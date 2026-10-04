@@ -602,7 +602,7 @@ impl MapFS {
                 if !file.file.mode.is_regular() {
                     return Err(FsError::Other(format!("append {:?}: path exists but is not a regular file", path)));
                 }
-                existing = file.file.data.clone();
+                existing.clone_from(&file.file.data);
                 existing_mode = file.file.mode;
             }
         }

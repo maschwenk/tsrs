@@ -1408,7 +1408,7 @@ fn parse_config(
             // the config file location, we'll need to know where that config file was.
             // Since 'paths' can be inherited from an extended config in another directory,
             // we wouldn't know which directory to use unless we store it here.
-            options.paths_base_path = base_path.clone();
+            options.paths_base_path.clone_from(&base_path);
         }
     }
 

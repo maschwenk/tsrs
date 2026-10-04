@@ -476,7 +476,7 @@ impl BuildInfoEmitSignature {
         } else if self.differs_in_options {
             signature_with_different_options = Some(vec![self.signature.clone()]);
         } else {
-            signature = self.signature.clone();
+            signature.clone_from(&self.signature);
         }
         EmitSignature { signature, signature_with_different_options }
     }
@@ -515,14 +515,14 @@ impl BuildInfoEmitSignature {
         let mut differs_only_in_dts_map = false;
         let mut differs_in_options = false;
         match &file_id_and_signature[1] {
-            Value::String(s) => signature = s.clone(),
+            Value::String(s) => signature.clone_from(s),
             Value::Array(signature_list) => match signature_list.len() {
                 0 => differs_only_in_dts_map = true,
                 1 => {
                     let Value::String(sig) = &signature_list[0] else {
                         return Err("invalid signature in BuildInfoEmitSignature: expected string".to_string());
                     };
-                    signature = sig.clone();
+                    signature.clone_from(sig);
                     differs_in_options = true;
                 }
                 n => {

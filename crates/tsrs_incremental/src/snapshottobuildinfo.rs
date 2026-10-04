@@ -289,11 +289,11 @@ impl toBuildInfo<'_> {
                     Some(emit_signature) if emit_signature.signature != info.signature => {
                         let mut incremental_emit_signature = BuildInfoEmitSignature { file_id, ..Default::default() };
                         if !emit_signature.signature.is_empty() {
-                            incremental_emit_signature.signature = emit_signature.signature.clone();
+                            incremental_emit_signature.signature.clone_from(&emit_signature.signature);
                         } else if emit_signature.signature_with_different_options.as_ref().unwrap()[0] == info.signature {
                             incremental_emit_signature.differs_only_in_dts_map = true;
                         } else {
-                            incremental_emit_signature.signature = emit_signature.signature_with_different_options.as_ref().unwrap()[0].clone();
+                            incremental_emit_signature.signature.clone_from(&emit_signature.signature_with_different_options.as_ref().unwrap()[0]);
                             incremental_emit_signature.differs_in_options = true;
                         }
                         self.build_info.emit_signatures.push(incremental_emit_signature);

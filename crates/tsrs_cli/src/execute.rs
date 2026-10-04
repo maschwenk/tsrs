@@ -143,7 +143,7 @@ fn tsc_compilation(
                 return CommandLineResult { status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
             }
         } else {
-            config_file_name = file_or_directory.clone();
+            config_file_name.clone_from(&file_or_directory);
             if !fs.file_exists(&config_file_name) {
                 report_diagnostic(new_compiler_diagnostic(&diagnostics::The_specified_path_does_not_exist_Colon_0, &[&file_or_directory]));
                 return CommandLineResult { status: ExitStatus::DiagnosticsPresent_OutputsSkipped };

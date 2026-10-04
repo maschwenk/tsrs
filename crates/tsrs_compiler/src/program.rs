@@ -567,7 +567,7 @@ impl Program {
         let index = result.files.iter().position(|file| file.path() == new_file_some.path()).unwrap();
         let mut files = result.files.to_vec();
         files[index] = new_file_some;
-        result.files_by_path = self.files_by_path.clone();
+        result.files_by_path.clone_from(&self.files_by_path);
         result.files_by_path.insert(new_file_some.path().clone(), new_file_some);
         for (i, &old_supplemental) in old_supplemental_files.iter().enumerate() {
             let new_supplemental = new_supplemental_files[i];
@@ -698,7 +698,7 @@ impl Program {
 
     // program.go:540
     pub fn get_config_file_parsing_diagnostics(&self) -> Vec<P<Diagnostic>> {
-        self.opts.config.get_config_file_parsing_diagnostics().to_vec()
+        self.opts.config.get_config_file_parsing_diagnostics()
     }
 
     // program.go:546
@@ -2418,7 +2418,7 @@ impl Program {
                                 if let Some(package_scope) = resolver.get_package_scope_for_path(&resolved_module.resolved_file_name) {
                                     if package_scope.exists() {
                                         if let Some(scope_name) = package_scope.contents.and_then(|c| c.get().name.get_value()) {
-                                            name = scope_name.to_string();
+                                            name.clone_from(scope_name);
                                         }
                                     }
                                 }

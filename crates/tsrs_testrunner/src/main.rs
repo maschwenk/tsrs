@@ -335,19 +335,19 @@ fn cmd_run(mut args: Args, spec: BackendSpec) {
         // An errors-only (or types-only) run keeps the other baselines' previous results.
         if let Some(old) = previous.get(&item.id()) {
             if entry.types.is_none() {
-                entry.types = old.types.clone();
+                entry.types.clone_from(&old.types);
             }
             if entry.symbols.is_none() {
-                entry.symbols = old.symbols.clone();
+                entry.symbols.clone_from(&old.symbols);
             }
             if entry.js.is_none() {
-                entry.js = old.js.clone();
+                entry.js.clone_from(&old.js);
             }
             if entry.jsmap.is_none() {
-                entry.jsmap = old.jsmap.clone();
+                entry.jsmap.clone_from(&old.jsmap);
             }
             if entry.sourcemap.is_none() {
-                entry.sourcemap = old.sourcemap.clone();
+                entry.sourcemap.clone_from(&old.sourcemap);
             }
         }
         summary.insert(item.id(), entry);

@@ -1263,7 +1263,7 @@ impl<'r> ResolutionState<'r> {
         let rest = rest.to_string();
         let mut package_directory = tspath::combine_paths(node_modules_directory, &[package_name]);
         if package_name.is_empty() {
-            package_directory = candidate.clone();
+            package_directory.clone_from(&candidate);
         }
 
         if self.resolve_package_directory_only {

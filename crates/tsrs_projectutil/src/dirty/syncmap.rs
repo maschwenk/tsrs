@@ -216,7 +216,7 @@ impl<K: Hash + Eq + Clone + Send + Sync, T: Cloneable + Clone> SyncMapEntry<K, T
         if loaded {
             let mut es = entry.mu.lock().unwrap();
             st.proxy_for = Some(Arc::clone(&entry));
-            st.e.value = es.e.value.clone();
+            st.e.value.clone_from(&es.e.value);
             st.e.delete = true;
             st.e.dirty = es.e.dirty;
             es.e.delete = true;

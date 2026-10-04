@@ -58,7 +58,7 @@ impl toProgramSnapshot {
         if let Some(old_program) = self.old_program {
             let old = old_program.snapshot;
             if self.snapshot.options().composite.is_true() {
-                *self.snapshot.latest_changed_dts_file.borrow_mut() = old.latest_changed_dts_file.borrow().clone();
+                self.snapshot.latest_changed_dts_file.borrow_mut().clone_from(&old.latest_changed_dts_file.borrow());
             }
             // Copy old snapshot's changed files set
             old.changed_files_set.range(|key| {
@@ -72,8 +72,8 @@ impl toProgramSnapshot {
             self.snapshot.build_info_emit_pending.set(old.build_info_emit_pending.get());
             self.snapshot.has_errors_from_old_state.set(old.has_errors.get());
             self.snapshot.has_semantic_errors_from_old_state.set(old.has_semantic_errors.get());
-            *self.snapshot.package_jsons_from_old_state.borrow_mut() = old.package_jsons.borrow().clone();
-            *self.snapshot.missing_package_jsons_from_old_state.borrow_mut() = old.missing_package_jsons.borrow().clone();
+            self.snapshot.package_jsons_from_old_state.borrow_mut().clone_from(&old.package_jsons.borrow());
+            self.snapshot.missing_package_jsons_from_old_state.borrow_mut().clone_from(&old.missing_package_jsons.borrow());
         } else {
             self.snapshot.build_info_emit_pending.set(self.snapshot.options().is_incremental());
         }
@@ -171,7 +171,7 @@ impl toProgramSnapshot {
                     }
                 }
             } else {
-                signature = version.clone();
+                signature.clone_from(&version);
             }
             (FileInfo { version, signature, affects_global_scope, implied_node_format }, new_references, change)
         };

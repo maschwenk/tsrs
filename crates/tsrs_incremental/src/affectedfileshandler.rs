@@ -422,7 +422,7 @@ impl affectedFilesHandler<'_> {
         let snapshot = &self.program.snapshot;
         for (file_path, update) in self.updated_signatures.borrow().iter() {
             if let Some(mut info) = snapshot.file_infos.load(file_path) {
-                info.signature = update.signature.clone();
+                info.signature.clone_from(&update.signature);
                 snapshot.file_infos.store(file_path.clone(), info);
                 if let Some(testing_data) = &self.program.testing_data {
                     testing_data.lock().unwrap().updated_signature_kinds.insert(file_path.clone(), update.kind);

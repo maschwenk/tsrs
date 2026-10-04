@@ -482,8 +482,7 @@ mod emit {
                         self.host.get_current_directory(),
                         &self.host.common_source_directory(),
                         self.host.use_case_sensitive_file_names(),
-                    ))
-                    .to_string();
+                    ));
                 }
                 if tspath::get_root_length(&source_map_dir) == 0 {
                     // The relative paths are relative to the common directory
@@ -491,7 +490,7 @@ mod emit {
                 }
                 return source_map_dir;
             }
-            tspath::get_directory_path(&tspath::normalize_path(file_path)).to_string()
+            tspath::get_directory_path(&tspath::normalize_path(file_path))
         }
 
         // emitter.go:443
@@ -508,7 +507,7 @@ mod emit {
                 return source_map_generator.base64_data_url();
             }
 
-            let source_map_file = tspath::get_base_file_name(&tspath::normalize_slashes(source_map_file_path)).to_string();
+            let source_map_file = tspath::get_base_file_name(&tspath::normalize_slashes(source_map_file_path));
             if !map_options.map_root.is_empty() {
                 let mut source_map_dir = tspath::normalize_slashes(&map_options.map_root);
                 if let Some(source_file) = source_file {
@@ -520,8 +519,7 @@ mod emit {
                         self.host.get_current_directory(),
                         &self.host.common_source_directory(),
                         self.host.use_case_sensitive_file_names(),
-                    ))
-                    .to_string();
+                    ));
                 }
                 if tspath::get_root_length(&source_map_dir) == 0 {
                     // The relative paths are relative to the common directory

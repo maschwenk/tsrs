@@ -323,7 +323,7 @@ fn walk_symlinks(path: &str) -> io::Result<String> {
                 r -= 1;
             }
             if r < vol_len as isize {
-                dest = vol.clone();
+                dest.clone_from(&vol);
             } else {
                 dest.truncate(r as usize);
             }

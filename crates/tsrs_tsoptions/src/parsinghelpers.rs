@@ -97,7 +97,7 @@ pub(crate) fn parse_project_reference(json: &CompilerOptionsValue) -> Option<Pro
         if let Some(value) = v.get("path") {
             result.has_path = true;
             if let CompilerOptionsValue::String(path) = value {
-                result.reference.path = path.clone();
+                result.reference.path.clone_from(path);
                 result.path_valid = true;
             }
         }
@@ -121,7 +121,7 @@ pub(crate) fn parse_content_mapper(value: &CompilerOptionsValue) -> (Option<Mapp
     let mut mapper = Mapper::default();
     if let Some(pkg) = v.get("package") {
         match pkg {
-            CompilerOptionsValue::String(str) if !str.is_empty() => mapper.definition.package = str.clone(),
+            CompilerOptionsValue::String(str) if !str.is_empty() => mapper.definition.package.clone_from(str),
             _ => errors.push(new_compiler_diagnostic(
                 &diagnostics::Compiler_option_0_requires_a_value_of_type_1,
                 &[&"contentMapper.package", &"string"],
