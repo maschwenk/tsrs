@@ -2012,7 +2012,7 @@ impl Server {
 
     // server.go:2129
     fn handle_document_format(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::DocumentFormattingParams) -> Result<lsproto::DocumentFormattingResponse, Error> {
-        ls.provide_format_document(ctx, &params.text_document.uri, &params.options)
+        ls.provide_format_document(ctx, &params.text_document.uri, params.options)
     }
 
     // server.go:2137
@@ -2022,7 +2022,7 @@ impl Server {
         ls: &Arc<LanguageService>,
         params: lsproto::DocumentRangeFormattingParams,
     ) -> Result<lsproto::DocumentRangeFormattingResponse, Error> {
-        ls.provide_format_document_range(ctx, &params.text_document.uri, &params.options, params.range)
+        ls.provide_format_document_range(ctx, &params.text_document.uri, params.options, params.range)
     }
 
     // server.go:2146
@@ -2032,7 +2032,7 @@ impl Server {
         ls: &Arc<LanguageService>,
         params: lsproto::DocumentOnTypeFormattingParams,
     ) -> Result<lsproto::DocumentOnTypeFormattingResponse, Error> {
-        ls.provide_format_document_on_type(ctx, &params.text_document.uri, &params.options, params.position, &params.ch)
+        ls.provide_format_document_on_type(ctx, &params.text_document.uri, params.options, params.position, &params.ch)
     }
 
     // server.go:2156

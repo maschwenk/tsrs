@@ -433,7 +433,7 @@ impl FormatSpanWorker {
         // child node is outside the target range - do not dive inside
         if !self.original_range.overlaps(child.loc()) {
             if child.end() < self.original_range.pos() {
-                self.fs().skip_to_end_of(&child.loc());
+                self.fs().skip_to_end_of(child.loc());
             }
             return inherited_indentation;
         }
@@ -450,7 +450,7 @@ impl FormatSpanWorker {
             }
             if token_info.token.loc.end() > child_start_pos {
                 if token_info.token.loc.pos() > child_start_pos {
-                    self.fs().skip_to_start_of(&child.loc());
+                    self.fs().skip_to_start_of(child.loc());
                 }
                 // stop when formatting scanner advances past the beginning of the child
                 break;
@@ -528,7 +528,7 @@ impl FormatSpanWorker {
         // node range is outside the target range - do not dive inside
         if !self.original_range.overlaps(nodes.loc.get()) {
             if nodes.end() < self.original_range.pos() && (nodes.nodes().is_empty() || !nodes.nodes()[0].flags().intersects(NodeFlags::Reparsed)) {
-                self.fs().skip_to_end_of(&nodes.loc.get());
+                self.fs().skip_to_end_of(nodes.loc.get());
             }
             return;
         }
