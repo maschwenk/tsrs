@@ -654,8 +654,51 @@ impl BuildInfo {
         })
     }
 
+    /// `json::marshal(&self.marshal_json())`, written straight into the output: the large arrays (`fileIdsList`
+    /// holds ~9.5 M ids on the 38k-file codebase) never become a `Value` tree. Fields and omission rules are
+    /// `marshal_json`'s, in its order; elements of the other lists go through their own `marshal_json`.
     pub fn marshal(&self) -> String {
-        tsrs_core::json::marshal(&self.marshal_json()).unwrap_or_else(|err| panic!("Failed to marshal build info: {err}"))
+        let mut out = String::with_capacity(self.marshal_size_hint());
+        let mut w = ObjWriter { out: &mut out, first: true };
+        w.out.push('{');
+        w.str("version", &self.version);
+        w.bool("errors", self.errors);
+        w.bool("checkPending", self.check_pending);
+        w.values("root", &self.root, BuildInfoRoot::marshal_json);
+        w.opt_strings("packageJsons", &self.package_jsons);
+        w.opt_strings("missingPackageJsons", &self.missing_package_jsons);
+        w.opt_strings("contentMapperIdentities", &self.content_mapper_identities);
+        if !self.file_names.is_empty() {
+            w.strings("fileNames", &self.file_names);
+        }
+        if self.file_infos_non_nil || !self.file_infos.is_empty() {
+            w.key("fileInfos");
+            write_array(w.out, &self.file_infos, |out, info| write_compact(out, &info.marshal_json()));
+        }
+        w.list("fileIdsList", &self.file_ids_list, |out, ids| write_array(out, ids, |out, &id| tsrs_core::json::write_compact_int(out, id as i64)));
+        if let Some(options) = &self.options {
+            // omitzero on a pointer: only nil is omitted.
+            w.key("options");
+            write_compact(w.out, &Value::Object(options.clone()));
+        }
+        w.values("referencedMap", &self.referenced_map, BuildInfoReferenceMapEntry::marshal_json);
+        w.values("semanticDiagnosticsPerFile", &self.semantic_diagnostics_per_file, BuildInfoSemanticDiagnostic::marshal_json);
+        w.values("emitDiagnosticsPerFile", &self.emit_diagnostics_per_file, BuildInfoDiagnosticsOfFile::marshal_json);
+        w.list("changeFileSet", &self.change_file_set, |out, &id| tsrs_core::json::write_compact_int(out, id as i64));
+        w.values("affectedFilesPendingEmit", &self.affected_files_pending_emit, BuildInfoFilePendingEmit::marshal_json);
+        w.str("latestChangedDtsFile", &self.latest_changed_dts_file);
+        w.values("emitSignatures", &self.emit_signatures, BuildInfoEmitSignature::marshal_json);
+        w.values("resolvedRoot", &self.resolved_root, BuildInfoResolvedRoot::marshal_json);
+        w.bool("semanticErrors", self.semantic_errors);
+        out.push('}');
+        out
+    }
+
+    // A rough upper estimate of the encoded size, so the output buffer is not regrown (and copied) several times.
+    fn marshal_size_hint(&self) -> usize {
+        let ids: usize = self.file_ids_list.iter().map(|ids| ids.len() * 7 + 2).sum();
+        let names: usize = self.file_names.iter().map(|n| n.len() + 3).sum();
+        ids + names + self.file_infos.len() * 120 + self.referenced_map.len() * 16 + self.semantic_diagnostics_per_file.len() * 8 + 4096
     }
 
     pub fn unmarshal(text: &str) -> Result<BuildInfo, String> {
@@ -826,6 +869,71 @@ impl BuildInfoRootInfoReader {
 }
 
 // JSON helpers.
+
+fn write_compact(out: &mut String, v: &Value) {
+    tsrs_core::json::write_compact(out, v).unwrap_or_else(|err| panic!("Failed to marshal build info: {err}"));
+}
+
+fn write_array<T>(out: &mut String, items: &[T], mut f: impl FnMut(&mut String, &T)) {
+    out.push('[');
+    for (i, item) in items.iter().enumerate() {
+        if i > 0 {
+            out.push(',');
+        }
+        f(out, item);
+    }
+    out.push(']');
+}
+
+// `Obj` for BuildInfo::marshal: writes the members as it goes, with the same omission rules.
+struct ObjWriter<'a> {
+    out: &'a mut String,
+    first: bool,
+}
+
+impl ObjWriter<'_> {
+    fn key(&mut self, key: &str) {
+        if !self.first {
+            self.out.push(',');
+        }
+        self.first = false;
+        tsrs_core::json::write_compact_string(self.out, key);
+        self.out.push(':');
+    }
+    fn str(&mut self, key: &str, v: &str) {
+        if !v.is_empty() {
+            self.key(key);
+            tsrs_core::json::write_compact_string(self.out, v);
+        }
+    }
+    fn bool(&mut self, key: &str, v: bool) {
+        if v {
+            self.key(key);
+            self.out.push_str("true");
+        }
+    }
+    fn list<T>(&mut self, key: &str, items: &[T], f: impl FnMut(&mut String, &T)) {
+        if !items.is_empty() {
+            self.key(key);
+            write_array(self.out, items, f);
+        }
+    }
+    fn values<T>(&mut self, key: &str, items: &[T], f: impl Fn(&T) -> Value) {
+        self.list(key, items, |out, item| write_compact(out, &f(item)));
+    }
+    fn strings(&mut self, key: &str, v: &[String]) {
+        self.key(key);
+        write_array(self.out, v, |out, s| tsrs_core::json::write_compact_string(out, s));
+    }
+    fn opt_strings(&mut self, key: &str, v: &Option<Vec<String>>) {
+        // omitzero on a slice omits nil and empty slices.
+        if let Some(v) = v {
+            if !v.is_empty() {
+                self.strings(key, v);
+            }
+        }
+    }
+}
 
 #[derive(Default)]
 struct Obj(OrderedMap<String, Value>);
@@ -1011,5 +1119,71 @@ pub(crate) fn json_to_option_value(v: &Value) -> CompilerOptionsValue {
         Value::String(s) => CompilerOptionsValue::String(s.clone()),
         Value::Array(items) => CompilerOptionsValue::Array(items.iter().map(json_to_option_value).collect()),
         Value::Object(m) => CompilerOptionsValue::Object(m.iter().map(|(k, v)| (k.clone(), json_to_option_value(v))).collect()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // `marshal` streams what `marshal_json` builds; a field written in the wrong place, or omitted or kept against
+    // `marshal_json`'s rules, would change the tsbuildinfo bytes.
+    #[test]
+    fn marshal_streams_the_marshal_json_document() {
+        let info = |version: &str, signature: &str, affects_global_scope: bool, implied_node_format: ModuleKind| {
+            new_build_info_file_info(&FileInfo { version: version.into(), signature: signature.into(), affects_global_scope, implied_node_format })
+        };
+        let diagnostic = BuildInfoDiagnostic {
+            file: 2,
+            pos: 3,
+            end: 9,
+            code: 2322,
+            message_text: "Type \"a\\b\"\n is not \u{1}assignable.".into(),
+            message_key: "k".into(),
+            message_args: vec!["x".into()],
+            message_chain: vec![BuildInfoDiagnostic { code: 1, message_text: "chain".into(), ..Default::default() }],
+            reports_unnecessary: true,
+            ..Default::default()
+        };
+        let mut options = OrderedMap::default();
+        options.insert("strict".to_string(), Value::Bool(true));
+        options.insert("target".to_string(), Value::Number(99.0));
+        options.insert("lib".to_string(), Value::Array(vec![Value::String("lib.es2022.d.ts".into())]));
+        let full = BuildInfo {
+            version: "7.1.0".into(),
+            errors: true,
+            check_pending: true,
+            root: vec![BuildInfoRoot { start: 1, end: 3, ..Default::default() }, BuildInfoRoot { start: 5, end: 5, ..Default::default() }],
+            package_jsons: Some(vec!["../package.json".into()]),
+            missing_package_jsons: Some(vec![]),
+            content_mapper_identities: None,
+            file_names: vec!["lib.d.ts".into(), "../src/a.ts".into(), "../src/ü \"q\".ts".into()],
+            file_infos: vec![
+                info("v1", "v1", false, ModuleKind::CommonJS),
+                info("v2", "", true, ModuleKind::ESNext),
+                info("v3", "s3", false, ModuleKind::ESNext),
+            ],
+            file_infos_non_nil: true,
+            file_ids_list: vec![vec![1, 2], vec![3], vec![1, 2, 3, 123456789]],
+            options: Some(options),
+            referenced_map: vec![BuildInfoReferenceMapEntry { file_id: 2, file_id_list_id: 1 }, BuildInfoReferenceMapEntry { file_id: 3, file_id_list_id: 3 }],
+            semantic_diagnostics_per_file: vec![
+                BuildInfoSemanticDiagnostic { file_id: 1, diagnostics: None },
+                BuildInfoSemanticDiagnostic { file_id: 0, diagnostics: Some(BuildInfoDiagnosticsOfFile { file_id: 2, diagnostics: vec![diagnostic.clone()] }) },
+            ],
+            emit_diagnostics_per_file: vec![BuildInfoDiagnosticsOfFile { file_id: 3, diagnostics: vec![diagnostic] }],
+            change_file_set: vec![2, 3],
+            affected_files_pending_emit: vec![BuildInfoFilePendingEmit { file_id: 2, emit_kind: FileEmitKind::Js }],
+            latest_changed_dts_file: "../out/a.d.ts".into(),
+            emit_signatures: vec![BuildInfoEmitSignature { file_id: 2, signature: "s".into(), differs_only_in_dts_map: false, differs_in_options: true }],
+            resolved_root: vec![BuildInfoResolvedRoot { resolved: 2, root: 1 }],
+            semantic_errors: true,
+        };
+        let empty = BuildInfo { version: "7.1.0".into(), file_infos_non_nil: true, ..Default::default() };
+        let bare = BuildInfo { version: "7.1.0".into(), ..Default::default() };
+        for build_info in [full, empty, bare] {
+            let expected = tsrs_core::json::marshal(&build_info.marshal_json()).unwrap();
+            assert_eq!(build_info.marshal(), expected);
+        }
     }
 }
