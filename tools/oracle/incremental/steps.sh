@@ -3,6 +3,8 @@
 # the tsbuildinfo (modulo the build-stamped version) and the emitted files after every step.
 # usage: steps.sh <project-dir> <steps-file> [extra tsc flags...]
 # steps-file: one shell command per line, run inside the project copy before each build (first line: initial build, use `true`).
+# SIGNATURES_MAY_DIFFER=1: accept a tsbuildinfo that differs only as the hub-edit shortcut may make it differ
+# (cmp-signatures.py); every other comparison stays exact.
 set -u
 src=$1; steps=$2; shift 2
 [ -n "$(ls -A "$src" 2>/dev/null)" ] || { echo "empty or missing project $src" >&2; exit 2; }
@@ -12,7 +14,7 @@ W=$(mktemp -d /tmp/incr-oracle.XXXX)
 cp -r "$src" "$W/go"; cp -r "$src" "$W/rs"
 # `-b ...` runs build mode (no -p); otherwise `-p .` is prepended.
 if [ "${1:-}" = "-b" ]; then PRE=(); else PRE=(-p .); fi
-n=0; fail=0
+n=0; fail=0; sigdiff=0
 while IFS= read -r step; do
   n=$((n+1))
   (cd "$W/go" && eval "$step"); (cd "$W/rs" && eval "$step")
@@ -26,6 +28,9 @@ while IFS= read -r step; do
   if [ -n "$d" ]; then echo "step $n ($step): trees differ"; echo "$d" | head; fail=1; fi
   for b in $(cd "$W/go" && find . -name '*.tsbuildinfo'); do
     if ! sed -e 's/"version":"[^"]*"/"version":"V"/' -e "s#$W/go#<W>#g" "$W/go/$b" | cmp -s - <(sed -e 's/"version":"[^"]*"/"version":"V"/' -e "s#$W/rs#<W>#g" "$W/rs/$b"); then
+      if [ "${SIGNATURES_MAY_DIFFER:-0}" = 1 ] && r=$("$(dirname "$0")/cmp-signatures.py" "$W/go/$b" "$W/rs/$b"); then
+        echo "step $n ($step): $b: ${r##*$'\n'}"; sigdiff=$((sigdiff+1)); continue
+      fi
       echo "step $n ($step): $b differs"; fail=1
       python3 - "$W/go/$b" "$W/rs/$b" <<'PY'
 import json,sys
@@ -36,4 +41,5 @@ PY
     fi
   done
 done < "$steps"
-[ $fail = 0 ] && echo "all $n steps identical ($W)" || echo "differences ($W)"
+sig=""; [ $sigdiff = 0 ] || sig=" except signatures in $sigdiff"
+[ $fail = 0 ] && echo "all $n steps identical$sig ($W)" || echo "differences ($W)"

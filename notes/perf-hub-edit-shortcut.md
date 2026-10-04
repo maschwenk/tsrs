@@ -96,3 +96,90 @@ two strings are equal, in which case nothing differs at all.
 - `--extendedDiagnostics` counters of the run (Types, Symbols, Instantiations): lower, since the skipped emits
   created types.
 - Reported diagnostics: identical. Every file of the closure is checked either way, against the same program.
+- Pending emits: unchanged. Returning C(F) instead of V gives every file of C(F) a pending emit of the full kind.
+  That is a superset of Go's and would make a later emitting run re-emit more files (with the same content), so the
+  shortcut only applies when every emittable file of C(F) is already pending a full emit. That holds in the steady
+  `--noEmit` state (a cold run makes every file pending and `--noEmit` never clears them) and fails after an emitting
+  run until the next cold one, where Go's walk runs. Found by the tsctests `tsc/noEmit/changes-*` scenarios, which
+  alternate `--noEmit` and emitting runs.
+
+## The trigger
+
+After F's own declaration signature is computed and has changed (so one d.ts emit for F, as in Go), and only with
+`noEmit`, without `composite`, `--build`, `isolatedModules`, `assumeChangesOnlyAffectDirectDependencies`, and with
+`TSRS_HUB_SHORTCUT` not `0`:
+
+- `rechecked` = the number of files that will lose their diagnostics: every non-library file if some file of C(F)
+  other than F affects the global scope, else |C(F)|. For the global-scope case of F itself (phase 2's per-file
+  signatures), the whole program.
+- fire when `rechecked * 100 >= 50 * (non-library files)` and every emittable file of C(F) is already pending a full
+  emit (above).
+
+Deterministic: it depends only on the reference map, the stored file infos and the options, all known before any
+signature work.
+
+### Choosing X
+
+Re-check set size per file, from each corpus's reference map (`affectsGlobalScope` files included; a file whose
+referenced-by closure reaches one re-checks everything), as a share of the non-library files:
+
+| corpus | files | < 10% | 10-49% | 50-99% | 100% |
+| --- | --- | --- | --- | --- | --- |
+| the 38k-file codebase | 37,863 | 12,673 | 0 | 0 | 25,190 |
+| vscode `src` | 10,353 | 7,744 | 1,046 | 0 | 1,563 |
+| webpack | 1,557 | 749 | 631 | 46 | 131 |
+| xstate | 1,444 | 527 | 1 | 0 | 916 |
+
+On the 38k-file codebase two thirds of the files re-check the whole program when their declaration changes (one
+large reference cycle through the files declaring ambient modules, plus test files that affect the global scope) and
+the rest re-check under 10%; nothing is in between, so any X from 10 to 95 makes the same decisions. X = 50 fires on
+whole-program edits on all four corpora (and webpack's 46 files at 50-59%), and on nothing that re-checks a minority
+of the program. X does not control the cost on later runs (below): that cost is per skipped file.
+
+## Measurements
+
+Sweep: single runs, `--noEmit --incremental`, 4 checkers, load 6-13. Start state "H": a cold incremental
+tsbuildinfo, then a Go-algorithm hub edit and its revert (so the files those walks visited hold declaration
+signatures). Seconds total (emit in parentheses); the shortcut was forced on (also below X) for this table.
+
+| edit | files re-checked | Go algorithm | shortcut |
+| --- | --- | --- | --- |
+| leaf: `export type` appended to a file nothing imports | 1 | 1.14 (0.20) | 1.06 (0.20) |
+| service with 8 importers (closure 1,797 = 4.7%, which reaches a test file that affects the global scope) | 37,863 | 8.12 (0.81) | 7.43 (0.21) |
+| service with 23 importers, inside the large cycle | 37,863 | 15.06 (6.32) | 9.45 (0.27) |
+| ORM hub, 1,870 importers | 37,863 | 9.87 (1.86) | 8.40 (0.59) |
+| global `.d.ts` (`interface` appended) | all | 18.00 (12.05) | 7.19 (0.21) |
+| ORM hub, from a cold tsbuildinfo | 37,863 | 10.81 (4.52) | 7.86 (0.56) |
+| global `.d.ts`, from a cold tsbuildinfo | all | 16.98 (11.26) | 7.08 (0.20) |
+
+The global case is the largest: Go then computes a declaration signature for every file, one emit per file (27,427
+emits, sequential). Diagnostics identical in every row; tsbuildinfo equal except signatures and package.json lists.
+
+### The cost on the following run
+
+The shortcut leaves the files of V (which Go would give a declaration signature) with their version. The next time
+one of those files gets an edit that does not change its declaration (a function body), Go compares the new
+declaration signature with the stored one, finds it unchanged and re-checks that one file; after the shortcut the
+stored value is the version, so the edit counts as a declaration change and re-checks the file's whole re-check set
+(for the files of the large cycle: everything, at which point the shortcut fires again). That file's signature is
+computed in that run, so the cost is paid once per file. Measured (body-only edit = a non-exported `const` appended;
+same edit after each history):
+
+| previous run | next edit | after Go algorithm | after shortcut |
+| --- | --- | --- | --- |
+| service-in-cycle edit | body edit of the 8-importer service (visited by that walk) | 1.20 | 10.48 |
+| global `.d.ts` edit (Go computes every file's signature) | body edit of the in-cycle service | 1.18 | 8.41 |
+| global `.d.ts` edit | body edit of the 8-importer service | 1.12 | 8.08 |
+| ORM hub edit | body edit of the in-cycle service (not visited by Go's walk either) | 11.43 | 8.13 |
+| any of the above | body edit of a file nothing imports | 1.1-1.4 | 1.1-1.4 |
+| any | body edit of the file the previous run edited | 1.2-1.4 | 1.2-1.4 (that file keeps its computed signature) |
+
+So the shortcut saves 1.5-11 s on the run that edits a widely used file and costs about a cold check (+6-9 s) on the
+first later body-only edit of each file that run skipped (22k files for the ORM hub edit from cold, 21.7k for the
+in-cycle service, 27k for the global `.d.ts`). One such edit already takes back the saving of an ORM hub edit. It
+comes out ahead only when few of the skipped files are edited before their signatures get computed some other way
+(an edit to one of their dependencies that Go's walk passes through, or an emitting run).
+
+Go has the same shape of cost after every cold run: all signatures are versions then, and the first edit of a file
+in the large cycle walks and re-checks everything, but that walk computes the visited files' signatures, so the cost
+is paid once for all of them together rather than once per file.

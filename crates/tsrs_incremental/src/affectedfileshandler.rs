@@ -171,6 +171,18 @@ impl affectedFilesHandler<'_> {
         (closure, reaches_global_scope)
     }
 
+    // Whether every file of `files` that can be emitted is already pending a full emit, so that returning them as
+    // affected (each gets a pending emit of the full kind in collect_all_affected_files) leaves the pending emits as
+    // the visited files alone would. After a cold --noEmit run every file is pending; an emitting run clears them.
+    fn already_pending_emit(&self, files: &[P<SourceFile>]) -> bool {
+        let program = self.program.p();
+        let emit_kind = get_file_emit_kind(&self.program.snapshot.options());
+        files.iter().all(|&file| {
+            !program.source_file_may_be_emitted(file, false)
+                || self.program.snapshot.affected_files_pending_emit.load(file.path()).is_some_and(|kind| kind.contains(emit_kind))
+        })
+    }
+
     fn non_library_file_count(&self) -> usize {
         let program = self.program.p();
         program.get_source_files().iter().filter(|file| !program.is_source_file_default_library(file.path())).count()
@@ -236,7 +248,7 @@ impl affectedFilesHandler<'_> {
             let (closure, reaches_global_scope) = self.referenced_by_closure(file);
             let all = self.non_library_file_count();
             let rechecked = if reaches_global_scope { all } else { closure.len() };
-            if rechecked * 100 >= all * HUB_SHORTCUT_MIN_PERCENT {
+            if rechecked * 100 >= all * HUB_SHORTCUT_MIN_PERCENT && self.already_pending_emit(&closure) {
                 for &current_file in &closure {
                     self.update_shape_signature(current_file, true);
                 }
