@@ -125,7 +125,7 @@ pub(crate) fn new_with_backend(fs: Arc<dyn FS>, backend: Box<dyn watcherBackend>
         on_changes,
         logger,
         mu: Mutex::new(watcherState { watches: Some(FxHashMap::default()), ..Default::default() }),
-        this: this.clone(),
+        this: Weak::clone(this),
     })
 }
 
@@ -164,12 +164,12 @@ impl Watcher {
                 }
             };
             let new_watch = Arc::new_cyclic(|this| watch {
-                watcher: self.this.clone(),
+                watcher: Weak::clone(&self.this),
                 requested_directory: directory.clone(),
                 kind: effective_kind(file_system_watcher),
                 recursive: is_recursive_glob(file_system_watcher),
                 mu: Mutex::new(watchState::default()),
-                this: this.clone(),
+                this: Weak::clone(this),
             });
             if let Err(err) = new_watch.reconcile(false /*emitSynthetic*/) {
                 self.logger.logf(format_args!("lspwatcher: failed to register watcher {:?} for {:?}: {}", id, directory, err));
@@ -322,7 +322,7 @@ impl Watcher {
     // Callers must hold w.mu.
     fn schedule_flush_locked(&self, st: &mut watcherState) {
         if st.flush_timer.is_none() {
-            let this = self.this.clone();
+            let this = Weak::clone(&self.this);
             st.flush_timer = Some(after_func(throttleWindow, move || {
                 if let Some(w) = this.upgrade() {
                     w.flush();
@@ -448,7 +448,7 @@ impl watch {
     // (the watched directory was deleted), falls back to watching the nearest
     // existing ancestor so the watch re-attaches when the directory is recreated.
     fn target_callback(&self, watched_directory: &str) -> fswatch::WatchCallback {
-        let w = self.this.clone();
+        let w = Weak::clone(&self.this);
         let watched_directory = watched_directory.to_string();
         Arc::new(move |events: Vec<fswatch::Event>, err: Option<fswatch::Error>| {
             let Some(w) = w.upgrade() else {
@@ -508,7 +508,7 @@ impl watch {
     // being created; their events are about ancestor directories the session
     // doesn't track, so they are ignored and the watch is simply re-evaluated.
     fn ancestor_callback(&self) -> fswatch::WatchCallback {
-        let w = self.this.clone();
+        let w = Weak::clone(&self.this);
         Arc::new(move |_events: Vec<fswatch::Event>, _err: Option<fswatch::Error>| {
             if let Some(w) = w.upgrade() {
                 let _ = w.reconcile(true /*emitSyntheticCreates*/);

@@ -60,7 +60,7 @@ pub fn new_server(opts: ServerOptions) -> Arc<Server> {
         w: Mutex::new(opts.out),
         background_ctx: OnceLock::new(),
         stderr: Mutex::new(opts.err),
-        logger: Arc::new(new_logger(weak.clone())),
+        logger: Arc::new(new_logger(Weak::clone(weak))),
         init_started: AtomicBool::new(false),
         client_seq: AtomicI32::new(0),
         request_queue: new_dynamic_queue(),
@@ -307,7 +307,7 @@ impl responseChan {
     // `select { case <-ctx.Done(): ...; case resp := <-responseChan: ... }`; Ok(None) is a receive from the
     // closed, empty channel (Go: a nil response).
     fn recv(&self, ctx: &Context) -> Result<Option<ResponseMessage>, ContextError> {
-        let inner = self.inner.clone();
+        let inner = Arc::clone(&self.inner);
         let guard = self.inner.0.lock().unwrap();
         let mut state = wait_until(ctx, &self.inner.1, guard, |s| s.value.is_some() || s.closed, move || {
             drop(inner.0.lock().unwrap());
@@ -366,7 +366,7 @@ impl Server {
     }
 
     pub(crate) fn logger_arc(&self) -> Arc<logger> {
-        self.logger.clone()
+        Arc::clone(&self.logger)
     }
 
     // server.go:257
@@ -958,12 +958,12 @@ impl Server {
         let (g, ctx) = errGroup::with_context(ctx);
         let _ = self.background_ctx.set(ctx.clone());
         {
-            let s = self.clone();
+            let s = Arc::clone(self);
             let ctx = ctx.clone();
             g.go("lsp-dispatch", move || s.dispatch_loop(&ctx));
         }
         {
-            let s = self.clone();
+            let s = Arc::clone(self);
             let ctx = ctx.clone();
             g.go("lsp-write", move || s.write_loop(&ctx));
         }
@@ -972,7 +972,7 @@ impl Server {
         // (Go's group member that waits for ctx.Done() or the read loop's error is folded into the read
         // thread: it reports its error to the group when it returns.)
         {
-            let s = self.clone();
+            let s = Arc::clone(self);
             let ctx = ctx.clone();
             let g = g.clone();
             spawn_server_thread("lsp-read", move || {
@@ -1081,7 +1081,7 @@ impl Server {
                 let (c, cancel_func) = context::with_request_id(&request_ctx, &id.string()).with_cancel();
                 request_ctx = c;
                 cancel = Some(cancel_func.clone());
-                self.pending_client_requests.lock().unwrap().insert(id.clone(), pendingClientRequest { req: req.clone(), cancel: cancel_func });
+                self.pending_client_requests.lock().unwrap().insert(id.clone(), pendingClientRequest { req: Arc::clone(&req), cancel: cancel_func });
             }
 
             match self.handle_request_or_notification(&request_ctx, &req) {
@@ -1090,7 +1090,7 @@ impl Server {
                     self.remove_request(req.id.as_ref(), cancel.as_ref());
                 }
                 Ok(Some(do_async_work)) => {
-                    let s = self.clone();
+                    let s = Arc::clone(self);
                     let lsp_exit = lsp_exit.clone();
                     workerpool::go(move || {
                         if let Err(ls_error) = do_async_work() {
@@ -1264,7 +1264,7 @@ impl Server {
                 Ok(do_async_work) => do_async_work,
             };
             if let Some(do_async_work) = do_async_work {
-                let s = self.clone();
+                let s = Arc::clone(self);
                 let method = req.method;
                 return Ok(Some(Box::new(move || {
                     // note: ctx.Err() has to be checked in the async work to allow async handlers to cleanup resources correctly
@@ -1301,9 +1301,9 @@ impl Server {
     ) -> Result<(Arc<LanguageService>, Arc<dyn tsrs_ls::CrossProjectOrchestrator>), Error> {
         let (default_project, default_ls, all_projects) = self.session().get_language_service_and_projects_for_file(ctx, uri)?;
         let orchestrator: Arc<dyn tsrs_ls::CrossProjectOrchestrator> = Arc::new(crossProjectOrchestrator {
-            server: self.clone(),
+            server: Arc::clone(self),
             req: Arc::new(req.clone()),
-            default_project: default_project.arc().clone(),
+            default_project: Arc::<project::Project>::clone(default_project.arc()),
             all_projects,
         });
         Ok((default_ls, orchestrator))
@@ -1361,7 +1361,7 @@ impl Server {
         self.init_started.store(true, Ordering::SeqCst);
 
         let params = Arc::new(params);
-        let _ = self.initialize_params.set(params.clone());
+        let _ = self.initialize_params.set(Arc::clone(&params));
         // The spec types initializationOptions as nullable; treat both null and an
         // absent value as empty options so the rest of the server can read fields
         // off s.initializationOptions without nil-checking the container.
@@ -1563,7 +1563,7 @@ impl Server {
             self.logger.logf(format_args!("file watching: disabled (client lacks dynamic watch registration and builtin watcher backend is not fast-recursive)"));
         }
 
-        let initialize_params = self.initialize_params.get().unwrap().clone();
+        let initialize_params = Arc::clone(self.initialize_params.get().unwrap());
         let mut cwd = self.cwd.clone();
         if self.client_capabilities().workspace.workspace_folders
             && matches!(&initialize_params.workspace_folders, Some(lsproto::WorkspaceFoldersOrNull { workspace_folders: Some(folders), .. }) if folders.len() == 1)
@@ -1581,9 +1581,9 @@ impl Server {
 
         self.telemetry_enabled.store(enable_telemetry, Ordering::SeqCst);
 
-        let client: Arc<dyn project::Client> = self.clone();
+        let client: Arc<dyn project::Client> = Arc::<Server>::clone(self);
         let logger: Arc<dyn logging::Logger> = self.logger_arc();
-        let npm_executor: Arc<dyn project::NpmExecutor> = self.clone();
+        let npm_executor: Arc<dyn project::NpmExecutor> = Arc::<Server>::clone(self);
         let session = project::new_session(project::SessionInit {
             background_ctx: lsproto::with_client_capabilities(&self.background_ctx(), self.client_capabilities_arc()),
             options: Arc::new(project::SessionOptions {
@@ -1606,7 +1606,7 @@ impl Server {
             parse_cache: self.parse_cache.clone(),
             content_mapped_parse_cache: None,
         });
-        let _ = self.session.set(session.clone());
+        let _ = self.session.set(Arc::clone(&session));
 
         let user_preferences = self.request_configuration(ctx)?;
         session.initialize_with_user_config(user_preferences);
@@ -2484,7 +2484,7 @@ impl handlerMap {
             Box::new(move |s, ctx, req| {
                 let params = req.unmarshal_params::<Req>()?;
                 let ls = s.session().get_language_service(ctx, params.text_document_uri())?;
-                let (s, ctx, req) = (s.clone(), ctx.clone(), req.clone());
+                let (s, ctx, req) = (Arc::clone(s), ctx.clone(), Arc::clone(req));
                 Ok(Some(Box::new(move || {
                     s.with_recover(&req, || {
                         let resp = f(&s, &ctx, &ls, params);
@@ -2517,7 +2517,7 @@ impl handlerMap {
                 let params = req.unmarshal_params::<Req>()?;
                 let uri = params.text_document_uri().clone();
                 s.session().with_language_service_and_snapshot(ctx, &uri, |language_service, snapshot| {
-                    let (s, ctx, req) = (s.clone(), ctx.clone(), req.clone());
+                    let (s, ctx, req) = (Arc::clone(s), ctx.clone(), Arc::clone(req));
                     Ok(Some(Box::new(move || {
                         s.with_recover(&req, || {
                             let mut language_service = language_service;
@@ -2559,7 +2559,7 @@ impl handlerMap {
                 let params = req.unmarshal_params::<Req>()?;
                 // !!! sheetal: multiple projects that contain the file through symlinks
                 let (default_ls, orchestrator) = s.get_language_service_and_cross_project_orchestrator(ctx, params.text_document_uri(), req)?;
-                let (s, ctx, req) = (s.clone(), ctx.clone(), req.clone());
+                let (s, ctx, req) = (Arc::clone(s), ctx.clone(), Arc::clone(req));
                 Ok(Some(Box::new(move || {
                     s.with_recover(&req, || {
                         let resp = f(&default_ls, &ctx, params, orchestrator)?;
@@ -2585,7 +2585,7 @@ struct crossProjectOrchestrator {
 impl tsrs_ls::CrossProjectOrchestrator for crossProjectOrchestrator {
     // server.go:1440
     fn get_default_project(&self) -> Arc<dyn tsrs_ls::Project> {
-        self.default_project.clone()
+        Arc::clone(&self.default_project)
     }
 
     // server.go:1444
@@ -2613,7 +2613,7 @@ impl tsrs_ls::CrossProjectOrchestrator for crossProjectOrchestrator {
         let mut projects = Vec::new();
         self.server.session().with_snapshot_loading_project_tree(ctx, Some(requested_project_trees.clone()), |snapshot| {
             for p in snapshot.project_collection.language_service_projects() {
-                projects.push(p.arc().clone() as Arc<dyn tsrs_ls::Project>);
+                projects.push(Arc::clone(p.arc()) as Arc<dyn tsrs_ls::Project>);
             }
         });
         Box::new(projects.into_iter())
