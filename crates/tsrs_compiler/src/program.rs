@@ -330,7 +330,7 @@ impl Program {
 
 // Parsing and binding recurse deeply on large files; Go's goroutine stacks grow on demand, so the
 // worker threads get large stacks.
-pub(crate) fn worker_pool() -> &'static rayon::ThreadPool {
+pub fn worker_pool() -> &'static rayon::ThreadPool {
     static POOL: OnceLock<rayon::ThreadPool> = OnceLock::new();
     POOL.get_or_init(|| rayon::ThreadPoolBuilder::new().stack_size(256 << 20).build().unwrap())
 }
