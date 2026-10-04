@@ -587,7 +587,8 @@ fn is_descendant(descendant: &str, path: &str) -> bool {
 fn fstat(fd: i32) -> Option<(u64, u64)> {
     // SAFETY: zeroed `stat` is a valid out-parameter; `fd` is an fd this backend owns.
     let mut st: libc::stat = unsafe { std::mem::zeroed() };
-    if unsafe { libc::fstat(fd, &mut st) } != 0 {
+    // SAFETY: `st` is a live, writable `stat` out-parameter for the call; `fd` is an fd this backend owns.
+    if unsafe { libc::fstat(fd, &raw mut st) } != 0 {
         return None;
     }
     Some((st.st_dev as u64, st.st_ino as u64))
@@ -732,7 +733,7 @@ impl watcherImpl for kqueueBackend {
             return;
         }
         // SAFETY: writing one byte from a live buffer to our own pipe.
-        unsafe { libc::write(fd, b"X".as_ptr() as *const libc::c_void, 1) };
+        unsafe { libc::write(fd, b"X".as_ptr().cast::<libc::c_void>(), 1) };
         let ended = self.ended.lock().unwrap();
         let _ended = self.ended_cv.wait_while(ended, |e| !*e).unwrap();
     }

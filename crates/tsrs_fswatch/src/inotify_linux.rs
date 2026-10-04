@@ -142,7 +142,7 @@ impl inotifyBackend {
 
         loop {
             // SAFETY: `buf` is a writable buffer of `buf.len()` bytes.
-            let n = unsafe { libc::read(self.inotify.load(Ordering::SeqCst), buf.as_mut_ptr() as *mut libc::c_void, buf.len()) };
+            let n = unsafe { libc::read(self.inotify.load(Ordering::SeqCst), buf.as_mut_ptr().cast::<libc::c_void>(), buf.len()) };
             if n < 0 {
                 let errno = last_errno();
                 if errno == libc::EAGAIN || errno == libc::EWOULDBLOCK {
@@ -157,7 +157,7 @@ impl inotifyBackend {
             let mut offset = 0;
             while offset < n {
                 // SAFETY: the kernel writes whole `inotify_event` records; `offset` is at a record start.
-                let ev: libc::inotify_event = unsafe { std::ptr::read_unaligned(buf.as_ptr().add(offset) as *const libc::inotify_event) };
+                let ev: libc::inotify_event = unsafe { std::ptr::read_unaligned(buf.as_ptr().add(offset).cast::<libc::inotify_event>()) };
                 let record_size = header + ev.len as usize;
                 let mut name = String::new();
                 if ev.len > 0 {
@@ -284,7 +284,7 @@ impl watcherImpl for inotifyBackend {
             return;
         }
         // SAFETY: writing one byte from a live buffer to our own pipe.
-        unsafe { libc::write(fd, b"X".as_ptr() as *const libc::c_void, 1) };
+        unsafe { libc::write(fd, b"X".as_ptr().cast::<libc::c_void>(), 1) };
         let ended = self.ended.lock().unwrap();
         let _ended = self.ended_cv.wait_while(ended, |e| !*e).unwrap();
     }
