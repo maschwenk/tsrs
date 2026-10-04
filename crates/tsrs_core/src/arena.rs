@@ -340,7 +340,7 @@ impl Arena {
     pub(crate) unsafe fn push_free(&self, class: usize, p: *mut u8) {
         #[cfg(debug_assertions)]
         std::ptr::write_bytes(p.add(8), POISON, class * 8 - 8);
-        *(p as *mut *mut u8) = self.free[class].get();
+        *p.cast::<*mut u8>() = self.free[class].get();
         self.free[class].set(p);
     }
 
@@ -454,7 +454,8 @@ fn new_slab(size: usize, live: usize) -> *const Slab {
     let size = size.div_ceil(PAGE) * PAGE;
     #[cfg(compressed_ptrs)]
     if size == SLAB_SIZE {
-        if let Some(addr) = SLAB_CACHE.lock().unwrap().pop() {
+        let cached = SLAB_CACHE.lock().unwrap().pop();
+        if let Some(addr) = cached {
             let base = std::ptr::with_exposed_provenance_mut::<u8>(addr);
             return Box::into_raw(Box::new(Slab { base, size, live: AtomicUsize::new(live) }));
         }
@@ -523,7 +524,7 @@ fn slab_release(slab: *const Slab) {
         }
     }
     // SAFETY: made by `Box::into_raw` in `new_slab`; this was the last reference.
-    drop(unsafe { Box::from_raw(slab as *mut Slab) });
+    drop(unsafe { Box::from_raw(slab.cast_mut()) });
 }
 
 /// Census only: clears `N` bytes of the stack below the caller. The frames that just used the freed or rewound
@@ -763,7 +764,7 @@ impl Region {
     /// thread has it entered.
     pub fn enter(&self) -> RegionScope {
         self.0.lock.lock();
-        RegionScope::push(&*self.0.arena as *const Arena, Some(self.clone()))
+        RegionScope::push(&raw const *self.0.arena, Some(self.clone()))
     }
 
     /// The region one of whose chunks contains `addr`.
@@ -894,7 +895,7 @@ pub fn current_region() -> Option<Region> {
 /// Makes the current thread's own (never freed) arena the allocation target until the scope is dropped: for data
 /// that outlives any region, such as process-wide lazily initialized statics.
 pub fn enter_thread_arena() -> RegionScope {
-    let own = crate::ptr::own_arena() as *const Arena;
+    let own = std::ptr::from_ref::<Arena>(crate::ptr::own_arena());
     RegionScope::push(own, None)
 }
 
@@ -926,7 +927,7 @@ pub fn enter_table_owner(addr: usize) -> Option<RegionScope> {
     }
     let current = CURRENT.with(|c| c.get());
     match Region::containing(addr) {
-        Some(region) if std::ptr::eq(&*region.0.arena, current) => None,
+        Some(region) if std::ptr::eq(&raw const *region.0.arena, current) => None,
         _ => Some(enter_thread_arena()),
     }
 }
@@ -951,9 +952,9 @@ impl Region {
     /// innermost one is the scratch region.
     pub fn enter_scratch(&self) -> ScratchScope {
         let outer = CURRENT.with(|c| c.get());
-        let outer = if outer.is_null() { crate::ptr::own_arena() as *const Arena } else { outer };
+        let outer = if outer.is_null() { std::ptr::from_ref::<Arena>(crate::ptr::own_arena()) } else { outer };
         let scope = self.enter();
-        let saved = SCRATCH.with(|s| s.replace((&*self.0.arena as *const Arena, outer)));
+        let saved = SCRATCH.with(|s| s.replace((&raw const *self.0.arena, outer)));
         ScratchScope { saved, _scope: scope }
     }
 }
