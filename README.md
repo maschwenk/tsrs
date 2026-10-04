@@ -1,35 +1,35 @@
 <!-- bench:start -->
 ## Benchmark: tsrs vs tsgo 7.0.2
 
-tsrs is a Rust port of the TypeScript 7 type checker (the Go compiler, "tsgo"). Each row type-checks one project from [microsoft/typescript-benchmarking](https://github.com/microsoft/typescript-benchmarking), the suite the TypeScript team benchmarks tsgo on (vscode, xstate-main, webpack, mui-docs, Compiler, Compiler-Unions), with tsgo 7.0.2 (npm `typescript@7.0.2`) and with tsrs at commit `06027d29a717` (the PGO-optimized `dist` build, built like the npm release binaries): `tsc -p <project> --noEmit`, median of 3 interleaved runs, on Depot CI `depot-ubuntu-24.04-8` (8 vCPU, 31 GB RAM, Linux x86_64, AMD EPYC 9R45 96-Core Processor).
+tsrs is a Rust port of the TypeScript 7 type checker (the Go compiler, "tsgo"). Each row type-checks one project from [microsoft/typescript-benchmarking](https://github.com/microsoft/typescript-benchmarking), the suite the TypeScript team benchmarks tsgo on (vscode, xstate-main, webpack, mui-docs, Compiler, Compiler-Unions), with tsgo 7.0.2 (npm `typescript@7.0.2`) and with tsrs at commit `405854f8038c` (the PGO-optimized `dist` build, built like the npm release binaries): `tsc -p <project> --noEmit`, median of 3 interleaved runs, on Depot CI `depot-ubuntu-24.04-8` (8 vCPU, 31 GB RAM, Linux x86_64, AMD EPYC 9R45 96-Core Processor).
 
 **Default mode: 4 checker threads in both (tsrs also resolves members lazily, its default)**
 
 | project | errors, tsgo / tsrs | tsgo wall (s) | tsrs wall (s) | speedup | tsgo peak memory | tsrs peak memory | memory, tsrs / tsgo |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| vscode | 359 / 371 (ref 371) | 11.60 | 3.29 | 3.52x | 7.47 GiB | 2.50 GiB | 0.33x |
-| xstate-main | 0 / 0 | 0.85 | 0.24 | 3.58x | 751 MiB | 412 MiB | 0.55x |
-| webpack | 848 / 840 (ref 840) | 1.35 | 0.38 | 3.57x | 1.21 GiB | 578 MiB | 0.47x |
-| mui-docs | 0 / 0 | 12.74 | 1.65 | 7.75x | 8.16 GiB | 1.13 GiB | 0.14x |
-| Compiler | 43 / 43 | 0.29 | 0.09 | 3.40x | 221 MiB | 171 MiB | 0.77x |
-| Compiler-Unions | 41 / 41 | 0.53 | 0.16 | 3.37x | 253 MiB | 174 MiB | 0.69x |
+| vscode | 359 / 371 (ref 371) | 11.63 | 3.27 | 3.55x | 7.58 GiB | 2.48 GiB | 0.33x |
+| xstate-main | 0 / 0 | 0.85 | 0.24 | 3.61x | 748 MiB | 413 MiB | 0.55x |
+| webpack | 848 / 840 (ref 840) | 1.35 | 0.38 | 3.60x | 1.21 GiB | 582 MiB | 0.47x |
+| mui-docs | 0 / 0 | 12.72 | 1.64 | 7.77x | 8.18 GiB | 1.11 GiB | 0.14x |
+| Compiler | 43 / 43 | 0.27 | 0.08 | 3.34x | 217 MiB | 166 MiB | 0.77x |
+| Compiler-Unions | 41 / 41 | 0.53 | 0.16 | 3.32x | 251 MiB | 170 MiB | 0.68x |
 
 **`--singleThreaded`: one checker thread in both**
 
 | project | errors, tsgo / tsrs | tsgo wall (s) | tsrs wall (s) | speedup | tsgo peak memory | tsrs peak memory | memory, tsrs / tsgo |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| vscode | 359 / 371 (ref 371) | 30.10 | 10.48 | 2.87x | 6.56 GiB | 2.07 GiB | 0.32x |
-| xstate-main | 0 / 0 | 1.67 | 0.63 | 2.64x | 611 MiB | 234 MiB | 0.38x |
-| webpack | 848 / 840 (ref 840) | 2.96 | 1.13 | 2.62x | 940 MiB | 361 MiB | 0.38x |
-| mui-docs | 0 / 0 | 14.46 | 3.23 | 4.48x | 3.46 GiB | 795 MiB | 0.22x |
-| Compiler | 43 / 43 | 0.52 | 0.19 | 2.77x | 189 MiB | 83 MiB | 0.44x |
-| Compiler-Unions | 41 / 41 | 0.85 | 0.35 | 2.42x | 205 MiB | 86 MiB | 0.42x |
+| vscode | 359 / 371 (ref 371) | 30.30 | 10.56 | 2.87x | 6.77 GiB | 2.04 GiB | 0.30x |
+| xstate-main | 0 / 0 | 1.66 | 0.63 | 2.65x | 597 MiB | 229 MiB | 0.38x |
+| webpack | 848 / 840 (ref 840) | 2.96 | 1.13 | 2.63x | 945 MiB | 357 MiB | 0.38x |
+| mui-docs | 0 / 0 | 14.38 | 3.27 | 4.39x | 3.73 GiB | 790 MiB | 0.21x |
+| Compiler | 43 / 43 | 0.47 | 0.17 | 2.71x | 187 MiB | 82 MiB | 0.44x |
+| Compiler-Unions | 41 / 41 | 0.85 | 0.35 | 2.45x | 203 MiB | 85 MiB | 0.42x |
 
 errors: the number of type errors each compiler reports on the project; they must be equal (a bold cell is a disagreement, i.e. a correctness bug). wall: process wall-clock time. speedup: tsgo wall / tsrs wall (above 1 = tsrs faster). peak memory: maximum resident set size. memory, tsrs / tsgo: below 1 = tsrs uses less.
 
 (ref N): tsgo 7.0.2 and tsrs disagree, but `typescript@7.1.0-dev.20260930.4`, built from the TypeScript commit tsrs ports (`b85298b6`), reports exactly tsrs's errors: a TypeScript 7.0 vs 7.1-dev difference, not a tsrs bug.
 
-Runner: Depot CI `depot-ubuntu-24.04-8` (8 vCPU, 31 GB RAM, Linux x86_64, AMD EPYC 9R45 96-Core Processor). Date: 2026-10-04 16:31 UTC. tsrs commit: `06027d29a717`. Numbers from shared CI machines are noisy; compare trends, not single runs. How it is measured: [`bench/README.md`](bench/README.md).
+Runner: Depot CI `depot-ubuntu-24.04-8` (8 vCPU, 31 GB RAM, Linux x86_64, AMD EPYC 9R45 96-Core Processor). Date: 2026-10-04 16:50 UTC. tsrs commit: `405854f8038c`. Numbers from shared CI machines are noisy; compare trends, not single runs. How it is measured: [`bench/README.md`](bench/README.md).
 <!-- bench:end -->
 
 # tsrs
