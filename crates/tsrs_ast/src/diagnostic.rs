@@ -703,7 +703,6 @@ mod tests {
 
 // diagnostic.go NewDiagnosticFromText: a diagnostic whose message is already-localized text (the native API
 // receives these from clients, e.g. `configFileParsingDiagnostics`).
-#[allow(clippy::too_many_arguments)]
 pub fn new_diagnostic_from_text(
     file: Option<P<SourceFile>>,
     loc: TextRange,

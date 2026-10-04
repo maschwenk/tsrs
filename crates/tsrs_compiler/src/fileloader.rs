@@ -152,7 +152,7 @@ pub(crate) fn process_all_program_files(opts: &ProgramOptions, single_threaded: 
             if std::thread::panicking() {
                 // SAFETY: loading unwound, so no program was created from this mapper; the resolver and loader that
                 // referred to it were dropped first.
-                unsafe { crate::program::free_project_reference_file_mapper(self.0 as *const projectReferenceFileMapper as *mut projectReferenceFileMapper) };
+                unsafe { crate::program::free_project_reference_file_mapper(std::ptr::from_ref::<projectReferenceFileMapper>(self.0).cast_mut()) };
             }
         }
     }

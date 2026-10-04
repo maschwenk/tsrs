@@ -647,8 +647,10 @@ pub unsafe fn free_api_orchestrator(o: &'static Orchestrator) {
     // Order: the host and orchestrator are dropped before the regions. Their destructors only free heap containers
     // (maps of `P<..>` pointers, Arcs); none dereferences arena memory, which is still alive here. Keep it that way:
     // a destructor that reads region memory must run before `drop(regions)`.
-    drop(Box::from_raw(h as *const host as *mut host));
-    drop(Box::from_raw(o as *const Orchestrator as *mut Orchestrator));
+    // SAFETY: `new_orchestrator` leaked both from `Box`es, and nothing uses them afterwards (this function's contract).
+    drop(unsafe { Box::from_raw(std::ptr::from_ref::<host>(h).cast_mut()) });
+    // SAFETY: as above.
+    drop(unsafe { Box::from_raw(std::ptr::from_ref::<Orchestrator>(o).cast_mut()) });
     drop(regions);
 }
 

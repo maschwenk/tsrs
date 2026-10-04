@@ -181,7 +181,7 @@ static MISSING_LIST_NODES_BACKING: usize = 0;
 pub(crate) fn missing_list_nodes() -> &'static [P<Node>] {
     // SAFETY: a zero-length slice needs only a non-null, aligned pointer; P<Node> has the size
     // and alignment of a pointer, and nothing is ever read through this slice.
-    unsafe { std::slice::from_raw_parts(&MISSING_LIST_NODES_BACKING as *const usize as *const P<Node>, 0) }
+    unsafe { std::slice::from_raw_parts(std::ptr::from_ref::<usize>(&MISSING_LIST_NODES_BACKING).cast::<P<Node>>(), 0) }
 }
 
 pub(crate) fn is_missing_node_list(list: Option<P<NodeList>>) -> bool {

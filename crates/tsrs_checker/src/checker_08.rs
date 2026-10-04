@@ -242,7 +242,7 @@ impl Checker {
         }
 
         let mut source_file: Option<P<SourceFile>> = None;
-        if is_resolved && (resolution_diagnostic.is_none() || std::ptr::eq(resolution_diagnostic.unwrap(), &diagnostics::Module_0_was_resolved_to_1_but_jsx_is_not_set)) {
+        if is_resolved && (resolution_diagnostic.is_none() || std::ptr::eq(resolution_diagnostic.unwrap(), &raw const diagnostics::Module_0_was_resolved_to_1_but_jsx_is_not_set)) {
             source_file = self.program.get_source_file_for_resolved_module(resolved_module.unwrap().resolved_file_name);
         }
 
@@ -391,7 +391,7 @@ impl Checker {
         let error_node = error_node?;
 
         if is_resolved && !resolution_extension_is_ts_or_json(resolved_module.unwrap().extension) && resolution_diagnostic.is_none()
-            || resolution_diagnostic.is_some_and(|d| std::ptr::eq(d, &diagnostics::Could_not_find_a_declaration_file_for_module_0_1_implicitly_has_an_any_type))
+            || resolution_diagnostic.is_some_and(|d| std::ptr::eq(d, &raw const diagnostics::Could_not_find_a_declaration_file_for_module_0_1_implicitly_has_an_any_type))
         {
             let resolved_module = resolved_module.unwrap();
             if is_for_augmentation {

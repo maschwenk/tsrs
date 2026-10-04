@@ -384,6 +384,7 @@ impl Drop for EntryVec {
 
 // SAFETY: an `EntryVec` owns its buffer like a `Vec` (entries are plain words).
 unsafe impl Send for EntryVec {}
+// SAFETY: as for the `Vec` it stands for: through `&EntryVec` the plain-word entries are only read.
 unsafe impl Sync for EntryVec {}
 
 /// One word: the symbol in the low 45 bits (`P::pack`), then the odd-key flag (the key is in `odd_keys`), the key length capped at 63 (6 bits)
@@ -561,6 +562,8 @@ impl Drop for ExtraSlot {
 
 // SAFETY: an `ExtraSlot` owns its `SymbolMapExtra` like a `Box` (or holds plain bits).
 unsafe impl Send for ExtraSlot {}
+// SAFETY: as for the `Box` it stands for: `SymbolMapExtra` has no interior mutability, and through `&ExtraSlot` it
+// is only read.
 unsafe impl Sync for ExtraSlot {}
 
 #[inline]

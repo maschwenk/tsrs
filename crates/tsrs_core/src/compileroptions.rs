@@ -381,7 +381,6 @@ impl ModuleDetectionKind {
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
 pub struct ModuleKind(pub i32);
 
-#[allow(non_upper_case_globals)]
 impl ModuleKind {
     pub const None: ModuleKind = ModuleKind(0);
     pub const CommonJS: ModuleKind = ModuleKind(1);
@@ -480,7 +479,6 @@ pub const RESOLUTION_MODE_ESM: ResolutionMode = ModuleKind::ESNext;
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
 pub struct ModuleResolutionKind(pub i32);
 
-#[allow(non_upper_case_globals)]
 impl ModuleResolutionKind {
     pub const Unknown: ModuleResolutionKind = ModuleResolutionKind(0);
     pub const Classic: ModuleResolutionKind = ModuleResolutionKind(1);
@@ -592,7 +590,6 @@ impl NewLineKind {
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
 pub struct ScriptTarget(pub i32);
 
-#[allow(non_upper_case_globals)]
 impl ScriptTarget {
     pub const None: ScriptTarget = ScriptTarget(0);
     pub const ES5: ScriptTarget = ScriptTarget(1);
@@ -679,7 +676,6 @@ impl fmt::Display for ScriptTarget {
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
 pub struct JsxEmit(pub i32);
 
-#[allow(non_upper_case_globals)]
 impl JsxEmit {
     pub const None: JsxEmit = JsxEmit(0);
     pub const Preserve: JsxEmit = JsxEmit(1);

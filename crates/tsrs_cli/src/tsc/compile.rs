@@ -30,9 +30,10 @@ pub trait System: Sync {
 
 pub fn format_local_time_03_04_05_pm(t: std::time::SystemTime) -> String {
     let secs = t.duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as libc::time_t).unwrap_or(0);
-    // SAFETY: localtime_r writes only into the provided tm.
+    // SAFETY: `libc::tm` is C integers (and, on some platforms, a nullable `char *`), for which all zeros is valid.
     let mut tm: libc::tm = unsafe { std::mem::zeroed() };
-    unsafe { libc::localtime_r(&secs, &mut tm) };
+    // SAFETY: both pointers are to live locals; localtime_r reads `secs` and writes only into `tm`.
+    unsafe { libc::localtime_r(&raw const secs, &raw mut tm) };
     let hour12 = match tm.tm_hour % 12 {
         0 => 12,
         h => h,

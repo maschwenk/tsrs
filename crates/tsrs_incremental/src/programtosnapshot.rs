@@ -387,7 +387,7 @@ fn checker_references_of(file: P<SourceFile>, checker: &mut Checker, ambient_mod
     }
     // From ambient modules. A checker's ambient modules and their declarations are fixed once it is initialized,
     // so their declaring files are collected once per checker and only filtered per file.
-    let key = &*checker as *const Checker as usize;
+    let key = std::ptr::from_ref::<Checker>(&*checker) as usize;
     let declaring_files = ambient_module_files_by_checker.lock().unwrap().get(&key).cloned();
     let ambient_module_files = declaring_files.unwrap_or_else(|| {
         let mut declaring_files = Vec::new();

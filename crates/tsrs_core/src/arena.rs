@@ -77,8 +77,11 @@ struct DropEntry {
     drop: unsafe fn(*mut u8, usize),
 }
 
+/// # Safety
+/// `ptr` holds `len` live `T`s that are never used again (a region's drop list, run once when it is freed).
 unsafe fn drop_slice<T>(ptr: *mut u8, len: usize) {
-    std::ptr::drop_in_place(std::ptr::slice_from_raw_parts_mut(ptr.cast::<T>(), len));
+    // SAFETY: this function's contract.
+    unsafe { std::ptr::drop_in_place(std::ptr::slice_from_raw_parts_mut(ptr.cast::<T>(), len)) };
 }
 
 /// The bump position of the current thread's arena (`checkpoint`).
@@ -116,21 +119,21 @@ impl Arena {
         a
     }
 
-    #[inline(always)]
+    #[inline]
     pub(crate) fn is_region(&self) -> bool {
         self.region.is_some()
     }
 
     /// Records `len` values of type `T` at `ptr` (just allocated in this arena) for dropping when the region is freed.
     /// Does nothing in a thread's own arena (values there are never dropped).
-    #[inline(always)]
+    #[inline]
     pub(crate) fn track_drop<T>(&self, ptr: *mut T, len: usize) {
         if std::mem::needs_drop::<T>() && self.is_region() && len != 0 {
             self.drops.borrow_mut().push(DropEntry { ptr: ptr.cast(), len, drop: drop_slice::<T> });
         }
     }
 
-    #[inline(always)]
+    #[inline]
     pub(crate) fn alloc_layout(&self, layout: Layout) -> NonNull<u8> {
         // Profile builds: a zero-sized value (a closure without captures, e.g. a `TypeComparer`) would get the bump
         // position, which is the start of the previous block, and the census would count that word as a reference.
@@ -152,7 +155,7 @@ impl Arena {
         self.alloc_layout_slow(layout)
     }
 
-    #[inline(always)]
+    #[inline]
     fn alloc_layout_up(&self, layout: Layout) -> NonNull<u8> {
         let ptr = self.ptr.get();
         let aligned = (ptr.addr() + (layout.align() - 1)) & !(layout.align() - 1);
@@ -256,7 +259,7 @@ impl Arena {
     }
 
     /// `value` in a block of `layout` (at least `T`'s size and alignment).
-    #[inline(always)]
+    #[inline]
     #[expect(clippy::mut_from_ref, reason = "a bump allocator: each call returns a fresh block nothing else points to (bumpalo's alloc has this signature)")]
     pub(crate) fn alloc_with<T>(&self, layout: Layout, value: T) -> &mut T {
         debug_assert!(layout.size() >= std::mem::size_of::<T>() && layout.align() >= std::mem::align_of::<T>());
@@ -344,10 +347,12 @@ impl Arena {
     #[inline]
     pub(crate) unsafe fn push_free(&self, class: usize, p: *mut u8) {
         #[cfg(debug_assertions)]
-        std::ptr::write_bytes(p.add(8), POISON, class * 8 - 8);
+        // SAFETY: `p` is a dead block of `class * 8` bytes (this function's contract); its first word is kept.
+        unsafe { std::ptr::write_bytes(p.add(8), POISON, class * 8 - 8) };
         #[expect(clippy::cast_ptr_alignment, reason = "`p` is 8-aligned (this function's contract)")]
         let next = p.cast::<*mut u8>();
-        *next = self.free[class].get();
+        // SAFETY: the block is dead and at least 8 bytes, so its first word holds the free-list link.
+        unsafe { *next = self.free[class].get() };
         self.free[class].set(p);
     }
 
@@ -579,7 +584,7 @@ fn census_mode() -> bool {
 
 /// The free-list class of a block of `size` bytes and alignment `align` at address `addr`, or 0 when such blocks
 /// are not recycled.
-#[inline(always)]
+#[inline]
 pub const fn free_class(size: usize, align: usize) -> usize {
     if size >= 8 && size <= MAX_FREE_SIZE && size % 8 == 0 && align <= 8 {
         size / 8
@@ -618,10 +623,12 @@ pub(crate) unsafe fn free_block(arena: &Arena, addr: usize, size: usize, align: 
         return;
     }
     if poison_mode() {
-        std::ptr::write_bytes(p, POISON, size);
+        // SAFETY: the block is `size` dead bytes (this function's contract), written through the chunk's provenance.
+        unsafe { std::ptr::write_bytes(p, POISON, size) };
         return;
     }
-    arena.push_free(class, p);
+    // SAFETY: a dead block of `class * 8` bytes (`free_class`), 8-aligned (checked above).
+    unsafe { arena.push_free(class, p) };
 }
 
 /// Rewinds to `cp` if allowed (see the module docs).
@@ -734,10 +741,11 @@ pub(crate) struct RegionInner {
     on_free: Mutex<Vec<Box<dyn FnOnce() + Send>>>,
 }
 
+#[expect(clippy::non_send_fields_in_send_ty, reason = "the arena's cells: see the SAFETY comment")]
 // SAFETY: the arena's cells are only touched by the thread holding `lock` (or, before the region is shared, by its
 // creator), and by `Drop`, when no handle exists any more.
-#[expect(clippy::non_send_fields_in_send_ty, reason = "the arena's cells: see the SAFETY comment")]
 unsafe impl Send for RegionInner {}
+// SAFETY: as for `Send`: shared handles reach the arena's cells only while holding `lock`.
 unsafe impl Sync for RegionInner {}
 
 /// A freeable arena (see the module docs). Cloning shares it; it is freed when the last handle is dropped.

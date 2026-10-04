@@ -78,7 +78,7 @@ impl ParsedPatternsCache {
     }
 
     pub(crate) fn get(&self, path_mappings: Option<&OrderedMap<String, Vec<String>>>) -> P<ParsedPatterns> {
-        let key = path_mappings.map_or(0, |m| m as *const OrderedMap<String, Vec<String>> as usize);
+        let key = path_mappings.map_or(0, |m| std::ptr::from_ref::<OrderedMap<String, Vec<String>>>(m) as usize);
         match self.cache.load(&key) {
             Some(patterns) => patterns,
             None => self.cache.load_or_store(key, P::new(try_parse_patterns(path_mappings))).0,

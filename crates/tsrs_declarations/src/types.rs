@@ -33,7 +33,6 @@ pub trait DeclarationEmitHost: ModuleSpecifierGenerationHost {
 }
 
 // transform.go:46
-#[allow(non_camel_case_types)]
 #[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct thisPropertyAssignmentKey {
     pub name: String,

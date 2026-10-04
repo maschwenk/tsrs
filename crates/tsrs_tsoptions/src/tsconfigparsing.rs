@@ -248,7 +248,7 @@ fn parse_own_config_of_json_source_file(
         let mut value = value;
         let mut property_set_errors: Vec<P<Diagnostic>> = Vec::new();
         if let Some(option) = option {
-            if !std::ptr::eq(option, &*EXTENDS_OPTION_DECLARATION) {
+            if !std::ptr::eq(option, &raw const *EXTENDS_OPTION_DECLARATION) {
                 let (v, e) = convert_json_option(
                     option,
                     value,
@@ -305,8 +305,8 @@ fn parse_own_config_of_json_source_file(
                     // errors = append(errors, ast.NewCompilerDiagnostic(diagnostics.Unknown_compiler_option_0_Did_you_mean_1, keyText, core.FindKey(parentOption.ElementOptions, keyText)))
                 }
             }
-        } else if parent_option.is_some_and(|p| std::ptr::eq(p, &*TSCONFIG_ROOT_OPTIONS_MAP)) {
-            if option.is_some_and(|o| std::ptr::eq(o, &*EXTENDS_OPTION_DECLARATION)) {
+        } else if parent_option.is_some_and(|p| std::ptr::eq(p, &raw const *TSCONFIG_ROOT_OPTIONS_MAP)) {
+            if option.is_some_and(|o| std::ptr::eq(o, &raw const *EXTENDS_OPTION_DECLARATION)) {
                 let (config_path, err) = get_extends_config_path_or_array(
                     &value,
                     host,

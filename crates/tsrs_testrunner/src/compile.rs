@@ -135,7 +135,6 @@ impl crate::emit_harness::Recompile for Recompiler<'_> {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn compile_files(
     input_files: &[TestFile],
     other_files: &[TestFile],

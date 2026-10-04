@@ -194,7 +194,7 @@ impl Node {
             if !c.enabled.get() {
                 return self.compute_subtree_facts() & !SubtreeFacts::ExclusionsNode;
             }
-            let key = self as *const Node as usize;
+            let key = std::ptr::from_ref::<Node>(self) as usize;
             if let Some(&facts) = c.facts.borrow().get(&key) {
                 return facts;
             }
