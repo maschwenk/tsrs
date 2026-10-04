@@ -1283,9 +1283,12 @@ impl Checker {
     pub(crate) fn get_exports_of_module(&mut self, module_symbol: P<Symbol>) -> P<SymbolTable> {
         let links = self.module_symbol_links.get(module_symbol);
         if links.resolved_exports.get().is_none() {
+            // A nested computation of the same table (export * cycles) caches its result, which this one then replaces.
+            self.alias_cache_blockers += 1;
             let (exports, type_only_export_star_map) = self.get_exports_of_module_worker(Some(module_symbol));
             links.resolved_exports.set(Some(exports));
             links.type_only_export_star_map.assign(type_only_export_star_map);
+            self.alias_cache_blockers -= 1;
         }
         links.resolved_exports.get().unwrap()
     }
