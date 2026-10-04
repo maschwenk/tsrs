@@ -112,7 +112,7 @@ impl<T> P<T> {
     pub fn new(value: T) -> P<T> {
         let p = with_arena(|a| {
             let r = a.alloc_with(p_layout::<T>(), value);
-            a.track_drop(r as *mut T, 1);
+            a.track_drop(std::ptr::from_mut::<T>(r), 1);
             // SAFETY: a fresh block of the current arena, laid out by `p_layout`.
             unsafe { P::from_arena(r) }
         });
@@ -127,7 +127,7 @@ impl<T> P<T> {
     pub fn new_scratch(value: T) -> P<T> {
         let p = with_scratch_arena(|a| {
             let r = a.alloc_with(p_layout::<T>(), value);
-            a.track_drop(r as *mut T, 1);
+            a.track_drop(std::ptr::from_mut::<T>(r), 1);
             // SAFETY: a fresh block of the arena, laid out by `p_layout`.
             unsafe { P::from_arena(r) }
         });
@@ -174,7 +174,7 @@ impl<T> P<T> {
     pub unsafe fn from_arena(r: &'static T) -> P<T> {
         #[cfg(compressed_ptrs)]
         {
-            let off = (r as *const T).addr().wrapping_sub(crate::reserve::base().addr());
+            let off = std::ptr::from_ref::<T>(r).addr().wrapping_sub(crate::reserve::base().addr());
             debug_assert!(off < crate::reserve::RESERVE && off & 7 == 0 && off != 0, "P::from_arena outside the arena");
             P(std::num::NonZeroU32::new_unchecked((off >> crate::reserve::UNIT_SHIFT) as u32), std::marker::PhantomData)
         }
@@ -287,9 +287,9 @@ impl<T> P<T> {
     #[cfg(compressed_ptrs)]
     #[track_caller]
     pub fn from_static(r: &'static T) -> P<T> {
-        let off = (r as *const T).addr().wrapping_sub(crate::reserve::base().addr());
+        let off = std::ptr::from_ref::<T>(r).addr().wrapping_sub(crate::reserve::base().addr());
         if off >= crate::reserve::RESERVE || off & 7 != 0 || off == 0 {
-            from_static_failed(std::any::type_name::<T>(), (r as *const T).addr());
+            from_static_failed(std::any::type_name::<T>(), std::ptr::from_ref::<T>(r).addr());
         }
         P(std::num::NonZeroU32::new((off >> crate::reserve::UNIT_SHIFT) as u32).unwrap(), std::marker::PhantomData)
     }
@@ -582,7 +582,7 @@ impl<T> SP<T> {
     }
     #[inline]
     pub fn addr(self) -> usize {
-        self.0 as *const T as usize
+        std::ptr::from_ref::<T>(self.0) as usize
     }
 }
 
@@ -738,7 +738,7 @@ impl PackedStr {
         let p = self.0.as_ptr().map_addr(|a| a & ((1 << PACKED_STR_LEN_SHIFT) - 1));
         // SAFETY: built by `new` from a `&'static str` of this length, or by `new_long` (length prefix + bytes).
         unsafe {
-            let (p, len) = if len == PACKED_STR_LONG { (p.add(4) as *const u8, *(p as *const u32) as usize) } else { (p as *const u8, len) };
+            let (p, len) = if len == PACKED_STR_LONG { (p.add(4).cast_const(), *(p as *const u32) as usize) } else { (p.cast_const(), len) };
             std::str::from_utf8_unchecked(std::slice::from_raw_parts(p, len))
         }
     }
@@ -1343,7 +1343,7 @@ pub fn alloc_str_scratch(s: &str) -> &'static str {
 pub fn alloc<T>(value: T) -> &'static T {
     let r: &'static T = with_arena(|a| {
         let r = a.alloc_with(p_layout::<T>(), value);
-        a.track_drop(r as *mut T, 1);
+        a.track_drop(std::ptr::from_mut::<T>(r), 1);
         &*r
     });
     profile!(T, p_layout::<T>().size(), r as *const T as usize);
@@ -1430,7 +1430,7 @@ pub mod shared_check {
         if !enabled() {
             return;
         }
-        let addr = object as *const T as *const () as usize;
+        let addr = std::ptr::from_ref::<T>(object).cast::<()>() as usize;
         let frozen = FROZEN.read().unwrap();
         let i = frozen.partition_point(|&(start, _)| start <= addr);
         if i > 0 && addr < frozen[i - 1].1 {
