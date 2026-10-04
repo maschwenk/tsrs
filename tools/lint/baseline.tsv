@@ -33,12 +33,7 @@
 2	clippy::implicit_clone	crates/tsrs_api/src/config.rs
 1	clippy::implicit_clone	crates/tsrs_api/src/module_resolution.rs
 2	clippy::implicit_clone	crates/tsrs_api/src/requestfs.rs
-3	clippy::inline_always	crates/tsrs_ast/src/ast.rs
-1	clippy::inline_always	crates/tsrs_checker/src/types.rs
-6	clippy::inline_always	crates/tsrs_core/src/arena.rs
-28	clippy::inline_always	crates/tsrs_core/src/ptr.rs
 1	clippy::inline_always	crates/tsrs_core/src/reserve.rs
-2	clippy::inline_always	crates/tsrs_scanner/src/scanner.rs
 7	clippy::iter_over_hash_type	crates/tsrs_api/src/requestfs.rs
 1	clippy::iter_over_hash_type	crates/tsrs_api/src/snapshots.rs
 1	clippy::iter_over_hash_type	crates/tsrs_fswatch/src/event.rs

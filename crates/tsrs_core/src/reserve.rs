@@ -32,7 +32,7 @@ pub const BASE_ADDR: usize = 0x4001_0000_0000;
 static RESERVED: AtomicBool = AtomicBool::new(false);
 
 /// The start of the reservation. A handle exists only after the first chunk, i.e. after the reservation.
-#[inline(always)]
+#[inline]
 pub fn base() -> *mut u8 {
     std::ptr::with_exposed_provenance_mut(BASE_ADDR)
 }

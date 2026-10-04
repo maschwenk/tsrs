@@ -515,19 +515,19 @@ pub(crate) trait NodeRareTail: NodePayload {
 // for_each_child(), ...) are generated in generated.rs.
 
 impl Node {
-    #[inline(always)]
+    #[inline]
     pub fn kind(&self) -> Kind {
         self.header.get().kind()
     }
 
     /// Which data struct follows this node's header.
-    #[inline(always)]
+    #[inline]
     pub(crate) fn data_tag(&self) -> NodeDataTag {
         self.header.get().data_tag()
     }
 
     /// The data struct after this node's header. Callers check `data_tag() == T::TAG` first.
-    #[inline(always)]
+    #[inline]
     pub(crate) fn payload<T: NodePayload>(&self) -> &'static T {
         debug_assert!(self.data_tag() == T::TAG);
         // SAFETY: a node tagged `T::TAG` was allocated by `new_node::<T>` as a `NodeAlloc<T>` whose header is

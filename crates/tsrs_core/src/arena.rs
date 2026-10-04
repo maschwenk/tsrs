@@ -119,21 +119,21 @@ impl Arena {
         a
     }
 
-    #[inline(always)]
+    #[inline]
     pub(crate) fn is_region(&self) -> bool {
         self.region.is_some()
     }
 
     /// Records `len` values of type `T` at `ptr` (just allocated in this arena) for dropping when the region is freed.
     /// Does nothing in a thread's own arena (values there are never dropped).
-    #[inline(always)]
+    #[inline]
     pub(crate) fn track_drop<T>(&self, ptr: *mut T, len: usize) {
         if std::mem::needs_drop::<T>() && self.is_region() && len != 0 {
             self.drops.borrow_mut().push(DropEntry { ptr: ptr.cast(), len, drop: drop_slice::<T> });
         }
     }
 
-    #[inline(always)]
+    #[inline]
     pub(crate) fn alloc_layout(&self, layout: Layout) -> NonNull<u8> {
         // Profile builds: a zero-sized value (a closure without captures, e.g. a `TypeComparer`) would get the bump
         // position, which is the start of the previous block, and the census would count that word as a reference.
@@ -155,7 +155,7 @@ impl Arena {
         self.alloc_layout_slow(layout)
     }
 
-    #[inline(always)]
+    #[inline]
     fn alloc_layout_up(&self, layout: Layout) -> NonNull<u8> {
         let ptr = self.ptr.get();
         let aligned = (ptr.addr() + (layout.align() - 1)) & !(layout.align() - 1);
@@ -259,7 +259,7 @@ impl Arena {
     }
 
     /// `value` in a block of `layout` (at least `T`'s size and alignment).
-    #[inline(always)]
+    #[inline]
     #[expect(clippy::mut_from_ref, reason = "a bump allocator: each call returns a fresh block nothing else points to (bumpalo's alloc has this signature)")]
     pub(crate) fn alloc_with<T>(&self, layout: Layout, value: T) -> &mut T {
         debug_assert!(layout.size() >= std::mem::size_of::<T>() && layout.align() >= std::mem::align_of::<T>());
@@ -584,7 +584,7 @@ fn census_mode() -> bool {
 
 /// The free-list class of a block of `size` bytes and alignment `align` at address `addr`, or 0 when such blocks
 /// are not recycled.
-#[inline(always)]
+#[inline]
 pub const fn free_class(size: usize, align: usize) -> usize {
     if size >= 8 && size <= MAX_FREE_SIZE && size % 8 == 0 && align <= 8 {
         size / 8

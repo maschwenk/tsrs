@@ -1357,7 +1357,7 @@ impl Type {
     }
 
     /// The data struct after this type's header. Callers check `data_tag == T::TAG` first.
-    #[inline(always)]
+    #[inline]
     fn payload<T: TypePayload>(&self) -> &'static T {
         debug_assert!(self.data_tag == T::TAG);
         // SAFETY: a type tagged `T::TAG` was allocated by `Type::alloc::<T>` as a `TypeAlloc<T>` whose header is

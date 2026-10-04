@@ -80,7 +80,7 @@ fn with_scratch_arena<R>(f: impl FnOnce(&'static Arena) -> R) -> R {
 
 /// The layout `P::new` allocates for a `T`. Compressed handles count 8-byte units, so every `P` target is 8-aligned
 /// and padded to 8 (the padding keeps free-list classes, which assume 8-aligned blocks of `size` bytes, exact).
-#[inline(always)]
+#[inline]
 pub(crate) const fn p_layout<T>() -> std::alloc::Layout {
     let l = std::alloc::Layout::new::<T>();
     if cfg!(compressed_ptrs) {
@@ -170,7 +170,7 @@ impl<T> P<T> {
     /// # Safety
     /// `r` must be an 8-aligned object in the arena: a block allocated with `p_layout` (`P::new`, `alloc`), or a view
     /// of one that starts 8-aligned inside it.
-    #[inline(always)]
+    #[inline]
     pub unsafe fn from_arena(r: &'static T) -> P<T> {
         #[cfg(compressed_ptrs)]
         {
@@ -188,7 +188,7 @@ impl<T> P<T> {
     ///
     /// # Safety
     /// `bits` must come from `to_bits` of a live `P<T>` (same `T`, or a type whose value starts there).
-    #[inline(always)]
+    #[inline]
     pub unsafe fn from_bits(bits: usize) -> P<T> {
         #[cfg(compressed_ptrs)]
         {
@@ -205,7 +205,7 @@ impl<T> P<T> {
     ///
     /// # Safety
     /// The low `PACK_BITS` bits of `w` must come from `pack` of a live `P<T>`.
-    #[inline(always)]
+    #[inline]
     pub unsafe fn unpack(w: u64) -> P<T> {
         #[cfg(compressed_ptrs)]
         // SAFETY: the low bits came from `pack` of a live `P<T>` (this function's contract): its handle, not 0.
@@ -219,7 +219,7 @@ impl<T> P<T> {
     ///
     /// # Safety
     /// As `unpack`, or the low `PACK_BITS` bits are 0.
-    #[inline(always)]
+    #[inline]
     pub unsafe fn unpack_opt(w: u64) -> Option<P<T>> {
         #[cfg(compressed_ptrs)]
         // SAFETY: nonzero low bits came from `pack` (this function's contract).
@@ -233,7 +233,7 @@ impl<T> P<T> {
     ///
     /// # Safety
     /// `key` must come from `key` of a live `P<T>` (same `T`, or a type whose value starts there).
-    #[inline(always)]
+    #[inline]
     pub unsafe fn from_key(key: PKey) -> P<T> {
         #[cfg(compressed_ptrs)]
         // SAFETY: `key` came from `key` of a live `P<T>` (this function's contract): its handle, not 0.
@@ -247,7 +247,7 @@ impl<T> P<T> {
     ///
     /// # Safety
     /// As `from_key`.
-    #[inline(always)]
+    #[inline]
     pub unsafe fn from_key_opt(key: PKey) -> Option<P<T>> {
         // SAFETY: a nonzero `key` came from `key` of a live `P<T>` (this function's contract).
         (key != 0).then(|| unsafe { P::from_key(key) })
@@ -257,7 +257,7 @@ impl<T> P<T> {
     ///
     /// # Safety
     /// As `from_bits`.
-    #[inline(always)]
+    #[inline]
     pub unsafe fn from_bits_opt(bits: usize) -> Option<P<T>> {
         // SAFETY: nonzero `bits` came from `to_bits` of a live `P<T>` (this function's contract).
         (bits != 0).then(|| unsafe { P::from_bits(bits) })
@@ -268,7 +268,7 @@ impl<T> P<T> {
     ///
     /// # Safety
     /// `self` must be an element of an arena array with at least `n` more elements.
-    #[inline(always)]
+    #[inline]
     pub unsafe fn array_add(self, n: usize) -> P<T> {
         #[cfg(compressed_ptrs)]
         {
@@ -286,7 +286,7 @@ impl<T> P<T> {
     ///
     /// # Safety
     /// A `U` must live at this address.
-    #[inline(always)]
+    #[inline]
     pub unsafe fn cast<U>(self) -> P<U> {
         #[cfg(compressed_ptrs)]
         return P(self.0, std::marker::PhantomData);
@@ -309,7 +309,7 @@ impl<T> P<T> {
     }
 
     /// The handle (compressed mode only): the object's offset from `reserve::base()` in 8-byte units.
-    #[inline(always)]
+    #[inline]
     #[cfg(compressed_ptrs)]
     pub fn handle(self) -> u32 {
         self.0.get()
@@ -347,7 +347,7 @@ impl<T: ?Sized> P<T> {
     /// Position-independent bits for packed words: the address here, the offset from the arena base in compressed
     /// mode. 8-aligned and below 2^48 in both (the arena aligns every `P` target to 8; user-space addresses are below
     /// 2^48 on every supported platform), so callers may keep tags in the low 3 and the high 16 bits.
-    #[inline(always)]
+    #[inline]
     pub fn to_bits(self) -> usize {
         (self.0 as *const T as *const ()).expose_provenance()
     }
@@ -356,7 +356,7 @@ impl<T: ?Sized> P<T> {
 #[cfg(compressed_ptrs)]
 impl<T: ?Sized> P<T> {
     /// The value (a `'static` reference, not tied to the borrow of `self`).
-    #[inline(always)]
+    #[inline]
     pub fn get(self) -> &'static T
     where
         T: Sized,
@@ -375,7 +375,7 @@ impl<T: ?Sized> P<T> {
     }
 
     /// See the pointer-mode `to_bits`: here the byte offset from the base.
-    #[inline(always)]
+    #[inline]
     pub fn to_bits(self) -> usize {
         (self.0.get() as usize) << crate::reserve::UNIT_SHIFT
     }
@@ -400,7 +400,7 @@ impl<T: ?Sized> P<T> {
 
     /// Identity as an integer, for tables keyed by object (eq and hash agree with `P`'s) and for packed fields
     /// (`from_key` turns it back; never 0).
-    #[inline(always)]
+    #[inline]
     pub fn key(self) -> PKey {
         #[cfg(compressed_ptrs)]
         return self.0.get();
@@ -411,7 +411,7 @@ impl<T: ?Sized> P<T> {
     /// The pointer in the low `PACK_BITS` (45) bits of a word whose higher bits belong to the caller: the handle with
     /// compressed pointers (bits 32..45 stay 0, so `unpack` reads the low 32 bits and needs no mask), else the
     /// address / 8. 0 for `None` (`pack_opt`).
-    #[inline(always)]
+    #[inline]
     pub fn pack(self) -> u64 {
         #[cfg(compressed_ptrs)]
         return self.0.get() as u64;
@@ -423,19 +423,19 @@ impl<T: ?Sized> P<T> {
         }
     }
 
-    #[inline(always)]
+    #[inline]
     pub fn pack_opt(p: Option<P<T>>) -> u64 {
         p.map_or(0, P::pack)
     }
 
     /// `key` of an optional pointer, 0 for `None`.
-    #[inline(always)]
+    #[inline]
     pub fn key_opt(p: Option<P<T>>) -> PKey {
         p.map_or(0, P::key)
     }
 
     /// `to_bits` of an optional pointer, 0 for `None`.
-    #[inline(always)]
+    #[inline]
     pub fn to_bits_opt(p: Option<P<T>>) -> usize {
         p.map_or(0, P::to_bits)
     }
@@ -463,7 +463,7 @@ impl<T: ?Sized> Deref for P<T> {
 #[cfg(compressed_ptrs)]
 impl<T> Deref for P<T> {
     type Target = T;
-    #[inline(always)]
+    #[inline]
     fn deref(&self) -> &T {
         self.get()
     }
@@ -557,7 +557,7 @@ pub struct PSlot<V>(pub V);
 
 impl<V> PSlot<V> {
     /// The pointer to the element of an arena array.
-    #[inline(always)]
+    #[inline]
     #[cfg_attr(compressed_ptrs, track_caller)]
     pub fn as_p(&'static self) -> P<V> {
         // SAFETY: slots live only in arena arrays (`alloc_vec`), 8-aligned in compressed mode.
@@ -575,7 +575,7 @@ impl<V> PSlot<V> {
     ///
     /// # Safety
     /// `first` comes from `first` of an array with more than `i` slots.
-    #[inline(always)]
+    #[inline]
     pub unsafe fn nth(first: P<PSlot<V>>, i: usize) -> P<V> {
         // SAFETY: the array has more than `i` slots (this function's contract), and `PSlot` is `repr(C)` /
         // `repr(transparent)` with the value first, so a `V` lives at the slot's address.
@@ -1147,13 +1147,13 @@ pub unsafe fn free_raw(addr: usize, size: usize, align: usize, needs_drop: bool)
 }
 
 #[doc(hidden)]
-#[inline(always)]
+#[inline]
 pub fn layout_of_pointee<T: ?Sized>(p: &T) -> (usize, usize, bool) {
     (std::mem::size_of_val(p), std::mem::align_of_val(p), std::mem::needs_drop::<T>())
 }
 
 #[doc(hidden)]
-#[inline(always)]
+#[inline]
 pub fn layout_of_p<T>(_: P<T>) -> (usize, usize, bool) {
     (p_layout::<T>().size(), p_layout::<T>().align(), std::mem::needs_drop::<T>())
 }
@@ -1244,7 +1244,7 @@ impl CensusField {
 
 /// Whether the census records (alloc-profile build with `TSRS_CENSUS=1`); a constant `false` in other builds, so
 /// census-only work behind it compiles to nothing.
-#[inline(always)]
+#[inline]
 pub fn census_recording() -> bool {
     #[cfg(feature = "alloc-profile")]
     return crate::alloc_profile::census::recording();
@@ -1255,7 +1255,7 @@ pub fn census_recording() -> bool {
 /// Census builds: registers the fields of the arena type named `type_name` (`std::any::type_name` of the allocated
 /// value, or a prefix ending in `<` for every instance of a generic, such as `TypeAlloc<`) that the strong mark must
 /// read specially. Call before the census runs. Compiled to nothing otherwise.
-#[inline(always)]
+#[inline]
 pub fn census_layout(type_name: &'static str, fields: &[CensusField]) {
     #[cfg(feature = "alloc-profile")]
     crate::alloc_profile::census::register_layout(type_name, fields);
@@ -1265,7 +1265,7 @@ pub fn census_layout(type_name: &'static str, fields: &[CensusField]) {
 
 /// Census builds (`TSRS_CENSUS=1`): zeroes the unused capacity of a pooled vector after elements were removed, so
 /// stale pointers there do not count as references in the would-free check. Compiled to nothing otherwise.
-#[inline(always)]
+#[inline]
 pub fn census_scrub_slack<T>(v: &mut Vec<T>) {
     #[cfg(feature = "alloc-profile")]
     if crate::alloc_profile::census::recording() {
@@ -1281,7 +1281,7 @@ pub fn census_scrub_slack<T>(v: &mut Vec<T>) {
 /// its control bytes, so the removed entries stay in its buckets, and an entry type with uninitialized bytes (an enum
 /// whose variants differ in size) keeps stale words there that the census reads as references. Compiled to nothing
 /// otherwise.
-#[inline(always)]
+#[inline]
 pub fn census_reset<T: Default>(t: &mut T) {
     #[cfg(feature = "alloc-profile")]
     if crate::alloc_profile::census::recording() {
@@ -1294,7 +1294,7 @@ pub fn census_reset<T: Default>(t: &mut T) {
 /// Census builds (`TSRS_CENSUS=1`): a `None` option keeps uninitialized payload bytes (copied from the stack slot or
 /// heap block the value was built in), which the conservative census reads as references. Zeroes them, for options
 /// kept for the rest of a session (process-wide caches, long-lived tables). Compiled to nothing otherwise.
-#[inline(always)]
+#[inline]
 pub fn census_scrub_none<T>(opt: &mut Option<T>) {
     #[cfg(feature = "alloc-profile")]
     if crate::alloc_profile::census::recording() && opt.is_none() {
@@ -1313,7 +1313,7 @@ pub fn census_scrub_none<T>(opt: &mut Option<T>) {
 /// Census builds (`TSRS_CENSUS=1`): clears the stack area the caller's next callees will use, so values built there
 /// (a struct with an unset `OnceLock`, padding) do not carry stale words that look like references. Compiled to
 /// nothing otherwise.
-#[inline(always)]
+#[inline]
 pub fn census_scrub_stack() {
     #[cfg(feature = "alloc-profile")]
     if crate::alloc_profile::census::recording() {
