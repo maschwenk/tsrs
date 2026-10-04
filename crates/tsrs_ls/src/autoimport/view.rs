@@ -184,6 +184,7 @@ impl View {
 
                 // As we go up the directory tree, exclude packages found in lower node_modules
                 if let Some(package_files) = &node_modules_bucket.package_files {
+                    #[expect(clippy::iter_over_hash_type, reason = "pure set inserts; Go ranges the map too")]
                     for pkg_name in package_files.keys() {
                         exclude_packages.add(pkg_name.clone());
                     }

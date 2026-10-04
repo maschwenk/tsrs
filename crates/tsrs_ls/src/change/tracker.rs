@@ -178,6 +178,7 @@ impl Tracker {
             return (changes, Vec::new());
         }
         let mut unmappable = Vec::with_capacity(self.unmappable_files.len());
+        #[expect(clippy::iter_over_hash_type, reason = "removals of distinct keys commute and the names are sorted after; Go ranges the set too")]
         for file_name in &self.unmappable_files {
             changes.shift_remove(file_name);
             unmappable.push(file_name.clone());
