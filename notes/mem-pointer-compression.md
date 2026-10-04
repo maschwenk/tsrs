@@ -369,7 +369,7 @@ include skid, so read the deltas, not the absolute shares):
 | handle <-> address (`shl $3`, `lea (,r,8)`, `shr $3`) | 849 | 692 | 2,333 |
 | push / pop and stack moves | 24,746 | 26,401 | 25,280 |
 
-Zero-based removes the base (2.7 of the 7.0 points), not most of the cost. Of the 4.1 points left, 1.5 are extra
+Zero-based removes the base (2.7 of the 7.0 points), not most of the cost. Of the 4.1 points left (in samples), 1.5 are extra
 register moves (a 32-bit move is how x86 zero-extends, so copying a handle and extending it are one instruction, and
 the handle and its address are often live together), 1.2 are handle <-> address shifts, 0.45 extra spills, and ~1
 point is spread over everything else (the compressed layouts' packed words, inlining differences). These come from
@@ -377,9 +377,9 @@ the representation itself: every time a handle becomes a `&T` (a method on `&sel
 that is not inlined) it is extended and shifted, and every `as_p()` / `from_arena` shifts back. The top functions by
 32-bit register move samples are the checker's hot entry points (`get_apparent_type`, `get_property_of_type_worker`,
 `get_resolved_symbol`, `is_simple_type_related_to`, `get_type_of_symbol`); about a quarter of the 32-bit register
-moves sit in the first 12 instructions of a function (arguments). Two things could still reduce it, neither measured here: the release
-profile (`dist`: fat LTO, one codegen unit, PGO) inlines across crates and removes call boundaries; and APIs that
-take the handle instead of `&T` on the hottest paths.
+moves sit in the first 12 instructions of a function (arguments). Two things could still reduce it, neither
+measured here: the release profile (`dist`: fat LTO, one codegen unit, PGO) inlines across crates and removes call
+boundaries; and APIs that take the handle instead of `&T` on the hottest paths.
 
 ### Address space per target
 
