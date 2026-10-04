@@ -25,21 +25,24 @@ use std::rc::Rc;
 
 // nodebuilderimpl.go:125
 pub(crate) fn new_node_builder_impl(ch: &mut Checker, e: P<EmitContext>, id_to_symbol: Option<P<RefCell<FxHashMap<P<Node>, P<Symbol>>>>>) -> P<NodeBuilderImpl> {
+    // A builder whose emit context is a per-file scratch one (emit's requests) dies with that file, and so do its
+    // state and caches (notes/mem-emit-regions.md).
+    let scratch = e.factory.is_scratch();
     // The map is shared with the caller (Go map semantics): language service code reads it back.
     let id_to_symbol = match id_to_symbol {
         Some(id_to_symbol) => id_to_symbol,
-        None => P::new(RefCell::new(FxHashMap::default())),
+        None => P::new_in(scratch, RefCell::new(FxHashMap::default())),
     };
-    let b = P::new(NodeBuilderImpl {
+    let b = P::new_in(scratch, NodeBuilderImpl {
         f: e.factory.as_node_factory().clone(),
         e,
         pc: new_pseudo_checker(ch.strict_null_checks, ch.exact_optional_property_types),
-        links: Default::default(),
-        symbol_links: Default::default(),
+        links: tsrs_core::LinkStore::new_scratch(scratch),
+        symbol_links: tsrs_core::LinkStore::new_scratch(scratch),
         ctx: Cell::new(None),
         clone_binding_name_visitor: std::cell::OnceCell::new(),
         id_to_symbol,
-        checker_slot: P::new(CheckerSlot::default()),
+        checker_slot: P::new_in(scratch, CheckerSlot::default()),
         this: std::cell::OnceCell::new(),
     });
     let _ = b.this.set(b);
@@ -329,7 +332,7 @@ impl NodeBuilderImpl {
                     )
                 } else {
                     let text = format!("... {} more ...", list.len() - 2);
-                    self.f.new_type_reference_node(self.f.new_identifier(alloc_str(&text)), None /*typeArguments*/)
+                    self.f.new_type_reference_node(self.f.new_identifier(self.f.alloc_text(&text)), None /*typeArguments*/)
                 };
                 return Some(self.f.new_node_list(vec![first.unwrap(), middle, last.unwrap()]));
             }
@@ -360,7 +363,7 @@ impl NodeBuilderImpl {
                     ));
                 } else {
                     let text = format!("... {} more ...", list.len() - display_index);
-                    result.push(self.f.new_type_reference_node(self.f.new_identifier(alloc_str(&text)), None /*typeArguments*/));
+                    result.push(self.f.new_type_reference_node(self.f.new_identifier(self.f.alloc_text(&text)), None /*typeArguments*/));
                 }
                 let type_node = self.type_to_type_node(c, Some(list[list.len() - 1]));
                 if let Some(type_node) = type_node {
@@ -908,7 +911,7 @@ impl NodeBuilderImpl {
             // Moreover, what's even guaranteeing the name *isn't* -1 here anyway? Needs double-checking.
             let ctx = self.ctx();
             ctx.approximate_length.set(ctx.approximate_length.get() + symbol_name.len() as i32);
-            expression = Some(self.f.new_numeric_literal(alloc_str(&symbol_name), TokenFlags::None));
+            expression = Some(self.f.new_numeric_literal(self.f.alloc_text(&symbol_name), TokenFlags::None));
         }
         if expression.is_none() {
             let ctx = self.ctx();
@@ -1353,7 +1356,7 @@ impl NodeBuilderImpl {
             false, /*forAutoImports*/
         );
         assert!(!module_specifiers_result.specifiers.is_empty());
-        let mut result = moduleSpecifierResult { specifier: alloc_str(&module_specifiers_result.specifiers[0]), import_attributes_type: None };
+        let mut result = moduleSpecifierResult { specifier: self.f.alloc_text(&module_specifiers_result.specifiers[0]), import_attributes_type: None };
         if let Some(ambient_module_symbol) = module_specifiers_result.ambient_module_symbol {
             result.import_attributes_type = Some(c.get_type_of_module_import_attributes(ambient_module_symbol));
         }

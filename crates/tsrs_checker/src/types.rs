@@ -24,7 +24,10 @@ impl<K: Eq + Hash + 'static, V: Clone + 'static> GoMap<K, V> {
     }
     /// Go `m = make(map[K]V)`.
     pub fn make(&self) {
-        self.0.set(Some(P::new(RefCell::new(FxHashMap::default()))));
+        // The table lives where the map field does: a field in an emit scratch region (a node builder request's
+        // links, notes/mem-emit-regions.md) must not leave a table outside it that refers into it.
+        let scratch = tsrs_core::arena::scratch_contains(self as *const Self as usize);
+        self.0.set(Some(P::new_in(scratch, RefCell::new(FxHashMap::default()))));
     }
     pub fn is_nil(&self) -> bool {
         self.0.get().is_none()
@@ -86,7 +89,8 @@ impl<K: Eq + Hash + 'static, V: Clone + 'static> GoMap<K, V> {
     }
     /// Go `a.m = someFreshlyBuiltMap`.
     pub fn assign(&self, m: FxHashMap<K, V>) {
-        self.0.set(Some(P::new(RefCell::new(m))))
+        let scratch = tsrs_core::arena::scratch_contains(self as *const Self as usize);
+        self.0.set(Some(P::new_in(scratch, RefCell::new(m))))
     }
     /// Snapshot of the entries (Go `for k, v := range m`).
     pub fn entries(&self) -> Vec<(K, V)>

@@ -454,7 +454,7 @@ impl Checker {
                         continue;
                     }
                     // Any meaning of a module symbol is always accessible via an `import` type
-                    return Some(P::new(SymbolAccessibilityResult { accessibility: SymbolAccessibility::Accessible, ..Default::default() }));
+                    return Some(P::new_scratch(SymbolAccessibilityResult { accessibility: SymbolAccessibility::Accessible, ..Default::default() }));
                 }
             }
 
@@ -483,7 +483,7 @@ impl Checker {
         }
 
         if early_module_bail {
-            return Some(P::new(SymbolAccessibilityResult { accessibility: SymbolAccessibility::Accessible, ..Default::default() }));
+            return Some(P::new_scratch(SymbolAccessibilityResult { accessibility: SymbolAccessibility::Accessible, ..Default::default() }));
         }
 
         if let Some(had_accessible_chain) = had_accessible_chain {
@@ -491,7 +491,7 @@ impl Checker {
             if had_accessible_chain != initial_symbol {
                 module_name = self.symbol_to_string_ex(had_accessible_chain, enclosing_declaration, SymbolFlags::Namespace, SymbolFormatFlags::AllowAnyNodeKind);
             }
-            return Some(P::new(SymbolAccessibilityResult {
+            return Some(P::new_scratch(SymbolAccessibilityResult {
                 accessibility: SymbolAccessibility::NotAccessible,
                 error_symbol_name: self.symbol_to_string_ex(initial_symbol, enclosing_declaration, meaning, SymbolFormatFlags::AllowAnyNodeKind),
                 error_module_name: module_name,
@@ -1057,6 +1057,13 @@ impl Checker {
             false
         });
         links.accessible_chain_cache.borrow_mut().insert(link_key, alloc_slice(&result));
+        // A location in a file's emit scratch region (a synthesized node) dies with it; its handle may then name a
+        // new node, so the entry is forgotten when the file's transform ends (`forget_scratch_keyed_caches`).
+        if let Some(location) = first_relevant_location {
+            if !ast::is_parse_tree_node(location) && tsrs_core::arena::scratch_contains(location.addr()) {
+                self.scratch_keyed_chain_cache.push((symbol, link_key));
+            }
+        }
         result
     }
 
@@ -1489,7 +1496,7 @@ pub fn new_symbol_tracker_impl(context: P<NodeBuilderContext>, tracker: Option<&
         }
     }
 
-    P::new(SymbolTrackerImpl { context, inner: tracker, disable_track_symbol: Cell::new(false) })
+    P::new_scratch(SymbolTrackerImpl { context, inner: tracker, disable_track_symbol: Cell::new(false) })
 }
 
 impl SymbolTrackerImpl {
@@ -1502,7 +1509,7 @@ impl SymbolTrackerImpl {
             }
             // Skip recording type parameters as they dont contribute to late painted statements
             if !symbol.flags().intersects(SymbolFlags::TypeParameter) {
-                self.context.tracked_symbols.borrow_mut().push(P::new(TrackedSymbolArgs { symbol, enclosing_declaration, meaning }));
+                self.context.tracked_symbols.borrow_mut().push(TrackedSymbolArgs { symbol, enclosing_declaration, meaning });
             }
         }
         false

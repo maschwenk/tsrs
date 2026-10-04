@@ -105,7 +105,10 @@ pub(crate) fn get_declaration_diagnostics(host: &'static crate::emithost::EmitHo
         return Vec::new();
     }
     let options = program.options();
-    let transform = tsrs_declarations::new_declaration_transformer(host, None, options, "", "");
+    // The caller runs this in a scratch region (`Program::get_declaration_diagnostics_for_file`): a scratch emit
+    // context, so the nodes the node builder makes for the transform die with it. Go passes nil and the transformer
+    // makes a fresh context, which is what this is.
+    let transform = tsrs_declarations::new_declaration_transformer(host, Some(tsrs_printer::new_scratch_emit_context()), options, "", "");
     transform.base.transform_source_file(file);
     transform.get_diagnostics()
 }
@@ -157,6 +160,12 @@ mod emit {
         pub(crate) pending_js: Option<pendingPrint>,
         pub(crate) declaration_diagnostics: Vec<P<Diagnostic>>,
         pub(crate) pending_declaration: Option<pendingPrint>,
+    }
+
+    /// `TSRS_EMIT_MEM=1`: per file, the arena bytes its emit used in its region and outside it (stderr, `emitmem`).
+    pub(crate) fn emit_mem_log() -> bool {
+        static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        *ON.get_or_init(|| std::env::var_os("TSRS_EMIT_MEM").is_some_and(|v| v == "1"))
     }
 
     // tsrs-only: what printing a transformed file needs. Go prints and writes each file while it still holds the
@@ -260,7 +269,7 @@ mod emit {
                 return;
             }
 
-            let (emit_context, _) = printer::get_emit_context();
+            let (emit_context, _) = printer::get_scratch_emit_context();
 
             let source_file = self.run_script_transformers(emit_context, source_file);
 
@@ -301,7 +310,7 @@ mod emit {
             let emit_declaration_map = self.emit_only != EmitOnly::EmitOnlyBuilderSignature && options.declaration_map.is_true();
             let content_mapped_source = source_file;
 
-            let (emit_context, _) = printer::get_emit_context();
+            let (emit_context, _) = printer::get_scratch_emit_context();
             let (source_file, diags) = self.run_declaration_transformers(emit_context, source_file, declaration_file_path, declaration_map_path);
 
             // added to the emit diagnostics in `print`, after the JS file is written

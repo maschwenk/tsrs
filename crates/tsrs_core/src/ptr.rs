@@ -64,6 +64,20 @@ fn with_arena<R>(f: impl FnOnce(&'static Arena) -> R) -> R {
     f(a)
 }
 
+/// The thread's scratch region (`arena::Region::enter_scratch`) if one is entered, else the current target
+/// (`with_arena`).
+#[inline]
+fn with_scratch_arena<R>(f: impl FnOnce(&'static Arena) -> R) -> R {
+    let s = arena::scratch_arena();
+    if s.is_null() {
+        return with_arena(f);
+    }
+    #[cfg(feature = "alloc-profile")]
+    let _chunk = crate::alloc_profile::ArenaScope::enter();
+    // SAFETY: the scratch region is kept alive (and locked by this thread) by its entered `ScratchScope`.
+    f(unsafe { &*s })
+}
+
 /// The layout `P::new` allocates for a `T`. Compressed handles count 8-byte units, so every `P` target is 8-aligned
 /// and padded to 8 (the padding keeps free-list classes, which assume 8-aligned blocks of `size` bytes, exact).
 #[inline(always)]
@@ -104,6 +118,32 @@ impl<T> P<T> {
         });
         profile!(T, p_layout::<T>().size(), p.addr());
         p
+    }
+
+    /// `P::new` in the thread's scratch region if one is entered (`arena::Region::enter_scratch`), even while escaped
+    /// from it: for values known to die with the scratch region (a node builder call's state, emit's nodes).
+    #[inline]
+    #[cfg_attr(feature = "alloc-profile", track_caller)]
+    pub fn new_scratch(value: T) -> P<T> {
+        let p = with_scratch_arena(|a| {
+            let r = a.alloc_with(p_layout::<T>(), value);
+            a.track_drop(r as *mut T, 1);
+            // SAFETY: a fresh block of the arena, laid out by `p_layout`.
+            unsafe { P::from_arena(r) }
+        });
+        profile!(T, p_layout::<T>().size(), p.addr());
+        p
+    }
+
+    /// `P::new` or `P::new_scratch`.
+    #[inline]
+    #[cfg_attr(feature = "alloc-profile", track_caller)]
+    pub fn new_in(scratch: bool, value: T) -> P<T> {
+        if scratch {
+            P::new_scratch(value)
+        } else {
+            P::new(value)
+        }
     }
 
     /// `P::new` that first takes a block of the right size from the current thread's free list (see `free`).
@@ -978,6 +1018,35 @@ pub fn alloc_slice<T: Copy>(items: &[T]) -> &'static [T] {
     s
 }
 
+/// `alloc_slice` in the thread's scratch region if one is entered (see `P::new_scratch`), else like `alloc_slice`.
+#[inline]
+#[cfg_attr(feature = "alloc-profile", track_caller)]
+pub fn alloc_slice_scratch<T: Copy>(items: &[T]) -> &'static [T] {
+    if items.is_empty() {
+        return &[];
+    }
+    let s: &'static [T] = with_scratch_arena(|a| &*a.alloc_slice_copy(items));
+    profile!([T], std::mem::size_of_val(items), s.as_ptr() as usize);
+    s
+}
+
+/// `alloc_vec` in the thread's scratch region if one is entered (see `P::new_scratch`), else like `alloc_vec`.
+#[inline]
+#[cfg_attr(feature = "alloc-profile", track_caller)]
+pub fn alloc_vec_scratch<T>(items: Vec<T>) -> &'static [T] {
+    if items.is_empty() {
+        return &[];
+    }
+    let bytes = std::mem::size_of_val(&items[..]);
+    let s: &'static [T] = with_scratch_arena(|a| {
+        let s = a.alloc_vec(items);
+        a.track_drop(s.as_mut_ptr(), s.len());
+        &*s
+    });
+    profile!([T], bytes, s.as_ptr() as usize);
+    s
+}
+
 /// `alloc_slice` of bytes, 4-aligned (for a length prefix read as `u32`).
 #[inline]
 #[cfg_attr(feature = "alloc-profile", track_caller)]
@@ -1256,6 +1325,18 @@ pub fn alloc_str(s: &str) -> &'static str {
     r
 }
 
+/// `alloc_str` in the thread's scratch region if one is entered (see `P::new_scratch`), else like `alloc_str`.
+#[inline]
+#[cfg_attr(feature = "alloc-profile", track_caller)]
+pub fn alloc_str_scratch(s: &str) -> &'static str {
+    if s.is_empty() {
+        return "";
+    }
+    let r: &'static str = with_scratch_arena(|a| &*a.alloc_str(s));
+    profile!(str, s.len(), r.as_ptr() as usize);
+    r
+}
+
 /// Allocates a plain `&'static T` (for values that do not need pointer identity semantics).
 #[inline]
 #[cfg_attr(feature = "alloc-profile", track_caller)]
@@ -1278,6 +1359,20 @@ pub fn alloc_profile_dump() {
 /// Bytes allocated so far by the current thread's arena.
 pub fn arena_allocated_bytes() -> usize {
     with_arena(|a| a.capacity())
+}
+
+/// Bytes in use in the current allocation target (the thread's arena or an entered region), for measurements.
+pub fn arena_used_bytes() -> usize {
+    with_arena(|a| a.used_ranges().iter().map(|&(_, len)| len).sum())
+}
+
+/// Compressed pointers: (bytes of the reserved range handed out as chunks now, how far into it chunks were ever
+/// carved). `None` with plain pointers.
+pub fn reserve_stats() -> Option<(usize, usize)> {
+    #[cfg(compressed_ptrs)]
+    return Some((crate::reserve::reserved_in_use(), crate::reserve::reserved_high_water()));
+    #[cfg(not(compressed_ptrs))]
+    None
 }
 
 /// Debug aid for the threading contract (checked builds only, opt-in with `TSRS_CHECK_SHARED=1`):

@@ -14,6 +14,7 @@ use std::sync::{Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 use tsrs_ast::{Diagnostic, SourceFile};
+use tsrs_core::arena::Region;
 use tsrs_core::P;
 
 use crate::checkerpool::Context;
@@ -88,6 +89,37 @@ const EMIT_PHASE_NAMES: [&str; 5] = [
 // only add kernel lock contention that slows the transforming checker threads (notes/perf-emit.md).
 const EMIT_WRITERS: usize = 4;
 
+/// First chunk of a file's emit region (it grows by a quarter of its size at a time). Most files need less: the
+/// median file on the 38k-file codebase allocates about 20 KB during emit.
+const EMIT_REGION_FIRST_CHUNK: usize = 64 << 10;
+
+/// Transformed files waiting to be printed and written, at most (`Program::emit`). Each keeps its region and its
+/// emit contexts' tables. The 38k-file codebase is write-bound and had up to 7,000 files waiting (0.35 GiB); a
+/// bound of 256 made emit about 8% slower on vscode (the checker threads stall), 2,048 costs no measurable time
+/// and keeps 0.24 GiB of the 0.35 (notes/mem-emit-regions.md).
+const EMIT_MAX_PENDING_PRINTS: usize = 2048;
+
+#[derive(Default)]
+struct PendingPrints {
+    count: Mutex<usize>,
+    done: Condvar,
+}
+
+impl PendingPrints {
+    fn acquire(&self) {
+        let mut count = self.count.lock().unwrap();
+        while *count >= EMIT_MAX_PENDING_PRINTS {
+            count = self.done.wait(count).unwrap();
+        }
+        *count += 1;
+    }
+
+    fn release(&self) {
+        *self.count.lock().unwrap() -= 1;
+        self.done.notify_one();
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct EmitTimes {
     times: [AtomicU64; 5],
@@ -152,49 +184,88 @@ impl Program {
 
         let results: Vec<Mutex<Option<EmitResult>>> = source_files.iter().map(|_| Mutex::new(None)).collect();
         let times = EmitTimes::default();
-        let transform = |c: &mut tsrs_checker::Checker, source_file: P<SourceFile>| {
-            let checker_slot = P::new(tsrs_checker::CheckerSlot::default());
-            let host = crate::emithost::new_emit_host(self, c.get_emit_resolver(), checker_slot);
-            let paths = outputpaths::get_output_paths_for(
-                source_file,
-                &self.options(),
-                host,
-                ForceEmitPaths { dts: force_dts_emit, js: force_js_emit, declaration_map: options.force_emit && options.emit_only == EmitOnly::EmitOnlyDts },
-            );
-            let mut e = emitter {
-                host,
-                emit_only: options.emit_only,
-                emitter_diagnostics: Default::default(),
-                paths,
-                source_file,
-                emit_result: EmitResult::default(),
-                force_emit: options.force_emit,
-                write_file: options.write_file,
-                times: &times,
-                pending_js: None,
-                declaration_diagnostics: Vec::new(),
-                pending_declaration: None,
+        let mem_log = crate::emitter::emit_mem_log();
+        // Each file's emit runs in a scratch region of its own (notes/mem-emit-regions.md): the transformed trees,
+        // the emit context and the node builder's per-request state are allocated there and freed once the file is
+        // printed and written; the checker escapes to its own arena (`CheckerSlot::with`), and so do diagnostics
+        // and the program's caches (`EmitHost`).
+        let transform = |c: &mut tsrs_checker::Checker, source_file: P<SourceFile>| -> (emitter, Region) {
+            let emit_resolver = c.get_emit_resolver();
+            let outer_before = if mem_log { tsrs_core::ptr::arena_used_bytes() } else { 0 };
+            let region = Region::new_scratch(EMIT_REGION_FIRST_CHUNK);
+            let e = {
+                let _scratch = region.enter_scratch();
+                let checker_slot = P::new(tsrs_checker::CheckerSlot::default());
+                let host = crate::emithost::new_emit_host(self, emit_resolver, checker_slot);
+                let paths = outputpaths::get_output_paths_for(
+                    source_file,
+                    &self.options(),
+                    host,
+                    ForceEmitPaths { dts: force_dts_emit, js: force_js_emit, declaration_map: options.force_emit && options.emit_only == EmitOnly::EmitOnlyDts },
+                );
+                let mut e = emitter {
+                    host,
+                    emit_only: options.emit_only,
+                    emitter_diagnostics: Default::default(),
+                    paths,
+                    source_file,
+                    emit_result: EmitResult::default(),
+                    force_emit: options.force_emit,
+                    write_file: options.write_file,
+                    times: &times,
+                    pending_js: None,
+                    declaration_diagnostics: Vec::new(),
+                    pending_declaration: None,
+                };
+                checker_slot.lend(c, || e.transform());
+                e
             };
-            checker_slot.lend(c, || e.transform());
-            e
+            c.forget_scratch_keyed_caches();
+            if mem_log {
+                let outer = tsrs_core::ptr::arena_used_bytes() - outer_before;
+                eprintln!("emitmem\ttransform\t{}\t{}\t{}", source_file.file_name(), region.used_bytes(), outer);
+            }
+            (e, region)
         };
-        let print = |mut e: emitter, index: usize| {
-            // take an unused writer (Go pools them; a fresh writer prints the same text)
-            let mut writer = tsrs_printer::new_text_writer(new_line, 0);
-            e.print(&mut *writer);
-            *results[index].lock().unwrap() = Some(e.emit_result);
+        let print = |(mut e, region): (emitter, Region), index: usize| {
+            let outer_before = if mem_log { tsrs_core::ptr::arena_used_bytes() } else { 0 };
+            let used_before = if mem_log { region.used_bytes() } else { 0 };
+            let result = {
+                let _scratch = region.enter_scratch();
+                // take an unused writer (Go pools them; a fresh writer prints the same text)
+                let mut writer = tsrs_printer::new_text_writer(new_line, 0);
+                e.print(&mut *writer);
+                std::mem::take(&mut e.emit_result)
+            };
+            if mem_log {
+                let outer = tsrs_core::ptr::arena_used_bytes() - outer_before;
+                eprintln!("emitmem\tprint\t{}\t{}\t{}", e.source_file.file_name(), region.used_bytes() - used_before, outer);
+            }
+            // The emitter's own fields are heap values; the region goes last.
+            drop(e);
+            drop(region);
+            *results[index].lock().unwrap() = Some(result);
         };
 
         match self.compiler_checker_pool() {
             // Printing and writing do not need the checker (`emitter::print`), so they run on the worker pool while
-            // the checker threads go on transforming; per file the steps keep Go's order.
-            Some(pool) if !self.single_threaded() => crate::program::worker_pool().in_place_scope(|scope| {
-                pool.for_each_checker_group_do(&source_files, false, |c, index, file| {
-                    let e = transform(c, file);
-                    let print = &print;
-                    scope.spawn(move |_| print(e, index));
+            // the checker threads go on transforming; per file the steps keep Go's order. At most
+            // `EMIT_MAX_PENDING_PRINTS` transformed files wait to be printed: writing is the slower stage on large
+            // projects, and every waiting file keeps its region.
+            Some(pool) if !self.single_threaded() => {
+                let pending = PendingPrints::default();
+                crate::program::worker_pool().in_place_scope(|scope| {
+                    pool.for_each_checker_group_do(&source_files, false, |c, index, file| {
+                        let e = transform(c, file);
+                        pending.acquire();
+                        let (print, pending) = (&print, &pending);
+                        scope.spawn(move |_| {
+                            print(e, index);
+                            pending.release();
+                        });
+                    });
                 })
-            }),
+            }
             Some(pool) => pool.for_each_checker_group_do(&source_files, true, |c, index, file| print(transform(c, file), index)),
             None => {
                 for (index, &file) in source_files.iter().enumerate() {
@@ -208,6 +279,9 @@ impl Program {
         }
 
         times.record();
+        if let (true, Some((in_use, high_water))) = (mem_log, tsrs_core::ptr::reserve_stats()) {
+            eprintln!("emitmem\treserve\tin use {} MiB\thigh water {} MiB", in_use >> 20, high_water >> 20);
+        }
 
         // collect results from emit, preserving input order
         combine_emit_results(results.into_iter().map(|r| r.into_inner().unwrap()).collect())

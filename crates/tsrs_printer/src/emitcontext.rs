@@ -48,8 +48,19 @@ pub(crate) struct varScope {
 }
 
 pub fn new_emit_context() -> P<EmitContext> {
-    let c = P::new(EmitContext {
-        factory: new_node_factory_for_context(),
+    new_emit_context_in(false)
+}
+
+/// tsrs-only: an emit context whose nodes die with the thread's scratch region (one file's emit,
+/// notes/mem-emit-regions.md): the context and every node its factory creates (also through a node builder that
+/// uses it) are allocated there (`P::new_scratch`). Without an entered scratch region it is `new_emit_context`.
+pub fn new_scratch_emit_context() -> P<EmitContext> {
+    new_emit_context_in(true)
+}
+
+fn new_emit_context_in(scratch: bool) -> P<EmitContext> {
+    let c = P::new_in(scratch, EmitContext {
+        factory: new_node_factory_for_context(scratch),
         auto_generate: RefCell::default(),
         text_source: RefCell::default(),
         original: RefCell::default(),
@@ -67,6 +78,12 @@ pub fn new_emit_context() -> P<EmitContext> {
 // Go pools emit contexts; the release function resets the context like Go's does before returning it to the pool.
 pub fn get_emit_context() -> (P<EmitContext>, impl FnOnce()) {
     let c = new_emit_context();
+    (c, move || c.reset())
+}
+
+/// `get_emit_context` with `new_scratch_emit_context`.
+pub fn get_scratch_emit_context() -> (P<EmitContext>, impl FnOnce()) {
+    let c = new_scratch_emit_context();
     (c, move || c.reset())
 }
 

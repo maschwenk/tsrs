@@ -170,17 +170,23 @@ pub trait DiagnosticExt {
 
 impl DiagnosticExt for P<Diagnostic> {
     fn set_external_data(self, source: &str, message_text: &str) -> P<Diagnostic> {
+        // Diagnostics outlive a scratch region (one file's emit) they are reported in.
+        let _outer = tsrs_core::arena::escape_scratch();
         self.source.set(alloc_str(source));
         self.message_text.set(alloc_str(message_text));
         self
     }
 
     fn set_message_chain(self, message_chain: &[P<Diagnostic>]) -> P<Diagnostic> {
+        // Diagnostics outlive a scratch region (one file's emit) they are reported in.
+        let _outer = tsrs_core::arena::escape_scratch();
         self.message_chain.set(alloc_slice(message_chain));
         self
     }
 
     fn add_message_chain(self, message_chain: impl Into<Option<P<Diagnostic>>>) -> P<Diagnostic> {
+        // Diagnostics outlive a scratch region (one file's emit) they are reported in.
+        let _outer = tsrs_core::arena::escape_scratch();
         if let Some(message_chain) = message_chain.into() {
             let mut chain = self.message_chain.get().to_vec();
             chain.push(message_chain);
@@ -190,11 +196,15 @@ impl DiagnosticExt for P<Diagnostic> {
     }
 
     fn set_related_info(self, related_information: &[P<Diagnostic>]) -> P<Diagnostic> {
+        // Diagnostics outlive a scratch region (one file's emit) they are reported in.
+        let _outer = tsrs_core::arena::escape_scratch();
         self.related_information.set(alloc_slice(related_information));
         self
     }
 
     fn add_related_info(self, related_information: impl Into<Option<P<Diagnostic>>>) -> P<Diagnostic> {
+        // Diagnostics outlive a scratch region (one file's emit) they are reported in.
+        let _outer = tsrs_core::arena::escape_scratch();
         if let Some(related_information) = related_information.into() {
             let mut related = self.related_information.get().to_vec();
             related.push(related_information);
@@ -204,6 +214,8 @@ impl DiagnosticExt for P<Diagnostic> {
     }
 
     fn clone_diagnostic(self) -> P<Diagnostic> {
+        // Diagnostics outlive a scratch region (one file's emit) they are reported in.
+        let _outer = tsrs_core::arena::escape_scratch();
         P::new(Diagnostic {
             file: OwnedCell::new(self.file.get()),
             loc: OwnedCell::new(self.loc.get()),
@@ -254,6 +266,8 @@ impl fmt::Debug for Diagnostic {
 }
 
 pub fn new_diagnostic(file: Option<P<SourceFile>>, loc: TextRange, message: &'static Message, args: &[&dyn fmt::Display]) -> P<Diagnostic> {
+    // Diagnostics outlive a scratch region (one file's emit) they are reported in.
+    let _outer = tsrs_core::arena::escape_scratch();
     P::new(Diagnostic {
         file: OwnedCell::new(file),
         loc: OwnedCell::new(loc),
@@ -287,6 +301,8 @@ pub fn new_diagnostic_from_serialized(
     reports_deprecated: bool,
     skipped_on_no_emit: bool,
 ) -> P<Diagnostic> {
+    // Diagnostics outlive a scratch region (one file's emit) they are reported in.
+    let _outer = tsrs_core::arena::escape_scratch();
     P::new(Diagnostic {
         file: OwnedCell::new(file),
         loc: OwnedCell::new(loc),
@@ -331,6 +347,8 @@ pub fn new_external_diagnostic(
     code: i32,
     message_text: &str,
 ) -> P<Diagnostic> {
+    // Diagnostics outlive a scratch region (one file's emit) they are reported in.
+    let _outer = tsrs_core::arena::escape_scratch();
     P::new(Diagnostic {
         file: OwnedCell::new(file),
         loc: OwnedCell::new(loc),

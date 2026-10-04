@@ -2466,6 +2466,26 @@ impl Checker {
         self.emit_resolver.unwrap()
     }
 
+    /// tsrs-only: called when a file's emit transform ends in a scratch region (notes/mem-emit-regions.md). Forgets
+    /// what the checker keeps keyed by nodes of that region: once it is freed, a handle may name a new node and
+    /// would hit a stale entry. Go keys these maps by pointer and its GC keeps the nodes alive, so such an entry is
+    /// never hit again there either: the referenced-import links of synthesized JSX factory names (every key of
+    /// `EmitResolver::jsx_links` is one), and accessible-chain cache entries whose scope is a synthesized node.
+    pub fn forget_scratch_keyed_caches(&mut self) {
+        if let Some(resolver) = self.emit_resolver {
+            resolver.jsx_links.clear();
+        }
+        for (symbol, key) in std::mem::take(&mut self.scratch_keyed_chain_cache) {
+            let links = self.symbol_container_links.get(symbol);
+            let mut cache = links.accessible_chain_cache.borrow_mut();
+            cache.remove(&key);
+            if tsrs_core::census_recording() {
+                // Census builds: a removed entry's words stay in the table's memory, which the census scans.
+                *cache = std::mem::take(&mut *cache).into_iter().collect();
+            }
+        }
+    }
+
     // checker.go:32664
     pub fn get_aliased_symbol(&mut self, symbol: P<Symbol>) -> P<Symbol> {
         self.resolve_alias(symbol)
