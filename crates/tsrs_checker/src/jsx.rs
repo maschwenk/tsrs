@@ -774,10 +774,8 @@ impl Checker {
     // @remarks Because this function calls getSpreadType, it needs to use the same checks as checkObjectLiteral,
     // which also calls getSpreadType.
     pub(crate) fn create_jsx_attributes_type_from_attributes_property(&mut self, opening_like_element: P<Node>, check_mode: CheckMode) -> P<Type> {
-        let mut all_attributes_table: Option<P<SymbolTable>> = None;
-        if self.strict_null_checks {
-            all_attributes_table = Some(SymbolTable::new());
-        }
+        // Local to this call: owned here, not allocated in the arena (as `checkObjectLiteral`'s table).
+        let all_attributes_table: Option<SymbolTable> = self.strict_null_checks.then(SymbolTable::default);
         let mut attributes_table = SymbolTable::new();
         let mut attributes_symbol: Option<P<Symbol>> = None;
         let mut attribute_parent = opening_like_element;
@@ -819,7 +817,7 @@ impl Checker {
                     links.resolved_type.set(Some(expr_type));
                     links.set_target(Some(member));
                     attributes_table.set(attribute_symbol.name(), attribute_symbol);
-                    if let Some(all_attributes_table) = all_attributes_table {
+                    if let Some(all_attributes_table) = &all_attributes_table {
                         all_attributes_table.set(attribute_symbol.name(), attribute_symbol);
                     }
                     if attribute_decl.name().unwrap().text() == jsx_children_property_name {
@@ -851,7 +849,7 @@ impl Checker {
                     if self.is_valid_spread_type(expr_type) {
                         spread = self.get_spread_type(spread, expr_type, attributes_symbol, object_flags, false /*readonly*/);
                         if all_attributes_table.is_some() {
-                            self.check_spread_prop_overrides(expr_type, all_attributes_table, attribute_decl);
+                            self.check_spread_prop_overrides(expr_type, all_attributes_table.as_ref(), attribute_decl);
                         }
                     } else {
                         self.error(attribute_decl.expression(), &diagnostics::Spread_types_may_only_be_created_from_object_types, &[]);
