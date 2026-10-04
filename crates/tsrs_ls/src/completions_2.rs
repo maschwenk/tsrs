@@ -1,5 +1,6 @@
 // completions.go, lines 1820-3466.
 
+use std::sync::Arc;
 use std::fmt::Write as _;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -232,7 +233,7 @@ impl LanguageService {
                 );
                 // The edit range covers the whole import statement typed so far, and clients match that text against the
                 // filter text, so it has to be the statement being inserted (as in Strada), not just the bare name.
-                filter_text = insert_text.clone();
+                filter_text.clone_from(&insert_text);
                 sort_text = SORT_TEXT_LOCATION_PRIORITY.to_string();
             }
 
@@ -402,7 +403,7 @@ impl LanguageService {
                     insert_text = format!("[{}]", name);
                 }
             } else {
-                insert_text = name.clone();
+                insert_text.clone_from(&name);
             }
 
             if insert_question_dot || property_access_to_convert.question_dot_token().is_some() {
@@ -429,7 +430,7 @@ impl LanguageService {
 
         if data.jsx_initializer.is_initializer {
             if insert_text.is_empty() {
-                insert_text = name.clone();
+                insert_text.clone_from(&name);
             }
             insert_text = format!("{{{}}}", insert_text);
             if let Some(initializer) = data.jsx_initializer.initializer {
@@ -444,7 +445,7 @@ impl LanguageService {
         if origin_is_promise(origin) && data.property_access_to_convert.is_some() {
             let property_access_to_convert = data.property_access_to_convert.unwrap();
             if insert_text.is_empty() {
-                insert_text = name.clone();
+                insert_text.clone_from(&name);
             }
             let preceding_token = astnav::find_preceding_token(file, property_access_to_convert.pos());
             let mut await_text = String::new();
@@ -524,9 +525,9 @@ impl LanguageService {
 
         if origin_is_object_literal_method(origin) {
             let method = origin.unwrap().as_object_literal_method();
-            insert_text = method.insert_text.clone();
+            insert_text.clone_from(&method.insert_text);
             is_snippet = method.is_snippet;
-            label_details = method.label_details.clone();
+            label_details.clone_from(&method.label_details);
             if !client_supports_item_label_details(ctx) {
                 name = name + method.label_details.as_ref().unwrap().detail.as_ref().unwrap();
                 label_details = None;
@@ -596,7 +597,7 @@ impl LanguageService {
             if element_kind == lsutil::ScriptElementKind::Warning || element_kind == lsutil::ScriptElementKind::String {
                 commit_characters = Some(Vec::new());
             } else if !client_supports_default_commit_characters(ctx) {
-                commit_characters = data.default_commit_characters.clone();
+                commit_characters.clone_from(&data.default_commit_characters);
             }
             // Otherwise use the completion list default.
         }
@@ -863,7 +864,7 @@ impl LanguageService {
 
         let mut import_adder = self.create_import_adder(ctx, type_checker, file)?;
 
-        let change_tracker = change::new_tracker(ctx, &self.get_program().options(), self.format_options(), self.converters.clone());
+        let change_tracker = change::new_tracker(ctx, &self.get_program().options(), self.format_options(), Arc::clone(&self.converters));
 
         let present_modifiers = self.get_present_member_modifiers(context_token, file, position);
         let abstract_ = present_modifiers.modifiers.intersects(ModifierFlags::Abstract) && class_like_declaration.modifier_flags().intersects(ModifierFlags::Abstract);
@@ -1088,7 +1089,7 @@ impl LanguageService {
             file,
             view,
             self.format_options(),
-            self.converters.clone(),
+            Arc::clone(&self.converters),
             self.user_preferences().clone(),
         )))
     }

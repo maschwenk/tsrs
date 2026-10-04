@@ -733,12 +733,16 @@ impl PackedStr {
     }
 
     #[inline]
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "from_utf8 here and in OwnedStrCell::get: +5% instructions, one checker (notes/lint-paydown-compiler.md)"
+    )]
     pub fn as_str(self) -> &'static str {
         let len = self.0.addr().get() >> PACKED_STR_LEN_SHIFT;
         let p = self.0.as_ptr().map_addr(|a| a & ((1 << PACKED_STR_LEN_SHIFT) - 1));
         // SAFETY: built by `new` from a `&'static str` of this length, or by `new_long` (length prefix + bytes).
         unsafe {
-            let (p, len) = if len == PACKED_STR_LONG { (p.add(4).cast_const(), *(p as *const u32) as usize) } else { (p.cast_const(), len) };
+            let (p, len) = if len == PACKED_STR_LONG { (p.add(4).cast_const(), p.cast::<u32>().read_unaligned() as usize) } else { (p.cast_const(), len) };
             std::str::from_utf8_unchecked(std::slice::from_raw_parts(p, len))
         }
     }

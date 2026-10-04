@@ -262,7 +262,7 @@ pub fn get_each_file_name_of_module(
     let output_and_reference = host.get_project_reference_from_source(&imported_path);
     if let Some(output_and_reference) = output_and_reference {
         if !output_and_reference.output_dts.is_empty() {
-            reference_redirect = output_and_reference.output_dts.clone();
+            reference_redirect.clone_from(&output_and_reference.output_dts);
         }
     }
 
@@ -607,7 +607,7 @@ pub(crate) fn get_local_module_specifier(
         if !package_json_paths_are_equal(
             &nearest_target_package_json,
             &nearest_source_package_json,
-            tspath::ComparePathsOptions {
+            &tspath::ComparePathsOptions {
                 use_case_sensitive_file_names: host.use_case_sensitive_file_names(),
                 current_directory: host.get_current_directory().to_string(),
             },
@@ -925,11 +925,11 @@ pub(crate) fn try_directory_with_package_json(
     let mut main_file_relative = "index.js".to_string();
     if let Some(content) = package_json_content {
         if content.fields.typings.valid {
-            main_file_relative = content.fields.typings.value.clone();
+            main_file_relative.clone_from(&content.fields.typings.value);
         } else if content.fields.types.valid {
-            main_file_relative = content.fields.types.value.clone();
+            main_file_relative.clone_from(&content.fields.types.value);
         } else if content.fields.main.valid {
-            main_file_relative = content.fields.main.value.clone();
+            main_file_relative.clone_from(&content.fields.main.value);
         }
     }
 

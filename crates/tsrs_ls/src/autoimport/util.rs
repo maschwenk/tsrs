@@ -173,6 +173,7 @@ pub(crate) fn get_resolved_package_names(ctx: &Context, program: &'static Progra
     // @types names when the program resolves an import like "react" to
     // "@types/react/index.d.ts" via the PackageId.Name field.
     let mut resolved_package_names = new_set_with_size_hint(raw_names.len());
+    #[expect(clippy::iter_over_hash_type, reason = "only adds to a set; Go ranges the set too")]
     for name in raw_names.keys() {
         resolved_package_names.add(module::get_package_name_from_types_package_name(name));
     }
@@ -187,6 +188,7 @@ pub(crate) fn get_resolved_package_names(ctx: &Context, program: &'static Progra
 
     if unresolved_package_names.len() > 0 {
         let mut checker = program.get_type_checker(ctx);
+        #[expect(clippy::iter_over_hash_type, reason = "read-only globals lookup, then adds to a set; Go ranges the set too")]
         for name in unresolved_package_names.keys() {
             if let Some(symbol) = checker.try_find_ambient_module_exported(name) {
                 let declaring_file = ast::get_source_file_of_module(symbol).unwrap();
@@ -213,6 +215,7 @@ pub(crate) fn add_project_reference_output_mappings(program: &'static Program, r
         };
         tsrs_tsoptions::ParsedCommandLine::parse_input_output_names(r);
         if let Some(mappings) = r.output_dts_to_project_reference() {
+            #[expect(clippy::iter_over_hash_type, reason = "keys are distinct within one reference's map; first-wins runs across the refs slice; Go ranges the map too")]
             for (output_dts_path, mapping) in mappings {
                 // Only add if not already present (first program wins)
                 result.entry(output_dts_path.clone()).or_insert_with(|| mapping.source.clone());

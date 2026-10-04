@@ -109,7 +109,7 @@ impl Tracker {
                 trackerEditKind::ReplaceWithMultipleNodes => {
                     let mut joiner = change.options.joiner.clone();
                     if joiner.is_empty() {
-                        joiner = self.new_line.clone();
+                        joiner.clone_from(&self.new_line);
                     }
                     let parts: Vec<String> = change
                         .nodes

@@ -84,7 +84,7 @@ impl Queue {
         }
 
         *self.pending.count.lock().unwrap() += 1;
-        let pending = self.pending.clone();
+        let pending = Arc::clone(&self.pending);
         let ctx = ctx.clone();
         let task: task = Box::new(move || {
             let done = scopeDone(pending);

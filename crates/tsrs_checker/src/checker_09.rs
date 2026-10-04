@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use crate::*;
 use tsrs_ast::*;
 use tsrs_core::*;
@@ -2149,9 +2150,8 @@ impl Checker {
             let mut checked: FxHashSet<&'static str> = FxHashSet::default();
             let mut props: Vec<P<Symbol>> = Vec::new();
             for &current in d.types.get() {
-                for prop in self.get_properties_of_type(current).iter().copied() {
-                    if !checked.contains(prop.name()) {
-                        checked.insert(prop.name());
+                for &prop in self.get_properties_of_type(current) {
+                    if checked.insert(prop.name()) {
                         let combined_prop = self.get_property_of_union_or_intersection_type(
                             t,
                             prop.name(),
@@ -2665,7 +2665,7 @@ impl Checker {
             return None;
         }
         let lm = match self.lazy_member_tables.get(&t) {
-            Some(lm) => lm.clone(),
+            Some(lm) => Rc::clone(lm),
             None => self.create_lazy_member_table(t, source.unwrap())?,
         };
         if lm.ready.get().is_none() || t.object_flags().intersects(ObjectFlags::MembersResolved) {
@@ -2708,7 +2708,7 @@ impl Checker {
             declared: SymbolTable::default(),
             ordered_properties: std::cell::OnceCell::new(),
         });
-        self.lazy_member_tables.insert(t, lm.clone());
+        self.lazy_member_tables.insert(t, Rc::clone(&lm));
         self.lazy_member_stats.member_tables_created += 1;
         if t.target().unwrap().object_flags().intersects(ObjectFlags::Tuple) {
             self.lazy_member_stats.tuple_tables_created += 1;

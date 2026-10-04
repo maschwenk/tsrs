@@ -50,7 +50,7 @@ impl ConfigFileRegistry {
     // configfileregistry.go:48
     pub(crate) fn content_mappers(&self) -> Arc<configuredContentMappers> {
         if let Some(mappers) = &self.all_configured_content_mappers {
-            return mappers.clone();
+            return Arc::clone(mappers);
         }
         let command_lines: Vec<P<ParsedCommandLine>> = self.configs.values().filter_map(|entry| entry.command_line).collect();
         collect_configured_content_mappers(&command_lines)
@@ -195,6 +195,7 @@ impl ConfigFileRegistry {
     // configfileregistry.go:168
     // For testing
     pub fn for_each_test_config_entry(&self, mut cb: impl FnMut(&Path, &TestConfigEntry)) {
+        #[expect(clippy::iter_over_hash_type, reason = "test-only; the caller adds rows to a table it sorts; Go ranges the map too")]
         for (path, entry) in self.configs.iter() {
             cb(path, &test_config_entry(entry));
         }
@@ -209,6 +210,7 @@ impl ConfigFileRegistry {
     // configfileregistry.go:202
     // For testing
     pub fn for_each_test_config_file_names_entry(&self, mut cb: impl FnMut(&Path, &TestConfigFileNamesEntry)) {
+        #[expect(clippy::iter_over_hash_type, reason = "test-only; the caller adds rows to a table it sorts; Go ranges the map too")]
         for (path, entry) in self.config_file_names.iter() {
             cb(path, &TestConfigFileNamesEntry { nearest_config_file_name: entry.nearest_config_file_name.clone(), ancestors: entry.ancestors.clone() });
         }

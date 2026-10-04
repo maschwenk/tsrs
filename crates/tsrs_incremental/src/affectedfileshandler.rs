@@ -5,6 +5,7 @@
 // order is random. The declaration signatures of the files referencing a changed file are computed a level at a
 // time with one emit per level, which runs each checker's files on that checker's thread (getFilesAffectedBy).
 
+use std::rc::Rc;
 use std::cell::{Cell, RefCell};
 
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -45,7 +46,7 @@ impl affectedFilesHandler<'_> {
         let mut m = FxHashMap::default();
         m.insert(affected_file_path, affected_file_emit_kind);
         let result = std::rc::Rc::new(RefCell::new(m));
-        self.dts_may_change.borrow_mut().push(result.clone());
+        self.dts_may_change.borrow_mut().push(Rc::clone(&result));
         result
     }
 
@@ -410,6 +411,10 @@ impl affectedFilesHandler<'_> {
     }
 
     // affectedfileshandler.go:339
+    #[expect(
+        clippy::iter_over_hash_type,
+        reason = "each loop stores, deletes or ORs one entry per key of an unordered map; the end state does not depend on the order"
+    )]
     fn update_snapshot(&self) {
         if self.ctx.err().is_some() {
             return;
@@ -417,7 +422,7 @@ impl affectedFilesHandler<'_> {
         let snapshot = &self.program.snapshot;
         for (file_path, update) in self.updated_signatures.borrow().iter() {
             if let Some(mut info) = snapshot.file_infos.load(file_path) {
-                info.signature = update.signature.clone();
+                info.signature.clone_from(&update.signature);
                 snapshot.file_infos.store(file_path.clone(), info);
                 if let Some(testing_data) = &self.program.testing_data {
                     testing_data.lock().unwrap().updated_signature_kinds.insert(file_path.clone(), update.kind);
@@ -429,7 +434,7 @@ impl affectedFilesHandler<'_> {
         }
         for change in self.dts_may_change.borrow().iter() {
             for (file_path, &emit_kind) in change.borrow().iter() {
-                snapshot.add_file_to_affected_files_pending_emit(file_path.clone(), emit_kind);
+                snapshot.add_file_to_affected_files_pending_emit(file_path, emit_kind);
             }
         }
         for key in snapshot.changed_files_set.keys() {

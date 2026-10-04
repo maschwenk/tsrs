@@ -220,7 +220,7 @@ impl Arena {
         self.ptr.set(if self.up { base.wrapping_add(CENSUS_GAP) } else { self.end.get() });
         self.capacity.set(self.capacity.get() + size);
         if let (Some(region), true) = (&self.region, self.registered) {
-            REGISTRY.write().unwrap().insert(reg_key(base.addr()), (reg_key(base.addr() + size), region.clone()));
+            REGISTRY.write().unwrap().insert(reg_key(base.addr()), (reg_key(base.addr() + size), Weak::clone(region)));
         }
     }
 
@@ -238,7 +238,7 @@ impl Arena {
         self.end.set(end.with_addr(new_end));
         self.capacity.set(self.capacity.get() - (end.addr() - new_end));
         if let (Some(region), true) = (&self.region, self.registered) {
-            REGISTRY.write().unwrap().insert(reg_key(start.addr()), (reg_key(new_end), region.clone()));
+            REGISTRY.write().unwrap().insert(reg_key(start.addr()), (reg_key(new_end), Weak::clone(region)));
         }
     }
 
@@ -257,6 +257,7 @@ impl Arena {
 
     /// `value` in a block of `layout` (at least `T`'s size and alignment).
     #[inline(always)]
+    #[expect(clippy::mut_from_ref, reason = "a bump allocator: each call returns a fresh block nothing else points to (bumpalo's alloc has this signature)")]
     pub(crate) fn alloc_with<T>(&self, layout: Layout, value: T) -> &mut T {
         debug_assert!(layout.size() >= std::mem::size_of::<T>() && layout.align() >= std::mem::align_of::<T>());
         let p = self.alloc_layout(layout).cast::<T>();
@@ -268,6 +269,7 @@ impl Arena {
     }
 
     #[inline]
+    #[expect(clippy::mut_from_ref, reason = "a fresh block, as in alloc_with")]
     pub(crate) fn alloc_slice_copy<T: Copy>(&self, src: &[T]) -> &mut [T] {
         let p = self.alloc_layout(Layout::for_value(src)).cast::<T>();
         // SAFETY: fresh memory for `src.len()` items; `T: Copy`.
@@ -278,6 +280,7 @@ impl Arena {
     }
 
     #[inline]
+    #[expect(clippy::mut_from_ref, reason = "a fresh block, as in alloc_with")]
     pub(crate) fn alloc_vec<T>(&self, items: Vec<T>) -> &mut [T] {
         let len = items.len();
         let p = self.alloc_layout(Layout::array::<T>(len).expect("arena slice layout")).cast::<T>();
@@ -292,6 +295,7 @@ impl Arena {
     }
 
     #[inline]
+    #[expect(clippy::mut_from_ref, reason = "a fresh block, as in alloc_with")]
     pub(crate) fn alloc_str(&self, s: &str) -> &mut str {
         let bytes = self.alloc_slice_copy(s.as_bytes());
         // SAFETY: copied from a `str`.
@@ -323,7 +327,8 @@ impl Arena {
         }
         // SAFETY: free blocks hold the next pointer in their first word.
         unsafe {
-            self.free[class].set(*(head as *const *mut u8));
+            #[expect(clippy::cast_ptr_alignment, reason = "free blocks are 8-aligned (push_free's contract)")]
+            self.free[class].set(*head.cast_const().cast::<*mut u8>());
             #[cfg(debug_assertions)]
             {
                 let size = class * 8;
@@ -340,7 +345,9 @@ impl Arena {
     pub(crate) unsafe fn push_free(&self, class: usize, p: *mut u8) {
         #[cfg(debug_assertions)]
         std::ptr::write_bytes(p.add(8), POISON, class * 8 - 8);
-        *p.cast::<*mut u8>() = self.free[class].get();
+        #[expect(clippy::cast_ptr_alignment, reason = "`p` is 8-aligned (this function's contract)")]
+        let next = p.cast::<*mut u8>();
+        *next = self.free[class].get();
         self.free[class].set(p);
     }
 
@@ -729,6 +736,7 @@ pub(crate) struct RegionInner {
 
 // SAFETY: the arena's cells are only touched by the thread holding `lock` (or, before the region is shared, by its
 // creator), and by `Drop`, when no handle exists any more.
+#[expect(clippy::non_send_fields_in_send_ty, reason = "the arena's cells: see the SAFETY comment")]
 unsafe impl Send for RegionInner {}
 unsafe impl Sync for RegionInner {}
 
@@ -753,7 +761,7 @@ impl Region {
 
     fn new_in(first_chunk: usize, registered: bool) -> Region {
         Region(Arc::new_cyclic(|weak| RegionInner {
-            arena: Box::new(Arena::with_first_chunk(first_chunk.max(PAGE), Some(weak.clone()), registered)),
+            arena: Box::new(Arena::with_first_chunk(first_chunk.max(PAGE), Some(Weak::clone(weak)), registered)),
             lock: OwnerLock { state: Mutex::new((None, 0)), released: Condvar::new() },
             owners: Mutex::new(Vec::new()),
             on_free: Mutex::new(Vec::new()),

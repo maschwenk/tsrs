@@ -157,7 +157,7 @@ impl LogTree {
         };
         let root = match &c.root {
             None => Arc::downgrade(c),
-            Some(root) => root.clone(),
+            Some(root) => Weak::clone(root),
         };
         let child = LogTree(Some(Arc::new(logTreeNode {
             name: String::new(),

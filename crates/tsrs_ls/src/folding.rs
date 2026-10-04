@@ -90,7 +90,7 @@ fn key_for_folding_range(folding_range: &lsproto::FoldingRange) -> FoldingRangeK
         key.has_kind = true;
     }
     if let Some(collapsed_text) = &folding_range.collapsed_text {
-        key.collapsed_text = collapsed_text.clone();
+        key.collapsed_text.clone_from(collapsed_text);
         key.has_collapsed_text = true;
     }
     key
@@ -204,7 +204,7 @@ impl LanguageService {
                 if supports_collapsed_text(ctx) {
                     let mut collapsed_text = "#region".to_string();
                     if !result.name.is_empty() {
-                        collapsed_text = result.name.clone();
+                        collapsed_text.clone_from(&result.name);
                     }
                     region.collapsed_text = Some(collapsed_text);
                 }

@@ -247,7 +247,7 @@ impl InlayHintState<'_> {
         let hint_parts = self.type_to_inlay_hint_parts(declaration_type);
         let mut hint_text = String::new();
         if let Some(s) = &hint_parts.string {
-            hint_text = s.clone();
+            hint_text.clone_from(s);
         } else if let Some(label_parts) = &hint_parts.inlay_hint_label_parts {
             for part in label_parts {
                 hint_text.push_str(&part.value);

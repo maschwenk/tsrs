@@ -523,7 +523,7 @@ impl SourceDefResolver<'_> {
         let scope = self.resolver.get_package_scope_for_path(&tspath::get_directory_path(file_name));
         if scope.exists() {
             if let Some(value) = scope.unwrap().contents.unwrap().fields.type_.get_value() {
-                package_json_type = value.clone();
+                package_json_type.clone_from(value);
             }
         }
         ast::get_implied_node_format_for_file(file_name, &package_json_type)

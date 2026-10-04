@@ -44,7 +44,7 @@ pub(crate) struct extractorStats {
 impl exportExtractor<'_> {
     // extract.go:39
     pub(crate) fn stats(&self) -> Arc<extractorStats> {
-        self.symbol_extractor.stats.clone()
+        Arc::clone(&self.symbol_extractor.stats)
     }
 }
 

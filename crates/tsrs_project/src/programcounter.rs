@@ -10,7 +10,7 @@ pub(crate) struct programCounter {
 }
 
 fn key(program: &'static Program) -> usize {
-    program as *const Program as usize
+    std::ptr::from_ref::<Program>(program) as usize
 }
 
 impl programCounter {

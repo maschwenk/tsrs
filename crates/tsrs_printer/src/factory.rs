@@ -34,7 +34,7 @@ impl Deref for NodeFactory {
 /// `scratch`: see `ast::NodeFactory::scratch`.
 pub(crate) fn new_node_factory_for_context(scratch: bool) -> NodeFactory {
     let slot: Rc<Cell<Option<P<EmitContext>>>> = Rc::default();
-    let (s1, s2, s3) = (slot.clone(), slot.clone(), slot.clone());
+    let (s1, s2, s3) = (Rc::clone(&slot), Rc::clone(&slot), Rc::clone(&slot));
     NodeFactory {
         node_factory: ast::new_node_factory_ex(
             NodeFactoryHooks {

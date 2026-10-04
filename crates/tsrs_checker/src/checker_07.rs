@@ -709,7 +709,7 @@ impl Checker {
 
     // checker.go:13589
     pub(crate) fn check_spread_prop_overrides(&mut self, t: P<Type>, props: Option<&SymbolTable>, spread: P<Node>) {
-        for right in self.get_properties_of_type(t).iter().copied() {
+        for &right in self.get_properties_of_type(t) {
             if !right.flags().intersects(SymbolFlags::Optional) && !right.check_flags().intersects(CheckFlags::Partial) {
                 if let Some(left) = props.and_then(|props| props.lookup(right.name())) {
                     let diagnostic = self.error(left.value_declaration(), &diagnostics::X_0_is_specified_more_than_once_so_this_usage_will_be_overwritten, &[&left.name()]);

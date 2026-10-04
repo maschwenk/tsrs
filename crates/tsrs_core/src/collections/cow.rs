@@ -42,7 +42,7 @@ impl<K: Hash + Eq + Clone, V: Clone> CopyOnWriteMap<K, V> {
     // the parent scope: reads see the inherited entries, and the first mutation
     // transparently clones the storage so the parent's view is not modified.
     pub fn enter_scope(&mut self) -> CopyOnWriteScope<K, V> {
-        CopyOnWriteScope { saved: self.m.clone() }
+        CopyOnWriteScope { saved: Rc::clone(&self.m) }
     }
 
     pub fn exit_scope(&mut self, scope: CopyOnWriteScope<K, V>) {

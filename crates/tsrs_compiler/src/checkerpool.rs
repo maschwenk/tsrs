@@ -135,6 +135,7 @@ impl Drop for CheckerHandle {
 // itself), so a pool that shares checkers between threads stores them in this wrapper and, like the built-in pool,
 // lets only the thread that holds a checker touch it.
 pub struct PooledChecker(Box<Checker>);
+#[expect(clippy::non_send_fields_in_send_ty, reason = "the checker: only the thread that holds it touches it (see above)")]
 unsafe impl Send for PooledChecker {}
 unsafe impl Sync for PooledChecker {}
 
@@ -203,6 +204,7 @@ fn run_work_group(single_threaded: bool, count: usize, task: impl Fn(usize) + Sy
 // never hands out references that outlive the guard. The checker's deferred closures are not
 // `Send`, which is the only reason this wrapper is needed.
 struct CheckerSlot(Mutex<Box<Checker>>);
+#[expect(clippy::non_send_fields_in_send_ty, reason = "the checker: touched only under its mutex (see above)")]
 unsafe impl Send for CheckerSlot {}
 unsafe impl Sync for CheckerSlot {}
 

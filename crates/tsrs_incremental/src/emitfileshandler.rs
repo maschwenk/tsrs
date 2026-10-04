@@ -1,5 +1,6 @@
 // Port of execute/incremental/emitfileshandler.go.
 
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
@@ -181,7 +182,7 @@ impl<'a> emitFilesHandler<'a> {
         // Get updated errors that were not included in affected files emit
         let mut cached: Vec<(Path, std::sync::Arc<DiagnosticsOrBuildInfoDiagnosticsWithFileName>)> = Vec::new();
         self.program.snapshot.emit_diagnostics_per_file.range(|path, diagnostics| {
-            cached.push((path.clone(), diagnostics.clone()));
+            cached.push((path.clone(), Arc::clone(diagnostics)));
             true
         });
         cached.sort_by(|a, b| a.0.cmp(&b.0));
@@ -226,7 +227,7 @@ impl<'a> emitFilesHandler<'a> {
                     let signature = self.program.snapshot.compute_signature_with_diagnostics(source_file, text, data);
                     // With d.ts diagnostics they are also part of the signature so emitSignature will be different from it since its just hash of d.ts
                     if data.diagnostics.is_empty() {
-                        emit_signature = signature.clone();
+                        emit_signature.clone_from(&signature);
                     }
                     if signature != info.version {
                         // Update it
@@ -283,9 +284,9 @@ impl<'a> emitFilesHandler<'a> {
         let old_signature_format = self.program.snapshot.emit_signatures.load(file.path());
         if let Some(old_signature_format) = &old_signature_format {
             if !old_signature_format.signature.is_empty() {
-                old_signature = old_signature_format.signature.clone();
+                old_signature.clone_from(&old_signature_format.signature);
             } else {
-                old_signature = old_signature_format.signature_with_different_options.as_ref().unwrap()[0].clone();
+                old_signature.clone_from(&old_signature_format.signature_with_different_options.as_ref().unwrap()[0]);
             }
         }
         if new_signature.is_empty() {
@@ -310,12 +311,16 @@ impl<'a> emitFilesHandler<'a> {
     }
 
     // emitfileshandler.go:300
+    #[expect(
+        clippy::iter_over_hash_type,
+        reason = "the three loops store or delete one entry per key of an unordered map; the results below follow the program's file order"
+    )]
     fn update_snapshot(&self) -> Vec<EmitResult> {
         let snapshot = &self.program.snapshot;
         if snapshot.can_use_incremental_state() {
             for (file, signature) in self.signatures.lock().unwrap().iter() {
                 let mut info = snapshot.file_infos.load(file).unwrap();
-                info.signature = signature.clone();
+                info.signature.clone_from(signature);
                 snapshot.file_infos.store(file.clone(), info);
                 if let Some(testing_data) = &self.program.testing_data {
                     testing_data.lock().unwrap().updated_signature_kinds.insert(file.clone(), SignatureUpdateKind::StoredAtEmit);
@@ -335,7 +340,7 @@ impl<'a> emitFilesHandler<'a> {
             let mut emit_updates = self.emit_updates.lock().unwrap();
             for &file in self.program.p().get_source_files() {
                 if let Some(latest_changed_dts_file) = self.latest_changed_dts_files.lock().unwrap().get(file.path()) {
-                    *snapshot.latest_changed_dts_file.borrow_mut() = latest_changed_dts_file.clone();
+                    snapshot.latest_changed_dts_file.borrow_mut().clone_from(latest_changed_dts_file);
                     snapshot.build_info_emit_pending.set(true);
                     snapshot.has_changed_dts_file.set(true);
                 }
@@ -367,7 +372,7 @@ impl<'a> emitFilesHandler<'a> {
 }
 
 // emitfileshandler.go:341
-pub(crate) fn emit_files(ctx: &Context, program: P<Program>, options: EmitOptions, is_for_dts_errors: bool) -> Option<EmitResult> {
+pub(crate) fn emit_files(ctx: &Context, program: P<Program>, options: &EmitOptions, is_for_dts_errors: bool) -> Option<EmitResult> {
     let emit_handler = emitFilesHandler {
         ctx,
         program,
@@ -382,8 +387,8 @@ pub(crate) fn emit_files(ctx: &Context, program: P<Program>, options: EmitOption
 
     // Single file emit - do direct from program
     if !is_for_dts_errors && options.target_source_files.is_some() {
-        let write_file = emit_handler.get_emit_write_file(&options);
-        let result = compiler_program_emit(program.p(), ctx, emit_handler.get_emit_options(&options, write_file.as_deref()));
+        let write_file = emit_handler.get_emit_write_file(options);
+        let result = compiler_program_emit(program.p(), ctx, emit_handler.get_emit_options(options, write_file.as_deref()));
         emit_handler.update_has_emit_diagnostics(result.as_ref());
         if ctx.err().is_some() {
             return None;

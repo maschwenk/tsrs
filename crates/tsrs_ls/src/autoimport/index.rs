@@ -175,6 +175,7 @@ impl<T: Named + Clone> Index<T> {
         }
 
         // Rebuild the index with remapped indices
+        #[expect(clippy::iter_over_hash_type, reason = "each key is re-inserted into a new map with its Vec order kept; Go ranges the map too")]
         for (&r, old_indices) in &self.index {
             let mut new_indices = Vec::with_capacity(old_indices.len());
             for old_index in old_indices {

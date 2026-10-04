@@ -95,16 +95,16 @@ pub struct ResolutionData {
     pub(crate) package_json_info_cache: P<InfoCache>,
 }
 
-pub(crate) fn new_resolution_data(opts: &ResolverOptions) -> P<ResolutionData> {
+pub(crate) fn new_resolution_data(opts: ResolverOptions) -> P<ResolutionData> {
     let package_json_info_cache = match opts.package_json_cache {
         Some(cache) => cache,
         None => P::new(packagejson::new_info_cache(opts.host.get_current_directory(), opts.host.fs().use_case_sensitive_file_names())),
     };
     P::new(ResolutionData {
         compiler_options: opts.compiler_options,
-        typings_location: opts.typings_location.clone(),
-        project_name: opts.project_name.clone(),
-        extra_extensions: opts.extra_extensions.clone(),
+        typings_location: opts.typings_location,
+        project_name: opts.project_name,
+        extra_extensions: opts.extra_extensions,
         package_json_info_cache,
     })
 }

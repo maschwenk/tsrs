@@ -131,7 +131,7 @@ impl checker::Program for aliasResolver {
 
     // aliasresolver.go:111
     fn get_resolved_module(&self, current_source_file: P<SourceFile>, module_reference: &str, mode: ResolutionMode) -> Option<P<ResolvedModule>> {
-        let cache = self.resolved_modules.lock().unwrap().entry(current_source_file.path().clone()).or_default().clone();
+        let cache = Arc::clone(self.resolved_modules.lock().unwrap().entry(current_source_file.path().clone()).or_default());
         let key = ModeAwareCacheKey { name: alloc_str(module_reference), mode };
         if let Some(&resolved) = cache.lock().unwrap().get(&key) {
             return Some(resolved);

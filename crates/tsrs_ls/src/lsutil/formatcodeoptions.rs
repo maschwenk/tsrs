@@ -115,7 +115,7 @@ impl std::ops::DerefMut for FormatCodeSettings {
 }
 
 // formatcodeoptions.go:94
-pub fn from_ls_format_options(f: &FormatCodeSettings, opt: &tsrs_lsproto::FormattingOptions) -> FormatCodeSettings {
+pub fn from_ls_format_options(f: &FormatCodeSettings, opt: tsrs_lsproto::FormattingOptions) -> FormatCodeSettings {
     let mut updated_settings = f.clone();
     updated_settings.tab_size = opt.tab_size as i32;
     updated_settings.indent_size = opt.tab_size as i32;

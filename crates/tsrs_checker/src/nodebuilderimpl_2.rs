@@ -53,7 +53,7 @@ impl NodeBuilderImpl {
         // If the expanded parameter list had a variadic in a non-trailing position, don't expand it
         let last_expanded_param = expanded_params.last().copied();
         let has_non_trailing_rest = expanded_params.iter().any(|&p| Some(p) != last_expanded_param && p.check_flags.get().intersects(CheckFlags::RestParameter));
-        let parameter_symbols: Vec<P<Symbol>> = if has_non_trailing_rest { signature.parameters().to_vec() } else { expanded_params.clone() };
+        let parameter_symbols: Vec<P<Symbol>> = if has_non_trailing_rest { signature.parameters().to_vec() } else { expanded_params };
         let mut parameters: Vec<P<Node>> = parameter_symbols.iter().map(|&parameter| self.symbol_to_parameter_declaration(c, parameter, kind == Kind::Constructor)).collect();
         let this_parameter = if self.ctx().flags.get().intersects(Flags::OmitThisParameter) {
             None

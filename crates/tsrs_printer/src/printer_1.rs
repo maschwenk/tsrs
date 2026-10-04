@@ -161,7 +161,7 @@ pub fn new_printer(options: PrinterOptions, handlers: PrintHandlers, emit_contex
         print_handlers: handlers,
         options,
         emit_context,
-        text_state: text_state.clone(),
+        text_state: Rc::clone(&text_state),
         unique_helper_names: None,
         external_helpers_module_name: None,
         next_list_element_pos: 0,
@@ -186,7 +186,7 @@ pub fn new_printer(options: PrinterOptions, handlers: PrintHandlers, emit_contex
         id_to_symbol: None,
     };
     printer.name_generator.context = Some(printer.emit_context);
-    let state = text_state.clone();
+    let state = Rc::clone(&text_state);
     printer.name_generator.get_text_of_node = Some(Rc::new(move |g: &mut NameGenerator, node: P<Node>| get_text_of_node_worker(g, &state, node, false)));
     let state = text_state;
     let has_global_name = printer.print_handlers.has_global_name.clone();

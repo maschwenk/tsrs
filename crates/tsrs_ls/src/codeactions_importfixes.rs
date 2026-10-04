@@ -125,7 +125,7 @@ fn get_all_import_code_actions(ctx: &Context, fix_context: &CodeFixContext) -> R
         fix_context.source_file,
         view,
         fix_context.ls.format_options(),
-        fix_context.ls.converters.clone(),
+        Arc::clone(&fix_context.ls.converters),
         fix_context.ls.user_preferences().clone(),
     );
 

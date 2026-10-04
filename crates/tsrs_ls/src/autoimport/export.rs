@@ -57,7 +57,7 @@ pub enum ExportSyntax {
 
 impl ExportSyntax {
     // export_stringer_generated.go
-    pub fn string(&self) -> String {
+    pub fn string(self) -> String {
         format!("ExportSyntax{:?}", self)
     }
 }
@@ -135,7 +135,7 @@ pub fn symbol_to_export(symbol: P<Symbol>, ch: &mut Checker) -> Option<Arc<Expor
     if let Some(parent) = symbol.parent() {
         if checker::is_external_module_symbol(parent) {
             if let Some((module_id, module_file_name)) = try_get_module_id_and_file_name_of_module_symbol(parent) {
-                return extract_first_export(symbol, ch, module_id, &module_file_name, ast::get_source_file_of_module(parent).unwrap());
+                return extract_first_export(symbol, ch, &module_id, &module_file_name, ast::get_source_file_of_module(parent).unwrap());
             }
             return None;
         }
@@ -175,16 +175,16 @@ fn try_get_module_export(
     if let Some(exported) = exported {
         let skipped = ch.skip_alias(exported);
         if ch.get_merged_symbol(skipped) == target {
-            return extract_first_export(exported, ch, module_id.clone(), module_file_name, file);
+            return extract_first_export(exported, ch, module_id, module_file_name, file);
         }
     }
     None
 }
 
 // export.go:133
-fn extract_first_export(symbol: P<Symbol>, ch: &mut Checker, module_id: ModuleID, module_file_name: &str, file: P<SourceFile>) -> Option<Arc<Export>> {
+fn extract_first_export(symbol: P<Symbol>, ch: &mut Checker, module_id: &ModuleID, module_file_name: &str, file: P<SourceFile>) -> Option<Arc<Export>> {
     let mut exports: Vec<Arc<Export>> = Vec::new();
     let mut extractor = new_symbol_extractor("", ch, None, None);
-    extractor.extract_from_symbol(symbol.name(), symbol, &module_id, module_file_name, file, &mut exports);
+    extractor.extract_from_symbol(symbol.name(), symbol, module_id, module_file_name, file, &mut exports);
     exports.into_iter().next()
 }
