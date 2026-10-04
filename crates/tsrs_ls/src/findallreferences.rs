@@ -1595,7 +1595,6 @@ pub(crate) fn is_string_literal_property_reference(node: P<Node> /*StringLiteral
 impl LanguageService {
     // Go returns nil (no module references) or a slice; `None` is Go's nil.
     // findallreferences.go:1401
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn get_referenced_symbols_for_module_if_declared_by_source_file(
         &self,
         ctx: &Context,
@@ -2146,7 +2145,6 @@ pub(crate) fn get_special_search_kind(node: Option<P<Node>>) -> &'static str {
 }
 
 // findallreferences.go:1853
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn get_referenced_symbols_for_symbol(
     ctx: &Context,
     program: &'static Program,
@@ -2244,7 +2242,6 @@ pub(crate) struct RefState<'a> {
 }
 
 // findallreferences.go:1926
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn new_state<'a>(
     ctx: &'a Context,
     program: &'static Program,

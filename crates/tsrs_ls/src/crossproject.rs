@@ -52,7 +52,6 @@ impl LanguageService {
     // first like tsrs_core's WorkGroup (the order only affects which search runs first: results are ordered by
     // getResultsIterator). Go's `iter.Seq[Resp]` of results is a Vec handed to `combine_results`.
     // crossproject.go:46
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn handle_cross_project<Req: lsproto::HasTextDocumentPosition, Resp: Default>(
         &self,
         ctx: &Context,

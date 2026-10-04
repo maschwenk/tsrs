@@ -243,21 +243,18 @@ pub trait Watch: Send + Sync {
 
 // Package-level watcher instances. Platform init() functions set the factory.
 pub(crate) static inotifyWatcher: LazyLock<watcher> = LazyLock::new(|| {
-    #[allow(unused_mut)]
     let mut w = watcher::new("inotify");
     #[cfg(target_os = "linux")]
     crate::inotify_linux::init(&mut w);
     w
 });
 pub(crate) static fseventsWatcher: LazyLock<watcher> = LazyLock::new(|| {
-    #[allow(unused_mut)]
     let mut w = watcher::new("fsevents");
     #[cfg(target_os = "macos")]
     crate::fsevents_darwin::init(&mut w);
     w
 });
 pub(crate) static kqueueWatcher: LazyLock<watcher> = LazyLock::new(|| {
-    #[allow(unused_mut)]
     let mut w = watcher::new("kqueue");
     #[cfg(any(target_os = "macos", target_os = "freebsd", target_os = "openbsd", target_os = "netbsd", target_os = "dragonfly"))]
     crate::kqueue::init(&mut w);

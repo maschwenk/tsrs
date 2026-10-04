@@ -388,7 +388,6 @@ impl FormatSpanWorker {
     }
 
     // span.go:334
-    #[allow(clippy::too_many_arguments)]
     fn process_child_node(
         &mut self,
         node: P<Node>,
@@ -505,7 +504,6 @@ impl FormatSpanWorker {
     }
 
     // span.go:439
-    #[allow(clippy::too_many_arguments)]
     fn process_child_nodes(
         &mut self,
         node: P<Node>,
@@ -795,7 +793,6 @@ impl FormatSpanWorker {
     }
 
     // span.go:650
-    #[allow(clippy::too_many_arguments)]
     fn process_pair(
         &mut self,
         current_item: TextRangeWithKind,
