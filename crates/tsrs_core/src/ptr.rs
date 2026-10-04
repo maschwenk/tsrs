@@ -175,7 +175,7 @@ impl<T> P<T> {
         #[cfg(compressed_ptrs)]
         {
             let off = std::ptr::from_ref::<T>(r).addr().wrapping_sub(crate::reserve::base().addr());
-            debug_assert!(off < crate::reserve::RESERVE && off & 7 == 0 && off != 0, "P::from_arena outside the arena");
+            debug_assert!(off < crate::reserve::RESERVE && off & 7 == 0 && off >= crate::reserve::FIRST, "P::from_arena outside the arena");
             P(std::num::NonZeroU32::new_unchecked((off >> crate::reserve::UNIT_SHIFT) as u32), std::marker::PhantomData)
         }
         #[cfg(not(compressed_ptrs))]
@@ -288,7 +288,7 @@ impl<T> P<T> {
     #[track_caller]
     pub fn from_static(r: &'static T) -> P<T> {
         let off = std::ptr::from_ref::<T>(r).addr().wrapping_sub(crate::reserve::base().addr());
-        if off >= crate::reserve::RESERVE || off & 7 != 0 || off == 0 {
+        if off >= crate::reserve::RESERVE || off & 7 != 0 || off < crate::reserve::FIRST {
             from_static_failed(std::any::type_name::<T>(), std::ptr::from_ref::<T>(r).addr());
         }
         P(std::num::NonZeroU32::new((off >> crate::reserve::UNIT_SHIFT) as u32).unwrap(), std::marker::PhantomData)
@@ -348,7 +348,7 @@ impl<T: ?Sized> P<T> {
         T: Sized,
     {
         // SAFETY: a handle is the offset of a live arena object from the base of the reservation it lives in.
-        let r = unsafe { &*crate::reserve::base().add((self.0.get() as usize) << crate::reserve::UNIT_SHIFT).cast::<T>() };
+        let r = unsafe { &*crate::reserve::at((self.0.get() as usize) << crate::reserve::UNIT_SHIFT).cast::<T>() };
         #[cfg(feature = "alloc-profile")]
         check_not_freed(r);
         r

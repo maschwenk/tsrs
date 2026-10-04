@@ -1,10 +1,10 @@
 //! The process-wide address range behind compressed `P<T>` handles (`cfg(compressed_ptrs)`: the default feature
 //! `compressed-ptrs` on unix, see build.rs; notes/mem-pointer-compression.md).
 //!
-//! The first chunk request reserves `RESERVE` bytes of address space with no access, and every arena chunk of every
-//! thread arena and region is carved from it and committed on hand-out, so one `base()` turns any handle into an
-//! address: `base() + (handle << UNIT_SHIFT)`. The first `GRANULE` is never handed out, so handle 0 is never an
-//! object (the `Option<P<T>>` niche). Released chunks (region slabs) are decommitted and their ranges reused.
+//! The first chunk request reserves the range `BASE_ADDR + FIRST .. BASE_ADDR + RESERVE` with no access, and every
+//! arena chunk of every thread arena and region is carved from it and committed on hand-out, so a handle turns into
+//! an address with no lookup: `at(handle << UNIT_SHIFT)`. Offsets below `FIRST` are never handed out, so handle 0 is
+//! never an object (the `Option<P<T>>` niche). Released chunks (region slabs) are decommitted and their ranges reused.
 
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -17,24 +17,56 @@ pub const RESERVE: usize = 1 << (32 + UNIT_SHIFT);
 /// Chunk sizes and offsets are multiples of this (a multiple of every supported page size).
 const GRANULE: usize = 64 << 10;
 
-/// Where the reservation lives: a fixed address, so `base()` is a constant and turning a handle into an address
-/// costs an add, no load (a loaded base cost ~25% more instructions). 64 TiB + 4 GiB is clear of every placement seen
-/// on the supported platforms: macOS keeps 4-448 GiB for the binary, the shared cache and its malloc zones and places
-/// other mappings upward from 448 GiB; mimalloc hints from 2 to 30 TiB; Linux puts PIE binaries near 85 TiB and maps
-/// top-down below the stack (near 128 TiB). It needs a 47-bit address space (x86-64, arm64 with 48-bit VA).
+/// Where the reservation lives: a fixed address per target, so turning a handle into an address costs no load (a
+/// base loaded from a global cost ~25% more instructions; notes/mem-pointer-compression.md sections 4-6).
 ///
-/// The value is chosen for arm64 codegen: one `movz` materializes it (a single 16-bit chunk, `0x4001 << 32`), and
+/// Linux: 0, "zero-based" handles (the JVM's zero-based compressed oops): the address is `handle << 3`, which x86-64
+/// folds into the addressing mode (`[idx*8 + disp]`) and arm64 into a shifted-register load or one `ubfiz`. A base
+/// that does not fit a 32-bit displacement costs ~7% instructions and wall time on x86-64 (section 6). The range
+/// `FIRST .. RESERVE` (4-32 GiB) is free in every Linux process seen: PIE executables, their brk heap, shared
+/// libraries and default mmap placements are all above 2^40, and non-PIE executables load at 4 MiB.
+///
+/// Elsewhere (macOS): 64 TiB + 4 GiB. macOS keeps 4-448 GiB for the binary, the shared cache and its malloc zones
+/// (the low 4 GiB is `__PAGEZERO`), so no low 32 GiB range exists there; on arm64 the base costs about one `add` per
+/// pointer chase and no wall time (section 5). The value is chosen for arm64 codegen: one `movz` materializes it, and
 /// bit 32 overlaps the offset range (`handle << 3` < 2^35), so LLVM cannot turn the add into an `orr`; `add x, base,
-/// w, uxtw #3` then folds the zero-extension and the shift of a 32-bit handle into the one instruction. A base with
-/// disjoint bits (0x4000_0000_0000) gave `mov w, w` + `orr` per dereference of a handle passed in a register.
+/// w, uxtw #3` then folds the zero-extension and the shift of a 32-bit handle into the one instruction. It needs a
+/// 47-bit address space (arm64 with 48-bit VA).
+#[cfg(target_os = "linux")]
+pub const BASE_ADDR: usize = 0;
+#[cfg(not(target_os = "linux"))]
 pub const BASE_ADDR: usize = 0x4001_0000_0000;
+
+/// Offset of the first byte ever handed out; handles below `FIRST >> UNIT_SHIFT` never name an object. Zero-based,
+/// 4 GiB: clear of non-PIE executables and their brk heap (from 4 MiB), of `MAP_32BIT` and other low-2-GiB users, and
+/// every arena address stays above `u32::MAX`, as with a high base. That leaves 28 GiB (the worst measured run uses
+/// 6 GB). With a high base only the first granule is skipped.
+#[cfg(target_os = "linux")]
+pub const FIRST: usize = 4 << 30;
+#[cfg(not(target_os = "linux"))]
+pub const FIRST: usize = GRANULE;
 
 static RESERVED: AtomicBool = AtomicBool::new(false);
 
-/// The start of the reservation. A handle exists only after the first chunk, i.e. after the reservation.
+/// The address of offset 0 of the reservation (not itself mapped: offsets below `FIRST` are never handed out).
 #[inline(always)]
 pub fn base() -> *mut u8 {
     std::ptr::with_exposed_provenance_mut(BASE_ADDR)
+}
+
+/// The address at byte offset `off` of the reservation.
+///
+/// # Safety
+/// `off` must lie inside a chunk handed out by `alloc_chunk` (or be its end).
+#[inline(always)]
+pub unsafe fn at(off: usize) -> *mut u8 {
+    if BASE_ADDR == 0 {
+        // Zero-based: the offset is the address. `base().add(off)` would offset a null pointer, which is UB.
+        std::ptr::with_exposed_provenance_mut(off)
+    } else {
+        // SAFETY: `base() + off` lies inside the reservation, whose provenance `reserve` exposed.
+        unsafe { base().add(off) }
+    }
 }
 
 struct Chunks {
@@ -48,42 +80,47 @@ struct Chunks {
     peak: usize,
 }
 
-static CHUNKS: Mutex<Chunks> = Mutex::new(Chunks { next: GRANULE, free: BTreeMap::new(), live: 0, peak: GRANULE });
+static CHUNKS: Mutex<Chunks> = Mutex::new(Chunks { next: FIRST, free: BTreeMap::new(), live: 0, peak: FIRST });
 
 #[cold]
 fn fail(what: &str) -> ! {
     let live = CHUNKS.try_lock().map(|c| c.live).unwrap_or(0);
     eprintln!(
-        "tsrs: {what} (compressed pointers: one {} GiB address range for every arena; {} MiB of it in use). \
-         Build with the tsrs_core/plain-ptrs feature to lift the limit.",
-        RESERVE >> 30,
+        "tsrs: {what} (compressed pointers: one {} GiB address range at {:#x}..{:#x} for every arena; {} MiB of it in \
+         use). Build with the tsrs_core/plain-ptrs feature to lift the limit.",
+        (RESERVE - FIRST) >> 30,
+        BASE_ADDR + FIRST,
+        BASE_ADDR + RESERVE,
         live >> 20
     );
     std::process::abort()
 }
 
+/// Linux refuses an occupied fixed range (`EEXIST`) instead of placing it elsewhere; kernels before 4.17 treat the
+/// flag as a hint, which the address check in `reserve` covers.
+#[cfg(target_os = "linux")]
+const RESERVE_FLAGS: libc::c_int = libc::MAP_PRIVATE | libc::MAP_ANON | libc::MAP_NORESERVE | libc::MAP_FIXED_NOREPLACE;
+#[cfg(all(unix, not(target_os = "linux")))]
+const RESERVE_FLAGS: libc::c_int = libc::MAP_PRIVATE | libc::MAP_ANON | libc::MAP_NORESERVE;
+
 #[cfg(unix)]
 fn reserve() {
-    // SAFETY: a fresh anonymous mapping with no access at a hint; nothing else refers to it.
-    let p = unsafe {
-        libc::mmap(
-            std::ptr::without_provenance_mut(BASE_ADDR),
-            RESERVE,
-            libc::PROT_NONE,
-            libc::MAP_PRIVATE | libc::MAP_ANON | libc::MAP_NORESERVE,
-            -1,
-            0,
-        )
-    };
+    let start = BASE_ADDR + FIRST;
+    // SAFETY: a fresh anonymous mapping with no access at a hint (Linux: at exactly that range if it is free);
+    // nothing else refers to it.
+    let p = unsafe { libc::mmap(std::ptr::without_provenance_mut(start), RESERVE - FIRST, libc::PROT_NONE, RESERVE_FLAGS, -1, 0) };
     if p == libc::MAP_FAILED {
+        if std::io::Error::last_os_error().raw_os_error() == Some(libc::EEXIST) {
+            fail("the arena address range is taken by another mapping");
+        }
         fail("could not reserve the arena address range");
     }
-    if p.addr() != BASE_ADDR {
+    if p.addr() != start {
         // SAFETY: the mapping just made, unused.
-        unsafe { libc::munmap(p, RESERVE) };
-        fail(&format!("the arena address range at {BASE_ADDR:#x} is taken (the system placed it at {:#x})", p.addr()));
+        unsafe { libc::munmap(p, RESERVE - FIRST) };
+        fail(&format!("the arena address range is taken (the system placed it at {:#x})", p.addr()));
     }
-    // `base()` derives every arena pointer from the address.
+    // `at` derives every arena pointer from the address.
     let _ = p.expose_provenance();
 }
 
@@ -164,14 +201,13 @@ pub(crate) fn alloc_chunk(size: usize) -> *mut u8 {
         reserve();
         RESERVED.store(true, Ordering::Relaxed);
     }
-    let base = base();
     let Some(off) = c.take(size) else {
         drop(c);
         fail("the arena address range is exhausted");
     };
     drop(c);
-    // SAFETY: inside the reservation.
-    let p = unsafe { base.add(off) };
+    // SAFETY: the chunk just taken.
+    let p = unsafe { at(off) };
     commit(p, size);
     p
 }
@@ -192,9 +228,10 @@ pub fn reserved_in_use() -> usize {
     CHUNKS.lock().unwrap_or_else(|e| e.into_inner()).live
 }
 
-/// How far into the reservation chunks have ever been carved (released ranges are reused before it grows).
+/// How far into the reservation chunks have ever been carved, from `FIRST` (released ranges are reused before it
+/// grows).
 pub fn reserved_high_water() -> usize {
-    CHUNKS.lock().unwrap_or_else(|e| e.into_inner()).peak
+    CHUNKS.lock().unwrap_or_else(|e| e.into_inner()).peak - FIRST
 }
 
 #[cfg(test)]
@@ -203,11 +240,11 @@ mod tests {
 
     #[test]
     fn released_ranges_are_reused_and_coalesced() {
-        let mut c = Chunks { next: GRANULE, free: BTreeMap::new(), live: 0, peak: GRANULE };
+        let mut c = Chunks { next: FIRST, free: BTreeMap::new(), live: 0, peak: FIRST };
         let a = c.take(GRANULE).unwrap();
         let b = c.take(3 * GRANULE).unwrap();
         let d = c.take(GRANULE).unwrap();
-        assert_eq!((a, b, d), (GRANULE, 2 * GRANULE, 5 * GRANULE));
+        assert_eq!((a, b, d), (FIRST, FIRST + GRANULE, FIRST + 4 * GRANULE));
         c.put(a, GRANULE);
         c.put(b, 3 * GRANULE);
         assert_eq!(c.free.len(), 1);
@@ -227,6 +264,6 @@ mod tests {
             p.write(7);
             release_chunk(p, 1);
         }
-        assert!(p.addr() - base().addr() >= GRANULE);
+        assert!(p.addr() - base().addr() >= FIRST);
     }
 }
