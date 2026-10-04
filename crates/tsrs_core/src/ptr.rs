@@ -858,6 +858,20 @@ pub fn alloc_slice<T: Copy>(items: &[T]) -> &'static [T] {
     s
 }
 
+/// `alloc_slice` of bytes, 4-aligned (for a length prefix read as `u32`).
+#[inline]
+#[cfg_attr(feature = "alloc-profile", track_caller)]
+pub fn alloc_slice_aligned4(items: &[u8]) -> &'static [u8] {
+    let layout = std::alloc::Layout::from_size_align(items.len().max(1), 4).expect("arena slice layout");
+    let p = with_arena(|a| a.alloc_layout(layout));
+    profile!([u8], layout.size(), p.addr().get());
+    // SAFETY: fresh memory for `items.len()` bytes.
+    unsafe {
+        std::ptr::copy_nonoverlapping(items.as_ptr(), p.as_ptr(), items.len());
+        std::slice::from_raw_parts(p.as_ptr(), items.len())
+    }
+}
+
 /// Moves a `Vec` of arbitrary (possibly non-`Copy`) items into the arena.
 #[inline]
 #[cfg_attr(feature = "alloc-profile", track_caller)]

@@ -281,6 +281,122 @@ impl Default for OwnedStrCell {
     }
 }
 
+/// `OwnedCell<&'static str>` in 8 bytes with two tag bits for the owner (`tags` / `set_tags`; `set` keeps them): the
+/// address in the low 48 bits, the length in the next 14, the tags in the top 2. A string of `0x3FFF` bytes or more
+/// (or at an address above 2^48) is copied into the arena after a `u32` length (`PackedStr`'s long form).
+pub struct OwnedTaggedStrCell(Cell<u64>);
+
+const TAGGED_LEN_SHIFT: u32 = 48;
+const TAGGED_LEN_MASK: u64 = (1 << 14) - 1;
+const TAGGED_TAG_SHIFT: u32 = 62;
+const TAGGED_ADDR: u64 = (1 << TAGGED_LEN_SHIFT) - 1;
+
+impl OwnedTaggedStrCell {
+    #[inline]
+    #[cfg_attr(feature = "alloc-profile", track_caller)]
+    pub fn new(value: &'static str) -> OwnedTaggedStrCell {
+        OwnedTaggedStrCell(Cell::new(Self::pack(value)))
+    }
+
+    #[inline]
+    #[cfg_attr(feature = "alloc-profile", track_caller)]
+    fn pack(s: &'static str) -> u64 {
+        let a = s.as_ptr().expose_provenance() as u64;
+        if (s.len() as u64) < TAGGED_LEN_MASK && a >> TAGGED_LEN_SHIFT == 0 {
+            return a | (s.len() as u64) << TAGGED_LEN_SHIFT;
+        }
+        Self::pack_long(s)
+    }
+
+    #[cold]
+    #[cfg_attr(feature = "alloc-profile", track_caller)]
+    fn pack_long(s: &str) -> u64 {
+        let len = u32::try_from(s.len()).expect("string longer than u32::MAX");
+        let mut bytes = Vec::with_capacity(4 + s.len());
+        bytes.extend_from_slice(&len.to_ne_bytes());
+        bytes.extend_from_slice(s.as_bytes());
+        let copy = crate::alloc_slice_aligned4(&bytes);
+        let a = copy.as_ptr().expose_provenance() as u64;
+        assert!(a >> TAGGED_LEN_SHIFT == 0, "arena address above 2^48");
+        a | TAGGED_LEN_MASK << TAGGED_LEN_SHIFT
+    }
+
+    #[inline]
+    pub fn get(&self) -> &'static str {
+        let w = self.0.get();
+        let p = std::ptr::with_exposed_provenance::<u8>((w & TAGGED_ADDR) as usize);
+        let len = (w >> TAGGED_LEN_SHIFT) & TAGGED_LEN_MASK;
+        // SAFETY: built by `pack` from a `&'static str` of this length, or by `pack_long` (length prefix + bytes).
+        unsafe {
+            let (p, len) = if len == TAGGED_LEN_MASK { (p.add(4), (p as *const u32).read() as usize) } else { (p, len as usize) };
+            std::str::from_utf8_unchecked(std::slice::from_raw_parts(p, len))
+        }
+    }
+
+    #[inline]
+    #[cfg_attr(feature = "alloc-profile", track_caller)]
+    pub fn set(&self, value: &'static str) {
+        crate::ptr::shared_check::assert_not_shared(self, "OwnedTaggedStrCell");
+        self.0.set(Self::pack(value) | self.0.get() & !(TAGGED_ADDR | TAGGED_LEN_MASK << TAGGED_LEN_SHIFT))
+    }
+
+    /// The two tag bits.
+    #[inline]
+    pub fn tags(&self) -> u8 {
+        (self.0.get() >> TAGGED_TAG_SHIFT) as u8
+    }
+
+    #[inline]
+    pub fn set_tags(&self, tags: u8) {
+        crate::ptr::shared_check::assert_not_shared(self, "OwnedTaggedStrCell");
+        debug_assert!(tags < 4);
+        self.0.set(self.0.get() & !(3 << TAGGED_TAG_SHIFT) | (tags as u64) << TAGGED_TAG_SHIFT)
+    }
+}
+
+impl Default for OwnedTaggedStrCell {
+    fn default() -> Self {
+        OwnedTaggedStrCell::new("")
+    }
+}
+
+/// `OwnedCell<&'static [T]>` for slices of handles in arena objects: a `SliceCell` (12 bytes, 4-aligned), or with
+/// compressed pointers, where a struct of handles packs tighter, a `ThinSliceCell` (8 bytes). `get` returns exactly
+/// the slice last `set`.
+pub struct OwnedPSliceCell<T: 'static>(
+    #[cfg(not(feature = "compressed-ptrs"))] crate::ptr::SliceCell<T>,
+    #[cfg(feature = "compressed-ptrs")] crate::ptr::ThinSliceCell<T>,
+);
+
+impl<T> Default for OwnedPSliceCell<T> {
+    fn default() -> Self {
+        OwnedPSliceCell::new(&[])
+    }
+}
+
+impl<T> OwnedPSliceCell<T> {
+    #[inline]
+    #[cfg_attr(feature = "alloc-profile", track_caller)]
+    pub fn new(value: &'static [T]) -> OwnedPSliceCell<T> {
+        #[cfg(not(feature = "compressed-ptrs"))]
+        return OwnedPSliceCell(crate::ptr::SliceCell::new(value));
+        #[cfg(feature = "compressed-ptrs")]
+        return OwnedPSliceCell(crate::ptr::ThinSliceCell::new(value));
+    }
+
+    #[inline]
+    pub fn get(&self) -> &'static [T] {
+        self.0.get()
+    }
+
+    #[inline]
+    #[cfg_attr(feature = "alloc-profile", track_caller)]
+    pub fn set(&self, value: &'static [T]) {
+        crate::ptr::shared_check::assert_not_shared(self, "OwnedPSliceCell");
+        self.0.set(value)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
