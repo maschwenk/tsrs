@@ -19,41 +19,44 @@ pointer compression costs about +4.9% instructions and took back most of the che
 
 ## Not verified yet
 
-- **The 32 GiB reservation outside macOS and GitHub runners.** Compressed pointers reserve a fixed virtual range
-  (notes/mem-pointer-compression.md, "Not done"). It needs a 47-bit user address space and no `ulimit -v` below
-  32 GiB, else tsrs aborts with a message. Not yet run inside the sandboxes and dev containers where the monorepo
-  uses it. Do this before the next release.
-- **x86-64 cost of compression.** The +4-5% instructions were measured on arm64 (one extra `add` per dereference);
-  the x86 addressing mode should make it nearly free. Unmeasured.
+- **The 32 GiB reservation outside macOS and GitHub runners: verified.** main ran in a Linux x86-64 dev sandbox
+  (gVisor-style microVM, `ulimit -v` unlimited, overcommit 1): check, emit and incremental all work. It still needs
+  a 47-bit address space and no `ulimit -v` below 32 GiB.
+- **x86-64 cost of compression: measured, not free.** Intel Xeon 8259CL, 18 vCPU, the 38k-file codebase, compressed
+  vs `plain-ptrs`: `--release` +6.6% wall / +7.0% instructions (one and four checkers); `dist` profile (fat LTO, no
+  PGO) +4.4% wall with four checkers (27.0 -> 28.2 s), +2.3% with one, +7.1% instructions; peak -15.2%. With PGO: not
+  measured. Shipping the Linux binaries with `plain-ptrs` is a one-line release choice if speed matters more there.
 - **Linux emit.** The 38k-file codebase is bound by file creation on macOS (4 writer permits). On Linux file creation
   runs in parallel, so the writer cap and the remaining transform CPU may both matter (notes/perf-emit.md).
-- **CI on main.** The `CI` workflow did not run for the #55 merge commit (654342d) or 48665c7; only the macOS Node
-  API workflow did. `ci.yml` no longer has a manual trigger. Find out whether that is a path filter or a gap.
+- **CI on main: fine.** CI moved to Depot (`.depot/workflows/ci.yml`: `check-and-test`, `lint-ratchet`); results are
+  check runs on the commit (`gh api repos/<repo>/commits/<sha>/check-runs`), not `gh run list`. It runs on pushes to
+  main only, so a PR that adds a lint finding turns main red after the merge: run `tools/lint/ratchet.py` before merging.
 - **`cargo test -p tsrs_cli` does not link on macOS**: `api::memory_tests` calls glibc `malloc_trim`. Every agent
   this round excluded it locally. Needs a `cfg(target_os = "linux")` from the Node API side.
 
 ## Ideas, by expected value
 
-1. **The heavy type graphs every checker rebuilds** (notes/perf-checker-scaling.md). At 8 checkers the checkers do
-   +84% total work, and 58 files account for 11.2 of the 13.4 s of excess: one project-wide service graph
-   (0.3-0.5 s per checker) and the router aggregator (`src/router/index.ts`, 128 imports: 3 ms with one checker,
-   1.4-2 s cold). No partition avoids it and sharing types across checkers cannot be exact
-   (notes/mem-shared-base.md). The fix is in the checked codebase, not in tsrs: if the router type is one large
-   inferred type, an explicit annotation would remove most of it for tsc and tsrs alike. `TSRS_FILE_TIMES` (per-file
-   thread CPU) is the tool to find such files in any project.
+1. **The heavy type graphs every checker rebuilds: fixed in the checked codebase**, not in tsrs
+   (notes/perf-checker-scaling.md has the measurement). Two causes, both worth knowing for any project:
+   `export default new Ctor(...)` makes the checker check the whole constructor call, pulling in every argument's
+   type transitively, where `const x = new Ctor(...); export default x` takes the type from the constructor (TS 7
+   behaviour); and a mapped type that runs `Extract` over a large union once per key (294 x 590 conditional checks).
+   Result there: wall -10% at four checkers, instantiations 76.9M -> 65.6M. `TSRS_FILE_TIMES` (per-file thread CPU,
+   compare one checker against eight) is the tool to find such files. Left: a module built from ~200 repository
+   getters (~0.3 s cold) that needs a per-service split.
 2. **Emit memory over check-only: 0.53 GiB left** (notes/mem-emit-regions.md, "What remains"): raw source maps kept in
    `EmitResult` as Go does (0.15), the print backlog of up to 2,048 files (0.15; a bound of 256 saved 0.14 GiB but
    cost 8% emit time on vscode), declaration-diagnostics leftovers (0.1).
 3. **Emit CPU on the checker thread** (notes/perf-emit.md): `get_local_module_specifier`,
    `get_nearest_ancestor_directory_with_package_json` (a memo, ~0.1 s), `get_accessible_symbol_chain_from_symbol_table`,
    each about 3% of emit. Only visible in wall time once writes are not the bound (Linux).
-4. **Signature emit parallelism on hub edits** (notes/perf-dev-loop2.md): about 55% parallel efficiency because each
-   dependency level waits for the previous one; module-specifier computation is 4.3 CPU-s of it. The two shortcuts
-   around it were rejected (below), so this is what is left for hub edits.
-5. **Checker CPU** (notes/perf-checker-cpu2.md, "What remains"): interned names so `SymbolMap::position` hits compare
-   pointers instead of name bytes (~5% of check samples; a parser/binder change);
-   `instantiate_type_with_alias_worker` cache probes (~3%). Everything else is below 0.3%. What is left at the top of
-   the profile is memory latency.
+4. **Hub edits**: closed. See "Measured and rejected" and notes/perf-hub-edit-shortcut.md; the exact part
+   (one batched emit for global-scope edits, 18.0 -> 10.5 s) landed as #65.
+5. **Checker CPU**: round 3 landed (#66, notes/perf-checker-cpu3.md): -4.2% / -5.0% instructions (one / four
+   checkers), check time -3.3% / -3.7%. Full name interning was not done: 43% of symbol-table hits already use the
+   same string and now skip the comparison; the rest would need the parser to intern every identifier (+9% parse
+   time, rejected earlier) for about 0.2%. Handle-to-reference conversions are ~1.2% of samples on arm64; the x86
+   side (zero-extends 1.5 points, shifts 1.2) is unmeasured after round 3.
 6. **Smaller layouts that handles now allow** (notes/mem-pointer-compression.md, "Not done"): `Type` header 24 -> 20
    bytes (at most ~38 MB), `TypeMapper` below 16 bytes (needs a home for its kind and escape bits).
 7. **The "nothing changed" fast path** (notes/perf-dev-loop.md): exact conditions written up; it still has to
@@ -63,6 +66,10 @@ pointer compression costs about +4.9% instructions and took back most of the che
    the port; costs nothing under `--noEmit`. Worth doing with an emit-on incremental benchmark.
 
 ## Measured and rejected (do not redo)
+
+- Zero-based handles on Linux (reserve 4-32 GiB so a dereference needs no base; #62, notes/mem-pointer-compression.md
+  section 6): removes 2.7 of the 7 points of extra x86 instructions, but wall and cycles move by 0.7-2%, inside the
+  host's drift, and it adds low-address-space failure modes. The rest of the cost is the 32-bit handle itself.
 
 - Hub-edit shortcut, storing file versions as signatures when an edit re-checks most of the program (#64): hub edit
   10.7 -> 7.9 s, global `.d.ts` 18.0 -> 7.2 s, but the first later body-only edit of each skipped file re-checks the
@@ -83,6 +90,16 @@ pointer compression costs about +4.9% instructions and took back most of the che
   (notes/mem-pointer-compression.md).
 - A per-file `type_to_string` builder, lazy `ErrorSymbolName`, dropping source maps from `EmitResult`
   (notes/mem-emit-regions.md).
+
+## The lint ratchet
+
+`tools/lint/baseline.tsv` went from 1,373 findings to 312 (#57-#59, #61, #63; notes/lint-paydown-compiler.md,
+notes/lint-paydown-project.md). Left: 195 in `tsrs_api*` (the Node API crates, not touched), ~112 in the
+project / language-service crates that need a redesign rather than a cleanup (by-value handler arguments fixed by
+fn-pointer types, one large JSON error type, 31 hash-iteration loops whose order is observable), and 5 compiler-side
+findings blocked on callers in those crates. Measured on the way: none of the 43 `#[inline(always)]` were needed;
+the unchecked string conversions and link-store indexing are (+1.6% to +5%, +0.6%); removing ~170 clones did not
+change speed.
 
 ## Housekeeping
 
