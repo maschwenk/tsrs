@@ -10,7 +10,7 @@ use tsrs_core::tspath::{self, ComparePathsOptions, Path};
 use tsrs_core::{CompilerOptions, Tristate, P};
 use tsrs_diagnostics as diagnostics;
 
-use crate::affectedfileshandler::collect_all_affected_files;
+use crate::affectedfileshandler::{collect_all_affected_files, finish_deferred_signatures, DeferredSignatures};
 use crate::emit::{handle_no_emit_options, EmitOnly, EmitOptions, EmitResult, ProgramLike, WriteFileData};
 use crate::emitfileshandler::emit_files;
 use crate::host::Host;
@@ -42,6 +42,9 @@ pub struct Program {
 
     nested_emit_now: Option<fn() -> Instant>,
     nested_emit: Mutex<nestedEmitState>,
+
+    // Set between the check and the declaration signatures it was moved ahead of (affectedfileshandler.rs).
+    pub(crate) deferred_signatures: Mutex<Option<DeferredSignatures>>,
 }
 
 // program.go:46
@@ -66,6 +69,7 @@ pub fn new_program(
         testing_data,
         nested_emit_now,
         nested_emit: Mutex::new(nestedEmitState::default()),
+        deferred_signatures: Mutex::new(None),
     })
 }
 
@@ -86,7 +90,7 @@ pub enum SemanticDiagnosticsState {
 
 impl Program {
     pub(crate) fn new_from_snapshot(snapshot: P<Snapshot>) -> P<Program> {
-        P::new(Program { snapshot, program: None, host: None, testing_data: None, nested_emit_now: None, nested_emit: Mutex::new(nestedEmitState::default()) })
+        P::new(Program { snapshot, program: None, host: None, testing_data: None, nested_emit_now: None, nested_emit: Mutex::new(nestedEmitState::default()), deferred_signatures: Mutex::new(None) })
     }
 
     pub fn get_testing_data(&self) -> Option<&Mutex<TestingData>> {
@@ -246,10 +250,14 @@ impl Program {
             self.snapshot.check_pending.set(false);
         }
         self.snapshot.build_info_emit_pending.set(true);
+        if finish_deferred_signatures(ctx, self) {
+            self.collect_semantic_diagnostics_of_affected_files(ctx, file);
+        }
     }
 
     // program.go:304
     pub(crate) fn emit_build_info(&self, ctx: &Context, options: &EmitOptions) -> Option<EmitResult> {
+        finish_deferred_signatures(ctx, self);
         let program = self.p();
         let build_info_file_name = tsrs_tsoptions::outputpaths::get_build_info_file_name(
             &self.snapshot.options(),

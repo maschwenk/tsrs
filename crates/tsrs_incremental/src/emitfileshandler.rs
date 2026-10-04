@@ -10,7 +10,7 @@ use tsrs_compiler::Context;
 use tsrs_core::tspath::{self, Path};
 use tsrs_core::P;
 
-use crate::affectedfileshandler::collect_all_affected_files;
+use crate::affectedfileshandler::{collect_all_affected_files, finish_deferred_signatures};
 use crate::emit::{combine_emit_results, compiler_program_emit, EmitOnly, EmitOptions, EmitResult, ProgramLike, WriteFileData};
 use crate::program::{Program, SignatureUpdateKind};
 use crate::snapshot::{get_pending_emit_kind, get_text_handling_source_map_for_signature, DiagnosticsOrBuildInfoDiagnosticsWithFileName, EmitSignature, FileEmitKind};
@@ -130,6 +130,7 @@ impl<'a> emitFilesHandler<'a> {
         let program = self.program.p();
         // Get all affected files
         collect_all_affected_files(self.ctx, &self.program);
+        finish_deferred_signatures(self.ctx, &self.program);
         if self.ctx.err().is_some() {
             return Vec::new();
         }

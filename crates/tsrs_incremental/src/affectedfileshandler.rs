@@ -38,7 +38,25 @@ struct affectedFilesHandler<'a> {
     files_to_remove_diagnostics: RefCell<FxHashSet<Path>>,
     cleaned_diagnostics_of_lib_files: Cell<bool>,
     seen_file_and_references: RefCell<FxHashMap<Path, bool>>,
+    // Declaration signatures computed ahead of update_shape_signature (deferred signatures, below); used instead of
+    // computing them again.
+    precomputed: RefCell<FxHashMap<Path, String>>,
 }
+
+// Deferred signatures (notes/perf-hub-edit-shortcut.md). When the files whose diagnostics an edit drops are most of
+// the program, the check runs first and the declaration signatures afterwards, with Go's algorithm unchanged: the
+// set of dropped files does not depend on the propagated signatures, so it is computed up front from the reference
+// map and dropped before the check; collect_all_affected_files then runs after the check (finish_deferred_signatures)
+// without dropping diagnostics again.
+pub(crate) struct DeferredSignatures {
+    // The changed files' own declaration signatures, computed before the check, as Go computes them first.
+    precomputed: FxHashMap<Path, String>,
+    // The files whose diagnostics were dropped before the check.
+    dropped: FxHashSet<Path>,
+}
+
+// Deferred signatures apply when the dropped files are at least this share of the program's non-library files.
+const DEFERRED_SIGNATURES_MIN_PERCENT: usize = 50;
 
 impl affectedFilesHandler<'_> {
     // affectedfileshandler.go:40
@@ -125,7 +143,10 @@ impl affectedFilesHandler<'_> {
 
     // Whether update_shape_signature(file, false) computes the file's declaration signature.
     fn needs_dts_signature(&self, file: P<SourceFile>) -> bool {
-        !self.updated_signatures.borrow().contains_key(file.path()) && !file.is_declaration_file() && !ast::is_json_source_file(file)
+        !self.updated_signatures.borrow().contains_key(file.path())
+            && !self.precomputed.borrow().contains_key(file.path())
+            && !file.is_declaration_file()
+            && !ast::is_json_source_file(file)
     }
 
     // affectedfileshandler.go:87
@@ -150,7 +171,7 @@ impl affectedFilesHandler<'_> {
         // JSON files have no declaration output from which to compute a shape
         // signature, so use the file version to conservatively invalidate dependents.
         if !file.is_declaration_file() && !ast::is_json_source_file(file) && !use_file_version_as_signature {
-            signature = match computed {
+            signature = match computed.or_else(|| self.precomputed.borrow_mut().remove(file.path())) {
                 Some(computed) => computed,
                 None => self.compute_dts_signature(file),
             };
@@ -415,7 +436,9 @@ impl affectedFilesHandler<'_> {
         clippy::iter_over_hash_type,
         reason = "each loop stores, deletes or ORs one entry per key of an unordered map; the end state does not depend on the order"
     )]
-    fn update_snapshot(&self) {
+    // `dropped_before_check`: deferred signatures dropped these files' diagnostics before the check; they hold fresh
+    // diagnostics now and are left alone.
+    fn update_snapshot(&self, dropped_before_check: Option<&FxHashSet<Path>>) {
         if self.ctx.err().is_some() {
             return;
         }
@@ -430,7 +453,9 @@ impl affectedFilesHandler<'_> {
             }
         }
         for file in self.files_to_remove_diagnostics.borrow().iter() {
-            snapshot.semantic_diagnostics_per_file.delete(file);
+            if !dropped_before_check.is_some_and(|dropped| dropped.contains(file)) {
+                snapshot.semantic_diagnostics_per_file.delete(file);
+            }
         }
         for change in self.dts_may_change.borrow().iter() {
             for (file_path, &emit_kind) in change.borrow().iter() {
@@ -449,46 +474,195 @@ fn sorted(mut paths: Vec<Path>) -> Vec<Path> {
     paths
 }
 
-// affectedfileshandler.go:366
-pub(crate) fn collect_all_affected_files(ctx: &Context, program: &Program) {
-    if program.snapshot.changed_files_set.size() == 0 {
-        return;
-    }
-
-    let handler = affectedFilesHandler {
-        ctx,
-        program,
-        has_all_files_excluding_default_library_file: Cell::new(false),
-        updated_signatures: RefCell::new(FxHashMap::default()),
-        dts_may_change: RefCell::new(Vec::new()),
-        files_to_remove_diagnostics: RefCell::new(FxHashSet::default()),
-        cleaned_diagnostics_of_lib_files: Cell::new(false),
-        seen_file_and_references: RefCell::new(FxHashMap::default()),
-    };
-    let mut result: Vec<P<SourceFile>> = Vec::new();
-    let mut seen: FxHashSet<P<SourceFile>> = FxHashSet::default();
-    for file in sorted(program.snapshot.changed_files_set.keys()) {
-        for affected_file in handler.get_files_affected_by(&file) {
-            if seen.insert(affected_file) {
-                result.push(affected_file);
-            }
+impl<'a> affectedFilesHandler<'a> {
+    fn new(ctx: &'a Context, program: &'a Program, precomputed: FxHashMap<Path, String>) -> Self {
+        affectedFilesHandler {
+            ctx,
+            program,
+            has_all_files_excluding_default_library_file: Cell::new(false),
+            updated_signatures: RefCell::new(FxHashMap::default()),
+            dts_may_change: RefCell::new(Vec::new()),
+            files_to_remove_diagnostics: RefCell::new(FxHashSet::default()),
+            cleaned_diagnostics_of_lib_files: Cell::new(false),
+            seen_file_and_references: RefCell::new(FxHashMap::default()),
+            precomputed: RefCell::new(precomputed),
         }
     }
 
-    if ctx.err().is_some() {
+    // affectedfileshandler.go:366, up to updateSnapshot. `batch_global`: when every file is affected (a change to a
+    // file that affects the global scope), compute the declaration signatures phase 2 asks for one at a time with
+    // one emit instead.
+    fn collect(&self, batch_global: bool) {
+        let program = self.program;
+        let mut result: Vec<P<SourceFile>> = Vec::new();
+        let mut seen: FxHashSet<P<SourceFile>> = FxHashSet::default();
+        for file in sorted(program.snapshot.changed_files_set.keys()) {
+            for affected_file in self.get_files_affected_by(&file) {
+                if seen.insert(affected_file) {
+                    result.push(affected_file);
+                }
+            }
+        }
+
+        if self.ctx.err().is_some() {
+            return;
+        }
+
+        // For all the affected files, get all the files that would need to change their dts or js files,
+        // update their diagnostics
+        let emit_kind = get_file_emit_kind(&program.snapshot.options());
+        result.sort_by(|a, b| a.path().clone().cmp(b.path()));
+        if batch_global && self.has_all_files_excluding_default_library_file.get() {
+            let to_compute: Vec<P<SourceFile>> = result.iter().copied().filter(|&f| self.needs_dts_signature(f)).collect();
+            if to_compute.len() > 1 {
+                let computed = self.compute_dts_signatures(to_compute.clone());
+                let mut precomputed = self.precomputed.borrow_mut();
+                for file in to_compute {
+                    precomputed.insert(file.path().clone(), computed.get(&file).cloned().unwrap_or_default());
+                }
+            }
+        }
+        for file in result {
+            // remove the cached semantic diagnostics and handle dts emit and js emit if needed
+            let dts_may_change = self.get_dts_may_change(file.path().clone(), emit_kind);
+            self.handle_dts_may_change_of_affected_file(&dts_may_change, file);
+        }
+    }
+
+    fn deferred_signatures_allowed(&self) -> bool {
+        static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        let options = self.program.snapshot.options();
+        *ENABLED.get_or_init(|| std::env::var("TSRS_DEFERRED_SIGNATURES").map_or(true, |v| v != "0"))
+            && options.no_emit.is_true()
+            && !options.composite.is_true()
+            && !options.build.is_true()
+            && !options.isolated_modules.is_true()
+            && !options.assume_changes_only_affect_direct_dependencies.is_true()
+    }
+
+    // The files whose diagnostics collect() will drop, computed without propagating signatures: each changed file,
+    // and for a changed file whose own signature changed, its referenced-by closure, or every file (and the default
+    // library files that are checked) once that closure holds a file that affects the global scope or the changed
+    // file itself does. Computes the changed files' own signatures (into `precomputed`), in the order collect()
+    // would.
+    fn files_to_drop_without_propagation(&self) -> (FxHashSet<Path>, bool) {
+        let program = self.program.p();
+        let snapshot = &self.program.snapshot;
+        let mut dropped: FxHashSet<Path> = FxHashSet::default();
+        let mut all = false;
+        for path in sorted(snapshot.changed_files_set.keys()) {
+            let Some(file) = program.get_source_file_by_path(&path) else { continue };
+            dropped.insert(path.clone());
+            let info = snapshot.file_infos.load(&path).unwrap();
+            let mut signature = String::new();
+            if !file.is_declaration_file() && !ast::is_json_source_file(file) {
+                let mut precomputed = self.precomputed.borrow_mut();
+                signature = match precomputed.get(&path) {
+                    Some(signature) => signature.clone(),
+                    None => {
+                        drop(precomputed);
+                        let computed = self.compute_dts_signature(file);
+                        precomputed = self.precomputed.borrow_mut();
+                        precomputed.insert(path.clone(), computed.clone());
+                        computed
+                    }
+                };
+            }
+            if signature.is_empty() {
+                signature = info.version;
+            }
+            if signature == info.signature {
+                continue;
+            }
+            if info.affects_global_scope {
+                all = true;
+                continue;
+            }
+            let (closure, reaches_global_scope) = self.referenced_by_closure(file);
+            if reaches_global_scope {
+                all = true;
+            } else {
+                dropped.extend(closure.iter().map(|f| f.path().clone()));
+            }
+        }
+        if all {
+            for &file in program.get_source_files() {
+                if !program.is_source_file_default_library(file.path()) || !program.skip_type_checking(file, true) {
+                    dropped.insert(file.path().clone());
+                }
+            }
+        }
+        (dropped, all)
+    }
+
+    // `file` and every file that references it, directly or not; and whether one of those other files affects the
+    // global scope.
+    fn referenced_by_closure(&self, file: P<SourceFile>) -> (Vec<P<SourceFile>>, bool) {
+        let mut seen: FxHashSet<Path> = FxHashSet::default();
+        seen.insert(file.path().clone());
+        let mut closure = vec![file];
+        let mut reaches_global_scope = false;
+        let mut queue = self.program.snapshot.referenced_map.get_referenced_by(file.path());
+        while let Some(current_path) = queue.pop() {
+            if !seen.insert(current_path.clone()) {
+                continue;
+            }
+            reaches_global_scope |= self.program.snapshot.file_infos.load(&current_path).is_some_and(|info| info.affects_global_scope);
+            if let Some(current_file) = self.program.p().get_source_file_by_path(&current_path) {
+                closure.push(current_file);
+                queue.extend(self.program.snapshot.referenced_map.get_referenced_by(&current_path));
+            }
+        }
+        (closure, reaches_global_scope)
+    }
+}
+
+// affectedfileshandler.go:366
+pub(crate) fn collect_all_affected_files(ctx: &Context, program: &Program) {
+    if program.snapshot.changed_files_set.size() == 0 || program.deferred_signatures.lock().unwrap().is_some() {
         return;
     }
 
-    // For all the affected files, get all the files that would need to change their dts or js files,
-    // update their diagnostics
-    let emit_kind = get_file_emit_kind(&program.snapshot.options());
-    result.sort_by(|a, b| a.path().clone().cmp(b.path()));
-    for file in result {
-        // remove the cached semantic diagnostics and handle dts emit and js emit if needed
-        let dts_may_change = handler.get_dts_may_change(file.path().clone(), emit_kind);
-        handler.handle_dts_may_change_of_affected_file(&dts_may_change, file);
+    let handler = affectedFilesHandler::new(ctx, program, FxHashMap::default());
+    if handler.deferred_signatures_allowed() {
+        let (dropped, all) = handler.files_to_drop_without_propagation();
+        if ctx.err().is_some() {
+            return;
+        }
+        let p = program.p();
+        let non_library = p.get_source_files().iter().filter(|f| !p.is_source_file_default_library(f.path())).count();
+        if all || dropped.len() * 100 >= non_library * DEFERRED_SIGNATURES_MIN_PERCENT {
+            #[expect(clippy::iter_over_hash_type, reason = "deletes one entry per key; the end state does not depend on the order")]
+            for path in &dropped {
+                program.snapshot.semantic_diagnostics_per_file.delete(path);
+            }
+            *program.deferred_signatures.lock().unwrap() = Some(DeferredSignatures { precomputed: handler.precomputed.take(), dropped });
+            return;
+        }
     }
 
+    handler.collect(false);
     // Update the snapshot with the new state
-    handler.update_snapshot();
+    handler.update_snapshot(None);
+}
+
+// The second half of deferred signatures, after the check. Returns whether it dropped diagnostics the first half did
+// not (which it never should); the caller then checks those files.
+pub(crate) fn finish_deferred_signatures(ctx: &Context, program: &Program) -> bool {
+    let Some(deferred) = program.deferred_signatures.lock().unwrap().take() else {
+        return false;
+    };
+    let handler = affectedFilesHandler::new(ctx, program, deferred.precomputed);
+    handler.collect(true);
+    if ctx.err().is_some() {
+        return false;
+    }
+    let missed = handler.files_to_remove_diagnostics.borrow().iter().any(|path| !deferred.dropped.contains(path));
+    debug_assert!(!missed, "deferred signatures: a dropped file was not predicted");
+    debug_assert!(
+        deferred.dropped.iter().all(|path| handler.files_to_remove_diagnostics.borrow().contains(path)),
+        "deferred signatures: a file was dropped that Go keeps"
+    );
+    handler.update_snapshot(Some(&deferred.dropped));
+    missed
 }
