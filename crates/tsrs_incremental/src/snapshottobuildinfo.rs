@@ -55,6 +55,10 @@ pub(crate) fn snapshot_to_build_info(snapshot: &Snapshot, program: &'static Comp
     Ok(build_info)
 }
 
+fn relative_to_build_info(build_info_directory: &str, compare_paths_options: &ComparePathsOptions, path: &str) -> String {
+    tspath::ensure_path_is_non_module_name(&tspath::get_relative_path_from_directory(build_info_directory, path, compare_paths_options))
+}
+
 struct toBuildInfo<'a> {
     snapshot: &'a Snapshot,
     program: &'static CompilerProgram,
@@ -69,7 +73,7 @@ struct toBuildInfo<'a> {
 impl toBuildInfo<'_> {
     // snapshottobuildinfo.go:73
     fn relative_to_build_info(&self, path: &str) -> String {
-        tspath::ensure_path_is_non_module_name(&tspath::get_relative_path_from_directory(&self.build_info_directory, path, &self.compare_paths_options))
+        relative_to_build_info(&self.build_info_directory, &self.compare_paths_options, path)
     }
 
     // snapshottobuildinfo.go:77
@@ -238,13 +242,35 @@ impl toBuildInfo<'_> {
         let program = self.program;
         let snapshot = self.snapshot;
         let mut file_infos = Vec::with_capacity(program.get_source_files().len());
-        for &file in program.get_source_files() {
+        // The names relative to the tsbuildinfo of the files that are not default lib files, computed up front on the
+        // worker pool (a pure function of the path); to_file_id would compute the same name when it gives the file
+        // its id below.
+        let (build_info_directory, compare_paths_options) = (&self.build_info_directory, &self.compare_paths_options);
+        let relative_name = |file: &P<SourceFile>| match program.get_default_lib_file(file.path()) {
+            Some(_) => None,
+            None => Some(relative_to_build_info(build_info_directory, compare_paths_options, file.path())),
+        };
+        let mut relative_names: Vec<Option<String>> = if program.single_threaded() {
+            program.get_source_files().iter().map(relative_name).collect()
+        } else {
+            use rayon::prelude::*;
+            tsrs_compiler::worker_pool().install(|| program.get_source_files().par_iter().map(relative_name).collect())
+        };
+        for (i, &file) in program.get_source_files().iter().enumerate() {
             let path = file.path().clone();
             let info = snapshot.file_infos.load(&path).unwrap();
             // A file that gets its id here and is not a lib file is named relative_to_build_info(path), so the check
             // below holds without computing the relative path again.
-            let named_relative = !self.file_name_to_file_id.contains_key(path.as_str()) && program.get_default_lib_file(&path).is_none();
-            let file_id = self.to_file_id(&path);
+            let named_relative = !self.file_name_to_file_id.contains_key(path.as_str()) && relative_names[i].is_some();
+            let file_id = match relative_names[i].take() {
+                Some(name) if named_relative => {
+                    self.build_info.file_names.push(name);
+                    let file_id = self.build_info.file_names.len() as BuildInfoFileId;
+                    self.file_name_to_file_id.insert(path.to_string(), file_id);
+                    file_id
+                }
+                _ => self.to_file_id(&path),
+            };
             //  tryAddRoot(key, fileId);
             if !named_relative && self.build_info.file_names[file_id as usize - 1] != self.relative_to_build_info(&path) {
                 match program.get_default_lib_file(&path) {
