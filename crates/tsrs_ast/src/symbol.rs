@@ -605,10 +605,15 @@ impl SymbolMap {
         odd_keys.iter().find(|&&(j, _)| j as usize == i).unwrap().1
     }
 
-    /// Whether entry `i`'s key is `name` (whose fingerprint is `print`).
+    /// Whether entry `i`'s key is `name` (whose fingerprint is `print`). The same pointer and length decide a hit
+    /// without reading the bytes: over 40% of hits look a name up by the very string the symbol was named with (an
+    /// instantiated property by its declaration's name).
     #[inline]
     fn entry_matches(&self, i: usize, name: &str, print: KeyPrint) -> bool {
-        self.entries[i].print() == print && self.key(i) == name
+        self.entries[i].print() == print && {
+            let key = self.key(i);
+            key.len() == name.len() && (std::ptr::eq(key.as_ptr(), name.as_ptr()) || key.as_bytes() == name.as_bytes())
+        }
     }
 
     /// The hash of entry `i`'s key (rehashing the index, removing from it).
@@ -617,22 +622,25 @@ impl SymbolMap {
         hash_name(self.key(i))
     }
 
+    /// The position of `name`. Over half of all lookups end at the filter (a miss in a small table), so that test is
+    /// all this function does before the search, which is out of line: with the search inlined, every call saved
+    /// the search's registers first.
     #[inline]
     fn position(&self, name: &str) -> Option<usize> {
+        let hash = hash_name(name);
+        if !self.extra.may_contain(hash) {
+            return None;
+        }
+        self.search(name, hash)
+    }
+
+    /// `position` past the filter (`hash` = `hash_name(name)`).
+    #[inline(never)]
+    fn search(&self, name: &str, hash: u32) -> Option<usize> {
+        let print = KeyPrint::of(name, hash);
         match self.index() {
-            None => {
-                let hash = hash_name(name);
-                if !self.extra.may_contain(hash) {
-                    return None;
-                }
-                let print = KeyPrint::of(name, hash);
-                (0..self.entries.len()).find(|&i| self.entry_matches(i, name, print))
-            }
-            Some(index) => {
-                let hash = hash_name(name);
-                let print = KeyPrint::of(name, hash);
-                index.find(index_hash(hash), |&i| self.entry_matches(i as usize, name, print)).map(|&i| i as usize)
-            }
+            None => (0..self.entries.len()).find(|&i| self.entry_matches(i, name, print)),
+            Some(index) => index.find(index_hash(hash), |&i| self.entry_matches(i as usize, name, print)).map(|&i| i as usize),
         }
     }
 
@@ -642,7 +650,8 @@ impl SymbolMap {
     }
 
     fn insert(&mut self, name: &'static str, symbol: P<Symbol>) {
-        if let Some(i) = self.position(name) {
+        let hash = hash_name(name);
+        if let Some(i) = if self.extra.may_contain(hash) { self.search(name, hash) } else { None } {
             // Go keeps the stored key; it is no longer the new symbol's name when that differs.
             self.entries[i].set_symbol(symbol);
             if !self.entries[i].is_odd() && symbol.name() != name {
@@ -660,7 +669,6 @@ impl SymbolMap {
             // symbols (locals of small functions, members of small object literals).
             self.entries.reserve_exact(1);
         }
-        let hash = hash_name(name);
         self.entries.push(SymbolMapEntry::new(symbol, KeyPrint::of(name, hash)));
         self.extra.add_to_filter(hash);
         if symbol.name() != name {
