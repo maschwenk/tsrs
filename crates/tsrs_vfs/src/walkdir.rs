@@ -126,9 +126,9 @@ impl WalkState {
         }
 
         let entries = file_system.get_accessible_entries(path);
-        let mut directories: FxHashMap<&str, ()> = FxHashMap::default();
+        let mut directories: FxHashSet<&str> = FxHashSet::default();
         for name in &entries.directories {
-            directories.insert(name.as_str(), ());
+            directories.insert(name.as_str());
         }
         let mut names: Vec<&str> = entries.directories.iter().map(|s| s.as_str()).collect();
         names.extend(entries.files.iter().map(|s| s.as_str()));
@@ -140,7 +140,7 @@ impl WalkState {
             }
 
             let mut mode = FileMode::None;
-            if directories.contains_key(name) {
+            if directories.contains(name) {
                 mode = FileMode::Dir;
             }
             let mut child_realpath = String::new();

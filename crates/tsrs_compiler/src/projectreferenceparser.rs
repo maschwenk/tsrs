@@ -125,7 +125,7 @@ impl<'a> projectReferenceParser<'a> {
                         let options = resolved.compiler_options().unwrap();
                         let mut decl_dir = options.declaration_dir.clone();
                         if decl_dir.is_empty() {
-                            decl_dir = options.out_dir.clone();
+                            decl_dir.clone_from(&options.out_dir);
                         }
                         if !decl_dir.is_empty() {
                             mapper.dts_directories.insert(self.to_path(&decl_dir));

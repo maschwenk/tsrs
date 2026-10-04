@@ -416,11 +416,11 @@ impl Snapshot {
     }
 
     // snapshot.go:356
-    pub(crate) fn add_file_to_affected_files_pending_emit(&self, file_path: Path, emit_kind: FileEmitKind) {
-        let existing_kind = self.affected_files_pending_emit.load(&file_path).unwrap_or_default();
+    pub(crate) fn add_file_to_affected_files_pending_emit(&self, file_path: &Path, emit_kind: FileEmitKind) {
+        let existing_kind = self.affected_files_pending_emit.load(file_path).unwrap_or_default();
         self.affected_files_pending_emit.store(file_path.clone(), existing_kind | emit_kind);
         if emit_kind.intersects(FileEmitKind::DtsErrors) {
-            self.emit_diagnostics_per_file.delete(&file_path);
+            self.emit_diagnostics_per_file.delete(file_path);
         }
         self.build_info_emit_pending.set(true);
     }

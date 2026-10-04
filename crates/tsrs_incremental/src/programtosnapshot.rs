@@ -1,5 +1,6 @@
 // Port of execute/incremental/programtosnapshot.go.
 
+use std::sync::Arc;
 use tsrs_ast::{self as ast, Diagnostic, DiagnosticExt, Node, SourceFile, Symbol};
 use tsrs_compiler::{Checker, Context, Program as CompilerProgram};
 use tsrs_core::collections::Set;
@@ -57,7 +58,7 @@ impl toProgramSnapshot {
         if let Some(old_program) = self.old_program {
             let old = old_program.snapshot;
             if self.snapshot.options().composite.is_true() {
-                *self.snapshot.latest_changed_dts_file.borrow_mut() = old.latest_changed_dts_file.borrow().clone();
+                self.snapshot.latest_changed_dts_file.borrow_mut().clone_from(&old.latest_changed_dts_file.borrow());
             }
             // Copy old snapshot's changed files set
             old.changed_files_set.range(|key| {
@@ -71,8 +72,8 @@ impl toProgramSnapshot {
             self.snapshot.build_info_emit_pending.set(old.build_info_emit_pending.get());
             self.snapshot.has_errors_from_old_state.set(old.has_errors.get());
             self.snapshot.has_semantic_errors_from_old_state.set(old.has_semantic_errors.get());
-            *self.snapshot.package_jsons_from_old_state.borrow_mut() = old.package_jsons.borrow().clone();
-            *self.snapshot.missing_package_jsons_from_old_state.borrow_mut() = old.missing_package_jsons.borrow().clone();
+            self.snapshot.package_jsons_from_old_state.borrow_mut().clone_from(&old.package_jsons.borrow());
+            self.snapshot.missing_package_jsons_from_old_state.borrow_mut().clone_from(&old.missing_package_jsons.borrow());
         } else {
             self.snapshot.build_info_emit_pending.set(self.snapshot.options().is_incremental());
         }
@@ -170,7 +171,7 @@ impl toProgramSnapshot {
                     }
                 }
             } else {
-                signature = version.clone();
+                signature.clone_from(&version);
             }
             (FileInfo { version, signature, affects_global_scope, implied_node_format }, new_references, change)
         };
@@ -215,7 +216,7 @@ impl toProgramSnapshot {
                     self.snapshot.emit_signatures.store(file.path().clone(), emit_signature);
                 }
             } else {
-                self.snapshot.add_file_to_affected_files_pending_emit(file.path().clone(), get_file_emit_kind(&new_options));
+                self.snapshot.add_file_to_affected_files_pending_emit(file.path(), get_file_emit_kind(&new_options));
             }
             self.snapshot.file_infos.store(file.path().clone(), info);
         }
@@ -286,7 +287,7 @@ impl toProgramSnapshot {
                 for &file in self.program.get_source_files() {
                     // Add to affectedFilesPending emit only if not changed since any changed file will do full emit
                     if !self.snapshot.changed_files_set.has(file.path()) {
-                        self.snapshot.add_file_to_affected_files_pending_emit(file.path().clone(), pending_emit_kind);
+                        self.snapshot.add_file_to_affected_files_pending_emit(file.path(), pending_emit_kind);
                     }
                 }
                 self.snapshot.build_info_emit_pending.set(true);
@@ -405,7 +406,7 @@ fn checker_references_of(file: P<SourceFile>, checker: &mut Checker, ambient_mod
             paths.add(f.path().clone());
         }
         let declaring_files = std::sync::Arc::new((declaring_files, seen, std::sync::Arc::new(paths)));
-        ambient_module_files_by_checker.lock().unwrap().insert(key, declaring_files.clone());
+        ambient_module_files_by_checker.lock().unwrap().insert(key, Arc::clone(&declaring_files));
         declaring_files
     });
     checkerReferences { import_files, augmentation_files, ambient_module_files }
@@ -435,6 +436,7 @@ fn referenced_files_of(
         file_name_paths.push(referenced_file_path_from_file_name(program, &referenced_file.file_name, &source_file_directory));
     }
     if let Some(type_refs_in_file) = program.get_resolved_type_reference_directives().get(file.path()) {
+        #[expect(clippy::iter_over_hash_type, reason = "the paths go into a set, and references_equal does not depend on their order")]
         for type_ref in type_refs_in_file.values() {
             if !type_ref.resolved_file_name.is_empty() {
                 file_name_paths.push(referenced_file_path_from_file_name(program, type_ref.resolved_file_name, &source_file_directory));
@@ -444,7 +446,7 @@ fn referenced_files_of(
 
     if let Some(old) = old {
         if references_equal(program, file, &import_files, &augmentation_files, ambient_files, ambient_file_set, &file_name_paths, old) {
-            return Some(old.clone());
+            return Some(Arc::clone(old));
         }
     }
 
@@ -477,7 +479,7 @@ fn referenced_files_of(
         return Some(std::sync::Arc::new(RefSet::flat(own)));
     }
     let skip = if file_is_ambient { Some(file.path().clone()) } else { None };
-    Some(std::sync::Arc::new(RefSet::split(own, ambient_paths.clone(), skip)))
+    Some(std::sync::Arc::new(RefSet::split(own, Arc::clone(ambient_paths), skip)))
 }
 
 // Whether `old` is exactly the set referenced_files_of would build: as large as the number of distinct paths, and
@@ -525,12 +527,12 @@ fn references_equal(
 fn repopulate_diagnostics_of_file(diags: &DiagnosticsCache, p: &'static CompilerProgram, file: P<SourceFile>) -> DiagnosticsCache {
     if let Some(diagnostics) = diags.diagnostics() {
         let Some(repopulated) = repopulate_diagnostics_list(&diagnostics, p, file) else {
-            return diags.clone();
+            return Arc::clone(diags);
         };
         return DiagnosticsOrBuildInfoDiagnosticsWithFileName::from_diagnostics(repopulated);
     }
     // buildInfoDiagnostics will be repopulated via toDiagnostic's repopulateInfo handling
-    diags.clone()
+    Arc::clone(diags)
 }
 
 // repopulateDiagnosticsList repopulates diagnostic chains in a list of diagnostics.

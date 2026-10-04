@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use crate::*;
 use tsrs_ast::*;
 use tsrs_core::*;
@@ -2098,7 +2099,7 @@ impl Checker {
     #[inline(never)]
     fn get_lazy_mapped_table_worker(&mut self, t: P<Type>) -> Option<std::rc::Rc<LazyMappedTable>> {
         if let Some(lazy) = self.lazy_mapped_tables.get(&t) {
-            return Some(lazy.clone());
+            return Some(Rc::clone(lazy));
         }
         if !self.is_mapped_type_with_keyof_constraint_declaration(t) {
             return None;
@@ -2134,7 +2135,7 @@ impl Checker {
             index_infos_ready: Cell::new(false),
             resolving: Cell::new(false),
         });
-        self.lazy_mapped_tables.insert(t, lazy.clone());
+        self.lazy_mapped_tables.insert(t, Rc::clone(&lazy));
         self.lazy_member_stats.mapped_tables_created += 1;
         Some(lazy)
     }

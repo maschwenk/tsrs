@@ -32,9 +32,9 @@ impl EmitInput<'_> {
     }
 }
 
-pub fn emit_and_report_statistics(input: EmitInput) -> (CompileAndEmitResult, Option<Statistics>) {
+pub fn emit_and_report_statistics(input: &EmitInput) -> (CompileAndEmitResult, Option<Statistics>) {
     let mut statistics = None;
-    let mut result = emit_files_and_report_errors(&input);
+    let mut result = emit_files_and_report_errors(input);
     if result.status != ExitStatus::Success {
         // compile exited early
         return (result, None);
@@ -43,7 +43,7 @@ pub fn emit_and_report_statistics(input: EmitInput) -> (CompileAndEmitResult, Op
 
     let options = input.config.compiler_options().unwrap();
     if options.diagnostics.is_true() || options.extended_diagnostics.is_true() {
-        let stats = tsrs_core::phases::time("Statistics", || statistics_from_program(&input, &result.times));
+        let stats = tsrs_core::phases::time("Statistics", || statistics_from_program(input, &result.times));
         stats.report(&|t: &str| input.write(t), input.testing);
         if tsrs_compiler::assignment_stats_enabled() {
             input.write(&input.program.checker_assignment_report());

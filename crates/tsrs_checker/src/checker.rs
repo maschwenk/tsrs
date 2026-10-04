@@ -1748,7 +1748,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
     c.zero_type = c.get_number_literal_type(Number(0.0));
     c.zero_big_int_type = c.get_big_int_literal_type(PseudoBigInt::default());
     let mut typeof_names: Vec<&'static str> = typeofNEFacts.keys().copied().collect();
-    typeof_names.sort();
+    typeof_names.sort_unstable();
     let typeof_types: Vec<P<Type>> = typeof_names.iter().map(|name| c.get_string_literal_type(name)).collect();
     c.typeof_type = c.get_union_type(&typeof_types);
     // initializeClosures: the closures are the methods is_primitive_or_object_or_empty_type & co. below.
@@ -2311,13 +2311,14 @@ impl Checker {
     }
 }
 
-/// Go `var primitiveTypeAliasSuggestions = sync.OnceValue(...)`.
-pub fn primitive_type_alias_suggestions() -> &'static FxHashMap<&'static str, P<Symbol>> {
-    static MAP: OnceLock<FxHashMap<&'static str, P<Symbol>>> = OnceLock::new();
+/// Go `var primitiveTypeAliasSuggestions = sync.OnceValue(...)`. Go builds a map and ranges over it in random order;
+/// a list in declaration order gives the spelling suggestion one answer when two of these tie.
+pub fn primitive_type_alias_suggestions() -> &'static [(&'static str, P<Symbol>)] {
+    static MAP: OnceLock<Vec<(&'static str, P<Symbol>)>> = OnceLock::new();
     MAP.get_or_init(|| {
         // Process-wide: never in a freeable region (language server).
         let _arena = tsrs_core::arena::enter_thread_arena();
-        let mut result = FxHashMap::default();
+        let mut result = Vec::new();
         for (primitive, builtin) in [
             ("string", "String"),
             ("number", "Number"),
@@ -2327,7 +2328,7 @@ pub fn primitive_type_alias_suggestions() -> &'static FxHashMap<&'static str, P<
             ("symbol", "Symbol"),
         ] {
             let sym = Symbol::new(SymbolFlags::TypeAlias | SymbolFlags::Transient, primitive);
-            result.insert(builtin, sym);
+            result.push((builtin, sym));
         }
         result
     })

@@ -121,7 +121,7 @@ pub fn parse_test_files_and_symlinks_with_options<T>(
             let meta_data_name = test_meta_data[1].to_lowercase();
             let meta_data_value = test_meta_data[2].trim().to_string();
             if meta_data_name == "currentdirectory" {
-                current_directory = meta_data_value.clone();
+                current_directory.clone_from(&meta_data_value);
             }
             if meta_data_name != "filename" {
                 if meta_data_name == "symlink" && !current_file_name.is_empty() {

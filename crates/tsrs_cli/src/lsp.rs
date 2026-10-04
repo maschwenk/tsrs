@@ -266,7 +266,7 @@ impl flagSet {
         eprint!("{}", out);
     }
 
-    fn fail(&self, message: String) -> Result<(), ()> {
+    fn fail(&self, message: &str) -> Result<(), ()> {
         eprintln!("{}", message);
         self.usage();
         Err(())
@@ -290,7 +290,7 @@ impl flagSet {
             }
             let name = &s[num_minuses..];
             if name.is_empty() || name.starts_with('-') || name.starts_with('=') {
-                return self.fail(format!("bad flag syntax: {}", s));
+                return self.fail(&format!("bad flag syntax: {}", s));
             }
             i += 1;
 
@@ -305,7 +305,7 @@ impl flagSet {
                     self.usage();
                     return Err(());
                 }
-                return self.fail(format!("flag provided but not defined: -{}", name));
+                return self.fail(&format!("flag provided but not defined: -{}", name));
             };
 
             match self.flags[index].value {
@@ -314,7 +314,7 @@ impl flagSet {
                         None => true,
                         Some("1" | "t" | "T" | "TRUE" | "true" | "True") => true,
                         Some("0" | "f" | "F" | "FALSE" | "false" | "False") => false,
-                        Some(v) => return self.fail(format!("invalid boolean value {:?} for -{}: parse error", v, name)),
+                        Some(v) => return self.fail(&format!("invalid boolean value {:?} for -{}: parse error", v, name)),
                     };
                     self.flags[index].value = flagValue::Bool(b);
                 }
@@ -323,7 +323,7 @@ impl flagSet {
                         Some(value) => value,
                         None => {
                             if i >= args.len() {
-                                return self.fail(format!("flag needs an argument: -{}", name));
+                                return self.fail(&format!("flag needs an argument: -{}", name));
                             }
                             i += 1;
                             args[i - 1].clone()
@@ -332,7 +332,7 @@ impl flagSet {
                     let new_value = match self.flags[index].value {
                         flagValue::Int(_) => match parse_go_int(&value) {
                             Ok(n) => flagValue::Int(n),
-                            Err(reason) => return self.fail(format!("invalid value {:?} for flag -{}: {}", value, name, reason)),
+                            Err(reason) => return self.fail(&format!("invalid value {:?} for flag -{}: {}", value, name, reason)),
                         },
                         _ => flagValue::String(value),
                     };

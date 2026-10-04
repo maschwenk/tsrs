@@ -608,7 +608,7 @@ impl DeclarationTransformer {
             return;
         }
 
-        let report_expando_function_errors = self.state.report_expando_function_errors.get().unwrap().clone();
+        let report_expando_function_errors = Rc::clone(self.state.report_expando_function_errors.get().unwrap());
         self.resolver.lock(|c| report_expando_function_errors(c, declaration));
 
         if default_export {

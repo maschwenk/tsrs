@@ -18,7 +18,7 @@ pub fn new_implied_module_transformer(opts: &TransformOptions) -> Option<P<Trans
         base: Transformer::default(),
         opts: opts.clone(),
         resolver: opts.resolver,
-        get_emit_module_format_of_file: opts.get_emit_module_format_of_file.clone(),
+        get_emit_module_format_of_file: Rc::clone(&opts.get_emit_module_format_of_file),
         cjs_transformer: Cell::new(None),
         esm_transformer: Cell::new(None),
     });

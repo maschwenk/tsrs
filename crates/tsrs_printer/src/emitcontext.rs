@@ -202,7 +202,7 @@ impl EmitContext {
     pub fn add_variable_declaration(&self, name: P<Node>) {
         let var_decl = self.factory.new_variable_declaration(name, None /*exclamationToken*/, None /*typeNode*/, None /*initializer*/);
         self.set_emit_flags(var_decl, EmitFlags::NoNestedSourceMaps);
-        let scope = self.var_scope_stack.borrow().peek().clone();
+        let scope = Rc::clone(self.var_scope_stack.borrow().peek());
         let mut scope = scope.borrow_mut();
         scope.variables.push(var_decl);
         if scope.flags.intersects(environmentFlags::InParameters) {
@@ -215,7 +215,7 @@ impl EmitContext {
     // NOTE: This is the equivalent of `transformContext.hoistFunctionDeclaration` in Strada.
     pub fn add_hoisted_function_declaration(&self, node: P<Node>) {
         self.set_emit_flags(node, EmitFlags::CustomPrologue);
-        let scope = self.var_scope_stack.borrow().peek().clone();
+        let scope = Rc::clone(self.var_scope_stack.borrow().peek());
         scope.borrow_mut().functions.push(node);
     }
 
@@ -282,7 +282,7 @@ impl EmitContext {
     pub fn add_lexical_declaration(&self, name: P<Node>) {
         let var_decl = self.factory.new_variable_declaration(name, None /*exclamationToken*/, None /*typeNode*/, None /*initializer*/);
         self.set_emit_flags(var_decl, EmitFlags::NoNestedSourceMaps);
-        let scope = self.let_scope_stack.borrow().peek().clone();
+        let scope = Rc::clone(self.let_scope_stack.borrow().peek());
         scope.borrow_mut().variables.push(var_decl);
     }
 
@@ -776,7 +776,7 @@ impl EmitContext {
 
     pub fn visit_parameters(&self, nodes: Option<P<NodeList>>, visitor: &mut NodeVisitor) -> Option<P<NodeList>> {
         self.start_variable_environment();
-        let scope = self.var_scope_stack.borrow().peek().clone();
+        let scope = Rc::clone(self.var_scope_stack.borrow().peek());
         let old_flags = scope.borrow().flags;
         scope.borrow_mut().flags |= environmentFlags::InParameters;
         let mut nodes = visitor.visit_nodes(nodes);
@@ -879,7 +879,7 @@ impl EmitContext {
 
     pub fn add_initialization_statement(&self, node: P<Node>) {
         // Go's `Peek()` panics on an empty stack before the nil check below can fire.
-        let scope = self.var_scope_stack.borrow().peek().clone();
+        let scope = Rc::clone(self.var_scope_stack.borrow().peek());
         self.add_emit_flags(node, EmitFlags::CustomPrologue);
         scope.borrow_mut().initialization_statements.push(node);
     }

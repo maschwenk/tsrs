@@ -17,7 +17,7 @@ impl ExpectedValue for String {
     fn unmarshal_from(&mut self, value: &Json) -> bool {
         match value {
             Json::String(s) => {
-                *self = s.clone();
+                self.clone_from(s);
                 true
             }
             Json::Null => {

@@ -80,7 +80,7 @@ fn bundled_lib_text(name: &str) -> String {
 
 fn to_diag(v: &Value, texts: &Value, cache: &mut FxHashMap<String, Rc<FileLike>>) -> Diag {
     let file = v["file"].as_str().map(|name| {
-        cache
+        Rc::clone(cache
             .entry(name.to_string())
             .or_insert_with(|| {
                 let text = match texts[name].as_str() {
@@ -88,8 +88,7 @@ fn to_diag(v: &Value, texts: &Value, cache: &mut FxHashMap<String, Rc<FileLike>>
                     None => bundled_lib_text(name),
                 };
                 FileLike::new(name.to_string(), text)
-            })
-            .clone()
+            }))
     });
     let message = v["message"].as_str().unwrap_or("").to_string();
     let key = v["key"].as_str().unwrap_or("");

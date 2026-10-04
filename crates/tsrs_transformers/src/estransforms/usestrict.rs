@@ -5,7 +5,7 @@ pub fn new_use_strict_transformer(opts: &TransformOptions) -> Option<P<Transform
     let tx = P::new(useStrictTransformer {
         base: Transformer::default(),
         compiler_options: opts.compiler_options,
-        get_emit_module_format_of_file: opts.get_emit_module_format_of_file.clone(),
+        get_emit_module_format_of_file: Rc::clone(&opts.get_emit_module_format_of_file),
     });
     Some(tx.get().base.new_transformer(Rc::new(move |_: &mut NodeVisitor, n: P<Node>| Some(tx.visit(n))), Some(opts.context)))
 }

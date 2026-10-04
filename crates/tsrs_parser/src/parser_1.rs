@@ -482,6 +482,7 @@ impl Parser {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct ParserState {
     pub(crate) scanner_state: ScannerState,
     pub(crate) context_flags: NodeFlags,
