@@ -32,7 +32,9 @@ pub struct CompositeSymbolIdentity {
     pub node_id: NodeId,
 }
 
-/// Go `TrackedSymbolArgs`, handled as `P<TrackedSymbolArgs>` (built once by a composite literal).
+/// Go `TrackedSymbolArgs` (`*TrackedSymbolArgs`, built once by a composite literal and never compared by identity):
+/// a value here.
+#[derive(Clone, Copy)]
 pub struct TrackedSymbolArgs {
     pub symbol: P<Symbol>,
     pub enclosing_declaration: Option<P<Node>>,
@@ -44,7 +46,7 @@ pub struct SerializedTypeEntry {
     pub node: Option<P<Node>>, // Go stores the (possibly nil) result of the transform
     pub truncating: bool,
     pub added_length: i32,
-    pub tracked_symbols: Vec<P<TrackedSymbolArgs>>,
+    pub tracked_symbols: Vec<TrackedSymbolArgs>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -98,7 +100,7 @@ pub struct NodeBuilderContext {
     pub visited_types: RefCell<Set<TypeId>>,
     pub symbol_depth: RefCell<FxHashMap<CompositeSymbolIdentity, i32>>,
     /// Go saves the slice, sets it to nil, and stores/restores it around `visitAndTransformType`.
-    pub tracked_symbols: RefCell<Vec<P<TrackedSymbolArgs>>>,
+    pub tracked_symbols: RefCell<Vec<TrackedSymbolArgs>>,
     pub mapper: MapperCell,
     pub reverse_mapped_stack: RefCell<Vec<P<Symbol>>>,
     pub enclosing_symbol_types: RefCell<FxHashMap<SymbolId, P<Type>>>,
@@ -222,6 +224,9 @@ impl CheckerSlot {
 
     /// Calls `f` with the checker lent by the innermost `lend`.
     pub fn with<R>(&self, f: impl FnOnce(&mut Checker) -> R) -> R {
+        // The checker's allocations (types, symbols, caches) outlive a scratch region (one file's emit) the caller
+        // may have entered (notes/mem-emit-regions.md).
+        let _outer = tsrs_core::arena::escape_scratch();
         let mut ptr = self.ptr.get().expect("CheckerSlot::with outside CheckerSlot::lend");
         assert!(!self.in_use.replace(true), "CheckerSlot::with re-entered without CheckerSlot::lend");
         // SAFETY: `ptr` comes from the `&mut Checker` passed to the innermost active `lend`, which is borrowed for
@@ -289,8 +294,8 @@ pub struct recoveryBoundary {
     pub deferred_reports: RefCell<Vec<Box<dyn FnOnce()>>>,
     pub old_tracker: Option<&'static dyn SymbolTracker>,
     /// `finalizeBoundary` moves it back into the context (`take()`).
-    pub old_tracked_symbols: RefCell<Vec<P<TrackedSymbolArgs>>>,
-    pub tracked_symbols: RefCell<Vec<P<TrackedSymbolArgs>>>,
+    pub old_tracked_symbols: RefCell<Vec<TrackedSymbolArgs>>,
+    pub tracked_symbols: RefCell<Vec<TrackedSymbolArgs>>,
     pub old_encountered_error: bool,
     pub old_approximate_length: i32,
 }

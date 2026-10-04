@@ -27,7 +27,7 @@ use std::alloc::Layout;
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 use std::ptr::NonNull;
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, RwLock, Weak};
 
 const FIRST_CHUNK: usize = 1 << 20;
@@ -642,13 +642,18 @@ fn reg_key(addr: usize) -> usize {
 static REGISTRY: RwLock<BTreeMap<usize, (usize, Weak<RegionInner>)>> = RwLock::new(BTreeMap::new());
 /// Set once the first region exists; until then (the CLI) owner lookups return immediately.
 static ANY_REGION: AtomicBool = AtomicBool::new(false);
-static NEXT_TOKEN: AtomicU64 = AtomicU64::new(1);
 
 thread_local! {
     /// The arena allocations go to: null until the thread first allocates (then its own arena), or a region.
     pub(crate) static CURRENT: Cell<*const Arena> = const { Cell::new(std::ptr::null()) };
     /// Entered scopes, innermost last: (token, arena). Empty: the thread's own arena is current.
     static SCOPES: RefCell<Vec<(u64, *const Arena)>> = const { RefCell::new(Vec::new()) };
+    /// Scope tokens: a scope is `!Send`, so tokens only need to be unique on their thread (a global counter was a
+    /// contended cache line once scratch regions push a scope per checker call).
+    static NEXT_TOKEN: Cell<u64> = const { Cell::new(1) };
+    /// While a scratch region is entered on this thread (`Region::enter_scratch`): its arena, and the allocation
+    /// target that was current when it was entered (`escape_scratch`). Null when none is.
+    static SCRATCH: Cell<(*const Arena, *const Arena)> = const { Cell::new((std::ptr::null(), std::ptr::null())) };
 }
 
 /// A lock that the thread holding it may take again (a region entered while it is already entered).
@@ -812,7 +817,11 @@ pub struct RegionScope {
 
 impl RegionScope {
     fn push(arena: *const Arena, region: Option<Region>) -> RegionScope {
-        let token = NEXT_TOKEN.fetch_add(1, Ordering::Relaxed);
+        let token = NEXT_TOKEN.with(|t| {
+            let token = t.get();
+            t.set(token + 1);
+            token
+        });
         SCOPES.with(|s| s.borrow_mut().push((token, arena)));
         CURRENT.with(|c| c.set(arena));
         RegionScope { token, region, _not_send: std::marker::PhantomData }
@@ -883,6 +892,75 @@ pub fn enter_table_owner(addr: usize) -> Option<RegionScope> {
         Some(region) if std::ptr::eq(&*region.0.arena, current) => None,
         _ => Some(enter_thread_arena()),
     }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Scratch regions (per-file emit, notes/mem-emit-regions.md)
+// ---------------------------------------------------------------------------------------------------------------
+
+/// While alive, the region it was made from is the thread's allocation target as with `Region::enter`, and also the
+/// thread's **scratch region**: code that knows its allocations die with the scratch region allocates there even
+/// while escaped (`P::new_scratch`, `alloc_str_scratch`, ...), and code whose allocations must outlive it escapes
+/// to the target that was current before it (`escape_scratch`). Emit uses one per file: the transformers, the
+/// printer and the node builder's per-call state allocate in it, the checker escapes (its types, symbols and caches
+/// outlive the file).
+pub struct ScratchScope {
+    saved: (*const Arena, *const Arena),
+    _scope: RegionScope,
+}
+
+impl Region {
+    /// `enter`, and makes the region the thread's scratch region (see `ScratchScope`). Scratch scopes nest; the
+    /// innermost one is the scratch region.
+    pub fn enter_scratch(&self) -> ScratchScope {
+        let outer = CURRENT.with(|c| c.get());
+        let outer = if outer.is_null() { crate::ptr::own_arena() as *const Arena } else { outer };
+        let scope = self.enter();
+        let saved = SCRATCH.with(|s| s.replace((&*self.0.arena as *const Arena, outer)));
+        ScratchScope { saved, _scope: scope }
+    }
+}
+
+impl Drop for ScratchScope {
+    fn drop(&mut self) {
+        SCRATCH.with(|s| s.set(self.saved));
+    }
+}
+
+/// Inside a scratch region, makes the allocation target that was current when it was entered (the thread's own arena,
+/// or an enclosing region) the target until the scope is dropped: for code whose allocations may outlive the scratch
+/// region (the checker called from emit, program caches, diagnostics). `None` (no cost beyond a thread-local read)
+/// outside scratch regions or when that target is already current.
+#[inline]
+pub fn escape_scratch() -> Option<RegionScope> {
+    let (scratch, outer) = SCRATCH.with(|s| s.get());
+    if scratch.is_null() || CURRENT.with(|c| c.get()) == outer {
+        return None;
+    }
+    Some(RegionScope::push(outer, None))
+}
+
+/// Whether a scratch region is entered on this thread.
+#[inline]
+pub fn scratch_active() -> bool {
+    !SCRATCH.with(|s| s.get()).0.is_null()
+}
+
+/// Whether `addr` lies in the thread's scratch region (for caches outside it that must forget keys in it).
+pub fn scratch_contains(addr: usize) -> bool {
+    let s = scratch_arena();
+    if s.is_null() {
+        return false;
+    }
+    // SAFETY: the scratch region is kept alive by its entered scope on this thread, which alone uses its arena.
+    let a = unsafe { &*s };
+    (a.start.get().addr() <= addr && addr < a.end.get().addr()) || a.retired.borrow().iter().any(|&(start, end, _)| start <= addr && addr < end)
+}
+
+/// The thread's scratch region's arena, if one is entered.
+#[inline]
+pub(crate) fn scratch_arena() -> *const Arena {
+    SCRATCH.with(|s| s.get()).0
 }
 
 impl Drop for RegionInner {
@@ -1038,6 +1116,37 @@ mod tests {
         drop(region);
         // The rewound value lost its entry (not dropped, like a thread arena); `c` and `d` were dropped.
         assert_eq!(Rc::strong_count(&counter), 2);
+    }
+
+    #[test]
+    fn scratch_regions_route_escapes_to_the_outer_target() {
+        use super::{enter_thread_arena, escape_scratch, scratch_active, Region};
+        let outer = Region::new(4096);
+        let scratch = Region::new(4096);
+        let _o = outer.enter();
+        assert!(!scratch_active() && escape_scratch().is_none());
+        {
+            let _s = scratch.enter_scratch();
+            assert!(scratch_active());
+            assert!(Region::containing(P::new(1u64).addr()).unwrap().ptr_eq(&scratch));
+            {
+                let _e = escape_scratch().unwrap();
+                // Already escaped: no second scope.
+                assert!(escape_scratch().is_none());
+                assert!(Region::containing(P::new(2u64).addr()).unwrap().ptr_eq(&outer));
+                // Scratch allocations while escaped.
+                assert!(Region::containing(P::new_scratch(3u64).addr()).unwrap().ptr_eq(&scratch));
+                assert!(Region::containing(crate::alloc_str_scratch("abc").as_ptr() as usize).unwrap().ptr_eq(&scratch));
+                // A scope pushed and popped inside the escape restores the escape's target, not the scratch region.
+                drop(enter_thread_arena());
+                assert!(Region::containing(P::new(4u64).addr()).unwrap().ptr_eq(&outer));
+            }
+            assert!(Region::containing(P::new(5u64).addr()).unwrap().ptr_eq(&scratch));
+        }
+        assert!(!scratch_active());
+        assert!(Region::containing(P::new(6u64).addr()).unwrap().ptr_eq(&outer));
+        // Without a scratch region, `new_scratch` is `new`.
+        assert!(Region::containing(P::new_scratch(7u64).addr()).unwrap().ptr_eq(&outer));
     }
 
     #[test]

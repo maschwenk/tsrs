@@ -1238,6 +1238,9 @@ pub struct Checker {
     /// tests such a field against nil (`c.globalObjectType != nil`).
     pub unassigned_type: P<Type>,
     pub type_to_string_nodebuilder: Option<P<NodeBuilder>>,
+    /// tsrs-only: accessible-chain cache entries keyed by a node in the current emit scratch region
+    /// (`forget_scratch_keyed_caches`, notes/mem-emit-regions.md).
+    pub scratch_keyed_chain_cache: Vec<(P<Symbol>, accessibleChainCacheKey)>,
     pub emit_resolver: Option<P<EmitResolver>>, // Go `emitResolver` + `emitResolverOnce`: None until `get_emit_resolver`
 }
 
@@ -1597,6 +1600,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         alias_cache_blockers: 1,
         unassigned_type: dummy_type,
         type_to_string_nodebuilder: None,
+        scratch_keyed_chain_cache: Vec::new(),
         emit_resolver: None,
     });
     c.undefined_symbol = c.new_symbol(SymbolFlags::Property, "undefined");

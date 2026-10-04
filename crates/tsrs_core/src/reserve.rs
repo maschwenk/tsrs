@@ -44,9 +44,11 @@ struct Chunks {
     free: BTreeMap<usize, usize>,
     /// Bytes handed out and not released.
     live: usize,
+    /// Highest `next` so far.
+    peak: usize,
 }
 
-static CHUNKS: Mutex<Chunks> = Mutex::new(Chunks { next: GRANULE, free: BTreeMap::new(), live: 0 });
+static CHUNKS: Mutex<Chunks> = Mutex::new(Chunks { next: GRANULE, free: BTreeMap::new(), live: 0, peak: GRANULE });
 
 #[cold]
 fn fail(what: &str) -> ! {
@@ -124,6 +126,7 @@ impl Chunks {
                     return None;
                 }
                 self.next = off + size;
+                self.peak = self.peak.max(self.next);
                 off
             }
         };
@@ -189,13 +192,18 @@ pub fn reserved_in_use() -> usize {
     CHUNKS.lock().unwrap_or_else(|e| e.into_inner()).live
 }
 
+/// How far into the reservation chunks have ever been carved (released ranges are reused before it grows).
+pub fn reserved_high_water() -> usize {
+    CHUNKS.lock().unwrap_or_else(|e| e.into_inner()).peak
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn released_ranges_are_reused_and_coalesced() {
-        let mut c = Chunks { next: GRANULE, free: BTreeMap::new(), live: 0 };
+        let mut c = Chunks { next: GRANULE, free: BTreeMap::new(), live: 0, peak: GRANULE };
         let a = c.take(GRANULE).unwrap();
         let b = c.take(3 * GRANULE).unwrap();
         let d = c.take(GRANULE).unwrap();

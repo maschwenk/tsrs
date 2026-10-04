@@ -7,11 +7,25 @@ use std::cell::RefCell;
 // Values are arena-allocated and returned as `P<V>`; callers mutate them through `Cell` fields.
 pub struct LinkStore<K: 'static, V: 'static> {
     entries: RefCell<FxHashMap<P<K>, P<V>>>,
+    /// Values go to the thread's scratch region (`P::new_scratch`): the store of an object that dies with it.
+    scratch: bool,
 }
 
 impl<K, V> Default for LinkStore<K, V> {
     fn default() -> Self {
-        LinkStore { entries: RefCell::new(FxHashMap::default()) }
+        LinkStore { entries: RefCell::new(FxHashMap::default()), scratch: false }
+    }
+}
+
+impl<K, V> LinkStore<K, V> {
+    /// A store whose values are allocated in the thread's scratch region when one is entered (see `scratch`).
+    pub fn new_scratch(scratch: bool) -> Self {
+        LinkStore { entries: RefCell::new(FxHashMap::default()), scratch }
+    }
+
+    /// Forgets every entry (and releases the table, so no stale entry stays in its memory).
+    pub fn clear(&self) {
+        *self.entries.borrow_mut() = FxHashMap::default();
     }
 }
 
@@ -20,7 +34,7 @@ impl<K, V: Default> LinkStore<K, V> {
         if let Some(&value) = self.entries.borrow().get(&key) {
             return value;
         }
-        let value = P::new(V::default());
+        let value = P::new_in(self.scratch, V::default());
         self.entries.borrow_mut().insert(key, value);
         value
     }
