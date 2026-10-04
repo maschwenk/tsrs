@@ -352,6 +352,6 @@ pub(crate) fn get_module_resolver(host: &'static dyn RegistryCloneHost, realpath
         fs: wrapvfs::wrap(host.fs(), wrapvfs::Replacements { realpath: Some(Box::new(move |s: &str| realpath(s))), ..Default::default() }),
         current_directory: host.get_current_directory().to_string(),
     });
-    let opts = ResolverOptions::new(rh, P::from_static(&EMPTY_COMPILER_OPTIONS));
+    let opts = ResolverOptions::new(rh, tsrs_core::empty_compiler_options());
     module::new_resolver(opts)
 }

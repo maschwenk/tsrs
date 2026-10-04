@@ -53,8 +53,7 @@ pub(crate) fn census_layout() {
     tsrs_core::census_layout(std::any::type_name::<Symbol>(), &[tsrs_core::CensusField::Tagged { off }]);
 }
 
-/// `Symbol.parent` or, once the symbol has a `SymbolTables` tail, the tail: an address (provenance exposed when
-/// stored, recovered with `with_exposed_provenance`) in the low 48 bits (user-space addresses are below 2^48), with
+/// `Symbol.parent` or, once the symbol has a `SymbolTables` tail, the tail: its `P::to_bits` in the low 48 bits, with
 /// bit 63 set for the tail. Bit 62: the value declaration is the first declaration. 0 = no parent, no tail, no value
 /// declaration. The address part stays a plain pointer to the start of its block.
 #[derive(Clone, Copy, Default)]
@@ -67,39 +66,33 @@ impl SymbolParentWord {
 
     #[inline]
     fn parent(p: Option<P<Symbol>>) -> SymbolParentWord {
-        SymbolParentWord(p.map_or(0, |p| Self::addr(p.get() as *const Symbol as *const u8)))
+        SymbolParentWord(Self::bits(P::to_bits_opt(p)))
     }
 
     #[inline]
     fn tables(t: P<SymbolTables>) -> SymbolParentWord {
-        SymbolParentWord(Self::addr(t.get() as *const SymbolTables as *const u8) | Self::TABLES)
+        SymbolParentWord(Self::bits(t.to_bits()) | Self::TABLES)
     }
 
     #[inline]
-    fn addr(p: *const u8) -> u64 {
-        let addr = p.expose_provenance() as u64;
-        assert!(addr >> 48 == 0, "symbol address {addr:#x} above 2^48");
-        addr
+    fn bits(bits: usize) -> u64 {
+        let bits = bits as u64;
+        assert!(bits >> 48 == 0, "symbol bits {bits:#x} above 2^48");
+        bits
     }
 
     #[inline]
     fn get_tables(self) -> Option<P<SymbolTables>> {
-        // SAFETY: a tagged word was stored from a live `P<SymbolTables>` (arena objects are never freed or moved),
-        // whose provenance `addr` exposed.
-        (self.0 & Self::TABLES != 0).then(|| {
-            P::from_static(unsafe { &*std::ptr::with_exposed_provenance::<SymbolTables>((self.0 & Self::ADDR) as usize) })
-        })
+        // SAFETY: a tagged word was stored from a live `P<SymbolTables>` (arena objects are never freed or moved).
+        (self.0 & Self::TABLES != 0).then(|| unsafe { P::from_bits((self.0 & Self::ADDR) as usize) })
     }
 
     #[inline]
     fn get_parent(self) -> Option<P<Symbol>> {
         match self.get_tables() {
             Some(t) => t.parent.get(),
-            // SAFETY: a nonzero untagged word was stored from a live `P<Symbol>`, whose provenance `addr` exposed.
-            None => {
-                let addr = self.0 & Self::ADDR;
-                (addr != 0).then(|| P::from_static(unsafe { &*std::ptr::with_exposed_provenance::<Symbol>(addr as usize) }))
-            }
+            // SAFETY: a nonzero untagged word was stored from a live `P<Symbol>`.
+            None => unsafe { P::from_bits_opt((self.0 & Self::ADDR) as usize) },
         }
     }
 }
@@ -428,11 +421,9 @@ impl Drop for EntryVec {
 unsafe impl Send for EntryVec {}
 unsafe impl Sync for EntryVec {}
 
-/// One word: the symbol's address / 8 in the low 45 bits (symbols are 8-aligned and user-space addresses are below
-/// 2^48; checked on store), then the odd-key flag (the key is in `odd_keys`), the key length capped at 63 (6 bits)
+/// One word: the symbol's `P::to_bits` / 8 in the low 45 bits (8-aligned and below 2^48; checked on store), then the odd-key flag (the key is in `odd_keys`), the key length capped at 63 (6 bits)
 /// and the top 12 bits of `hash_name(key)`. 8 bytes instead of 16 (pointer + 32-bit hash + length): symbol table
-/// entries are 465 MB of capacity on the private monorepo. The symbol's provenance is exposed on store and recovered with
-/// `with_exposed_provenance`.
+/// entries are 465 MB of capacity on the private monorepo.
 #[derive(Clone, Copy)]
 struct SymbolMapEntry(u64);
 
@@ -473,9 +464,9 @@ impl SymbolMapEntry {
 
     #[inline]
     fn addr_bits(symbol: P<Symbol>) -> u64 {
-        let addr = (symbol.get() as *const Symbol).expose_provenance() as u64;
-        assert!(addr & 7 == 0 && addr >> (Self::ADDR_BITS + 3) == 0, "symbol address {addr:#x} does not fit a symbol table entry");
-        addr >> 3
+        let bits = symbol.to_bits() as u64;
+        assert!(bits & 7 == 0 && bits >> (Self::ADDR_BITS + 3) == 0, "symbol bits {bits:#x} do not fit a symbol table entry");
+        bits >> 3
     }
 
     #[inline]
@@ -485,10 +476,8 @@ impl SymbolMapEntry {
 
     #[inline]
     fn symbol(self) -> P<Symbol> {
-        let addr = ((self.0 & Self::ADDR_MASK) << 3) as usize;
-        // SAFETY: the address was stored from a live `P<Symbol>` (arena symbols are never freed or moved), whose
-        // provenance `addr_bits` exposed.
-        P::from_static(unsafe { &*std::ptr::with_exposed_provenance::<Symbol>(addr) })
+        // SAFETY: the bits were stored from a live `P<Symbol>` (arena symbols are never freed or moved).
+        unsafe { P::from_bits(((self.0 & Self::ADDR_MASK) << 3) as usize) }
     }
 
     #[inline]

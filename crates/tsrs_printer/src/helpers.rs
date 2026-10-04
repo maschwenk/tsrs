@@ -10,11 +10,11 @@ pub struct EmitHelper {
     pub text: &'static str, // ES3-compatible raw script text
     pub text_callback: Option<fn(make_unique_name: &mut dyn FnMut(&str) -> String) -> String>, // A function yielding an ES3-compatible raw script text.
     pub priority: Option<&'static Priority>, // Helpers with a higher priority are emitted earlier than other helpers on the node.
-    pub dependencies: &'static [tsrs_core::P<EmitHelper>], // Emit helpers this helper depends on
+    pub dependencies: &'static [tsrs_core::SP<EmitHelper>], // Emit helpers this helper depends on
     pub import_name: &'static str, // The name of the helper to use when importing via `--importHelpers`.
 }
 
-pub(crate) fn compare_emit_helpers(x: tsrs_core::P<EmitHelper>, y: tsrs_core::P<EmitHelper>) -> i32 {
+pub(crate) fn compare_emit_helpers(x: tsrs_core::SP<EmitHelper>, y: tsrs_core::SP<EmitHelper>) -> i32 {
     if x == y {
         return 0;
     }

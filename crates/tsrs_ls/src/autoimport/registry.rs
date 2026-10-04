@@ -1275,7 +1275,7 @@ impl registryBuilder<'_> {
             }
             if !root_files.is_empty() {
                 let module_resolver: &'static DefaultResolver =
-                    tsrs_core::alloc(module::new_resolver(ResolverOptions::new(self.host, P::from_static(&*tsrs_core::EMPTY_COMPILER_OPTIONS))));
+                    tsrs_core::alloc(module::new_resolver(ResolverOptions::new(self.host, tsrs_core::empty_compiler_options())));
                 // Go collects `maps.Values(rootFiles)` (random order, nil files included; the checker skips nothing).
                 let files: Vec<P<SourceFile>> = root_file_order.iter().filter_map(|f| root_files[f]).collect();
                 let alias_resolver = new_alias_resolver(
@@ -1476,7 +1476,7 @@ impl registryBuilder<'_> {
         let file_exclude_patterns = self.user_preferences.parsed_auto_import_file_exclude_patterns(self.host.fs().use_case_sensitive_file_names());
         result.bucket = Some(RegistryBucket::default());
         let module_resolver: &'static DefaultResolver =
-            tsrs_core::alloc(module::new_resolver(ResolverOptions::new(self.host, P::from_static(&*tsrs_core::EMPTY_COMPILER_OPTIONS))));
+            tsrs_core::alloc(module::new_resolver(ResolverOptions::new(self.host, tsrs_core::empty_compiler_options())));
         let program = self.host.get_program_for_project(project_id).unwrap();
         let project_root_path = (self.base.to_path)(program.get_current_directory());
         let symlink_cache = Some(program.get_symlink_cache());

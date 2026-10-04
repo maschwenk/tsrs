@@ -84,8 +84,7 @@ fn source_text(index: u32) -> &'static str {
     unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(slot.ptr.load(Relaxed), slot.len.load(Relaxed))) }
 }
 
-// The word: bits 0..45 the flow node's address / 8 (provenance exposed when stored, like the node header's parent)
-// or the text index, bits 45..62 the text length, bits 62..64 the mode.
+// The word: bits 0..45 the flow node's `P::to_bits` / 8 (like the node header's parent) or the text index, bits 45..62 the text length, bits 62..64 the mode.
 const SLOT_MASK: u64 = (1 << 45) - 1;
 const LEN_SHIFT: u32 = 45;
 const LEN_MAX: u64 = (1 << 17) - 1;
@@ -132,17 +131,16 @@ pub(crate) fn census_layout() {
 
 #[inline]
 fn flow_slot(flow: Option<P<FlowNode>>) -> u64 {
-    let addr = flow.map_or(0, |f| (f.get() as *const FlowNode).expose_provenance()) as u64;
-    assert!(addr & 7 == 0 && addr >> 48 == 0, "flow node address {addr:#x} does not fit an identifier");
-    addr >> 3
+    let bits = P::to_bits_opt(flow) as u64;
+    assert!(bits & 7 == 0 && bits >> 48 == 0, "flow node bits {bits:#x} do not fit an identifier");
+    bits >> 3
 }
 
 #[inline]
 fn slot_flow(word: u64) -> Option<P<FlowNode>> {
-    let addr = ((word & SLOT_MASK) << 3) as usize;
     // SAFETY: a nonzero flow slot was stored by `flow_slot` from a live `P<FlowNode>` (arena objects are never moved;
-    // a flow node is recycled only when nothing references it), whose provenance it exposed.
-    (addr != 0).then(|| P::from_static(unsafe { &*std::ptr::with_exposed_provenance::<FlowNode>(addr) }))
+    // a flow node is recycled only when nothing references it).
+    unsafe { P::from_bits_opt(((word & SLOT_MASK) << 3) as usize) }
 }
 
 impl Identifier {

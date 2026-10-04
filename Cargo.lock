@@ -438,6 +438,7 @@ version = "0.3.0"
 dependencies = [
  "bitflags",
  "indexmap",
+ "libc",
  "memchr",
  "mimalloc",
  "rustc-hash",

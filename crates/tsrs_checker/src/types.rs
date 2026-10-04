@@ -272,7 +272,7 @@ pub struct SymbolReferenceLinks {
 pub struct ValueSymbolLinks {
     pub resolved_type: Cell<Option<P<Type>>>, // Type of value symbol
     first: Cell<Option<P<()>>>,  // plain: target (P<Symbol>); synthetic: containing_type (P<Type>); tail: P<ValueSymbolLinksTail>
-    second: Cell<Option<P<()>>>, // plain: mapper (P<TypeMapper>); synthetic: name_type (P<Type>) | SYNTHETIC; tail: TAIL
+    second: Cell<usize>,         // `P::to_bits` of: plain: mapper (P<TypeMapper>); synthetic: name_type (P<Type>) | SYNTHETIC; tail: TAIL
 }
 
 #[derive(Default)]
@@ -285,7 +285,7 @@ struct ValueSymbolLinksTail {
     function_or_constructor_checked: Cell<bool>,
 }
 
-const _: () = assert!(std::mem::size_of::<ValueSymbolLinks>() == 24);
+const _: () = assert!(std::mem::size_of::<ValueSymbolLinks>() == if tsrs_core::COMPRESSED_PTRS { 16 } else { 24 });
 
 const MODE_MASK: usize = 3;
 const SYNTHETIC: usize = 1;
@@ -301,33 +301,26 @@ enum LinksMode {
 /// A pointer stored in a link word whose type depends on the mode.
 #[inline]
 fn erase<T>(p: Option<P<T>>) -> Option<P<()>> {
-    // A `&()` may point anywhere (zero-sized); the cast keeps the pointer's provenance.
-    p.map(|p| P::from_static(unsafe { &*(p.get() as *const T).cast::<()>() }))
+    // SAFETY: a `()` is zero-sized; the word only keeps the object's position.
+    p.map(|p| unsafe { p.cast::<()>() })
 }
 
-/// SAFETY: `w` was stored by `erase` from a `P<T>` (arena values are never freed or moved), with the mode bits cleared.
+/// SAFETY: `w` was stored by `erase` from a `P<T>` (arena values are never freed or moved).
 #[inline]
 unsafe fn restore<T: 'static>(w: Option<P<()>>) -> Option<P<T>> {
-    w.map(|w| P::from_static(unsafe { &*(w.get() as *const ()).cast::<T>() }))
+    w.map(|w| unsafe { w.cast::<T>() })
 }
 
-/// `w` with its address mapped by `f` (`None` stands for address 0; a result of 0 is `None`).
+/// SAFETY: `bits` is 0 or `P::to_bits` of a `P<T>` (mode bits cleared).
 #[inline]
-fn map_word(w: Option<P<()>>, f: impl FnOnce(usize) -> usize) -> Option<P<()>> {
-    let ptr = w.map_or(std::ptr::null(), |w| w.get() as *const ()).map_addr(f);
-    // SAFETY: a `&()` only needs to be non-null.
-    (!ptr.is_null()).then(|| P::from_static(unsafe { &*ptr }))
-}
-
-#[inline]
-fn word_bits(w: Option<P<()>>) -> usize {
-    w.map_or(0, |w| (w.get() as *const ()).addr())
+unsafe fn restore_bits<T: 'static>(bits: usize) -> Option<P<T>> {
+    unsafe { P::from_bits_opt(bits) }
 }
 
 impl ValueSymbolLinks {
     #[inline]
     fn mode(&self) -> LinksMode {
-        match word_bits(self.second.get()) & MODE_MASK {
+        match self.second.get() & MODE_MASK {
             0 => LinksMode::Plain,
             SYNTHETIC => LinksMode::Synthetic,
             _ => LinksMode::Tail,
@@ -352,14 +345,14 @@ impl ValueSymbolLinks {
         tail.containing_type.set(self.containing_type());
         tail.name_type.set(self.name_type());
         self.first.set(erase(Some(tail)));
-        self.second.set(map_word(None, |_| TAIL));
+        self.second.set(TAIL);
         tail
     }
 
     /// Moves a plain record without target and mapper to synthetic mode, if it is one.
     fn enter_synthetic_mode(&self) -> bool {
-        if self.mode() == LinksMode::Plain && self.first.get().is_none() && self.second.get().is_none() {
-            self.second.set(map_word(None, |_| SYNTHETIC));
+        if self.mode() == LinksMode::Plain && self.first.get().is_none() && self.second.get() == 0 {
+            self.second.set(SYNTHETIC);
             return true;
         }
         self.mode() == LinksMode::Synthetic
@@ -386,7 +379,7 @@ impl ValueSymbolLinks {
     pub fn mapper(&self) -> Option<P<TypeMapper>> {
         match self.mode() {
             // SAFETY: in plain mode `second` is an erased `P<TypeMapper>` or nil (no mode bits).
-            LinksMode::Plain => unsafe { restore(self.second.get()) },
+            LinksMode::Plain => unsafe { restore_bits(self.second.get()) },
             LinksMode::Synthetic => None,
             LinksMode::Tail => self.tail().mapper.get(),
         }
@@ -397,7 +390,7 @@ impl ValueSymbolLinks {
             escape_mapper(m); // a symbol link outlives the call that made the mapper
         }
         match self.mode() {
-            LinksMode::Plain => self.second.set(erase(mapper)),
+            LinksMode::Plain => self.second.set(P::to_bits_opt(mapper)),
             LinksMode::Synthetic if mapper.is_none() => {}
             _ => self.tail_for_write().mapper.set(mapper),
         }
@@ -427,7 +420,7 @@ impl ValueSymbolLinks {
         match self.mode() {
             LinksMode::Plain => None,
             // SAFETY: in synthetic mode `second` is an erased `P<Type>` or nil plus the mode bits.
-            LinksMode::Synthetic => unsafe { restore(map_word(self.second.get(), |a| a & !MODE_MASK)) },
+            LinksMode::Synthetic => unsafe { restore_bits(self.second.get() & !MODE_MASK) },
             LinksMode::Tail => self.tail().name_type.get(),
         }
     }
@@ -437,7 +430,7 @@ impl ValueSymbolLinks {
             return;
         }
         if self.enter_synthetic_mode() {
-            self.second.set(map_word(erase(t), |a| a | SYNTHETIC));
+            self.second.set(P::to_bits_opt(t) | SYNTHETIC);
         } else {
             self.tail_for_write().name_type.set(t);
         }
@@ -1948,7 +1941,7 @@ struct StructuredMembers {
     count_or_index_infos: CountOrIndexInfos,
 }
 
-const _: () = assert!(std::mem::size_of::<StructuredType>() == 8);
+const _: () = assert!(std::mem::size_of::<StructuredType>() == if tsrs_core::COMPRESSED_PTRS { 4 } else { 8 });
 const _: () = assert!(std::mem::size_of::<StructuredMembers>() == 32);
 
 /// Go's `CallSignatureCount` and `IndexInfos` in one word: `count << 1 | 1` while no non-empty index info list was
@@ -2762,7 +2755,7 @@ pub struct Signature {
     rare: SignatureRareWord,
 }
 
-const _: () = assert!(std::mem::size_of::<Signature>() == 72);
+const _: () = assert!(std::mem::size_of::<Signature>() == if tsrs_core::COMPRESSED_PTRS { 56 } else { 72 });
 
 #[derive(Default)]
 struct SignatureRare {

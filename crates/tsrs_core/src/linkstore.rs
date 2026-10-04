@@ -1,4 +1,4 @@
-use crate::P;
+use crate::{PSlot, P};
 use rustc_hash::FxHashMap;
 use std::cell::RefCell;
 
@@ -45,8 +45,8 @@ const MAX_PAGE_COUNT: u64 = 65536;
 // stored in fixed-size pages of 256 entries and an index of pages is maintained in an array for lower valued
 // page indices and a map for higher valued page indices.
 pub struct PagedLinkStore<V: 'static> {
-    page_map: RefCell<FxHashMap<u64, &'static [V]>>, // Page map for page indices above maxPageCount
-    page_list: RefCell<Vec<Option<&'static [V]>>>,  // Page table for page indices below maxPageCount
+    page_map: RefCell<FxHashMap<u64, &'static [PSlot<V>]>>, // Page map for page indices above maxPageCount
+    page_list: RefCell<Vec<Option<&'static [PSlot<V>]>>>,  // Page table for page indices below maxPageCount
 }
 
 impl<V> Default for PagedLinkStore<V> {
@@ -56,8 +56,8 @@ impl<V> Default for PagedLinkStore<V> {
 }
 
 impl<V: Default> PagedLinkStore<V> {
-    fn new_page() -> &'static [V] {
-        crate::alloc_vec((0..PAGE_SIZE).map(|_| V::default()).collect())
+    fn new_page() -> &'static [PSlot<V>] {
+        crate::alloc_vec((0..PAGE_SIZE).map(|_| PSlot(V::default())).collect())
     }
 
     pub fn get(&self, key: u64) -> P<V> {
@@ -80,7 +80,7 @@ impl<V: Default> PagedLinkStore<V> {
             let mut map = self.page_map.borrow_mut();
             *map.entry(page_index).or_insert_with(Self::new_page)
         };
-        P::from_static(&page[(key & PAGE_MASK) as usize])
+        page[(key & PAGE_MASK) as usize].as_p()
     }
 }
 
@@ -96,7 +96,7 @@ impl<V> PagedLinkStore<V> {
         } else {
             self.page_map.borrow().get(&page_index).copied()
         };
-        page.map(|page| P::from_static(&page[(key & PAGE_MASK) as usize]))
+        page.map(|page| page[(key & PAGE_MASK) as usize].as_p())
     }
 }
 

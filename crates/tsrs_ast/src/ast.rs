@@ -376,11 +376,10 @@ pub fn census_layouts() {
     });
 }
 
-/// A node's kind, data tag and parent in one word: the parent's address divided by 8 in the low 45 bits (nodes are
-/// 8-aligned and user-space addresses are below 2^48 on every supported platform; checked when the parent is set),
-/// the kind in the next 9 bits, the data tag in the 8 above and then the rare bit (the data struct is followed by its
-/// rare tail, `NodeRareTail`). Only the parent changes after creation. The parent's provenance is exposed when it is
-/// stored and recovered with `with_exposed_provenance`.
+/// A node's kind, data tag and parent in one word: the parent's `P::to_bits` divided by 8 in the low 45 bits (nodes
+/// are 8-aligned and the bits are below 2^48; checked when the parent is set), the kind in the next 9 bits, the data
+/// tag in the 8 above and then the rare bit (the data struct is followed by its rare tail, `NodeRareTail`). Only the
+/// parent changes after creation.
 #[derive(Clone, Copy)]
 struct NodeHeaderWord(u64);
 
@@ -422,17 +421,15 @@ impl NodeHeaderWord {
 
     #[inline]
     fn parent(self) -> Option<P<Node>> {
-        let addr = ((self.0 & Self::PARENT_MASK) << 3) as usize;
-        // SAFETY: a nonzero address was stored from a live `P<Node>` (arena nodes are never freed or moved), whose
-        // provenance `with_parent` exposed.
-        (addr != 0).then(|| P::from_static(unsafe { &*std::ptr::with_exposed_provenance::<Node>(addr) }))
+        // SAFETY: nonzero bits were stored by `with_parent` from a live `P<Node>` (arena nodes are never freed or moved).
+        unsafe { P::from_bits_opt(((self.0 & Self::PARENT_MASK) << 3) as usize) }
     }
 
     #[inline]
     fn with_parent(self, parent: Option<P<Node>>) -> NodeHeaderWord {
-        let addr = parent.map_or(0, |p| (p.get() as *const Node).expose_provenance()) as u64;
-        assert!(addr & 7 == 0 && addr >> (Self::PARENT_BITS + 3) == 0, "node address {addr:#x} does not fit the node header");
-        NodeHeaderWord(self.0 & !Self::PARENT_MASK | addr >> 3)
+        let bits = P::to_bits_opt(parent) as u64;
+        assert!(bits & 7 == 0 && bits >> (Self::PARENT_BITS + 3) == 0, "node bits {bits:#x} do not fit the node header");
+        NodeHeaderWord(self.0 & !Self::PARENT_MASK | bits >> 3)
     }
 }
 

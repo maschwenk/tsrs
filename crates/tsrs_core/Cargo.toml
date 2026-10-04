@@ -14,6 +14,8 @@ checked-cells = []
 alloc-profile = ["dep:mimalloc"]
 # Creation-site counters for checker objects (src/sitecount.rs).
 site-counts = []
+# `P<T>` as a 32-bit handle into one reserved address range (src/reserve.rs, notes/mem-pointer-compression.md).
+compressed-ptrs = []
 
 [dependencies]
 rustc-hash.workspace = true
@@ -21,3 +23,6 @@ indexmap.workspace = true
 bitflags.workspace = true
 memchr.workspace = true
 mimalloc = { version = "0.1.52", optional = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

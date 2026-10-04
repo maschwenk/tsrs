@@ -1,8 +1,12 @@
 pub mod arena;
 pub mod ptr;
+#[cfg(feature = "compressed-ptrs")]
+pub mod reserve;
+/// Whether `P<T>` is a 32-bit handle (feature `compressed-ptrs`) rather than a reference.
+pub const COMPRESSED_PTRS: bool = cfg!(feature = "compressed-ptrs");
 #[cfg(feature = "alloc-profile")]
 pub mod alloc_profile;
-pub use ptr::{alloc, alloc_slice, alloc_slice_recycled, alloc_str, alloc_vec, alloc_profile_dump, arena_checkpoint, arena_pin, census_layout, census_recording, census_reset, census_scrub_none, census_scrub_slack, census_scrub_stack, CensusField, arena_rewind, free_raw, OptionSliceCell, OptionThinSliceCell, PackedStr, SliceCell, StrCell, SlicePair, StaticSlicePtr, ThinSlice, ThinSliceCell, P};
+pub use ptr::{alloc, alloc_slice, alloc_slice_recycled, alloc_str, alloc_vec, alloc_profile_dump, arena_checkpoint, arena_pin, census_layout, census_recording, census_reset, census_scrub_none, census_scrub_slack, census_scrub_stack, CensusField, arena_rewind, free_raw, OptionSliceCell, OptionThinSliceCell, PackedStr, SliceCell, StrCell, SlicePair, StaticSlicePtr, ThinSlice, ThinSliceCell, PSlot, P, SP};
 
 mod frozen;
 pub use frozen::{FrozenCell, FrozenRef, FrozenRefMut, OwnedCell, OwnedSliceCell, OwnedStrCell};

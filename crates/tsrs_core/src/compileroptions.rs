@@ -169,6 +169,21 @@ pub struct CompilerOptions {
 
 pub static EMPTY_COMPILER_OPTIONS: LazyLock<CompilerOptions> = LazyLock::new(CompilerOptions::default);
 
+/// `EMPTY_COMPILER_OPTIONS` as an arena pointer (one per process; a compressed `P` cannot point to a static, so
+/// compressed builds keep a copy in the arena of the thread that first asks).
+pub fn empty_compiler_options() -> crate::P<CompilerOptions> {
+    #[cfg(not(feature = "compressed-ptrs"))]
+    return crate::P::from_static(&*EMPTY_COMPILER_OPTIONS);
+    #[cfg(feature = "compressed-ptrs")]
+    {
+        static EMPTY: std::sync::OnceLock<crate::P<CompilerOptions>> = std::sync::OnceLock::new();
+        *EMPTY.get_or_init(|| {
+            let _scope = crate::arena::enter_thread_arena();
+            crate::P::new(CompilerOptions::default())
+        })
+    }
+}
+
 impl CompilerOptions {
     pub fn get_emit_script_target(&self) -> ScriptTarget {
         if self.target != ScriptTarget::None {

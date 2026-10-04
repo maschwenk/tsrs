@@ -61,10 +61,32 @@ fn with_arena<R>(f: impl FnOnce(&'static Arena) -> R) -> R {
     f(a)
 }
 
+/// The layout `P::new` allocates for a `T`. Compressed handles count 8-byte units, so every `P` target is 8-aligned
+/// and padded to 8 (the padding keeps free-list classes, which assume 8-aligned blocks of `size` bytes, exact).
+#[inline(always)]
+pub(crate) const fn p_layout<T>() -> std::alloc::Layout {
+    let l = std::alloc::Layout::new::<T>();
+    if cfg!(feature = "compressed-ptrs") {
+        match l.align_to(8) {
+            Ok(l) => l.pad_to_align(),
+            Err(_) => panic!("layout"),
+        }
+    } else {
+        l
+    }
+}
+
 /// Pointer to an arena value. Never null; use `Option<P<T>>` for Go's nil-able pointers
 /// (it is pointer-sized).
+#[cfg(not(feature = "compressed-ptrs"))]
 #[repr(transparent)]
 pub struct P<T: ?Sized + 'static>(&'static T);
+
+/// Handle of an arena value: its offset from `reserve::base()` in 8-byte units (notes/mem-pointer-compression.md).
+/// Never 0; `Option<P<T>>` is 4 bytes too.
+#[cfg(feature = "compressed-ptrs")]
+#[repr(transparent)]
+pub struct P<T: ?Sized + 'static>(std::num::NonZeroU32, std::marker::PhantomData<&'static T>);
 
 impl<T> P<T> {
     /// Allocates `value` in the current thread's leak arena. Destructors never run.
@@ -72,11 +94,12 @@ impl<T> P<T> {
     #[cfg_attr(feature = "alloc-profile", track_caller)]
     pub fn new(value: T) -> P<T> {
         let p = with_arena(|a| {
-            let r = a.alloc(value);
+            let r = a.alloc_with(p_layout::<T>(), value);
             a.track_drop(r as *mut T, 1);
-            P(&*r)
+            // SAFETY: a fresh block of the current arena, laid out by `p_layout`.
+            unsafe { P::from_arena(r) }
         });
-        profile!(T, std::mem::size_of::<T>(), p.addr());
+        profile!(T, p_layout::<T>().size(), p.addr());
         p
     }
 
@@ -84,22 +107,100 @@ impl<T> P<T> {
     #[inline]
     #[cfg_attr(feature = "alloc-profile", track_caller)]
     pub fn new_recycled(value: T) -> P<T> {
-        let class = const { arena::free_class(std::mem::size_of::<T>(), std::mem::align_of::<T>()) };
+        let class = const { arena::free_class(p_layout::<T>().size(), p_layout::<T>().align()) };
         if class != 0 {
             if let Some((block, a)) = with_arena(|a| a.pop_free(class).map(|b| (b, a))) {
                 let p = block.cast::<T>();
-                // SAFETY: a dead block of exactly `size_of::<T>()` bytes, 8-aligned (`free_class`).
+                // SAFETY: a dead block of exactly `p_layout::<T>().size()` bytes, 8-aligned (`free_class`).
                 unsafe { p.as_ptr().write(value) };
                 a.track_drop(p.as_ptr(), 1);
-                profile!(T, std::mem::size_of::<T>(), p.addr().get());
+                profile!(T, p_layout::<T>().size(), p.addr().get());
                 // SAFETY: as above; the block is now owned by the new value.
-                return P(unsafe { &*p.as_ptr() });
+                return unsafe { P::from_arena(&*p.as_ptr()) };
             }
         }
         P::new(value)
     }
+
+    /// The pointer for a value just allocated in an arena with `p_layout`.
+    ///
+    /// # Safety
+    /// `r` must be such a block.
+    #[inline(always)]
+    unsafe fn from_arena(r: &'static T) -> P<T> {
+        #[cfg(feature = "compressed-ptrs")]
+        {
+            let off = (r as *const T).addr().wrapping_sub(crate::reserve::base().addr());
+            P(std::num::NonZeroU32::new_unchecked((off >> crate::reserve::UNIT_SHIFT) as u32), std::marker::PhantomData)
+        }
+        #[cfg(not(feature = "compressed-ptrs"))]
+        P(r)
+    }
+
+    /// The arena object at `bits`, which `to_bits` returned (tag bits cleared).
+    ///
+    /// # Safety
+    /// `bits` must come from `to_bits` of a live `P<T>` (same `T`, or a type whose value starts there).
+    #[inline(always)]
+    pub unsafe fn from_bits(bits: usize) -> P<T> {
+        #[cfg(feature = "compressed-ptrs")]
+        {
+            debug_assert!(bits != 0 && bits & 7 == 0);
+            P(std::num::NonZeroU32::new_unchecked((bits >> crate::reserve::UNIT_SHIFT) as u32), std::marker::PhantomData)
+        }
+        #[cfg(not(feature = "compressed-ptrs"))]
+        P(&*std::ptr::with_exposed_provenance::<T>(bits))
+    }
+
+    /// `from_bits` for an optional pointer: 0 is `None`.
+    ///
+    /// # Safety
+    /// As `from_bits`.
+    #[inline(always)]
+    pub unsafe fn from_bits_opt(bits: usize) -> Option<P<T>> {
+        (bits != 0).then(|| P::from_bits(bits))
+    }
+
+    /// The same object viewed as a `U` (a header at the start of a larger allocation, or the reverse).
+    ///
+    /// # Safety
+    /// A `U` must live at this address.
+    #[inline(always)]
+    pub unsafe fn cast<U>(self) -> P<U> {
+        P::from_bits(self.to_bits())
+    }
+
+    /// A pointer to an arena object (`P::get` of a live `P`, an object made with `alloc`, or a view of one that
+    /// starts 8-aligned inside it). In compressed mode this is checked: anything outside the arena range (a static,
+    /// a heap object) or not 8-aligned panics.
+    #[inline]
+    #[cfg(feature = "compressed-ptrs")]
+    #[track_caller]
+    pub fn from_static(r: &'static T) -> P<T> {
+        let off = (r as *const T).addr().wrapping_sub(crate::reserve::base().addr());
+        if off >= crate::reserve::RESERVE || off & 7 != 0 || off == 0 {
+            from_static_failed(std::any::type_name::<T>(), (r as *const T).addr());
+        }
+        P(std::num::NonZeroU32::new((off >> crate::reserve::UNIT_SHIFT) as u32).unwrap(), std::marker::PhantomData)
+    }
+
+    /// The handle (compressed mode only): the object's offset from `reserve::base()` in 8-byte units.
+    #[inline(always)]
+    #[cfg(feature = "compressed-ptrs")]
+    pub fn handle(self) -> u32 {
+        self.0.get()
+    }
 }
 
+#[cfg(feature = "compressed-ptrs")]
+#[cold]
+#[inline(never)]
+#[track_caller]
+fn from_static_failed(ty: &str, addr: usize) -> ! {
+    panic!("P::<{ty}>::from_static({addr:#x}): not an 8-aligned object in the arena range (compressed pointers)")
+}
+
+#[cfg(not(feature = "compressed-ptrs"))]
 impl<T: ?Sized> P<T> {
     #[inline]
     pub const fn from_static(r: &'static T) -> P<T> {
@@ -117,9 +218,50 @@ impl<T: ?Sized> P<T> {
         self.0 as *const T as *const () as usize
     }
 
+    /// Position-independent bits for packed words: the address here, the offset from the arena base in compressed
+    /// mode. 8-aligned and below 2^48 in both (the arena aligns every `P` target to 8; user-space addresses are below
+    /// 2^48 on every supported platform), so callers may keep tags in the low 3 and the high 16 bits.
+    #[inline(always)]
+    pub fn to_bits(self) -> usize {
+        (self.0 as *const T as *const ()).expose_provenance()
+    }
+}
+
+#[cfg(feature = "compressed-ptrs")]
+impl<T: ?Sized> P<T> {
+    /// The value (a `'static` reference, not tied to the borrow of `self`).
+    #[inline(always)]
+    pub fn get(self) -> &'static T
+    where
+        T: Sized,
+    {
+        // SAFETY: a handle is the offset of a live arena object from the base of the reservation it lives in.
+        unsafe { &*crate::reserve::base().add((self.0.get() as usize) << crate::reserve::UNIT_SHIFT).cast::<T>() }
+    }
+
+    /// The object's address.
+    #[inline]
+    pub fn addr(self) -> usize {
+        crate::reserve::base().addr() + ((self.0.get() as usize) << crate::reserve::UNIT_SHIFT)
+    }
+
+    /// See the pointer-mode `to_bits`: here the byte offset from the base.
+    #[inline(always)]
+    pub fn to_bits(self) -> usize {
+        (self.0.get() as usize) << crate::reserve::UNIT_SHIFT
+    }
+}
+
+impl<T: ?Sized> P<T> {
     #[inline]
     pub fn ptr_eq(self, other: P<T>) -> bool {
-        self.addr() == other.addr()
+        self == other
+    }
+
+    /// `to_bits` of an optional pointer, 0 for `None`.
+    #[inline(always)]
+    pub fn to_bits_opt(p: Option<P<T>>) -> usize {
+        p.map_or(0, P::to_bits)
     }
 }
 
@@ -131,6 +273,7 @@ impl<T: ?Sized> Clone for P<T> {
 }
 impl<T: ?Sized> Copy for P<T> {}
 
+#[cfg(not(feature = "compressed-ptrs"))]
 impl<T: ?Sized> Deref for P<T> {
     type Target = T;
     #[inline]
@@ -139,10 +282,27 @@ impl<T: ?Sized> Deref for P<T> {
     }
 }
 
+#[cfg(feature = "compressed-ptrs")]
+impl<T> Deref for P<T> {
+    type Target = T;
+    #[inline(always)]
+    fn deref(&self) -> &T {
+        self.get()
+    }
+}
+
+#[cfg(not(feature = "compressed-ptrs"))]
 impl<T: ?Sized> PartialEq for P<T> {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
         self.addr() == other.addr()
+    }
+}
+#[cfg(feature = "compressed-ptrs")]
+impl<T: ?Sized> PartialEq for P<T> {
+    #[inline]
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
     }
 }
 impl<T: ?Sized> Eq for P<T> {}
@@ -150,7 +310,10 @@ impl<T: ?Sized> Eq for P<T> {}
 impl<T: ?Sized> Hash for P<T> {
     #[inline]
     fn hash<H: Hasher>(&self, state: &mut H) {
-        state.write_usize(self.addr())
+        #[cfg(not(feature = "compressed-ptrs"))]
+        state.write_usize(self.addr());
+        #[cfg(feature = "compressed-ptrs")]
+        state.write_u32(self.0.get());
     }
 }
 
@@ -163,20 +326,98 @@ impl<T: ?Sized> PartialOrd for P<T> {
 impl<T: ?Sized> Ord for P<T> {
     #[inline]
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.addr().cmp(&other.addr())
+        #[cfg(not(feature = "compressed-ptrs"))]
+        return self.addr().cmp(&other.addr());
+        #[cfg(feature = "compressed-ptrs")]
+        return self.0.cmp(&other.0);
     }
 }
 
-/// Prints the address only: arena graphs are cyclic, so a structural Debug would recurse forever.
+/// Prints the address (the handle in compressed mode) only: arena graphs are cyclic, so a structural Debug would
+/// recurse forever.
 impl<T: ?Sized> fmt::Debug for P<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "P({:#x})", self.addr())
+        #[cfg(not(feature = "compressed-ptrs"))]
+        return write!(f, "P({:#x})", self.addr());
+        #[cfg(feature = "compressed-ptrs")]
+        return write!(f, "P(#{:#x})", self.0.get());
     }
 }
 
 // See the threading contract in the module docs.
 unsafe impl<T: ?Sized> Send for P<T> {}
 unsafe impl<T: ?Sized> Sync for P<T> {}
+
+/// An element of an arena array whose elements are handed out as `P<V>` (link-store pages): 8-aligned in compressed
+/// mode, where `P` targets must be; the same as `V` otherwise.
+#[cfg_attr(feature = "compressed-ptrs", repr(C, align(8)))]
+#[cfg_attr(not(feature = "compressed-ptrs"), repr(transparent))]
+#[derive(Default)]
+pub struct PSlot<V>(pub V);
+
+impl<V> PSlot<V> {
+    /// The pointer to the element of an arena array.
+    #[inline(always)]
+    #[cfg_attr(feature = "compressed-ptrs", track_caller)]
+    pub fn as_p(&'static self) -> P<V> {
+        P::from_static(&self.0)
+    }
+}
+
+/// A pointer to a `static` with `P`'s identity semantics (eq / hash / order by address): for Go package-level
+/// `*T` variables such as the emit helpers, which a compressed `P` cannot point to.
+#[repr(transparent)]
+pub struct SP<T: 'static>(&'static T);
+
+impl<T> SP<T> {
+    #[inline]
+    pub const fn from_static(r: &'static T) -> SP<T> {
+        SP(r)
+    }
+    #[inline]
+    pub fn get(self) -> &'static T {
+        self.0
+    }
+    #[inline]
+    pub fn addr(self) -> usize {
+        self.0 as *const T as usize
+    }
+}
+
+impl<T> Clone for SP<T> {
+    #[inline]
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<T> Copy for SP<T> {}
+impl<T> Deref for SP<T> {
+    type Target = T;
+    #[inline]
+    fn deref(&self) -> &T {
+        self.0
+    }
+}
+impl<T> PartialEq for SP<T> {
+    #[inline]
+    fn eq(&self, other: &Self) -> bool {
+        std::ptr::eq(self.0, other.0)
+    }
+}
+impl<T> Eq for SP<T> {}
+impl<T> Hash for SP<T> {
+    #[inline]
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        state.write_usize(self.addr())
+    }
+}
+impl<T> fmt::Debug for SP<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "SP({:#x})", self.addr())
+    }
+}
+unsafe impl<T> Send for SP<T> {}
+unsafe impl<T> Sync for SP<T> {}
 
 /// Two `&'static` slices in 24 bytes (u32 lengths) instead of 32, so an enum variant holding both still fits in a
 /// 32-byte enum (Go slice headers are larger, but Go's mapper structs are separate allocations per kind).
@@ -630,12 +871,18 @@ pub fn layout_of_pointee<T: ?Sized>(p: &T) -> (usize, usize, bool) {
     (std::mem::size_of_val(p), std::mem::align_of_val(p), std::mem::needs_drop::<T>())
 }
 
+#[doc(hidden)]
+#[inline(always)]
+pub fn layout_of_p<T>(_: P<T>) -> (usize, usize, bool) {
+    (p_layout::<T>().size(), p_layout::<T>().align(), std::mem::needs_drop::<T>())
+}
+
 /// `free!(p)`: gives the arena object `p: P<T>` back (`free_raw`). Unsafe: see `free_raw`.
 #[macro_export]
 macro_rules! free {
     ($p:expr) => {{
         let p = $p;
-        let (size, align, needs_drop) = $crate::ptr::layout_of_pointee(p.get());
+        let (size, align, needs_drop) = $crate::ptr::layout_of_p(p);
         $crate::ptr::free_raw(p.addr(), size, align, needs_drop)
     }};
 }
@@ -831,11 +1078,11 @@ pub fn alloc_str(s: &str) -> &'static str {
 #[cfg_attr(feature = "alloc-profile", track_caller)]
 pub fn alloc<T>(value: T) -> &'static T {
     let r: &'static T = with_arena(|a| {
-        let r = a.alloc(value);
+        let r = a.alloc_with(p_layout::<T>(), value);
         a.track_drop(r as *mut T, 1);
         &*r
     });
-    profile!(T, std::mem::size_of::<T>(), r as *const T as usize);
+    profile!(T, p_layout::<T>().size(), r as *const T as usize);
     r
 }
 
@@ -934,7 +1181,7 @@ mod tests {
         b.next.set(Some(a));
         a.next.get().unwrap().n.set(5);
         assert_eq!(b.n.get(), 5);
-        assert_eq!(std::mem::size_of::<Option<P<Thing>>>(), std::mem::size_of::<usize>());
+        assert_eq!(std::mem::size_of::<Option<P<Thing>>>(), if crate::COMPRESSED_PTRS { 4 } else { std::mem::size_of::<usize>() });
     }
 
     #[test]
