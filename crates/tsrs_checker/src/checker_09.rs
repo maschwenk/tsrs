@@ -361,12 +361,17 @@ impl keyBuilder {
     pub(crate) fn hash(&self) -> CacheHashKey {
         match &self.overflow_buffer {
             None => CacheHashKey::hash_128(&self.inline_buffer[..self.inline_length as usize]),
-            Some(overflow) => {
-                let mut buf = overflow.clone();
-                buf.extend_from_slice(&self.inline_buffer[..self.inline_length as usize]);
-                CacheHashKey::hash_128(&buf)
-            }
+            Some(overflow) => self.hash_spilled(overflow),
         }
+    }
+
+    /// `hash` of a key longer than the inline buffer (rare).
+    #[cold]
+    #[inline(never)]
+    fn hash_spilled(&self, overflow: &[u8]) -> CacheHashKey {
+        let mut buf = overflow.to_vec();
+        buf.extend_from_slice(&self.inline_buffer[..self.inline_length as usize]);
+        CacheHashKey::hash_128(&buf)
     }
 
     // spill moves the buffered bytes onto the end of overflowBuffer, so the key's byte
@@ -462,13 +467,20 @@ impl keyBuilder {
         self.write_alias_arg(alias.into());
     }
 
-    /// `write_alias` of an `AliasArg` (a pending alias writes the same bytes as the alias it stands for).
+    /// `write_alias` of an `AliasArg` (a pending alias writes the same bytes as the alias it stands for). Most keys
+    /// have no alias; that byte is written inline.
+    #[inline]
     pub(crate) fn write_alias_arg(&mut self, alias: AliasArg<'_>) {
+        match alias {
+            AliasArg::None => self.write_byte(0),
+            _ => self.write_some_alias_arg(alias),
+        }
+    }
+
+    #[inline(never)]
+    fn write_some_alias_arg(&mut self, alias: AliasArg<'_>) {
         let (symbol, type_arguments) = match alias {
-            AliasArg::None => {
-                self.write_byte(0);
-                return;
-            }
+            AliasArg::None => unreachable!("write_alias_arg writes a missing alias"),
             AliasArg::Some(alias) => (alias.symbol.get(), alias.type_arguments.get()),
             AliasArg::Pending(pending) => (pending.symbol, pending.type_arguments.as_slice()),
         };

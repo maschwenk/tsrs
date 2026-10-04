@@ -1705,6 +1705,18 @@ impl Checker {
     // checker.go:16816
     pub fn get_type_of_symbol(&mut self, symbol: P<Symbol>) -> P<Type> {
         let check_flags = symbol.check_flags.get();
+        // The cached type of an instantiated symbol or a variable / parameter / property (the two branches below that
+        // return `resolved_type` when it is set), read here so that this hit returns without a frame.
+        let value_symbol = !check_flags.intersects(CheckFlags::DeferredType)
+            && (check_flags.intersects(CheckFlags::Instantiated)
+                || !check_flags.intersects(CheckFlags::Mapped | CheckFlags::ReverseMapped)
+                    && !symbol.flags().intersects(SymbolFlags::Accessor)
+                    && symbol.flags().intersects(SymbolFlags::Variable | SymbolFlags::Property));
+        if value_symbol {
+            if let Some(t) = self.resolved_type_of_value_symbol(symbol) {
+                return t;
+            }
+        }
         if check_flags.intersects(CheckFlags::DeferredType) {
             return self.get_type_of_symbol_with_deferred_type(symbol);
         }
@@ -1742,7 +1754,16 @@ impl Checker {
         self.remove_missing_type(t, symbol.flags().intersects(SymbolFlags::Optional))
     }
 
+    /// The cached answer of `get_type_of_instantiated_symbol` / `get_type_of_variable_or_parameter_or_property`, read
+    /// without creating links or assigning an id, so that `get_type_of_symbol` returns it without a frame (the
+    /// functions that compute it are out of line).
+    #[inline]
+    fn resolved_type_of_value_symbol(&self, symbol: P<Symbol>) -> Option<P<Type>> {
+        self.value_symbol_links.try_get_if_id_assigned(symbol)?.resolved_type.get()
+    }
+
     // checker.go:16851
+    #[inline(never)]
     pub(crate) fn get_type_of_instantiated_symbol(&mut self, symbol: P<Symbol>) -> P<Type> {
         let links = self.value_symbol_links.get(symbol);
         if links.resolved_type.get().is_none() {
@@ -1769,6 +1790,7 @@ impl Checker {
     }
 
     // checker.go:16867
+    #[inline(never)]
     pub(crate) fn get_type_of_variable_or_parameter_or_property(&mut self, symbol: P<Symbol>) -> P<Type> {
         let links = self.value_symbol_links.get(symbol);
         if links.resolved_type.get().is_none() {

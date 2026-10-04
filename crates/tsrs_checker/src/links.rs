@@ -229,13 +229,18 @@ impl<V: 'static> IdLinkStore<V> {
 
     #[inline]
     fn slot(&self, id: u64) -> Option<u32> {
-        if id <= u32::MAX as u64 {
-            match self.pages.get((id >> ID_PAGE_SHIFT) as usize)?.as_ref()? {
-                IdPage::Dense(page) => page[id as usize & (ID_PAGE - 1)].checked_sub(1),
-                IdPage::Sparse(page) => page.slot(id as usize & (ID_PAGE - 1)),
-            }
-        } else {
-            self.wide_slot(id)
+        match u32::try_from(id) {
+            Ok(id) => self.narrow_slot(id),
+            Err(_) => self.wide_slot(id),
+        }
+    }
+
+    #[inline]
+    fn narrow_slot(&self, id: u32) -> Option<u32> {
+        let id = id as usize;
+        match self.pages.get(id >> ID_PAGE_SHIFT)?.as_ref()? {
+            IdPage::Dense(page) => page[id & (ID_PAGE - 1)].checked_sub(1),
+            IdPage::Sparse(page) => page.slot(id & (ID_PAGE - 1)),
         }
     }
 
@@ -364,6 +369,14 @@ impl<V: 'static> SymbolArenaLinkStore<V> {
     #[inline]
     pub fn try_get(&self, symbol: P<Symbol>) -> Option<P<V>> {
         self.store.try_get(ast::get_symbol_id(symbol).0)
+    }
+
+    /// `try_get` that returns `None` for a symbol without an id instead of assigning one (no side effect, no call:
+    /// for fast paths whose fallback does the `get`).
+    #[inline]
+    pub fn try_get_if_id_assigned(&self, symbol: P<Symbol>) -> Option<P<V>> {
+        let id = ast::get_assigned_symbol_id(symbol)?;
+        self.store.narrow_slot(id).map(|slot| self.store.at(slot))
     }
 
     #[inline]
