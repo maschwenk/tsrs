@@ -393,7 +393,7 @@ pub(crate) fn fs_events_callback(cb: &streamCallback, payload: &fsEventsCallback
                 } else {
                     w.events.remove_at(&display_path, event_id);
                 }
-                if w.terminate_callbacks_for_deleted_root(&display_path, event_id, err_watched_directory_removed()) {
+                if w.terminate_callbacks_for_deleted_root(&display_path, event_id, &err_watched_directory_removed()) {
                     touch(w);
                 }
                 if display_path == w.dir {
@@ -417,7 +417,7 @@ pub(crate) fn fs_events_callback(cb: &streamCallback, payload: &fsEventsCallback
                     } else {
                         w.events.remove_at(&display_path, event_id);
                     }
-                    if w.terminate_callbacks_for_deleted_root(&display_path, event_id, err_watched_directory_removed()) {
+                    if w.terminate_callbacks_for_deleted_root(&display_path, event_id, &err_watched_directory_removed()) {
                         touch(w);
                     }
                     if display_path == w.dir {

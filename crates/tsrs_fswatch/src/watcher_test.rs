@@ -84,7 +84,7 @@ fn path_comparer() {
 fn file_callback_case_sensitivity() {
     for ignore_case in [false, true] {
         let got: Arc<Mutex<Vec<Event>>> = Arc::new(Mutex::new(Vec::new()));
-        let dw = dirWatch::new("/root".to_string(), "/root".to_string(), debounce::new(), pathComparer { ignore_case }, None, true);
+        let dw = dirWatch::new("/root".to_string(), "/root".to_string(), &debounce::new(), pathComparer { ignore_case }, None, true);
         let sink = got.clone();
         let cb: WatchCallback = Arc::new(move |events: Vec<Event>, _: Option<Error>| sink.lock().unwrap().extend(events));
         dw.add_callback("/root", "/root", false, cb, None, "/root/file.ts");

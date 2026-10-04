@@ -561,7 +561,7 @@ impl watcher {
         if let Some(dw) = st.dir_watches.get(&key) {
             return Ok(Arc::clone(dw));
         }
-        let dw = dirWatch::new(dir, physical_dir, st.debounce.clone().unwrap(), comparer, self.sequence, recursive);
+        let dw = dirWatch::new(dir, physical_dir, st.debounce.as_ref().unwrap(), comparer, self.sequence, recursive);
         st.dir_watches.insert(key, Arc::clone(&dw));
         Ok(dw)
     }
@@ -794,13 +794,13 @@ impl watcherBase {
     }
 
     // watcher.go:701
-    fn handle_start_error(&self, err: Error) {
+    fn handle_start_error(&self, err: &Error) {
         let mut st = self.mu.lock().unwrap();
         st.start_err = Some(err.clone());
         let subs: Vec<Arc<dirWatch>> = st.subscriptions.iter().map(|k| Arc::clone(&k.0)).collect();
         drop(st);
         for w in subs {
-            w.notify_error(err.clone());
+            w.notify_error(&err);
         }
         self.notify_started();
     }
@@ -816,10 +816,10 @@ fn run(impl_: &Arc<dyn watcherImpl>) -> Result<(), Error> {
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || starter.start()));
             match result {
                 Ok(Ok(())) => {}
-                Ok(Err(err)) => base_owner.base().handle_start_error(err),
+                Ok(Err(err)) => base_owner.base().handle_start_error(&err),
                 Err(panic) => {
                     let msg = panic.downcast_ref::<String>().cloned().or_else(|| panic.downcast_ref::<&str>().map(|s| s.to_string())).unwrap_or_default();
-                    base_owner.base().handle_start_error(Error::new(msg));
+                    base_owner.base().handle_start_error(&Error::new(msg));
                 }
             }
         })
@@ -879,7 +879,7 @@ pub(crate) fn watch_remove(impl_: &Arc<dyn watcherImpl>, w: &Arc<dirWatch>) {
 pub(crate) fn handle_watcher_error(impl_: &Arc<dyn watcherImpl>, werr: &dirWatchError) {
     watch_remove(impl_, &werr.dir_watch);
     let err = Error::wrap2(format!("{}: {}", ErrWatchTerminated.0, werr.err), &ErrWatchTerminated.into(), &werr.err);
-    werr.dir_watch.notify_error(err);
+    werr.dir_watch.notify_error(&err);
 }
 
 // ----- dirWatch: per-directory watch state -------------------------
@@ -948,7 +948,7 @@ static nextDirWatchKey: AtomicU64 = AtomicU64::new(1);
 
 impl dirWatch {
     // watcher.go:834 (newDirWatch + setComparer + the fields getOrCreateDirWatch assigns before publishing it)
-    pub(crate) fn new(dir: String, physical_dir: String, db: Arc<debounce>, comparer: pathComparer, sequence: Option<fn() -> u64>, recursive: bool) -> Arc<dirWatch> {
+    pub(crate) fn new(dir: String, physical_dir: String, db: &Arc<debounce>, comparer: pathComparer, sequence: Option<fn() -> u64>, recursive: bool) -> Arc<dirWatch> {
         let dir_fold = comparer.prepare(&dir).folded;
         let physical_dir_fold = if physical_dir == dir { dir_fold.clone() } else { comparer.prepare(&physical_dir).folded };
         let dw = Arc::new(dirWatch {
@@ -1008,7 +1008,7 @@ impl dirWatch {
     }
 
     // watcher.go:944
-    pub(crate) fn notify_error(&self, err: Error) {
+    pub(crate) fn notify_error(&self, err: &Error) {
         let cbs = std::mem::take(&mut self.mu.lock().unwrap().callbacks);
         for cb in cbs {
             (cb.f)(Vec::new(), Some(err.clone()));
@@ -1094,7 +1094,7 @@ impl dirWatch {
     }
 
     // watcher.go:1066
-    pub(crate) fn terminate_callbacks_for_deleted_root(&self, path: &str, seq: u64, err: Error) -> bool {
+    pub(crate) fn terminate_callbacks_for_deleted_root(&self, path: &str, seq: u64, err: &Error) -> bool {
         let mut st = self.mu.lock().unwrap();
         let mut changed = false;
         let comparisons = Mutex::new(comparisonCache::default());
