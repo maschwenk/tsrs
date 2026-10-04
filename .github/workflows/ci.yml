@@ -96,3 +96,29 @@ jobs:
           name: conformance-results
           path: target/test-results/*.txt
           if-no-files-found: ignore
+
+  # docs/RUST.md: clippy findings per (lint, file) may not grow past tools/lint/baseline.tsv. A separate job because
+  # it needs the clippy version pinned in tools/lint/ratchet.py, not the stable toolchain the build uses.
+  lint-ratchet:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Read the pinned lint toolchain
+        id: pin
+        run: echo "toolchain=$(sed -n 's/^TOOLCHAIN = "\(.*\)"$/\1/p' tools/lint/ratchet.py)" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: ${{ steps.pin.outputs.toolchain }}
+          components: clippy
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          shared-key: lint-ratchet
+
+      - name: Lint ratchet
+        run: python3 tools/lint/ratchet.py --self-test && python3 tools/lint/ratchet.py
