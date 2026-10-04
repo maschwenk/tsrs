@@ -28,15 +28,6 @@ pub fn new_diagnostic_chain_for_node(chain: Option<P<Diagnostic>>, node: P<Node>
     new_diagnostic_for_node(Some(node), message, args)
 }
 
-// utilities.go:38
-pub(crate) fn find_in_map<K: Copy + Eq + std::hash::Hash, V: Copy + Default>(m: &FxHashMap<K, V>, mut predicate: impl FnMut(V) -> bool) -> V {
-    for value in m.values() {
-        if predicate(*value) {
-            return *value;
-        }
-    }
-    V::default()
-}
 
 // utilities.go:47
 pub(crate) fn token_is_identifier_or_keyword(token: Kind) -> bool {
@@ -1794,6 +1785,7 @@ impl Checker {
             let mut packages_map: FxHashMap<String, bool> = FxHashMap::default();
             let program = self.program;
             let resolved_modules = program.get_resolved_modules();
+            #[expect(clippy::iter_over_hash_type, reason = "ORs one flag per package name; the result does not depend on the order")]
             for resolved_modules_in_file in resolved_modules.values() {
                 for module in resolved_modules_in_file.values() {
                     if !module.package_id.name.is_empty() {

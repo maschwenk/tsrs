@@ -2311,13 +2311,14 @@ impl Checker {
     }
 }
 
-/// Go `var primitiveTypeAliasSuggestions = sync.OnceValue(...)`.
-pub fn primitive_type_alias_suggestions() -> &'static FxHashMap<&'static str, P<Symbol>> {
-    static MAP: OnceLock<FxHashMap<&'static str, P<Symbol>>> = OnceLock::new();
+/// Go `var primitiveTypeAliasSuggestions = sync.OnceValue(...)`. Go builds a map and ranges over it in random order;
+/// a list in declaration order gives the spelling suggestion one answer when two of these tie.
+pub fn primitive_type_alias_suggestions() -> &'static [(&'static str, P<Symbol>)] {
+    static MAP: OnceLock<Vec<(&'static str, P<Symbol>)>> = OnceLock::new();
     MAP.get_or_init(|| {
         // Process-wide: never in a freeable region (language server).
         let _arena = tsrs_core::arena::enter_thread_arena();
-        let mut result = FxHashMap::default();
+        let mut result = Vec::new();
         for (primitive, builtin) in [
             ("string", "String"),
             ("number", "Number"),
@@ -2327,7 +2328,7 @@ pub fn primitive_type_alias_suggestions() -> &'static FxHashMap<&'static str, P<
             ("symbol", "Symbol"),
         ] {
             let sym = Symbol::new(SymbolFlags::TypeAlias | SymbolFlags::Transient, primitive);
-            result.insert(builtin, sym);
+            result.push((builtin, sym));
         }
         result
     })
