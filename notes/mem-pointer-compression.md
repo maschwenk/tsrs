@@ -286,9 +286,8 @@ Chunk hand-out is not a factor: thread chunks are at most 64 MiB, ~150 `mprotect
 | 4 checkers | compressed | 8.35 (8.11-8.86) | 5.727 (-14.3%) | 424.6 G (+5.3%) | 377,365 (377,587) | 1 |
 
 Wall time is the same within the ranges (one checker +1.4% median, four checkers -0.8%). Page reclaims (minor
-faults) drop 15% with the smaller arena; the base's ~670 major faults on its first run and in every later run are
-gone (the compressed build maps its arena itself with `mmap`, mimalloc's arena chunks fault once from the file-backed
-side). During this measurement the corpus changed under the runs (`Lines` 5,941,654 / 5,941,656, flipping in both
+faults) drop 15% with the smaller arena. Major faults: ~670 per base run (first and later runs alike), 1 per
+compressed run; the cause was not investigated. During this measurement the corpus changed under the runs (`Lines` 5,941,654 / 5,941,656, flipping in both
 binaries, another session editing a file); runs with the same `Lines` have identical counters and diagnostics.
 
 ### `PSlice` / `PStr`
