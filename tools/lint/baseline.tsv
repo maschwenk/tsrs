@@ -195,11 +195,6 @@
 1	clippy::clone_on_ref_ptr	crates/tsrs_transformers/src/tstransforms/runtimesyntax.rs
 4	clippy::clone_on_ref_ptr	crates/tsrs_vfs/src/iovfs/iofs.rs
 1	clippy::disallowed_methods	crates/tsrs_api_codec/src/decoder.rs
-2	clippy::disallowed_methods	crates/tsrs_ast/src/identifier.rs
-1	clippy::disallowed_methods	crates/tsrs_ast/src/symbol.rs
-3	clippy::disallowed_methods	crates/tsrs_checker/src/links.rs
-1	clippy::disallowed_methods	crates/tsrs_core/src/frozen.rs
-1	clippy::disallowed_methods	crates/tsrs_core/src/ptr.rs
 2	clippy::disallowed_types	crates/tsrs_api/src/build.rs
 7	clippy::disallowed_types	crates/tsrs_api/src/module_resolution.rs
 14	clippy::disallowed_types	crates/tsrs_api/src/predecode.rs
@@ -368,7 +363,6 @@
 50	clippy::trivially_copy_pass_by_ref	crates/tsrs_transformers/src/resolver.rs
 2	clippy::undocumented_unsafe_blocks	crates/tsrs_api/src/sourcefiles.rs
 2	clippy::undocumented_unsafe_blocks	crates/tsrs_ast/src/symbol.rs
-1	clippy::undocumented_unsafe_blocks	crates/tsrs_checker/src/links.rs
 2	clippy::undocumented_unsafe_blocks	crates/tsrs_checker/src/types.rs
 1	clippy::undocumented_unsafe_blocks	crates/tsrs_cli/src/tsc/compile.rs
 4	clippy::undocumented_unsafe_blocks	crates/tsrs_compiler/src/checkerpool.rs

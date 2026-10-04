@@ -47,8 +47,13 @@ impl<K: 'static, V: 'static> LinkStore<K, V> {
     #[inline]
     fn at(&self, index: u32) -> P<V> {
         debug_assert!(index < self.len);
+        #[expect(
+            clippy::disallowed_methods,
+            reason = "bounds checks on the three link-store lookups: +0.6% instructions, four checkers (notes/lint-paydown-compiler.md)"
+        )]
         // SAFETY: every stored index is below `len`, and `chunks` holds `LINK_CHUNK` values per started chunk.
         let chunk = unsafe { *self.chunks.get_unchecked((index >> LINK_CHUNK_SHIFT) as usize) };
+        // SAFETY: `chunk` is the first slot of a `LINK_CHUNK`-slot array, and the offset is below `LINK_CHUNK`.
         unsafe { PSlot::nth(chunk, index as usize & (LINK_CHUNK - 1)) }
     }
 
@@ -134,6 +139,7 @@ impl SparseIdPage {
     }
 
     #[inline]
+    #[expect(clippy::disallowed_methods, reason = "measured with the other link-store lookups (see LinkStore::at)")]
     fn slot(&self, i: usize) -> Option<u32> {
         // SAFETY: `rank` counts set bits, and `slots` holds one entry per set bit.
         self.rank(i).map(|r| unsafe { *self.slots.get_unchecked(r) })
@@ -216,6 +222,7 @@ impl<V: 'static> IdLinkStore<V> {
     #[inline]
     fn at(&self, slot: u32) -> P<V> {
         debug_assert!(slot < self.len);
+        #[expect(clippy::disallowed_methods, reason = "measured with the other link-store lookups (see LinkStore::at)")]
         // SAFETY: every stored slot is below `len`; chunks hold `ID_LINK_CHUNK` values per started chunk.
         unsafe { PSlot::nth(*self.chunks.get_unchecked((slot >> ID_LINK_CHUNK_SHIFT) as usize), slot as usize & (ID_LINK_CHUNK - 1)) }
     }

@@ -322,6 +322,10 @@ impl OwnedTaggedStrCell {
     }
 
     #[inline]
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "from_utf8 here and in PackedStr::as_str: +5% instructions, one checker (notes/lint-paydown-compiler.md)"
+    )]
     pub fn get(&self) -> &'static str {
         let w = self.0.get();
         let p = std::ptr::with_exposed_provenance::<u8>((w & TAGGED_ADDR) as usize);

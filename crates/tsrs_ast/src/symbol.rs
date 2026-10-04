@@ -112,6 +112,7 @@ impl Symbol {
         self.set_declarations_static(tsrs_core::alloc_vec(result))
     }
     #[inline]
+    #[expect(clippy::disallowed_methods, reason = "indexing with a bounds check: +0.7% instructions, one checker (notes/mem-small.md)")]
     pub fn value_declaration(&self) -> Option<P<Node>> {
         if self.name.tags() & TAG_VALUE_FIRST != 0 {
             let declarations = self.declarations.get();

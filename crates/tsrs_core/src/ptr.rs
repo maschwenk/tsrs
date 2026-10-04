@@ -733,6 +733,10 @@ impl PackedStr {
     }
 
     #[inline]
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "from_utf8 here and in OwnedStrCell::get: +5% instructions, one checker (notes/lint-paydown-compiler.md)"
+    )]
     pub fn as_str(self) -> &'static str {
         let len = self.0.addr().get() >> PACKED_STR_LEN_SHIFT;
         let p = self.0.as_ptr().map_addr(|a| a & ((1 << PACKED_STR_LEN_SHIFT) - 1));
