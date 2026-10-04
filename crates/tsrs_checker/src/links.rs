@@ -100,10 +100,10 @@ impl<K: 'static, V: Default + 'static> LinkStore<K, V> {
 ///
 /// Node and symbol ids come from process-wide counters, so with several checkers one checker's ids are spread
 /// thinly over the whole id space (on the private monorepo with 4 checkers each checker holds links for ~25% of
-/// the ids of the pages it touches, and the pages cost ~4x what one checker's do). With `TSRS_SPARSE_ID_PAGES=1`
-/// (notes/mem-shared-base.md) a page starts sparse: a bitmap of the ids present plus their slots in id order, and
-/// becomes a dense page once it is `ID_PAGE_DENSE_AT` full. Slots and their first-access order are the same in both
-/// forms; only the lookup structure differs.
+/// the ids of the pages it touches, and the pages cost ~4x what one checker's do). With `set_sparse_id_pages(true)` or
+/// `TSRS_SPARSE_ID_PAGES=1` (notes/mem-shared-base.md) a page starts sparse: a bitmap of the ids present plus their
+/// slots in id order, and becomes a dense page once it is `ID_PAGE_DENSE_AT` full. Slots and their first-access order
+/// are the same in both forms; only the lookup structure differs.
 pub struct IdLinkStore<V: 'static> {
     pages: Vec<Option<IdPage>>,
     wide_slots: FxHashMap<u64, u32>, // ids >= 2^32 (long-running processes such as the test runner)
@@ -182,10 +182,23 @@ pub fn set_multiple_checkers(multiple: bool) {
     MULTIPLE_CHECKERS.store(multiple, std::sync::atomic::Ordering::Relaxed);
 }
 
+static SPARSE_BY_DEFAULT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Makes sparse pages the default for multi-checker pools created afterwards (an embedder's choice: tsrslint uses
+/// them; the compiler keeps dense pages). `TSRS_SPARSE_ID_PAGES=0|1` overrides it.
+pub fn set_sparse_id_pages(on: bool) {
+    SPARSE_BY_DEFAULT.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
 fn sparse_id_pages() -> bool {
-    static SPARSE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    static ENV: std::sync::OnceLock<Option<bool>> = std::sync::OnceLock::new();
+    let env = *ENV.get_or_init(|| match std::env::var("TSRS_SPARSE_ID_PAGES").as_deref() {
+        Ok("1") => Some(true),
+        Ok("0") => Some(false),
+        _ => None,
+    });
     MULTIPLE_CHECKERS.load(std::sync::atomic::Ordering::Relaxed)
-        && *SPARSE.get_or_init(|| std::env::var("TSRS_SPARSE_ID_PAGES").is_ok_and(|v| v == "1"))
+        && env.unwrap_or_else(|| SPARSE_BY_DEFAULT.load(std::sync::atomic::Ordering::Relaxed))
 }
 
 const ID_LINK_CHUNK_SHIFT: u32 = 12;
