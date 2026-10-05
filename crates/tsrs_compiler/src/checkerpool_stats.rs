@@ -133,7 +133,7 @@ pub(crate) fn report(program: &'static Program, pool: &crate::checkerpool::check
         let mut touched = 0;
         let (mut total, mut own, mut foreign_src, mut decl, mut lib) = (0u64, 0u64, 0u64, 0u64, 0u64);
         for (i, &f) in files.iter().enumerate() {
-            let mine = state.associations[i] == c;
+            let mine = state.owner_at(i) == c;
             if mine {
                 if f.is_declaration_file.get() { own_decl += 1 } else { own_src += 1 }
             }
@@ -296,7 +296,7 @@ fn report_created(out: &mut String, program: &'static Program, state: &crate::ch
                 let ci = CATEGORIES.iter().position(|&(cat, _)| cat == categories[i]).unwrap();
                 by_cat[ci] += v;
                 if categories[i] == Category::ProjectSource || categories[i] == Category::OtherSource {
-                    if state.associations[i] == c { own += v } else { foreign += v }
+                    if state.owner_at(i) == c { own += v } else { foreign += v }
                 }
             }
             let cats: Vec<String> = CATEGORIES.iter().zip(&by_cat).map(|((_, n), v)| format!("{n}={:.2}", *v as f64 / 1e6)).collect();
