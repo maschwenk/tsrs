@@ -75,10 +75,14 @@ run)
     start=$(date +%s)
     (cd "$corpus/$p" && TSRS_DERIVED_VARIANCE=shadow TSRS_DERIVED_VARIANCE_LOG="$out.log" "$tsrs" -p tsconfig.tsrs-dv.json --noEmit --pretty false >"$out.out" 2>"$out.err")
     code=$?
+    # `on` against `off`, byte for byte.
+    (cd "$corpus/$p" && TSRS_DERIVED_VARIANCE=off "$tsrs" -p tsconfig.tsrs-dv.json --noEmit --pretty false >"$out.off" 2>/dev/null)
+    (cd "$corpus/$p" && TSRS_DERIVED_VARIANCE=on "$tsrs" -p tsconfig.tsrs-dv.json --noEmit --pretty false >"$out.on" 2>/dev/null)
+    onoff=$(cmp -s "$out.off" "$out.on" && echo same || echo DIFFER)
     decisions=$(cat "$out.log" 2>/dev/null | grep -c '^D ')
     bases=$(cat "$out.log" 2>/dev/null | grep '^D '  | awk '{print $2}' | sort -u | wc -l)
     errors=$(grep -c 'error TS' "$out.out")
-    echo "$p exit=$code decisions=$decisions bases=$bases errors=$errors $(grep 'shadow:.*decisions' "$out.err") $(( $(date +%s) - start ))s"
+    echo "$p exit=$code decisions=$decisions bases=$bases errors=$errors on-vs-off=$onoff $(grep 'shadow:.*decisions' "$out.err") $(( $(date +%s) - start ))s"
     rm -f "$out.log.tmp"
   done ;;
 esac
