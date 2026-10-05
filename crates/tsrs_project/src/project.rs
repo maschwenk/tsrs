@@ -454,7 +454,7 @@ impl Project {
     // GetProjectDiagnostics returns program diagnostics combined with any global
     // diagnostics discovered during checking. These are the diagnostics reported on
     // the tsconfig.json file.
-    pub fn get_project_diagnostics(&self, ctx: &Context) -> Vec<P<Diagnostic>> {
+    pub fn get_project_diagnostics(&self, _ctx: &Context) -> Vec<P<Diagnostic>> {
         let mut global_diags = Vec::new();
         if let Some(checker_pool) = &self.checker_pool {
             global_diags = checker_pool.get_global_diagnostics();
@@ -661,6 +661,7 @@ impl Project {
     }
 
     // project.go:593
+    #[expect(dead_code, reason = "Go passes p.log to newCheckerPool (project.go:505); with this no-op body the Rust passes None")]
     fn log(&self, _msg: &str) {
         // !!!
     }

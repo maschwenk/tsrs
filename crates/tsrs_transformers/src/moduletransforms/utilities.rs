@@ -79,7 +79,7 @@ pub(crate) fn get_external_module_name_literal(
 //
 // Otherwise, a new StringLiteral node representing the module name will be returned.
 // utilities.go:76
-pub(crate) fn try_get_module_name_from_file(factory: &printer::NodeFactory, file: Option<P<SourceFile>>, host: Option<()>, /*EmitHost*/ options: &CompilerOptions) -> Option<P<Node>> {
+pub(crate) fn try_get_module_name_from_file(_factory: &printer::NodeFactory, file: Option<P<SourceFile>>, _host: Option<()>, /*EmitHost*/ _options: &CompilerOptions) -> Option<P<Node>> {
     file?;
     // !!!
     // if file.moduleName {
@@ -100,17 +100,10 @@ pub(crate) fn try_get_module_name_from_declaration(
     try_get_module_name_from_file(factory, resolver.get_external_module_file_from_declaration(declaration), host, compiler_options)
 }
 
-// Resolves a local path to a path which is absolute to the base of the emit
-// utilities.go:95
-pub(crate) fn get_external_module_name_from_path(host: Option<()>, /*ResolveModuleNameResolutionHost*/ file_name: &str, reference_path: &str) -> String {
-    // !!!
-    String::new()
-}
-
 // Some bundlers (SystemJS builder) sometimes want to rename dependencies.
 // Here we check if alternative name was provided for a given moduleName and return it if possible.
 // utilities.go:102
-pub(crate) fn try_rename_external_module(factory: &printer::NodeFactory, module_name: P<Node>, source_file: Option<P<SourceFile>>) -> Option<P<Node>> {
+pub(crate) fn try_rename_external_module(_factory: &printer::NodeFactory, _module_name: P<Node>, _source_file: Option<P<SourceFile>>) -> Option<P<Node>> {
     // !!!
     None
 }

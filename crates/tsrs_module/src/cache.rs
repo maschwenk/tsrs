@@ -25,6 +25,7 @@ pub(crate) struct ModuleResolutionCache {
 }
 
 impl ModuleResolutionCache {
+    #[cfg(test)]
     pub(crate) fn size(&self) -> usize {
         self.cache.size()
     }
@@ -53,6 +54,7 @@ pub(crate) struct TypeRefDirectiveResolutionCache {
 }
 
 impl TypeRefDirectiveResolutionCache {
+    #[cfg(test)]
     pub(crate) fn size(&self) -> usize {
         self.cache.size()
     }
@@ -73,6 +75,7 @@ pub(crate) struct ParsedPatternsCache {
 }
 
 impl ParsedPatternsCache {
+    #[cfg(test)]
     pub(crate) fn size(&self) -> usize {
         self.cache.size()
     }

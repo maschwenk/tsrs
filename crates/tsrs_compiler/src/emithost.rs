@@ -213,9 +213,3 @@ impl tsrs_transformers::EmitHost for EmitHost {
         self.program.is_source_file_from_external_library(file)
     }
 }
-
-impl EmitHost {
-    pub(crate) fn program(&self) -> &'static Program {
-        self.program
-    }
-}

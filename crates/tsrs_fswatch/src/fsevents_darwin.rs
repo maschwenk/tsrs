@@ -35,12 +35,7 @@ const flagHistoryDone: u32 = 0x00000010;
 
 const flagItemCreated: u32 = 0x00000100;
 const flagItemRemoved: u32 = 0x00000200;
-const flagItemInodeMetaMod: u32 = 0x00000400;
 const flagItemRenamed: u32 = 0x00000800;
-const flagItemModified: u32 = 0x00001000;
-const flagItemFinderInfoMod: u32 = 0x00002000;
-const flagItemChangeOwner: u32 = 0x00004000;
-const flagItemXattrMod: u32 = 0x00008000;
 const flagItemIsFile: u32 = 0x00010000;
 const flagItemIsDir: u32 = 0x00020000;
 const flagItemIsSymlink: u32 = 0x00040000;
@@ -74,9 +69,10 @@ struct fsEventsState {
 }
 
 // fsevents_darwin.go:161 (init)
-pub(crate) fn init(w: &mut watcher) {
+pub(crate) fn init(mut w: watcher) -> watcher {
     w.factory = Some(|| Arc::new(new_fs_events_backend()) as Arc<dyn watcherImpl>);
     w.sequence = Some(fs_events_get_current_event_id);
+    w
 }
 
 // fsevents_darwin.go:166
@@ -440,6 +436,7 @@ pub(crate) fn fs_events_callback(cb: &streamCallback, payload: &fsEventsCallback
 }
 
 // fsevents_darwin.go:609
+#[expect(dead_code, reason = "only Go tests call it (fsevents_darwin_shared_test.go), and those are not ported")]
 fn fsevents_display_path(w: &dirWatch, raw_path: &str) -> Option<String> {
     let mut path = comparisonPath::new(raw_path);
     fsevents_display_path_prepared(w, &mut path)
@@ -459,6 +456,7 @@ fn fsevents_display_path_prepared(w: &dirWatch, raw_path: &mut comparisonPath) -
 }
 
 // fsevents_darwin.go:626
+#[expect(dead_code, reason = "only Go tests call it (fsevents_darwin_shared_test.go), and those are not ported")]
 fn fsevents_overflow_matches(w: &dirWatch, raw_path: &str) -> bool {
     let mut path = comparisonPath::new(raw_path);
     fsevents_overflow_matches_prepared(w, &mut path)

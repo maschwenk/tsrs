@@ -405,6 +405,7 @@ pub struct Registry {
 
     // Memory regions (docs/LSP.md "Memory plan"), not in Go: the regions holding the arena values this version
     // refers to (its directories' package.json entries), shared with the older and newer versions that keep them.
+    #[expect(dead_code, reason = "never read: holding the regions keeps them alive as long as this version")]
     regions: Vec<Region>,
 }
 
@@ -724,6 +725,7 @@ impl registryBuilder<'_> {
         // Go maps (random iteration order).
         let mut needed_projects: FxHashSet<ProjectID> = FxHashSet::default();
         let mut needed_directories: FxHashMap<Path, String> = FxHashMap::default();
+        #[expect(clippy::iter_over_hash_type, reason = "order-independent: fills the needed project set and directory map keyed by path; Go ranges the map too")]
         for (path, file_name) in &change.open_files {
             if let (Some(project_id), _) = self.host.get_default_project(path) {
                 needed_projects.insert(project_id);
@@ -770,6 +772,7 @@ impl registryBuilder<'_> {
         let mut added_projects: Vec<ProjectID> = Vec::new();
         let mut removed_projects: Vec<ProjectID> = Vec::new();
         // core.DiffMapsFunc(base.projects, neededProjects, nil onChanged)
+        #[expect(clippy::iter_over_hash_type, reason = "order-independent: adds missing buckets to the projects map; the order only reaches log lines (Go's DiffMapsFunc ranges a map too)")]
         for project_id in needed_projects.iter() {
             if !self.base.projects.contains_key(project_id) {
                 // Need and don't have
@@ -777,6 +780,7 @@ impl registryBuilder<'_> {
                 added_projects.push(project_id.clone());
             }
         }
+        #[expect(clippy::iter_over_hash_type, reason = "order-independent: deletes unneeded buckets; the order only reaches log lines (Go's DiffMapsFunc ranges a map too)")]
         for project_id in self.base.projects.keys() {
             if !needed_projects.contains(project_id) {
                 // Have and don't need
@@ -832,6 +836,7 @@ impl registryBuilder<'_> {
         };
         // core.DiffMapsFunc(base.directories, neededDirectories, equalValues, onAdded, onRemoved, onChanged)
         let base_directories = Arc::clone(&self.base.directories);
+        #[expect(clippy::iter_over_hash_type, reason = "order-independent: updates each directory entry by its own key; the order only reaches log lines (Go's DiffMapsFunc ranges a map too)")]
         for (dir_path, dir_name) in &needed_directories {
             match base_directories.get(dir_path) {
                 None => {
@@ -857,6 +862,7 @@ impl registryBuilder<'_> {
                 }
             }
         }
+        #[expect(clippy::iter_over_hash_type, reason = "order-independent: deletes each unneeded directory by its own key; the order only reaches log lines (Go's DiffMapsFunc ranges a map too)")]
         for dir_path in base_directories.keys() {
             if !needed_directories.contains_key(dir_path) {
                 // Have and don't need
@@ -1300,6 +1306,7 @@ impl registryBuilder<'_> {
                 let sources = br.possible_failed_ambient_module_lookup_sources.to_map();
                 let bucket = br.bucket.as_mut().unwrap();
                 let mut index = bucket.index.as_ref().map(|i| (**i).clone()).unwrap_or_default();
+                #[expect(clippy::iter_over_hash_type, reason = "order-independent: only fills the export index, whose searches are sorted by fix preference (View.GetCompletions, sortFixInfo); Go ranges the map too")]
                 for source in sources.values() {
                     let (file_name, package_name) = {
                         let s = source.lock().unwrap();
@@ -1523,6 +1530,7 @@ impl registryBuilder<'_> {
         let index_start = Instant::now();
         let mut idx: Index<Arc<Export>> = Index::default();
         let mut paths: FxHashMap<Path, String> = FxHashMap::with_capacity_and_hasher(exports.len(), Default::default());
+        #[expect(clippy::iter_over_hash_type, reason = "order-independent: fills the paths map and the export index, whose searches are sorted by fix preference; Go ranges the map too")]
         for (path, file_exports) in exports {
             paths.insert(path, String::new()); // Empty string for project buckets
             for exp in file_exports {
@@ -1595,7 +1603,7 @@ impl registryBuilder<'_> {
     }
 }
 
-// registry.go:1351
+// registry.go:1351 (Go's dirPath field is never read)
 // discoveredPackage represents a package found during the discovery phase.
 // It holds the resolved package.json and realpath for deduplication.
 // When both a real package and a corresponding @types package exist (e.g., react + @types/react),
@@ -1607,7 +1615,6 @@ struct discoveredPackage {
     realpath: String,
     types_package_json: Option<P<InfoCacheEntry>>,
     types_realpath: String,
-    dir_path: Path, // bucket directory path (used as extraction context)
     is_local: bool, // true if realpath is within the workspace root
 }
 
@@ -1648,11 +1655,12 @@ impl registryBuilder<'_> {
     // registry.go:1392
     // discoverBucketPackages resolves the package.json and realpath for each package name
     // in a node_modules directory. This is the discovery phase of the three-phase extraction pipeline.
-    fn discover_bucket_packages(&self, package_names: Option<&Set<String>>, dir_name: &str, dir_path: &Path) -> Vec<Arc<discoveredPackage>> {
+    fn discover_bucket_packages(&self, package_names: Option<&Set<String>>, dir_name: &str, _dir_path: &Path) -> Vec<Arc<discoveredPackage>> {
         let mut result = Vec::with_capacity(package_names.map_or(0, |p| p.len()));
         let Some(package_names) = package_names else {
             return result;
         };
+        #[expect(clippy::iter_over_hash_type, reason = "Go ranges packageNames.Keys() too, so the discovered packages come in map order there as well")]
         for package_name in package_names.keys() {
             let types_package_name = module::get_types_package_name(package_name);
             let package_json = self.host.get_package_json(&tspath::combine_paths(dir_name, &["node_modules", package_name, "package.json"]));
@@ -1684,7 +1692,6 @@ impl registryBuilder<'_> {
                 realpath,
                 types_package_json,
                 types_realpath,
-                dir_path: dir_path.clone(),
                 is_local,
             }));
         }
@@ -1927,6 +1934,7 @@ impl registryBuilder<'_> {
         // Build Paths as reverse mapping from path to package name.
         // Only include paths for local workspace packages (eligible for granular updates).
         let mut paths: FxHashMap<Path, String> = FxHashMap::default();
+        #[expect(clippy::iter_over_hash_type, reason = "order-independent: fills the paths map from each workspace package's files; Go ranges the set too")]
         for pkg_name in extraction.workspace_packages.keys() {
             if let Some(files) = extraction.package_files.get(pkg_name) {
                 #[expect(clippy::iter_over_hash_type, reason = "distinct keys inserted with the same value; Go ranges the map too")]
@@ -1937,6 +1945,7 @@ impl registryBuilder<'_> {
         }
 
         let mut index: Index<Arc<Export>> = Index::default();
+        #[expect(clippy::iter_over_hash_type, reason = "order-independent: only fills the export index, whose searches are sorted by fix preference; Go ranges the map too")]
         for file_exports in extraction.exports.values() {
             for exp in file_exports {
                 index.insert_as_words(Arc::clone(exp));
@@ -2041,6 +2050,7 @@ impl registryBuilder<'_> {
             new_paths.insert(path.clone(), pkg_name.clone());
         }
         // Add paths for newly extracted workspace packages
+        #[expect(clippy::iter_over_hash_type, reason = "order-independent: fills the paths map from each workspace package's files; Go ranges the set too")]
         for pkg_name in extraction.workspace_packages.keys() {
             if let Some(files) = extraction.package_files.get(pkg_name) {
                 #[expect(clippy::iter_over_hash_type, reason = "distinct keys inserted with the same value; Go ranges the map too")]
@@ -2100,6 +2110,7 @@ impl registryBuilder<'_> {
         // (Go calls insertAsWords on the cloned index, which is nil when the existing bucket had none: a nil
         // pointer dereference.)
         let index = new_index.as_mut().expect("nil Index");
+        #[expect(clippy::iter_over_hash_type, reason = "order-independent: only fills the export index, whose searches are sorted by fix preference; Go ranges the map too")]
         for file_exports in extraction.exports.values() {
             for exp in file_exports {
                 index.insert_as_words(Arc::clone(exp));

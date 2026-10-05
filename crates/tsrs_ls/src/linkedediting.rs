@@ -14,7 +14,7 @@ const JSX_TAG_WORD_PATTERN: &str = "[a-zA-Z0-9:\\-\\._$]*";
 
 impl LanguageService {
     // linkedediting.go:18
-    pub fn provide_linked_editing_range(&self, ctx: &Context, params: &lsproto::LinkedEditingRangeParams) -> Result<lsproto::LinkedEditingRangeResponse, lsproto::Error> {
+    pub fn provide_linked_editing_range(&self, _ctx: &Context, params: &lsproto::LinkedEditingRangeParams) -> Result<lsproto::LinkedEditingRangeResponse, lsproto::Error> {
         let (_, mut source_file) = self.get_program_and_file(&params.text_document.uri);
         let positions = self.converters.from_lsp_position_for_source_file(source_file, params.position, Feature::LinkedEditing);
         if positions.len() != 1 || !positions[0].fidelity.is_exact() {

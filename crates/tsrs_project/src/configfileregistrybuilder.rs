@@ -78,13 +78,6 @@ pub(crate) struct changeFileResult {
     pub(crate) affected_files: Option<FxHashSet<Path>>,
 }
 
-impl changeFileResult {
-    // configfileregistrybuilder.go:400
-    pub(crate) fn is_empty(&self) -> bool {
-        self.affected_projects.as_ref().is_none_or(|p| p.is_empty()) && self.affected_files.as_ref().is_none_or(|f| f.is_empty())
-    }
-}
-
 // Go `core.CopyMapInto` over set-like maps.
 fn copy_set_into<T: std::hash::Hash + Eq + Clone>(dst: Option<FxHashSet<T>>, src: Option<&FxHashSet<T>>) -> Option<FxHashSet<T>> {
     let mut dst = dst.unwrap_or_default();
@@ -382,18 +375,6 @@ impl configFileRegistryBuilder {
         }
     }
 
-    // configfileregistrybuilder.go:357
-    pub(crate) fn retain_config_for_project(&self, config_file_path: &Path, project_id: &ID) {
-        if let Some(entry) = self.configs.load(config_file_path) {
-            entry.change_if(
-                |config| !config.retaining_projects.as_ref().is_some_and(|r| r.contains(project_id)),
-                |config| {
-                    config.retaining_projects.get_or_insert_with(FxHashSet::default).insert(project_id.clone());
-                },
-            );
-        }
-    }
-
     // configfileregistrybuilder.go:376
     // didCloseFile removes the open file from the config entry. Once no projects
     // or files are associated with the config entry, it will be removed on the next call to `cleanup`.
@@ -477,6 +458,7 @@ impl configFileRegistryBuilder {
         let mut created_or_deleted_config_files: FxHashSet<Path> = FxHashSet::default();
         let mut created_or_changed_or_deleted_files: Vec<Path> = Vec::new();
         let mut seen_changed: FxHashSet<Path> = FxHashSet::default();
+        #[expect(clippy::iter_over_hash_type, reason = "order-independent: fills path sets and a list (a map in Go) whose later uses commute apart from log lines; Go ranges the set too")]
         for uri in summary.changed.keys() {
             if tspath::contains_ignored_path(&uri.0) {
                 continue;
@@ -491,6 +473,7 @@ impl configFileRegistryBuilder {
                 created_or_changed_or_deleted_files.push(path);
             }
         }
+        #[expect(clippy::iter_over_hash_type, reason = "order-independent: fills path sets and maps and a list (a map in Go) whose later uses commute apart from log lines; Go ranges the set too")]
         for uri in summary.deleted.keys() {
             if tspath::contains_ignored_path(&uri.0) {
                 continue;
@@ -506,6 +489,7 @@ impl configFileRegistryBuilder {
                 created_or_changed_or_deleted_files.push(path);
             }
         }
+        #[expect(clippy::iter_over_hash_type, reason = "order-independent: fills path sets and maps and a list (a map in Go) whose later uses commute apart from log lines; Go ranges the set too")]
         for uri in summary.created.keys() {
             if tspath::contains_ignored_path(&uri.0) {
                 continue;
@@ -581,6 +565,7 @@ impl configFileRegistryBuilder {
         }
 
         // Handle deletions of wildcard-included root files
+        #[expect(clippy::iter_over_hash_type, reason = "order-independent: marks configs for a file-name reload and unions affected projects; Go ranges the map too")]
         for (path, file_name) in &deleted_files {
             self.configs.range(|entry| {
                 let key = entry.key();

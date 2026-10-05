@@ -226,6 +226,7 @@ impl<K: Hash + Eq + Clone, T: Cloneable + Clone> Map<K, T> {
             }
         }
         let base = self.inner.base.lock().unwrap().clone();
+        #[expect(clippy::iter_over_hash_type, reason = "unspecified order, as in Go: Range ranges Go maps, so no caller can rely on an order")]
         for (key, value) in base.iter() {
             if seen_in_dirty.contains(key) {
                 continue; // already processed in dirty entries

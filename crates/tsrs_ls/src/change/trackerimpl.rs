@@ -87,7 +87,6 @@ impl Tracker {
     // trackerimpl.go:136
     fn compute_new_text(&mut self, change: &trackerEdit, target_source_file: P<SourceFile>, source_file: P<SourceFile>) -> String {
         match change.kind {
-            trackerEditKind::Remove => return String::new(),
             trackerEditKind::Text => return change.new_text.clone(),
             _ => {}
         }

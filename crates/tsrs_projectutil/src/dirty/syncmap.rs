@@ -368,6 +368,7 @@ impl<K: Hash + Eq + Clone + Send + Sync, T: Cloneable + Clone> SyncMap<K, T> {
             true
         });
         // Go continues with the base map even when the callback stopped the dirty map's Range.
+        #[expect(clippy::iter_over_hash_type, reason = "unspecified order, as in Go: Range ranges Go maps, so no caller can rely on an order")]
         for (key, value) in self.inner.base.iter() {
             if seen_in_dirty.contains(key) {
                 continue; // already processed in dirty entries

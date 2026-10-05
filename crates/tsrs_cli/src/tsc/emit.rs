@@ -96,7 +96,7 @@ pub fn emit_files_and_report_errors(input: &EmitInput) -> CompileAndEmitResult {
     let mut emit_result = tsrs_compiler::EmitResult { emit_skipped: true, ..Default::default() };
     if !program.options().list_files_only.is_true() {
         let emit_start = input.sys.now();
-        emit_result = tsrs_core::phases::time("Emit", || program.emit(&ctx, tsrs_compiler::EmitOptions { write_file: input.write_file, ..Default::default() }));
+        emit_result = tsrs_core::phases::time("Emit", || program.emit(&ctx, &tsrs_compiler::EmitOptions { write_file: input.write_file, ..Default::default() }));
         times.emit_time += input.sys.now() - emit_start;
     }
     let emit_skipped = emit_result.emit_skipped;

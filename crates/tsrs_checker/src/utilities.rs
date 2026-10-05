@@ -4,7 +4,6 @@ use tsrs_core::*;
 use tsrs_ast as ast;
 use tsrs_diagnostics as diagnostics;
 use tsrs_diagnostics::Message;
-use rustc_hash::FxHashMap;
 use std::fmt::Display;
 
 // Non-function declarations of utilities.go are hand-ported in utilities_types.rs.
@@ -28,16 +27,6 @@ pub fn new_diagnostic_chain_for_node(chain: Option<P<Diagnostic>>, node: P<Node>
     new_diagnostic_for_node(Some(node), message, args)
 }
 
-
-// utilities.go:47
-pub(crate) fn token_is_identifier_or_keyword(token: Kind) -> bool {
-    token >= Kind::Identifier
-}
-
-// utilities.go:51
-pub(crate) fn token_is_identifier_or_keyword_or_greater_than(token: Kind) -> bool {
-    token == Kind::GreaterThanToken || token_is_identifier_or_keyword(token)
-}
 
 // utilities.go:55
 pub(crate) fn has_override_modifier(node: P<Node>) -> bool {
@@ -65,11 +54,6 @@ pub(crate) fn is_static_private_identifier_property(s: P<Symbol>) -> bool {
         Some(vd) => ast::is_private_identifier_class_element_declaration(vd) && ast::is_static(vd),
         None => false,
     }
-}
-
-// utilities.go:75
-pub(crate) fn is_empty_object_literal(expression: P<Node>) -> bool {
-    ast::is_object_literal_expression(expression) && expression.properties().is_empty()
 }
 
 // utilities.go:89
@@ -349,12 +333,6 @@ pub(crate) fn has_dot_dot_dot_token(node: P<Node>) -> bool {
 // utilities.go:286
 pub fn is_type_any(t: Option<P<Type>>) -> bool {
     matches!(t, Some(t) if t.flags().intersects(TypeFlags::Any))
-}
-
-// utilities.go:290
-pub(crate) fn is_jsdoc_optional_parameter(node: P<Node>) -> bool {
-    let _ = node;
-    false // !!!
 }
 
 // utilities.go:294
@@ -874,14 +852,6 @@ pub(crate) fn get_type_name_symbol(t: P<Type>) -> Option<P<Symbol>> {
     None
 }
 
-// utilities.go:661
-pub(crate) fn get_object_type_name(t: P<Type>) -> Option<P<Symbol>> {
-    if t.object_flags().intersects(ObjectFlags::ClassOrInterface | ObjectFlags::Reference) {
-        return t.symbol();
-    }
-    None
-}
-
 // utilities.go:668
 pub(crate) fn compare_tuple_types(t1: &'static TupleType, t2: &'static TupleType) -> i32 {
     if std::ptr::eq(t1, t2) {
@@ -1063,56 +1033,6 @@ pub(crate) fn is_shift_operator(kind: Kind) -> bool {
 // utilities.go:825
 pub(crate) fn is_shift_operator_or_higher(kind: Kind) -> bool {
     is_shift_operator(kind) || is_additive_operator_or_higher(kind)
-}
-
-// utilities.go:829
-pub(crate) fn is_relational_operator(kind: Kind) -> bool {
-    kind == Kind::LessThanToken
-        || kind == Kind::LessThanEqualsToken
-        || kind == Kind::GreaterThanToken
-        || kind == Kind::GreaterThanEqualsToken
-        || kind == Kind::InstanceOfKeyword
-        || kind == Kind::InKeyword
-}
-
-// utilities.go:834
-pub(crate) fn is_relational_operator_or_higher(kind: Kind) -> bool {
-    is_relational_operator(kind) || is_shift_operator_or_higher(kind)
-}
-
-// utilities.go:838
-pub(crate) fn is_equality_operator(kind: Kind) -> bool {
-    kind == Kind::EqualsEqualsToken || kind == Kind::EqualsEqualsEqualsToken || kind == Kind::ExclamationEqualsToken || kind == Kind::ExclamationEqualsEqualsToken
-}
-
-// utilities.go:843
-pub(crate) fn is_equality_operator_or_higher(kind: Kind) -> bool {
-    is_equality_operator(kind) || is_relational_operator_or_higher(kind)
-}
-
-// utilities.go:847
-pub(crate) fn is_bitwise_operator(kind: Kind) -> bool {
-    kind == Kind::AmpersandToken || kind == Kind::BarToken || kind == Kind::CaretToken
-}
-
-// utilities.go:851
-pub(crate) fn is_bitwise_operator_or_higher(kind: Kind) -> bool {
-    is_bitwise_operator(kind) || is_equality_operator_or_higher(kind)
-}
-
-// utilities.go:855
-pub(crate) fn is_logical_operator_or_higher(kind: Kind) -> bool {
-    ast::is_logical_binary_operator(kind) || is_bitwise_operator_or_higher(kind)
-}
-
-// utilities.go:859
-pub(crate) fn is_assignment_operator_or_higher(kind: Kind) -> bool {
-    kind == Kind::QuestionQuestionToken || is_logical_operator_or_higher(kind) || ast::is_assignment_operator(kind)
-}
-
-// utilities.go:863
-pub(crate) fn is_binary_operator(kind: Kind) -> bool {
-    is_assignment_operator_or_higher(kind) || kind == Kind::CommaToken
 }
 
 // utilities.go:867
@@ -1359,11 +1279,6 @@ pub(crate) fn is_this_initialized_declaration(node: Option<P<Node>>) -> bool {
     ast::is_variable_declaration(node) && matches!(node.initializer(), Some(init) if init.kind() == Kind::ThisKeyword)
 }
 
-// utilities.go:1079
-pub(crate) fn is_infinity_or_nan_string(name: &str) -> bool {
-    name == "Infinity" || name == "-Infinity" || name == "NaN"
-}
-
 impl Checker {
     // utilities.go:1083
     pub(crate) fn is_constant_variable(&mut self, symbol: P<Symbol>) -> bool {
@@ -1404,11 +1319,6 @@ pub(crate) fn is_literal_expression_of_object(node: P<Node>) -> bool {
         node.kind(),
         Kind::ObjectLiteralExpression | Kind::ArrayLiteralExpression | Kind::RegularExpressionLiteral | Kind::FunctionExpression | Kind::ClassExpression
     )
-}
-
-// utilities.go:1116
-pub(crate) fn can_have_flow_node(node: P<Node>) -> bool {
-    node.has_flow_node_data()
 }
 
 // utilities.go:1120
@@ -1503,11 +1413,6 @@ pub(crate) fn is_in_name_of_expression_with_type_arguments_or_heritage_type_refe
     }
 
     node.parent().unwrap().kind() == Kind::ExpressionWithTypeArguments || ast::is_name_of_heritage_clause_type_reference(node)
-}
-
-// utilities.go:1197
-pub(crate) fn get_index_symbol_from_symbol_table(symbol_table: Option<P<SymbolTable>>) -> Option<P<Symbol>> {
-    symbol_table.and_then(|t| t.lookup(InternalSymbolNameIndex))
 }
 
 // Indicates whether the result of an `Expression` will be unused.
@@ -1787,39 +1692,6 @@ impl Checker {
         if self.was_canceled {
             panic!("Checker was previously cancelled");
         }
-    }
-
-    // utilities.go:1722
-    pub(crate) fn get_packages_map(&mut self) -> FxHashMap<String, bool> {
-        if self.packages_map.is_none() {
-            let mut packages_map: FxHashMap<String, bool> = FxHashMap::default();
-            let program = self.program;
-            let resolved_modules = program.get_resolved_modules();
-            #[expect(clippy::iter_over_hash_type, reason = "ORs one flag per package name; the result does not depend on the order")]
-            for resolved_modules_in_file in resolved_modules.values() {
-                for module in resolved_modules_in_file.values() {
-                    if !module.package_id.name.is_empty() {
-                        let name = module.package_id.name;
-                        let v = packages_map.get(name).copied().unwrap_or(false) || module.extension == tspath::EXTENSION_DTS;
-                        packages_map.insert(name.to_string(), v);
-                    }
-                }
-            }
-            self.packages_map = Some(packages_map);
-        }
-        self.packages_map.clone().unwrap()
-    }
-
-    // utilities.go:1737
-    pub(crate) fn types_package_exists(&mut self, package_name: &str) -> bool {
-        let packages_map = self.get_packages_map();
-        packages_map.contains_key(&tsrs_module::get_types_package_name(package_name))
-    }
-
-    // utilities.go:1743
-    pub(crate) fn package_bundles_types(&mut self, package_name: &str) -> bool {
-        let packages_map = self.get_packages_map();
-        packages_map.get(package_name).copied().unwrap_or(false)
     }
 }
 

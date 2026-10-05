@@ -13,7 +13,6 @@ pub(crate) struct externalModuleInfo {
 
 struct externalModuleInfoCollector {
     source_file: P<SourceFile>,
-    compiler_options: P<CompilerOptions>,
     emit_context: P<EmitContext>,
     resolver: ReferenceResolverRef,
     unique_exports: Set<&'static str>,
@@ -22,10 +21,9 @@ struct externalModuleInfoCollector {
 }
 
 // externalmoduleinfo.go:35
-pub(crate) fn collect_external_module_info(source_file: P<SourceFile>, compiler_options: P<CompilerOptions>, emit_context: P<EmitContext>, resolver: ReferenceResolverRef) -> externalModuleInfo {
+pub(crate) fn collect_external_module_info(source_file: P<SourceFile>, _compiler_options: P<CompilerOptions>, emit_context: P<EmitContext>, resolver: ReferenceResolverRef) -> externalModuleInfo {
     let c = externalModuleInfoCollector {
         source_file,
-        compiler_options,
         emit_context,
         resolver,
         unique_exports: Set::default(),
@@ -351,7 +349,7 @@ fn get_imported_helpers(emit_context: P<EmitContext>, source_file: P<SourceFile>
 fn get_or_create_external_helpers_module_name_if_needed(
     emit_context: P<EmitContext>,
     node: P<SourceFile>,
-    compiler_options: &CompilerOptions,
+    _compiler_options: &CompilerOptions,
     helpers: &[SP<EmitHelper>],
     has_export_stars_to_export_values: bool,
     has_import_star_or_import_default: bool,

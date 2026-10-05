@@ -288,10 +288,6 @@ impl Printer {
         self.writer.as_deref_mut().unwrap()
     }
 
-    pub(crate) fn writer_ref(&self) -> &dyn EmitTextWriter {
-        self.writer.as_deref().unwrap()
-    }
-
     pub(crate) fn get_literal_text_of_node(&mut self, node: P<Node>, source_file: Option<P<SourceFile>>, flags: getLiteralTextFlags) -> String {
         get_literal_text_of_node_worker(&mut self.name_generator, &self.text_state, node, source_file, flags)
     }
@@ -339,12 +335,6 @@ impl Printer {
     // Go `(*Printer).write`; suffixed because the exported `Write` takes the plain snake_case name.
     pub(crate) fn write_(&mut self, text: &str) {
         self.write_as(text, self.write_kind);
-    }
-
-    pub(crate) fn set_write_kind(&mut self, kind: WriteKind) -> WriteKind {
-        let previous = self.write_kind;
-        self.write_kind = kind;
-        previous
     }
 
     pub(crate) fn write_symbol(&mut self, text: &str, opt_symbol: Option<P<Symbol>>) {
@@ -839,7 +829,7 @@ impl Printer {
         !self.source_maps_disabled && self.source_map_source.is_some() && !is_source_file(node) && !is_in_json_file(node)
     }
 
-    pub(crate) fn should_emit_token_source_maps(&self, token: Kind, pos: i32, context_node: P<Node>, flags: tokenEmitFlags) -> bool {
+    pub(crate) fn should_emit_token_source_maps(&self, token: Kind, _pos: i32, context_node: P<Node>, flags: tokenEmitFlags) -> bool {
         // We don't emit source positions for most tokens as it tends to be quite noisy, however
         // we need to emit source positions for open and close braces so that tools like istanbul
         // can map branches for code coverage. However, we still omit brace source positions when
@@ -856,10 +846,6 @@ impl Printer {
 
     pub(crate) fn should_emit_trailing_comments(&self, node: P<Node>) -> bool {
         !self.emit_context.emit_flags(node).intersects(EmitFlags::NoTrailingComments)
-    }
-
-    pub(crate) fn should_emit_nested_comments(&self, node: P<Node>) -> bool {
-        !self.emit_context.emit_flags(node).intersects(EmitFlags::NoNestedComments)
     }
 
     pub(crate) fn should_emit_detached_comments(&self, node: P<Node>) -> bool {

@@ -714,7 +714,6 @@ impl LanguageService {
     // createSignatureHelpParameterFromLabel creates a signatureHelpParameter from a pre-computed label string.
     // signaturehelp.go:669
     fn create_signature_help_parameter_from_label(&self, parameter: P<Symbol>, label: &str, c: &mut Checker, doc_format: lsproto::MarkupKind) -> signatureHelpParameter {
-        let is_optional = parameter.check_flags().intersects(CheckFlags::OptionalParameter);
         let is_rest = parameter.check_flags().intersects(CheckFlags::RestParameter);
         let mut documentation: Option<lsproto::StringOrMarkupContent> = None;
         if let Some(value_declaration) = parameter.value_declaration() {
@@ -727,7 +726,6 @@ impl LanguageService {
         signatureHelpParameter {
             parameter_info: lsproto::ParameterInformation { label: lsproto::StringOrTuple { string: Some(label.to_string()), ..Default::default() }, documentation },
             is_rest,
-            is_optional,
         }
     }
 
@@ -758,7 +756,6 @@ fn create_signature_help_parameter_for_type_parameter(t: P<Type>, source_file: P
     signatureHelpParameter {
         parameter_info: lsproto::ParameterInformation { label: lsproto::StringOrTuple { string: Some(display), ..Default::default() }, ..Default::default() },
         is_rest: false,
-        is_optional: false,
     }
 }
 
@@ -788,12 +785,11 @@ struct signatureHelpItemInfo {
     writer: DisplayPartsWriter,
 }
 
-// signaturehelp.go:734
+// signaturehelp.go:734 (Go's isOptional field is never read)
 #[derive(Clone)]
 struct signatureHelpParameter {
     parameter_info: lsproto::ParameterInformation,
     is_rest: bool,
-    is_optional: bool,
 }
 
 // signaturehelp.go:740

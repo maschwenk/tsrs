@@ -73,14 +73,6 @@ impl LanguageService {
         let symbol_infos = flatten_document_symbols(&symbols, document_uri);
         Ok(lsproto::SymbolInformationsOrDocumentSymbolsOrNull { symbol_informations: Some(symbol_infos), ..Default::default() })
     }
-
-    // getDocumentSymbolInformations converts hierarchical DocumentSymbols to a flat SymbolInformation array
-    // symbols.go:59
-    pub(crate) fn get_document_symbol_informations(&self, ctx: &Context, file: P<SourceFile>, document_uri: &lsproto::DocumentUri) -> Vec<lsproto::SymbolInformation> {
-        // First get hierarchical symbols
-        let doc_symbols: Vec<lsproto::DocumentSymbol> = self.get_document_symbols_for_children(ctx, file.as_node(), file).iter().map(doc_sym_to_lsp).collect();
-        flatten_document_symbols(&doc_symbols, document_uri)
-    }
 }
 
 // symbols.go:65

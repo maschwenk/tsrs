@@ -31,7 +31,7 @@ use crate::project::{Project, ProgramUpdateKind, SyntheticProjectID, ID};
 use crate::projectcollection::{new_project_collection, open_file_paths, ProjectCollection};
 use crate::projectcollectionbuilder::new_project_collection_builder;
 use crate::session::{ContentMapperContributions, UpdateReason};
-use crate::snapshotfs::{new_snapshot_fs_builder_from_source, new_source_fs, snapshotFSBuilder, FileHandleSource, FileSource, SnapshotFS};
+use crate::snapshotfs::{new_snapshot_fs_builder_from_source, new_source_fs, snapshotFSBuilder, FileHandleSource, SnapshotFS};
 use crate::snapshothost::SnapshotHost;
 use crate::watch::WatchedFiles;
 
@@ -855,6 +855,7 @@ impl Snapshot {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn ref_count(&self) -> i32 {
         self.ref_count.load(Ordering::SeqCst)
     }

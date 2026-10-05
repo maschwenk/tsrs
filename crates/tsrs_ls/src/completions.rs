@@ -200,12 +200,11 @@ pub(crate) enum CompletionData {
     JSDocParameterName(completionDataJSDocParameterName),
 }
 
-// completions.go:166
+// completions.go:166 (Go's isInSnippetScope field is never read)
 pub(crate) struct completionDataData {
     pub(crate) symbols: Vec<P<Symbol>>,
     pub(crate) auto_imports: Vec<autoimport::FixAndExport>,
     pub(crate) completion_kind: CompletionKind,
-    pub(crate) is_in_snippet_scope: bool,
     // Note that the presence of this alone doesn't mean that we need a conversion. Only do that if the completion is not an ordinary identifier.
     pub(crate) property_access_to_convert: Option<P<Node>>,
     pub(crate) is_new_identifier_location: bool,
@@ -237,7 +236,6 @@ impl completionDataData {
             symbols: Vec::new(),
             auto_imports: Vec::new(),
             completion_kind: CompletionKind::None,
-            is_in_snippet_scope: false,
             property_access_to_convert: None,
             is_new_identifier_location: false,
             location,
@@ -399,17 +397,15 @@ pub(crate) enum symbolOriginData {
     #[default]
     None,
     ObjectLiteralMethod(symbolOriginInfoObjectLiteralMethod),
+    #[expect(dead_code, reason = "see symbolOriginInfoTypeOnlyAlias")]
     TypeOnlyAlias(symbolOriginInfoTypeOnlyAlias),
     ComputedPropertyName(symbolOriginInfoComputedPropertyName),
 }
 
-// completions.go:308
+// completions.go:308 (Go's isDefaultExport, isFromPackageJson and fileName fields are never set or read)
 #[derive(Clone, Default)]
 pub(crate) struct symbolOriginInfo {
     pub(crate) kind: symbolOriginInfoKind,
-    pub(crate) is_default_export: bool,
-    pub(crate) is_from_package_json: bool,
-    pub(crate) file_name: String,
     pub(crate) data: symbolOriginData,
 }
 
@@ -457,6 +453,7 @@ pub(crate) struct symbolOriginInfoObjectLiteralMethod {
 // completions.go:335
 #[derive(Clone)]
 pub(crate) struct symbolOriginInfoTypeOnlyAlias {
+    #[expect(dead_code, reason = "Go has no reader yet either: `!!! fill in additionalTextEdits from code actions` (completions.go:5712)")]
     pub(crate) declaration: P<Node>,
 }
 
@@ -910,7 +907,6 @@ impl LanguageService {
             is_new_identifier_location,
             default_commit_characters,
             keyword_filters,
-            is_in_snippet_scope: false,
         };
 
         if is_right_of_dot || is_right_of_question_dot {
@@ -979,7 +975,6 @@ impl LanguageService {
             symbols: s.symbols,
             auto_imports: s.auto_imports,
             completion_kind: s.completion_kind,
-            is_in_snippet_scope: s.is_in_snippet_scope,
             property_access_to_convert,
             is_new_identifier_location: s.is_new_identifier_location,
             location,
@@ -1030,7 +1025,6 @@ struct getCompletionDataState {
     is_new_identifier_location: bool,
     default_commit_characters: Option<Vec<String>>,
     keyword_filters: KeywordCompletionFilters,
-    is_in_snippet_scope: bool,
 }
 
 impl getCompletionDataState {
@@ -1818,7 +1812,6 @@ impl getCompletionDataState {
             if previous_token != context_token { astnav::get_start_of_node(previous_token.unwrap(), file, false /*includeJSDoc*/) } else { position };
 
         let scope_node = get_scope_node(context_token, adjusted_position, file).unwrap_or(file.as_node());
-        self.is_in_snippet_scope = is_snippet_scope(scope_node);
 
         let symbol_meanings =
             (if self.is_type_only_location { SymbolFlags::None } else { SymbolFlags::Value }) | SymbolFlags::Type | SymbolFlags::Namespace | SymbolFlags::Alias;

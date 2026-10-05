@@ -4,7 +4,6 @@ use std::cell::RefCell;
 use rustc_hash::FxHashMap;
 use tsrs_ast::{self as ast, Kind, ModifierFlags, ModifierList, Node, NodeFactory, NodeFlags, SourceFile, Symbol, TokenFlags};
 use tsrs_checker::{Checker, Flags, InternalFlags, ObjectFlags, Type, TypeFlags, UnionReduction};
-use tsrs_compiler::Program;
 use tsrs_core::context::Context;
 use tsrs_core::{alloc_str, LanguageVariant, NewLineKind, TextRange, P};
 use tsrs_diagnostics as diagnostics;
@@ -150,7 +149,6 @@ fn get_all_isolated_declarations_code_actions(ctx: &Context, fix_context: &CodeF
 
     let mut fixer = isolatedDeclarationsFixer {
         source_file: fix_context.source_file,
-        program: fix_context.program,
         checker: &mut ch,
         change_tracker: &mut change_tracker,
         fixed_nodes: FxHashMap::default(),
@@ -195,7 +193,6 @@ fn try_code_action(
 
     let mut fixer = isolatedDeclarationsFixer {
         source_file: fix_context.source_file,
-        program: fix_context.program,
         checker: ch,
         change_tracker: &mut change_tracker,
         fixed_nodes: FxHashMap::default(),
@@ -232,10 +229,9 @@ fn try_code_action(
 
 // codeactions_fixmissingtypeannotation.go:220
 // isolatedDeclarationsFixer encapsulates the state for fixing isolated declarations errors.
-// (Go's `importAdder` field is never set and its `locale` is English here.)
+// (Go's `importAdder` field is never set, its `program` field is never read and its `locale` is English here.)
 struct isolatedDeclarationsFixer<'a> {
     source_file: P<SourceFile>,
-    program: &'static Program,
     checker: &'a mut Checker,
     change_tracker: &'a mut change::Tracker,
     fixed_nodes: FxHashMap<P<Node>, bool>,

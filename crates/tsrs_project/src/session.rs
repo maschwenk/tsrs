@@ -130,6 +130,7 @@ pub struct Session {
     background_ctx: Context,
     to_path: ToPath,
     client: Option<Arc<dyn Client>>,
+    #[expect(dead_code, reason = "Go's reader sendPerformanceTelemetry (session.go:737) is not ported yet")]
     start_time: Instant,
     npm_executor: Option<Arc<dyn ata::NpmExecutor>>,
     fs: Arc<overlayFS>,
@@ -187,6 +188,7 @@ pub struct Session {
     performance_telemetry_cancel: Mutex<Option<CancelFunc>>,
 
     // seenProjects tracks projects that have already had telemetry sent.
+    #[expect(dead_code, reason = "Go's reader sendProjectInfoTelemetry (session.go:875) is not ported yet")]
     seen_projects: SyncSet<ID>,
 
     // watches tracks the current watch globs and how many individual WatchedFiles
@@ -1040,6 +1042,7 @@ impl Session {
     // with an extra reference for the caller. The ref is taken atomically with
     // the snapshot assignment under snapshotMu, so the snapshot is guaranteed
     // to be alive when returned. The caller must call snapshot.Deref() when done.
+    #[expect(dead_code, reason = "Go's caller Session.APIUpdate (project/api.go) is not ported yet")]
     pub(crate) fn update_snapshot_ref(&self, ctx: &Context, overlays: OverlayMap, change: SnapshotChange) -> Arc<Snapshot> {
         self.update_snapshot_with(ctx, overlays, change, true).unwrap()
     }
@@ -1174,6 +1177,7 @@ impl Session {
                 if !w.ignored_paths.is_empty() {
                     self.logger.logf(format_args!("{} paths ineligible for watching", w.ignored_paths.len()));
                     if self.logger.is_verbose() {
+                        #[expect(clippy::iter_over_hash_type, reason = "verbose log lines only; Go ranges the map too")]
                         for path in &w.ignored_paths {
                             self.logger.log(&format!("\t{path}"));
                         }
@@ -1279,6 +1283,7 @@ impl Session {
             errors.extend(self.update_watch(&ctx, old_entry.root_files_watch.as_ref(), new_entry.root_files_watch.as_ref()));
         }
         // Retry config watchers whose IDs didn't change but whose previous registration failed.
+        #[expect(clippy::iter_over_hash_type, reason = "order-independent: retries each pending config watcher by its own ID; Go ranges the map too, so the registrations go out in map order there as well")]
         for (path, new_entry) in new_configs.iter() {
             if let Some(old_entry) = old_configs.get(path) {
                 if old_entry.root_files_watch.id() == new_entry.root_files_watch.id() && self.watches.is_pending(&new_entry.root_files_watch.id()) {
@@ -1466,6 +1471,7 @@ impl Session {
                 for bucket in &auto_import_stats.node_modules_buckets {
                     self.logger.logf(format_args!("\t\t{}{}:", bucket.name, if bucket.state.dirty() { " (dirty)" } else { "" }));
                     if let Some(dirty_packages) = bucket.state.dirty_packages() {
+                        #[expect(clippy::iter_over_hash_type, reason = "log lines only; Go ranges the set too")]
                         for package_name in dirty_packages.keys() {
                             self.logger.logf(format_args!("\t\t\tNeeds granular update: {}", package_name));
                         }

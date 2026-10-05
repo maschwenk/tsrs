@@ -116,7 +116,6 @@ pub(crate) static TSCONFIG_ROOT_OPTIONS_MAP: LazyLock<CommandLineOption> = LazyL
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct ConfigFileSpecs {
-    pub(crate) files_specs: Option<Vec<CompilerOptionsValue>>,
     // Present to report errors (user specified specs), validatedIncludeSpecs are used for file name matching
     pub(crate) include_specs: Option<Vec<CompilerOptionsValue>>,
     // Present to report errors (user specified specs), validatedExcludeSpecs are used for file name matching
@@ -130,29 +129,6 @@ pub(crate) struct ConfigFileSpecs {
 }
 
 impl ConfigFileSpecs {
-    pub(crate) fn matches_exclude(&self, file_name: &str, compare_paths_options: &ComparePathsOptions) -> bool {
-        if self.validated_exclude_specs.is_empty() {
-            return false;
-        }
-        let Some(exclude_matcher) = vfsmatch::new_spec_matcher(
-            &self.validated_exclude_specs,
-            &compare_paths_options.current_directory,
-            vfsmatch::Usage::Exclude,
-            compare_paths_options.use_case_sensitive_file_names,
-        ) else {
-            return false;
-        };
-        if exclude_matcher.match_string(file_name) {
-            return true;
-        }
-        if !tspath::has_extension(file_name) {
-            if exclude_matcher.match_string(&tspath::ensure_trailing_directory_separator(file_name)) {
-                return true;
-            }
-        }
-        false
-    }
-
     pub(crate) fn get_matched_include_spec(&self, file_name: &str, compare_paths_options: &ComparePathsOptions) -> String {
         if self.validated_include_specs.is_empty() {
             return String::new();
@@ -554,13 +530,6 @@ pub(crate) fn starts_with_config_dir_template(value: &str) -> bool {
     tsrs_core::stringutil::go_strings_to_lower(value).starts_with(&tsrs_core::stringutil::go_strings_to_lower(CONFIG_DIR_TEMPLATE))
 }
 
-fn starts_with_config_dir_template_value(value: &CompilerOptionsValue) -> bool {
-    match value {
-        CompilerOptionsValue::String(str) => starts_with_config_dir_template(str),
-        _ => false,
-    }
-}
-
 fn normalize_non_list_option_value(option: &CommandLineOption, base_path: &str, value: CompilerOptionsValue) -> CompilerOptionsValue {
     if option.is_file_path {
         let mut value = tspath::normalize_slashes(value.as_str().unwrap());
@@ -918,10 +887,6 @@ impl tsrs_module::ResolutionHost for ResolverHost {
     fn get_current_directory(&self) -> &str {
         self.host.get_current_directory()
     }
-}
-
-impl ResolverHost {
-    fn trace(&self, msg: &str) {}
 }
 
 pub fn parse_json_source_file_config_file_content(
@@ -1737,7 +1702,6 @@ fn parse_json_config_file_content_worker(
         };
     }
     let config_file_specs = ConfigFileSpecs {
-        files_specs: file_specs.slice_value,
         include_specs: include_specs.slice_value,
         exclude_specs: exclude_specs.slice_value,
         validated_files_spec,

@@ -1209,7 +1209,7 @@ impl<'r> ResolutionState<'r> {
         continue_searching()
     }
 
-    fn load_module_from_nearest_node_modules_directory_worker(&mut self, ext: Extensions, mode: ResolutionMode, types_scope_only: bool) -> Option<Resolved> {
+    fn load_module_from_nearest_node_modules_directory_worker(&mut self, ext: Extensions, _mode: ResolutionMode, types_scope_only: bool) -> Option<Resolved> {
         let containing_directory = self.containing_directory.clone();
         tspath::for_each_ancestor_directory(&containing_directory, |directory| {
             // !!! stop at global cache

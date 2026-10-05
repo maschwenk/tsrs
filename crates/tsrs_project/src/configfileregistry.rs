@@ -6,7 +6,7 @@ use tsrs_core::tspath::Path;
 use tsrs_core::P;
 use tsrs_tsoptions::ParsedCommandLine;
 
-use crate::dirty::{Cloneable, Shared, SharedMap};
+use crate::dirty::{Cloneable, SharedMap};
 use crate::project::{PendingReload, ID};
 use crate::watch::{allWatchKinds, new_watched_files, PatternsAndIgnored, WatchedFiles};
 
@@ -249,8 +249,4 @@ impl Cloneable for configFileNames {
     fn clone_value(&self) -> configFileNames {
         configFileNames { nearest_config_file_name: self.nearest_config_file_name.clone(), ancestors: self.ancestors.clone() }
     }
-}
-
-pub(crate) fn shared_config_entry(entry: configFileEntry) -> Shared<configFileEntry> {
-    Shared::new(entry)
 }

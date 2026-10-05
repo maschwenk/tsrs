@@ -145,7 +145,7 @@ impl Parser {
     }
 
     // Pass end=-1 to parse the text to the end
-    pub(crate) fn parse_jsdoc_comment(&mut self, parent: P<Node>, start: i32, end: i32, full_start: i32) -> Option<P<Node>> {
+    pub(crate) fn parse_jsdoc_comment(&mut self, _parent: P<Node>, start: i32, end: i32, full_start: i32) -> Option<P<Node>> {
         let end = if end == -1 { self.source_text.len() as i32 } else { end };
         // Check for /** (JSDoc opening part)
         if !is_jsdoc_like_text(&self.source_text[start as usize..]) {

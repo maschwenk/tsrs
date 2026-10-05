@@ -216,6 +216,7 @@ fn merge_cached_directory_entries(
         tspath::get_canonical_file_name(left, use_case_sensitive_file_names) == tspath::get_canonical_file_name(right, use_case_sensitive_file_names)
     };
     let has_name = |names: &[String], name: &str| names.iter().any(|candidate| equal_name(candidate, name));
+    #[expect(clippy::iter_over_hash_type, reason = "Go ranges the cached entry map too, so cached children are appended in map order there as well")]
     for (child_path, child_name) in cached_entries.iter() {
         if let Some(symlinks) = &mut entries.symlinks {
             symlinks.retain(|name| !equal_name(name, child_name));
