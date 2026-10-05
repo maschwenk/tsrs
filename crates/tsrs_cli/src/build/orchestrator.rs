@@ -656,6 +656,8 @@ pub unsafe fn free_api_orchestrator(o: &'static Orchestrator) {
 
 // orchestrator.go:921
 pub fn new_orchestrator(opts: Options) -> &'static Orchestrator {
+    // Several projects build at once; each project's pool keeps Go's checker count.
+    tsrs_compiler::use_go_default_checker_count();
     let sys = opts.sys;
     let compare_paths_options =
         ComparePathsOptions { current_directory: sys.get_current_directory().to_string(), use_case_sensitive_file_names: sys.fs().use_case_sensitive_file_names() };

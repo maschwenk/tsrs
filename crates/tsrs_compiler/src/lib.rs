@@ -27,7 +27,7 @@ mod program_test;
 #[cfg(all(test, feature = "checker"))]
 mod modulespecifiers_oracle_test;
 
-pub use checkerpool::{assignment_stats_enabled, set_checker_assignment_from_cli, set_checker_cost_cache_from_cli, Checker, CheckerHandle, CheckerPool, Context, PooledChecker};
+pub use checkerpool::{assignment_stats_enabled, set_checker_assignment_from_cli, set_checker_cost_cache_from_cli, use_go_default_checker_count, Checker, CheckerHandle, CheckerPool, Context, PooledChecker};
 #[cfg(feature = "checker")]
 pub use emitter::EmitOnly;
 #[cfg(feature = "checker")]

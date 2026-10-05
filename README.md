@@ -81,6 +81,9 @@ npx -y @maschwenk/tsrs -p . --singleThreaded         # one checker thread (less 
 ```
 
 or `pnpm add -D @maschwenk/tsrs` and run `tsrs` from scripts. `--extendedDiagnostics` prints the usual counters.
+Without `--checkers`, tsrs runs half as many checker threads as the machine has cores, at least tsgo's 4 and at most
+8 (4 for small programs and in `-b` build mode); diagnostics do not depend on the count, the `--extendedDiagnostics`
+counters and peak memory do.
 `--checkerCostCache <file>` (opt-in) records per-file check times in `<file>` and balances the checker threads on
 them in the next run (a few percent to ~15% less wall time on repeated runs; it never changes diagnostics).
 By default tsrs also runs with checker changes that are not merged upstream yet; `--noLazyMembers` turns them
