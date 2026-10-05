@@ -78,8 +78,14 @@ jobs:
           sparse-checkout: tsc/testdata
           persist-credentials: false
 
+      - name: Read the pinned Rust toolchain (rust-toolchain.toml)
+        id: rust
+        shell: bash
+        run: echo "toolchain=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
+
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:
+          toolchain: ${{ steps.rust.outputs.toolchain }}
           targets: x86_64-unknown-linux-gnu
           components: llvm-tools
 

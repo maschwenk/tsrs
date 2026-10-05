@@ -87,7 +87,9 @@ different profiles and binaries whose counts differed by 0.002-0.046%, well unde
 the Go runtime makes its count vary 2-4%.
 
 `bench/regressions.py --latest` compares the counts with the newest earlier result from the same runner label and
-build, and only when the CPU model and C library match (they pick different `memcpy`-style routines). A project up
+build, and only when the CPU model and C library match (they pick different `memcpy`-style routines). When the Rust
+compiler differs (results record `tsrs.rustc`; `rust-toolchain.toml` pins it), it prints the change as the upgrade's
+measurement and flags nothing (`docs/RUST.md`, "Upgrading Rust"). A project up
 more than 1% is a regression: the step prints a warning and comments on the pull request merged in between, or, when
 the run covers more than three merges, on the commit. It never fails the job; a deliberate trade (memory for CPU, say)
 needs no action. Results store the count under `projects.<name>.single.tsrs.instructions`.
