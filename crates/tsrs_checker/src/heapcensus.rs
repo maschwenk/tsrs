@@ -221,6 +221,11 @@ impl Checker {
             declared_type_links, spread_links, variance_links, reverse_mapped_symbol_links,
             marked_assignment_symbol_links, symbol_container_links, source_file_links,
         );
+        let mut inner = HeapStat::default();
+        for index in self.exports_by_target_index.values() {
+            inner.add(index.heap_stat());
+        }
+        h.row("exports_by_target_index (inner maps and lists)", inner);
         h.row("flow_memo", self.flow_memo.heap_stat());
         h.row("module_export_index", self.module_export_index.heap_stat());
         h
