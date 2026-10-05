@@ -85,6 +85,8 @@ mod flow;
 pub(crate) use flow::*;
 pub mod flowmemo;
 pub mod heapcensus;
+pub mod packedmap;
+pub use packedmap::{GoPackedMap, PackedMap};
 mod inference;
 pub(crate) use inference::*;
 mod grammarchecks;

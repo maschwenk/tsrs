@@ -1489,7 +1489,7 @@ impl Checker {
         let new_text_refs: Vec<&str> = new_texts.iter().map(|s| s.as_str()).collect();
         let key = get_template_type_key(&new_text_refs, &new_types);
         let t = match self.template_literal_types.get(&key) {
-            Some(&t) => t,
+            Some(t) => t,
             None => {
                 let t = self.new_template_literal_type(&new_text_refs, &new_types);
                 self.template_literal_types.insert(key, t);

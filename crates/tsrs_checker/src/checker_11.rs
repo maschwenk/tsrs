@@ -982,7 +982,7 @@ impl Checker {
             }
         };
         let cache_index = if index != -1 { index as usize } else { self.active_type_mappers_caches.len() - 1 };
-        if let Some(&cached_type) = self.active_type_mappers_caches[cache_index].get(&key) {
+        if let Some(cached_type) = self.active_type_mappers_caches[cache_index].get(&key) {
             tsrs_core::sitecount::hit("active mapper cache (instantiateTypeWithAlias)", "hit");
             return cached_type;
         }
@@ -1043,7 +1043,7 @@ impl Checker {
         let mut cache = self.active_type_mappers_caches.pop().unwrap();
         if cache.capacity() > 64 && cache.capacity() > 4 * cache.len() {
             // A table one large instantiation grew is not worth clearing (clearing touches every bucket).
-            cache = FxHashMap::default();
+            cache = PackedMap::default();
         } else {
             cache.clear();
         }
@@ -1298,9 +1298,9 @@ impl Checker {
         let key = get_type_instantiation_key(&type_arguments, new_alias, t.object_flags().intersects(ObjectFlags::SingleSignatureType));
         let instantiations = self.object_type_instantiations.entry(target).or_insert_with(|| {
             let initial_key = get_type_instantiation_key(type_parameters, target.alias().into(), false);
-            FxHashMap::from_iter([(initial_key, target)])
+            PackedMap::from_one(initial_key, target)
         });
-        let mut result = instantiations.get(&key).copied();
+        let mut result = instantiations.get(&key);
         if result.is_none() {
             let new_alias = new_alias.alias();
             let mut new_mapper = new_type_mapper(type_parameters, alloc_slice(&type_arguments));
