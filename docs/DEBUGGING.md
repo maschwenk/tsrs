@@ -166,6 +166,27 @@ the type. Use one checker: with several, each checker's spans are merged and wal
 about 18% instructions; its span cost is calibrated and subtracted, but patterns made of many short spans (unions,
 relations, indexed access) still read a little high.
 
+## The flow memo and its shadow mode
+
+Control flow analysis keeps the result of a sub-walk (the type at a flow node for one reference) across walks
+(`crates/tsrs_checker/src/flowmemo.rs`, notes/perf-flow-union-inference.md). It is on by default; it must never change
+output. Environment switches, read once per process:
+
+- `TSRS_FLOW_MEMO=0`: off. Every walk is Go's walk. Use it to tell whether a difference comes from the memo.
+- `TSRS_FLOW_MEMO=shadow`: every memo answer is also walked for real, and the walked result is the one used; a
+  different type, an incomplete result or a different full reference key (the stored key bytes against the walk's)
+  panics with the reference, the flow node, and where the stored answer came from. Output equals `TSRS_FLOW_MEMO=0`.
+  Run it over the suite (`TSRS_FLOW_MEMO=shadow tsrs-test run --suite all --baselines types,symbols --panic-summary`)
+  and the corpora after any change to the checker that could affect what a flow walk reads.
+- `TSRS_FLOW_MEMO_STATS=1` with `--extendedDiagnostics`: one line per checker on stderr: walks, consults, answers
+  found / blocked (by an active loop analysis, the instantiation counters, another `flowTypeCache`, transient
+  `sharedFlows` values) / used, height misses (answers not used near the depth limit), stores, frames not stored and
+  why, walks redone after the depth limit (`aborts`), shadow checks.
+- `TSRS_FLOW_MEMO_BITS=<8..24>`: log2 of the table's slots (default 12, 32 bytes each).
+
+testdata/flow-memo holds the hazard cases (each with tsgo's output); `cargo test -p tsrs_cli --test flow_memo` runs
+them with the memo on, off and in shadow mode.
+
 ## Profiling
 
 Profile the `dist` profile (fat LTO, one codegen unit; release builds also add PGO, `.github/workflows/release.yml`),

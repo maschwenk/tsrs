@@ -1,0 +1,4 @@
+a.ts(5,15): error TS2322: Type 'string' is not assignable to type 'never'.
+a.ts(9,9): error TS18048: 'z' is possibly 'undefined'.
+a.ts(10,15): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
