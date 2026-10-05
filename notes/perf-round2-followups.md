@@ -37,8 +37,18 @@ pointer compression costs about +4.9% instructions and took back most of the che
 - **`cargo test -p tsrs_cli` does not link on macOS**: `api::memory_tests` calls glibc `malloc_trim`. Every agent
   this round excluded it locally. Needs a `cfg(target_os = "linux")` from the Node API side.
 
+- **`panic = "abort"` builds segfault** (notes/perf-build-level.md, section 3): PGO `dist` and plain `--release`, on
+  every project, one checker too, in `tsrs_core::arena::pop_free` (a recycled slice's next pointer is overwritten
+  after the free). Debug-assertion builds do not crash; the unwind build does not either. Likely an aliasing or
+  lifetime bug in arena slice recycling that `nounwind` code generation exposes: worth Miri on `tsrs_core` or a
+  bisection of the recycled-slice free sites before any change of inlining exposes it in the shipped build.
+
 ## Ideas, by expected value
 
+0. **BOLT for the Linux release binaries** (notes/perf-build-level.md): -2.7% / -3.2% / -1.0% wall at 1 / 4 / 8
+   checkers on the 38k-file codebase, -3.4% to -4.0% on vscode, identical output and gates; a draft PR adds it to
+   `release.yml` with the gates on the BOLT-optimized binaries. The bench workflow needs the same step to keep
+   measuring what ships.
 1. **The heavy type graphs every checker rebuilds: fixed in the checked codebase**, not in tsrs
    (notes/perf-checker-scaling.md has the measurement). Two causes, both worth knowing for any project:
    `export default new Ctor(...)` makes the checker check the whole constructor call, pulling in every argument's
@@ -92,6 +102,11 @@ pointer compression costs about +4.9% instructions and took back most of the che
   instructions and takes 1-2% more cycles, v2 changes nothing. Nothing to ship.
 - mimalloc purge delay (never, 10 s) and eager arena commit on Linux (same note): page faults -54..-77% but no
   consistent change in cycles; eager commit +3.7% cycles.
+- Build-level options on top of PGO + fat LTO (notes/perf-build-level.md, Linux x86-64, Ice Lake): BOLT `-hugify`
+  (text on 2 MiB pages: no gain over BOLT alone), mimalloc v2 / jemalloc / glibc malloc instead of mimalloc v3 (3-14%
+  slower for 3-7% less peak), `opt-level = "s"` for the cold crates (`.text` -6%, speed unchanged), vscode at eight
+  checkers added to the PGO training (-3% instructions, cycles unchanged). `panic = "abort"` could not be measured:
+  see "Not verified yet".
 - Faster file reading for the front end (`io_uring`, `readahead`, fewer syscalls): not tried, the front end is 5.6-6.6%
   of a 4- or 8-checker run on Linux x86 (same note), below the bar where it could pay.
 
