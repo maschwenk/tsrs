@@ -191,6 +191,28 @@ sets 0). `TSRS_DERIVED_VARIANCE_RELIABLE=params` limits it to bases whose type p
 Unmeasurable nor Unreliable (`=1`: also the `this` variance); `TSRS_DERIVED_VARIANCE_BASES=A,B` (or `=-A,B`) limits it
 to (or excludes) bases by name; `TSRS_DERIVED_VARIANCE_LOG=<file>` logs every decision with its timing.
 
+## The union front cache and its shadow mode: `TSRS_UNION_CACHE`
+
+`getUnionType` calls with two or more inputs and no origin first look in a small direct-mapped table per checker
+(`crates/tsrs_checker/src/unioncache.rs`; 2^10 slots of 40 bytes, allocated on first use), keyed by the input handles
+in input order, the reduction mode and the alias (symbol and type arguments), at most 8 words. A call is stored only if
+it created no type other than the union it returns, instantiated nothing, took neither the template-literal nor the
+constrained-type-variable reduction, and did not return `errorType` (the TS2590 path); the module comment has the
+argument for why a hit then returns exactly what the uncached call would. On by default, off under
+`--checkerAssignment go`. Diagnostics, `.types`/`.symbols` output and the `Types`/`Instantiations` counters are the
+same either way.
+
+| variable | values | effect |
+| --- | --- | --- |
+| `TSRS_UNION_CACHE` | unset (on; off under `--checkerAssignment go`), `0`/`off`, `1`/`on` (on in every mode), `shadow` | `shadow` also computes the uncached answer at every hit and panics if it is a different type (the panic names the input type ids, the reduction and both answers) |
+| `TSRS_UNION_CACHE_STATS` | `1` | at exit, one line on stderr: lookups, hits, stores, why misses were not stored, calls that bypass the cache (shadow mode prints it too) |
+| `TSRS_UNION_CACHE_BITS` | default `10` | log2 of the table size. Larger tables hit slightly more often (2^12: 0.03% fewer instructions) but cost up to 2 MiB of RSS per checker (an allocation above mimalloc's medium size) |
+
+To audit a change near union construction, run the suite and a corpus with `TSRS_UNION_CACHE=shadow`: the result trees
+and the diagnostics must equal a `TSRS_UNION_CACHE=0` run, with no panics (`tsrs-test run --panic-summary`). A shadow
+failure means a stored call was not a function of its inputs: find which branch of `get_union_type_worker_inner` it
+took and either keep it out of the cache (count it in `union_front_cache.impure`) or fix the state it read.
+
 ## Profiling
 
 Profile the `dist` profile (fat LTO, one codegen unit; release builds also add PGO, `.github/workflows/release.yml`),

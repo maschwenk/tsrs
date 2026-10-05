@@ -3,7 +3,7 @@
 //!
 //! Most `getUnionType` calls build a union of a few types that was built before. Without the cache every such call
 //! flattens, sorts (`compareTypes` is structural), reduces literals, builds and hashes the type-list key and looks it up
-//! in `unionTypes` (or `unionOfUnionTypes`). The cache is a direct-mapped table (2^12 slots of 40 bytes per checker)
+//! in `unionTypes` (or `unionOfUnionTypes`). The cache is a direct-mapped table (2^10 slots of 40 bytes per checker)
 //! in front of all of that. The key is the input handles in input order, the reduction mode and, with an alias, the
 //! alias symbol and type arguments (what `getAliasKey` hashes), at most `MAX_WORDS` words; calls with an origin, or
 //! with a longer key, go the normal way.
@@ -30,7 +30,8 @@
 //! `TSRS_UNION_CACHE=shadow` computes the uncached answer at every hit as well and panics if it is a different object.
 //! `TSRS_UNION_CACHE=0` turns the cache off, `=1` forces it on under Go-compatible history too.
 //! `TSRS_UNION_CACHE_STATS=1` prints the totals (lookups, hits, stores, why misses were not stored, calls that bypass
-//! the cache) on stderr at exit; `TSRS_UNION_CACHE_BITS=<n>` sets the table size (default 12).
+//! the cache) on stderr at exit; `TSRS_UNION_CACHE_BITS=<n>` sets the table size (default 10; larger tables cost RSS,
+//! notes/perf-union-inference.md).
 
 use crate::*;
 use tsrs_core::ptr::PKey;
@@ -79,7 +80,7 @@ static SKIP_ERROR: AtomicU64 = AtomicU64::new(0);
 
 fn bits() -> u32 {
     static BITS: OnceLock<u32> = OnceLock::new();
-    *BITS.get_or_init(|| std::env::var("TSRS_UNION_CACHE_BITS").ok().and_then(|v| v.parse().ok()).filter(|b| (4..=24).contains(b)).unwrap_or(12))
+    *BITS.get_or_init(|| std::env::var("TSRS_UNION_CACHE_BITS").ok().and_then(|v| v.parse().ok()).filter(|b| (4..=24).contains(b)).unwrap_or(10))
 }
 /// Key words: the inputs, then for an alias its symbol and type arguments.
 pub(crate) const MAX_WORDS: usize = 8;
