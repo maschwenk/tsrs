@@ -936,6 +936,8 @@ pub struct Checker {
     pub census: Option<Box<crate::workcensus::Census>>,
     /// TSRS_DERIVED_VARIANCE (relater_derived.rs; off by default and under Go-compatible history).
     pub(crate) derived_variance: crate::relater_derived::DerivedVarianceMode,
+    /// TSRS_UNION_CACHE (unioncache.rs; on by default, off under Go-compatible history).
+    pub(crate) union_front_cache: crate::unioncache::UnionFrontCache,
     pub(crate) derived_depth: u32,
     /// Variance of each generic's `this` type (relater_derived.rs); None while being computed.
     pub(crate) derived_this_variances: FxHashMap<P<Type>, Option<VarianceFlags>>,
@@ -1330,6 +1332,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         instantiation_count: 0,
         census: crate::workcensus::census_path().map(|_| crate::workcensus::Census::new()),
         derived_variance: crate::relater_derived::derived_variance_mode(),
+        union_front_cache: crate::unioncache::UnionFrontCache::new(),
         derived_depth: 0,
         derived_this_variances: FxHashMap::default(),
         derived_conditional_params: FxHashMap::default(),

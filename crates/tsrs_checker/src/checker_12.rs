@@ -2634,6 +2634,18 @@ impl Checker {
         if types.len() == 1 {
             return types[0];
         }
+        // tsrs: a front cache for small unions without an origin (unioncache.rs).
+        if self.union_front_cache.mode != crate::unioncache::UnionCacheMode::Off {
+            if origin.is_none() {
+                return self.get_union_type_front_cached(types, union_reduction, alias);
+            }
+            crate::unioncache::count_bypass_origin(&self.union_front_cache);
+        }
+        self.get_union_type_ex_uncached(types, union_reduction, alias, origin)
+    }
+
+    /// `getUnionType` for two or more types, without the front cache.
+    pub(crate) fn get_union_type_ex_uncached(&mut self, types: &[P<Type>], union_reduction: UnionReduction, alias: AliasArg<'_>, origin: Option<P<Type>>) -> P<Type> {
         // We optimize for the common case of unioning a union type with some other type (such as `undefined`).
         if types.len() == 2 && origin.is_none() && (types[0].flags().intersects(TypeFlags::Union) || types[1].flags().intersects(TypeFlags::Union)) {
             let mut id1 = types[0].id;
