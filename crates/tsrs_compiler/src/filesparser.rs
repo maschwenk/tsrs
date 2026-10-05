@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use indexmap::IndexMap;
 use rayon::prelude::*;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -164,7 +165,7 @@ fn load(t: TaskId, loader: &mut fileLoader) {
                         file: None,
                         diagnostic_reason: include_reason,
                         message: &diagnostics::File_0_is_a_JavaScript_file_Did_you_mean_to_enable_the_allowJs_option,
-                        args: vec![normalized_file_path.to_string()],
+                        args: vec![normalized_file_path],
                     }));
                 } else {
                     let flat: Vec<&str> = loader.supported_extensions.iter().flatten().map(|s| s.as_str()).collect();
@@ -172,7 +173,7 @@ fn load(t: TaskId, loader: &mut fileLoader) {
                         file: None,
                         diagnostic_reason: include_reason,
                         message: &diagnostics::File_0_has_an_unsupported_extension_The_only_supported_extensions_are_1,
-                        args: vec![normalized_file_path.to_string(), format!("'{}'", flat.join("', '"))],
+                        args: vec![normalized_file_path, format!("'{}'", flat.join("', '"))],
                     }));
                 }
                 return;
@@ -205,7 +206,7 @@ fn load(t: TaskId, loader: &mut fileLoader) {
                     loader.tasks[t].data().processing_diagnostics.push(processing_diagnostic);
                     continue;
                 }
-                Ok(resolved_ref) => loader.add_sub_task(t, resolved_ref, None),
+                Ok(resolved_ref) => loader.add_sub_task(t, &resolved_ref, None),
             }
         }
 
@@ -224,7 +225,7 @@ fn load(t: TaskId, loader: &mut fileLoader) {
                 let lib_file = loader.path_for_lib_file(&name);
                 loader.add_sub_task(
                     t,
-                    resolvedRef {
+                    &resolvedRef {
                         file_name: lib_file.path.clone(),
                         increase_depth: false,
                         elide_on_depth: false,
@@ -278,7 +279,7 @@ fn load_automatic_type_directives(t: TaskId, loader: &mut fileLoader) {
     data.type_resolutions_trace = type_resolutions_trace;
     data.processing_diagnostics.extend(p_diagnostics);
     for type_resolution in to_parse_type_refs {
-        loader.add_sub_task(t, type_resolution, None);
+        loader.add_sub_task(t, &type_resolution, None);
     }
 }
 
@@ -323,6 +324,7 @@ impl TasksByCasing {
     }
 }
 
+#[derive(Clone, Copy)]
 struct queuedTask {
     task: TaskId,
     loaded: bool,
@@ -504,7 +506,7 @@ impl filesParser {
                 Some(&data) => (data, true),
                 None => {
                     let mut tasks = TasksByCasing::default();
-                    tasks.insert(loader.tasks[task].normalized_file_path.clone(), task);
+                    tasks.insert(Arc::clone(&loader.tasks[task].normalized_file_path), task);
                     w.datas.push(parseTaskData { tasks, lowest_depth: i32::MAX, started_sub_tasks: false, package_id: PackageId::default() });
                     let id = w.datas.len() - 1;
                     w.task_data_by_path.insert(path, id);
@@ -519,7 +521,7 @@ impl filesParser {
         let queuedTask { task, loaded, data, depth } = item;
         let mut start_subtasks = false;
         if loaded {
-            let casing = loader.tasks[task].normalized_file_path.clone();
+            let casing = Arc::clone(&loader.tasks[task].normalized_file_path);
             if let Some(existing_task) = loader.files_parser.datas[data].tasks.get(&casing) {
                 loader.tasks[task].loaded_task = Some(existing_task);
             } else {
@@ -531,7 +533,7 @@ impl filesParser {
 
         // Propagate packageId to data if we have one and data doesn't yet
         if loader.files_parser.datas[data].package_id.name.is_empty() && !loader.tasks[task].package_id.name.is_empty() {
-            loader.files_parser.datas[data].package_id = loader.tasks[task].package_id.clone();
+            loader.files_parser.datas[data].package_id = loader.tasks[task].package_id;
         }
 
         let current_depth = if loader.tasks[task].increase_depth { depth + 1 } else { depth };
@@ -584,7 +586,7 @@ impl filesParser {
                 candidates.push(item.task);
             }
             for candidate in candidates {
-                let key = (item.data, loader.tasks[candidate].normalized_file_path.clone());
+                let key = (item.data, Arc::clone(&loader.tasks[candidate].normalized_file_path));
                 if planned.contains(&key) || !task_needs_parse(loader, candidate) {
                     continue;
                 }
@@ -843,18 +845,18 @@ impl filesParser {
                                 &loader.compare_paths_options.current_directory,
                             );
                             if checked_absolute_path != input_absolute_path {
-                                let checked_name = checked_name.clone();
+                                let checked_name = Arc::clone(checked_name);
                                 include_data.add_processing_diagnostics_for_file_casing(
                                     loader.tasks[task].path.clone(),
                                     &checked_name,
-                                    &loader.tasks[task].normalized_file_path.to_string(),
+                                    loader.tasks[task].normalized_file_path.as_ref(),
                                     include_reason,
                                 );
                             }
                         }
                         continue;
                     } else {
-                        c.seen.insert(data, loader.tasks[task].normalized_file_path.clone());
+                        c.seen.insert(data, Arc::clone(&loader.tasks[task].normalized_file_path));
                     }
 
                     if let Some(seen_ignore_case) = &mut tasks_seen_by_name_ignore_case {
@@ -865,7 +867,7 @@ impl filesParser {
                             include_data.add_processing_diagnostics_for_file_casing(
                                 p,
                                 &n,
-                                &loader.tasks[task].normalized_file_path.to_string(),
+                                loader.tasks[task].normalized_file_path.as_ref(),
                                 include_reason,
                             );
                         } else {
@@ -883,7 +885,7 @@ impl filesParser {
                     }
 
                     let file = loader.tasks[task].file;
-                    let data_package_id = loader.files_parser.datas[data].package_id.clone();
+                    let data_package_id = loader.files_parser.datas[data].package_id;
                     if dedupe && !data_package_id.name.is_empty() {
                         if let Some(&package_id_file) = package_id_to_source_file.get(&data_package_id) {
                             if let Some(file) = file {
@@ -931,6 +933,7 @@ impl filesParser {
         let lib_len = lib_files.len();
         let mut all_files = lib_files;
         all_files.extend(files);
+        #[expect(clippy::iter_over_hash_type, reason = "shifts each index on its own")]
         for redirect_file in redirect_files_by_path.values_mut() {
             redirect_file.index += lib_len;
         }

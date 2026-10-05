@@ -67,7 +67,7 @@ pub(crate) fn new_api_session(flags: &ApiFlags) -> Result<(Arc<Session>, Arc<Cal
     let base: Arc<dyn FS> = Arc::new(bundled::wrap_fs(osvfs::fs()));
     let config = CallbackConfig::parse(&flags.callbacks)?;
     let callback_fs = Arc::new(CallbackFs::new(base, &config, Some(flags.case_sensitive)));
-    let fs: Arc<dyn FS> = callback_fs.clone();
+    let fs: Arc<dyn FS> = Arc::<CallbackFs>::clone(&callback_fs);
     let mut options = SessionOptions::new(flags.cwd.clone(), bundled::lib_path(), fs, !flags.is_async);
     options.run_external_code = flags.run_external_code;
     let session = Session::new(options);
@@ -120,7 +120,7 @@ pub fn run_api(args: &[String]) -> i32 {
     let pipe = (!flags.pipe_path.is_empty()).then(|| std::path::PathBuf::from(&flags.pipe_path));
     let result = transport::serve(pipe.as_deref(), options, |caller| {
         let (session, callback_fs) = new_api_session(&flags).expect("callbacks validated above");
-        callback_fs.set_connection(caller.clone());
+        callback_fs.set_connection(Arc::clone(&caller));
         session.set_connection(Arc::new(ClientConnAdapter(caller)));
         Arc::new(SessionHandler(session))
     });
@@ -143,7 +143,7 @@ struct ApiBuildSystem {
 
 impl System for ApiBuildSystem {
     fn fs(&self) -> Arc<dyn FS> {
-        self.fs.clone()
+        Arc::clone(&self.fs)
     }
     fn default_library_path(&self) -> &str {
         &self.default_library_path

@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use rustc_hash::FxHashSet;
 use tsrs_ast::{self as ast, CommentRange, FileReference, Kind, ModifierFlags, Node, NodeFlags, NodeList, SemanticMeaning, SourceFile, Symbol, SymbolFlags};
 use tsrs_checker::{Checker, ContextFlags, LiteralValue, Signature, SignatureKind, Type, TypeFlags};
@@ -1389,7 +1390,7 @@ pub(crate) fn find_containing_list(node: P<Node>, file: P<SourceFile>) -> Option
     // be parented by the container of the SyntaxList, not the SyntaxList itself.
     let list: std::rc::Rc<std::cell::Cell<Option<P<NodeList>>>> = Default::default();
     let visit_node: astnav::VisitNodeFn = std::rc::Rc::new(|n: Option<P<Node>>, _visitor: &mut ast::NodeVisitor| n);
-    let list_ref = list.clone();
+    let list_ref = Rc::clone(&list);
     let node_loc = node.loc();
     let visit_nodes: astnav::VisitNodesFn = std::rc::Rc::new(move |nodes: Option<P<NodeList>>, _visitor: &mut ast::NodeVisitor| {
         if let Some(n) = nodes {

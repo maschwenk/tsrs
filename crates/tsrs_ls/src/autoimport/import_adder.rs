@@ -151,7 +151,7 @@ impl ImportAdder for importAdder {
                         symbol_name.clone(),
                         newImportBinding {
                             kind: lsproto::ImportKind::Named,
-                            name: symbol_name.clone(),
+                            name: symbol_name,
                             add_as_type_only: reduce_add_as_type_only_values(prev_type_only, fix.add_as_type_only),
                             property_name: existing_fix.named_import.as_ref().unwrap().property_name.clone(),
                         },
@@ -165,7 +165,7 @@ impl ImportAdder for importAdder {
                     let prev_type_only = entry.default_import.as_ref().map(|d| d.add_as_type_only).unwrap_or_default();
                     entry.default_import = Some(newImportBinding {
                         kind: lsproto::ImportKind::Default,
-                        name: symbol_name.clone(),
+                        name: symbol_name,
                         add_as_type_only: reduce_add_as_type_only_values(prev_type_only, fix.add_as_type_only),
                         ..Default::default()
                     });
@@ -185,7 +185,7 @@ impl ImportAdder for importAdder {
                         let prev_type_only = entry.default_import.as_ref().map(|d| d.add_as_type_only).unwrap_or_default();
                         entry.default_import = Some(newImportBinding {
                             kind: lsproto::ImportKind::Default,
-                            name: symbol_name.clone(),
+                            name: symbol_name,
                             add_as_type_only: reduce_add_as_type_only_values(prev_type_only, fix.add_as_type_only),
                             ..Default::default()
                         });
@@ -197,7 +197,7 @@ impl ImportAdder for importAdder {
                             symbol_name.clone(),
                             newImportBinding {
                                 kind: lsproto::ImportKind::Named,
-                                name: symbol_name.clone(),
+                                name: symbol_name,
                                 add_as_type_only: reduce_add_as_type_only_values(prev_type_only, fix.add_as_type_only),
                                 // !!! propertyName
                                 ..Default::default()
@@ -212,7 +212,7 @@ impl ImportAdder for importAdder {
                                 symbol_name.clone(),
                                 newImportBinding {
                                     kind: lsproto::ImportKind::CommonJS,
-                                    name: symbol_name.clone(),
+                                    name: symbol_name,
                                     add_as_type_only: reduce_add_as_type_only_values(prev_type_only, fix.add_as_type_only),
                                     // !!! propertyName
                                     ..Default::default()
@@ -225,7 +225,7 @@ impl ImportAdder for importAdder {
                             );
                             entry.namespace_like_import = Some(newImportBinding {
                                 kind: lsproto::ImportKind::CommonJS,
-                                name: symbol_name.clone(),
+                                name: symbol_name,
                                 add_as_type_only: fix.add_as_type_only,
                                 ..Default::default()
                             });
@@ -239,7 +239,7 @@ impl ImportAdder for importAdder {
                         );
                         entry.namespace_like_import = Some(newImportBinding {
                             kind: lsproto::ImportKind::Namespace,
-                            name: symbol_name.clone(),
+                            name: symbol_name,
                             add_as_type_only: fix.add_as_type_only,
                             ..Default::default()
                         });
@@ -258,7 +258,7 @@ impl ImportAdder for importAdder {
     // import_adder.go:118
     fn edits(&mut self) -> Vec<lsproto::TextEdit> {
         // !!! organize imports?
-        let mut tracker = change::new_tracker(&self.ctx, &self.view.program.options(), self.format_options.clone(), self.converters.clone());
+        let mut tracker = change::new_tracker(&self.ctx, &self.view.program.options(), self.format_options.clone(), Arc::clone(&self.converters));
         let quote_preference = lsutil::get_quote_preference(self.view.importing_file, &self.preferences);
         for fix in &self.add_to_namespace {
             add_namespace_qualifier(fix, &mut tracker, self.view.importing_file);
@@ -446,7 +446,7 @@ fn import_symbols(import_adder: &mut dyn ImportAdder, symbols: &[P<Symbol>]) {
 pub fn try_get_auto_importable_reference_from_type_node(import_type_node: Option<P<Node>>, id_to_symbol: IdToSymbol) -> (Option<P<Node>>, Vec<P<Symbol>>) {
     let symbols: Rc<RefCell<Vec<P<Symbol>>>> = Rc::new(RefCell::new(Vec::new()));
     let factory = NodeFactory::new(NodeFactoryHooks::default());
-    let visit_symbols = symbols.clone();
+    let visit_symbols = Rc::clone(&symbols);
     let visit_factory = factory.clone();
     let visit = move |visitor: &mut NodeVisitor, node: P<Node>| -> Option<P<Node>> {
         if ast::is_literal_import_type_node(node) && node.as_import_type_node().qualifier.is_some() {

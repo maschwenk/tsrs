@@ -40,6 +40,13 @@ pub fn get_symbol_id(symbol: P<Symbol>) -> SymbolId {
     assign_symbol_id(symbol)
 }
 
+/// The symbol's id if it has one; unlike `get_symbol_id`, never assigns one.
+#[inline]
+pub fn get_assigned_symbol_id(symbol: P<Symbol>) -> Option<u32> {
+    let id = symbol.id.load(Ordering::Relaxed);
+    (id != 0).then_some(id)
+}
+
 #[inline(never)]
 fn assign_symbol_id(symbol: P<Symbol>) -> SymbolId {
     // Worst case, we burn a few ids if we have to CAS.

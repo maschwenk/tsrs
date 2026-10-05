@@ -315,7 +315,7 @@ impl KeywordCompletionFilters {
 fn keyword_filters_from_syntax_kind(keyword_completion: Kind) -> KeywordCompletionFilters {
     match keyword_completion {
         Kind::TypeKeyword => KeywordCompletionFilters::TypeKeyword,
-        _ => panic!("Unknown mapping from ast.Kind `{}` to KeywordCompletionFilters", format!("Kind{:?}", keyword_completion)),
+        _ => panic!("Unknown mapping from ast.Kind `Kind{:?}` to KeywordCompletionFilters", keyword_completion),
     }
 }
 
@@ -778,7 +778,7 @@ impl LanguageService {
                     Kind::MetaProperty => {
                         node = lsutil::get_first_token(parent, file).unwrap();
                         if node.kind() != Kind::ImportKeyword && node.kind() != Kind::NewKeyword {
-                            panic!("Unexpected token kind: {}", format!("Kind{:?}", node.kind()));
+                            panic!("Unexpected token kind: Kind{:?}", node.kind());
                         }
                     }
                     _ => {
@@ -1585,8 +1585,7 @@ impl getCompletionDataState {
 
         // Go checks the attribute list for nil; the parser always creates it.
         let elements: &'static [P<Node>] = import_attributes.as_import_attributes().attributes.nodes();
-        let attribute_names: Vec<&'static str> = elements.iter().map(|el| el.as_import_attribute().name.unwrap().text()).collect();
-        let existing: FxHashSet<&'static str> = attribute_names.into_iter().collect();
+        let existing: FxHashSet<&'static str> = elements.iter().map(|el| el.as_import_attribute().name.unwrap().text()).collect();
         let type_at_location = type_checker.get_type_at_location(import_attributes);
         let uniques: Vec<P<Symbol>> = type_checker.get_apparent_properties(type_at_location).into_iter().filter(|&symbol| !existing.contains(ast::symbol_name(symbol))).collect();
         self.symbols.extend(uniques);

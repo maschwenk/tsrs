@@ -33,7 +33,7 @@ impl LanguageService {
         &self,
         ctx: &Context,
         document_uri: &lsproto::DocumentUri,
-        options: &lsproto::FormattingOptions,
+        options: lsproto::FormattingOptions,
     ) -> Result<lsproto::DocumentFormattingResponse, lsproto::Error> {
         if self.user_preferences().enable_formatting.is_false() {
             return Ok(lsproto::TextEditsOrNull::default());
@@ -77,7 +77,7 @@ impl LanguageService {
         &self,
         ctx: &Context,
         document_uri: &lsproto::DocumentUri,
-        options: &lsproto::FormattingOptions,
+        options: lsproto::FormattingOptions,
         r: lsproto::Range,
     ) -> Result<lsproto::DocumentRangeFormattingResponse, lsproto::Error> {
         if self.user_preferences().enable_formatting.is_false() {
@@ -104,7 +104,7 @@ impl LanguageService {
         &self,
         ctx: &Context,
         document_uri: &lsproto::DocumentUri,
-        options: &lsproto::FormattingOptions,
+        options: lsproto::FormattingOptions,
         position: lsproto::Position,
         character: &str,
     ) -> Result<lsproto::DocumentOnTypeFormattingResponse, lsproto::Error> {

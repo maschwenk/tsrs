@@ -480,7 +480,7 @@ impl<'a> missingMemberFixer<'a> {
         if has_rest_parameter {
             let mut rest_parameter_name = "rest".to_string();
             if (max_non_rest_args as usize) < parameter_names.len() && !parameter_names[max_non_rest_args as usize].is_empty() {
-                rest_parameter_name = parameter_names[max_non_rest_args as usize].clone();
+                rest_parameter_name.clone_from(&parameter_names[max_non_rest_args as usize]);
             }
 
             let mut question_token: Option<P<Node>> = None;

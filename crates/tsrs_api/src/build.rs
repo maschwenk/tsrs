@@ -5,7 +5,7 @@
 // `SessionOptions::build_backend` so the API reuses it in-process instead of spawning `tsrs -b` per call;
 // sessions without a backend report the build methods as unsupported.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -55,7 +55,7 @@ pub trait BuildBackend: Send + Sync {
 #[derive(Default)]
 pub(crate) struct BuildState {
     next_id: AtomicU64,
-    orchestrators: Mutex<HashMap<u64, Orchestrator>>,
+    orchestrators: Mutex<FxHashMap<u64, Orchestrator>>,
 }
 
 struct Orchestrator {
@@ -112,7 +112,8 @@ impl Session {
 
     pub(crate) fn handle_dispose_build_orchestrator(&self, p: Params) -> ApiResult<Value> {
         let id = p.u64("buildOrchestratorID")?;
-        match self.build_state.orchestrators.lock().unwrap_or_else(|e| e.into_inner()).remove(&id) {
+        let removed = self.build_state.orchestrators.lock().unwrap_or_else(|e| e.into_inner()).remove(&id);
+        match removed {
             Some(_) => Ok(Value::Bool(true)),
             None => Err(ApiError::internal("build orchestrator not found while disposing")),
         }

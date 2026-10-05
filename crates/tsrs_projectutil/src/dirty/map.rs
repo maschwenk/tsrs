@@ -33,7 +33,7 @@ impl<K: Hash + Eq + Clone, T: Cloneable + Clone> MapEntry<K, T> {
 
     fn register_dirty(self: &Arc<Self>) {
         if let Some(m) = self.m.upgrade() {
-            m.dirty.lock().unwrap().insert(self.key.clone(), self.clone());
+            m.dirty.lock().unwrap().insert(self.key.clone(), Arc::clone(self));
         }
     }
 
@@ -250,6 +250,7 @@ impl<K: Hash + Eq + Clone, T: Cloneable + Clone> Map<K, T> {
             return (base, false); // no changes, return base map
         }
         let mut result: FxHashMap<K, Shared<T>> = (*base).clone();
+        #[expect(clippy::iter_over_hash_type, reason = "inserts or removes distinct keys")]
         for (key, entry) in dirty.iter() {
             let st = entry.st.lock().unwrap();
             if st.delete {

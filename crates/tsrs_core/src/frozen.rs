@@ -31,6 +31,7 @@ pub struct FrozenCell<T> {
 // SAFETY: shared access is read-only except through `borrow_mut`, whose callers follow the ownership
 // contract in the module docs (only the owning thread writes, and never while other threads can read).
 unsafe impl<T: Send + Sync> Sync for FrozenCell<T> {}
+// SAFETY: the cell owns its `T` like an `UnsafeCell<T>`, so it is `Send` when `T` is.
 unsafe impl<T: Send> Send for FrozenCell<T> {}
 
 impl<T> FrozenCell<T> {
@@ -53,8 +54,8 @@ impl<T> FrozenCell<T> {
                 panic!("FrozenCell already mutably borrowed");
             }
         }
-        // SAFETY: see the module contract; no exclusive borrow is live.
         FrozenRef {
+            // SAFETY: see the module contract; no exclusive borrow is live.
             value: unsafe { &*self.value.get() },
             #[cfg(any(debug_assertions, feature = "checked-cells"))]
             state: &self.state,
@@ -70,8 +71,8 @@ impl<T> FrozenCell<T> {
                 panic!("FrozenCell already borrowed");
             }
         }
-        // SAFETY: see the module contract; only the owning thread writes, and no other borrow is live.
         FrozenRefMut {
+            // SAFETY: see the module contract; only the owning thread writes, and no other borrow is live.
             value: unsafe { &mut *self.value.get() },
             #[cfg(any(debug_assertions, feature = "checked-cells"))]
             state: &self.state,
@@ -89,8 +90,8 @@ impl<T> FrozenCell<T> {
                 panic!("FrozenCell already borrowed");
             }
         }
-        // SAFETY: the caller's exclusive lock excludes every other access.
         FrozenRefMut {
+            // SAFETY: the caller's exclusive lock excludes every other access.
             value: unsafe { &mut *self.value.get() },
             #[cfg(any(debug_assertions, feature = "checked-cells"))]
             state: &self.state,
@@ -322,13 +323,17 @@ impl OwnedTaggedStrCell {
     }
 
     #[inline]
+    #[expect(
+        clippy::disallowed_methods,
+        reason = "from_utf8 here and in PackedStr::as_str: +5% instructions, one checker (notes/lint-paydown-compiler.md)"
+    )]
     pub fn get(&self) -> &'static str {
         let w = self.0.get();
         let p = std::ptr::with_exposed_provenance::<u8>((w & TAGGED_ADDR) as usize);
         let len = (w >> TAGGED_LEN_SHIFT) & TAGGED_LEN_MASK;
         // SAFETY: built by `pack` from a `&'static str` of this length, or by `pack_long` (length prefix + bytes).
         unsafe {
-            let (p, len) = if len == TAGGED_LEN_MASK { (p.add(4), (p as *const u32).read() as usize) } else { (p, len as usize) };
+            let (p, len) = if len == TAGGED_LEN_MASK { (p.add(4), p.cast::<u32>().read_unaligned() as usize) } else { (p, len as usize) };
             std::str::from_utf8_unchecked(std::slice::from_raw_parts(p, len))
         }
     }

@@ -48,7 +48,7 @@ fn timer_thread() -> &'static timerThread {
                             }
                             st.heap.pop();
                             let fire = match st.pending.get(&id) {
-                                Some((g, f)) if *g == generation => Some(f.clone()),
+                                Some((g, f)) if *g == generation => Some(Arc::clone(f)),
                                 _ => None,
                             };
                             if let Some(f) = fire {
@@ -77,7 +77,7 @@ pub fn after_func(d: Duration, f: impl Fn() + Send + Sync + 'static) -> Timer {
     let mut st = t.st.lock().unwrap();
     st.next_id += 1;
     let id = st.next_id;
-    schedule(&mut st, id, d, f.clone());
+    schedule(&mut st, id, d, Arc::clone(&f));
     drop(st);
     t.wake.notify_one();
     Timer { id, f }
@@ -102,7 +102,7 @@ impl Timer {
         let t = timer_thread();
         let mut st = t.st.lock().unwrap();
         let was_pending = st.pending.contains_key(&self.id);
-        schedule(&mut st, self.id, d, self.f.clone());
+        schedule(&mut st, self.id, d, Arc::clone(&self.f));
         drop(st);
         t.wake.notify_one();
         was_pending

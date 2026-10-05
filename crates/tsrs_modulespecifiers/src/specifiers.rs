@@ -262,7 +262,7 @@ pub fn get_each_file_name_of_module(
     let output_and_reference = host.get_project_reference_from_source(&imported_path);
     if let Some(output_and_reference) = output_and_reference {
         if !output_and_reference.output_dts.is_empty() {
-            reference_redirect = output_and_reference.output_dts.clone();
+            reference_redirect.clone_from(&output_and_reference.output_dts);
         }
     }
 
@@ -607,7 +607,7 @@ pub(crate) fn get_local_module_specifier(
         if !package_json_paths_are_equal(
             &nearest_target_package_json,
             &nearest_source_package_json,
-            tspath::ComparePathsOptions {
+            &tspath::ComparePathsOptions {
                 use_case_sensitive_file_names: host.use_case_sensitive_file_names(),
                 current_directory: host.get_current_directory().to_string(),
             },
@@ -885,15 +885,19 @@ pub(crate) fn try_directory_with_package_json(
 
         let mut from_exports = String::new();
         if let Some(content) = package_json_content.filter(|c| c.fields.exports.type_() != JSONValueType::NotPresent) {
-            from_exports = try_get_module_name_from_exports(
-                options,
-                host,
-                &path_obj.file_name,
-                &package_root_path,
-                &package_name,
-                &content.fields.exports,
-                &conditions,
-            );
+            let compute = || try_get_module_name_from_exports(options, host, &path_obj.file_name, &package_root_path, &package_name, &content.fields.exports, &conditions);
+            from_exports = match host.exports_module_name_cache(options) {
+                Some(cache) => {
+                    // the exports map is the one of `package_root_path`'s package.json
+                    let mut key = format!("{}\0{}\0{}", path_obj.file_name, package_root_path, package_name);
+                    for condition in &conditions {
+                        key.push('\0');
+                        key.push_str(condition);
+                    }
+                    cache.get_or_compute(key, compute)
+                }
+                None => compute(),
+            };
         }
         if !from_exports.is_empty() {
             return pkgJsonDirAttemptResult { module_file_to_try: from_exports, verbatim_from_exports: true, ..Default::default() };
@@ -921,11 +925,11 @@ pub(crate) fn try_directory_with_package_json(
     let mut main_file_relative = "index.js".to_string();
     if let Some(content) = package_json_content {
         if content.fields.typings.valid {
-            main_file_relative = content.fields.typings.value.clone();
+            main_file_relative.clone_from(&content.fields.typings.value);
         } else if content.fields.types.valid {
-            main_file_relative = content.fields.types.value.clone();
+            main_file_relative.clone_from(&content.fields.types.value);
         } else if content.fields.main.valid {
-            main_file_relative = content.fields.main.value.clone();
+            main_file_relative.clone_from(&content.fields.main.value);
         }
     }
 

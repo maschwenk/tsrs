@@ -78,7 +78,7 @@ impl ParsedPatternsCache {
     }
 
     pub(crate) fn get(&self, path_mappings: Option<&OrderedMap<String, Vec<String>>>) -> P<ParsedPatterns> {
-        let key = path_mappings.map_or(0, |m| m as *const OrderedMap<String, Vec<String>> as usize);
+        let key = path_mappings.map_or(0, |m| std::ptr::from_ref::<OrderedMap<String, Vec<String>>>(m) as usize);
         match self.cache.load(&key) {
             Some(patterns) => patterns,
             None => self.cache.load_or_store(key, P::new(try_parse_patterns(path_mappings))).0,
@@ -95,16 +95,16 @@ pub struct ResolutionData {
     pub(crate) package_json_info_cache: P<InfoCache>,
 }
 
-pub(crate) fn new_resolution_data(opts: &ResolverOptions) -> P<ResolutionData> {
+pub(crate) fn new_resolution_data(opts: ResolverOptions) -> P<ResolutionData> {
     let package_json_info_cache = match opts.package_json_cache {
         Some(cache) => cache,
         None => P::new(packagejson::new_info_cache(opts.host.get_current_directory(), opts.host.fs().use_case_sensitive_file_names())),
     };
     P::new(ResolutionData {
         compiler_options: opts.compiler_options,
-        typings_location: opts.typings_location.clone(),
-        project_name: opts.project_name.clone(),
-        extra_extensions: opts.extra_extensions.clone(),
+        typings_location: opts.typings_location,
+        project_name: opts.project_name,
+        extra_extensions: opts.extra_extensions,
         package_json_info_cache,
     })
 }

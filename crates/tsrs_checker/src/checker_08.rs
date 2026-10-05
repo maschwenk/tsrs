@@ -242,7 +242,7 @@ impl Checker {
         }
 
         let mut source_file: Option<P<SourceFile>> = None;
-        if is_resolved && (resolution_diagnostic.is_none() || std::ptr::eq(resolution_diagnostic.unwrap(), &diagnostics::Module_0_was_resolved_to_1_but_jsx_is_not_set)) {
+        if is_resolved && (resolution_diagnostic.is_none() || std::ptr::eq(resolution_diagnostic.unwrap(), &raw const diagnostics::Module_0_was_resolved_to_1_but_jsx_is_not_set)) {
             source_file = self.program.get_source_file_for_resolved_module(resolved_module.unwrap().resolved_file_name);
         }
 
@@ -317,11 +317,11 @@ impl Checker {
                             // Get outDir paths, defaulting to root directories if not specified
                             let mut own_out_dir = self.compiler_options.out_dir.clone();
                             if own_out_dir.is_empty() {
-                                own_out_dir = own_root_dir.clone();
+                                own_out_dir = own_root_dir;
                             }
                             let mut other_out_dir = redirect.compiler_options().unwrap().out_dir.clone();
                             if other_out_dir.is_empty() {
-                                other_out_dir = other_root_dir.clone();
+                                other_out_dir = other_root_dir;
                             }
                             let out_dir_path = tspath::get_relative_path_from_directory(&own_out_dir, &other_out_dir, &compare_options);
 
@@ -391,7 +391,7 @@ impl Checker {
         let error_node = error_node?;
 
         if is_resolved && !resolution_extension_is_ts_or_json(resolved_module.unwrap().extension) && resolution_diagnostic.is_none()
-            || resolution_diagnostic.is_some_and(|d| std::ptr::eq(d, &diagnostics::Could_not_find_a_declaration_file_for_module_0_1_implicitly_has_an_any_type))
+            || resolution_diagnostic.is_some_and(|d| std::ptr::eq(d, &raw const diagnostics::Could_not_find_a_declaration_file_for_module_0_1_implicitly_has_an_any_type))
         {
             let resolved_module = resolved_module.unwrap();
             if is_for_augmentation {
@@ -646,9 +646,8 @@ impl Checker {
             let pattern_ambient_modules = self.pattern_ambient_modules.clone();
             for module in pattern_ambient_modules {
                 let symbol = self.get_merged_symbol(module.symbol);
-                if !seen.contains(&symbol) {
+                if seen.insert(symbol) {
                     self.ambient_modules.push(symbol);
-                    seen.insert(symbol);
                 }
             }
         }
@@ -1334,6 +1333,10 @@ impl Checker {
                     let exported_symbols = visit(c, st, resolved_module, Some(node), is_type_only || node.is_type_only());
                     c.extend_export_symbols(nested_symbols, exported_symbols, Some(&mut lookup_table), Some(node));
                 }
+                #[expect(
+                    clippy::iter_over_hash_type,
+                    reason = "Go ranges over the map too; the loop only adds diagnostics (each names its own export), which the collection sorts on read"
+                )]
                 for (id, s) in lookup_table.iter() {
                     // It's not an error if the file with multiple `export *`s with duplicate names exports a member with that name itself
                     if id == InternalSymbolNameExportEquals || s.exports_with_duplicate.borrow().is_empty() || symbols.lookup(id).is_some() {
@@ -1389,6 +1392,7 @@ impl Checker {
             }
         }
         let mut type_only_export_star_map = st.type_only_export_star_map.unwrap_or_default();
+        #[expect(clippy::iter_over_hash_type, reason = "only removes keys from another map")]
         for name in st.non_type_only_names.keys() {
             type_only_export_star_map.remove(name);
         }
@@ -1593,7 +1597,7 @@ impl Checker {
     }
 
     // checker.go:16720
-    pub(crate) fn get_declaration_of_alias_symbol(&mut self, symbol: P<Symbol>) -> Option<P<Node>> {
+    pub fn get_declaration_of_alias_symbol(&mut self, symbol: P<Symbol>) -> Option<P<Node>> {
         symbol.declarations().iter().rev().copied().find(|d| ast::is_alias_symbol_declaration(*d))
     }
 
@@ -1701,6 +1705,18 @@ impl Checker {
     // checker.go:16816
     pub fn get_type_of_symbol(&mut self, symbol: P<Symbol>) -> P<Type> {
         let check_flags = symbol.check_flags.get();
+        // The cached type of an instantiated symbol or a variable / parameter / property (the two branches below that
+        // return `resolved_type` when it is set), read here so that this hit returns without a frame.
+        let value_symbol = !check_flags.intersects(CheckFlags::DeferredType)
+            && (check_flags.intersects(CheckFlags::Instantiated)
+                || !check_flags.intersects(CheckFlags::Mapped | CheckFlags::ReverseMapped)
+                    && !symbol.flags().intersects(SymbolFlags::Accessor)
+                    && symbol.flags().intersects(SymbolFlags::Variable | SymbolFlags::Property));
+        if value_symbol {
+            if let Some(t) = self.resolved_type_of_value_symbol(symbol) {
+                return t;
+            }
+        }
         if check_flags.intersects(CheckFlags::DeferredType) {
             return self.get_type_of_symbol_with_deferred_type(symbol);
         }
@@ -1738,7 +1754,16 @@ impl Checker {
         self.remove_missing_type(t, symbol.flags().intersects(SymbolFlags::Optional))
     }
 
+    /// The cached answer of `get_type_of_instantiated_symbol` / `get_type_of_variable_or_parameter_or_property`, read
+    /// without creating links or assigning an id, so that `get_type_of_symbol` returns it without a frame (the
+    /// functions that compute it are out of line).
+    #[inline]
+    fn resolved_type_of_value_symbol(&self, symbol: P<Symbol>) -> Option<P<Type>> {
+        self.value_symbol_links.try_get_if_id_assigned(symbol)?.resolved_type.get()
+    }
+
     // checker.go:16851
+    #[inline(never)]
     pub(crate) fn get_type_of_instantiated_symbol(&mut self, symbol: P<Symbol>) -> P<Type> {
         let links = self.value_symbol_links.get(symbol);
         if links.resolved_type.get().is_none() {
@@ -1765,6 +1790,7 @@ impl Checker {
     }
 
     // checker.go:16867
+    #[inline(never)]
     pub(crate) fn get_type_of_variable_or_parameter_or_property(&mut self, symbol: P<Symbol>) -> P<Type> {
         let links = self.value_symbol_links.get(symbol);
         if links.resolved_type.get().is_none() {

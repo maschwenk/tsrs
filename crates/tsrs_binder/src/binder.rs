@@ -1876,7 +1876,7 @@ impl Binder {
         let locals = ast::get_locals(self.file.as_node());
         if (*locals).get(name).is_none() {
             let symbol = self.new_symbol(SymbolFlags::FunctionScopedVariable | SymbolFlags::ModuleExports, name);
-            symbol.set_declarations(&vec![self.file.as_node()]);
+            symbol.set_declarations(&[self.file.as_node()]);
             symbol.set_value_declaration(Some(self.file.as_node()));
             if name == "module" {
                 let exports_property = self.new_symbol(SymbolFlags::ModuleExports | SymbolFlags::Property, "exports");

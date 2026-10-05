@@ -48,8 +48,19 @@ pub(crate) struct varScope {
 }
 
 pub fn new_emit_context() -> P<EmitContext> {
-    let c = P::new(EmitContext {
-        factory: new_node_factory_for_context(),
+    new_emit_context_in(false)
+}
+
+/// tsrs-only: an emit context whose nodes die with the thread's scratch region (one file's emit,
+/// notes/mem-emit-regions.md): the context and every node its factory creates (also through a node builder that
+/// uses it) are allocated there (`P::new_scratch`). Without an entered scratch region it is `new_emit_context`.
+pub fn new_scratch_emit_context() -> P<EmitContext> {
+    new_emit_context_in(true)
+}
+
+fn new_emit_context_in(scratch: bool) -> P<EmitContext> {
+    let c = P::new_in(scratch, EmitContext {
+        factory: new_node_factory_for_context(scratch),
         auto_generate: RefCell::default(),
         text_source: RefCell::default(),
         original: RefCell::default(),
@@ -70,21 +81,29 @@ pub fn get_emit_context() -> (P<EmitContext>, impl FnOnce()) {
     (c, move || c.reset())
 }
 
+/// `get_emit_context` with `new_scratch_emit_context`.
+pub fn get_scratch_emit_context() -> (P<EmitContext>, impl FnOnce()) {
+    let c = new_scratch_emit_context();
+    (c, move || c.reset())
+}
+
 impl EmitContext {
     pub fn new() -> P<EmitContext> {
         new_emit_context()
     }
 
+    // Go returns the context to a pool; tsrs allocates a new one per file (in the arena, never freed), so `reset`
+    // also releases the tables' memory instead of keeping their capacity.
     pub fn reset(&self) {
-        self.auto_generate.borrow_mut().clear();
-        self.text_source.borrow_mut().clear();
-        self.original.borrow_mut().clear();
-        self.emit_nodes.borrow_mut().clear();
-        self.assigned_name.borrow_mut().clear();
-        self.class_this.borrow_mut().clear();
+        *self.auto_generate.borrow_mut() = Default::default();
+        *self.text_source.borrow_mut() = Default::default();
+        *self.original.borrow_mut() = Default::default();
+        *self.emit_nodes.borrow_mut() = Default::default();
+        *self.assigned_name.borrow_mut() = Default::default();
+        *self.class_this.borrow_mut() = Default::default();
         *self.var_scope_stack.borrow_mut() = Stack::default();
         *self.let_scope_stack.borrow_mut() = Stack::default();
-        self.emit_helpers.borrow_mut().clear();
+        *self.emit_helpers.borrow_mut() = Default::default();
     }
 
     // emitcontext.go:90
@@ -92,7 +111,7 @@ impl EmitContext {
     pub fn new_node_visitor(&self, visit: VisitFn) -> NodeVisitor {
         // SAFETY: an EmitContext is only ever created by `new_emit_context`, which allocates it in the process-lifetime
         // arena (`P::new`), so `self` is `'static`.
-        let c: P<EmitContext> = P::from_static(unsafe { &*(self as *const EmitContext) });
+        let c: P<EmitContext> = P::from_static(unsafe { &*std::ptr::from_ref::<EmitContext>(self) });
         tsrs_ast::new_node_visitor(
             Some(visit),
             Some(self.factory.as_node_factory().clone()),
@@ -183,7 +202,7 @@ impl EmitContext {
     pub fn add_variable_declaration(&self, name: P<Node>) {
         let var_decl = self.factory.new_variable_declaration(name, None /*exclamationToken*/, None /*typeNode*/, None /*initializer*/);
         self.set_emit_flags(var_decl, EmitFlags::NoNestedSourceMaps);
-        let scope = self.var_scope_stack.borrow().peek().clone();
+        let scope = Rc::clone(self.var_scope_stack.borrow().peek());
         let mut scope = scope.borrow_mut();
         scope.variables.push(var_decl);
         if scope.flags.intersects(environmentFlags::InParameters) {
@@ -196,7 +215,7 @@ impl EmitContext {
     // NOTE: This is the equivalent of `transformContext.hoistFunctionDeclaration` in Strada.
     pub fn add_hoisted_function_declaration(&self, node: P<Node>) {
         self.set_emit_flags(node, EmitFlags::CustomPrologue);
-        let scope = self.var_scope_stack.borrow().peek().clone();
+        let scope = Rc::clone(self.var_scope_stack.borrow().peek());
         scope.borrow_mut().functions.push(node);
     }
 
@@ -263,7 +282,7 @@ impl EmitContext {
     pub fn add_lexical_declaration(&self, name: P<Node>) {
         let var_decl = self.factory.new_variable_declaration(name, None /*exclamationToken*/, None /*typeNode*/, None /*initializer*/);
         self.set_emit_flags(var_decl, EmitFlags::NoNestedSourceMaps);
-        let scope = self.let_scope_stack.borrow().peek().clone();
+        let scope = Rc::clone(self.let_scope_stack.borrow().peek());
         scope.borrow_mut().variables.push(var_decl);
     }
 
@@ -757,7 +776,7 @@ impl EmitContext {
 
     pub fn visit_parameters(&self, nodes: Option<P<NodeList>>, visitor: &mut NodeVisitor) -> Option<P<NodeList>> {
         self.start_variable_environment();
-        let scope = self.var_scope_stack.borrow().peek().clone();
+        let scope = Rc::clone(self.var_scope_stack.borrow().peek());
         let old_flags = scope.borrow().flags;
         scope.borrow_mut().flags |= environmentFlags::InParameters;
         let mut nodes = visitor.visit_nodes(nodes);
@@ -860,7 +879,7 @@ impl EmitContext {
 
     pub fn add_initialization_statement(&self, node: P<Node>) {
         // Go's `Peek()` panics on an empty stack before the nil check below can fire.
-        let scope = self.var_scope_stack.borrow().peek().clone();
+        let scope = Rc::clone(self.var_scope_stack.borrow().peek());
         self.add_emit_flags(node, EmitFlags::CustomPrologue);
         scope.borrow_mut().initialization_statements.push(node);
     }

@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::any::Any;
 use std::io::{Read, Write};
 use std::panic::AssertUnwindSafe;
@@ -59,7 +60,7 @@ pub fn new_server(opts: ServerOptions) -> Arc<Server> {
         w: Mutex::new(opts.out),
         background_ctx: OnceLock::new(),
         stderr: Mutex::new(opts.err),
-        logger: Arc::new(new_logger(weak.clone())),
+        logger: Arc::new(new_logger(Weak::clone(weak))),
         init_started: AtomicBool::new(false),
         client_seq: AtomicI32::new(0),
         request_queue: new_dynamic_queue(),
@@ -306,7 +307,7 @@ impl responseChan {
     // `select { case <-ctx.Done(): ...; case resp := <-responseChan: ... }`; Ok(None) is a receive from the
     // closed, empty channel (Go: a nil response).
     fn recv(&self, ctx: &Context) -> Result<Option<ResponseMessage>, ContextError> {
-        let inner = self.inner.clone();
+        let inner = Arc::clone(&self.inner);
         let guard = self.inner.0.lock().unwrap();
         let mut state = wait_until(ctx, &self.inner.1, guard, |s| s.value.is_some() || s.closed, move || {
             drop(inner.0.lock().unwrap());
@@ -365,7 +366,7 @@ impl Server {
     }
 
     pub(crate) fn logger_arc(&self) -> Arc<logger> {
-        self.logger.clone()
+        Arc::clone(&self.logger)
     }
 
     // server.go:257
@@ -480,7 +481,7 @@ impl Server {
     // synchronization and pull diagnostics for the given otherwise unsupported file extensions so the editor forwards their
     // open/change/close notifications to the server and requests diagnostics for them. It is called with the
     // full desired set each time it changes; an empty slice removes any prior registration.
-    pub fn register_content_mapper_extensions(&self, ctx: &Context, extensions: Vec<String>) -> Result<(), Error> {
+    pub fn register_content_mapper_extensions(&self, ctx: &Context, extensions: &[String]) -> Result<(), Error> {
         if !self.client_capabilities().text_document.synchronization.dynamic_registration {
             return Ok(());
         }
@@ -531,7 +532,7 @@ impl Server {
         }
 
         let mut filters = Vec::with_capacity(extensions.len());
-        for ext in &extensions {
+        for ext in extensions {
             filters.push(lsproto::TextDocumentFilterLanguageOrSchemeOrPattern {
                 pattern: Some(lsproto::TextDocumentFilterPattern {
                     pattern: lsproto::PatternOrRelativePattern { pattern: Some(format!("**/*{}", ext)), ..Default::default() },
@@ -542,7 +543,7 @@ impl Server {
         }
         let selector = lsproto::DocumentSelectorOrNull { document_selector: Some(filters) };
         let mut content_mapper_file_rename_filters = Vec::with_capacity(extensions.len());
-        for extension in &extensions {
+        for extension in extensions {
             content_mapper_file_rename_filters.push(lsproto::FileOperationFilter {
                 scheme: Some("file".to_string()),
                 pattern: lsproto::FileOperationPattern { glob: format!("**/*{}", extension), ..Default::default() },
@@ -769,7 +770,7 @@ impl Server {
             registration(
                 CONTENT_MAPPER_CALL_HIERARCHY_REGISTRATION_ID,
                 lsproto::RegisterOptions {
-                    text_document_prepare_call_hierarchy: Some(lsproto::CallHierarchyRegistrationOptions { document_selector: selector.clone(), ..Default::default() }),
+                    text_document_prepare_call_hierarchy: Some(lsproto::CallHierarchyRegistrationOptions { document_selector: selector, ..Default::default() }),
                     ..Default::default()
                 },
             ),
@@ -957,12 +958,12 @@ impl Server {
         let (g, ctx) = errGroup::with_context(ctx);
         let _ = self.background_ctx.set(ctx.clone());
         {
-            let s = self.clone();
+            let s = Arc::clone(self);
             let ctx = ctx.clone();
             g.go("lsp-dispatch", move || s.dispatch_loop(&ctx));
         }
         {
-            let s = self.clone();
+            let s = Arc::clone(self);
             let ctx = ctx.clone();
             g.go("lsp-write", move || s.write_loop(&ctx));
         }
@@ -971,7 +972,7 @@ impl Server {
         // (Go's group member that waits for ctx.Done() or the read loop's error is folded into the read
         // thread: it reports its error to the group when it returns.)
         {
-            let s = self.clone();
+            let s = Arc::clone(self);
             let ctx = ctx.clone();
             let g = g.clone();
             spawn_server_thread("lsp-read", move || {
@@ -1004,7 +1005,7 @@ impl Server {
                     if err.is_code(ErrorCode::InvalidParams) {
                         if let Some(msg) = &msg {
                             if msg.kind == MessageKind::Request {
-                                id = msg.as_request().id.clone();
+                                id.clone_from(&msg.as_request().id);
                             }
                         }
                     }
@@ -1026,7 +1027,7 @@ impl Server {
                         }
                     };
                     let resp = self.handle_initialize(ctx, params, &req)?;
-                    self.send_result(req.id.as_ref(), resp)?;
+                    self.send_result(req.id.as_ref(), &resp)?;
                 } else {
                     self.send_error(req.id.as_ref(), ErrorCode::ServerNotInitialized.into())?;
                 }
@@ -1080,7 +1081,7 @@ impl Server {
                 let (c, cancel_func) = context::with_request_id(&request_ctx, &id.string()).with_cancel();
                 request_ctx = c;
                 cancel = Some(cancel_func.clone());
-                self.pending_client_requests.lock().unwrap().insert(id.clone(), pendingClientRequest { req: req.clone(), cancel: cancel_func });
+                self.pending_client_requests.lock().unwrap().insert(id.clone(), pendingClientRequest { req: Arc::clone(&req), cancel: cancel_func });
             }
 
             match self.handle_request_or_notification(&request_ctx, &req) {
@@ -1089,7 +1090,7 @@ impl Server {
                     self.remove_request(req.id.as_ref(), cancel.as_ref());
                 }
                 Ok(Some(do_async_work)) => {
-                    let s = self.clone();
+                    let s = Arc::clone(self);
                     let lsp_exit = lsp_exit.clone();
                     workerpool::go(move || {
                         if let Err(ls_error) = do_async_work() {
@@ -1194,7 +1195,7 @@ impl Server {
     }
 
     // server.go:1096
-    pub(crate) fn send_result(&self, id: Option<&ID>, result: impl Json) -> Result<(), Error> {
+    pub(crate) fn send_result(&self, id: Option<&ID>, result: &impl Json) -> Result<(), Error> {
         self.send_response(ResponseMessage { id: id.cloned(), result: Some(result.to_json()), ..Default::default() })
     }
 
@@ -1263,7 +1264,7 @@ impl Server {
                 Ok(do_async_work) => do_async_work,
             };
             if let Some(do_async_work) = do_async_work {
-                let s = self.clone();
+                let s = Arc::clone(self);
                 let method = req.method;
                 return Ok(Some(Box::new(move || {
                     // note: ctx.Err() has to be checked in the async work to allow async handlers to cleanup resources correctly
@@ -1300,9 +1301,9 @@ impl Server {
     ) -> Result<(Arc<LanguageService>, Arc<dyn tsrs_ls::CrossProjectOrchestrator>), Error> {
         let (default_project, default_ls, all_projects) = self.session().get_language_service_and_projects_for_file(ctx, uri)?;
         let orchestrator: Arc<dyn tsrs_ls::CrossProjectOrchestrator> = Arc::new(crossProjectOrchestrator {
-            server: self.clone(),
+            server: Arc::clone(self),
             req: Arc::new(req.clone()),
-            default_project: default_project.arc().clone(),
+            default_project: Arc::<project::Project>::clone(default_project.arc()),
             all_projects,
         });
         Ok((default_ls, orchestrator))
@@ -1314,14 +1315,14 @@ impl Server {
         match recover_scope(f) {
             Ok(result) => result,
             Err((payload, stack)) => {
-                self.recover(req, payload, &stack);
+                self.recover(req, &payload, &stack);
                 Ok(())
             }
         }
     }
 
     // server.go:1477
-    fn recover(&self, req: &RequestMessage, r: Box<dyn Any + Send>, stack: &str) {
+    fn recover(&self, req: &RequestMessage, r: &Box<dyn Any + Send>, stack: &str) {
         let r = panic_value_string(&r);
         self.logger.errorf(format_args!("panic handling request {}: {}\n{}", req.method, r, stack));
         if req.id.is_some() {
@@ -1360,7 +1361,7 @@ impl Server {
         self.init_started.store(true, Ordering::SeqCst);
 
         let params = Arc::new(params);
-        let _ = self.initialize_params.set(params.clone());
+        let _ = self.initialize_params.set(Arc::clone(&params));
         // The spec types initializationOptions as nullable; treat both null and an
         // absent value as empty options so the rest of the server can read fields
         // off s.initializationOptions without nil-checking the container.
@@ -1562,7 +1563,7 @@ impl Server {
             self.logger.logf(format_args!("file watching: disabled (client lacks dynamic watch registration and builtin watcher backend is not fast-recursive)"));
         }
 
-        let initialize_params = self.initialize_params.get().unwrap().clone();
+        let initialize_params = Arc::clone(self.initialize_params.get().unwrap());
         let mut cwd = self.cwd.clone();
         if self.client_capabilities().workspace.workspace_folders
             && matches!(&initialize_params.workspace_folders, Some(lsproto::WorkspaceFoldersOrNull { workspace_folders: Some(folders), .. }) if folders.len() == 1)
@@ -1572,18 +1573,18 @@ impl Server {
         } else if let Some(root_uri) = &initialize_params.root_uri.document_uri {
             cwd = root_uri.file_name();
         } else if let Some(lsproto::StringOrNull { string: Some(root_path), .. }) = &initialize_params.root_path {
-            cwd = root_path.clone();
+            cwd.clone_from(root_path);
         }
         if !tspath::path_is_absolute(&cwd) {
-            cwd = self.cwd.clone();
+            cwd.clone_from(&self.cwd);
         }
 
         self.telemetry_enabled.store(enable_telemetry, Ordering::SeqCst);
 
-        let client: Arc<dyn project::Client> = self.clone();
+        let client: Arc<dyn project::Client> = Arc::<Server>::clone(self);
         let logger: Arc<dyn logging::Logger> = self.logger_arc();
-        let npm_executor: Arc<dyn project::NpmExecutor> = self.clone();
-        let session = project::new_session(project::SessionInit {
+        let npm_executor: Arc<dyn project::NpmExecutor> = Arc::<Server>::clone(self);
+        let session = project::new_session(&project::SessionInit {
             background_ctx: lsproto::with_client_capabilities(&self.background_ctx(), self.client_capabilities_arc()),
             options: Arc::new(project::SessionOptions {
                 current_directory: cwd,
@@ -1605,7 +1606,7 @@ impl Server {
             parse_cache: self.parse_cache.clone(),
             content_mapped_parse_cache: None,
         });
-        let _ = self.session.set(session.clone());
+        let _ = self.session.set(Arc::clone(&session));
 
         let user_preferences = self.request_configuration(ctx)?;
         session.initialize_with_user_config(user_preferences);
@@ -2003,7 +2004,7 @@ impl Server {
         match recover_scope(|| language_service.resolve_completion_item(ctx, params, Some(&data))) {
             Ok(result) => result,
             Err((payload, stack)) => {
-                self.recover(req_msg, payload, &stack);
+                self.recover(req_msg, &payload, &stack);
                 Err(Error::new(format!("panic handling request {}", req_msg.method)))
             }
         }
@@ -2011,7 +2012,7 @@ impl Server {
 
     // server.go:2129
     fn handle_document_format(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::DocumentFormattingParams) -> Result<lsproto::DocumentFormattingResponse, Error> {
-        ls.provide_format_document(ctx, &params.text_document.uri, &params.options)
+        ls.provide_format_document(ctx, &params.text_document.uri, params.options)
     }
 
     // server.go:2137
@@ -2021,7 +2022,7 @@ impl Server {
         ls: &Arc<LanguageService>,
         params: lsproto::DocumentRangeFormattingParams,
     ) -> Result<lsproto::DocumentRangeFormattingResponse, Error> {
-        ls.provide_format_document_range(ctx, &params.text_document.uri, &params.options, params.range)
+        ls.provide_format_document_range(ctx, &params.text_document.uri, params.options, params.range)
     }
 
     // server.go:2146
@@ -2031,7 +2032,7 @@ impl Server {
         ls: &Arc<LanguageService>,
         params: lsproto::DocumentOnTypeFormattingParams,
     ) -> Result<lsproto::DocumentOnTypeFormattingResponse, Error> {
-        ls.provide_format_document_on_type(ctx, &params.text_document.uri, &params.options, params.position, &params.ch)
+        ls.provide_format_document_on_type(ctx, &params.text_document.uri, params.options, params.position, &params.ch)
     }
 
     // server.go:2156
@@ -2463,7 +2464,7 @@ impl handlerMap {
                 if let Some(err) = ctx.err() {
                     return Err(err.into());
                 }
-                s.send_result(req.id.as_ref(), resp)?;
+                s.send_result(req.id.as_ref(), &resp)?;
                 Ok(None)
             }),
         );
@@ -2483,7 +2484,7 @@ impl handlerMap {
             Box::new(move |s, ctx, req| {
                 let params = req.unmarshal_params::<Req>()?;
                 let ls = s.session().get_language_service(ctx, params.text_document_uri())?;
-                let (s, ctx, req) = (s.clone(), ctx.clone(), req.clone());
+                let (s, ctx, req) = (Arc::clone(s), ctx.clone(), Arc::clone(req));
                 Ok(Some(Box::new(move || {
                     s.with_recover(&req, || {
                         let resp = f(&s, &ctx, &ls, params);
@@ -2494,7 +2495,7 @@ impl handlerMap {
                         if let Some(err) = ctx.err() {
                             return Err(err.into());
                         }
-                        s.send_result(req.id.as_ref(), resp)
+                        s.send_result(req.id.as_ref(), &resp)
                     })
                 })))
             }),
@@ -2516,7 +2517,7 @@ impl handlerMap {
                 let params = req.unmarshal_params::<Req>()?;
                 let uri = params.text_document_uri().clone();
                 s.session().with_language_service_and_snapshot(ctx, &uri, |language_service, snapshot| {
-                    let (s, ctx, req) = (s.clone(), ctx.clone(), req.clone());
+                    let (s, ctx, req) = (Arc::clone(s), ctx.clone(), Arc::clone(req));
                     Ok(Some(Box::new(move || {
                         s.with_recover(&req, || {
                             let mut language_service = language_service;
@@ -2535,7 +2536,7 @@ impl handlerMap {
                             if let Some(err) = ctx.err() {
                                 return Err(err.into());
                             }
-                            s.send_result(req.id.as_ref(), resp)
+                            s.send_result(req.id.as_ref(), &resp)
                         })
                     }) as project::AsyncWork))
                 })
@@ -2558,14 +2559,14 @@ impl handlerMap {
                 let params = req.unmarshal_params::<Req>()?;
                 // !!! sheetal: multiple projects that contain the file through symlinks
                 let (default_ls, orchestrator) = s.get_language_service_and_cross_project_orchestrator(ctx, params.text_document_uri(), req)?;
-                let (s, ctx, req) = (s.clone(), ctx.clone(), req.clone());
+                let (s, ctx, req) = (Arc::clone(s), ctx.clone(), Arc::clone(req));
                 Ok(Some(Box::new(move || {
                     s.with_recover(&req, || {
                         let resp = f(&default_ls, &ctx, params, orchestrator)?;
                         if let Some(err) = ctx.err() {
                             return Err(err.into());
                         }
-                        s.send_result(req.id.as_ref(), resp)
+                        s.send_result(req.id.as_ref(), &resp)
                     })
                 })))
             }),
@@ -2584,7 +2585,7 @@ struct crossProjectOrchestrator {
 impl tsrs_ls::CrossProjectOrchestrator for crossProjectOrchestrator {
     // server.go:1440
     fn get_default_project(&self) -> Arc<dyn tsrs_ls::Project> {
-        self.default_project.clone()
+        Arc::clone(&self.default_project)
     }
 
     // server.go:1444
@@ -2612,7 +2613,7 @@ impl tsrs_ls::CrossProjectOrchestrator for crossProjectOrchestrator {
         let mut projects = Vec::new();
         self.server.session().with_snapshot_loading_project_tree(ctx, Some(requested_project_trees.clone()), |snapshot| {
             for p in snapshot.project_collection.language_service_projects() {
-                projects.push(p.arc().clone() as Arc<dyn tsrs_ls::Project>);
+                projects.push(Arc::clone(p.arc()) as Arc<dyn tsrs_ls::Project>);
             }
         });
         Box::new(projects.into_iter())
@@ -2629,10 +2630,10 @@ pub(crate) fn not_yet_ported(method: Method) -> Error {
 fn generate_diagnostic_diff_string(missing_from_pre: &[&lsproto::Diagnostic], missing_from_post: &[&lsproto::Diagnostic], stringifier: fn(&lsproto::Diagnostic) -> String) -> String {
     let mut b = String::new();
     for elem in missing_from_pre {
-        b.push_str(&format!("Diagnostic {} was present after emit but not before emit\n", stringifier(elem)));
+        let _ = write!(b, "Diagnostic {} was present after emit but not before emit\n", stringifier(elem));
     }
     for elem in missing_from_post {
-        b.push_str(&format!("Diagnostic {} was present before emit but not after emit\n", stringifier(elem)));
+        let _ = write!(b, "Diagnostic {} was present before emit but not after emit\n", stringifier(elem));
     }
     b
 }
@@ -2646,7 +2647,7 @@ impl project::Client for Server {
         Server::unwatch_files(self, ctx, &id.0)
     }
     fn register_content_mapper_extensions(&self, ctx: &Context, extensions: Vec<String>) -> Result<(), Error> {
-        Server::register_content_mapper_extensions(self, ctx, extensions)
+        Server::register_content_mapper_extensions(self, ctx, &extensions)
     }
     fn refresh_diagnostics(&self, ctx: &Context) -> Result<(), Error> {
         Server::refresh_diagnostics(self, ctx)
@@ -2889,11 +2890,11 @@ pub(crate) fn go_duration_string(d: Duration) -> String {
     let minutes = rem / 60_000_000_000;
     let secs = rem % 60_000_000_000;
     if hours > 0 {
-        out.push_str(&format!("{}h", hours));
+        let _ = write!(out, "{}h", hours);
     }
     if hours > 0 || minutes > 0 {
-        out.push_str(&format!("{}m", minutes));
+        let _ = write!(out, "{}m", minutes);
     }
-    out.push_str(&format!("{}s", frac(secs, 9)));
+    let _ = write!(out, "{}s", frac(secs, 9));
     out
 }

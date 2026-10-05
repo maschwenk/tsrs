@@ -75,4 +75,70 @@ non_upper_case_globals = "allow"
 non_camel_case_types = "allow"
 
 [workspace.lints.clippy]
-all = "allow"
+# Clippy's style and complexity groups stay off: the port keeps the shape of the Go code (docs/PORTING.md). The
+# lints below catch what a port gets wrong in Rust instead: copies and allocations Go does not make, unsound
+# `unsafe`, and leftovers. They are warnings so that `cargo clippy` reports all of them; the gate is
+# tools/lint/ratchet.py, which fails when a (lint, file) count grows. docs/RUST.md explains each group.
+all = { level = "allow", priority = -2 }
+correctness = { level = "warn", priority = -1 }
+suspicious = { level = "warn", priority = -1 }
+perf = { level = "warn", priority = -1 }
+
+# A `.clone()` that remains is a real copy.
+redundant_clone = "warn"
+clone_on_copy = "warn"
+implicit_clone = "warn"
+clone_on_ref_ptr = "warn"
+assigning_clones = "warn"
+cloned_instead_of_copied = "warn"
+
+# Allocations nobody asked for.
+format_push_string = "warn"
+inefficient_to_string = "warn"
+needless_collect = "warn"
+unnecessary_box_returns = "warn"
+rc_buffer = "warn"
+vec_box = "warn"
+stable_sort_primitive = "warn"
+
+# Argument passing and stack use.
+needless_pass_by_value = "warn"
+trivially_copy_pass_by_ref = "warn"
+large_types_passed_by_value = "warn"
+large_stack_arrays = "warn"
+large_stack_frames = "warn"
+inline_always = "warn"
+
+# Hashing and iteration order (clippy.toml bans the SipHash std maps).
+disallowed_types = "warn"
+set_contains_or_insert = "warn"
+zero_sized_map_values = "warn"
+iter_over_hash_type = "warn"
+
+# Locks and threads.
+mutex_atomic = "warn"
+mutex_integer = "warn"
+rc_mutex = "warn"
+significant_drop_in_scrutinee = "warn"
+non_send_fields_in_send_ty = "warn"
+
+# `unsafe` (clippy.toml lists the unchecked operations that need a measured reason).
+undocumented_unsafe_blocks = "warn"
+missing_safety_doc = "warn"
+ptr_as_ptr = "warn"
+ptr_cast_constness = "warn"
+ref_as_ptr = "warn"
+borrow_as_ptr = "warn"
+cast_ptr_alignment = "warn"
+as_ptr_cast_mut = "warn"
+transmute_ptr_to_ptr = "warn"
+mem_forget = "warn"
+disallowed_methods = "warn"
+
+# Leftovers and escape hatches. A suppression is `#[expect(lint, reason = "...")]`, never a bare `#[allow]`.
+dbg_macro = "warn"
+todo = "warn"
+unimplemented = "warn"
+disallowed_macros = "warn"
+allow_attributes = "warn"
+allow_attributes_without_reason = "warn"

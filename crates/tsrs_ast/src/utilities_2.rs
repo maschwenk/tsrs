@@ -1353,7 +1353,7 @@ pub fn get_jsx_implicit_import_base(compiler_options: &CompilerOptions, file: Op
     {
         let mut result = get_pragma_argument(jsx_import_source_pragma, "factory").to_string();
         if result.is_empty() {
-            result = compiler_options.jsx_import_source.to_string();
+            result.clone_from(&compiler_options.jsx_import_source);
         }
         if result.is_empty() {
             result = "react".to_string();

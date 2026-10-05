@@ -70,7 +70,8 @@ impl host {
     // host.go:142
     pub(crate) fn store_m_time_from_old_cache(&self, file: &str, old_cache: &mTimeCache) {
         let path = self.o().to_path(file);
-        if let Some(m_time) = old_cache.lock().unwrap().get(&path).copied() {
+        let m_time = old_cache.lock().unwrap().get(&path).copied();
+        if let Some(m_time) = m_time {
             self.m_times.lock().unwrap().lock().unwrap().insert(path, m_time);
         }
     }
@@ -117,7 +118,7 @@ impl CompilerHost for host {
     fn get_source_file(&self, opts: SourceFileParseOptions) -> Option<P<SourceFile>> {
         if tspath::is_declaration_file_name(&opts.file_name) || tspath::file_extension_is(&opts.file_name, tspath::EXTENSION_JSON) {
             // Cache dts and json files as they will be reused
-            return self.source_files.load_or_store(opts, |opts| self.host.get_source_file(opts.clone()), false /* allowZero */);
+            return self.source_files.load_or_store(&opts, |opts| self.host.get_source_file(opts.clone()), false /* allowZero */);
         }
         self.host.get_source_file(opts)
     }
@@ -125,7 +126,7 @@ impl CompilerHost for host {
     // host.go:71
     fn get_resolved_project_reference(&self, file_name: &str, path: Path) -> Option<P<ParsedCommandLine>> {
         self.resolved_references.load_or_store(
-            path,
+            &path,
             |path| {
                 let o = self.o();
                 let config_start = o.opts.sys.now();

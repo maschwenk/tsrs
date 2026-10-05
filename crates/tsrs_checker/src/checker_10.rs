@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use crate::*;
 use tsrs_ast::*;
 use tsrs_core::*;
@@ -2098,7 +2099,7 @@ impl Checker {
     #[inline(never)]
     fn get_lazy_mapped_table_worker(&mut self, t: P<Type>) -> Option<std::rc::Rc<LazyMappedTable>> {
         if let Some(lazy) = self.lazy_mapped_tables.get(&t) {
-            return Some(lazy.clone());
+            return Some(Rc::clone(lazy));
         }
         if !self.is_mapped_type_with_keyof_constraint_declaration(t) {
             return None;
@@ -2134,7 +2135,7 @@ impl Checker {
             index_infos_ready: Cell::new(false),
             resolving: Cell::new(false),
         });
-        self.lazy_mapped_tables.insert(t, lazy.clone());
+        self.lazy_mapped_tables.insert(t, Rc::clone(&lazy));
         self.lazy_member_stats.mapped_tables_created += 1;
         Some(lazy)
     }
@@ -2185,7 +2186,7 @@ impl Checker {
             }
             lazy.resolving.set(true);
             let mut index_infos: Vec<P<IndexInfo>> = Vec::new();
-            for info in self.get_index_infos_of_type(lazy.modifiers_type).iter().copied() {
+            for info in self.get_index_infos_of_type(lazy.modifiers_type) {
                 index_infos = self.append_mapped_type_index_info(
                     index_infos,
                     t,
@@ -2273,6 +2274,7 @@ fn mapped_type_add_member_for_key_type(c: &mut Checker, st: &mut MappedTypeMembe
 
 impl Checker {
     // checker.go:21325
+    #[inline(never)] // out of get_type_of_symbol, which then needs no frame for its common cases
     pub(crate) fn get_type_of_mapped_symbol(&mut self, symbol: P<Symbol>) -> P<Type> {
         let links = self.value_symbol_links.get(symbol);
         if links.resolved_type.get().is_none() {

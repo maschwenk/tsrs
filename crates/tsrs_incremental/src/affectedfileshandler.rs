@@ -5,6 +5,7 @@
 // order is random. The declaration signatures of the files referencing a changed file are computed a level at a
 // time with one emit per level, which runs each checker's files on that checker's thread (getFilesAffectedBy).
 
+use std::rc::Rc;
 use std::cell::{Cell, RefCell};
 
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -37,6 +38,9 @@ struct affectedFilesHandler<'a> {
     files_to_remove_diagnostics: RefCell<FxHashSet<Path>>,
     cleaned_diagnostics_of_lib_files: Cell<bool>,
     seen_file_and_references: RefCell<FxHashMap<Path, bool>>,
+    // Declaration signatures computed ahead of update_shape_signature by one emit for many files
+    // (collect_all_affected_files, a change that affects the global scope).
+    precomputed: RefCell<FxHashMap<Path, String>>,
 }
 
 impl affectedFilesHandler<'_> {
@@ -45,7 +49,7 @@ impl affectedFilesHandler<'_> {
         let mut m = FxHashMap::default();
         m.insert(affected_file_path, affected_file_emit_kind);
         let result = std::rc::Rc::new(RefCell::new(m));
-        self.dts_may_change.borrow_mut().push(result.clone());
+        self.dts_may_change.borrow_mut().push(Rc::clone(&result));
         result
     }
 
@@ -149,7 +153,7 @@ impl affectedFilesHandler<'_> {
         // JSON files have no declaration output from which to compute a shape
         // signature, so use the file version to conservatively invalidate dependents.
         if !file.is_declaration_file() && !ast::is_json_source_file(file) && !use_file_version_as_signature {
-            signature = match computed {
+            signature = match computed.or_else(|| self.precomputed.borrow_mut().remove(file.path())) {
                 Some(computed) => computed,
                 None => self.compute_dts_signature(file),
             };
@@ -198,9 +202,9 @@ impl affectedFilesHandler<'_> {
         while !frontier.is_empty() {
             let mut level: Vec<Option<P<SourceFile>>> = Vec::new();
             for current_path in frontier {
-                if !seen_file_names_map.contains_key(&current_path) {
-                    let current_file = self.program.p().get_source_file_by_path(&current_path);
-                    seen_file_names_map.insert(current_path, current_file);
+                if let std::collections::hash_map::Entry::Vacant(entry) = seen_file_names_map.entry(current_path) {
+                    let current_file = self.program.p().get_source_file_by_path(entry.key());
+                    entry.insert(current_file);
                     level.push(current_file);
                 }
             }
@@ -410,6 +414,10 @@ impl affectedFilesHandler<'_> {
     }
 
     // affectedfileshandler.go:339
+    #[expect(
+        clippy::iter_over_hash_type,
+        reason = "each loop stores, deletes or ORs one entry per key of an unordered map; the end state does not depend on the order"
+    )]
     fn update_snapshot(&self) {
         if self.ctx.err().is_some() {
             return;
@@ -417,7 +425,7 @@ impl affectedFilesHandler<'_> {
         let snapshot = &self.program.snapshot;
         for (file_path, update) in self.updated_signatures.borrow().iter() {
             if let Some(mut info) = snapshot.file_infos.load(file_path) {
-                info.signature = update.signature.clone();
+                info.signature.clone_from(&update.signature);
                 snapshot.file_infos.store(file_path.clone(), info);
                 if let Some(testing_data) = &self.program.testing_data {
                     testing_data.lock().unwrap().updated_signature_kinds.insert(file_path.clone(), update.kind);
@@ -429,7 +437,7 @@ impl affectedFilesHandler<'_> {
         }
         for change in self.dts_may_change.borrow().iter() {
             for (file_path, &emit_kind) in change.borrow().iter() {
-                snapshot.add_file_to_affected_files_pending_emit(file_path.clone(), emit_kind);
+                snapshot.add_file_to_affected_files_pending_emit(file_path, emit_kind);
             }
         }
         for key in snapshot.changed_files_set.keys() {
@@ -459,6 +467,7 @@ pub(crate) fn collect_all_affected_files(ctx: &Context, program: &Program) {
         files_to_remove_diagnostics: RefCell::new(FxHashSet::default()),
         cleaned_diagnostics_of_lib_files: Cell::new(false),
         seen_file_and_references: RefCell::new(FxHashMap::default()),
+        precomputed: RefCell::new(FxHashMap::default()),
     };
     let mut result: Vec<P<SourceFile>> = Vec::new();
     let mut seen: FxHashSet<P<SourceFile>> = FxHashSet::default();
@@ -478,6 +487,19 @@ pub(crate) fn collect_all_affected_files(ctx: &Context, program: &Program) {
     // update their diagnostics
     let emit_kind = get_file_emit_kind(&program.snapshot.options());
     result.sort_by(|a, b| a.path().clone().cmp(b.path()));
+    // When every file is affected, handle_dts_may_change_of_affected_file computes the declaration signature of each
+    // one in turn, one emit per file. Compute them with one emit instead: each checker still emits its files in
+    // the same (sorted) order, so every checker goes through the same states and the signatures are the same.
+    if handler.has_all_files_excluding_default_library_file.get() {
+        let to_compute: Vec<P<SourceFile>> = result.iter().copied().filter(|&f| handler.needs_dts_signature(f)).collect();
+        if to_compute.len() > 1 {
+            let mut computed = handler.compute_dts_signatures(to_compute.clone());
+            let mut precomputed = handler.precomputed.borrow_mut();
+            for file in to_compute {
+                precomputed.insert(file.path().clone(), computed.remove(&file).unwrap_or_default());
+            }
+        }
+    }
     for file in result {
         // remove the cached semantic diagnostics and handle dts emit and js emit if needed
         let dts_may_change = handler.get_dts_may_change(file.path().clone(), emit_kind);

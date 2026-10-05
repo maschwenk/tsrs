@@ -139,7 +139,7 @@ impl<K: Hash + Eq + Clone + Send + Sync, T: Cloneable + Clone> SyncMapEntry<K, T
         }
 
         let m = self.m.upgrade().expect("dirty.SyncMap dropped while an entry is in use");
-        let (entry, loaded) = m.dirty.load_or_store(self.key.clone(), self.clone());
+        let (entry, loaded) = m.dirty.load_or_store(self.key.clone(), Arc::clone(self));
         if loaded {
             let mut es = entry.mu.lock().unwrap();
             if !es.e.dirty {
@@ -148,7 +148,7 @@ impl<K: Hash + Eq + Clone + Send + Sync, T: Cloneable + Clone> SyncMapEntry<K, T
             }
             // Go also copies `entry.value` into this entry; every access is routed through proxyFor, so the copy
             // is not kept (it would only force copy-on-write on later changes).
-            st.proxy_for = Some(entry.clone());
+            st.proxy_for = Some(Arc::clone(&entry));
             st.e.dirty = true;
             st.e.delete = es.e.delete;
             apply(Shared::make_mut(es.e.value.as_mut().unwrap()));
@@ -196,7 +196,7 @@ impl<K: Hash + Eq + Clone + Send + Sync, T: Cloneable + Clone> SyncMapEntry<K, T
             return;
         }
         let m = self.m.upgrade().expect("dirty.SyncMap dropped while an entry is in use");
-        let (entry, loaded) = m.dirty.load_or_store(self.key.clone(), self.clone());
+        let (entry, loaded) = m.dirty.load_or_store(self.key.clone(), Arc::clone(self));
         if loaded {
             let _es = entry.mu.lock().unwrap();
             st.e.delete = true;
@@ -212,11 +212,11 @@ impl<K: Hash + Eq + Clone + Send + Sync, T: Cloneable + Clone> SyncMapEntry<K, T
             return;
         }
         let m = self.m.upgrade().expect("dirty.SyncMap dropped while an entry is in use");
-        let (entry, loaded) = m.dirty.load_or_store(self.key.clone(), self.clone());
+        let (entry, loaded) = m.dirty.load_or_store(self.key.clone(), Arc::clone(self));
         if loaded {
             let mut es = entry.mu.lock().unwrap();
-            st.proxy_for = Some(entry.clone());
-            st.e.value = es.e.value.clone();
+            st.proxy_for = Some(Arc::clone(&entry));
+            st.e.value.clone_from(&es.e.value);
             st.e.delete = true;
             st.e.dirty = es.e.dirty;
             es.e.delete = true;
@@ -411,7 +411,7 @@ impl<K: Hash + Eq + Clone + Send + Sync, T: Cloneable + Clone> SyncMap<K, T> {
         });
         match result {
             Some(result) => (Arc::new(result), changed),
-            None => (base.clone(), changed),
+            None => (Arc::clone(base), changed),
         }
     }
 

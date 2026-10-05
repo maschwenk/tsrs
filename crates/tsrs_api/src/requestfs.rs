@@ -6,7 +6,7 @@
 // (`LayeredFileSystem` + `RebasableFileSystem` + `FileChangeExpander`): the snapshot's overlay file system is
 // rebased *under* it, and client `fileNotifications` are expanded to request-symlink aliases.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use std::sync::Arc;
 use std::time::SystemTime;
 
@@ -69,7 +69,7 @@ fn dir_info(name: &str) -> FileInfo {
 struct Node {
     entry: Option<Arc<Entry>>,
     fallback: Fallback,
-    children: HashMap<Path, Arc<Node>>,
+    children: FxHashMap<Path, Arc<Node>>,
     has_symlinks: bool,
 }
 
@@ -78,7 +78,7 @@ fn ancestors(path: &str) -> Vec<Path> {
     let mut p = path.to_string();
     loop {
         paths.push(Path::new(p.clone()));
-        let parent = tspath::get_directory_path(&p).to_string();
+        let parent = tspath::get_directory_path(&p);
         if parent == p {
             break;
         }
@@ -139,6 +139,7 @@ impl Node {
             return Some(l.clone());
         }
         let mut e = Entries::default();
+        #[expect(clippy::iter_over_hash_type, reason = "both lists are sorted right after the loop, as Go does")]
         for child in node.children.values() {
             match child.entry.as_deref() {
                 Some(Entry::File { file_name, .. }) => e.files.push(tspath::get_base_file_name(file_name)),
@@ -237,11 +238,12 @@ fn compose(base: Option<&Arc<Node>>, overlay: Option<&Arc<Node>>, mut fallback: 
         _ => None,
     };
     if let Some(entry) = &overlay.entry {
-        result.entry = Some(entry.clone());
+        result.entry = Some(Arc::clone(entry));
         if let (Some((name, None)), Some(prev)) = (&overlay_dir, &previous_listing) {
             result.entry = Some(Arc::new(Entry::Directory { directory_name: name.clone(), listing: prev.clone() }));
         }
     }
+    #[expect(clippy::iter_over_hash_type, reason = "composes each child into a map independently; Go ranges the map too")]
     for (path, child) in &overlay.children {
         let composed = compose(result.children.get(path), Some(child), fallback, cs);
         if let Some(c) = composed {
@@ -409,7 +411,7 @@ pub fn new_for_update(
     if let Some(b) = layered_base {
         fs.paths = compose(Some(&b.paths), Some(&fs.paths), Fallback::Allowed, fs.cs).unwrap_or_default();
         fs.kind = b.kind;
-        fs.base = b.base.clone();
+        fs.base = Arc::clone(&b.base);
         fs.base_ref = b.base_ref.clone();
     }
     if params.kind == Kind::Layer {
@@ -423,7 +425,7 @@ impl RequestFileSystem {
         let cs = base.use_case_sensitive_file_names();
         let mut r = RequestFileSystem {
             kind: params.kind,
-            base_ref: FsRef::Host(base.clone()),
+            base_ref: FsRef::Host(Arc::clone(&base)),
             base,
             current_directory: current_directory.to_string(),
             cs,
@@ -467,7 +469,7 @@ impl RequestFileSystem {
             let abs = r.to_absolute_path(link);
             r.register_directory(&mut root, &tspath::get_directory_path(&abs));
         }
-        let mut seen_links: HashMap<Path, String> = HashMap::new();
+        let mut seen_links: FxHashMap<Path, String> = FxHashMap::default();
         for (link, target, host) in &params.symlinks {
             let abs = r.to_absolute_path(link);
             let path = r.to_path(&abs);
@@ -521,7 +523,7 @@ impl RequestFileSystem {
                 return;
             }
             node.entry = Some(Arc::new(Entry::Directory { directory_name: name.clone(), listing: None }));
-            let parent = tspath::get_directory_path(&name).to_string();
+            let parent = tspath::get_directory_path(&name);
             if parent == name {
                 return;
             }
@@ -891,12 +893,13 @@ impl LayeredFileSystem for RequestFileSystem {
     fn overlays(&self) -> OverlayMap {
         let FsRef::Layered(base) = &self.base_ref else { return OverlayMap::default() };
         let mut result = rustc_hash::FxHashMap::default();
+        #[expect(clippy::iter_over_hash_type, reason = "builds a map keyed by path; Go ranges the overlay map too")]
         for (path, overlay) in base.overlays().iter() {
             let Some(l) = self.lookup_path(overlay.file_name()) else { continue };
             if !l.use_base || self.to_path(&l.path) != *path {
                 continue;
             }
-            result.insert(path.clone(), overlay.clone());
+            result.insert(path.clone(), Arc::clone(overlay));
         }
         Arc::new(result)
     }
@@ -918,8 +921,8 @@ impl RebasableFileSystem for RequestFileSystem {
     fn with_base_file_system(&self, base: FsRef) -> Arc<dyn LayeredFileSystem> {
         let mut clone = self.clone();
         clone.base = match &base {
-            FsRef::Host(fs) => fs.clone(),
-            FsRef::Layered(layered) => layered.clone() as Arc<dyn FS>,
+            FsRef::Host(fs) => Arc::clone(fs),
+            FsRef::Layered(layered) => Arc::clone(layered) as Arc<dyn FS>,
         };
         clone.base_ref = base;
         Arc::new(clone)
@@ -931,6 +934,7 @@ impl FileChangeExpander for RequestFileSystem {
     fn expand_file_changes(&self, mut summary: FileChangeSummary) -> FileChangeSummary {
         let expand = |uris: &mut tsrs_core::collections::Set<tsrs_lsproto::DocumentUri>| {
             let mut additional = Vec::new();
+            #[expect(clippy::iter_over_hash_type, reason = "the aliases are added to the same set; Go ranges the set too")]
             for uri in uris.keys().iter() {
                 for alias in self.aliases_for_path(&uri.file_name()) {
                     additional.push(tsrs_ls::lsconv::file_name_to_document_uri(&alias));

@@ -59,13 +59,13 @@ pub(crate) struct ParseCacheJournal(Mutex<FxHashMap<ParseCacheKey, i64>>);
 
 impl ParseCacheJournal {
     pub(crate) fn acquire(&self, cache: &ParseCache, key: ParseCacheKey, fh: Arc<dyn FileHandle>) -> P<SourceFile> {
-        let file = cache.acquire(key.clone(), fh);
+        let file = cache.acquire(&key, fh);
         *self.0.lock().unwrap_or_else(|e| e.into_inner()).entry(key).or_default() += 1;
         file
     }
 
     pub(crate) fn ref_(&self, cache: &ParseCache, key: ParseCacheKey) {
-        cache.ref_(key.clone());
+        cache.ref_(&key);
         *self.0.lock().unwrap_or_else(|e| e.into_inner()).entry(key).or_default() += 1;
     }
 
@@ -77,6 +77,7 @@ impl ParseCacheJournal {
     /// Releases every reference this clone still holds (its programs never reached a snapshot).
     pub(crate) fn roll_back(&self, cache: &ParseCache) {
         let held = std::mem::take(&mut *self.0.lock().unwrap_or_else(|e| e.into_inner()));
+        #[expect(clippy::iter_over_hash_type, reason = "refcount decrements on distinct keys commute (no Go counterpart: Rust-only journal)")]
         for (key, count) in held {
             for _ in 0..count.max(0) {
                 cache.deref(&key);
@@ -93,7 +94,7 @@ impl ParseCacheJournal {
 // it is freed once neither the cache nor any live program refers to the file, as Go's GC would.
 pub fn new_parse_cache(options: RefCountCacheOptions) -> ParseCache {
     let regions: Arc<Mutex<FxHashMap<usize, Region>>> = Arc::default();
-    let parse_regions = regions.clone();
+    let parse_regions = Arc::clone(&regions);
     let mut cache = new_ref_count_cache(options, move |key: &ParseCacheKey, fh: Arc<dyn FileHandle>| {
         let text = fh.content();
         let region = Region::new(file_region_first_chunk(text.len()));
@@ -110,7 +111,7 @@ pub fn new_parse_cache(options: RefCountCacheOptions) -> ParseCache {
         parse_regions.lock().unwrap().insert(file.addr(), region);
         file
     });
-    let evict_regions = regions.clone();
+    let evict_regions = Arc::clone(&regions);
     cache.on_evict = Some(Box::new(move |file: &P<SourceFile>| {
         let region = evict_regions.lock().unwrap().remove(&file.addr());
         drop(region);

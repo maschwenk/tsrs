@@ -50,7 +50,7 @@ impl DisplayPartsWriter {
             self.runs.extend_from_slice(other.get_runs());
         }
         if !other.last_written.is_empty() {
-            self.last_written = other.last_written.clone();
+            self.last_written.clone_from(&other.last_written);
         }
     }
 

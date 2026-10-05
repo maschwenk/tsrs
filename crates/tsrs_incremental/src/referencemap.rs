@@ -95,7 +95,7 @@ impl ReferenceMap {
             let mut groups: Vec<(Arc<RefSet>, Vec<Path>)> = Vec::new();
             self.references.range(|key, value| {
                 let i = *index.entry(Arc::as_ptr(value)).or_insert_with(|| {
-                    groups.push((value.clone(), Vec::new()));
+                    groups.push((Arc::clone(value), Vec::new()));
                     groups.len() - 1
                 });
                 groups[i].1.push(key.clone());

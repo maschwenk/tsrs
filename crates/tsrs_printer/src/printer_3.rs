@@ -473,14 +473,14 @@ impl Printer {
         let saved_source_map_line_char_cache = self.source_map_line_char_cache.take();
 
         self.source_maps_disabled = source_map_generator.is_none();
-        self.source_map_generator = source_map_generator.map(|g| g as *mut SourceMapGenerator);
+        self.source_map_generator = source_map_generator.map(|g| std::ptr::from_mut::<SourceMapGenerator>(g));
         self.source_map_source = None;
         self.source_map_source_index = -1;
         self.source_map_line_char_cache = None;
         self.text_state.target.set(self.options.target);
 
         self.set_source_file(source_file);
-        let mut writer: Box<dyn EmitTextWriter> = Box::new(borrowedWriter(writer as *mut (dyn EmitTextWriter + 'static)));
+        let mut writer: Box<dyn EmitTextWriter> = Box::new(borrowedWriter(std::ptr::from_mut::<dyn EmitTextWriter + 'static>(writer)));
         if self.options.omit_trailing_semicolon {
             writer = get_trailing_semicolon_deferring_writer(writer);
         }

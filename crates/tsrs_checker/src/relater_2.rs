@@ -794,7 +794,7 @@ impl Relater {
                 && !c.is_generic_object_type(target)
                 && source.flags().intersects(TypeFlags::Object | TypeFlags::Intersection)
             {
-                result &= self.properties_related_to(c, source, target, report_errors, Set::new() /*excludedProperties*/, false /*optionalsOnly*/, IntersectionState::None);
+                result &= self.properties_related_to(c, source, target, report_errors, &Set::new() /*excludedProperties*/, false /*optionalsOnly*/, IntersectionState::None);
                 if result != Ternary::False && is_object_literal_type(source) && source.object_flags().intersects(ObjectFlags::FreshLiteral) {
                     result &= self.index_signatures_related_to(c, source, target, false /*sourceIsPrimitive*/, report_errors, IntersectionState::None);
                 }
@@ -806,7 +806,7 @@ impl Relater {
             //   }
             //
             } else if result != Ternary::False && c.is_non_generic_object_type(target) && !c.is_array_or_tuple_type(target) && self.is_source_intersection_needing_extra_check(c, source, target) {
-                result &= self.properties_related_to(c, source, target, report_errors, Set::new() /*excludedProperties*/, true /*optionalsOnly*/, intersection_state);
+                result &= self.properties_related_to(c, source, target, report_errors, &Set::new() /*excludedProperties*/, true /*optionalsOnly*/, intersection_state);
             }
         }
         if result != Ternary::False {
@@ -1518,7 +1518,7 @@ impl Relater {
             if source.flags().intersects(TypeFlags::Object | TypeFlags::Intersection) && target.flags().intersects(TypeFlags::Object) {
                 // Report structural errors only if we haven't reported any errors yet
                 let report_structural_errors = report_errors && self.error_chain.get() == save_error_state.error_chain && !source_is_primitive;
-                result = self.properties_related_to(c, source, target, report_structural_errors, Set::new() /*excludedProperties*/, false /*optionalsOnly*/, intersection_state);
+                result = self.properties_related_to(c, source, target, report_structural_errors, &Set::new() /*excludedProperties*/, false /*optionalsOnly*/, intersection_state);
                 if result != Ternary::False {
                     result &= self.signatures_related_to(c, source, target, SignatureKind::Call, report_structural_errors, intersection_state);
                     if result != Ternary::False {
@@ -1747,7 +1747,7 @@ impl Relater {
         // Compare the remaining non-discriminant properties of each match.
         let mut result = Ternary::True;
         for &t in &matching_types {
-            result &= self.properties_related_to(c, source, t, false /*reportErrors*/, excluded_properties.clone(), false /*optionalsOnly*/, IntersectionState::None);
+            result &= self.properties_related_to(c, source, t, false /*reportErrors*/, &excluded_properties, false /*optionalsOnly*/, IntersectionState::None);
             if result != Ternary::False {
                 result &= self.signatures_related_to(c, source, t, SignatureKind::Call, false /*reportErrors*/, IntersectionState::None);
                 if result != Ternary::False {
@@ -1769,7 +1769,7 @@ impl Relater {
     }
 
     // relater.go:4132
-    pub(crate) fn properties_related_to(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, excluded_properties: Set<String>, optionals_only: bool, intersection_state: IntersectionState) -> Ternary {
+    pub(crate) fn properties_related_to(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, excluded_properties: &Set<String>, optionals_only: bool, intersection_state: IntersectionState) -> Ternary {
         if self.rel() == c.identity_relation {
             return self.properties_identical_to(c, source, target, excluded_properties);
         }
@@ -1895,7 +1895,7 @@ impl Relater {
         }
         if is_object_literal_type(target) {
             let source_properties = c.get_properties_of_type(source);
-            for source_prop in exclude_properties(&source_properties, excluded_properties.clone()) {
+            for source_prop in exclude_properties(&source_properties, excluded_properties) {
                 if c.get_property_of_object_type(target, source_prop.name()).is_none() {
                     if report_errors {
                         let source_prop_string = c.symbol_to_string(source_prop);
@@ -2105,12 +2105,12 @@ impl Relater {
     }
 
     // relater.go:4449
-    pub(crate) fn properties_identical_to(&self, c: &mut Checker, source: P<Type>, target: P<Type>, excluded_properties: Set<String>) -> Ternary {
+    pub(crate) fn properties_identical_to(&self, c: &mut Checker, source: P<Type>, target: P<Type>, excluded_properties: &Set<String>) -> Ternary {
         if !source.flags().intersects(TypeFlags::Object) || !target.flags().intersects(TypeFlags::Object) {
             return Ternary::False;
         }
         let source_object_properties = c.get_properties_of_object_type(source);
-        let source_properties = exclude_properties(&source_object_properties, excluded_properties.clone());
+        let source_properties = exclude_properties(&source_object_properties, excluded_properties);
         let target_object_properties = c.get_properties_of_object_type(target);
         let target_properties = exclude_properties(&target_object_properties, excluded_properties);
         if source_properties.len() != target_properties.len() {
@@ -2550,7 +2550,7 @@ impl Relater {
                 }
             }
             Some(message) => {
-                if std::ptr::eq(message, &diagnostics::Argument_of_type_0_is_not_assignable_to_parameter_of_type_1) && c.exact_optional_property_types && !c.get_exact_optional_unassignable_properties(source, target).is_empty() {
+                if std::ptr::eq(message, &raw const diagnostics::Argument_of_type_0_is_not_assignable_to_parameter_of_type_1) && c.exact_optional_property_types && !c.get_exact_optional_unassignable_properties(source, target).is_empty() {
                     &diagnostics::Argument_of_type_0_is_not_assignable_to_parameter_of_type_1_with_exactOptionalPropertyTypes_Colon_true_Consider_adding_undefined_to_the_types_of_the_target_s_properties
                 } else {
                     message
@@ -2591,7 +2591,7 @@ impl Relater {
     pub(crate) fn report_error(&self, c: &mut Checker, message: &'static Message, args: &[&dyn Display]) {
         let mut message = message;
         let mut args = diagnostics::stringify_args(args);
-        if std::ptr::eq(message, &diagnostics::Types_of_property_0_are_incompatible) {
+        if std::ptr::eq(message, &raw const diagnostics::Types_of_property_0_are_incompatible) {
             // Suppress if next message is an excess property error
             let chain_message = self.get_chain_message(c, 0);
             if is_message(chain_message, &diagnostics::Object_literal_may_only_specify_known_properties_and_0_does_not_exist_in_type_1)
@@ -2630,7 +2630,7 @@ impl Relater {
                 let tail = get_property_name_arg(&self.error_chain.get().unwrap().next.unwrap().args[0]);
                 let arg = add_to_dotted_name(&head, &tail);
                 self.error_chain.set(self.error_chain.get().unwrap().next.unwrap().next);
-                if std::ptr::eq(message, &diagnostics::Types_of_property_0_are_incompatible) {
+                if std::ptr::eq(message, &raw const diagnostics::Types_of_property_0_are_incompatible) {
                     message = &diagnostics::The_types_of_0_are_incompatible_between_these_types;
                 }
                 self.report_error(c, message, &[&arg]);
@@ -2710,12 +2710,12 @@ pub(crate) fn get_property_name_arg(arg: &str) -> String {
 
 // relater.go:4967
 pub(crate) fn is_conversion_or_interface_implementation_message(message: &'static Message) -> bool {
-    std::ptr::eq(message, &diagnostics::Class_0_incorrectly_implements_interface_1)
-        || std::ptr::eq(message, &diagnostics::Class_0_incorrectly_implements_class_1_Did_you_mean_to_extend_1_and_inherit_its_members_as_a_subclass)
-        || std::ptr::eq(message, &diagnostics::Conversion_of_type_0_to_type_1_may_be_a_mistake_because_neither_type_sufficiently_overlaps_with_the_other_If_this_was_intentional_convert_the_expression_to_unknown_first)
-        || std::ptr::eq(message, &diagnostics::Its_instance_type_0_is_not_a_valid_JSX_element)
-        || std::ptr::eq(message, &diagnostics::Its_return_type_0_is_not_a_valid_JSX_element)
-        || std::ptr::eq(message, &diagnostics::Its_element_type_0_is_not_a_valid_JSX_element)
+    std::ptr::eq(message, &raw const diagnostics::Class_0_incorrectly_implements_interface_1)
+        || std::ptr::eq(message, &raw const diagnostics::Class_0_incorrectly_implements_class_1_Did_you_mean_to_extend_1_and_inherit_its_members_as_a_subclass)
+        || std::ptr::eq(message, &raw const diagnostics::Conversion_of_type_0_to_type_1_may_be_a_mistake_because_neither_type_sufficiently_overlaps_with_the_other_If_this_was_intentional_convert_the_expression_to_unknown_first)
+        || std::ptr::eq(message, &raw const diagnostics::Its_instance_type_0_is_not_a_valid_JSX_element)
+        || std::ptr::eq(message, &raw const diagnostics::Its_return_type_0_is_not_a_valid_JSX_element)
+        || std::ptr::eq(message, &raw const diagnostics::Its_element_type_0_is_not_a_valid_JSX_element)
 }
 
 // relater.go:4976

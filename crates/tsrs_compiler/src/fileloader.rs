@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::sync::Mutex;
 
 use rustc_hash::FxHashMap;
@@ -114,16 +115,16 @@ pub(crate) struct jsxRuntimeImportSpecifier {
 
 // fileloader.go:337 (Go runs it on the loader before creating the resolver; it only needs the options and the host,
 // and returns the builder the loader keeps)
-fn add_project_reference_tasks(opts: &ProgramConfig, host: std::sync::Arc<dyn CompilerHost>, _single_threaded: bool) -> projectReferenceFileMapperBuilder {
+fn add_project_reference_tasks(opts: &ProgramConfig, host: &Arc<dyn CompilerHost>, _single_threaded: bool) -> projectReferenceFileMapperBuilder {
     let mut mapper = projectReferenceFileMapper::new(opts.config, opts.can_use_project_reference_source());
-    let resolution_host = resolution_host_for(host.clone());
+    let resolution_host = resolution_host_for(Arc::clone(host));
     mapper.loader_host = Some(resolution_host);
     let project_references = opts.config.resolved_project_reference_paths();
     if project_references.is_empty() {
         return projectReferenceFileMapperBuilder { mapper: Box::leak(Box::new(mapper)), host: resolution_host };
     }
 
-    let mut parser = projectReferenceParser::new(&*host);
+    let mut parser = projectReferenceParser::new(&**host);
     let mut root_tasks = parser.create_project_reference_parse_tasks(project_references);
     parser.parse(&mut root_tasks, &mut mapper);
     let mapper: &'static projectReferenceFileMapper = Box::leak(Box::new(mapper));
@@ -139,8 +140,8 @@ pub(crate) fn process_all_program_files(opts: &ProgramOptions, single_threaded: 
     // Go `int`. It is only compared with node_modules depths (small non-negative counts), so saturating to i32 keeps
     // every comparison's result.
     let max_node_module_js_depth = compiler_options.max_node_module_js_depth.unwrap_or(0).clamp(i32::MIN as i64, i32::MAX as i64) as i32;
-    let host = opts.host.clone();
-    let project_references = add_project_reference_tasks(&opts.program_config(), host.clone(), single_threaded);
+    let host = Arc::clone(&opts.host);
+    let project_references = add_project_reference_tasks(&opts.program_config(), &host, single_threaded);
     // The mapper (with its resolution hosts) is leaked for the program to own (`SharedProgramData`). If loading
     // unwinds (a panic while loading, e.g. the module resolver's `Unexpected moduleResolution`, which the API turns
     // into an error), no program will own it: free it then. Declared before the resolver and loader, so it is
@@ -151,7 +152,7 @@ pub(crate) fn process_all_program_files(opts: &ProgramOptions, single_threaded: 
             if std::thread::panicking() {
                 // SAFETY: loading unwound, so no program was created from this mapper; the resolver and loader that
                 // referred to it were dropped first.
-                unsafe { crate::program::free_project_reference_file_mapper(self.0 as *const projectReferenceFileMapper as *mut projectReferenceFileMapper) };
+                unsafe { crate::program::free_project_reference_file_mapper(std::ptr::from_ref::<projectReferenceFileMapper>(self.0).cast_mut()) };
             }
         }
     }
@@ -170,7 +171,7 @@ pub(crate) fn process_all_program_files(opts: &ProgramOptions, single_threaded: 
     };
     let mut loader = fileLoader {
         opts: opts.program_config(),
-        host: host.clone(),
+        host: Arc::clone(&host),
         resolver,
         default_library_path: tspath::get_normalized_absolute_path(host.default_library_path(), host.get_current_directory()),
         compare_paths_options: ComparePathsOptions {
@@ -443,7 +444,7 @@ pub(crate) fn source_file_meta_data(
                 && module_resolution_kind <= ModuleResolutionKind::NodeNext
                 || file_name.contains("/node_modules/")
             {
-                package_json_type = value.to_string();
+                package_json_type.clone_from(value);
             }
         }
     }
@@ -681,7 +682,7 @@ impl fileLoader {
             if resolved.is_resolved() {
                 self.add_sub_task(
                     t,
-                    resolvedRef {
+                    &resolvedRef {
                         file_name: resolved.resolved_file_name.to_string(),
                         increase_depth: resolved.is_external_library_import,
                         elide_on_depth: false,
@@ -727,7 +728,7 @@ impl fileLoader {
                 let specifier = self.create_synthetic_import(&jsx_import, file);
                 module_names.push(specifier);
                 self.tasks[t].data().jsx_runtime_import_specifier =
-                    Some(P::new(jsxRuntimeImportSpecifier { module_reference: jsx_import.to_string(), specifier }));
+                    Some(P::new(jsxRuntimeImportSpecifier { module_reference: jsx_import.clone(), specifier }));
             }
         }
 
@@ -795,7 +796,7 @@ impl fileLoader {
                     );
                     self.add_sub_task_normalized(
                         t,
-                        resolvedRef {
+                        &resolvedRef {
                             file_name: resolved_file_name.to_string(),
                             increase_depth: resolved_module.is_external_library_import,
                             elide_on_depth: is_js_file_from_node_modules,
@@ -858,7 +859,7 @@ impl fileLoader {
         }
     }
 
-    pub(crate) fn add_sub_task(&mut self, t: TaskId, ref_: resolvedRef, lib_file: Option<P<LibFile>>) {
+    pub(crate) fn add_sub_task(&mut self, t: TaskId, ref_: &resolvedRef, lib_file: Option<P<LibFile>>) {
         self.add_sub_task_normalized(t, ref_, lib_file, None);
     }
 
@@ -866,7 +867,7 @@ impl fileLoader {
     pub(crate) fn add_sub_task_normalized(
         &mut self,
         t: TaskId,
-        ref_: resolvedRef,
+        ref_: &resolvedRef,
         lib_file: Option<P<LibFile>>,
         normalized: Option<(String, Path)>,
     ) {
@@ -879,7 +880,7 @@ impl fileLoader {
         let mut shared_name: Option<std::sync::Arc<str>> = None;
         if let Some((known_path, &data)) = self.files_parser.task_data_by_path.get_key_value(&path) {
             path = known_path.clone();
-            shared_name = self.files_parser.datas[data].tasks.get_key_value(&normalized_file_path).map(|(name, _)| name.clone());
+            shared_name = self.files_parser.datas[data].tasks.get_key_value(&normalized_file_path).map(|(name, _)| Arc::clone(name));
         }
         let mut sub_task = match shared_name {
             Some(name) => parseTask::new(name),

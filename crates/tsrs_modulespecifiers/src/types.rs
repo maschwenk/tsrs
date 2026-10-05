@@ -68,6 +68,31 @@ pub trait ModuleSpecifierGenerationHost: OutputPathsHost {
     fn get_default_resolution_mode_for_file(&self, file: P<SourceFile>) -> ResolutionMode;
     fn get_resolved_module_from_module_specifier(&self, file: P<SourceFile>, module_specifier: P<Node>) -> Option<P<ResolvedModule>>;
     fn get_mode_for_usage_location(&self, file: P<SourceFile>, module_specifier: P<Node>) -> ResolutionMode;
+
+    // tsrs-only: the host's memo for `try_get_module_name_from_exports` under `options`, if it keeps one (see
+    // `ExportsModuleNameCache`).
+    fn exports_module_name_cache(&self, _options: &tsrs_core::CompilerOptions) -> Option<&ExportsModuleNameCache> {
+        None
+    }
+}
+
+/// tsrs-only: memo for `try_get_module_name_from_exports`, a pure function of its arguments and of the program (its
+/// compiler options, package.json contents and output paths). Declaration emit asks for the same (module file,
+/// package) pair from every file that prints a type from that module, and each answer walks the package's
+/// `exports` map. A host returns one only if it lives as long as the program it describes, and only for that
+/// program's own options object.
+#[derive(Default)]
+pub struct ExportsModuleNameCache(std::sync::Mutex<FxHashMap<String, String>>);
+
+impl ExportsModuleNameCache {
+    pub(crate) fn get_or_compute(&self, key: String, compute: impl FnOnce() -> String) -> String {
+        if let Some(result) = self.0.lock().unwrap().get(&key) {
+            return result.clone();
+        }
+        let result = compute();
+        self.0.lock().unwrap().insert(key, result.clone());
+        result
+    }
 }
 
 /// Go `ImportModuleSpecifierPreference` (a string type; `as_str()` is the Go value).

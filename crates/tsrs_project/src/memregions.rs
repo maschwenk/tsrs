@@ -51,7 +51,7 @@ impl programOwner {
 
 // The address `Program::get_symlink_cache` routes by (`Program` derefs to its shared `processedFiles`).
 fn processed_files_addr(program: &'static Program) -> usize {
-    &**program as *const _ as *const () as usize
+    std::ptr::from_ref(&**program).cast::<()>() as usize
 }
 
 impl Drop for programOwner {

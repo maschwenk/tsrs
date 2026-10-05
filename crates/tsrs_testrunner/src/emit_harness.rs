@@ -114,8 +114,8 @@ pub fn compile_files_with_host_emit(
     pre_compiler_options.trace_resolution = Tristate::False;
     let mut pre_config = tsrs_tsoptions::new_parsed_command_line(P::new(pre_compiler_options), config.file_names().to_vec(), Vec::new(), ComparePathsOptions::default());
     pre_config.config_file = config.config_file;
-    pre_config.errors = config.errors.clone();
-    let pre_program = create_program(host.clone(), P::new(pre_config));
+    pre_config.errors.clone_from(&config.errors);
+    let pre_program = create_program(Arc::clone(&host), P::new(pre_config));
     pre_errors.extend(pre_program.get_config_file_parsing_diagnostics());
     pre_errors.extend(pre_program.get_program_diagnostics());
     pre_errors.extend(pre_program.get_syntactic_diagnostics(ctx, None));
@@ -162,7 +162,7 @@ pub fn compile_files_with_host_emit(
                 diag = diag.add_related_info(d);
             }
         }
-        errors = shorter_errors.clone();
+        errors.clone_from(shorter_errors);
         errors.push(diag);
     }
 
@@ -260,7 +260,7 @@ pub(crate) fn file_output(file: &TestFile, settings: &HarnessOptions) -> String 
     let file_name = if settings.full_emit_paths {
         tsbaseline::remove_test_path_prefixes(&file.unit_name, false /*retainTrailingDirectorySeparator*/)
     } else {
-        tspath::get_base_file_name(&file.unit_name).to_string()
+        tspath::get_base_file_name(&file.unit_name)
     };
     format!("//// [{file_name}]\r\n{}", file.content)
 }
@@ -272,7 +272,6 @@ pub trait Recompile {
 }
 
 // js_emit_baseline.go:20. Returns the baseline text (`NO_CONTENT` when empty); a Go `t.Fatal` is an `Err`.
-#[allow(clippy::too_many_arguments)]
 pub fn do_js_emit_baseline(
     header: &str,
     options: &CompilerOptions,
@@ -371,7 +370,7 @@ pub fn do_js_emit_baseline(
                         let file_name = if harness_settings.full_emit_paths {
                             tsbaseline::remove_test_path_prefixes(&doc.unit_name, false)
                         } else {
-                            tspath::get_base_file_name(&doc.unit_name).to_string()
+                            tspath::get_base_file_name(&doc.unit_name)
                         };
                         js_code.push_str("//// [");
                         js_code.push_str(&file_name);
@@ -449,7 +448,7 @@ fn prepare_declaration_compilation_context(
                 if !find_unit(&decl_file.unit_name, decl_input_files) && !find_unit(&decl_file.unit_name, decl_other_files) {
                     let content = decl_file.content.strip_prefix('\u{FEFF}').unwrap_or(&decl_file.content).to_string();
                     let dts_files = if into_input { &mut *decl_input_files } else { &mut *decl_other_files };
-                    dts_files.push(TestFile { unit_name: decl_file.unit_name.clone(), content });
+                    dts_files.push(TestFile { unit_name: decl_file.unit_name, content });
                 }
             }
         }

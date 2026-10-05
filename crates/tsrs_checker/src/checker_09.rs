@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use crate::*;
 use tsrs_ast::*;
 use tsrs_core::*;
@@ -260,6 +261,8 @@ impl Checker {
                     if constraint != check_type {
                         let mapper = prepend_type_mapping(root.check_type.get().unwrap(), constraint, d.mapper.get());
                         let instantiated = self.get_conditional_type_instantiation(t, mapper, true /*forConstraint*/, None);
+                        // SAFETY: made here for this one instantiation; kept if the result stored it.
+                        unsafe { recycle_mapping(mapper, false) };
                         if !instantiated.flags().intersects(TypeFlags::Never) {
                             d.resolved_constraint_of_distributive.set(Some(instantiated));
                             return Some(instantiated);
@@ -358,12 +361,17 @@ impl keyBuilder {
     pub(crate) fn hash(&self) -> CacheHashKey {
         match &self.overflow_buffer {
             None => CacheHashKey::hash_128(&self.inline_buffer[..self.inline_length as usize]),
-            Some(overflow) => {
-                let mut buf = overflow.clone();
-                buf.extend_from_slice(&self.inline_buffer[..self.inline_length as usize]);
-                CacheHashKey::hash_128(&buf)
-            }
+            Some(overflow) => self.hash_spilled(overflow),
         }
+    }
+
+    /// `hash` of a key longer than the inline buffer (rare).
+    #[cold]
+    #[inline(never)]
+    fn hash_spilled(&self, overflow: &[u8]) -> CacheHashKey {
+        let mut buf = overflow.to_vec();
+        buf.extend_from_slice(&self.inline_buffer[..self.inline_length as usize]);
+        CacheHashKey::hash_128(&buf)
     }
 
     // spill moves the buffered bytes onto the end of overflowBuffer, so the key's byte
@@ -459,13 +467,20 @@ impl keyBuilder {
         self.write_alias_arg(alias.into());
     }
 
-    /// `write_alias` of an `AliasArg` (a pending alias writes the same bytes as the alias it stands for).
+    /// `write_alias` of an `AliasArg` (a pending alias writes the same bytes as the alias it stands for). Most keys
+    /// have no alias; that byte is written inline.
+    #[inline]
     pub(crate) fn write_alias_arg(&mut self, alias: AliasArg<'_>) {
+        match alias {
+            AliasArg::None => self.write_byte(0),
+            _ => self.write_some_alias_arg(alias),
+        }
+    }
+
+    #[inline(never)]
+    fn write_some_alias_arg(&mut self, alias: AliasArg<'_>) {
         let (symbol, type_arguments) = match alias {
-            AliasArg::None => {
-                self.write_byte(0);
-                return;
-            }
+            AliasArg::None => unreachable!("write_alias_arg writes a missing alias"),
             AliasArg::Some(alias) => (alias.symbol.get(), alias.type_arguments.get()),
             AliasArg::Pending(pending) => (pending.symbol, pending.type_arguments.as_slice()),
         };
@@ -704,7 +719,7 @@ pub(crate) fn is_type_reference_with_generic_arguments(c: &mut Checker, t: P<Typ
 }
 
 // checker.go:17986
-pub(crate) fn is_non_deferred_type_reference(t: P<Type>) -> bool {
+pub fn is_non_deferred_type_reference(t: P<Type>) -> bool {
     t.object_flags().intersects(ObjectFlags::Reference) && t.as_type_reference().node.get().is_none()
 }
 
@@ -2147,9 +2162,8 @@ impl Checker {
             let mut checked: FxHashSet<&'static str> = FxHashSet::default();
             let mut props: Vec<P<Symbol>> = Vec::new();
             for &current in d.types.get() {
-                for prop in self.get_properties_of_type(current).iter().copied() {
-                    if !checked.contains(prop.name()) {
-                        checked.insert(prop.name());
+                for &prop in self.get_properties_of_type(current) {
+                    if checked.insert(prop.name()) {
                         let combined_prop = self.get_property_of_union_or_intersection_type(
                             t,
                             prop.name(),
@@ -2663,7 +2677,7 @@ impl Checker {
             return None;
         }
         let lm = match self.lazy_member_tables.get(&t) {
-            Some(lm) => lm.clone(),
+            Some(lm) => Rc::clone(lm),
             None => self.create_lazy_member_table(t, source.unwrap())?,
         };
         if lm.ready.get().is_none() || t.object_flags().intersects(ObjectFlags::MembersResolved) {
@@ -2706,7 +2720,7 @@ impl Checker {
             declared: SymbolTable::default(),
             ordered_properties: std::cell::OnceCell::new(),
         });
-        self.lazy_member_tables.insert(t, lm.clone());
+        self.lazy_member_tables.insert(t, Rc::clone(&lm));
         self.lazy_member_stats.member_tables_created += 1;
         if t.target().unwrap().object_flags().intersects(ObjectFlags::Tuple) {
             self.lazy_member_stats.tuple_tables_created += 1;

@@ -551,7 +551,7 @@ impl Checker {
         let mut counts: OrderedMap<&'static str, i32> = OrderedMap::default();
         for (i, &t) in types.iter().enumerate() {
             if Some(i) != skipped {
-                for prop in self.get_properties_of_type(t).iter().copied() {
+                for prop in self.get_properties_of_type(t) {
                     *counts.entry(prop.name()).or_insert(0) += 1;
                 }
             }
@@ -920,6 +920,25 @@ impl Checker {
         let Some(m) = m else {
             return t;
         };
+        // `could_contain_type_variables(t)`'s cached answers, so that every path here returns or tail-calls (the
+        // checks that call out are in `instantiate_type_with_alias_slow`, which repeats these).
+        if t.flags().intersects(TypeFlags::StructuredOrInstantiable) {
+            let object_flags = t.object_flags();
+            if !object_flags.intersects(ObjectFlags::CouldContainTypeVariablesComputed) {
+                return self.instantiate_type_with_alias_slow(t, m, alias);
+            }
+            if object_flags.intersects(ObjectFlags::CouldContainTypeVariables) {
+                return self.instantiate_type_with_alias_worker(t, m, alias);
+            }
+        }
+        if t.alias().is_none() {
+            return t;
+        }
+        self.instantiate_type_with_alias_slow(t, m, alias)
+    }
+
+    #[inline(never)]
+    fn instantiate_type_with_alias_slow(&mut self, t: P<Type>, m: P<TypeMapper>, alias: Option<P<TypeAlias>>) -> P<Type> {
         if !(self.could_contain_type_variables(t)
             || (t.alias().is_some() && !t.alias().type_arguments().is_empty() && t.alias().type_arguments().iter().any(|&a| self.could_contain_type_variables(a))))
         {
@@ -950,10 +969,19 @@ impl Checker {
         if index == -1 {
             self.push_active_mapper(m);
         }
-        let mut b = keyBuilder::default();
-        b.write_type(t);
-        b.write_alias(alias);
-        let key = b.hash();
+        let key = match alias {
+            // The bytes `write_type` + `write_alias(None)` produce, without zeroing a key builder.
+            None => {
+                let id = t.id.0.to_le_bytes();
+                CacheHashKey::hash_128(&[id[0], id[1], id[2], id[3], 0])
+            }
+            Some(_) => {
+                let mut b = keyBuilder::default();
+                b.write_type(t);
+                b.write_alias(alias);
+                b.hash()
+            }
+        };
         let cache_index = if index != -1 { index as usize } else { self.active_type_mappers_caches.len() - 1 };
         if let Some(&cached_type) = self.active_type_mappers_caches[cache_index].get(&key) {
             tsrs_core::sitecount::hit("active mapper cache (instantiateTypeWithAlias)", "hit");
@@ -1743,7 +1771,7 @@ impl Checker {
         if t.flags().intersects(TypeFlags::Any) {
             cb(self, self.string_type);
         } else {
-            for info in self.get_index_infos_of_type(t).iter().copied() {
+            for info in self.get_index_infos_of_type(t) {
                 if !strings_only || info.key_type().flags().intersects(TypeFlags::String | TypeFlags::TemplateLiteral) {
                     cb(self, info.key_type());
                 }

@@ -134,7 +134,7 @@ impl AsyncConn {
                 let spawned = std::thread::Builder::new()
                     .name(format!("tsrs-api-{}", msg.method))
                     .stack_size(self.handler_stack_size)
-                    .spawn(move || this.dispatch(msg));
+                    .spawn(move || this.dispatch(&msg));
                 match spawned {
                     Ok(handle) => handles.push(handle),
                     Err(e) => break Err(TransportError::Io(e)),
@@ -161,13 +161,13 @@ impl AsyncConn {
         }
     }
 
-    fn dispatch(&self, msg: Message) {
+    fn dispatch(&self, msg: &Message) {
         if msg.is_notification() {
-            let cx = RequestContext { cancel: self.cancel.clone(), depth: 0, callbacks: self.callbacks.clone(), state: Default::default() };
+            let cx = RequestContext { cancel: self.cancel.clone(), depth: 0, callbacks: Arc::clone(&self.callbacks), state: Default::default() };
             let _ = catch_unwind(AssertUnwindSafe(|| self.handler.handle_notification(&cx, &msg.method, msg.params_bytes())));
             return;
         }
-        if let Err(e) = self.handle_request(&msg) {
+        if let Err(e) = self.handle_request(msg) {
             let recorded = {
                 let mut pending = lock(&self.pending);
                 let recorded = pending.record_terminal(Some(e.to_string()));
@@ -193,9 +193,9 @@ impl AsyncConn {
         }
     }
 
-    fn write_result(&self, id: &Id, result: Result<Response, ResponseError>) -> Result<(), TransportError> {
+    fn write_result(&self, id: &Id, result: &Result<Response, ResponseError>) -> Result<(), TransportError> {
         let mut w = lock(&self.writer);
-        let written = match &result {
+        let written = match result {
             Ok(response) => match w.write_response(id, response) {
                 Err(TransportError::Protocol(e)) => w.write_error(id, &ResponseError::internal(e)),
                 other => other,
@@ -210,18 +210,18 @@ impl AsyncConn {
         match msg.method.as_str() {
             METHOD_GET_SERVER_TIMING => {
                 let json = serde_json::to_vec(&server_timing_snapshot(self.timing.as_ref())).expect("timing serializes");
-                return self.write_result(id, Ok(Response::Json(json)));
+                return self.write_result(id, &Ok(Response::Json(json)));
             }
             METHOD_RESET_SERVER_TIMING => {
                 if let Some(t) = &self.timing {
                     t.reset();
                 }
-                return self.write_result(id, Ok(Response::null()));
+                return self.write_result(id, &Ok(Response::null()));
             }
             _ => {}
         }
         let start = self.timing.as_ref().map(|_| Instant::now());
-        let cx = RequestContext { cancel: self.cancel.clone(), depth: 0, callbacks: self.callbacks.clone(), state: Default::default() };
+        let cx = RequestContext { cancel: self.cancel.clone(), depth: 0, callbacks: Arc::clone(&self.callbacks), state: Default::default() };
         let outcome = catch_unwind(AssertUnwindSafe(|| {
             crate::reentrancy::with_request(&cx, || self.handler.handle_request(&cx, &msg.method, msg.params_bytes()))
         }));
@@ -233,7 +233,7 @@ impl AsyncConn {
             Ok(Err(err)) => Err(ResponseError { code: err.code, message: err.message }),
             Err(payload) => Err(ResponseError::internal(panic_message(&*payload))),
         };
-        self.write_result(id, result)
+        self.write_result(id, &result)
     }
 
     /// Call: unique "api<N>" string IDs; the response channel is registered before the request is

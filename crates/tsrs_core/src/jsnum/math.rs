@@ -17,6 +17,7 @@ pub(crate) fn modf(f: f64) -> (f64, f64) {
 pub(crate) fn exp(x: f64) -> f64 {
     const Ln2Hi: f64 = 6.93147180369123816490e-01;
     const Ln2Lo: f64 = 1.90821492927058770002e-10;
+    #[expect(clippy::approx_constant, reason = "the literal from Go's math.Exp, kept verbatim")]
     const Log2e: f64 = 1.44269504088896338700e+00;
     const Overflow: f64 = 7.09782712893383973096e+02;
     const Underflow: f64 = -7.45133219101941108420e+02;

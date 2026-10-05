@@ -829,7 +829,7 @@ impl LanguageService {
         for type_directory_name in self.get_directories(directory) {
             let package_name = tsrs_module::unmangle_scoped_package_name(&type_directory_name);
             if let Some(types) = &options.types {
-                if !types.is_empty() && !types.iter().any(|t| *t == package_name) {
+                if !types.is_empty() && !types.contains(&package_name) {
                     continue;
                 }
             }
@@ -1184,7 +1184,7 @@ impl LanguageService {
         for directory in directories {
             let directory_name = tspath::get_base_file_name(&directory);
             if directory_name != "@types" {
-                result.add(moduleCompletionNameAndKind { name: directory_name.to_string(), kind: moduleCompletionKind::Directory, extension: String::new() });
+                result.add(moduleCompletionNameAndKind { name: directory_name.clone(), kind: moduleCompletionKind::Directory, extension: String::new() });
             }
         }
     }
@@ -1431,9 +1431,9 @@ impl LanguageService {
         // full directory component. For example: directory/path/of/prefix/base*
         let normalized_prefix = tspath::resolve_path(prefix, &[]);
         let (normalized_prefix_directory, normalized_prefix_base) = if tspath::has_trailing_directory_separator(prefix) {
-            (normalized_prefix.clone(), String::new())
+            (normalized_prefix, String::new())
         } else {
-            (tspath::get_directory_path(&normalized_prefix), tspath::get_base_file_name(&normalized_prefix).to_string())
+            (tspath::get_directory_path(&normalized_prefix), tspath::get_base_file_name(&normalized_prefix))
         };
 
         let fragment_has_path = contains_slash(fragment);
@@ -1455,7 +1455,7 @@ impl LanguageService {
         let expanded_prefix_directory = if fragment_has_path {
             tspath::combine_paths(&normalized_prefix_directory, &[&(normalized_prefix_base.clone() + &fragment_directory)])
         } else {
-            normalized_prefix_directory.clone()
+            normalized_prefix_directory
         };
         // Need to normalize after combining: If we combinePaths("a", "../b"), we want "b" and not "a/../b".
         let base_directory = tspath::normalize_path(&tspath::combine_paths(package_directory, &[&expanded_prefix_directory]));

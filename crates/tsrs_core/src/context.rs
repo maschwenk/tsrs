@@ -212,7 +212,7 @@ impl Context {
                 }
             }
         }
-        (self.push(ctxKind::Cancel(state.clone())), state)
+        (self.push(ctxKind::Cancel(Arc::clone(&state))), state)
     }
 
     // Go `context.WithCancel(parent)`.

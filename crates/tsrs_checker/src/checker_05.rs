@@ -319,7 +319,7 @@ impl Checker {
         // s.candidates (chooseOverload, pickLongestCandidateSignature) are visible to the caller. We
         // re-copy the candidates before every return below to preserve that aliasing.
         if let Some(out) = candidates_out_array.as_deref_mut() {
-            *out = s.candidates.clone();
+            out.clone_from(&s.candidates);
         }
 
         if s.candidates.is_empty() {
@@ -406,14 +406,14 @@ impl Checker {
         self.call_resolution_stack.pop();
         if let Some(result) = result {
             if let Some(out) = candidates_out_array.as_deref_mut() {
-                *out = s.candidates.clone();
+                out.clone_from(&s.candidates);
             }
             return result;
         }
         let args = s.args.clone();
         let result = self.get_candidate_for_overload_failure(s_node, &mut s.candidates, &args, candidates_out_array.is_some(), check_mode);
         if let Some(out) = candidates_out_array.as_deref_mut() {
-            *out = s.candidates.clone();
+            out.clone_from(&s.candidates);
         }
         // Preemptively cache the result; getResolvedSignature will do this after we return, but
         // we need to ensure that the result is present for the error checks below so that if
@@ -998,6 +998,10 @@ impl Checker {
                         };
                         // Inferences made from return types have lower priority than all other inferences.
                         self.infer_types(context.inferences.get(), inference_source_type, inference_target_type, InferencePriority::ReturnType, false);
+                        // The snapshot is garbage now unless its mapper was stored (notes/mem-scoped-arenas.md).
+                        if let Some(cloned) = cloned {
+                            InferenceContext::recycle(cloned);
+                        }
                     }
                     // Create a type mapper for instantiating generic contextual types using the inferences made
                     // from the return type. We need a separate inference pass here because (a) instantiation of
@@ -1021,6 +1025,8 @@ impl Checker {
                     } else {
                         context.set_return_mapper(None);
                     }
+                    // Its inferred part was copied (`cloneInferredPartOfContext` clones the infos).
+                    InferenceContext::recycle(return_context);
                 }
             }
         }

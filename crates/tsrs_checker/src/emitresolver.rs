@@ -502,7 +502,7 @@ impl EmitResolver {
             }
         }
 
-        Some(P::new(SymbolAccessibilityResult {
+        Some(P::new_scratch(SymbolAccessibilityResult {
             accessibility: SymbolAccessibility::Accessible,
             aliases_to_make_visible: aliases_to_make_visible_set.unwrap_or_default().into_iter().map(|(_, n)| n).collect(),
             ..Default::default()
@@ -1093,11 +1093,11 @@ impl EmitResolver {
                 }
                 if value.abs() != value {
                     // negative
-                    return Some(f.new_prefix_unary_expression(Kind::MinusToken, f.new_numeric_literal(alloc_str(&value.string()[1..]), TokenFlags::None)));
+                    return Some(f.new_prefix_unary_expression(Kind::MinusToken, f.new_numeric_literal(f.alloc_text(&value.string()[1..]), TokenFlags::None)));
                 }
-                Some(f.new_numeric_literal(alloc_str(&value.string()), TokenFlags::None))
+                Some(f.new_numeric_literal(f.alloc_text(&value.string()), TokenFlags::None))
             }
-            Some(LiteralValue::BigInt(value)) => Some(f.new_big_int_literal(alloc_str(&(pseudo_big_int_to_string(value) + "n")), TokenFlags::None)),
+            Some(LiteralValue::BigInt(value)) => Some(f.new_big_int_literal(f.alloc_text(&(pseudo_big_int_to_string(value) + "n")), TokenFlags::None)),
             Some(LiteralValue::Boolean(value)) => {
                 let kind = if value { Kind::TrueKeyword } else { Kind::FalseKeyword };
                 Some(f.new_keyword_expression(kind))

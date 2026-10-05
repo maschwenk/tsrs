@@ -9,6 +9,7 @@
 // The scan is iterative (no recursion), allocates at most one key set per open object, and rejects
 // nesting deeper than jsontext's limit (10000).
 
+use std::fmt::Write as _;
 use rustc_hash::FxHashSet;
 
 pub const MAX_DEPTH: usize = 10000;
@@ -106,10 +107,10 @@ impl Scanner<'_> {
     fn err(&self, what: &str, pointer: &str, offset: usize) -> String {
         let mut s = format!("jsontext: {what}");
         if !pointer.is_empty() {
-            s.push_str(&format!(" within {}", serde_json::to_string(pointer).unwrap()));
+            let _ = write!(s, " within {}", serde_json::to_string(pointer).unwrap());
         }
         if offset > 0 {
-            s.push_str(&format!(" after offset {offset}"));
+            let _ = write!(s, " after offset {offset}");
         }
         s
     }

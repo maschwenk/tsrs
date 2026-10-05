@@ -76,7 +76,7 @@ impl Relation {
 
 impl Checker {
     // relater.go:117
-    pub(crate) fn is_type_identical_to(&mut self, source: P<Type>, target: P<Type>) -> bool {
+    pub fn is_type_identical_to(&mut self, source: P<Type>, target: P<Type>) -> bool {
         let relation = self.identity_relation;
         self.is_type_related_to(source, target, relation)
     }
@@ -959,7 +959,7 @@ impl Checker {
 
     // relater.go:695
     pub(crate) fn has_common_properties(&mut self, source: P<Type>, target: P<Type>, is_comparing_jsx_attributes: bool) -> bool {
-        for prop in self.get_properties_of_type(source).iter().copied() {
+        for prop in self.get_properties_of_type(source) {
             if self.is_known_property(target, prop.name(), is_comparing_jsx_attributes) {
                 return true;
             }
@@ -1078,17 +1078,24 @@ impl Checker {
 }
 
 // relater.go:797
+#[inline]
 pub(crate) fn has_matching_recursion_identity(c: &mut Checker, t: P<Type>, identity: RecursionId) -> bool {
     let target = get_recursion_identity_target(c, t);
     if target.flags().intersects(TypeFlags::Intersection) {
-        for &t in target.types() {
-            if has_matching_recursion_identity(c, t, identity) {
-                return true;
-            }
-        }
-        return false;
+        return intersection_has_matching_recursion_identity(c, target, identity);
     }
     get_recursion_identity_from_target(target) == identity
+}
+
+/// `has_matching_recursion_identity` of an intersection recursion identity target.
+#[inline(never)]
+fn intersection_has_matching_recursion_identity(c: &mut Checker, target: P<Type>, identity: RecursionId) -> bool {
+    for &t in target.types() {
+        if has_matching_recursion_identity(c, t, identity) {
+            return true;
+        }
+    }
+    false
 }
 
 // relater.go:810
@@ -1104,7 +1111,17 @@ pub(crate) fn get_recursion_identity(c: &mut Checker, t: P<Type>) -> RecursionId
 // to explicitly written object literals. For example in `Mapped<{ x: Mapped<{ x: Mapped<{ x: string }>}>}>`,
 // each of the mapped type applications will have a unique recursion identity (that of their target object type
 // literal) and thus avoid appearing deeply nested.
+#[inline]
 pub(crate) fn get_recursion_identity_target(c: &mut Checker, t: P<Type>) -> P<Type> {
+    // Most types are their own target; the unwrapping is out of line.
+    if t.flags().intersects(TypeFlags::IndexedAccess) || t.object_flags().contains(ObjectFlags::InstantiatedMapped) {
+        return get_recursion_identity_target_worker(c, t);
+    }
+    t
+}
+
+#[inline(never)]
+fn get_recursion_identity_target_worker(c: &mut Checker, t: P<Type>) -> P<Type> {
     if t.flags().intersects(TypeFlags::IndexedAccess) {
         return get_recursion_identity_target(c, t.as_indexed_access_type().object_type.get().unwrap());
     }
@@ -1423,7 +1440,7 @@ impl Checker {
 }
 
 // relater.go:1008
-pub(crate) fn exclude_properties(properties: &[P<Symbol>], excluded_properties: Set<String>) -> Vec<P<Symbol>> {
+pub(crate) fn exclude_properties(properties: &[P<Symbol>], excluded_properties: &Set<String>) -> Vec<P<Symbol>> {
     if excluded_properties.len() == 0 || properties.is_empty() {
         return properties.to_vec();
     }

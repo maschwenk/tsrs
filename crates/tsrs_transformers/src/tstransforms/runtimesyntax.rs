@@ -184,7 +184,7 @@ impl RuntimeSyntaxTransformer {
             if ast::is_identifier(name) {
                 let map = {
                     let mut current = self.current_scope_first_declarations_of_name.borrow_mut();
-                    current.get_or_insert_with(|| Rc::new(RefCell::new(FxHashMap::default()))).clone()
+                    Rc::clone(current.get_or_insert_with(|| Rc::new(RefCell::new(FxHashMap::default()))))
                 };
                 let text = name.text();
                 map.borrow_mut().entry(text).or_insert(node);

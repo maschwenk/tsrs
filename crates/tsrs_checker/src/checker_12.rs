@@ -30,7 +30,8 @@ pub(crate) fn is_single_element_generic_tuple_type(t: P<Type>) -> bool {
 
 impl Checker {
     // checker.go:23966
-    pub(crate) fn is_array_or_tuple_type(&mut self, t: P<Type>) -> bool {
+    // Public for lint rules (tsgolint's shim exposes Checker_isArrayOrTupleType).
+    pub fn is_array_or_tuple_type(&mut self, t: P<Type>) -> bool {
         self.is_array_type(t) || is_tuple_type(t)
     }
 
@@ -996,7 +997,7 @@ impl Checker {
 
     // checker.go:24770
     pub(crate) fn get_conditional_type(&mut self, root: P<ConditionalRoot>, mapper: Option<P<TypeMapper>>, for_constraint: bool, alias: Option<P<TypeAlias>>) -> P<Type> {
-        let (mappers, contexts) = (self.scratch_mappers.len(), self.scratch_contexts.len());
+        let (mappers, contexts, lists) = (self.scratch_mappers.len(), self.scratch_contexts.len(), self.scratch_mapper_lists.len());
         let result = self.get_conditional_type_worker(root, mapper, for_constraint, alias);
         // The `infer` contexts and the composite mappers made for them are garbage unless one of their mappers was
         // stored (74% / 61-88% are, notes/mem-census.md). Contexts first: recycling reads their mapper fields.
@@ -1009,8 +1010,14 @@ impl Checker {
             // SAFETY: made by this call (below), which is done; escaped mappers are kept.
             unsafe { recycle_mapper(m) };
         }
+        while self.scratch_mapper_lists.len() > lists {
+            let (m, targets) = self.scratch_mapper_lists.pop().unwrap();
+            // SAFETY: made by this call's `getTailRecursionRoot` with its list; escaped mappers keep theirs.
+            unsafe { recycle_mapper_with_targets(m, targets) };
+        }
         tsrs_core::census_scrub_slack(&mut self.scratch_contexts);
         tsrs_core::census_scrub_slack(&mut self.scratch_mappers);
+        tsrs_core::census_scrub_slack(&mut self.scratch_mapper_lists);
         result
     }
 
@@ -1204,9 +1211,15 @@ impl Checker {
             if let Some(new_mapper) = new_mapper {
                 let new_root = new_type.as_conditional_type().root.get().unwrap();
                 if !new_root.outer_type_parameters.get().is_empty() {
-                    let type_param_mapper = self.combine_type_mappers(new_type.as_conditional_type().mapper.get(), new_mapper);
+                    let conditional_mapper = new_type.as_conditional_type().mapper.get();
+                    let type_param_mapper = self.combine_type_mappers(conditional_mapper, new_mapper);
                     let type_arguments: Vec<P<Type>> = new_root.outer_type_parameters.get().iter().map(|&t| type_param_mapper.map(self, t)).collect();
-                    let new_root_mapper = new_type_mapper(new_root.outer_type_parameters.get(), alloc_vec(type_arguments));
+                    if conditional_mapper.is_some() {
+                        // SAFETY: the composite made above, used only by those `map` calls.
+                        unsafe { recycle_mapper(type_param_mapper) };
+                    }
+                    let type_argument_list = tsrs_core::alloc_slice_recycled(&type_arguments);
+                    let new_root_mapper = new_type_mapper(new_root.outer_type_parameters.get(), type_argument_list);
                     let mut new_check_type = None;
                     if new_root.is_distributive.get() {
                         new_check_type = Some(self.get_mapped_type(new_root.check_type.get().unwrap(), new_root_mapper));
@@ -1215,8 +1228,13 @@ impl Checker {
                         || new_check_type == new_root.check_type.get()
                         || !new_check_type.unwrap().flags().intersects(TypeFlags::Union | TypeFlags::Never)
                     {
+                        // The caller's `getConditionalType` loops with this mapper and recycles it on return unless
+                        // the result kept it (99% do not, notes/mem-scoped-arenas.md).
+                        self.scratch_mapper_lists.push((new_root_mapper, type_argument_list));
                         return (Some(new_root), Some(new_root_mapper));
                     }
+                    // SAFETY: made above; mapping a type through it stores nothing.
+                    unsafe { recycle_mapper_with_targets(new_root_mapper, type_argument_list) };
                 }
             }
         }
@@ -1753,7 +1771,10 @@ impl Checker {
             let name_type = self.get_name_type_from_mapped_type(t);
             if let Some(name_type) = name_type {
                 let type_parameter = self.get_type_parameter_from_mapped_type(t);
-                let instantiated = self.instantiate_type(name_type, Some(new_simple_type_mapper(type_parameter, constraint)));
+                let mapper = new_simple_type_mapper(type_parameter, constraint);
+                let instantiated = self.instantiate_type(name_type, Some(mapper));
+                // SAFETY: made here for this one instantiation; kept if the result stored it.
+                unsafe { recycle_mapper(mapper) };
                 if self.is_generic_index_type(instantiated) {
                     return true;
                 }
@@ -2604,7 +2625,7 @@ impl Checker {
     // circularly reference themselves and therefore cannot be subtype reduced during their declaration.
     // For example, "type Item = string | (() => Item" is a named type that circularly references itself.
     // checker.go:26098
-    pub(crate) fn get_union_type_ex(&mut self, types: &[P<Type>], union_reduction: UnionReduction, alias: AliasArg<'_>, origin: Option<P<Type>>) -> P<Type> {
+    pub fn get_union_type_ex(&mut self, types: &[P<Type>], union_reduction: UnionReduction, alias: AliasArg<'_>, origin: Option<P<Type>>) -> P<Type> {
         if types.is_empty() {
             return self.never_type;
         }

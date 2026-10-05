@@ -91,14 +91,14 @@ impl CallbackState {
 
     /// Registers a client call made on the current thread until the guard drops.
     pub(crate) fn enter(self: &Arc<Self>) -> WaitingGuard {
-        let owner = current_request().map(|cx| cx.state.clone());
+        let owner = current_request().map(|cx| cx.state);
         match &owner {
             Some(state) => state.waiting.fetch_add(1, Ordering::SeqCst),
             None => self.unattributed.fetch_add(1, Ordering::SeqCst),
         };
         self.waiting.fetch_add(1, Ordering::SeqCst);
         self.notify();
-        WaitingGuard { conn: self.clone(), owner }
+        WaitingGuard { conn: Arc::clone(self), owner }
     }
 
     fn notify(&self) {
@@ -179,7 +179,7 @@ pub struct Holder(Arc<RequestState>);
 impl Holder {
     /// The request served on this thread (None outside a request).
     pub fn current() -> Option<Holder> {
-        current_request().map(|cx| Holder(cx.state.clone()))
+        current_request().map(|cx| Holder(cx.state))
     }
 }
 
@@ -189,7 +189,7 @@ fn holder_possibly_stuck(holder: &Arc<RequestState>, conn: &CallbackState) -> bo
     if conn.unattributed_waiting() > 0 {
         return true;
     }
-    let mut r = holder.clone();
+    let mut r = Arc::clone(holder);
     for _ in 0..64 {
         if r.waiting.load(Ordering::SeqCst) > 0 {
             return true;
@@ -217,12 +217,12 @@ impl ContentionWait {
     /// `holder`: the resource's current holder if known (`Holder::current()` captured by the holder).
     /// Without it, any client call in flight on the connection counts as the holder's (conservative).
     pub fn new(holder: Option<&Holder>) -> ContentionWait {
-        ContentionWait { holder: holder.map(|h| h.0.clone()), stuck_since: None, registered: None }
+        ContentionWait { holder: holder.map(|h| Arc::clone(&h.0)), stuck_since: None, registered: None }
     }
 
     /// Updates the holder (it can change between re-checks).
     pub fn set_holder(&mut self, holder: Option<&Holder>) {
-        let h = holder.map(|h| h.0.clone());
+        let h = holder.map(|h| Arc::clone(&h.0));
         let same = match (&h, &self.holder) {
             (Some(a), Some(b)) => Arc::ptr_eq(a, b),
             (None, None) => true,
@@ -232,7 +232,7 @@ impl ContentionWait {
             self.holder = h;
             self.stuck_since = None;
             if let Some(me) = &self.registered {
-                *me.blocked_on.lock().unwrap_or_else(|e| e.into_inner()) = self.holder.clone();
+                (*me.blocked_on.lock().unwrap_or_else(|e| e.into_inner())).clone_from(&self.holder);
             }
         }
     }
@@ -243,8 +243,8 @@ impl ContentionWait {
     pub fn may_deadlock(&mut self) -> bool {
         let Some(cx) = current_request() else { return false };
         if self.registered.is_none() {
-            *cx.state.blocked_on.lock().unwrap_or_else(|e| e.into_inner()) = self.holder.clone();
-            self.registered = Some(cx.state.clone());
+            (*cx.state.blocked_on.lock().unwrap_or_else(|e| e.into_inner())).clone_from(&self.holder);
+            self.registered = Some(Arc::clone(&cx.state));
         }
         let stuck = match &self.holder {
             Some(h) => holder_possibly_stuck(h, &cx.callbacks),
@@ -351,12 +351,12 @@ impl<T> Drop for RequestGuard<'_, T> {
 /// client (immediately on sync, after the grace period on async; see module docs). Outside a request it
 /// is a plain blocking lock. Poisoned locks are recovered (the connection already reported the panic).
 pub fn lock_for_request<'a, T>(mutex: &'a Mutex<T>, resource: &str) -> Result<RequestGuard<'a, T>, ApiError> {
-    let key = mutex as *const Mutex<T> as usize;
+    let key = std::ptr::from_ref::<Mutex<T>>(mutex) as usize;
     let Some(cx) = current_request() else {
         return Ok(RequestGuard { key: None, guard: mutex.lock().unwrap_or_else(|e| e.into_inner()) });
     };
     let acquired = |guard: MutexGuard<'a, T>| {
-        lock_holders().get_or_insert_with(FxHashMap::default).insert(key, cx.state.clone());
+        lock_holders().get_or_insert_with(FxHashMap::default).insert(key, Arc::clone(&cx.state));
         RequestGuard { key: Some(key), guard }
     };
     let mut wait: Option<ContentionWait> = None;

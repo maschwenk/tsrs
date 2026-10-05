@@ -90,7 +90,7 @@ pub(crate) fn get_token_at_position_worker(
     };
 
     let test_node = {
-        let st = st.clone();
+        let st = Rc::clone(&st);
         Rc::new(move |node: P<Node>| -> i32 {
             if node.kind() != Kind::EndOfFile
                 && node.end() == position
@@ -127,8 +127,8 @@ pub(crate) fn get_token_at_position_worker(
     // child and JSDoc comment of the current node. Node children are walked in
     // order, while node lists are binary searched.
     let visit_node: VisitNodeFn = {
-        let st = st.clone();
-        let test_node = test_node.clone();
+        let st = Rc::clone(&st);
+        let test_node = Rc::clone(&test_node);
         Rc::new(move |node: Option<P<Node>>, _: &mut NodeVisitor| -> Option<P<Node>> {
             // We can't abort visiting children, so once a match is found, we set `next`
             // and do nothing on subsequent visits.
@@ -161,8 +161,7 @@ pub(crate) fn get_token_at_position_worker(
     };
 
     let visit_node_list: VisitNodesFn = {
-        let st = st.clone();
-        let test_node = test_node.clone();
+        let st = Rc::clone(&st);
         Rc::new(move |node_list: Option<P<NodeList>>, _: &mut NodeVisitor| -> Option<P<NodeList>> {
             let Some(list) = node_list else {
                 return node_list;
@@ -238,7 +237,7 @@ pub(crate) fn get_token_at_position_worker(
     };
 
     loop {
-        visit_each_child_and_jsdoc(current, source_file, Some(visit_node.clone()), Some(visit_node_list.clone()));
+        visit_each_child_and_jsdoc(current, source_file, Some(Rc::clone(&visit_node)), Some(Rc::clone(&visit_node_list)));
         // If prevSubtree was set on the last iteration, it ends at the target position.
         // Check if the rightmost token of prevSubtree should be returned based on the
         // `includePrecedingTokenAtEndPosition` callback.
@@ -329,7 +328,7 @@ pub fn find_rightmost_node(node: P<Node>) -> P<Node> {
     let next: Rc<Cell<Option<P<Node>>>> = Rc::new(Cell::new(None));
     let mut current = node;
     let visit_node: VisitNodeFn = {
-        let next = next.clone();
+        let next = Rc::clone(&next);
         Rc::new(move |node: Option<P<Node>>, _: &mut NodeVisitor| {
             if node.is_some() {
                 next.set(node);
@@ -338,7 +337,7 @@ pub fn find_rightmost_node(node: P<Node>) -> P<Node> {
         })
     };
     let visit_nodes: VisitNodesFn = {
-        let next = next.clone();
+        let next = Rc::clone(&next);
         Rc::new(move |node_list: Option<P<NodeList>>, _: &mut NodeVisitor| {
             if let Some(list) = node_list {
                 if let Some(rightmost) = ast::find_last_visible_node(list.nodes()) {
@@ -409,8 +408,8 @@ pub fn find_preceding_token_ex(
         let found_child: Rc<Cell<Option<P<Node>>>> = Rc::new(Cell::new(None));
         let prev_child: Rc<Cell<Option<P<Node>>>> = Rc::new(Cell::new(None));
         let visit_node: VisitNodeFn = {
-            let found_child = found_child.clone();
-            let prev_child = prev_child.clone();
+            let found_child = Rc::clone(&found_child);
+            let prev_child = Rc::clone(&prev_child);
             Rc::new(move |node: Option<P<Node>>, _: &mut NodeVisitor| {
                 // skip synthesized nodes (that will exist now because of jsdoc handling)
                 let Some(nd) = node else {
@@ -432,8 +431,7 @@ pub fn find_preceding_token_ex(
             })
         };
         let visit_nodes: VisitNodesFn = {
-            let found_child = found_child.clone();
-            let prev_child = prev_child.clone();
+            let found_child = Rc::clone(&found_child);
             Rc::new(move |node_list: Option<P<NodeList>>, _: &mut NodeVisitor| {
                 if found_child.get().is_some() {
                     return node_list;
@@ -589,9 +587,9 @@ fn find_rightmost_valid_token(
         let rightmost_visited_nodes: Rc<RefCell<Vec<P<Node>>>> = Rc::new(RefCell::new(Vec::with_capacity(1))); // Nodes after the last valid node.
         let has_children: Rc<Cell<bool>> = Rc::new(Cell::new(false));
         let visit_node: VisitNodeFn = {
-            let rightmost_valid_node = rightmost_valid_node.clone();
-            let rightmost_visited_nodes = rightmost_visited_nodes.clone();
-            let has_children = has_children.clone();
+            let rightmost_valid_node = Rc::clone(&rightmost_valid_node);
+            let rightmost_visited_nodes = Rc::clone(&rightmost_visited_nodes);
+            let has_children = Rc::clone(&has_children);
             Rc::new(move |node: Option<P<Node>>, _: &mut NodeVisitor| {
                 let Some(nd) = node else {
                     return node;
@@ -612,9 +610,9 @@ fn find_rightmost_valid_token(
             })
         };
         let visit_nodes: VisitNodesFn = {
-            let rightmost_valid_node = rightmost_valid_node.clone();
-            let rightmost_visited_nodes = rightmost_visited_nodes.clone();
-            let has_children = has_children.clone();
+            let rightmost_valid_node = Rc::clone(&rightmost_valid_node);
+            let rightmost_visited_nodes = Rc::clone(&rightmost_visited_nodes);
+            let has_children = Rc::clone(&has_children);
             Rc::new(move |node_list: Option<P<NodeList>>, _: &mut NodeVisitor| {
                 if let Some(list) = node_list {
                     if !list.nodes().is_empty() {
@@ -740,7 +738,7 @@ pub fn find_next_token(previous_token: P<Node>, parent: P<Node>, file: P<SourceF
         // Node that contains `previousToken` or occurs immediately after it.
         let found_node: Rc<Cell<Option<P<Node>>>> = Rc::new(Cell::new(None));
         let visit_node: VisitNodeFn = {
-            let found_node = found_node.clone();
+            let found_node = Rc::clone(&found_node);
             Rc::new(move |node: Option<P<Node>>, _: &mut NodeVisitor| {
                 if let Some(nd) = node {
                     if !nd.flags().intersects(NodeFlags::Reparsed) && nd.pos() <= previous_token.end() && nd.end() > previous_token.end() {
@@ -751,7 +749,7 @@ pub fn find_next_token(previous_token: P<Node>, parent: P<Node>, file: P<SourceF
             })
         };
         let visit_nodes: VisitNodesFn = {
-            let found_node = found_node.clone();
+            let found_node = Rc::clone(&found_node);
             Rc::new(move |node_list: Option<P<NodeList>>, _: &mut NodeVisitor| {
                 if let Some(list) = node_list {
                     if !list.nodes().is_empty() && found_node.get().is_none() {

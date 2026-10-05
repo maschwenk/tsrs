@@ -101,11 +101,14 @@ pub(crate) fn get_declaration_diagnostics(host: &'static crate::emithost::EmitHo
     // TODO: use p.getSourceFilesToEmit cache
     // Go passes the emit host as the SourceFileMayBeEmittedHost; its methods forward to the program.
     let full_files: Vec<P<SourceFile>> = get_source_files_to_emit(program, Some(&[file]), false, false).into_iter().filter(|&f| is_source_file_not_json(f)).collect();
-    if !full_files.iter().any(|&f| f == file) {
+    if !full_files.contains(&file) {
         return Vec::new();
     }
     let options = program.options();
-    let transform = tsrs_declarations::new_declaration_transformer(host, None, options, "", "");
+    // The caller runs this in a scratch region (`Program::get_declaration_diagnostics_for_file`): a scratch emit
+    // context, so the nodes the node builder makes for the transform die with it. Go passes nil and the transformer
+    // makes a fresh context, which is what this is.
+    let transform = tsrs_declarations::new_declaration_transformer(host, Some(tsrs_printer::new_scratch_emit_context()), options, "", "");
     transform.base.transform_source_file(file);
     transform.get_diagnostics()
 }
@@ -131,7 +134,7 @@ mod emit {
     use tsrs_tsoptions::outputpaths::{self, OutputPaths};
 
     use crate::emithost::EmitHost;
-    use crate::program_emit::{EmitResult, SourceMapEmitResult, WriteFile, WriteFileData};
+    use crate::program_emit::{EmitPhase, EmitResult, EmitTimes, SourceMapEmitResult, WriteFile, WriteFileData};
 
     // emitter.go:24
     #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -148,24 +151,76 @@ mod emit {
         pub(crate) host: &'static EmitHost,
         pub(crate) emit_only: EmitOnly,
         pub(crate) emitter_diagnostics: DiagnosticsCollection,
-        pub(crate) writer: Box<dyn EmitTextWriter>,
         pub(crate) paths: OutputPaths,
         pub(crate) source_file: P<SourceFile>,
         pub(crate) emit_result: EmitResult,
         pub(crate) force_emit: bool,
         pub(crate) write_file: Option<WriteFile<'a>>,
+        pub(crate) times: &'a EmitTimes,
+        pub(crate) pending_js: Option<pendingPrint>,
+        pub(crate) declaration_diagnostics: Vec<P<Diagnostic>>,
+        pub(crate) pending_declaration: Option<pendingPrint>,
+    }
+
+    /// `TSRS_EMIT_MEM=1`: per file, the arena bytes its emit used in its region and outside it (stderr, `emitmem`).
+    pub(crate) fn emit_mem_log() -> bool {
+        static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        *ON.get_or_init(|| std::env::var_os("TSRS_EMIT_MEM").is_some_and(|v| v == "1"))
+    }
+
+    // tsrs-only: what printing a transformed file needs. Go prints and writes each file while it still holds the
+    // file's checker; tsrs splits `emit` into `transform` (needs the checker) and `print` (does not), so that
+    // `Program::emit` can print and write on another thread while the checker transforms the next file.
+    pub(crate) struct pendingPrint {
+        source_file: P<SourceFile>,
+        emit_context: P<EmitContext>,
+        printer_options: PrinterOptions,
+        file_path: String,
+        source_map_file_path: String,
+        // `None`: the program's options (JS file); `Some`: the declaration map options
+        map_options: Option<CompilerOptions>,
+        should_emit_source_maps: bool,
     }
 
     impl emitter<'_> {
-        // emitter.go:46
-        pub(crate) fn emit(&mut self) {
+        // emitter.go:46 `emit` is `transform` followed by `print`. This part runs the transformers (and so needs the
+        // file's checker).
+        pub(crate) fn transform(&mut self) {
+            tsrs_ast::with_subtree_facts_cache(|| self.transform_worker());
+        }
+
+        fn transform_worker(&mut self) {
             let js_file_path = self.paths.js_file_path().to_string();
             let source_map_file_path = self.paths.source_map_file_path().to_string();
             self.emit_js_file(Some(self.source_file), &js_file_path, &source_map_file_path);
             let declaration_file_path = self.paths.declaration_file_path().to_string();
             let declaration_map_path = self.paths.declaration_map_path().to_string();
             self.emit_declaration_file(Some(self.source_file), &declaration_file_path, &declaration_map_path);
+        }
+
+        // The rest of `emit`, in Go's order: print and write the JS file, add the declaration transform's
+        // diagnostics, print and write the declaration file.
+        pub(crate) fn print(&mut self, writer: &mut (dyn EmitTextWriter + 'static)) {
+            if let Some(pending) = self.pending_js.take() {
+                self.print_pending(&pending, writer);
+            }
+            for elem in std::mem::take(&mut self.declaration_diagnostics) {
+                // Add declaration transform diagnostics to emit diagnostics
+                self.emitter_diagnostics.add(elem);
+            }
+            if let Some(pending) = self.pending_declaration.take() {
+                self.print_pending(&pending, writer);
+            }
             self.emit_result.diagnostics = self.emitter_diagnostics.get_diagnostics();
+        }
+
+        fn print_pending(&mut self, pending: &pendingPrint, writer: &mut (dyn EmitTextWriter + 'static)) {
+            // create a printer to print the nodes
+            let printer = printer::new_printer(pending.printer_options, PrintHandlers::default(), Some(pending.emit_context));
+            let options = self.host.options();
+            let map_options = pending.map_options.as_ref().unwrap_or(&options);
+            self.print_source_file(&pending.file_path, &pending.source_map_file_path, pending.source_file, printer, map_options, pending.should_emit_source_maps, writer);
+            pending.emit_context.reset(); // put_emit_context
         }
 
         // emitter.go:62. Go returns a slice of the `declarationTransformer` interface; the two transformers run in
@@ -177,19 +232,25 @@ mod emit {
             let declaration = tsrs_declarations::new_declaration_transformer(self.host, Some(emit_context), self.host.options(), declaration_file_path, declaration_map_path);
             let supplemental = tsrs_declarations::new_supplemental_references_transformer(self.host, source_file, declaration_file_path, force_dts_emit);
             // emitter.go:81
-            let source_file = declaration.base.transform_source_file(source_file);
-            diags.extend(declaration.get_diagnostics());
-            let source_file = supplemental.transform_source_file(source_file);
-            diags.extend(supplemental.get_diagnostics());
+            let source_file = self.times.time(EmitPhase::DeclarationTransform, || {
+                let source_file = declaration.base.transform_source_file(source_file);
+                diags.extend(declaration.get_diagnostics());
+                let source_file = supplemental.transform_source_file(source_file);
+                diags.extend(supplemental.get_diagnostics());
+                source_file
+            });
             (source_file, diags)
         }
 
         // emitter.go:71
         fn run_script_transformers(&mut self, emit_context: P<EmitContext>, mut source_file: P<SourceFile>) -> P<SourceFile> {
-            for transformer in get_script_transformers(emit_context, self.host, source_file) {
-                source_file = transformer.transform_source_file(source_file);
-            }
-            source_file
+            let host = self.host;
+            self.times.time(EmitPhase::ScriptTransform, || {
+                for transformer in get_script_transformers(emit_context, host, source_file) {
+                    source_file = transformer.transform_source_file(source_file);
+                }
+                source_file
+            })
         }
 
         // emitter.go:192
@@ -208,7 +269,7 @@ mod emit {
                 return;
             }
 
-            let (emit_context, put_emit_context) = printer::get_emit_context();
+            let (emit_context, _) = printer::get_scratch_emit_context();
 
             let source_file = self.run_script_transformers(emit_context, source_file);
 
@@ -224,18 +285,16 @@ mod emit {
                 ..Default::default()
             };
 
-            // create a printer to print the nodes
-            let printer = printer::new_printer(
+            // the printer is created, and the file printed, in `print`
+            self.pending_js = Some(pendingPrint {
+                source_file,
+                emit_context,
                 printer_options,
-                PrintHandlers {
-                    // !!!
-                    ..Default::default()
-                },
-                Some(emit_context),
-            );
-
-            self.print_source_file(js_file_path, source_map_file_path, source_file, printer, &options, should_emit_source_maps(&options, source_file));
-            put_emit_context();
+                file_path: js_file_path.to_string(),
+                source_map_file_path: source_map_file_path.to_string(),
+                map_options: None,
+                should_emit_source_maps: should_emit_source_maps(&options, source_file),
+            });
         }
 
         // emitter.go:239
@@ -251,24 +310,22 @@ mod emit {
             let emit_declaration_map = self.emit_only != EmitOnly::EmitOnlyBuilderSignature && options.declaration_map.is_true();
             let content_mapped_source = source_file;
 
-            let (emit_context, put_emit_context) = printer::get_emit_context();
+            let (emit_context, _) = printer::get_scratch_emit_context();
             let (source_file, diags) = self.run_declaration_transformers(emit_context, source_file, declaration_file_path, declaration_map_path);
 
-            for &elem in &diags {
-                // Add declaration transform diagnostics to emit diagnostics
-                self.emitter_diagnostics.add(elem);
-            }
+            // added to the emit diagnostics in `print`, after the JS file is written
+            let decl_blocked = !diags.is_empty() && !self.force_emit && self.emit_only != EmitOnly::EmitOnlyBuilderSignature;
+            self.declaration_diagnostics = diags;
 
             if !self.force_emit && self.emit_only != EmitOnly::EmitOnlyBuilderSignature && (options.no_emit == Tristate::True || self.host.is_emit_blocked(declaration_file_path)) {
                 self.emit_result.emit_skipped = true;
-                put_emit_context();
+                emit_context.reset(); // put_emit_context
                 return;
             }
 
-            let decl_blocked = !diags.is_empty() && !self.force_emit && self.emit_only != EmitOnly::EmitOnlyBuilderSignature;
             if decl_blocked {
                 self.emit_result.emit_skipped = true;
-                put_emit_context();
+                emit_context.reset(); // put_emit_context
                 return;
             }
 
@@ -288,12 +345,9 @@ mod emit {
                 ..Default::default()
             };
 
-            // create a printer to print the nodes
             // Go installs PrintHandlers.MapSourcePosition when the file has a content-mapper span map; content mappers
-            // are not supported by tsrs (docs/EMIT.md section 10), so the handlers stay empty.
+            // are not supported by tsrs (docs/EMIT.md section 10), so the handlers stay empty (`print_pending`).
             let _ = content_mapped_source;
-            let print_handlers = PrintHandlers::default();
-            let printer = printer::new_printer(printer_options, print_handlers, Some(emit_context));
 
             let declaration_map_options = CompilerOptions {
                 source_map: if emit_declaration_map { Tristate::True } else { Tristate::False },
@@ -303,12 +357,19 @@ mod emit {
                 ..Default::default()
             };
             let should_emit = should_emit_source_maps(&declaration_map_options, source_file);
-            self.print_source_file(declaration_file_path, declaration_map_path, source_file, printer, &declaration_map_options, should_emit);
-            put_emit_context();
+            self.pending_declaration = Some(pendingPrint {
+                source_file,
+                emit_context,
+                printer_options,
+                file_path: declaration_file_path.to_string(),
+                source_map_file_path: declaration_map_path.to_string(),
+                map_options: Some(declaration_map_options),
+                should_emit_source_maps: should_emit,
+            });
         }
 
         // emitter.go:345
-        fn print_source_file(&mut self, js_file_path: &str, source_map_file_path: &str, source_file: P<SourceFile>, mut printer_: Printer, map_options: &CompilerOptions, should_emit_source_maps: bool) {
+        fn print_source_file(&mut self, js_file_path: &str, source_map_file_path: &str, source_file: P<SourceFile>, mut printer_: Printer, map_options: &CompilerOptions, should_emit_source_maps: bool, writer: &mut (dyn EmitTextWriter + 'static)) {
             // !!! sourceMapGenerator
             let options = self.host.options();
             let mut source_map_generator: Option<SourceMapGenerator> = None;
@@ -321,10 +382,13 @@ mod emit {
                 ));
             }
 
-            printer_.write(source_file.as_node(), Some(source_file), &mut *self.writer, source_map_generator.as_mut());
+            let print_start = std::time::Instant::now();
+            printer_.write(source_file.as_node(), Some(source_file), writer, source_map_generator.as_mut());
+            self.times.add(EmitPhase::Print, print_start);
 
             let mut source_map_url_pos: i32 = -1;
             if let Some(source_map_generator) = &mut source_map_generator {
+                let source_map_start = std::time::Instant::now();
                 if map_options.source_map.is_true() || map_options.inline_source_map.is_true() {
                     self.emit_result.source_maps.push(SourceMapEmitResult {
                         input_source_file_names: source_map_generator.sources().to_vec(),
@@ -336,17 +400,18 @@ mod emit {
                 let source_mapping_url = self.get_source_mapping_url(map_options, source_map_generator, js_file_path, source_map_file_path, Some(source_file));
 
                 if !source_mapping_url.is_empty() {
-                    if !self.writer.is_at_start_of_line() {
-                        self.writer.raw_write(if options.new_line == NewLineKind::CRLF { "\r\n" } else { "\n" });
+                    if !writer.is_at_start_of_line() {
+                        writer.raw_write(if options.new_line == NewLineKind::CRLF { "\r\n" } else { "\n" });
                     }
-                    source_map_url_pos = self.writer.get_text_pos();
-                    self.writer.write_comment("//# sourceMappingURL=");
-                    self.writer.write_comment(&source_mapping_url);
+                    source_map_url_pos = writer.get_text_pos();
+                    writer.write_comment("//# sourceMappingURL=");
+                    writer.write_comment(&source_mapping_url);
                 }
 
                 // Write the source map
                 if !source_map_file_path.is_empty() {
                     let source_map = source_map_generator.string();
+                    self.times.add(EmitPhase::SourceMap, source_map_start);
                     let err = self.write_text(source_map_file_path, &source_map, &mut WriteFileData { source_file: Some(self.source_file), ..Default::default() });
                     match err {
                         Err(err) => {
@@ -356,13 +421,15 @@ mod emit {
                             self.emit_result.emitted_files.push(source_map_file_path.to_string());
                         }
                     }
+                } else {
+                    self.times.add(EmitPhase::SourceMap, source_map_start);
                 }
             } else {
-                self.writer.write_line();
+                writer.write_line();
             }
 
             // Write the output file
-            let mut text = self.writer.string();
+            let mut text = writer.string();
             if options.emit_bom.is_true() {
                 text = stringutil::add_utf8_byte_order_mark(&text);
             }
@@ -385,15 +452,18 @@ mod emit {
             }
 
             // Reset state
-            self.writer.clear();
+            writer.clear();
         }
 
         // emitter.go:436
         fn write_text(&self, file_name: &str, text: &str, data: &mut WriteFileData) -> Result<(), String> {
-            if let Some(write_file) = self.write_file {
-                return write_file(file_name, text, data);
-            }
-            self.host.write_file(file_name, text)
+            let _permit = self.times.write_permit();
+            self.times.time(EmitPhase::Write, || {
+                if let Some(write_file) = self.write_file {
+                    return write_file(file_name, text, data);
+                }
+                self.host.write_file(file_name, text)
+            })
         }
 
         // emitter.go:460
@@ -412,8 +482,7 @@ mod emit {
                         self.host.get_current_directory(),
                         &self.host.common_source_directory(),
                         self.host.use_case_sensitive_file_names(),
-                    ))
-                    .to_string();
+                    ));
                 }
                 if tspath::get_root_length(&source_map_dir) == 0 {
                     // The relative paths are relative to the common directory
@@ -421,7 +490,7 @@ mod emit {
                 }
                 return source_map_dir;
             }
-            tspath::get_directory_path(&tspath::normalize_path(file_path)).to_string()
+            tspath::get_directory_path(&tspath::normalize_path(file_path))
         }
 
         // emitter.go:443
@@ -438,7 +507,7 @@ mod emit {
                 return source_map_generator.base64_data_url();
             }
 
-            let source_map_file = tspath::get_base_file_name(&tspath::normalize_slashes(source_map_file_path)).to_string();
+            let source_map_file = tspath::get_base_file_name(&tspath::normalize_slashes(source_map_file_path));
             if !map_options.map_root.is_empty() {
                 let mut source_map_dir = tspath::normalize_slashes(&map_options.map_root);
                 if let Some(source_file) = source_file {
@@ -450,8 +519,7 @@ mod emit {
                         self.host.get_current_directory(),
                         &self.host.common_source_directory(),
                         self.host.use_case_sensitive_file_names(),
-                    ))
-                    .to_string();
+                    ));
                 }
                 if tspath::get_root_length(&source_map_dir) == 0 {
                     // The relative paths are relative to the common directory

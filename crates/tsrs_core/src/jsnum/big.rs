@@ -2,6 +2,7 @@
 // integers with Go's SetString/String/Exp semantics and correctly rounded
 // (round-to-nearest-even) conversion to float64.
 
+use std::fmt::Write as _;
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) struct Int {
     neg: bool,
@@ -327,7 +328,7 @@ impl Int {
             s.push_str(&first.to_string());
         }
         for chunk in iter {
-            s.push_str(&format!("{chunk:09}"));
+            let _ = write!(s, "{chunk:09}");
         }
         s
     }

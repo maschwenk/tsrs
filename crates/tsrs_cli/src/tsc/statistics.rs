@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::time::Duration;
 
 use super::{CompileTimes, EmitInput, System};
@@ -13,12 +14,12 @@ struct table {
 }
 
 impl table {
-    fn add(&mut self, name: &str, value: impl ToString) {
+    fn add(&mut self, name: &str, value: &dyn std::fmt::Display) {
         self.rows.push(tableRow { name: name.to_string(), value: value.to_string() });
     }
 
     fn add_duration(&mut self, name: &str, d: Duration) {
-        self.add(name, format_duration(d));
+        self.add(name, &format_duration(d));
     }
 
     fn print(&self, w: &dyn Fn(&str)) {
@@ -33,7 +34,7 @@ impl table {
         for r in &self.rows {
             // Go: "%-*s %*s\n"
             let name = format!("{}:", r.name);
-            out.push_str(&format!("{:<nw$} {:>vw$}\n", name, r.value, nw = name_width + 1, vw = value_width));
+            let _ = write!(out, "{:<nw$} {:>vw$}\n", name, r.value, nw = name_width + 1, vw = value_width);
         }
         w(&out);
     }
@@ -111,18 +112,18 @@ impl Statistics {
         let prefix = if self.is_aggregate { "Aggregate " } else { "" };
 
         if self.is_aggregate {
-            table.add("Projects in scope", self.projects);
-            table.add("Projects built", self.projects_built);
-            table.add("Timestamps only updates", self.timestamp_updates);
+            table.add("Projects in scope", &self.projects);
+            table.add("Projects built", &self.projects_built);
+            table.add("Timestamps only updates", &self.timestamp_updates);
         }
-        table.add(&format!("{prefix}Files"), self.files);
-        table.add(&format!("{prefix}Lines"), self.lines);
-        table.add(&format!("{prefix}Identifiers"), self.identifiers);
-        table.add(&format!("{prefix}Symbols"), self.symbols);
-        table.add(&format!("{prefix}Types"), self.types);
-        table.add(&format!("{prefix}Instantiations"), self.instantiations);
-        table.add(&format!("{prefix}Memory used"), format!("{}K", self.memory_used / 1024));
-        table.add(&format!("{prefix}Memory allocs"), self.memory_allocs);
+        table.add(&format!("{prefix}Files"), &self.files);
+        table.add(&format!("{prefix}Lines"), &self.lines);
+        table.add(&format!("{prefix}Identifiers"), &self.identifiers);
+        table.add(&format!("{prefix}Symbols"), &self.symbols);
+        table.add(&format!("{prefix}Types"), &self.types);
+        table.add(&format!("{prefix}Instantiations"), &self.instantiations);
+        table.add(&format!("{prefix}Memory used"), &format!("{}K", self.memory_used / 1024));
+        table.add(&format!("{prefix}Memory allocs"), &self.memory_allocs);
         if !self.compile_times.config_time.is_zero() {
             table.add_duration(&format!("{prefix}Config time"), self.compile_times.config_time);
         }
@@ -153,14 +154,14 @@ impl Statistics {
         for (name, value) in tsrs_core::phases::snapshot() {
             match value {
                 tsrs_core::phases::PhaseValue::Time(d) => table.add_duration(name, d),
-                tsrs_core::phases::PhaseValue::Count(n) => table.add(name, n),
+                tsrs_core::phases::PhaseValue::Count(n) => table.add(name, &n),
             }
         }
         table.print(w);
         if let Some(stats) = &self.lazy_member_stats {
             let mut table = table::default();
             for (name, value) in stats.rows() {
-                table.add(name, value);
+                table.add(name, &value);
             }
             table.print(w);
         }

@@ -59,38 +59,39 @@ pub fn strings(v: impl IntoIterator<Item = impl Into<String>>) -> Value {
 }
 
 /// Typed accessors over request params with Go-like error text.
+#[derive(Clone, Copy)]
 pub struct Params<'a>(pub &'a Value);
 
 static NULL: Value = Value::Null;
 
 impl<'a> Params<'a> {
-    pub fn object(&self) -> ApiResult<&'a OrderedMap<String, Value>> {
+    pub fn object(self) -> ApiResult<&'a OrderedMap<String, Value>> {
         match self.0 {
             Value::Object(o) => Ok(o),
             _ => Err(ApiError::invalid_request("params must be an object")),
         }
     }
-    pub fn get(&self, key: &str) -> &'a Value {
+    pub fn get(self, key: &str) -> &'a Value {
         match self.0 {
             Value::Object(o) => o.get(key).unwrap_or(&NULL),
             _ => &NULL,
         }
     }
     /// A `DocumentIdentifier` field: absent is Go's zero value (empty file name); explicit `null` is an error.
-    pub fn document(&self, key: &str) -> ApiResult<DocumentIdentifier> {
+    pub fn document(self, key: &str) -> ApiResult<DocumentIdentifier> {
         match self.0 {
             Value::Object(o) if !o.contains_key(key) => Ok(DocumentIdentifier::FileName(String::new())),
             _ => DocumentIdentifier::parse(self.get(key), key),
         }
     }
 
-    pub fn has(&self, key: &str) -> bool {
+    pub fn has(self, key: &str) -> bool {
         !matches!(self.get(key), Value::Null)
     }
     /// An unsigned integer field. For an object of the current request's params tree (any depth) the field's
     /// own exact literal is used (f64 would turn e.g. 9007199254740993 into another ID); values outside the
     /// tree (copies) use the parsed value.
-    pub fn u64(&self, key: &str) -> ApiResult<u64> {
+    pub fn u64(self, key: &str) -> ApiResult<u64> {
         if let Value::Number(_) = self.get(key) {
             if let Some(n) = crate::predecode::exact_u64(self.0, key) {
                 return Ok(n);
@@ -99,34 +100,34 @@ impl<'a> Params<'a> {
         as_u64(self.get(key), key)
     }
 
-    pub fn opt_u64(&self, key: &str) -> ApiResult<Option<u64>> {
+    pub fn opt_u64(self, key: &str) -> ApiResult<Option<u64>> {
         match self.get(key) {
             Value::Null => Ok(None),
             _ => self.u64(key).map(Some),
         }
     }
-    pub fn str(&self, key: &str) -> ApiResult<&'a str> {
+    pub fn str(self, key: &str) -> ApiResult<&'a str> {
         match self.get(key) {
             Value::String(s) => Ok(s),
             Value::Null => Ok(""),
             _ => Err(ApiError::invalid_request(format!("{key} must be a string"))),
         }
     }
-    pub fn bool(&self, key: &str) -> ApiResult<bool> {
+    pub fn bool(self, key: &str) -> ApiResult<bool> {
         match self.get(key) {
             Value::Bool(b) => Ok(*b),
             Value::Null => Ok(false),
             _ => Err(ApiError::invalid_request(format!("{key} must be a boolean"))),
         }
     }
-    pub fn array(&self, key: &str) -> ApiResult<&'a [Value]> {
+    pub fn array(self, key: &str) -> ApiResult<&'a [Value]> {
         match self.get(key) {
             Value::Array(a) => Ok(a),
             Value::Null => Ok(&[]),
             _ => Err(ApiError::invalid_request(format!("{key} must be an array"))),
         }
     }
-    pub fn strings(&self, key: &str) -> ApiResult<Vec<String>> {
+    pub fn strings(self, key: &str) -> ApiResult<Vec<String>> {
         self.array(key)?
             .iter()
             .map(|v| match v {

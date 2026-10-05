@@ -15,6 +15,9 @@ pub(crate) fn run(program: &'static Program, roots: &[usize]) {
     if !census::active() {
         return;
     }
+    // The census's own frames take the stack area parsing used on this thread (rolled-back speculative parses);
+    // their unset slots would keep its words (as in `run_lsp`).
+    tsrs_core::census_scrub_stack();
     tsrs_ast::census_layouts();
     let mut all = vec![program as *const Program as usize];
     all.extend_from_slice(roots);

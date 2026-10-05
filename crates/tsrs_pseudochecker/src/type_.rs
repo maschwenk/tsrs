@@ -63,14 +63,16 @@ pub enum PseudoTypeData {
     Literal(PseudoTypeLiteral),
 }
 
+// Pseudo types are built per node builder request and never cached: in the scratch region during emit
+// (notes/mem-emit-regions.md).
 fn new_pseudo_type(kind: PseudoTypeKind, data: PseudoTypeData) -> P<PseudoType> {
-    P::new(PseudoType { kind, data })
+    P::new_scratch(PseudoType { kind, data })
 }
 
 // The shared pseudo types below are process-wide: never in a freeable region (language server).
 fn new_static_pseudo_type(kind: PseudoTypeKind) -> P<PseudoType> {
     let _arena = tsrs_core::arena::enter_thread_arena();
-    new_pseudo_type(kind, PseudoTypeData::Base)
+    P::new(PseudoType { kind, data: PseudoTypeData::Base })
 }
 
 pub static PseudoTypeUndefined: LazyLock<P<PseudoType>> = LazyLock::new(|| new_static_pseudo_type(PseudoTypeKind::Undefined));

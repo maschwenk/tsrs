@@ -1,5 +1,5 @@
 use std::sync::Mutex;
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 use crate::canonicalize::{fold_native_path, nativePathFolding};
 use crate::watcher::{is_in_directory_or_self, join_path_suffix, rebase_path};
@@ -21,7 +21,7 @@ pub(crate) struct comparisonPath<'c> {
 
 // Shared only within a synchronous callback/termination pass, never published
 // to a subscriber or stored on a watch.
-pub(crate) type comparisonCache = HashMap<String, String>;
+pub(crate) type comparisonCache = FxHashMap<String, String>;
 
 impl comparisonPath<'_> {
     pub(crate) fn new(path: &str) -> comparisonPath<'static> {
@@ -50,7 +50,7 @@ impl comparisonPath<'_> {
 
 impl pathComparer {
     // pathcompare.go:26
-    pub(crate) fn prepare(&self, path: &str) -> comparisonPath<'static> {
+    pub(crate) fn prepare(self, path: &str) -> comparisonPath<'static> {
         let mut p = comparisonPath::new(path);
         if self.ignore_case && nativePathFolding {
             p.fold();
@@ -60,13 +60,13 @@ impl pathComparer {
 
     // pathcompare.go:56
     // suffix returns the part of path below root, respecting directory boundaries.
-    pub(crate) fn suffix(&self, root: &str, path: &str) -> Option<String> {
+    pub(crate) fn suffix(self, root: &str, path: &str) -> Option<String> {
         let mut p = comparisonPath::new(path);
         self.suffix_prepared(&comparisonPath::new(root), &mut p)
     }
 
     // pathcompare.go:61
-    pub(crate) fn suffix_prepared(&self, root: &comparisonPath, path: &mut comparisonPath) -> Option<String> {
+    pub(crate) fn suffix_prepared(self, root: &comparisonPath, path: &mut comparisonPath) -> Option<String> {
         if is_in_directory_or_self(&root.path, &path.path) {
             return Some(path.path[root.path.len()..].to_string());
         }
@@ -81,7 +81,7 @@ impl pathComparer {
     }
 
     // pathcompare.go:75
-    pub(crate) fn suffix_unicode(&self, root: &comparisonPath, path: &mut comparisonPath) -> Option<String> {
+    pub(crate) fn suffix_unicode(self, root: &comparisonPath, path: &mut comparisonPath) -> Option<String> {
         if !nativePathFolding {
             return path_suffix_fold_unicode(&root.path, &path.path);
         }
@@ -119,18 +119,18 @@ impl pathComparer {
     }
 
     // pathcompare.go:166
-    pub(crate) fn contains(&self, root: &str, path: &str) -> bool {
+    pub(crate) fn contains(self, root: &str, path: &str) -> bool {
         self.suffix(root, path).is_some()
     }
 
     // pathcompare.go:171
-    pub(crate) fn rebase(&self, path: &str, from: &str, to: &str) -> Option<String> {
+    pub(crate) fn rebase(self, path: &str, from: &str, to: &str) -> Option<String> {
         let mut p = comparisonPath::new(path);
         self.rebase_prepared(&mut p, &comparisonPath::new(from), to)
     }
 
     // pathcompare.go:176
-    pub(crate) fn rebase_prepared(&self, path: &mut comparisonPath, from: &comparisonPath, to: &str) -> Option<String> {
+    pub(crate) fn rebase_prepared(self, path: &mut comparisonPath, from: &comparisonPath, to: &str) -> Option<String> {
         if is_in_directory_or_self(&from.path, &path.path) {
             return Some(rebase_path(&path.path, &from.path, to));
         }

@@ -245,8 +245,8 @@ enum VisitedChild {
 
 fn collect_visited_children(node: P<Node>) -> Vec<VisitedChild> {
     let items: Rc<RefCell<Vec<VisitedChild>>> = Rc::new(RefCell::new(Vec::new()));
-    let visit_items = items.clone();
-    let nodes_items = items.clone();
+    let visit_items = Rc::clone(&items);
+    let nodes_items = Rc::clone(&items);
     let mut visitor = ast::new_node_visitor(
         Some(Rc::new(move |_: &mut ast::NodeVisitor, child: P<Node>| {
             visit_items.borrow_mut().push(VisitedChild::Node(child));
@@ -286,7 +286,7 @@ impl FormatSpanWorker {
         self.indentation_on_last_indented_line = -1;
         self.last_indented_line = -1;
         let opt = Rc::new(get_format_code_settings_from_context(&self.ctx));
-        self.formatting_context = Some(new_formatting_context(self.source_file, self.request_kind, opt.clone()));
+        self.formatting_context = Some(new_formatting_context(self.source_file, self.request_kind, Rc::clone(&opt)));
         // formatting context is used by rules provider
 
         self.fs().advance();
@@ -388,7 +388,6 @@ impl FormatSpanWorker {
     }
 
     // span.go:334
-    #[allow(clippy::too_many_arguments)]
     fn process_child_node(
         &mut self,
         node: P<Node>,
@@ -433,7 +432,7 @@ impl FormatSpanWorker {
         // child node is outside the target range - do not dive inside
         if !self.original_range.overlaps(child.loc()) {
             if child.end() < self.original_range.pos() {
-                self.fs().skip_to_end_of(&child.loc());
+                self.fs().skip_to_end_of(child.loc());
             }
             return inherited_indentation;
         }
@@ -450,13 +449,13 @@ impl FormatSpanWorker {
             }
             if token_info.token.loc.end() > child_start_pos {
                 if token_info.token.loc.pos() > child_start_pos {
-                    self.fs().skip_to_start_of(&child.loc());
+                    self.fs().skip_to_start_of(child.loc());
                 }
                 // stop when formatting scanner advances past the beginning of the child
                 break;
             }
 
-            self.consume_token_and_advance_scanner(token_info, node, parent_dynamic_indentation.clone(), node, false);
+            self.consume_token_and_advance_scanner(token_info, node, Rc::clone(&parent_dynamic_indentation), node, false);
         }
 
         if !self.fs_ref().is_on_token() || self.fs_ref().get_token_full_start() >= self.original_range.end() {
@@ -505,7 +504,6 @@ impl FormatSpanWorker {
     }
 
     // span.go:439
-    #[allow(clippy::too_many_arguments)]
     fn process_child_nodes(
         &mut self,
         node: P<Node>,
@@ -522,13 +520,13 @@ impl FormatSpanWorker {
 
         let list_start_token = get_open_token_for_list(parent, nodes);
 
-        let mut list_dynamic_indentation = parent_dynamic_indentation.clone();
+        let mut list_dynamic_indentation = Rc::clone(&parent_dynamic_indentation);
         let mut start_line = parent_start_line;
 
         // node range is outside the target range - do not dive inside
         if !self.original_range.overlaps(nodes.loc.get()) {
             if nodes.end() < self.original_range.pos() && (nodes.nodes().is_empty() || !nodes.nodes()[0].flags().intersects(NodeFlags::Reparsed)) {
-                self.fs().skip_to_end_of(&nodes.loc.get());
+                self.fs().skip_to_end_of(nodes.loc.get());
             }
             return;
         }
@@ -545,7 +543,7 @@ impl FormatSpanWorker {
                     start_line = scanner::get_ecma_line_of_position(self.source_file.get(), token_info.token.loc.pos());
 
                     let token_pos = token_info.token.loc.pos();
-                    self.consume_token_and_advance_scanner(token_info, parent, parent_dynamic_indentation.clone(), parent, false);
+                    self.consume_token_and_advance_scanner(token_info, parent, Rc::clone(&parent_dynamic_indentation), parent, false);
 
                     let indentation_on_list_start_token = if self.indentation_on_last_indented_line != -1 {
                         // scanner just processed list start token so consider last indentation as list indentation
@@ -561,7 +559,7 @@ impl FormatSpanWorker {
                         self.get_dynamic_indentation(parent, parent_start_line, indentation_on_list_start_token, self.fc().options.indent_size);
                 } else {
                     // consume any tokens that precede the list as child elements of 'node' using its indentation scope
-                    self.consume_token_and_advance_scanner(token_info, parent, parent_dynamic_indentation.clone(), parent, false);
+                    self.consume_token_and_advance_scanner(token_info, parent, Rc::clone(&parent_dynamic_indentation), parent, false);
                 }
             }
         }
@@ -577,7 +575,7 @@ impl FormatSpanWorker {
                 child,
                 inherited_indentation,
                 node,
-                list_dynamic_indentation.clone(),
+                Rc::clone(&list_dynamic_indentation),
                 start_line,
                 start_line,
                 true,
@@ -590,7 +588,7 @@ impl FormatSpanWorker {
             let mut token_info = self.fs().read_token_info(parent);
             if token_info.token.kind == Kind::CommaToken {
                 // consume the comma
-                self.consume_token_and_advance_scanner(token_info, parent, list_dynamic_indentation.clone(), parent, false);
+                self.consume_token_and_advance_scanner(token_info, parent, Rc::clone(&list_dynamic_indentation), parent, false);
                 if self.fs_ref().is_on_token() {
                     token_info = self.fs().read_token_info(parent);
                 } else {
@@ -626,7 +624,7 @@ impl FormatSpanWorker {
                 VisitedChild::Node(child) => {
                     self.process_child_node(
                         visiting_node,
-                        Some(visiting_indenter.clone()),
+                        Some(Rc::clone(&visiting_indenter)),
                         self.visiting_node_start_line,
                         self.visiting_undecorated_node_start_line,
                         child,
@@ -642,7 +640,7 @@ impl FormatSpanWorker {
                 VisitedChild::Nodes(nodes) => {
                     self.process_child_nodes(
                         visiting_node,
-                        Some(visiting_indenter.clone()),
+                        Some(Rc::clone(&visiting_indenter)),
                         self.visiting_node_start_line,
                         self.visiting_undecorated_node_start_line,
                         nodes,
@@ -782,7 +780,7 @@ impl FormatSpanWorker {
 
         // if there are any tokens that logically belong to node and interleave child nodes
         // such tokens will be consumed in processChildNode for the child that follows them
-        self.execute_process_node_visitor(node, node_dynamic_indentation.clone(), node_start_line, undecorated_node_start_line);
+        self.execute_process_node_visitor(node, Rc::clone(&node_dynamic_indentation), node_start_line, undecorated_node_start_line);
 
         // proceed any tokens in the node that are located after child nodes
         while self.fs_ref().is_on_token() && self.fs_ref().get_token_full_start() < self.original_range.end() {
@@ -790,12 +788,11 @@ impl FormatSpanWorker {
             if token_info.token.loc.end() > node.end().min(self.original_range.end()) {
                 break;
             }
-            self.consume_token_and_advance_scanner(token_info, node, node_dynamic_indentation.clone(), node, false);
+            self.consume_token_and_advance_scanner(token_info, node, Rc::clone(&node_dynamic_indentation), node, false);
         }
     }
 
     // span.go:650
-    #[allow(clippy::too_many_arguments)]
     fn process_pair(
         &mut self,
         current_item: TextRangeWithKind,
@@ -1299,7 +1296,7 @@ impl FormatSpanWorker {
         let mut indent_token = false;
 
         if !current_token_info.leading_trivia.is_empty() {
-            self.process_trivia(&current_token_info.leading_trivia, Some(parent), self.child_context_node, Some(dynamic_indenation.clone()));
+            self.process_trivia(&current_token_info.leading_trivia, Some(parent), self.child_context_node, Some(Rc::clone(&dynamic_indenation)));
         }
 
         let mut line_action = LineAction::None;
@@ -1318,7 +1315,7 @@ impl FormatSpanWorker {
                 token_start_char,
                 Some(parent),
                 self.child_context_node,
-                Some(dynamic_indenation.clone()),
+                Some(Rc::clone(&dynamic_indenation)),
             );
             // do not indent comments\token if token range overlaps with some error
             if !range_has_error {
@@ -1350,7 +1347,7 @@ impl FormatSpanWorker {
                     break;
                 }
             }
-            self.process_trivia(&current_token_info.trailing_trivia, Some(parent), self.child_context_node, Some(dynamic_indenation.clone()));
+            self.process_trivia(&current_token_info.trailing_trivia, Some(parent), self.child_context_node, Some(Rc::clone(&dynamic_indenation)));
         }
 
         if indent_token {
@@ -1541,7 +1538,7 @@ impl FormatSpanWorker {
             node_start_line,
             indentation: Cell::new(indentation),
             delta: Cell::new(delta),
-            options: self.fc().options.clone(),
+            options: Rc::clone(&self.fc().options),
             source_file: self.source_file,
         })
     }

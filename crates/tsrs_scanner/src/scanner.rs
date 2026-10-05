@@ -85,7 +85,7 @@ macro_rules! keywords {
 const KEYWORD_HASH_MUL: u32 = 0xae8526c7;
 const NO_KEYWORD: u8 = u8::MAX;
 
-#[inline(always)]
+#[inline]
 const fn keyword_hash(b: &[u8]) -> usize {
     let key = b[0] as u32 | (b[1] as u32) << 8 | (b[b.len() - 1] as u32) << 16 | (b.len() as u32) << 24;
     (key.wrapping_mul(KEYWORD_HASH_MUL) >> 24) as usize
@@ -651,7 +651,7 @@ impl Scanner {
     // scanASCIIWhile advances s.pos over the longest run of ASCII bytes for which
     // pred returns true. It stops at end-of-text, the first non-ASCII byte, or the
     // first byte where pred is false.
-    #[inline(always)]
+    #[inline]
     fn scan_ascii_while(&mut self, pred: impl Fn(u8) -> bool) {
         let text = &self.text.as_bytes()[self.state.pos as usize..self.end as usize];
         let mut i = 0;
@@ -2651,8 +2651,9 @@ pub fn is_identifier_part_ex(ch: i32, language_variant: LanguageVariant) -> bool
 fn token_to_text() -> &'static [&'static str] {
     static T: OnceLock<Vec<&'static str>> = OnceLock::new();
     T.get_or_init(|| {
+        // Go fills this from the textToToken map; no two texts share a kind, so the tables give the same result.
         let mut result = vec![""; Kind::Count as usize];
-        for (&text, &kind) in text_to_token() {
+        for &(text, kind) in TEXT_TO_PUNCTUATION.iter().chain(TEXT_TO_KEYWORD) {
             result[kind as usize] = text;
         }
         result

@@ -362,6 +362,10 @@ pub fn run(roots: &[usize]) {
     if !recording() {
         return;
     }
+    // The stack is scanned from this frame up: the census's own frames below it hold, in unset slots, words from
+    // its own work (block addresses it sorted and indexed, freed ones included), which are not program state.
+    let marker = 0u64;
+    STACK_LOW.store(std::hint::black_box(&marker) as *const u64 as usize & !7, Ordering::SeqCst);
     MODE.store(3, Ordering::SeqCst);
     with_guard(|| run_frozen(roots));
 }
@@ -415,10 +419,12 @@ fn data_segments() -> Vec<(usize, usize, String)> {
     out
 }
 
+/// The low end of the stack range the census scans (set by `run`).
+static STACK_LOW: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
 #[inline(never)]
 fn scan_stack(table: &mut Table, work: &mut Vec<u32>) -> usize {
-    let marker = 0u64;
-    let low = std::hint::black_box(&marker) as *const u64 as usize & !7;
+    let low = STACK_LOW.load(Ordering::SeqCst);
     // SAFETY: plain libc queries about the current thread.
     let high = unsafe { pthread_get_stackaddr_np(pthread_self()) } as usize;
     table.scan(low, high - low, work);
@@ -589,9 +595,31 @@ fn run_frozen(roots: &[usize]) {
     }
     let t_mark = t0.elapsed();
     check_would_free(&table, &classes, &stacks, &scan, roots, would_free);
+    // `TSRS_CENSUS_SKIP_FREED=1`: the tables leave out blocks the arena freed or rewound (reused in normal builds), so
+    // they show the garbage that remains.
+    let freed: Vec<bool> = if std::env::var_os("TSRS_CENSUS_SKIP_FREED").is_some_and(|v| v == "1") {
+        let w = WOULD_FREE.lock().unwrap();
+        let mut j = 0usize;
+        table
+            .blocks
+            .iter()
+            .map(|b| {
+                while j < w.len() && w[j].0 < b.start {
+                    j += 1;
+                }
+                j < w.len() && w[j].0 == b.start
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let skip = |i: usize| freed.get(i).copied().unwrap_or(false);
 
     let mut per_class = vec![Agg::default(); classes.len()];
     for (i, b) in table.blocks.iter().enumerate() {
+        if skip(i) {
+            continue;
+        }
         let a = &mut per_class[b.class as usize];
         a.count += 1;
         a.bytes += b.size as u64;
@@ -660,6 +688,9 @@ fn run_frozen(roots: &[usize]) {
     let mut sampled: FxHashMap<(u32, u32), Agg> = FxHashMap::default();
     for &(addr, stack) in &samples {
         let Some(i) = table.lookup(addr) else { continue };
+        if skip(i) {
+            continue;
+        }
         let b = table.blocks[i];
         let a = sampled.entry((b.class, stack)).or_default();
         a.count += rate;
@@ -1000,8 +1031,7 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
             visit(i, None, &|| "explicit root".into(), &mut work, &mut smark, &mut via);
         }
     }
-    let marker = 0u64;
-    let low = std::hint::black_box(&marker) as *const u64 as usize & !7;
+    let low = STACK_LOW.load(Ordering::SeqCst);
     // SAFETY: plain libc queries about the current thread.
     let high = unsafe { pthread_get_stackaddr_np(pthread_self()) } as usize;
     let mut roots_ranges: Vec<(usize, usize, String)> = data_segments();
@@ -1016,7 +1046,10 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
                     visit(i, None, &|| format!("root {name} +{off:#x} [{w:#018x}]"), &mut work, &mut smark, &mut via);
                 }
             }
-            p += 4;
+            // Statics and stack slots keep pointers 8-aligned (the packed 4-byte slots live in arena and heap
+            // blocks). A 4-byte step reads the high half of one word and the low half of the next as a pointer: a
+            // heap address's high half (0x200) next to a text length of 0x7c01 is an arena address.
+            p += 8;
         }
     }
     while let Some(j) = work.pop() {

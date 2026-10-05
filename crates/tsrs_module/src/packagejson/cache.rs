@@ -222,7 +222,7 @@ impl InfoCache {
         if self.origin != 0 {
             return self.origin;
         }
-        self as *const InfoCache as usize
+        std::ptr::from_ref::<InfoCache>(self) as usize
     }
 
     pub fn clone_cache(&self) -> InfoCache {

@@ -28,7 +28,8 @@ impl NodeBuilder {
             max_truncation_length = verbosity.max_truncation_length.get();
         }
         self.ctx_stack.borrow_mut().push(self.impl_.ctx.get());
-        let ctx = P::new(NodeBuilderContext {
+        // Per-call state, dead after `exit_context`: in the scratch region during emit (notes/mem-emit-regions.md).
+        let ctx = P::new_scratch(NodeBuilderContext {
             tracker: Cell::new(tracker),
             flags: Cell::new(flags),
             internal_flags: Cell::new(internal_flags),
@@ -304,7 +305,7 @@ pub fn new_node_builder(ch: &mut Checker, e: P<EmitContext>) -> P<NodeBuilder> {
 // nodebuilder.go:283
 pub fn new_node_builder_ex(ch: &mut Checker, e: P<EmitContext>, id_to_symbol: Option<P<RefCell<FxHashMap<P<Node>, P<Symbol>>>>>) -> P<NodeBuilder> {
     let impl_ = new_node_builder_impl(ch, e, id_to_symbol);
-    P::new(NodeBuilder { impl_, ctx_stack: RefCell::new(Vec::with_capacity(1)), host: ch.program.as_module_specifier_generation_host(), verbosity: Cell::new(None) })
+    P::new_in(e.factory.is_scratch(), NodeBuilder { impl_, ctx_stack: RefCell::new(Vec::with_capacity(1)), host: ch.program.as_module_specifier_generation_host(), verbosity: Cell::new(None) })
 }
 
 impl Checker {

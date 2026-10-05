@@ -92,7 +92,7 @@ pub struct Orchestrator {
     use_regions: AtomicBool,
     // API clean existence answers, kept until the next build (which uses a fresh orchestrator): Go's `Clean` asks
     // the orchestrator's cachedvfs, which only `Build`'s recheck clears, so a later clean reuses them.
-    api_clean_exists: Mutex<std::collections::HashMap<String, bool>>,
+    api_clean_exists: Mutex<FxHashMap<String, bool>>,
 
     error_summary_reporter: DiagnosticsReporter<'static>,
 
@@ -566,6 +566,7 @@ impl Orchestrator {
     // A builder panicked: release every waiter so the panic surfaces instead of a hang.
     fn abort(&self) {
         self.aborted.store(true, Ordering::SeqCst);
+        #[expect(clippy::iter_over_hash_type, reason = "wakes every waiter; the order does not matter")]
         for task in self.tasks.lock().unwrap().values() {
             task.done.wake();
             task.built.wake();
@@ -613,7 +614,7 @@ impl Orchestrator {
             Some(task) => {
                 let builder = {
                     let result = task.result.lock().unwrap();
-                    result.as_ref().unwrap().builder.clone()
+                    Arc::clone(&result.as_ref().unwrap().builder)
                 };
                 std::sync::Arc::new(move |t: &str| builder.lock().unwrap().push_str(t))
             }
@@ -646,8 +647,10 @@ pub unsafe fn free_api_orchestrator(o: &'static Orchestrator) {
     // Order: the host and orchestrator are dropped before the regions. Their destructors only free heap containers
     // (maps of `P<..>` pointers, Arcs); none dereferences arena memory, which is still alive here. Keep it that way:
     // a destructor that reads region memory must run before `drop(regions)`.
-    drop(Box::from_raw(h as *const host as *mut host));
-    drop(Box::from_raw(o as *const Orchestrator as *mut Orchestrator));
+    // SAFETY: `new_orchestrator` leaked both from `Box`es, and nothing uses them afterwards (this function's contract).
+    drop(unsafe { Box::from_raw(std::ptr::from_ref::<host>(h).cast_mut()) });
+    // SAFETY: as above.
+    drop(unsafe { Box::from_raw(std::ptr::from_ref::<Orchestrator>(o).cast_mut()) });
     drop(regions);
 }
 
@@ -672,11 +675,11 @@ pub fn new_orchestrator(opts: Options) -> &'static Orchestrator {
         schedule_order: Mutex::new(Vec::new()),
         regions: Mutex::new(Vec::new()),
         use_regions: AtomicBool::new(false),
-        api_clean_exists: Mutex::new(std::collections::HashMap::new()),
+        api_clean_exists: Mutex::new(FxHashMap::default()),
     }));
     let cached_fs = Arc::new(tsrs_vfs::cachedvfs::from(sys.fs()));
     let compiler_host: Arc<dyn CompilerHost> =
-        tsrs_compiler::new_compiler_host(sys.get_current_directory(), cached_fs.clone(), sys.default_library_path(), None, None);
+        tsrs_compiler::new_compiler_host(sys.get_current_directory(), Arc::<tsrs_vfs::cachedvfs::FS<_>>::clone(&cached_fs), sys.default_library_path(), None, None);
     let h: &'static host = Box::leak(Box::new(host {
         orchestrator: OnceLock::new(),
         host: compiler_host,

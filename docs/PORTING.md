@@ -73,6 +73,10 @@ referenced through `tsrs_core::P<T>`:
 - Nothing is ever freed. That is intentional (batch compiler). The exceptions are a few recycling sites that
   prove an object dead (rolled-back parses, dropped flow labels, scratch mappers and inference contexts whose escape
   bit is clear; `tsrs_core::arena`, notes/mem-recycle.md). A struct field that keeps a mapper must be a `MapperCell`.
+  Emit runs each file in a scratch region that is freed after the file is written (notes/mem-emit-regions.md): code
+  that emit calls and that stores what it allocates beyond the file (the checker, program caches, diagnostics)
+  escapes it (`arena::escape_scratch`; `CheckerSlot::with` does it for the checker), and a checker cache keyed by a
+  node must not keep a key from that region past the file (`Checker::forget_scratch_keyed_caches`).
 - Fields that are assigned after construction use interior mutability:
   `Cell<T>` for `Copy` data (flags, numbers, `Option<P<T>>`, `&'static [T]`, `&'static str`),
   `RefCell<T>` for growable collections (`Vec`, maps). Fields that are set at construction and
@@ -207,6 +211,8 @@ code is truly unreachable for type checking.
 - No `unsafe` outside `tsrs_core` and generated AST code without a very good reason.
 - No lint/clippy cleanups, no doc comments restating the code, no `// ported from` banners. Keep comments that
   the Go source has when they explain *why*. Do not add `#[allow]`s; workspace lints already silence the noisy ones.
+  The lints that are on (`docs/RUST.md`) are gated by `tools/lint/ratchet.py`: new code must not add findings, and
+  an intended exception is `#[expect(clippy::<lint>, reason = "...")]`.
 - Never leave `todo!()`/`unimplemented!()` for in-scope behavior without listing it in your final report.
 - Your crate must compile (`cargo check -p <crate>`) when you finish, with zero warnings of the kinds not
   silenced workspace-wide. Use your own target dir to avoid lock contention with other agents:

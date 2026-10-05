@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::fmt;
 use std::marker::PhantomData;
 use std::ops::Deref;
@@ -302,7 +303,7 @@ pub(crate) fn go_quote(b: &[u8]) -> String {
             '\x0b' => out.push_str("\\v"),
             '"' => out.push_str("\\\""),
             '\\' => out.push_str("\\\\"),
-            c if (c as u32) < 0x20 || c as u32 == 0x7f => out.push_str(&format!("\\x{:02x}", c as u32)),
+            c if (c as u32) < 0x20 || c as u32 == 0x7f => { let _ = write!(out, "\\x{:02x}", c as u32); },
             c => out.push(c),
         }
     }
@@ -641,7 +642,7 @@ pub fn with_client_capabilities(ctx: &tsrs_core::context::Context, caps: std::sy
 // lsp.go:293
 pub fn get_client_capabilities(ctx: &tsrs_core::context::Context) -> std::sync::Arc<crate::ResolvedClientCapabilities> {
     if let Some(caps) = ctx.value::<clientCapabilitiesKey>() {
-        return caps.0.clone();
+        return std::sync::Arc::clone(&caps.0);
     }
     std::sync::Arc::new(crate::ResolvedClientCapabilities::default())
 }

@@ -1,5 +1,6 @@
 // Port of execute/incremental/snapshot.go.
 
+use std::fmt::Write as _;
 use std::cell::{Cell, RefCell};
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -42,7 +43,7 @@ pub fn compute_hash(text: &str, hash_with_text: bool) -> String {
     let hash_bytes = xxhash_rust::xxh3::xxh3_128(text.as_bytes()).to_be_bytes();
     let mut hash = String::with_capacity(32);
     for b in hash_bytes {
-        hash.push_str(&format!("{b:02x}"));
+        let _ = write!(hash, "{b:02x}");
     }
     if hash_with_text {
         hash += "-";
@@ -415,11 +416,11 @@ impl Snapshot {
     }
 
     // snapshot.go:356
-    pub(crate) fn add_file_to_affected_files_pending_emit(&self, file_path: Path, emit_kind: FileEmitKind) {
-        let existing_kind = self.affected_files_pending_emit.load(&file_path).unwrap_or_default();
+    pub(crate) fn add_file_to_affected_files_pending_emit(&self, file_path: &Path, emit_kind: FileEmitKind) {
+        let existing_kind = self.affected_files_pending_emit.load(file_path).unwrap_or_default();
         self.affected_files_pending_emit.store(file_path.clone(), existing_kind | emit_kind);
         if emit_kind.intersects(FileEmitKind::DtsErrors) {
-            self.emit_diagnostics_per_file.delete(&file_path);
+            self.emit_diagnostics_per_file.delete(file_path);
         }
         self.build_info_emit_pending.set(true);
     }
@@ -500,10 +501,10 @@ fn diagnostic_to_string_builder(diagnostic: Option<P<Diagnostic>>, file: P<Sourc
         )));
     }
     if diagnostic.file().is_some() {
-        builder.push_str(&format!("({},{}): ", diagnostic.pos(), diagnostic.len()));
+        let _ = write!(builder, "({},{}): ", diagnostic.pos(), diagnostic.len());
     }
     builder.push_str(diagnostic.category().name());
-    builder.push_str(&format!("{}: ", diagnostic.code()));
+    let _ = write!(builder, "{}: ", diagnostic.code());
     builder.push_str(diagnostic.message_key().0);
     builder.push('\n');
     for arg in diagnostic.message_args() {

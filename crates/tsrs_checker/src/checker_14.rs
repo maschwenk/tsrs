@@ -462,21 +462,31 @@ impl Checker {
                     {
                         return;
                     }
-                    let res = find_many_ancestors(
-                        location,
-                        &mut [
-                            &mut |n| is_meta_property(n),
-                            &mut |n| is_decorator(n),
-                            &mut |n| is_for_in_or_of_statement(n),
-                            &mut |n| is_computed_property_name(n),
-                            &mut |n| is_heritage_clause(n),
-                        ],
-                    );
-                    let meta_property = res[0];
-                    let decorator = res[1];
-                    let for_node = res[2];
-                    let computed_name = res[3];
-                    let heritage_clause = res[4];
+                    // Go: ast.FindManyAncestors(location, IsMetaProperty, IsDecorator, IsForInOrOfStatement,
+                    // IsComputedPropertyName, IsHeritageClause). The predicates test disjoint kinds, so one walk with a
+                    // `match` finds the same nearest ancestors (this runs for every identifier emit visits).
+                    let (mut meta_property, mut decorator, mut for_node, mut computed_name, mut heritage_clause) = (None, None, None, None, None);
+                    let mut ancestor = Some(location);
+                    while let Some(n) = ancestor {
+                        let slot = match n.kind() {
+                            Kind::MetaProperty => &mut meta_property,
+                            Kind::Decorator => &mut decorator,
+                            Kind::ForInStatement | Kind::ForOfStatement => &mut for_node,
+                            Kind::ComputedPropertyName => &mut computed_name,
+                            Kind::HeritageClause => &mut heritage_clause,
+                            _ => {
+                                ancestor = n.parent();
+                                continue;
+                            }
+                        };
+                        if slot.is_none() {
+                            *slot = Some(n);
+                            if meta_property.is_some() && decorator.is_some() && for_node.is_some() && computed_name.is_some() && heritage_clause.is_some() {
+                                break;
+                            }
+                        }
+                        ancestor = n.parent();
+                    }
                     if meta_property.is_some() {
                         return; // identifiers in meta properties shouldn't be resolved, but are expressions, so must be filtered
                     }
@@ -1313,7 +1323,7 @@ impl Checker {
 }
 
 // checker.go:29482
-pub(crate) fn get_mapped_type_modifiers(t: P<Type>) -> MappedTypeModifiers {
+pub fn get_mapped_type_modifiers(t: P<Type>) -> MappedTypeModifiers {
     let declaration = t.as_mapped_type().declaration.get().unwrap().as_mapped_type_node();
     let mut modifiers = MappedTypeModifiers::empty();
     if let Some(readonly_token) = declaration.readonly_token {
@@ -1419,12 +1429,12 @@ impl Checker {
     }
 
     // checker.go:29576
-    pub(crate) fn remove_definitely_falsy_types(&mut self, t: P<Type>) -> P<Type> {
+    pub fn remove_definitely_falsy_types(&mut self, t: P<Type>) -> P<Type> {
         self.filter_type(t, |c, t| c.has_type_facts(t, TypeFacts::Truthy))
     }
 
     // checker.go:29580
-    pub(crate) fn extract_definitely_falsy_types(&mut self, t: P<Type>) -> P<Type> {
+    pub fn extract_definitely_falsy_types(&mut self, t: P<Type>) -> P<Type> {
         self.map_type(t, |c, t| Some(c.get_definitely_falsy_part_of_type(t))).unwrap()
     }
 
@@ -1664,6 +1674,13 @@ impl Checker {
         let template_mapper = self.combine_type_mappers(object_type.as_mapped_type().mapper.get(), mapper);
         let template_type = self.get_template_type_from_mapped_type(object_type.as_mapped_type().target.get().unwrap_or(object_type));
         let instantiated_template_type = self.instantiate_type(template_type, Some(template_mapper));
+        // SAFETY: both made here for this one instantiation (the composite's children escape with it).
+        unsafe {
+            if template_mapper != mapper {
+                recycle_mapper(template_mapper);
+            }
+            recycle_mapper(mapper);
+        }
         let mut is_optional = get_mapped_type_optionality(object_type) > 0;
         if !is_optional {
             if self.is_generic_type(object_type) {
@@ -1691,7 +1708,7 @@ impl Checker {
     }
 
     // checker.go:29803
-    pub(crate) fn get_type_of_property_or_index_signature_of_type(&mut self, t: P<Type>, name: &str) -> Option<P<Type>> {
+    pub fn get_type_of_property_or_index_signature_of_type(&mut self, t: P<Type>, name: &str) -> Option<P<Type>> {
         let prop_type = self.get_type_of_property_of_type(t, name);
         if prop_type.is_some() {
             return prop_type;
@@ -1721,7 +1738,7 @@ impl Checker {
      * @returns the contextual type of an expression.
      */
     // checker.go:29832
-    pub(crate) fn get_contextual_type(&mut self, node: P<Node>, context_flags: ContextFlags) -> Option<P<Type>> {
+    pub fn get_contextual_type(&mut self, node: P<Node>, context_flags: ContextFlags) -> Option<P<Type>> {
         if node.flags().intersects(NodeFlags::InWithStatement) {
             // We cannot answer semantic questions within a with block, do not proceed any further
             return None;
@@ -2165,7 +2182,7 @@ impl Checker {
     }
 
     // checker.go:30261
-    pub(crate) fn get_contextual_type_for_argument_at_index(&mut self, call_target: P<Node>, arg_index: i32) -> Option<P<Type>> {
+    pub fn get_contextual_type_for_argument_at_index(&mut self, call_target: P<Node>, arg_index: i32) -> Option<P<Type>> {
         if is_import_call(call_target) {
             return if arg_index == 0 {
                 Some(self.string_type)

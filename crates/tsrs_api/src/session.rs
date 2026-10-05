@@ -9,7 +9,8 @@
 //   reached through a live `SnapshotData` and are never exposed as addresses. Wire handles are the
 //   pinned Go IDs (snapshot ids, project ids, symbol/type/signature ids, node handles).
 
-use std::collections::HashMap;
+use std::sync::Weak;
+use rustc_hash::FxHashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 
@@ -102,10 +103,10 @@ pub struct Session {
     pub(crate) parse_config_host: &'static crate::config::ApiParseConfigHost,
     binary_responses: bool,
     /// Registered snapshots with their API reference count (Go `snapshotData.refCount`).
-    snapshots: RwLock<HashMap<SnapshotID, (Arc<SnapshotData>, usize)>>,
+    snapshots: RwLock<FxHashMap<SnapshotID, (Arc<SnapshotData>, usize)>>,
     conn: Mutex<Option<Arc<dyn ClientConn>>>,
     closed: Mutex<bool>,
-    pub(crate) batch_pages: Mutex<HashMap<String, Vec<String>>>,
+    pub(crate) batch_pages: Mutex<FxHashMap<String, Vec<String>>>,
     pub(crate) module_resolvers: crate::module_resolution::ModuleResolvers,
     /// The session's base filesystem (Go `Session.FS()`), shared with resolver hosts.
     base_fs: Arc<dyn FS>,
@@ -142,22 +143,22 @@ impl Session {
             content_mapped_parse_cache: None,
         };
         let parse_config_host: &'static crate::config::ApiParseConfigHost =
-            Box::leak(Box::new(crate::config::ApiParseConfigHost { fs: init.fs.clone(), cwd: init.options.current_directory.clone() }));
+            Box::leak(Box::new(crate::config::ApiParseConfigHost { fs: Arc::clone(&init.fs), cwd: init.options.current_directory.clone() }));
         let id = SESSION_ID_COUNTER.fetch_add(1, Ordering::SeqCst) + 1;
-        let base_fs = init.fs.clone();
+        let base_fs = Arc::clone(&init.fs);
         Arc::new_cyclic(|weak_self| Session {
             id: format!("api-session-{id}"),
             snapshot_host: tsrs_project::new_snapshot_host(&init),
             parse_config_host,
             binary_responses: options.binary_responses,
-            snapshots: RwLock::new(HashMap::new()),
+            snapshots: RwLock::new(FxHashMap::default()),
             conn: Mutex::new(None),
             closed: Mutex::new(false),
-            batch_pages: Mutex::new(HashMap::new()),
+            batch_pages: Mutex::new(FxHashMap::default()),
             next_batch_page: AtomicU64::new(0),
             module_resolvers: Default::default(),
             base_fs,
-            weak_self: weak_self.clone(),
+            weak_self: Weak::clone(weak_self),
             build_state: Default::default(),
             source_files: Default::default(),
             build_backend: Mutex::new(None),
@@ -182,11 +183,11 @@ impl Session {
     }
 
     pub(crate) fn weak_self(&self) -> std::sync::Weak<Session> {
-        self.weak_self.clone()
+        Weak::clone(&self.weak_self)
     }
 
     pub(crate) fn snapshot_host_fs(&self) -> Arc<dyn FS> {
-        self.base_fs.clone()
+        Arc::clone(&self.base_fs)
     }
 
     pub(crate) fn next_batch_page_id(&self) -> u64 {
@@ -237,7 +238,7 @@ impl Session {
 
     /// Go `getSnapshotData`: resolves a client snapshot handle, pinning it for the caller.
     pub fn snapshot_data(&self, handle: SnapshotID) -> ApiResult<Arc<SnapshotData>> {
-        self.snapshots.read().unwrap().get(&handle).map(|(sd, _)| sd.clone()).ok_or_else(|| ApiError::client(format!("snapshot {handle} not found")))
+        self.snapshots.read().unwrap().get(&handle).map(|(sd, _)| Arc::clone(sd)).ok_or_else(|| ApiError::client(format!("snapshot {handle} not found")))
     }
 
     /// Go `setupChecker`: resolves snapshot -> project -> program and acquires the API-lifetime checker.
@@ -342,7 +343,7 @@ impl Session {
         self.dispatch_parsed(method, &params, info.owner, raw_params, lexemes).map_err(typed)
     }
 
-    fn dispatch_parsed(&self, method: &str, params: &Value, owner: Owner, raw: &[u8], lexemes: std::collections::HashMap<String, String>) -> ApiResult<Response> {
+    fn dispatch_parsed(&self, method: &str, params: &Value, owner: Owner, raw: &[u8], lexemes: rustc_hash::FxHashMap<String, String>) -> ApiResult<Response> {
         let params = params.clone();
         // Raw payload and exact number literals of this request, for the objects of this params tree (by address).
         let _request = crate::predecode::enter_request(raw, lexemes, &params);

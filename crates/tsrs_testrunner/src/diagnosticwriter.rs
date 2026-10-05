@@ -1,6 +1,7 @@
 // The subset of internal/diagnosticwriter that error baselines use, over an owned diagnostic snapshot
 // (`Diag`) so that baseline rendering does not depend on the lifetime or API of compiler objects.
 
+use std::fmt::Write as _;
 use std::cmp::Ordering;
 use std::rc::Rc;
 
@@ -264,7 +265,7 @@ pub fn format_diagnostic_with_color_and_context(output: &mut String, diagnostic:
     }
 
     write_with_style_and_reset(output, diagnostic.category.name(), get_category_format(diagnostic.category));
-    output.push_str(&format!("{} {}{}: {}", FOREGROUND_COLOR_ESCAPE_GREY, diagnostic_prefix(diagnostic), diagnostic.code, RESET_ESCAPE_SEQUENCE));
+    let _ = write!(output, "{} {}{}: {}", FOREGROUND_COLOR_ESCAPE_GREY, diagnostic_prefix(diagnostic), diagnostic.code, RESET_ESCAPE_SEQUENCE);
     write_flattened_diagnostic_message(output, diagnostic, format_opts.new_line);
 
     if let Some(file) = &diagnostic.file {
@@ -326,7 +327,7 @@ fn write_code_snippet(
         if has_more_than_five_lines && first_line + 1 < i && i < last_line - 1 {
             writer.push_str(indent);
             writer.push_str(GUTTER_STYLE_SEQUENCE);
-            writer.push_str(&format!("{:>width$}", ELLIPSIS, width = gutter_width));
+            let _ = write!(writer, "{:>width$}", ELLIPSIS, width = gutter_width);
             writer.push_str(RESET_ESCAPE_SEQUENCE);
             writer.push_str(GUTTER_SEPARATOR);
             writer.push_str(format_opts.new_line);
@@ -342,7 +343,7 @@ fn write_code_snippet(
         // Output the gutter and the actual contents of the line.
         writer.push_str(indent);
         writer.push_str(GUTTER_STYLE_SEQUENCE);
-        writer.push_str(&format!("{:>width$}", i + 1, width = gutter_width));
+        let _ = write!(writer, "{:>width$}", i + 1, width = gutter_width);
         writer.push_str(RESET_ESCAPE_SEQUENCE);
         writer.push_str(GUTTER_SEPARATOR);
         writer.push_str(&line_content);
@@ -351,7 +352,7 @@ fn write_code_snippet(
         // Output the gutter and the error span for the line using tildes.
         writer.push_str(indent);
         writer.push_str(GUTTER_STYLE_SEQUENCE);
-        writer.push_str(&format!("{:>width$}", "", width = gutter_width));
+        let _ = write!(writer, "{:>width$}", "", width = gutter_width);
         writer.push_str(RESET_ESCAPE_SEQUENCE);
         writer.push_str(GUTTER_SEPARATOR);
         writer.push_str(squiggle_color);
@@ -454,7 +455,7 @@ pub fn write_error_summary_text(output: &mut String, all_diagnostics: &[&Diag], 
             None => global_errors += 1,
             Some(f) => match errors_by_file.iter_mut().find(|(g, _)| Rc::ptr_eq(g, f)) {
                 Some((_, v)) => v.push(diagnostic),
-                None => errors_by_file.push((f.clone(), vec![diagnostic])),
+                None => errors_by_file.push((Rc::clone(f), vec![diagnostic])),
             },
         }
     }
@@ -510,7 +511,7 @@ fn write_tabular_errors_display(output: &mut String, errors_by_file: &[(Rc<FileL
     output.push_str(format_opts.new_line);
 
     for (file, file_errors) in errors_by_file {
-        output.push_str(&format!("{:>width$}  ", file_errors.len(), width = left_padding_goal));
+        let _ = write!(output, "{:>width$}  ", file_errors.len(), width = left_padding_goal);
         output.push_str(&pretty_path_for_file_error(file, file_errors, format_opts));
         output.push_str(format_opts.new_line);
     }
@@ -538,10 +539,10 @@ pub fn write_format_diagnostic(output: &mut String, diagnostic: &Diag, format_op
     if let Some(file) = &diagnostic.file {
         let (line, character) = get_ecma_line_and_utf16_character_of_position(file, diagnostic.pos);
         let relative_file_name = tspath::convert_to_relative_path(&file.file_name, &format_opts.compare_paths_options);
-        output.push_str(&format!("{}({},{}): ", relative_file_name, line + 1, character + 1));
+        let _ = write!(output, "{}({},{}): ", relative_file_name, line + 1, character + 1);
     }
 
-    output.push_str(&format!("{} {}{}: ", diagnostic.category.name(), diagnostic_prefix(diagnostic), diagnostic.code));
+    let _ = write!(output, "{} {}{}: ", diagnostic.category.name(), diagnostic_prefix(diagnostic), diagnostic.code);
     write_flattened_diagnostic_message(output, diagnostic, format_opts.new_line);
     output.push_str(format_opts.new_line);
 }

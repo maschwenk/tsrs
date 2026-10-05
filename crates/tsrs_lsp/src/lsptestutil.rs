@@ -144,7 +144,7 @@ pub fn new_lsp_client(mut server_opts: ServerOptions, on_server_request: Option<
 
     let (ctx, cancel) = Context::background().with_cancel();
     let client = Arc::new(LSPClient {
-        server: server.clone(),
+        server: Arc::clone(&server),
         input_writer: Mutex::new(transport.client_out),
         id: AtomicI32::new(0),
         ctx: ctx.clone(),
@@ -166,8 +166,8 @@ pub fn new_lsp_client(mut server_opts: ServerOptions, on_server_request: Option<
     }
     // Start async message router
     {
-        let client = client.clone();
-        let ctx = ctx.clone();
+        let client = Arc::clone(&client);
+        let ctx = ctx;
         let mut output_reader = transport.client_in;
         threads.push(std::thread::spawn(move || client.message_router(&ctx, &mut *output_reader)));
     }

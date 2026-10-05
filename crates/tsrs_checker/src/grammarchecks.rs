@@ -1208,9 +1208,7 @@ impl Checker {
             let name = attr.name;
             let initializer = attr.initializer;
             let text_of_name = name.text();
-            if !seen.contains(text_of_name) {
-                seen.insert(text_of_name);
-            } else {
+            if !seen.insert(text_of_name) {
                 return self.grammar_error_on_node(name, &diagnostics::JSX_elements_cannot_have_multiple_attributes_with_the_same_name, &[]);
             }
             if let Some(initializer) = initializer {

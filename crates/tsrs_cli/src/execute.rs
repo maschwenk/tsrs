@@ -143,7 +143,7 @@ fn tsc_compilation(
                 return CommandLineResult { status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
             }
         } else {
-            config_file_name = file_or_directory.clone();
+            config_file_name.clone_from(&file_or_directory);
             if !fs.file_exists(&config_file_name) {
                 report_diagnostic(new_compiler_diagnostic(&diagnostics::The_specified_path_does_not_exist_Colon_0, &[&file_or_directory]));
                 return CommandLineResult { status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
@@ -277,7 +277,7 @@ fn perform_compilation(
     let parse_start = sys.now();
     let program = new_program(ProgramOptions::new(config, host));
     compile_times.parse_time = sys.now() - parse_start;
-    let (result, _) = emit_and_report_statistics(EmitInput {
+    let (result, _) = emit_and_report_statistics(&EmitInput {
         sys,
         program,
         config,
@@ -318,12 +318,12 @@ fn perform_incremental_compilation(
     // is built; "BuildInfo read time" is the read's own duration. `--singleThreaded` keeps Go's order.
     let read_build_info = || {
         let start = sys.now();
-        let old_program = tsrs_incremental::read_build_info_program(config, &*tsrs_incremental::new_build_info_reader(host.clone()), &*host);
+        let old_program = tsrs_incremental::read_build_info_program(config, &*tsrs_incremental::new_build_info_reader(Arc::clone(&host)), &*host);
         (old_program, sys.now() - start)
     };
     let build_program = || {
         let start = sys.now();
-        let program = new_program(ProgramOptions::new(config, host.clone()));
+        let program = new_program(ProgramOptions::new(config, Arc::clone(&host)));
         (program, sys.now() - start)
     };
     let ((old_program, build_info_read_time), (program, parse_time)) = if config.compiler_options().unwrap().single_threaded.is_true() {
@@ -344,7 +344,7 @@ fn perform_incremental_compilation(
     let incremental_program =
         tsrs_incremental::new_program(program, old_program, tsrs_incremental::create_host(host), Some(std::time::Instant::now), testing.is_some());
     compile_times.changes_compute_time = sys.now() - changes_compute_start;
-    let (result, _) = emit_and_report_statistics(EmitInput {
+    let (result, _) = emit_and_report_statistics(&EmitInput {
         sys,
         program: incremental_program.get_program(),
         config,

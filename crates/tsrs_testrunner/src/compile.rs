@@ -86,7 +86,7 @@ fn test_lib_folder_map() -> Vec<(String, String)> {
 }
 
 enum Compiled {
-    Result(CompilationResult),
+    Result(Box<CompilationResult>),
     Unsupported(String),
 }
 
@@ -135,7 +135,6 @@ impl crate::emit_harness::Recompile for Recompiler<'_> {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn compile_files(
     input_files: &[TestFile],
     other_files: &[TestFile],
@@ -156,7 +155,7 @@ fn compile_files(
         return Ok(Compiled::Unsupported(reason));
     }
 
-    compile_files_ex(input_files, other_files, &harness_options, compiler_options, current_directory, symlinks, tsconfig).map(Compiled::Result)
+    compile_files_ex(input_files, other_files, &harness_options, compiler_options, current_directory, symlinks, tsconfig).map(|r| Compiled::Result(Box::new(r)))
 }
 
 fn compile_files_ex(
@@ -231,10 +230,10 @@ fn compile_files_ex(
     let fs = vfstest::from_map(testfs, harness_options.use_case_sensitive_file_names);
     let fs: Arc<dyn FS> = Arc::new(bundled::wrap_fs(fs));
     #[cfg(feature = "checker")]
-    let recorder = emit_baselines().then(|| crate::emit_harness::new_output_recorder_fs(fs.clone()));
+    let recorder = emit_baselines().then(|| crate::emit_harness::new_output_recorder_fs(Arc::clone(&fs)));
     #[cfg(feature = "checker")]
     let fs: Arc<dyn FS> = match &recorder {
-        Some(r) => r.clone(),
+        Some(r) => Arc::<crate::emit_harness::OutputRecorderFS>::clone(r),
         None => fs,
     };
 
@@ -250,7 +249,7 @@ fn compile_files_ex(
     #[cfg(feature = "checker")]
     if let Some(recorder) = recorder {
         let (diagnostics, program, emit_result) =
-            crate::emit_harness::compile_files_with_host_emit(host.clone(), config, harness_options, &|host, config| create_program_like(host, config));
+            crate::emit_harness::compile_files_with_host_emit(Arc::clone(&host), config, harness_options, &|host, config| create_program_like(host, config));
         let options = program.options().get();
         let emit = crate::emit_harness::new_emit_outputs(&recorder, program, options, &*host, emit_result);
         return Ok(CompilationResult { diagnostics, options, program, harness_options: harness_options.clone(), host, tsconfig, emit: Some(emit) });
@@ -277,9 +276,9 @@ impl tsrs_incremental::BuildInfoReader for testBuildInfoReader {
 // wrapped in `incremental.NewProgram` like Go's. The default mode (no emit baselines) keeps the plain program below.
 #[cfg(feature = "checker")]
 fn create_program_like(host: Arc<dyn CompilerHost>, config: P<ParsedCommandLine>) -> &'static dyn compiler::ProgramLike {
-    let program = create_program(host.clone(), config);
+    let program = create_program(Arc::clone(&host), config);
     if config.compiler_options().unwrap().incremental.is_true() {
-        let reader = testBuildInfoReader { inner: tsrs_incremental::new_build_info_reader(host.clone()) };
+        let reader = testBuildInfoReader { inner: tsrs_incremental::new_build_info_reader(Arc::clone(&host)) };
         let old_program = tsrs_incremental::read_build_info_program(config, &reader, &*host);
         let incremental_program = tsrs_incremental::new_program(program, old_program, tsrs_incremental::create_host(host), None, false);
         return Box::leak(Box::new(incremental_program.get()));
@@ -297,7 +296,7 @@ fn create_program(host: Arc<dyn CompilerHost>, config: P<ParsedCommandLine>) -> 
 }
 
 fn compile_files_with_host(host: Arc<dyn CompilerHost>, config: P<ParsedCommandLine>, harness_options: &HarnessOptions, tsconfig: Option<P<ParsedCommandLine>>) -> CompilationResult {
-    let program = create_program(host.clone(), config);
+    let program = create_program(Arc::clone(&host), config);
     let harness_options = harness_options.clone();
     let ctx = &compiler::Context::default();
     let mut errors = Vec::new();
@@ -345,7 +344,7 @@ pub fn run(item: &TestItem, table: &OptionTable) -> Outcome {
     let compiler_runner::SplitUnits { current_directory, ts_config_files, to_be_compiled, other_files } = split;
 
     let result = match compile_files(&to_be_compiled, &other_files, Some(&harness_config), ts_config, &current_directory, &payload.symlinks) {
-        Ok(Compiled::Result(r)) => r,
+        Ok(Compiled::Result(r)) => *r,
         // Go checks SkipUnsupportedCompilerOptions after compiling; checking first keeps crashes in
         // unsupported configurations (which have no reference baselines) out of the results.
         Ok(Compiled::Unsupported(reason)) => match reason.strip_prefix("fatal: ") {
@@ -534,7 +533,7 @@ pub fn convert_diagnostics(diagnostics: &[P<Diagnostic>]) -> Vec<Diag> {
 }
 
 fn convert(d: P<Diagnostic>, files: &mut FxHashMap<P<SourceFile>, Rc<FileLike>>) -> Diag {
-    let file = d.file().map(|f| files.entry(f).or_insert_with(|| FileLike::new(f.file_name().to_string(), f.text().to_string())).clone());
+    let file = d.file().map(|f| Rc::clone(files.entry(f).or_insert_with(|| FileLike::new(f.file_name().to_string(), f.text().to_string()))));
     let identity = if !d.message_text().is_empty() {
         d.message_text().to_string()
     } else if let (Some(m), -1) = (d.message(), d.code()) {

@@ -645,5 +645,3 @@ pub(crate) fn signature_to_signature_declaration(host: &dyn CheckerHost, p: &Par
     }
 }
 
-#[allow(unused)]
-fn _assert_sig(_: P<Signature>) {}

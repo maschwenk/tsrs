@@ -65,7 +65,7 @@ impl fmt::Display for Path {
 pub const DIRECTORY_SEPARATOR: u8 = b'/';
 const URL_SCHEME_SEPARATOR: &str = "://";
 
-//// Path Tests
+// Path Tests
 
 // Determines whether a byte corresponds to `/` or `\`.
 fn is_any_directory_separator(char: u8) -> bool {
@@ -113,7 +113,13 @@ pub fn has_trailing_directory_separator(path: &str) -> bool {
 //	CombinePaths("/path", "to", "file.ext") === "/path/to/file.ext"
 //	CombinePaths("/path", "/to", "file.ext") === "/to/file.ext"
 pub fn combine_paths(first_path: &str, paths: &[&str]) -> String {
-    let mut result = normalize_slashes(first_path);
+    // Each absolute path replaces everything before it, so start from the last one without normalizing what it
+    // replaces (`first_path` is often the current directory).
+    let is_absolute = |p: &str| if p.as_bytes().contains(&b'\\') { get_root_length(&normalize_slashes(p)) != 0 } else { get_root_length(p) != 0 };
+    let (mut result, paths) = match paths.iter().rposition(|p| is_absolute(p)) {
+        Some(last_absolute) => (normalize_slashes(paths[last_absolute]), &paths[last_absolute + 1..]),
+        None => (normalize_slashes(first_path), paths),
+    };
     for &trailing_path in paths {
         if trailing_path.is_empty() {
             continue;
@@ -546,71 +552,23 @@ fn simple_normalize_path(path: &str) -> Option<std::borrow::Cow<'_, str>> {
 
 // hasRelativePathSegment reports whether p contains ".", "..", "./", "../", "/.", "/..", "//", "/./", or "/../".
 fn has_relative_path_segment(p: &str) -> bool {
+    // A segment that is "." or "..", or an empty segment between two slashes. Scans slash to slash (memchr).
     let p = p.as_bytes();
     let n = p.len();
-    if n == 0 {
-        return false;
-    }
-
-    if p == b"." || p == b".." {
+    let is_dot_segment = |segment: &[u8]| segment == b"." || segment == b"..";
+    let mut end = memchr::memchr(b'/', p).unwrap_or(n);
+    if is_dot_segment(&p[..end]) {
         return true;
     }
-
-    // Leading "./" OR "../"
-    if p[0] == b'.' {
-        if n >= 2 && p[1] == b'/' {
-            return true;
-        }
-        // Leading "../"
-        if n >= 3 && p[1] == b'.' && p[2] == b'/' {
+    while end < n {
+        let start = end + 1;
+        end = memchr::memchr(b'/', &p[start..]).map_or(n, |i| start + i);
+        let segment = &p[start..end];
+        if segment.is_empty() && end < n || is_dot_segment(segment) {
             return true;
         }
     }
-    // Trailing "/." OR "/.."
-    if p[n - 1] == b'.' {
-        if n >= 2 && p[n - 2] == b'/' {
-            return true;
-        }
-        if n >= 3 && p[n - 2] == b'.' && p[n - 3] == b'/' {
-            return true;
-        }
-    }
-
-    // Now look for any `//` or `/./` or `/../`
-
-    let mut prev_slash = false;
-    let mut seg_len = 0; // length of current segment since last slash
-    let mut dot_count: i32 = 0; // consecutive dots at start of the current segment; -1 => not only dots
-
-    for &c in p {
-        if c == b'/' {
-            // "//"
-            if prev_slash {
-                return true;
-            }
-            // "/./" or "/../"
-            if (seg_len == 1 && dot_count == 1) || (seg_len == 2 && dot_count == 2) {
-                return true;
-            }
-            prev_slash = true;
-            seg_len = 0;
-            dot_count = 0;
-            continue;
-        }
-
-        if c == b'.' {
-            if dot_count >= 0 {
-                dot_count += 1;
-            }
-        } else {
-            dot_count = -1;
-        }
-        seg_len += 1;
-        prev_slash = false;
-    }
-
-    // Trailing "/." or "/.."
-    (seg_len == 1 && dot_count == 1) || (seg_len == 2 && dot_count == 2)
+    false
 }
 
 pub fn normalize_path(path: &str) -> String {
@@ -779,7 +737,7 @@ impl Path {
     }
 }
 
-//// Relative Paths
+// Relative Paths
 
 pub fn get_path_components_relative_to(from: &str, to: &str, options: &ComparePathsOptions) -> Vec<String> {
     let from_components = reduce_path_components(&get_path_components(from, &options.current_directory));

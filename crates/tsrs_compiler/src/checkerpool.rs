@@ -135,7 +135,11 @@ impl Drop for CheckerHandle {
 // itself), so a pool that shares checkers between threads stores them in this wrapper and, like the built-in pool,
 // lets only the thread that holds a checker touch it.
 pub struct PooledChecker(Box<Checker>);
+#[expect(clippy::non_send_fields_in_send_ty, reason = "the checker: only the thread that holds it touches it (see above)")]
+// SAFETY: the checker's `Rc`s and closures are reachable only from the checker, and the pool lets one thread at a time
+// hold it (see above), so moving it to that thread moves all of them together.
 unsafe impl Send for PooledChecker {}
+// SAFETY: a `&PooledChecker` is only used by the thread that holds the checker (see above).
 unsafe impl Sync for PooledChecker {}
 
 impl PooledChecker {
@@ -203,7 +207,10 @@ fn run_work_group(single_threaded: bool, count: usize, task: impl Fn(usize) + Sy
 // never hands out references that outlive the guard. The checker's deferred closures are not
 // `Send`, which is the only reason this wrapper is needed.
 struct CheckerSlot(Mutex<Box<Checker>>);
+#[expect(clippy::non_send_fields_in_send_ty, reason = "the checker: touched only under its mutex (see above)")]
+// SAFETY: the checker's non-`Send` parts are reachable only from the checker, which is reached only through the mutex.
 unsafe impl Send for CheckerSlot {}
+// SAFETY: every access to the checker holds its mutex, and no reference outlives the guard (see above).
 unsafe impl Sync for CheckerSlot {}
 
 // A pool is dropped only with its program (`free_program` / `free_unshared_program`: no checker handle is held
@@ -212,7 +219,7 @@ impl Drop for poolState {
     fn drop(&mut self) {
         // SAFETY: `checkers` came from `Box::leak` of a boxed slice in `create_checkers`, and no handle borrowing a
         // checker outlives the pool's program.
-        unsafe { drop(Box::from_raw(self.checkers as *const [CheckerSlot] as *mut [CheckerSlot])) };
+        unsafe { drop(Box::from_raw(std::ptr::from_ref::<[CheckerSlot]>(self.checkers).cast_mut())) };
     }
 }
 
@@ -283,7 +290,7 @@ pub(crate) fn thread_cpu_seconds() -> f64 {
     const CLOCK_THREAD_CPUTIME_ID: i32 = 3;
     let mut ts = Timespec { tv_sec: 0, tv_nsec: 0 };
     // SAFETY: clock_gettime writes one timespec through the valid pointer.
-    if unsafe { clock_gettime(CLOCK_THREAD_CPUTIME_ID, &mut ts) } != 0 {
+    if unsafe { clock_gettime(CLOCK_THREAD_CPUTIME_ID, &raw mut ts) } != 0 {
         return 0.0;
     }
     ts.tv_sec as f64 + ts.tv_nsec as f64 * 1e-9
@@ -547,6 +554,8 @@ impl checkerPool {
                 tsrs_core::ptr::shared_check::freeze_shared_objects();
             }
             let create_start = std::time::Instant::now();
+            #[cfg(feature = "checker")]
+            tsrs_checker::links::set_multiple_checkers(self.checker_count > 1);
             let slots: Vec<Mutex<Option<CheckerSlot>>> = (0..self.checker_count).map(|_| Mutex::new(None)).collect();
             run_work_group(self.single_threaded, self.checker_count, |i| {
                 *slots[i].lock().unwrap() = Some(CheckerSlot(Mutex::new(new_checker(program))));
@@ -579,6 +588,10 @@ impl checkerPool {
 
     pub(crate) fn checker_count(&self) -> usize {
         self.checker_count
+    }
+
+    pub(crate) fn checker_index_of_file(&self, file: P<SourceFile>) -> Option<usize> {
+        self.create_checkers().file_associations.get(&file).copied()
     }
 
     // checkerpool.go:451

@@ -154,8 +154,9 @@ What Max must configure before the first release:
 - Linux binaries are built on Ubuntu 22.04, so they need glibc >= 2.35 at most (a build on Debian 12 needed 2.34);
   Alpine/musl is not supported.
 
-`.github/workflows/ci.yml` (push to main, pull requests): `cargo check --workspace` with warnings denied, `cargo test` for
-the fast crates, a release build, the conformance gate, and an npm install smoke test of the packed tarballs.
+`.depot/workflows/ci.yml` (Depot CI; push to main and manual dispatch): `cargo check --workspace` with warnings denied,
+`cargo test` for the fast crates, a release build, the conformance and fourslash gates, an npm install smoke test of
+the packed tarballs, and the lint ratchet.
 
 ## Adopting it in a pnpm workspace
 

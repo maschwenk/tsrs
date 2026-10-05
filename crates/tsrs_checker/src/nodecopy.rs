@@ -44,7 +44,7 @@ impl NodeBuilderImpl {
 
         let renamed = match kind {
             propertyNameNodeKind::Identifier => self.new_identifier(c, &text, None),
-            propertyNameNodeKind::StringLiteral => self.f.new_string_literal(alloc_str(&text), TokenFlags::None),
+            propertyNameNodeKind::StringLiteral => self.f.new_string_literal(self.f.alloc_text(&text), TokenFlags::None),
             _ => return Some(res),
         };
         self.e.set_original(renamed, res);
@@ -189,14 +189,14 @@ impl wrappingTracker {
 
     // nodecopy.go:183
     pub fn track_symbol(&self, c: &mut Checker, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags) -> bool {
-        self.bound.tracked_symbols.borrow_mut().push(P::new(TrackedSymbolArgs { symbol, enclosing_declaration, meaning }));
+        self.bound.tracked_symbols.borrow_mut().push(TrackedSymbolArgs { symbol, enclosing_declaration, meaning });
         false
     }
 }
 
 // nodecopy.go:188
 pub(crate) fn new_wrapping_tracker(inner: &'static dyn SymbolTracker, bound: P<recoveryBoundary>) -> P<wrappingTracker> {
-    P::new(wrappingTracker { wrapped: inner, bound })
+    P::new_scratch(wrappingTracker { wrapped: inner, bound })
 }
 
 impl NodeBuilderImpl {
@@ -204,7 +204,7 @@ impl NodeBuilderImpl {
     pub(crate) fn create_recovery_boundary(&self, c: &mut Checker) -> P<recoveryBoundary> {
         c.check_not_canceled();
         let ctx = self.ctx();
-        let bound = P::new(recoveryBoundary {
+        let bound = P::new_scratch(recoveryBoundary {
             ctx,
             had_error: Cell::new(false),
             deferred_reports: RefCell::new(Vec::new()),
@@ -299,7 +299,7 @@ impl NodeBuilderImpl {
         if new_name.is_empty() {
             return lit;
         }
-        let res = self.f.new_string_literal(alloc_str(&new_name), TokenFlags::None);
+        let res = self.f.new_string_literal(self.f.alloc_text(&new_name), TokenFlags::None);
         self.e.set_original(res, lit);
         res
     }
@@ -332,7 +332,7 @@ pub(crate) fn get_existing_node_tree_visitor(c: &mut Checker, b: P<NodeBuilderIm
     let non_local_node = Rc::new(Cell::new(true));
     let visit: VisitFn = Rc::new(move |v: &mut NodeVisitor, node: P<Node>| slot.with(|c| t.visit(c, v, node)));
     let visit_nodes: VisitNodesHook = {
-        let non_local_node = non_local_node.clone();
+        let non_local_node = Rc::clone(&non_local_node);
         Rc::new(move |nodes: Option<P<NodeList>>, v: &mut NodeVisitor| {
             let mut res = v.visit_nodes(nodes);
             if non_local_node.get() {

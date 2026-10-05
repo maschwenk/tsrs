@@ -127,6 +127,7 @@ pub(crate) struct packageNamesInfo {
 // Go `checkerPool CheckerPool` + `compilerCheckerPool *checkerPool`: the built-in pool is set only when
 // `CreateCheckerPool` was not provided; it enables grouped parallel iteration, non-exclusive access for emit,
 // and direct global diagnostics collection.
+#[expect(clippy::large_enum_variant, reason = "one per program; the built-in pool, the usual variant, is reached on every checker request and stays inline")]
 enum programCheckerPool {
     Compiler(checkerPool),
     External(Box<dyn CheckerPool>),
@@ -173,6 +174,9 @@ pub struct Program {
 
     // Cached map of package names to whether they bundle types
     packages_map: OnceLock<FxHashMap<String, bool>>,
+
+    // tsrs-only (tsrs_modulespecifiers::ExportsModuleNameCache)
+    pub(crate) exports_module_name_cache: tsrs_modulespecifiers::ExportsModuleNameCache,
 }
 
 impl std::ops::Deref for Program {
@@ -343,13 +347,13 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
     let processing_diagnostics = std::mem::take(&mut processed.file_include_data.processing_diagnostics);
     let files = std::mem::take(&mut processed.files);
     let files_by_path = std::mem::take(&mut processed.files_by_path);
-    let host = opts.host.clone();
+    let host = Arc::clone(&opts.host);
     let mut p = Program {
         opts: opts.program_config(),
         // Go's NewProgram never sets `comparePathsOptions`: it is the zero value (no current directory,
         // case-insensitive), which e.g. makes IsGlobalTypingsFile false when no typings location is set.
         compare_paths_options: ComparePathsOptions::default(),
-        resolution_host: crate::projectreferencefilemapper::resolution_host_for(host.clone()),
+        resolution_host: crate::projectreferencefilemapper::resolution_host_for(Arc::clone(&host)),
         host,
         resolution_data,
         checker_pool: OnceLock::new(),
@@ -370,6 +374,7 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
         package_names: OnceLock::new(),
         has_ts_file: OnceLock::new(),
         packages_map: OnceLock::new(),
+        exports_module_name_cache: Default::default(),
     };
     // Go initializes the checker pool before verifying options; the pool factory takes the program by
     // `&'static`, so here it runs after verification, once the program is leaked. Neither pool reads anything
@@ -378,34 +383,38 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
     let p: &'static Program = Box::leak(Box::new(p));
     // Census builds: the pool enum is mostly uninitialized bytes when set; clear the stack they come from.
     tsrs_core::census_scrub_stack();
-    p.init_checker_pool(opts.create_checker_pool.as_ref());
+    p.init_checker_pool(opts.create_checker_pool);
     p
 }
 
-// Frees a program made by `new_program` or `update_program` (language server; Go's GC). The caller guarantees that
-// nothing uses it any more: no checker of its pool is held, and no snapshot or language service refers to it. What
-// it shares with other versions (`processed`, the project reference file mapper) stays.
-//
-// # Safety
-// `program` came from `new_program` / `update_program` and is not used afterwards.
+/// Frees a program made by `new_program` or `update_program` (language server; Go's GC). The caller guarantees that
+/// nothing uses it any more: no checker of its pool is held, and no snapshot or language service refers to it. What
+/// it shares with other versions (`processed`, the project reference file mapper) stays.
+///
+/// # Safety
+/// `program` came from `new_program` / `update_program` and is not used afterwards.
 pub unsafe fn free_program(program: &'static Program) {
     let resolution_host: *const dyn ResolutionHost = program.resolution_host;
-    drop(Box::from_raw(program as *const Program as *mut Program));
+    // SAFETY: both functions leak the program from a `Box`, and nothing uses it afterwards (this function's contract).
+    drop(unsafe { Box::from_raw(std::ptr::from_ref::<Program>(program).cast_mut()) });
     // Per program (`resolution_host_for`); it keeps the compiler host alive.
-    drop(Box::from_raw(resolution_host as *mut dyn ResolutionHost));
+    // SAFETY: `resolution_host_for` leaked it from a `Box` for this program alone, which is gone.
+    drop(unsafe { Box::from_raw(resolution_host as *mut dyn ResolutionHost) });
 }
 
-// Frees a program from `new_program` that never shared data with another version (it was not the source or the
-// result of `update_program`), including its processed-file data and project reference file mapper, which
-// `free_program` keeps because language-server program versions share them. Used for one-shot programs (the
-// native API's transpileModule / transpileDeclaration).
-//
-// # Safety
-// As `free_program`, and additionally: no other program refers to `program`'s processed files or mapper.
+/// Frees a program from `new_program` that never shared data with another version (it was not the source or the
+/// result of `update_program`), including its processed-file data and project reference file mapper, which
+/// `free_program` keeps because language-server program versions share them. Used for one-shot programs (the
+/// native API's transpileModule / transpileDeclaration).
+///
+/// # Safety
+/// As `free_program`, and additionally: no other program refers to `program`'s processed files or mapper.
 pub unsafe fn free_unshared_program(program: &'static Program) {
     let shared = shared_program_data(program);
-    free_program(program);
-    shared.free();
+    // SAFETY: this function's contract includes `free_program`'s.
+    unsafe { free_program(program) };
+    // SAFETY: the only program that shared this data was just freed (this function's contract).
+    unsafe { shared.free() };
 }
 
 /// The data program versions share (`processed`, the project reference file mapper, the file loader's
@@ -419,8 +428,8 @@ pub struct SharedProgramData {
 /// See `SharedProgramData`.
 pub fn shared_program_data(program: &'static Program) -> SharedProgramData {
     SharedProgramData {
-        processed: program.processed as *const processedFiles as usize,
-        mapper: program.project_reference_file_mapper as *const projectReferenceFileMapper as usize,
+        processed: std::ptr::from_ref::<processedFiles>(program.processed) as usize,
+        mapper: std::ptr::from_ref::<projectReferenceFileMapper>(program.project_reference_file_mapper) as usize,
     }
 }
 
@@ -428,8 +437,10 @@ impl SharedProgramData {
     /// # Safety
     /// Every program that shares this data has been freed, and nothing else refers to it.
     pub unsafe fn free(self) {
-        free_project_reference_file_mapper(self.mapper as *mut projectReferenceFileMapper);
-        drop(Box::from_raw(self.processed as *mut processedFiles));
+        // SAFETY: the file loader leaked the mapper from a `Box`, and nothing refers to it (this function's contract).
+        unsafe { free_project_reference_file_mapper(self.mapper as *mut projectReferenceFileMapper) };
+        // SAFETY: `new_program` leaked `processed` from a `Box`, and nothing refers to it (this function's contract).
+        drop(unsafe { Box::from_raw(self.processed as *mut processedFiles) });
     }
 }
 
@@ -438,14 +449,17 @@ impl SharedProgramData {
 /// # Safety
 /// `mapper` came from `Box::leak` in the file loader, and nothing refers to it or its hosts any more.
 pub(crate) unsafe fn free_project_reference_file_mapper(mapper: *mut projectReferenceFileMapper) {
-    let dts_faking_host = (*mapper).dts_faking_host.get().copied();
-    let loader_host = (*mapper).loader_host;
-    drop(Box::from_raw(mapper));
+    // SAFETY: `mapper` is a live leaked `Box` (this function's contract).
+    let (dts_faking_host, loader_host) = unsafe { ((*mapper).dts_faking_host.get().copied(), (*mapper).loader_host) };
+    // SAFETY: it came from `Box::leak`, and nothing refers to it any more (this function's contract).
+    drop(unsafe { Box::from_raw(mapper) });
     if let Some(h) = dts_faking_host {
-        drop(Box::from_raw(h as *const dyn ResolutionHost as *mut dyn ResolutionHost));
+        // SAFETY: `new_project_reference_dts_faking_host` leaked it from a `Box` for this mapper, which is gone.
+        drop(unsafe { Box::from_raw(std::ptr::from_ref::<dyn ResolutionHost>(h) as *mut dyn ResolutionHost) });
     }
     if let Some(h) = loader_host {
-        drop(Box::from_raw(h as *const dyn ResolutionHost as *mut dyn ResolutionHost));
+        // SAFETY: `resolution_host_for` leaked it from a `Box` for this mapper's loader, which is gone.
+        drop(unsafe { Box::from_raw(std::ptr::from_ref::<dyn ResolutionHost>(h) as *mut dyn ResolutionHost) });
     }
 }
 
@@ -464,7 +478,7 @@ impl Program {
         create_checker_pool: Option<CreateCheckerPool>,
         create_module_resolver: Option<CreateModuleResolver>,
     ) -> (&'static Program, Option<P<SourceFile>>, bool) {
-        let (result, new_file, reused) = self.reuse_program(changed_file_path, new_host.clone(), create_checker_pool.clone(), create_module_resolver.clone());
+        let (result, new_file, reused) = self.reuse_program(changed_file_path, Arc::clone(&new_host), create_checker_pool.clone(), create_module_resolver.clone());
         if reused {
             (result.unwrap(), new_file, true)
         } else {
@@ -532,7 +546,7 @@ impl Program {
         // TODO: reverify compiler options when config has changed?
         let mut result = Program {
             opts: self.opts.clone(),
-            resolution_host: crate::projectreferencefilemapper::resolution_host_for(new_host.clone()),
+            resolution_host: crate::projectreferencefilemapper::resolution_host_for(Arc::clone(&new_host)),
             host: new_host,
             resolution_data: self.resolution_data.clone_data(),
             checker_pool: OnceLock::new(),
@@ -554,6 +568,7 @@ impl Program {
             package_names: OnceLock::new(),
             has_ts_file: OnceLock::new(),
             packages_map: OnceLock::new(),
+            exports_module_name_cache: Default::default(),
         };
         try_reuse(&result.unresolved_imports, &self.unresolved_imports);
         try_reuse(&result.known_symlinks, &self.known_symlinks);
@@ -561,7 +576,7 @@ impl Program {
         let index = result.files.iter().position(|file| file.path() == new_file_some.path()).unwrap();
         let mut files = result.files.to_vec();
         files[index] = new_file_some;
-        result.files_by_path = self.files_by_path.clone();
+        result.files_by_path.clone_from(&self.files_by_path);
         result.files_by_path.insert(new_file_some.path().clone(), new_file_some);
         for (i, &old_supplemental) in old_supplemental_files.iter().enumerate() {
             let new_supplemental = new_supplemental_files[i];
@@ -572,12 +587,12 @@ impl Program {
         result.files = tsrs_core::alloc_vec(files);
         let result: &'static Program = Box::leak(Box::new(result));
         tsrs_core::census_scrub_stack();
-        result.init_checker_pool(create_checker_pool.as_ref());
+        result.init_checker_pool(create_checker_pool);
         (Some(result), new_file, true)
     }
 
     // program.go:443
-    fn init_checker_pool(&'static self, create: Option<&CreateCheckerPool>) {
+    fn init_checker_pool(&'static self, create: Option<CreateCheckerPool>) {
         if !self.finished_processing {
             panic!("Program must finish processing files before initializing checker pool");
         }
@@ -692,7 +707,7 @@ impl Program {
 
     // program.go:540
     pub fn get_config_file_parsing_diagnostics(&self) -> Vec<P<Diagnostic>> {
-        self.opts.config.get_config_file_parsing_diagnostics().to_vec()
+        self.opts.config.get_config_file_parsing_diagnostics()
     }
 
     // program.go:546
@@ -721,6 +736,7 @@ impl Program {
         let mut unresolved_imports = Vec::new();
 
         if let Some(resolved_modules) = self.resolved_modules.get(file.path()) {
+            #[expect(clippy::iter_over_hash_type, reason = "the only caller adds the names to a hash set")]
             for (cache_key, resolution) in resolved_modules {
                 let resolved = resolution.is_resolved();
                 if (!resolved || !tspath::extension_is_one_of(resolution.extension, tspath::SUPPORTED_TS_EXTENSIONS_WITH_JSON_FLAT))
@@ -785,6 +801,13 @@ impl Program {
         }
     }
 
+    /// The index (as passed to `for_each_checker_parallel`) of the checker the pool assigned `file` to, i.e. the
+    /// checker `for_each_checker_group` runs it on. Creates the checkers on first use. None when the program has no
+    /// checker pool of its own or `file` is not one of its files.
+    pub fn checker_index_of_file(&self, file: P<SourceFile>) -> Option<usize> {
+        self.compiler_checker_pool()?.checker_index_of_file(file)
+    }
+
     /// Runs `cb` for every file of `files` with the file's checker, one task per checker, each visiting its files in
     /// the order of `files` under one lock acquisition (`checkerPool::for_each_checker_group_do`). False, without
     /// calling `cb`, when the program has no checker pool of its own.
@@ -846,6 +869,7 @@ impl Program {
     pub fn get_packages_map(&self) -> &FxHashMap<String, bool> {
         self.packages_map.get_or_init(|| {
             let mut packages_map: FxHashMap<String, bool> = FxHashMap::default();
+            #[expect(clippy::iter_over_hash_type, reason = "ORs one flag per package name; the result does not depend on the order")]
             for resolved_modules_in_file in self.resolved_modules.values() {
                 for module in resolved_modules_in_file.values() {
                     if !module.package_id.name.is_empty() {
@@ -876,7 +900,7 @@ impl Program {
                 diagnostics.concat()
             }
         };
-        filter_and_sort_diagnostics(result)
+        filter_and_sort_diagnostics(&result)
     }
 
     // program.go:686
@@ -913,9 +937,9 @@ impl Program {
             let mut c = self.get_type_checker_for_file_exclusive(ctx, source_file);
             let result = collect(ctx, &mut c, source_file);
             drop(c);
-            return filter_and_sort_diagnostics(result);
+            return filter_and_sort_diagnostics(&result);
         }
-        filter_and_sort_diagnostics(self.collect_checker_diagnostics_from_files(ctx, self.files, &collect).concat())
+        filter_and_sort_diagnostics(&self.collect_checker_diagnostics_from_files(ctx, self.files, &collect).concat())
     }
 
     // program.go:728
@@ -992,7 +1016,7 @@ impl Program {
         });
         let mut result = FxHashMap::default();
         for (i, diags) in all_diags.into_iter().enumerate() {
-            result.insert(source_files[i], filter_and_sort_diagnostics(diags));
+            result.insert(source_files[i], filter_and_sort_diagnostics(&diags));
         }
         result
     }
@@ -1856,7 +1880,7 @@ impl Program {
                 .concat()
             }
         };
-        filter_and_sort_diagnostics(result)
+        filter_and_sort_diagnostics(&result)
     }
 
     // Declaration emit needs the checker; without it declaration diagnostics are empty.
@@ -1885,9 +1909,18 @@ impl Program {
                 &mut *guard
             }
         };
-        let checker_slot = P::new(tsrs_checker::CheckerSlot::default());
-        let host = crate::emithost::new_emit_host(self, c.get_emit_resolver(), checker_slot);
-        let diagnostics = checker_slot.lend(c, || crate::emitter::get_declaration_diagnostics(host, self, source_file));
+        // The declaration transform runs in a scratch region of its own, freed once its diagnostics are collected
+        // (notes/mem-emit-regions.md; the diagnostics themselves escape it).
+        let emit_resolver = c.get_emit_resolver();
+        let region = tsrs_core::arena::Region::new_scratch(64 << 10);
+        let diagnostics = {
+            let _scratch = region.enter_scratch();
+            let checker_slot = P::new(tsrs_checker::CheckerSlot::default());
+            let host = crate::emithost::new_emit_host(self, emit_resolver, checker_slot);
+            checker_slot.lend(c, || crate::emitter::get_declaration_diagnostics(host, self, source_file))
+        };
+        c.forget_scratch_keyed_caches();
+        drop(region);
         self.declaration_diagnostic_cache.lock().unwrap().entry(source_file).or_insert(diagnostics).clone()
     }
 
@@ -1954,6 +1987,10 @@ impl Program {
         let (mut filtered, directives_by_line) = self.get_diagnostics_with_preceding_directives(source_file, diags);
         if let Some(directives_by_line) = directives_by_line {
             // Go iterates this map in random order; the result is sorted by the caller.
+            #[expect(
+                clippy::iter_over_hash_type,
+                reason = "every caller sorts and deduplicates (filter_and_sort_diagnostics); each directive has its own location"
+            )]
             for directive in directives_by_line.values() {
                 // Above we changed all used directive kinds to @ts-ignore, so any @ts-expect-error directives that
                 // remain are unused and thus errors.
@@ -1986,7 +2023,7 @@ impl Program {
         let mut directives_by_line: FxHashMap<usize, ast::CommentDirective> = FxHashMap::default();
         for directive in comment_directives.iter() {
             let line = tsrs_scanner::get_ecma_line_of_position(&*source_file, directive.loc.pos());
-            directives_by_line.insert(line as usize, directive.clone());
+            directives_by_line.insert(line as usize, *directive);
         }
         let line_starts = tsrs_scanner::get_ecma_line_starts(&*source_file);
         let text = source_file.text();
@@ -2390,7 +2427,7 @@ impl Program {
                                 if let Some(package_scope) = resolver.get_package_scope_for_path(&resolved_module.resolved_file_name) {
                                     if package_scope.exists() {
                                         if let Some(scope_name) = package_scope.contents.and_then(|c| c.get().name.get_value()) {
-                                            name = scope_name.to_string();
+                                            name.clone_from(scope_name);
                                         }
                                     }
                                 }
@@ -2439,7 +2476,7 @@ impl Program {
         }
         // `UpdateProgram` hands the cache to the next program version, which shares `processed`: in the language
         // server it lives in the region that owns `processed` (the full build's), not in this version's.
-        let _region = tsrs_core::arena::enter_owner(self.processed as *const processedFiles as usize);
+        let _region = tsrs_core::arena::enter_owner(std::ptr::from_ref::<processedFiles>(self.processed) as usize);
         *self.known_symlinks.get_or_init(|| {
             let resolver = self.new_resolver();
             let known_symlinks = symlinks::new_known_symlink(self.get_current_directory(), self.use_case_sensitive_file_names());
@@ -2454,6 +2491,9 @@ impl Program {
 
             // Check other dependencies for symlinks
             let mut seen_package_jsons: tsrs_core::collections::Set<Path> = tsrs_core::collections::Set::default();
+            // Go ranges over these maps too. Each resolution records the realpath the file system gives a symlink, so
+            // the cache gets the same entries in any order; `has_directory` only skips resolving a directory again.
+            #[expect(clippy::iter_over_hash_type, reason = "see the comment above")]
             for (file_path, meta) in &self.source_file_meta_datas {
                 if meta.package_json_directory.is_empty()
                     || !self.source_file_may_be_emitted(self.get_source_file_by_path(file_path).unwrap(), false)
@@ -2467,6 +2507,7 @@ impl Program {
                     continue;
                 };
 
+                #[expect(clippy::iter_over_hash_type, reason = "see the comment above the outer loop")]
                 for dep in contents.get_runtime_dependency_names().keys() {
                     // Skip work in common case: we already saved a symlink for this package directory
                     // in the node_modules adjacent to this package.json
@@ -2520,6 +2561,10 @@ impl Program {
     }
 }
 
+#[expect(
+    clippy::iter_over_hash_type,
+    reason = "the one caller (KnownSymlinks::set_symlinks_from_resolutions) records file-system symlinks, which come out the same in any order"
+)]
 fn for_each_resolution<T>(
     resolution_cache: &FxHashMap<Path, ModeAwareCache<P<T>>>,
     mut callback: impl FnMut(&T, &str, ResolutionMode, &Path),
@@ -2576,9 +2621,9 @@ fn equal_check_js_directives(d1: Option<P<ast::CheckJsDirective>>, d2: Option<P<
     }
 }
 
-fn filter_and_sort_diagnostics(diags: Vec<P<Diagnostic>>) -> Vec<P<Diagnostic>> {
+fn filter_and_sort_diagnostics(diags: &[P<Diagnostic>]) -> Vec<P<Diagnostic>> {
     // Content-mapped files (span maps) are not ported, so no diagnostic is filtered out here.
-    sort_and_deduplicate_diagnostics(&diags)
+    sort_and_deduplicate_diagnostics(diags)
 }
 
 // getAdditionalJSSyntacticDiagnostics produces option-dependent syntactic diagnostics for JS files

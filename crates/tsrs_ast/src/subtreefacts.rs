@@ -157,10 +157,52 @@ fn async_generator_facts(is_async: bool, is_generator: bool) -> SubtreeFacts {
 }
 
 // Go caches the facts of composite nodes in CompositeBase; computeSubtreeFacts is idempotent, so the port
-// recomputes them instead of storing a field in every node (callers only walk trees that are finished).
+// recomputes them instead of storing a field in every node (callers only walk trees that are finished). The
+// transformers ask at every node they visit, which makes recomputing quadratic in the tree depth, so emit runs them
+// under `with_subtree_facts_cache`, a side table on the transforming thread (Go's cache, scoped to one file).
+struct SubtreeFactsCache {
+    enabled: std::cell::Cell<bool>,
+    facts: std::cell::RefCell<rustc_hash::FxHashMap<usize, SubtreeFacts>>, // kept allocated between scopes
+}
+
+thread_local! {
+    static SUBTREE_FACTS_CACHE: SubtreeFactsCache =
+        SubtreeFactsCache { enabled: std::cell::Cell::new(false), facts: std::cell::RefCell::new(Default::default()) };
+}
+
+/// Runs `f` with `Node::subtree_facts` cached on this thread (nested calls share the outer cache).
+pub fn with_subtree_facts_cache<T>(f: impl FnOnce() -> T) -> T {
+    if SUBTREE_FACTS_CACHE.with(|c| c.enabled.replace(true)) {
+        return f();
+    }
+    struct Reset;
+    impl Drop for Reset {
+        fn drop(&mut self) {
+            SUBTREE_FACTS_CACHE.with(|c| {
+                c.enabled.set(false);
+                c.facts.borrow_mut().clear();
+            });
+        }
+    }
+    let _reset = Reset;
+    f()
+}
+
 impl Node {
     pub fn subtree_facts(&self) -> SubtreeFacts {
-        self.compute_subtree_facts() & !SubtreeFacts::ExclusionsNode
+        SUBTREE_FACTS_CACHE.with(|c| {
+            if !c.enabled.get() {
+                return self.compute_subtree_facts() & !SubtreeFacts::ExclusionsNode;
+            }
+            let key = std::ptr::from_ref::<Node>(self) as usize;
+            if let Some(&facts) = c.facts.borrow().get(&key) {
+                return facts;
+            }
+            // no borrow is held here: computing asks for the children's facts
+            let facts = self.compute_subtree_facts() & !SubtreeFacts::ExclusionsNode;
+            c.facts.borrow_mut().insert(key, facts);
+            facts
+        })
     }
 
     fn compute_subtree_facts(&self) -> SubtreeFacts {

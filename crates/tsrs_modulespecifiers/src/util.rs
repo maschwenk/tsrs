@@ -242,14 +242,14 @@ pub(crate) fn get_relative_path_if_in_same_volume(path: &str, directory_path: &s
 }
 
 // util.go:240
-pub(crate) fn package_json_paths_are_equal(a: &str, b: &str, options: tspath::ComparePathsOptions) -> bool {
+pub(crate) fn package_json_paths_are_equal(a: &str, b: &str, options: &tspath::ComparePathsOptions) -> bool {
     if a == b {
         return true;
     }
     if a.is_empty() || b.is_empty() {
         return false;
     }
-    tspath::compare_paths(a, b, &options) == 0
+    tspath::compare_paths(a, b, options) == 0
 }
 
 // util.go:250
@@ -334,11 +334,11 @@ pub fn get_node_modules_package_name(
     importing_source_file: P<SourceFile>,
     node_modules_file_name: &str,
     host: &dyn ModuleSpecifierGenerationHost,
-    preferences: UserPreferences,
+    preferences: &UserPreferences,
     options: ModuleSpecifierOptions,
 ) -> String {
     let info = get_info(importing_source_file.file_name(), host);
-    let module_paths = get_all_module_paths(&info, node_modules_file_name, host, compiler_options, &preferences, options);
+    let module_paths = get_all_module_paths(&info, node_modules_file_name, host, compiler_options, preferences, options);
     for module_path in &module_paths {
         let result = try_get_module_name_as_node_module(
             module_path,
@@ -346,7 +346,7 @@ pub fn get_node_modules_package_name(
             importing_source_file,
             host,
             compiler_options,
-            &preferences,
+            preferences,
             true, /*packageNameOnly*/
             options.override_import_mode,
         );

@@ -1,5 +1,6 @@
 // completions.go, lines 5489-6905.
 
+use std::sync::Arc;
 use std::sync::OnceLock;
 
 use tsrs_ast::{self as ast, FindAncestorResult, Kind, Node, NodeFactory, NodeFactoryHooks, NodeFlags, SourceFile, Symbol, SymbolFlags, TokenFlags};
@@ -161,7 +162,7 @@ impl LanguageService {
         let mut literal: Option<LiteralValue> = None;
         for l in &data.literals {
             if completion_name_for_literal(file, &preferences, l) == item_data.name {
-                literal = Some(l.clone());
+                literal = Some(*l);
                 break;
             }
         }
@@ -1073,7 +1074,7 @@ impl LanguageService {
             if !tspath::is_dynamic_file_name(file.file_name()) {
                 let view = self.get_prepared_auto_import_view(file, c)?;
                 // Go checks the view for nil; a prepared view is never nil.
-                import_adder = Some(autoimport::new_import_adder(ctx, program, c, file, view, self.format_options(), self.converters.clone(), self.user_preferences().clone()));
+                import_adder = Some(autoimport::new_import_adder(ctx, program, c, file, view, self.format_options(), Arc::clone(&self.converters), self.user_preferences().clone()));
             }
 
             let mut elements: Vec<P<Node>> = Vec::new();

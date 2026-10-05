@@ -31,15 +31,19 @@ impl Deref for NodeFactory {
 
 /// Builds the factory for an emit context that is not allocated yet; `set_emit_context` must be called before the
 /// factory creates its first node.
-pub(crate) fn new_node_factory_for_context() -> NodeFactory {
+/// `scratch`: see `ast::NodeFactory::scratch`.
+pub(crate) fn new_node_factory_for_context(scratch: bool) -> NodeFactory {
     let slot: Rc<Cell<Option<P<EmitContext>>>> = Rc::default();
-    let (s1, s2, s3) = (slot.clone(), slot.clone(), slot.clone());
+    let (s1, s2, s3) = (Rc::clone(&slot), Rc::clone(&slot), Rc::clone(&slot));
     NodeFactory {
-        node_factory: ast::new_node_factory(NodeFactoryHooks {
-            on_create: Some(Rc::new(move |node| s1.get().unwrap().on_create(node))),
-            on_update: Some(Rc::new(move |updated, original| s2.get().unwrap().on_update(updated, original))),
-            on_clone: Some(Rc::new(move |updated, original| s3.get().unwrap().on_clone(updated, original))),
-        }),
+        node_factory: ast::new_node_factory_ex(
+            NodeFactoryHooks {
+                on_create: Some(Rc::new(move |node| s1.get().unwrap().on_create(node))),
+                on_update: Some(Rc::new(move |updated, original| s2.get().unwrap().on_update(updated, original))),
+                on_clone: Some(Rc::new(move |updated, original| s3.get().unwrap().on_clone(updated, original))),
+            },
+            scratch,
+        ),
         emit_context: slot,
     }
 }

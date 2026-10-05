@@ -370,6 +370,9 @@ pub type UTF16Offset = i32;
 // UTF16Len returns the number of UTF-16 code units needed to
 // represent the given UTF-8 encoded string.
 pub fn utf16_len(s: &str) -> UTF16Offset {
+    if s.is_ascii() {
+        return s.len() as UTF16Offset;
+    }
     let bytes = s.as_bytes();
     for i in 0..bytes.len() {
         if bytes[i] >= 0x80 {
@@ -629,6 +632,10 @@ pub fn diff_maps<K: Hash + Eq, V: PartialEq>(
     diff_maps_func(m1, m2, |a, b| a == b, Some(on_added), Some(on_removed), Some(on_changed))
 }
 
+#[expect(
+    clippy::iter_over_hash_type,
+    reason = "Go's DiffMapsFunc ranges over the maps too; the one caller (tsrs_project update_watches) collects watch changes, whose order is not output"
+)]
 pub fn diff_maps_func<K: Hash + Eq, V1, V2>(
     m1: &FxHashMap<K, V1>,
     m2: &FxHashMap<K, V2>,
@@ -667,6 +674,7 @@ pub fn copy_map_into<K: Hash + Eq + Clone, V: Clone>(dst: Option<FxHashMap<K, V>
     match dst {
         None => src.clone(),
         Some(mut dst) => {
+            #[expect(clippy::iter_over_hash_type, reason = "inserts distinct keys into a map")]
             for (k, v) in src {
                 dst.insert(k.clone(), v.clone());
             }

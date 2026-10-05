@@ -53,7 +53,7 @@ pub(crate) fn new_config_file_registry_builder(
     custom_config_file_name: &str,
     _logger: &LogTree,
 ) -> configFileRegistryBuilder {
-    let to_path = fs.to_path.clone();
+    let to_path = Arc::clone(&fs.to_path);
     configFileRegistryBuilder {
         has_relative_pattern_capability,
         fs: Arc::new(new_source_fs(false, fs, to_path)),
@@ -65,8 +65,8 @@ pub(crate) fn new_config_file_registry_builder(
         custom_config_file_name_changed: custom_config_file_name != old_config_file_registry.custom_config_file_name,
         all_configured_content_mappers: Mutex::new(Some(old_config_file_registry.content_mappers())),
 
-        configs: dirty::new_sync_map(old_config_file_registry.configs.clone()),
-        config_file_names: dirty::new_map(old_config_file_registry.config_file_names.clone()),
+        configs: dirty::new_sync_map(Arc::clone(&old_config_file_registry.configs)),
+        config_file_names: dirty::new_map(Arc::clone(&old_config_file_registry.config_file_names)),
         base: old_config_file_registry,
     }
 }
@@ -120,12 +120,12 @@ impl configFileRegistryBuilder {
 
         if self.custom_config_file_name_changed {
             let registry = new_registry.get_or_insert_with(|| self.base.clone_registry());
-            registry.custom_config_file_name = self.custom_config_file_name.clone();
+            registry.custom_config_file_name.clone_from(&self.custom_config_file_name);
         }
 
         match new_registry {
             Some(registry) => Arc::new(registry),
-            None => self.base.clone(),
+            None => Arc::clone(&self.base),
         }
     }
 
@@ -483,7 +483,7 @@ impl configFileRegistryBuilder {
             }
             let file_name = uri.file_name();
             let path = self.to_path(&file_name);
-            let base_name = tspath::get_base_file_name(&path).to_string();
+            let base_name = tspath::get_base_file_name(&path);
             if self.is_config_base_name(&base_name) {
                 created_or_deleted_config_files.insert(path.clone());
             }
@@ -498,7 +498,7 @@ impl configFileRegistryBuilder {
             let file_name = uri.file_name();
             let path = self.to_path(&file_name);
             deleted_files.insert(path.clone(), file_name);
-            let base_name = tspath::get_base_file_name(&path).to_string();
+            let base_name = tspath::get_base_file_name(&path);
             if self.is_config_base_name(&base_name) {
                 created_or_deleted_config_files.insert(path.clone());
             }
@@ -513,7 +513,7 @@ impl configFileRegistryBuilder {
             let file_name = uri.file_name();
             let path = self.to_path(&file_name);
             created_files.insert(path.clone(), file_name);
-            let base_name = tspath::get_base_file_name(&path).to_string();
+            let base_name = tspath::get_base_file_name(&path);
             if self.is_config_base_name(&base_name) {
                 created_or_deleted_config_files.insert(path.clone());
             }
@@ -525,6 +525,7 @@ impl configFileRegistryBuilder {
         // Handle closed files - this ranges over config entries and could be combined
         // with the file change handling, but a separate loop is simpler and a snapshot
         // change with both closing and watch changes seems rare.
+        #[expect(clippy::iter_over_hash_type, reason = "each path is only deleted from config_file_names and retaining sets; removals commute; Go ranges the set too")]
         for uri in summary.closed.keys() {
             let file_name = uri.file_name();
             let path = self.to_path(&file_name);
@@ -564,6 +565,7 @@ impl configFileRegistryBuilder {
         }
 
         // Handle created/deleted files named "tsconfig.json" or "jsconfig.json"
+        #[expect(clippy::iter_over_hash_type, reason = "the early return depends only on has_excessive_changes; otherwise deletes and set inserts; Go ranges the map too")]
         for path in &created_or_deleted_config_files {
             if has_excessive_changes {
                 return self.invalidate_cache(logger);
@@ -626,6 +628,7 @@ impl configFileRegistryBuilder {
                             return false;
                         }
                         logger.logf(format_args!("Checking if any of {} created files match root files for config {}", created_files.len(), key.0));
+                        #[expect(clippy::iter_over_hash_type, reason = "any-match predicate; the result does not depend on order; Go ranges the map too")]
                         for (path, file_name) in &created_files {
                             if command_line.possibly_matches_file_name(file_name) {
                                 return true;
@@ -850,9 +853,9 @@ impl ExtendedConfigCacheTrait for configFileRegistryBuilder {
 
         self.extended_config_cache
             .load_and_acquire(
-                path.clone(),
+                path,
                 self.snapshot_id,
-                ExtendedConfigParseArgs {
+                &ExtendedConfigParseArgs {
                     file_name: file_name.to_string(),
                     content,
                     fs: self.fs.source(),

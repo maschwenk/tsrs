@@ -54,7 +54,7 @@ pub fn walk_dir(
         if !w.equivalent(&root_realpath, &expected_realpath) {
             root_entry = DirEntry {
                 path: root.to_string(),
-                name: tspath::get_base_file_name(root).to_string(),
+                name: tspath::get_base_file_name(root),
                 mode: FileMode::Symlink,
                 info: None,
             };
@@ -126,13 +126,13 @@ impl WalkState {
         }
 
         let entries = file_system.get_accessible_entries(path);
-        let mut directories: FxHashMap<&str, ()> = FxHashMap::default();
+        let mut directories: FxHashSet<&str> = FxHashSet::default();
         for name in &entries.directories {
-            directories.insert(name.as_str(), ());
+            directories.insert(name.as_str());
         }
         let mut names: Vec<&str> = entries.directories.iter().map(|s| s.as_str()).collect();
         names.extend(entries.files.iter().map(|s| s.as_str()));
-        names.sort();
+        names.sort_unstable();
         for name in names {
             let child_path = tspath::combine_paths(path, &[name]);
             if !self.same_root(&child_path) {
@@ -140,7 +140,7 @@ impl WalkState {
             }
 
             let mut mode = FileMode::None;
-            if directories.contains_key(name) {
+            if directories.contains(name) {
                 mode = FileMode::Dir;
             }
             let mut child_realpath = String::new();

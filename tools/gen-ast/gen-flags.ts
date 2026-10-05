@@ -88,9 +88,9 @@ pub fn get_function_flags(node: Option<P<Node>>) -> FunctionFlags {
         return FunctionFlags::Invalid;
     };
     let mut flags = FunctionFlags::Normal;
-    match node.kind {
+    match node.kind() {
         Kind::FunctionDeclaration | Kind::FunctionExpression | Kind::MethodDeclaration | Kind::ArrowFunction => {
-            if node.kind != Kind::ArrowFunction && data.asterisk_token.is_some() {
+            if node.kind() != Kind::ArrowFunction && data.asterisk_token.is_some() {
                 flags |= FunctionFlags::Generator;
             }
             if crate::has_syntactic_modifier(node, ModifierFlags::Async) {

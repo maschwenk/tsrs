@@ -53,7 +53,7 @@ impl NodeBuilderImpl {
         // If the expanded parameter list had a variadic in a non-trailing position, don't expand it
         let last_expanded_param = expanded_params.last().copied();
         let has_non_trailing_rest = expanded_params.iter().any(|&p| Some(p) != last_expanded_param && p.check_flags.get().intersects(CheckFlags::RestParameter));
-        let parameter_symbols: Vec<P<Symbol>> = if has_non_trailing_rest { signature.parameters().to_vec() } else { expanded_params.clone() };
+        let parameter_symbols: Vec<P<Symbol>> = if has_non_trailing_rest { signature.parameters().to_vec() } else { expanded_params };
         let mut parameters: Vec<P<Node>> = parameter_symbols.iter().map(|&parameter| self.symbol_to_parameter_declaration(c, parameter, kind == Kind::Constructor)).collect();
         let this_parameter = if self.ctx().flags.get().intersects(Flags::OmitThisParameter) {
             None
@@ -691,8 +691,8 @@ impl NodeBuilderImpl {
     pub(crate) fn create_property_name_node_for_identifier_or_literal(&self, c: &mut Checker, name: &str, single_quote: bool, string_named: bool, is_method: bool, symbol: P<Symbol>) -> P<Node> {
         match classify_property_name(name, string_named, is_method) {
             propertyNameNodeKind::Identifier => self.new_identifier(c, name, Some(symbol)),
-            propertyNameNodeKind::NumericLiteral => self.f.new_numeric_literal(alloc_str(name), TokenFlags::None),
-            _ => self.f.new_string_literal(alloc_str(name), if single_quote { TokenFlags::SingleQuote } else { TokenFlags::None }),
+            propertyNameNodeKind::NumericLiteral => self.f.new_numeric_literal(self.f.alloc_text(name), TokenFlags::None),
+            _ => self.f.new_string_literal(self.f.alloc_text(name), if single_quote { TokenFlags::SingleQuote } else { TokenFlags::None }),
         }
     }
 
@@ -785,11 +785,11 @@ impl NodeBuilderImpl {
                 _ => String::new(),
             };
             if !tsrs_scanner::is_identifier_text(&name, LanguageVariant::Standard) && (string_named || !is_numeric_literal_name(&name)) {
-                let node = self.f.new_string_literal(alloc_str(&name), if single_quote { TokenFlags::SingleQuote } else { TokenFlags::None });
+                let node = self.f.new_string_literal(self.f.alloc_text(&name), if single_quote { TokenFlags::SingleQuote } else { TokenFlags::None });
                 return Some(node);
             }
             if is_numeric_literal_name(&name) && name.as_bytes()[0] == b'-' {
-                return Some(self.f.new_computed_property_name(self.f.new_prefix_unary_expression(Kind::MinusToken, self.f.new_numeric_literal(alloc_str(&name[1..]), TokenFlags::None))));
+                return Some(self.f.new_computed_property_name(self.f.new_prefix_unary_expression(Kind::MinusToken, self.f.new_numeric_literal(self.f.alloc_text(&name[1..]), TokenFlags::None))));
             }
             return Some(self.create_property_name_node_for_identifier_or_literal(c, &name, single_quote, string_named, is_method, symbol));
         }
@@ -854,7 +854,7 @@ impl NodeBuilderImpl {
                         if symbol_mapper.is_some() {
                             getter_signature = c.instantiate_signature(getter_signature, symbol_mapper);
                         }
-                        let getter = self.signature_to_signature_declaration_helper(c, getter_signature, Kind::GetAccessor, Some(P::new(SignatureToSignatureDeclarationOptions { name: property_name, ..Default::default() })));
+                        let getter = self.signature_to_signature_declaration_helper(c, getter_signature, Kind::GetAccessor, Some(P::new_scratch(SignatureToSignatureDeclarationOptions { name: property_name, ..Default::default() })));
                         self.set_comment_range(c, getter, Some(getter_declaration));
                         type_elements.push(getter);
                     }
@@ -863,7 +863,7 @@ impl NodeBuilderImpl {
                         if symbol_mapper.is_some() {
                             setter_signature = c.instantiate_signature(setter_signature, symbol_mapper);
                         }
-                        let setter = self.signature_to_signature_declaration_helper(c, setter_signature, Kind::SetAccessor, Some(P::new(SignatureToSignatureDeclarationOptions { name: property_name, ..Default::default() })));
+                        let setter = self.signature_to_signature_declaration_helper(c, setter_signature, Kind::SetAccessor, Some(P::new_scratch(SignatureToSignatureDeclarationOptions { name: property_name, ..Default::default() })));
                         self.set_comment_range(c, setter, Some(setter_declaration));
                         type_elements.push(setter);
                     }
@@ -871,7 +871,7 @@ impl NodeBuilderImpl {
                 } else if parent_is_class && prop_declaration.is_some() && prop_declaration.unwrap().modifier_nodes().iter().any(|m| m.kind() == Kind::AccessorKeyword) {
                     let prop_declaration = prop_declaration.unwrap();
                     let fake_getter_signature = c.new_signature(SignatureFlags::None, None, &[], None, &[], Some(property_type), None, 0);
-                    let fake_getter_declaration = self.signature_to_signature_declaration_helper(c, fake_getter_signature, Kind::GetAccessor, Some(P::new(SignatureToSignatureDeclarationOptions { name: property_name, ..Default::default() })));
+                    let fake_getter_declaration = self.signature_to_signature_declaration_helper(c, fake_getter_signature, Kind::GetAccessor, Some(P::new_scratch(SignatureToSignatureDeclarationOptions { name: property_name, ..Default::default() })));
                     self.set_comment_range(c, fake_getter_declaration, Some(prop_declaration));
                     type_elements.push(fake_getter_declaration);
 
@@ -879,7 +879,7 @@ impl NodeBuilderImpl {
                     c.value_symbol_links.get(setter_param).resolved_type.set(Some(write_type));
                     let void_type = c.void_type;
                     let fake_setter_signature = c.new_signature(SignatureFlags::None, None, &[], None, &[setter_param], Some(void_type), None, 0);
-                    let fake_setter_declaration = self.signature_to_signature_declaration_helper(c, fake_setter_signature, Kind::SetAccessor, Some(P::new(SignatureToSignatureDeclarationOptions { name: property_name, ..Default::default() })));
+                    let fake_setter_declaration = self.signature_to_signature_declaration_helper(c, fake_setter_signature, Kind::SetAccessor, Some(P::new_scratch(SignatureToSignatureDeclarationOptions { name: property_name, ..Default::default() })));
                     type_elements.push(fake_setter_declaration);
                     return type_elements;
                 }
@@ -891,7 +891,7 @@ impl NodeBuilderImpl {
             let filtered_type = c.filter_type(property_type, |_c, t| !t.flags().intersects(TypeFlags::Undefined));
             let signatures = c.get_signatures_of_type(filtered_type, SignatureKind::Call);
             for &signature in signatures {
-                let method_declaration = self.signature_to_signature_declaration_helper(c, signature, Kind::MethodSignature, Some(P::new(SignatureToSignatureDeclarationOptions { name: property_name, question_token: optional_token, ..Default::default() })));
+                let method_declaration = self.signature_to_signature_declaration_helper(c, signature, Kind::MethodSignature, Some(P::new_scratch(SignatureToSignatureDeclarationOptions { name: property_name, question_token: optional_token, ..Default::default() })));
                 self.set_comment_range(c, method_declaration, signature.declaration().or(property_symbol.value_declaration()));
                 type_elements.push(method_declaration);
             }
@@ -982,7 +982,7 @@ impl NodeBuilderImpl {
                     type_elements[last] = self.e.add_synthetic_trailing_comment(type_elements[last], Kind::MultiLineCommentTrivia, &format!("... {} more elided ...", properties.len() as i32 - i), false /*hasTrailingNewLine*/);
                 } else {
                     let text = format!("... {} more ...", properties.len() as i32 - i);
-                    type_elements.push(self.f.new_property_signature_declaration(None, self.f.new_identifier(alloc_str(&text)), None, None, None));
+                    type_elements.push(self.f.new_property_signature_declaration(None, self.f.new_identifier(self.f.alloc_text(&text)), None, None, None));
                 }
                 type_elements = self.add_property_to_element_list(c, properties[properties.len() - 1], &type_elements);
                 break;
@@ -1556,7 +1556,7 @@ impl NodeBuilderImpl {
             if let Some(enclosing_declaration) = self.ctx().enclosing_declaration.get() {
                 let links = self.links.get(enclosing_declaration);
                 let tracked_symbols = self.ctx().tracked_symbols.borrow().clone();
-                links.serialized_types.set(key, P::new(SerializedTypeEntry { node: result, truncating: self.ctx().truncating.get(), added_length, tracked_symbols }));
+                links.serialized_types.set(key, P::new_in(self.f.is_scratch(), SerializedTypeEntry { node: result, truncating: self.ctx().truncating.get(), added_length, tracked_symbols }));
             }
         }
         self.ctx().visited_types.borrow_mut().delete(&type_id);
@@ -1693,14 +1693,14 @@ impl NodeBuilderImpl {
             let value_text = value.string();
             add_approximate_length(self, value_text.len() as i32);
             if value.0 < 0.0 {
-                return Some(self.f.new_literal_type_node(self.f.new_prefix_unary_expression(Kind::MinusToken, self.f.new_numeric_literal(alloc_str(&value_text[1..]), TokenFlags::None))));
+                return Some(self.f.new_literal_type_node(self.f.new_prefix_unary_expression(Kind::MinusToken, self.f.new_numeric_literal(self.f.alloc_text(&value_text[1..]), TokenFlags::None))));
             } else {
-                return Some(self.f.new_literal_type_node(self.f.new_numeric_literal(alloc_str(&value_text), TokenFlags::None)));
+                return Some(self.f.new_literal_type_node(self.f.new_numeric_literal(self.f.alloc_text(&value_text), TokenFlags::None)));
             }
         }
         if t.flags().intersects(TypeFlags::BigIntLiteral) {
             add_approximate_length(self, pseudo_big_int_to_string(get_big_int_literal_value(t)).len() as i32 + 1);
-            return Some(self.f.new_literal_type_node(self.f.new_big_int_literal(alloc_str(&(pseudo_big_int_to_string(get_big_int_literal_value(t)) + "n")), TokenFlags::None)));
+            return Some(self.f.new_literal_type_node(self.f.new_big_int_literal(self.f.alloc_text(&(pseudo_big_int_to_string(get_big_int_literal_value(t)) + "n")), TokenFlags::None)));
         }
         if t.flags().intersects(TypeFlags::BooleanLiteral) {
             let value = matches!(t.as_literal_type().value.get(), Some(LiteralValue::Boolean(true)));
@@ -1935,7 +1935,7 @@ impl NodeBuilderImpl {
         if is_single_quote || self.ctx().flags.get().intersects(Flags::UseSingleQuotesForStringLiteralType) {
             flags |= TokenFlags::SingleQuote;
         }
-        let node = self.f.new_string_literal(alloc_str(text), flags);
+        let node = self.f.new_string_literal(self.f.alloc_text(text), flags);
         node
     }
 }
@@ -1954,7 +1954,7 @@ impl TypeAlias {
 impl NodeBuilderImpl {
     // nodebuilderimpl.go:3643
     pub(crate) fn new_identifier(&self, _c: &mut Checker, text: &str, symbol: Option<P<Symbol>>) -> P<Node> {
-        let id = self.f.new_identifier(alloc_str(text));
+        let id = self.f.new_identifier(self.f.alloc_text(text));
         if let Some(symbol) = symbol {
             self.id_to_symbol.borrow_mut().insert(id, symbol);
         }

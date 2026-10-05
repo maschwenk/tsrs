@@ -95,7 +95,7 @@ pub(crate) fn create_import_tracker<'a>(
 
 impl ImportTracker<'_> {
     // The closure returned by createImportTracker (importTracker.go:76).
-    pub(crate) fn call(&self, checker: &mut Checker, export_symbol: P<Symbol>, export_info: &ExportInfo, is_for_rename: bool) -> ImportsResult {
+    pub(crate) fn call(&self, checker: &mut Checker, export_symbol: P<Symbol>, export_info: ExportInfo, is_for_rename: bool) -> ImportsResult {
         let (direct_imports, indirect_users) = get_importers_for_export(self.source_files, self.source_files_set, &self.all_direct_imports, export_info, checker);
         let (import_searches, single_references) = get_searches_from_direct_imports(&direct_imports, export_symbol, export_info.export_kind, checker, is_for_rename);
         ImportsResult { import_searches, single_references, indirect_users }
@@ -370,14 +370,14 @@ pub(crate) fn get_importers_for_export(
     source_files: &[P<SourceFile>],
     source_files_set: &Set<String>,
     all_direct_imports: &FxHashMap<P<Symbol>, Vec<P<Node>>>,
-    export_info: &ExportInfo,
+    export_info: ExportInfo,
     checker: &mut Checker,
 ) -> (Vec<P<Node>>, Vec<P<SourceFile>>) {
     let mut state = importersForExport {
         source_files,
         source_files_set,
         all_direct_imports,
-        export_info,
+        export_info: &export_info,
         direct_imports: Vec::new(),
         indirect_user_declarations: Vec::new(),
         mark_seen_direct_import: FxHashSet::default(),

@@ -493,7 +493,7 @@ pub(crate) fn parse_comparator(op: &str, text: &str) -> Option<Vec<VersionCompar
                         VersionComparator { operator: ComparatorOperator::RangeLessThan, operand: second_version },
                     ];
                 } else {
-                    comparators_result = vec![VersionComparator { operator, operand: result.version.clone() }];
+                    comparators_result = vec![VersionComparator { operator, operand: result.version }];
                 }
             }
             _ => panic!("Unexpected operator: {op}"),

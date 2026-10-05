@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
@@ -31,7 +31,7 @@ pub(crate) struct debounce {
 }
 
 struct debounceState {
-    callbacks: HashMap<usize, debounceCallback>,
+    callbacks: FxHashMap<usize, debounceCallback>,
     last_time: Option<Instant>,
 }
 
@@ -45,11 +45,11 @@ impl debounce {
     // debounce.go:42
     pub(crate) fn new() -> Arc<debounce> {
         let d = Arc::new(debounce {
-            mu: Mutex::new(debounceState { callbacks: HashMap::new(), last_time: None }),
+            mu: Mutex::new(debounceState { callbacks: FxHashMap::default(), last_time: None }),
             latch_mu: Mutex::new(latchState::default()),
             latch_cv: Condvar::new(),
         });
-        let looper = d.clone();
+        let looper = Arc::clone(&d);
         std::thread::Builder::new().name("fswatch-debounce".to_string()).spawn(move || looper.loop_()).expect("failed to spawn fswatch debounce thread");
         d
     }

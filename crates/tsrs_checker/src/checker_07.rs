@@ -24,9 +24,24 @@ struct ObjectLiteralState {
     has_computed_string_property: bool,
     has_computed_number_property: bool,
     has_computed_symbol_property: bool,
-    properties_table: P<SymbolTable>,
+    // Go's `propertiesTable`, made on first use: Go makes a new one after every spread, and the last one is
+    // usually never used (an object literal ending in a spread); an empty table is unobservable until it is used.
+    properties_table: Cell<Option<P<SymbolTable>>>,
     properties_array: Vec<P<Symbol>>,
     offset: usize,
+}
+
+impl ObjectLiteralState {
+    fn properties_table(&self) -> P<SymbolTable> {
+        match self.properties_table.get() {
+            Some(table) => table,
+            None => {
+                let table = SymbolTable::new();
+                self.properties_table.set(Some(table));
+                table
+            }
+        }
+    }
 }
 
 fn create_object_literal_type(c: &mut Checker, node: P<Node>, st: &ObjectLiteralState) -> P<Type> {
@@ -44,7 +59,7 @@ fn create_object_literal_type(c: &mut Checker, node: P<Node>, st: &ObjectLiteral
         let es_symbol_type = c.es_symbol_type;
         index_infos.push(c.get_object_literal_index_info(is_readonly, &st.properties_array[st.offset..], es_symbol_type));
     }
-    let result = c.new_anonymous_type(node.symbol(), Some(st.properties_table), &[], &[], &index_infos);
+    let result = c.new_anonymous_type(node.symbol(), Some(st.properties_table()), &[], &[], &index_infos);
     result.object_flags.set(result.object_flags() | st.object_flags | ObjectFlags::ObjectLiteral | ObjectFlags::ContainsObjectOrArrayLiteral);
     if st.contextual_type.is_none() && ast::is_in_js_file(node) && !ast::is_in_json_file(node) {
         result.object_flags.set(result.object_flags() | ObjectFlags::JSLiteral);
@@ -460,10 +475,8 @@ impl Checker {
         let in_destructuring_pattern = ast::is_assignment_target(node);
         // Grammar checking
         self.check_grammar_object_literal_expression(node, in_destructuring_pattern);
-        let mut all_properties_table: Option<P<SymbolTable>> = None;
-        if self.strict_null_checks {
-            all_properties_table = Some(SymbolTable::new());
-        }
+        // Local to this call (Go's GC collects it): owned here, not allocated in the arena.
+        let all_properties_table: Option<SymbolTable> = self.strict_null_checks.then(SymbolTable::default);
         let mut spread = self.empty_object_type;
         self.push_cached_contextual_type(node);
         let contextual_type = self.get_apparent_type_of_contextual_type(node, ContextFlags::None);
@@ -488,7 +501,7 @@ impl Checker {
             has_computed_string_property: false,
             has_computed_number_property: false,
             has_computed_symbol_property: false,
-            properties_table: SymbolTable::new(),
+            properties_table: Cell::new(None),
             properties_array: Vec::new(),
             offset: 0,
         };
@@ -559,7 +572,7 @@ impl Checker {
                 links.resolved_type.set(Some(t));
                 links.set_target(Some(member_symbol));
                 member = Some(prop);
-                if let Some(all_properties_table) = all_properties_table {
+                if let Some(all_properties_table) = &all_properties_table {
                     all_properties_table.set(prop.name(), prop);
                 }
                 if contextual_type.is_some()
@@ -581,7 +594,7 @@ impl Checker {
                     let object_literal_type = create_object_literal_type(self, node, &st);
                     spread = self.get_spread_type(spread, object_literal_type, node.symbol(), st.object_flags, in_const_context);
                     st.properties_array = Vec::new();
-                    st.properties_table = SymbolTable::new();
+                    st.properties_table = Cell::new(None);
                     st.has_computed_string_property = false;
                     st.has_computed_number_property = false;
                     st.has_computed_symbol_property = false;
@@ -591,7 +604,7 @@ impl Checker {
                 if self.is_valid_spread_type(t) {
                     let merged_type = self.try_merge_union_of_object_type_and_empty_object(t, in_const_context);
                     if all_properties_table.is_some() {
-                        self.check_spread_prop_overrides(merged_type, all_properties_table, member_decl);
+                        self.check_spread_prop_overrides(merged_type, all_properties_table.as_ref(), member_decl);
                     }
                     st.offset = st.properties_array.len();
                     if self.is_error_type(spread) {
@@ -631,7 +644,7 @@ impl Checker {
                     }
                 }
             } else {
-                st.properties_table.set(member.name(), member);
+                st.properties_table().set(member.name(), member);
             }
             st.properties_array.push(member);
         }
@@ -644,7 +657,7 @@ impl Checker {
                 let object_literal_type = create_object_literal_type(self, node, &st);
                 spread = self.get_spread_type(spread, object_literal_type, node.symbol(), st.object_flags, in_const_context);
                 st.properties_array = Vec::new();
-                st.properties_table = SymbolTable::new();
+                st.properties_table = Cell::new(None);
                 st.has_computed_string_property = false;
                 st.has_computed_number_property = false;
             }
@@ -695,8 +708,8 @@ impl Checker {
     }
 
     // checker.go:13589
-    pub(crate) fn check_spread_prop_overrides(&mut self, t: P<Type>, props: Option<P<SymbolTable>>, spread: P<Node>) {
-        for right in self.get_properties_of_type(t).iter().copied() {
+    pub(crate) fn check_spread_prop_overrides(&mut self, t: P<Type>, props: Option<&SymbolTable>, spread: P<Node>) {
+        for &right in self.get_properties_of_type(t) {
             if !right.flags().intersects(SymbolFlags::Optional) && !right.check_flags().intersects(CheckFlags::Partial) {
                 if let Some(left) = props.and_then(|props| props.lookup(right.name())) {
                     let diagnostic = self.error(left.value_declaration(), &diagnostics::X_0_is_specified_more_than_once_so_this_usage_will_be_overwritten, &[&left.name()]);
@@ -915,7 +928,7 @@ impl Checker {
 
     // We approximate own properties as non-methods plus methods that are inside the object literal
     // checker.go:13798
-    pub(crate) fn is_spreadable_property(&mut self, prop: P<Symbol>) -> bool {
+    pub fn is_spreadable_property(&mut self, prop: P<Symbol>) -> bool {
         let declarations = prop.declarations();
         !declarations.iter().any(|&d| ast::is_private_identifier_class_element_declaration(d))
             && !prop.flags().intersects(SymbolFlags::Method | SymbolFlags::GetAccessor | SymbolFlags::SetAccessor)
@@ -1563,7 +1576,7 @@ impl Checker {
     }
 
     // checker.go:14289
-    pub(crate) fn is_deprecated_symbol(&mut self, symbol: P<Symbol>) -> bool {
+    pub fn is_deprecated_symbol(&mut self, symbol: P<Symbol>) -> bool {
         let parent_symbol = self.get_parent_of_symbol(symbol);
         let declarations = symbol.declarations();
         if let Some(parent_symbol) = parent_symbol {

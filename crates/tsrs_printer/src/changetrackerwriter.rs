@@ -46,12 +46,12 @@ pub fn new_change_tracker_writer(newline: &str, indent_size: i32) -> ChangeTrack
 impl ChangeTrackerWriter {
     // changetrackerwriter.go:39
     pub fn get_print_handlers(&self) -> PrintHandlers {
-        let p1 = self.positions.clone();
-        let p2 = self.positions.clone();
-        let p3 = self.positions.clone();
-        let p4 = self.positions.clone();
-        let p5 = self.positions.clone();
-        let p6 = self.positions.clone();
+        let p1 = Rc::clone(&self.positions);
+        let p2 = Rc::clone(&self.positions);
+        let p3 = Rc::clone(&self.positions);
+        let p4 = Rc::clone(&self.positions);
+        let p5 = Rc::clone(&self.positions);
+        let p6 = Rc::clone(&self.positions);
         PrintHandlers {
             map_source_position: None,
             on_before_emit_node: Some(Box::new(move |node_opt: Option<P<Node>>| {
@@ -119,12 +119,12 @@ impl ChangeTrackerWriter {
 
     // changetrackerwriter.go:107
     pub fn assign_positions_to_node(&self, node: P<Node>, factory: &NodeFactory) -> P<Node> {
-        let positions = self.positions.clone();
-        let p_visit = positions.clone();
-        let p_node = positions.clone();
-        let p_nodes = positions.clone();
-        let p_token = positions.clone();
-        let p_modifiers = positions.clone();
+        let positions = Rc::clone(&self.positions);
+        let p_visit = Rc::clone(&positions);
+        let p_node = Rc::clone(&positions);
+        let p_nodes = Rc::clone(&positions);
+        let p_token = Rc::clone(&positions);
+        let p_modifiers = Rc::clone(&positions);
         let modifiers_factory = factory.clone();
         let mut visitor = new_node_visitor(
             Some(Rc::new(move |v: &mut NodeVisitor, n: P<Node>| assign_positions_to_node_worker(&p_visit, Some(n), v))),

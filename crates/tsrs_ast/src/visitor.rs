@@ -18,11 +18,22 @@ pub type VisitNodeHook = Rc<dyn Fn(Option<P<Node>>, &mut NodeVisitor) -> Option<
 pub type VisitNodesHook = Rc<dyn Fn(Option<P<NodeList>>, &mut NodeVisitor) -> Option<P<NodeList>>>;
 pub type VisitModifiersHook = Rc<dyn Fn(Option<P<ModifierList>>, &mut NodeVisitor) -> Option<P<ModifierList>>>;
 
+// A handle (one `Rc`): transformers hand out a fresh `&mut NodeVisitor` for every `visit_each_child` by cloning the
+// one they keep, and the visitor itself is never modified after construction.
 #[derive(Clone)]
-pub struct NodeVisitor {
+pub struct NodeVisitor(Rc<NodeVisitorData>);
+
+pub struct NodeVisitorData {
     pub visit: Option<VisitFn>, // Required. The callback used to visit a node
     pub factory: NodeFactory,   // Required. The NodeFactory used to produce new nodes when passed to VisitEachChild
     pub hooks: NodeVisitorHooks, // Hooks to be invoked when visiting a node
+}
+
+impl std::ops::Deref for NodeVisitor {
+    type Target = NodeVisitorData;
+    fn deref(&self) -> &NodeVisitorData {
+        &self.0
+    }
 }
 
 // These hooks are used to intercept the default behavior of the visitor
@@ -40,7 +51,7 @@ pub struct NodeVisitorHooks {
 }
 
 pub fn new_node_visitor(visit: Option<VisitFn>, factory: Option<NodeFactory>, hooks: NodeVisitorHooks) -> NodeVisitor {
-    NodeVisitor { visit, factory: factory.unwrap_or_default(), hooks }
+    NodeVisitor(Rc::new(NodeVisitorData { visit, factory: factory.unwrap_or_default(), hooks }))
 }
 
 impl NodeVisitor {

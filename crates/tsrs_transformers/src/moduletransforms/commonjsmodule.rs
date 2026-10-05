@@ -34,7 +34,7 @@ pub fn new_common_js_module_transformer(opts: &TransformOptions) -> Option<P<Tra
         assignment_pattern_visitor: OnceCell::new(),
         compiler_options,
         resolver: opts.resolver,
-        get_emit_module_format_of_file: opts.get_emit_module_format_of_file.clone(),
+        get_emit_module_format_of_file: Rc::clone(&opts.get_emit_module_format_of_file),
         module_kind: compiler_options.get_emit_module_kind(),
         language_version: compiler_options.get_emit_script_target(),
         current_source_file: Cell::new(None),

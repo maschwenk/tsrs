@@ -28,15 +28,6 @@ pub fn new_diagnostic_chain_for_node(chain: Option<P<Diagnostic>>, node: P<Node>
     new_diagnostic_for_node(Some(node), message, args)
 }
 
-// utilities.go:38
-pub(crate) fn find_in_map<K: Copy + Eq + std::hash::Hash, V: Copy + Default>(m: &FxHashMap<K, V>, mut predicate: impl FnMut(V) -> bool) -> V {
-    for value in m.values() {
-        if predicate(*value) {
-            return *value;
-        }
-    }
-    V::default()
-}
 
 // utilities.go:47
 pub(crate) fn token_is_identifier_or_keyword(token: Kind) -> bool {
@@ -481,7 +472,7 @@ impl Checker {
         } else if d2.is_some() {
             return 1;
         }
-        let r = s1.name().cmp(s2.name()) as i32;
+        let r = compare_names(s1.name(), s2.name());
         if r != 0 {
             return r;
         }
@@ -852,12 +843,22 @@ pub(crate) fn compare_type_names(c: &mut Checker, t1: P<Type>, t2: P<Type>) -> i
     let Some(s2) = s2 else {
         return -1;
     };
-    let r = s1.name().cmp(s2.name()) as i32;
+    let r = compare_names(s1.name(), s2.name());
     if r != 0 {
         return r;
     }
     // Keep distinct same-named declarations together before comparing alias arguments or structure.
     c.compare_symbols(Some(s1), Some(s2))
+}
+
+/// `a.cmp(b)` as Go's `strings.Compare`, without reading the bytes when both are the same string (distinct symbols
+/// often share their declaration's name string).
+#[inline]
+fn compare_names(a: &str, b: &str) -> i32 {
+    if a.len() == b.len() && std::ptr::eq(a.as_ptr(), b.as_ptr()) {
+        return 0;
+    }
+    a.cmp(b) as i32
 }
 
 // utilities.go:651
@@ -1794,6 +1795,7 @@ impl Checker {
             let mut packages_map: FxHashMap<String, bool> = FxHashMap::default();
             let program = self.program;
             let resolved_modules = program.get_resolved_modules();
+            #[expect(clippy::iter_over_hash_type, reason = "ORs one flag per package name; the result does not depend on the order")]
             for resolved_modules_in_file in resolved_modules.values() {
                 for module in resolved_modules_in_file.values() {
                     if !module.package_id.name.is_empty() {

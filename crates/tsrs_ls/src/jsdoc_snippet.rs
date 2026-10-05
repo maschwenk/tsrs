@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use tsrs_ast::{self as ast, Kind, Node, SourceFile};
 use tsrs_core::context::Context;
 use tsrs_core::{stringutil, P};
@@ -456,12 +457,12 @@ fn transform_jsdoc_param_line(line: &str, snippet_index: &mut i32) -> Option<Str
 
     let mut out = format!("{}* @param ", prefix);
     if type_text == " {any}" || type_text == " {*}" {
-        out += &format!("{{${{{}:*}}}} ", *snippet_index);
+        let _ = write!(out, "{{${{{}:*}}}} ", *snippet_index);
         *snippet_index += 1;
     } else if !type_text.is_empty() {
-        out += &format!("{} ", type_text);
+        let _ = write!(out, "{} ", type_text);
     }
-    out += &format!("{} ${{{}}}", param_name, *snippet_index);
+    let _ = write!(out, "{} ${{{}}}", param_name, *snippet_index);
     *snippet_index += 1;
     Some(out)
 }

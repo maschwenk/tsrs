@@ -98,7 +98,9 @@ fn pack_slice(s: &'static [P<Type>]) -> Option<usize> {
 /// `w` must come from `pack_slice` (tag bits may have been added).
 #[inline]
 unsafe fn unpack_slice(w: usize) -> &'static [P<Type>] {
-    std::slice::from_raw_parts(std::ptr::with_exposed_provenance::<P<Type>>((w & ADDR_MASK) >> 1), w >> LEN_SHIFT)
+    // SAFETY: `w` came from `pack_slice` of a `&'static [P<Type>]` (this function's contract): the exposed data
+    // address and the length, which tag bits do not overlap.
+    unsafe { std::slice::from_raw_parts(std::ptr::with_exposed_provenance::<P<Type>>((w & ADDR_MASK) >> 1), w >> LEN_SHIFT) }
 }
 
 #[inline]
@@ -110,7 +112,8 @@ fn tagged<T>(p: P<T>, tag: usize) -> usize {
 /// `w` must hold a `P<T>`'s bits (plus tag bits).
 #[inline]
 unsafe fn untagged<T>(w: usize) -> P<T> {
-    P::from_bits(w & !TAG_MASK)
+    // SAFETY: `w` holds a `P<T>`'s bits plus tag bits (this function's contract); the tags are masked off.
+    unsafe { P::from_bits(w & !TAG_MASK) }
 }
 
 impl TypeMapper {
@@ -275,9 +278,26 @@ pub(crate) unsafe fn recycle_mapping(m: P<TypeMapper>, appended: bool) {
     if let TypeMapperData::Merged { m1, m2 } = m.data() {
         let simple = if appended { m2 } else { m1 };
         tsrs_core::free!(m);
-        recycle_mapper(simple);
+        // SAFETY: the caller made the simple mapper too (this function's contract), and the merged mapper that held
+        // it was just freed.
+        unsafe { recycle_mapper(simple) };
     } else {
         tsrs_core::free!(m);
+    }
+}
+
+/// Recycles a mapper made by `new_type_mapper(sources, targets)` whose creator also made `targets` (with
+/// `alloc_slice_recycled`), with that list: an array mapper is its list's only holder, a simple mapper does not
+/// refer to it (`getConditionalTypeInstantiation` does the same inline).
+///
+/// # Safety
+/// As for `recycle_mapper`; `targets` is the list the caller made for `m`.
+pub(crate) unsafe fn recycle_mapper_with_targets(m: P<TypeMapper>, targets: &'static [P<Type>]) {
+    if !m.escaped() {
+        tsrs_core::free!(m);
+        tsrs_core::free_slice!(targets);
+    } else if targets.len() == 1 {
+        tsrs_core::free_slice!(targets);
     }
 }
 

@@ -89,10 +89,19 @@ pub struct NodeFactory {
     pub(crate) hooks: NodeFactoryHooks,
     pub(crate) node_count: Rc<Cell<usize>>,
     pub(crate) text_count: Rc<Cell<usize>>,
+    /// tsrs-only: nodes and lists go to the thread's scratch region when one is entered (`P::new_scratch`), also
+    /// while the checker has escaped from it: the factory of a per-file emit context, whose nodes die with the file
+    /// (notes/mem-emit-regions.md).
+    pub(crate) scratch: bool,
 }
 
 pub fn new_node_factory(hooks: NodeFactoryHooks) -> NodeFactory {
-    NodeFactory { hooks, node_count: Rc::default(), text_count: Rc::default() }
+    new_node_factory_ex(hooks, false)
+}
+
+/// `new_node_factory`; `scratch`: see `NodeFactory::scratch`.
+pub fn new_node_factory_ex(hooks: NodeFactoryHooks, scratch: bool) -> NodeFactory {
+    NodeFactory { hooks, node_count: Rc::default(), text_count: Rc::default(), scratch }
 }
 
 fn node_header(kind: Kind, data_tag: NodeDataTag) -> Node {
@@ -106,9 +115,14 @@ fn node_header(kind: Kind, data_tag: NodeDataTag) -> Node {
 
 /// Creates a node whose data struct is `data` (Go: the data struct embeds `NodeBase`, one allocation).
 pub(crate) fn new_node<T: NodePayload>(kind: Kind, data: T, hooks: &NodeFactoryHooks) -> P<Node> {
+    new_node_in(kind, data, hooks, false)
+}
+
+#[inline]
+fn new_node_in<T: NodePayload>(kind: Kind, data: T, hooks: &NodeFactoryHooks, scratch: bool) -> P<Node> {
     // SAFETY: `NodeAlloc` is `repr(C)` with the header first, so the pointer to the allocation is a pointer to
     // its header; the header is never moved or freed (leak arena).
-    let n = unsafe { P::new(NodeAlloc { node: node_header(kind, T::TAG), data }).cast::<Node>() };
+    let n = unsafe { P::new_in(scratch, NodeAlloc { node: node_header(kind, T::TAG), data }).cast::<Node>() };
     if let Some(on_create) = &hooks.on_create {
         on_create(n);
     }
@@ -117,13 +131,12 @@ pub(crate) fn new_node<T: NodePayload>(kind: Kind, data: T, hooks: &NodeFactoryH
 
 /// Creates a node whose data struct `data` is followed by its rare tail `rare` (`NodeAllocRare`; the header's
 /// rare bit says the tail is there). The factory uses it when one of the struct's rare fields is set.
-pub(crate) fn new_node_with_rare<T: NodeRareTail>(kind: Kind, data: T, rare: T::Rare, hooks: &NodeFactoryHooks) -> P<Node> {
-    #[allow(clippy::let_unit_value)]
+fn new_node_with_rare<T: NodeRareTail>(kind: Kind, data: T, rare: T::Rare, hooks: &NodeFactoryHooks, scratch: bool) -> P<Node> {
     let () = T::SAME_OFFSET;
     let mut header = node_header(kind, T::TAG);
     header.header = OwnedCell::new(header.header.get().with_rare_tail());
     // SAFETY: as in `new_node` (`NodeAllocRare` is `repr(C)` with the header first).
-    let n = unsafe { P::new(NodeAllocRare { node: header, data, rare }).cast::<Node>() };
+    let n = unsafe { P::new_in(scratch, NodeAllocRare { node: header, data, rare }).cast::<Node>() };
     if let Some(on_create) = &hooks.on_create {
         on_create(n);
     }
@@ -133,11 +146,11 @@ pub(crate) fn new_node_with_rare<T: NodeRareTail>(kind: Kind, data: T, rare: T::
 /// The rare tail of the node whose data struct is `data`, if it was allocated with one.
 #[inline]
 pub(crate) fn rare_tail<T: NodeRareTail>(data: &T) -> Option<&'static T::Rare> {
-    #[allow(clippy::let_unit_value)]
     let () = T::SAME_OFFSET;
-    let at = data as *const T as *const u8;
+    let at = std::ptr::from_ref::<T>(data).cast::<u8>();
     // SAFETY: data structs are created only inside a `NodeAlloc<T>` or `NodeAllocRare<T, _>` (both `repr(C)`, header
     // first, data at the same offset: asserted in `NodeRareTail`), which is never moved or freed while reachable.
+    #[expect(clippy::cast_ptr_alignment, reason = "the header starts the `NodeAlloc`, so it has the allocation's alignment")]
     let node = unsafe { &*at.sub(std::mem::offset_of!(NodeAlloc<T>, data)).cast::<Node>() };
     if !node.header.get().has_rare_tail() {
         return None;
@@ -148,8 +161,8 @@ pub(crate) fn rare_tail<T: NodeRareTail>(data: &T) -> Option<&'static T::Rare> {
 }
 
 /// Creates a node whose data struct has no fields (`Token`, `KeywordTypeNode`, ...): just the header.
-pub(crate) fn new_empty_node(kind: Kind, data_tag: NodeDataTag, hooks: &NodeFactoryHooks) -> P<Node> {
-    let n = P::new(node_header(kind, data_tag));
+fn new_empty_node(kind: Kind, data_tag: NodeDataTag, hooks: &NodeFactoryHooks, scratch: bool) -> P<Node> {
+    let n = P::new_in(scratch, node_header(kind, data_tag));
     if let Some(on_create) = &hooks.on_create {
         on_create(n);
     }
@@ -164,19 +177,19 @@ impl NodeFactory {
     #[inline]
     pub(crate) fn new_node<T: NodePayload>(&self, kind: Kind, data: T) -> P<Node> {
         self.node_count.set(self.node_count.get() + 1);
-        new_node(kind, data, &self.hooks)
+        new_node_in(kind, data, &self.hooks, self.scratch)
     }
 
     #[inline]
     pub(crate) fn new_node_with_rare<T: NodeRareTail>(&self, kind: Kind, data: T, rare: T::Rare) -> P<Node> {
         self.node_count.set(self.node_count.get() + 1);
-        new_node_with_rare(kind, data, rare, &self.hooks)
+        new_node_with_rare(kind, data, rare, &self.hooks, self.scratch)
     }
 
     #[inline]
     pub(crate) fn new_empty_node(&self, kind: Kind, data_tag: NodeDataTag) -> P<Node> {
         self.node_count.set(self.node_count.get() + 1);
-        new_empty_node(kind, data_tag, &self.hooks)
+        new_empty_node(kind, data_tag, &self.hooks, self.scratch)
     }
 
     pub fn node_count(&self) -> usize {
@@ -189,6 +202,41 @@ impl NodeFactory {
 
     pub fn as_node_factory(&self) -> &NodeFactory {
         self
+    }
+
+    /// Whether this factory allocates in the scratch region (see `NodeFactory::scratch`).
+    #[inline]
+    pub fn is_scratch(&self) -> bool {
+        self.scratch
+    }
+
+    /// Copies `s` for a node this factory creates (identifier and literal text): into the scratch region for a
+    /// scratch factory, like the node.
+    #[inline]
+    pub fn alloc_text(&self, s: &str) -> &'static str {
+        if self.scratch {
+            tsrs_core::alloc_str_scratch(s)
+        } else {
+            alloc_str(s)
+        }
+    }
+
+    #[inline]
+    fn alloc_nodes_vec(&self, nodes: Vec<P<Node>>) -> &'static [P<Node>] {
+        if self.scratch {
+            tsrs_core::alloc_vec_scratch(nodes)
+        } else {
+            alloc_vec(nodes)
+        }
+    }
+
+    #[inline]
+    fn alloc_nodes_slice(&self, nodes: &[P<Node>]) -> &'static [P<Node>] {
+        if self.scratch {
+            tsrs_core::alloc_slice_scratch(nodes)
+        } else {
+            alloc_slice(nodes)
+        }
     }
 }
 
@@ -225,16 +273,16 @@ const _: () = assert!(std::mem::size_of::<NodeList>() == 16);
 
 impl NodeFactory {
     pub fn new_node_list(&self, nodes: Vec<P<Node>>) -> P<NodeList> {
-        self.new_node_list_from_static(alloc_vec(nodes))
+        self.new_node_list_from_static(self.alloc_nodes_vec(nodes))
     }
 
     pub fn new_node_list_from_slice(&self, nodes: &[P<Node>]) -> P<NodeList> {
-        self.new_node_list_from_static(alloc_slice(nodes))
+        self.new_node_list_from_static(self.alloc_nodes_slice(nodes))
     }
 
     /// Stores `nodes` without copying (keeps slice identity, e.g. for sentinel slices).
     pub fn new_node_list_from_static(&self, nodes: &'static [P<Node>]) -> P<NodeList> {
-        P::new(NodeList::new(undefined_text_range(), nodes))
+        P::new_in(self.scratch, NodeList::new(undefined_text_range(), nodes))
     }
 }
 
@@ -284,15 +332,15 @@ pub struct ModifierList {
 
 impl NodeFactory {
     pub fn new_modifier_list(&self, nodes: Vec<P<Node>>) -> P<ModifierList> {
-        self.new_modifier_list_from_static(alloc_vec(nodes))
+        self.new_modifier_list_from_static(self.alloc_nodes_vec(nodes))
     }
 
     pub fn new_modifier_list_from_slice(&self, nodes: &[P<Node>]) -> P<ModifierList> {
-        self.new_modifier_list_from_static(alloc_slice(nodes))
+        self.new_modifier_list_from_static(self.alloc_nodes_slice(nodes))
     }
 
     fn new_modifier_list_from_static(&self, nodes: &'static [P<Node>]) -> P<ModifierList> {
-        P::new(ModifierList {
+        P::new_in(self.scratch, ModifierList {
             list: NodeList::new(undefined_text_range(), nodes),
             modifier_flags: modifiers_to_flags(nodes),
         })
@@ -322,7 +370,7 @@ impl ModifierList {
     }
 
     pub fn clone_list(&self, f: &NodeFactory) -> P<ModifierList> {
-        P::new(ModifierList {
+        P::new_in(f.scratch, ModifierList {
             list: NodeList::new(self.list.loc.get(), self.list.nodes()),
             modifier_flags: self.modifier_flags,
         })
@@ -467,24 +515,24 @@ pub(crate) trait NodeRareTail: NodePayload {
 // for_each_child(), ...) are generated in generated.rs.
 
 impl Node {
-    #[inline(always)]
+    #[inline]
     pub fn kind(&self) -> Kind {
         self.header.get().kind()
     }
 
     /// Which data struct follows this node's header.
-    #[inline(always)]
+    #[inline]
     pub(crate) fn data_tag(&self) -> NodeDataTag {
         self.header.get().data_tag()
     }
 
     /// The data struct after this node's header. Callers check `data_tag() == T::TAG` first.
-    #[inline(always)]
+    #[inline]
     pub(crate) fn payload<T: NodePayload>(&self) -> &'static T {
         debug_assert!(self.data_tag() == T::TAG);
         // SAFETY: a node tagged `T::TAG` was allocated by `new_node::<T>` as a `NodeAlloc<T>` whose header is
         // `self`, so its data struct lives at this offset from the header, for the rest of the process.
-        unsafe { &*(self as *const Node).cast::<u8>().add(std::mem::offset_of!(NodeAlloc<T>, data)).cast::<T>() }
+        unsafe { &*std::ptr::from_ref::<Node>(self).cast::<u8>().add(std::mem::offset_of!(NodeAlloc<T>, data)).cast::<T>() }
     }
 
     /// The arena pointer for this node. Every `Node` is created by `NodeFactory`/`new_node` in the leak
@@ -493,7 +541,7 @@ impl Node {
     #[inline]
     pub fn as_p(&self) -> P<Node> {
         // SAFETY: see above; nodes are never freed or moved.
-        unsafe { P::from_arena(&*(self as *const Node)) }
+        unsafe { P::from_arena(&*std::ptr::from_ref::<Node>(self)) }
     }
 
     #[inline]
@@ -1838,7 +1886,7 @@ impl SourceFile {
     // any lock of the cache it fills (lock order: region, then cache). No-op without regions (CLI).
     #[inline]
     fn owner_region(&self) -> Option<tsrs_core::arena::RegionScope> {
-        tsrs_core::arena::enter_owner(self as *const SourceFile as usize)
+        tsrs_core::arena::enter_owner(std::ptr::from_ref::<SourceFile>(self) as usize)
     }
 
     pub fn file_name(&self) -> &str {

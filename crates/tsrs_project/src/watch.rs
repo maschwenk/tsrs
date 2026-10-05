@@ -110,11 +110,11 @@ fn to_file_system_watcher_key(w: &lsproto::FileSystemWatcher) -> fileSystemWatch
     let kind = w.kind.unwrap_or(allWatchKinds);
     let mut pattern = String::new();
     if let Some(p) = &w.glob_pattern.pattern {
-        pattern = p.clone();
+        pattern.clone_from(p);
     } else if let Some(relative_pattern) = &w.glob_pattern.relative_pattern {
         let mut base = String::new();
         if let Some(uri) = &relative_pattern.base_uri.uri {
-            base = uri.0.clone();
+            base.clone_from(&uri.0);
         } else if relative_pattern.base_uri.workspace_folder.is_some() {
             panic!("workspace folder-based relative patterns not implemented");
         }
@@ -131,7 +131,7 @@ pub(crate) fn file_system_watcher_glob_string(w: &lsproto::FileSystemWatcher) ->
     if let Some(relative_pattern) = &w.glob_pattern.relative_pattern {
         let mut base = String::new();
         if let Some(uri) = &relative_pattern.base_uri.uri {
-            base = uri.0.clone();
+            base.clone_from(&uri.0);
         } else if relative_pattern.base_uri.workspace_folder.is_some() {
             panic!("workspace folder-based relative patterns not implemented");
         }
@@ -314,7 +314,7 @@ impl<T> WatchedFiles<T> {
             name: self.name.clone(),
             watch_kind: self.watch_kind,
             has_relative_pattern_capability: self.has_relative_pattern_capability,
-            compute_glob_patterns: self.compute_glob_patterns.clone(),
+            compute_glob_patterns: Arc::clone(&self.compute_glob_patterns),
             mu: RwLock::new(watchedFilesState {
                 workspace_watchers: st.workspace_watchers.clone(),
                 outside_workspace_watchers: st.outside_workspace_watchers.clone(),

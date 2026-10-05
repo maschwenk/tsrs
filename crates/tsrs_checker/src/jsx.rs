@@ -403,7 +403,7 @@ impl Checker {
                 if array_like_target_parts != self.never_type {
                     let child_types = self.check_jsx_children(containing_element, CheckMode::Normal);
                     let real_source = self.create_tuple_type(&child_types);
-                    let children = self.generate_jsx_children(containing_element, get_invalid_textual_child_diagnostic.clone());
+                    let children = self.generate_jsx_children(containing_element, Rc::clone(&get_invalid_textual_child_diagnostic));
                     reported_error = self.elaborate_iterable_or_array_like_target_elementwise(children, real_source, array_like_target_parts, relation, diagnostic_output.as_deref_mut())
                         || reported_error;
                 } else if {
@@ -422,7 +422,7 @@ impl Checker {
                 }
             } else if non_array_like_target_parts != self.never_type {
                 let child = valid_children[0];
-                let e = self.get_elaboration_element_for_jsx_child(child, children_name_type, get_invalid_textual_child_diagnostic.clone());
+                let e = self.get_elaboration_element_for_jsx_child(child, children_name_type, Rc::clone(&get_invalid_textual_child_diagnostic));
                 if let Some(error_node) = e.error_node {
                     let mut create_diagnostic = e.create_diagnostic.clone().map(|f| move |c: &mut Checker, prop: P<Node>| f(c, prop));
                     reported_error = self.elaborate_element(
@@ -467,7 +467,7 @@ impl Checker {
                 let child = children[i];
                 let name_type = c.get_number_literal_type(Number((i - member_offset) as f64));
                 i += 1;
-                let e = c.get_elaboration_element_for_jsx_child(child, name_type, get_invalid_text_diagnostic.clone());
+                let e = c.get_elaboration_element_for_jsx_child(child, name_type, Rc::clone(&get_invalid_text_diagnostic));
                 if e.error_node.is_some() {
                     return Some(e);
                 } else {
@@ -774,10 +774,8 @@ impl Checker {
     // @remarks Because this function calls getSpreadType, it needs to use the same checks as checkObjectLiteral,
     // which also calls getSpreadType.
     pub(crate) fn create_jsx_attributes_type_from_attributes_property(&mut self, opening_like_element: P<Node>, check_mode: CheckMode) -> P<Type> {
-        let mut all_attributes_table: Option<P<SymbolTable>> = None;
-        if self.strict_null_checks {
-            all_attributes_table = Some(SymbolTable::new());
-        }
+        // Local to this call: owned here, not allocated in the arena (as `checkObjectLiteral`'s table).
+        let all_attributes_table: Option<SymbolTable> = self.strict_null_checks.then(SymbolTable::default);
         let mut attributes_table = SymbolTable::new();
         let mut attributes_symbol: Option<P<Symbol>> = None;
         let mut attribute_parent = opening_like_element;
@@ -819,7 +817,7 @@ impl Checker {
                     links.resolved_type.set(Some(expr_type));
                     links.set_target(Some(member));
                     attributes_table.set(attribute_symbol.name(), attribute_symbol);
-                    if let Some(all_attributes_table) = all_attributes_table {
+                    if let Some(all_attributes_table) = &all_attributes_table {
                         all_attributes_table.set(attribute_symbol.name(), attribute_symbol);
                     }
                     if attribute_decl.name().unwrap().text() == jsx_children_property_name {
@@ -851,7 +849,7 @@ impl Checker {
                     if self.is_valid_spread_type(expr_type) {
                         spread = self.get_spread_type(spread, expr_type, attributes_symbol, object_flags, false /*readonly*/);
                         if all_attributes_table.is_some() {
-                            self.check_spread_prop_overrides(expr_type, all_attributes_table, attribute_decl);
+                            self.check_spread_prop_overrides(expr_type, all_attributes_table.as_ref(), attribute_decl);
                         }
                     } else {
                         self.error(attribute_decl.expression(), &diagnostics::Spread_types_may_only_be_created_from_object_types, &[]);

@@ -349,7 +349,7 @@ impl InferenceContext {
     /// The arena handle of this context (contexts are only created in the arena and never moved).
     fn as_p(&self) -> P<InferenceContext> {
         // SAFETY: see above.
-        unsafe { P::from_arena(&*(self as *const InferenceContext)) }
+        unsafe { P::from_arena(&*std::ptr::from_ref::<InferenceContext>(self)) }
     }
 
     fn rare(&self) -> Option<P<InferenceContextRare>> {
@@ -423,11 +423,14 @@ impl InferenceContext {
     pub fn return_mapper(&self) -> Option<P<TypeMapper>> {
         self.rare().and_then(|r| r.return_mapper.get())
     }
-    // A return mapper is stored in the context, which can outlive the call that made the mapper: an escape.
+    // The return mappers live and die with the context: they escape when it does (`escape` walks them), and
+    // `recycle` frees them with it (notes/mem-scoped-arenas.md).
     pub fn set_return_mapper(&self, mapper: Option<P<TypeMapper>>) {
         if mapper.is_some() || self.rare().is_some() {
             if let Some(m) = mapper {
-                escape_mapper(m);
+                if self.escaped() {
+                    escape_mapper(m);
+                }
             }
             self.rare_for_write().return_mapper.set(mapper);
         }
@@ -438,7 +441,9 @@ impl InferenceContext {
     pub fn set_outer_return_mapper(&self, mapper: Option<P<TypeMapper>>) {
         if mapper.is_some() || self.rare().is_some() {
             if let Some(m) = mapper {
-                escape_mapper(m);
+                if self.escaped() {
+                    escape_mapper(m);
+                }
             }
             self.rare_for_write().outer_return_mapper.set(mapper);
         }
@@ -492,12 +497,47 @@ impl InferenceContext {
         // SAFETY: the context's own list (`alloc_slice_recycled` in `newInferenceContextWorker`, or the merged copy).
         unsafe { tsrs_core::free_slice!(inferences) };
         if let Some(rare) = n.rare() {
+            // The return mappers: the mapper of a clone made for this context by `inferTypeArguments`, and the
+            // outer return mapper `createOuterReturnMapper` cached here (the mapper of another clone, merged after
+            // the return mapper of that time). Only this context refers to them unless they escaped.
+            let return_mapper = rare.return_mapper.get();
+            if let Some(o) = rare.outer_return_mapper.get() {
+                if !o.escaped() {
+                    match o.data() {
+                        TypeMapperData::Merged { m1, m2 } => {
+                            // SAFETY: made by `createOuterReturnMapper` for this context only.
+                            unsafe { tsrs_core::free!(o) };
+                            InferenceContext::recycle_held_mapper(m2);
+                            if Some(m1) != return_mapper {
+                                // A replaced return mapper: `o` was its last holder.
+                                InferenceContext::recycle_held_mapper(m1);
+                            }
+                        }
+                        _ => InferenceContext::recycle_held_mapper(o),
+                    }
+                }
+            }
+            if let Some(r) = return_mapper {
+                InferenceContext::recycle_held_mapper(r);
+            }
             drop(std::mem::take(&mut *rare.intra_expression_inference_sites.borrow_mut()));
             // SAFETY: only `n` points to its tail (the type parameter list it holds is not freed).
             unsafe { tsrs_core::free!(rare) };
         }
         // SAFETY: see above.
         unsafe { tsrs_core::free!(n) };
+    }
+
+    /// Recycles the clone behind `m`, the mapper (`InferenceContext::mapper`) of a context that only `m`'s holder,
+    /// which is being recycled, refers to; with `m` itself (one of the clone's own mappers). Kept if `m` escaped.
+    fn recycle_held_mapper(m: P<TypeMapper>) {
+        if m.escaped() {
+            return;
+        }
+        if let TypeMapperData::Inference { n, .. } = m.data() {
+            debug_assert!(n.mapper.get() == Some(m));
+            InferenceContext::recycle(n);
+        }
     }
 }
 
@@ -1218,6 +1258,8 @@ pub struct Checker {
     // Mappers and inference contexts `getConditionalType` made, recycled when it returns (notes/mem-recycle.md).
     pub scratch_mappers: Vec<P<TypeMapper>>,
     pub scratch_contexts: Vec<P<InferenceContext>>,
+    /// `getTailRecursionRoot` mappers with the type-argument lists made for them, recycled with `scratch_mappers`.
+    pub scratch_mapper_lists: Vec<(P<TypeMapper>, &'static [P<Type>])>,
     pub free_type_mapper_caches: Vec<FxHashMap<CacheHashKey, P<Type>>>, // Rust-only: cleared maps for reuse (Go keeps them in the slice capacity)
     pub free_type_lists: Vec<Vec<P<Type>>>, // Rust-only: empty buffers for `instantiate_types_changed`
     pub ambient_modules_once: bool, // Go sync.Once: true once ambient_modules has been computed
@@ -1238,6 +1280,9 @@ pub struct Checker {
     /// tests such a field against nil (`c.globalObjectType != nil`).
     pub unassigned_type: P<Type>,
     pub type_to_string_nodebuilder: Option<P<NodeBuilder>>,
+    /// tsrs-only: accessible-chain cache entries keyed by a node in the current emit scratch region
+    /// (`forget_scratch_keyed_caches`, notes/mem-emit-regions.md).
+    pub scratch_keyed_chain_cache: Vec<(P<Symbol>, accessibleChainCacheKey)>,
     pub emit_resolver: Option<P<EmitResolver>>, // Go `emitResolver` + `emitResolverOnce`: None until `get_emit_resolver`
 }
 
@@ -1584,6 +1629,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         active_type_mappers_caches: Vec::new(),
         scratch_mappers: Vec::new(),
         scratch_contexts: Vec::new(),
+        scratch_mapper_lists: Vec::new(),
         free_type_mapper_caches: Vec::new(),
         free_type_lists: Vec::new(),
         ambient_modules_once: false,
@@ -1597,6 +1643,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         alias_cache_blockers: 1,
         unassigned_type: dummy_type,
         type_to_string_nodebuilder: None,
+        scratch_keyed_chain_cache: Vec::new(),
         emit_resolver: None,
     });
     c.undefined_symbol = c.new_symbol(SymbolFlags::Property, "undefined");
@@ -1701,7 +1748,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
     c.zero_type = c.get_number_literal_type(Number(0.0));
     c.zero_big_int_type = c.get_big_int_literal_type(PseudoBigInt::default());
     let mut typeof_names: Vec<&'static str> = typeofNEFacts.keys().copied().collect();
-    typeof_names.sort();
+    typeof_names.sort_unstable();
     let typeof_types: Vec<P<Type>> = typeof_names.iter().map(|name| c.get_string_literal_type(name)).collect();
     c.typeof_type = c.get_union_type(&typeof_types);
     // initializeClosures: the closures are the methods is_primitive_or_object_or_empty_type & co. below.
@@ -2264,13 +2311,14 @@ impl Checker {
     }
 }
 
-/// Go `var primitiveTypeAliasSuggestions = sync.OnceValue(...)`.
-pub fn primitive_type_alias_suggestions() -> &'static FxHashMap<&'static str, P<Symbol>> {
-    static MAP: OnceLock<FxHashMap<&'static str, P<Symbol>>> = OnceLock::new();
+/// Go `var primitiveTypeAliasSuggestions = sync.OnceValue(...)`. Go builds a map and ranges over it in random order;
+/// a list in declaration order gives the spelling suggestion one answer when two of these tie.
+pub fn primitive_type_alias_suggestions() -> &'static [(&'static str, P<Symbol>)] {
+    static MAP: OnceLock<Vec<(&'static str, P<Symbol>)>> = OnceLock::new();
     MAP.get_or_init(|| {
         // Process-wide: never in a freeable region (language server).
         let _arena = tsrs_core::arena::enter_thread_arena();
-        let mut result = FxHashMap::default();
+        let mut result = Vec::new();
         for (primitive, builtin) in [
             ("string", "String"),
             ("number", "Number"),
@@ -2280,7 +2328,7 @@ pub fn primitive_type_alias_suggestions() -> &'static FxHashMap<&'static str, P<
             ("symbol", "Symbol"),
         ] {
             let sym = Symbol::new(SymbolFlags::TypeAlias | SymbolFlags::Transient, primitive);
-            result.insert(builtin, sym);
+            result.push((builtin, sym));
         }
         result
     })
