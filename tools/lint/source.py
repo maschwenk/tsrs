@@ -12,6 +12,11 @@
 2. Weakened atomic orderings (Relaxed, Acquire, Release, AcqRel) need a `//` comment on the same line or in the three
    lines above saying why the ordering is enough. tools/lint/atomics.tsv holds the per-file count of those without
    one; a file may not go above it. Bun's rule: "default to seq_cst and comment any weakened ordering".
+3. An arena free (`free!`, `free_slice!`, `free_raw`, `free_slice_ptr`) of a function's own reference parameter
+   (`x: &T`, `x: &[T]`, or `self` in a `&self` method). A reference parameter is a protected borrow for the whole call
+   (LLVM `noalias`), so writing the free-list link into its memory is undefined behaviour; LLVM deleted that write in
+   `panic = "abort"` builds (notes/fix-arena-recycle-uaf.md). Take the block as a `P<T>`, an address or a raw slice.
+   No baseline: every finding fails.
 
 Scans crates/*/src/**/*.rs, without test files (*_test.rs, tests.rs, tests/ directories), the generated
 tsrs_fourslash crate, and files whose first line says they are generated.
@@ -31,6 +36,8 @@ WEAK = ("Relaxed", "Acquire", "Release", "AcqRel")
 QUALIFIED = re.compile(r"\bOrdering::(Relaxed|Acquire|Release|AcqRel)\b")
 IMPORTED = re.compile(r"\buse\s+std::sync::atomic::(?:\{[^}]*\bOrdering::(?:\{[^}]*\}|\w+)[^}]*\}|Ordering::(?:\{[^}]*\}|\w+))\s*;")
 LOOKBACK = 3
+FN_START = re.compile(r"\bfn\s+\w+\s*(?:<[^(]*?>)?\s*\(")
+FREE_CALL = re.compile(r"\b(free!|free_slice!|free_raw|free_slice_ptr)\s*\(\s*&?\s*(\w+)")
 
 
 def source_files():
@@ -95,11 +102,72 @@ def uncommented_orderings(text):
     return found
 
 
+def matching(text, i, open_ch, close_ch):
+    """Index just past the bracket that closes the one at text[i] (strings and comments are not special-cased)."""
+    depth = 0
+    for j in range(i, len(text)):
+        if text[j] == open_ch:
+            depth += 1
+        elif text[j] == close_ch:
+            depth -= 1
+            if depth == 0:
+                return j + 1
+    return len(text)
+
+
+def reference_params(params):
+    """Names of the parameters whose type is a reference (`&self` counts as `self`)."""
+    names, depth, cur = set(), 0, ""
+    for ch in params + ",":
+        if ch in "<([":
+            depth += 1
+        elif ch in ">)]":
+            depth -= 1
+        if ch == "," and depth == 0:
+            p = cur.strip()
+            cur = ""
+            if re.match(r"^&\s*(?:'\w+\s+)?(?:mut\s+)?self$", p):
+                names.add("self")
+            m = re.match(r"^(?:mut\s+)?(\w+)\s*:\s*&", p)
+            if m:
+                names.add(m.group(1))
+        else:
+            cur += ch
+    return names
+
+
+def frees_of_reference_params(text):
+    """(line number, line) of each arena free whose argument is a reference parameter of the enclosing function."""
+    code = "\n".join(code_part(l) for l in text.split("\n"))
+    found = []
+    for m in FN_START.finditer(code):
+        open_paren = m.end() - 1
+        close = matching(code, open_paren, "(", ")")
+        brace = code.find("{", close)
+        semi = code.find(";", close)
+        if brace < 0 or (0 <= semi < brace):
+            continue  # a declaration without a body
+        refs = reference_params(code[open_paren + 1:close - 1])
+        if not refs:
+            continue
+        body_end = matching(code, brace, "{", "}")
+        for f in FREE_CALL.finditer(code, brace, body_end):
+            if f.group(2) in refs:
+                line_no = code.count("\n", 0, f.start()) + 1
+                line = text.split("\n")[line_no - 1]
+                if "source.py: deliberate" not in line:  # the Miri negative control in tsrs_core's arena tests
+                    found.append((line_no, line.strip()))
+    return found
+
+
 def scan():
     inventory, atomics, details, files = [], {}, {}, 0
+    global REF_FREES
+    REF_FREES = []
     for rel, text in source_files():
         files += 1
         inventory.extend(send_sync_impls(rel, text))
+        REF_FREES.extend((rel, n, l) for n, l in frees_of_reference_params(text))
         found = uncommented_orderings(text)
         if found:
             atomics[rel] = len(found)
@@ -139,6 +207,18 @@ def self_test():
     found = uncommented_orderings(text)
     assert [n for n, _ in found] == [3, 9, 9], found
     assert uncommented_orderings("enum Kind { Release }\nlet k = Kind::Release;\n") == []
+    bad = "\n".join([
+        "unsafe fn recycle(m: P<TypeMapper>, targets: &'static [P<Type>]) {",
+        "    tsrs_core::free!(m);",                    # by value: fine
+        "    tsrs_core::free_slice!(targets);",        # flagged
+        "}",
+        "fn ok(targets: *const [P<Type>], n: usize) { unsafe { tsrs_core::free_slice_ptr(targets) } }",
+        "impl X { fn drop_me(&self) { unsafe { free_raw(self as *const X as usize, 8, 8, false) } } }",  # flagged
+        "fn local() { let s: &[u8] = alloc_slice_recycled(&[1]); unsafe { free_slice!(s) } }",
+        "fn decl(s: &[u8]);",
+        "fn after(x: u32) { free!(p) }",
+    ])
+    assert [n for n, _ in frees_of_reference_params(bad)] == [3, 6], frees_of_reference_params(bad)
     files, inventory, _, _ = scan()
     assert files > 100 and inventory, "the scan found nothing; the paths or patterns are wrong"
     print("source checks self-test: ok")
@@ -161,6 +241,10 @@ def main(argv):
         return
 
     failed = False
+    for rel, line_no, line in REF_FREES:
+        print(f"{rel}:{line_no}: arena free of a reference parameter (a protected borrow for the whole call; take the "
+              f"block as a P<T>, an address or a raw slice, see tsrs_core::free_raw):\n  {line}")
+        failed = True
     recorded = set(read_tsv(INVENTORY))
     current = set(inventory)
     for row in sorted(current - recorded):
@@ -182,7 +266,7 @@ def main(argv):
         sys.exit(1)
     lower = sum(n - atomics.get(f, 0) for f, n in baseline.items() if atomics.get(f, 0) < n)
     print(f"source checks: ok ({files} files, {len(inventory)} Send/Sync impls, {sum(atomics.values())} uncommented "
-          f"orderings)" + (f"; {lower} fewer than recorded, run --update" if lower else ""))
+          f"orderings, no arena free of a reference parameter)" + (f"; {lower} fewer than recorded, run --update" if lower else ""))
 
 
 if __name__ == "__main__":

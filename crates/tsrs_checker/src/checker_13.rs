@@ -64,9 +64,13 @@ impl Checker {
                 type_set = self.remove_redundant_literal_types(&type_set, includes, union_reduction == UnionReduction::Subtype);
             }
             if includes.intersects(TypeFlags::StringLiteral) && includes.intersects(TypeFlags::TemplateLiteral | TypeFlags::StringMapping) {
+                // tsrs: relations and inference; never stored in the union front cache (unioncache.rs).
+                self.union_front_cache.impure = self.union_front_cache.impure.wrapping_add(1);
                 type_set = self.remove_string_literals_matched_by_template_literals(&type_set);
             }
             if includes.intersects(TypeFlags::IncludesConstrainedTypeVariable) {
+                // tsrs: reads base constraints; never stored in the union front cache (unioncache.rs).
+                self.union_front_cache.impure = self.union_front_cache.impure.wrapping_add(1);
                 type_set = self.remove_constrained_type_variables(&type_set);
             }
             if union_reduction == UnionReduction::Subtype {

@@ -37,8 +37,18 @@ pointer compression costs about +4.9% instructions and took back most of the che
 - **`cargo test -p tsrs_cli` does not link on macOS**: `api::memory_tests` calls glibc `malloc_trim`. Every agent
   this round excluded it locally. Needs a `cfg(target_os = "linux")` from the Node API side.
 
+- **`panic = "abort"` builds segfaulted: fixed** (notes/fix-arena-recycle-uaf.md). `recycle_mapper_with_targets`
+  freed a type list it had received as a `&[P<Type>]` parameter, a protected borrow for the call, so LLVM could and
+  (with `panic = "abort"`) did delete the free-list link write. Undefined behaviour that the unwind build survived by
+  luck of code generation; no output was affected. Now a raw slice, with a source check, Miri on the arena tests and
+  a `panic = "abort"` conformance job as guards.
+
 ## Ideas, by expected value
 
+0. **BOLT for the Linux release binaries** (notes/perf-build-level.md): -2.7% / -3.2% / -1.0% wall at 1 / 4 / 8
+   checkers on the 38k-file codebase, -3.4% to -4.0% on vscode, identical output and gates; a draft PR adds it to
+   `release.yml` with the gates on the BOLT-optimized binaries. The bench workflow needs the same step to keep
+   measuring what ships.
 1. **The heavy type graphs every checker rebuilds: fixed in the checked codebase**, not in tsrs
    (notes/perf-checker-scaling.md has the measurement). Two causes, both worth knowing for any project:
    `export default new Ctor(...)` makes the checker check the whole constructor call, pulling in every argument's
@@ -70,6 +80,17 @@ pointer compression costs about +4.9% instructions and took back most of the che
 8. **Parallel `affectedfileshandler` / `emitfileshandler`** (notes/perf-incremental-parallel.md): still sequential in
    the port; costs nothing under `--noEmit`. Worth doing with an emit-on incremental benchmark.
 
+## Round 3, union and inference work (#100, draft; notes/perf-union-inference.md)
+
+- **Union front cache** (`TSRS_UNION_CACHE`, on by default and off under `--checkerAssignment go`; its shadow mode is
+  in docs/DEBUGGING.md). It is a direct-mapped table in front of `getUnionType` for calls without an origin. It stores
+  a call only if that call created nothing but the union it returns, instantiated nothing, took no state-dependent
+  reduction and did not return `errorType`.
+  - Instructions: -0.5% to -1.1% on four corpora, with 1, 4 and 8 checkers.
+  - Check time with one checker: -1.1% to -3.3%.
+  - No change in memory or `--extendedDiagnostics` counters.
+  - Diagnostics byte-identical, and shadow mode clean on the suite, fourslash and four corpora.
+
 ## Measured and rejected (do not redo)
 
 - A1, deciding `getConditionalType`'s definitely-false test for discriminated unions without the relater (draft #88,
@@ -79,6 +100,13 @@ pointer compression costs about +4.9% instructions and took back most of the che
 - A2, skipping the non-matching constituents of such a conditional through a key index: asymptotically better, but the
   skipped evaluations' instantiation counts depend on cache states, so it moves the instantiation-budget (TS2589)
   boundary that `testdata/regressions/conditional-instantiation-limit-*` pins.
+- A memo for generic calls inferred again with the same inputs (notes/perf-union-inference.md, task B). The part
+  such a memo could skip is 1.3% of one checker's check time on the 38k-file codebase, 2.2% on vscode and 0.3-0.4% on
+  webpack and xstate, which fails the 1.5%-on-two-corpora bar. Those figures are upper bounds that ignore the memo's
+  own cost. The census's ~8% for repeated inferences is mostly checking the argument expressions, which has to run
+  at every call site.
+- A larger union front cache (2^12 slots or more; notes/perf-union-inference.md): 0.03% fewer instructions, but about
+  2 MiB of RSS per checker.
 - A full unit-property index for relations to union targets: would skip at most 0.2% (big) / 0.1% (vscode) of failed
   constituent checks; the rest is inherent (notes/perf-checker-algorithms.md, "Row 1").
 
@@ -92,6 +120,11 @@ pointer compression costs about +4.9% instructions and took back most of the che
   instructions and takes 1-2% more cycles, v2 changes nothing. Nothing to ship.
 - mimalloc purge delay (never, 10 s) and eager arena commit on Linux (same note): page faults -54..-77% but no
   consistent change in cycles; eager commit +3.7% cycles.
+- Build-level options on top of PGO + fat LTO (notes/perf-build-level.md, Linux x86-64, Ice Lake): BOLT `-hugify`
+  (text on 2 MiB pages: no gain over BOLT alone), mimalloc v2 / jemalloc / glibc malloc instead of mimalloc v3 (3-14%
+  slower for 3-7% less peak), `opt-level = "s"` for the cold crates (`.text` -6%, speed unchanged), vscode at eight
+  checkers added to the PGO training (-3% instructions, cycles unchanged). `panic = "abort"` was not measured: its
+  builds crashed until notes/fix-arena-recycle-uaf.md.
 - Faster file reading for the front end (`io_uring`, `readahead`, fewer syscalls): not tried, the front end is 5.6-6.6%
   of a 4- or 8-checker run on Linux x86 (same note), below the bar where it could pay.
 

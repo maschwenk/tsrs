@@ -176,3 +176,72 @@ jobs:
 
       - name: Generated code is up to date
         run: tools/gen-check.sh
+
+  # notes/fix-arena-recycle-uaf.md: an arena free of memory that a function held as a reference parameter is undefined
+  # behaviour that LLVM exploited only in `panic = "abort"` builds (every call `nounwind`). Two cheap guards for that
+  # class: Miri on the arena's free-list tests (plus a negative control that Miri must reject), and the conformance
+  # suite on a `panic = "abort"` release build, which crashed on 44 tests before the fix. tools/lint/source.py
+  # (lint-ratchet job) rejects the direct pattern.
+  arena-safety:
+    runs-on: depot-ubuntu-24.04-8
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Read TypeScript reference commit
+        id: ts
+        run: echo "commit=$(node npm/build.mjs --print-typescript-commit)" >> "$GITHUB_OUTPUT"
+
+      - name: Check out TypeScript testdata
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: microsoft/TypeScript
+          ref: ${{ steps.ts.outputs.commit }}
+          path: ts-ref
+          fetch-depth: 1
+          sparse-checkout: tsc/testdata
+          persist-credentials: false
+
+      - name: Read the pinned Rust toolchain (rust-toolchain.toml)
+        id: rust
+        shell: bash
+        run: echo "toolchain=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: ${{ steps.rust.outputs.toolchain }}
+
+      # Miri needs a nightly; pinned so that a Miri change cannot turn main red on its own.
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: nightly-2026-10-04
+          components: miri, rust-src
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          shared-key: arena-safety
+
+      # plain-ptrs: the compressed handles' 32 GiB PROT_NONE reservation is not supported by Miri.
+      - name: Miri on the arena free-list tests
+        # The arena leaks its chunks by design (nothing is freed at exit), so Miri's leak check is off here.
+        env:
+          MIRIFLAGS: -Zmiri-ignore-leaks
+        run: |
+          cargo +nightly-2026-10-04 miri test --locked -p tsrs_core --features plain-ptrs --lib arena::tests
+          # The negative control frees a reference parameter; Miri must still call that undefined behaviour.
+          if cargo +nightly-2026-10-04 miri test --locked -p tsrs_core --features plain-ptrs --lib \
+              arena::tests::miri_rejects_freeing_a_reference_parameter -- --ignored > miri-negative.log 2>&1; then
+            echo "::error::Miri accepted a free of a protected reference parameter"; exit 1
+          fi
+          grep -q "Undefined Behavior" miri-negative.log
+
+      - name: Conformance suite on a panic = "abort" build
+        env:
+          CARGO_PROFILE_RELEASE_PANIC: abort
+          CARGO_TARGET_DIR: target/abort
+        run: |
+          cargo +${{ steps.rust.outputs.toolchain }} build --release --locked -p tsrs_testrunner
+          TSRS_TEST=target/abort/release/tsrs-test TSRS_TEST_RESULTS="$PWD/target/abort/test-results" \
+            .github/scripts/conformance-gate.sh
