@@ -32,11 +32,13 @@ fn flow_type_of(t: P<Type>) -> FlowType {
     FlowType { t: Some(t), incomplete: false }
 }
 
-/// Where a frame's entries in `FlowMemo::checkpoints` and `FlowMemo::shadow_hits` begin (flowmemo.rs).
+/// Where a frame's entries in `FlowMemo::checkpoints` and `FlowMemo::shadow_hits` begin, and how many nodes its
+/// iteration passed (flowmemo.rs).
 #[derive(Clone, Copy)]
 struct FrameMarks {
     checkpoints: u32,
     shadow: u32,
+    steps: u32,
 }
 
 enum FlowStep {
@@ -296,10 +298,13 @@ impl Checker {
         let key = f.memo_key.get();
         // The memo key's meaning holds only outside inlined conditions and reduce labels, while flow analysis is on.
         let memo_ok = self.inline_level == 0 && !self.flow_analysis_disabled && f.reduce_depth.get() == 0;
-        let marks = FrameMarks { checkpoints: self.flow_memo.checkpoints.len() as u32, shadow: self.flow_memo.shadow_hits.len() as u32 };
+        let shadow = if self.flow_memo.mode == FlowMemoMode::Shadow { self.flow_memo.shadow_hits.len() as u32 } else { 0 };
+        let marks = FrameMarks { checkpoints: self.flow_memo.checkpoints.len() as u32, shadow, steps: 0 };
         f.depth.set(entry_depth + 1);
         let mut shared_flow: Option<P<FlowNode>> = None;
+        let mut marks = marks;
         loop {
+            marks.steps += 1;
             let flags = flow.flags();
             if flags.intersects(FlowFlags::Shared) {
                 for i in f.shared_flow_start.get() as usize..self.shared_flows.len() {
@@ -437,6 +442,10 @@ impl Checker {
             return;
         }
         if t.incomplete || self.flow_analysis_disabled {
+            return;
+        }
+        if height == 0 && marks.steps < 4 && hit.is_none() {
+            // A short iteration ending without recursion costs less to walk again than to keep.
             return;
         }
         if self.flow_memo.mode == FlowMemoMode::Shadow {

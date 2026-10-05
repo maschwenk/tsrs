@@ -153,7 +153,6 @@ impl FrameTaint {
 #[derive(Default, Clone, Copy)]
 pub(crate) struct FlowMemoStats {
     pub walks: u64,
-    pub keyed_walks: u64,
     pub consults: u64,
     pub blocked: u64,
     pub blocked_loop: u64,
@@ -341,11 +340,10 @@ impl FlowMemo {
         }
         let s = &self.stats;
         Some(format!(
-            "flow memo ({:?}, {} slots): walks {} (keyed {}), consults {}, found {} (blocked {}: loop {}, counters {}, cache {}, shared {}), hits {}, height misses {}, fills {}, not stored: tainted {}, counters {}; aborts {}, shadow checks {}",
+            "flow memo ({:?}, {} slots): walks {}, consults {}, found {} (blocked {}: loop {}, counters {}, cache {}, shared {}), hits {}, height misses {}, fills {}, not stored: tainted {}, counters {}; aborts {}, shadow checks {}",
             self.mode,
             self.slots.len(),
             s.walks,
-            s.keyed_walks,
             s.consults,
             s.hits + s.blocked + s.height_misses,
             s.blocked,
@@ -444,7 +442,6 @@ impl Checker {
             Some(key) => {
                 f.memo_key.set(key);
                 f.memo_key_state.set(2);
-                self.flow_memo.stats.keyed_walks += 1;
             }
             None => f.memo_key_state.set(1),
         }
@@ -493,7 +490,7 @@ impl Checker {
     /// `this` in a type query (Go keys and matches those like `this`).
     fn flow_memo_root_symbol(&self, node: P<Node>) -> Option<P<Symbol>> {
         let symbol = self.symbol_node_links.try_get_if_id_assigned(node).and_then(|links| links.resolved_symbol.get())?;
-        if symbol == self.unknown_symbol || ast::is_this_in_type_query(node) {
+        if symbol == self.unknown_symbol || node.as_identifier().text() == "this" && ast::is_this_in_type_query(node) {
             return None;
         }
         Some(symbol)
