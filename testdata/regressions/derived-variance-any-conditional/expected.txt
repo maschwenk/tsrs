@@ -1,0 +1,4 @@
+a.ts(14,14): error TS2322: Type 'E<any>' is not assignable to type 'H<unknown>'.
+  The types returned by 'asElement()' are incompatible between these types.
+    Type 'E<any> | null' is not assignable to type 'null'.
+      Type 'E<any>' is not assignable to type 'null'.

@@ -56,7 +56,7 @@ impl Checker {
 }
 
 impl Relater {
-    fn rel(&self) -> P<Relation> {
+    pub(crate) fn rel(&self) -> P<Relation> {
         self.relation.get().unwrap()
     }
 
@@ -751,6 +751,32 @@ impl Relater {
 
     // relater.go:3224
     pub(crate) fn structured_type_related_to(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, intersection_state: IntersectionState) -> Ternary {
+        if c.derived_variance != crate::relater_derived::DerivedVarianceMode::Off {
+            return self.structured_type_related_to_derived(c, source, target, report_errors, intersection_state);
+        }
+        self.structured_type_related_to_body(c, source, target, report_errors, intersection_state)
+    }
+
+    /// TSRS_DERIVED_VARIANCE (relater_derived.rs): a derived generic against a reference to its generic base.
+    #[cold]
+    #[inline(never)]
+    fn structured_type_related_to_derived(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, intersection_state: IntersectionState) -> Ternary {
+        let (early, decision) = self.derived_variance_pre(c, source, target, report_errors, intersection_state);
+        if let Some(result) = early {
+            return result;
+        }
+        let Some(decision) = decision else { return self.structured_type_related_to_body(c, source, target, report_errors, intersection_state) };
+        let outermost = c.derived_depth == 0;
+        c.derived_depth += 1;
+        let t0 = std::time::Instant::now();
+        let result = self.structured_type_related_to_body(c, source, target, report_errors, intersection_state);
+        let base_ns = t0.elapsed().as_nanos() as u64;
+        c.derived_depth -= 1;
+        self.derived_variance_post(c, source, target, &decision, result, base_ns, outermost);
+        result
+    }
+
+    fn structured_type_related_to_body(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, intersection_state: IntersectionState) -> Ternary {
         let save_error_state = self.get_error_state(c);
         let mut result = self.structured_type_related_to_worker(c, source, target, report_errors, intersection_state);
         if self.rel() != c.identity_relation {
