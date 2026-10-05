@@ -1397,7 +1397,7 @@ impl Checker {
         let lm = self.get_ready_lazy_member_table(reduced)?;
         self.lazy_member_stats.unmatched_lazy_walks += 1;
         if let Some(properties) = lm.ordered_properties.get() {
-            return Some(properties.clone());
+            return Some(properties.get().to_vec());
         }
         let mut members: Vec<P<Symbol>> = Vec::new();
         let mut seen: FxHashSet<&'static str> = FxHashSet::default();
@@ -1409,7 +1409,7 @@ impl Checker {
                 }
             }
         }
-        for &base_type in lm.ready.get().unwrap().base_types {
+        for &base_type in lm.ready.get().unwrap().base_types.get() {
             let base_properties: std::borrow::Cow<'static, [P<Symbol>]> = match self.get_lazy_properties_in_order(base_type) {
                 Some(properties) => properties.into(),
                 None => self.get_properties_of_type(base_type).into(),
@@ -1434,7 +1434,7 @@ impl Checker {
         self.sort_symbols(&mut contained);
         self.sort_symbols(&mut rest);
         contained.extend(rest);
-        let _ = lm.ordered_properties.set(contained.clone());
+        let _ = lm.ordered_properties.set(ThinSlice::new(alloc_slice(&contained)));
         Some(contained)
     }
 }

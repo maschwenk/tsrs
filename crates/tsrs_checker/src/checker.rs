@@ -1052,7 +1052,7 @@ pub struct Checker {
     pub source_file_links: LinkStore<SourceFile, SourceFileLinks>,
     pub reg_exp_scanner: Option<Box<Scanner>>,
     pub pattern_for_type: FxHashMap<P<Type>, P<Node>>,
-    pub(crate) lazy_member_tables: FxHashMap<P<Type>, std::rc::Rc<LazyMemberTable>>,
+    pub(crate) lazy_member_tables: FxHashMap<P<Type>, P<LazyMemberTable>>,
     // Go `StructuredType.objectTypeWithoutAbstractConstructSignatures`: set only by the node builder, for few types,
     // so kept here instead of in every object, union and intersection type.
     pub(crate) object_types_without_abstract_construct_signatures: FxHashMap<P<Type>, P<Type>>,
