@@ -31,8 +31,9 @@ pub(crate) const FLOW_DEPTH_LIMIT: i32 = 2000;
 /// No taint source.
 pub(crate) const UNTAINTED: u32 = u32::MAX;
 
-/// The frame instantiated a type or ran inside an instantiation (it may touch the instantiation counters and stack).
-pub(crate) const FLAG_COUNTERS: u8 = 1;
+/// The frame instantiated a type, ran inside an instantiation (either may touch the instantiation counters and
+/// stack), or created a type, symbol or signature (a later walk may create a new one with another identity).
+pub(crate) const FLAG_EFFECTS: u8 = 1;
 /// The frame read `flowTypeCache`.
 pub(crate) const FLAG_TYPE_CACHE: u8 = 2;
 /// The frame may have reset the instantiation count (`checkExpression`): a later walk of it leaves the count where
@@ -84,6 +85,14 @@ pub(crate) struct SavedFlowTypeCache {
     epoch: u32,
 }
 
+/// Shadow mode: a memo answer as found, with the full key and origin its slot held then.
+pub(crate) struct ShadowHit {
+    pub flow: P<FlowNode>,
+    pub hit: MemoHit,
+    pub full_key: Option<Box<[u8]>>,
+    pub origin: (Option<P<Node>>, i32),
+}
+
 /// A memo answer: the type, the height of the sub-walk it stands for, and the cache it was computed with.
 #[derive(Clone, Copy)]
 pub(crate) struct MemoHit {
@@ -122,6 +131,7 @@ pub(crate) struct FlowFrame {
     saved: Regs,
     instantiation_count: u32,
     total_instantiation_count: u32,
+    created: u32,
     in_instantiation: bool,
 }
 
@@ -164,6 +174,9 @@ pub struct FlowMemo {
     slots: Vec<Slot>,
     /// Shadow mode: the full reference key of each slot, to prove that no two references share a hashed key.
     shadow_keys: Vec<Option<Box<[u8]>>>,
+    /// Shadow mode: where each slot's value came from (reference node, depth), for reports.
+    pub(crate) shadow_origin: Vec<(Option<P<Node>>, i32)>,
+    pub(crate) shadow_origin_next: (Option<P<Node>>, i32),
     serial: u32,
     regs: Regs,
     /// Identifies the current `Checker::flow_type_cache` (a new one per reset, and when an entry changes); saved and
@@ -172,7 +185,7 @@ pub struct FlowMemo {
     /// Checkpoints that the active frames of keyed walks iterated past.
     pub(crate) checkpoints: Vec<P<FlowNode>>,
     /// Shadow mode: memo answers waiting for the frame that found them to end.
-    pub(crate) shadow_hits: Vec<(P<FlowNode>, MemoHit)>,
+    pub(crate) shadow_hits: Vec<ShadowHit>,
     pub(crate) key_buf: Vec<u8>,
     pub(crate) stats: FlowMemoStats,
 }
@@ -183,6 +196,8 @@ impl FlowMemo {
             mode: mode_from_env(),
             slots: Vec::new(),
             shadow_keys: Vec::new(),
+            shadow_origin: Vec::new(),
+            shadow_origin_next: (None, 0),
             serial: 1,
             regs: FRESH_REGS,
             type_cache_epoch: UNTAINTED,
@@ -214,8 +229,8 @@ impl FlowMemo {
     }
 
     #[inline]
-    fn begin(&mut self, instantiation_count: u32, total_instantiation_count: u32, in_instantiation: bool) -> FlowFrame {
-        let frame = FlowFrame { start: self.next_serial(), saved: self.regs, instantiation_count, total_instantiation_count, in_instantiation };
+    fn begin(&mut self, instantiation_count: u32, total_instantiation_count: u32, created: u32, in_instantiation: bool) -> FlowFrame {
+        let frame = FlowFrame { start: self.next_serial(), saved: self.regs, instantiation_count, total_instantiation_count, created, in_instantiation };
         self.regs = FRESH_REGS;
         frame
     }
@@ -303,18 +318,21 @@ impl FlowMemo {
             self.slots = vec![Slot::default(); 1 << table_bits()];
             if self.mode == FlowMemoMode::Shadow {
                 self.shadow_keys = vec![None; 1 << table_bits()];
+                self.shadow_origin = vec![(None, 0); 1 << table_bits()];
             }
         }
         let i = self.slot_index(flow, key);
         self.slots[i] = Slot { key, flow: Some(flow), t: Some(t), height, epoch, count_reset };
         if self.mode == FlowMemoMode::Shadow {
             self.shadow_keys[i] = Some(self.key_buf.clone().into_boxed_slice());
+            self.shadow_origin[i] = self.shadow_origin_next;
         }
     }
 
-    /// Shadow mode: the full key stored with the slot `lookup` found.
-    pub(crate) fn shadow_key(&self, flow: P<FlowNode>, key: u128) -> Option<&[u8]> {
-        self.shadow_keys.get(self.slot_index(flow, key)).and_then(|k| k.as_deref())
+    /// Shadow mode: the answer `lookup` found, with what its slot holds now.
+    pub(crate) fn shadow_hit(&self, flow: P<FlowNode>, key: u128, hit: MemoHit) -> ShadowHit {
+        let i = self.slot_index(flow, key);
+        ShadowHit { flow, hit, full_key: self.shadow_keys.get(i).cloned().flatten(), origin: self.shadow_origin.get(i).copied().unwrap_or((None, 0)) }
     }
 
     pub fn report(&self) -> Option<String> {
@@ -355,7 +373,7 @@ impl Default for FlowMemo {
 impl Checker {
     #[inline]
     pub(crate) fn flow_frame_begin(&mut self) -> FlowFrame {
-        self.flow_memo.begin(self.instantiation_count, self.total_instantiation_count, !self.active_mappers.is_empty())
+        self.flow_memo.begin(self.instantiation_count, self.total_instantiation_count, self.flow_memo_created(), !self.active_mappers.is_empty())
     }
 
     /// Ends a frame that computed its result, adding what it did to the instantiation counters to its flags. With no
@@ -374,10 +392,16 @@ impl Checker {
         self.flow_memo.end_with(frame, height)
     }
 
+    /// Changes whenever a type, symbol or signature is created.
+    #[inline]
+    fn flow_memo_created(&self) -> u32 {
+        self.type_count.wrapping_add(self.symbol_count).wrapping_add(self.signature_count)
+    }
+
     #[inline]
     fn flow_frame_counters(&mut self, frame: FlowFrame) {
-        if self.total_instantiation_count != frame.total_instantiation_count || frame.in_instantiation {
-            self.flow_memo.add_flags(FLAG_COUNTERS);
+        if self.total_instantiation_count != frame.total_instantiation_count || frame.in_instantiation || self.flow_memo_created() != frame.created {
+            self.flow_memo.add_flags(FLAG_EFFECTS);
         }
         if frame.instantiation_count == 0 || self.instantiation_count != frame.instantiation_count {
             self.flow_memo.add_flags(FLAG_COUNT_RESET);

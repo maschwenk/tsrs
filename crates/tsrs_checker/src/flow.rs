@@ -1,4 +1,4 @@
-use crate::flowmemo::{FlowFrame, FlowMemoMode, FrameTaint, MemoHit, FLAG_COUNTERS, FLAG_COUNT_RESET, FLAG_TYPE_CACHE, FLOW_DEPTH_LIMIT, UNTAINTED};
+use crate::flowmemo::{FlowFrame, FlowMemoMode, FrameTaint, MemoHit, ShadowHit, FLAG_EFFECTS, FLAG_COUNT_RESET, FLAG_TYPE_CACHE, FLOW_DEPTH_LIMIT, UNTAINTED};
 use crate::*;
 use tsrs_ast::*;
 use tsrs_ast as ast;
@@ -309,8 +309,9 @@ impl Checker {
                         self.flow_memo_consume(shared.transient, shared.reference);
                         self.flow_memo.add_flags(shared.flags);
                         f.depth.set(f.depth.get() - 1);
-                        self.flow_frame_end_with(frame, shared.height);
+                        let taint = self.flow_frame_end_with(frame, shared.height);
                         self.flow_memo.checkpoints.truncate(marks.checkpoints as usize);
+                        self.flow_memo_shadow_settle(f, marks, entry_depth, key, shared.flow_type, taint);
                         return shared.flow_type;
                     }
                 }
@@ -334,6 +335,7 @@ impl Checker {
                     if f.memo_aborted.get() {
                         self.flow_frame_end(frame);
                         self.flow_memo.checkpoints.truncate(marks.checkpoints as usize);
+                        self.flow_memo.shadow_hits.truncate(marks.shadow as usize);
                         return t;
                     }
                     return self.flow_memo_end_frame(f, frame, marks, shared_flow, entry_flow, flow, entry_depth, key, t, None, memo_ok);
@@ -374,6 +376,8 @@ impl Checker {
         }
         if memo_ok {
             self.flow_memo_fill(f, marks, entry_flow, final_flow, entry_depth, key, t, taint, height, hit);
+        } else {
+            self.flow_memo_shadow_settle(f, marks, entry_depth, key, t, taint);
         }
         self.flow_memo.checkpoints.truncate(marks.checkpoints as usize);
         t
@@ -395,7 +399,8 @@ impl Checker {
         }
         let hit = self.flow_memo_lookup(f, flow, key, entry_depth)?;
         if self.flow_memo.mode == FlowMemoMode::Shadow {
-            self.flow_memo.shadow_hits.push((flow, hit));
+            let shadow_hit = self.flow_memo.shadow_hit(flow, key, hit);
+            self.flow_memo.shadow_hits.push(shadow_hit);
             return None;
         }
         Some((hit, ends_iteration))
@@ -422,16 +427,12 @@ impl Checker {
     /// iterated past (the type is the same at all of them; so is the height, iteration adds no depth).
     #[expect(clippy::too_many_arguments, reason = "the frame's facts, passed once at its end")]
     fn flow_memo_fill(&mut self, f: P<FlowState>, marks: FrameMarks, entry_flow: P<FlowNode>, final_flow: P<FlowNode>, entry_depth: i32, key: u128, t: FlowType, taint: FrameTaint, height: u16, hit: Option<MemoHit>) {
-        if self.flow_memo.shadow_hits.len() > marks.shadow as usize {
-            for (flow, shadow_hit) in self.flow_memo.shadow_hits.split_off(marks.shadow as usize) {
-                self.flow_memo_shadow_check(f, flow, entry_depth, key, t, taint, shadow_hit);
-            }
-        }
+        self.flow_memo_shadow_settle(f, marks, entry_depth, key, t, taint);
         if !taint.is_pure() {
             self.flow_memo.stats.tainted += 1;
             return;
         }
-        if taint.flags & FLAG_COUNTERS != 0 {
+        if taint.flags & FLAG_EFFECTS != 0 {
             self.flow_memo.stats.counters += 1;
             return;
         }
@@ -440,6 +441,7 @@ impl Checker {
         }
         if self.flow_memo.mode == FlowMemoMode::Shadow {
             self.flow_memo_shadow_key_bytes(f);
+            self.flow_memo.shadow_origin_next = (f.reference.get(), entry_depth);
         }
         let epoch = if taint.flags & FLAG_TYPE_CACHE != 0 { self.flow_memo.type_cache_epoch } else { 0 };
         let count_reset = taint.flags & FLAG_COUNT_RESET != 0;
@@ -459,13 +461,23 @@ impl Checker {
         self.flow_memo.stats.fills += 1;
     }
 
+    /// Shadow mode: checks the answers the memo had for this frame's nodes against what the frame computed.
+    #[inline]
+    fn flow_memo_shadow_settle(&mut self, f: P<FlowState>, marks: FrameMarks, entry_depth: i32, key: u128, t: FlowType, taint: FrameTaint) {
+        if self.flow_memo.shadow_hits.len() > marks.shadow as usize {
+            for shadow_hit in self.flow_memo.shadow_hits.split_off(marks.shadow as usize) {
+                self.flow_memo_shadow_check(f, entry_depth, t, taint, shadow_hit);
+            }
+        }
+    }
+
     /// Shadow mode: the frame was walked although the memo had an answer; they must agree.
     #[cold]
-    #[expect(clippy::too_many_arguments, reason = "everything the report prints")]
-    fn flow_memo_shadow_check(&mut self, f: P<FlowState>, flow: P<FlowNode>, entry_depth: i32, key: u128, t: FlowType, taint: FrameTaint, hit: MemoHit) {
+    fn flow_memo_shadow_check(&mut self, f: P<FlowState>, entry_depth: i32, t: FlowType, taint: FrameTaint, shadow_hit: ShadowHit) {
         self.flow_memo.stats.shadow_checks += 1;
         self.flow_memo_shadow_key_bytes(f);
-        let same_key = self.flow_memo.shadow_key(flow, key) == Some(self.flow_memo.key_buf.as_slice());
+        let ShadowHit { flow, hit, full_key, origin: (origin, origin_depth) } = shadow_hit;
+        let same_key = full_key.as_deref() == Some(self.flow_memo.key_buf.as_slice());
         if t.t == Some(hit.t) && !t.incomplete && same_key {
             return;
         }
@@ -474,8 +486,11 @@ impl Checker {
         let walked = t.t.map_or(String::new(), |t| self.type_to_string(t, None));
         let memo = self.type_to_string(hit.t, None);
         panic!(
-            "TSRS_FLOW_MEMO=shadow: memo and walk disagree for reference at {file}:{} (flow node at depth {entry_depth}): walked {walked} (type {:?}, incomplete {}, taint {}/{}), memo {memo} (type {:?}, height {}), same key {same_key}",
+            "TSRS_FLOW_MEMO=shadow: memo and walk disagree for reference at {file}:{} (flow node {:?} of node at {:?} in a frame at depth {entry_depth}; memo from reference at {:?} depth {origin_depth}): walked {walked} (type {:?}, incomplete {}, taint {}/{}), memo {memo} (type {:?}, height {}), same key {same_key}",
             reference.pos(),
+            flow.flags(),
+            flow.node().map(|n| (n.pos(), n.end(), n.kind())),
+            origin.map(|n| n.pos()),
             t.t.map(|t| t.id.0),
             t.incomplete,
             taint.transient,
