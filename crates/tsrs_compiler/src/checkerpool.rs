@@ -561,6 +561,13 @@ impl checkerPool {
                 program.bind_source_files();
                 tsrs_core::ptr::shared_check::freeze_shared_objects();
             }
+            // TSRS_PREASSIGN_IDS=1 (measurement): give every node and binder symbol its id before the checkers exist, so
+            // checking never writes into the shared AST (checkerpool_procs.rs).
+            if self.checker_count > 1 && std::env::var("TSRS_PREASSIGN_IDS").is_ok() {
+                let t = std::time::Instant::now();
+                crate::checkerpool_procs::preassign_ids(program, &program.files);
+                tsrs_core::phases::record("Checkers: pre-assign ids", t.elapsed());
+            }
             let create_start = std::time::Instant::now();
             #[cfg(feature = "checker")]
             tsrs_checker::links::set_multiple_checkers(self.checker_count > 1);

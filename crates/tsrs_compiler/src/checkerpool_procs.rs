@@ -149,7 +149,7 @@ fn warmup_files(program: &Program, files: &[P<SourceFile>], checked: &[bool], we
 // Deterministic: each file gets a range of node ids and of symbol ids (prefix sums of a counting pass) and assigns
 // them in tree order; a symbol belongs to the file of its first declaration. Runs on the worker pool, which is idle
 // again when this returns.
-fn preassign_ids(program: &Program, files: &[P<SourceFile>]) -> (u64, u64) {
+pub(crate) fn preassign_ids(program: &Program, files: &[P<SourceFile>]) -> (u64, u64) {
     use rayon::prelude::*;
     fn owned(symbol: P<tsrs_ast::Symbol>, file: P<SourceFile>) -> bool {
         tsrs_ast::symbol_id_unset(symbol)
