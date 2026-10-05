@@ -43,6 +43,16 @@ pub(crate) fn checker_processes_for(program: &Program) -> usize {
     n
 }
 
+// TSRS_CHECKER_PROCESSES_PAUSE=<dir> (measurement): when a process has checked its slice it creates `<dir>/<name>`;
+// children then wait for `<dir>/go`, so the physical memory of the whole process tree can be taken at its peak.
+fn pause_point(name: &str, wait: bool) {
+    let Ok(dir) = std::env::var("TSRS_CHECKER_PROCESSES_PAUSE") else { return };
+    let _ = std::fs::write(format!("{dir}/{name}"), std::process::id().to_string());
+    while wait && !std::path::Path::new(&format!("{dir}/go")).exists() {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+}
+
 fn stats_enabled() -> bool {
     std::env::var("TSRS_CHECKER_PROCESSES_STATS").is_ok_and(|v| !v.is_empty() && v != "0")
 }
@@ -206,6 +216,7 @@ impl checkerPool {
             }
             let globals = guard.get_global_diagnostics();
             let wall = child_start.elapsed().as_secs_f64();
+            pause_point(&format!("child-{slice}"), true);
             let encode_file = |f: P<SourceFile>| *file_index.get(&f).expect("a diagnostic in a file of the program");
             let mut out = Vec::new();
             // Every file of the slice, warm-up files included: checking later files may have added to their
@@ -257,6 +268,7 @@ impl checkerPool {
                 parent_info.1 = parent_start.elapsed().as_secs_f64();
                 parent_info.2 = thread_cpu_seconds() - cpu;
             }
+            pause_point("parent", false);
             (reader.join().expect("checker process reader"), parent_info)
         });
         let outputs = outputs.unwrap_or_else(|e| panic!("tsrs: internal error: {e}"));
