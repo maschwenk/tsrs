@@ -127,8 +127,15 @@ pub struct IdLinkStore<V: 'static> {
 
 enum IdPage {
     Dense(Box<[u32; ID_PAGE]>),
+    /// A dense page whose slots all lie in `before + 1..=before + 2^16 - 1`: 2 bytes per id (`slot - before`,
+    /// 0 = no links) instead of 4 (notes/mem-checker-heap.md). Every new dense page starts narrow; `before` is one
+    /// less than the first slot it gets (wrapping; slots only grow), and it becomes `Dense` when a slot does not fit.
+    Narrow { before: u32, slots: Box<[u16; ID_PAGE]> },
     Sparse(Box<SparseIdPage>),
 }
+
+const _: () = assert!(std::mem::size_of::<Option<IdPage>>() == 16);
+
 
 /// The ids of a page that have links (bit `i % 64` of word `i / 64`), the number of set bits before each word, and
 /// the slots of the present ids in id order.
@@ -246,9 +253,24 @@ impl<V: 'static> IdLinkStore<V> {
     #[inline]
     fn narrow_slot(&self, id: u32) -> Option<u32> {
         let id = id as usize;
-        match self.pages.get(id >> ID_PAGE_SHIFT)?.as_ref()? {
-            IdPage::Dense(page) => page[id & (ID_PAGE - 1)].checked_sub(1),
-            IdPage::Sparse(page) => page.slot(id & (ID_PAGE - 1)),
+        let page = self.pages.get(id >> ID_PAGE_SHIFT)?.as_ref()?;
+        // Narrow pages first: nearly all pages are narrow, and the test plus the add cost what the dense form's
+        // `checked_sub` did.
+        if let IdPage::Narrow { before, slots } = page {
+            return match slots[id & (ID_PAGE - 1)] {
+                0 => None,
+                offset => Some(before.wrapping_add(offset as u32)),
+            };
+        }
+        Self::wide_page_slot(page, id & (ID_PAGE - 1))
+    }
+
+    #[inline(never)]
+    fn wide_page_slot(page: &IdPage, i: usize) -> Option<u32> {
+        match page {
+            IdPage::Dense(page) => page[i].checked_sub(1),
+            IdPage::Narrow { .. } => unreachable!("narrow pages are read inline"),
+            IdPage::Sparse(page) => page.slot(i),
         }
     }
 
@@ -276,6 +298,7 @@ impl<V: 'static> IdLinkStore<V> {
         use crate::heapcensus::{HeapSize, HeapStat};
         let mut dense = HeapStat { slot: 4, ..HeapStat::default() };
         let mut sparse = HeapStat { slot: 4, ..HeapStat::default() };
+        let mut narrow = HeapStat { slot: 2, ..HeapStat::default() };
         for page in self.pages.iter().flatten() {
             match page {
                 IdPage::Dense(page) => {
@@ -283,6 +306,12 @@ impl<V: 'static> IdLinkStore<V> {
                     dense.len += page.iter().filter(|&&s| s != 0).count() as u64;
                     dense.cap += ID_PAGE as u64;
                     dense.bytes += std::mem::size_of::<[u32; ID_PAGE]>() as u64;
+                }
+                IdPage::Narrow { slots, .. } => {
+                    narrow.containers += 1;
+                    narrow.len += slots.iter().filter(|&&s| s != 0).count() as u64;
+                    narrow.cap += ID_PAGE as u64;
+                    narrow.bytes += std::mem::size_of::<[u16; ID_PAGE]>() as u64;
                 }
                 IdPage::Sparse(page) => {
                     sparse.containers += 1;
@@ -295,6 +324,7 @@ impl<V: 'static> IdLinkStore<V> {
         vec![
             ("page vector", self.pages.heap_stat()),
             ("dense pages", dense),
+            ("narrow pages", narrow),
             ("sparse pages", sparse),
             ("wide ids", self.wide_slots.heap_stat()),
             ("chunk list", self.chunks.heap_stat()),
@@ -331,12 +361,25 @@ impl<V: Default + 'static> IdLinkStore<V> {
                 if sparse {
                     IdPage::Sparse(Box::new(SparseIdPage { bits: [0; ID_PAGE / 64], before: [0; ID_PAGE / 64], slots: Vec::new() }))
                 } else {
-                    IdPage::Dense(Box::new([0; ID_PAGE]))
+                    IdPage::Narrow { before: slot.wrapping_sub(1), slots: Box::new([0; ID_PAGE]) }
                 }
             });
             let i = id as usize & (ID_PAGE - 1);
             match page {
                 IdPage::Dense(page) => page[i] = slot + 1,
+                IdPage::Narrow { before, slots } => match u16::try_from(slot.wrapping_sub(*before)) {
+                    Ok(offset) if offset != 0 => slots[i] = offset,
+                    _ => {
+                        let mut dense = Box::new([0u32; ID_PAGE]);
+                        for (d, &offset) in dense.iter_mut().zip(slots.iter()) {
+                            if offset != 0 {
+                                *d = before.wrapping_add(offset as u32) + 1;
+                            }
+                        }
+                        dense[i] = slot + 1;
+                        *page = IdPage::Dense(dense);
+                    }
+                },
                 IdPage::Sparse(sparse_page) => {
                     sparse_page.insert(i, slot);
                     if sparse_page.slots.len() >= ID_PAGE_DENSE_AT {
@@ -443,6 +486,27 @@ impl<V: 'static> SymbolArenaLinkStore<V> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // A narrow page stores slot offsets from its first slot in 16 bits. A page that gets a link again after more
+    // than 2^16 other links must turn dense and keep every earlier id's slot.
+    #[test]
+    fn narrow_pages_turn_dense_without_losing_slots() {
+        let mut store: IdLinkStore<Cell<u64>> = IdLinkStore { sparse: false, ..IdLinkStore::default() };
+        let mut ids: Vec<u64> = vec![5, 7];
+        ids.extend((0..70_000u64).map(|i| 1024 + i));
+        ids.extend([9, 1023]);
+        for &id in &ids {
+            store.get(id).set(id + 1);
+        }
+        assert!(matches!(store.pages[0], Some(IdPage::Dense(_))));
+        assert!(matches!(store.pages[1], Some(IdPage::Narrow { .. })));
+        for &id in &ids {
+            assert_eq!(store.try_get(id).map(|v| (*v).get()), Some(id + 1), "id {id}");
+        }
+        for id in [0u64, 6, 8, 10, 1022, 71_100] {
+            assert!(store.try_get(id).is_none(), "id {id}");
+        }
+    }
 
     // A wrong rank in a sparse page hands out another id's links: the checker would read a foreign symbol's type
     // without any visible error. Every id must map to the slot it was given, before and after densification.
