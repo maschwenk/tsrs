@@ -43,7 +43,9 @@ language server it is `tsgo --lsp`: `tsrs --lsp -stdio`. `docs/EMIT.md` describe
 It ports the Go implementation in [microsoft/TypeScript](https://github.com/microsoft/TypeScript) (`tsc/internal`)
 at commit `b85298b6a81f` function for function, and the Go code is the specification: on the TypeScript conformance
 suite the output matches the reference on 13,458 of 13,462 error baselines and on all 12,779 `.types` and `.symbols`
-baselines; the four exceptions are test-harness artifacts. `docs/STATUS.md` has the details and the comparison on a
+baselines; the four exceptions are test-harness artifacts. These counts are in Go-compatible mode (`--checkerAssignment
+go`). By default, tsrs makes output independent of how files are split over checkers, which changes one test's
+`.types` / `.symbols` / `.d.ts` baselines by design (notes/perf-order-independence.md). `docs/STATUS.md` has the details and the comparison on a
 38k-file production codebase.
 
 ## What it does and doesn't do
@@ -56,6 +58,7 @@ against tsgo built from the same pinned commit.
 | --- | --- | --- |
 | Type checking (`tsc --noEmit`) | yes | 13,458 of 13,462 error baselines and all 12,779 `.types` / `.symbols` baselines match; same diagnostics on the 38k-file codebase |
 | Checker threads, `--singleThreaded`, `--pretty`, `--extendedDiagnostics`, `--listFiles`, `--listFilesOnly` | yes | |
+| Output independent of the checker count and assignment | yes (tsgo: no) | diagnostics and `.d.ts` identical for `--checkers 1`-16 and 20 random assignments on the error-rich corpora; `--checkerAssignment go` keeps tsgo's history-dependent output for byte-identity (notes/perf-order-independence.md) |
 | Options TypeScript 7 removed (ES5 target, AMD/UMD/System modules, `node10`/`classic` resolution, `baseUrl`, …) | rejected, as in tsgo | same TS5102 / TS5108 errors |
 | JavaScript emit | yes (since `0.3.0`) | all of tsgo's script transforms: type erasure, import elision, enums, namespaces, const enum inlining, CommonJS and ES modules, JSX, legacy and standard decorators, class fields, `using`, async and `for await`, and lowering for older targets (object rest/spread, `?.`, `??`, `**`, logical assignment). 13,392 `.js` baselines pass, 0 fail |
 | Declaration emit (`.d.ts`) | yes (since `0.3.0`) | part of the `.js` baselines |

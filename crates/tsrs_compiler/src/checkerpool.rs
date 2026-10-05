@@ -619,9 +619,9 @@ impl checkerPool {
 
     // checkerpool.go:476
     // forEachCheckerGroupDo runs one task per checker in parallel. Each task iterates the provided files,
-    // processing only those assigned to its checker. Within each checker's set, files are
-    // visited in their original order (load-bearing: another order can change the property order of
-    // types printed in messages, notes/perf-balance.md).
+    // processing only those assigned to its checker. Within each checker's set, files are visited in their original
+    // order (`visit_order`). Output does not depend on it in the default mode (notes/perf-order-independence.md); it
+    // keeps Go's history under `--checkerAssignment go` and the counters stable.
     pub(crate) fn for_each_checker_group_do(
         &self,
         files: &[P<SourceFile>],
@@ -640,7 +640,8 @@ impl checkerPool {
             let mut count = 0;
             let mut file_cpu: Vec<(P<SourceFile>, f64)> = Vec::new();
             let mut guard = state.checkers[checker_idx].0.lock().unwrap();
-            for (i, &file) in files.iter().enumerate() {
+            for i in visit_order(files.len()) {
+                let file = files[i];
                 if state.file_associations.get(&file) == Some(&checker_idx) {
                     let file_start = file_times.then(std::time::Instant::now);
                     let cpu_start = if cost_cache || file_times { thread_cpu_seconds() } else { 0.0 };
@@ -679,6 +680,29 @@ impl CheckerPool for checkerPool {
     fn get_checker(&self, _ctx: &Context, file: Option<P<SourceFile>>) -> CheckerHandle {
         self.get_checker_exclusive(file)
     }
+}
+
+// The order in which a checker group visits `count` files: program order, or with `TSRS_CHECKER_ASSIGNMENT=random:<seed>`
+// a permutation drawn from the seed (a debug mode that checks that output does not depend on the visit order).
+fn visit_order(count: usize) -> Vec<usize> {
+    let mut order: Vec<usize> = (0..count).collect();
+    if let CheckerAssignment::Random(seed) = checker_assignment() {
+        // Fisher-Yates with splitmix64.
+        let mut state = seed ^ 0x9e37_79b9_7f4a_7c15;
+        for i in (1..count).rev() {
+            let j = (splitmix64(&mut state) % (i as u64 + 1)) as usize;
+            order.swap(i, j);
+        }
+    }
+    order
+}
+
+fn splitmix64(state: &mut u64) -> u64 {
+    *state = state.wrapping_add(0x9e37_79b9_7f4a_7c15);
+    let mut z = *state;
+    z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    z ^ (z >> 31)
 }
 
 // Go `createCheckers`' association step (FENNEL over the import graph, see above).
@@ -728,6 +752,10 @@ fn compute_associations(program: &Program, checker_count: usize) -> Vec<usize> {
     let associations = match checker_assignment() {
         CheckerAssignment::Go => go_associations(program, checker_count),
         CheckerAssignment::Locality => locality_associations(program, checker_count),
+        CheckerAssignment::Random(seed) => {
+            let mut state = seed;
+            (0..program.files.len()).map(|_| (splitmix64(&mut state) % checker_count as u64) as usize).collect()
+        }
         CheckerAssignment::File(path) => {
             let text = std::fs::read_to_string(path).expect("TSRS_CHECKER_ASSIGNMENT file");
             let associations: Vec<usize> = text.lines().map(|l| l.trim().parse::<usize>().unwrap().min(checker_count - 1)).collect();
@@ -849,10 +877,13 @@ pub(crate) fn write_cost_cache(program: &'static Program) {
 //   locality (default): directory-subtree groups packed onto checkers with Go's FENNEL (below)
 //   go:                 Go's createCheckers association (FENNEL over single files in program order)
 //   file:<path>:        one checker index per line by program file index (experiments)
+//   random:<seed>:      a random checker per file and a random visit order in each checker, drawn from the seed
+//                       (debug: output must not depend on the assignment)
 pub enum CheckerAssignment {
     Locality,
     Go,
     File(String),
+    Random(u64),
 }
 
 static CLI_CHECKER_ASSIGNMENT: OnceLock<String> = OnceLock::new();
@@ -863,6 +894,8 @@ pub fn set_checker_assignment_from_cli(name: &str) -> bool {
         return false;
     }
     let _ = CLI_CHECKER_ASSIGNMENT.set(name.to_string());
+    // `go` also means Go's check history in the caches that have two behaviours (tsrs_core::compat).
+    tsrs_core::compat::set_go_compatible_history(name == "go");
     true
 }
 
@@ -870,7 +903,10 @@ fn parse_checker_assignment(name: &str) -> Option<CheckerAssignment> {
     match name {
         "" | "locality" => Some(CheckerAssignment::Locality),
         "go" => Some(CheckerAssignment::Go),
-        _ => name.strip_prefix("file:").map(|p| CheckerAssignment::File(p.to_string())),
+        _ => match name.strip_prefix("random:") {
+            Some(seed) => seed.parse::<u64>().ok().map(CheckerAssignment::Random),
+            None => name.strip_prefix("file:").map(|p| CheckerAssignment::File(p.to_string())),
+        },
     }
 }
 
@@ -879,7 +915,7 @@ fn checker_assignment() -> CheckerAssignment {
         Some(name) => name.clone(),
         None => std::env::var("TSRS_CHECKER_ASSIGNMENT").unwrap_or_default(),
     };
-    parse_checker_assignment(&name).unwrap_or_else(|| panic!("unknown checker assignment {name:?} (locality, go, file:<path>)"))
+    parse_checker_assignment(&name).unwrap_or_else(|| panic!("unknown checker assignment {name:?} (locality, go, file:<path>, random:<seed>)"))
 }
 
 // A directory subtree whose checked weight is at most 1/LOCALITY_GROUP_FRACTION of an average checker load is

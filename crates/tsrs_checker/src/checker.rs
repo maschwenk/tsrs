@@ -973,6 +973,8 @@ pub struct Checker {
     pub cached_types: FxHashMap<CachedTypeKey, P<Type>>,
     pub cached_signatures: FxHashMap<CachedSignatureKey, P<Signature>>,
     pub undefined_properties: FxHashMap<String, P<Symbol>>,
+    // tsrs: the canonical (history-independent) form of `undefined_properties` (get_undefined_property).
+    pub undefined_properties_by_prop: FxHashMap<P<Symbol>, P<Symbol>>,
     pub narrowed_types: FxHashMap<NarrowedTypeKey, P<Type>>,
     pub assignment_reduced_types: FxHashMap<AssignmentReducedKey, P<Type>>,
     pub discriminated_contextual_types: FxHashMap<DiscriminatedContextualTypeKey, P<Type>>,
@@ -1358,6 +1360,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         cached_types: FxHashMap::default(),
         cached_signatures: FxHashMap::default(),
         undefined_properties: FxHashMap::default(),
+        undefined_properties_by_prop: FxHashMap::default(),
         narrowed_types: FxHashMap::default(),
         assignment_reduced_types: FxHashMap::default(),
         discriminated_contextual_types: FxHashMap::default(),

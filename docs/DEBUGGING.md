@@ -60,12 +60,16 @@ fewer symbols, types and instantiations than `tsgo-ref` (it equals tsgo with bot
 ## Checker assignment (multi-checker counters)
 
 With more than one checker, tsrs assigns files to checkers by directory locality by default
-(`--checkerAssignment locality`, notes/mem-assignment.md); Go uses FENNEL over single files. Per-file diagnostics
-do not depend on it, but multi-checker symbol/type/instantiation counters and peak memory do: compare them
-against `tsgo-ref` with `--checkerAssignment go` (or `TSRS_CHECKER_ASSIGNMENT=go`). Single-threaded runs are
-unaffected. `--checkerCostCache <file>` (opt-in, locality only) balances the checkers on the previous run's
-per-file CPU times (notes/perf-balance.md); `TSRS_ASSIGNMENT_STATS=times` prints per-checker wall and CPU seconds.
-Inside a checker, files must stay in program order: reordering them can change printed types in messages.
+(`--checkerAssignment locality`, notes/mem-assignment.md); Go uses FENNEL over single files. Diagnostics and emitted
+files do not depend on the assignment (notes/perf-order-independence.md), but multi-checker
+symbol/type/instantiation counters and peak memory do: compare them against `tsgo-ref` with `--checkerAssignment go`
+(or `TSRS_CHECKER_ASSIGNMENT=go`). `go` also restores Go's check history in the one cache where tsgo's output depends on
+what a checker saw first (`tsrs_core::compat`), so it is the mode for byte-identity with tsgo. The conformance,
+fourslash and tsc harnesses run in it; set `TSRS_CHECKER_ASSIGNMENT=locality` to run them in the default mode.
+`TSRS_CHECKER_ASSIGNMENT=random:<seed>` puts each file on a random checker with a random visit order in each checker:
+the default mode must print the same text for every seed and checker count. Single-threaded runs have no assignment.
+`--checkerCostCache <file>` (opt-in, locality only) balances the checkers on the previous run's per-file CPU times
+(notes/perf-balance.md); `TSRS_ASSIGNMENT_STATS=times` prints per-checker wall and CPU seconds.
 
 ## `.types` / `.symbols` equivalence on the private monorepo against the cached reference
 

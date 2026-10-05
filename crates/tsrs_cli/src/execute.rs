@@ -64,12 +64,12 @@ pub fn command_line_with_testing(
             args.retain(|a| !a.eq_ignore_ascii_case(flag));
         }
     }
-    // tsrs-only: `--checkerAssignment <locality|go>` picks how files are assigned to checkers
-    // (tsrs_compiler checkerpool.rs; `go` is Go's FENNEL assignment).
+    // tsrs-only: `--checkerAssignment <locality|go|random:<seed>>` picks how files are assigned to checkers
+    // (tsrs_compiler checkerpool.rs; `go` is Go's FENNEL assignment and Go's check history, tsrs_core::compat).
     if let Some(pos) = args.iter().position(|a| a.eq_ignore_ascii_case("--checkerAssignment")) {
         let name = args.get(pos + 1).cloned().unwrap_or_default();
         if !tsrs_compiler::set_checker_assignment_from_cli(&name) {
-            sys.write(&format!("error: unknown --checkerAssignment {name:?} (expected locality or go).\n"));
+            sys.write(&format!("error: unknown --checkerAssignment {name:?} (expected locality, go or random:<seed>).\n"));
             return CommandLineResult { status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
         }
         args.drain(pos..(pos + 2).min(args.len()));

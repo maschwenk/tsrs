@@ -15,6 +15,8 @@ fn usage() -> ExitCode {
 }
 
 fn main() -> ExitCode {
+    // The baselines are tsgo's output: keep Go's check history (tsrs_core::compat).
+    tsrs_core::compat::use_go_history_for_tsgo_baselines();
     let args: Vec<String> = std::env::args().skip(1).collect();
     let Some(cmd) = args.first() else {
         return usage();
