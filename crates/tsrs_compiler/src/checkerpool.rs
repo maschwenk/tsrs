@@ -206,7 +206,7 @@ fn run_work_group(single_threaded: bool, count: usize, task: impl Fn(usize) + Sy
 // A checker is mutated only while its mutex is held, by exactly one thread at a time; the pool
 // never hands out references that outlive the guard. The checker's deferred closures are not
 // `Send`, which is the only reason this wrapper is needed.
-struct CheckerSlot(Mutex<Box<Checker>>);
+pub(crate) struct CheckerSlot(pub(crate) Mutex<Box<Checker>>);
 #[expect(clippy::non_send_fields_in_send_ty, reason = "the checker: touched only under its mutex (see above)")]
 // SAFETY: the checker's non-`Send` parts are reachable only from the checker, which is reached only through the mutex.
 unsafe impl Send for CheckerSlot {}
@@ -225,7 +225,9 @@ impl Drop for poolState {
 
 pub(crate) struct poolState {
     // Leaked like the program that owns the pool, so a handle can hold a checker's lock without borrowing the pool.
-    checkers: &'static [CheckerSlot],
+    pub(crate) checkers: &'static [CheckerSlot],
+    // Process mode only (checkerpool_procs.rs): the slices of the worker processes and what they reported.
+    pub(crate) processes: Option<crate::checkerpool_procs::ProcessState>,
     file_associations: FxHashMap<P<SourceFile>, usize>,
     // Checker index per program file index.
     pub(crate) associations: Vec<usize>,
@@ -309,10 +311,12 @@ pub fn assignment_stats_enabled() -> bool {
 }
 
 pub(crate) struct checkerPool {
-    program: &'static Program,
+    pub(crate) program: &'static Program,
     checker_count: usize,
     single_threaded: bool,
     state: OnceLock<poolState>,
+    // Worker processes (checkerpool_procs.rs); 0 for checker threads. With processes the pool has one checker.
+    pub(crate) processes: usize,
 }
 
 /*
@@ -506,7 +510,11 @@ impl checkerPool {
         // Go `max(min(checkerCount, len(files), 256), 1)` on int: a negative or zero count is one checker.
         let checker_count = checker_count.min(program.files.len() as i64).min(256).max(1) as usize;
 
-        checkerPool { program, checker_count, single_threaded: program.single_threaded() || checker_count == 1, state: OnceLock::new() }
+        let processes = crate::checkerpool_procs::checker_processes_for(program).min(program.files.len());
+        if processes > 1 {
+            return checkerPool { program, checker_count: 1, single_threaded: true, state: OnceLock::new(), processes };
+        }
+        checkerPool { program, checker_count, single_threaded: program.single_threaded() || checker_count == 1, state: OnceLock::new(), processes: 0 }
     }
 
     // checkerpool.go:331
@@ -570,8 +578,13 @@ impl checkerPool {
             for (i, &file) in files.iter().enumerate() {
                 file_associations.insert(file, associations[i]);
             }
+            let processes = (self.processes > 1).then(|| {
+                let slices = tsrs_core::phases::time("Checkers: assign slices", || compute_associations(program, self.processes));
+                crate::checkerpool_procs::ProcessState::new(slices, self.processes)
+            });
             poolState {
                 checkers,
+                processes,
                 file_associations,
                 associations,
                 group_runs: Mutex::new(Vec::new()),
@@ -613,7 +626,8 @@ impl checkerPool {
         self.for_each_checker_parallel(|idx, checker| {
             *global_diagnostics[idx].lock().unwrap() = checker.get_global_diagnostics();
         });
-        let all: Vec<P<Diagnostic>> = global_diagnostics.into_iter().flat_map(|d| d.into_inner().unwrap()).collect();
+        let mut all: Vec<P<Diagnostic>> = global_diagnostics.into_iter().flat_map(|d| d.into_inner().unwrap()).collect();
+        all.extend(self.process_globals());
         sort_and_deduplicate_diagnostics(&all)
     }
 
@@ -1151,7 +1165,7 @@ fn refine_group_associations(associations: &mut [usize], costs: &[i64], adjacenc
 // unchecked files already weigh 0, so declaration files that are checked (no skipLibCheck) get it too. Measured
 // on webpack (642 checked declaration files): 393 ns of check CPU per base unit for declaration files, 536 for
 // sources; with 4 checkers the slowest checker (the one holding the lib files) went from 53% to 12% above the mean.
-fn checked_file_weights(program: &Program) -> Vec<i64> {
+pub(crate) fn checked_file_weights(program: &Program) -> Vec<i64> {
     let files = &program.files;
     let checked: Vec<bool> = files
         .iter()
@@ -1214,15 +1228,14 @@ fn dump_assignment_inputs(program: &Program, associations: &[usize], path: &str)
     std::fs::write(format!("{path}.edges.tsv"), out).expect("TSRS_ASSIGNMENT_DUMP");
 }
 
-// getImportAdjacency returns an undirected import graph represented by file index.
-fn get_import_adjacency(program: &Program) -> Vec<Vec<usize>> {
+// The in-program import targets of each file, by file index, in resolution-map order (looking a resolved file name up
+// normalizes it, so this runs on the worker pool).
+pub(crate) fn get_import_targets(program: &Program) -> Vec<Vec<usize>> {
     let files = &program.files;
     let mut file_indices: FxHashMap<P<SourceFile>, usize> = FxHashMap::default();
     for (i, &file) in files.iter().enumerate() {
         file_indices.insert(file, i);
     }
-    // The in-program import targets of each file, in resolution-map order (looking a resolved file name up
-    // normalizes it, so this part runs on the worker pool); the adjacency lists are then built in file order.
     let targets_of = |file_index: usize| -> Vec<usize> {
         let Some(resolved_modules) = program.resolved_modules.get(files[file_index].path()) else {
             return Vec::new();
@@ -1237,13 +1250,18 @@ fn get_import_adjacency(program: &Program) -> Vec<Vec<usize>> {
             .filter(|&imported_index| imported_index != file_index)
             .collect()
     };
-    let targets: Vec<Vec<usize>> = if program.single_threaded() {
+    if program.single_threaded() {
         (0..files.len()).map(targets_of).collect()
     } else {
         use rayon::prelude::*;
         crate::program::worker_pool().install(|| (0..files.len()).into_par_iter().map(targets_of).collect())
-    };
-    let mut adjacent_files: Vec<Vec<usize>> = vec![Vec::new(); files.len()];
+    }
+}
+
+// getImportAdjacency returns an undirected import graph represented by file index.
+fn get_import_adjacency(program: &Program) -> Vec<Vec<usize>> {
+    let targets = get_import_targets(program);
+    let mut adjacent_files: Vec<Vec<usize>> = vec![Vec::new(); program.files.len()];
     for (file_index, file_targets) in targets.into_iter().enumerate() {
         for imported_index in file_targets {
             adjacent_files[file_index].push(imported_index);

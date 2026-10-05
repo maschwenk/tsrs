@@ -274,6 +274,10 @@ fn perform_compilation(
         Some(get_trace_from_sys(sys, testing)),
     );
 
+    // One program in this process and nothing else running: the checker pool may fork worker processes.
+    if testing.is_none() {
+        tsrs_compiler::allow_checker_processes();
+    }
     let parse_start = sys.now();
     let program = new_program(ProgramOptions::new(config, host));
     compile_times.parse_time = sys.now() - parse_start;

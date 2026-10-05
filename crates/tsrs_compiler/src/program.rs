@@ -950,6 +950,10 @@ impl Program {
         source_files: &[P<SourceFile>],
         collect: &(impl Fn(&Context, &mut Checker, P<SourceFile>) -> Vec<P<Diagnostic>> + Sync),
     ) -> Vec<Vec<P<Diagnostic>>> {
+        #[cfg(unix)]
+        if let Some(pool) = self.compiler_checker_pool().filter(|p| p.processes_pending() && std::ptr::eq(source_files, self.files)) {
+            return pool.check_in_processes(source_files, &|c: &mut Checker, file: P<SourceFile>| collect(ctx, c, file));
+        }
         let diagnostics: Vec<Mutex<Vec<P<Diagnostic>>>> = source_files.iter().map(|_| Mutex::new(Vec::new())).collect();
         if let Some(pool) = self.compiler_checker_pool() {
             pool.for_each_checker_group_do(source_files, self.single_threaded(), |c, file_index, file| {
@@ -2075,7 +2079,7 @@ impl Program {
         self.for_each_checker_parallel(|_, c| {
             val.fetch_add(c.symbol_count as usize, std::sync::atomic::Ordering::Relaxed);
         });
-        val.into_inner()
+        val.into_inner() + self.compiler_checker_pool().map_or(0, |p| p.process_counts().1 as usize)
     }
 
     pub fn type_count(&'static self) -> usize {
@@ -2083,7 +2087,7 @@ impl Program {
         self.for_each_checker_parallel(|_, c| {
             val.fetch_add(c.type_count as usize, std::sync::atomic::Ordering::Relaxed);
         });
-        val.into_inner()
+        val.into_inner() + self.compiler_checker_pool().map_or(0, |p| p.process_counts().0 as usize)
     }
 
     pub fn instantiation_count(&'static self) -> usize {
@@ -2091,7 +2095,7 @@ impl Program {
         self.for_each_checker_parallel(|_, c| {
             val.fetch_add(c.total_instantiation_count as usize, std::sync::atomic::Ordering::Relaxed);
         });
-        val.into_inner()
+        val.into_inner() + self.compiler_checker_pool().map_or(0, |p| p.process_counts().2 as usize)
     }
 
     pub fn lazy_member_stats(&'static self) -> tsrs_core::lazymembers::LazyMemberStats {

@@ -19,6 +19,8 @@ pub mod jsnum;
 pub mod json;
 pub mod lazymembers;
 pub mod phases;
+#[cfg(unix)]
+pub mod procs;
 pub mod semver;
 pub mod sitecount;
 pub mod stringutil;
