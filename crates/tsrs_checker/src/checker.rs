@@ -972,7 +972,7 @@ pub struct Checker {
     pub subtype_reduction_cache: FxHashMap<CacheHashKey, &'static [P<Type>]>,
     pub cached_types: FxHashMap<CachedTypeKey, P<Type>>,
     pub cached_signatures: FxHashMap<CachedSignatureKey, P<Signature>>,
-    pub undefined_properties: FxHashMap<String, P<Symbol>>,
+    pub undefined_properties: FxHashMap<P<Symbol>, P<Symbol>>,
     pub narrowed_types: FxHashMap<NarrowedTypeKey, P<Type>>,
     pub assignment_reduced_types: FxHashMap<AssignmentReducedKey, P<Type>>,
     pub discriminated_contextual_types: FxHashMap<DiscriminatedContextualTypeKey, P<Type>>,
