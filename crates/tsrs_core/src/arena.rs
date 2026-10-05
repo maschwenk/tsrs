@@ -33,6 +33,14 @@ use std::sync::{Arc, Condvar, Mutex, RwLock, Weak};
 const FIRST_CHUNK: usize = 1 << 20;
 const CHUNK_ALIGN: usize = 16;
 const PAGE: usize = 4096;
+/// Linux with compressed pointers: thread-arena chunks of at least this size (all but a thread's first chunk) are
+/// whole 2 MiB blocks backed by transparent huge pages (`reserve::alloc_chunk`), and their sizes are rounded to it,
+/// since an unused tail would be resident with the huge page it shares. A thread that allocates less than its first
+/// chunk keeps 4 KiB pages. `None` elsewhere.
+#[cfg(all(compressed_ptrs, target_os = "linux"))]
+const HUGE_THREAD_CHUNK: Option<usize> = Some(crate::reserve::HUGE_CHUNK);
+#[cfg(not(all(compressed_ptrs, target_os = "linux")))]
+const HUGE_THREAD_CHUNK: Option<usize> = None;
 /// Largest chunk a thread arena grows to in compressed mode (larger single allocations still get their own size).
 #[cfg(compressed_ptrs)]
 const MAX_CHUNK: usize = 64 << 20;
@@ -204,9 +212,10 @@ impl Arena {
             self.slabs.borrow_mut().push(slab);
             self.new_chunk_at(base, size);
         } else {
-            let size = size.div_ceil(PAGE) * PAGE;
+            let huge = HUGE_THREAD_CHUNK.filter(|&h| size >= h);
+            let size = size.next_multiple_of(huge.unwrap_or(PAGE));
             let layout = Layout::from_size_align(size, CHUNK_ALIGN).expect("arena chunk layout");
-            self.new_chunk_at(os_chunk(layout), size);
+            self.new_chunk_at(os_chunk(layout, huge.is_some()), size);
         }
     }
 
@@ -412,10 +421,13 @@ fn census_chunk(size: usize) -> *mut u8 {
     p.cast()
 }
 
-/// A chunk for a thread's arena (or a slab). Compressed pointers: from the process-wide reservation (`reserve`).
-fn os_chunk(layout: Layout) -> *mut u8 {
+/// A chunk for a thread's arena or a slab. Compressed pointers: from the process-wide reservation (`reserve`), where
+/// `huge` asks for transparent huge pages on Linux.
+fn os_chunk(layout: Layout, huge: bool) -> *mut u8 {
     #[cfg(compressed_ptrs)]
-    return crate::reserve::alloc_chunk(layout.size());
+    return crate::reserve::alloc_chunk(layout.size(), huge);
+    #[cfg(not(compressed_ptrs))]
+    let _ = huge;
     #[cfg(all(feature = "alloc-profile", not(compressed_ptrs)))]
     let base = census_chunk(layout.size());
     #[cfg(not(any(feature = "alloc-profile", compressed_ptrs)))]
@@ -472,7 +484,7 @@ fn new_slab(size: usize, live: usize) -> *const Slab {
             return Box::into_raw(Box::new(Slab { base, size, live: AtomicUsize::new(live) }));
         }
     }
-    let base = os_chunk(Layout::from_size_align(size, CHUNK_ALIGN).expect("arena slab layout"));
+    let base = os_chunk(Layout::from_size_align(size, CHUNK_ALIGN).expect("arena slab layout"), false);
     Box::into_raw(Box::new(Slab { base, size, live: AtomicUsize::new(live) }))
 }
 

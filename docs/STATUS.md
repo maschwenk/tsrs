@@ -324,3 +324,7 @@ identical. Details: `notes/mem-small.md`.
 ## 2026-10-01: first Linux profile (x86_64 cloud VM)
 
 The private monorepo on an 18-vCPU x86_64 sandbox VM (kernel 7.2, THP `madvise`): release 0.1.5 takes 37-48 s with one checker and 16-20 s with four (TS 7.1 nightly `tsc`: 127 s / 75 s), sys 3.5-7.7 s, ~25 K page faults, because mimalloc already puts ~97% of memory on transparent huge pages (THP off: +11-12% wall); explicit `MADV_HUGEPAGE` on arena chunks changes no wall time (-2% RSS) and pre-faulting adds 16-36% RSS for nothing, so nothing landed. Details: `notes/linux-perf.md`.
+
+## 2026-10-05: huge pages for the compressed arena on Linux
+
+Pointer compression moved the arena out of mimalloc into a 32 GiB reservation that never asked for transparent huge pages, so on Linux hosts with THP `madvise` (Ubuntu's default) the arena ran on 4 KiB pages: ~0.9 M page faults per 4-checker run of the private monorepo instead of ~30 K. Thread-arena chunks from 2 MiB up are now 2 MiB-aligned and advised with `MADV_HUGEPAGE`: 2-6% less wall time, a third less sys time, half the dTLB misses, +0.1-0.7% peak RSS; macOS unchanged. With huge pages on both sides, compressed handles cost about 1% of wall time against `plain-ptrs` on x86-64, not the 4-7% measured before. Details: `notes/linux-x86-round.md`.
