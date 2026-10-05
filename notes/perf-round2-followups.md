@@ -58,8 +58,10 @@ pointer compression costs about +4.9% instructions and took back most of the che
 5. **Checker CPU**: round 3 landed (#66, notes/perf-checker-cpu3.md): -4.2% / -5.0% instructions (one / four
    checkers), check time -3.3% / -3.7%. Full name interning was not done: 43% of symbol-table hits already use the
    same string and now skip the comparison; the rest would need the parser to intern every identifier (+9% parse
-   time, rejected earlier) for about 0.2%. Handle-to-reference conversions are ~1.2% of samples on arm64; the x86
-   side (zero-extends 1.5 points, shifts 1.2) is unmeasured after round 3.
+   time, rejected earlier) for about 0.2%. Handle-to-reference conversions are ~1.2% of samples on arm64; on x86
+   zero-based handles, re-measured with huge pages, remove 2.2% of the instructions for -0.4% / -3.2% cycles (one /
+   four checkers, notes/linux-x86-round.md part 2). The x86 profile's own list (relation cache = 11% of L3 misses,
+   node link stores, instantiation caches) is in that note.
 6. **Smaller layouts that handles now allow** (notes/mem-pointer-compression.md, "Not done"): `Type` header 24 -> 20
    bytes (at most ~38 MB), `TypeMapper` below 16 bytes (needs a home for its kind and escape bits).
 7. **The "nothing changed" fast path** (notes/perf-dev-loop.md): exact conditions written up; it still has to
@@ -71,8 +73,17 @@ pointer compression costs about +4.9% instructions and took back most of the che
 ## Measured and rejected (do not redo)
 
 - Zero-based handles on Linux (reserve 4-32 GiB so a dereference needs no base; #62, notes/mem-pointer-compression.md
-  section 6): removes 2.7 of the 7 points of extra x86 instructions, but wall and cycles move by 0.7-2%, inside the
-  host's drift, and it adds low-address-space failure modes. The rest of the cost is the 32-bit handle itself.
+  section 6 on that branch): removes 2.7 of the 7 points of extra x86 instructions, but wall and cycles move by 0.7-2%,
+  inside the host's drift, and it adds low-address-space failure modes. The rest of the cost is the 32-bit handle
+  itself. Re-measured once the compressed arena had huge pages again (notes/linux-x86-round.md part 2): -2.2%
+  instructions, wall -0.4% / -2.2% and cycles -0.4% / -3.2% with one / four checkers; still not worth the failure
+  modes.
+- `-C target-cpu=x86-64-v2` / `-v3` for the Linux x64 release (notes/linux-x86-round.md part 2): v3 retires 0.6% fewer
+  instructions and takes 1-2% more cycles, v2 changes nothing. Nothing to ship.
+- mimalloc purge delay (never, 10 s) and eager arena commit on Linux (same note): page faults -54..-77% but no
+  consistent change in cycles; eager commit +3.7% cycles.
+- Faster file reading for the front end (`io_uring`, `readahead`, fewer syscalls): not tried, the front end is 5.6-6.6%
+  of a 4- or 8-checker run on Linux x86 (same note), below the bar where it could pay.
 
 - Hub-edit shortcut, storing file versions as signatures when an edit re-checks most of the program (#64): hub edit
   10.7 -> 7.9 s, global `.d.ts` 18.0 -> 7.2 s, but the first later body-only edit of each skipped file re-checks the
