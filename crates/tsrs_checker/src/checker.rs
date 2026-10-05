@@ -932,6 +932,8 @@ pub struct Checker {
     pub signature_count: u32,
     pub total_instantiation_count: u32,
     pub instantiation_count: u32,
+    /// TSRS_WORK_CENSUS (workcensus.rs); None unless the variable is set.
+    pub census: Option<Box<crate::workcensus::Census>>,
     pub instantiation_stack: Vec<P<Type>>,
     pub conditional_constraint_depth: u32,
     pub inline_level: i32,
@@ -973,6 +975,8 @@ pub struct Checker {
     pub cached_types: FxHashMap<CachedTypeKey, P<Type>>,
     pub cached_signatures: FxHashMap<CachedSignatureKey, P<Signature>>,
     pub undefined_properties: FxHashMap<String, P<Symbol>>,
+    // tsrs: the canonical (history-independent) form of `undefined_properties` (get_undefined_property).
+    pub undefined_properties_by_prop: FxHashMap<P<Symbol>, P<Symbol>>,
     pub narrowed_types: FxHashMap<NarrowedTypeKey, P<Type>>,
     pub assignment_reduced_types: FxHashMap<AssignmentReducedKey, P<Type>>,
     pub discriminated_contextual_types: FxHashMap<DiscriminatedContextualTypeKey, P<Type>>,
@@ -1317,6 +1321,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         signature_count: 0,
         total_instantiation_count: 0,
         instantiation_count: 0,
+        census: crate::workcensus::census_path().map(|_| crate::workcensus::Census::new()),
         instantiation_stack: Vec::new(),
         conditional_constraint_depth: 0,
         inline_level: 0,
@@ -1358,6 +1363,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         cached_types: FxHashMap::default(),
         cached_signatures: FxHashMap::default(),
         undefined_properties: FxHashMap::default(),
+        undefined_properties_by_prop: FxHashMap::default(),
         narrowed_types: FxHashMap::default(),
         assignment_reduced_types: FxHashMap::default(),
         discriminated_contextual_types: FxHashMap::default(),

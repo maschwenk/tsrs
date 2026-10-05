@@ -60,12 +60,21 @@ fewer symbols, types and instantiations than `tsgo-ref` (it equals tsgo with bot
 ## Checker assignment (multi-checker counters)
 
 With more than one checker, tsrs assigns files to checkers by directory locality by default
-(`--checkerAssignment locality`, notes/mem-assignment.md); Go uses FENNEL over single files. Per-file diagnostics
-do not depend on it, but multi-checker symbol/type/instantiation counters and peak memory do: compare them
-against `tsgo-ref` with `--checkerAssignment go` (or `TSRS_CHECKER_ASSIGNMENT=go`). Single-threaded runs are
-unaffected. `--checkerCostCache <file>` (opt-in, locality only) balances the checkers on the previous run's
-per-file CPU times (notes/perf-balance.md); `TSRS_ASSIGNMENT_STATS=times` prints per-checker wall and CPU seconds.
-Inside a checker, files must stay in program order: reordering them can change printed types in messages.
+(`--checkerAssignment locality`, notes/mem-assignment.md); Go uses FENNEL over single files. Diagnostics and emitted
+files do not depend on the assignment (notes/perf-order-independence.md), but multi-checker
+symbol/type/instantiation counters and peak memory do: compare them against `tsgo-ref` with `--checkerAssignment go`
+(or `TSRS_CHECKER_ASSIGNMENT=go`). `go` also restores Go's check history in the one cache where tsgo's output depends on
+what a checker saw first (`tsrs_core::compat`), so it is the mode for byte-identity with tsgo. The conformance,
+fourslash and tsc harnesses run in it; set `TSRS_CHECKER_ASSIGNMENT=locality` to run them in the default mode.
+`TSRS_CHECKER_ASSIGNMENT=random:<seed>` puts each file on a random checker with a random visit order in each checker:
+the default mode must print the same text for every seed and checker count. Single-threaded runs have no assignment.
+Without a named assignment the type-check pass also steals work: a checker that has run out of files takes unstarted
+files from the back of the busiest checker (notes/perf-checker-stealing.md). Output is unchanged by it, but the
+counters vary from run to run; naming an assignment (`--checkerAssignment locality`) turns stealing off for fully
+reproducible counters. `TSRS_HISTORY=canonical` runs the tsgo-baseline harnesses in the default mode, stealing
+included, without naming an assignment.
+`--checkerCostCache <file>` (opt-in, locality only) balances the checkers on the previous run's per-file CPU times
+(notes/perf-balance.md); `TSRS_ASSIGNMENT_STATS=times` prints per-checker wall and CPU seconds.
 
 ## `.types` / `.symbols` equivalence on the private monorepo against the cached reference
 
@@ -131,6 +140,31 @@ packed word, flag bits above an address or a new enum payload is not). Stale reg
 (padding read as pointers) and hide real ones (pointer fields skipped); notes/census-regress.md is what happened
 when they were hard-coded offsets. A violation that survives that check is a real bug: fix the escape tracking or
 stop freeing that class.
+
+## Where checker time goes by source pattern: the work census
+
+A function profile cannot tell which type alias or call site the time belongs to. The work census
+(`crates/tsrs_checker/src/workcensus.rs`, notes/perf-checker-algorithms.md) attributes the checker's work to
+source-level identities: conditional types by root alias (with distribution fan-out and `never` results), mapped types
+by declaration and key count, generic calls by callee (and repeats of the same signature + argument types), relations
+by target symbol and relation kind (cache hit rates, pairs compared under several relations, how the constituent loop
+for union targets exits), flow walks by function (steps per walk, sampled re-walks), union construction /
+`removeSubtypes` / indexed access / `keyof` by size, export-assignment and initializer types.
+
+It is compiled in only with `--features work-census` (the runtime test alone costs 0.3-0.5% instructions):
+
+```sh
+CARGO_TARGET_DIR=target/census cargo build --release -p tsrs_cli --features work-census
+cd <project> && TSRS_WORK_CENSUS=/tmp/census.md target/census/release/tsrs -p . --noEmit --incremental false --extendedDiagnostics --checkers 1
+```
+
+The report (Markdown, written after `--extendedDiagnostics`) starts with per-category totals, then the top keys per
+category. Read "key incl" as the time spent under the outermost span of that key (recursion counted once) and "self"
+as the time minus every nested span; categories overlap, so shares do not add up. `TSRS_WORK_CENSUS_TOP=<n>` sets the
+rows per table (default 60); `TSRS_WORK_CENSUS_SLOW=<ms>` prints every mapped-type resolution slower than that, with
+the type. Use one checker: with several, each checker's spans are merged and wall time is shared. The census adds
+about 18% instructions; its span cost is calibrated and subtracted, but patterns made of many short spans (unions,
+relations, indexed access) still read a little high.
 
 ## Profiling
 

@@ -229,9 +229,15 @@ impl Drop for poolState {
 pub(crate) struct poolState {
     // Leaked like the program that owns the pool, so a handle can hold a checker's lock without borrowing the pool.
     checkers: &'static [CheckerSlot],
-    file_associations: FxHashMap<P<SourceFile>, usize>,
-    // Checker index per program file index.
-    pub(crate) associations: Vec<usize>,
+    // Program file index of each file.
+    file_indices: FxHashMap<P<SourceFile>, usize>,
+    // The checker that runs each program file: the static assignment until stealing moves a file to the checker that
+    // checks it, so later passes over the file (declaration diagnostics, emit) use the checker that has its state.
+    owners: Vec<std::sync::atomic::AtomicU32>,
+    // Estimated work per program file (checked_file_weights), what stealing balances.
+    weights: Vec<i64>,
+    // TSRS_ASSIGNMENT_STATS only: per for_each_checker_group_do call, files each checker took from other checkers.
+    pub(crate) group_stolen: Mutex<Vec<Vec<usize>>>,
     // TSRS_ASSIGNMENT_STATS only: per for_each_checker_group_do call, (seconds, files run) per checker.
     pub(crate) group_runs: Mutex<Vec<Vec<(f64, usize)>>>,
     // TSRS_ASSIGNMENT_STATS only: per for_each_checker_group_do call, thread CPU seconds per checker.
@@ -535,7 +541,7 @@ impl checkerPool {
     // checkerpool.go:351
     pub(crate) fn get_checker_for_file_exclusive(&self, file: P<SourceFile>) -> CheckerHandle {
         let state = self.create_checkers();
-        let idx = state.file_associations[&file];
+        let idx = state.owner_of(file).expect("a file of the program");
         CheckerHandle::locked(state.checkers[idx].0.lock().unwrap())
     }
 
@@ -569,14 +575,15 @@ impl checkerPool {
 
             let files = &program.files;
             let associations = tsrs_core::phases::time("Checkers: assign files", || compute_associations(program, self.checker_count));
-            let mut file_associations = FxHashMap::default();
-            for (i, &file) in files.iter().enumerate() {
-                file_associations.insert(file, associations[i]);
-            }
+            let file_indices: FxHashMap<P<SourceFile>, usize> = files.iter().enumerate().map(|(i, &f)| (f, i)).collect();
+            let owners = associations.iter().map(|&c| std::sync::atomic::AtomicU32::new(c as u32)).collect();
+            let weights = if self.checker_count > 1 { checked_file_weights(program) } else { Vec::new() };
             poolState {
                 checkers,
-                file_associations,
-                associations,
+                file_indices,
+                owners,
+                weights,
+                group_stolen: Mutex::new(Vec::new()),
                 group_runs: Mutex::new(Vec::new()),
                 group_cpu: Mutex::new(Vec::new()),
                 file_times: Mutex::new(Vec::new()),
@@ -594,7 +601,7 @@ impl checkerPool {
     }
 
     pub(crate) fn checker_index_of_file(&self, file: P<SourceFile>) -> Option<usize> {
-        self.create_checkers().file_associations.get(&file).copied()
+        self.create_checkers().owner_of(file)
     }
 
     // checkerpool.go:451
@@ -622,41 +629,81 @@ impl checkerPool {
 
     // checkerpool.go:476
     // forEachCheckerGroupDo runs one task per checker in parallel. Each task iterates the provided files,
-    // processing only those assigned to its checker. Within each checker's set, files are
-    // visited in their original order (load-bearing: another order can change the property order of
-    // types printed in messages, notes/perf-balance.md).
+    // processing only those assigned to its checker. Within each checker's set, files are visited in their original
+    // order (`visit_order`). Output does not depend on it in the default mode (notes/perf-order-independence.md); it
+    // keeps Go's history under `--checkerAssignment go` and the counters stable.
     pub(crate) fn for_each_checker_group_do(
         &self,
         files: &[P<SourceFile>],
         single_threaded: bool,
         cb: impl Fn(&mut Checker, usize, P<SourceFile>) + Sync,
     ) {
+        self.for_each_checker_group_do_ex(files, single_threaded, false, cb);
+    }
+
+    // `allow_steal`: the pass may move files between checkers (stealing_enabled). Only the type-check pass does: later
+    // passes over a file (declaration diagnostics, emit) must run on the checker that checked it, and the incremental
+    // pass records which checker found a global diagnostic first.
+    pub(crate) fn for_each_checker_group_do_ex(
+        &self,
+        files: &[P<SourceFile>],
+        single_threaded: bool,
+        allow_steal: bool,
+        cb: impl Fn(&mut Checker, usize, P<SourceFile>) + Sync,
+    ) {
         let state = self.create_checkers();
         let stats = assignment_stats_enabled();
-        let times: Vec<Mutex<(f64, usize)>> = if stats { (0..state.checkers.len()).map(|_| Mutex::new((0.0, 0))).collect() } else { Vec::new() };
-        let cpu: Vec<Mutex<f64>> = if stats { (0..state.checkers.len()).map(|_| Mutex::new(0.0)).collect() } else { Vec::new() };
+        let n = state.checkers.len();
+        let times: Vec<Mutex<(f64, usize)>> = if stats { (0..n).map(|_| Mutex::new((0.0, 0))).collect() } else { Vec::new() };
+        let cpu: Vec<Mutex<f64>> = if stats { (0..n).map(|_| Mutex::new(0.0)).collect() } else { Vec::new() };
+        let stolen: Vec<std::sync::atomic::AtomicUsize> = (0..n).map(|_| std::sync::atomic::AtomicUsize::new(0)).collect();
         let file_times = file_times_path().is_some();
-        let cost_cache = checker_cost_cache_path().is_some() && state.checkers.len() > 1;
+        let cost_cache = checker_cost_cache_path().is_some() && n > 1;
+        // Each checker's positions in `files`, in the order of `files` (visit_order).
+        let index_of: Vec<Option<usize>> = files.iter().map(|f| state.file_indices.get(f).copied()).collect();
+        let mut positions: Vec<Vec<u32>> = vec![Vec::new(); n];
+        for i in visit_order(files.len()) {
+            // Owners change only inside a work group (stealing); this pass starts after the last one joined.
+            if let Some(owner) = index_of[i].map(|fi| state.owners[fi].load(std::sync::atomic::Ordering::Relaxed) as usize) {
+                positions[owner].push(i as u32);
+            }
+        }
+        // Go queues one goroutine per checker group (cheap); here each group is an OS thread, so spawn threads only for
+        // the checkers that own at least one of `files`. A one-file call (incremental emit of one affected file) then
+        // runs on the calling thread instead of creating `checkers.len()` threads per file.
+        let active: Vec<usize> = (0..n).filter(|&c| !positions[c].is_empty()).collect();
+        let single = single_threaded || self.single_threaded || active.len() <= 1;
+        let steal = allow_steal && !single && stealing_enabled();
+        let weight = |i: u32| index_of[i as usize].map_or(1, |fi| state.weights.get(fi).copied().unwrap_or(1).max(0) as u64);
+        let queues: Vec<FileQueue> = positions.into_iter().map(|p| FileQueue::new(p, weight)).collect();
         let run = |checker_idx: usize| {
             let start = stats.then(std::time::Instant::now);
             let cpu_start = if stats { thread_cpu_seconds() } else { 0.0 };
             let mut count = 0;
             let mut file_cpu: Vec<(P<SourceFile>, f64)> = Vec::new();
             let mut guard = state.checkers[checker_idx].0.lock().unwrap();
-            for (i, &file) in files.iter().enumerate() {
-                if state.file_associations.get(&file) == Some(&checker_idx) {
-                    let file_start = file_times.then(std::time::Instant::now);
-                    let cpu_start = if cost_cache || file_times { thread_cpu_seconds() } else { 0.0 };
-                    cb(&mut guard, i, file);
-                    if let Some(file_start) = file_start {
-                        let cpu = thread_cpu_seconds() - cpu_start;
-                        state.file_times.lock().unwrap().push((file, checker_idx, file_start.elapsed().as_secs_f64(), cpu));
+            while let Some((i, from_other)) = queues_next(&queues, checker_idx, steal) {
+                let file = files[i];
+                if from_other {
+                    // Later passes over this file go to the checker that checked it.
+                    if let Some(fi) = index_of[i] {
+                        // Read only by later passes, after the work group joined.
+                        state.owners[fi].store(checker_idx as u32, std::sync::atomic::Ordering::Relaxed);
                     }
-                    if cost_cache {
-                        file_cpu.push((file, thread_cpu_seconds() - cpu_start));
-                    }
-                    count += 1;
+                    // A counter read after the work group joined.
+                    stolen[checker_idx].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 }
+                let file_start = file_times.then(std::time::Instant::now);
+                let cpu_start = if cost_cache || file_times { thread_cpu_seconds() } else { 0.0 };
+                cb(&mut guard, i, file);
+                if let Some(file_start) = file_start {
+                    let cpu = thread_cpu_seconds() - cpu_start;
+                    state.file_times.lock().unwrap().push((file, checker_idx, file_start.elapsed().as_secs_f64(), cpu));
+                }
+                if cost_cache {
+                    file_cpu.push((file, thread_cpu_seconds() - cpu_start));
+                }
+                count += 1;
             }
             if cost_cache {
                 state.file_cpu.lock().unwrap().extend(file_cpu);
@@ -666,14 +713,110 @@ impl checkerPool {
                 *cpu[checker_idx].lock().unwrap() = thread_cpu_seconds() - cpu_start;
             }
         };
-        // Go queues one goroutine per checker group (cheap); here each group is an OS thread, so spawn threads only for
-        // the checkers that own at least one of `files`. A one-file call (incremental emit of one affected file) then
-        // runs on the calling thread instead of creating `checkers.len()` threads per file.
-        let active: Vec<usize> = (0..state.checkers.len()).filter(|&i| files.iter().any(|f| state.file_associations.get(f) == Some(&i))).collect();
-        run_work_group(single_threaded || self.single_threaded, active.len(), |k| run(active[k]));
+        run_work_group(single, active.len(), |k| run(active[k]));
         if stats {
             state.group_runs.lock().unwrap().push(times.into_iter().map(|t| t.into_inner().unwrap()).collect());
             state.group_cpu.lock().unwrap().push(cpu.into_iter().map(|t| t.into_inner().unwrap()).collect());
+            state.group_stolen.lock().unwrap().push(stolen.into_iter().map(std::sync::atomic::AtomicUsize::into_inner).collect());
+        }
+    }
+}
+
+impl poolState {
+    // The checker that runs `file` now (see `owners`).
+    fn owner_of(&self, file: P<SourceFile>) -> Option<usize> {
+        // Written by stealing inside a work group, read after it joined.
+        self.file_indices.get(&file).map(|&i| self.owners[i].load(std::sync::atomic::Ordering::Relaxed) as usize)
+    }
+
+    // The checker that ran program file `i` (the static assignment unless the file was stolen).
+    pub(crate) fn owner_at(&self, i: usize) -> usize {
+        // See owner_of.
+        self.owners[i].load(std::sync::atomic::Ordering::Relaxed) as usize
+    }
+}
+
+// tsrs-only: dynamic scheduling (notes/perf-checker-stealing.md, after tsrslint's scheduler). Each checker runs the files
+// assigned to it from the front of its queue; a checker that runs out takes not-yet-started files from the back of the
+// queue with the most work left. Diagnostics and emit do not depend on which checker runs a file
+// (notes/perf-order-independence.md); the --extendedDiagnostics counters do, so they vary from run to run. Off when an
+// assignment is named (`--checkerAssignment` / TSRS_CHECKER_ASSIGNMENT: the fully deterministic static modes, also
+// for the oracles and harnesses) and under Go's check history.
+fn stealing_enabled() -> bool {
+    let named = CLI_CHECKER_ASSIGNMENT.get().is_some() || std::env::var("TSRS_CHECKER_ASSIGNMENT").is_ok_and(|v| !v.is_empty());
+    !named && !tsrs_core::compat::go_compatible_history()
+}
+
+// One checker's positions in the files of a group pass, in visiting order. The owner takes from the front, other
+// checkers from the back. `range` packs the next front position (low 32 bits) and the back end (high 32 bits,
+// exclusive); `prefix[k]` is the weight of `positions[..k]`, the estimate of the work left.
+struct FileQueue {
+    positions: Vec<u32>,
+    prefix: Vec<u64>,
+    range: std::sync::atomic::AtomicU64,
+}
+
+const QUEUE_LOW: u64 = u32::MAX as u64;
+
+impl FileQueue {
+    fn new(positions: Vec<u32>, weight: impl Fn(u32) -> u64) -> FileQueue {
+        let mut prefix = Vec::with_capacity(positions.len() + 1);
+        let mut sum = 0;
+        prefix.push(0);
+        for &i in &positions {
+            sum += weight(i);
+            prefix.push(sum);
+        }
+        let len = positions.len() as u64;
+        FileQueue { positions, prefix, range: std::sync::atomic::AtomicU64::new(len << 32) }
+    }
+
+    fn remaining(&self) -> u64 {
+        // A heuristic read: a stale value only picks a different victim.
+        let r = self.range.load(std::sync::atomic::Ordering::Relaxed);
+        let (front, back) = ((r & QUEUE_LOW) as usize, (r >> 32) as usize);
+        if front < back {
+            self.prefix[back] - self.prefix[front]
+        } else {
+            0
+        }
+    }
+
+    fn take(&self, front: bool) -> Option<usize> {
+        // The compare-exchange on `range` alone decides who gets a position; nothing else is published through it.
+        let mut r = self.range.load(std::sync::atomic::Ordering::Relaxed);
+        loop {
+            if (r & QUEUE_LOW) >= (r >> 32) {
+                return None;
+            }
+            let new = if front { r + 1 } else { r - (1 << 32) };
+            // As above: the exchange only claims the position.
+            match self.range.compare_exchange_weak(r, new, std::sync::atomic::Ordering::Relaxed, std::sync::atomic::Ordering::Relaxed) {
+                Ok(_) => break,
+                Err(current) => r = current,
+            }
+        }
+        let pos = if front { r & QUEUE_LOW } else { (r >> 32) - 1 };
+        Some(self.positions[pos as usize] as usize)
+    }
+}
+
+// The next position for checker `me` and whether it came from another checker's queue.
+fn queues_next(queues: &[FileQueue], me: usize, steal: bool) -> Option<(usize, bool)> {
+    if let Some(i) = queues[me].take(true) {
+        return Some((i, false));
+    }
+    if !steal {
+        return None;
+    }
+    loop {
+        let (victim, left) = queues.iter().enumerate().map(|(c, q)| (c, q.remaining())).max_by_key(|&(c, left)| (left, std::cmp::Reverse(c)))?;
+        if left == 0 {
+            // Queues whose remaining files weigh 0 (unchecked declaration files) are still drained by their owners.
+            return queues.iter().enumerate().find_map(|(c, q)| if c == me { None } else { q.take(false).map(|i| (i, true)) });
+        }
+        if let Some(i) = queues[victim].take(false) {
+            return Some((i, true));
         }
     }
 }
@@ -682,6 +825,29 @@ impl CheckerPool for checkerPool {
     fn get_checker(&self, _ctx: &Context, file: Option<P<SourceFile>>) -> CheckerHandle {
         self.get_checker_exclusive(file)
     }
+}
+
+// The order in which a checker group visits `count` files: program order, or with `TSRS_CHECKER_ASSIGNMENT=random:<seed>`
+// a permutation drawn from the seed (a debug mode that checks that output does not depend on the visit order).
+fn visit_order(count: usize) -> Vec<usize> {
+    let mut order: Vec<usize> = (0..count).collect();
+    if let CheckerAssignment::Random(seed) = checker_assignment() {
+        // Fisher-Yates with splitmix64.
+        let mut state = seed ^ 0x9e37_79b9_7f4a_7c15;
+        for i in (1..count).rev() {
+            let j = (splitmix64(&mut state) % (i as u64 + 1)) as usize;
+            order.swap(i, j);
+        }
+    }
+    order
+}
+
+fn splitmix64(state: &mut u64) -> u64 {
+    *state = state.wrapping_add(0x9e37_79b9_7f4a_7c15);
+    let mut z = *state;
+    z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    z ^ (z >> 31)
 }
 
 // Go `createCheckers`' association step (FENNEL over the import graph, see above).
@@ -731,6 +897,10 @@ fn compute_associations(program: &Program, checker_count: usize) -> Vec<usize> {
     let associations = match checker_assignment() {
         CheckerAssignment::Go => go_associations(program, checker_count),
         CheckerAssignment::Locality => locality_associations(program, checker_count),
+        CheckerAssignment::Random(seed) => {
+            let mut state = seed;
+            (0..program.files.len()).map(|_| (splitmix64(&mut state) % checker_count as u64) as usize).collect()
+        }
         CheckerAssignment::File(path) => {
             let text = std::fs::read_to_string(path).expect("TSRS_CHECKER_ASSIGNMENT file");
             let associations: Vec<usize> = text.lines().map(|l| l.trim().parse::<usize>().unwrap().min(checker_count - 1)).collect();
@@ -830,7 +1000,7 @@ pub(crate) fn write_cost_cache(program: &'static Program) {
     for (i, file) in program.files.iter().enumerate() {
         let skipped = (file.is_declaration_file.get() || ast::is_json_source_file(*file)) && program.skip_type_checking(*file, false);
         if measured[i] >= 0.0 && !skipped {
-            entries.push((file.path(), measured[i], state.associations[i]));
+            entries.push((file.path(), measured[i], state.owner_at(i)));
         }
     }
     entries.sort_by(|a, b| a.0.cmp(b.0));
@@ -852,10 +1022,13 @@ pub(crate) fn write_cost_cache(program: &'static Program) {
 //   locality (default): directory-subtree groups packed onto checkers with Go's FENNEL (below)
 //   go:                 Go's createCheckers association (FENNEL over single files in program order)
 //   file:<path>:        one checker index per line by program file index (experiments)
+//   random:<seed>:      a random checker per file and a random visit order in each checker, drawn from the seed
+//                       (debug: output must not depend on the assignment)
 pub enum CheckerAssignment {
     Locality,
     Go,
     File(String),
+    Random(u64),
 }
 
 static CLI_CHECKER_ASSIGNMENT: OnceLock<String> = OnceLock::new();
@@ -866,6 +1039,8 @@ pub fn set_checker_assignment_from_cli(name: &str) -> bool {
         return false;
     }
     let _ = CLI_CHECKER_ASSIGNMENT.set(name.to_string());
+    // `go` also means Go's check history in the caches that have two behaviours (tsrs_core::compat).
+    tsrs_core::compat::set_go_compatible_history(name == "go");
     true
 }
 
@@ -873,7 +1048,10 @@ fn parse_checker_assignment(name: &str) -> Option<CheckerAssignment> {
     match name {
         "" | "locality" => Some(CheckerAssignment::Locality),
         "go" => Some(CheckerAssignment::Go),
-        _ => name.strip_prefix("file:").map(|p| CheckerAssignment::File(p.to_string())),
+        _ => match name.strip_prefix("random:") {
+            Some(seed) => seed.parse::<u64>().ok().map(CheckerAssignment::Random),
+            None => name.strip_prefix("file:").map(|p| CheckerAssignment::File(p.to_string())),
+        },
     }
 }
 
@@ -882,7 +1060,7 @@ fn checker_assignment() -> CheckerAssignment {
         Some(name) => name.clone(),
         None => std::env::var("TSRS_CHECKER_ASSIGNMENT").unwrap_or_default(),
     };
-    parse_checker_assignment(&name).unwrap_or_else(|| panic!("unknown checker assignment {name:?} (locality, go, file:<path>)"))
+    parse_checker_assignment(&name).unwrap_or_else(|| panic!("unknown checker assignment {name:?} (locality, go, file:<path>, random:<seed>)"))
 }
 
 // A directory subtree whose checked weight is at most 1/LOCALITY_GROUP_FRACTION of an average checker load is
@@ -1254,4 +1432,53 @@ fn get_import_adjacency(program: &Program) -> Vec<Vec<usize>> {
         }
     }
     adjacent_files
+}
+
+#[cfg(test)]
+mod stealing_tests {
+    use super::{queues_next, FileQueue};
+    use std::sync::Mutex;
+
+    /// Owners taking from the front and thieves from the back of the same queues must hand out every position exactly
+    /// once: a lost position is a file that is never checked (missing diagnostics), a repeated one is checked twice.
+    #[test]
+    fn every_position_is_taken_exactly_once() {
+        let sizes = [5000usize, 0, 20000, 300, 1];
+        let mut base = 0u32;
+        let queues: Vec<FileQueue> = sizes
+            .iter()
+            .map(|&n| {
+                let positions: Vec<u32> = (base..base + n as u32).collect();
+                base += n as u32;
+                // Some positions weigh 0 (unchecked declaration files): they must still be handed out.
+                FileQueue::new(positions, |i| u64::from(i % 7 != 0) * u64::from(i % 5 + 1))
+            })
+            .collect();
+        let taken: Mutex<Vec<(usize, bool)>> = Mutex::new(Vec::new());
+        std::thread::scope(|s| {
+            for me in 0..queues.len() {
+                let (queues, taken) = (&queues, &taken);
+                s.spawn(move || {
+                    let mut mine = Vec::new();
+                    while let Some(t) = queues_next(queues, me, true) {
+                        mine.push(t);
+                    }
+                    taken.lock().unwrap().extend(mine);
+                });
+            }
+        });
+        let mut ids: Vec<usize> = taken.into_inner().unwrap().iter().map(|&(i, _)| i).collect();
+        ids.sort_unstable();
+        assert_eq!(ids, (0..base as usize).collect::<Vec<_>>());
+        assert!(queues.iter().all(|q| q.remaining() == 0));
+    }
+
+    /// Without stealing a checker runs exactly its own files, in visiting order.
+    #[test]
+    fn without_stealing_a_checker_keeps_its_own_files_in_order() {
+        let queues = vec![FileQueue::new(vec![0, 2, 4], |_| 1), FileQueue::new(vec![1, 3], |_| 1)];
+        let order: Vec<(usize, bool)> = std::iter::from_fn(|| queues_next(&queues, 0, false)).collect();
+        assert_eq!(order, vec![(0, false), (2, false), (4, false)]);
+        assert_eq!(queues[1].remaining(), 2);
+    }
 }

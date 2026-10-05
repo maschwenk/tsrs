@@ -72,6 +72,16 @@ pointer compression costs about +4.9% instructions and took back most of the che
 
 ## Measured and rejected (do not redo)
 
+- A1, deciding `getConditionalType`'s definitely-false test for discriminated unions without the relater (draft #88,
+  notes/perf-checker-algorithms.md): exact (it replays the relater's side effects; cross-checked on the suite and five
+  corpora), but -0.5% instructions on one corpus at four checkers and neutral elsewhere, not worth a second
+  implementation of part of the relater.
+- A2, skipping the non-matching constituents of such a conditional through a key index: asymptotically better, but the
+  skipped evaluations' instantiation counts depend on cache states, so it moves the instantiation-budget (TS2589)
+  boundary that `testdata/regressions/conditional-instantiation-limit-*` pins.
+- A full unit-property index for relations to union targets: would skip at most 0.2% (big) / 0.1% (vscode) of failed
+  constituent checks; the rest is inherent (notes/perf-checker-algorithms.md, "Row 1").
+
 - Zero-based handles on Linux (reserve 4-32 GiB so a dereference needs no base; #62, notes/mem-pointer-compression.md
   section 6 on that branch): removes 2.7 of the 7 points of extra x86 instructions, but wall and cycles move by 0.7-2%,
   inside the host's drift, and it adds low-address-space failure modes. The rest of the cost is the 32-bit handle
@@ -95,8 +105,12 @@ pointer compression costs about +4.9% instructions and took back most of the che
 - Persisted, mmap-able front end: 26% of nodes cacheable, 0.02-0.03 s at 18 threads, at most 0.15 GiB
   (docs/PERSISTED_FRONTEND.md on #36).
 - Scope regions for inference contexts: 25-50% of scopes keep a live block (notes/mem-scoped-arenas.md).
-- Work stealing between checkers: counters vary between runs. Partition changes: +-4% with no consistent winner
-  (notes/perf-checker-scaling.md).
+- Work stealing between checkers: landed after all (notes/perf-checker-stealing.md), once output stopped depending on
+  the assignment (notes/perf-order-independence.md); only the counters vary between runs, and naming an assignment
+  keeps them fixed. Partition changes: +-4% with no consistent winner (notes/perf-checker-scaling.md).
+- Forked checker processes sharing one warm checker copy-on-write (notes/perf-checker-processes.md): 17-47% fewer
+  instructions and 0.2-1.9 GiB less memory at 8-16 workers, but no faster than threads, static or with stealing; worse
+  on small programs. Children's private state is mostly their own caches and copied hash-table pages.
 - Sharing types across checkers: cannot be exact (notes/mem-shared-base.md).
 - Directory listings instead of existence probes, `openat`, a typed tsbuildinfo decode, skip-if-identical
   tsbuildinfo writes (notes/perf-dev-loop.md, perf-dev-loop2.md).
