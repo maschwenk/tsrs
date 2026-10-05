@@ -20,7 +20,7 @@ pub(crate) fn token_is_identifier_or_keyword_or_greater_than(token: Kind) -> boo
     token == Kind::GreaterThanToken || token_is_identifier_or_keyword(token)
 }
 
-pub fn get_jsdoc_comment_ranges(f: &mut NodeFactory, comment_ranges: &[CommentRange], node: P<Node>, text: &'static str) -> Vec<CommentRange> {
+pub fn get_jsdoc_comment_ranges(_f: &mut NodeFactory, comment_ranges: &[CommentRange], node: P<Node>, text: &'static str) -> Vec<CommentRange> {
     let mut comment_ranges = comment_ranges.to_vec();
     match node.kind() {
         Kind::Parameter

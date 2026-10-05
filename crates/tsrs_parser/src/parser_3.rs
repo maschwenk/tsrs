@@ -2780,7 +2780,7 @@ pub(crate) fn attach_file_to_diagnostics(diagnostics: &[P<ast::Diagnostic>], fil
     diagnostics.to_vec()
 }
 
-pub(crate) fn get_comment_pragmas(f: &mut ast::NodeFactory, source_text: &'static str) -> Vec<ast::Pragma> {
+pub(crate) fn get_comment_pragmas(_f: &mut ast::NodeFactory, source_text: &'static str) -> Vec<ast::Pragma> {
     let mut pragmas = Vec::new();
     for comment_range in scanner::get_leading_comment_ranges(source_text, 0) {
         let comment = &source_text[comment_range.pos() as usize..comment_range.end() as usize];

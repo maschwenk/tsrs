@@ -163,10 +163,6 @@ impl Number {
         Number((self.to_int32() ^ y.to_int32()) as f64)
     }
 
-    pub(crate) fn trunc(self) -> Number {
-        Number(self.0.trunc())
-    }
-
     pub fn floor(self) -> Number {
         Number(self.0.floor())
     }
@@ -176,6 +172,7 @@ impl Number {
     }
 }
 
+#[cfg(test)] // only tests use it, in Go too
 pub(crate) const negative_zero: Number = Number(-0.0);
 
 impl Number {

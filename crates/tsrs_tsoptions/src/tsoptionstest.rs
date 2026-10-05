@@ -24,17 +24,6 @@ pub fn get_parsed_command_line(
     parse_json_source_file_config_file_content(tsconfig_source_file, host, current_directory, None, None, &config_file_name, &[], None)
 }
 
-fn fix_root(path: &str) -> &str {
-    let root_length = tspath::get_root_length(path);
-    if root_length == 0 {
-        return path;
-    }
-    if path.len() == root_length {
-        return ".";
-    }
-    &path[root_length..]
-}
-
 pub struct VfsParseConfigHost {
     pub vfs: &'static dyn FS,
     pub current_directory: String,

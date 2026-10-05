@@ -1,15 +1,12 @@
 use std::fmt;
-use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, Mutex, Weak};
 use std::time::SystemTime;
 
 use super::logcollector::LogCollector;
 use super::logger::{format_time, Logger};
 
-static seq: AtomicU64 = AtomicU64::new(0);
-
 struct logEntry {
-    seq: u64,
     time: SystemTime,
     message: String,
     child: LogTree,
@@ -17,7 +14,7 @@ struct logEntry {
 
 // logtree.go:20
 fn new_log_entry(child: LogTree, message: String) -> logEntry {
-    logEntry { seq: seq.fetch_add(1, Ordering::Relaxed) + 1, time: SystemTime::now(), message, child }
+    logEntry { time: SystemTime::now(), message, child }
 }
 
 // Go `*LogTree`; the default value is the nil tree, on which every method is a no-op (Go's nil receiver checks).

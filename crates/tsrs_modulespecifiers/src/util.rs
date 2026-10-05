@@ -2,7 +2,6 @@ use crate::*;
 use tsrs_ast::*;
 use tsrs_core::*;
 use tsrs_core::tspath;
-use tsrs_module::packagejson;
 
 // Non-function declarations in util.go (hand-ported in types.rs):
 //   type regexPatternCacheKey (util.go:19)
@@ -355,16 +354,6 @@ pub fn get_node_modules_package_name(
         }
     }
     String::new()
-}
-
-// util.go:350
-pub(crate) fn all_keys_start_with_dot(obj: &OrderedMap<String, packagejson::ExportsOrImports>) -> bool {
-    for k in obj.keys() {
-        if !k.starts_with('.') {
-            return false;
-        }
-    }
-    true
 }
 
 // util.go:359
