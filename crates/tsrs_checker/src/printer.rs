@@ -855,9 +855,7 @@ impl Checker {
             // Unreachable as long as resolutions finish before returning; keep the loop's answer otherwise.
             return None;
         }
-        if let Some(files_with_target) = self.module_export_index.by_target.get(&target) {
-            found.extend(files_with_target.iter().copied());
-        }
+        found.extend(self.module_export_index.files_with_target(target));
         if let Some(parent) = self.get_parent_of_symbol(symbol) {
             if let Some(&i) = self.module_export_index.by_symbol.get(&parent) {
                 found.push(i);
@@ -878,7 +876,7 @@ impl Checker {
         if index.len != table.len() {
             return false;
         }
-        let mut targets: Vec<P<Symbol>> = index.by_target.keys().copied().collect();
+        let mut targets: Vec<P<Symbol>> = index.targets().collect();
         if let Some(export_equals) = sym.exports().and_then(|exports| exports.lookup(InternalSymbolNameExportEquals)) {
             let merged = self.get_merged_symbol(export_equals);
             if merged.flags().intersects(SymbolFlags::Alias) && self.alias_symbol_links.get(merged).alias_target.get().is_none() {
@@ -887,10 +885,7 @@ impl Checker {
             targets.push(self.get_symbol_target_for_alias_lookup(export_equals));
         }
         for t in targets {
-            let files = self.module_export_index.by_target.entry(t).or_default();
-            if files.last() != Some(&i) {
-                files.push(i);
-            }
+            self.module_export_index.add_file_with_target(t, i);
         }
         self.module_export_index.by_symbol.insert(sym, i);
         true
@@ -920,23 +915,23 @@ impl Checker {
             self.get_symbol_target_for_alias_lookup(symbol)
         } else {
             let entries = exports.values();
-            let mut by_target: FxHashMap<P<Symbol>, Vec<P<Symbol>>> = FxHashMap::default();
+            let mut pairs: Vec<(P<Symbol>, P<Symbol>)> = Vec::with_capacity(entries.len());
             let mut target = None;
             for (i, &exported) in entries.iter().enumerate() {
                 let a = self.get_symbol_target_for_alias_lookup(exported);
                 if i == 0 {
                     target = Some(self.get_symbol_target_for_alias_lookup(symbol));
                 }
-                by_target.entry(a).or_default().push(exported);
+                pairs.push((a, exported));
             }
-            self.exports_by_target_index.insert(exports, ExportsByTarget { len, by_target });
+            self.exports_by_target_index.insert(exports, ExportsByTarget::new(len, pairs));
             match target {
                 Some(target) => target,
                 None => return true,
             }
         };
-        if let Some(found) = self.exports_by_target_index.get(&exports).and_then(|index| index.by_target.get(&target)) {
-            candidates.extend(found.iter().copied());
+        if let Some(index) = self.exports_by_target_index.get(&exports) {
+            candidates.extend(index.candidates(target));
         }
         true
     }
@@ -1611,8 +1606,11 @@ pub struct ModuleExportIndex {
     started: bool,
     /// Program file indices of the external modules not summarized yet, in program order.
     pending: Vec<u32>,
-    /// Merged resolved target -> the summarized modules (file indices) with an entry resolving to it.
-    by_target: FxHashMap<P<Symbol>, Vec<u32>>,
+    /// Merged resolved target -> the summarized modules (file indices) with an entry resolving to it: the head of a
+    /// list in `files` (most recent first; usually one module, so no `Vec` per target).
+    by_target: FxHashMap<P<Symbol>, u32>,
+    /// List nodes of `by_target`: (file index, next node or `u32::MAX`).
+    files: Vec<(u32, u32)>,
     /// Summarized module symbol -> its file index.
     by_symbol: FxHashMap<P<Symbol>, u32>,
 }
@@ -1620,20 +1618,79 @@ pub struct ModuleExportIndex {
 use crate::heapcensus::HeapSize;
 
 impl HeapSize for ModuleExportIndex {
-    #[expect(clippy::iter_over_hash_type, reason = "sums sizes: the order does not matter")]
     fn heap_stat(&self) -> crate::heapcensus::HeapStat {
         let mut stat = self.pending.heap_stat();
         stat.add(self.by_target.heap_stat());
-        for v in self.by_target.values() {
-            stat.add(v.heap_stat());
-        }
+        stat.add(self.files.heap_stat());
         stat.add(self.by_symbol.heap_stat());
         stat
     }
 }
 
-/// An export table indexed by the merged resolved target of each entry (`Checker::exports_by_target`).
+impl ModuleExportIndex {
+    const END: u32 = u32::MAX;
+
+    /// The summarized modules with an entry resolving to `target`, most recently added first.
+    fn files_with_target(&self, target: P<Symbol>) -> impl Iterator<Item = u32> + '_ {
+        let mut next = self.by_target.get(&target).copied().unwrap_or(Self::END);
+        std::iter::from_fn(move || {
+            let (file, after) = *self.files.get(next as usize)?;
+            next = after;
+            Some(file)
+        })
+    }
+
+    /// Records that module `file` has an entry resolving to `target` (once per consecutive repeat, like the `Vec`
+    /// it replaces: `if files.last() != Some(&i) { files.push(i) }`).
+    fn add_file_with_target(&mut self, target: P<Symbol>, file: u32) {
+        let node = u32::try_from(self.files.len()).expect("module export index too large");
+        match self.by_target.entry(target) {
+            std::collections::hash_map::Entry::Occupied(mut head) => {
+                if self.files[*head.get() as usize].0 != file {
+                    self.files.push((file, *head.get()));
+                    *head.get_mut() = node;
+                }
+            }
+            std::collections::hash_map::Entry::Vacant(head) => {
+                self.files.push((file, Self::END));
+                head.insert(node);
+            }
+        }
+    }
+}
+
+impl HeapSize for ExportsByTarget {
+    fn heap_stat(&self) -> crate::heapcensus::HeapStat {
+        let slot = std::mem::size_of::<(P<Symbol>, P<Symbol>)>() as u64;
+        let n = self.entries.len() as u64;
+        crate::heapcensus::HeapStat { containers: 1, len: n, cap: n, slot, bytes: n * slot }
+    }
+}
+
+/// An export table indexed by the merged resolved target of each entry (`Checker::exports_by_target`): the
+/// (target, entry) pairs sorted by target with a stable sort, so each target's entries are adjacent and in table
+/// order. One allocation of 8 bytes per entry instead of a hash map with a `Vec` per target (the index is built in
+/// every checker; most tables are small and most targets have one entry).
 pub struct ExportsByTarget {
     len: usize,
-    by_target: FxHashMap<P<Symbol>, Vec<P<Symbol>>>,
+    entries: Box<[(P<Symbol>, P<Symbol>)]>,
+}
+
+impl ExportsByTarget {
+    fn new(len: usize, mut pairs: Vec<(P<Symbol>, P<Symbol>)>) -> ExportsByTarget {
+        pairs.sort_by_key(|&(target, _)| target.key());
+        ExportsByTarget { len, entries: pairs.into_boxed_slice() }
+    }
+
+    /// The table's entries whose target is `target`, in table order.
+    fn candidates(&self, target: P<Symbol>) -> impl Iterator<Item = P<Symbol>> + '_ {
+        let key = target.key();
+        let start = self.entries.partition_point(|&(t, _)| t.key() < key);
+        self.entries[start..].iter().take_while(move |&&(t, _)| t == target).map(|&(_, exported)| exported)
+    }
+
+    /// Every distinct target once.
+    fn targets(&self) -> impl Iterator<Item = P<Symbol>> + '_ {
+        self.entries.iter().enumerate().filter(|&(i, &(t, _))| i == 0 || self.entries[i - 1].0 != t).map(|(_, &(t, _))| t)
+    }
 }
