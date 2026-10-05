@@ -466,7 +466,7 @@ impl SymbolMapEntry {
 
 #[derive(Default, Clone)]
 struct SymbolMapExtra {
-    index: Option<HashTable<u32>>, // positions in `entries`; present once len > SYMBOL_TABLE_LINEAR_MAX
+    index: Option<PosIndex>, // positions in `entries`; present once len > SYMBOL_TABLE_LINEAR_MAX
     odd_keys: Vec<(u32, &'static str)>, // (position, key) of the entries whose key is not their symbol's name
 }
 
@@ -579,6 +579,102 @@ fn same_text(a: &str, b: &str) -> bool {
     a.len() == b.len() && (std::ptr::eq(a.as_ptr(), b.as_ptr()) || a.as_bytes() == b.as_bytes())
 }
 
+/// The hash index of a large table's entry positions, in the narrowest integer that holds them (notes/mem-checker-
+/// heap.md): most indexed tables have 17-255 entries, where 4-byte positions made the index larger than the entries.
+/// A table that outgrows its width gets a wider index rebuilt from its entries.
+#[derive(Clone)]
+enum PosIndex {
+    P8(HashTable<u8>),
+    P16(HashTable<u16>),
+    P32(HashTable<u32>),
+}
+
+impl PosIndex {
+    fn with_capacity(n: usize) -> PosIndex {
+        if n <= 1 << 8 {
+            PosIndex::P8(HashTable::with_capacity(n))
+        } else if n <= 1 << 16 {
+            PosIndex::P16(HashTable::with_capacity(n))
+        } else {
+            PosIndex::P32(HashTable::with_capacity(n))
+        }
+    }
+
+    /// Whether position `i` fits.
+    #[inline]
+    fn holds(&self, i: usize) -> bool {
+        match self {
+            PosIndex::P8(_) => i < 1 << 8,
+            PosIndex::P16(_) => i < 1 << 16,
+            PosIndex::P32(_) => true,
+        }
+    }
+
+    #[inline]
+    fn find(&self, hash: u64, eq: impl Fn(usize) -> bool) -> Option<usize> {
+        // 8-bit indexes first: nearly all indexed tables have at most 256 entries.
+        if let PosIndex::P8(t) = self {
+            return t.find(hash, |&i| eq(i as usize)).map(|&i| i as usize);
+        }
+        self.find_wide(hash, &eq)
+    }
+
+    // `eq` behind a reference: the comparison stays a single inlined instance in `find`'s 8-bit path.
+    #[inline(never)]
+    fn find_wide(&self, hash: u64, eq: &dyn Fn(usize) -> bool) -> Option<usize> {
+        match self {
+            PosIndex::P8(_) => unreachable!("8-bit indexes are searched inline"),
+            PosIndex::P16(t) => t.find(hash, |&i| eq(i as usize)).map(|&i| i as usize),
+            PosIndex::P32(t) => t.find(hash, |&i| eq(i as usize)).map(|&i| i as usize),
+        }
+    }
+
+    /// Adds position `i` (which `holds`); `rehash` gives the hash of a stored position.
+    fn insert(&mut self, hash: u64, i: usize, rehash: impl Fn(usize) -> u64) {
+        debug_assert!(self.holds(i));
+        match self {
+            PosIndex::P8(t) => drop(t.insert_unique(hash, i as u8, |&m| rehash(m as usize))),
+            PosIndex::P16(t) => drop(t.insert_unique(hash, i as u16, |&m| rehash(m as usize))),
+            PosIndex::P32(t) => drop(t.insert_unique(hash, i as u32, |&m| rehash(m as usize))),
+        }
+    }
+
+    /// Removes position `i` and moves every later position down by one (`shift_remove`).
+    fn remove_shift(&mut self, hash: u64, i: usize) {
+        macro_rules! go {
+            ($t:expr) => {{
+                if let Ok(entry) = $t.find_entry(hash, |&j| j as usize == i) {
+                    entry.remove();
+                }
+                for j in $t.iter_mut() {
+                    if *j as usize > i {
+                        *j -= 1;
+                    }
+                }
+            }};
+        }
+        match self {
+            PosIndex::P8(t) => go!(t),
+            PosIndex::P16(t) => go!(t),
+            PosIndex::P32(t) => go!(t),
+        }
+    }
+
+    /// Heap bytes (hashbrown's layout: data buckets rounded to 16, control bytes, group padding).
+    fn heap_bytes(&self) -> usize {
+        let (cap, slot) = match self {
+            PosIndex::P8(t) => (t.capacity(), 1),
+            PosIndex::P16(t) => (t.capacity(), 2),
+            PosIndex::P32(t) => (t.capacity(), 4),
+        };
+        if cap == 0 {
+            return 0;
+        }
+        let buckets = if cap < 8 { (cap + 1).next_power_of_two() } else { cap / 7 * 8 };
+        (buckets * slot).div_ceil(16) * 16 + buckets + 16
+    }
+}
+
 /// The index's hash of an entry: its 32-bit hash spread over 64 bits (hashbrown takes its tag from the top bits).
 #[inline]
 fn index_hash(hash: u32) -> u64 {
@@ -589,7 +685,7 @@ fn index_hash(hash: u32) -> u64 {
 impl SymbolMap {
     fn with_capacity(n: usize) -> SymbolMap {
         let extra = if n > SYMBOL_TABLE_LINEAR_MAX {
-            ExtraSlot::boxed(SymbolMapExtra { index: Some(HashTable::with_capacity(n)), odd_keys: Vec::new() })
+            ExtraSlot::boxed(SymbolMapExtra { index: Some(PosIndex::with_capacity(n)), odd_keys: Vec::new() })
         } else {
             ExtraSlot::default()
         };
@@ -597,7 +693,7 @@ impl SymbolMap {
     }
 
     #[inline]
-    fn index(&self) -> Option<&HashTable<u32>> {
+    fn index(&self) -> Option<&PosIndex> {
         self.extra.get().and_then(|e| e.index.as_ref())
     }
 
@@ -642,7 +738,7 @@ impl SymbolMap {
         let print = KeyPrint::of(name, hash);
         match self.index() {
             None => (0..self.entries.len()).find(|&i| self.entry_matches(i, name, print)),
-            Some(index) => index.find(index_hash(hash), |&i| self.entry_matches(i as usize, name, print)).map(|&i| i as usize),
+            Some(index) => index.find(index_hash(hash), |i| self.entry_matches(i, name, print)),
         }
     }
 
@@ -679,10 +775,11 @@ impl SymbolMap {
         let len = self.entries.len();
         let has_index = self.index().is_some();
         if has_index || len > SYMBOL_TABLE_LINEAR_MAX {
-            let mut index = self.extra.get_mut().and_then(|e| e.index.take()).unwrap_or_else(|| HashTable::with_capacity(len));
-            let start = if has_index { i } else { 0 };
+            let kept = self.extra.get_mut().and_then(|e| e.index.take()).filter(|index| index.holds(i));
+            let start = if kept.is_some() { i } else { 0 };
+            let mut index = kept.unwrap_or_else(|| PosIndex::with_capacity(len));
             for j in start..len {
-                index.insert_unique(index_hash(self.entry_hash(j)), j as u32, |&m| index_hash(self.entry_hash(m as usize)));
+                index.insert(index_hash(self.entry_hash(j)), j, |m| index_hash(self.entry_hash(m)));
             }
             self.extra.get_or_insert().index = Some(index);
         }
@@ -695,14 +792,7 @@ impl SymbolMap {
         let hash = self.entry_hash(i);
         if let Some(extra) = self.extra.get_mut() {
             if let Some(index) = &mut extra.index {
-                if let Ok(entry) = index.find_entry(index_hash(hash), |&j| j as usize == i) {
-                    entry.remove();
-                }
-                for j in index.iter_mut() {
-                    if *j as usize > i {
-                        *j -= 1;
-                    }
-                }
+                index.remove_shift(index_hash(hash), i);
             }
             extra.odd_keys.retain(|&(j, _)| j as usize != i);
             for (j, _) in extra.odd_keys.iter_mut() {
@@ -782,9 +872,7 @@ impl SymbolTable {
         if let Some(extra) = m.extra.get() {
             bytes += std::mem::size_of::<SymbolMapExtra>() + extra.odd_keys.capacity() * 24;
             if let Some(index) = &extra.index {
-                let cap = index.capacity();
-                let buckets = if cap < 8 { (cap + 1).next_power_of_two() } else { cap / 7 * 8 };
-                bytes += (buckets * 4).div_ceil(16) * 16 + buckets + 16;
+                bytes += index.heap_bytes();
             }
         }
         (m.entries.len(), m.entries.capacity(), bytes)
@@ -878,4 +966,41 @@ pub fn escape_symbol_name(name: &str) -> String {
         return format!("_{name}");
     }
     name.to_string()
+}
+
+#[cfg(test)]
+mod symbol_table_tests {
+    use super::*;
+
+    // The position index widens from 8 to 16 to 32 bits as a table grows; removals shift positions. Every name must
+    // keep mapping to its symbol, in insertion order, across those changes (with the odd-key path as well).
+    #[test]
+    fn index_widths_keep_positions() {
+        let table = SymbolTable::default();
+        let mut expected: Vec<(&'static str, P<Symbol>)> = Vec::new();
+        for i in 0..70_000u32 {
+            let name = tsrs_core::alloc_str(&format!("s{i}"));
+            let symbol = Symbol::new(SymbolFlags::Property, name);
+            // Every 1000th entry is stored under another key than its symbol's name.
+            let key = if i % 1000 == 7 { tsrs_core::alloc_str(&format!("k{i}")) } else { name };
+            table.set(key, symbol);
+            expected.push((key, symbol));
+            if i == 300 || i == 66_000 {
+                for &(k, s) in &expected {
+                    assert_eq!(table.lookup(k), Some(s), "{k} at {i}");
+                }
+            }
+        }
+        for victim in ["s5", "s200", "s65537", "k1007"] {
+            table.delete(victim);
+            expected.retain(|&(k, _)| k != victim);
+        }
+        assert_eq!(table.len(), expected.len());
+        assert_eq!(table.entries(), expected);
+        for &(k, s) in &expected {
+            assert_eq!(table.lookup(k), Some(s), "{k}");
+        }
+        assert_eq!(table.lookup("s5"), None);
+        assert_eq!(table.lookup("missing"), None);
+    }
 }
