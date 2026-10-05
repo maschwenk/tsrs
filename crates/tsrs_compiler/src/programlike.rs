@@ -65,7 +65,7 @@ impl ProgramLike for &'static CompilerProgram {
         CompilerProgram::get_suggestion_diagnostics(self, ctx, file)
     }
     fn emit(&self, ctx: &Context, options: EmitOptions) -> Option<EmitResult> {
-        Some(CompilerProgram::emit(self, ctx, options))
+        Some(CompilerProgram::emit(self, ctx, &options))
     }
     fn common_source_directory(&self) -> String {
         CompilerProgram::common_source_directory(self).to_string()
