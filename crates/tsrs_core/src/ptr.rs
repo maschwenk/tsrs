@@ -1139,13 +1139,34 @@ pub fn alloc_slice_recycled<T: Copy>(items: &[T]) -> &'static [T] {
 /// block is filled with `arena::POISON` instead, and in the census build (`TSRS_CENSUS=1`) it is recorded, never
 /// reused, and the census checks at exit that it is unreachable.
 ///
+/// A function that frees a block must not have received it as a reference parameter (`&T`, `&[T]`): a reference
+/// parameter is a protected borrow for the whole call (LLVM `noalias readonly`), so writing the free-list link into
+/// the block is undefined behaviour, and LLVM may delete that write. It did, in `recycle_mapper_with_targets`,
+/// once `panic = "abort"` made the calls around it `nounwind`: the block stayed on the free list with its old
+/// contents as the link, and the next allocation of that size crashed (notes/fix-arena-recycle-uaf.md). Pass the
+/// block as a `P<T>`, as an address, or as a raw slice (`free_slice_ptr`).
+///
 /// # Safety
-/// No live object, local or cache may point into the block afterwards, and it must be an arena block of exactly
-/// `size` bytes.
+/// No live object, local or cache may point into the block afterwards, no function on the stack may hold it as a
+/// reference parameter, and it must be an arena block of exactly `size` bytes.
 #[inline]
 pub unsafe fn free_raw(addr: usize, size: usize, align: usize, needs_drop: bool) {
     // SAFETY: nothing points into the block afterwards (this function's contract).
     with_arena(|a| unsafe { arena::free_block(a, addr, size, align, needs_drop) });
+}
+
+/// `free_slice!` for a slice passed as a raw pointer: the form a function takes when it frees a slice its caller
+/// made (see `free_raw`: a `&[T]` parameter would be a protected borrow of the memory being freed). Empty slices are
+/// ignored.
+///
+/// # Safety
+/// As for `free_raw`: `s` is a whole arena slice that nothing uses afterwards.
+#[inline]
+pub unsafe fn free_slice_ptr<T>(s: *const [T]) {
+    if s.len() != 0 {
+        // SAFETY: the caller's contract (`free_raw`).
+        unsafe { free_raw(s.cast::<T>() as usize, s.len() * std::mem::size_of::<T>(), std::mem::align_of::<T>(), std::mem::needs_drop::<T>()) };
+    }
 }
 
 #[doc(hidden)]

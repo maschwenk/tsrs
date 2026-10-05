@@ -73,6 +73,13 @@ flag would blame whichever pull request merged next. An upgrade is a pull reques
   the three lines above saying why the ordering is enough (Bun: "default to seq_cst and comment any weakened
   ordering"). `tools/lint/atomics.tsv` counts the ones without a comment per file (81 in 25 files); a file may not
   go above its count.
+- **Arena frees of reference parameters.** `free!`, `free_slice!`, `free_raw` or `free_slice_ptr` of the enclosing
+  function's own reference parameter (`x: &T`, `x: &[T]`, `self` of a `&self` method) fails. A reference parameter is
+  a protected borrow for the whole call (`noalias readonly`), so writing the free-list link into it is undefined
+  behaviour; LLVM deleted that write in `panic = "abort"` builds and every such build crashed
+  (`notes/fix-arena-recycle-uaf.md`). Take the block as a `P<T>`, an address or a raw slice (`*const [T]`). No
+  baseline. The CI job `arena-safety` adds Miri on the arena tests and the conformance suite on a `panic = "abort"`
+  build for the forms a source check cannot see.
 
 Test files, the generated fourslash crate and generated files are not scanned.
 
@@ -163,7 +170,7 @@ largest tsrs generic `filter_type` 1.1%, on a hot path). A target CPU above the 
 Identifiers that carry their hash (same note: all Fx hashing is 0.7-1.4% of instructions, not worth a hash field on
 every name). Build-level options on top of PGO (`notes/perf-build-level.md`, Linux x86-64): text on 2 MiB pages (BOLT
 `-hugify`; instruction page walks are 1.2-1.5% of cycles and it gains nothing measurable over BOLT alone);
-`panic = "abort"` (every such build segfaults in the arena's free list, see that note; it would also need a CLI-only
+`panic = "abort"` (it crashed until `notes/fix-arena-recycle-uaf.md`, and it would also need a CLI-only
 binary); mimalloc v2, jemalloc and glibc malloc instead of mimalloc v3 (3-14% slower, 3-7% less peak memory);
 `opt-level = "s"` for the language-server, API and emit crates (`.text` -6%, speed unchanged); adding vscode at eight
 checkers to the PGO training (-3% instructions, cycles unchanged).
@@ -173,7 +180,7 @@ Not tried. Each needs a measurement and a note before it is adopted; none is app
 | Candidate | Who does it | What it would give | What it needs |
 | --- | --- | --- | --- |
 | Allocation-count snapshot gate | oxc `tasks/track_memory_allocations` (`cargo allocs`, then `git diff --exit-code` in CI), Rolldown | A stray heap allocation on a hot path becomes a diff in a checked-in snapshot. Counts are exact on one thread. | A fixed corpus, one checker, the counting allocator behind `alloc-profile`. |
-| Miri on `tsrs_core` | oxc (strict provenance, allocator and AST crates), rust-analyzer (`intern`), Bun (tree borrows, 17 crates) | Soundness of the handle and arena code, where a third of the `unsafe` is. | Nightly; the unit tests must run on the system allocator. |
+| Miri on all of `tsrs_core` | oxc (strict provenance, allocator and AST crates), rust-analyzer (`intern`), Bun (tree borrows, 17 crates) | Soundness of the handle and region code, where a third of the `unsafe` is. The arena free-list tests already run under Miri in CI (`arena-safety`, `notes/fix-arena-recycle-uaf.md`). | Nightly and `--features plain-ptrs` (Miri does not support the compressed handles' `PROT_NONE` reservation). |
 | Conformance with `debug-assertions` and `overflow-checks` in an optimized profile | oxc `[profile.coverage]` | Overflow and failed debug assertions that release builds skip. | A profile and a second conformance run. |
 | A symbol order file at link time | Bun (order file from a function-entry trace) | Part of BOLT's gain without a post-link step, on every platform. | A function-entry trace and `-Wl,--symbol-ordering-file` / `-order_file`. |
 | Arena-backed temporaries | oxc (arena `Vec` and `HashMap`), Bun (hashbrown on its arenas through `allocator-api2`, the stable stand-in for the nightly `Allocator` API) | Scratch vectors and maps skip malloc and free. | A scratch allocator whose reset point is provable; scope regions were rejected (above), so per-call scratch is the experiment. |

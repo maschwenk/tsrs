@@ -125,6 +125,10 @@ same pages more directly and gained nothing measurable.
 
 ## 3. `panic = "abort"`
 
+Update: the crash is fixed (notes/fix-arena-recycle-uaf.md): `recycle_mapper_with_targets` freed a list it held as a
+reference parameter, and LLVM deleted the free-list link write. The reasoning below about shipping it still holds;
+the speed was not re-measured.
+
 Not measurable: every `panic = "abort"` build segfaults. The PGO build (trained on the conformance suite only, since
 the instrumented binary itself crashed on xstate-main in 12 of 12 tries and on webpack) and a plain `cargo build
 --release` with `CARGO_PROFILE_RELEASE_PANIC=abort` both crash on xstate-main, webpack, vscode and the 38k-file
