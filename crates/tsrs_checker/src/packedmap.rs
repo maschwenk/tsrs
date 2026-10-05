@@ -1,0 +1,158 @@
+//! Hash maps of small `Copy` keys and values whose slots are packed to 4-byte alignment (notes/mem-checker-heap.md).
+//!
+//! The checker's caches keyed by a `CacheHashKey` (Go's 128-bit `xxh3` key) store a 16-byte key and a 4-byte type
+//! handle; as a `(K, V)` tuple in an `FxHashMap` that slot is padded to 24 bytes. `PackedMap` stores the same pair in
+//! 20 bytes, and hashes a `CacheHashKey` by its own low word (it is already a hash) instead of running Fx over both
+//! words. Same contents, same lookups; only the table's layout differs. Nothing iterates these maps in an order
+//! that reaches output (`values` is for counts and tests).
+
+use crate::*;
+
+/// A key `PackedMap` can hash.
+pub trait PackedKey: Copy + Eq {
+    fn packed_hash(&self) -> u64;
+}
+
+impl PackedKey for CacheHashKey {
+    #[inline]
+    fn packed_hash(&self) -> u64 {
+        // The key is the output of xxh3-128: its low word is already uniformly distributed.
+        self.lo
+    }
+}
+
+impl PackedKey for CachedSignatureKey {
+    #[inline]
+    fn packed_hash(&self) -> u64 {
+        self.key.lo ^ (self.sig.key() as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15)
+    }
+}
+
+#[repr(C, packed(4))]
+#[derive(Clone, Copy)]
+struct PackedSlot<K, V> {
+    key: K,
+    value: V,
+}
+
+const _: () = assert!(std::mem::size_of::<PackedSlot<CacheHashKey, P<Type>>>() == if tsrs_core::COMPRESSED_PTRS { 20 } else { 24 });
+
+pub struct PackedMap<K, V> {
+    table: hashbrown::HashTable<PackedSlot<K, V>>,
+}
+
+impl<K, V> Default for PackedMap<K, V> {
+    fn default() -> Self {
+        PackedMap { table: hashbrown::HashTable::new() }
+    }
+}
+
+impl<K: PackedKey, V: Copy> PackedMap<K, V> {
+    pub fn new() -> Self {
+        PackedMap::default()
+    }
+
+    /// A map holding one entry, with the capacity `FxHashMap::from_iter([(key, value)])` has.
+    pub fn from_one(key: K, value: V) -> Self {
+        let mut m = PackedMap { table: hashbrown::HashTable::with_capacity(1) };
+        m.insert(key, value);
+        m
+    }
+
+    #[inline]
+    pub fn get(&self, key: &K) -> Option<V> {
+        let key = *key;
+        self.table.find(key.packed_hash(), |slot| ({ slot.key }) == key).map(|slot| slot.value)
+    }
+
+    #[inline]
+    pub fn contains_key(&self, key: &K) -> bool {
+        self.get(key).is_some()
+    }
+
+    /// Like `HashMap::insert`: returns the value the key had.
+    #[inline]
+    pub fn insert(&mut self, key: K, value: V) -> Option<V> {
+        match self.table.entry(key.packed_hash(), |slot| ({ slot.key }) == key, |slot| ({ slot.key }).packed_hash()) {
+            hashbrown::hash_table::Entry::Occupied(mut slot) => {
+                let old = slot.get().value;
+                slot.get_mut().value = value;
+                Some(old)
+            }
+            hashbrown::hash_table::Entry::Vacant(slot) => {
+                slot.insert(PackedSlot { key, value });
+                None
+            }
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.table.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.table.is_empty()
+    }
+
+    pub fn capacity(&self) -> usize {
+        self.table.capacity()
+    }
+
+    pub fn clear(&mut self) {
+        self.table.clear();
+    }
+
+    /// The values, in table order (counts and tests only: the order is not observable).
+    pub fn values(&self) -> impl Iterator<Item = V> + '_ {
+        self.table.iter().map(|slot| slot.value)
+    }
+
+    pub(crate) fn heap_stat(&self) -> crate::heapcensus::HeapStat {
+        crate::heapcensus::HeapStat::table(self.table.len(), self.table.capacity(), std::mem::size_of::<PackedSlot<K, V>>())
+    }
+}
+
+/// `GoMap` (a nil-able shared map in the arena) over a `PackedMap`, for the `CacheHashKey`-keyed instantiation maps
+/// of arena objects (conditional roots, type aliases). Same `make` / `get` / `set` behavior as `GoMap`.
+pub struct GoPackedMap<K: 'static, V: 'static>(Cell<Option<P<RefCell<PackedMap<K, V>>>>>);
+
+impl<K: 'static, V: 'static> Default for GoPackedMap<K, V> {
+    fn default() -> Self {
+        GoPackedMap(Cell::new(None))
+    }
+}
+
+impl<K: PackedKey + 'static, V: Copy + 'static> GoPackedMap<K, V> {
+    /// Go `m = make(map[K]V)`.
+    pub fn make(&self) {
+        // As `GoMap::make`: the table lives where the map field does (emit scratch regions).
+        let scratch = tsrs_core::arena::scratch_contains(std::ptr::from_ref::<Self>(self) as usize);
+        self.0.set(Some(P::new_in(scratch, RefCell::new(PackedMap::default()))));
+    }
+
+    pub fn is_nil(&self) -> bool {
+        self.0.get().is_none()
+    }
+
+    /// Go `v, ok := m[k]` (reading a nil map is allowed).
+    #[inline]
+    pub fn get(&self, key: &K) -> Option<V> {
+        self.0.get().and_then(|m| m.borrow().get(key))
+    }
+
+    /// Go `m[k] = v`. Creates the map if it is nil, as `GoMap::set` does.
+    pub fn set(&self, key: K, value: V) {
+        let m = match self.0.get() {
+            Some(m) => m,
+            None => {
+                self.make();
+                self.0.get().unwrap()
+            }
+        };
+        m.borrow_mut().insert(key, value);
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.get().map_or(0, |m| m.borrow().len())
+    }
+}

@@ -88,7 +88,7 @@ impl Checker {
     // checker.go:19659
     pub(crate) fn get_signature_instantiation_without_filling_in_type_arguments(&mut self, sig: P<Signature>, type_arguments: &[P<Type>]) -> P<Signature> {
         let key = CachedSignatureKey { sig, key: get_type_list_key(type_arguments) };
-        let mut instantiation = self.cached_signatures.get(&key).copied();
+        let mut instantiation = self.cached_signatures.get(&key);
         if instantiation.is_none() {
             let created = self.create_signature_instantiation(sig, type_arguments);
             self.cached_signatures.insert(key, created);
@@ -183,7 +183,7 @@ impl Checker {
             return signature;
         }
         let key = CachedSignatureKey { sig: signature, key: SignatureKeyErased };
-        let mut erased = self.cached_signatures.get(&key).copied();
+        let mut erased = self.cached_signatures.get(&key);
         if erased.is_none() {
             let m = new_array_to_single_type_mapper(signature.type_parameters.get(), self.any_type);
             let created = self.instantiate_signature_ex(signature, m, true /*eraseTypeParameters*/);
@@ -199,7 +199,7 @@ impl Checker {
             return signature;
         }
         let key = CachedSignatureKey { sig: signature, key: SignatureKeyCanonical };
-        let mut canonical = self.cached_signatures.get(&key).copied();
+        let mut canonical = self.cached_signatures.get(&key);
         if canonical.is_none() {
             let created = self.create_canonical_signature(signature);
             self.cached_signatures.insert(key, created);
@@ -236,7 +236,7 @@ impl Checker {
             return signature;
         }
         let key = CachedSignatureKey { sig: signature, key: SignatureKeyBase };
-        if let Some(cached) = self.cached_signatures.get(&key).copied() {
+        if let Some(cached) = self.cached_signatures.get(&key) {
             return cached;
         }
         let mut constraints = Vec::with_capacity(type_parameters.len());

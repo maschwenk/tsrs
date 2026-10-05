@@ -978,15 +978,15 @@ pub struct Checker {
     pub bigint_literal_types: FxHashMap<PseudoBigInt, P<Type>>,
     pub enum_literal_types: FxHashMap<EnumLiteralKey, P<Type>>,
     pub enum_nan_literal_types: FxHashMap<P<Symbol>, P<Type>>,
-    pub indexed_access_types: FxHashMap<CacheHashKey, P<Type>>,
-    pub template_literal_types: FxHashMap<CacheHashKey, P<Type>>,
+    pub indexed_access_types: PackedMap<CacheHashKey, P<Type>>,
+    pub template_literal_types: PackedMap<CacheHashKey, P<Type>>,
     pub string_mapping_types: FxHashMap<StringMappingKey, P<Type>>,
     pub unique_es_symbol_types: FxHashMap<P<Symbol>, P<Type>>,
     pub this_expando_kinds: FxHashMap<P<Symbol>, thisAssignmentDeclarationKind>,
     pub this_expando_locations: FxHashMap<P<Symbol>, Option<P<Node>>>,
     pub subtype_reduction_cache: FxHashMap<CacheHashKey, &'static [P<Type>]>,
     pub cached_types: FxHashMap<CachedTypeKey, P<Type>>,
-    pub cached_signatures: FxHashMap<CachedSignatureKey, P<Signature>>,
+    pub cached_signatures: PackedMap<CachedSignatureKey, P<Signature>>,
     pub undefined_properties: FxHashMap<String, P<Symbol>>,
     // tsrs: the canonical (history-independent) form of `undefined_properties` (get_undefined_property).
     pub undefined_properties_by_prop: FxHashMap<P<Symbol>, P<Symbol>>,
@@ -1005,7 +1005,7 @@ pub struct Checker {
     pub require_symbol: P<Symbol>,
     pub unknown_symbol: P<Symbol>,
     pub unresolved_symbols: FxHashMap<String, P<Symbol>>,
-    pub error_types: FxHashMap<CacheHashKey, P<Type>>,
+    pub error_types: PackedMap<CacheHashKey, P<Type>>,
     pub module_symbols: FxHashMap<P<Node>, P<Symbol>>,
     pub global_this_symbol: P<Symbol>,
     pub symbol_table_alias_cache: FxHashMap<symbolTableID, &'static [P<Symbol>]>,
@@ -1014,10 +1014,10 @@ pub struct Checker {
     pub name_resolver: P<NameResolver<Checker>>,
     /// Go `resolveNameForSymbolSuggestion`; call through `resolve_name_for_symbol_suggestion`.
     pub name_resolver_for_suggestion: P<NameResolver<Checker>>,
-    pub tuple_types: FxHashMap<CacheHashKey, P<Type>>,
-    pub union_types: FxHashMap<CacheHashKey, P<Type>>,
+    pub tuple_types: PackedMap<CacheHashKey, P<Type>>,
+    pub union_types: PackedMap<CacheHashKey, P<Type>>,
     pub union_of_union_types: FxHashMap<UnionOfUnionKey, P<Type>>,
-    pub intersection_types: FxHashMap<CacheHashKey, P<Type>>,
+    pub intersection_types: PackedMap<CacheHashKey, P<Type>>,
     pub properties_types: FxHashMap<PropertiesTypesKey, P<Type>>,
     pub diagnostics: ast::DiagnosticsCollection,
     pub suggestion_diagnostics: ast::DiagnosticsCollection,
@@ -1059,7 +1059,7 @@ pub struct Checker {
     // Go `StructuredType.resolvedBaseConstraint` (see `resolved_base_constraint_of`).
     pub(crate) structured_type_base_constraints: FxHashMap<P<Type>, P<Type>>,
     // Go `ObjectType.instantiations` of object types that are not interfaces or tuples (see `ObjectType`).
-    pub(crate) object_type_instantiations: FxHashMap<P<Type>, FxHashMap<CacheHashKey, P<Type>>>,
+    pub(crate) object_type_instantiations: FxHashMap<P<Type>, PackedMap<CacheHashKey, P<Type>>>,
     pub(crate) lazy_mapped_tables: FxHashMap<P<Type>, std::rc::Rc<LazyMappedTable>>,
     /// tsrs_core::lazymembers::enabled() (default on; `--noLazyMembers` / `TSRS_LAZY_MEMBERS=0`): no lazy table is created when false.
     pub lazy_members: bool,
@@ -1270,13 +1270,13 @@ pub struct Checker {
     pub skip_direct_inference_nodes: Set<P<Node>>,
     pub ctx: Option<Context>, // Go nil until checkSourceFile
     pub active_mappers: Vec<P<TypeMapper>>,
-    pub active_type_mappers_caches: Vec<FxHashMap<CacheHashKey, P<Type>>>,
+    pub active_type_mappers_caches: Vec<PackedMap<CacheHashKey, P<Type>>>,
     // Mappers and inference contexts `getConditionalType` made, recycled when it returns (notes/mem-recycle.md).
     pub scratch_mappers: Vec<P<TypeMapper>>,
     pub scratch_contexts: Vec<P<InferenceContext>>,
     /// `getTailRecursionRoot` mappers with the type-argument lists made for them, recycled with `scratch_mappers`.
     pub scratch_mapper_lists: Vec<(P<TypeMapper>, &'static [P<Type>])>,
-    pub free_type_mapper_caches: Vec<FxHashMap<CacheHashKey, P<Type>>>, // Rust-only: cleared maps for reuse (Go keeps them in the slice capacity)
+    pub free_type_mapper_caches: Vec<PackedMap<CacheHashKey, P<Type>>>, // Rust-only: cleared maps for reuse (Go keeps them in the slice capacity)
     pub free_type_lists: Vec<Vec<P<Type>>>, // Rust-only: empty buffers for `instantiate_types_changed`
     pub ambient_modules_once: bool, // Go sync.Once: true once ambient_modules has been computed
     pub ambient_modules: Vec<P<Symbol>>,
@@ -1373,15 +1373,15 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         bigint_literal_types: FxHashMap::default(),
         enum_literal_types: FxHashMap::default(),
         enum_nan_literal_types: FxHashMap::default(),
-        indexed_access_types: FxHashMap::default(),
-        template_literal_types: FxHashMap::default(),
+        indexed_access_types: PackedMap::default(),
+        template_literal_types: PackedMap::default(),
         string_mapping_types: FxHashMap::default(),
         unique_es_symbol_types: FxHashMap::default(),
         this_expando_kinds: FxHashMap::default(),
         this_expando_locations: FxHashMap::default(),
         subtype_reduction_cache: FxHashMap::default(),
         cached_types: FxHashMap::default(),
-        cached_signatures: FxHashMap::default(),
+        cached_signatures: PackedMap::default(),
         undefined_properties: FxHashMap::default(),
         undefined_properties_by_prop: FxHashMap::default(),
         narrowed_types: FxHashMap::default(),
@@ -1399,17 +1399,17 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         require_symbol: dummy_symbol,
         unknown_symbol: dummy_symbol,
         unresolved_symbols: FxHashMap::default(),
-        error_types: FxHashMap::default(),
+        error_types: PackedMap::default(),
         module_symbols: FxHashMap::default(),
         global_this_symbol: dummy_symbol,
         symbol_table_alias_cache: FxHashMap::default(),
         class_expression_name_tables: FxHashMap::default(),
         name_resolver: dummy_resolver,
         name_resolver_for_suggestion: dummy_resolver,
-        tuple_types: FxHashMap::default(),
-        union_types: FxHashMap::default(),
+        tuple_types: PackedMap::default(),
+        union_types: PackedMap::default(),
         union_of_union_types: FxHashMap::default(),
-        intersection_types: FxHashMap::default(),
+        intersection_types: PackedMap::default(),
         properties_types: FxHashMap::default(),
         diagnostics: ast::DiagnosticsCollection::default(),
         suggestion_diagnostics: ast::DiagnosticsCollection::default(),
@@ -1731,7 +1731,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
     c.unknown_empty_object_type = c.new_anonymous_type(None /*symbol*/, None, &[], &[], &[]);
     c.unknown_union_type = c.create_unknown_union_type();
     c.empty_generic_type = c.new_anonymous_type(None /*symbol*/, None, &[], &[], &[]);
-    c.object_type_instantiations.insert(c.empty_generic_type, FxHashMap::default());
+    c.object_type_instantiations.insert(c.empty_generic_type, PackedMap::default());
     c.any_function_type = c.new_anonymous_type(None /*symbol*/, None, &[], &[], &[]);
     c.any_function_type.object_flags.set(c.any_function_type.object_flags.get() | ObjectFlags::NonInferrableType);
     c.no_constraint_type = c.new_anonymous_type(None /*symbol*/, None, &[], &[], &[]);

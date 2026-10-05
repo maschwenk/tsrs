@@ -133,7 +133,7 @@ impl Checker {
             return types[0];
         }
         let key = get_union_key(types, origin, alias);
-        if let Some(t) = self.union_types.get(&key).copied() {
+        if let Some(t) = self.union_types.get(&key) {
             return t;
         }
         let flags = precomputed_object_flags | self.get_propagating_flags_of_types(types, TypeFlags::Nullable);
@@ -149,7 +149,7 @@ impl Checker {
 
     // checker.go:26227
     pub fn union_types(&mut self) -> Vec<P<Type>> {
-        self.union_types.values().copied().collect()
+        self.union_types.values().collect()
     }
 
     // checker.go:26231
@@ -586,7 +586,7 @@ impl Checker {
             }
         }
         let key = get_intersection_key(&type_set, flags, alias);
-        let mut result = self.intersection_types.get(&key).copied();
+        let mut result = self.intersection_types.get(&key);
         if result.is_none() {
             let r;
             if includes.intersects(TypeFlags::Union) {
@@ -1541,7 +1541,7 @@ impl Checker {
             // Defer the operation by creating an indexed access type.
             let persistent_access_flags = access_flags & AccessFlags::Persistent;
             let key = get_indexed_access_key(object_type, index_type, access_flags, alias);
-            if let Some(t) = self.indexed_access_types.get(&key).copied() {
+            if let Some(t) = self.indexed_access_types.get(&key) {
                 return Some(t);
             }
             let t = self.new_indexed_access_type(object_type, index_type, persistent_access_flags);
