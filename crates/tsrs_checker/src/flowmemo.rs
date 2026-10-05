@@ -73,7 +73,7 @@ struct Slot {
     flow: Option<P<FlowNode>>,
     t: Option<P<Type>>,
     height: u16,
-    /// `Checker::flow_type_cache_epoch` when the value was computed, if the frame read that cache; else 0.
+    /// `FlowMemo::type_cache_epoch` when the value was computed, if the frame read that cache; else 0.
     epoch: u32,
     count_reset: bool,
 }
@@ -109,13 +109,11 @@ struct Regs {
     /// Largest `child height + 1` so far: an upper bound on the depth its sub-walk can reach in any walk (memo and
     /// `sharedFlows` hits count with the height they stand for).
     height: u16,
-    /// The same, counting memo and `sharedFlows` hits as 0: the depth this walk actually reached (shadow checks).
-    actual: u16,
     /// FLAG_*.
     flags: u8,
 }
 
-const FRESH_REGS: Regs = Regs { transient: UNTAINTED, reference: UNTAINTED, height: 0, actual: 0, flags: 0 };
+const FRESH_REGS: Regs = Regs { transient: UNTAINTED, reference: UNTAINTED, height: 0, flags: 0 };
 
 /// What `Checker::flow_frame_begin` saved.
 #[derive(Clone, Copy)]
@@ -168,6 +166,13 @@ pub struct FlowMemo {
     shadow_keys: Vec<Option<Box<[u8]>>>,
     serial: u32,
     regs: Regs,
+    /// Identifies the current `Checker::flow_type_cache` (a new one per reset, and when an entry changes); saved and
+    /// restored with it. Within one, an expression's cached type never changes. Starts at a value serials never take.
+    pub(crate) type_cache_epoch: u32,
+    /// Checkpoints that the active frames of keyed walks iterated past.
+    pub(crate) checkpoints: Vec<P<FlowNode>>,
+    /// Shadow mode: memo answers waiting for the frame that found them to end.
+    pub(crate) shadow_hits: Vec<(P<FlowNode>, MemoHit)>,
     pub(crate) key_buf: Vec<u8>,
     pub(crate) stats: FlowMemoStats,
 }
@@ -180,6 +185,9 @@ impl FlowMemo {
             shadow_keys: Vec::new(),
             serial: 1,
             regs: FRESH_REGS,
+            type_cache_epoch: UNTAINTED,
+            checkpoints: Vec::new(),
+            shadow_hits: Vec::new(),
             key_buf: Vec::new(),
             stats: FlowMemoStats::default(),
         }
@@ -212,10 +220,9 @@ impl FlowMemo {
         frame
     }
 
-    /// Ends a frame whose sub-walk has height `height` (and reached `actual`) and reports both to the parent; taint
-    /// and flags carry over to it.
+    /// Ends a frame whose sub-walk has height `height` and reports it to the parent; taint and flags carry over.
     #[inline]
-    pub(crate) fn end_with(&mut self, frame: FlowFrame, height: u16, actual: u16) -> FrameTaint {
+    fn end_with(&mut self, frame: FlowFrame, height: u16) -> FrameTaint {
         let r = self.regs;
         let taint = FrameTaint {
             transient: if r.transient < frame.start { r.transient } else { UNTAINTED },
@@ -227,7 +234,6 @@ impl FlowMemo {
             transient: r.transient.min(p.transient),
             reference: r.reference.min(p.reference),
             height: p.height.max(height.saturating_add(1)),
-            actual: p.actual.max(actual.saturating_add(1)),
             flags: r.flags | p.flags,
         };
         taint
@@ -235,9 +241,9 @@ impl FlowMemo {
 
     /// Ends a frame that computed its result: its height is what its children reported.
     #[inline]
-    fn end(&mut self, frame: FlowFrame) -> (FrameTaint, u16, u16) {
-        let (height, actual) = (self.regs.height, self.regs.actual);
-        (self.end_with(frame, height, actual), height, actual)
+    fn end(&mut self, frame: FlowFrame) -> (FrameTaint, u16) {
+        let height = self.regs.height;
+        (self.end_with(frame, height), height)
     }
 
     /// The innermost frame's result came from a memo answer for a sub-walk of height `height` at its own level.
@@ -252,16 +258,13 @@ impl FlowMemo {
     }
 
     #[inline]
-    pub(crate) fn save_heights(&mut self) -> (u16, u16) {
-        let saved = (self.regs.height, self.regs.actual);
-        self.regs.height = 0;
-        self.regs.actual = 0;
-        saved
+    pub(crate) fn save_height(&mut self) -> u16 {
+        std::mem::take(&mut self.regs.height)
     }
 
     #[inline]
-    pub(crate) fn restore_heights(&mut self, saved: (u16, u16)) {
-        (self.regs.height, self.regs.actual) = saved;
+    pub(crate) fn restore_height(&mut self, saved: u16) {
+        self.regs.height = saved;
     }
 
     #[inline]
@@ -359,7 +362,7 @@ impl Checker {
     /// instantiation in it, the count can only have stayed or gone to 0 (a `checkExpression` reset); if it was 0 at
     /// the start, a reset cannot be told apart.
     #[inline]
-    pub(crate) fn flow_frame_end(&mut self, frame: FlowFrame) -> (FrameTaint, u16, u16) {
+    pub(crate) fn flow_frame_end(&mut self, frame: FlowFrame) -> (FrameTaint, u16) {
         self.flow_frame_counters(frame);
         self.flow_memo.end(frame)
     }
@@ -368,7 +371,7 @@ impl Checker {
     #[inline]
     pub(crate) fn flow_frame_end_with(&mut self, frame: FlowFrame, height: u16) -> FrameTaint {
         self.flow_frame_counters(frame);
-        self.flow_memo.end_with(frame, height, 0)
+        self.flow_memo.end_with(frame, height)
     }
 
     #[inline]
@@ -500,18 +503,12 @@ impl Checker {
         }
     }
 
-    /// Whether a frame of this walk may use or fill the memo (both need the same context).
-    #[inline]
-    pub(crate) fn flow_memo_frame_ok(&self, f: P<FlowState>) -> bool {
-        self.flow_memo.mode != FlowMemoMode::Off && f.memo_key_state.get() != 1 && self.inline_level == 0 && !self.flow_analysis_disabled && f.reduce_labels.borrow().is_empty()
-    }
-
     /// Whether a fresh walk of this frame now could read a value that the memo's walk did not (this walk's transient
     /// `sharedFlows` values, the loop analysis in progress, another `flowTypeCache` when the memo's walk read it, an
     /// active instantiation's cache), or leave the instantiation count elsewhere.
     #[inline]
     pub(crate) fn flow_memo_consult_ok(&mut self, f: P<FlowState>, hit: MemoHit) -> bool {
-        let cache_ok = hit.epoch == 0 || hit.epoch == self.flow_type_cache_epoch;
+        let cache_ok = hit.epoch == 0 || hit.epoch == self.flow_memo.type_cache_epoch;
         let counters_ok = self.active_mappers.is_empty() && (!hit.count_reset || self.instantiation_count == 0);
         let ok = !f.memo_faithful.get() && self.flow_loop_stack.is_empty() && cache_ok && counters_ok && f.impure_shared.get() == 0;
         if !ok && stats_from_env() {
@@ -531,13 +528,13 @@ impl Checker {
 
     /// Go's `saveFlowTypeCache := c.flowTypeCache; c.flowTypeCache = nil`, with the memo's bookkeeping.
     pub(crate) fn take_flow_type_cache(&mut self) -> SavedFlowTypeCache {
-        let saved = SavedFlowTypeCache { cache: self.flow_type_cache.take(), epoch: self.flow_type_cache_epoch };
-        self.flow_type_cache_epoch = self.flow_memo.next_serial();
+        let saved = SavedFlowTypeCache { cache: self.flow_type_cache.take(), epoch: self.flow_memo.type_cache_epoch };
+        self.flow_memo.type_cache_epoch = self.flow_memo.next_serial();
         saved
     }
 
     pub(crate) fn restore_flow_type_cache(&mut self, saved: SavedFlowTypeCache) {
         self.flow_type_cache = saved.cache;
-        self.flow_type_cache_epoch = saved.epoch;
+        self.flow_memo.type_cache_epoch = saved.epoch;
     }
 }

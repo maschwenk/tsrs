@@ -1270,7 +1270,7 @@ impl Checker {
             if previous.is_some() {
                 // A nested evaluation of this node cached it first, so a cached type changed: memo answers that read
                 // this cache no longer describe it.
-                self.flow_type_cache_epoch = self.flow_memo.next_serial();
+                self.flow_memo.type_cache_epoch = self.flow_memo.next_serial();
             }
         }
         t

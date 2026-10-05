@@ -48,6 +48,8 @@ pub struct FlowState {
     pub memo_faithful: Cell<bool>,
     /// `sharedFlows` entries of this walk whose value is transient.
     pub impure_shared: Cell<u32>,
+    /// `reduce_labels.len()`, kept as a number for the memo's per-frame test.
+    pub reduce_depth: Cell<u32>,
 }
 
 pub static typeofNEFacts: LazyLock<FxHashMap<&'static str, TypeFacts>> = LazyLock::new(|| {
