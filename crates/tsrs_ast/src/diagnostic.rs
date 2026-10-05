@@ -732,3 +732,143 @@ pub fn new_diagnostic_from_text(
         repopulate_info: OwnedCell::new(None),
     })
 }
+
+// Process mode (notes/perf-checker-processes.md): diagnostics a forked checker process computed travel to the parent
+// as bytes, every field included, and are rebuilt there as new objects. Source files are sent by index (the caller's
+// mapping; files are shared with the parent, which built the program before the fork); messages by key, ad-hoc
+// messages by text.
+
+/// Appends `diagnostic` (with its message chain and related information) to `out`.
+pub fn encode_diagnostic(out: &mut Vec<u8>, diagnostic: P<Diagnostic>, file_index: &dyn Fn(P<SourceFile>) -> u32) {
+    fn put_u32(out: &mut Vec<u8>, v: u32) {
+        out.extend_from_slice(&v.to_le_bytes());
+    }
+    fn put_str(out: &mut Vec<u8>, s: &str) {
+        put_u32(out, s.len() as u32);
+        out.extend_from_slice(s.as_bytes());
+    }
+    let d = diagnostic;
+    put_u32(out, d.file().map_or(u32::MAX, file_index));
+    put_u32(out, d.pos() as u32);
+    put_u32(out, d.end() as u32);
+    put_u32(out, d.code as u32);
+    out.push(d.category() as u8);
+    put_str(out, d.source());
+    match d.message {
+        None => out.push(0),
+        Some(message) if diagnostics::key_to_message(message.key().as_str()).is_some_and(|m| std::ptr::eq(m, message)) => {
+            out.push(1);
+            put_str(out, message.key().as_str());
+        }
+        Some(message) => {
+            assert_eq!(message.code(), -1, "a diagnostic message that is neither generated nor ad hoc");
+            out.push(2);
+            put_str(out, message.text());
+        }
+    }
+    put_str(out, d.message_text());
+    put_str(out, d.message_key.as_str());
+    put_u32(out, d.message_args.len() as u32);
+    for arg in &d.message_args {
+        put_str(out, arg);
+    }
+    for list in [d.message_chain(), d.related_information()] {
+        put_u32(out, list.len() as u32);
+        for &item in list {
+            encode_diagnostic(out, item, file_index);
+        }
+    }
+    out.push(d.reports_unnecessary as u8 | (d.reports_deprecated as u8) << 1 | (d.skipped_on_no_emit() as u8) << 2);
+    match d.repopulate_info() {
+        None => out.push(0),
+        Some(info) => {
+            out.push(1);
+            put_u32(out, info.kind as u32);
+            put_str(out, &info.module_reference);
+            put_u32(out, info.mode.0 as u32);
+            put_str(out, &info.package_name);
+        }
+    }
+}
+
+/// Reads one diagnostic written by `encode_diagnostic` from the front of `input`.
+pub fn decode_diagnostic(input: &mut &[u8], file_at: &dyn Fn(u32) -> P<SourceFile>) -> P<Diagnostic> {
+    fn take<'a>(input: &mut &'a [u8], n: usize) -> &'a [u8] {
+        let (head, rest) = input.split_at(n);
+        *input = rest;
+        head
+    }
+    fn get_u32(input: &mut &[u8]) -> u32 {
+        u32::from_le_bytes(take(input, 4).try_into().unwrap())
+    }
+    fn get_u8(input: &mut &[u8]) -> u8 {
+        take(input, 1)[0]
+    }
+    fn get_str<'a>(input: &mut &'a [u8]) -> &'a str {
+        let n = get_u32(input) as usize;
+        std::str::from_utf8(take(input, n)).expect("diagnostic text is UTF-8")
+    }
+    fn static_key(key: &str) -> Key {
+        match key {
+            "" => Key::default(),
+            "-1" => Key("-1"),
+            _ => diagnostics::key_to_message(key).map_or_else(|| Key(Box::leak(key.to_string().into_boxed_str())), |m| m.key()),
+        }
+    }
+    let _outer = tsrs_core::arena::escape_scratch();
+    let file = match get_u32(input) {
+        u32::MAX => None,
+        index => Some(file_at(index)),
+    };
+    let loc = TextRange::new(get_u32(input) as i32, get_u32(input) as i32);
+    let code = get_u32(input) as i32;
+    let category = match get_u8(input) {
+        0 => Category::Warning,
+        1 => Category::Error,
+        2 => Category::Suggestion,
+        _ => Category::Message,
+    };
+    let source = get_str(input);
+    let message = match get_u8(input) {
+        0 => None,
+        1 => Some(diagnostics::key_to_message(get_str(input)).expect("a generated diagnostic message")),
+        _ => Some(diagnostics::new_ad_hoc_message(get_str(input))),
+    };
+    let message_text = get_str(input);
+    let message_key = static_key(get_str(input));
+    let message_args: Vec<String> = (0..get_u32(input)).map(|_| get_str(input).to_string()).collect();
+    let message_chain: Vec<P<Diagnostic>> = (0..get_u32(input)).map(|_| decode_diagnostic(input, file_at)).collect();
+    let related_information: Vec<P<Diagnostic>> = (0..get_u32(input)).map(|_| decode_diagnostic(input, file_at)).collect();
+    let flags = get_u8(input);
+    let repopulate_info = match get_u8(input) {
+        0 => None,
+        _ => {
+            let kind = if get_u32(input) == RepopulateDiagnosticKind::ModeMismatch as u32 {
+                RepopulateDiagnosticKind::ModeMismatch
+            } else {
+                RepopulateDiagnosticKind::ModuleNotFound
+            };
+            let module_reference = get_str(input).to_string();
+            let mode: ResolutionMode = tsrs_core::ModuleKind(get_u32(input) as i32);
+            let package_name = get_str(input).to_string();
+            Some(tsrs_core::alloc(RepopulateDiagnosticInfo { kind, module_reference, mode, package_name }))
+        }
+    };
+    P::new(Diagnostic {
+        file: OwnedCell::new(file),
+        loc: OwnedCell::new(loc),
+        code,
+        category: OwnedCell::new(category),
+        source: OwnedCell::new(if source.is_empty() { "" } else { alloc_str(source) }),
+        message,
+        message_text: OwnedCell::new(if message_text.is_empty() { "" } else { alloc_str(message_text) }),
+        message_key,
+        message_args,
+        message_chain: OwnedCell::new(alloc_slice(&message_chain)),
+        related_information: OwnedCell::new(alloc_slice(&related_information)),
+        reports_unnecessary: flags & 1 != 0,
+        reports_deprecated: flags & 2 != 0,
+        skipped_on_no_emit: OwnedCell::new(flags & 4 != 0),
+        repopulate_info: OwnedCell::new(repopulate_info),
+    })
+}
