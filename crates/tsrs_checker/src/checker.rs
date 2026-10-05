@@ -1217,7 +1217,6 @@ pub struct Checker {
     pub get_global_promise_constructor_symbol_cache: Option<Option<P<Symbol>>>,
     pub get_global_promise_constructor_symbol_or_nil_cache: Option<Option<P<Symbol>>>,
     pub get_global_omit_symbol_cache: Option<Option<P<Symbol>>>,
-    pub get_global_no_infer_symbol_or_nil_cache: Option<Option<P<Symbol>>>,
     pub get_global_iterator_type_cache: Option<P<Type>>,
     pub get_global_iterable_type_cache: Option<P<Type>>,
     pub get_global_iterable_type_checked_cache: Option<P<Type>>,
@@ -1251,7 +1250,6 @@ pub struct Checker {
     pub _jsx_factory_entity: Option<P<Node>>,
     pub skip_direct_inference_nodes: Set<P<Node>>,
     pub ctx: Option<Context>, // Go nil until checkSourceFile
-    pub packages_map: Option<FxHashMap<String, bool>>, // Go nil map = not computed
     pub active_mappers: Vec<P<TypeMapper>>,
     pub active_type_mappers_caches: Vec<FxHashMap<CacheHashKey, P<Type>>>,
     // Mappers and inference contexts `getConditionalType` made, recycled when it returns (notes/mem-recycle.md).
@@ -1589,7 +1587,6 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         get_global_promise_constructor_symbol_cache: None,
         get_global_promise_constructor_symbol_or_nil_cache: None,
         get_global_omit_symbol_cache: None,
-        get_global_no_infer_symbol_or_nil_cache: None,
         get_global_iterator_type_cache: None,
         get_global_iterable_type_cache: None,
         get_global_iterable_type_checked_cache: None,
@@ -1623,7 +1620,6 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         _jsx_factory_entity: None,
         skip_direct_inference_nodes: Set::new(),
         ctx: None,
-        packages_map: None,
         active_mappers: Vec::new(),
         active_type_mappers_caches: Vec::new(),
         scratch_mappers: Vec::new(),
@@ -1750,22 +1746,8 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
     typeof_names.sort_unstable();
     let typeof_types: Vec<P<Type>> = typeof_names.iter().map(|name| c.get_string_literal_type(name)).collect();
     c.typeof_type = c.get_union_type(&typeof_types);
-    // initializeClosures: the closures are the methods is_primitive_or_object_or_empty_type & co. below.
-    // initializeIterationResolvers:
-    c.sync_iteration_types_resolver = P::new(IterationTypesResolver {
-        is_async: false,
-        iterator_symbol_name: "iterator",
-        must_have_a_next_method_diagnostic: &diagnostics::An_iterator_must_have_a_next_method,
-        must_be_a_method_diagnostic: &diagnostics::The_0_property_of_an_iterator_must_be_a_method,
-        must_have_a_value_diagnostic: &diagnostics::The_type_returned_by_the_0_method_of_an_iterator_must_have_a_value_property,
-    });
-    c.async_iteration_types_resolver = P::new(IterationTypesResolver {
-        is_async: true,
-        iterator_symbol_name: "asyncIterator",
-        must_have_a_next_method_diagnostic: &diagnostics::An_async_iterator_must_have_a_next_method,
-        must_be_a_method_diagnostic: &diagnostics::The_0_property_of_an_async_iterator_must_be_a_method,
-        must_have_a_value_diagnostic: &diagnostics::The_type_returned_by_the_0_method_of_an_async_iterator_must_be_a_promise_for_a_type_with_a_value_property,
-    });
+    c.initialize_closures();
+    c.initialize_iteration_resolvers();
     c.initialize_checker();
     c.alias_cache_blockers -= 1;
     c
@@ -2072,15 +2054,6 @@ impl Checker {
         }
         let s = self.get_global_type_alias_symbol("Omit", 2 /*arity*/, true /*reportErrors*/);
         self.get_global_omit_symbol_cache = Some(s);
-        s
-    }
-
-    pub(crate) fn get_global_no_infer_symbol_or_nil(&mut self) -> Option<P<Symbol>> {
-        if let Some(s) = self.get_global_no_infer_symbol_or_nil_cache {
-            return s;
-        }
-        let s = self.get_global_type_alias_symbol("NoInfer", 1 /*arity*/, false /*reportErrors*/);
-        self.get_global_no_infer_symbol_or_nil_cache = Some(s);
         s
     }
 

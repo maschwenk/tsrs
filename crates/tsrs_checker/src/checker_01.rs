@@ -170,78 +170,9 @@ impl Checker {
         t
     }
 
-    // Resolve to the global class or interface by the given name and arity, or emptyObjectType/emptyGenericType otherwise
-    // checker.go:1161
-    pub(crate) fn get_global_type_resolver(&mut self, name: &str, arity: i32, report_errors: bool) -> Box<dyn FnMut(&mut Checker) -> P<Type>> {
-        let name = name.to_string();
-        let mut cache: Option<P<Type>> = None;
-        Box::new(move |c: &mut Checker| {
-            if let Some(t) = cache {
-                return t;
-            }
-            let t = c.get_global_type(&name, arity, report_errors);
-            cache = Some(t);
-            t
-        })
-    }
-
-    // Resolve to the global type alias symbol by the given name and arity, or nil otherwise
-    // checker.go:1168
-    pub(crate) fn get_global_type_alias_resolver(&mut self, name: &str, arity: i32, report_errors: bool) -> Box<dyn FnMut(&mut Checker) -> Option<P<Symbol>>> {
-        let name = name.to_string();
-        let mut cache: Option<Option<P<Symbol>>> = None;
-        Box::new(move |c: &mut Checker| {
-            if let Some(s) = cache {
-                return s;
-            }
-            let s = c.get_global_type_alias_symbol(&name, arity, report_errors);
-            cache = Some(s);
-            s
-        })
-    }
-
-    // Resolve to the global value symbol by the given name, or nil otherwise
-    // checker.go:1175
-    pub(crate) fn get_global_value_symbol_resolver(&mut self, name: &str, report_errors: bool) -> Box<dyn FnMut(&mut Checker) -> Option<P<Symbol>>> {
-        let name = name.to_string();
-        let mut cache: Option<Option<P<Symbol>>> = None;
-        Box::new(move |c: &mut Checker| {
-            if let Some(s) = cache {
-                return s;
-            }
-            let s = c.get_global_symbol(&name, SymbolFlags::Value, if report_errors { Some(&diagnostics::Cannot_find_global_value_0) } else { None });
-            cache = Some(s);
-            s
-        })
-    }
-
-    // checker.go:1181
-    pub(crate) fn get_global_type_symbol_resolver(&mut self, name: &str, report_errors: bool) -> Box<dyn FnMut(&mut Checker) -> Option<P<Symbol>>> {
-        let name = name.to_string();
-        let mut cache: Option<Option<P<Symbol>>> = None;
-        Box::new(move |c: &mut Checker| {
-            if let Some(s) = cache {
-                return s;
-            }
-            let s = c.get_global_symbol(&name, SymbolFlags::Type, if report_errors { Some(&diagnostics::Cannot_find_global_type_0) } else { None });
-            cache = Some(s);
-            s
-        })
-    }
-
-    // checker.go:1187
-    pub(crate) fn get_global_types_resolver(&mut self, names: &[&str], arity: i32, report_errors: bool) -> Box<dyn FnMut(&mut Checker) -> Vec<P<Type>>> {
-        let names: Vec<String> = names.iter().map(|name| name.to_string()).collect();
-        let mut cache: Option<Vec<P<Type>>> = None;
-        Box::new(move |c: &mut Checker| {
-            if let Some(types) = &cache {
-                return types.clone();
-            }
-            let types: Vec<P<Type>> = names.iter().map(|name| c.get_global_type(name, arity, report_errors)).collect();
-            cache = Some(types.clone());
-            types
-        })
-    }
+    // checker.go:1161-1192: getGlobalTypeResolver, getGlobalTypeAliasResolver, getGlobalValueSymbolResolver,
+    // getGlobalTypeSymbolResolver and getGlobalTypesResolver build the lazily resolved function-valued fields that
+    // NewChecker assigns; in Rust those fields are the cached `get_global_*` methods in checker.rs.
 
     // checker.go:1195
     pub(crate) fn get_global_type_alias_symbol(&mut self, name: &str, arity: i32, report_errors: bool) -> Option<P<Symbol>> {

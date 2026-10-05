@@ -36,15 +36,6 @@ pub(crate) fn create_printer_with_remove_comments_omit_trailing_semicolon_never_
     )
 }
 
-// printer.go:36
-pub(crate) fn create_printer_with_remove_comments_never_ascii_escape(emit_context: P<EmitContext>) -> Printer {
-    new_printer(
-        PrinterOptions { remove_comments: true, never_ascii_escape: true, ..Default::default() },
-        PrintHandlers::default(),
-        Some(emit_context),
-    )
-}
-
 impl Checker {
     // printer.go:43
     pub fn type_to_string_exported(&mut self, t: P<Type>) -> String {
