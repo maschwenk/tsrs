@@ -1,0 +1,6 @@
+# The one Rust version for builds, tests, clippy (tools/lint/ratchet.py), the bench and releases; every workflow
+# installs it. Upgrading is a pull request of its own: docs/RUST.md, "Upgrading Rust".
+[toolchain]
+channel = "1.99.0"
+components = ["clippy", "rustfmt"]
+profile = "minimal"
