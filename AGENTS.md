@@ -13,6 +13,8 @@ techniques are in place, rejected or untried.
   change (`docs/RUST.md`).
 - If the flagged code is intended, use `#[expect(clippy::<lint>, reason = "...")]` on the smallest item. Never a bare
   `#[allow]`, and never raise `baseline.tsv`.
+- Run `tools/lint/source.py` too: a new `unsafe impl Send`/`Sync` needs a SAFETY comment and an `--update` that puts it
+  in the reviewed inventory, and a `Relaxed`/`Acquire`/`Release` ordering needs a comment saying why it is enough.
 - A performance change needs numbers (instructions retired and peak RSS, before and after) and a note in `notes/`.
   Check `docs/RUST.md` "Techniques" first: it lists what was already measured and rejected.
 

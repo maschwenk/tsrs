@@ -48,6 +48,21 @@ Details:
   `[workspace.lints.rust]` (where the last four stay `allow`) while findings remain.
 - `tools/lint/ratchet.py --self-test` checks the comparison logic without running cargo.
 
+## Source checks
+
+`tools/lint/source.py` (CI: the `lint-ratchet` job) checks two things clippy cannot express:
+
+- **`unsafe impl Send` / `Sync`.** `tools/lint/send_sync.tsv` lists all of them (29 on 2026-10-05). Adding or removing
+  one fails until `tools/lint/source.py --update` records it, so every new cross-thread escape is a reviewed line in a
+  diff. `P<T>` is `Send + Sync` by decree (PORTING.md, "Threading"), so the compiler does not police these. After Bun's
+  `vm-thread-door` inventory.
+- **Weakened atomic orderings.** A `Relaxed`, `Acquire`, `Release` or `AcqRel` needs a `//` comment on its line or in
+  the three lines above saying why the ordering is enough (Bun: "default to seq_cst and comment any weakened
+  ordering"). `tools/lint/atomics.tsv` counts the ones without a comment per file (81 in 25 files); a file may not
+  go above its count.
+
+Test files, the generated fourslash crate and generated files are not scanned.
+
 ## What the lints check
 
 `awk -F'\t' '!/^#/{n[$2]+=$1} END{for (l in n) print n[l], l}' tools/lint/baseline.tsv | sort -rn` prints the current
@@ -139,8 +154,6 @@ Not tried. Each needs a measurement and a note before it is adopted; none is app
 | Call-graph lints | mordant, used by Bun with a per-file baseline, advisory there | `forbidden_reach` ("nothing reachable from this function may allocate"), `generic_body_not_generic` (code compiled again per type for no reason). | A nightly with `rustc-dev` that compiles the workspace. |
 | Source-pattern lints | Bun `test/internal/source-lints/` (one regex per rule, a per-file count allowlist, a check that the scan is not empty), rust-analyzer `xtask/src/tidy.rs` | Bans that clippy cannot express. | A rule that needs it; put it next to `ratchet.py`. |
 | Dependency checks in CI | cargo-deny (oxc, Ruff, Biome, swc), cargo-shear or machete (oxc, Rolldown, Ruff, rust-analyzer) | `deny.toml` exists but no job runs it; unused dependencies cost fat-LTO build time. | A CI step. |
-| Inventory of `unsafe impl Send` / `Sync` | Bun `vm-thread-door.inventory.json` (exact snapshot; any change fails until regenerated) | 29 such impls today; each new cross-thread escape becomes a reviewed line, which matters because `P<T>` is `Send + Sync` by decree. | A script and a checked-in list, run with the ratchet. |
-| Weakened atomic orderings need a reason | Bun review rule ("default to seq_cst and comment any weakened ordering") | 110 `Relaxed`, 5 `Acquire`, 5 `Release` today; a source-pattern check (ratcheted per file) asks for a comment at new ones. | A script, run with the ratchet. |
 | Hot/cold text grouping with PGO (`-Wl,-z,keep-text-section-prefix`) | Bun (only when a profile is loaded) | PGO already marks functions hot or cold; the linker flag keeps them grouped, for fewer instruction-cache misses on Linux. | A cycles or wall-time A/B; instruction counts will not show it. |
 | Monomorphization audit | oxc (`cargo llvm-lines` workflow), rust-analyzer style guide ("Avoid Monomorphization") | The port's `impl FnMut` callback convention compiles a copy per caller; a list of the largest instantiations shows where a non-generic inner function would cut code size and compile time. | `cargo llvm-lines` on the checker crate; a note. |
 | Identifiers that carry their hash | oxc `Ident` (pointer, length, precomputed hash; `IdentHashMap` does not rehash) | Symbol-table lookups by name hash the string every time. | A profile showing what share of instructions string hashing takes before any change. |

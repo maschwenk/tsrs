@@ -22,6 +22,7 @@ cargo build --release -p tsrs_cli -p tsrs_testrunner
 ./target/release/tsrs -p path/to/project          # like `tsc` (emits; add --noEmit to only type check)
 cargo check --workspace                           # must be 0 errors, 0 warnings (CI uses -D warnings)
 tools/lint/ratchet.py                             # no new clippy findings (docs/RUST.md)
+tools/lint/source.py                              # unsafe Send/Sync inventory, comments on weakened atomic orderings
 tools/gen-check.sh                                # generated code matches its generator (change the generator, then --write)
 ```
 

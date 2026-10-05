@@ -1,0 +1,26 @@
+# Weakened atomic orderings without a comment, per file (tools/lint/source.py). Counts only go down.
+1	crates/tsrs_checker/src/checker.rs
+1	crates/tsrs_cli/src/tsctests/mod.rs
+1	crates/tsrs_fswatch/src/kqueue.rs
+1	crates/tsrs_fswatch/src/watcher.rs
+1	crates/tsrs_incremental/src/referencemap.rs
+1	crates/tsrs_project/src/watch.rs
+2	crates/tsrs_ast/src/ast.rs
+2	crates/tsrs_ast/src/utilities_1.rs
+2	crates/tsrs_checker/src/links.rs
+2	crates/tsrs_compiler/src/program_emit.rs
+2	crates/tsrs_core/src/context.rs
+2	crates/tsrs_core/src/lazymembers.rs
+2	crates/tsrs_core/src/reserve.rs
+2	crates/tsrs_incremental/src/emitfileshandler.rs
+2	crates/tsrs_ls/src/autoimport/extract.rs
+2	crates/tsrs_vfs/src/osvfs/os.rs
+3	crates/tsrs_compiler/src/program.rs
+3	crates/tsrs_core/src/arena.rs
+4	crates/tsrs_core/src/alloc_profile/census.rs
+4	crates/tsrs_ls/src/autoimport/registry.rs
+4	crates/tsrs_testrunner/src/main.rs
+7	crates/tsrs_ast/src/identifier.rs
+7	crates/tsrs_projectutil/src/logging/logtree.rs
+8	crates/tsrs_core/src/frozen.rs
+15	crates/tsrs_core/src/alloc_profile.rs
