@@ -228,8 +228,6 @@ pub(crate) struct poolState {
     checkers: &'static [CheckerSlot],
     // Program file index of each file.
     file_indices: FxHashMap<P<SourceFile>, usize>,
-    // The static assignment: checker index per program file index.
-    pub(crate) associations: Vec<usize>,
     // The checker that runs each program file: the static assignment until stealing moves a file to the checker that
     // checks it, so later passes over the file (declaration diagnostics, emit) use the checker that has its state.
     owners: Vec<std::sync::atomic::AtomicU32>,
@@ -580,7 +578,6 @@ impl checkerPool {
             poolState {
                 checkers,
                 file_indices,
-                associations,
                 owners,
                 weights,
                 group_stolen: Mutex::new(Vec::new()),
@@ -663,6 +660,7 @@ impl checkerPool {
         let index_of: Vec<Option<usize>> = files.iter().map(|f| state.file_indices.get(f).copied()).collect();
         let mut positions: Vec<Vec<u32>> = vec![Vec::new(); n];
         for i in visit_order(files.len()) {
+            // Owners change only inside a work group (stealing); this pass starts after the last one joined.
             if let Some(owner) = index_of[i].map(|fi| state.owners[fi].load(std::sync::atomic::Ordering::Relaxed) as usize) {
                 positions[owner].push(i as u32);
             }
