@@ -638,6 +638,19 @@ impl checkerPool {
         single_threaded: bool,
         cb: impl Fn(&mut Checker, usize, P<SourceFile>) + Sync,
     ) {
+        self.for_each_checker_group_do_ex(files, single_threaded, false, cb);
+    }
+
+    // `allow_steal`: the pass may move files between checkers (stealing_enabled). Only the type-check pass does: later
+    // passes over a file (declaration diagnostics, emit) must run on the checker that checked it, and the incremental
+    // pass records which checker found a global diagnostic first.
+    pub(crate) fn for_each_checker_group_do_ex(
+        &self,
+        files: &[P<SourceFile>],
+        single_threaded: bool,
+        allow_steal: bool,
+        cb: impl Fn(&mut Checker, usize, P<SourceFile>) + Sync,
+    ) {
         let state = self.create_checkers();
         let stats = assignment_stats_enabled();
         let n = state.checkers.len();
@@ -659,7 +672,7 @@ impl checkerPool {
         // runs on the calling thread instead of creating `checkers.len()` threads per file.
         let active: Vec<usize> = (0..n).filter(|&c| !positions[c].is_empty()).collect();
         let single = single_threaded || self.single_threaded || active.len() <= 1;
-        let steal = !single && stealing_enabled();
+        let steal = allow_steal && !single && stealing_enabled();
         let weight = |i: u32| index_of[i as usize].map_or(1, |fi| state.weights.get(fi).copied().unwrap_or(1).max(0) as u64);
         let queues: Vec<FileQueue> = positions.into_iter().map(|p| FileQueue::new(p, weight)).collect();
         let run = |checker_idx: usize| {
@@ -1418,4 +1431,53 @@ fn get_import_adjacency(program: &Program) -> Vec<Vec<usize>> {
         }
     }
     adjacent_files
+}
+
+#[cfg(test)]
+mod stealing_tests {
+    use super::{queues_next, FileQueue};
+    use std::sync::Mutex;
+
+    /// Owners taking from the front and thieves from the back of the same queues must hand out every position exactly
+    /// once: a lost position is a file that is never checked (missing diagnostics), a repeated one is checked twice.
+    #[test]
+    fn every_position_is_taken_exactly_once() {
+        let sizes = [5000usize, 0, 20000, 300, 1];
+        let mut base = 0u32;
+        let queues: Vec<FileQueue> = sizes
+            .iter()
+            .map(|&n| {
+                let positions: Vec<u32> = (base..base + n as u32).collect();
+                base += n as u32;
+                // Some positions weigh 0 (unchecked declaration files): they must still be handed out.
+                FileQueue::new(positions, |i| u64::from(i % 7 != 0) * u64::from(i % 5 + 1))
+            })
+            .collect();
+        let taken: Mutex<Vec<(usize, bool)>> = Mutex::new(Vec::new());
+        std::thread::scope(|s| {
+            for me in 0..queues.len() {
+                let (queues, taken) = (&queues, &taken);
+                s.spawn(move || {
+                    let mut mine = Vec::new();
+                    while let Some(t) = queues_next(queues, me, true) {
+                        mine.push(t);
+                    }
+                    taken.lock().unwrap().extend(mine);
+                });
+            }
+        });
+        let mut ids: Vec<usize> = taken.into_inner().unwrap().iter().map(|&(i, _)| i).collect();
+        ids.sort_unstable();
+        assert_eq!(ids, (0..base as usize).collect::<Vec<_>>());
+        assert!(queues.iter().all(|q| q.remaining() == 0));
+    }
+
+    /// Without stealing a checker runs exactly its own files, in visiting order.
+    #[test]
+    fn without_stealing_a_checker_keeps_its_own_files_in_order() {
+        let queues = vec![FileQueue::new(vec![0, 2, 4], |_| 1), FileQueue::new(vec![1, 3], |_| 1)];
+        let order: Vec<(usize, bool)> = std::iter::from_fn(|| queues_next(&queues, 0, false)).collect();
+        assert_eq!(order, vec![(0, false), (2, false), (4, false)]);
+        assert_eq!(queues[1].remaining(), 2);
+    }
 }

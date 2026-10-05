@@ -950,9 +950,20 @@ impl Program {
         source_files: &[P<SourceFile>],
         collect: &(impl Fn(&Context, &mut Checker, P<SourceFile>) -> Vec<P<Diagnostic>> + Sync),
     ) -> Vec<Vec<P<Diagnostic>>> {
+        self.collect_checker_diagnostics_from_files_ex(ctx, source_files, false, collect)
+    }
+
+    // `allow_steal`: files may move between checkers while they are checked (checkerPool::for_each_checker_group_do_ex).
+    fn collect_checker_diagnostics_from_files_ex(
+        &'static self,
+        ctx: &Context,
+        source_files: &[P<SourceFile>],
+        allow_steal: bool,
+        collect: &(impl Fn(&Context, &mut Checker, P<SourceFile>) -> Vec<P<Diagnostic>> + Sync),
+    ) -> Vec<Vec<P<Diagnostic>>> {
         let diagnostics: Vec<Mutex<Vec<P<Diagnostic>>>> = source_files.iter().map(|_| Mutex::new(Vec::new())).collect();
         if let Some(pool) = self.compiler_checker_pool() {
-            pool.for_each_checker_group_do(source_files, self.single_threaded(), |c, file_index, file| {
+            pool.for_each_checker_group_do_ex(source_files, self.single_threaded(), allow_steal, |c, file_index, file| {
                 *diagnostics[file_index].lock().unwrap() = collect(ctx, c, file);
             });
         } else {
@@ -1000,7 +1011,12 @@ impl Program {
 
     // program.go:806
     pub fn get_semantic_diagnostics(&'static self, ctx: &Context, source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
-        self.collect_checker_diagnostics(ctx, source_file, |ctx, c, file| self.get_semantic_diagnostics_with_checker(ctx, c, file))
+        let collect = |ctx: &Context, c: &mut Checker, file: P<SourceFile>| self.get_semantic_diagnostics_with_checker(ctx, c, file);
+        match source_file {
+            // All files: the type-check pass, the one that may move files between checkers.
+            None => filter_and_sort_diagnostics(&self.collect_checker_diagnostics_from_files_ex(ctx, self.files, true, &collect).concat()),
+            Some(_) => self.collect_checker_diagnostics(ctx, source_file, collect),
+        }
     }
 
     // program.go:812
