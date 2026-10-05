@@ -477,6 +477,7 @@ impl configFileRegistryBuilder {
         let mut created_or_deleted_config_files: FxHashSet<Path> = FxHashSet::default();
         let mut created_or_changed_or_deleted_files: Vec<Path> = Vec::new();
         let mut seen_changed: FxHashSet<Path> = FxHashSet::default();
+        #[expect(clippy::iter_over_hash_type, reason = "order-independent: fills path sets and a list (a map in Go) whose later uses commute apart from log lines; Go ranges the set too")]
         for uri in summary.changed.keys() {
             if tspath::contains_ignored_path(&uri.0) {
                 continue;
@@ -491,6 +492,7 @@ impl configFileRegistryBuilder {
                 created_or_changed_or_deleted_files.push(path);
             }
         }
+        #[expect(clippy::iter_over_hash_type, reason = "order-independent: fills path sets and maps and a list (a map in Go) whose later uses commute apart from log lines; Go ranges the set too")]
         for uri in summary.deleted.keys() {
             if tspath::contains_ignored_path(&uri.0) {
                 continue;
@@ -506,6 +508,7 @@ impl configFileRegistryBuilder {
                 created_or_changed_or_deleted_files.push(path);
             }
         }
+        #[expect(clippy::iter_over_hash_type, reason = "order-independent: fills path sets and maps and a list (a map in Go) whose later uses commute apart from log lines; Go ranges the set too")]
         for uri in summary.created.keys() {
             if tspath::contains_ignored_path(&uri.0) {
                 continue;
@@ -581,6 +584,7 @@ impl configFileRegistryBuilder {
         }
 
         // Handle deletions of wildcard-included root files
+        #[expect(clippy::iter_over_hash_type, reason = "order-independent: marks configs for a file-name reload and unions affected projects; Go ranges the map too")]
         for (path, file_name) in &deleted_files {
             self.configs.range(|entry| {
                 let key = entry.key();

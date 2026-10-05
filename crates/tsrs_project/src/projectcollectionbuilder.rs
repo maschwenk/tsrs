@@ -278,6 +278,7 @@ impl ProjectCollectionBuilder {
         }
 
         if let Some(open_projects) = &api_request.open_projects {
+            #[expect(clippy::iter_over_hash_type, reason = "Go ranges the set too; the order only decides which error is returned when several projects are missing")]
             for config_file_name in open_projects.keys() {
                 let config_path = (self.to_path)(config_file_name);
                 if let Some(entry) = self.find_or_create_project(config_file_name, &config_path, projectLoadKind::Create, logger) {
@@ -327,6 +328,7 @@ impl ProjectCollectionBuilder {
         }
 
         if let Some(projects_to_close) = &projects_to_close {
+            #[expect(clippy::iter_over_hash_type, reason = "order-independent: deletes each closed project by its own key; Go ranges the set too")]
             for project_path in projects_to_close {
                 if let Some(entry) = self.configured_projects.load(&ConfiguredProjectID(project_path.clone())) {
                     self.delete_project(&projectEntry::Configured(entry), logger);
@@ -340,6 +342,7 @@ impl ProjectCollectionBuilder {
         if let Some(open_files) = &api_request.open_files {
             let mut retain: Set<Path> = Set::default();
             let mut ensure_inferred_project = false;
+            #[expect(clippy::iter_over_hash_type, reason = "Go ranges the map too; the order only decides which error is returned when several files have no project")]
             for (path, file_name) in open_files {
                 if self.is_open_file(path) {
                     if self.find_default_configured_project(file_name, path).is_none() && !self.is_supported_in_inferred_project(file_name) {
@@ -377,6 +380,7 @@ impl ProjectCollectionBuilder {
             }
         }
         if let Some(remove_programs) = &api_request.remove_programs {
+            #[expect(clippy::iter_over_hash_type, reason = "Go ranges the set too; the order only decides which error is returned when several programs are missing")]
             for program_id in remove_programs.keys() {
                 let Some(project) = self.synthetic_projects.load(program_id) else {
                     return Err(lsproto::Error::new(format!("synthetic program not found for removal: {}", program_id.0)));
@@ -429,6 +433,7 @@ impl ProjectCollectionBuilder {
             }
         }
         *self.created_programs.borrow_mut() = created_programs;
+        #[expect(clippy::iter_over_hash_type, reason = "Go ranges the map too; the order only decides which error is returned when several files have no project")]
         for (path, file_name) in &api_request.ensure_files {
             self.did_request_file_path(file_name, path, false /*configuredProjectsOnly*/, logger);
             if self.find_default_project(file_name, path).is_none() {
@@ -436,6 +441,7 @@ impl ProjectCollectionBuilder {
             }
         }
         if let Some(ensure_programs) = &api_request.ensure_programs {
+            #[expect(clippy::iter_over_hash_type, reason = "order-independent: loads each requested project by its own ID; Go ranges the set too")]
             for project_id in ensure_programs.keys() {
                 self.did_request_project(project_id, logger);
             }
@@ -592,6 +598,7 @@ impl ProjectCollectionBuilder {
         };
 
         let mut inferred_project_files: Vec<String> = Vec::new();
+        #[expect(clippy::iter_over_hash_type, reason = "order-independent: retains projects in a set and collects inferred roots, which update_inferred_project sorts (as Go does); Go ranges the map too")]
         for overlay in self.overlays.values() {
             let open_file = overlay.base.file_name.clone();
             let open_file_path = (self.to_path)(&open_file);
@@ -646,6 +653,7 @@ impl ProjectCollectionBuilder {
     // projectcollectionbuilder.go:590
     fn collect_inferred_project_roots(&self) -> Vec<String> {
         let mut inferred_project_files: Vec<String> = Vec::new();
+        #[expect(clippy::iter_over_hash_type, reason = "order-independent: collects inferred roots, which update_inferred_project sorts (as Go does); Go ranges the map too")]
         for (path, overlay) in self.overlays.iter() {
             if self.find_default_configured_project(&overlay.base.file_name, path).is_none() {
                 inferred_project_files.push(overlay.base.file_name.clone());
@@ -915,6 +923,7 @@ impl ProjectCollectionBuilder {
             );
         };
 
+        #[expect(clippy::iter_over_hash_type, reason = "order-independent: updates each project's ATA state by its own ID; the order only reaches log lines; Go ranges the map too")]
         for (project_id, ata_change) in ata_changes {
             logger.embed(&ata_change.logs);
             if project_id.inferred().is_some() {

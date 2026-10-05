@@ -2,12 +2,6 @@
 # Written by `tools/lint/ratchet.py --update` with clippy from Rust 1.99.0. Counts only go down; never edit by hand.
 3	clippy::iter_over_hash_type	crates/tsrs_api/src/requestfs.rs
 1	clippy::iter_over_hash_type	crates/tsrs_fswatch/src/event.rs
-12	clippy::iter_over_hash_type	crates/tsrs_ls/src/autoimport/registry.rs
-4	clippy::iter_over_hash_type	crates/tsrs_project/src/configfileregistrybuilder.rs
-1	clippy::iter_over_hash_type	crates/tsrs_project/src/overlayfs.rs
-9	clippy::iter_over_hash_type	crates/tsrs_project/src/projectcollectionbuilder.rs
-3	clippy::iter_over_hash_type	crates/tsrs_project/src/session.rs
-1	clippy::iter_over_hash_type	crates/tsrs_project/src/snapshotfs.rs
 1	clippy::iter_over_hash_type	crates/tsrs_projectutil/src/dirty/map.rs
 1	clippy::iter_over_hash_type	crates/tsrs_projectutil/src/dirty/syncmap.rs
 1	clippy::needless_pass_by_value	crates/tsrs_compiler/src/program_emit.rs
