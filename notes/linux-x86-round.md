@@ -246,7 +246,8 @@ Each against main after part 1, interleaved, 5 rounds unless noted, paired media
 | `MIMALLOC_ARENA_EAGER_COMMIT=1` (4 rounds) | - | wall +4.1%, cycles +3.7% | - | rejected |
 | `MIMALLOC_PURGE_DELAY=-1` (never give heap pages back) | wall -0.1%, cycles -0.3%, faults -77% | wall -2.7%, cycles -1.7% (-6.4..+0.4), faults -69% | wall +0.6%, cycles +0.9%, faults -55% | rejected |
 | `MIMALLOC_PURGE_DELAY=10000` | wall -0.4%, cycles -0.6% | wall +0.6%, cycles -0.2% | wall +1.4%, cycles +1.4% | rejected |
-| checker threads take ids in blocks of 1,024 | not used with one checker (wall +0.2%, cycles -0.2%, 3 rounds) | wall -1.8% (-6.7..+0.3), cycles -0.5%, max RSS -1.2% | two sessions: wall +1.9% / -3.0%, cycles +1.9% / -0.4%, max RSS -3.7% / -3.8% | landed (memory) |
+| checker threads take ids in blocks of 1,024, on main with work stealing (#93) | not used with one checker (wall +0.2%, cycles -0.2%, 3 rounds, before #93) | wall -1.4% (-17.1..-1.1), cycles -1.6% (-14.5..+0.3), max RSS -1.7% | wall -3.7% (-7.7..-2.2), cycles -4.5% (-7.6..-0.4), max RSS -4.7% | landed |
+| the same before #93 (static assignment) | - | wall -1.8% (-6.7..+0.3), cycles -0.5%, max RSS -1.2% | two sessions: wall +1.9% / -3.0%, cycles +1.9% / -0.4%, max RSS -3.7% / -3.8% | |
 
 - **Target CPU.** v3 (AVX2, BMI2, LZCNT, MOVBE, FMA) retires 0.6% fewer instructions and takes 1-2% more cycles; v2
   (POPCNT, SSE4.2) changes nothing. hashbrown probes with SSE2 at every level, the handle shifts are constant shifts
@@ -279,18 +280,21 @@ Each against main after part 1, interleaved, 5 rounds unless noted, paired media
   Threads of a parallel checker group now take 1,024 node or symbol ids at a time (`tsrs_ast::use_id_blocks`, set by
   `run_work_group` for the threads it spawns); all other threads take ids one at a time as before. In the eight-checker
   profile `assign_symbol_id` falls from 1.47% to 0.48% of the checker threads' cycles and `assign_node_id` from 0.34% to
-  0.20%; end to end that is inside this host's round-to-round spread. The effect that shows is memory: peak -1.2% with
-  four checkers (5.92 -> 5.85 GiB) and -3.7% / -3.8% with eight (7.47 -> 7.18 GiB), with tight ranges. With one counter
-  a checker's ids were spread over the whole id space, so each checker's id-keyed link stores (`IdLinkStore`, dense
-  pages of 1,024 ids) held a 4 KiB page for nearly every page of ids, most of it unused; now its ids come in runs of
-  1,024 and its pages are mostly its own. Sparse id pages (`TSRS_SPARSE_ID_PAGES=1`, which pay only for the ids present)
-  confirm it: with them both builds peak at 7.40-7.45 GB with eight checkers, against 7.83 GB for main and 7.54 GB for
-  id blocks with dense pages (two runs each). Output is identical in every run (error-line md5 and the Types / Symbols /
-  Instantiations counters at 1 / 4 / 8 checkers), and the conformance trees are identical also in the multi-checker test
-  mode (`TS_TEST_PROGRAM_SINGLE_THREADED=false`). Differs from Go: Go takes every id from one counter. Ids of a parallel
-  checker group already interleave by timing there and here, so their values were never deterministic; what is kept is
-  that each thread's ids increase in its assignment order and that ids taken before, during and after a group stay in
-  that order, which is what a deterministic output can depend on.
+  0.20%. Measured first on main with the static checker assignment, the CPU change was inside this host's spread and
+  memory fell (peak -1.2% with four checkers, -3.7% / -3.8% with eight); measured again on main with work stealing (#93,
+  377d870), where every checker stays busy to the end, both show: eight checkers wall -3.7% and cycles -4.5% (every
+  round faster), peak -4.7% (7.93 -> 7.54 GiB); four checkers wall -1.4%, cycles -1.6%, peak -1.7% (5.98 -> 5.87 GiB).
+  The memory comes from the id-keyed link stores: with one counter a checker's ids were spread over the whole id space,
+  so each checker's `IdLinkStore` held a dense 4 KiB page for nearly every page of 1,024 ids, most of it unused; now its
+  ids come in runs of 1,024 and its pages are mostly its own. Sparse id pages (`TSRS_SPARSE_ID_PAGES=1`, which pay only
+  for the ids present) confirm it: with them both builds peak at 7.40-7.45 GB with eight checkers (static assignment),
+  against 7.83 GB for main and 7.54 GB for id blocks with dense pages (two runs each). Output is identical in every run
+  (error-line md5 at 1 / 4 / 8 checkers; with static assignment also the Types / Symbols / Instantiations counters,
+  which work stealing makes vary from run to run anyway), and the conformance trees are identical also in the
+  multi-checker test mode (`TS_TEST_PROGRAM_SINGLE_THREADED=false`). Differs from Go: Go takes every id from one
+  counter. Ids of a parallel checker group already interleave by timing there and here, so their values were never
+  deterministic; what is kept is that each thread's ids increase in its assignment order and that ids taken before,
+  during and after a group stay in that order, which is what a deterministic output can depend on.
 
 ### What is left
 
