@@ -51,7 +51,7 @@ for `b.ts` when `a.ts` is in the program and `{ status: string; user?: undefined
 | conformance suite, Go mode (the harness default) | identical: 13,458 / 12,779 / 12,779; `.js` 13,392, `.js.map` 149, `.sourcemap.txt` 156 |
 | conformance suite, canonical (`TSRS_CHECKER_ASSIGNMENT=locality tsrs-test ...`) | 1 test differs by design: `conformance/objectLiteralNormalization` `.types`, `.symbols` and `.js` (its `.d.ts`); error baselines and maps unchanged |
 | diagnostics: Mac error-rich clone, vscode, webpack, mui-docs, xstate | 0 lines differ (canonical vs Go mode with one checker, which is tsgo's history) |
-| diagnostics: 40k-error corpus | the 2-6 lines above (each tsgo checker count printed one of four variants) |
+| diagnostics: 40k-error corpus | 5 lines vs Go mode with 1 or 8 checkers, 2 lines vs 12 (Go mode prints one of four variants depending on the count) |
 | declaration output, monorepo emit oracle (101 packages, `--emitDeclarationOnly`) | 8 of 2,460 files differ from tsgo (3 packages); Go mode 2,460 / 2,460 identical |
 | declaration output, vscode / mui-docs / webpack | 8 of 9,399 / 1 of 26,505 / 0 of 884 files differ |
 
@@ -69,7 +69,7 @@ every changed line was a printed type.
 | --- | --- | --- |
 | Mac error-rich clone (10,781 errors, 11,761 lines): N ∈ {1,2,4,8,16} x 20 seeds | 100 | 100 |
 | webpack `--declaration` (1,027 lines): N ∈ {1,2,4,8,16} x 20 seeds | 100 | 100 |
-| 40k-error corpus (Linux, 43,859 lines): N ∈ {1,2,4,8,16} x 20 seeds | 100 | see the PR |
+| 40k-error corpus (Linux, 43,859 lines): N ∈ {1,2,4,8,16} x 20 seeds | 100 | 100 |
 | conformance, `TS_TEST_PROGRAM_SINGLE_THREADED=false` (4 checkers per test), random:1/2/3, types+symbols | 3 | result trees identical to canonical single-threaded |
 | conformance, one checker, random visit order (random:4/5) | 2 | identical |
 | conformance js/jsmap/sourcemap, 4 checkers, random:7 | 1 | identical |
