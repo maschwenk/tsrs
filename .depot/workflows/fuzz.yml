@@ -1,0 +1,74 @@
+# Depot CI workflow: nightly differential fuzzing of the parser against tsgo's (tools/fuzz/parser.py, docs/RUST.md
+# "Differential fuzzing"). A failed run means the Rust parser built a different AST from Go's for some input; the
+# inputs, both dumps and their diff are in the `fuzz-findings` artifact.
+
+name: Fuzz
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  parser:
+    runs-on: depot-ubuntu-24.04-8
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Read TypeScript reference commit
+        id: ts
+        run: echo "commit=$(node npm/build.mjs --print-typescript-commit)" >> "$GITHUB_OUTPUT"
+
+      # The Go oracle builds from ts-ref/tsc; the corpus is ts-ref/tsc/testdata/tests/cases.
+      - name: Check out TypeScript
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: microsoft/TypeScript
+          ref: ${{ steps.ts.outputs.commit }}
+          path: ts-ref
+          fetch-depth: 1
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            /tsc/
+            !/tsc/testdata/baselines/
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: ts-ref/tsc/go.mod
+          cache-dependency-path: ts-ref/tsc/go.sum
+
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: fuzz
+
+      - name: Build the AST oracles
+        run: sh tools/oracle/ast/build.sh
+
+      # A new seed every day; the seed is printed, so a finding can be reproduced locally.
+      - name: Fuzz the parser
+        run: python3 tools/fuzz/parser.py --rounds 50 --per-round 4000 --seed "$(date -u +%Y%m%d)" --jobs 8
+
+      - name: Upload findings
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: fuzz-findings
+          path: target/fuzz-parser
+          if-no-files-found: ignore
