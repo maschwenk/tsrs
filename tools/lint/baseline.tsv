@@ -1,11 +1,5 @@
 # Lint ratchet baseline: findings that predate the ratchet, as count<TAB>lint<TAB>file.
 # Written by `tools/lint/ratchet.py --update` with clippy from Rust 1.99.0. Counts only go down; never edit by hand.
-12	clippy::iter_over_hash_type	crates/tsrs_ls/src/autoimport/registry.rs
-4	clippy::iter_over_hash_type	crates/tsrs_project/src/configfileregistrybuilder.rs
-1	clippy::iter_over_hash_type	crates/tsrs_project/src/overlayfs.rs
-9	clippy::iter_over_hash_type	crates/tsrs_project/src/projectcollectionbuilder.rs
-3	clippy::iter_over_hash_type	crates/tsrs_project/src/session.rs
-1	clippy::iter_over_hash_type	crates/tsrs_project/src/snapshotfs.rs
 1	clippy::needless_pass_by_value	crates/tsrs_ls/src/autoimport/registry.rs
 1	clippy::needless_pass_by_value	crates/tsrs_ls/src/callhierarchy.rs
 2	clippy::needless_pass_by_value	crates/tsrs_ls/src/crossproject.rs
