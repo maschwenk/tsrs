@@ -328,6 +328,7 @@ unsafe impl Send for fsEventStream {}
 // SAFETY: as for Send: the stream functions are thread-safe once it is scheduled on a dispatch queue.
 unsafe impl Sync for fsEventStream {}
 
+#[derive(Clone, Copy)]
 pub(crate) enum streamStartError {
     CFStringCreateNull,
     CFArrayCreateNull,
@@ -381,6 +382,7 @@ pub(crate) fn create_and_start_stream(paths: &[String], cb: &mut Box<streamCallb
 // teardownStream performs the full FSEventStream cleanup. Stop and Invalidate
 // prevent new callbacks, waitDispatchQueue waits for callbacks already queued
 // on the stream's serial dispatch queue.
+#[expect(clippy::needless_pass_by_value, reason = "takes the stream by value: it is torn down exactly once and must not be used after")]
 pub(crate) fn teardown_stream(stream: fsEventStream, cb: Option<&mut Box<streamCallback>>) {
     // SAFETY: `stream` is a started stream that is torn down exactly once (the caller swapped it out).
     unsafe {

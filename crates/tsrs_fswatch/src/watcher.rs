@@ -1,4 +1,3 @@
-use std::any::Any;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -33,6 +32,7 @@ impl Error {
         Error { message: std::io::Error::from_raw_os_error(errno).to_string(), wraps: Vec::new(), errno: Some(errno) }
     }
 
+    #[expect(clippy::needless_pass_by_value, reason = "a conversion: callers pass it to `map_err`, which hands over the error by value")]
     pub fn from_io(err: std::io::Error) -> Error {
         Error { message: err.to_string(), wraps: Vec::new(), errno: err.raw_os_error() }
     }
@@ -243,21 +243,21 @@ pub trait Watch: Send + Sync {
 
 // Package-level watcher instances. Platform init() functions set the factory.
 pub(crate) static inotifyWatcher: LazyLock<watcher> = LazyLock::new(|| {
-    let mut w = watcher::new("inotify");
+    let w = watcher::new("inotify");
     #[cfg(target_os = "linux")]
-    crate::inotify_linux::init(&mut w);
+    let w = crate::inotify_linux::init(w);
     w
 });
 pub(crate) static fseventsWatcher: LazyLock<watcher> = LazyLock::new(|| {
-    let mut w = watcher::new("fsevents");
+    let w = watcher::new("fsevents");
     #[cfg(target_os = "macos")]
-    crate::fsevents_darwin::init(&mut w);
+    let w = crate::fsevents_darwin::init(w);
     w
 });
 pub(crate) static kqueueWatcher: LazyLock<watcher> = LazyLock::new(|| {
-    let mut w = watcher::new("kqueue");
+    let w = watcher::new("kqueue");
     #[cfg(any(target_os = "macos", target_os = "freebsd", target_os = "openbsd", target_os = "netbsd", target_os = "dragonfly"))]
-    crate::kqueue::init(&mut w);
+    let w = crate::kqueue::init(w);
     w
 });
 // windows.go (ReadDirectoryChangesW) is not ported: Windows builds get an unavailable watcher.
@@ -827,11 +827,6 @@ fn run(impl_: &Arc<dyn watcherImpl>) -> Result<(), Error> {
     base.mu.lock().unwrap().start_err.clone().map_or(Ok(()), Err)
 }
 
-// watcher.go:713
-pub(crate) fn watch_add(impl_: &Arc<dyn watcherImpl>, w: &Arc<dirWatch>) -> Result<(), Error> {
-    watch_add_many(impl_, std::slice::from_ref(w))
-}
-
 // watcher.go:717
 pub(crate) fn watch_add_many(impl_: &Arc<dyn watcherImpl>, watches: &[Arc<dirWatch>]) -> Result<(), Error> {
     let mut st = impl_.base().mu.lock().unwrap();
@@ -873,6 +868,7 @@ pub(crate) fn watch_remove(impl_: &Arc<dyn watcherImpl>, w: &Arc<dirWatch>) {
 }
 
 // watcher.go:775
+#[expect(dead_code, reason = "its only Go caller, windows.go (windowsSubscription.fatal), is not ported")]
 pub(crate) fn handle_watcher_error(impl_: &Arc<dyn watcherImpl>, werr: &dirWatchError) {
     watch_remove(impl_, &werr.dir_watch);
     let err = Error::wrap2(format!("{}: {}", ErrWatchTerminated.0, werr.err), &ErrWatchTerminated.into(), &werr.err);
@@ -895,6 +891,7 @@ pub(crate) struct callback {
     terminal: Option<Error>,
     delivered: bool,
     comparer: pathComparer,
+    #[cfg(target_os = "macos")] // read only by terminate_callbacks_for_deleted_root
     dir_comparison: comparisonPath<'static>,
     physical_comparison: comparisonPath<'static>,
     file_comparison: comparisonPath<'static>,
@@ -903,6 +900,7 @@ pub(crate) struct callback {
 // dirWatchError associates an error with a specific directory watch.
 pub(crate) struct dirWatchError {
     pub(crate) err: Error,
+    #[expect(dead_code, reason = "read only by handle_watcher_error, whose Go caller (windows.go) is not ported")]
     pub(crate) dir_watch: Arc<dirWatch>,
 }
 
@@ -923,11 +921,14 @@ pub(crate) struct dirWatch {
     pub(crate) recursive: bool,
     pub(crate) events: eventList,
     pub(crate) comparer: pathComparer,
+    #[cfg(target_os = "macos")] // read only by the FSEvents backend
     pub(crate) dir_fold: String,
+    #[cfg(target_os = "macos")] // read only by the FSEvents backend
     pub(crate) physical_dir_fold: String,
 
     // state stores per-directory platform-specific bookkeeping (fsevents, windows).
-    pub(crate) state: Mutex<Option<Arc<dyn Any + Send + Sync>>>,
+    #[cfg(target_os = "macos")] // windows.go is not ported
+    pub(crate) state: Mutex<Option<Arc<dyn std::any::Any + Send + Sync>>>,
     // sequence returns a backend event sequence cutoff for new logical callbacks.
     sequence: Option<fn() -> u64>,
 
@@ -946,7 +947,9 @@ static nextDirWatchKey: AtomicU64 = AtomicU64::new(1);
 impl dirWatch {
     // watcher.go:834 (newDirWatch + setComparer + the fields getOrCreateDirWatch assigns before publishing it)
     pub(crate) fn new(dir: String, physical_dir: String, db: &Arc<debounce>, comparer: pathComparer, sequence: Option<fn() -> u64>, recursive: bool) -> Arc<dirWatch> {
+        #[cfg(target_os = "macos")]
         let dir_fold = comparer.prepare(&dir).folded;
+        #[cfg(target_os = "macos")]
         let physical_dir_fold = if physical_dir == dir { dir_fold.clone() } else { comparer.prepare(&physical_dir).folded };
         let dw = Arc::new(dirWatch {
             dir,
@@ -954,8 +957,11 @@ impl dirWatch {
             recursive,
             events: eventList::default(),
             comparer,
+            #[cfg(target_os = "macos")]
             dir_fold,
+            #[cfg(target_os = "macos")]
             physical_dir_fold,
+            #[cfg(target_os = "macos")]
             state: Mutex::new(None),
             sequence,
             mu: Mutex::new(dirWatchState { callbacks: Vec::new(), debounce: Some(Arc::clone(&db)), next_cb_id: 0 }),
@@ -975,6 +981,7 @@ impl dirWatch {
 
     // watcher.go:871
     // physicalPath maps a caller-visible path to the physical watched root.
+    #[expect(dead_code, reason = "its only Go callers, in fanotify_linux.go, are not ported")]
     pub(crate) fn physical_path(&self, display_path: &str) -> String {
         rebase_path(display_path, &self.dir, &self.physical_dir)
     }
@@ -1091,6 +1098,7 @@ impl dirWatch {
     }
 
     // watcher.go:1066
+    #[cfg(target_os = "macos")] // only the FSEvents backend calls it
     pub(crate) fn terminate_callbacks_for_deleted_root(&self, path: &str, seq: u64, err: &Error) -> bool {
         let mut st = self.mu.lock().unwrap();
         let mut changed = false;
@@ -1113,6 +1121,7 @@ impl dirWatch {
     }
 
     // watcher.go:1124
+    #[expect(dead_code, reason = "only Go tests call it (watcher_test.go, fsevents_darwin_shared_test.go), and those are not ported")]
     pub(crate) fn watch(&self, dir: &str, physical_dir: &str, recursive: bool, f: WatchCallback, ignore: Option<IgnoreFunc>) -> u64 {
         self.add_callback(dir, physical_dir, recursive, f, ignore, "")
     }
@@ -1139,6 +1148,7 @@ impl dirWatch {
             terminal: None,
             delivered: false,
             comparer: self.comparer,
+            #[cfg(target_os = "macos")]
             dir_comparison: self.comparer.prepare(dir),
             physical_comparison: self.comparer.prepare(physical_dir),
             file_comparison: self.comparer.prepare(file),
@@ -1177,6 +1187,7 @@ impl dirWatch {
 
 impl callback {
     // watcher.go:1046
+    #[expect(dead_code, reason = "only a Go test calls it (TestConsolidatedSymlinkChildMapsSharedLogicalPath), and it is not ported")]
     pub(crate) fn map_event(&self, e: Event) -> Event {
         self.map_event_cached(e, None)
     }
