@@ -225,6 +225,9 @@ jobs:
 
       # plain-ptrs: the compressed handles' 32 GiB PROT_NONE reservation is not supported by Miri.
       - name: Miri on the arena free-list tests
+        # The arena leaks its chunks by design (nothing is freed at exit), so Miri's leak check is off here.
+        env:
+          MIRIFLAGS: -Zmiri-ignore-leaks
         run: |
           cargo +nightly-2026-10-04 miri test --locked -p tsrs_core --features plain-ptrs --lib arena::tests
           # The negative control frees a reference parameter; Miri must still call that undefined behaviour.
