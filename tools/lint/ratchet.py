@@ -18,9 +18,10 @@ import re
 import subprocess
 import sys
 
-# Findings depend on the clippy version, so the ratchet runs one pinned toolchain everywhere (CI installs it too).
-# docs/RUST.md says how to bump it.
-TOOLCHAIN = "1.99.0"
+# Findings depend on the clippy version, so the ratchet runs the toolchain the repository pins (rust-toolchain.toml),
+# also outside the repository's directory. docs/RUST.md says how to bump it.
+TOOLCHAIN = re.search(r'^channel = "(.*)"$', open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..",
+                                                               "rust-toolchain.toml")).read(), re.M).group(1)
 
 # Generated code (tools/gen-fourslash), 750k lines. Generated files in other crates are skipped by `generated`.
 EXCLUDE = ["tsrs_fourslash"]
