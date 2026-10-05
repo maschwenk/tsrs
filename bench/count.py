@@ -5,7 +5,7 @@
 
 Opens a hardware instruction counter on this process (disabled, enabled when the child execs, inherited by every
 thread and process the command creates), forks, execs the command, and after it exits reads the total. Writes
-{"instructions": N, "exit": code} to <out.json> and exits with the command's status. Kernel work is excluded, so
+{"instructions": N, "max_rss_bytes": M, "exit": code} to <out.json> and exits with the command's status. Kernel work is excluded, so
 for a deterministic single-threaded run the count is the same every time, unlike wall time (bench/README.md
 "Regression flag").
 """
@@ -50,11 +50,12 @@ def main(argv):
             os.execvp(command[0], command)
         finally:
             os._exit(127)
-    _, status = os.waitpid(pid, 0)
+    _, status, usage = os.wait4(pid, 0)
     code = os.waitstatus_to_exitcode(status)
     count = struct.unpack("Q", os.read(fd, 8))[0] if fd is not None else None
+    max_rss = usage.ru_maxrss * (1 if sys.platform == "darwin" else 1024)  # KiB on Linux, bytes on macOS
     with open(out, "w") as f:
-        json.dump({"instructions": count, "exit": code, **({"error": error} if error else {})}, f)
+        json.dump({"instructions": count, "max_rss_bytes": max_rss, "exit": code, **({"error": error} if error else {})}, f)
     sys.exit(code if code >= 0 else 128 - code)
 
 
