@@ -70,6 +70,17 @@ pointer compression costs about +4.9% instructions and took back most of the che
 8. **Parallel `affectedfileshandler` / `emitfileshandler`** (notes/perf-incremental-parallel.md): still sequential in
    the port; costs nothing under `--noEmit`. Worth doing with an emit-on incremental benchmark.
 
+## Landed in round 3, union and inference work (notes/perf-union-inference.md)
+
+- **Union front cache** (`TSRS_UNION_CACHE`, on by default and off under `--checkerAssignment go`; its shadow mode is
+  in docs/DEBUGGING.md). It is a direct-mapped table in front of `getUnionType` for calls without an origin. It stores
+  a call only if that call created nothing but the union it returns, instantiated nothing, took no state-dependent
+  reduction and did not return `errorType`.
+  - Instructions: -0.5% to -1.1% on four corpora, with 1, 4 and 8 checkers.
+  - Check time with one checker: -1.1% to -3.3%.
+  - No change in memory or `--extendedDiagnostics` counters.
+  - Diagnostics byte-identical, and shadow mode clean on the suite, fourslash and four corpora.
+
 ## Measured and rejected (do not redo)
 
 - A1, deciding `getConditionalType`'s definitely-false test for discriminated unions without the relater (draft #88,
@@ -79,6 +90,13 @@ pointer compression costs about +4.9% instructions and took back most of the che
 - A2, skipping the non-matching constituents of such a conditional through a key index: asymptotically better, but the
   skipped evaluations' instantiation counts depend on cache states, so it moves the instantiation-budget (TS2589)
   boundary that `testdata/regressions/conditional-instantiation-limit-*` pins.
+- A memo for generic calls inferred again with the same inputs (notes/perf-union-inference.md, task B). The part
+  such a memo could skip is 1.3% of one checker's check time on the 38k-file codebase, 2.2% on vscode and 0.3-0.4% on
+  webpack and xstate, which fails the 1.5%-on-two-corpora bar. Those figures are upper bounds that ignore the memo's
+  own cost. The census's ~8% for repeated inferences is mostly checking the argument expressions, which has to run
+  at every call site.
+- A larger union front cache (2^12 slots or more; notes/perf-union-inference.md): 0.03% fewer instructions, but about
+  2 MiB of RSS per checker.
 - A full unit-property index for relations to union targets: would skip at most 0.2% (big) / 0.1% (vscode) of failed
   constituent checks; the rest is inherent (notes/perf-checker-algorithms.md, "Row 1").
 
