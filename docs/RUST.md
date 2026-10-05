@@ -132,6 +132,7 @@ In place:
 | `#[cold]` slow-path splits | `notes/perf-parse.md` changes 6 to 8: parse instructions 16.66 G -> 15.07 G | oxc, Bun |
 | Instruction counts and peak memory per merge, flagged on regression | `bench/README.md` "Regression flag": single-threaded tsrs repeats to about 0.001% (instructions) and under 0.4% (peak RSS); a project up more than 1% (and 2 MiB for memory) gets a comment on the PR | CodSpeed in oxc, Rolldown, Ruff, Biome, swc (simulated counts); Ruff's PR memory report |
 | Generated-code freshness check | `tools/gen-check.sh` (CI job `generated-code`) re-runs the eight generators and fails on a diff; it found two hand edits the generators no longer reproduced | oxc, Ruff, rust-analyzer |
+| Differential parser fuzzing | `tools/fuzz/parser.py` mutates conformance files and compares the AST hashes of the Go and Rust oracles (`tools/oracle/ast`); the Depot `Fuzz` workflow runs 200,000 mutants nightly with a date seed. First 320,000 mutants: no divergence, no crash (inputs kept valid UTF-8; invalid UTF-8 is read lossily on purpose) | Ruff (`cargo fuzz` on its parser) |
 
 Measured and rejected (do not retry without new evidence): explicit huge pages, pre-faulting and mmap'd arena chunks
 (`notes/linux-perf.md`); global identifier interning (`notes/mem-round2.md`: parse +9% time); rolling back whole
@@ -158,7 +159,6 @@ Not tried. Each needs a measurement and a note before it is adopted; none is app
 | Dependency checks in CI | cargo-deny (oxc, Ruff, Biome, swc), cargo-shear or machete (oxc, Rolldown, Ruff, rust-analyzer) | `deny.toml` exists but no job runs it; unused dependencies cost fat-LTO build time. | A CI step. |
 | Hot/cold text grouping with PGO (`-Wl,-z,keep-text-section-prefix`) | Bun (only when a profile is loaded) | PGO already marks functions hot or cold; the linker flag keeps them grouped, for fewer instruction-cache misses on Linux. | A cycles or wall-time A/B; instruction counts will not show it. |
 | Identifiers that carry their hash | oxc `Ident` (pointer, length, precomputed hash; `IdentHashMap` does not rehash) | Symbol-table lookups by name hash the string every time. | A profile showing what share of instructions string hashing takes before any change. |
-| Differential fuzzing of the parser and scanner | Ruff (`cargo fuzz` on its parser) | Crashes and divergences from tsgo on inputs the conformance suite never has. | A fuzz target, a Go oracle to diff against, a corpus. |
 | Frame pointers for profiling | Bun (`-Cforce-frame-pointers=yes`) | Reliable stacks in samply and `perf` profiles of the `dist` build, at a small cost, so not for release. | A documented profiling build command. |
 
 Not pursued: a binary-size check (Bun fails a pull request that grows the binary by more than 0.5 MB); size is not a
