@@ -47,6 +47,13 @@ pub fn emit_and_report_statistics(input: &EmitInput) -> (CompileAndEmitResult, O
         if tsrs_compiler::assignment_stats_enabled() {
             input.write(&input.program.checker_assignment_report());
         }
+        // TSRS_FLOW_MEMO_STATS (docs/DEBUGGING.md): one line per checker, on stderr.
+        #[cfg(feature = "checker")]
+        input.program.for_each_checker_parallel(|i, c| {
+            if let Some(report) = c.flow_memo.report() {
+                eprintln!("checker {i}: {report}");
+            }
+        });
         statistics = Some(stats);
     }
 

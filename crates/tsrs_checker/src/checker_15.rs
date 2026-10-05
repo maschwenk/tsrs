@@ -1705,6 +1705,11 @@ impl Checker {
 
     // checker.go:31980
     pub(crate) fn get_narrowable_type_for_reference(&mut self, t: P<Type>, reference: P<Node>, check_mode: CheckMode) -> P<Type> {
+        self.get_narrowable_type_for_reference_ex(t, reference, check_mode).0
+    }
+
+    /// Also says whether the answer read the reference's position (the flow memo needs to know).
+    pub(crate) fn get_narrowable_type_for_reference_ex(&mut self, t: P<Type>, reference: P<Node>, check_mode: CheckMode) -> (P<Type>, bool) {
         let mut t = t;
         if self.is_no_infer_type(t) {
             t = t.as_substitution_type().base_type.get().unwrap();
@@ -1716,13 +1721,12 @@ impl Checker {
         // control flow analysis an opportunity to narrow it further. For example, for a reference of a type
         // parameter type 'T extends string | undefined' with a contextual type 'string', we substitute
         // 'string | undefined' to give control flow analysis the opportunity to narrow to type 'string'.
-        let substitute_constraints = !check_mode.intersects(CheckMode::Inferential)
-            && some_type(self, t, |c, t| c.is_generic_type_with_union_constraint(t))
-            && (self.is_constraint_position(t, reference) || self.has_contextual_type_with_no_generic_types(reference, check_mode));
+        let position_read = !check_mode.intersects(CheckMode::Inferential) && some_type(self, t, |c, t| c.is_generic_type_with_union_constraint(t));
+        let substitute_constraints = position_read && (self.is_constraint_position(t, reference) || self.has_contextual_type_with_no_generic_types(reference, check_mode));
         if substitute_constraints {
-            return self.map_type(t, |c, t| Some(c.get_base_constraint_or_type(t))).unwrap();
+            return (self.map_type(t, |c, t| Some(c.get_base_constraint_or_type(t))).unwrap(), position_read);
         }
-        t
+        (t, position_read)
     }
 
     // checker.go:31998

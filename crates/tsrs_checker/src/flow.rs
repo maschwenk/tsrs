@@ -1,3 +1,4 @@
+use crate::flowmemo::{FlowMemoMode, FrameTaint, MemoHit, FLAG_COUNTERS, FLAG_TYPE_CACHE, FLOW_DEPTH_LIMIT, UNTAINTED};
 use crate::*;
 use tsrs_ast::*;
 use tsrs_ast as ast;
@@ -31,6 +32,16 @@ fn flow_type_of(t: P<Type>) -> FlowType {
     FlowType { t: Some(t), incomplete: false }
 }
 
+/// Memo answers found while a frame ran (flowmemo.rs).
+#[derive(Default)]
+struct FrameMemoHits {
+    /// The answer used for the node that ended the iteration.
+    used: Option<MemoHit>,
+    /// Shadow mode: answers found at the frame's first node and at the node that ended its iteration, checked
+    /// against the walked result when the frame ends.
+    shadow: [Option<(P<FlowNode>, MemoHit)>; 2],
+}
+
 impl Checker {
     // flow.go:28
     pub(crate) fn new_flow_type(&mut self, t: P<Type>, incomplete: bool) -> FlowType {
@@ -61,6 +72,11 @@ impl Checker {
         f.depth.set(0);
         f.shared_flow_start.set(0);
         f.reduce_labels.borrow_mut().clear();
+        f.memo_key_state.set(0);
+        f.memo_used.set(false);
+        f.memo_aborted.set(false);
+        f.memo_faithful.set(false);
+        f.impure_shared.set(0);
         f.next.set(self.free_flow_state);
         self.free_flow_state = Some(f);
     }
@@ -95,8 +111,26 @@ impl Checker {
         f.initial_type.set(Some(initial_type));
         f.flow_container.set(flow_container);
         f.shared_flow_start.set(self.shared_flows.len() as i32);
+        f.walk_floor.set(self.flow_memo.next_serial());
         self.flow_invocation_count += 1;
-        let evolved_type = self.get_type_at_flow_node(f, flow_node).t.unwrap();
+        self.flow_memo.stats.walks += 1;
+        // A nested walk counts its depth from 0: its frames' heights are not this frame's.
+        let saved_heights = self.flow_memo.save_heights();
+        let mut flow_type = self.get_type_at_flow_node(f, flow_node);
+        if f.memo_aborted.get() {
+            // The walk used memo results and then reached the depth limit. Go's walk computes those sub-walks and
+            // keeps their shared nodes in sharedFlows, so it may not be this deep here: walk again without the memo.
+            self.flow_memo.stats.aborts += 1;
+            self.shared_flows.truncate(f.shared_flow_start.get() as usize);
+            f.memo_aborted.set(false);
+            f.memo_used.set(false);
+            f.memo_faithful.set(true);
+            f.impure_shared.set(0);
+            f.depth.set(0);
+            flow_type = self.get_type_at_flow_node(f, flow_node);
+        }
+        self.flow_memo.restore_heights(saved_heights);
+        let evolved_type = flow_type.t.unwrap();
         self.shared_flows.truncate(f.shared_flow_start.get() as usize);
         self.put_flow_state(f);
         // When the reference is 'x' in an 'x.length', 'x.push(value)', 'x.unshift(value)' or x[n] = value' operation,
@@ -121,16 +155,30 @@ impl Checker {
 
     // flow.go:117
     pub(crate) fn get_type_at_flow_node(&mut self, f: P<FlowState>, flow: P<FlowNode>) -> FlowType {
+        let entry_flow = flow;
         let mut flow = flow;
-        if f.depth.get() == 2000 {
+        if f.depth.get() == FLOW_DEPTH_LIMIT {
+            if f.memo_used.get() {
+                // Go, which walked the sub-graphs this walk took from the memo, may not be this deep here:
+                // get_flow_type_of_reference_ex walks again without the memo.
+                f.memo_aborted.set(true);
+                return flow_type_of(self.error_type);
+            }
             // We have made 2000 recursive invocations. To avoid overflowing the call stack we report an error
             // and disable further control flow analysis in the containing function or module body.
+            self.flow_memo.taint(0);
             self.flow_analysis_disabled = true;
             self.report_flow_control_error(f.ref_node());
             return flow_type_of(self.error_type);
         }
-        f.depth.set(f.depth.get() + 1);
+        let entry_depth = f.depth.get();
+        let frame = self.flow_memo.begin();
+        self.flow_memo.stats.frames += 1;
+        let memo_key = if self.flow_memo_frame_ok(f) { self.flow_memo_key(f) } else { None };
+        let mut memo_hits = FrameMemoHits::default();
+        f.depth.set(entry_depth + 1);
         let mut shared_flow: Option<P<FlowNode>> = None;
+        let mut first = true;
         loop {
             let flags = flow.flags();
             if flags.intersects(FlowFlags::Shared) {
@@ -139,11 +187,38 @@ impl Checker {
                 // antecedent of more than one node.
                 for i in f.shared_flow_start.get() as usize..self.shared_flows.len() {
                     if self.shared_flows[i].flow == flow {
+                        let shared = self.shared_flows[i];
+                        // A later walk of this frame may compute the node instead: it consumes what that took.
+                        self.flow_memo_consume(shared.transient, shared.reference);
+                        self.flow_memo.flags |= shared.flags;
                         f.depth.set(f.depth.get() - 1);
-                        return self.shared_flows[i].flow_type;
+                        self.flow_memo.end_with(frame, shared.height, 0);
+                        return shared.flow_type;
                     }
                 }
                 shared_flow = Some(flow);
+            }
+            if first {
+                first = false;
+                if let Some(key) = memo_key {
+                    if let Some(hit) = self.flow_memo_lookup(f, flow, key, entry_depth) {
+                        let MemoHit { t, height, epoch } = hit;
+                        if self.flow_memo.mode == FlowMemoMode::Shadow {
+                            memo_hits.shadow[0] = Some((flow, hit));
+                        } else {
+                            f.memo_used.set(true);
+                            let flags = if epoch != 0 { FLAG_TYPE_CACHE } else { 0 };
+                            self.flow_memo.flags |= flags;
+                            if let Some(shared_flow) = shared_flow {
+                                // Go computes this node and records it; later visits in this walk hit it.
+                                self.shared_flows.push(SharedFlow { flow: shared_flow, flow_type: flow_type_of(t), transient: UNTAINTED, reference: UNTAINTED, height, flags });
+                            }
+                            f.depth.set(f.depth.get() - 1);
+                            self.flow_memo.end_with(frame, height, 0);
+                            return flow_type_of(t);
+                        }
+                    }
+                }
             }
             let t: FlowType;
             if flags.intersects(FlowFlags::Assignment) {
@@ -159,23 +234,35 @@ impl Checker {
                     continue;
                 }
             } else if flags.intersects(FlowFlags::Condition) {
-                t = self.get_type_at_flow_condition(f, flow);
+                t = match self.flow_memo_at_iterated_node(f, entry_flow, flow, memo_key, entry_depth, &mut memo_hits) {
+                    Some(t) => t,
+                    None => self.get_type_at_flow_condition(f, flow),
+                };
             } else if flags.intersects(FlowFlags::SwitchClause) {
-                t = self.get_type_at_switch_clause(f, flow);
+                t = match self.flow_memo_at_iterated_node(f, entry_flow, flow, memo_key, entry_depth, &mut memo_hits) {
+                    Some(t) => t,
+                    None => self.get_type_at_switch_clause(f, flow),
+                };
             } else if flags.intersects(FlowFlags::BranchLabel) {
                 let antecedents = get_branch_label_antecedents(flow, &f.reduce_labels.borrow()).unwrap();
                 if antecedents.next.get().is_none() {
                     flow = antecedents.flow;
                     continue;
                 }
-                t = self.get_type_at_flow_branch_label(f, flow, antecedents);
+                t = match self.flow_memo_at_iterated_node(f, entry_flow, flow, memo_key, entry_depth, &mut memo_hits) {
+                    Some(t) => t,
+                    None => self.get_type_at_flow_branch_label(f, flow, antecedents),
+                };
             } else if flags.intersects(FlowFlags::LoopLabel) {
                 let antecedents = flow.antecedents().unwrap();
                 if antecedents.next.get().is_none() {
                     flow = antecedents.flow;
                     continue;
                 }
-                t = self.get_type_at_flow_loop_label(f, flow);
+                t = match self.flow_memo_at_iterated_node(f, entry_flow, flow, memo_key, entry_depth, &mut memo_hits) {
+                    Some(t) => t,
+                    None => self.get_type_at_flow_loop_label(f, flow),
+                };
             } else if flags.intersects(FlowFlags::ArrayMutation) {
                 t = self.get_type_at_flow_array_mutation(f, flow);
                 if t.is_nil() {
@@ -183,6 +270,10 @@ impl Checker {
                     continue;
                 }
             } else if flags.intersects(FlowFlags::ReduceLabel) {
+                // The antecedents of a branch label below depend on the reduce labels above it, which the memo key
+                // does not have; and Go's sharedFlows keep what a shared node got under a reduce label for the rest
+                // of the walk.
+                self.flow_memo.taint(0);
                 f.reduce_labels.borrow_mut().push(flow.node().unwrap().as_flow_reduce_label_data_p());
                 t = self.get_type_at_flow_node(f, flow.antecedent().unwrap());
                 f.reduce_labels.borrow_mut().pop();
@@ -208,13 +299,127 @@ impl Checker {
                 // simply return the non-auto declared type to reduce follow-on errors.
                 t = flow_type_of(self.convert_auto_to_any(f.declared()));
             }
+            f.depth.set(f.depth.get() - 1);
+            if f.memo_aborted.get() {
+                self.flow_memo.end(frame);
+                return t;
+            }
+            if let Some(hit) = memo_hits.used {
+                // The node that ends the iteration came from the memo: this frame's height is that sub-walk's.
+                f.memo_used.set(true);
+                self.flow_memo.raise_height(hit.height);
+                if hit.epoch != 0 {
+                    self.flow_memo.flags |= FLAG_TYPE_CACHE;
+                }
+            }
+            let (taint, height, actual) = self.flow_memo.end(frame);
             if let Some(shared_flow) = shared_flow {
                 // Record visited node and the associated type in the cache.
-                self.shared_flows.push(SharedFlow { flow: shared_flow, flow_type: t });
+                if taint.transient != UNTAINTED {
+                    f.impure_shared.set(f.impure_shared.get() + 1);
+                }
+                self.shared_flows.push(SharedFlow { flow: shared_flow, flow_type: t, transient: taint.transient, reference: taint.reference, height, flags: taint.flags });
             }
-            f.depth.set(f.depth.get() - 1);
+            if let Some(key) = memo_key {
+                self.flow_memo_fill(f, entry_flow, flow, entry_depth, key, t, taint, height, actual, &memo_hits);
+            }
             return t;
         }
+    }
+
+    /// Before the handler of the node that ends this frame's iteration (a condition, switch clause or label): the
+    /// memo's answer for that node, which is this frame's answer (the nodes iterated before it pass the type on).
+    fn flow_memo_at_iterated_node(&mut self, f: P<FlowState>, entry_flow: P<FlowNode>, flow: P<FlowNode>, memo_key: Option<u128>, entry_depth: i32, hits: &mut FrameMemoHits) -> Option<FlowType> {
+        let key = memo_key?;
+        if flow == entry_flow {
+            // Consulted when the frame began.
+            return None;
+        }
+        let hit = self.flow_memo_lookup(f, flow, key, entry_depth)?;
+        if self.flow_memo.mode == FlowMemoMode::Shadow {
+            hits.shadow[1] = Some((flow, hit));
+            return None;
+        }
+        hits.used = Some(hit);
+        Some(flow_type_of(hit.t))
+    }
+
+    fn flow_memo_lookup(&mut self, f: P<FlowState>, flow: P<FlowNode>, key: u128, entry_depth: i32) -> Option<MemoHit> {
+        self.flow_memo.stats.consults += 1;
+        let hit = self.flow_memo.lookup(flow, key)?;
+        if !self.flow_memo_consult_ok(f, hit) {
+            self.flow_memo.stats.blocked += 1;
+            return None;
+        }
+        // Go's walk of this sub-graph reaches at most `height` levels below here: it must not reach the limit, or Go
+        // would report TS2563 inside it.
+        if entry_depth + hit.height as i32 >= FLOW_DEPTH_LIMIT {
+            self.flow_memo.stats.height_misses += 1;
+            return None;
+        }
+        self.flow_memo.stats.hits += 1;
+        Some(hit)
+    }
+
+    /// Stores the frame's answer under its first node and under the node that ended its iteration (the type is the
+    /// same at both; so is the height, iteration adds no depth).
+    #[expect(clippy::too_many_arguments, reason = "the frame's facts, passed once at its end")]
+    fn flow_memo_fill(&mut self, f: P<FlowState>, entry_flow: P<FlowNode>, final_flow: P<FlowNode>, entry_depth: i32, key: u128, t: FlowType, taint: FrameTaint, height: u32, actual: u32, hits: &FrameMemoHits) {
+        for (flow, hit) in hits.shadow.iter().flatten() {
+            self.flow_memo_shadow_check(f, *flow, entry_depth, key, t, taint, actual, hit.t, hit.height);
+        }
+        if !taint.is_pure() {
+            self.flow_memo.stats.tainted += 1;
+            return;
+        }
+        if taint.flags & FLAG_COUNTERS != 0 {
+            self.flow_memo.stats.counters += 1;
+            return;
+        }
+        if t.incomplete || self.flow_analysis_disabled {
+            return;
+        }
+        if self.flow_memo.mode == FlowMemoMode::Shadow {
+            self.flow_memo_shadow_key_bytes(f);
+        }
+        let epoch = if taint.flags & FLAG_TYPE_CACHE != 0 { self.flow_type_cache_epoch } else { 0 };
+        self.flow_memo.store(entry_flow, key, t.t.unwrap(), height, epoch);
+        if final_flow != entry_flow && hits.used.is_none() && final_flow.flags().intersects(FlowFlags::Condition | FlowFlags::SwitchClause | FlowFlags::BranchLabel | FlowFlags::LoopLabel) {
+            self.flow_memo.store(final_flow, key, t.t.unwrap(), height, epoch);
+        }
+        self.flow_memo.stats.fills += 1;
+    }
+
+    /// Shadow mode: the frame was walked although the memo had an answer; they must agree.
+    #[cold]
+    #[expect(clippy::too_many_arguments, reason = "everything the report prints")]
+    fn flow_memo_shadow_check(&mut self, f: P<FlowState>, flow: P<FlowNode>, entry_depth: i32, key: u128, t: FlowType, taint: FrameTaint, actual: u32, memo_t: P<Type>, memo_height: u32) {
+        self.flow_memo.stats.shadow_checks += 1;
+        self.flow_memo_shadow_key_bytes(f);
+        let same_key = self.flow_memo.shadow_key(flow, key) == Some(self.flow_memo.key_buf.as_slice());
+        if t.t == Some(memo_t) && !t.incomplete && actual <= memo_height && same_key {
+            return;
+        }
+        let reference = f.ref_node();
+        let file = ast::get_source_file_of_node(reference).map_or(String::new(), |s| s.file_name().to_string());
+        let walked = t.t.map_or(String::new(), |t| self.type_to_string(t, None));
+        let memo = self.type_to_string(memo_t, None);
+        panic!(
+            "TSRS_FLOW_MEMO=shadow: memo and walk disagree for reference at {file}:{} (flow node at depth {entry_depth}): walked {walked} (type {:?}, incomplete {}, taint {}/{}, reached {actual}), memo {memo} (type {:?}, height {memo_height}), same key {same_key}",
+            reference.pos(),
+            t.t.map(|t| t.id.0),
+            t.incomplete,
+            taint.transient,
+            taint.reference,
+            memo_t.id.0
+        );
+    }
+
+    /// Shadow mode: the walk's full memo key in `flow_memo.key_buf`.
+    fn flow_memo_shadow_key_bytes(&mut self, f: P<FlowState>) {
+        f.memo_key_state.set(0);
+        let key = self.flow_memo_key(f);
+        debug_assert!(key == Some(f.memo_key.get()));
     }
 }
 
@@ -243,6 +448,9 @@ impl Checker {
             }
             if get_assignment_target_kind(node) == AssignmentKind::Compound {
                 let flow_type = self.get_type_at_flow_node(f, flow.antecedent().unwrap());
+                if f.memo_aborted.get() {
+                    return flow_type;
+                }
                 let t = self.get_base_type_of_literal_type(flow_type.t.unwrap());
                 return self.new_flow_type(t, flow_type.incomplete);
             }
@@ -291,7 +499,11 @@ impl Checker {
         if ast::is_variable_declaration(node) && ast::is_for_in_statement(node.parent().unwrap().parent().unwrap()) {
             let for_in_expression = node.parent().unwrap().parent().unwrap().expression().unwrap();
             if self.is_matching_reference(f.ref_node(), for_in_expression) || self.optional_chain_contains_reference(for_in_expression, f.ref_node()) {
-                let antecedent_type = self.get_type_at_flow_node(f, flow.antecedent().unwrap()).t.unwrap();
+                let antecedent = self.get_type_at_flow_node(f, flow.antecedent().unwrap());
+                if f.memo_aborted.get() {
+                    return antecedent;
+                }
+                let antecedent_type = antecedent.t.unwrap();
                 let finalized = self.finalize_evolving_array_type(antecedent_type);
                 return flow_type_of(self.get_non_nullable_type_if_needed(finalized));
             }
@@ -303,12 +515,23 @@ impl Checker {
     // flow.go:276
     pub(crate) fn get_initial_or_assigned_type(&mut self, f: P<FlowState>, flow: P<FlowNode>) -> P<Type> {
         let node = flow.node().unwrap();
-        if ast::is_variable_declaration(node) || ast::is_binding_element(node) {
-            let initial_type = self.get_initial_type(node);
-            return self.get_narrowable_type_for_reference(initial_type, f.ref_node(), CheckMode::Normal);
+        let t = if ast::is_variable_declaration(node) || ast::is_binding_element(node) { self.get_initial_type(node) } else { self.get_assigned_type(node) };
+        let (narrowable, position_read) = self.get_narrowable_type_for_reference_ex(t, f.ref_node(), CheckMode::Normal);
+        if position_read {
+            // Flow memo: the answer depends on where the reference is, not only on its key.
+            self.flow_memo.taint_reference(f.walk_floor.get());
         }
-        let assigned_type = self.get_assigned_type(node);
-        self.get_narrowable_type_for_reference(assigned_type, f.ref_node(), CheckMode::Normal)
+        narrowable
+    }
+
+    /// `isConstantReference(f.reference)`. For an access expression it reads the property symbol that the reference
+    /// node resolved to, which another reference with the same key may not share.
+    fn is_constant_reference_of_walk(&mut self, f: P<FlowState>) -> bool {
+        let reference = f.ref_node();
+        if ast::is_access_expression(reference) {
+            self.flow_memo.taint_reference(f.walk_floor.get());
+        }
+        self.is_constant_reference(reference)
     }
 
     // flow.go:283
@@ -326,6 +549,9 @@ impl Checker {
             if let Some(predicate) = predicate {
                 if predicate.kind.get() == TypePredicateKind::AssertsThis || predicate.kind.get() == TypePredicateKind::AssertsIdentifier {
                     let flow_type = self.get_type_at_flow_node(f, flow.antecedent().unwrap());
+                    if f.memo_aborted.get() {
+                        return flow_type;
+                    }
                     let t = self.finalize_evolving_array_type(flow_type.t.unwrap());
                     let parameter_index = predicate.parameter_index.get();
                     let narrowed_type = if predicate.t.get().is_some() {
@@ -399,7 +625,7 @@ impl Checker {
     // flow.go:354
     pub(crate) fn get_type_at_flow_condition(&mut self, f: P<FlowState>, flow: P<FlowNode>) -> FlowType {
         let flow_type = self.get_type_at_flow_node(f, flow.antecedent().unwrap());
-        if flow_type.t.unwrap().flags().intersects(TypeFlags::Never) {
+        if f.memo_aborted.get() || flow_type.t.unwrap().flags().intersects(TypeFlags::Never) {
             return flow_type;
         }
         // If we have an antecedent type (meaning we're reachable in some way), we first
@@ -436,18 +662,24 @@ impl Checker {
                 if expr.kind() == Kind::Identifier {
                     // When narrowing a reference to a const variable, non-assigned parameter, or readonly property, we inline
                     // up to five levels of aliased conditional expressions that are themselves declared as const variables.
-                    if !self.is_matching_reference(f.ref_node(), expr) && self.inline_level < 5 {
-                        let symbol = self.get_resolved_symbol(expr);
-                        if self.is_constant_variable(symbol) {
-                            let declaration = symbol.value_declaration();
-                            if let Some(declaration) = declaration {
-                                if ast::is_variable_declaration(declaration) && declaration.type_node().is_none() && declaration.initializer().is_some() && self.is_constant_reference(f.ref_node()) {
-                                    self.inline_level += 1;
-                                    let result = self.narrow_type(f, t, declaration.initializer().unwrap(), assume_true);
-                                    self.inline_level -= 1;
-                                    return result;
+                    if !self.is_matching_reference(f.ref_node(), expr) {
+                        if self.inline_level < 5 {
+                            let symbol = self.get_resolved_symbol(expr);
+                            if self.is_constant_variable(symbol) {
+                                let declaration = symbol.value_declaration();
+                                if let Some(declaration) = declaration {
+                                    if ast::is_variable_declaration(declaration) && declaration.type_node().is_none() && declaration.initializer().is_some() && self.is_constant_reference_of_walk(f) {
+                                        self.inline_level += 1;
+                                        let result = self.narrow_type(f, t, declaration.initializer().unwrap(), assume_true);
+                                        self.inline_level -= 1;
+                                        return result;
+                                    }
                                 }
                             }
+                        } else {
+                            // Flow memo: whether this inlines depends on how deep the inlining already is, which no
+                            // key has.
+                            self.flow_memo.taint(0);
                         }
                     }
                 }
@@ -1166,6 +1398,9 @@ impl Checker {
         let data = flow.node().unwrap();
         let expr = ast::skip_parentheses(data.as_flow_switch_clause_data().switch_statement.expression().unwrap());
         let flow_type = self.get_type_at_flow_node(f, flow.antecedent().unwrap());
+        if f.memo_aborted.get() {
+            return flow_type;
+        }
         let mut t = flow_type.t.unwrap();
         if self.is_matching_reference(f.ref_node(), expr) {
             t = self.narrow_type_by_switch_on_discriminant(t, data);
@@ -1395,6 +1630,10 @@ impl Checker {
                 continue;
             }
             let flow_type = self.get_type_at_flow_node(f, antecedent);
+            if f.memo_aborted.get() {
+                self.antecedent_types.truncate(antecedent_start);
+                return flow_type;
+            }
             let flow_type_t = flow_type.t.unwrap();
             // If the type at a particular antecedent path is the declared type and the
             // reference is known to always be assigned (i.e. when declared and initial types
@@ -1419,6 +1658,10 @@ impl Checker {
         }
         if let Some(bypass_flow) = bypass_flow {
             let flow_type = self.get_type_at_flow_node(f, bypass_flow);
+            if f.memo_aborted.get() {
+                self.antecedent_types.truncate(antecedent_start);
+                return flow_type;
+            }
             let flow_type_t = flow_type.t.unwrap();
             // If the bypass flow contributes a type we haven't seen yet and the switch statement
             // isn't exhaustive, process the bypass flow type. Since exhaustiveness checks increase
@@ -1497,8 +1740,10 @@ impl Checker {
         // a non-empty in-process array for the outer loop and eventually terminate because
         // the first antecedent of a loop junction is always the non-looping control flow
         // path that leads to the top.
-        let in_process_types = self.flow_loop_stack.iter().find(|loop_info| loop_info.key == key && !loop_info.types.is_empty()).map(|loop_info| loop_info.types.clone());
-        if let Some(in_process_types) = in_process_types {
+        let in_process = self.flow_loop_stack.iter().find(|loop_info| loop_info.key == key && !loop_info.types.is_empty()).map(|loop_info| (loop_info.types.clone(), loop_info.serial));
+        if let Some((in_process_types, serial)) = in_process {
+            // Everything computed from these types (every frame younger than the loop's stack entry) is transient.
+            self.flow_memo.taint(serial);
             let union_type = self.get_union_or_evolving_array_type(f, &in_process_types, UnionReduction::Literal);
             return self.new_flow_type(union_type, true /*incomplete*/);
         }
@@ -1515,15 +1760,22 @@ impl Checker {
                 // The first antecedent of a loop junction is always the non-looping control
                 // flow path that leads to the top.
                 first_antecedent_type = self.get_type_at_flow_node(f, list.flow);
+                if f.memo_aborted.get() {
+                    return first_antecedent_type;
+                }
                 flow_type = first_antecedent_type;
             } else {
                 // All but the first antecedent are the looping control flow paths that lead
                 // back to the loop junction. We track these on the flow loop stack.
-                self.flow_loop_stack.push(FlowLoopInfo { key, types: antecedent_types.clone() });
-                let save_flow_type_cache = self.flow_type_cache.take();
+                let serial = self.flow_memo.next_serial();
+                self.flow_loop_stack.push(FlowLoopInfo { key, types: antecedent_types.clone(), serial });
+                let save_flow_type_cache = self.take_flow_type_cache();
                 flow_type = self.get_type_at_flow_node(f, list.flow);
-                self.flow_type_cache = save_flow_type_cache;
+                self.restore_flow_type_cache(save_flow_type_cache);
                 self.flow_loop_stack.pop();
+                if f.memo_aborted.get() {
+                    return flow_type;
+                }
                 // If we see a value appear in the cache it is a sign that control flow analysis
                 // was restarted and completed by checkExpressionCached. We can simply pick up
                 // the resulting type and bail out.
@@ -1570,6 +1822,9 @@ impl Checker {
             let candidate = self.get_reference_candidate(expr);
             if self.is_matching_reference(f.ref_node(), candidate) {
                 let flow_type = self.get_type_at_flow_node(f, flow.antecedent().unwrap());
+                if f.memo_aborted.get() {
+                    return flow_type;
+                }
                 let flow_type_t = flow_type.t.unwrap();
                 if flow_type_t.object_flags().intersects(ObjectFlags::EvolvingArray) {
                     let mut evolved_type = flow_type_t;

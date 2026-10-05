@@ -80,6 +80,7 @@ pub(crate) use relater_1::*;
 mod relater_2;
 mod flow;
 pub(crate) use flow::*;
+pub mod flowmemo;
 mod inference;
 pub(crate) use inference::*;
 mod grammarchecks;
