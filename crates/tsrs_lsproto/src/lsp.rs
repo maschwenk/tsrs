@@ -524,6 +524,7 @@ impl<Params: Json, Resp: Json> RequestInfo<Params, Resp> {
     }
 
     // lsp.go:207
+    #[expect(clippy::needless_pass_by_value, reason = "Go stores params in the message; senders hand over params built for it")]
     pub fn new_request_message(&self, id: Option<ID>, params: Params) -> RequestMessage {
         RequestMessage { id, method: self.method, params: Some(params.to_json()) }
     }
@@ -551,6 +552,7 @@ impl<Params> NotificationInfo<Params> {
 
 impl<Params: Json> NotificationInfo<Params> {
     // lsp.go:220
+    #[expect(clippy::needless_pass_by_value, reason = "Go stores params in the message; senders hand over params built for it")]
     pub fn new_notification_message(&self, params: Params) -> RequestMessage {
         RequestMessage { id: None, method: self.method, params: Some(params.to_json()) }
     }

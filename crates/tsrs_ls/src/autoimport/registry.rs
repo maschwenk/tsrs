@@ -488,7 +488,7 @@ impl Registry {
     // the arena (module and alias resolvers, the extraction checkers' types and symbols, resolution caches) goes
     // to a scratch region freed before this returns; the finished registry holds no reference into it. The
     // package.json entries the new version keeps in `directories` go to a region of their own (`regions`).
-    pub fn clone_registry(&self, ctx: &Context, change: RegistryChange, host: &dyn RegistryCloneHost, logger: LogTree) -> Result<Arc<Registry>, String> {
+    pub fn clone_registry(&self, ctx: &Context, change: &RegistryChange, host: &dyn RegistryCloneHost, logger: LogTree) -> Result<Arc<Registry>, String> {
         let scratch = Region::new(SCRATCH_REGION_FIRST_CHUNK);
         let scratch_scope = scratch.enter();
         let registry = self.clone_registry_in_scratch(ctx, change, host, logger);
@@ -497,7 +497,7 @@ impl Registry {
         registry
     }
 
-    fn clone_registry_in_scratch(&self, ctx: &Context, change: RegistryChange, host: &dyn RegistryCloneHost, logger: LogTree) -> Result<Arc<Registry>, String> {
+    fn clone_registry_in_scratch(&self, ctx: &Context, change: &RegistryChange, host: &dyn RegistryCloneHost, logger: LogTree) -> Result<Arc<Registry>, String> {
         let start = Instant::now();
         let mut logger = logger;
         if !logger.is_nil() {

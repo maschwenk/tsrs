@@ -397,7 +397,7 @@ impl FormatSpanWorker {
         child: P<Node>,
         mut inherited_indentation: i32,
         parent: P<Node>,
-        parent_dynamic_indentation: DynamicIndenterRef,
+        parent_dynamic_indentation: &DynamicIndenterRef,
         parent_start_line: i32,
         undecorated_parent_start_line: i32,
         is_list_item: bool,
@@ -455,7 +455,7 @@ impl FormatSpanWorker {
                 break;
             }
 
-            self.consume_token_and_advance_scanner(token_info, node, Rc::clone(&parent_dynamic_indentation), node, false);
+            self.consume_token_and_advance_scanner(&token_info, node, parent_dynamic_indentation, node, false);
         }
 
         if !self.fs_ref().is_on_token() || self.fs_ref().get_token_full_start() >= self.original_range.end() {
@@ -468,7 +468,7 @@ impl FormatSpanWorker {
             // JSX text shouldn't affect indenting
             if child.kind() != Kind::JsxText {
                 assert!(token_info.token.loc.end() == child.loc().end(), "Token end is child end");
-                self.consume_token_and_advance_scanner(token_info, node, parent_dynamic_indentation, child, false);
+                self.consume_token_and_advance_scanner(&token_info, node, parent_dynamic_indentation, child, false);
                 return inherited_indentation;
             }
         }
@@ -487,7 +487,7 @@ impl FormatSpanWorker {
                 child_start_line,
                 child_indentation_amount,
                 node,
-                &parent_dynamic_indentation,
+                parent_dynamic_indentation,
                 effective_parent_start_line,
             );
         }
@@ -507,20 +507,20 @@ impl FormatSpanWorker {
     fn process_child_nodes(
         &mut self,
         node: P<Node>,
-        indenter: Option<DynamicIndenterRef>,
+        indenter: Option<&DynamicIndenterRef>,
         node_start_line: i32,
         undecorated_node_start_line: i32,
         nodes: P<NodeList>,
         parent: P<Node>,
         parent_start_line: i32,
-        parent_dynamic_indentation: DynamicIndenterRef,
+        parent_dynamic_indentation: &DynamicIndenterRef,
     ) {
         assert!(!ast::position_is_synthesized(nodes.pos()));
         assert!(!ast::position_is_synthesized(nodes.end()));
 
         let list_start_token = get_open_token_for_list(parent, nodes);
 
-        let mut list_dynamic_indentation = Rc::clone(&parent_dynamic_indentation);
+        let mut list_dynamic_indentation = Rc::clone(parent_dynamic_indentation);
         let mut start_line = parent_start_line;
 
         // node range is outside the target range - do not dive inside
@@ -543,7 +543,7 @@ impl FormatSpanWorker {
                     start_line = scanner::get_ecma_line_of_position(self.source_file.get(), token_info.token.loc.pos());
 
                     let token_pos = token_info.token.loc.pos();
-                    self.consume_token_and_advance_scanner(token_info, parent, Rc::clone(&parent_dynamic_indentation), parent, false);
+                    self.consume_token_and_advance_scanner(&token_info, parent, parent_dynamic_indentation, parent, false);
 
                     let indentation_on_list_start_token = if self.indentation_on_last_indented_line != -1 {
                         // scanner just processed list start token so consider last indentation as list indentation
@@ -559,7 +559,7 @@ impl FormatSpanWorker {
                         self.get_dynamic_indentation(parent, parent_start_line, indentation_on_list_start_token, self.fc().options.indent_size);
                 } else {
                     // consume any tokens that precede the list as child elements of 'node' using its indentation scope
-                    self.consume_token_and_advance_scanner(token_info, parent, Rc::clone(&parent_dynamic_indentation), parent, false);
+                    self.consume_token_and_advance_scanner(&token_info, parent, parent_dynamic_indentation, parent, false);
                 }
             }
         }
@@ -569,13 +569,13 @@ impl FormatSpanWorker {
             let child = nodes.nodes()[i];
             inherited_indentation = self.process_child_node(
                 node,
-                indenter.clone(),
+                indenter.cloned(),
                 node_start_line,
                 undecorated_node_start_line,
                 child,
                 inherited_indentation,
                 node,
-                Rc::clone(&list_dynamic_indentation),
+                &list_dynamic_indentation,
                 start_line,
                 start_line,
                 true,
@@ -588,7 +588,7 @@ impl FormatSpanWorker {
             let mut token_info = self.fs().read_token_info(parent);
             if token_info.token.kind == Kind::CommaToken {
                 // consume the comma
-                self.consume_token_and_advance_scanner(token_info, parent, Rc::clone(&list_dynamic_indentation), parent, false);
+                self.consume_token_and_advance_scanner(&token_info, parent, &list_dynamic_indentation, parent, false);
                 if self.fs_ref().is_on_token() {
                     token_info = self.fs().read_token_info(parent);
                 } else {
@@ -602,7 +602,7 @@ impl FormatSpanWorker {
             // without this check close paren will be interpreted as list end token for function expression which is wrong
             if token_info.token.kind == list_end_token && token_info.token.loc.contained_by(parent.loc()) {
                 // consume list end token
-                self.consume_token_and_advance_scanner(token_info, parent, list_dynamic_indentation, parent, true /*isListEndToken*/);
+                self.consume_token_and_advance_scanner(&token_info, parent, &list_dynamic_indentation, parent, true /*isListEndToken*/);
             }
         }
     }
@@ -630,7 +630,7 @@ impl FormatSpanWorker {
                         child,
                         -1,
                         visiting_node,
-                        visiting_indenter,
+                        &visiting_indenter,
                         self.visiting_node_start_line,
                         self.visiting_undecorated_node_start_line,
                         false,
@@ -640,13 +640,13 @@ impl FormatSpanWorker {
                 VisitedChild::Nodes(nodes) => {
                     self.process_child_nodes(
                         visiting_node,
-                        Some(Rc::clone(&visiting_indenter)),
+                        Some(&visiting_indenter),
                         self.visiting_node_start_line,
                         self.visiting_undecorated_node_start_line,
                         nodes,
                         visiting_node,
                         self.visiting_node_start_line,
-                        visiting_indenter,
+                        &visiting_indenter,
                     );
                 }
             }
@@ -788,7 +788,7 @@ impl FormatSpanWorker {
             if token_info.token.loc.end() > node.end().min(self.original_range.end()) {
                 break;
             }
-            self.consume_token_and_advance_scanner(token_info, node, Rc::clone(&node_dynamic_indentation), node, false);
+            self.consume_token_and_advance_scanner(&token_info, node, &node_dynamic_indentation, node, false);
         }
     }
 
@@ -802,7 +802,7 @@ impl FormatSpanWorker {
         previous_start_line: i32,
         previous_parent: Option<P<Node>>,
         context_node: Option<P<Node>>,
-        dynamic_indentation: Option<DynamicIndenterRef>,
+        dynamic_indentation: Option<&DynamicIndenterRef>,
     ) -> LineAction {
         self.formatting_context.as_mut().unwrap().update_context(previous_item, previous_parent, current_item, current_parent, context_node);
 
@@ -819,7 +819,7 @@ impl FormatSpanWorker {
             let rules = self.current_rules.clone();
             for &rule in rules.iter().rev() {
                 line_action = self.apply_rule_edits(rule, previous_item, previous_start_line, current_item, current_start_line);
-                if let Some(dynamic_indentation) = &dynamic_indentation {
+                if let Some(dynamic_indentation) = dynamic_indentation {
                     match line_action {
                         LineAction::LineRemoved => {
                             // Handle the case where the next line is moved to be the end of this line.
@@ -945,7 +945,7 @@ impl FormatSpanWorker {
         _range_start_character: i32,
         parent: Option<P<Node>>,
         context_node: Option<P<Node>>,
-        dynamic_indentation: Option<DynamicIndenterRef>,
+        dynamic_indentation: Option<&DynamicIndenterRef>,
     ) -> LineAction {
         let range_has_error = (self.range_contains_error)(r.loc);
         let mut line_action = LineAction::None;
@@ -982,13 +982,13 @@ impl FormatSpanWorker {
         trivia: &[TextRangeWithKind],
         parent: Option<P<Node>>,
         context_node: Option<P<Node>>,
-        dynamic_indentation: Option<DynamicIndenterRef>,
+        dynamic_indentation: Option<&DynamicIndenterRef>,
     ) {
         for &trivia_item in trivia {
             if is_comment(trivia_item.kind) && trivia_item.loc.contained_by(self.original_range) {
                 let (trivia_item_start_line, trivia_item_start_character) =
                     scanner::get_ecma_line_and_byte_offset_of_position(self.source_file.get(), trivia_item.loc.pos());
-                self.process_range(trivia_item, trivia_item_start_line, trivia_item_start_character, parent, context_node, dynamic_indentation.clone());
+                self.process_range(trivia_item, trivia_item_start_line, trivia_item_start_character, parent, context_node, dynamic_indentation);
             }
         }
     }
@@ -1285,9 +1285,9 @@ impl FormatSpanWorker {
     // span.go:1042
     fn consume_token_and_advance_scanner(
         &mut self,
-        current_token_info: TokenInfo,
+        current_token_info: &TokenInfo,
         parent: P<Node>,
-        dynamic_indenation: DynamicIndenterRef,
+        dynamic_indenation: &DynamicIndenterRef,
         container: P<Node>,
         is_list_end_token: bool,
     ) {
@@ -1296,7 +1296,7 @@ impl FormatSpanWorker {
         let mut indent_token = false;
 
         if !current_token_info.leading_trivia.is_empty() {
-            self.process_trivia(&current_token_info.leading_trivia, Some(parent), self.child_context_node, Some(Rc::clone(&dynamic_indenation)));
+            self.process_trivia(&current_token_info.leading_trivia, Some(parent), self.child_context_node, Some(dynamic_indenation));
         }
 
         let mut line_action = LineAction::None;
@@ -1315,7 +1315,7 @@ impl FormatSpanWorker {
                 token_start_char,
                 Some(parent),
                 self.child_context_node,
-                Some(Rc::clone(&dynamic_indenation)),
+                Some(dynamic_indenation),
             );
             // do not indent comments\token if token range overlaps with some error
             if !range_has_error {
@@ -1347,7 +1347,7 @@ impl FormatSpanWorker {
                     break;
                 }
             }
-            self.process_trivia(&current_token_info.trailing_trivia, Some(parent), self.child_context_node, Some(Rc::clone(&dynamic_indenation)));
+            self.process_trivia(&current_token_info.trailing_trivia, Some(parent), self.child_context_node, Some(dynamic_indenation));
         }
 
         if indent_token {

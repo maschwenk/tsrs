@@ -113,7 +113,7 @@ impl LanguageService {
         &self,
         ctx: &Context,
         params: &lsproto::RenameParams,
-        data: SymbolAndEntriesData,
+        data: &SymbolAndEntriesData,
         _options: SymbolEntryTransformOptions,
     ) -> Result<lsproto::WorkspaceEditOrNull, lsproto::Error> {
         if !node_is_eligible_for_rename(data.original_node) {

@@ -895,7 +895,7 @@ impl LanguageService {
             params,
             orchestrator,
             LanguageService::symbol_and_entries_to_references,
-            combine_references,
+            |results| combine_references(&results),
             false, /*isRename*/
             false, /*implementations*/
             SymbolEntryTransformOptions::default(),
@@ -909,18 +909,18 @@ impl LanguageService {
         ctx: &Context,
         params: &lsproto::ReferenceParams,
         orchestrator: Option<&dyn CrossProjectOrchestrator>,
-        data: SymbolAndEntriesData,
+        data: &SymbolAndEntriesData,
     ) -> Result<lsproto::ReferencesResponse, lsproto::Error> {
         self.handle_cross_project(
             ctx,
             params,
             orchestrator,
             LanguageService::symbol_and_entries_to_references,
-            combine_references,
+            |results| combine_references(&results),
             false, /*isRename*/
             false, /*implementations*/
             SymbolEntryTransformOptions::default(),
-            Some(&data),
+            Some(data),
         )
     }
 
@@ -949,7 +949,7 @@ impl LanguageService {
         &self,
         _ctx: &Context,
         params: &lsproto::ReferenceParams,
-        data: SymbolAndEntriesData,
+        data: &SymbolAndEntriesData,
         _options: SymbolEntryTransformOptions,
     ) -> Result<lsproto::ReferencesResponse, lsproto::Error> {
         // `findReferencedSymbols` except only computes the information needed to return reference locations
@@ -967,7 +967,7 @@ impl LanguageService {
         &self,
         ctx: &Context,
         _params: &lsproto::ReferenceParams,
-        data: SymbolAndEntriesData,
+        data: &SymbolAndEntriesData,
         _options: SymbolEntryTransformOptions,
     ) -> Result<lsproto::VSReferencesResponse, lsproto::Error> {
         let caps = lsproto::get_client_capabilities(ctx);
@@ -1159,7 +1159,7 @@ impl LanguageService {
             params,
             orchestrator,
             LanguageService::symbol_and_entries_to_implementations,
-            combine_implementations,
+            |results| combine_implementations(&results),
             false, /*isRename*/
             true,  /*implementations*/
             options,
@@ -1174,18 +1174,18 @@ impl LanguageService {
         params: &lsproto::ImplementationParams,
         options: SymbolEntryTransformOptions,
         orchestrator: Option<&dyn CrossProjectOrchestrator>,
-        data: SymbolAndEntriesData,
+        data: &SymbolAndEntriesData,
     ) -> Result<lsproto::ImplementationResponse, lsproto::Error> {
         self.handle_cross_project(
             ctx,
             params,
             orchestrator,
             LanguageService::symbol_and_entries_to_implementations,
-            combine_implementations,
+            |results| combine_implementations(&results),
             false, /*isRename*/
             true,  /*implementations*/
             options,
-            Some(&data),
+            Some(data),
         )
     }
 
@@ -1194,7 +1194,7 @@ impl LanguageService {
         &self,
         ctx: &Context,
         _params: &lsproto::ImplementationParams,
-        data: SymbolAndEntriesData,
+        data: &SymbolAndEntriesData,
         options: SymbolEntryTransformOptions,
     ) -> Result<lsproto::ImplementationResponse, lsproto::Error> {
         let mut seen_nodes: FxHashSet<Option<P<Node>>> = FxHashSet::default();

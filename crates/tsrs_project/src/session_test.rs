@@ -1165,13 +1165,13 @@ fn refreshes_code_lenses_and_inlay_hints_when_relevant_user_preferences_change()
     open(&session, files, "/src/index.ts");
     let _ = ls_program(&session, "/src/index.ts");
 
-    session.configure(tsrs_ls::lsutil::new_default_user_preferences());
+    session.configure(&tsrs_ls::lsutil::new_default_user_preferences());
     // Change user preferences for code lens and inlay hints.
     let mut new_prefs = session.config();
     new_prefs.code_lens.references_code_lens_enabled = tsrs_core::Tristate::True;
     new_prefs.inlay_hints.include_inlay_function_like_return_type_hints = tsrs_core::Tristate::True;
 
-    session.configure(new_prefs);
+    session.configure(&new_prefs);
 
     assert_eq!(*utils.client().refresh_code_lens_calls.lock().unwrap(), 1, "expected one RefreshCodeLens call after code lens preference change");
     assert_eq!(*utils.client().refresh_inlay_hints_calls.lock().unwrap(), 1, "expected one RefreshInlayHints call after inlay hints preference change");
@@ -1184,7 +1184,7 @@ fn sets_locale_when_configured() {
     let mut prefs = tsrs_ls::lsutil::new_default_user_preferences();
     prefs.locale = "fr".to_string();
 
-    session.configure(prefs);
+    session.configure(&prefs);
 
     let set_locale_calls = utils.client().set_locale_calls.lock().unwrap().clone();
     assert_eq!(set_locale_calls, vec!["fr".to_string()]);
@@ -1203,12 +1203,12 @@ fn locale_change_invalidates_programs() {
 
     let mut preferences = session.config();
     preferences.code_lens.references_code_lens_enabled = tsrs_core::Tristate::True;
-    session.configure(preferences.clone());
+    session.configure(&preferences);
     let _ = ls_program(&session, "/src/index.ts");
     assert!(std::ptr::eq(program_of(), initial_program));
 
     preferences.locale = "fr".to_string();
-    session.configure(preferences);
+    session.configure(&preferences);
     let _ = ls_program(&session, "/src/index.ts");
     assert!(!std::ptr::eq(program_of(), initial_program));
     session.close();
@@ -1225,7 +1225,7 @@ fn adds_locale_to_background_contexts() {
     let mut prefs = tsrs_ls::lsutil::new_default_user_preferences();
     prefs.code_lens.references_code_lens_enabled = tsrs_core::Tristate::True;
 
-    session.configure(prefs);
+    session.configure(&prefs);
 
     assert_eq!(*utils.client().refresh_code_lens_calls.lock().unwrap(), 1);
 }
@@ -1245,7 +1245,7 @@ fn schedules_diagnostics_refresh_when_report_style_checks_as_warnings_changes() 
     // Toggle reportStyleChecksAsWarnings (default is true, so set it to false).
     let mut prefs = tsrs_ls::lsutil::new_default_user_preferences();
     prefs.report_style_checks_as_warnings = tsrs_core::Tristate::False;
-    session.configure(prefs);
+    session.configure(&prefs);
     session.wait_for_background_tasks();
 
     assert!(utils.client().refresh_diagnostics_calls() > baseline_refresh_count);
@@ -1265,14 +1265,14 @@ fn config_parsing() {
         _ => unreachable!(),
     };
 
-    session.configure(parse(r#"{"js/ts": {"preferences": {"useAliasesForRenames": true, "quoteStyle": "single"}, "unstable": {"organizeImportsSort": "ordinalIgnoreCase"}}}"#));
+    session.configure(&parse(r#"{"js/ts": {"preferences": {"useAliasesForRenames": true, "quoteStyle": "single"}, "unstable": {"organizeImportsSort": "ordinalIgnoreCase"}}}"#));
     let mut expected_prefs1 = new_default_user_preferences();
     expected_prefs1.use_aliases_for_rename = tsrs_core::Tristate::True;
     expected_prefs1.quote_preference = QuotePreference::Single;
     expected_prefs1.organize_imports_sort = OrganizeImportsSort::OrdinalIgnoreCase;
     assert_eq!(session.config(), expected_prefs1);
 
-    session.configure(parse(r#"{"js/ts": {"preferences": {"useAliasesForRenames": false, "quoteStyle": "double"}, "unstable": {"organizeImportsSort": "ordinal"}}}"#));
+    session.configure(&parse(r#"{"js/ts": {"preferences": {"useAliasesForRenames": false, "quoteStyle": "double"}, "unstable": {"organizeImportsSort": "ordinal"}}}"#));
     let mut expected_prefs2 = new_default_user_preferences();
     expected_prefs2.use_aliases_for_rename = tsrs_core::Tristate::False;
     expected_prefs2.quote_preference = QuotePreference::Double;

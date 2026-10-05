@@ -142,7 +142,7 @@ impl LanguageService {
                         ..Default::default()
                     },
                     orchestrator,
-                    symbols_data,
+                    &symbols_data,
                 )?;
                 if let Some(locations) = references_resp.locations {
                     locs = locations;
@@ -163,7 +163,7 @@ impl LanguageService {
                     // and don't include the "current" node in the results.
                     SymbolEntryTransformOptions { require_locations_result: true, drop_origin_nodes: true },
                     orchestrator,
-                    symbols_data,
+                    &symbols_data,
                 )?;
 
                 if let Some(locations) = implementations.locations {
