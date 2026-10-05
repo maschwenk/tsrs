@@ -7,7 +7,7 @@ use tsrs_ast::{self as ast, FindAncestorResult, Kind, Node, NodeFactory, NodeFac
 use tsrs_checker::{Checker, Flags, LiteralValue, TypeFlags};
 use tsrs_compiler::Program;
 use tsrs_core::context::Context;
-use tsrs_core::{apply_bulk_edits, compare_text_ranges, goslices, tspath, CompilerOptions, ResolutionMode, TextChange, TextRange, P};
+use tsrs_core::{apply_bulk_edits, compare_text_ranges, goslices, tspath, CompilerOptions, TextChange, TextRange, P};
 use tsrs_lsproto as lsproto;
 use tsrs_printer::{self as printer, ChangeTrackerWriter, EmitContext, EmitFlags, EmitTextWriter, Printer, PrinterOptions};
 use tsrs_scanner as scanner;
@@ -18,7 +18,7 @@ use crate::completions::*;
 use crate::format;
 use crate::languageservice::LanguageService;
 use crate::lsutil::{self, FormatCodeSettings, QuotePreference, UserPreferences};
-use crate::utilities::{is_in_string, new_case_clause_tracker, CaseClauseTracker, TrackerValue};
+use crate::utilities::{is_in_string, new_case_clause_tracker, CaseClauseTracker};
 
 impl LanguageService {
     // completions.go:5489

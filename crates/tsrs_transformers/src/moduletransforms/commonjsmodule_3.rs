@@ -1,5 +1,4 @@
 use super::*;
-use crate::*;
 
 /// The pending-statement state shared by the `commitPendingVariables` / `commitPendingExpressions` /
 /// `pushVariable` / `pushExpression` closures of `visitTopLevelVariableStatement`.

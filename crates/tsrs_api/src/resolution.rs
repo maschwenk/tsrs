@@ -10,7 +10,7 @@ use crate::handler::{ApiError, ApiResult};
 use crate::module_resolution::{package_id_response, resolved_module_response};
 use crate::program::resolve_source_file;
 use crate::session::Session;
-use crate::wire::{b, s, DocumentIdentifier, Obj, Params};
+use crate::wire::{b, s, Obj, Params};
 
 fn mode_param(p: Params, key: &str) -> ApiResult<ResolutionMode> {
     Ok(match p.get(key) {

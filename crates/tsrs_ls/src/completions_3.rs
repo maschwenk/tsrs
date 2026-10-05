@@ -1,14 +1,13 @@
 // completions.go, lines 3468-5487.
 
-use std::collections::hash_map::Entry;
 use std::sync::{Mutex, OnceLock};
 
 use rustc_hash::{FxHashMap, FxHashSet};
-use tsrs_ast::{self as ast, FindAncestorResult, Kind, ModifierFlags, Node, NodeFlags, SourceFile, Symbol, SymbolFlags};
+use tsrs_ast::{self as ast, FindAncestorResult, Kind, ModifierFlags, Node, SourceFile, Symbol, SymbolFlags};
 use tsrs_checker::{self as checker, Checker, ContextFlags, Type, TypeFlags};
 use tsrs_core::context::Context;
 use tsrs_core::stringutil::{self, Comparison};
-use tsrs_core::{LanguageVariant, TextRange, P};
+use tsrs_core::{LanguageVariant, P};
 use tsrs_lsproto as lsproto;
 use tsrs_scanner as scanner;
 

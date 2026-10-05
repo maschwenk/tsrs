@@ -89,7 +89,6 @@ pub use helpers::*;
 pub use helpers_defs::*;
 pub use namegenerator::*;
 pub use printer_1::*;
-pub use printer_2::*;
 pub use printer_3::*;
 pub(crate) use semicolon_writer::*;
 pub use singlelinestringwriter::*;

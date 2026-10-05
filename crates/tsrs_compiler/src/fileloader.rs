@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::sync::Mutex;
 
 use rustc_hash::FxHashMap;
 use tsrs_ast::{self as ast, FileReference, Kind, Node, NodeFactory, NodeFlags, SourceFile, SourceFileMetaData, SourceFileParseOptions, TokenFlags};
@@ -7,12 +6,12 @@ use tsrs_core::tspath::{self, ComparePathsOptions, Path};
 use tsrs_core::{alloc_str, CompilerOptions, ModuleKind, ModuleResolutionKind, ResolutionMode, ScriptKind, P};
 use tsrs_diagnostics::{self as diagnostics, Message};
 use tsrs_module::{self as module, DiagAndArgs, ModeAwareCache, ModeAwareCacheKey, ResolvedModule, ResolvedTypeReferenceDirective, Resolver};
-use tsrs_tsoptions::{self as tsoptions, ParsedCommandLine};
+use tsrs_tsoptions::{self as tsoptions};
 
 use crate::file_include::{fileIncludeKind, automaticTypeDirectiveFileData, FileIncludeReason};
 use crate::filesparser::{filesParser, parseTask, resolvedRef, TaskId};
 use crate::host::CompilerHost;
-use crate::processing_diagnostic::{includeExplainingDiagnostic, processingDiagnostic, processingDiagnosticKind};
+use crate::processing_diagnostic::{includeExplainingDiagnostic, processingDiagnostic};
 use crate::program::{ProgramConfig, ProgramOptions};
 use crate::projectreferencefilemapper::{projectReferenceFileMapper, projectReferenceFileMapperBuilder, resolution_host_for};
 use crate::projectreferenceparser::projectReferenceParser;

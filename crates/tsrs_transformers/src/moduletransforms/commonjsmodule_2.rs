@@ -1,5 +1,4 @@
 use super::*;
-use crate::*;
 
 impl CommonJSModuleTransformer {
     // Appends the down-level representation of an export to a statement list, returning the statement list.

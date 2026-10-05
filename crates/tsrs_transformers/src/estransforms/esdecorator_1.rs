@@ -1,6 +1,5 @@
 // esdecorator.go lines 1-1230 (types, constructor, lexical state, visitors, class transform, constructor).
 
-use crate::*;
 use printer::EmitFlags;
 use tsrs_core::collections::OrderedMap;
 

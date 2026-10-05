@@ -1,6 +1,5 @@
 use std::cell::Cell;
 
-use tsrs_ast::Diagnostic;
 use tsrs_compiler::{get_diagnostics_of_any_program, sort_and_deduplicate_diagnostics, Program};
 use tsrs_core::P;
 use tsrs_tsoptions::ParsedCommandLine;

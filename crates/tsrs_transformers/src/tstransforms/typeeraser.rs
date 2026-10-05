@@ -1,5 +1,4 @@
 use super::*;
-use crate::*;
 
 pub struct TypeEraserTransformer {
     pub base: Transformer,

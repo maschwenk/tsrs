@@ -1,6 +1,5 @@
 //! Go package `transformers/inliners`.
 
-use crate::*;
 
 mod constenum;
 

@@ -1,7 +1,6 @@
 // !!! SourceMaps and Comments need to be validated
 
 use super::*;
-use crate::*;
 use tsrs_checker::LiteralValue;
 
 /// Go `map[string]*ast.Node`: a reference type that `pushScope` saves and `popScope` restores by pointer, so a saved

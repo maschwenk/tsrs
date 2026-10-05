@@ -1,5 +1,4 @@
 use super::*;
-use crate::*;
 
 /// Go `constantExpression(value any, ...)`: `value` is a string or a `jsnum.Number`; anything else yields nil.
 #[derive(Clone, Copy)]

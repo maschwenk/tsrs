@@ -1,7 +1,7 @@
 use std::fmt::Write as _;
 use std::sync::{Arc, Mutex, OnceLock};
 
-use tsrs_ast::{Diagnostic, SourceFile};
+use tsrs_ast::Diagnostic;
 use tsrs_compiler::{new_program, sort_and_deduplicate_diagnostics, CheckerPool, CreateCheckerPool, CreateModuleResolver, Program, ProgramOptions};
 use tsrs_core::collections::{Set, SyncSet};
 use tsrs_core::context::Context;
@@ -14,7 +14,7 @@ use tsrs_tsoptions::{self as tsoptions, Mapper, ParsedCommandLine};
 
 use crate::ata;
 use crate::checkerpool::{checkerPool, checkerPoolHandle, new_checker_pool};
-use crate::compilerhost::{compilerHost, new_compiler_host};
+use crate::compilerhost::compilerHost;
 use crate::dirty::Cloneable;
 use crate::logging::LogTree;
 use crate::memregions::programOwner;

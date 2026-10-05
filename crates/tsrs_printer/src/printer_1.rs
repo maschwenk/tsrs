@@ -20,7 +20,6 @@ use std::cell::Cell;
 use std::rc::Rc;
 
 use rustc_hash::FxHashMap;
-use tsrs_ast as ast;
 use tsrs_ast::*;
 use tsrs_core::stringutil;
 use tsrs_core::*;

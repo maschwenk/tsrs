@@ -1,5 +1,5 @@
 use bitflags::bitflags;
-use tsrs_ast::{self as ast, Diagnostic, DiagnosticExt, Kind, ModifierList, Node, NodeFlags, NodeList, SourceFile};
+use tsrs_ast::{self as ast, DiagnosticExt, Kind, Node, NodeFlags, NodeList, SourceFile};
 use tsrs_core::{alloc_slice, alloc_str, alloc_vec, stringutil, TextRange, P};
 use tsrs_diagnostics::{self as diagnostics, Message};
 

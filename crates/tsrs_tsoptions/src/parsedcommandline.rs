@@ -1,7 +1,7 @@
 use std::sync::{Mutex, OnceLock};
 
 use rustc_hash::FxHashMap;
-use tsrs_ast::{Diagnostic, SourceFile};
+use tsrs_ast::Diagnostic;
 use tsrs_core::collections::OrderedMap;
 use tsrs_core::glob::{self, Glob};
 use tsrs_core::tspath::{self, ComparePathsOptions, Path};

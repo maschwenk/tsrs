@@ -4,7 +4,6 @@ use tsrs_core::*;
 use tsrs_ast as ast;
 use tsrs_diagnostics as diagnostics;
 use tsrs_diagnostics::Message;
-use rustc_hash::FxHashMap;
 use std::cell::RefCell;
 use std::fmt::Display;
 use std::rc::Rc;
@@ -1029,7 +1028,7 @@ impl Checker {
     pub(crate) fn get_jsx_props_type_from_class_type(&mut self, sig: P<Signature>, context: P<Node>) -> Option<P<Type>> {
         let ns = self.get_jsx_namespace_at(Some(context));
         let forced_lookup_location = self.get_jsx_element_properties_name(ns);
-        let mut attributes_type: Option<P<Type>>;
+        let attributes_type: Option<P<Type>>;
         if forced_lookup_location == InternalSymbolNameMissing {
             let unknown_type = self.unknown_type;
             attributes_type = Some(self.get_type_of_first_parameter_of_signature_with_fallback(sig, unknown_type));

@@ -27,7 +27,7 @@ EXCLUDE = ["tsrs_fourslash"]
 
 # rustc lints the ratchet adds on the command line. They cannot be "warn" in [workspace.lints.rust] while existing
 # findings remain: `cargo check` runs with -D warnings.
-RUSTC_LINTS = ["unsafe_op_in_unsafe_fn"]
+RUSTC_LINTS = ["unsafe_op_in_unsafe_fn", "dead_code", "unused_imports", "unused_variables", "unused_mut"]
 
 # unsafe_op_in_unsafe_fn reports under its error code in edition 2021.
 CODE_ALIASES = {"E0133": "unsafe_op_in_unsafe_fn"}

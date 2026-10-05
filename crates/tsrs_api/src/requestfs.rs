@@ -843,7 +843,7 @@ fn add_file_changes(summary: &mut FileChangeSummary, request: &RequestParams, ba
         }
         add_with_aliases(summary, &abs, true);
     }
-    let mut add_replacement = |summary: &mut FileChangeSummary, p: &str| {
+    let add_replacement = |summary: &mut FileChangeSummary, p: &str| {
         let abs = tspath::get_normalized_absolute_path(p, cwd);
         add_with_aliases(summary, &abs, true);
         summary.created.add(uri(&abs));

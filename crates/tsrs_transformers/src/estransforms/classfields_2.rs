@@ -2,7 +2,6 @@
 // constructors, private-name environments, destructuring targets and the free helpers). Part 1 is classfields_1.rs.
 
 use super::*;
-use crate::*;
 use printer::{EmitFlags, PrivateIdentifierKind};
 use tsrs_core::TextRange;
 

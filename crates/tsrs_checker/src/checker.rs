@@ -1,7 +1,6 @@
 //! Non-function declarations of `checker.go`, the `Checker` struct, `NewChecker`, and the methods that replace Go's
 //! function-valued `Checker` fields.
 
-use std::fmt::Display;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{LazyLock, OnceLock};
 

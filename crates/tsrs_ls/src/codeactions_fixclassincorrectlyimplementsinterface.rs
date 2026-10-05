@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use rustc_hash::FxHashMap;
-use tsrs_ast::{self as ast, DiagnosticExt as _, ModifierFlags, Node, SourceFile, Symbol};
+use tsrs_ast::{self as ast, ModifierFlags, Node, SourceFile, Symbol};
 use tsrs_checker::{self as checker, Checker, Type};
 use tsrs_core::collections::Set;
 use tsrs_core::context::{locale_from_context, Context};

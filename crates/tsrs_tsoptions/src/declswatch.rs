@@ -1,9 +1,9 @@
 use std::sync::LazyLock;
 
-use tsrs_core::{PollingKind, ScriptTarget, Tristate, WatchDirectoryKind, WatchFileKind};
+use tsrs_core::{PollingKind, WatchDirectoryKind, WatchFileKind};
 use tsrs_diagnostics as diagnostics;
 
-use crate::commandlineoption::{CommandLineOption, CommandLineOptionKind, DefaultValueDescription, ExtraValidation};
+use crate::commandlineoption::{CommandLineOption, CommandLineOptionKind, DefaultValueDescription};
 
 // BEGIN GENERATED
 static OPTIONS_FOR_WATCH_ITEMS: [CommandLineOption; 7] = [

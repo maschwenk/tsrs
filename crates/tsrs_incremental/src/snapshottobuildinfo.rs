@@ -3,7 +3,7 @@
 use rustc_hash::FxHashMap;
 use tsrs_ast::{self as ast, Diagnostic, RepopulateDiagnosticInfo, SourceFile};
 use tsrs_compiler::Program as CompilerProgram;
-use tsrs_core::collections::{OrderedMap, Set};
+use tsrs_core::collections::OrderedMap;
 use tsrs_core::json::Value;
 use tsrs_core::tspath::{self, ComparePathsOptions, Path};
 use tsrs_core::P;

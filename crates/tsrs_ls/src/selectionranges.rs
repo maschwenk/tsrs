@@ -336,7 +336,7 @@ fn get_smart_selection_range(l: &LanguageService, source_file: P<SourceFile>, po
         let mut next: Option<P<Node>> = None;
         let parent = cur;
 
-        let mut visit = |s: &mut SmartSelection, next: &mut Option<P<Node>>, node: P<Node>| {
+        let visit = |s: &mut SmartSelection, next: &mut Option<P<Node>>, node: P<Node>| {
             if next.is_some() {
                 return;
             }

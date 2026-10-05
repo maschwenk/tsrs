@@ -1,5 +1,4 @@
 use super::*;
-use crate::*;
 
 // using.go:11
 pub struct usingDeclarationTransformer {
@@ -289,7 +288,7 @@ impl usingDeclarationTransformer {
         let emit_context = self.emit_context();
         let mut statements: Vec<P<Node>> = Vec::new();
 
-        let mut hoist_or_append_node = |this: &Self, node: P<Node>, top: &mut Option<&mut Vec<P<Node>>>, statements: &mut Vec<P<Node>>| {
+        let hoist_or_append_node = |this: &Self, node: P<Node>, top: &mut Option<&mut Vec<P<Node>>>, statements: &mut Vec<P<Node>>| {
             if let Some(node) = this.hoist(node, top) {
                 statements.push(node);
             }

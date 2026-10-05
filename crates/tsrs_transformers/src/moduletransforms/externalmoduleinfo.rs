@@ -1,5 +1,4 @@
 use super::*;
-use crate::*;
 
 #[derive(Default)]
 pub(crate) struct externalModuleInfo {

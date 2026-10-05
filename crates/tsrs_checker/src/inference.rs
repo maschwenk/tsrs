@@ -1,6 +1,4 @@
 use crate::*;
-use tsrs_ast::*;
-use tsrs_core::*;
 use tsrs_ast as ast;
 
 // Non-function declarations of inference.go (InferenceKey, InferenceState) are in inference_types.rs.

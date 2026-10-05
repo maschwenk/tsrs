@@ -5,7 +5,7 @@ use tsrs_ast::{self as ast, CheckFlags, JSDeclarationKind, Kind, ModifierFlags, 
 use tsrs_binder::{self as binder, NameResolver};
 use tsrs_checker::Checker;
 use tsrs_core::tspath::{self, Path};
-use tsrs_core::{ModuleKind, EMPTY_COMPILER_OPTIONS, P};
+use tsrs_core::{ModuleKind, P};
 use tsrs_module::DefaultResolver;
 
 use super::export::{Export, ExportID, ExportSyntax, ModuleID};

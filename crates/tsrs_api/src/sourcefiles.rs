@@ -22,7 +22,7 @@ use tsrs_project::SourceFileLease;
 use crate::batch::base64_encode;
 use crate::handler::{ApiError, ApiResult, Response};
 use crate::session::{json_response, Session};
-use crate::wire::{s, DocumentIdentifier, Obj, Params};
+use crate::wire::{s, Obj, Params};
 
 #[derive(Default)]
 pub(crate) struct SourceFileState {

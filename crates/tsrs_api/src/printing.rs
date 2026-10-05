@@ -13,7 +13,7 @@ use crate::batch::base64_decode;
 use crate::handler::{ApiError, ApiResult};
 use crate::program::resolve_source_file;
 use crate::session::Session;
-use crate::wire::{s, DocumentIdentifier, Params};
+use crate::wire::{s, Params};
 
 /// Go `decodePrintNode`. A Go decoder panic surfaces like the Go server's recovered panic.
 fn decode(encoded: &str) -> ApiResult<DecodedNode> {

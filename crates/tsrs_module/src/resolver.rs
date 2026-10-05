@@ -1296,7 +1296,7 @@ impl<'r> ResolutionState<'r> {
             }
         }
 
-        let mut loader = |r: &mut ResolutionState<'r>, extensions: Extensions, candidate: &str, package_info: Option<P<InfoCacheEntry>>| -> Option<Resolved> {
+        let loader = |r: &mut ResolutionState<'r>, extensions: Extensions, candidate: &str, package_info: Option<P<InfoCacheEntry>>| -> Option<Resolved> {
             if !rest.is_empty() || !r.esm_mode {
                 let mut from_file = r.load_module_from_file(extensions, candidate);
                 if let Some(f) = from_file.as_mut() {

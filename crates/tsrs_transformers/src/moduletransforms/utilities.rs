@@ -1,5 +1,4 @@
 use super::*;
-use crate::*;
 
 // utilities.go:12
 pub(crate) fn is_declaration_name_of_enum_or_namespace(emit_context: P<EmitContext>, node: P<Node>) -> bool {

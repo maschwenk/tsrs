@@ -1,7 +1,7 @@
 // Type-, signature- and display-centric handlers (Go tsc/internal/api/session.go).
 
 use tsrs_ast::Kind;
-use tsrs_checker::{ContextFlags, Flags as NodeBuilderFlags, IndexKind, Signature, SignatureKind, Type, TypeDataTag, TypeFlags, TypeFormatFlags};
+use tsrs_checker::{ContextFlags, Flags as NodeBuilderFlags, IndexKind, SignatureKind, Type, TypeDataTag, TypeFlags, TypeFormatFlags};
 use tsrs_core::json::Value;
 use tsrs_core::P;
 

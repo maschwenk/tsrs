@@ -9,7 +9,7 @@ use tsrs_compiler::Program as CompilerProgram;
 use tsrs_core::collections::{SyncMap, SyncSet};
 use tsrs_core::tspath::{self, ComparePathsOptions, Path};
 use tsrs_core::{alloc_str, new_text_range, CompilerOptions, ResolutionMode, Tristate, P};
-use tsrs_diagnostics::{self as diagnostics, Category, Key};
+use tsrs_diagnostics::{Category, Key};
 
 use crate::emit::WriteFileData;
 use crate::referencemap::ReferenceMap;

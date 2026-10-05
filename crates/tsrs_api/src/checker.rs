@@ -31,7 +31,6 @@ use tsrs_core::json::Value;
 use tsrs_core::P;
 use tsrs_project::Snapshot;
 
-pub use dispatch::{is_checker_method, CHECKER_METHODS};
 pub use host::{CachedFileScope, CheckerError, CheckerErrorKind, CheckerHost, CheckerResponse, CheckerResult, SnapshotScope};
 pub use registry::CheckerRegistry;
 

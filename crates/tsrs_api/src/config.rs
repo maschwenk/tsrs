@@ -13,7 +13,7 @@ use tsrs_vfs::FS;
 use crate::diagnostics::{diagnostic_response, diagnostic_responses};
 use crate::handler::{ApiError, ApiResult};
 use crate::session::Session;
-use crate::wire::{strings, DocumentIdentifier, Obj, Params};
+use crate::wire::{strings, Obj, Params};
 
 /// `tsoptions.ParseConfigHost` over the session's base filesystem (Go passes the SnapshotHost).
 pub(crate) struct ApiParseConfigHost {
