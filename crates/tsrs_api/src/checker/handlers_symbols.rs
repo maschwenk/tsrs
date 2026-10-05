@@ -75,6 +75,7 @@ pub(crate) fn get_symbols_of_source_files(host: &dyn CheckerHost, p: &Params) ->
     Ok(Value::Array(out))
 }
 
+#[derive(Clone, Copy)]
 pub(crate) enum SymbolTypeQuery {
     TypeOf,
     DeclaredType,
@@ -142,6 +143,7 @@ pub(crate) fn get_export_specifier_local_target_symbol(host: &dyn CheckerHost, p
     s.opt_symbol_response(symbol)
 }
 
+#[derive(Clone, Copy)]
 pub(crate) enum AliasQuery {
     Aliased,
     ImmediateAliased,
@@ -275,6 +277,7 @@ fn resolve_symbol_reference<'h>(host: &'h dyn CheckerHost, r: &SymbolReference) 
     }
 }
 
+#[derive(Clone, Copy)]
 pub(crate) enum SymbolProperty {
     Parent,
     ExportSymbol,
@@ -293,6 +296,7 @@ pub(crate) fn symbol_property(host: &dyn CheckerHost, p: &Params, property: Symb
     }
 }
 
+#[derive(Clone, Copy)]
 pub(crate) enum SymbolTableProperty {
     Members,
     Exports,
@@ -330,6 +334,7 @@ pub(crate) fn symbol_table_property(host: &dyn CheckerHost, p: &Params, property
     }
 }
 
+#[expect(clippy::trivially_copy_pass_by_ref, reason = "passed to sort_by, which hands the comparator references")]
 fn compare_file_symbols(left: &P<Symbol>, right: &P<Symbol>) -> Ordering {
     let (ld, rd) = (left.declarations(), right.declarations());
     if ld.is_empty() != rd.is_empty() {

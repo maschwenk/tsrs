@@ -1,7 +1,8 @@
 // Port of tsc/internal/api/module_resolution.go (static + callback module resolvers, createModuleResolver /
 // releaseModuleResolver / resolveModuleName) and tsc/internal/module/staticresolver.go.
 
-use std::collections::HashMap;
+use std::sync::Weak;
+use rustc_hash::FxHashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -30,7 +31,7 @@ struct StaticKey {
 /// Go `module.StaticResolutions`.
 pub struct StaticResolutions {
     fallback_to_resolver: bool,
-    entries: HashMap<StaticKey, P<ResolvedModule>>,
+    entries: FxHashMap<StaticKey, P<ResolvedModule>>,
     current_directory: String,
     use_case_sensitive_file_names: bool,
 }
@@ -110,15 +111,15 @@ pub(crate) struct ModuleResolverRegistration {
 #[derive(Default)]
 pub(crate) struct ModuleResolvers {
     next_id: AtomicU64,
-    registrations: Mutex<HashMap<u64, Arc<ModuleResolverRegistration>>>,
+    registrations: Mutex<FxHashMap<u64, Arc<ModuleResolverRegistration>>>,
     next_context_id: AtomicU64,
     /// Go `programResolutionContexts`: resolvers live while a program is being built with a callback resolver.
-    contexts: Mutex<HashMap<u64, Arc<ProgramResolutionContext>>>,
+    contexts: Mutex<FxHashMap<u64, Arc<ProgramResolutionContext>>>,
 }
 
 pub(crate) struct ProgramResolutionContext {
     options: ResolverOptionsTemplate,
-    resolvers: Mutex<HashMap<u64, Arc<dyn Resolver>>>,
+    resolvers: Mutex<FxHashMap<u64, Arc<dyn Resolver>>>,
 }
 
 /// The parts of `module.ResolverOptions` needed to build another resolver for the same program.
@@ -136,9 +137,9 @@ impl ResolverOptionsTemplate {
     }
     fn with_options(&self, compiler_options: P<CompilerOptions>) -> ResolverOptions {
         let mut o = ResolverOptions::new(self.host, compiler_options);
-        o.typings_location = self.typings_location.clone();
-        o.project_name = self.project_name.clone();
-        o.extra_extensions = self.extra_extensions.clone();
+        o.typings_location.clone_from(&self.typings_location);
+        o.project_name.clone_from(&self.project_name);
+        o.extra_extensions.clone_from(&self.extra_extensions);
         o
     }
 }
@@ -192,7 +193,7 @@ impl CallbackResolver {
             .set_opt("snapshot", (self.snapshot != 0).then(|| Value::Number(self.snapshot as f64)))
             .set_opt("inProgressSnapshot", (self.context_id != 0).then(|| Value::Number(self.context_id as f64)))
             .build();
-        let text = json::marshal(&params).map_err(|e| e.to_string())?;
+        let text = json::marshal(&params)?;
         let result = self.conn.call(&self.registration.callback, &text).map_err(|e| format!("resolveModuleName callback failed: {e}"))?;
         if result.is_empty() || result == "null" {
             return Ok((unresolved(), Vec::new()));
@@ -322,7 +323,7 @@ impl ModuleResolverFactory for Factory {
         let mut fallback: Box<dyn Resolver> = Box::new(tsrs_module::new_resolver(options));
         let (Some(conn), false) = (&self.conn, self.registration.callback.is_empty()) else {
             if let Some(res) = &self.registration.resolutions {
-                fallback = Box::new(StaticResolver { fallback, resolutions: res.clone() });
+                fallback = Box::new(StaticResolver { fallback, resolutions: Arc::clone(res) });
             }
             return (fallback, Box::new(|| {}));
         };
@@ -330,10 +331,10 @@ impl ModuleResolverFactory for Factory {
         let (context_id, release): (u64, Box<dyn FnOnce() + Send>) = match self.session.upgrade() {
             Some(session) => {
                 let id = session.module_resolvers.next_context_id.fetch_add(1, Ordering::SeqCst) + 1;
-                let mut resolvers = HashMap::new();
-                resolvers.insert(self.registration.id, shared.clone());
+                let mut resolvers = FxHashMap::default();
+                resolvers.insert(self.registration.id, Arc::clone(&shared));
                 session.module_resolvers.contexts.lock().unwrap().insert(id, Arc::new(ProgramResolutionContext { options: template, resolvers: Mutex::new(resolvers) }));
-                let weak = self.session.clone();
+                let weak = Weak::clone(&self.session);
                 (
                     id,
                     Box::new(move || {
@@ -346,15 +347,15 @@ impl ModuleResolverFactory for Factory {
             None => (0, Box::new(|| {})),
         };
         let mut resolver: Box<dyn Resolver> = Box::new(CallbackResolver {
-            registration: self.registration.clone(),
-            conn: conn.clone(),
+            registration: Arc::clone(&self.registration),
+            conn: Arc::clone(conn),
             current_directory: self.current_directory.clone(),
             snapshot: 0,
             context_id,
             fallback: Box::new(SharedResolver(shared)),
         });
         if let Some(res) = &self.registration.resolutions {
-            resolver = Box::new(StaticResolver { fallback: resolver, resolutions: res.clone() });
+            resolver = Box::new(StaticResolver { fallback: resolver, resolutions: Arc::clone(res) });
         }
         (resolver, release)
     }
@@ -389,7 +390,7 @@ impl Session {
             "unresolved" => false,
             other => return Err(ApiError::client(format!("invalid module resolution fallback {other:?}"))),
         };
-        let mut entries = HashMap::new();
+        let mut entries = FxHashMap::default();
         for (i, entry) in p.array("entries")?.iter().enumerate() {
             if matches!(entry, Value::Null) {
                 return Err(ApiError::client(format!("module resolution entry {i} is null")));
@@ -432,7 +433,8 @@ impl Session {
 
     pub(crate) fn handle_release_module_resolver(&self, p: Params) -> ApiResult<Value> {
         let id = p.u64("resolver")?;
-        match self.module_resolvers.registrations.lock().unwrap().remove(&id) {
+        let removed = self.module_resolvers.registrations.lock().unwrap().remove(&id);
+        match removed {
             Some(_) => Ok(Value::Null),
             None => Err(ApiError::client(format!("module resolver {id} not found"))),
         }
@@ -477,10 +479,9 @@ impl Session {
             let ctx = self.module_resolvers.contexts.lock().unwrap().get(&in_progress).cloned();
             let ctx = ctx.ok_or_else(|| ApiError::client(format!("in-progress snapshot {in_progress} not found")))?;
             let mut resolvers = ctx.resolvers.lock().unwrap();
-            let r = resolvers
+            let r = Arc::clone(resolvers
                 .entry(data.id)
-                .or_insert_with(|| Arc::new(tsrs_module::new_resolver(ctx.options.with_options(data.compiler_options))) as Arc<dyn Resolver>)
-                .clone();
+                .or_insert_with(|| Arc::new(tsrs_module::new_resolver(ctx.options.with_options(data.compiler_options))) as Arc<dyn Resolver>));
             Box::new(SharedResolver(r))
         } else {
             let fs: Arc<dyn FS> = if snapshot != 0 {
@@ -499,10 +500,10 @@ impl Session {
         };
         if !data.callback.is_empty() {
             let conn = self.connection().ok_or_else(|| ApiError::client("API connection is not initialized"))?;
-            resolver = Box::new(CallbackResolver { registration: data.clone(), conn, current_directory: cwd.clone(), snapshot, context_id: in_progress, fallback: resolver });
+            resolver = Box::new(CallbackResolver { registration: Arc::clone(&data), conn, current_directory: cwd, snapshot, context_id: in_progress, fallback: resolver });
         }
         if let Some(res) = &data.resolutions {
-            resolver = Box::new(StaticResolver { fallback: resolver, resolutions: res.clone() });
+            resolver = Box::new(StaticResolver { fallback: resolver, resolutions: Arc::clone(res) });
         }
         let result = resolver.resolve_module_name_from_directory(module_name, &containing_directory, mode);
         drop(resolver);

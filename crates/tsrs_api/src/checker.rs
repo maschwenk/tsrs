@@ -101,8 +101,8 @@ impl CheckerHost for SessionHost<'_> {
 
     fn snapshot(&self, handle: u64) -> CheckerResult<SnapshotScope> {
         let sd = self.session.snapshot_data(handle).map_err(from_api_error)?;
-        let snapshot = sd.snapshot.clone();
-        let registry = sd.checker_state.registry.clone();
+        let snapshot = Arc::clone(&sd.snapshot);
+        let registry = Arc::clone(&sd.checker_state.registry);
         // The scope pins `SnapshotData` (and with it the project snapshot) until the request ends.
         Ok(SnapshotScope { handle, snapshot, registry, release: Some(Box::new(move || drop(sd))) })
     }

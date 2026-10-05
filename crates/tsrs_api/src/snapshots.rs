@@ -57,7 +57,7 @@ pub fn project_response(p: &Project) -> Value {
 }
 
 fn same_project(a: &Shared<Project>, b: &Shared<Project>) -> bool {
-    std::ptr::eq::<Project>(&**a, &**b)
+    std::ptr::eq::<Project>(&raw const **a, &raw const **b)
 }
 
 fn same_program(a: &Project, b: &Project) -> bool {
@@ -86,10 +86,11 @@ fn compute_snapshot_changes(prev: &Snapshot, next: &Snapshot) -> Value {
                 let new_files = new.get_program().map(|p| p.files_by_path()).unwrap_or(&empty);
                 let mut changed_files: Vec<&Path> = Vec::new();
                 let mut deleted_files: Vec<&Path> = Vec::new();
+                #[expect(clippy::iter_over_hash_type, reason = "both lists are sorted before they are serialized")]
                 for (path, old_file) in old_files.iter() {
                     match new_files.get(path) {
                         None => deleted_files.push(path),
-                        Some(new_file) if !std::ptr::eq::<tsrs_ast::SourceFile>(&**old_file, &**new_file) => changed_files.push(path),
+                        Some(new_file) if !std::ptr::eq::<tsrs_ast::SourceFile>(&raw const **old_file, &raw const **new_file) => changed_files.push(path),
                         _ => {}
                     }
                 }
@@ -167,7 +168,7 @@ impl Session {
     }
 
     /// Go `toAPISnapshotRequest`.
-    fn to_api_snapshot_request(&self, p: &Params) -> ApiResult<(APISnapshotRequest, RequestEcho)> {
+    fn to_api_snapshot_request(&self, p: Params) -> ApiResult<(APISnapshotRequest, RequestEcho)> {
         let cwd = self.current_directory().to_string();
         let mut req = APISnapshotRequest::default();
         for d in DocumentIdentifier::parse_list(p.array("openProjects")?, "openProjects")? {
@@ -385,7 +386,7 @@ impl Session {
     /// Go `requestfilesystem.NewForUpdate` for the request's optional `fileSystem`.
     fn request_file_system(
         &self,
-        p: &Params,
+        p: Params,
         base: Option<&RequestFileSystem>,
         file_changes: &mut FileChangeSummary,
     ) -> ApiResult<Option<(Arc<RequestFileSystem>, bool)>> {
@@ -402,12 +403,12 @@ impl Session {
         if !matches!(p.0, Value::Null) {
             p.object()?;
         }
-        let (mut req, echo) = self.to_api_snapshot_request(&p)?;
+        let (mut req, echo) = self.to_api_snapshot_request(p)?;
         let open_state = self.reconcile_snapshot_opens(&mut req, &OpenState::default());
         let mut file_changes = self.to_file_change_summary(p.get("fileNotifications"))?;
-        let snapshot_fs = match self.request_file_system(&p, None, &mut file_changes)? {
+        let snapshot_fs = match self.request_file_system(p, None, &mut file_changes)? {
             Some((fs, replace)) => {
-                req.layered_file_system = Some(fs.clone() as Arc<dyn tsrs_project::LayeredFileSystem>);
+                req.layered_file_system = Some(Arc::clone(&fs) as Arc<dyn tsrs_project::LayeredFileSystem>);
                 req.replace_file_system = replace;
                 Some(fs)
             }
@@ -454,14 +455,14 @@ impl Session {
         if !matches!(changes.0, Value::Null) {
             changes.object()?;
         }
-        let (mut req, echo) = self.to_api_snapshot_request(&changes)?;
+        let (mut req, echo) = self.to_api_snapshot_request(changes)?;
         let open_state = self.reconcile_snapshot_opens(&mut req, &base.open_state);
         let mut file_changes = self.to_file_change_summary(changes.get("fileNotifications"))?;
-        let new_fs = self.request_file_system(&changes, base.file_system.as_deref(), &mut file_changes)?;
+        let new_fs = self.request_file_system(changes, base.file_system.as_deref(), &mut file_changes)?;
         let replaced = new_fs.as_ref().is_some_and(|(_, replace)| *replace);
         let snapshot_fs = new_fs.map(|(fs, _)| fs).or_else(|| base.file_system.clone());
         if let Some(fs) = &snapshot_fs {
-            req.layered_file_system = Some(fs.clone() as Arc<dyn tsrs_project::LayeredFileSystem>);
+            req.layered_file_system = Some(Arc::clone(fs) as Arc<dyn tsrs_project::LayeredFileSystem>);
             req.replace_file_system = replaced;
         } else {
             // Attribution only: same host filesystem, never a replacement.

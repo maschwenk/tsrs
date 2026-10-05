@@ -9,7 +9,7 @@
 // removed when the region owning the file is freed (`Region::on_free` runs before the memory is reused), so a
 // table never outlives the nodes it points to; files outside any region live for the process.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use std::sync::{Arc, Mutex};
 
 use tsrs_api_codec::{self as codec, NodeIndexTable};
@@ -26,8 +26,8 @@ use crate::wire::{s, DocumentIdentifier, Obj, Params};
 
 #[derive(Default)]
 pub(crate) struct SourceFileState {
-    tables: Mutex<HashMap<usize, Arc<NodeIndexTable>>>,
-    leases: Mutex<HashMap<u64, Arc<SourceFileLease>>>,
+    tables: Mutex<FxHashMap<usize, Arc<NodeIndexTable>>>,
+    leases: Mutex<FxHashMap<u64, Arc<SourceFileLease>>>,
     next_lease: std::sync::atomic::AtomicU64,
 }
 
@@ -104,10 +104,11 @@ impl Session {
     pub(crate) fn node_index_table(&self, file: P<SourceFile>) -> Arc<NodeIndexTable> {
         let addr = file.as_node().addr();
         if let Some(t) = self.source_files.tables.lock().unwrap().get(&addr) {
-            return t.clone();
+            return Arc::clone(t);
         }
-        // SAFETY of lifetime: `file` is reachable from a live snapshot/lease for the whole request.
-        let file_ref: &'static SourceFile = unsafe { &*(&*file as *const SourceFile) };
+        // SAFETY: `file` is reachable from a live snapshot or lease for the whole request, and the cached table built
+        // from it is evicted when the file's arena region is freed (`store_table`).
+        let file_ref: &'static SourceFile = unsafe { &*(&raw const *file) };
         self.store_table(addr, Arc::new(codec::build_node_index_table(file_ref)))
     }
 
@@ -115,9 +116,9 @@ impl Session {
     fn store_table(&self, addr: usize, table: Arc<NodeIndexTable>) -> Arc<NodeIndexTable> {
         let mut tables = self.source_files.tables.lock().unwrap();
         if let Some(t) = tables.get(&addr) {
-            return t.clone();
+            return Arc::clone(t);
         }
-        tables.insert(addr, table.clone());
+        tables.insert(addr, Arc::clone(&table));
         drop(tables);
         if let Some(region) = tsrs_core::arena::Region::containing(addr) {
             let weak = self.weak_self();
@@ -132,7 +133,9 @@ impl Session {
 
     /// Go `encoder.EncodeSourceFile` + `SetSourceFileID`.
     fn encode_source_file(&self, file: P<SourceFile>) -> ApiResult<Vec<u8>> {
-        let file_ref: &'static SourceFile = unsafe { &*(&*file as *const SourceFile) };
+        // SAFETY: as in `node_index_table`: the file outlives the request, and the cached table is evicted when its arena
+        // region is freed.
+        let file_ref: &'static SourceFile = unsafe { &*(&raw const *file) };
         let (mut data, table) = codec::encode_source_file(file_ref).map_err(|e| ApiError::internal(format!("failed to encode source file: {e}")))?;
         self.store_table(file.as_node().addr(), Arc::new(table));
         // Go `SetSourceFileID(data, sourceFileNodeID(file))` after encoding.
@@ -207,7 +210,7 @@ impl Session {
         }
         let key = parse_cache_key(descriptor).map_err(|e| ApiError::client(format!("invalid source file descriptor: {e}")))?;
         let lease = self.snapshot_host.acquire_existing_source_file(key).ok_or_else(|| ApiError::client("source file is not available"))?;
-        if source_file_descriptor(lease.source_file()) != *descriptor_normalized(descriptor) {
+        if source_file_descriptor(lease.source_file()) != descriptor_normalized(descriptor) {
             lease.release();
             return Err(ApiError::client("source file descriptor no longer identifies the cached source file"));
         }
@@ -324,16 +327,14 @@ impl Session {
 }
 
 /// Descriptors compare structurally with Go's struct equality; normalize field order/shape for comparison.
-fn descriptor_normalized(v: &Value) -> Box<Value> {
+fn descriptor_normalized(v: &Value) -> Value {
     let p = Params(v);
-    Box::new(
-        Obj::new()
-            .set("fileName", p.get("fileName").clone())
-            .set("path", p.get("path").clone())
-            .set("contentHash", p.get("contentHash").clone())
-            .set("parseOptionsKey", p.get("parseOptionsKey").clone())
-            .set("scriptKind", p.get("scriptKind").clone())
-            .set("nodeId", p.get("nodeId").clone())
-            .build(),
-    )
+    Obj::new()
+        .set("fileName", p.get("fileName").clone())
+        .set("path", p.get("path").clone())
+        .set("contentHash", p.get("contentHash").clone())
+        .set("parseOptionsKey", p.get("parseOptionsKey").clone())
+        .set("scriptKind", p.get("scriptKind").clone())
+        .set("nodeId", p.get("nodeId").clone())
+        .build()
 }

@@ -206,7 +206,7 @@ pub fn serve(
     make_handler: impl FnOnce(Arc<dyn Caller>) -> Arc<dyn Handler>,
 ) -> Result<(), TransportError> {
     let late = LateCaller::new();
-    let handler = make_handler(late.clone());
+    let handler = make_handler(Arc::<LateCaller>::clone(&late));
     let (_listener, stream) = match pipe_path {
         Some(path) => {
             let listener = PipeListener::bind(path)
