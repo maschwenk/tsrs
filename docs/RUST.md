@@ -93,6 +93,11 @@ leave it off too), the cast lints (the port has about 1,000 `as usize`), `print_
 6. **Slow paths are split out.** The rare branch of a hot function goes into a `#[cold]` function so the common
    path does not pay for the rare one (`notes/perf-parse.md` changes 6 to 8; oxc builds parser diagnostics in a `#[cold]`
    function).
+7. **A complexity claim is checked by doubling the input.** "Linear now" or "no longer quadratic" comes with the
+   measurement at N and 2N and the ratio (Bun: "Verify complexity claims by doubling inputs and reporting the ratio").
+8. **Preconditions are assertions, not prose.** A helper's documented precondition becomes a `debug_assert!` at its
+   head (an `assert!` when breaking it would corrupt memory); a comment cannot fail (Bun: "Encode documented
+   preconditions as debug assertions rather than prose").
 
 ## Techniques
 
@@ -131,6 +136,19 @@ Not tried. Each needs a measurement and a note before it is adopted; none is app
 | Call-graph lints | mordant, used by Bun with a per-file baseline, advisory there | `forbidden_reach` ("nothing reachable from this function may allocate"), `generic_body_not_generic` (code compiled again per type for no reason). | A nightly with `rustc-dev` that compiles the workspace. |
 | Source-pattern lints | Bun `test/internal/source-lints/` (one regex per rule, a per-file count allowlist, a check that the scan is not empty), rust-analyzer `xtask/src/tidy.rs` | Bans that clippy cannot express. | A rule that needs it; put it next to `ratchet.py`. |
 | Dependency checks in CI | cargo-deny (oxc, Ruff, Biome, swc), cargo-shear or machete (oxc, Rolldown, Ruff, rust-analyzer) | `deny.toml` exists but no job runs it; unused dependencies cost fat-LTO build time. | A CI step. |
+| Generated-code freshness check | oxc, Ruff, rust-analyzer (regenerate in CI, then `git diff --exit-code`) | A hand edit to generated code (`tools/gen-*` output) fails CI instead of being lost at the next regeneration; `clippy --fix` once edited `lsp_generated.rs`. | A CI job that runs the generators that need no network. |
+| Unused code under the ratchet | Bun (`dead_code` and `unreachable_pub` denied), Ruff (hawk `dead_public`) | `dead_code`, `unused_imports`, `unused_variables` and `unused_mut` are allowed workspace-wide (left over from porting); counted by the ratchet, new unused code stops landing and the old is visible. | Adding them to the ratchet's rustc lints and a baseline. |
+| Inventory of `unsafe impl Send` / `Sync` | Bun `vm-thread-door.inventory.json` (exact snapshot; any change fails until regenerated) | 29 such impls today; each new cross-thread escape becomes a reviewed line, which matters because `P<T>` is `Send + Sync` by decree. | A script and a checked-in list, run with the ratchet. |
+| Weakened atomic orderings need a reason | Bun review rule ("default to seq_cst and comment any weakened ordering") | 110 `Relaxed`, 5 `Acquire`, 5 `Release` today; a source-pattern check (ratcheted per file) asks for a comment at new ones. | A script, run with the ratchet. |
+| Peak memory in the regression flag | Ruff (memory report on each PR, merge base vs head) | Memory is tsrs's main win; the bench flags instructions only. | A stability check of single-threaded peak RSS like the one for instructions. |
+| Hot/cold text grouping with PGO (`-Wl,-z,keep-text-section-prefix`) | Bun (only when a profile is loaded) | PGO already marks functions hot or cold; the linker flag keeps them grouped, for fewer instruction-cache misses on Linux. | A cycles or wall-time A/B; instruction counts will not show it. |
+| Monomorphization audit | oxc (`cargo llvm-lines` workflow), rust-analyzer style guide ("Avoid Monomorphization") | The port's `impl FnMut` callback convention compiles a copy per caller; a list of the largest instantiations shows where a non-generic inner function would cut code size and compile time. | `cargo llvm-lines` on the checker crate; a note. |
+| Identifiers that carry their hash | oxc `Ident` (pointer, length, precomputed hash; `IdentHashMap` does not rehash) | Symbol-table lookups by name hash the string every time. | A profile showing what share of instructions string hashing takes before any change. |
+| Differential fuzzing of the parser and scanner | Ruff (`cargo fuzz` on its parser) | Crashes and divergences from tsgo on inputs the conformance suite never has. | A fuzz target, a Go oracle to diff against, a corpus. |
+| Frame pointers for profiling | Bun (`-Cforce-frame-pointers=yes`) | Reliable stacks in samply and `perf` profiles of the `dist` build, at a small cost, so not for release. | A documented profiling build command. |
+
+Not pursued: a binary-size check (Bun fails a pull request that grows the binary by more than 0.5 MB); size is not a
+goal here (owner decision, 2026-10-05).
 
 Does not transfer: nightly-only flags (Bun's `-Zbuild-std`, `-Zlocation-detail=none`, `-Zshare-generics`; the release
 toolchain is stable), lifetime-carrying arenas such as bumpalo's `&'a T` (PORTING.md: no lifetime parameters), oxc's
