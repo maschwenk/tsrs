@@ -108,7 +108,9 @@ still points to is a use-after-free. The alloc-profile build checks that at exit
 and every freed block must be unreachable.
 
 The census decodes 48-bit words as pointers, so it needs plain pointers (compressed handles are 32-bit offsets,
-notes/mem-pointer-compression.md); a compressed build refuses `TSRS_CENSUS=1`.
+notes/mem-pointer-compression.md); a compressed build refuses `TSRS_CENSUS=1`. In a debugger a handle `h` is the
+object at `h * 8` on Linux (the arena range is 4-32 GiB) and at `0x4001_0000_0000 + h * 8` on macOS
+(`tsrs_core::reserve::BASE_ADDR`); a `P` field prints as its handle.
 
 ```sh
 CARGO_TARGET_DIR=$PWD/target/prof cargo build --release -p tsrs_cli --features alloc-profile,tsrs_core/plain-ptrs
