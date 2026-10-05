@@ -2,8 +2,8 @@
 
 Linux x86-64 is where CI and the coding sandboxes run, and all three checker CPU rounds were tuned on Apple Silicon.
 Part 1: the arena lost its transparent huge pages when `P<T>` became a 32-bit handle, and what fixing it shows about
-the x86 cost of the handles. Part 2, an x86 profile of the check phase on top of it, is added with the changes it
-leads to.
+the x86 cost of the handles. Part 2: an x86 profile of the check phase on top of that, and the candidates it suggested,
+each measured on its own.
 
 ## Machine and method
 
@@ -181,6 +181,129 @@ notes/perf-round2-followups.md, and the +3-8% of the zero-based-handles branch, 
 huge pages to a `plain-ptrs` build with them. The handles still retire 6.5% more instructions, but those are register
 moves and shifts that retire cheaply, and the smaller working set pays for part of them; for 15% less memory.
 
+## Part 2: the check phase on x86-64
+
+Host B (Xeon 8375C, Ice Lake), main after part 1 (825cd63), the `dist` profile, and the same profile with PGO trained
+as the release workflow does (`.github/scripts/pgo-train.sh`: conformance and fourslash suites, xstate and webpack; it
+ran in the sandbox in about 80 s). `perf stat` (two runs per row, one event group each, no multiplexing) and `perf
+record` sampling cycles and `mem_load_retired.l3_miss:pp` (the guest has PEBS, `max_precise` 3, but counts only ~45%
+of the L3 misses the plain counter sees, so read its shares, not its totals; the VM exposes no top-down metrics).
+
+### Counters
+
+| build, checkers | cycles G | instructions G | IPC | L1d load misses M | L2 load misses M | L3 load misses M | branch misses | dTLB load misses M |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| dist, 1 | 171.3 | 252.8 | 1.48 | 1,677 | 184 | 88.8 | 738 M (1.51%) | 20.9 |
+| dist + PGO, 1 | 149.2 | 214.6 | 1.44 | 1,771 | 182 | 79.9 | 735 M (1.75%) | 17.6 |
+| dist, 4 | 233.1 | 344.5 | 1.48 | 2,305 | 260 | 110.2 | 908 M (1.38%) | 23.2 |
+| dist + PGO, 4 | 190.1 | 291.8 | 1.53 | 2,377 | 254 | 95.1 | 911 M (1.61%) | 20.3 |
+
+PGO removes 15% of the instructions and 13% / 18% of the cycles. The check phase runs at 1.45-1.5 instructions per
+cycle here against ~2.8 on the Apple M-series machine of notes/perf-checker-cpu3.md (276 G instructions in 100 G
+cycles): the same work takes 1.7-1.9 times the cycles. Upper bounds from the counters, ignoring overlap: L3 load
+misses ~12% of the cycles (89 M x ~230 cycles at 2.9 GHz), branch misses ~7% (738 M x ~16).
+
+### Where the cycles go
+
+One checker (the check runs on the main thread then; the first 5% of samples, the front end, left out), share of
+cycles, and the L3-miss ranking of the `dist` build:
+
+| `dist`: cycles | % | `dist` + PGO: cycles | % | `dist`: L3 load misses (precise) | % |
+| --- | --- | --- | --- | --- | --- |
+| `Relation::lookup` | 3.26 | `instantiate_type_with_alias_worker` | 8.55 | `Relation::lookup` | 11.09 |
+| `instantiate_type_with_alias_worker` | 3.21 | `Relater::is_related_to_ex` | 5.04 | `ReferenceInstantiations` rehash (hashbrown `reserve_rehash`) | 7.82 |
+| `SymbolMap::search` | 2.96 | `SymbolMap::search` | 3.35 | `get_object_type_instantiation` | 4.81 |
+| `get_object_type_instantiation` | 1.94 | `check_expression_ex` | 3.20 | `create_type_reference_ex` | 3.94 |
+| `SymbolMap::position` | 1.73 | `get_member_of_structured_type_ex` | 2.74 | `get_conditional_type_instantiation_ex` | 3.64 |
+| `create_type_reference_ex` | 1.45 | `get_union_type_worker` | 2.32 | `SymbolMap::search` | 3.11 |
+| `get_type_of_symbol` | 1.44 | mimalloc `_mi_page_malloc_zero` | 1.64 | `LinkStore<Node, AssertionLinks>::get` | 3.02 |
+| `get_apparent_type` | 1.32 | `get_intersection_type_ex` | 1.52 | `get_ready_lazy_member_table_worker` | 2.47 |
+| mimalloc `_mi_page_malloc_zero` | 1.30 | `get_conditional_type_instantiation_ex` | 1.51 | mimalloc `_mi_page_malloc_zero` | 2.29 |
+| `get_conditional_type_instantiation_ex` | 1.27 | `get_type_of_symbol` | 1.50 | instantiation cache (`CacheHashKey` map) | 2.14 |
+
+With four and eight checkers (checker threads only) the `dist` order is the same, plus `assign_symbol_id`: 0.6% /
+1.2% / 1.8% of the cycles at 1 / 4 / 8 checkers, 90% of its samples on the `lock xadd` of the process-wide symbol id
+counter.
+
+What differs from the arm64 picture: the same functions lead, but on x86 the relation cache (`Relation::lookup`, 3.3% of
+the cycles against 1.6% on arm64, and 11% of the L3 misses) and everything else that probes a large hash table (the
+reference-instantiation table while it grows, symbol tables, node link stores, the instantiation caches) carries the L3
+misses, and the multi-checker profiles show a cost the single-checker arm64 profiles could not: the shared id counters.
+mimalloc's allocation and free fast paths are 2.8% (4.1% with PGO), libc's `memmove`/`memcmp` about 1.6%. PGO folds
+callees into the top two functions, so per-function shares of the released binary are not comparable with the `dist`
+ones.
+
+### Candidates
+
+Each against main after part 1, interleaved, 5 rounds unless noted, paired medians with their range.
+
+| candidate | 1 checker | 4 checkers | 8 checkers | verdict |
+| --- | --- | --- | --- | --- |
+| `-C target-cpu=x86-64-v2` | wall +0.2%, cycles +0.3%, instructions -0.2% | wall +3.1%, cycles +2.4% | - | rejected |
+| `-C target-cpu=x86-64-v3` | wall +0.9%, cycles +1.2%, instructions -0.6% | wall +1.4%, cycles +2.0%, instructions -0.6% | - | rejected |
+| zero-based handles (#62 merged onto part 1: branch `perf/linux-zero-thp`) | wall -0.4% (-2.1..+0.4), cycles -0.4%, instructions -2.2% | wall -2.2% (-5.2..+1.9), cycles -3.2% (-4.7..+0.6), instructions -2.2% | - | not reopened |
+| front end (`--noCheck`) | 1.05 s at 18 parse threads, 1.31 s at 8, 1.9 s at 4 | 5.6% of the 4-checker run | 6.6% of the 8-checker run | not pursued |
+| `MIMALLOC_ARENA_EAGER_COMMIT=1` (4 rounds) | - | wall +4.1%, cycles +3.7% | - | rejected |
+| `MIMALLOC_PURGE_DELAY=-1` (never give heap pages back) | wall -0.1%, cycles -0.3%, faults -77% | wall -2.7%, cycles -1.7% (-6.4..+0.4), faults -69% | wall +0.6%, cycles +0.9%, faults -55% | rejected |
+| `MIMALLOC_PURGE_DELAY=10000` | wall -0.4%, cycles -0.6% | wall +0.6%, cycles -0.2% | wall +1.4%, cycles +1.4% | rejected |
+| checker threads take ids in blocks of 1,024, on main with work stealing (#93) | not used with one checker (wall +0.2%, cycles -0.2%, 3 rounds, before #93) | wall -1.4% (-17.1..-1.1), cycles -1.6% (-14.5..+0.3), max RSS -1.7% | wall -3.7% (-7.7..-2.2), cycles -4.5% (-7.6..-0.4), max RSS -4.7% | landed |
+| the same before #93 (static assignment) | - | wall -1.8% (-6.7..+0.3), cycles -0.5%, max RSS -1.2% | two sessions: wall +1.9% / -3.0%, cycles +1.9% / -0.4%, max RSS -3.7% / -3.8% | |
+
+- **Target CPU.** v3 (AVX2, BMI2, LZCNT, MOVBE, FMA) retires 0.6% fewer instructions and takes 1-2% more cycles; v2
+  (POPCNT, SSE4.2) changes nothing. hashbrown probes with SSE2 at every level, the handle shifts are constant shifts
+  (BMI2's `shlx` does not apply), and glibc already dispatches `memcpy`/`memcmp` to AVX2 at run time, so there is
+  little for a wider target to use. Nothing to ship, and v3 would have excluded Intel before Haswell, AMD before
+  Excavator, the Atom-derived Pentium/Celeron parts without AVX, and VMs with a conservative CPU model (QEMU's
+  default `qemu64` is v1). aarch64 (`neoverse-n1`), by reasoning only: the default target already uses LSE atomics
+  through outline-atomics dispatch, and the remaining gain is scheduling, so expect less than on x86; not worth
+  excluding Cortex-A72 hosts (Graviton 1, Raspberry Pi 4).
+- **Zero-based handles**, re-measured with huge pages on both sides because #62 was closed as unmeasurable in a
+  huge-page-less comparison: they still remove 2.2% of the instructions; cycles move by -0.4% with one checker and
+  -3.2% with four, wall by -0.4% and -2.2%, all within this host's round-to-round spread at one checker. A gain of
+  0-3% does not pay for the low-address-space failure modes the branch documents (non-PIE executables and their brk
+  heap, `MAP_32BIT` users, AddressSanitizer). Against `plain-ptrs` in the same session the zero-based build is at
+  +2.5% / +1.2% wall (main: +2.4% / +1.0%).
+- **Front end and kernel time.** After part 1, sys is 2.3-3.3 s per run; the front end alone (`--noCheck`, program
+  construction, parse and bind) takes 1.05 s wall with 18 parse threads (5.9 s user, 1.1 s sys), 1.3 s with 8 and
+  1.9 s with 4, i.e. 5.6% of a 4-checker run and 6.6% of an 8-checker run. Below the 10% bar, so `io_uring`,
+  `readahead` or fewer syscalls per file were not tried: even halving the front end's sys time would save ~0.1 s
+  of wall at 18 threads.
+- **mimalloc options.** After part 1 most of the remaining ~35 K page faults are mimalloc giving freed heap pages back
+  (mimalloc 3.3: after 1 s, arenas after 10 s) and faulting them in again later. Never giving them back removes 55-77%
+  of the faults for 0.3-0.8% more peak, and a 10 s delay 54-66% of them, but cycles do not move consistently (-1.7% with
+  four checkers, +0.9% with eight, -0.3% with one); eager arena commit costs 3.7% cycles (4 rounds). These options do
+  not touch the allocator's fast paths, which are where its 2.8% of the cycles are. (This session ran after a VM restart
+  that left the guest with 6-8x the dTLB misses of the earlier sessions, huge pages or not; comparisons are within the
+  session.)
+- **Id blocks.** `assign_symbol_id` spent 90% of its samples on the `lock xadd` of the process-wide symbol id counter,
+  which every checker thread increments: 1.5-1.8% of the checker threads' cycles with eight checkers (two profiles).
+  Threads of a parallel checker group now take 1,024 node or symbol ids at a time (`tsrs_ast::use_id_blocks`, set by
+  `run_work_group` for the threads it spawns); all other threads take ids one at a time as before. In the eight-checker
+  profile `assign_symbol_id` falls from 1.47% to 0.48% of the checker threads' cycles and `assign_node_id` from 0.34% to
+  0.20%. Measured first on main with the static checker assignment, the CPU change was inside this host's spread and
+  memory fell (peak -1.2% with four checkers, -3.7% / -3.8% with eight); measured again on main with work stealing (#93,
+  377d870), where every checker stays busy to the end, both show: eight checkers wall -3.7% and cycles -4.5% (every
+  round faster), peak -4.7% (7.93 -> 7.54 GiB); four checkers wall -1.4%, cycles -1.6%, peak -1.7% (5.98 -> 5.87 GiB).
+  The memory comes from the id-keyed link stores: with one counter a checker's ids were spread over the whole id space,
+  so each checker's `IdLinkStore` held a dense 4 KiB page for nearly every page of 1,024 ids, most of it unused; now its
+  ids come in runs of 1,024 and its pages are mostly its own. Sparse id pages (`TSRS_SPARSE_ID_PAGES=1`, which pay only
+  for the ids present) confirm it: with them both builds peak at 7.40-7.45 GB with eight checkers (static assignment),
+  against 7.83 GB for main and 7.54 GB for id blocks with dense pages (two runs each). Output is identical in every run
+  (error-line md5 at 1 / 4 / 8 checkers; with static assignment also the Types / Symbols / Instantiations counters,
+  which work stealing makes vary from run to run anyway), and the conformance trees are identical also in the
+  multi-checker test mode (`TS_TEST_PROGRAM_SINGLE_THREADED=false`). Differs from Go: Go takes every id from one
+  counter. Ids of a parallel checker group already interleave by timing there and here, so their values were never
+  deterministic; what is kept is that each thread's ids increase in its assignment order and that ids taken before,
+  during and after a group stay in that order, which is what a deterministic output can depend on.
+
+### What is left
+
+- The relation cache is 11% of the L3 misses: a table for the 8-byte `Pair` keys that finds a key in one cache line
+  (hashbrown reads the control group and the slot, two lines) would halve the misses of the most frequent lookup.
+- Sparse id pages for the CLI save another 0.13 GB with eight checkers on top of id blocks (0.38 GB without them);
+  their CPU cost was not measured here (notes/mem-shared-base.md has the earlier numbers).
+- PGO interacts with handle arithmetic and inlining; the zero-based branch was measured without PGO only.
+
 ## Reproducing
 
 ```sh
@@ -191,4 +314,12 @@ perf stat -x, -e instructions,cycles,dTLB-load-misses,dTLB-store-misses -- \
   /usr/bin/time -f "%e %U %S %R %F %M" tsrs -p . --noEmit --incremental false --pretty false --extendedDiagnostics --checkers 4
 # while it runs: awk '/^AnonHugePages/{print $2}' /proc/<tsrs pid>/smaps_rollup; per mapping: /proc/<pid>/smaps
 # (the arena is 0x4001_0000_0000 + 32 GiB; `hg` in VmFlags = advised)
+
+# part 2: counters, profiles (one checker runs on the main thread; with N checkers filter --comms checker-0,...)
+perf stat -e cycles,instructions,L1-dcache-load-misses,mem_load_retired.l2_miss,mem_load_retired.l3_miss,dTLB-load-misses -- tsrs ...
+perf record -e cycles -c 10000019 -- tsrs ... ; perf report --no-children --sort sym --time 5%-100% | c++filt
+perf record -e mem_load_retired.l3_miss:pp -c 5003 -- tsrs ...
+RUSTFLAGS="-C target-cpu=x86-64-v3" cargo build --profile dist -p tsrs_cli          # separate target dir per flag set
+MIMALLOC_PURGE_DELAY=-1 tsrs ... ; TSRS_SPARSE_ID_PAGES=1 tsrs ...
+# PGO as released: .github/workflows/release.yml (instrumented build, .github/scripts/pgo-train.sh, llvm-profdata merge)
 ```
