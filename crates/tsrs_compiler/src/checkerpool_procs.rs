@@ -274,6 +274,21 @@ impl checkerPool {
 
         let mut results: Vec<Vec<P<Diagnostic>>> = vec![Vec::new(); files.len()];
         let warm_cpu = thread_cpu_seconds();
+        // TSRS_CHECKER_WARMUP_EXPORTS=<count> (measurement): before the warm-up files, resolve the exports of the most
+        // imported modules (types only, no file is checked).
+        if let Some(k) = std::env::var("TSRS_CHECKER_WARMUP_EXPORTS").ok().and_then(|v| v.parse::<usize>().ok()) {
+            let mut in_degree = vec![0usize; files.len()];
+            for targets in crate::checkerpool::get_import_targets(program) {
+                for t in targets {
+                    in_degree[t] += 1;
+                }
+            }
+            let mut order: Vec<usize> = (0..files.len()).collect();
+            order.sort_by(|&a, &b| in_degree[b].cmp(&in_degree[a]).then(a.cmp(&b)));
+            for &i in order.iter().take(k) {
+                guard.warm_up_module_exports(files[i]);
+            }
+        }
         for &i in &warmup {
             results[i] = collect(&mut guard, files[i]);
         }

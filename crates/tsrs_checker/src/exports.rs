@@ -500,3 +500,22 @@ impl Checker {
 pub fn is_distributed_type_parameter(t: P<Type>) -> bool {
     t.flags().intersects(TypeFlags::TypeParameter) && t.as_type_parameter().is_distributed.get()
 }
+
+impl Checker {
+    /// Process mode warm-up (measurement, notes/perf-checker-processes.md): resolves the type of every export of
+    /// `file`'s module, building what the files that import it would otherwise build in every worker.
+    pub fn warm_up_module_exports(&mut self, file: P<ast::SourceFile>) {
+        let Some(symbol) = file.as_node().symbol() else { return };
+        let symbol = self.get_merged_symbol(symbol);
+        let exports = self.get_exports_of_module(symbol);
+        for export in exports.values() {
+            let target = if export.flags().intersects(ast::SymbolFlags::Alias) { self.resolve_alias(export) } else { export };
+            if target.flags().intersects(ast::SymbolFlags::Value) {
+                self.get_type_of_symbol(target);
+            }
+            if target.flags().intersects(ast::SymbolFlags::Type) {
+                self.get_declared_type_of_symbol(target);
+            }
+        }
+    }
+}
