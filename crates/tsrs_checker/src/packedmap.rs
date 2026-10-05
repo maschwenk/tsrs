@@ -155,6 +155,11 @@ impl<K: PackedKey + 'static, V: Copy + 'static> GoPackedMap<K, V> {
     pub fn len(&self) -> usize {
         self.0.get().map_or(0, |m| m.borrow().len())
     }
+
+    #[cfg(feature = "assignment-stats")]
+    pub(crate) fn heap_stat(&self) -> Option<crate::heapcensus::HeapStat> {
+        self.0.get().map(|m| m.borrow().heap_stat())
+    }
 }
 
 /// Go `c.stringLiteralTypes` (`map[string]*Type`): the literal types by their value. The key was a heap `String`

@@ -158,3 +158,50 @@ Largest first, at 8 checkers (per checker / total):
 6. **String-keyed literal cache, 6 MB / 47 MB** (`string_literal_types`: 32-byte slots with a `String` key, plus the
    key text, which the literal type also holds).
 7. Smaller: `cached_signatures` (32-byte slots), `union_of_union_types` (40), lazy tables' name lists (16 B/name).
+
+## What was done (measured on origin/main 68997ed)
+
+Six representation changes, each exact (diagnostics byte-identical in every run; `--extendedDiagnostics` Types /
+Symbols / Instantiations identical single-threaded; conformance and fourslash result trees identical to main's,
+`tools/regressions.sh` 8/8). Interleaved runs of `dist` builds (fat LTO, no PGO) on the 38k-file codebase, 5 rounds,
+medians; "step" is against the previous row. Instructions: `perf stat -e instructions:u`, `--singleThreaded`; the
+non-PGO column moves by up to +-0.4% between sessions for the same change (LTO inlining shifts: whole functions move
+in and out of their callers), so decisions use the PGO column (builds trained as `.github/workflows/release.yml`
+does, run without `--extendedDiagnostics`).
+
+| change | peak, 1 checker | peak, 8 checkers | single-threaded peak | instructions, PGO | instructions, no PGO |
+| --- | --- | --- | --- | --- | --- |
+| main | 4.485 GiB | 7.567 GiB | 4.205 GiB | 210.99 G | 249.25 G |
+| 1. lazy member tables in the arena, one-word slices | -1.29% | -1.65% | -1.26% | -0.05% | -0.11% |
+| 2. `CacheHashKey` maps in packed 20-byte slots (`PackedMap`) | -0.70% | -1.76% | -0.99% | | +0.18% |
+| 3. string literal cache stores only the types | -0.61% | -0.48% | -0.54% | | +0.03% |
+| 4. printer export indexes without a `Vec` per target | -0.05% | -1.76% | -0.46% | (2-4 together) -0.09% | -0.02% |
+| 5. narrow (16-bit) id-link-store pages | -0.69% | -0.95% | -0.64% | +0.13% | +0.41% |
+| **1-5 against main** | **-3.30%** | **-6.44%** | **-3.83%** | **-0.004%** | +0.49% |
+| (rejected) 6. symbol-table position index in 8/16 bits | -1.38% | -1.51% | -1.41% | +0.39% | +0.20% |
+
+Wall time (medians, s): 8 checkers 13.56 -> 13.41 (1-5: 13.71), one checker 49.6 -> 50.1, single-threaded 54.5 ->
+54.3: no change beyond this host's spread. The PGO pair main / 1-6 at 8 checkers: 7.572 -> 6.947 GiB (-8.3%),
+wall 12.07 -> 11.59 s.
+
+Change 6 is kept out: it saves 1.4-1.5% but costs +0.39% instructions with PGO, above the 0.3% bar. Where the cost
+comes from is not established (the 8-bit search is inline, the wider ones out of line); branch
+`heap/symtab-index` (on top of this stack) has it for a follow-up.
+
+Rejected without a branch: sparse id pages by default for multi-checker CLI runs (`TSRS_SPARSE_ID_PAGES=1` on main:
+-2.4% peak at 8 checkers, -1.2% at 4, but every lookup becomes a rank computation; +1.2% instructions at 8 checkers
+in notes/mem-shared-base.md, not re-measured here at 8 checkers with `perf`).
+
+## What remains per checker (8 checkers, after 1-5)
+
+Heap per checker drops from ~297 MB to ~240 MB. The largest rows left, none of which has a cheap exact
+representation change: the assignable relation cache (20 MB, already 8-byte slots at load 0.73), conditional-root
+and object-type instantiation maps (~17 MB each, now 20-byte slots; the 128-bit key cannot be shortened exactly or
+recovered from the value), resolved member symbol tables (~30 MB including their position indexes; change 6), the
+id-link-store pages that do not fit 16 bits or stay sparse (~15 MB at load 0.33; sparse pages, above), intersection
+and union caches (11 + 5 MB), link-store slot tables (~15 MB over 27 stores, 8 bytes per entry). The rest of an extra
+checker is arena (~440 MB: types, symbols, mappers, link records), which this round did not touch.
+
+Unverified: PGO instruction deltas per change for 2, 3 and 4 separately (measured together); instructions at 4 and
+8 checkers (`perf` was run single-threaded only); the smaller bench projects (a vscode A/B was started and
+interrupted).
