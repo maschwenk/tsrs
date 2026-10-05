@@ -137,6 +137,8 @@ pub(crate) struct DerivedDecision {
     pub(crate) members_structural: usize,
     pub(crate) covered: Vec<(P<Symbol>, P<Symbol>)>,
     pub(crate) elapsed_ns: u64,
+    /// True, or Maybe when a member comparison met a pair already being compared (as the relater combines them).
+    pub(crate) result: Ternary,
 }
 
 impl Relater {
@@ -154,7 +156,7 @@ impl Relater {
                 if log_path().is_some() {
                     log_line(&format!("D {} {} {} {} {} on\n", c.symbol_to_string_exported(decision.base_symbol), decision.reliable as u8 + 2 * decision.this_reliable as u8, decision.members_total, decision.members_structural, decision.elapsed_ns));
                 }
-                (Some(Ternary::True), None)
+                (Some(decision.result), None)
             }
             _ => (None, Some(decision)),
         }
@@ -272,7 +274,8 @@ impl Relater {
                 }
             }
         }
-        if self.type_arguments_related_to(c, base_arguments, target_arguments, &variances, false, intersection_state) != Ternary::True {
+        let mut result = self.type_arguments_related_to(c, base_arguments, target_arguments, &variances, false, intersection_state);
+        if result == Ternary::False {
             return None;
         }
         // Members: inherited unchanged from the base reference = the same member symbol in both.
@@ -294,23 +297,34 @@ impl Relater {
             // Guard 4: the variance digest speaks for a member only where its type is monotone in the type
             // parameters and `this`; a member that puts them under keyof, a conditional, a mapped, indexed access,
             // template literal or intersection type (directly or through a type alias) is compared structurally.
-            if bp == Some(sp) && !(guard_enabled(4) && self.member_sensitive(c, sp)) {
+            if bp == Some(sp) && !(guard_enabled(4) && self.member_sensitive(c, sp) && !top_target_slots(c, sp, tp)) {
                 covered.push((sp, tp));
                 continue;
             }
             structural += 1;
+            if log_path().is_some() {
+                let why = if bp == Some(sp) { "sensitive" } else { "declared" };
+                log_line(&format!("M {} {} {}\n", generic.symbol().map(|s| s.name()).unwrap_or_default(), tp.name(), why));
+            }
             let related = self.property_related_to(c, source, target, sp, tp, |c, s| c.get_non_missing_type_of_symbol(s), false, intersection_state, self.rel() == c.comparable_relation);
-            if related != Ternary::True {
+            if related == Ternary::False {
                 return None;
             }
+            result &= related;
         }
-        if self.signatures_related_to(c, source, target, SignatureKind::Call, false, intersection_state) != Ternary::True
-            || self.signatures_related_to(c, source, target, SignatureKind::Construct, false, intersection_state) != Ternary::True
-            || self.index_signatures_related_to(c, source, target, false, false, intersection_state) != Ternary::True
-        {
+        for kind in [SignatureKind::Call, SignatureKind::Construct] {
+            let related = self.signatures_related_to(c, source, target, kind, false, intersection_state);
+            if related == Ternary::False {
+                return None;
+            }
+            result &= related;
+        }
+        let related = self.index_signatures_related_to(c, source, target, false, false, intersection_state);
+        if related == Ternary::False {
             return None;
         }
-        Some(DerivedDecision { base_symbol: generic.symbol()?, reliable, this_reliable, members_total: properties.len(), members_structural: structural, covered, elapsed_ns: 0 })
+        result &= related;
+        Some(DerivedDecision { base_symbol: generic.symbol()?, reliable, this_reliable, members_total: properties.len(), members_structural: structural, covered, elapsed_ns: 0, result })
     }
 
     /// Guard 5: every `in` / `out` annotation of `generic`'s type parameters holds when checked the way
@@ -533,6 +547,66 @@ impl Relater {
     }
 }
 
+/// Guard 4's exception: a sensitive member still counts as related when every sensitive slot of its declaration is
+/// `any` or `unknown` in the target, and the slot is one where any source type relates to that: a property's type,
+/// a method's return type, or a method parameter (compared bivariantly, so the source -> target direction suffices).
+/// The method must have one declaration, no type parameters and no `this` parameter; its other slots are monotone,
+/// so the variance digest covers them. (Zod's `parse(): core.output<this>` against `ZodType<any, any, any>`.)
+fn top_target_slots(c: &mut Checker, sp: P<Symbol>, tp: P<Symbol>) -> bool {
+    let [d] = sp.declarations() else { return false };
+    let d = *d;
+    let top = |t: P<Type>| t.flags().intersects(TypeFlags::AnyOrUnknown);
+    match d.kind() {
+        Kind::PropertySignature | Kind::PropertyDeclaration => {
+            let t = c.get_type_of_symbol(tp);
+            top(t)
+        }
+        Kind::MethodSignature | Kind::MethodDeclaration => {
+            if !d.type_parameters().is_empty() {
+                return false;
+            }
+            let target_type = c.get_type_of_symbol(tp);
+            let &[sig] = c.get_signatures_of_type(target_type, SignatureKind::Call) else { return false };
+            let params = d.parameters();
+            if sig.this_parameter().is_some() || !sig.type_parameters().is_empty() || sig.parameters().len() != params.len() {
+                return false;
+            }
+            let mut aliases = Vec::new();
+            for (i, &p) in params.iter().enumerate() {
+                match p.type_node() {
+                    Some(t) => {
+                        if sensitive_type(c, t, false, &[], &mut aliases) {
+                            let pt = c.get_type_of_symbol(sig.parameters()[i]);
+                            if !top(pt) {
+                                return false;
+                            }
+                        }
+                    }
+                    None => {
+                        if p.initializer().is_some() {
+                            return false;
+                        }
+                    }
+                }
+            }
+            match d.type_node() {
+                None => d.body().is_none(),
+                Some(r) => {
+                    if !sensitive_type(c, r, false, &[], &mut aliases) {
+                        return true;
+                    }
+                    if r.kind() == Kind::TypePredicate {
+                        return false;
+                    }
+                    let rt = c.get_return_type_of_signature(sig);
+                    top(rt)
+                }
+            }
+        }
+        _ => false,
+    }
+}
+
 /// Guard 4 walker for one member declaration (see `member_sensitive`).
 fn sensitive_declaration(c: &mut Checker, d: P<Node>, aliases: &mut Vec<P<Symbol>>) -> bool {
     match d.kind() {
@@ -604,7 +678,7 @@ fn sensitive_type(c: &mut Checker, node: P<Node>, under: bool, alias_vars: &[P<S
                 };
             }
             if symbol.flags().intersects(SymbolFlags::TypeAlias) && !node.type_arguments().is_empty() {
-                let Some(decl) = symbol.declarations().first().copied() else { return true };
+                let Some(decl) = symbol.declarations().iter().copied().find(|d| matches!(d.kind(), Kind::TypeAliasDeclaration | Kind::JSTypeAliasDeclaration)) else { return true };
                 let params = decl.type_parameters();
                 let mut vars = Vec::new();
                 for (i, &arg) in node.type_arguments().iter().enumerate() {
