@@ -437,7 +437,7 @@ fn prepare_declaration_compilation_context(
 
     let mut decl_input_files: Vec<TestFile> = Vec::new();
     let mut decl_other_files: Vec<TestFile> = Vec::new();
-    let mut add_dts_file = |file: &TestFile, into_input: bool, decl_input_files: &mut Vec<TestFile>, decl_other_files: &mut Vec<TestFile>| -> Result<(), String> {
+    let add_dts_file = |file: &TestFile, into_input: bool, decl_input_files: &mut Vec<TestFile>, decl_other_files: &mut Vec<TestFile>| -> Result<(), String> {
         let dts_files = if into_input { &mut *decl_input_files } else { &mut *decl_other_files };
         if tspath::is_declaration_file_name(&file.unit_name) || tspath::has_json_file_extension(&file.unit_name) {
             dts_files.push(file.clone());

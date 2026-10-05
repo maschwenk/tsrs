@@ -8,7 +8,7 @@ use tsrs_core::collections::{new_set_with_size_hint, Set};
 use tsrs_core::context::Context;
 use tsrs_core::stringutil::{self, Rune};
 use tsrs_core::tspath::{self, Path};
-use tsrs_core::{EMPTY_COMPILER_OPTIONS, P};
+use tsrs_core::P;
 use tsrs_module::packagejson::PackageJson;
 use tsrs_module::{self as module, DefaultResolver, ResolutionHost, ResolverOptions};
 use tsrs_vfs::{wrapvfs, FS};

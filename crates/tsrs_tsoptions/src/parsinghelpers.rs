@@ -3,8 +3,7 @@ use tsrs_ast::Diagnostic;
 use tsrs_core::collections::{OrderedMap, OrderedMapExt};
 use tsrs_core::tspath;
 use tsrs_core::{
-    BuildOptions, CompilerOptions, JsxEmit, ModuleDetectionKind, ModuleKind, ModuleResolutionKind, NewLineKind, PluginImport,
-    PollingKind, ProjectReference, ScriptTarget, Tristate, TypeAcquisition, WatchDirectoryKind, WatchFileKind, WatchOptions, P,
+    BuildOptions, CompilerOptions, JsxEmit, ModuleDetectionKind, ModuleKind, ModuleResolutionKind, NewLineKind, PluginImport, ProjectReference, ScriptTarget, Tristate, TypeAcquisition, WatchOptions, P,
 };
 use tsrs_diagnostics as diagnostics;
 use tsrs_diagnostics::Message;
@@ -12,8 +11,8 @@ use tsrs_diagnostics::Message;
 use crate::commandlineoption::{CommandLineOption, CommandLineOptionKind, CompilerOptionsValue};
 use crate::contentmappers::Mapper;
 use crate::enummaps::{
-    FALLBACK_ENUM_MAP, JSX_OPTION_MAP, MODULE_DETECTION_OPTION_MAP, MODULE_OPTION_MAP, MODULE_RESOLUTION_OPTION_MAP, NEW_LINE_OPTION_MAP,
-    TARGET_OPTION_MAP, WATCH_DIRECTORY_ENUM_MAP, WATCH_FILE_ENUM_MAP,
+    JSX_OPTION_MAP, MODULE_DETECTION_OPTION_MAP, MODULE_OPTION_MAP, MODULE_RESOLUTION_OPTION_MAP, NEW_LINE_OPTION_MAP,
+    TARGET_OPTION_MAP,
 };
 use crate::errors::{extra_key_diagnostics, extra_key_did_you_mean_diagnostics};
 use crate::namemap::BUILD_NAME_MAP;

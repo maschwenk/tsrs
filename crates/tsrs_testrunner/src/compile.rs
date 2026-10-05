@@ -5,21 +5,20 @@
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::rc::Rc;
-use std::sync::{Arc, LazyLock};
+use std::sync::Arc;
 
-use regex::Regex;
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 use tsrs_ast::{Diagnostic, SourceFile, SourceFileParseOptions};
 use tsrs_compiler::{self as compiler, CompilerHost};
 use tsrs_core::tspath::{self, ComparePathsOptions, Path};
-use tsrs_core::{CompilerOptions, ModuleKind, ModuleResolutionKind, NewLineKind, ScriptKind, ScriptTarget, Tristate, P};
-use tsrs_tsoptions::{self as tsoptions, CommandLineOption, CommandLineOptionKind, CompilerOptionsValue, ParsedCommandLine};
+use tsrs_core::{CompilerOptions, ScriptKind, Tristate, P};
+use tsrs_tsoptions::{self as tsoptions, ParsedCommandLine};
 use tsrs_vfs::{bundled, vfstest, FS};
 
-use crate::compiler_runner::{self, Outcome, TestItem, SRC_FOLDER};
+use crate::compiler_runner::{self, Outcome, TestItem};
 use crate::diagnosticwriter::{Diag, FileLike};
-use crate::harnessutil::{self, HarnessOptions, OptKind, OptionDecl, OptionTable, TestConfiguration, TestFile, TEST_LIB_FOLDER};
-use crate::test_case_parser::{self, TestUnit};
+use crate::harnessutil::{HarnessOptions, OptionTable, TestConfiguration, TestFile, TEST_LIB_FOLDER};
+use crate::test_case_parser::{self};
 use crate::tsbaseline;
 use crate::options::{parse_test_ts_config, test_compiler_options, unsupported_reason};
 

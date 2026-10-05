@@ -1,7 +1,7 @@
 use std::sync::{Arc, OnceLock, RwLock};
 use std::time::SystemTime;
 
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 use tsrs_core::tspath::{self, Path};
 use tsrs_core::{compute_ecma_line_starts, get_script_kind_from_file_name, ScriptKind, TextChange};
 use tsrs_ls::lsconv::{self, LSPLineMap, Script};

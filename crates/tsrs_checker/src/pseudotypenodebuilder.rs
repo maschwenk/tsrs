@@ -1,6 +1,5 @@
 use crate::*;
 use tsrs_ast::*;
-use tsrs_core::*;
 use pseudochecker::{PseudoObjectElementKind, PseudoTypeKind};
 
 impl NodeBuilderImpl {

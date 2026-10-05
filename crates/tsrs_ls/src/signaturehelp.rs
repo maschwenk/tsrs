@@ -665,7 +665,7 @@ impl LanguageService {
         }
 
         let lists_len = lists.len();
-        let mut is_variadic = |c: &mut Checker, parameter_list: &[P<Symbol>]| -> bool {
+        let is_variadic = |c: &mut Checker, parameter_list: &[P<Symbol>]| -> bool {
             if !c.has_effective_rest_parameter_exported(candidate_signature) {
                 return false;
             }

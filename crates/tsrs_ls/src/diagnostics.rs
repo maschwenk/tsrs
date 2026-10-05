@@ -1,6 +1,6 @@
 use tsrs_ast::{self as ast, Diagnostic, DiagnosticExt as _, SourceFile};
 use tsrs_compiler::Program;
-use tsrs_core::collections::{OrderedMap, OrderedMapExt as _};
+use tsrs_core::collections::OrderedMap;
 use tsrs_core::context::Context;
 use tsrs_core::{TextRange, P};
 use tsrs_diagnostics::{self as diagnostics, Category};

@@ -1,6 +1,5 @@
 // Port of estransforms/namedevaluation.go.
 
-use crate::*;
 
 use super::*;
 

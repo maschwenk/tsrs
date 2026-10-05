@@ -1,6 +1,6 @@
 use std::sync::LazyLock;
 
-use tsrs_core::{PollingKind, ScriptTarget, Tristate, WatchDirectoryKind, WatchFileKind};
+use tsrs_core::{ScriptTarget, Tristate};
 use tsrs_diagnostics as diagnostics;
 
 use crate::commandlineoption::{CommandLineOption, CommandLineOptionKind, DefaultValueDescription, ExtraValidation};

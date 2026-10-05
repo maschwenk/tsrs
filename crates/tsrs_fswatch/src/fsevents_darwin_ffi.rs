@@ -12,7 +12,6 @@
 // documents the invariant it relies on) and the callback.
 
 use std::ffi::{c_char, c_void, CString};
-use std::sync::Arc;
 
 use crate::fsevents_darwin::{fs_events_callback, fseventsWatchSnapshot};
 

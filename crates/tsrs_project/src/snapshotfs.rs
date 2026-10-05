@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::time::SystemTime;
 
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 use tsrs_core::collections::{Set, SyncMap, SyncSet};
 use tsrs_core::new_work_group;
 use tsrs_core::tspath::{self, Path};

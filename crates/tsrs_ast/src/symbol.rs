@@ -1,4 +1,3 @@
-use std::cell::Cell;
 use std::hash::BuildHasher;
 use std::sync::atomic::AtomicU32;
 

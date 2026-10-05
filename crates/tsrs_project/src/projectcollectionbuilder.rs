@@ -9,7 +9,7 @@ use tsrs_core::{breadth_first_search_parallel_ex, BreadthFirstSearchLevel, Bread
 use tsrs_core::collections::{new_set_with_size_hint, Set, SyncMap, SyncSet};
 use tsrs_core::context::Context;
 use tsrs_core::tspath::{self, ComparePathsOptions, Path};
-use tsrs_core::{get_script_kind_from_file_name, new_work_group, CompilerOptions, ProjectReference, ScriptKind, Tristate, P};
+use tsrs_core::{get_script_kind_from_file_name, CompilerOptions, ProjectReference, ScriptKind, Tristate, P};
 use tsrs_diagnostics as diagnostics;
 use tsrs_ls::lsutil::UserPreferences;
 use tsrs_lsproto as lsproto;

@@ -1,8 +1,7 @@
 use std::sync::Arc;
-use indexmap::IndexMap;
 use rayon::prelude::*;
 use rustc_hash::{FxHashMap, FxHashSet};
-use tsrs_ast::{self as ast, Node, SourceFile, SourceFileMetaData, SourceFileParseOptions};
+use tsrs_ast::{Node, SourceFile, SourceFileMetaData};
 use tsrs_core::tspath::{self, Path};
 use tsrs_core::{ModuleKind, Tristate, P};
 use tsrs_diagnostics as diagnostics;

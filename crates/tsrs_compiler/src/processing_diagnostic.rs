@@ -3,7 +3,7 @@ use std::fmt::Display;
 use rustc_hash::FxHashSet;
 use tsrs_ast::{new_compiler_diagnostic, Diagnostic, DiagnosticExt};
 use tsrs_core::tspath::{self, Path};
-use tsrs_core::{stringutil, P};
+use tsrs_core::P;
 use tsrs_diagnostics::{self as diagnostics, Message};
 use tsrs_tsoptions as tsoptions;
 

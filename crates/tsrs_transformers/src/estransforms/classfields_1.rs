@@ -2,7 +2,6 @@
 // to `visitInNewClassLexicalEnvironment`). Part 2 is classfields_2.rs.
 
 use super::*;
-use crate::*;
 use printer::{EmitFlags, PrivateIdentifierKind};
 
 bitflags::bitflags! {

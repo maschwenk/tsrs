@@ -9,7 +9,7 @@ use rustc_hash::FxHashSet;
 use tsrs_ast::{self as ast, Kind, ModifierFlags, Node, NodeFactory, SourceFile, Symbol, SymbolFlags, SymbolId};
 use tsrs_checker::{self as checker, Checker, ContextFlags, Flags, LiteralValue, MemberOverrideStatus, SignatureKind, Type, TypeFlags, UnionReduction};
 use tsrs_core::context::{locale_from_context, Context};
-use tsrs_core::{json, tspath, CompilerOptions, LanguageVariant, NewLineKind, Tristate, P};
+use tsrs_core::{json, tspath, CompilerOptions, LanguageVariant, Tristate, P};
 use tsrs_lsproto as lsproto;
 use tsrs_printer::{self as printer, EmitContext, SnippetElement, SnippetKind};
 use tsrs_scanner as scanner;

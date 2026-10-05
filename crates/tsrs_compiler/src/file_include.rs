@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
 use tsrs_ast::{self as ast, new_compiler_diagnostic, new_diagnostic, Diagnostic, FileReference, Kind, Node, SourceFile};
-use tsrs_core::tspath::{self, Path};
+use tsrs_core::tspath::{self};
 use tsrs_core::P;
 use tsrs_diagnostics::{self as diagnostics, Message};
 use tsrs_module::PackageId;

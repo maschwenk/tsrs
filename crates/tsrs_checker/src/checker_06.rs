@@ -4,9 +4,7 @@ use tsrs_core::*;
 use tsrs_ast as ast;
 use tsrs_diagnostics as diagnostics;
 use tsrs_diagnostics::Message;
-use rustc_hash::FxHashMap;
 use std::borrow::Cow;
-use std::fmt::Display;
 
 // Go closure state of getInstantiationExpressionType.
 struct InstantiationExpressionState {

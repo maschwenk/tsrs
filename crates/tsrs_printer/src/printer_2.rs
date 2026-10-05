@@ -1,4 +1,3 @@
-use tsrs_ast as ast;
 use tsrs_ast::*;
 use tsrs_core::*;
 use tsrs_scanner as scanner;

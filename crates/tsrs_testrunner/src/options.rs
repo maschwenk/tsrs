@@ -10,7 +10,6 @@ use tsrs_tsoptions::{self as tsoptions, CommandLineOption, CommandLineOptionKind
 use std::collections::BTreeMap;
 
 use tsrs_ast::SourceFileParseOptions;
-use tsrs_core::tspath::ComparePathsOptions;
 use tsrs_core::{CompilerOptions, ModuleKind, ModuleResolutionKind, NewLineKind, ScriptKind, ScriptTarget, Tristate, P};
 use tsrs_tsoptions::ParsedCommandLine;
 use tsrs_vfs::{vfstest, FS};

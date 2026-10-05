@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::cell::RefCell;
 
 use rustc_hash::FxHashMap;
-use tsrs_ast::{self as ast, DiagnosticExt as _, Kind, ModifierFlags, ModifierList, Node, NodeFactory, NodeFlags, SourceFile, Symbol, TokenFlags};
+use tsrs_ast::{self as ast, Kind, ModifierFlags, ModifierList, Node, NodeFactory, NodeFlags, SourceFile, Symbol, TokenFlags};
 use tsrs_checker::{Checker, Flags, InternalFlags, ObjectFlags, Type, TypeFlags, UnionReduction};
 use tsrs_compiler::Program;
 use tsrs_core::context::Context;

@@ -1,5 +1,4 @@
 use super::*;
-use crate::*;
 
 pub struct ESModuleTransformer {
     pub base: Transformer,

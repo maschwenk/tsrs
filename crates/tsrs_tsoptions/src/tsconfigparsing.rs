@@ -1276,7 +1276,7 @@ fn read_json_config_file(
             diagnostic,
         )
     } else {
-        let mut factory = NodeFactory::default();
+        let factory = NodeFactory::default();
         let statements = factory.new_node_list(Vec::new());
         let end_of_file = factory.new_token(Kind::EndOfFile);
         let file = TsConfigSourceFile::new(
@@ -1850,7 +1850,7 @@ fn parse_json_config_file_content_worker(
         content_mapper_extensions = content_mappers.iter().flat_map(|m| m.definition.extensions.iter().cloned()).collect();
     }
 
-    let mut get_file_names = |base_path: &str, errors: &mut Vec<P<Diagnostic>>| -> (Vec<String>, usize) {
+    let get_file_names = |base_path: &str, errors: &mut Vec<P<Diagnostic>>| -> (Vec<String>, usize) {
         let parsed_config_options = parsed_config.options.as_ref();
         let (file_names, literal_file_names_len) =
             get_file_names_from_config_specs(&config_file_specs, base_path, parsed_config_options, host.fs(), &content_mapper_extensions);

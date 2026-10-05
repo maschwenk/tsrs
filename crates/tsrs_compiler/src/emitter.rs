@@ -125,11 +125,11 @@ pub use self::emit::*;
 mod emit {
     use tsrs_ast::{self as ast, new_compiler_diagnostic, Diagnostic, DiagnosticsCollection, SourceFile};
     use tsrs_core::tspath::{self, ComparePathsOptions};
-    use tsrs_core::{stringutil, CompilerOptions, LanguageVariant, ModuleKind, NewLineKind, ScriptTarget, Tristate, P};
+    use tsrs_core::{stringutil, CompilerOptions, LanguageVariant, ModuleKind, NewLineKind, Tristate, P};
     use tsrs_diagnostics as diagnostics;
     use tsrs_printer::{self as printer, EmitContext, EmitTextWriter, PrintHandlers, Printer, PrinterOptions, SourceMapGenerator};
     use tsrs_transformers::{
-        self as transformers, estransforms, inliners, jsxtransforms, moduletransforms, tstransforms, EmitHost as _, ReferenceResolverRef, TransformOptions, Transformer,
+        estransforms, inliners, jsxtransforms, moduletransforms, tstransforms, EmitHost as _, ReferenceResolverRef, TransformOptions, Transformer,
     };
     use tsrs_tsoptions::outputpaths::{self, OutputPaths};
 

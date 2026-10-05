@@ -8,7 +8,7 @@ use rustc_hash::FxHashSet;
 use tsrs_core::tspath;
 
 use crate::error::Error;
-use crate::json::{is_null, kind, kind_string, IsZero, Json, JsonError, JsonKey, Value};
+use crate::json::{is_null, kind_string, IsZero, Json, JsonError, JsonKey, Value};
 use crate::jsonrpc::ID;
 use crate::{CodeActionKind, ErrorCode, Location, MarkupKind, Position, RequestMessage};
 

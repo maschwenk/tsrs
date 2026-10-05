@@ -8,7 +8,6 @@ use tsrs_core::collections::{diff_ordered_maps, OrderedMap, OrderedMapExt, Set, 
 use tsrs_core::context::{has_locale, with_locale, CancelFunc, Context};
 use tsrs_core::tspath::{self, Path};
 use tsrs_core::{diff_maps_func, CompilerOptions, ScriptKind, P};
-use tsrs_diagnostics as diagnostics;
 use tsrs_ls::autoimport::{ProjectID, RegistryExt};
 use tsrs_ls::lsconv::{self, Converters};
 use tsrs_ls::lsutil::{self, UserPreferences};
@@ -24,7 +23,7 @@ use crate::client::Client;
 use crate::configfileregistry::configFileEntry;
 use crate::dirty::Shared;
 use crate::filechange::{FileChange, FileChangeKind, FileChangeSummary};
-use crate::logging::{new_log_tree, new_nop_logger, LogTree, Logger};
+use crate::logging::{new_nop_logger, Logger};
 use crate::overlayfs::{new_overlay_fs, overlayFS, FsRef, OverlayMap, ToPath};
 use crate::parsecache::{ContentMappedParseCache, ParseCache};
 use crate::project::{hr, Kind, Project, ProgramUpdateKind, ID};

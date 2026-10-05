@@ -1,4 +1,4 @@
-use tsrs_ast::{Diagnostic, DiagnosticExt as _, SourceFile};
+use tsrs_ast::{Diagnostic, SourceFile};
 use tsrs_compiler::Program;
 use tsrs_core::collections::OrderedMap;
 use tsrs_core::context::Context;

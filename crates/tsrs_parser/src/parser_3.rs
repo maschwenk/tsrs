@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 use tsrs_ast as ast;
 use tsrs_ast::{DiagnosticExt, Kind, ModifierFlags, ModifierList, Node, NodeFlags, NodeList, OperatorPrecedence, TokenFlags};
 use tsrs_core::{LanguageVariant, TextRange, Tristate, P};

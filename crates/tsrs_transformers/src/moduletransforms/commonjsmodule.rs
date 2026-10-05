@@ -1,5 +1,4 @@
 use super::*;
-use crate::*;
 
 // commonjsmodule.go is split by line range: commonjsmodule.rs (1–560), commonjsmodule_2.rs (561–1240),
 // commonjsmodule_3.rs (1241–end).

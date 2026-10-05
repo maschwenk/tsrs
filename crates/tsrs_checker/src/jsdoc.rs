@@ -3,9 +3,6 @@ use tsrs_ast::*;
 use tsrs_core::*;
 use tsrs_ast as ast;
 use tsrs_diagnostics as diagnostics;
-use tsrs_diagnostics::Message;
-use rustc_hash::FxHashMap;
-use std::fmt::Display;
 
 impl Checker {
     // jsdoc.go:9

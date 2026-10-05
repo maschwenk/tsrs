@@ -1,5 +1,4 @@
 use super::*;
-use crate::*;
 
 impl CommonJSModuleTransformer {
     // commonjsmodule.go:1340

@@ -1,6 +1,5 @@
 // esdecorator.go lines 1231-end (class elements, expressions, descriptors, metadata).
 
-use crate::*;
 use printer::EmitFlags;
 
 use super::*;

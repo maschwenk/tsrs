@@ -3,7 +3,7 @@
 use std::sync::Arc;
 use tsrs_ast::RepopulateDiagnosticInfo;
 use tsrs_compiler::CompilerHost;
-use tsrs_core::collections::{new_set_with_size_hint, Set};
+use tsrs_core::collections::new_set_with_size_hint;
 use tsrs_core::tspath::{self, Path};
 use tsrs_core::P;
 use tsrs_tsoptions::ParsedCommandLine;

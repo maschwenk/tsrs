@@ -1,5 +1,4 @@
 use std::fmt;
-use std::io::Write;
 use std::sync::{Mutex, Weak};
 
 use tsrs_lsproto as lsproto;

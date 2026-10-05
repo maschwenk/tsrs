@@ -15,7 +15,6 @@ use tsrs_core::{tspath, CompilerOptions, JsxEmit, Tristate, P};
 use tsrs_tsoptions::gojson;
 use tsrs_vfs::{Entries, FileInfo, FS};
 
-use crate::diagnostics::diagnostic_responses;
 use crate::handler::{ApiError, ApiResult};
 use crate::session::Session;
 use crate::wire::{s, Obj, Params};

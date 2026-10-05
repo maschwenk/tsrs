@@ -133,7 +133,7 @@ impl Common {
         let mut result = Entries::default();
         let mut symlinks = FxHashSet::default();
 
-        let mut add_to_result = |result: &mut Entries, symlinks: &mut FxHashSet<String>, name: &str, mode: FileMode, is_link: bool| -> bool {
+        let add_to_result = |result: &mut Entries, symlinks: &mut FxHashSet<String>, name: &str, mode: FileMode, is_link: bool| -> bool {
             if mode.is_dir() {
                 result.directories.push(name.to_string());
             } else if mode.is_regular() {

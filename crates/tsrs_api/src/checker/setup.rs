@@ -11,7 +11,7 @@ use tsrs_core::P;
 use tsrs_project::ID;
 
 use super::host::{CheckerError, CheckerHost, CheckerResult, SnapshotScope};
-use super::json::{obj, Obj};
+use super::json::Obj;
 use super::params::{DocumentIdentifier, SymbolReference, SYMBOL_OWNER_KIND_FILE, SYMBOL_OWNER_KIND_SNAPSHOT};
 use super::symbol_index::source_file_symbol;
 

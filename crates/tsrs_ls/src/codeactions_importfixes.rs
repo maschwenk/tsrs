@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use tsrs_ast::{self as ast, Diagnostic, DiagnosticExt as _, Node, SourceFile, Symbol, SymbolFlags};
+use tsrs_ast::{self as ast, Diagnostic, Node, SourceFile, Symbol, SymbolFlags};
 use tsrs_checker::Checker;
 use tsrs_core::context::Context;
 use tsrs_core::{tspath, CompilerOptions, JsxEmit, TextRange, P};

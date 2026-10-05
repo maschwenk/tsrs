@@ -1,4 +1,3 @@
-use std::cell::Cell;
 
 use bitflags::bitflags;
 use rustc_hash::FxHashSet;

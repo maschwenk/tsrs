@@ -1,7 +1,7 @@
 use std::fmt::Write as _;
 use std::time::Duration;
 
-use super::{CompileTimes, EmitInput, System};
+use super::{CompileTimes, EmitInput};
 
 struct tableRow {
     name: String,

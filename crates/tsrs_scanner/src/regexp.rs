@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::fmt::Display;
 
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashSet;
 use tsrs_core::{stringutil, ScriptTarget};
 use tsrs_diagnostics as diagnostics;
 use tsrs_diagnostics::Message;
