@@ -136,6 +136,31 @@ packed word, flag bits above an address or a new enum payload is not). Stale reg
 when they were hard-coded offsets. A violation that survives that check is a real bug: fix the escape tracking or
 stop freeing that class.
 
+## Where checker time goes by source pattern: the work census
+
+A function profile cannot tell which type alias or call site the time belongs to. The work census
+(`crates/tsrs_checker/src/workcensus.rs`, notes/perf-checker-algorithms.md) attributes the checker's work to
+source-level identities: conditional types by root alias (with distribution fan-out and `never` results), mapped types
+by declaration and key count, generic calls by callee (and repeats of the same signature + argument types), relations
+by target symbol and relation kind (cache hit rates, pairs compared under several relations, how the constituent loop
+for union targets exits), flow walks by function (steps per walk, sampled re-walks), union construction /
+`removeSubtypes` / indexed access / `keyof` by size, export-assignment and initializer types.
+
+It is compiled in only with `--features work-census` (the runtime test alone costs 0.3-0.5% instructions):
+
+```sh
+CARGO_TARGET_DIR=target/census cargo build --release -p tsrs_cli --features work-census
+cd <project> && TSRS_WORK_CENSUS=/tmp/census.md target/census/release/tsrs -p . --noEmit --incremental false --extendedDiagnostics --checkers 1
+```
+
+The report (Markdown, written after `--extendedDiagnostics`) starts with per-category totals, then the top keys per
+category. Read "key incl" as the time spent under the outermost span of that key (recursion counted once) and "self"
+as the time minus every nested span; categories overlap, so shares do not add up. `TSRS_WORK_CENSUS_TOP=<n>` sets the
+rows per table (default 60); `TSRS_WORK_CENSUS_SLOW=<ms>` prints every mapped-type resolution slower than that, with
+the type. Use one checker: with several, each checker's spans are merged and wall time is shared. The census adds
+about 18% instructions; its span cost is calibrated and subtracted, but patterns made of many short spans (unions,
+relations, indexed access) still read a little high.
+
 ## Profiling
 
 Profile the `dist` profile (fat LTO, one codegen unit; release builds also add PGO, `.github/workflows/release.yml`),

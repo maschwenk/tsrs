@@ -995,7 +995,12 @@ impl Checker {
     // checker.go:24770
     pub(crate) fn get_conditional_type(&mut self, root: P<ConditionalRoot>, mapper: Option<P<TypeMapper>>, for_constraint: bool, alias: Option<P<TypeAlias>>) -> P<Type> {
         let (mappers, contexts, lists) = (self.scratch_mappers.len(), self.scratch_contexts.len(), self.scratch_mapper_lists.len());
+        let census_span = self.census_begin(crate::workcensus::Cat::Cond, || crate::workcensus::CKey::Root(root));
         let result = self.get_conditional_type_worker(root, mapper, for_constraint, alias);
+        if let Some(t) = self.census_end(census_span) {
+            let never = (result == self.never_type) as u64;
+            self.census.as_mut().unwrap().record(crate::workcensus::Cat::Cond, crate::workcensus::CKey::Root(root), t, never, 0, 0);
+        }
         // The `infer` contexts and the composite mappers made for them are garbage unless one of their mappers was
         // stored (74% / 61-88% are, notes/mem-census.md). Contexts first: recycling reads their mapper fields.
         while self.scratch_contexts.len() > contexts {

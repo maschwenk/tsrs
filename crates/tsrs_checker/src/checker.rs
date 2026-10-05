@@ -932,6 +932,8 @@ pub struct Checker {
     pub signature_count: u32,
     pub total_instantiation_count: u32,
     pub instantiation_count: u32,
+    /// TSRS_WORK_CENSUS (workcensus.rs); None unless the variable is set.
+    pub census: Option<Box<crate::workcensus::Census>>,
     pub instantiation_stack: Vec<P<Type>>,
     pub conditional_constraint_depth: u32,
     pub inline_level: i32,
@@ -1319,6 +1321,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         signature_count: 0,
         total_instantiation_count: 0,
         instantiation_count: 0,
+        census: crate::workcensus::census_path().map(|_| crate::workcensus::Census::new()),
         instantiation_stack: Vec::new(),
         conditional_constraint_depth: 0,
         inline_level: 0,

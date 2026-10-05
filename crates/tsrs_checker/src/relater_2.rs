@@ -521,10 +521,76 @@ impl Relater {
     }
 
     // relater.go:3004
+    #[cfg_attr(not(feature = "work-census"), inline(always), expect(clippy::inline_always, reason = "without the census the wrapper is a forwarding call; inlined, callers call the body as before (notes/perf-checker-algorithms.md)"))]
     pub(crate) fn type_related_to_some_type(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, intersection_state: IntersectionState) -> Ternary {
+        if !c.census_on() {
+            return self.type_related_to_some_type_worker(c, source, target, report_errors, intersection_state, &mut (0, 0, 0));
+        }
+        let span = c.census_begin(crate::workcensus::Cat::RelUnion, || {
+            let (sym, label) = crate::workcensus::type_identity(target);
+            crate::workcensus::CKey::Rel(0, sym, label)
+        });
+        let mut outcome = (0u8, 0u8, 0u32);
+        let r = self.type_related_to_some_type_worker(c, source, target, report_errors, intersection_state, &mut outcome);
+        let timing = c.census_end(span).unwrap();
+        let k = crate::workcensus::rel_kind(c, self.rel());
+        let (sym, label) = crate::workcensus::type_identity(target);
+        let n = target.types().len();
+        let source_kind = if is_object_literal_type(source) && source.object_flags().intersects(ObjectFlags::FreshLiteral) {
+            0
+        } else if is_object_literal_type(source) {
+            1
+        } else if source.flags().intersects(TypeFlags::Object) {
+            2
+        } else if source.flags().intersects(TypeFlags::Intersection) {
+            3
+        } else if source.flags().intersects(TypeFlags::Primitive) {
+            4
+        } else {
+            5
+        };
+        let key_state = if !target.flags().intersects(TypeFlags::Union) || target.as_union_type().key_property_name().is_empty() {
+            0
+        } else if target.as_union_type().key_property_name() == InternalSymbolNameMissing {
+            1
+        } else {
+            outcome.1
+        };
+        let exit = match outcome.0 {
+            0 => 0,
+            1 => 1,
+            2 => 2,
+            _ => {
+                if r == Ternary::False {
+                    6
+                } else if outcome.2 <= 1 {
+                    3
+                } else if (outcome.2 as usize) * 10 <= n.max(10) {
+                    4
+                } else {
+                    5
+                }
+            }
+        };
+        let census = c.census.as_mut().unwrap();
+        census.record(crate::workcensus::Cat::RelUnion, crate::workcensus::CKey::Rel(k, sym, label), timing, outcome.2 as u64, (outcome.0 == 2) as u64, (r != Ternary::False) as u64);
+        let s = census.rel_union.entry((source_kind, key_state, exit)).or_default();
+        s.count += 1;
+        s.a += outcome.2 as u64;
+        if timing.key_outer {
+            s.key_incl_ns += timing.incl_ns;
+        }
+        census.charge_bookkeeping();
+        r
+    }
+
+    /// `outcome`: (exit path: 0 contains, 1 primitive union, 2 key match, 3 loop; key map state; constituents tried).
+    #[cfg_attr(not(feature = "work-census"), inline(always), expect(clippy::inline_always, reason = "its only call without the census; inlined, the outcome stores disappear"))]
+    fn type_related_to_some_type_worker(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, intersection_state: IntersectionState, outcome: &mut (u8, u8, u32)) -> Ternary {
         let target_types = target.types();
         if target.flags().intersects(TypeFlags::Union) {
             if contains_type(c, target_types, source) {
+                outcome.0 = 0;
                 return Ternary::True;
             }
             if self.rel() != c.comparable_relation
@@ -552,24 +618,90 @@ impl Relater {
                 } else if source.flags().intersects(TypeFlags::BigIntLiteral) {
                     primitive = Some(c.bigint_type);
                 }
+                outcome.0 = 1;
                 if primitive.is_some_and(|p| contains_type(c, target_types, p)) || alternate_form.is_some_and(|a| contains_type(c, target_types, a)) {
                     return Ternary::True;
                 }
                 return Ternary::False;
             }
             let match_ = c.get_matching_union_constituent_for_type(target, source);
+            outcome.1 = 4;
             if let Some(match_) = match_ {
+                outcome.1 = 3;
                 let related = self.is_related_to_ex(c, source, match_, RecursionFlags::Target, false /*reportErrors*/, None /*headMessage*/, intersection_state);
                 if related != Ternary::False {
+                    outcome.0 = 2;
+                    outcome.1 = 2;
                     return related;
                 }
             }
         }
-        for &t in target_types {
+        outcome.0 = 3;
+        let census_on = c.census_on();
+        let mut fail_ns = 0u64;
+        let mut fail_cached = 0u64;
+        for (i, &t) in target_types.iter().enumerate() {
+            outcome.2 += 1;
+            let (t0, cached) = if census_on {
+                let (id, _) = get_relation_key(c, source, t, intersection_state, false, false);
+                (c.census.as_ref().unwrap().now_ns(), self.rel().lookup(id) != RelationComparisonResult::None)
+            } else {
+                (0, false)
+            };
             let related = self.is_related_to_ex(c, source, t, RecursionFlags::Target, false /*reportErrors*/, None /*headMessage*/, intersection_state);
+            if census_on && related == Ternary::False {
+                fail_ns += c.census.as_ref().unwrap().now_ns() - t0;
+                fail_cached += cached as u64;
+            }
             if related != Ternary::False {
+                if census_on && i > 0 {
+                    // Would an index on one of the source's unit-typed properties have excluded every constituent tried
+                    // before this one? (census only; the lookups below may resolve members early)
+                    let mut indexable = false;
+                    if source.flags().intersects(TypeFlags::Object | TypeFlags::Intersection) {
+                        let props = c.get_properties_of_type(source);
+                        for &p in props {
+                            let pt = c.get_type_of_symbol(p);
+                            if !is_unit_type(pt) {
+                                continue;
+                            }
+                            let mut all = true;
+                            for &tj in &target_types[..i] {
+                                let excluded = tj.flags().intersects(TypeFlags::Object | TypeFlags::Intersection)
+                                    && c.get_property_of_type(tj, p.name()).is_some_and(|q| {
+                                        let qt = c.get_type_of_symbol(q);
+                                        is_unit_type(qt) && !c.is_type_assignable_to(pt, qt)
+                                    });
+                                if !excluded {
+                                    all = false;
+                                    break;
+                                }
+                            }
+                            if all {
+                                indexable = true;
+                                break;
+                            }
+                        }
+                    }
+                    let n = target_types.len();
+                    let census = c.census.as_mut().unwrap();
+                    let s = census.rel_union_late.entry((crate::workcensus::bucket(n) as u8, indexable as u8)).or_default();
+                    s.count += 1;
+                    s.a += i as u64;
+                    s.b += fail_cached;
+                    s.incl_ns += fail_ns;
+                }
                 return related;
             }
+        }
+        if census_on {
+            let n = target_types.len();
+            let census = c.census.as_mut().unwrap();
+            let s = census.rel_union_late.entry((crate::workcensus::bucket(n) as u8, 2)).or_default();
+            s.count += 1;
+            s.a += target_types.len() as u64;
+            s.b += fail_cached;
+            s.incl_ns += fail_ns;
         }
         if report_errors {
             // Elaborate only if we can find a best matching type in the target union
@@ -625,6 +757,17 @@ impl Relater {
         let (id, constrained) = get_relation_key(c, source, target, intersection_state, is_identity, false /*ignoreConstraints*/);
         let entry = self.rel().lookup(id);
         tsrs_core::sitecount::hit("relation cache (recursiveTypeRelatedTo)", if entry != RelationComparisonResult::None { "hit" } else { "miss" });
+        if c.census_on() {
+            let k = crate::workcensus::rel_kind(c, self.rel()) as usize;
+            let census = c.census.as_mut().unwrap();
+            if entry != RelationComparisonResult::None {
+                census.rel_cache[k][0] += 1;
+            } else if self.maybe_keys_set.borrow().has(&id) {
+                census.rel_cache[k][2] += 1;
+            } else {
+                census.rel_cache[k][1] += 1;
+            }
+        }
         if entry != RelationComparisonResult::None {
             if report_errors && entry.intersects(RelationComparisonResult::Failed) && !entry.intersects(RelationComparisonResult::Overflow) {
                 // We are elaborating errors and the cached result is a failure not due to a comparison overflow,
@@ -750,7 +893,25 @@ impl Relater {
     }
 
     // relater.go:3224
+    #[cfg_attr(not(feature = "work-census"), inline(always), expect(clippy::inline_always, reason = "without the census the wrapper is a forwarding call; inlined, callers call the body as before (notes/perf-checker-algorithms.md)"))]
     pub(crate) fn structured_type_related_to(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, intersection_state: IntersectionState) -> Ternary {
+        if c.census_on() {
+            let span = c.census_begin(crate::workcensus::Cat::Rel, || { let (sym, label) = crate::workcensus::type_identity(target); crate::workcensus::CKey::Rel(0, sym, label) });
+            let r = self.structured_type_related_to_inner(c, source, target, report_errors, intersection_state);
+            let timing = c.census_end(span).unwrap();
+            let k = crate::workcensus::rel_kind(c, self.rel());
+            let (sym, label) = crate::workcensus::type_identity(target);
+            let census = c.census.as_mut().unwrap();
+            if (((source.id.0 as u64) << 32 | target.id.0 as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 61) == 0 {
+                *census.rel_pairs.entry((source.id.0, target.id.0)).or_default() |= 1 << k;
+            }
+            census.record(crate::workcensus::Cat::Rel, crate::workcensus::CKey::Rel(k, sym, label), timing, (r == Ternary::False) as u64, 0, 0);
+            return r;
+        }
+        self.structured_type_related_to_inner(c, source, target, report_errors, intersection_state)
+    }
+
+    fn structured_type_related_to_inner(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, intersection_state: IntersectionState) -> Ternary {
         let save_error_state = self.get_error_state(c);
         let mut result = self.structured_type_related_to_worker(c, source, target, report_errors, intersection_state);
         if self.rel() != c.identity_relation {

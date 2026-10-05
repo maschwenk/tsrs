@@ -34,6 +34,8 @@ default = ["checker"]
 checker = ["tsrs_compiler/checker"]
 # Creation-site counters of checker objects, printed at exit (tsrs_core::sitecount).
 site-counts = ["tsrs_compiler/site-counts"]
+# TSRS_WORK_CENSUS=<file>: the work census (docs/DEBUGGING.md).
+work-census = ["tsrs_compiler/work-census"]
 # Allocation profile (tsrs_core/alloc-profile); replaces the mimalloc global allocator with the counting one.
 alloc-profile = ["tsrs_core/alloc-profile"]
 # TSRS_ASSIGNMENT_STATS also attributes checker-created types/symbols to files (tsrs_compiler checkerpool_stats.rs).

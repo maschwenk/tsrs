@@ -21,6 +21,7 @@ pub(crate) use tsrs_modulespecifiers::ModuleSpecifierGenerationHost;
 pub(crate) use tsrs_pseudochecker::{new_pseudo_checker, PseudoChecker, PseudoParameter, PseudoType};
 
 // Data model (checker-foundation).
+pub mod workcensus;
 pub mod checker;
 pub mod evaluator;
 pub mod flow_types;
