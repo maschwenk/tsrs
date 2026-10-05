@@ -46,10 +46,11 @@ enum FlowStep {
     Done(FlowType),
 }
 
-/// About one in eight flow nodes, chosen by the node: a checkpoint for the flow memo on long linear chains.
+/// About one in four flow nodes, chosen by the node: a checkpoint for the flow memo on long linear chains. (One in
+/// two, eight or none measured worse: notes/perf-flow-union-inference.md.)
 #[inline]
 fn is_flow_memo_checkpoint(flow: P<FlowNode>) -> bool {
-    (flow.key() as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 61 == 0
+    (flow.key() as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 62 == 0
 }
 
 impl Checker {
@@ -353,7 +354,7 @@ impl Checker {
 
     /// Whether to ask the memo before the handler of this node, and its answer (with whether the node ends the
     /// iteration). A frame asks at its first node, at a node that ends its iteration (a condition, a switch clause,
-    /// a label with more than one antecedent), and at checkpoints: about one in eight of the nodes it iterates past,
+    /// a label with more than one antecedent), and at checkpoints: about one in four of the nodes it iterates past,
     /// chosen by the node itself so that walks starting at different places agree on them. The answer at any of them
     /// is the frame's answer (the nodes iterated past pass the type on).
     fn flow_memo_at_node(&mut self, f: P<FlowState>, entry_flow: P<FlowNode>, flow: P<FlowNode>, flags: FlowFlags, key: u128, entry_depth: i32) -> Option<(MemoHit, bool)> {
