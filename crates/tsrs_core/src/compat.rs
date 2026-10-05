@@ -22,6 +22,7 @@ pub fn go_compatible_history() -> bool {
     match MODE.load(Ordering::Relaxed) {
         UNSET => {
             let go = std::env::var("TSRS_CHECKER_ASSIGNMENT").is_ok_and(|v| v == "go");
+            // Racing first readers compute the same value from the environment.
             MODE.store(if go { GO } else { CANONICAL }, Ordering::Relaxed);
             go
         }
