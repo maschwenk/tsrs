@@ -625,6 +625,17 @@ impl Relater {
         let (id, constrained) = get_relation_key(c, source, target, intersection_state, is_identity, false /*ignoreConstraints*/);
         let entry = self.rel().lookup(id);
         tsrs_core::sitecount::hit("relation cache (recursiveTypeRelatedTo)", if entry != RelationComparisonResult::None { "hit" } else { "miss" });
+        if c.census.is_some() {
+            let k = crate::workcensus::rel_kind(c, self.rel()) as usize;
+            let census = c.census.as_mut().unwrap();
+            if entry != RelationComparisonResult::None {
+                census.rel_cache[k][0] += 1;
+            } else if self.maybe_keys_set.borrow().has(&id) {
+                census.rel_cache[k][2] += 1;
+            } else {
+                census.rel_cache[k][1] += 1;
+            }
+        }
         if entry != RelationComparisonResult::None {
             if report_errors && entry.intersects(RelationComparisonResult::Failed) && !entry.intersects(RelationComparisonResult::Overflow) {
                 // We are elaborating errors and the cached result is a failure not due to a comparison overflow,
@@ -751,6 +762,23 @@ impl Relater {
 
     // relater.go:3224
     pub(crate) fn structured_type_related_to(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, intersection_state: IntersectionState) -> Ternary {
+        if c.census.is_some() {
+            let span = c.census_begin(crate::workcensus::Cat::Rel, || { let (sym, label) = crate::workcensus::type_identity(target); crate::workcensus::CKey::Rel(0, sym, label) });
+            let r = self.structured_type_related_to_censused(c, source, target, report_errors, intersection_state);
+            let timing = c.census_end(span).unwrap();
+            let k = crate::workcensus::rel_kind(c, self.rel());
+            let (sym, label) = crate::workcensus::type_identity(target);
+            let census = c.census.as_mut().unwrap();
+            if (((source.id.0 as u64) << 32 | target.id.0 as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 61) == 0 {
+                *census.rel_pairs.entry((source.id.0, target.id.0)).or_default() |= 1 << k;
+            }
+            census.record(crate::workcensus::Cat::Rel, crate::workcensus::CKey::Rel(k, sym, label), timing, (r == Ternary::False) as u64, 0, 0);
+            return r;
+        }
+        self.structured_type_related_to_censused(c, source, target, report_errors, intersection_state)
+    }
+
+    fn structured_type_related_to_censused(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, intersection_state: IntersectionState) -> Ternary {
         let save_error_state = self.get_error_state(c);
         let mut result = self.structured_type_related_to_worker(c, source, target, report_errors, intersection_state);
         if self.rel() != c.identity_relation {

@@ -47,6 +47,11 @@ pub fn emit_and_report_statistics(input: &EmitInput) -> (CompileAndEmitResult, O
         if tsrs_compiler::assignment_stats_enabled() {
             input.write(&input.program.checker_assignment_report());
         }
+        #[cfg(feature = "checker")]
+        if tsrs_compiler::Checker::census_enabled() {
+            input.program.for_each_checker_parallel(|_, c| c.census_collect());
+            tsrs_compiler::Checker::census_write_report();
+        }
         statistics = Some(stats);
     }
 

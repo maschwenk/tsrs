@@ -1936,6 +1936,7 @@ impl Checker {
 
     // checker.go:21235
     pub(crate) fn resolve_mapped_type_members(&mut self, t: P<Type>) {
+        let census_span = self.census_begin(crate::workcensus::Cat::MappedResolve, || crate::workcensus::CKey::OptNode(t.as_mapped_type().target.get().unwrap_or(t).as_mapped_type().declaration.get()));
         let members = SymbolTable::new();
         // Resolve upfront such that recursive references see an empty object type.
         self.set_structured_type_members(t, None, &[], &[], &[]);
@@ -1982,6 +1983,16 @@ impl Checker {
             index_infos = lazy.index_infos.get().to_vec();
         }
         self.set_structured_type_members(t, Some(members), &[], &[], &index_infos);
+        if let Some(timing) = self.census_end(census_span) {
+            let n = members.len();
+            if timing.incl_ns > crate::workcensus::slow_threshold_ns() {
+                let s = self.type_to_string_exported(t);
+                let m = self.type_to_string_exported(modifiers_type_of_mapped);
+                eprintln!("census slow mapped type: {:.1} ms, {n} keys: {} | modifiers {}", timing.incl_ns as f64 / 1e6, &s[..s.len().min(300)], &m[..m.len().min(300)]);
+            }
+            let key = crate::workcensus::CKey::Mapped(mapped_type.as_mapped_type().declaration.get(), crate::workcensus::bucket(n));
+            self.census.as_mut().unwrap().record(crate::workcensus::Cat::MappedResolve, key, timing, n as u64, 0, 0);
+        }
     }
 
     // #64526 (behind `Checker::lazy_members`)
@@ -2265,6 +2276,20 @@ impl Checker {
     // checker.go:21325
     #[inline(never)] // out of get_type_of_symbol, which then needs no frame for its common cases
     pub(crate) fn get_type_of_mapped_symbol(&mut self, symbol: P<Symbol>) -> P<Type> {
+        let links = self.value_symbol_links.get(symbol);
+        if links.resolved_type.get().is_none() && self.census.is_some() {
+            let span = self.census_begin(crate::workcensus::Cat::MappedProp, || { let mt = links.containing_type().unwrap(); crate::workcensus::CKey::OptNode(mt.as_mapped_type().target.get().unwrap_or(mt).as_mapped_type().declaration.get()) });
+            let r = self.get_type_of_mapped_symbol_worker(symbol);
+            let timing = self.census_end(span).unwrap();
+            let mapped_type = links.containing_type().unwrap();
+            let decl = mapped_type.as_mapped_type().target.get().unwrap_or(mapped_type).as_mapped_type().declaration.get();
+            self.census.as_mut().unwrap().record(crate::workcensus::Cat::MappedProp, crate::workcensus::CKey::OptNode(decl), timing, 0, 0, 0);
+            return r;
+        }
+        self.get_type_of_mapped_symbol_worker(symbol)
+    }
+
+    fn get_type_of_mapped_symbol_worker(&mut self, symbol: P<Symbol>) -> P<Type> {
         let links = self.value_symbol_links.get(symbol);
         if links.resolved_type.get().is_none() {
             let mapped_type = links.containing_type().unwrap();

@@ -1867,7 +1867,12 @@ impl Checker {
                 if let Some(type_node) = declaration.type_node() {
                     self.get_type_from_type_node(type_node)
                 } else {
+                    let span = self.census_begin(crate::workcensus::Cat::ExportAssign, || crate::workcensus::CKey::Node(declaration));
                     let t = self.check_expression_cached(declaration.expression().unwrap());
+                    if let Some(timing) = self.census_end(span) {
+                        let expr_kind = ast::skip_parentheses(declaration.expression().unwrap()).kind() as u64;
+                        self.census.as_mut().unwrap().record(crate::workcensus::Cat::ExportAssign, crate::workcensus::CKey::Node(declaration), timing, expr_kind, 0, 0);
+                    }
                     self.widen_type_for_variable_like_declaration(Some(t), declaration, false /*reportErrors*/)
                 }
             }
@@ -2053,7 +2058,10 @@ impl Checker {
     // checker.go:17120
     pub(crate) fn check_declaration_initializer(&mut self, declaration: P<Node>, check_mode: CheckMode, contextual_type: Option<P<Type>>) -> P<Type> {
         let initializer = declaration.initializer().unwrap();
-        let t = match self.get_quick_type_of_expression(initializer) {
+        let census_span = self.census_begin(crate::workcensus::Cat::VarInit, || crate::workcensus::CKey::None);
+        let quick = self.get_quick_type_of_expression(initializer);
+        let quick_used = quick.is_some() as u64;
+        let t = match quick {
             Some(t) => t,
             None => {
                 if let Some(contextual_type) = contextual_type {
@@ -2063,6 +2071,9 @@ impl Checker {
                 }
             }
         };
+        if let Some(timing) = self.census_end(census_span) {
+            self.census.as_mut().unwrap().record(crate::workcensus::Cat::VarInit, crate::workcensus::CKey::None, timing, quick_used, 0, 0);
+        }
         if ast::is_parameter_declaration(ast::get_root_declaration(declaration)) {
             let name = declaration.name().unwrap();
             match name.kind() {

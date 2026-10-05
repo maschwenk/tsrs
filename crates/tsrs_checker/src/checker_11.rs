@@ -1469,6 +1469,9 @@ impl Checker {
             let key = get_conditional_type_key(&type_arguments, alias, for_constraint);
             let mut result = root.instantiations.get(&key);
             if result.is_none() {
+                let census_span = self.census_begin(crate::workcensus::Cat::CondInst, || crate::workcensus::CKey::Root(root));
+                let mut census_fan_out: Option<usize> = None;
+                let mut census_nevers = 0u64;
                 let type_argument_list = tsrs_core::alloc_slice_recycled(&type_arguments);
                 let new_mapper = new_type_mapper(outer_type_parameters, type_argument_list);
                 let check_type = root.check_type.get().unwrap();
@@ -1481,19 +1484,47 @@ impl Checker {
                 // distributive conditional type T extends U ? X : Y is instantiated with A | B for T, the
                 // result is (A extends U ? X : Y) | (B extends U ? X : Y).
                 let r = match distribution_type {
-                    Some(distribution_type) if check_type != distribution_type && distribution_type.flags().intersects(TypeFlags::Union | TypeFlags::Never) => self.map_type_with_alias(
-                        distribution_type,
-                        |c, t| {
-                            let m = prepend_type_mapping(check_type, t, Some(new_mapper));
-                            let r = c.get_conditional_type(root, Some(m), for_constraint, None);
-                            // SAFETY: made here for this one call.
-                            unsafe { recycle_mapping(m, false) };
-                            r
-                        },
-                        alias,
-                    ),
+                    Some(distribution_type) if check_type != distribution_type && distribution_type.flags().intersects(TypeFlags::Union | TypeFlags::Never) => {
+                        if census_span.is_some() {
+                            census_fan_out = Some(if distribution_type.flags().intersects(TypeFlags::Union) { distribution_type.types().len() } else { 0 });
+                        }
+                        let never_type = self.never_type;
+                        self.map_type_with_alias(
+                            distribution_type,
+                            |c, t| {
+                                let m = prepend_type_mapping(check_type, t, Some(new_mapper));
+                                let r = c.get_conditional_type(root, Some(m), for_constraint, None);
+                                // SAFETY: made here for this one call.
+                                unsafe { recycle_mapping(m, false) };
+                                if r == never_type {
+                                    census_nevers += 1;
+                                }
+                                r
+                            },
+                            alias,
+                        )
+                    }
                     _ => self.get_conditional_type(root, Some(new_mapper), for_constraint, alias),
                 };
+                if let Some(t) = self.census_end(census_span) {
+                    let census = self.census.as_mut().unwrap();
+                    let n = census_fan_out.unwrap_or(0);
+                    census.record(crate::workcensus::Cat::CondInst, crate::workcensus::CKey::Root(root), t, n as u64, census_nevers, census_fan_out.is_some() as u64);
+                    if census_fan_out.is_some() {
+                        let s = census.fanout.entry((root, crate::workcensus::bucket(n))).or_default();
+                        s.count += 1;
+                        s.a += n as u64;
+                        s.b += census_nevers;
+                        if t.outer {
+                            s.incl_ns += t.incl_ns;
+                        }
+                        if t.key_outer {
+                            s.key_incl_ns += t.incl_ns;
+                        }
+                        s.self_ns += t.self_ns;
+                        census.charge_bookkeeping();
+                    }
+                }
                 root.instantiations.set(key, r);
                 result = Some(r);
                 // The mapper and its type list are garbage unless the result kept the mapper (79%, notes/mem-census.md).
