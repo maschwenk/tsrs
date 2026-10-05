@@ -9,8 +9,6 @@ use tsrs_lsproto::DocumentUri;
 
 use super::host::{CheckerError, CheckerResult};
 
-const MAX_SAFE_INTEGER: f64 = 9007199254740991.0;
-
 static EMPTY_OBJECT: std::sync::LazyLock<tsrs_core::collections::OrderedMap<String, Value>> = std::sync::LazyLock::new(Default::default);
 
 pub(crate) fn object<'a>(params: &'a Value, method: &str) -> CheckerResult<&'a tsrs_core::collections::OrderedMap<String, Value>> {

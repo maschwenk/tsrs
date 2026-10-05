@@ -16,7 +16,7 @@ pub(crate) type InvalidTextDiagnosticFn = Rc<dyn Fn(&mut Checker) -> (&'static M
 
 impl Checker {
     // jsx.go:72
-    pub(crate) fn check_jsx_element(&mut self, node: P<Node>, check_mode: CheckMode) -> P<Type> {
+    pub(crate) fn check_jsx_element(&mut self, node: P<Node>, _check_mode: CheckMode) -> P<Type> {
         self.check_node_deferred(node);
         self.get_jsx_element_type_at(node)
     }
@@ -48,7 +48,7 @@ impl Checker {
     }
 
     // jsx.go:101
-    pub(crate) fn check_jsx_self_closing_element(&mut self, node: P<Node>, check_mode: CheckMode) -> P<Type> {
+    pub(crate) fn check_jsx_self_closing_element(&mut self, node: P<Node>, _check_mode: CheckMode) -> P<Type> {
         self.check_node_deferred(node);
         self.get_jsx_element_type_at(node)
     }

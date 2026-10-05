@@ -68,6 +68,7 @@ impl host {
     }
 
     // host.go:142
+    #[expect(dead_code, reason = "its only Go caller, BuildTask.updateWatch (build --watch), is not ported")]
     pub(crate) fn store_m_time_from_old_cache(&self, file: &str, old_cache: &mTimeCache) {
         let path = self.o().to_path(file);
         let m_time = old_cache.lock().unwrap().get(&path).copied();

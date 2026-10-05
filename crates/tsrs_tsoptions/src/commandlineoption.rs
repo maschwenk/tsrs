@@ -87,6 +87,7 @@ pub struct CommandLineOption {
 
     // true or undefined
     // used for configDirTemplateSubstitutionOptions
+    #[expect(dead_code, reason = "unused in Go too; kept so the option tables match declscompiler.go")]
     pub(crate) allow_config_dir_template_substitution: bool,
 
     // used for filter in compilerrunner
@@ -104,6 +105,7 @@ pub struct CommandLineOption {
 
     // used in transpileoptions worker
     // todo: revisit to see if this can be reduced to boolean
+    #[expect(dead_code, reason = "unused in Go too; kept so the option tables match declscompiler.go")]
     pub(crate) transpile_option_value: Tristate,
 
     // used for CommandLineOptionTypeList

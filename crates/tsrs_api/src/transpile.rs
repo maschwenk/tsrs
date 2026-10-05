@@ -204,7 +204,7 @@ fn transpile_in_current_region(input: &str, base: Option<&CompilerOptions>, file
         Ok(())
     };
     let emit_only = if declaration { EmitOnly::EmitOnlyDts } else { EmitOnly::EmitAll };
-    let result = program.emit(&ctx, EmitOptions { target_source_files: None, emit_only, force_emit: declaration, write_file: Some(&write) });
+    let result = program.emit(&ctx, &EmitOptions { target_source_files: None, emit_only, force_emit: declaration, write_file: Some(&write) });
     all.extend(result.diagnostics);
     let diagnostics: Vec<Value> = all.iter().map(|d| crate::diagnostics::diagnostic_response(d)).collect();
     drop(all);

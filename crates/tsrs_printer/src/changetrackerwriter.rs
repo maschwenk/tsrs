@@ -88,16 +88,6 @@ impl ChangeTrackerWriter {
         }
     }
 
-    // changetrackerwriter.go:82
-    fn get_pos(&self, node: triviaPositionKey) -> i32 {
-        self.positions.borrow().pos.get(&node).copied().unwrap_or(0)
-    }
-
-    // changetrackerwriter.go:86
-    fn get_end(&self, node: triviaPositionKey) -> i32 {
-        self.positions.borrow().end.get(&node).copied().unwrap_or(0)
-    }
-
     // changetrackerwriter.go:90
     fn set_last_non_trivia_position(&mut self, s: &str, force: bool) {
         if force || scanner::skip_trivia(s, 0) as usize != s.len() {
@@ -163,6 +153,16 @@ fn set_end(positions: &Rc<RefCell<changeTrackerPositions>>, node: triviaPosition
     p.end.insert(node, last);
 }
 
+// changetrackerwriter.go:82
+fn get_pos(positions: &Rc<RefCell<changeTrackerPositions>>, node: triviaPositionKey) -> i32 {
+    positions.borrow().pos.get(&node).copied().unwrap_or(0)
+}
+
+// changetrackerwriter.go:86
+fn get_end(positions: &Rc<RefCell<changeTrackerPositions>>, node: triviaPositionKey) -> i32 {
+    positions.borrow().end.get(&node).copied().unwrap_or(0)
+}
+
 // changetrackerwriter.go:130
 fn assign_positions_to_node_worker(positions: &Rc<RefCell<changeTrackerPositions>>, node: Option<P<Node>>, v: &mut NodeVisitor) -> Option<P<Node>> {
     let node = node?;
@@ -180,9 +180,7 @@ fn assign_positions_to_node_worker(positions: &Rc<RefCell<changeTrackerPositions
         child.set_parent(Some(new_node));
         true
     });
-    let p = positions.borrow();
-    let key = triviaPositionKey::Node(node);
-    new_node.set_loc(TextRange::new(p.pos.get(&key).copied().unwrap_or(0), p.end.get(&key).copied().unwrap_or(0)));
+    new_node.set_loc(TextRange::new(get_pos(positions, triviaPositionKey::Node(node)), get_end(positions, triviaPositionKey::Node(node))));
     Some(new_node)
 }
 
@@ -199,9 +197,7 @@ fn assign_positions_to_node_array(positions: &Rc<RefCell<changeTrackerPositions>
         node_array = visited.clone_list(&v.factory);
     }
 
-    let p = positions.borrow();
-    let key = triviaPositionKey::NodeList(nodes);
-    node_array.loc.set(TextRange::new(p.pos.get(&key).copied().unwrap_or(0), p.end.get(&key).copied().unwrap_or(0)));
+    node_array.loc.set(TextRange::new(get_pos(positions, triviaPositionKey::NodeList(nodes)), get_end(positions, triviaPositionKey::NodeList(nodes))));
     Some(node_array)
 }
 

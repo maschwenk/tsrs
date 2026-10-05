@@ -50,8 +50,8 @@ mod transform_2;
 mod transform_3;
 mod util;
 
-pub use diagnostics_::*;
+pub(crate) use diagnostics_::*;
 pub use supplementalreferences::*;
 pub use tracker::*;
 pub use transform_1::*;
-pub use util::*;
+pub(crate) use util::*;

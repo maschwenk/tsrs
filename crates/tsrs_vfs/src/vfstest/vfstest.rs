@@ -635,7 +635,7 @@ impl MapFS {
         self.remove_locked(&mut inner, path)
     }
 
-    pub fn chtimes(&self, path: &str, a_time: SystemTime, m_time: SystemTime) -> Result<(), FsError> {
+    pub fn chtimes(&self, path: &str, _a_time: SystemTime, m_time: SystemTime) -> Result<(), FsError> {
         let mut inner = self.inner.write().unwrap();
         let canonical = self.get_canonical_path(path);
         let Some(file_info) = inner.m.get_mut(&canonical) else {
