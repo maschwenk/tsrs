@@ -105,11 +105,6 @@ pub(crate) fn prerelease_regexp_match_string(text: &str) -> bool {
     text.split('.').all(is_prerelease_part)
 }
 
-// (?i)^(?:0|[1-9]\d*|[a-z-][a-z0-9-]*)$
-pub(crate) fn prerelease_part_regexp_match_string(text: &str) -> bool {
-    is_prerelease_part(text)
-}
-
 // (?i)^[a-z0-9-]+$
 fn is_build_part(part: &str) -> bool {
     !part.is_empty() && part.chars().all(|c| is_letter_fold(c) || is_digit(c) || c == '-')
@@ -122,11 +117,6 @@ fn is_build_part(part: &str) -> bool {
 // (?i)^[a-z0-9-]+(?:\.[a-z0-9-]+)*$
 pub(crate) fn build_reg_exp_match_string(text: &str) -> bool {
     text.split('.').all(is_build_part)
-}
-
-// (?i)^[a-z0-9-]+$
-pub(crate) fn build_part_reg_exp_match_string(text: &str) -> bool {
-    is_build_part(text)
 }
 
 // https://semver.org/#spec-item-9

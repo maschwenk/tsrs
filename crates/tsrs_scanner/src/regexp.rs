@@ -70,8 +70,6 @@ impl Scanner {
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum ClassSetExpressionType {
-    Unknown,
-    ClassUnion,
     ClassIntersection,
     ClassSubtraction,
 }
@@ -93,7 +91,6 @@ struct DecimalEscapeValue {
 pub(crate) struct RegExpParser {
     scanner: Scanner,
     end: i32,
-    reg_exp_flags: RegularExpressionFlags,
     any_unicode_mode: bool,
     unicode_sets_mode: bool,
     annex_b: bool,
@@ -155,7 +152,6 @@ impl RegExpParser {
     pub(crate) fn new(
         scanner: Scanner,
         end: i32,
-        reg_exp_flags: RegularExpressionFlags,
         any_unicode_mode: bool,
         unicode_sets_mode: bool,
         annex_b: bool,
@@ -164,7 +160,6 @@ impl RegExpParser {
         RegExpParser {
             scanner,
             end,
-            reg_exp_flags,
             any_unicode_mode,
             unicode_sets_mode,
             annex_b,
@@ -188,11 +183,6 @@ impl RegExpParser {
     #[inline]
     fn pos(&self) -> i32 {
         self.scanner.state.pos
-    }
-
-    #[inline]
-    fn set_pos(&mut self, v: i32) {
-        self.scanner.state.pos = v;
     }
 
     #[inline]
@@ -972,7 +962,6 @@ impl RegExpParser {
                     ClassSetExpressionType::ClassIntersection => {
                         self.error(&diagnostics::X_0_expected, self.pos(), 0, &[&"&&"]);
                     }
-                    _ => {}
                 },
             }
             ch = self.char();
