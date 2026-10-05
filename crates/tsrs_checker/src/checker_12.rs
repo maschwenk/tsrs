@@ -1113,7 +1113,7 @@ impl Checker {
                     && (check_type.flags().intersects(TypeFlags::Any) || {
                         let permissive_check_type = self.get_permissive_instantiation(check_type);
                         let permissive_extends_type = self.get_permissive_instantiation(inferred_extends_type);
-                        !self.is_type_assignable_to(permissive_check_type, permissive_extends_type)
+                        !self.is_conditional_extends_assignable(permissive_check_type, permissive_extends_type, root.is_distributive.get())
                     })
                 {
                     // Return union of trueType and falseType for 'any' since it matches anything. Furthermore, for a

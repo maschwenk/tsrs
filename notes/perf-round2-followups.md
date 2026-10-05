@@ -67,6 +67,12 @@ pointer compression costs about +4.9% instructions and took back most of the che
 
 ## Measured and rejected (do not redo)
 
+- Skipping whole constituents of a conditional over a discriminated union (a key index over the union, evaluating only
+  the matching constituents; "A2" in notes/perf-checker-algorithms.md): would make `Extract`-per-key mapped types
+  linear, but the skipped evaluations' instantiation counts depend on cache states (first permissive instantiation per
+  constituent, active-mapper hits) and each leaves a conditional-instantiation cache entry, so the counter that drives
+  TS2589 cannot be charged exactly. The exact per-constituent version (A1) landed instead.
+
 - Zero-based handles on Linux (reserve 4-32 GiB so a dereference needs no base; #62, notes/mem-pointer-compression.md
   section 6): removes 2.7 of the 7 points of extra x86 instructions, but wall and cycles move by 0.7-2%, inside the
   host's drift, and it adds low-address-space failure modes. The rest of the cost is the 32-bit handle itself.

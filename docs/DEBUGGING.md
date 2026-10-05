@@ -132,6 +132,15 @@ packed word, flag bits above an address or a new enum payload is not). Stale reg
 when they were hard-coded offsets. A violation that survives that check is a real bug: fix the escape tracking or
 stop freeing that class.
 
+## Cross-checking the conditional-type prefilter
+
+`getConditionalType`'s definitely-false test is decided without the relater for discriminated-union shapes
+(`crates/tsrs_checker/src/relater_prefilter.rs`, notes/perf-checker-algorithms.md "A1"). `TSRS_COND_PREFILTER=0` turns
+it off for A/B runs. `TSRS_VERIFY_COND_PREFILTER=<file>` runs the relater after every decision and appends a line for
+each disagreement (result, relation cache entries, instantiation / type / symbol counters), plus progress lines
+(`ok N decisions`). After a change to the relater, run it over the suite and a large project and check for
+`MISMATCH`.
+
 ## Profiling
 
 Profile the `dist` profile (fat LTO, one codegen unit; release builds also add PGO, `.github/workflows/release.yml`),

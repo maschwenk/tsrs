@@ -1,0 +1,85 @@
+a.ts(82,12): error TS2345: Argument of type 'R1' is not assignable to parameter of type 'Nope'.
+  Property 'nope' is missing in type '{ kind: 1; a: string; }' but required in type 'Nope'.
+a.ts(83,12): error TS2345: Argument of type 'number' is not assignable to parameter of type 'Nope'.
+  Type 'number' is not assignable to type 'Nope'.
+a.ts(84,12): error TS2345: Argument of type 'R2' is not assignable to parameter of type 'Nope'.
+  Property 'nope' is missing in type '{ kind: 1; a: string; }' but required in type 'Nope'.
+a.ts(85,12): error TS2345: Argument of type 'number' is not assignable to parameter of type 'Nope'.
+  Type 'number' is not assignable to type 'Nope'.
+a.ts(86,12): error TS2741: Property 'nope' is missing in type '{ kind: never; j: string; }' but required in type 'Nope'.
+a.ts(88,12): error TS2345: Argument of type 'R4' is not assignable to parameter of type 'Nope'.
+  Property 'nope' is missing in type '{ kind: StrE.B; e: string; }' but required in type 'Nope'.
+a.ts(89,12): error TS2345: Argument of type 'StrE' is not assignable to parameter of type 'Nope'.
+a.ts(90,12): error TS2345: Argument of type 'R5' is not assignable to parameter of type 'Nope'.
+  Property 'nope' is missing in type '{ kind: unique symbol; f: string; }' but required in type 'Nope'.
+a.ts(91,12): error TS2345: Argument of type 'typeof sym1' is not assignable to parameter of type 'Nope'.
+a.ts(92,12): error TS2741: Property 'nope' is missing in type '{ kind: never; j: string; }' but required in type 'Nope'.
+a.ts(94,12): error TS2345: Argument of type 'R7' is not assignable to parameter of type 'Nope'.
+  Property 'nope' is missing in type '{ kind: true; g: string; }' but required in type 'Nope'.
+a.ts(95,12): error TS2345: Argument of type 'boolean' is not assignable to parameter of type 'Nope'.
+a.ts(96,12): error TS2345: Argument of type 'R8' is not assignable to parameter of type 'Nope'.
+  Property 'nope' is missing in type '{ kind: null; h: string; }' but required in type 'Nope'.
+a.ts(97,12): error TS2345: Argument of type 'null' is not assignable to parameter of type 'Nope'.
+a.ts(98,12): error TS2345: Argument of type 'R9' is not assignable to parameter of type 'Nope'.
+  Property 'nope' is missing in type '{ kind: undefined; i: string; }' but required in type 'Nope'.
+a.ts(99,12): error TS2345: Argument of type 'undefined' is not assignable to parameter of type 'Nope'.
+a.ts(100,12): error TS2741: Property 'nope' is missing in type '{ kind: never; j: string; }' but required in type 'Nope'.
+a.ts(102,12): error TS2741: Property 'nope' is missing in type '{ kind: never; j: string; }' but required in type 'Nope'.
+a.ts(104,12): error TS2345: Argument of type 'R12' is not assignable to parameter of type 'Nope'.
+  Property 'nope' is missing in type '{ kind: undefined; i: string; }' but required in type 'Nope'.
+a.ts(105,12): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'Nope'.
+  Type 'undefined' is not assignable to type 'Nope'.
+a.ts(106,12): error TS2345: Argument of type 'R13' is not assignable to parameter of type 'Nope'.
+  Property 'nope' is missing in type '{ kind: never; j: string; }' but required in type 'Nope'.
+a.ts(107,12): error TS2345: Argument of type 'string' is not assignable to parameter of type 'Nope'.
+a.ts(108,12): error TS2741: Property 'nope' is missing in type '{ kind: "y"; } & { kind: string; m: string; }' but required in type 'Nope'.
+a.ts(109,12): error TS2345: Argument of type 'string' is not assignable to parameter of type 'Nope'.
+a.ts(110,12): error TS2345: Argument of type 'R15' is not assignable to parameter of type 'Nope'.
+  Property 'nope' is missing in type '{ kind: never; j: string; }' but required in type 'Nope'.
+a.ts(111,12): error TS2345: Argument of type 'string' is not assignable to parameter of type 'Nope'.
+a.ts(112,12): error TS2345: Argument of type 'R16' is not assignable to parameter of type 'Nope'.
+  Property 'nope' is missing in type '{ kind: 1; a: string; }' but required in type 'Nope'.
+a.ts(113,12): error TS2345: Argument of type 'string | number | boolean | typeof sym1 | null | undefined' is not assignable to parameter of type 'Nope'.
+  Type 'undefined' is not assignable to type 'Nope'.
+a.ts(114,12): error TS2345: Argument of type 'R17' is not assignable to parameter of type 'Nope'.
+  Property 'nope' is missing in type '{ kind: 1; a: string; }' but required in type 'Nope'.
+a.ts(115,12): error TS2345: Argument of type 'string | number | boolean | typeof sym1 | null | undefined' is not assignable to parameter of type 'Nope'.
+  Type 'undefined' is not assignable to type 'Nope'.
+a.ts(116,12): error TS2345: Argument of type 'R18' is not assignable to parameter of type 'Nope'.
+  Property 'nope' is missing in type '{ kind: 1; a: string; }' but required in type 'Nope'.
+a.ts(117,12): error TS2345: Argument of type 'number' is not assignable to parameter of type 'Nope'.
+  Type 'number' is not assignable to type 'Nope'.
+a.ts(118,12): error TS2345: Argument of type 'R19' is not assignable to parameter of type 'Nope'.
+  Property 'nope' is missing in type '{ kind: 1; a: string; }' but required in type 'Nope'.
+a.ts(119,12): error TS2345: Argument of type 'string | number' is not assignable to parameter of type 'Nope'.
+  Type 'string' is not assignable to type 'Nope'.
+a.ts(120,12): error TS2345: Argument of type 'R20' is not assignable to parameter of type 'Nope'.
+  Property 'nope' is missing in type '{ kind: "a"; d: string; }' but required in type 'Nope'.
+a.ts(121,12): error TS2345: Argument of type 'string' is not assignable to parameter of type 'Nope'.
+a.ts(122,12): error TS2741: Property 'nope' is missing in type '{ kind: "a"; d: string; }' but required in type 'Nope'.
+a.ts(123,12): error TS2345: Argument of type 'string' is not assignable to parameter of type 'Nope'.
+a.ts(124,12): error TS2345: Argument of type 'string' is not assignable to parameter of type 'Nope'.
+  Type 'string' is not assignable to type 'Nope'.
+a.ts(125,12): error TS2345: Argument of type 'R23' is not assignable to parameter of type 'Nope'.
+  Property 'nope' is missing in type '{ kind: 2; b: string; }' but required in type 'Nope'.
+a.ts(126,12): error TS2345: Argument of type 'number' is not assignable to parameter of type 'Nope'.
+a.ts(127,12): error TS2345: Argument of type 'R24' is not assignable to parameter of type 'Nope'.
+  Property 'nope' is missing in type '{ wrapped: { kind: "a"; d: string; }; }' but required in type 'Nope'.
+a.ts(129,12): error TS2741: Property 'nope' is missing in type 'Priv' but required in type 'Nope'.
+a.ts(130,12): error TS2345: Argument of type 'string' is not assignable to parameter of type 'Nope'.
+a.ts(131,12): error TS2741: Property 'nope' is missing in type 'Prot' but required in type 'Nope'.
+a.ts(132,12): error TS2345: Argument of type 'string' is not assignable to parameter of type 'Nope'.
+a.ts(133,12): error TS2345: Argument of type 'R27' is not assignable to parameter of type 'Nope'.
+  Property 'nope' is missing in type 'Priv' but required in type 'Nope'.
+a.ts(134,12): error TS2345: Argument of type 'string' is not assignable to parameter of type 'Nope'.
+a.ts(135,12): error TS2741: Property 'nope' is missing in type 'Tagged<"a">' but required in type 'Nope'.
+a.ts(136,12): error TS2345: Argument of type 'string' is not assignable to parameter of type 'Nope'.
+a.ts(137,12): error TS2741: Property 'nope' is missing in type '{ kind: "c"; tag: true; }' but required in type 'Nope'.
+a.ts(138,12): error TS2345: Argument of type 'string' is not assignable to parameter of type 'Nope'.
+a.ts(139,12): error TS2345: Argument of type '{ kind: "a"; d: string; } | { kind: never; j: string; }' is not assignable to parameter of type 'Nope'.
+  Property 'nope' is missing in type '{ kind: "a"; d: string; }' but required in type 'Nope'.
+a.ts(140,12): error TS2345: Argument of type 'string' is not assignable to parameter of type 'Nope'.
+a.ts(141,12): error TS2345: Argument of type '{ kind: never; j: string; } | ({ kind: "x"; } & { l: string; })' is not assignable to parameter of type 'Nope'.
+  Property 'nope' is missing in type '{ kind: never; j: string; }' but required in type 'Nope'.
+a.ts(142,12): error TS2345: Argument of type 'string' is not assignable to parameter of type 'Nope'.
+a.ts(143,12): error TS2741: Property 'nope' is missing in type '{ kind: never; j: string; }' but required in type 'Nope'.
