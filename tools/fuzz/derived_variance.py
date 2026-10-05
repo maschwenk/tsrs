@@ -361,7 +361,7 @@ class Gen:
         r = self.r
         base, params, cons = self.base, self.params, self.constraints
         k = 0
-        nsites = r.randint(30, 60)
+        nsites = r.randint(60, 120)
         for _ in range(nsites):
             dname, own, own_cons, args = r.choice(derived)
             # Choose source arguments for D's own parameters and target arguments for the base.
@@ -427,8 +427,11 @@ def generate(seed, exclude=()):
     return src, cfg, g
 
 
+EXTRA_ENV = {}
+
+
 def run_tsrs(tsrs, d, mode, log=None, min_members=None):
-    env = dict(os.environ, TSRS_DERIVED_VARIANCE=mode)
+    env = dict(os.environ, TSRS_DERIVED_VARIANCE=mode, **EXTRA_ENV)
     env.pop("TSRS_CHECKER_ASSIGNMENT", None)
     if log:
         env["TSRS_DERIVED_VARIANCE_LOG"] = log
@@ -442,7 +445,8 @@ def run_tsrs(tsrs, d, mode, log=None, min_members=None):
 
 
 def one(args):
-    seed, tsrs, exclude, onoff, min_members = args
+    seed, tsrs, exclude, onoff, min_members, extra_env = args
+    EXTRA_ENV.update(extra_env)
     src, cfg, g = generate(seed, exclude)
     d = tempfile.mkdtemp(prefix=f"dv{seed}-", dir="/tmp/opencode" if os.path.isdir("/tmp/opencode") else None)
     try:
@@ -495,6 +499,7 @@ def main():
     ap.add_argument("--min-members", type=int, default=None)
     ap.add_argument("--onoff-every", type=int, default=1)
     ap.add_argument("--summary", default=None, help="append the JSON summary to this file")
+    ap.add_argument("--env", action="append", default=[], help="KEY=VALUE for tsrs (e.g. TSRS_DERIVED_VARIANCE_NO_GUARD=4,5)")
     a = ap.parse_args()
     exclude = [x for x in a.exclude.split(",") if x]
     if a.cmd == "gen":
@@ -513,7 +518,8 @@ def main():
     per_opts = collections.Counter()
     fired = 0
     findings = 0
-    jobs = [(s, a.tsrs, exclude, (s - a.start) % a.onoff_every == 0, a.min_members) for s in range(a.start, a.start + a.count)]
+    extra_env = dict(e.split("=", 1) for e in a.env)
+    jobs = [(s, a.tsrs, exclude, (s - a.start) % a.onoff_every == 0, a.min_members, extra_env) for s in range(a.start, a.start + a.count)]
     with concurrent.futures.ProcessPoolExecutor(a.jobs) as ex:
         for res in ex.map(one, jobs, chunksize=4):
             tot["programs"] += 1
@@ -551,7 +557,7 @@ def main():
                     json.dump(res, f, indent=1)
     tot["programs_where_it_fired"] = fired
     tot["findings"] = findings
-    summary = {"start": a.start, "count": a.count, "exclude": exclude, "totals": dict(tot), "culprits": dict(culprits.most_common()),
+    summary = {"start": a.start, "count": a.count, "exclude": exclude, "env": extra_env, "min_members": a.min_members, "totals": dict(tot), "culprits": dict(culprits.most_common()),
                "decisions_per_feature": dict(per_feature.most_common()), "decisions_per_options": dict(per_opts)}
     print(json.dumps(summary, indent=1))
     if a.summary:
