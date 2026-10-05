@@ -137,6 +137,7 @@ In place:
 | Technique | Evidence here | Also in |
 | --- | --- | --- |
 | Fat LTO, one codegen unit, PGO for release binaries | `notes/perf-pgo.md`: -13.5% instructions with PGO; fat LTO alone about -2% | oxc, Rolldown, swc (fat); Ruff (fat, PGO); Turborepo, rust-analyzer (thin) |
+| BOLT on top of PGO for the Linux release binaries (`.github/scripts/bolt.sh`, gates run on the BOLT-optimized binaries) | `notes/perf-build-level.md`: -2.7% / -3.2% / -1.0% wall at 1 / 4 / 8 checkers on the 38k-file codebase, -3.4 to -4.0% on vscode; instruction-cache misses -20% | rustc (its Linux toolchain builds), CPython (`--enable-bolt`) |
 | mimalloc as the global allocator | `notes/fix-perf-memory.md` | oxc, Rolldown, Turborepo, Bun |
 | Leak arenas, one per thread; exact frees of provably dead objects | PORTING.md "Memory model", `notes/mem-recycle.md` | oxc and Bun (arenas with no `Drop`) |
 | 32-bit handles with a niche (`Option<P<T>>` is 4 bytes) | `notes/mem-pointer-compression.md`: -14 to -15% peak memory, +6.5% instructions | oxc and Ruff (`NonMax`/`NonZero` u32 ids), Bun (`StoreRef`) |

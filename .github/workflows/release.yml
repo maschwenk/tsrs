@@ -52,6 +52,8 @@ jobs:
   # Release binaries are PGO builds with the `dist` profile (fat LTO, one codegen unit; Cargo.toml): an instrumented
   # build of tsrs + tsrs-test + tsrs-fourslash, the training workload (.github/scripts/pgo-train.sh: the conformance suite and two
   # open-source bench projects), then the final build with the merged profile. Numbers: notes/perf-pgo.md.
+  # On Linux the final build is then optimized with BOLT (.github/scripts/bolt.sh; notes/perf-build-level.md), and
+  # the conformance and fourslash gates run on BOLT-optimized binaries before the binary is staged.
   build:
     name: build ${{ matrix.target }}
     needs: version
@@ -126,12 +128,34 @@ jobs:
           sum=$(shasum -a 256 "$RUNNER_TEMP/pgo/merged.profdata" | cut -c1-16)
           mv "$RUNNER_TEMP/pgo/merged.profdata" "$RUNNER_TEMP/pgo/$sum.profdata"
           echo "path=$RUNNER_TEMP/pgo/$sum.profdata" >> "$GITHUB_OUTPUT"
+      # Linux: --emit-relocs keeps the relocations BOLT needs to move code (the code itself is unchanged), and the
+      # test runners are built too so that the BOLT step can run the gates on BOLT-optimized binaries.
       - name: cargo build
         shell: bash
         env:
-          RUSTFLAGS: -Cprofile-use=${{ steps.profile.outputs.path }}
+          RUSTFLAGS: -Cprofile-use=${{ steps.profile.outputs.path }}${{ runner.os == 'Linux' && ' -Clink-arg=-Wl,--emit-relocs' || '' }}
           CFLAGS: ${{ runner.os == 'macOS' && '-fno-profile-use' || '' }}
-        run: cargo build --profile dist --locked -p tsrs_cli --target ${{ matrix.target }}
+        run: |
+          pkgs=(-p tsrs_cli)
+          [ "$RUNNER_OS" = Linux ] && pkgs+=(-p tsrs_testrunner -p tsrs_fourslash)
+          cargo build --profile dist --locked "${pkgs[@]}" --target ${{ matrix.target }}
+      # BOLT from the LLVM release that matches rustc's LLVM. The tarball's tools need glibc 2.34 (22.04 has 2.35).
+      - name: Install BOLT
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          llvm=$(rustc -vV | sed -n 's/^LLVM version: //p')
+          arch=X64; [ "$(uname -m)" = aarch64 ] && arch=ARM64
+          name="LLVM-$llvm-Linux-$arch"
+          mkdir -p "$RUNNER_TEMP/llvm"
+          curl -fsSL "https://github.com/llvm/llvm-project/releases/download/llvmorg-$llvm/$name.tar.zst" |
+            tar -x --zstd -C "$RUNNER_TEMP/llvm" --strip-components=1 --wildcards \
+              "$name/bin/llvm-bolt" "$name/bin/merge-fdata" "$name/lib/libbolt_rt_instr.a"
+          echo "$RUNNER_TEMP/llvm/bin" >> "$GITHUB_PATH"
+      - name: BOLT and gates on the BOLT-optimized binaries
+        if: runner.os == 'Linux'
+        shell: bash
+        run: .github/scripts/bolt.sh "target/${{ matrix.target }}/dist" "$RUNNER_TEMP/bolt" "$RUNNER_TEMP/pgo/bench"
       - name: Stage binary
         shell: bash
         run: |
