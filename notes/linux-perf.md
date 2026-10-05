@@ -1,5 +1,9 @@
 # linux-perf: first Linux profile (page faults, transparent huge pages, pre-faulting)
 
+Update (2026-10-05): pointer compression later moved the arena chunks out of mimalloc into a reservation that did not
+ask for huge pages, which cost 2-6% wall time on Linux until the reservation advised its chunks itself
+(notes/linux-x86-round.md). The measurements below are from before that, with mimalloc-backed chunks.
+
 All earlier performance work was measured on an 18-core Apple Silicon Mac, where kernel time is a large share
 (the private monorepo: ~15 s user + ~8 s sys with one checker). The users run Linux (x86_64 cloud sandbox VMs,
 arm64 dev VMs, x86_64 CI). This is the first measurement there, and an A/B of transparent huge pages (THP) and

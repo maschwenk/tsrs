@@ -22,10 +22,13 @@ pointer compression costs about +4.9% instructions and took back most of the che
 - **The 32 GiB reservation outside macOS and GitHub runners: verified.** main ran in a Linux x86-64 dev sandbox
   (gVisor-style microVM, `ulimit -v` unlimited, overcommit 1): check, emit and incremental all work. It still needs
   a 47-bit address space and no `ulimit -v` below 32 GiB.
-- **x86-64 cost of compression: measured, not free.** Intel Xeon 8259CL, 18 vCPU, the 38k-file codebase, compressed
-  vs `plain-ptrs`: `--release` +6.6% wall / +7.0% instructions (one and four checkers); `dist` profile (fat LTO, no
-  PGO) +4.4% wall with four checkers (27.0 -> 28.2 s), +2.3% with one, +7.1% instructions; peak -15.2%. With PGO: not
-  measured. Shipping the Linux binaries with `plain-ptrs` is a one-line release choice if speed matters more there.
+- **x86-64 cost of compression: 0-1.5% wall, once both builds have huge pages** (notes/linux-x86-round.md). The
+  earlier figures (`--release` +6.6% wall, `dist` +4.4% with four checkers and +2.3% with one, Intel Xeon 8259CL)
+  compared a compressed build whose arena had silently lost its transparent huge pages (the 32 GiB reservation never
+  asked for them; mimalloc, which backs `plain-ptrs` chunks, does) with a `plain-ptrs` build that had them. With the
+  arena advised again (Xeon 8259CL, 5 rounds): wall +0.6% / +1.4% / -0.9% (1 / 4 / 8 checkers), cycles +1-2.6%,
+  instructions still +6.5%, peak -15%; an Ice Lake host agreed within its noise. Shipping `plain-ptrs` on Linux would
+  buy about 1% for 15% more memory.
 - **Linux emit.** The 38k-file codebase is bound by file creation on macOS (4 writer permits). On Linux file creation
   runs in parallel, so the writer cap and the remaining transform CPU may both matter (notes/perf-emit.md).
 - **CI on main: fine.** CI moved to Depot (`.depot/workflows/ci.yml`: `check-and-test`, `lint-ratchet`); results are
