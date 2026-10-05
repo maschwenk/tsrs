@@ -774,6 +774,22 @@ impl SymbolTable {
         self.0.borrow().entries.len()
     }
 
+    /// Heap census (notes/mem-checker-heap.md): entries, entry capacity, and the heap bytes of the entry buffer
+    /// plus the boxed index of a large table.
+    pub fn heap_usage(&self) -> (usize, usize, usize) {
+        let m = self.0.borrow();
+        let mut bytes = m.entries.capacity() * std::mem::size_of::<SymbolMapEntry>();
+        if let Some(extra) = m.extra.get() {
+            bytes += std::mem::size_of::<SymbolMapExtra>() + extra.odd_keys.capacity() * 24;
+            if let Some(index) = &extra.index {
+                let cap = index.capacity();
+                let buckets = if cap < 8 { (cap + 1).next_power_of_two() } else { cap / 7 * 8 };
+                bytes += (buckets * 4).div_ceil(16) * 16 + buckets + 16;
+            }
+        }
+        (m.entries.len(), m.entries.capacity(), bytes)
+    }
+
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.0.borrow().entries.is_empty()

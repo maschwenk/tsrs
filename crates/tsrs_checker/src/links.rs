@@ -74,6 +74,14 @@ impl<K: 'static, V: 'static> LinkStore<K, V> {
     }
 }
 
+impl<K: 'static, V: 'static> LinkStore<K, V> {
+    /// Heap census: the slot table (the values are in the arena).
+    pub fn heap_parts(&self) -> Vec<(&'static str, crate::heapcensus::HeapStat)> {
+        use crate::heapcensus::HeapSize;
+        vec![("slots", self.slots.heap_stat()), ("chunk list", self.chunks.heap_stat())]
+    }
+}
+
 impl<K: 'static, V: Default + 'static> LinkStore<K, V> {
     /// Returns the links for `key`, creating them on first use.
     #[inline]
@@ -262,6 +270,38 @@ impl<V: 'static> IdLinkStore<V> {
     }
 }
 
+impl<V: 'static> IdLinkStore<V> {
+    /// Heap census: the page vector, the dense and sparse pages, the wide-id map (the values are in the arena).
+    pub fn heap_parts(&self) -> Vec<(&'static str, crate::heapcensus::HeapStat)> {
+        use crate::heapcensus::{HeapSize, HeapStat};
+        let mut dense = HeapStat { slot: 4, ..HeapStat::default() };
+        let mut sparse = HeapStat { slot: 4, ..HeapStat::default() };
+        for page in self.pages.iter().flatten() {
+            match page {
+                IdPage::Dense(page) => {
+                    dense.containers += 1;
+                    dense.len += page.iter().filter(|&&s| s != 0).count() as u64;
+                    dense.cap += ID_PAGE as u64;
+                    dense.bytes += std::mem::size_of::<[u32; ID_PAGE]>() as u64;
+                }
+                IdPage::Sparse(page) => {
+                    sparse.containers += 1;
+                    sparse.len += page.slots.len() as u64;
+                    sparse.cap += page.slots.capacity() as u64;
+                    sparse.bytes += (std::mem::size_of::<SparseIdPage>() + page.slots.capacity() * 4) as u64;
+                }
+            }
+        }
+        vec![
+            ("page vector", self.pages.heap_stat()),
+            ("dense pages", dense),
+            ("sparse pages", sparse),
+            ("wide ids", self.wide_slots.heap_stat()),
+            ("chunk list", self.chunks.heap_stat()),
+        ]
+    }
+}
+
 impl<V: Default + 'static> IdLinkStore<V> {
     #[inline]
     #[cfg_attr(feature = "site-counts", track_caller)]
@@ -332,6 +372,10 @@ impl<V: Default + 'static> NodeLinkStore<V> {
 }
 
 impl<V: 'static> NodeLinkStore<V> {
+    pub fn heap_parts(&self) -> Vec<(&'static str, crate::heapcensus::HeapStat)> {
+        self.store.heap_parts()
+    }
+
     #[inline]
     pub fn try_get(&self, node: P<Node>) -> Option<P<V>> {
         self.store.try_get(ast::get_node_id(node).0)
@@ -373,6 +417,10 @@ impl<V: Default + 'static> SymbolArenaLinkStore<V> {
 }
 
 impl<V: 'static> SymbolArenaLinkStore<V> {
+    pub fn heap_parts(&self) -> Vec<(&'static str, crate::heapcensus::HeapStat)> {
+        self.store.heap_parts()
+    }
+
     #[inline]
     pub fn try_get(&self, symbol: P<Symbol>) -> Option<P<V>> {
         self.store.try_get(ast::get_symbol_id(symbol).0)

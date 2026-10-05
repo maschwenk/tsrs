@@ -1617,6 +1617,21 @@ pub struct ModuleExportIndex {
     by_symbol: FxHashMap<P<Symbol>, u32>,
 }
 
+use crate::heapcensus::HeapSize;
+
+impl HeapSize for ModuleExportIndex {
+    #[expect(clippy::iter_over_hash_type, reason = "sums sizes: the order does not matter")]
+    fn heap_stat(&self) -> crate::heapcensus::HeapStat {
+        let mut stat = self.pending.heap_stat();
+        stat.add(self.by_target.heap_stat());
+        for v in self.by_target.values() {
+            stat.add(v.heap_stat());
+        }
+        stat.add(self.by_symbol.heap_stat());
+        stat
+    }
+}
+
 /// An export table indexed by the merged resolved target of each entry (`Checker::exports_by_target`).
 pub struct ExportsByTarget {
     len: usize,

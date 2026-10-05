@@ -15,6 +15,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 pub mod census;
+mod os;
 
 struct Counting;
 
@@ -94,7 +95,7 @@ mod heap_sample {
     use rustc_hash::FxHashMap;
     use std::cell::Cell;
     use std::ffi::c_void;
-    use std::sync::atomic::{AtomicU8, Ordering};
+    use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
     use std::sync::Mutex;
 
     pub(super) const RATE: isize = 256 * 1024;
@@ -106,21 +107,63 @@ mod heap_sample {
         fn backtrace(buf: *mut *mut c_void, size: i32) -> i32;
     }
 
+    /// One sampled stack of one thread group (see `group`).
+    pub(super) struct Site {
+        pub(super) stack: Stack,
+        pub(super) group: u8,
+        pub(super) live: i64,
+        pub(super) total: u64,
+    }
+
     pub(super) struct State {
         pub(super) live: FxHashMap<usize, (u32, usize)>,
-        pub(super) stacks: Vec<(Stack, i64, u64)>, // stack, live bytes, total sampled bytes
-        pub(super) index: FxHashMap<Stack, u32>,
+        pub(super) stacks: Vec<Site>,
+        pub(super) index: FxHashMap<(Stack, u8), u32>,
         // Live bytes per stack when the heap last grew past `peak_heap` + 8 MB: "live at the heap peak".
         pub(super) peak: Vec<i64>,
         pub(super) peak_heap: usize,
     }
     pub(super) static STATE: Mutex<Option<State>> = Mutex::new(None);
     static ENABLED: AtomicU8 = AtomicU8::new(0); // 0 unknown, 1 off, 2 on (bytes), 3 on (counts)
+    static SAMPLE_RATE: AtomicUsize = AtomicUsize::new(RATE as usize);
 
     thread_local! {
         static BUSY: Cell<bool> = const { Cell::new(false) };
         static COUNTDOWN: Cell<isize> = const { Cell::new(RATE) };
         pub(super) static IN_ARENA: Cell<bool> = const { Cell::new(false) };
+        static GROUP: Cell<u8> = const { Cell::new(GROUP_UNKNOWN) };
+    }
+
+    /// Thread groups: the main thread (the CLI's `tsrs` thread), checker thread `checker-<n>` as `n + 1`, every other thread.
+    pub(super) const GROUP_MAIN: u8 = 0;
+    pub(super) const GROUP_OTHER: u8 = 254;
+    const GROUP_UNKNOWN: u8 = 255;
+
+    fn group() -> u8 {
+        GROUP.try_with(|g| {
+            if g.get() == GROUP_UNKNOWN {
+                let current = std::thread::current();
+                let group = match current.name() {
+                    Some("main" | "tsrs") => GROUP_MAIN,
+                    Some(name) => match name.strip_prefix("checker-").and_then(|n| n.parse::<u8>().ok()) {
+                        Some(n) if n < GROUP_OTHER - 1 => n + 1,
+                        _ => GROUP_OTHER,
+                    },
+                    None => GROUP_OTHER,
+                };
+                g.set(group);
+            }
+            g.get()
+        })
+        .unwrap_or(GROUP_OTHER)
+    }
+
+    pub(super) fn group_name(group: u8) -> String {
+        match group {
+            GROUP_MAIN => "main".to_string(),
+            GROUP_OTHER => "other".to_string(),
+            n => format!("checker-{}", n - 1),
+        }
     }
 
     fn mode() -> u8 {
@@ -132,6 +175,11 @@ mod heap_sample {
                     Some("count") => 3,
                     _ => 1,
                 };
+                // TSRS_HEAP_PROFILE_RATE: bytes between samples (default 256 KiB).
+                // Relaxed: a profiling knob; see `on_alloc`.
+                if let Some(rate) = std::env::var("TSRS_HEAP_PROFILE_RATE").ok().and_then(|s| s.parse::<usize>().ok()) {
+                    SAMPLE_RATE.store(rate.max(1), Ordering::Relaxed);
+                }
                 ENABLED.store(m, Ordering::Relaxed);
                 m
             }
@@ -160,16 +208,18 @@ mod heap_sample {
             if mode == 1 {
                 return;
             }
-            let (cost, rate) = if mode == 3 { (1, COUNT_RATE) } else { (size as isize, RATE) };
+            // Relaxed: a profiling knob written once before sampling starts; a stale read only shifts one sample.
+            let byte_rate = SAMPLE_RATE.load(Ordering::Relaxed) as isize;
+            let (cost, rate) = if mode == 3 { (1, COUNT_RATE) } else { (size as isize, byte_rate) };
             let left = COUNTDOWN.with(|c| {
-                let left = c.get() - cost;
+                let left = c.get().min(rate) - cost;
                 c.set(if left <= 0 { rate } else { left });
                 left
             });
             if left > 0 {
                 return;
             }
-            let weight = if mode == 3 { COUNT_RATE as usize } else { size.max(RATE as usize) };
+            let weight = if mode == 3 { COUNT_RATE as usize } else { size.max(byte_rate as usize) };
             let mut raw = [std::ptr::null_mut::<c_void>(); DEPTH + 3];
             // SAFETY: `raw` has room for DEPTH + 3 frames.
             let n = unsafe { backtrace(raw.as_mut_ptr(), raw.len() as i32) } as usize;
@@ -181,6 +231,7 @@ mod heap_sample {
                     stack[i] = *f as usize;
                 }
             }
+            let group = group();
             let mut guard = STATE.lock().unwrap();
             let state = guard.get_or_insert_with(|| State {
                 live: FxHashMap::default(),
@@ -190,18 +241,18 @@ mod heap_sample {
                 peak_heap: 0,
             });
             let next = state.stacks.len() as u32;
-            let id = *state.index.entry(stack).or_insert(next);
+            let id = *state.index.entry((stack, group)).or_insert(next);
             if id == next {
-                state.stacks.push((stack, 0, 0));
+                state.stacks.push(Site { stack, group, live: 0, total: 0 });
             }
-            state.stacks[id as usize].1 += weight as i64;
-            state.stacks[id as usize].2 += weight as u64;
+            state.stacks[id as usize].live += weight as i64;
+            state.stacks[id as usize].total += weight as u64;
             if mode == 2 {
                 state.live.insert(p as usize, (id, weight));
                 let now = super::HEAP_CURRENT.load(Ordering::Relaxed);
                 if now > state.peak_heap + (8 << 20) {
                     state.peak_heap = now;
-                    state.peak = state.stacks.iter().map(|s| s.1).collect();
+                    state.peak = state.stacks.iter().map(|s| s.live).collect();
                 }
             }
         });
@@ -215,14 +266,23 @@ mod heap_sample {
             let mut guard = STATE.lock().unwrap();
             if let Some(state) = guard.as_mut() {
                 if let Some((id, weight)) = state.live.remove(&(p as usize)) {
-                    state.stacks[id as usize].1 -= weight as i64;
+                    state.stacks[id as usize].live -= weight as i64;
                 }
             }
         });
     }
 
-    extern "C" {
-        fn _dyld_get_image_header(index: u32) -> *const c_void;
+    fn library(name: &str) -> bool {
+        ["hashbrown::", "indexmap::", "alloc::", "core::", "std::", "<alloc::", "<core::", "<std::", "<hashbrown::"]
+            .iter()
+            .any(|p| name.starts_with(p))
+    }
+
+    /// A resolved frame without its library parts (a frame is several names when calls were inlined); None if
+    /// nothing else is left.
+    fn own_frame(name: &str) -> Option<String> {
+        let parts: Vec<&str> = name.split(" / ").filter(|p| !library(p)).collect();
+        (!parts.is_empty()).then(|| parts.join(" / "))
     }
 
     pub(super) fn dump(top: usize) {
@@ -231,18 +291,80 @@ mod heap_sample {
         let Some(state) = STATE.lock().unwrap().take() else {
             return;
         };
-        let state = &state;
-        let mut order: Vec<usize> = (0..state.stacks.len()).collect();
-        let print = |title: &str, order: &[usize], key: &dyn Fn(usize) -> i64| {
-            let ips: Vec<usize> = order
+        // Sites merged over thread groups, as before; the per-group rows go to TSRS_HEAP_PROFILE_TSV.
+        let mut merged: FxHashMap<Stack, usize> = FxHashMap::default();
+        let mut sites: Vec<(Stack, i64, u64, i64)> = Vec::new(); // stack, live, total, live at peak
+        for (i, site) in state.stacks.iter().enumerate() {
+            let next = sites.len();
+            let j = *merged.entry(site.stack).or_insert(next);
+            if j == next {
+                sites.push((site.stack, 0, 0, 0));
+            }
+            sites[j].1 += site.live;
+            sites[j].2 += site.total;
+            sites[j].3 += state.peak.get(i).copied().unwrap_or(0);
+        }
+        let all_ips: Vec<usize> = state.stacks.iter().flat_map(|s| s.stack.iter().copied().filter(|&ip| ip > 1)).collect();
+        let mut names: FxHashMap<usize, String> = FxHashMap::default();
+        let want_tsv = std::env::var_os("TSRS_HEAP_PROFILE_TSV");
+        if want_tsv.is_some() {
+            super::os::resolve_into(&all_ips, &mut names, super::census::function_name);
+        }
+        let frames_of = |stack: &Stack, names: &FxHashMap<usize, String>, limit: usize| -> Vec<String> {
+            stack
                 .iter()
-                .take(top)
-                .flat_map(|&i| state.stacks[i].0.iter().copied().filter(|&ip| ip > 1))
-                .collect();
-            let names = resolve(&ips);
+                .filter(|&&ip| ip > 1)
+                .filter_map(|ip| own_frame(names.get(ip).map(|s| s.as_str()).unwrap_or("?")))
+                .take(limit)
+                .collect()
+        };
+        if let Some(path) = want_tsv {
+            use std::io::Write;
+            let mut out = String::from("group\tlive_bytes\tpeak_bytes\ttotal_bytes\tframes\n");
+            for (i, site) in state.stacks.iter().enumerate() {
+                let frames = if site.stack[0] == 1 { vec!["<arena chunks>".to_string()] } else { frames_of(&site.stack, &names, 12) };
+                out.push_str(&format!(
+                    "{}\t{}\t{}\t{}\t{}\n",
+                    group_name(site.group),
+                    site.live,
+                    state.peak.get(i).copied().unwrap_or(0),
+                    site.total,
+                    frames.join(" <- ")
+                ));
+            }
+            if let Ok(mut f) = std::fs::File::create(&path) {
+                let _ = f.write_all(out.as_bytes());
+            }
+            // Per thread group: sampled live bytes outside arena chunks.
+            let mut groups: Vec<(u8, i64, i64)> = Vec::new();
+            for (i, site) in state.stacks.iter().enumerate() {
+                if site.stack[0] == 1 {
+                    continue;
+                }
+                let at = match groups.iter().position(|g| g.0 == site.group) {
+                    Some(at) => at,
+                    None => {
+                        groups.push((site.group, 0, 0));
+                        groups.len() - 1
+                    }
+                };
+                groups[at].1 += site.live;
+                groups[at].2 += state.peak.get(i).copied().unwrap_or(0);
+            }
+            groups.sort_by_key(|g| g.0);
+            eprintln!("\n-- heap outside arena chunks by thread (sampled): live MB / at heap peak MB --");
+            for (g, live, peak) in groups {
+                eprintln!("{:>12} {:>10.1} {:>10.1}", group_name(g), live as f64 / 1048576.0, peak as f64 / 1048576.0);
+            }
+        }
+        let mut order: Vec<usize> = (0..sites.len()).collect();
+        let print = |title: &str, order: &[usize], key: &dyn Fn(usize) -> i64, names: &mut FxHashMap<usize, String>| {
+            let ips: Vec<usize> =
+                order.iter().take(top).flat_map(|&i| sites[i].0.iter().copied().filter(|&ip| ip > 1)).collect();
+            super::os::resolve_into(&ips, names, super::census::function_name);
             eprintln!("\n-- heap {title} (sampled, top {top}) --");
             for &i in order.iter().take(top) {
-                let (stack, _, _) = &state.stacks[i];
+                let stack = &sites[i].0;
                 if counting {
                     eprintln!("{:>10.3} M allocations", key(i) as f64 / 1e6);
                 } else {
@@ -252,29 +374,20 @@ mod heap_sample {
                     eprintln!("             <arena chunks>");
                     continue;
                 }
-                let mut shown = 0;
-                for &ip in stack.iter().filter(|&&ip| ip != 0) {
-                    let name = names.get(&ip).map(|s| s.as_str()).unwrap_or("?");
-                    if ["hashbrown::", "indexmap::", "alloc::", "core::", "std::"].iter().any(|p| name.starts_with(p)) {
-                        continue;
-                    }
+                for name in frames_of(stack, names, 6) {
                     eprintln!("             {name}");
-                    shown += 1;
-                    if shown == 6 {
-                        break;
-                    }
                 }
             }
         };
         if counting {
-            let total: u64 = state.stacks.iter().map(|s| s.2).sum();
+            let total: u64 = sites.iter().map(|s| s.2).sum();
             eprintln!("\nheap allocations (sampled every {COUNT_RATE}th): {:.1} M", total as f64 / 1e6);
-            order.sort_by_key(|&i| -(state.stacks[i].2 as i64));
-            print("allocations by count", &order, &|i| state.stacks[i].2 as i64);
+            order.sort_by_key(|&i| -(sites[i].2 as i64));
+            print("allocations by count", &order, &|i| sites[i].2 as i64, &mut names);
             return;
         }
         let (mut live, mut total) = (0i64, 0u64);
-        for (stack, l, t) in &state.stacks {
+        for (stack, l, t, _) in &sites {
             if stack[0] != 1 {
                 live += l;
                 total += t;
@@ -285,43 +398,18 @@ mod heap_sample {
             live as f64 / 1048576.0,
             total as f64 / 1048576.0
         );
-        order.sort_by_key(|&i| -state.stacks[i].1);
-        print("live", &order, &|i| state.stacks[i].1);
-        let at_peak = |i: usize| state.peak.get(i).copied().unwrap_or(0);
-        let peak_live: i64 = (0..state.stacks.len()).filter(|&i| state.stacks[i].0[0] != 1).map(at_peak).sum();
+        order.sort_by_key(|&i| -sites[i].1);
+        print("live", &order, &|i| sites[i].1, &mut names);
+        let peak_live: i64 = sites.iter().filter(|s| s.0[0] != 1).map(|s| s.3).sum();
         eprintln!(
             "\nheap at its peak (snapshot at {:.1} MB counted): sampled live outside arena chunks {:.1} MB",
             state.peak_heap as f64 / 1048576.0,
             peak_live as f64 / 1048576.0
         );
-        order.sort_by_key(|&i| -at_peak(i));
-        print("live at the heap peak", &order, &at_peak);
-        order.sort_by_key(|&i| -(state.stacks[i].2 as i64));
-        print("allocated (cumulative)", &order, &|i| state.stacks[i].2 as i64);
-    }
-
-    fn resolve(ips: &[usize]) -> FxHashMap<usize, String> {
-        let mut out = FxHashMap::default();
-        let mut uniq: Vec<usize> = ips.to_vec();
-        uniq.sort_unstable();
-        uniq.dedup();
-        let exe = std::env::current_exe().unwrap();
-        // SAFETY: image 0 is the main executable.
-        let load = unsafe { _dyld_get_image_header(0) } as usize;
-        let mut cmd = std::process::Command::new("atos");
-        cmd.arg("-o").arg(&exe).arg("-l").arg(format!("{load:#x}"));
-        for ip in &uniq {
-            cmd.arg(format!("{:#x}", ip - 1));
-        }
-        if let Ok(o) = cmd.output() {
-            for (ip, line) in uniq.iter().zip(String::from_utf8_lossy(&o.stdout).lines()) {
-                let line = line.replace(" (in tsrs)", "");
-                // Shorten `func (in tsrs) (file.rs:12)` / generic noise.
-                let short = if line.len() > 160 { format!("{}...", &line[..160]) } else { line };
-                out.insert(*ip, short);
-            }
-        }
-        out
+        order.sort_by_key(|&i| -sites[i].3);
+        print("live at the heap peak", &order, &|i| sites[i].3, &mut names);
+        order.sort_by_key(|&i| -(sites[i].2 as i64));
+        print("allocated (cumulative)", &order, &|i| sites[i].2 as i64, &mut names);
     }
 }
 

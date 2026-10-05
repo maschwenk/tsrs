@@ -30,6 +30,7 @@ fn main() {
     // Type checking recurses deeply; run on a thread with a large stack
     // (Go's goroutine stacks grow on demand).
     let status = std::thread::Builder::new()
+        .name("tsrs".to_string()) // the alloc profile's "main" thread group
         .stack_size(512 << 20)
         .spawn(move || {
             let sys: &'static sys::osSys = Box::leak(Box::new(sys::new_system()));
