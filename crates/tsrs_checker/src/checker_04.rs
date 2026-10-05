@@ -1418,7 +1418,20 @@ impl Checker {
     }
 
     // checker.go:7656
+    #[cfg_attr(not(feature = "work-census"), inline(always), expect(clippy::inline_always, reason = "without the census the wrapper is a forwarding call; inlined, callers call the body as before (notes/perf-checker-algorithms.md)"))]
     pub(crate) fn check_expression_with_contextual_type(&mut self, node: P<Node>, contextual_type: P<Type>, inference_context: Option<P<InferenceContext>>, check_mode: CheckMode) -> P<Type> {
+        if self.census_on() {
+            let callee = self.census.as_ref().unwrap().call_stack.last().copied().flatten();
+            let span = self.census_begin(crate::workcensus::Cat::CtxCheck, || crate::workcensus::CKey::OptNode(callee));
+            let r = self.check_expression_with_contextual_type_worker(node, contextual_type, inference_context, check_mode);
+            let timing = self.census_end(span).unwrap();
+            self.census.as_mut().unwrap().record(crate::workcensus::Cat::CtxCheck, crate::workcensus::CKey::OptNode(callee), timing, inference_context.is_some() as u64, 0, 0);
+            return r;
+        }
+        self.check_expression_with_contextual_type_worker(node, contextual_type, inference_context, check_mode)
+    }
+
+    fn check_expression_with_contextual_type_worker(&mut self, node: P<Node>, contextual_type: P<Type>, inference_context: Option<P<InferenceContext>>, check_mode: CheckMode) -> P<Type> {
         let context_node = self.get_context_node(node).unwrap();
         self.push_contextual_type(context_node, Some(contextual_type), false /*isCache*/);
         self.push_inference_context(context_node, inference_context);

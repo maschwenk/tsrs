@@ -932,6 +932,8 @@ pub struct Checker {
     pub signature_count: u32,
     pub total_instantiation_count: u32,
     pub instantiation_count: u32,
+    /// TSRS_WORK_CENSUS (workcensus.rs); None unless the variable is set.
+    pub census: Option<Box<crate::workcensus::Census>>,
     /// TSRS_DERIVED_VARIANCE (relater_derived.rs; off by default and under Go-compatible history).
     pub(crate) derived_variance: crate::relater_derived::DerivedVarianceMode,
     pub(crate) derived_depth: u32,
@@ -1326,6 +1328,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         signature_count: 0,
         total_instantiation_count: 0,
         instantiation_count: 0,
+        census: crate::workcensus::census_path().map(|_| crate::workcensus::Census::new()),
         derived_variance: crate::relater_derived::derived_variance_mode(),
         derived_depth: 0,
         derived_this_variances: FxHashMap::default(),
