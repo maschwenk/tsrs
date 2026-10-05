@@ -33,6 +33,7 @@ pub fn use_id_blocks() {
 #[inline]
 fn next_id(counter: &AtomicU64, block: &'static std::thread::LocalKey<Cell<(u64, u64)>>) -> u64 {
     if !ID_BLOCK_MODE.get() {
+        // Relaxed: the counter only hands out distinct numbers; nothing is published through it.
         return counter.fetch_add(1, Ordering::Relaxed) + 1;
     }
     block.with(|b| {
@@ -41,6 +42,7 @@ fn next_id(counter: &AtomicU64, block: &'static std::thread::LocalKey<Cell<(u64,
             b.set((next + 1, end));
             return next;
         }
+        // Relaxed, as above: blocks only need to be disjoint.
         let start = counter.fetch_add(ID_BLOCK, Ordering::Relaxed) + 1;
         b.set((start + 1, start + ID_BLOCK));
         start
