@@ -1618,17 +1618,6 @@ impl Binder {
         }
     }
 
-    pub(crate) fn get_strict_mode_block_scope_function_declaration_message(&self, node: P<Node>) -> &'static Message {
-        // Provide specialized messages to help the user understand why we think they're in strict mode.
-        if ast::get_containing_class(node).is_some() {
-            return &diagnostics::Function_declarations_are_not_allowed_inside_blocks_in_strict_mode_when_targeting_ES5_Class_definitions_are_automatically_in_strict_mode;
-        }
-        if self.file.external_module_indicator.get().is_some() {
-            return &diagnostics::Function_declarations_are_not_allowed_inside_blocks_in_strict_mode_when_targeting_ES5_Modules_are_automatically_in_strict_mode;
-        }
-        &diagnostics::Function_declarations_are_not_allowed_inside_blocks_in_strict_mode_when_targeting_ES5
-    }
-
     pub(crate) fn check_strict_mode_binary_expression(&mut self, node: P<Node>) {
         let expr = node.as_binary_expression();
         if ast::is_left_hand_side_expression(expr.left()) && ast::is_assignment_operator(expr.operator_token().kind()) {
@@ -3052,33 +3041,11 @@ impl Binder {
     }
 }
 
-pub(crate) fn is_signed_numeric_literal(node: P<Node>) -> bool {
-    if node.kind() == Kind::PrefixUnaryExpression {
-        let node = node.as_prefix_unary_expression();
-        return (node.operator() == Kind::PlusToken || node.operator() == Kind::MinusToken) && ast::is_numeric_literal(node.operand());
-    }
-    false
-}
-
 pub(crate) fn get_optional_symbol_flag_for_node(node: P<Node>) -> SymbolFlags {
     match node.postfix_token() {
         Some(postfix_token) if postfix_token.kind() == Kind::QuestionToken => SymbolFlags::Optional,
         _ => SymbolFlags::None,
     }
-}
-
-pub(crate) fn is_function_symbol(symbol: P<Symbol>) -> bool {
-    if let Some(d) = symbol.value_declaration() {
-        if ast::is_function_declaration(d) {
-            return true;
-        }
-        if ast::is_variable_declaration(d) {
-            if let Some(initializer) = d.initializer() {
-                return ast::is_function_like(Some(initializer));
-            }
-        }
-    }
-    false
 }
 
 pub(crate) fn is_statement_condition(node: P<Node>) -> bool {

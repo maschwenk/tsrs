@@ -2,7 +2,7 @@ use std::fmt::Write as _;
 use std::any::Any;
 use std::io::{Read, Write};
 use std::panic::AssertUnwindSafe;
-use std::sync::atomic::{AtomicBool, AtomicI32, AtomicI64, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicI64, Ordering};
 use std::sync::{Arc, Condvar, LazyLock, Mutex, OnceLock, RwLock, Weak};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -79,7 +79,6 @@ pub fn new_server(opts: ServerOptions) -> Arc<Server> {
         init_locale: Mutex::new(Locale::DEFAULT),
         watch_enabled: AtomicBool::new(false),
         telemetry_enabled: AtomicBool::new(false),
-        watcher_id: AtomicU32::new(0),
         watchers: Mutex::new(FxHashSet::default()),
         content_mapper_registration_mu: Mutex::new(false),
         builtin_watcher: OnceLock::new(),
@@ -104,9 +103,8 @@ fn file_rename_filters() -> Vec<lsproto::FileOperationFilter> {
     }]
 }
 
-// server.go:102
+// server.go:102 (Go's req field is never read)
 struct pendingClientRequest {
-    req: Arc<RequestMessage>,
     cancel: CancelFunc,
 }
 
@@ -205,7 +203,7 @@ pub fn to_writer(w: impl Write + Send + 'static) -> Box<dyn Writer> {
     Box::new(lspWriter { w: lsproto::new_base_writer(w) })
 }
 
-// server.go:171
+// server.go:171 (Go's watcherID field is never used)
 pub struct Server {
     r: Mutex<Option<Box<dyn Reader>>>,
     w: Mutex<Box<dyn Writer>>,
@@ -237,7 +235,6 @@ pub struct Server {
 
     watch_enabled: AtomicBool,
     telemetry_enabled: AtomicBool,
-    watcher_id: AtomicU32,
     watchers: Mutex<FxHashSet<String>>,
 
     // contentMapperRegistrationMu serializes RegisterContentMapperExtensions so the method is correctly
@@ -814,13 +811,13 @@ impl Server {
 
     // server.go:725
     // PublishDiagnostics implements project.Client.
-    pub fn publish_diagnostics(&self, ctx: &Context, params: lsproto::PublishDiagnosticsParams) -> Result<(), Error> {
+    pub fn publish_diagnostics(&self, _ctx: &Context, params: lsproto::PublishDiagnosticsParams) -> Result<(), Error> {
         self.send_notification(lsproto::TEXT_DOCUMENT_PUBLISH_DIAGNOSTICS_INFO, params)
     }
 
     // server.go:730
     // SendTelemetry implements project.Client.
-    pub fn send_telemetry(&self, ctx: &Context, telemetry: lsproto::TelemetryEvent) -> Result<(), Error> {
+    pub fn send_telemetry(&self, _ctx: &Context, telemetry: lsproto::TelemetryEvent) -> Result<(), Error> {
         if !self.telemetry_enabled.load(Ordering::SeqCst) {
             panic!("SendTelemetry called with telemetry disabled");
         }
@@ -835,7 +832,7 @@ impl Server {
     }
 
     // server.go:743
-    pub fn refresh_inlay_hints(&self, ctx: &Context) -> Result<(), Error> {
+    pub fn refresh_inlay_hints(&self, _ctx: &Context) -> Result<(), Error> {
         if !self.client_capabilities().workspace.inlay_hint.refresh_support {
             return Ok(());
         }
@@ -847,7 +844,7 @@ impl Server {
     }
 
     // server.go:754
-    pub fn refresh_code_lens(&self, ctx: &Context) -> Result<(), Error> {
+    pub fn refresh_code_lens(&self, _ctx: &Context) -> Result<(), Error> {
         if !self.client_capabilities().workspace.code_lens.refresh_support {
             return Ok(());
         }
@@ -1081,7 +1078,7 @@ impl Server {
                 let (c, cancel_func) = context::with_request_id(&request_ctx, &id.string()).with_cancel();
                 request_ctx = c;
                 cancel = Some(cancel_func.clone());
-                self.pending_client_requests.lock().unwrap().insert(id.clone(), pendingClientRequest { req: Arc::clone(&req), cancel: cancel_func });
+                self.pending_client_requests.lock().unwrap().insert(id.clone(), pendingClientRequest { cancel: cancel_func });
             }
 
             match self.handle_request_or_notification(&request_ctx, &req) {
@@ -1297,12 +1294,11 @@ impl Server {
         self: &Arc<Self>,
         ctx: &Context,
         uri: &lsproto::DocumentUri,
-        req: &RequestMessage,
+        _req: &RequestMessage,
     ) -> Result<(Arc<LanguageService>, Arc<dyn tsrs_ls::CrossProjectOrchestrator>), Error> {
         let (default_project, default_ls, all_projects) = self.session().get_language_service_and_projects_for_file(ctx, uri)?;
         let orchestrator: Arc<dyn tsrs_ls::CrossProjectOrchestrator> = Arc::new(crossProjectOrchestrator {
             server: Arc::clone(self),
-            req: Arc::new(req.clone()),
             default_project: Arc::<project::Project>::clone(default_project.arc()),
             all_projects,
         });
@@ -1353,7 +1349,7 @@ impl Server {
     }
 
     // server.go:1501
-    fn handle_initialize(self: &Arc<Self>, ctx: &Context, params: lsproto::InitializeParams, _req: &RequestMessage) -> Result<lsproto::InitializeResponse, Error> {
+    fn handle_initialize(self: &Arc<Self>, _ctx: &Context, params: lsproto::InitializeParams, _req: &RequestMessage) -> Result<lsproto::InitializeResponse, Error> {
         if self.initialize_params.get().is_some() {
             return Err(ErrorCode::InvalidRequest.into());
         }
@@ -1649,7 +1645,7 @@ impl Server {
     }
 
     // server.go:1788
-    fn handle_shutdown(self: &Arc<Self>, ctx: &Context, _params: lsproto::NoParams, _req: &RequestMessage) -> Result<lsproto::ShutdownResponse, Error> {
+    fn handle_shutdown(self: &Arc<Self>, _ctx: &Context, _params: lsproto::NoParams, _req: &RequestMessage) -> Result<lsproto::ShutdownResponse, Error> {
         if let Some(builtin_watcher) = self.builtin_watcher.get() {
             builtin_watcher.close();
         }
@@ -1658,12 +1654,12 @@ impl Server {
     }
 
     // server.go:1796
-    fn handle_exit(self: &Arc<Self>, ctx: &Context, _params: lsproto::NoParams) -> Result<(), Error> {
+    fn handle_exit(self: &Arc<Self>, _ctx: &Context, _params: lsproto::NoParams) -> Result<(), Error> {
         Err(Error::tagged(ErrorTag::EOF, "EOF"))
     }
 
     // server.go:1800
-    fn handle_did_change_workspace_configuration(self: &Arc<Self>, ctx: &Context, params: lsproto::DidChangeConfigurationParams) -> Result<(), Error> {
+    fn handle_did_change_workspace_configuration(self: &Arc<Self>, _ctx: &Context, params: lsproto::DidChangeConfigurationParams) -> Result<(), Error> {
         if let lsproto::Value::Null = params.settings {
             return Ok(());
         } else if let lsproto::Value::Object(settings) = &params.settings {
@@ -2574,10 +2570,9 @@ impl handlerMap {
     }
 }
 
-// server.go:1431
+// server.go:1431 (Go's req field is never read)
 struct crossProjectOrchestrator {
     server: Arc<Server>,
-    req: Arc<RequestMessage>,
     default_project: Arc<dyn tsrs_ls::Project>,
     all_projects: Vec<Arc<dyn tsrs_ls::Project>>,
 }

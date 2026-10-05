@@ -601,11 +601,6 @@ fn skip_single_line_whitespace(text: &str, pos: usize) -> usize {
     pos
 }
 
-// jsdoc_snippet.go:578
-fn is_only_single_line_whitespace(text: &str) -> bool {
-    skip_single_line_whitespace(text, 0) == text.len()
-}
-
 // jsdoc_snippet.go:582
 fn starts_with_single_line_whitespace(text: &str) -> bool {
     if text.is_empty() {

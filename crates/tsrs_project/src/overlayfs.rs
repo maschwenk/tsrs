@@ -489,6 +489,7 @@ impl FS for overlayFS {
             tspath::get_canonical_file_name(left, use_case_sensitive_file_names) == tspath::get_canonical_file_name(right, use_case_sensitive_file_names)
         };
         if let Some(directory) = directory {
+            #[expect(clippy::iter_over_hash_type, reason = "Go ranges the overlay directory map too, so overlay-only children are appended in map order there as well")]
             for (child_path, child_name) in &directory {
                 entries.files.retain(|name| !equal_name(name, child_name));
                 entries.directories.retain(|name| !equal_name(name, child_name));
@@ -576,10 +577,6 @@ struct fileEvents {
 }
 
 impl overlayFS {
-    pub(crate) fn host(&self) -> &FsRef {
-        &self.host
-    }
-
     // overlayfs.go:407
     pub(crate) fn process_changes(&self, changes: &[FileChange]) -> (FileChangeSummary, OverlayMap) {
         let mut st = self.mu.write().unwrap();

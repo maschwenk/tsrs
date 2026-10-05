@@ -12,7 +12,7 @@ use tsrs_ast as ast;
 //   type EmitResolver (emitresolver.go:34)
 
 // emitresolver.go:45
-pub(crate) fn new_emit_resolver(checker: &mut Checker) -> P<EmitResolver> {
+pub(crate) fn new_emit_resolver(_checker: &mut Checker) -> P<EmitResolver> {
     // Go also wires `isValueAliasDeclaration` / `aliasMarkingVisitor` (method values of the `...Worker` methods, which
     // Rust calls directly) and `checkerMu` (dropped: the caller serializes checker access, see nodebuilder_types.rs).
     P::new(EmitResolver::default())
@@ -936,7 +936,7 @@ impl EmitResolver {
     }
 
     // emitresolver.go:869
-    pub fn set_referenced_import_declaration(&self, c: &mut Checker, node: P<Node>, ref_: P<Node>) {
+    pub fn set_referenced_import_declaration(&self, _c: &mut Checker, node: P<Node>, ref_: P<Node>) {
         self.jsx_links.get(node).import_ref.set(Some(ref_));
     }
 

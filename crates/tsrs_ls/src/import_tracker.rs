@@ -23,14 +23,12 @@ pub(crate) struct ImportExportSymbol {
     pub(crate) export_info: Option<ExportInfo>,
 }
 
-// importTracker.go:29
+// importTracker.go:29 (Go never uses ExportKindUMD and ExportKindModule)
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum ExportKind {
     Named = 0,
     Default = 1,
     ExportEquals = 2,
-    UMD = 3,
-    Module = 4,
 }
 
 // importTracker.go:39

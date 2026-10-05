@@ -325,10 +325,6 @@ pub(crate) fn get_literal_text(node: P<Node>, source_file: Option<P<SourceFile>>
     }
 }
 
-pub(crate) fn is_not_prologue_directive(node: P<Node>) -> bool {
-    !is_prologue_directive(node)
-}
-
 pub fn range_is_on_single_line(r: TextRange, source_file: P<SourceFile>) -> bool {
     range_start_is_on_same_line_as_range_end(r, r, source_file)
 }

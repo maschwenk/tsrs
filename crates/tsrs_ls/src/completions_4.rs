@@ -18,7 +18,7 @@ use crate::completions::*;
 use crate::format;
 use crate::languageservice::LanguageService;
 use crate::lsutil::{self, FormatCodeSettings, QuotePreference, UserPreferences};
-use crate::utilities::{is_in_string, new_case_clause_tracker, CaseClauseTracker};
+use crate::utilities::{is_in_string, new_case_clause_tracker};
 
 impl LanguageService {
     // completions.go:5489
@@ -127,6 +127,10 @@ struct detailsData {
 }
 
 // completions.go:5616
+#[expect(
+    dead_code,
+    reason = "Go reads only symbol and location too; the rest wait for `!!! fill in additionalTextEdits from code actions` (completions.go:5712)"
+)]
 struct symbolDetails {
     symbol: P<Symbol>,
     location: P<Node>,
@@ -222,6 +226,7 @@ pub(crate) fn create_completion_details(mut item: lsproto::CompletionItem, detai
 }
 
 // completions.go:5727
+#[expect(dead_code, reason = "Go has no user yet either: `!!! fill in additionalTextEdits from code actions` (completions.go:5712)")]
 struct codeAction {
     // Description of the code action to display in the UI of the editor
     description: String,
@@ -237,7 +242,7 @@ impl LanguageService {
         symbol: P<Symbol>,
         checker: &mut Checker,
         location: P<Node>,
-        position: i32,
+        _position: i32,
         doc_format: lsproto::MarkupKind,
     ) -> lsproto::CompletionItem {
         let (quick_info, documentation, _, _) = self.get_quick_info_and_documentation_for_symbol(checker, Some(symbol), location, doc_format, None, false /*vsCapability*/);
@@ -632,7 +637,7 @@ pub(crate) fn get_jsdoc_tag_completions() -> Vec<CompletionItem> {
 
 // completions.go:6126
 pub(crate) fn get_jsdoc_parameter_completions(
-    ctx: &Context,
+    _ctx: &Context,
     file: P<SourceFile>,
     position: i32,
     type_checker: &mut Checker,
@@ -778,7 +783,7 @@ fn get_jsdoc_param_annotation(
     is_object: bool,
     is_snippet: bool,
     type_checker: &mut Checker,
-    options: P<CompilerOptions>,
+    _options: P<CompilerOptions>,
     preferences: &UserPreferences,
     mut tabstop_counter: Option<&mut i32>,
 ) -> String {
@@ -956,8 +961,8 @@ fn js_doc_param_pattern_worker(
 fn js_doc_param_element_worker(
     path: &str,
     element: P<Node>,
-    initializer: Option<P<Node>>,
-    dot_dot_dot_token: Option<P<Node>>,
+    _initializer: Option<P<Node>>,
+    _dot_dot_dot_token: Option<P<Node>>,
     is_js: bool,
     is_snippet: bool,
     type_checker: &mut Checker,
@@ -1253,16 +1258,6 @@ pub(crate) struct snippetPrinter {
 }
 
 impl snippetPrinter {
-    // Snippet-escaping version of `printer.printNode`.
-    // completions.go:6794
-    pub(crate) fn print_node(&mut self, node: P<Node>) -> String {
-        let unescaped = self.print_unescaped_node(node);
-        if !self.writer.escapes.is_empty() {
-            return apply_bulk_edits(&unescaped, &self.writer.escapes);
-        }
-        unescaped
-    }
-
     // completions.go:6802
     pub(crate) fn print_unescaped_node(&mut self, node: P<Node>) -> String {
         self.writer.escapes.clear();

@@ -184,7 +184,7 @@ impl wrappingTracker {
     }
 
     // nodecopy.go:183
-    pub fn track_symbol(&self, c: &mut Checker, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags) -> bool {
+    pub fn track_symbol(&self, _c: &mut Checker, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags) -> bool {
         self.bound.tracked_symbols.borrow_mut().push(TrackedSymbolArgs { symbol, enclosing_declaration, meaning });
         false
     }

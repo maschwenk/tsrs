@@ -392,10 +392,4 @@ impl FormattingScanner {
         }
         self.s.token_full_start()
     }
-
-    // scanner.go:372
-    pub(crate) fn get_start_pos(&self) -> i32 {
-        // TODO: redundant?
-        self.get_token_full_start()
-    }
 }

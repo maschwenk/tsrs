@@ -95,7 +95,7 @@ impl affectedFilesHandler<'_> {
         compiler_program_emit(
             self.program.p(),
             self.ctx,
-            EmitOptions { target_source_files: Some(vec![file]), emit_only: EmitOnly::EmitOnlyBuilderSignature, write_file: Some(&write_file), ..Default::default() },
+            &EmitOptions { target_source_files: Some(vec![file]), emit_only: EmitOnly::EmitOnlyBuilderSignature, write_file: Some(&write_file), ..Default::default() },
         );
         done();
         signature.into_inner().unwrap()
@@ -120,7 +120,7 @@ impl affectedFilesHandler<'_> {
         compiler_program_emit(
             self.program.p(),
             self.ctx,
-            EmitOptions { target_source_files: Some(files), emit_only: EmitOnly::EmitOnlyBuilderSignature, write_file: Some(&write_file), ..Default::default() },
+            &EmitOptions { target_source_files: Some(files), emit_only: EmitOnly::EmitOnlyBuilderSignature, write_file: Some(&write_file), ..Default::default() },
         );
         done();
         signatures.into_inner().unwrap()

@@ -63,7 +63,6 @@ pub enum TrailingTriviaOption {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum trackerEditKind {
     Text = 1,
-    Remove = 2,
     ReplaceWithSingleNode = 3,
     ReplaceWithMultipleNodes = 4,
 }

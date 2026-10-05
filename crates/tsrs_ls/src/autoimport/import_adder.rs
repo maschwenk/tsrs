@@ -32,10 +32,9 @@ pub trait ImportAdder {
     fn edits(&mut self) -> Vec<lsproto::TextEdit>;
 }
 
-// import_adder.go:31
+// import_adder.go:31 (Go's importClauseOrBindingPattern field is never read; it is the map key)
 // addToExistingState tracks modifications to an existing import clause or binding pattern
 struct addToExistingState {
-    import_clause_or_binding_pattern: P<Node>,
     default_import: Option<newImportBinding>,
     named_imports: FxHashMap<String, newImportBinding>,
 }
@@ -140,7 +139,6 @@ impl ImportAdder for importAdder {
             lsproto::AutoImportFixKind::AddToExisting => {
                 let existing_fix = get_add_to_existing_import_fix(self.view.importing_file, fix);
                 let entry = self.add_to_existing.entry(existing_fix.import_clause_or_binding_pattern).or_insert_with(|| addToExistingState {
-                    import_clause_or_binding_pattern: existing_fix.import_clause_or_binding_pattern,
                     default_import: None,
                     named_imports: FxHashMap::default(),
                 });

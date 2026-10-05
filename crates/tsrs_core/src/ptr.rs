@@ -1065,6 +1065,7 @@ pub fn alloc_vec_scratch<T>(items: Vec<T>) -> &'static [T] {
     if items.is_empty() {
         return &[];
     }
+    #[cfg(feature = "alloc-profile")] // read only by profile!, before `items` is moved into the arena
     let bytes = std::mem::size_of_val(&items[..]);
     let s: &'static [T] = with_scratch_arena(|a| {
         let s = a.alloc_vec(items);
@@ -1096,6 +1097,7 @@ pub fn alloc_vec<T>(items: Vec<T>) -> &'static [T] {
     if items.is_empty() {
         return &[];
     }
+    #[cfg(feature = "alloc-profile")] // read only by profile!, before `items` is moved into the arena
     let bytes = std::mem::size_of_val(&items[..]);
     let s: &'static [T] = with_arena(|a| {
         let s = a.alloc_vec(items);

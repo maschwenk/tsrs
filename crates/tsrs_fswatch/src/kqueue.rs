@@ -122,8 +122,9 @@ pub(crate) struct kqueueBackend {
 }
 
 // kqueue.go:129 (init)
-pub(crate) fn init(w: &mut watcher) {
+pub(crate) fn init(mut w: watcher) -> watcher {
     w.factory = Some(|| Arc::new(new_kqueue_backend()) as Arc<dyn watcherImpl>);
+    w
 }
 
 // kqueue.go:133

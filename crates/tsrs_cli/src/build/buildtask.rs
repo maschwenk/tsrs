@@ -769,7 +769,6 @@ impl BuildTask {
             statusData::InputOutputFileAndTime(inputOutputFileAndTime {
                 input: newest_input_file_and_time,
                 output: oldest_output_file_and_time,
-                build_info: build_info_path,
             }),
         )
     }

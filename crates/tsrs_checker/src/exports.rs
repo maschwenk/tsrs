@@ -1,5 +1,4 @@
 use crate::*;
-use tsrs_ast::*;
 use tsrs_ast as ast;
 
 impl Checker {
