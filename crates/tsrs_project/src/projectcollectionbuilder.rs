@@ -51,13 +51,14 @@ pub(crate) enum projectEntry {
     Inferred,
 }
 
+// projectcollectionbuilder.go:35 (Go's extendedConfigCache field is never read; the config file registry builder gets it)
 pub struct ProjectCollectionBuilder {
     pub(crate) session_options: Arc<SessionOptions>,
     pub(crate) parse_cache: Arc<ParseCache>,
     /// The parse-cache references this clone's programs take (rolled back if the clone unwinds).
     pub(crate) parse_cache_journal: Arc<ParseCacheJournal>,
+    #[expect(dead_code, reason = "content mappers are not ported; Go reads it in compilerHost (compilerhost.go:130) and Project (project.go:535)")]
     content_mapped_parse_cache: Arc<ContentMappedParseCache>,
-    extended_config_cache: Arc<ExtendedConfigCache>,
     pub(crate) to_path: ToPath,
 
     pub(crate) ctx: Context,
@@ -115,7 +116,6 @@ pub(crate) fn new_project_collection_builder(
         parse_cache,
         parse_cache_journal: Arc::default(),
         content_mapped_parse_cache,
-        extended_config_cache: Arc::clone(&extended_config_cache),
         config_file_registry_builder: Arc::new(new_config_file_registry_builder(
             lsproto::get_client_capabilities(ctx).workspace.did_change_watched_files.relative_pattern_support,
             Arc::clone(&fs),
@@ -635,18 +635,6 @@ impl ProjectCollectionBuilder {
             }
         }
         self.update_inferred_project_roots(inferred_project_files, logger);
-        self.config_file_registry_builder.cleanup();
-    }
-
-    // projectcollectionbuilder.go:571
-    // cleanupAllConfiguredProjects removes all configured projects unconditionally.
-    fn cleanup_all_configured_projects(&self, logger: &LogTree) {
-        self.configured_projects.range(|entry| {
-            if let Some(p) = self.configured_projects.load(&entry.key()) {
-                self.delete_project(&projectEntry::Configured(p), logger);
-            }
-            true
-        });
         self.config_file_registry_builder.cleanup();
     }
 

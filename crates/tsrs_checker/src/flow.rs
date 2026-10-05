@@ -1,6 +1,5 @@
 use crate::*;
 use tsrs_ast::*;
-use tsrs_core::*;
 use tsrs_ast as ast;
 use tsrs_diagnostics as diagnostics;
 
@@ -1105,7 +1104,7 @@ impl Checker {
     }
 
     // flow.go:1001
-    pub(crate) fn narrow_type_by_in_keyword(&mut self, f: P<FlowState>, t: P<Type>, name_type: P<Type>, assume_true: bool) -> P<Type> {
+    pub(crate) fn narrow_type_by_in_keyword(&mut self, _f: P<FlowState>, t: P<Type>, name_type: P<Type>, assume_true: bool) -> P<Type> {
         let name = get_property_name_from_type(name_type);
         let is_known_property = some_type(self, t, |c, t| c.is_type_presence_possible(t, &name, true /*assumeTrue*/));
         if is_known_property {
@@ -1136,7 +1135,7 @@ impl Checker {
     }
 
     // flow.go:1032
-    pub(crate) fn narrow_type_by_optional_chain_containment(&mut self, f: P<FlowState>, t: P<Type>, operator: Kind, value: P<Node>, assume_true: bool) -> P<Type> {
+    pub(crate) fn narrow_type_by_optional_chain_containment(&mut self, _f: P<FlowState>, t: P<Type>, operator: Kind, value: P<Node>, assume_true: bool) -> P<Type> {
         // We are in a branch of obj?.foo === value (or any one of the other equality operators). We narrow obj as follows:
         // When operator is === and type of value excludes undefined, null and undefined is removed from type of obj in true branch.
         // When operator is !== and type of value excludes undefined, null and undefined is removed from type of obj in false branch.
@@ -1154,8 +1153,8 @@ impl Checker {
         };
         let value_type = self.get_type_of_expression(value);
         // Note that we include any and unknown in the exclusion test because their domain includes null and undefined.
-        let remove_nullable = equals_operator != assume_true && every_type(self, value_type, |c, t| t.flags().intersects(nullable_flags))
-            || equals_operator == assume_true && every_type(self, value_type, |c, t| !t.flags().intersects(TypeFlags::AnyOrUnknown | nullable_flags));
+        let remove_nullable = equals_operator != assume_true && every_type(self, value_type, |_, t| t.flags().intersects(nullable_flags))
+            || equals_operator == assume_true && every_type(self, value_type, |_, t| !t.flags().intersects(TypeFlags::AnyOrUnknown | nullable_flags));
         if remove_nullable {
             return self.get_adjusted_type_with_facts(t, TypeFacts::NEUndefinedOrNull);
         }
@@ -1381,7 +1380,7 @@ impl Checker {
     }
 
     // flow.go:1253
-    pub(crate) fn get_type_at_flow_branch_label(&mut self, f: P<FlowState>, flow: P<FlowNode>, antecedents: P<FlowList>) -> FlowType {
+    pub(crate) fn get_type_at_flow_branch_label(&mut self, f: P<FlowState>, _flow: P<FlowNode>, antecedents: P<FlowList>) -> FlowType {
         let antecedent_start = self.antecedent_types.len();
         let mut subtype_reduction = false;
         let mut seen_incomplete = false;

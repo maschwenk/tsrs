@@ -39,9 +39,9 @@ pub struct Mapper {
 // Content mappers only run with --runExternalCode, which executes third-party programs; this port does not
 // support them (only their tsconfig validation is ported).
 pub(crate) fn resolve_content_mapper_manifest(
-    host: &'static dyn ParseConfigHost,
-    containing_file: &str,
-    package_name: &str,
+    _host: &'static dyn ParseConfigHost,
+    _containing_file: &str,
+    _package_name: &str,
 ) -> (Manifest, String, Option<P<Diagnostic>>) {
     #[expect(clippy::unimplemented, reason = "content mappers are not ported; only their tsconfig validation is")]
     {

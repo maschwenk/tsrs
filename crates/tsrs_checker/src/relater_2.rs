@@ -724,7 +724,7 @@ impl Relater {
     }
 
     // relater.go:3201
-    pub(crate) fn reset_maybe_stack(&self, c: &mut Checker, maybe_start: i32, propagating_variance_flags: RelationComparisonResult, mark_all_as_succeeded: bool) {
+    pub(crate) fn reset_maybe_stack(&self, _c: &mut Checker, maybe_start: i32, propagating_variance_flags: RelationComparisonResult, mark_all_as_succeeded: bool) {
         let maybe_start = maybe_start as usize;
         let len = self.maybe_keys.borrow().len();
         for i in maybe_start..len {
@@ -739,12 +739,12 @@ impl Relater {
     }
 
     // relater.go:3212
-    pub(crate) fn get_error_state(&self, c: &mut Checker) -> errorState {
+    pub(crate) fn get_error_state(&self, _c: &mut Checker) -> errorState {
         errorState { error_chain: self.error_chain.get(), related_info: self.related_info.borrow().clone() }
     }
 
     // relater.go:3219
-    pub(crate) fn restore_error_state(&self, c: &mut Checker, e: errorState) {
+    pub(crate) fn restore_error_state(&self, _c: &mut Checker, e: errorState) {
         self.error_chain.set(e.error_chain);
         *self.related_info.borrow_mut() = e.related_info;
     }
@@ -771,7 +771,7 @@ impl Relater {
                 let source_types: Vec<P<Type>> = if source.flags().intersects(TypeFlags::Intersection) { source.types().to_vec() } else { vec![source] };
                 let constraint = c.get_effective_constraint_of_intersection(&source_types, target.flags().intersects(TypeFlags::Union));
                 if let Some(constraint) = constraint {
-                    if every_type(c, constraint, |c, t| t != source) {
+                    if every_type(c, constraint, |_, t| t != source) {
                         // TODO: Stack errors so we get a pyramid for the "normal" comparison above, _and_ a second for this
                         result = self.is_related_to_ex(c, constraint, target, RecursionFlags::Source, false /*reportErrors*/, None /*headMessage*/, intersection_state);
                     }
@@ -1036,7 +1036,7 @@ impl Relater {
                 // This is a carve-out in comparability to essentially forbid comparing a type parameter with another type parameter
                 // unless one extends the other. (Remember: comparability is mostly bidirectional!)
                 if let Some(constraint) = c.get_constraint_of_type_parameter(source) {
-                    if some_type(c, constraint, |c, t| t.flags().intersects(TypeFlags::TypeParameter)) {
+                    if some_type(c, constraint, |_, t| t.flags().intersects(TypeFlags::TypeParameter)) {
                         return self.is_related_to(c, constraint, target, RecursionFlags::Source, false /*reportErrors*/);
                     }
                 }
@@ -2665,7 +2665,7 @@ pub(crate) fn add_to_dotted_name(head: &str, tail: &str) -> String {
 
 impl Relater {
     // relater.go:4934
-    pub(crate) fn get_chain_message(&self, c: &mut Checker, index: i32) -> Option<&'static Message> {
+    pub(crate) fn get_chain_message(&self, _c: &mut Checker, index: i32) -> Option<&'static Message> {
         let mut index = index;
         let mut e = self.error_chain.get();
         loop {
@@ -2684,7 +2684,7 @@ impl Relater {
     // given arguments (where nil acts as a wildcard).
     // relater.go:4950
     // args: &[&dyn Display] -> &[Option<&str>] (Go passes nil as a wildcard; stored chain args are strings).
-    pub(crate) fn chain_args_match(&self, c: &mut Checker, args: &[Option<&str>]) -> bool {
+    pub(crate) fn chain_args_match(&self, _c: &mut Checker, args: &[Option<&str>]) -> bool {
         let chain = self.error_chain.get().unwrap();
         for (i, a) in args.iter().enumerate() {
             if let Some(a) = a {
@@ -2789,7 +2789,7 @@ impl Checker {
 
 impl Relater {
     // relater.go:5030
-    pub(crate) fn trace_unions_or_intersections_too_large(&self, c: &mut Checker, source: P<Type>, target: P<Type>) {
+    pub(crate) fn trace_unions_or_intersections_too_large(&self, _c: &mut Checker, _source: P<Type>, _target: P<Type>) {
         // Only reports to the tracer, which is not ported.
     }
 }

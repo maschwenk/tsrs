@@ -19,7 +19,9 @@ pub mod registry;
 mod setup;
 mod symbol_index;
 
+#[cfg(test)] // the method inventory that tests.rs checks against core's dispatch
 pub mod coverage_table;
+#[cfg(test)]
 pub mod coverage_types;
 
 use std::sync::Arc;
@@ -85,8 +87,6 @@ fn from_api_error(e: ApiError) -> CheckerError {
         ErrorKind::Internal => CheckerError { kind: CheckerErrorKind::Internal, message: e.message },
     }
 }
-
-const CODEC_PENDING: &str = "node handles, source-file descriptors and AST encoding require tsrs_api_codec, which is not integrated yet";
 
 /// Adapts core's `Session` to `CheckerHost`.
 struct SessionHost<'a> {

@@ -4,7 +4,6 @@ use tsrs_checker::LiteralValue;
 pub struct ConstEnumInliningTransformer {
     pub base: Transformer,
     compiler_options: P<CompilerOptions>,
-    current_source_file: Cell<Option<P<SourceFile>>>,
     emit_resolver: Option<Resolver>,
 }
 
@@ -15,7 +14,7 @@ pub fn new_const_enum_inlining_transformer(opt: &TransformOptions) -> Option<P<T
     if compiler_options.get_isolated_modules() {
         panic!("const enums are not inlined under isolated modules");
     }
-    let tx = P::new(ConstEnumInliningTransformer { base: Transformer::default(), compiler_options, current_source_file: Cell::new(None), emit_resolver: opt.emit_resolver });
+    let tx = P::new(ConstEnumInliningTransformer { base: Transformer::default(), compiler_options, emit_resolver: opt.emit_resolver });
     Some(tx.get().base.new_transformer(Rc::new(move |_: &mut NodeVisitor, n: P<Node>| tx.visit(n)), Some(emit_context)))
 }
 

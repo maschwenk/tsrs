@@ -130,6 +130,7 @@ pub struct Session {
     background_ctx: Context,
     to_path: ToPath,
     client: Option<Arc<dyn Client>>,
+    #[expect(dead_code, reason = "Go's reader sendPerformanceTelemetry (session.go:737) is not ported yet")]
     start_time: Instant,
     npm_executor: Option<Arc<dyn ata::NpmExecutor>>,
     fs: Arc<overlayFS>,
@@ -187,6 +188,7 @@ pub struct Session {
     performance_telemetry_cancel: Mutex<Option<CancelFunc>>,
 
     // seenProjects tracks projects that have already had telemetry sent.
+    #[expect(dead_code, reason = "Go's reader sendProjectInfoTelemetry (session.go:875) is not ported yet")]
     seen_projects: SyncSet<ID>,
 
     // watches tracks the current watch globs and how many individual WatchedFiles
@@ -1039,6 +1041,7 @@ impl Session {
     // with an extra reference for the caller. The ref is taken atomically with
     // the snapshot assignment under snapshotMu, so the snapshot is guaranteed
     // to be alive when returned. The caller must call snapshot.Deref() when done.
+    #[expect(dead_code, reason = "Go's caller Session.APIUpdate (project/api.go) is not ported yet")]
     pub(crate) fn update_snapshot_ref(&self, ctx: &Context, overlays: OverlayMap, change: SnapshotChange) -> Arc<Snapshot> {
         self.update_snapshot_with(ctx, overlays, change, true).unwrap()
     }

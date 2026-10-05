@@ -1478,7 +1478,6 @@ impl Scanner {
                     let mut parser = RegExpParser::new(
                         scanner,
                         end_of_reg_exp_body,
-                        reg_exp_flags,
                         reg_exp_flags.intersects(RegularExpressionFlags::AnyUnicodeMode),
                         reg_exp_flags.intersects(RegularExpressionFlags::UnicodeSets),
                         true,
@@ -2679,20 +2678,6 @@ pub fn get_viable_keyword_suggestions() -> Vec<&'static str> {
         }
     }
     result
-}
-
-pub(crate) fn could_start_trivia(text: &str, pos: i32) -> bool {
-    // Keep in sync with skipTrivia
-    let ch = text.as_bytes()[pos as usize];
-    match ch {
-        // Characters that could start normal trivia
-        b'\r' | b'\n' | b'\t' | 0x0B | 0x0C | b' ' | b'/'
-        // Characters that could start conflict marker trivia
-        | b'<' | b'|' | b'=' | b'>' => true,
-        // Only if its the beginning can we have #! trivia
-        b'#' => pos == 0,
-        _ => ch > MAX_ASCII_CHARACTER,
-    }
 }
 
 #[derive(Clone, Copy, Debug, Default)]

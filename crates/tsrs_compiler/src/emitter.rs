@@ -543,6 +543,7 @@ mod emit {
 
     // emitter.go:295
     // Go `declarationMapSource`: the original (content-mapped) source a declaration map points at.
+    #[expect(dead_code, reason = "only the content-mapper MapSourcePosition handler of emitDeclarationFile uses it; content mappers are not supported (docs/EMIT.md section 10)")]
     pub(crate) struct declarationMapSource {
         pub(crate) file_name: String,
         pub(crate) text: &'static str,
@@ -550,6 +551,7 @@ mod emit {
     }
 
     // emitter.go:301
+    #[expect(dead_code, reason = "its only Go caller, the content-mapper MapSourcePosition handler of emitDeclarationFile, is not ported (docs/EMIT.md section 10)")]
     pub(crate) fn new_declaration_map_source(source_file: P<SourceFile>) -> &'static declarationMapSource {
         let text = source_file.original_text();
         P::new(declarationMapSource { file_name: source_file.original_file_name().to_string(), text, line_map: tsrs_core::compute_ecma_line_starts(text) }).get()

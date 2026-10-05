@@ -405,6 +405,7 @@ pub struct Registry {
 
     // Memory regions (docs/LSP.md "Memory plan"), not in Go: the regions holding the arena values this version
     // refers to (its directories' package.json entries), shared with the older and newer versions that keep them.
+    #[expect(dead_code, reason = "never read: holding the regions keeps them alive as long as this version")]
     regions: Vec<Region>,
 }
 
@@ -1602,7 +1603,7 @@ impl registryBuilder<'_> {
     }
 }
 
-// registry.go:1351
+// registry.go:1351 (Go's dirPath field is never read)
 // discoveredPackage represents a package found during the discovery phase.
 // It holds the resolved package.json and realpath for deduplication.
 // When both a real package and a corresponding @types package exist (e.g., react + @types/react),
@@ -1614,7 +1615,6 @@ struct discoveredPackage {
     realpath: String,
     types_package_json: Option<P<InfoCacheEntry>>,
     types_realpath: String,
-    dir_path: Path, // bucket directory path (used as extraction context)
     is_local: bool, // true if realpath is within the workspace root
 }
 
@@ -1655,7 +1655,7 @@ impl registryBuilder<'_> {
     // registry.go:1392
     // discoverBucketPackages resolves the package.json and realpath for each package name
     // in a node_modules directory. This is the discovery phase of the three-phase extraction pipeline.
-    fn discover_bucket_packages(&self, package_names: Option<&Set<String>>, dir_name: &str, dir_path: &Path) -> Vec<Arc<discoveredPackage>> {
+    fn discover_bucket_packages(&self, package_names: Option<&Set<String>>, dir_name: &str, _dir_path: &Path) -> Vec<Arc<discoveredPackage>> {
         let mut result = Vec::with_capacity(package_names.map_or(0, |p| p.len()));
         let Some(package_names) = package_names else {
             return result;
@@ -1692,7 +1692,6 @@ impl registryBuilder<'_> {
                 realpath,
                 types_package_json,
                 types_realpath,
-                dir_path: dir_path.clone(),
                 is_local,
             }));
         }

@@ -33,7 +33,7 @@ impl Checker {
     }
 
     // checker.go:19627
-    pub(crate) fn get_constructors_for_type_arguments(&mut self, t: P<Type>, type_argument_nodes: &[P<Node>], location: P<Node>) -> Vec<P<Signature>> {
+    pub(crate) fn get_constructors_for_type_arguments(&mut self, t: P<Type>, type_argument_nodes: &[P<Node>], _location: P<Node>) -> Vec<P<Signature>> {
         let type_arg_count = type_argument_nodes.len() as i32;
         let signatures = self.get_signatures_of_type(t, SignatureKind::Construct);
         let mut result = Vec::new();
@@ -637,16 +637,6 @@ impl Checker {
             || t.flags().intersects(TypeFlags::Intersection) && !self.is_generic_type(t) && t.types().iter().any(|t| self.is_valid_index_key_type(*t))
     }
 
-    // checker.go:20134
-    pub(crate) fn find_index_info(&mut self, index_infos: &[P<IndexInfo>], key_type: P<Type>) -> Option<P<IndexInfo>> {
-        for &info in index_infos {
-            if info.key_type.get() == Some(key_type) {
-                return Some(info);
-            }
-        }
-        None
-    }
-
     // checker.go:20143
     pub(crate) fn get_index_symbol(&mut self, symbol: P<Symbol>) -> Option<P<Symbol>> {
         self.get_members_of_symbol(symbol).and_then(|m| m.lookup(InternalSymbolNameIndex))
@@ -1086,7 +1076,7 @@ impl Checker {
                 let contextual_return_type = self.get_contextual_return_type(fn_, ContextFlags::None);
                 let return_type = if contextual_return_type.is_some() && {
                     let unwrapped = self.unwrap_return_type(contextual_return_type.unwrap(), function_flags).unwrap_or(self.void_type);
-                    some_type(self, unwrapped, |c, t| t.flags().intersects(TypeFlags::Undefined))
+                    some_type(self, unwrapped, |_, t| t.flags().intersects(TypeFlags::Undefined))
                 } {
                     self.undefined_type
                 } else {

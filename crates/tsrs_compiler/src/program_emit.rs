@@ -169,7 +169,7 @@ impl EmitTimes {
 
 impl Program {
     // program.go:1875
-    pub fn emit(&'static self, ctx: &Context, options: EmitOptions) -> EmitResult {
+    pub fn emit(&'static self, ctx: &Context, options: &EmitOptions) -> EmitResult {
         if !options.force_emit && options.emit_only != EmitOnly::EmitOnlyBuilderSignature {
             let result = handle_no_emit_options(ctx, &self, options.target_source_files.as_deref(), None);
             if let Some(result) = result {

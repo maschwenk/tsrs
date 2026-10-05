@@ -20,7 +20,7 @@ use crate::astnav;
 use crate::completions::*;
 use crate::languageservice::LanguageService;
 use crate::lsutil::{ScriptElementKind, ScriptElementKindModifier};
-use crate::utilities::{get_contextual_type_from_parent, is_in_comment, is_in_string, new_case_clause_tracker, skip_constraint, CaseClauseTracker, TrackerValue};
+use crate::utilities::{get_contextual_type_from_parent, is_in_comment, is_in_string, new_case_clause_tracker, skip_constraint, TrackerValue};
 
 // string_completions.go:30
 pub(crate) struct completionsFromTypes {
@@ -219,7 +219,7 @@ impl LanguageService {
     // string_completions.go:263
     pub(crate) fn get_string_literal_completion_entries(
         &self,
-        ctx: &Context,
+        _ctx: &Context,
         file: P<SourceFile>,
         node: P<Node>,
         position: i32,
@@ -1807,7 +1807,7 @@ impl LanguageService {
         location: P<Node>,
         position: i32,
         completion: &stringLiteralCompletions,
-        file: P<SourceFile>,
+        _file: P<SourceFile>,
         checker: &mut Checker,
         doc_format: lsproto::MarkupKind,
     ) -> lsproto::CompletionItem {
@@ -1921,7 +1921,7 @@ fn parse_triple_slash_directive_fragment(text: &str) -> Option<(String, String, 
 
 impl LanguageService {
     // string_completions.go:2188
-    fn get_triple_slash_reference_completions(&self, file: P<SourceFile>, position: i32, program: &'static Program, checker: &mut Checker) -> Option<pathCompletions> {
+    fn get_triple_slash_reference_completions(&self, file: P<SourceFile>, position: i32, program: &'static Program, _checker: &mut Checker) -> Option<pathCompletions> {
         let compiler_options = program.options();
         let token = astnav::get_token_at_position(file, position);
         let comment_ranges: Vec<ast::CommentRange> = scanner::get_leading_comment_ranges(file.text(), token.pos()).collect();

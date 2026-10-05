@@ -32,24 +32,6 @@ pub(crate) fn try_get_module_id_and_file_name_of_module_symbol(symbol: P<Symbol>
     None
 }
 
-// util.go:39
-pub(crate) fn get_module_id_and_file_name_of_module_symbol(symbol: P<Symbol>) -> (ModuleID, String) {
-    if !symbol.is_external_module() {
-        panic!("symbol is not an external module");
-    }
-    let Some(decl) = ast::get_non_augmentation_declaration(symbol) else {
-        panic!("module symbol has no non-augmentation declaration");
-    };
-    if decl.kind() == Kind::SourceFile {
-        let file = decl.as_source_file();
-        return (ModuleID(file.path().to_string()), file.file_name().to_string());
-    }
-    if ast::is_module_with_string_literal_name(decl) {
-        return (ModuleID(decl.name().unwrap().text().to_string()), String::new());
-    }
-    panic!("could not determine module ID of module symbol");
-}
-
 // Go `unicode.IsLower`. Go's table is the Ll category; Rust's `char::is_lowercase` is the Lowercase property
 // (Ll plus Other_Lowercase), which differs only for a few modifier letters and symbols.
 pub(crate) fn go_unicode_is_lower(r: Rune) -> bool {

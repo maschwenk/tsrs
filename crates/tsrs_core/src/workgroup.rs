@@ -7,7 +7,7 @@ pub struct WorkGroup<'a> {
     fns: RefCell<Vec<Box<dyn FnOnce() + 'a>>>,
 }
 
-pub fn new_work_group<'a>(single_threaded: bool) -> WorkGroup<'a> {
+pub fn new_work_group<'a>(_single_threaded: bool) -> WorkGroup<'a> {
     WorkGroup { done: Cell::new(false), fns: RefCell::new(Vec::new()) }
 }
 

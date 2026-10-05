@@ -54,11 +54,10 @@ pub(crate) static IMPORT_FIX_PROVIDER: std::sync::LazyLock<CodeFixProvider> = st
     get_all_code_actions: Some(get_all_import_code_actions),
 });
 
-// codeactions_importfixes.go:55
+// codeactions_importfixes.go:55 (Go's errorIdentifierText field is never read)
 struct fixInfo {
     fix: Arc<autoimport::Fix>,
     symbol_name: String,
-    error_identifier_text: String,
     is_jsx_namespace_fix: bool,
 }
 
@@ -199,7 +198,6 @@ fn get_fix_infos(ch: &mut Checker, fix_context: &CodeFixContext, error_code: i32
                 all_type_only_fixes.push(fixInfo {
                     fix: Arc::new(fix),
                     symbol_name: sn.name.clone(),
-                    error_identifier_text: symbol_token.text().to_string(),
                     is_jsx_namespace_fix: false,
                 });
             }
@@ -248,11 +246,7 @@ fn get_fixes_info_for_umd_import(token: P<Node>, view: &View, ch: &mut Checker) 
 
     let mut result = Vec::new();
     for fix in view.get_fixes(&export, false, is_valid_type_only_use_site, None) {
-        let mut error_identifier_text = String::new();
-        if ast::is_identifier(token) {
-            error_identifier_text = token.text().to_string();
-        }
-        result.push(fixInfo { fix, symbol_name: umd_symbol.name().to_string(), error_identifier_text, is_jsx_namespace_fix: false });
+        result.push(fixInfo { fix, symbol_name: umd_symbol.name().to_string(), is_jsx_namespace_fix: false });
     }
     result
 }
@@ -330,7 +324,6 @@ fn get_fixes_info_for_non_umd_import(fix_context: &CodeFixContext, symbol_token:
                 all_info.push(fixInfo {
                     fix,
                     symbol_name: symbol_name.clone(),
-                    error_identifier_text: String::new(),
                     is_jsx_namespace_fix: symbol_name != symbol_token.text(),
                 });
             }

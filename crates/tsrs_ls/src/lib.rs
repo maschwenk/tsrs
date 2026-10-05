@@ -18,7 +18,6 @@ mod completions_3;
 mod completions_4;
 #[cfg(test)]
 mod completions_smoke_test;
-mod constants;
 mod crossproject;
 mod definition;
 mod diagnostics;

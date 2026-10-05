@@ -57,7 +57,7 @@ impl NodeBuilderImpl {
     }
 
     // nodebuilderimpl.go:134
-    pub(crate) fn save_restore_flags(&self, c: &mut Checker) -> Box<dyn FnMut(&mut Checker)> {
+    pub(crate) fn save_restore_flags(&self, _c: &mut Checker) -> Box<dyn FnMut(&mut Checker)> {
         let flags = self.ctx().flags.get();
         let internal_flags = self.ctx().internal_flags.get();
         let depth = self.ctx().depth.get();
@@ -71,7 +71,7 @@ impl NodeBuilderImpl {
     }
 
     // nodebuilderimpl.go:146
-    pub(crate) fn check_truncation_length(&self, c: &mut Checker) -> bool {
+    pub(crate) fn check_truncation_length(&self, _c: &mut Checker) -> bool {
         let ctx = self.ctx();
         if ctx.truncating.get() {
             return ctx.truncating.get();
@@ -125,7 +125,7 @@ impl NodeBuilderImpl {
     // isTypeOnStack reports whether t is already being processed in the current expansion,
     // excluding the last element (which is the type currently being serialized by typeToTypeNode).
     // nodebuilderimpl.go:197
-    pub(crate) fn is_type_on_stack(&self, c: &mut Checker, t: P<Type>) -> bool {
+    pub(crate) fn is_type_on_stack(&self, _c: &mut Checker, t: P<Type>) -> bool {
         let ctx = self.ctx();
         let type_stack = ctx.type_stack.borrow();
         let n = type_stack.len() as i32 - 1;
@@ -164,7 +164,7 @@ impl NodeBuilderImpl {
     // isActivelyExpanding reports whether the current depth is below maxExpansionDepth,
     // meaning type-node reuse should be skipped so typeToTypeNode can expand named types.
     // nodebuilderimpl.go:231
-    pub(crate) fn is_actively_expanding(&self, c: &mut Checker) -> bool {
+    pub(crate) fn is_actively_expanding(&self, _c: &mut Checker) -> bool {
         self.ctx().max_expansion_depth.get() > 0 && self.ctx().depth.get() < self.ctx().max_expansion_depth.get()
     }
 
@@ -293,7 +293,7 @@ pub(crate) fn is_class_instance_side(c: &mut Checker, t: P<Type>) -> bool {
 
 impl NodeBuilderImpl {
     // nodebuilderimpl.go:341
-    pub(crate) fn create_elided_information_placeholder(&self, c: &mut Checker) -> P<Node> {
+    pub(crate) fn create_elided_information_placeholder(&self, _c: &mut Checker) -> P<Node> {
         let ctx = self.ctx();
         ctx.approximate_length.set(ctx.approximate_length.get() + 3);
         if !ctx.flags.get().intersects(Flags::NoTruncation) {
@@ -453,7 +453,7 @@ pub(crate) fn types_are_same_reference(a: P<Type>, b: P<Type>) -> bool {
 
 impl NodeBuilderImpl {
     // nodebuilderimpl.go:485
-    pub(crate) fn set_comment_range(&self, c: &mut Checker, node: P<Node>, range_: Option<P<Node>>) {
+    pub(crate) fn set_comment_range(&self, _c: &mut Checker, node: P<Node>, range_: Option<P<Node>>) {
         if let Some(range_) = range_ {
             if self.ctx().enclosing_file.get().is_some() && self.ctx().enclosing_file.get() == get_source_file_of_node(range_) {
                 // Copy comments to node for declaration emit
@@ -1473,7 +1473,7 @@ impl NodeBuilderImpl {
      * It also calls `setOriginalNode` to setup a `.original` pointer, since you basically *always* want these in the node builder.
      */
     // nodebuilderimpl.go:1434
-    pub(crate) fn set_text_range(&self, c: &mut Checker, range_: P<Node>, location: Option<P<Node>>) -> Option<P<Node>> {
+    pub(crate) fn set_text_range(&self, _c: &mut Checker, range_: P<Node>, location: Option<P<Node>>) -> Option<P<Node>> {
         let mut range_ = range_;
         let enclosing_file = self.ctx().enclosing_file.get();
         if !node_is_synthesized(range_)

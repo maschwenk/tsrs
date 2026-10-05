@@ -19,11 +19,6 @@ static CODE_LINES_REGEXP: LazyLock<Regex> = LazyLock::new(|| Regex::new("[\r\u{2
 static BRACKET_LINE_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[\t\n\x0C\r ]*[{|}][\t\n\x0C\r ]*$").unwrap());
 static LINE_DELIMITER: LazyLock<Regex> = LazyLock::new(|| Regex::new("\r?\n").unwrap());
 
-pub struct TypeAndSymbolBaselines {
-    pub types: String,
-    pub symbols: String,
-}
-
 // DoTypeAndSymbolBaseline: both baselines from one walker, the type walk first (it runs first in Go's
 // test process, and it can create types that the symbol walk then sees). Each walk runs under its own
 // panic guard (Go's per-subtest RecoverAndFail); a panic is returned as `Err(message)`.

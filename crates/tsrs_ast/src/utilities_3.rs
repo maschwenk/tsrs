@@ -511,7 +511,7 @@ pub fn is_right_side_of_qualified_name_or_property_access(node: P<Node>) -> bool
     }
 }
 
-pub fn should_transform_import_call(file_name: &str, options: &CompilerOptions, implied_node_format_for_emit: ModuleKind) -> bool {
+pub fn should_transform_import_call(_file_name: &str, options: &CompilerOptions, implied_node_format_for_emit: ModuleKind) -> bool {
     let module_kind = options.get_emit_module_kind();
     if ModuleKind::Node16 <= module_kind && module_kind <= ModuleKind::NodeNext || module_kind == ModuleKind::Preserve {
         return false;

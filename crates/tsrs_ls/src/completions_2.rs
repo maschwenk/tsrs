@@ -21,7 +21,7 @@ use crate::codeactions_missingmemberfixer::{new_missing_member_fixer, preserveOp
 use crate::completions::*;
 use crate::languageservice::LanguageService;
 use crate::lsutil::{self, JsxAttributeCompletionStyle, QuotePreference, UserPreferences};
-use crate::utilities::{get_possible_generic_signatures, get_possible_type_arguments_info, new_case_clause_tracker, quote, CaseClauseTracker, TrackerValue};
+use crate::utilities::{get_possible_generic_signatures, get_possible_type_arguments_info, new_case_clause_tracker, quote, TrackerValue};
 
 // Go passes `literalValue` (string | jsnum.Number | PseudoBigInt) to `caseClauseTracker.hasValue`.
 pub(crate) fn tracker_value(literal: &LiteralValue) -> TrackerValue {
@@ -371,8 +371,8 @@ impl LanguageService {
         mut name: String,
         needs_convert_property_access: bool,
         origin: Option<&symbolOriginInfo>,
-        use_semicolons: bool,
-        compiler_options: P<CompilerOptions>,
+        _use_semicolons: bool,
+        _compiler_options: P<CompilerOptions>,
         is_member_completion: bool,
     ) -> Result<Option<lsproto::CompletionItem>, lsproto::Error> {
         let context_token = data.context_token;
@@ -1150,7 +1150,7 @@ fn trim_element_access(text: &str) -> String {
 
 // Ported from vscode ts extension: `getFilterText`.
 // completions.go:2919
-pub(crate) fn get_filter_text(file: P<SourceFile>, position: i32, insert_text: &str, label: &str, word_start: char, dot_accessor: &str) -> String {
+pub(crate) fn get_filter_text(_file: P<SourceFile>, _position: i32, insert_text: &str, label: &str, word_start: char, dot_accessor: &str) -> String {
     // Private field completion, e.g. label `#bar`.
     if let Some(after) = label.strip_prefix('#') {
         if !insert_text.is_empty() {
@@ -1230,14 +1230,6 @@ pub(crate) fn get_dot_accessor(file: P<SourceFile>, position: i32) -> String {
         return file.text()[(position - total_size) as usize..position as usize].to_string();
     }
     String::new()
-}
-
-// completions.go:3007
-pub(crate) fn str_ptr_is_empty(ptr: Option<&str>) -> bool {
-    match ptr {
-        None => true,
-        Some(s) => s.is_empty(),
-    }
 }
 
 // completions.go:3014
