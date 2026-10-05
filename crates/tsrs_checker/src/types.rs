@@ -1212,6 +1212,24 @@ pub(crate) fn census_layouts() {
             &[thin(offset_of!(StructuredMembers, properties)), thin(offset_of!(StructuredMembers, signatures))],
         );
         tsrs_core::census_layout(type_name::<IndexInfosTail>(), &[thin(offset_of!(IndexInfosTail, index_infos))]);
+        {
+            use crate::checker_09::{LazyMemberTable, LazyMembers};
+            // A `OnceCell` of a type with a niche is that type (checked here), so its fields are at their offsets.
+            const _: () = assert!(size_of::<std::cell::OnceCell<LazyMembers>>() == size_of::<LazyMembers>());
+            const _: () = assert!(size_of::<std::cell::OnceCell<tsrs_core::ThinSlice<P<Symbol>>>>() == 8);
+            let r = offset_of!(LazyMemberTable, ready);
+            tsrs_core::census_layout(
+                type_name::<LazyMemberTable>(),
+                &[
+                    thin(r + offset_of!(LazyMembers, unaffected)),
+                    thin(r + offset_of!(LazyMembers, call_signatures)),
+                    thin(r + offset_of!(LazyMembers, construct_signatures)),
+                    thin(r + offset_of!(LazyMembers, index_infos)),
+                    thin(r + offset_of!(LazyMembers, base_types)),
+                    thin(offset_of!(LazyMemberTable, ordered_properties)),
+                ],
+            );
+        }
         tsrs_core::census_layout(
             type_name::<Signature>(),
             &[

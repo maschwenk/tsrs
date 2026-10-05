@@ -952,7 +952,7 @@ impl Checker {
             if let Some(lm) = self.get_ready_lazy_member_table(t) {
                 self.lazy_member_stats.empty_lazy_queries += 1;
                 let ready = lm.ready.get().unwrap();
-                return ready.call_signatures.is_empty() && ready.construct_signatures.is_empty() && ready.index_infos.is_empty() && !self.has_properties_of_structured_type(t);
+                return ready.call_signatures.get().is_empty() && ready.construct_signatures.get().is_empty() && ready.index_infos.get().is_empty() && !self.has_properties_of_structured_type(t);
             }
         }
         let resolved = self.resolve_structured_type_members(t).unwrap();

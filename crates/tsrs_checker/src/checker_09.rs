@@ -1,4 +1,3 @@
-use std::rc::Rc;
 use crate::*;
 use tsrs_ast::*;
 use tsrs_core::*;
@@ -2282,9 +2281,9 @@ impl Checker {
             self.lazy_member_stats.member_signature_queries += 1;
             let ready = lm.ready.get().unwrap();
             if kind == SignatureKind::Call {
-                return ready.call_signatures;
+                return ready.call_signatures.get();
             }
-            return ready.construct_signatures;
+            return ready.construct_signatures.get();
         }
         if self.lazy_members && t.object_flags().intersects(ObjectFlags::Mapped) {
             if !t.object_flags().intersects(ObjectFlags::MembersResolved) {
@@ -2316,7 +2315,7 @@ impl Checker {
         if t.flags().intersects(TypeFlags::StructuredType) {
             if let Some(lm) = self.get_ready_lazy_member_table(t) {
                 self.lazy_member_stats.member_index_info_queries += 1;
-                return lm.ready.get().unwrap().index_infos;
+                return lm.ready.get().unwrap().index_infos.get();
             }
             if let Some(lazy) = self.get_lazy_mapped_table(t) {
                 return self.get_lazy_mapped_type_index_infos(t, &lazy);
@@ -2514,8 +2513,8 @@ impl Checker {
     // checker.go:19439
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn resolve_type_reference_members(&mut self, t: P<Type>) {
-        if let Some(lm) = self.lazy_member_tables.get(&t).filter(|lm| lm.ready.get().is_some()).cloned() {
-            self.resolve_lazy_members(t, &lm);
+        if let Some(lm) = self.lazy_member_tables.get(&t).filter(|lm| lm.ready.get().is_some()).copied() {
+            self.resolve_lazy_members(t, lm);
             return;
         }
         let source = t.target().unwrap();
@@ -2601,14 +2600,78 @@ impl Checker {
 // resolved members. It has the signatures and index infos, but only instantiates the
 // members that are looked up, and reuses them if the members are later resolved in full.
 
+/// One per instantiated reference whose members are answered lazily. In the arena (notes/mem-checker-heap.md):
+/// a table can be dropped from `lazy_member_tables` (resolved in full) while callers still hold it, which an `Rc`
+/// used to cover; the arena keeps it alive instead, and the one-word slices keep it at 80 bytes (an `Rc` box was
+/// 168, rounded up to 192 by mimalloc).
 pub(crate) struct LazyMemberTable {
     pub(crate) mapper: P<TypeMapper>,
-    pub(crate) type_arguments: &'static [P<Type>],
     // Go `ready` plus the fields prepareLazyMembers fills in before it sets `ready`.
     pub(crate) ready: std::cell::OnceCell<LazyMembers>,
     pub(crate) declared: SymbolTable, // keyed by the declared members' names
     // notes/mem-lazy.md L10: getPropertiesOfType order with declared members standing in (getLazyPropertiesInOrder).
-    pub(crate) ordered_properties: std::cell::OnceCell<Vec<P<Symbol>>>,
+    pub(crate) ordered_properties: std::cell::OnceCell<ThinSlice<P<Symbol>>>,
+}
+
+// 80 bytes in release builds (the symbol table is 24; debug builds add a borrow flag to it).
+const _: () = assert!(std::mem::size_of::<LazyMemberTable>() == std::mem::size_of::<SymbolTable>() + 56);
+
+/// Heap census: what the lazy member and lazy mapped tables own (the `Rc` boxes, their symbol tables, name lists,
+/// ordered property lists and mapped-member maps with their string keys).
+#[expect(clippy::iter_over_hash_type, reason = "sums sizes: the order does not matter")]
+pub(crate) fn lazy_member_tables_heap(c: &Checker) -> Vec<(String, crate::heapcensus::HeapStat)> {
+    use crate::heapcensus::{HeapSize, HeapStat};
+    let rc = 2 * std::mem::size_of::<usize>();
+    let mut boxes = HeapStat { slot: std::mem::size_of::<LazyMemberTable>() as u64, ..HeapStat::default() };
+    let mut declared = HeapStat { slot: 8, ..HeapStat::default() };
+    let mut unaffected = HeapStat { slot: 16, ..HeapStat::default() };
+    let mut ordered = HeapStat { slot: 4, ..HeapStat::default() };
+    for t in c.lazy_member_tables.values() {
+        boxes.containers += 1;
+        boxes.len += 1;
+        boxes.cap += 1;
+        let (len, cap, bytes) = t.declared.heap_usage();
+        declared.containers += 1;
+        declared.len += len as u64;
+        declared.cap += cap as u64;
+        declared.bytes += bytes as u64;
+        if let Some(ready) = t.ready.get() {
+            unaffected.containers += 1;
+            unaffected.len += ready.unaffected.get().len() as u64;
+            unaffected.cap += ready.unaffected.get().len() as u64;
+        }
+        if let Some(v) = t.ordered_properties.get() {
+            ordered.containers += 1;
+            ordered.len += v.get().len() as u64;
+            ordered.cap += v.get().len() as u64;
+        }
+    }
+    let mut mapped_boxes = HeapStat { slot: (rc + std::mem::size_of::<crate::checker_10::LazyMappedTable>()) as u64, ..HeapStat::default() };
+    let mut mapped_members = HeapStat::default();
+    let mut mapped_keys = HeapStat { slot: 1, ..HeapStat::default() };
+    for t in c.lazy_mapped_tables.values() {
+        mapped_boxes.containers += 1;
+        mapped_boxes.len += 1;
+        mapped_boxes.cap += 1;
+        mapped_boxes.bytes += mapped_boxes.slot;
+        let members = t.members.borrow();
+        mapped_members.add(members.heap_stat());
+        for k in members.keys() {
+            mapped_keys.containers += 1;
+            mapped_keys.len += k.len() as u64;
+            mapped_keys.cap += k.capacity() as u64;
+            mapped_keys.bytes += k.capacity() as u64;
+        }
+    }
+    vec![
+        ("lazy member tables (arena records, not heap)".to_string(), boxes),
+        ("lazy member tables (declared symbol tables)".to_string(), declared),
+        ("lazy member tables (unaffected names, arena)".to_string(), unaffected),
+        ("lazy member tables (ordered properties, arena)".to_string(), ordered),
+        ("lazy mapped tables (Rc boxes)".to_string(), mapped_boxes),
+        ("lazy mapped tables (members maps)".to_string(), mapped_members),
+        ("lazy mapped tables (member name strings)".to_string(), mapped_keys),
+    ]
 }
 
 /// Heap census: what the lazy member and lazy mapped tables own (the `Rc` boxes, their symbol tables, name lists,
@@ -2670,11 +2733,11 @@ pub(crate) fn lazy_member_tables_heap(c: &Checker) -> Vec<(String, crate::heapce
 }
 
 pub(crate) struct LazyMembers {
-    pub(crate) unaffected: Box<[&'static str]>, // sorted names of declared members that instantiate to themselves
-    pub(crate) call_signatures: &'static [P<Signature>],
-    pub(crate) construct_signatures: &'static [P<Signature>],
-    pub(crate) index_infos: &'static [P<IndexInfo>],
-    pub(crate) base_types: &'static [P<Type>],
+    pub(crate) unaffected: ThinSlice<&'static str>, // sorted names of declared members that instantiate to themselves
+    pub(crate) call_signatures: ThinSlice<P<Signature>>,
+    pub(crate) construct_signatures: ThinSlice<P<Signature>>,
+    pub(crate) index_infos: ThinSlice<P<IndexInfo>>,
+    pub(crate) base_types: ThinSlice<P<Type>>,
 }
 
 pub(crate) fn may_have_lazy_members(t: P<Type>) -> bool {
@@ -2700,14 +2763,14 @@ impl Checker {
     }
 
     // Returns nil if t has no lazy member table or it is still being prepared.
-    pub(crate) fn get_ready_lazy_member_table(&mut self, t: P<Type>) -> Option<std::rc::Rc<LazyMemberTable>> {
+    pub(crate) fn get_ready_lazy_member_table(&mut self, t: P<Type>) -> Option<P<LazyMemberTable>> {
         if !self.lazy_members || !may_have_lazy_members(t) {
             return None;
         }
         self.get_ready_lazy_member_table_worker(t)
     }
 
-    pub(crate) fn get_ready_lazy_member_table_worker(&mut self, t: P<Type>) -> Option<std::rc::Rc<LazyMemberTable>> {
+    pub(crate) fn get_ready_lazy_member_table_worker(&mut self, t: P<Type>) -> Option<P<LazyMemberTable>> {
         let source = t.target();
         if !t.flags().intersects(TypeFlags::Object)
             || source.is_none()
@@ -2720,7 +2783,7 @@ impl Checker {
             return None;
         }
         let lm = match self.lazy_member_tables.get(&t) {
-            Some(lm) => Rc::clone(lm),
+            Some(&lm) => lm,
             None => self.create_lazy_member_table(t, source.unwrap())?,
         };
         if lm.ready.get().is_none() || t.object_flags().intersects(ObjectFlags::MembersResolved) {
@@ -2732,7 +2795,7 @@ impl Checker {
     /// The table-creating half of `get_ready_lazy_member_table_worker` (out of line, so the
     /// lookup half has a small frame). `None` when the reference's arguments are its target's own parameters.
     #[inline(never)]
-    fn create_lazy_member_table(&mut self, t: P<Type>, source: P<Type>) -> Option<std::rc::Rc<LazyMemberTable>> {
+    fn create_lazy_member_table(&mut self, t: P<Type>, source: P<Type>) -> Option<P<LazyMemberTable>> {
         // get_reference_member_type_arguments without a temporary list.
         let type_parameters = source.as_interface_type().all_type_parameters.get();
         let arguments = self.get_type_arguments(t);
@@ -2752,28 +2815,27 @@ impl Checker {
             }
             alloc_slice(arguments)
         };
-        let lm = std::rc::Rc::new(LazyMemberTable {
+        let lm = P::new(LazyMemberTable {
             mapper: {
                 let m = new_type_mapper(type_parameters, type_arguments);
                 escape_mapper(m); // kept by the table
                 m
             },
-            type_arguments,
             ready: std::cell::OnceCell::new(),
             declared: SymbolTable::default(),
             ordered_properties: std::cell::OnceCell::new(),
         });
-        self.lazy_member_tables.insert(t, Rc::clone(&lm));
+        self.lazy_member_tables.insert(t, lm);
         self.lazy_member_stats.member_tables_created += 1;
         if t.target().unwrap().object_flags().intersects(ObjectFlags::Tuple) {
             self.lazy_member_stats.tuple_tables_created += 1;
         }
-        self.prepare_lazy_members(t, &lm);
+        self.prepare_lazy_members(t, lm, type_arguments.last().copied());
         Some(lm)
     }
 
     // Mirrors resolveObjectTypeMembers without creating member symbols.
-    pub(crate) fn prepare_lazy_members(&mut self, t: P<Type>, lm: &std::rc::Rc<LazyMemberTable>) {
+    pub(crate) fn prepare_lazy_members(&mut self, t: P<Type>, lm: P<LazyMemberTable>, this_argument: Option<P<Type>>) {
         let source = t.target().unwrap();
         let resolved = self.resolve_declared_members(source).unwrap();
         // Whether instantiateSymbol returns a member itself depends on what is resolved now.
@@ -2792,7 +2854,6 @@ impl Checker {
         let mut call_signatures = self.instantiate_signatures(resolved.declared_call_signatures.get(), lm.mapper);
         let mut construct_signatures = self.instantiate_signatures(resolved.declared_construct_signatures.get(), lm.mapper);
         let mut index_infos = self.instantiate_index_infos(resolved.declared_index_infos.get(), lm.mapper);
-        let this_argument = lm.type_arguments.last().copied();
         let mut base_types: Vec<P<Type>> = Vec::new();
         for &base_type in self.get_base_types(source) {
             let mut instantiated_base_type = base_type;
@@ -2808,11 +2869,11 @@ impl Checker {
             self.append_inherited_signatures_and_index_infos(&mut call_signatures, &mut construct_signatures, &mut index_infos, instantiated_base_type);
         }
         let _ = lm.ready.set(LazyMembers {
-            unaffected: unaffected.into_boxed_slice(),
-            call_signatures: alloc_vec(call_signatures),
-            construct_signatures: alloc_vec(construct_signatures),
-            index_infos: alloc_vec(index_infos),
-            base_types: alloc_vec(base_types),
+            unaffected: ThinSlice::new(alloc_vec(unaffected)),
+            call_signatures: ThinSlice::new(alloc_vec(call_signatures)),
+            construct_signatures: ThinSlice::new(alloc_vec(construct_signatures)),
+            index_infos: ThinSlice::new(alloc_vec(index_infos)),
+            base_types: ThinSlice::new(alloc_vec(base_types)),
         });
         if t.object_flags().intersects(ObjectFlags::MembersResolved) {
             // t was resolved while preparing; resolveObjectTypeMembers would now replace its members.
@@ -2820,7 +2881,7 @@ impl Checker {
         }
     }
 
-    pub(crate) fn resolve_lazy_members(&mut self, t: P<Type>, lm: &std::rc::Rc<LazyMemberTable>) {
+    pub(crate) fn resolve_lazy_members(&mut self, t: P<Type>, lm: P<LazyMemberTable>) {
         self.lazy_member_stats.member_tables_resolved_in_full += 1;
         if t.target().unwrap().object_flags().intersects(ObjectFlags::Tuple) {
             self.lazy_member_stats.tuple_tables_resolved_in_full += 1;
@@ -2838,22 +2899,22 @@ impl Checker {
             members = Some(table);
         }
         let ready = lm.ready.get().unwrap();
-        for &base_type in ready.base_types {
+        for &base_type in ready.base_types.get() {
             let base_properties = self.get_properties_of_type(base_type);
             members = self.add_inherited_members(members, &base_properties);
         }
-        self.set_structured_type_members(t, members, ready.call_signatures, ready.construct_signatures, ready.index_infos);
+        self.set_structured_type_members(t, members, ready.call_signatures.get(), ready.construct_signatures.get(), ready.index_infos.get());
         self.lazy_member_tables.remove(&t);
     }
 
     #[cfg_attr(feature = "site-counts", track_caller)]
-    pub(crate) fn get_lazy_declared_member(&mut self, lm: &std::rc::Rc<LazyMemberTable>, symbol: P<Symbol>, name: &'static str) -> P<Symbol> {
+    pub(crate) fn get_lazy_declared_member(&mut self, lm: P<LazyMemberTable>, symbol: P<Symbol>, name: &'static str) -> P<Symbol> {
         let existing = lm.declared.lookup(name);
         if let Some(result) = existing {
             return result;
         }
         let mut result = symbol;
-        if lm.ready.get().unwrap().unaffected.binary_search(&name).is_err() {
+        if lm.ready.get().unwrap().unaffected.get().binary_search(&name).is_err() {
             self.lazy_member_stats.member_table_declared_instantiated += 1;
             result = self.new_instantiated_symbol(symbol, Some(lm.mapper));
         }
@@ -2896,14 +2957,14 @@ impl Checker {
         if let Some((name, decl)) = declared_members.and_then(|m| m.lookup_entry(name)) {
             if self.is_named_member(decl, name) {
                 if instantiate {
-                    result = Some(self.get_lazy_declared_member(&lm, decl, name));
+                    result = Some(self.get_lazy_declared_member(lm, decl, name));
                 } else {
                     self.lazy_member_stats.has_prop_uninstantiated += 1;
                     result = Some(lm.declared.lookup(name).unwrap_or(decl));
                 }
             }
         }
-        for &base_type in lm.ready.get().unwrap().base_types {
+        for &base_type in lm.ready.get().unwrap().base_types.get() {
             if result.is_some_and(|r| r.flags().intersects(SymbolFlags::Value)) {
                 break;
             }
@@ -2921,7 +2982,7 @@ impl Checker {
         if let Some(lm) = self.get_ready_lazy_member_table(t) {
             self.lazy_member_stats.member_every_property_queries += 1;
             let mut seen: FxHashSet<&'static str> = FxHashSet::default();
-            return self.every_lazy_property(t, &lm, &mut seen, f);
+            return self.every_lazy_property(t, lm, &mut seen, f);
         }
         let properties = self.resolve_structured_type_members(t).unwrap().properties();
         properties.iter().all(|&p| f(self, p))
@@ -2935,7 +2996,7 @@ impl Checker {
     pub(crate) fn every_lazy_property(
         &mut self,
         t: P<Type>,
-        lm: &std::rc::Rc<LazyMemberTable>,
+        lm: P<LazyMemberTable>,
         seen: &mut FxHashSet<&'static str>,
         f: &mut dyn FnMut(&mut Checker, P<Symbol>) -> bool,
     ) -> bool {
@@ -2946,10 +3007,10 @@ impl Checker {
                 }
             }
         }
-        for &base_type in lm.ready.get().unwrap().base_types {
+        for &base_type in lm.ready.get().unwrap().base_types.get() {
             let reduced = self.get_reduced_apparent_type(base_type);
             if let Some(base_table) = self.get_ready_lazy_member_table(reduced) {
-                if !self.every_lazy_property(reduced, &base_table, seen, f) {
+                if !self.every_lazy_property(reduced, base_table, seen, f) {
                     return false;
                 }
                 continue;
