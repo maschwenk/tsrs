@@ -388,32 +388,60 @@ impl Checker {
         key
     }
 
+    /// An identifier or `this` packs into the key exactly: [root symbol (0 for `this`) | declared type id | initial
+    /// type id | flow container], with bit 63 clear. A property access chain's structure is hashed (xxh3-128 of the
+    /// serialized key, as Go hashes its flow cache keys) with bit 63 set, so it never equals a packed key.
     fn compute_flow_memo_key(&mut self, f: P<FlowState>) -> Option<u128> {
+        let reference = f.reference.get().unwrap();
+        let declared = f.declared_type.get().unwrap().id.0;
+        let initial = f.initial_type.get().unwrap().id.0;
+        let container = u32::try_from(P::key_opt(f.flow_container.get())).ok();
+        let root = match reference.kind() {
+            Kind::Identifier => self.flow_memo_root_symbol(reference)?.key(),
+            Kind::ThisKeyword => 0,
+            _ => return self.compute_hashed_flow_memo_key(f),
+        };
+        match (u32::try_from(root), container) {
+            (Ok(root), Some(container)) if declared < 1 << 31 => Some((root as u128) << 96 | (declared as u128) << 64 | (initial as u128) << 32 | container as u128),
+            _ => self.compute_hashed_flow_memo_key(f),
+        }
+    }
+
+    fn compute_hashed_flow_memo_key(&mut self, f: P<FlowState>) -> Option<u128> {
         let mut buf = std::mem::take(&mut self.flow_memo.key_buf);
-        buf.clear();
-        let ok = self.write_flow_memo_reference(&mut buf, f.reference.get().unwrap());
-        let key = ok.then(|| {
-            buf.extend_from_slice(&f.declared_type.get().unwrap().id.0.to_le_bytes());
-            buf.extend_from_slice(&f.initial_type.get().unwrap().id.0.to_le_bytes());
-            buf.extend_from_slice(&(P::key_opt(f.flow_container.get()) as u64).to_le_bytes());
-            xxhash_rust::xxh3::xxh3_128(&buf)
-        });
+        let key = self.serialize_flow_memo_key(&mut buf, f).then(|| xxhash_rust::xxh3::xxh3_128(&buf) | 1 << 63);
         self.flow_memo.key_buf = buf;
         key
+    }
+
+    /// The full key a hashed or packed memo key stands for (shadow mode compares these).
+    pub(crate) fn serialize_flow_memo_key(&self, buf: &mut Vec<u8>, f: P<FlowState>) -> bool {
+        buf.clear();
+        if !self.write_flow_memo_reference(buf, f.reference.get().unwrap()) {
+            return false;
+        }
+        buf.extend_from_slice(&f.declared_type.get().unwrap().id.0.to_le_bytes());
+        buf.extend_from_slice(&f.initial_type.get().unwrap().id.0.to_le_bytes());
+        buf.extend_from_slice(&(P::key_opt(f.flow_container.get()) as u64).to_le_bytes());
+        true
+    }
+
+    /// The symbol an identifier reference resolved to, if it is cached (no side effects), and the identifier is not
+    /// `this` in a type query (Go keys and matches those like `this`).
+    fn flow_memo_root_symbol(&self, node: P<Node>) -> Option<P<Symbol>> {
+        let symbol = self.symbol_node_links.try_get_if_id_assigned(node).and_then(|links| links.resolved_symbol.get())?;
+        if symbol == self.unknown_symbol || ast::is_this_in_type_query(node) {
+            return None;
+        }
+        Some(symbol)
     }
 
     fn write_flow_memo_reference(&self, buf: &mut Vec<u8>, node: P<Node>) -> bool {
         match node.kind() {
             Kind::Identifier => {
-                if ast::is_this_in_type_query(node) {
-                    return false;
-                }
-                let Some(symbol) = self.symbol_node_links.try_get_if_id_assigned(node).and_then(|links| links.resolved_symbol.get()) else {
+                let Some(symbol) = self.flow_memo_root_symbol(node) else {
                     return false;
                 };
-                if symbol == self.unknown_symbol {
-                    return false;
-                }
                 buf.push(b'I');
                 buf.extend_from_slice(&(symbol.key() as u64).to_le_bytes());
                 true
