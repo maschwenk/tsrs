@@ -82,7 +82,9 @@ Wall time on a shared VM moves 2-4% between runs with no code change (2026-10-04
 run therefore also counts the user-space instructions of one single-threaded tsrs type check per project
 (`bench/count.py`, Linux `perf_event_open`; untimed, after the timed runs; `--singleThreaded` and
 `RAYON_NUM_THREADS=1`). That count repeats to about 0.001% (five runs on the bench machine: 0.0000-0.0005% spread),
-so any change in it comes from the code. tsgo is not counted: the Go runtime makes its count vary 2-4%.
+so any change in it comes from the code. The PGO profile is retrained every run; two trainings of one commit gave
+different profiles and binaries whose counts differed by 0.002-0.046%, well under the threshold. tsgo is not counted:
+the Go runtime makes its count vary 2-4%.
 
 `bench/regressions.py --latest` compares the counts with the newest earlier result from the same runner label and
 build, and only when the CPU model and C library match (they pick different `memcpy`-style routines). A project up

@@ -3,7 +3,7 @@
 
   bench/regressions.py (<result.json> | --latest) [--threshold 1] [--comment]
 
-Compares each project's single-threaded tsrs instruction count (bench/count.py, recorded by bench/run.py) with the
+Compares each project's single-threaded instruction count (bench/count.py, recorded by bench/run.py) with the
 newest earlier result in bench/results from the same runner label and build. The count repeats to about 0.001%, so
 any change is the code's; only a different CPU model or C library (which pick different memcpy-style routines) can
 move it otherwise, and then nothing is judged. A count up by more than --threshold percent is a regression.
@@ -20,12 +20,19 @@ import sys
 import urllib.request
 from pathlib import Path
 
+# The result fields this repository's bench/run.py writes. maschwenk/tsrslint keeps a copy of this script; the
+# differences are these constants.
+TOOL = "tsrs"
+COUNT_PATH = ("single", "tsrs", "instructions")
+WHAT = "single-threaded type check"
 MAX_PR_COMMENTS = 3
 
 
-def instructions(result, project, compiler):
-    single = result.get("projects", {}).get(project, {}).get("single") or {}
-    return (single.get(compiler) or {}).get("instructions")
+def instructions(result, project):
+    node = result.get("projects", {}).get(project)
+    for key in COUNT_PATH:
+        node = node.get(key) if isinstance(node, dict) else None
+    return node
 
 
 def previous_result(new, path, results_dir):
@@ -39,8 +46,8 @@ def previous_result(new, path, results_dir):
         except ValueError:
             continue
         same_setup = (r.get("machine", {}).get("label") == new.get("machine", {}).get("label")
-                      and r.get("tsrs", {}).get("build") == new.get("tsrs", {}).get("build"))
-        has_counts = any(instructions(r, name, "tsrs") for name in r.get("projects", {}))
+                      and r.get(TOOL, {}).get("build") == new.get(TOOL, {}).get("build"))
+        has_counts = any(instructions(r, name) for name in r.get("projects", {}))
         if same_setup and has_counts and r.get("date", "") <= new.get("date", ""):
             candidates.append(r)
     return max(candidates, key=lambda r: r["date"]) if candidates else None
@@ -59,7 +66,7 @@ def compare(old, new, threshold):
     """Rows of (project, old, new, change %, verdict)."""
     rows = []
     for name in new.get("projects", {}):
-        before, after = instructions(old, name, "tsrs"), instructions(new, name, "tsrs")
+        before, after = instructions(old, name), instructions(new, name)
         if not before or not after:
             continue
         change = 100.0 * (after / before - 1)
@@ -69,7 +76,7 @@ def compare(old, new, threshold):
 
 
 def table(rows):
-    lines = ["| project | tsrs instructions before | after | change | |", "| --- | ---: | ---: | ---: | --- |"]
+    lines = [f"| project | {TOOL} instructions before | after | change | |", "| --- | ---: | ---: | ---: | --- |"]
     for name, before, after, change, verdict in rows:
         lines.append(f"| {name} | {before / 1e9:.3f} G | {after / 1e9:.3f} G | {change:+.2f}% | {verdict} |")
     return "\n".join(lines)
@@ -117,21 +124,21 @@ def main(argv):
     if old is None:
         print("regressions: no earlier result with instruction counts to compare with")
         return
-    old_commit, new_commit = old["tsrs"]["commit"], new["tsrs"]["commit"]
+    old_commit, new_commit = old[TOOL]["commit"], new[TOOL]["commit"]
     why_not = machine_difference(old, new)
     if why_not:
         print(f"regressions: not comparing with {old_commit[:12]}: {why_not}")
         return
     rows = compare(old, new, args.threshold)
     regressions = [r for r in rows if r[4] == "regression"]
-    summary = (f"Instruction counts, single-threaded, {old_commit[:12]} -> {new_commit[:12]} "
-               f"(regression: tsrs up more than {args.threshold:g}%)\n\n" + table(rows) + "\n")
+    summary = (f"Instruction counts, {WHAT}, {old_commit[:12]} -> {new_commit[:12]} "
+               f"(regression: {TOOL} up more than {args.threshold:g}%)\n\n" + table(rows) + "\n")
     print(summary)
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
             f.write("### " + summary)
     for name, before, after, change, _ in regressions:
-        print(f"::warning title=Instruction-count regression::{name}: tsrs instructions {change:+.2f}% "
+        print(f"::warning title=Instruction-count regression::{name}: {TOOL} instructions {change:+.2f}% "
               f"({before / 1e9:.3f} G -> {after / 1e9:.3f} G) since {old_commit[:12]}")
     if not regressions or not args.comment:
         return
@@ -140,8 +147,8 @@ def main(argv):
     scope = (f"this merge" if len(prs) <= 1 else
              f"one of the {len(prs)} merges in this range ({', '.join(f'#{n}' for n in prs)})")
     body = (f"**Bench: instruction-count regression** after {scope}.\n\n"
-            f"The bench on `{new_commit[:12]}` measured more user-space instructions for tsrs than the previous run on "
-            f"`{old_commit[:12]}` (single-threaded type check, same CPU model and C library). The count repeats to about "
+            f"The bench on `{new_commit[:12]}` measured more user-space instructions for {TOOL} than the previous run on "
+            f"`{old_commit[:12]}` ({WHAT}, same CPU model and C library). The count repeats to about "
             f"0.001%, so the change comes from the code. Wall time and memory are in `bench/results/`.\n\n"
             f"{table(regressions)}\n\n"
             f"Flag only; nothing fails. A deliberate trade (such as memory for CPU) needs no action. "
