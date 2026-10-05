@@ -1,0 +1,30 @@
+# Every unsafe impl Send / Sync (tools/lint/source.py --update). Review each change.
+crates/tsrs_ast/src/symbol.rs	Send	EntryVec
+crates/tsrs_ast/src/symbol.rs	Send	ExtraSlot
+crates/tsrs_ast/src/symbol.rs	Sync	EntryVec
+crates/tsrs_ast/src/symbol.rs	Sync	ExtraSlot
+crates/tsrs_compiler/src/checkerpool.rs	Send	CheckerSlot
+crates/tsrs_compiler/src/checkerpool.rs	Send	PooledChecker
+crates/tsrs_compiler/src/checkerpool.rs	Sync	CheckerSlot
+crates/tsrs_compiler/src/checkerpool.rs	Sync	PooledChecker
+crates/tsrs_core/src/arena.rs	Send	RegionInner
+crates/tsrs_core/src/arena.rs	Sync	RegionInner
+crates/tsrs_core/src/frozen.rs	Send	<T: Send> FrozenCell<T>
+crates/tsrs_core/src/frozen.rs	Sync	<T: Send + Sync> FrozenCell<T>
+crates/tsrs_core/src/ptr.rs	Send	<A, B> SlicePair<A, B>
+crates/tsrs_core/src/ptr.rs	Send	<T: ?Sized> P<T>
+crates/tsrs_core/src/ptr.rs	Send	<T> SP<T>
+crates/tsrs_core/src/ptr.rs	Send	<T> StaticSlicePtr<T>
+crates/tsrs_core/src/ptr.rs	Send	<T> ThinSlice<T>
+crates/tsrs_core/src/ptr.rs	Send	ArenaRef
+crates/tsrs_core/src/ptr.rs	Send	PackedStr
+crates/tsrs_core/src/ptr.rs	Sync	<A, B> SlicePair<A, B>
+crates/tsrs_core/src/ptr.rs	Sync	<T: ?Sized> P<T>
+crates/tsrs_core/src/ptr.rs	Sync	<T> SP<T>
+crates/tsrs_core/src/ptr.rs	Sync	<T> StaticSlicePtr<T>
+crates/tsrs_core/src/ptr.rs	Sync	<T> ThinSlice<T>
+crates/tsrs_core/src/ptr.rs	Sync	PackedStr
+crates/tsrs_fswatch/src/fsevents_darwin_ffi.rs	Send	fsEventStream
+crates/tsrs_fswatch/src/fsevents_darwin_ffi.rs	Send	streamCallback
+crates/tsrs_fswatch/src/fsevents_darwin_ffi.rs	Sync	fsEventStream
+crates/tsrs_fswatch/src/fsevents_darwin_ffi.rs	Sync	streamCallback
