@@ -20,11 +20,16 @@ work=$(cd "$2" && pwd)
 bench=$(cd "$3" && pwd)
 flags=(-reorder-blocks=ext-tsp -reorder-functions=cdsort -split-functions -split-all-cold -split-eh -icf=1
   -use-gnu-stack -update-debug-sections -dyno-stats)
+# aarch64: rustc links aarch64-unknown-linux-gnu with -Wl,--fix-cortex-a53-843419 (its target spec; GNU ld 2.38 has no
+# --no- form), and llvm-bolt refuses a binary with the erratum veneers unless told to drop them. The BOLT-optimized
+# binaries therefore carry no 843419 workaround; it only matters on Cortex-A53 r0p0-r0p4 cores.
+arch_flags=()
+[ "$(uname -m)" = aarch64 ] && arch_flags=(--drop-cortex-a53-843419-veneers)
 
 for b in tsrs tsrs-test tsrs-fourslash; do
   rm -rf "${work:?}/$b.fdata.d"; mkdir -p "$work/$b.fdata.d"
   llvm-bolt "$dist/$b" -instrument -o "$work/$b.inst" --instrumentation-file="$work/$b.fdata.d/prof" \
-    --instrumentation-file-append-pid | tail -1
+    --instrumentation-file-append-pid "${arch_flags[@]}" | tail -1
 done
 
 check_exit() { # $1 = exit status, $2 = what ran; 0/1/2 are tsc exit codes, anything else is a crash
@@ -45,7 +50,7 @@ check_exit "$status" "instrumented tsrs-fourslash run"
 for b in tsrs tsrs-test tsrs-fourslash; do
   compgen -G "$work/$b.fdata.d/prof*" > /dev/null || { echo "::error::no BOLT profile from $b"; exit 1; }
   merge-fdata "$work/$b.fdata.d"/prof* > "$work/$b.fdata"
-  llvm-bolt "$dist/$b" -o "$work/$b.bolt" -data="$work/$b.fdata" "${flags[@]}" > "$work/$b.bolt.log" 2>&1 \
+  llvm-bolt "$dist/$b" -o "$work/$b.bolt" -data="$work/$b.fdata" "${flags[@]}" "${arch_flags[@]}" > "$work/$b.bolt.log" 2>&1 \
     || { cat "$work/$b.bolt.log"; exit 1; }
   grep -E 'BOLT-INFO: (basic block reordering|splitting|ICF)' "$work/$b.bolt.log" || true
 done
