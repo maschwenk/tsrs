@@ -31,10 +31,13 @@ pub(crate) const FLOW_DEPTH_LIMIT: i32 = 2000;
 /// No taint source.
 pub(crate) const UNTAINTED: u32 = u32::MAX;
 
-/// The frame reset or read the instantiation counters (`checkExpression`, `instantiateType`).
+/// The frame instantiated a type or ran inside an instantiation (it may touch the instantiation counters and stack).
 pub(crate) const FLAG_COUNTERS: u8 = 1;
 /// The frame read `flowTypeCache`.
 pub(crate) const FLAG_TYPE_CACHE: u8 = 2;
+/// The frame may have reset the instantiation count (`checkExpression`): a later walk of it leaves the count where
+/// this one did only if the count is already 0.
+pub(crate) const FLAG_COUNT_RESET: u8 = 4;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum FlowMemoMode {
@@ -69,14 +72,15 @@ struct Slot {
     key: u128,
     flow: Option<P<FlowNode>>,
     t: Option<P<Type>>,
-    height: u32,
+    height: u16,
     /// `Checker::flow_type_cache_epoch` when the value was computed, if the frame read that cache; else 0.
     epoch: u32,
+    count_reset: bool,
 }
 
 /// What `Checker::take_flow_type_cache` saved.
 pub(crate) struct SavedFlowTypeCache {
-    cache: Option<FxHashMap<P<Node>, (P<Type>, u32)>>,
+    cache: Option<FxHashMap<P<Node>, P<Type>>>,
     epoch: u32,
 }
 
@@ -84,19 +88,43 @@ pub(crate) struct SavedFlowTypeCache {
 #[derive(Clone, Copy)]
 pub(crate) struct MemoHit {
     pub t: P<Type>,
-    pub height: u32,
+    pub height: u16,
     pub epoch: u32,
+    pub count_reset: bool,
 }
 
-/// The registers saved by `FlowMemo::begin`.
+impl MemoHit {
+    /// The flags a frame that uses this answer takes on (those of the walk it stands for).
+    pub fn flags(self) -> u8 {
+        (if self.epoch != 0 { FLAG_TYPE_CACHE } else { 0 }) | if self.count_reset { FLAG_COUNT_RESET } else { 0 }
+    }
+}
+
+/// The memo's registers for the innermost active frame. Saved whole by `FlowMemo::begin`.
+#[derive(Clone, Copy)]
+struct Regs {
+    /// Oldest source of each kind the frame consumed so far.
+    transient: u32,
+    reference: u32,
+    /// Largest `child height + 1` so far: an upper bound on the depth its sub-walk can reach in any walk (memo and
+    /// `sharedFlows` hits count with the height they stand for).
+    height: u16,
+    /// The same, counting memo and `sharedFlows` hits as 0: the depth this walk actually reached (shadow checks).
+    actual: u16,
+    /// FLAG_*.
+    flags: u8,
+}
+
+const FRESH_REGS: Regs = Regs { transient: UNTAINTED, reference: UNTAINTED, height: 0, actual: 0, flags: 0 };
+
+/// What `Checker::flow_frame_begin` saved.
 #[derive(Clone, Copy)]
 pub(crate) struct FlowFrame {
     pub start: u32,
-    saved_transient: u32,
-    saved_reference: u32,
-    saved_height: u32,
-    saved_actual: u32,
-    saved_flags: u8,
+    saved: Regs,
+    instantiation_count: u32,
+    total_instantiation_count: u32,
+    in_instantiation: bool,
 }
 
 /// What `FlowMemo::end` found: the oldest source of each kind that the frame consumed (UNTAINTED if none was older
@@ -118,12 +146,12 @@ impl FrameTaint {
 pub(crate) struct FlowMemoStats {
     pub walks: u64,
     pub keyed_walks: u64,
-    pub frames: u64,
     pub consults: u64,
     pub blocked: u64,
     pub blocked_loop: u64,
     pub blocked_cache: u64,
     pub blocked_shared: u64,
+    pub blocked_counters: u64,
     pub hits: u64,
     pub height_misses: u64,
     pub fills: u64,
@@ -139,16 +167,7 @@ pub struct FlowMemo {
     /// Shadow mode: the full reference key of each slot, to prove that no two references share a hashed key.
     shadow_keys: Vec<Option<Box<[u8]>>>,
     serial: u32,
-    /// Oldest source of each kind consumed by the innermost active frame so far.
-    transient: u32,
-    reference: u32,
-    /// Largest `child height + 1` of the innermost active frame so far: an upper bound on the depth its sub-walk can
-    /// reach in any walk (memo and `sharedFlows` hits count with the height they stand for).
-    height: u32,
-    /// The same, counting memo and `sharedFlows` hits as 0: the depth this walk actually reached (shadow checks).
-    actual: u32,
-    /// FLAG_* of the innermost active frame so far.
-    pub(crate) flags: u8,
+    regs: Regs,
     pub(crate) key_buf: Vec<u8>,
     pub(crate) stats: FlowMemoStats,
 }
@@ -160,17 +179,20 @@ impl FlowMemo {
             slots: Vec::new(),
             shadow_keys: Vec::new(),
             serial: 1,
-            transient: UNTAINTED,
-            reference: UNTAINTED,
-            height: 0,
-            actual: 0,
-            flags: 0,
+            regs: FRESH_REGS,
             key_buf: Vec::new(),
             stats: FlowMemoStats::default(),
         }
     }
 
-    /// A fresh serial: the taint source of a walk, loop-stack entry or type resolution, or a frame's start.
+    /// A taint source for something that starts now, without taking a serial: every frame that begins later has a
+    /// larger start, every frame that began before has this or a smaller one. Sources need not be unique.
+    #[inline]
+    pub(crate) fn source_now(&self) -> u32 {
+        self.serial - 1
+    }
+
+    /// A fresh serial: the taint source of a walk or loop-stack entry, or a frame's start.
     #[inline]
     pub(crate) fn next_serial(&mut self) -> u32 {
         let s = self.serial;
@@ -184,92 +206,75 @@ impl FlowMemo {
     }
 
     #[inline]
-    pub(crate) fn begin(&mut self) -> FlowFrame {
-        let frame = FlowFrame {
-            start: self.next_serial(),
-            saved_transient: self.transient,
-            saved_reference: self.reference,
-            saved_height: self.height,
-            saved_actual: self.actual,
-            saved_flags: self.flags,
-        };
-        self.transient = UNTAINTED;
-        self.reference = UNTAINTED;
-        self.height = 0;
-        self.actual = 0;
-        self.flags = 0;
+    fn begin(&mut self, instantiation_count: u32, total_instantiation_count: u32, in_instantiation: bool) -> FlowFrame {
+        let frame = FlowFrame { start: self.next_serial(), saved: self.regs, instantiation_count, total_instantiation_count, in_instantiation };
+        self.regs = FRESH_REGS;
         frame
     }
 
     /// Ends a frame whose sub-walk has height `height` (and reached `actual`) and reports both to the parent; taint
     /// and flags carry over to it.
     #[inline]
-    pub(crate) fn end_with(&mut self, frame: FlowFrame, height: u32, actual: u32) -> FrameTaint {
+    pub(crate) fn end_with(&mut self, frame: FlowFrame, height: u16, actual: u16) -> FrameTaint {
+        let r = self.regs;
         let taint = FrameTaint {
-            transient: if self.transient < frame.start { self.transient } else { UNTAINTED },
-            reference: if self.reference < frame.start { self.reference } else { UNTAINTED },
-            flags: self.flags,
+            transient: if r.transient < frame.start { r.transient } else { UNTAINTED },
+            reference: if r.reference < frame.start { r.reference } else { UNTAINTED },
+            flags: r.flags,
         };
-        self.transient = self.transient.min(frame.saved_transient);
-        self.reference = self.reference.min(frame.saved_reference);
-        self.height = frame.saved_height.max(height + 1);
-        self.actual = frame.saved_actual.max(actual + 1);
-        self.flags |= frame.saved_flags;
+        let p = frame.saved;
+        self.regs = Regs {
+            transient: r.transient.min(p.transient),
+            reference: r.reference.min(p.reference),
+            height: p.height.max(height.saturating_add(1)),
+            actual: p.actual.max(actual.saturating_add(1)),
+            flags: r.flags | p.flags,
+        };
         taint
     }
 
     /// Ends a frame that computed its result: its height is what its children reported.
     #[inline]
-    pub(crate) fn end(&mut self, frame: FlowFrame) -> (FrameTaint, u32, u32) {
-        let (height, actual) = (self.height, self.actual);
+    fn end(&mut self, frame: FlowFrame) -> (FrameTaint, u16, u16) {
+        let (height, actual) = (self.regs.height, self.regs.actual);
         (self.end_with(frame, height, actual), height, actual)
     }
 
     /// The innermost frame's result came from a memo answer for a sub-walk of height `height` at its own level.
     #[inline]
-    pub(crate) fn raise_height(&mut self, height: u32) {
-        self.height = self.height.max(height);
+    pub(crate) fn raise_height(&mut self, height: u16) {
+        self.regs.height = self.regs.height.max(height);
     }
 
     #[inline]
-    pub(crate) fn save_heights(&mut self) -> (u32, u32) {
-        (std::mem::take(&mut self.height), std::mem::take(&mut self.actual))
+    pub(crate) fn add_flags(&mut self, flags: u8) {
+        self.regs.flags |= flags;
     }
 
     #[inline]
-    pub(crate) fn restore_heights(&mut self, saved: (u32, u32)) {
-        (self.height, self.actual) = saved;
+    pub(crate) fn save_heights(&mut self) -> (u16, u16) {
+        let saved = (self.regs.height, self.regs.actual);
+        self.regs.height = 0;
+        self.regs.actual = 0;
+        saved
     }
 
-    /// Like a frame, for a computation whose result is cached outside the flow walk (`getTypeOfExpression`).
     #[inline]
-    pub(crate) fn begin_bracket(&mut self) -> FlowFrame {
-        self.begin()
-    }
-
-    /// Returns the bracket's transient taint (UNTAINTED when it consumed nothing older than itself).
-    #[inline]
-    pub(crate) fn end_bracket(&mut self, frame: FlowFrame) -> u32 {
-        let taint = if self.transient < frame.start { self.transient } else { UNTAINTED };
-        self.transient = self.transient.min(frame.saved_transient);
-        self.reference = self.reference.min(frame.saved_reference);
-        self.height = frame.saved_height;
-        self.actual = frame.saved_actual;
-        self.flags |= frame.saved_flags;
-        taint
+    pub(crate) fn restore_heights(&mut self, saved: (u16, u16)) {
+        (self.regs.height, self.regs.actual) = saved;
     }
 
     #[inline]
     pub(crate) fn taint(&mut self, source: u32) {
-        if source < self.transient {
-            self.transient = source;
+        if source < self.regs.transient {
+            self.regs.transient = source;
         }
     }
 
     #[inline]
     pub(crate) fn taint_reference(&mut self, source: u32) {
-        if source < self.reference {
-            self.reference = source;
+        if source < self.regs.reference {
+            self.regs.reference = source;
         }
     }
 
@@ -285,12 +290,12 @@ impl FlowMemo {
         }
         let slot = &self.slots[self.slot_index(flow, key)];
         if slot.flow == Some(flow) && slot.key == key {
-            return slot.t.map(|t| MemoHit { t, height: slot.height, epoch: slot.epoch });
+            return slot.t.map(|t| MemoHit { t, height: slot.height, epoch: slot.epoch, count_reset: slot.count_reset });
         }
         None
     }
 
-    pub(crate) fn store(&mut self, flow: P<FlowNode>, key: u128, t: P<Type>, height: u32, epoch: u32) {
+    pub(crate) fn store(&mut self, flow: P<FlowNode>, key: u128, t: P<Type>, height: u16, epoch: u32, count_reset: bool) {
         if self.slots.is_empty() {
             self.slots = vec![Slot::default(); 1 << table_bits()];
             if self.mode == FlowMemoMode::Shadow {
@@ -298,7 +303,7 @@ impl FlowMemo {
             }
         }
         let i = self.slot_index(flow, key);
-        self.slots[i] = Slot { key, flow: Some(flow), t: Some(t), height, epoch };
+        self.slots[i] = Slot { key, flow: Some(flow), t: Some(t), height, epoch, count_reset };
         if self.mode == FlowMemoMode::Shadow {
             self.shadow_keys[i] = Some(self.key_buf.clone().into_boxed_slice());
         }
@@ -315,16 +320,16 @@ impl FlowMemo {
         }
         let s = &self.stats;
         Some(format!(
-            "flow memo ({:?}, {} slots): walks {} (keyed {}), frames {}, consults {}, found {} (blocked {}: loop {}, cache {}, shared {}), hits {}, height misses {}, fills {}, not stored: tainted {}, counters {}; aborts {}, shadow checks {}",
+            "flow memo ({:?}, {} slots): walks {} (keyed {}), consults {}, found {} (blocked {}: loop {}, counters {}, cache {}, shared {}), hits {}, height misses {}, fills {}, not stored: tainted {}, counters {}; aborts {}, shadow checks {}",
             self.mode,
             self.slots.len(),
             s.walks,
             s.keyed_walks,
-            s.frames,
             s.consults,
             s.hits + s.blocked + s.height_misses,
             s.blocked,
             s.blocked_loop,
+            s.blocked_counters,
             s.blocked_cache,
             s.blocked_shared,
             s.hits,
@@ -345,7 +350,38 @@ impl Default for FlowMemo {
 }
 
 impl Checker {
-    /// Propagates the taint of a `sharedFlows` or `flowTypeCache` entry to the frames that consume it. A transient
+    #[inline]
+    pub(crate) fn flow_frame_begin(&mut self) -> FlowFrame {
+        self.flow_memo.begin(self.instantiation_count, self.total_instantiation_count, !self.active_mappers.is_empty())
+    }
+
+    /// Ends a frame that computed its result, adding what it did to the instantiation counters to its flags. With no
+    /// instantiation in it, the count can only have stayed or gone to 0 (a `checkExpression` reset); if it was 0 at
+    /// the start, a reset cannot be told apart.
+    #[inline]
+    pub(crate) fn flow_frame_end(&mut self, frame: FlowFrame) -> (FrameTaint, u16, u16) {
+        self.flow_frame_counters(frame);
+        self.flow_memo.end(frame)
+    }
+
+    /// `flow_frame_end` for a frame whose answer stands for a sub-walk of height `height` (a `sharedFlows` hit).
+    #[inline]
+    pub(crate) fn flow_frame_end_with(&mut self, frame: FlowFrame, height: u16) -> FrameTaint {
+        self.flow_frame_counters(frame);
+        self.flow_memo.end_with(frame, height, 0)
+    }
+
+    #[inline]
+    fn flow_frame_counters(&mut self, frame: FlowFrame) {
+        if self.total_instantiation_count != frame.total_instantiation_count || frame.in_instantiation {
+            self.flow_memo.add_flags(FLAG_COUNTERS);
+        }
+        if frame.instantiation_count == 0 || self.instantiation_count != frame.instantiation_count {
+            self.flow_memo.add_flags(FLAG_COUNT_RESET);
+        }
+    }
+
+    /// Propagates the taint of a `sharedFlows` entry to the frames that consume it. A transient
     /// source that is no longer active means the value outlived the loop analysis or resolution that produced it (Go
     /// reuses such values): everything active consumed a stale value.
     #[inline]
@@ -470,16 +506,20 @@ impl Checker {
         self.flow_memo.mode != FlowMemoMode::Off && f.memo_key_state.get() != 1 && self.inline_level == 0 && !self.flow_analysis_disabled && f.reduce_labels.borrow().is_empty()
     }
 
-    /// Whether a fresh walk of this frame now could read a value that the memo's walk did not: this walk's transient
-    /// `sharedFlows` values, the loop analysis in progress, or (for a frame that read it) another `flowTypeCache`.
+    /// Whether a fresh walk of this frame now could read a value that the memo's walk did not (this walk's transient
+    /// `sharedFlows` values, the loop analysis in progress, another `flowTypeCache` when the memo's walk read it, an
+    /// active instantiation's cache), or leave the instantiation count elsewhere.
     #[inline]
     pub(crate) fn flow_memo_consult_ok(&mut self, f: P<FlowState>, hit: MemoHit) -> bool {
         let cache_ok = hit.epoch == 0 || hit.epoch == self.flow_type_cache_epoch;
-        let ok = !f.memo_faithful.get() && self.flow_loop_stack.is_empty() && cache_ok && f.impure_shared.get() == 0;
+        let counters_ok = self.active_mappers.is_empty() && (!hit.count_reset || self.instantiation_count == 0);
+        let ok = !f.memo_faithful.get() && self.flow_loop_stack.is_empty() && cache_ok && counters_ok && f.impure_shared.get() == 0;
         if !ok && stats_from_env() {
             let s = &mut self.flow_memo.stats;
             if !self.flow_loop_stack.is_empty() {
                 s.blocked_loop += 1;
+            } else if !counters_ok {
+                s.blocked_counters += 1;
             } else if !cache_ok {
                 s.blocked_cache += 1;
             } else if f.impure_shared.get() != 0 {

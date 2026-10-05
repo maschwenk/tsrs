@@ -18,7 +18,7 @@ pub struct SharedFlow {
     /// the sub-walk it stands for.
     pub transient: u32,
     pub reference: u32,
-    pub height: u32,
+    pub height: u16,
     pub flags: u8,
 }
 

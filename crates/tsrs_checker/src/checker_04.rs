@@ -1257,19 +1257,16 @@ impl Checker {
             return quick_type;
         }
         // If a type has been cached for the node, return it.
-        if let Some((cached_type, taint)) = self.flow_type_cache.as_ref().and_then(|m| m.get(&node).copied()) {
-            self.flow_memo_consume(taint, crate::flowmemo::UNTAINTED);
-            // A flow walk that read this would read the same only from this cache (flow memo).
-            self.flow_memo.flags |= crate::flowmemo::FLAG_TYPE_CACHE;
+        if let Some(cached_type) = self.flow_type_cache.as_ref().and_then(|m| m.get(&node).copied()) {
+            // A later flow walk reads this answer only while the same cache is current (flow memo).
+            self.flow_memo.add_flags(crate::flowmemo::FLAG_TYPE_CACHE);
             return cached_type;
         }
         let start_invocation_count = self.flow_invocation_count;
-        let bracket = self.flow_memo.begin_bracket();
         let t = self.check_expression_ex(node, CheckMode::TypeOnly);
-        let taint = self.flow_memo.end_bracket(bracket);
         // If control flow analysis was required to determine the type, it is worth caching.
         if self.flow_invocation_count != start_invocation_count {
-            let previous = self.flow_type_cache.get_or_insert_with(FxHashMap::default).insert(node, (t, taint));
+            let previous = self.flow_type_cache.get_or_insert_with(FxHashMap::default).insert(node, t);
             if previous.is_some() {
                 // A nested evaluation of this node cached it first, so a cached type changed: memo answers that read
                 // this cache no longer describe it.
@@ -1519,7 +1516,6 @@ impl Checker {
         let save_current_node = self.current_node;
         self.current_node = Some(node);
         self.instantiation_count = 0;
-        self.flow_memo.flags |= crate::flowmemo::FLAG_COUNTERS;
         let uninstantiated_type = self.check_expression_worker(node, check_mode);
         let t = self.instantiate_type_with_single_generic_call_signature(node, uninstantiated_type, check_mode);
         if is_const_enum_object_type(t) {

@@ -2019,7 +2019,7 @@ impl Checker {
             }
             return false;
         }
-        let serial = self.flow_memo.next_serial();
+        let serial = self.flow_memo.source_now();
         self.type_resolutions.push(TypeResolution { target, property_name, result: true, serial });
         true
     }

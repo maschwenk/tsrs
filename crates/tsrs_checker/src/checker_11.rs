@@ -948,8 +948,6 @@ impl Checker {
 
     #[inline(never)]
     fn instantiate_type_with_alias_worker(&mut self, t: P<Type>, m: P<TypeMapper>, alias: Option<P<TypeAlias>>) -> P<Type> {
-        // Reads and may change the instantiation counters (flow memo: such frames are not memoized).
-        self.flow_memo.flags |= crate::flowmemo::FLAG_COUNTERS;
         if self.instantiation_stack.len() == 100 || self.instantiation_count >= 5_000_000 {
             // We have reached 100 recursive type instantiations, or 5M type instantiations caused by the same statement
             // or expression. There is a very high likelihood we're dealing with a combination of infinite generic types
