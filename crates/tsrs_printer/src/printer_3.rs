@@ -664,7 +664,7 @@ impl Printer {
         }
     }
 
-    pub(crate) fn emit_comments_before_token(&mut self, token: Kind, pos: i32, context_node: P<Node>, flags: tokenEmitFlags) -> (Option<commentState>, i32) {
+    pub(crate) fn emit_comments_before_token(&mut self, _token: Kind, pos: i32, context_node: P<Node>, flags: tokenEmitFlags) -> (Option<commentState>, i32) {
         let mut pos = pos;
         if flags.intersects(tokenEmitFlags::NoComments) || self.comments_disabled {
             // Still skip trivia so that the returned pos correctly identifies the token position.
@@ -699,7 +699,7 @@ impl Printer {
         (Some(commentState::default()), pos)
     }
 
-    pub(crate) fn emit_comments_after_token(&mut self, token: Kind, pos: i32, context_node: P<Node>, state: Option<commentState>) {
+    pub(crate) fn emit_comments_after_token(&mut self, _token: Kind, pos: i32, context_node: P<Node>, state: Option<commentState>) {
         if state.is_none() {
             return;
         }
@@ -732,7 +732,7 @@ impl Printer {
         Some(commentState { emit_flags, comment_range: detached_range, container_pos, container_end, declaration_list_container_end })
     }
 
-    pub(crate) fn emit_detached_comments_after_statement_list(&mut self, node: P<Node>, detached_range: TextRange, state: Option<commentState>) {
+    pub(crate) fn emit_detached_comments_after_statement_list(&mut self, _node: P<Node>, detached_range: TextRange, state: Option<commentState>) {
         let Some(state) = state else {
             return;
         };
@@ -1311,7 +1311,7 @@ impl Printer {
         Some(sourceMapState { emit_flags, source_map_range: loc, has_token_source_map_range: has_loc })
     }
 
-    pub(crate) fn emit_source_maps_after_token(&mut self, token: Kind, pos: i32, context_node: P<Node>, previous_state: Option<sourceMapState>) {
+    pub(crate) fn emit_source_maps_after_token(&mut self, _token: Kind, pos: i32, _context_node: P<Node>, previous_state: Option<sourceMapState>) {
         let Some(previous_state) = previous_state else {
             return;
         };
@@ -1455,11 +1455,6 @@ impl Printer {
     // Generate the text for a generated identifier or private identifier
     pub(crate) fn generate_name(&mut self, name: P<Node>) {
         let _ = self.name_generator.generate_name(name);
-    }
-
-    // Returns a value indicating whether a name is unique globally or within the current file.
-    pub(crate) fn is_file_level_unique_name_in_current_file(&self, name: &str, _private_name: bool) -> bool {
-        is_file_level_unique_name_in_current_file_worker(&self.text_state, self.print_handlers.has_global_name.as_deref(), name)
     }
 }
 

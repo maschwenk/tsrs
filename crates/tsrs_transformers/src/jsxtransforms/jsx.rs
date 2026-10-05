@@ -661,7 +661,7 @@ impl JSXTransformer {
     }
 
     // jsx.go:605
-    fn visit_jsx_opening_fragment_jsx(&self, fragment: P<Node>, children: Option<P<NodeList>>, location: TextRange) -> P<Node> {
+    fn visit_jsx_opening_fragment_jsx(&self, _fragment: P<Node>, children: Option<P<NodeList>>, location: TextRange) -> P<Node> {
         let mut children_props: Option<P<Node>> = None;
         if let Some(children) = children {
             if !children.nodes().is_empty() {

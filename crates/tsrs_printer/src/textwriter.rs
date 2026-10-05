@@ -213,7 +213,7 @@ impl EmitTextWriter for textWriter {
         self.write(text);
     }
 
-    fn write_symbol(&mut self, text: &str, symbol: P<Symbol>) {
+    fn write_symbol(&mut self, text: &str, _symbol: P<Symbol>) {
         self.write(text);
     }
 
