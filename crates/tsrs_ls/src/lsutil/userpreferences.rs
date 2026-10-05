@@ -199,6 +199,7 @@ pub(crate) struct FieldTag {
 
 // The Go field types that the reflection code distinguishes (by reflect.Type for the typeParsers/typeSerializers
 // entries, by reflect.Kind otherwise).
+#[derive(Clone, Copy)]
 pub(crate) enum FieldRef<'a> {
     Tristate(&'a Tristate),
     IndentStyle(&'a IndentStyle),

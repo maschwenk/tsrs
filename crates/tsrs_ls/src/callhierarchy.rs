@@ -708,7 +708,7 @@ impl LanguageService {
         &self,
         _ctx: &Context,
         _params: &incomingEntry,
-        data: SymbolAndEntriesData,
+        data: &SymbolAndEntriesData,
         _options: SymbolEntryTransformOptions,
     ) -> Result<lsproto::CallHierarchyIncomingCallsResponse, lsproto::Error> {
         let program = self.get_program();

@@ -170,7 +170,7 @@ impl LanguageService {
     }
 }
 
-fn go_cmp_compare<T: Ord>(a: T, b: T) -> i32 {
+fn go_cmp_compare<T: Ord + Copy>(a: T, b: T) -> i32 {
     match a.cmp(&b) {
         std::cmp::Ordering::Less => -1,
         std::cmp::Ordering::Equal => 0,

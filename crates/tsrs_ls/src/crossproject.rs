@@ -57,7 +57,7 @@ impl LanguageService {
         ctx: &Context,
         params: &Req,
         orchestrator: Option<&dyn CrossProjectOrchestrator>,
-        symbol_and_entries_to_resp: fn(&LanguageService, &Context, &Req, SymbolAndEntriesData, SymbolEntryTransformOptions) -> Result<Resp, lsproto::Error>,
+        symbol_and_entries_to_resp: fn(&LanguageService, &Context, &Req, &SymbolAndEntriesData, SymbolEntryTransformOptions) -> Result<Resp, lsproto::Error>,
         combine_results: fn(Vec<Resp>) -> Resp,
         is_rename: bool,
         implementations: bool,
@@ -68,11 +68,15 @@ impl LanguageService {
 
         // Single project
         let Some(orchestrator) = orchestrator else {
+            let computed;
             let data = match default_project_data {
-                Some(data) => data.clone(),
-                None => default_ls
-                    .provide_symbols_and_entries(ctx, params.text_document_uri(), params.text_document_position(), is_rename, implementations)
-                    .unwrap_or_default(),
+                Some(data) => data,
+                None => {
+                    computed = default_ls
+                        .provide_symbols_and_entries(ctx, params.text_document_uri(), params.text_document_position(), is_rename, implementations)
+                        .unwrap_or_default();
+                    &computed
+                }
             };
             return symbol_and_entries_to_resp(default_ls, ctx, params, data, options);
         };
@@ -190,7 +194,7 @@ impl LanguageService {
                         }
                     }
 
-                    Some(symbol_and_entries_to_resp(ls, ctx, params, data, options))
+                    Some(symbol_and_entries_to_resp(ls, ctx, params, &data, options))
                 }));
                 match outcome {
                     Ok(Some(Ok(result))) => {
@@ -335,8 +339,8 @@ pub(crate) fn combine_response_locations<T: HasLocations>(results: &[T]) -> Vec<
 }
 
 // crossproject.go:322
-pub(crate) fn combine_references(results: Vec<lsproto::ReferencesResponse>) -> lsproto::ReferencesResponse {
-    lsproto::LocationsOrNull { locations: Some(combine_response_locations(&results)) }
+pub(crate) fn combine_references(results: &[lsproto::ReferencesResponse]) -> lsproto::ReferencesResponse {
+    lsproto::LocationsOrNull { locations: Some(combine_response_locations(results)) }
 }
 
 // crossproject.go:326
@@ -370,14 +374,14 @@ pub(crate) fn combine_vs_references(results: Vec<lsproto::VSReferencesResponse>)
 
 // Go's `return ...combineResponseLocations(results)` restarts the iteration over all results; so does the port.
 // crossproject.go:354
-pub(crate) fn combine_implementations(results: Vec<lsproto::ImplementationResponse>) -> lsproto::ImplementationResponse {
+pub(crate) fn combine_implementations(results: &[lsproto::ImplementationResponse]) -> lsproto::ImplementationResponse {
     let mut combined: Vec<lsproto::LocationLink> = Vec::new();
     let mut seen_locations: Set<lsproto::Location> = Set::new();
-    for resp in &results {
+    for resp in results {
         if let Some(definition_links) = &resp.definition_links {
             combined = combine_location_array(combined, definition_links, &mut seen_locations);
         } else if resp.locations.is_some() {
-            return lsproto::LocationOrLocationsOrDefinitionLinksOrNull { locations: Some(combine_response_locations(&results)), ..Default::default() };
+            return lsproto::LocationOrLocationsOrDefinitionLinksOrNull { locations: Some(combine_response_locations(results)), ..Default::default() };
         }
     }
     lsproto::LocationOrLocationsOrDefinitionLinksOrNull { definition_links: Some(combined), ..Default::default() }

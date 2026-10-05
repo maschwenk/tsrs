@@ -708,7 +708,7 @@ impl Snapshot {
         let mut auto_imports_watch = None;
         let auto_imports = old_auto_imports.clone_registry(
             ctx,
-            autoimport::RegistryChange {
+            &autoimport::RegistryChange {
                 requested_file: prepare_auto_imports,
                 open_files,
                 changed: change.file_changes.changed.clone(),

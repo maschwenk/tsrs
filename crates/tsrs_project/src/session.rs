@@ -286,7 +286,7 @@ impl Session {
     }
 
     // session.go:287
-    pub fn configure(&self, config: UserPreferences) {
+    pub fn configure(&self, config: &UserPreferences) {
         let _configure = self.configure_mu.lock().unwrap();
         let old_config = {
             let mut user_config = self.user_config.lock().unwrap();
@@ -302,16 +302,17 @@ impl Session {
         }
 
         // Tell the client to re-request certain commands depending on user preference changes.
-        self.refresh_inlay_hints_if_needed(&old_config, &config);
-        self.refresh_code_lens_if_needed(&old_config, &config);
-        self.refresh_diagnostics_if_needed(&old_config, &config);
-        self.refresh_ata_if_needed(&old_config, &config);
+        self.refresh_inlay_hints_if_needed(&old_config, config);
+        self.refresh_code_lens_if_needed(&old_config, config);
+        self.refresh_diagnostics_if_needed(&old_config, config);
+        self.refresh_ata_if_needed(&old_config, config);
     }
 
     // session.go:314
+    // (Go stores initialUserPreferences before calling Configure; Configure does not read it.)
     pub fn initialize_with_user_config(&self, config: UserPreferences) {
-        *self.initial_user_preferences.lock().unwrap() = config.clone();
-        self.configure(config);
+        self.configure(&config);
+        *self.initial_user_preferences.lock().unwrap() = config;
     }
 
     // session.go:319

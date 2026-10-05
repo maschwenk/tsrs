@@ -1663,11 +1663,11 @@ impl Server {
     }
 
     // server.go:1800
-    fn handle_did_change_workspace_configuration(self: &Arc<Self>, ctx: &Context, params: lsproto::DidChangeConfigurationParams) -> Result<(), Error> {
+    fn handle_did_change_workspace_configuration(self: &Arc<Self>, ctx: &Context, params: &lsproto::DidChangeConfigurationParams) -> Result<(), Error> {
         if let lsproto::Value::Null = params.settings {
             return Ok(());
         } else if let lsproto::Value::Object(settings) = &params.settings {
-            self.session().configure(lsutil::parse_user_preferences(settings));
+            self.session().configure(&lsutil::parse_user_preferences(settings));
         }
         Ok(())
     }
@@ -1698,7 +1698,7 @@ impl Server {
     }
 
     // server.go:1829
-    fn handle_did_change_watched_files(self: &Arc<Self>, ctx: &Context, params: lsproto::DidChangeWatchedFilesParams) -> Result<(), Error> {
+    fn handle_did_change_watched_files(self: &Arc<Self>, ctx: &Context, params: &lsproto::DidChangeWatchedFilesParams) -> Result<(), Error> {
         self.session().did_change_watched_files(ctx, &params.changes);
         Ok(())
     }
@@ -1725,7 +1725,7 @@ impl Server {
         self: &Arc<Self>,
         ctx: &Context,
         language_service: &Arc<LanguageService>,
-        params: lsproto::DocumentDiagnosticParams,
+        params: &lsproto::DocumentDiagnosticParams,
     ) -> Result<lsproto::DocumentDiagnosticResponse, Error> {
         let ctx = context::with_checker_lifetime(ctx, context::CheckerLifetime::Diagnostics);
         if self.flake_logging() == lsproto::DiagnosticFlakeLogLevel::Off {
@@ -1775,7 +1775,7 @@ impl Server {
     }
 
     // server.go:1907
-    fn handle_hover(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::HoverParams) -> Result<lsproto::HoverResponse, Error> {
+    fn handle_hover(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: &lsproto::HoverParams) -> Result<lsproto::HoverResponse, Error> {
         ls.provide_hover(ctx, &params)
     }
 
@@ -1784,7 +1784,7 @@ impl Server {
         self: &Arc<Self>,
         ctx: &Context,
         language_service: &Arc<LanguageService>,
-        params: lsproto::PrepareRenameParams,
+        params: &lsproto::PrepareRenameParams,
     ) -> Result<lsproto::PrepareRenameResponse, Error> {
         let info = language_service.get_rename_info(ctx, "" /*newName*/, &params.text_document.uri, params.position);
         if !info.can_rename {
@@ -1797,7 +1797,7 @@ impl Server {
     }
 
     // server.go:1924
-    fn handle_rename(self: &Arc<Self>, ctx: &Context, params: lsproto::RenameParams, req: &RequestMessage) -> Result<lsproto::RenameResponse, Error> {
+    fn handle_rename(self: &Arc<Self>, ctx: &Context, params: &lsproto::RenameParams, req: &RequestMessage) -> Result<lsproto::RenameResponse, Error> {
         let (default_ls, orchestrator) = self.get_language_service_and_cross_project_orchestrator(ctx, &params.text_document.uri, req)?;
         let info = default_ls.get_rename_info(ctx, &params.new_name, &params.text_document.uri, params.position);
         if info.can_rename && !info.file_to_rename.is_empty() {
@@ -1823,14 +1823,14 @@ impl Server {
                     new_uri: tsrs_ls::lsconv::file_name_to_document_uri(&info.new_file_name),
                 }],
             };
-            return self.handle_will_rename_files_worker(ctx, rename_files_params, req, true /*sendRenameFile*/);
+            return self.handle_will_rename_files_worker(ctx, &rename_files_params, req, true /*sendRenameFile*/);
         }
 
-        default_ls.provide_rename(ctx, &params, Some(&*orchestrator))
+        default_ls.provide_rename(ctx, params, Some(&*orchestrator))
     }
 
     // server.go:1961
-    fn handle_will_rename_files(self: &Arc<Self>, ctx: &Context, params: lsproto::RenameFilesParams, msg: &RequestMessage) -> Result<lsproto::WillRenameFilesResponse, Error> {
+    fn handle_will_rename_files(self: &Arc<Self>, ctx: &Context, params: &lsproto::RenameFilesParams, msg: &RequestMessage) -> Result<lsproto::WillRenameFilesResponse, Error> {
         self.handle_will_rename_files_worker(ctx, params, msg, false /*sendRenameFile*/)
     }
 
@@ -1841,7 +1841,7 @@ impl Server {
     fn handle_will_rename_files_worker(
         self: &Arc<Self>,
         ctx: &Context,
-        params: lsproto::RenameFilesParams,
+        params: &lsproto::RenameFilesParams,
         _req: &RequestMessage,
         send_rename_file: bool,
     ) -> Result<lsproto::WillRenameFilesResponse, Error> {
@@ -1943,17 +1943,17 @@ impl Server {
     }
 
     // server.go:2070
-    fn handle_signature_help(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::SignatureHelpParams) -> Result<lsproto::SignatureHelpResponse, Error> {
+    fn handle_signature_help(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: &lsproto::SignatureHelpParams) -> Result<lsproto::SignatureHelpResponse, Error> {
         ls.provide_signature_help(ctx, &params.text_document.uri, params.position, params.context.as_ref())
     }
 
     // server.go:2079
-    fn handle_folding_range(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::FoldingRangeParams) -> Result<lsproto::FoldingRangeResponse, Error> {
+    fn handle_folding_range(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: &lsproto::FoldingRangeParams) -> Result<lsproto::FoldingRangeResponse, Error> {
         ls.provide_folding_range(ctx, &params.text_document.uri)
     }
 
     // server.go:2083
-    fn handle_vs_on_auto_insert(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::VSOnAutoInsertParams) -> Result<lsproto::VSOnAutoInsertResponse, Error> {
+    fn handle_vs_on_auto_insert(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: &lsproto::VSOnAutoInsertParams) -> Result<lsproto::VSOnAutoInsertResponse, Error> {
         ls.provide_on_auto_insert(ctx, &params)
     }
 
@@ -1962,13 +1962,13 @@ impl Server {
         self: &Arc<Self>,
         ctx: &Context,
         ls: &Arc<LanguageService>,
-        params: lsproto::LinkedEditingRangeParams,
+        params: &lsproto::LinkedEditingRangeParams,
     ) -> Result<lsproto::LinkedEditingRangeResponse, Error> {
         ls.provide_linked_editing_range(ctx, &params)
     }
 
     // server.go:2091
-    fn handle_definition(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::DefinitionParams) -> Result<lsproto::DefinitionResponse, Error> {
+    fn handle_definition(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: &lsproto::DefinitionParams) -> Result<lsproto::DefinitionResponse, Error> {
         ls.provide_definition(ctx, &params.text_document.uri, params.position)
     }
 
@@ -1977,19 +1977,19 @@ impl Server {
         self: &Arc<Self>,
         ctx: &Context,
         ls: &Arc<LanguageService>,
-        params: lsproto::TextDocumentPositionParams,
+        params: &lsproto::TextDocumentPositionParams,
     ) -> Result<lsproto::CustomTextDocumentSourceDefinitionResponse, Error> {
         let resp = ls.provide_source_definition(ctx, &params.text_document.uri, params.position)?;
         Ok(resp)
     }
 
     // server.go:2103
-    fn handle_type_definition(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::TypeDefinitionParams) -> Result<lsproto::TypeDefinitionResponse, Error> {
+    fn handle_type_definition(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: &lsproto::TypeDefinitionParams) -> Result<lsproto::TypeDefinitionResponse, Error> {
         ls.provide_type_definition(ctx, &params.text_document.uri, params.position)
     }
 
     // server.go:2107
-    fn handle_completion(self: &Arc<Self>, ctx: &Context, language_service: &Arc<LanguageService>, params: lsproto::CompletionParams) -> Result<lsproto::CompletionResponse, Error> {
+    fn handle_completion(self: &Arc<Self>, ctx: &Context, language_service: &Arc<LanguageService>, params: &lsproto::CompletionParams) -> Result<lsproto::CompletionResponse, Error> {
         language_service.provide_completion(ctx, &params.text_document.uri, params.position, params.context.as_ref())
     }
 
@@ -2011,7 +2011,7 @@ impl Server {
     }
 
     // server.go:2129
-    fn handle_document_format(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::DocumentFormattingParams) -> Result<lsproto::DocumentFormattingResponse, Error> {
+    fn handle_document_format(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: &lsproto::DocumentFormattingParams) -> Result<lsproto::DocumentFormattingResponse, Error> {
         ls.provide_format_document(ctx, &params.text_document.uri, params.options)
     }
 
@@ -2020,7 +2020,7 @@ impl Server {
         self: &Arc<Self>,
         ctx: &Context,
         ls: &Arc<LanguageService>,
-        params: lsproto::DocumentRangeFormattingParams,
+        params: &lsproto::DocumentRangeFormattingParams,
     ) -> Result<lsproto::DocumentRangeFormattingResponse, Error> {
         ls.provide_format_document_range(ctx, &params.text_document.uri, params.options, params.range)
     }
@@ -2030,13 +2030,13 @@ impl Server {
         self: &Arc<Self>,
         ctx: &Context,
         ls: &Arc<LanguageService>,
-        params: lsproto::DocumentOnTypeFormattingParams,
+        params: &lsproto::DocumentOnTypeFormattingParams,
     ) -> Result<lsproto::DocumentOnTypeFormattingResponse, Error> {
         ls.provide_format_document_on_type(ctx, &params.text_document.uri, params.options, params.position, &params.ch)
     }
 
     // server.go:2156
-    fn handle_workspace_symbol(self: &Arc<Self>, ctx: &Context, params: lsproto::WorkspaceSymbolParams, req_msg: &RequestMessage) -> Result<lsproto::WorkspaceSymbolResponse, Error> {
+    fn handle_workspace_symbol(self: &Arc<Self>, ctx: &Context, params: &lsproto::WorkspaceSymbolParams, req_msg: &RequestMessage) -> Result<lsproto::WorkspaceSymbolResponse, Error> {
         let mut resp = lsproto::WorkspaceSymbolResponse::default();
         let mut ls_err: Option<Error> = None;
         let mut provide_symbols = |snapshot: &Arc<project::Snapshot>, programs: Vec<&'static tsrs_compiler::Program>| {
@@ -2068,7 +2068,7 @@ impl Server {
     }
 
     // server.go:2184
-    fn handle_document_symbol(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::DocumentSymbolParams) -> Result<lsproto::DocumentSymbolResponse, Error> {
+    fn handle_document_symbol(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: &lsproto::DocumentSymbolParams) -> Result<lsproto::DocumentSymbolResponse, Error> {
         ls.provide_document_symbols(ctx, &params.text_document.uri)
     }
 
@@ -2077,7 +2077,7 @@ impl Server {
         self: &Arc<Self>,
         ctx: &Context,
         ls: &Arc<LanguageService>,
-        params: lsproto::DocumentHighlightParams,
+        params: &lsproto::DocumentHighlightParams,
     ) -> Result<lsproto::DocumentHighlightResponse, Error> {
         ls.provide_document_highlights(ctx, &params.text_document.uri, params.position)
     }
@@ -2087,28 +2087,28 @@ impl Server {
         self: &Arc<Self>,
         ctx: &Context,
         ls: &Arc<LanguageService>,
-        params: lsproto::MultiDocumentHighlightParams,
+        params: &lsproto::MultiDocumentHighlightParams,
     ) -> Result<lsproto::CustomMultiDocumentHighlightResponse, Error> {
         ls.provide_multi_document_highlights(ctx, &params.text_document.uri, params.position, &params.files_to_search)
     }
 
     // server.go:2196
-    fn handle_selection_range(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::SelectionRangeParams) -> Result<lsproto::SelectionRangeResponse, Error> {
+    fn handle_selection_range(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: &lsproto::SelectionRangeParams) -> Result<lsproto::SelectionRangeResponse, Error> {
         ls.provide_selection_ranges(ctx, &params)
     }
 
     // server.go:2200
-    fn handle_code_action(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::CodeActionParams) -> Result<lsproto::CodeActionResponse, Error> {
+    fn handle_code_action(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: &lsproto::CodeActionParams) -> Result<lsproto::CodeActionResponse, Error> {
         ls.provide_code_actions(ctx, &params)
     }
 
     // server.go:2204
-    fn handle_inlay_hint(self: &Arc<Self>, ctx: &Context, language_service: &Arc<LanguageService>, params: lsproto::InlayHintParams) -> Result<lsproto::InlayHintResponse, Error> {
+    fn handle_inlay_hint(self: &Arc<Self>, ctx: &Context, language_service: &Arc<LanguageService>, params: &lsproto::InlayHintParams) -> Result<lsproto::InlayHintResponse, Error> {
         language_service.provide_inlay_hint(ctx, &params)
     }
 
     // server.go:2212
-    fn handle_code_lens(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::CodeLensParams) -> Result<lsproto::CodeLensResponse, Error> {
+    fn handle_code_lens(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: &lsproto::CodeLensParams) -> Result<lsproto::CodeLensResponse, Error> {
         ls.provide_code_lenses(ctx, &params.text_document.uri)
     }
 
@@ -2149,7 +2149,7 @@ impl Server {
         self: &Arc<Self>,
         ctx: &Context,
         language_service: &Arc<LanguageService>,
-        params: lsproto::CallHierarchyPrepareParams,
+        params: &lsproto::CallHierarchyPrepareParams,
     ) -> Result<lsproto::CallHierarchyPrepareResponse, Error> {
         language_service.provide_prepare_call_hierarchy(ctx, &params.text_document.uri, params.position)
     }
@@ -2158,7 +2158,7 @@ impl Server {
     fn handle_call_hierarchy_incoming_calls(
         self: &Arc<Self>,
         ctx: &Context,
-        params: lsproto::CallHierarchyIncomingCallsParams,
+        params: &lsproto::CallHierarchyIncomingCallsParams,
         req_msg: &RequestMessage,
     ) -> Result<lsproto::CallHierarchyIncomingCallsResponse, Error> {
         let (default_ls, orchestrator) = self.get_language_service_and_cross_project_orchestrator(ctx, &params.item.uri, req_msg)?;
@@ -2169,7 +2169,7 @@ impl Server {
     fn handle_call_hierarchy_outgoing_calls(
         self: &Arc<Self>,
         ctx: &Context,
-        params: lsproto::CallHierarchyOutgoingCallsParams,
+        params: &lsproto::CallHierarchyOutgoingCallsParams,
         _req: &RequestMessage,
     ) -> Result<lsproto::CallHierarchyOutgoingCallsResponse, Error> {
         let language_service = self.session().get_language_service(ctx, &params.item.uri)?;
@@ -2177,7 +2177,7 @@ impl Server {
     }
 
     // server.go:2272
-    fn handle_semantic_tokens_full(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: lsproto::SemanticTokensParams) -> Result<lsproto::SemanticTokensResponse, Error> {
+    fn handle_semantic_tokens_full(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: &lsproto::SemanticTokensParams) -> Result<lsproto::SemanticTokensResponse, Error> {
         ls.provide_semantic_tokens(ctx, &params.text_document.uri)
     }
 
@@ -2186,7 +2186,7 @@ impl Server {
         self: &Arc<Self>,
         ctx: &Context,
         ls: &Arc<LanguageService>,
-        params: lsproto::SemanticTokensRangeParams,
+        params: &lsproto::SemanticTokensRangeParams,
     ) -> Result<lsproto::SemanticTokensRangeResponse, Error> {
         ls.provide_semantic_tokens_range(ctx, &params.text_document.uri, params.range)
     }
@@ -2195,7 +2195,7 @@ impl Server {
     fn handle_initialize_api_session(
         self: &Arc<Self>,
         ctx: &Context,
-        params: lsproto::InitializeAPISessionParams,
+        params: &lsproto::InitializeAPISessionParams,
         _req: &RequestMessage,
     ) -> Result<lsproto::CustomInitializeAPISessionResponse, Error> {
         Err(not_yet_ported(Method::CustomInitializeAPISession))
@@ -2216,17 +2216,17 @@ impl Server {
     }
 
     // server.go:2400
-    fn handle_save_heap_profile(self: &Arc<Self>, _ctx: &Context, params: lsproto::ProfileParams, _req: &RequestMessage) -> Result<lsproto::SaveHeapProfileResponse, Error> {
+    fn handle_save_heap_profile(self: &Arc<Self>, _ctx: &Context, params: &lsproto::ProfileParams, _req: &RequestMessage) -> Result<lsproto::SaveHeapProfileResponse, Error> {
         Err(not_yet_ported(Method::CustomSaveHeapProfile))
     }
 
     // server.go:2409
-    fn handle_save_alloc_profile(self: &Arc<Self>, _ctx: &Context, params: lsproto::ProfileParams, _req: &RequestMessage) -> Result<lsproto::SaveAllocProfileResponse, Error> {
+    fn handle_save_alloc_profile(self: &Arc<Self>, _ctx: &Context, params: &lsproto::ProfileParams, _req: &RequestMessage) -> Result<lsproto::SaveAllocProfileResponse, Error> {
         Err(not_yet_ported(Method::CustomSaveAllocProfile))
     }
 
     // server.go:2418
-    fn handle_start_cpu_profile(self: &Arc<Self>, _ctx: &Context, params: lsproto::ProfileParams, _req: &RequestMessage) -> Result<lsproto::StartCPUProfileResponse, Error> {
+    fn handle_start_cpu_profile(self: &Arc<Self>, _ctx: &Context, params: &lsproto::ProfileParams, _req: &RequestMessage) -> Result<lsproto::StartCPUProfileResponse, Error> {
         Err(not_yet_ported(Method::CustomStartCPUProfile))
     }
 
@@ -2236,7 +2236,7 @@ impl Server {
     }
 
     // server.go:2436
-    fn handle_project_info(self: &Arc<Self>, ctx: &Context, params: lsproto::ProjectInfoParams, _req: &RequestMessage) -> Result<lsproto::CustomProjectInfoResponse, Error> {
+    fn handle_project_info(self: &Arc<Self>, ctx: &Context, params: &lsproto::ProjectInfoParams, _req: &RequestMessage) -> Result<lsproto::CustomProjectInfoResponse, Error> {
         let uri = &params.text_document.uri;
         let (default_project, _, _) = self.session().get_language_service_and_projects_for_file(ctx, uri)?;
         let mut config_file_path = String::new();
@@ -2250,7 +2250,7 @@ impl Server {
     fn handle_set_content_mapper_contributions(
         self: &Arc<Self>,
         ctx: &Context,
-        params: lsproto::SetContentMapperContributionsParams,
+        params: &lsproto::SetContentMapperContributionsParams,
         _req: &RequestMessage,
     ) -> Result<lsproto::CustomSetContentMapperContributionsResponse, Error> {
         Err(not_yet_ported(Method::CustomSetContentMapperContributions))
@@ -2352,15 +2352,15 @@ fn handlers() -> &'static handlerMap {
         handlers.register_request_handler(lsproto::SHUTDOWN_INFO, Server::handle_shutdown);
         handlers.register_notification_handler(lsproto::EXIT_INFO, Server::handle_exit);
 
-        handlers.register_notification_handler(lsproto::WORKSPACE_DID_CHANGE_CONFIGURATION_INFO, Server::handle_did_change_workspace_configuration);
+        handlers.register_notification_handler(lsproto::WORKSPACE_DID_CHANGE_CONFIGURATION_INFO, |s, ctx, params| s.handle_did_change_workspace_configuration(ctx, &params));
         handlers.register_notification_handler(lsproto::TEXT_DOCUMENT_DID_OPEN_INFO, Server::handle_did_open);
         handlers.register_notification_handler(lsproto::TEXT_DOCUMENT_DID_CHANGE_INFO, Server::handle_did_change);
         handlers.register_notification_handler(lsproto::TEXT_DOCUMENT_DID_SAVE_INFO, Server::handle_did_save);
         handlers.register_notification_handler(lsproto::TEXT_DOCUMENT_DID_CLOSE_INFO, Server::handle_did_close);
-        handlers.register_notification_handler(lsproto::WORKSPACE_DID_CHANGE_WATCHED_FILES_INFO, Server::handle_did_change_watched_files);
+        handlers.register_notification_handler(lsproto::WORKSPACE_DID_CHANGE_WATCHED_FILES_INFO, |s, ctx, params| s.handle_did_change_watched_files(ctx, &params));
         handlers.register_notification_handler(lsproto::SET_TRACE_INFO, Server::handle_set_trace);
         handlers.register_notification_handler(lsproto::CUSTOM_SET_LOG_VERBOSITY_INFO, Server::handle_set_log_verbosity);
-        handlers.register_request_handler(lsproto::WORKSPACE_WILL_RENAME_FILES_INFO, Server::handle_will_rename_files);
+        handlers.register_request_handler(lsproto::WORKSPACE_WILL_RENAME_FILES_INFO, |s, ctx, params, req| s.handle_will_rename_files(ctx, &params, req));
 
         handlers.register_language_service_document_request_handler(lsproto::TEXT_DOCUMENT_DIAGNOSTIC_INFO, Server::handle_document_diagnostic);
         handlers.register_language_service_document_request_handler(lsproto::TEXT_DOCUMENT_HOVER_INFO, Server::handle_hover);
@@ -2394,15 +2394,15 @@ fn handlers() -> &'static handlerMap {
         handlers.register_multi_project_reference_request_handler(lsproto::TEXT_DOCUMENT_VS_REFERENCES_INFO, |ls, ctx, params, orchestrator| {
             ls.provide_vs_references(ctx, &params, Some(&*orchestrator))
         });
-        handlers.register_request_handler(lsproto::TEXT_DOCUMENT_RENAME_INFO, Server::handle_rename);
+        handlers.register_request_handler(lsproto::TEXT_DOCUMENT_RENAME_INFO, |s, ctx, params, req| s.handle_rename(ctx, &params, req));
         handlers.register_multi_project_reference_request_handler(lsproto::TEXT_DOCUMENT_IMPLEMENTATION_INFO, |ls, ctx, params, orchestrator| {
             ls.provide_implementations(ctx, &params, Some(&*orchestrator))
         });
 
-        handlers.register_request_handler(lsproto::CALL_HIERARCHY_INCOMING_CALLS_INFO, Server::handle_call_hierarchy_incoming_calls);
-        handlers.register_request_handler(lsproto::CALL_HIERARCHY_OUTGOING_CALLS_INFO, Server::handle_call_hierarchy_outgoing_calls);
+        handlers.register_request_handler(lsproto::CALL_HIERARCHY_INCOMING_CALLS_INFO, |s, ctx, params, req| s.handle_call_hierarchy_incoming_calls(ctx, &params, req));
+        handlers.register_request_handler(lsproto::CALL_HIERARCHY_OUTGOING_CALLS_INFO, |s, ctx, params, req| s.handle_call_hierarchy_outgoing_calls(ctx, &params, req));
 
-        handlers.register_request_handler(lsproto::WORKSPACE_SYMBOL_INFO, Server::handle_workspace_symbol);
+        handlers.register_request_handler(lsproto::WORKSPACE_SYMBOL_INFO, |s, ctx, params, req| s.handle_workspace_symbol(ctx, &params, req));
         handlers.register_request_handler(lsproto::COMPLETION_ITEM_RESOLVE_INFO, Server::handle_completion_item_resolve);
         handlers.register_request_handler(lsproto::CODE_LENS_RESOLVE_INFO, Server::handle_code_lens_resolve);
         handlers.register_language_service_document_request_handler(lsproto::TEXT_DOCUMENT_SEMANTIC_TOKENS_FULL_INFO, Server::handle_semantic_tokens_full);
@@ -2410,14 +2410,14 @@ fn handlers() -> &'static handlerMap {
 
         // Developer/debugging commands
         handlers.register_request_handler(lsproto::CUSTOM_RUN_GC_INFO, Server::handle_run_gc);
-        handlers.register_request_handler(lsproto::CUSTOM_SAVE_HEAP_PROFILE_INFO, Server::handle_save_heap_profile);
-        handlers.register_request_handler(lsproto::CUSTOM_SAVE_ALLOC_PROFILE_INFO, Server::handle_save_alloc_profile);
-        handlers.register_request_handler(lsproto::CUSTOM_START_CPU_PROFILE_INFO, Server::handle_start_cpu_profile);
+        handlers.register_request_handler(lsproto::CUSTOM_SAVE_HEAP_PROFILE_INFO, |s, ctx, params, req| s.handle_save_heap_profile(ctx, &params, req));
+        handlers.register_request_handler(lsproto::CUSTOM_SAVE_ALLOC_PROFILE_INFO, |s, ctx, params, req| s.handle_save_alloc_profile(ctx, &params, req));
+        handlers.register_request_handler(lsproto::CUSTOM_START_CPU_PROFILE_INFO, |s, ctx, params, req| s.handle_start_cpu_profile(ctx, &params, req));
         handlers.register_request_handler(lsproto::CUSTOM_STOP_CPU_PROFILE_INFO, Server::handle_stop_cpu_profile);
 
-        handlers.register_request_handler(lsproto::CUSTOM_INITIALIZE_API_SESSION_INFO, Server::handle_initialize_api_session);
-        handlers.register_request_handler(lsproto::CUSTOM_PROJECT_INFO_INFO, Server::handle_project_info);
-        handlers.register_request_handler(lsproto::CUSTOM_SET_CONTENT_MAPPER_CONTRIBUTIONS_INFO, Server::handle_set_content_mapper_contributions);
+        handlers.register_request_handler(lsproto::CUSTOM_INITIALIZE_API_SESSION_INFO, |s, ctx, params, req| s.handle_initialize_api_session(ctx, &params, req));
+        handlers.register_request_handler(lsproto::CUSTOM_PROJECT_INFO_INFO, |s, ctx, params, req| s.handle_project_info(ctx, &params, req));
+        handlers.register_request_handler(lsproto::CUSTOM_SET_CONTENT_MAPPER_CONTRIBUTIONS_INFO, |s, ctx, params, req| s.handle_set_content_mapper_contributions(ctx, &params, req));
         handlers
     })
 }
@@ -2474,7 +2474,7 @@ impl handlerMap {
     fn register_language_service_document_request_handler<Req, Resp>(
         &mut self,
         info: lsproto::RequestInfo<Req, Resp>,
-        f: fn(&Arc<Server>, &Context, &Arc<LanguageService>, Req) -> Result<Resp, Error>,
+        f: fn(&Arc<Server>, &Context, &Arc<LanguageService>, &Req) -> Result<Resp, Error>,
     ) where
         Req: Json + Default + lsproto::HasTextDocumentURI + Send + 'static,
         Resp: Json + 'static,
@@ -2487,7 +2487,7 @@ impl handlerMap {
                 let (s, ctx, req) = (Arc::clone(s), ctx.clone(), Arc::clone(req));
                 Ok(Some(Box::new(move || {
                     s.with_recover(&req, || {
-                        let resp = f(&s, &ctx, &ls, params);
+                        let resp = f(&s, &ctx, &ls, &params);
                         // After any language service request, check if new global diagnostics were
                         // discovered during checking and push updated tsconfig diagnostics if so.
                         s.session().enqueue_publish_global_diagnostics();
@@ -2506,9 +2506,9 @@ impl handlerMap {
     fn register_language_service_with_auto_imports_request_handler<Req, Resp>(
         &mut self,
         info: lsproto::RequestInfo<Req, Resp>,
-        f: fn(&Arc<Server>, &Context, &Arc<LanguageService>, Req) -> Result<Resp, Error>,
+        f: fn(&Arc<Server>, &Context, &Arc<LanguageService>, &Req) -> Result<Resp, Error>,
     ) where
-        Req: Json + Default + Clone + lsproto::HasTextDocumentURI + Send + 'static,
+        Req: Json + Default + lsproto::HasTextDocumentURI + Send + 'static,
         Resp: Json + 'static,
     {
         self.0.insert(
@@ -2521,13 +2521,13 @@ impl handlerMap {
                     Ok(Some(Box::new(move || {
                         s.with_recover(&req, || {
                             let mut language_service = language_service;
-                            let mut resp = f(&s, &ctx, &language_service, params.clone());
+                            let mut resp = f(&s, &ctx, &language_service, &params);
                             if matches!(&resp, Err(err) if tsrs_ls::is_err_needs_auto_imports(err)) {
                                 language_service = s.session().get_language_service_with_auto_imports(&ctx, &snapshot, params.text_document_uri())?;
                                 if let Some(err) = ctx.err() {
                                     return Err(err.into());
                                 }
-                                resp = f(&s, &ctx, &language_service, params);
+                                resp = f(&s, &ctx, &language_service, &params);
                                 if matches!(&resp, Err(err) if tsrs_ls::is_err_needs_auto_imports(err)) {
                                     panic!("{} returned ErrNeedsAutoImports even after enabling auto imports", info.method);
                                 }

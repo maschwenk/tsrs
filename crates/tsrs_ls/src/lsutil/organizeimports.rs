@@ -15,7 +15,7 @@ pub type StringComparer = Rc<dyn Fn(&str, &str) -> i32>;
 pub type NodeComparer = Rc<dyn Fn(P<Node>, P<Node>) -> i32>;
 
 // Go `cmp.Compare` / `strings.Compare`.
-fn go_cmp<T: Ord>(a: T, b: T) -> i32 {
+fn go_cmp<T: Ord + Copy>(a: T, b: T) -> i32 {
     match a.cmp(&b) {
         Ordering::Less => -1,
         Ordering::Equal => 0,
