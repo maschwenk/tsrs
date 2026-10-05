@@ -12,6 +12,8 @@ fn run(case: &str, mode: &str) -> (String, Option<i32>) {
         .current_dir(&dir)
         .args(["-p", ".", "--pretty", "false", "--singleThreaded"])
         .env("TSRS_DERIVED_VARIANCE", mode)
+        // The cases are small interfaces; the default only tries targets with 16 or more properties.
+        .env("TSRS_DERIVED_VARIANCE_MIN_MEMBERS", "0")
         .env_remove("TSRS_CHECKER_ASSIGNMENT")
         .env_remove("TSRS_DERIVED_VARIANCE_RELIABLE")
         .env_remove("TSRS_DERIVED_VARIANCE_LOG")

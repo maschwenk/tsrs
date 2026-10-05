@@ -20,6 +20,8 @@
 //! then exits with status 7 if there was any. `=on` uses the variance answer. Both are forced off under Go-compatible
 //! history (`--checkerAssignment go`). `TSRS_DERIVED_VARIANCE_RELIABLE=params` restricts it to bases whose type
 //! parameters' variances carry neither Unmeasurable nor Unreliable (`=1`: also the `this` variance);
+//! Only targets with at least 16 properties are tried (`TSRS_DERIVED_VARIANCE_MIN_MEMBERS=<n>`): below that the
+//! member-by-member comparison is cheaper than measuring and checking variances.
 //! `TSRS_DERIVED_VARIANCE_BASES=A,B` limits it to the generic bases named A and B (`=-A,B`: all but those);
 //! `TSRS_DERIVED_VARIANCE_LOG=<file>` appends one line per decision and per measured `this` variance.
 
@@ -98,6 +100,13 @@ fn base_filter() -> Option<&'static (bool, Vec<String>)> {
             Some((deny, list.split(',').map(str::to_string).collect()))
         })
         .as_ref()
+}
+
+/// `TSRS_DERIVED_VARIANCE_MIN_MEMBERS=<n>` (default 16): only targets with at least n properties. Below that the
+/// member-by-member comparison is cheaper than the variance route (notes/perf-derived-variance.md).
+fn min_members() -> usize {
+    static N: OnceLock<usize> = OnceLock::new();
+    *N.get_or_init(|| std::env::var("TSRS_DERIVED_VARIANCE_MIN_MEMBERS").ok().and_then(|v| v.parse().ok()).unwrap_or(16))
 }
 
 fn log_path() -> Option<&'static str> {
@@ -211,6 +220,9 @@ impl Relater {
             return None;
         }
         if c.is_marker_type(source) || c.is_marker_type(target) {
+            return None;
+        }
+        if c.get_properties_of_type(target).len() < min_members() {
             return None;
         }
         let base = self.derived_base_reference(c, source, generic, 0)?;
