@@ -32,13 +32,13 @@ fn flow_type_of(t: P<Type>) -> FlowType {
     FlowType { t: Some(t), incomplete: false }
 }
 
-/// Where a frame's entries in `FlowMemo::checkpoints` and `FlowMemo::shadow_hits` begin, and how many nodes its
-/// iteration passed (flowmemo.rs).
+/// A frame that may use and fill the memo: the walk's key, and where its entries in `FlowMemo::checkpoints` and
+/// `FlowMemo::shadow_hits` begin (flowmemo.rs).
 #[derive(Clone, Copy)]
-struct FrameMarks {
+struct FrameMemo {
+    key: u128,
     checkpoints: u32,
     shadow: u32,
-    steps: u32,
 }
 
 enum FlowStep {
@@ -169,6 +169,8 @@ impl Checker {
 
     // flow.go:117
     pub(crate) fn get_type_at_flow_node(&mut self, f: P<FlowState>, flow: P<FlowNode>) -> FlowType {
+        let entry_flow = flow;
+        let mut flow = flow;
         if f.depth.get() == FLOW_DEPTH_LIMIT {
             if f.memo_used.get() {
                 // Go, which walked the sub-graphs this walk took from the memo, may not be this deep here:
@@ -183,15 +185,25 @@ impl Checker {
             self.report_flow_control_error(f.ref_node());
             return flow_type_of(self.error_type);
         }
-        if f.memo_key_state.get() == 2 {
-            return self.get_type_at_flow_node_memo(f, flow);
-        }
-        // A walk without a memo key (flowmemo.rs): Go's loop. What it consumes reaches the frames of enclosing walks
-        // through the memo's registers directly; nothing of this walk is stored.
-        let mut flow = flow;
-        f.depth.set(f.depth.get() + 1);
+        // Flow memo (flowmemo.rs): in a walk with a memo key every call is a frame, which asks the memo at its first
+        // node, at the node that ends its iteration and at checkpoints, and stores its answer under them. The key's
+        // meaning holds only outside inlined conditions and reduce labels, while flow analysis is on. A walk without
+        // a key does no bookkeeping: what it consumes reaches the frames of enclosing walks through the memo's
+        // registers directly, and nothing of it is stored.
+        let entry_depth = f.depth.get();
+        let tracked = f.memo_key_state.get() == 2;
+        let frame = tracked.then(|| self.flow_frame_begin());
+        let memo = (tracked && self.inline_level == 0 && !self.flow_analysis_disabled && f.reduce_depth.get() == 0).then(|| FrameMemo {
+            key: f.memo_key.get(),
+            checkpoints: self.flow_memo.checkpoints.len() as u32,
+            shadow: if self.flow_memo.mode == FlowMemoMode::Shadow { self.flow_memo.shadow_hits.len() as u32 } else { 0 },
+        });
+        f.depth.set(entry_depth + 1);
         let mut shared_flow: Option<P<FlowNode>> = None;
-        loop {
+        let mut steps = 0u32;
+        let mut hit: Option<MemoHit> = None;
+        let t = loop {
+            steps += 1;
             let flags = flow.flags();
             if flags.intersects(FlowFlags::Shared) {
                 // We cache results of flow type resolution for shared nodes that were previously visited in
@@ -199,24 +211,74 @@ impl Checker {
                 // antecedent of more than one node.
                 for i in f.shared_flow_start.get() as usize..self.shared_flows.len() {
                     if self.shared_flows[i].flow == flow {
-                        f.depth.set(f.depth.get() - 1);
-                        return self.shared_flows[i].flow_type;
+                        let shared = self.shared_flows[i];
+                        f.depth.set(entry_depth);
+                        if let Some(frame) = frame {
+                            // A later walk of this frame may compute the node instead: it consumes what that took.
+                            self.flow_memo_consume(shared.transient, shared.reference);
+                            self.flow_memo.add_flags(shared.flags);
+                            let taint = self.flow_frame_end_with(frame, shared.height);
+                            if let Some(memo) = memo {
+                                self.flow_memo.checkpoints.truncate(memo.checkpoints as usize);
+                                self.flow_memo_shadow_settle(f, memo, entry_depth, shared.flow_type, taint);
+                            }
+                        }
+                        return shared.flow_type;
                     }
                 }
                 shared_flow = Some(flow);
             }
-            match self.get_type_at_flow_node_step(f, flow, flags) {
-                FlowStep::Next(next) => flow = next,
-                FlowStep::Done(t) => {
-                    if let Some(shared_flow) = shared_flow {
-                        // Record visited node and the associated type in the cache.
-                        self.shared_flows.push(SharedFlow { flow: shared_flow, flow_type: t, transient: UNTAINTED, reference: UNTAINTED, height: 0, flags: 0 });
+            if let Some(memo) = memo {
+                if let Some((memo_hit, ends_iteration)) = self.flow_memo_at_node(f, entry_flow, flow, flags, memo.key, entry_depth) {
+                    if !ends_iteration {
+                        // Go walks on from here and records the last shared node of the whole iteration, which this
+                        // frame does not know; leave the record out (a later visit walks or hits the memo again).
+                        shared_flow = None;
                     }
-                    f.depth.set(f.depth.get() - 1);
-                    return t;
+                    hit = Some(memo_hit);
+                    break flow_type_of(memo_hit.t);
                 }
             }
+            match self.get_type_at_flow_node_step(f, flow, flags) {
+                FlowStep::Next(next) => flow = next,
+                FlowStep::Done(t) => break t,
+            }
+        };
+        f.depth.set(entry_depth);
+        let Some(frame) = frame else {
+            if let Some(shared_flow) = shared_flow {
+                // Record visited node and the associated type in the cache.
+                self.shared_flows.push(SharedFlow { flow: shared_flow, flow_type: t, transient: UNTAINTED, reference: UNTAINTED, height: 0, flags: 0 });
+            }
+            return t;
+        };
+        if f.memo_aborted.get() {
+            self.flow_frame_end(frame);
+            if let Some(memo) = memo {
+                self.flow_memo.checkpoints.truncate(memo.checkpoints as usize);
+                self.flow_memo.shadow_hits.truncate(memo.shadow as usize);
+            }
+            return t;
         }
+        if let Some(hit) = hit {
+            // This frame's answer came from the memo: its height is that sub-walk's (iteration adds no depth).
+            f.memo_used.set(true);
+            self.flow_memo.raise_height(hit.height);
+            self.flow_memo.add_flags(hit.flags());
+        }
+        let (taint, height) = self.flow_frame_end(frame);
+        if let Some(shared_flow) = shared_flow {
+            // Record visited node and the associated type in the cache.
+            if taint.transient != UNTAINTED {
+                f.impure_shared.set(f.impure_shared.get() + 1);
+            }
+            self.shared_flows.push(SharedFlow { flow: shared_flow, flow_type: t, transient: taint.transient, reference: taint.reference, height, flags: taint.flags });
+        }
+        if let Some(memo) = memo {
+            self.flow_memo_fill(f, memo, entry_flow, flow, entry_depth, t, taint, height, steps, hit);
+            self.flow_memo.checkpoints.truncate(memo.checkpoints as usize);
+        }
+        t
     }
 
     /// One node of `getTypeAtFlowNode`'s loop: the node passes the type on (`Next`) or determines it (`Done`).
@@ -289,106 +351,6 @@ impl Checker {
         FlowStep::Done(t)
     }
 
-    /// `getTypeAtFlowNode` for a walk with a memo key: every call is a frame (flowmemo.rs), which asks the memo at its
-    /// first node, at the node that ends its iteration and at checkpoints, and stores its answer under them.
-    fn get_type_at_flow_node_memo(&mut self, f: P<FlowState>, flow: P<FlowNode>) -> FlowType {
-        let entry_flow = flow;
-        let mut flow = flow;
-        let entry_depth = f.depth.get();
-        let frame = self.flow_frame_begin();
-        let key = f.memo_key.get();
-        // The memo key's meaning holds only outside inlined conditions and reduce labels, while flow analysis is on.
-        let memo_ok = self.inline_level == 0 && !self.flow_analysis_disabled && f.reduce_depth.get() == 0;
-        let shadow = if self.flow_memo.mode == FlowMemoMode::Shadow { self.flow_memo.shadow_hits.len() as u32 } else { 0 };
-        let marks = FrameMarks { checkpoints: self.flow_memo.checkpoints.len() as u32, shadow, steps: 0 };
-        f.depth.set(entry_depth + 1);
-        let mut shared_flow: Option<P<FlowNode>> = None;
-        let mut marks = marks;
-        loop {
-            marks.steps += 1;
-            let flags = flow.flags();
-            if flags.intersects(FlowFlags::Shared) {
-                for i in f.shared_flow_start.get() as usize..self.shared_flows.len() {
-                    if self.shared_flows[i].flow == flow {
-                        let shared = self.shared_flows[i];
-                        // A later walk of this frame may compute the node instead: it consumes what that took.
-                        self.flow_memo_consume(shared.transient, shared.reference);
-                        self.flow_memo.add_flags(shared.flags);
-                        f.depth.set(f.depth.get() - 1);
-                        let taint = self.flow_frame_end_with(frame, shared.height);
-                        self.flow_memo.checkpoints.truncate(marks.checkpoints as usize);
-                        self.flow_memo_shadow_settle(f, marks, entry_depth, key, shared.flow_type, taint);
-                        return shared.flow_type;
-                    }
-                }
-                shared_flow = Some(flow);
-            }
-            if memo_ok {
-                if let Some((hit, ends_iteration)) = self.flow_memo_at_node(f, entry_flow, flow, flags, key, entry_depth) {
-                    if !ends_iteration {
-                        // Go walks on from here and records the last shared node of the whole iteration, which this
-                        // frame does not know; leave the record out (a later visit walks or hits the memo again).
-                        shared_flow = None;
-                    }
-                    f.depth.set(f.depth.get() - 1);
-                    return self.flow_memo_end_frame(f, frame, marks, shared_flow, entry_flow, flow, entry_depth, key, flow_type_of(hit.t), Some(hit), memo_ok);
-                }
-            }
-            match self.get_type_at_flow_node_step(f, flow, flags) {
-                FlowStep::Next(next) => flow = next,
-                FlowStep::Done(t) => {
-                    f.depth.set(f.depth.get() - 1);
-                    if f.memo_aborted.get() {
-                        self.flow_frame_end(frame);
-                        self.flow_memo.checkpoints.truncate(marks.checkpoints as usize);
-                        self.flow_memo.shadow_hits.truncate(marks.shadow as usize);
-                        return t;
-                    }
-                    return self.flow_memo_end_frame(f, frame, marks, shared_flow, entry_flow, flow, entry_depth, key, t, None, memo_ok);
-                }
-            }
-        }
-    }
-
-    /// Ends a frame of a keyed walk: records the shared node (as Go does) and fills the memo.
-    #[expect(clippy::too_many_arguments, reason = "the frame's facts, passed once at its end")]
-    fn flow_memo_end_frame(
-        &mut self,
-        f: P<FlowState>,
-        frame: FlowFrame,
-        marks: FrameMarks,
-        shared_flow: Option<P<FlowNode>>,
-        entry_flow: P<FlowNode>,
-        final_flow: P<FlowNode>,
-        entry_depth: i32,
-        key: u128,
-        t: FlowType,
-        hit: Option<MemoHit>,
-        memo_ok: bool,
-    ) -> FlowType {
-        if let Some(hit) = hit {
-            // This frame's answer came from the memo: its height is that sub-walk's (iteration adds no depth).
-            f.memo_used.set(true);
-            self.flow_memo.raise_height(hit.height);
-            self.flow_memo.add_flags(hit.flags());
-        }
-        let (taint, height) = self.flow_frame_end(frame);
-        if let Some(shared_flow) = shared_flow {
-            // Record visited node and the associated type in the cache.
-            if taint.transient != UNTAINTED {
-                f.impure_shared.set(f.impure_shared.get() + 1);
-            }
-            self.shared_flows.push(SharedFlow { flow: shared_flow, flow_type: t, transient: taint.transient, reference: taint.reference, height, flags: taint.flags });
-        }
-        if memo_ok {
-            self.flow_memo_fill(f, marks, entry_flow, final_flow, entry_depth, key, t, taint, height, hit);
-        } else {
-            self.flow_memo_shadow_settle(f, marks, entry_depth, key, t, taint);
-        }
-        self.flow_memo.checkpoints.truncate(marks.checkpoints as usize);
-        t
-    }
-
     /// Whether to ask the memo before the handler of this node, and its answer (with whether the node ends the
     /// iteration). A frame asks at its first node, at a node that ends its iteration (a condition, a switch clause,
     /// a label with more than one antecedent), and at checkpoints: about one in eight of the nodes it iterates past,
@@ -432,8 +394,9 @@ impl Checker {
     /// Stores the frame's answer under its first node, the node that ended its iteration and the checkpoints it
     /// iterated past (the type is the same at all of them; so is the height, iteration adds no depth).
     #[expect(clippy::too_many_arguments, reason = "the frame's facts, passed once at its end")]
-    fn flow_memo_fill(&mut self, f: P<FlowState>, marks: FrameMarks, entry_flow: P<FlowNode>, final_flow: P<FlowNode>, entry_depth: i32, key: u128, t: FlowType, taint: FrameTaint, height: u16, hit: Option<MemoHit>) {
-        self.flow_memo_shadow_settle(f, marks, entry_depth, key, t, taint);
+    fn flow_memo_fill(&mut self, f: P<FlowState>, memo: FrameMemo, entry_flow: P<FlowNode>, final_flow: P<FlowNode>, entry_depth: i32, t: FlowType, taint: FrameTaint, height: u16, steps: u32, hit: Option<MemoHit>) {
+        self.flow_memo_shadow_settle(f, memo, entry_depth, t, taint);
+        let key = memo.key;
         if !taint.is_pure() {
             self.flow_memo.stats.tainted += 1;
             return;
@@ -445,7 +408,7 @@ impl Checker {
         if t.incomplete || self.flow_analysis_disabled {
             return;
         }
-        if height == 0 && marks.steps < 4 && hit.is_none() {
+        if height == 0 && steps < 4 && hit.is_none() {
             // A short iteration ending without recursion costs less to walk again than to keep.
             return;
         }
@@ -462,7 +425,7 @@ impl Checker {
         if final_flow != entry_flow && hit.is_none() {
             self.flow_memo.store(final_flow, key, t, height, epoch, count_reset);
         }
-        for i in marks.checkpoints as usize..self.flow_memo.checkpoints.len() {
+        for i in memo.checkpoints as usize..self.flow_memo.checkpoints.len() {
             let checkpoint = self.flow_memo.checkpoints[i];
             if checkpoint != final_flow {
                 self.flow_memo.store(checkpoint, key, t, height, epoch, count_reset);
@@ -473,9 +436,9 @@ impl Checker {
 
     /// Shadow mode: checks the answers the memo had for this frame's nodes against what the frame computed.
     #[inline]
-    fn flow_memo_shadow_settle(&mut self, f: P<FlowState>, marks: FrameMarks, entry_depth: i32, key: u128, t: FlowType, taint: FrameTaint) {
-        if self.flow_memo.shadow_hits.len() > marks.shadow as usize {
-            for shadow_hit in self.flow_memo.shadow_hits.split_off(marks.shadow as usize) {
+    fn flow_memo_shadow_settle(&mut self, f: P<FlowState>, memo: FrameMemo, entry_depth: i32, t: FlowType, taint: FrameTaint) {
+        if self.flow_memo.shadow_hits.len() > memo.shadow as usize {
+            for shadow_hit in self.flow_memo.shadow_hits.split_off(memo.shadow as usize) {
                 self.flow_memo_shadow_check(f, entry_depth, t, taint, shadow_hit);
             }
         }
