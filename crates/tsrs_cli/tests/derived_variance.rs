@@ -38,6 +38,7 @@ const CASES: &[(&str, u8)] = &[
     ("derived-variance-this-conditional", 4),
     ("derived-variance-any-template", 4),
     ("derived-variance-intersection", 4),
+    ("derived-variance-generic-rest", 4),
     ("derived-variance-annotation", 5),
     ("derived-variance-void-arity", 6),
     ("derived-variance-void-rest", 6),

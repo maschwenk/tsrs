@@ -4,25 +4,25 @@
 generic instance to a reference to its generic base by the base's variances instead of member by member. It is exact
 only as far as TypeScript's variance digest agrees with the member-by-member comparison. Before this work: three
 guards, zero disagreements on the conformance suite and five projects. This note: an adversarial generator, 15 more
-projects, seven new kinds of disagreement (every one a lost error, confirmed against tsgo), two new guards that close
-them, and what the guards cost.
+projects, nine new kinds of disagreement (each one a lost error or a wrongly reduced union, confirmed against
+tsgo), three new guards that close them, one open cosmetic difference, and what the guards cost.
 
 **Verdict: do not turn it on by default.** The unguarded shortcut is wrong in many simple, ordinary shapes (`keyof T`,
 a conditional on `this`, `T & {...}`, a wrong `out`), each giving up an error tsgo reports. The guards that make it
 exact on everything found compare exactly the members that held the savings: on the 38k-file codebase the guarded
-switch saves 0.9% of instantiations and no check time (unguarded: 17% and 11%). See "Judgement" at the end.
+switch saves about 1% of instantiations and no check time (unguarded: 17% and 11%). See "Judgement" at the end.
 
 ## The generator
 
 `tools/fuzz/derived_variance.py` (deterministic from a seed; `gen --seed S` writes one program, `run` runs a range).
 Each program declares one generic base (interface, class or abstract class; 1-3 type parameters, sometimes
-constrained to `string`, with defaults or `in` / `out` / `in out` annotations) with 16-26 members drawn from 60
+constrained to `string` or `unknown[]` (tuple arguments), with defaults or `in` / `out` / `in out` annotations) with 16-26 members drawn from 60
 member shapes (interfaces) plus 7 class-only ones, named `<feature>_<n>` so a disagreement's culprit list names its
 features:
 
 - positions: property, readonly, optional, method parameter / return / both (bivariant), function-typed property
   parameter / return / both (contravariant under strictFunctionTypes), construct signature types, type predicates,
-  rest parameters and rest tuples, `NoInfer`, overloads, generic methods with constraints on the parameters, `this`
+  rest parameters, rest tuples and generic rest parameters (`...a: T`, function-typed and method), `NoInfer`, overloads, generic methods with constraints on the parameters, `this`
   as property type, return (polymorphic `this`), method parameter, function-property parameter, `Box<this>`,
   `keyof this`, `this["x"]`, `this` in a conditional's check type and in a generic method's callback;
 - operators: conditional types (distributive, non-distributive `[T] extends [...]`, `infer`, the parameter in the
@@ -58,8 +58,9 @@ members); see the tables for the counts.
 
 ## Findings
 
-All seven are lost errors: tsgo built from the pinned commit and tsrs with the switch off report the error; `on`
-drops it; `shadow` reports the disagreement and exits 7. Each has a minimal repro under `testdata/regressions/`
+In every case tsgo built from the pinned commit and tsrs with the switch off agree; `on` loses an error (or, for the
+`void` cases, reduces a union that TypeScript keeps, which changes printed and emitted types); `shadow` reports the
+disagreement and exits 7. Each has a minimal repro under `testdata/regressions/`
 (run in all three modes, and without its guard, by `cargo test -p tsrs_cli --test derived_variance`).
 
 | case | cause | guard |
@@ -71,6 +72,16 @@ drops it; `shadow` reports the disagreement and exits 7. Each has a minimal repr
 | `derived-variance-any-template` | `any` in a template literal type gives `` `a${any}` ``, not assignable to `"ab"` | 4 |
 | `derived-variance-intersection` | assignability is not monotone under intersection: `{}` is assignable to `{ [k: string]: string }` (implicit index signature), but `{} & { z?: 1 }` reduces to `{ z?: 1 }`, which is not | 4 |
 | `derived-variance-annotation` | TypeScript takes `in` / `out` as the variances without measuring them; a wrong `out` in a `.d.ts` under skipLibCheck is never reported, and the derived comparison is the only place the error surfaces | 5 |
+| `derived-variance-generic-rest` | a rest parameter typed by the type parameter itself (`...a: T`) is compared element by element (`getTypeAtPosition`): `B<never[]>` -> `B<any>` holds by variances (`any` -> `never[]`), but `(...a: never[]) => void` -> `(...a: any) => void` compares `any` with `never`; likewise `never` against a tuple argument | 4 |
+| `derived-variance-void-arity` | the strict subtype relation (union subtype reduction: array literals, `pick(a, b)`) treats a trailing parameter whose type contains `void` as optional (`getMinArgumentCount`) and then rejects `(x: void) => void` as a subtype of `(x: unknown) => void` (relater.go `StrictArity`). A plain `m(x: T)` member: `[D<void>, B<unknown>]` stays a union in tsgo, the shortcut reduced it to `B<unknown>[]` | 6 |
+| `derived-variance-void-rest` | the same, through a tuple argument spread into a rest parameter (`m(...a: T)`, `T = [void]`) | 6 |
+
+Open, cosmetic: `derived-variance-expanding-elaboration`. With an expanding recursive member (`next?: B<T[]>`),
+deciding an earlier pair by variances skips comparisons whose relation-cache entries a later error elaboration
+meets, and `on` elaborates that error one or more recursion levels deeper than tsgo (8 programs in the 40,000 of the
+first campaign, all with `recursive_wrap`; the original shortcut has it too). The reported errors are the same.
+Closing it exactly would mean making the comparisons the shortcut exists to skip; a guard that refuses generics with
+expanding self-references would also refuse `ZodType` (`refine(): ... ZodType<R, core.input<this>>`).
 
 By feature, before the new guards (campaign B below, the generator's culprit lists): conditional types in every form
 (`cond_*`, `this_cond`), `keyof` in every position, mapped types in every form including `Partial`, indexed access,
@@ -95,16 +106,23 @@ both routes relate by the same variances) the markers' answer carries over to re
 all operators where it does not: they evaluate eagerly for real arguments and stay deferred for markers, or are not
 monotone in assignability. So an inherited member counts as related only if its declarations put no class /
 interface / signature type parameter and no `this` under keyof / unique, a conditional type, a mapped type, indexed
-access, a template literal type, an intersection, `infer`, a type query (`typeof this.x` always), or an intrinsic
+access, a template literal type, an intersection, a rest parameter's type, `infer`, a type query (`typeof this.x` always), or an intrinsic
 alias (`Uppercase`, `NoInfer`); type aliases are followed into their bodies with their parameters bound to the
 arguments that mention a variable. Declarations without a type annotation count as sensitive. Sensitive members are
 compared structurally like the members the derived type declares. Exception: a sensitive slot that is `any` or
 `unknown` in the target (a property's type, a method's return or parameter type; methods with one declaration, no
 type parameters, no `this` parameter) relates whatever the source is, so it stays covered. Guard 4 subsumes guard 3.
 
+Guard 4 also covers `typeof this.x` (a type query starting with `this`).
+
 **Guard 5, verified annotations** (`annotations_hold`). Before trusting variances that come from `in` / `out`, check
 them as `checkTypeParameterDeferred` does (marker instantiations related in the annotated direction), silently, with
 markers of its own (sharing the `*_for_check` markers left relation-cache entries that changed TS2636 elaborations).
+
+**Guard 6, `void` arity under strict subtype** (`reaches_void`). No decision under the strict subtype relation when
+an argument of the base reference or the target has `void` as a constituent, or as a constituent of a tuple or array
+element (spread into a rest parameter). Only the strict subtype relation checks arity by `getMinArgumentCount` (in
+assignability a smaller minimum only makes the source more assignable).
 
 Also: member comparisons inside a decision now combine like the relater's (`result &= related`) and accept Maybe
 (recursion through `this` back to the pair being decided); requiring True made most decisions with structural members

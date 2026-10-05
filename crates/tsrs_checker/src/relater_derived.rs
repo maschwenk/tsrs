@@ -16,8 +16,8 @@
 //! 3. an `any` argument in the base reference falls back when its parameter reaches the check type of a conditional
 //!    type in the generic's members (`any` takes both branches where the measuring markers kept it deferred);
 //! 4. an inherited member counts as related only if its declaration is monotone: no type parameter or `this` under
-//!    keyof, a conditional, mapped, indexed access, template literal or intersection type (directly or through a type
-//!    alias), where the markers' answer and the real arguments' answer differ; other members are compared
+//!    keyof, a conditional, mapped, indexed access, template literal or intersection type, or in a rest parameter
+//!    (directly or through a type alias), where the markers' answer and the real arguments' answer differ; other members are compared
 //!    structurally, unless every such slot is `any` / `unknown` in the target (a property type, a method's return or
 //!    parameter type). This subsumes guard 3;
 //! 5. `in` / `out` annotations are verified with markers before the variances they imply are trusted (TypeScript
@@ -606,7 +606,7 @@ fn top_target_slots(c: &mut Checker, sp: P<Symbol>, tp: P<Symbol>) -> bool {
             for (i, &p) in params.iter().enumerate() {
                 match p.type_node() {
                     Some(t) => {
-                        if sensitive_type(c, t, false, &[], &mut aliases) {
+                        if sensitive_type(c, t, is_rest(p), &[], &mut aliases) {
                             let pt = c.get_type_of_symbol(sig.parameters()[i]);
                             if !top(pt) {
                                 return false;
@@ -638,6 +638,10 @@ fn top_target_slots(c: &mut Checker, sp: P<Symbol>, tp: P<Symbol>) -> bool {
     }
 }
 
+fn is_rest(p: P<Node>) -> bool {
+    p.kind() == Kind::Parameter && p.as_parameter_declaration().dot_dot_dot_token().is_some()
+}
+
 /// Guard 4 walker for one member declaration (see `member_sensitive`).
 fn sensitive_declaration(c: &mut Checker, d: P<Node>, aliases: &mut Vec<P<Symbol>>) -> bool {
     match d.kind() {
@@ -657,7 +661,7 @@ fn sensitive_declaration(c: &mut Checker, d: P<Node>, aliases: &mut Vec<P<Symbol
             for &p in d.parameters() {
                 match p.type_node() {
                     Some(t) => {
-                        if sensitive_type(c, t, false, &[], aliases) {
+                        if sensitive_type(c, t, is_rest(p), &[], aliases) {
                             return true;
                         }
                     }
@@ -692,6 +696,9 @@ fn sensitive_type(c: &mut Checker, node: P<Node>, under: bool, alias_vars: &[P<S
                 under_here = true;
             }
         }
+        // A rest parameter is compared element by element (`getTypeAtPosition`): `...a: T` with `T = never[]`
+        // against `T = any` compares `never` with `any`, where the markers compare the array types.
+        Kind::Parameter if is_rest(node) => under_here = true,
         Kind::TypeReference => {
             let mut symbol = c.get_symbol_from_type_reference(node);
             if symbol.flags().intersects(SymbolFlags::Alias) {

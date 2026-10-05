@@ -1,5 +1,8 @@
 # perf-derived-variance: relating a derived generic to its generic base by variances
 
+> Update: an adversarial generator found nine more kinds of disagreement; guards 4-6 close them and remove the
+> savings below. notes/fuzz-derived-variance.md has the findings, the guards, the new numbers and the judgement.
+
 Row 2 of the work census (notes/perf-checker-algorithms.md): on the 38k-file codebase 10-17% of check time is
 structural comparison of derived generic instances against references to their generic bases (`ZodObject<...>`,
 `ZodString` against `ZodType<any, any, any>`; ORM repositories against `EntityRepository<T>`). TypeScript relates two
