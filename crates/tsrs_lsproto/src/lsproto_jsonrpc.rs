@@ -96,10 +96,10 @@ fn unmarshal_raw_message(v: &Value, response_fields: bool) -> Result<RawMessage,
 }
 
 // Go `fmt.Errorf("%w: %w", ErrorCodeInvalidRequest, err)` returned from a v1 UnmarshalJSON method.
-fn invalid_request(v: &Value, go_type: &str, err: JsonError) -> JsonError {
+fn invalid_request(v: &Value, go_type: &str, err: &JsonError) -> JsonError {
     let mut wrapped = JsonError::method_v1(kind(v), go_type, format!("{}: {}", ErrorCode::InvalidRequest, err));
     wrapped.codes = vec![ErrorCode::InvalidRequest];
-    wrapped.codes.extend(err.codes);
+    wrapped.codes.extend_from_slice(&err.codes);
     wrapped
 }
 
@@ -116,7 +116,7 @@ impl Json for Message {
 
     // jsonrpc.go:32
     fn from_json(v: &Value) -> Result<Self, JsonError> {
-        let raw = unmarshal_raw_message(v, true).map_err(|err| invalid_request(v, Self::GO_TYPE, err))?;
+        let raw = unmarshal_raw_message(v, true).map_err(|err| invalid_request(v, Self::GO_TYPE, &err))?;
         if raw.id.is_some() && raw.method.0.is_empty() {
             return Ok(Message {
                 kind: MessageKind::Response,
@@ -160,7 +160,7 @@ impl Json for RequestMessage {
 
     // jsonrpc.go:98
     fn from_json(v: &Value) -> Result<Self, JsonError> {
-        let raw = unmarshal_raw_message(v, false).map_err(|err| invalid_request(v, Self::GO_TYPE, err))?;
+        let raw = unmarshal_raw_message(v, false).map_err(|err| invalid_request(v, Self::GO_TYPE, &err))?;
         Ok(RequestMessage { id: raw.id, method: raw.method, params: raw.params })
     }
 }

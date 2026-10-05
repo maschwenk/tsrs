@@ -13,10 +13,6 @@
 2	clippy::needless_pass_by_value	crates/tsrs_lsproto/src/lsp.rs
 2	clippy::needless_pass_by_value	crates/tsrs_modulespecifiers/src/specifiers.rs
 1	clippy::needless_pass_by_value	crates/tsrs_project/src/session.rs
-5	clippy::result_large_err	crates/tsrs_lsproto/src/json.rs
-1	clippy::result_large_err	crates/tsrs_lsproto/src/lsp.rs
-1	clippy::result_large_err	crates/tsrs_lsproto/src/lsproto_jsonrpc.rs
-10	clippy::result_large_err	crates/tsrs_lsproto/src/structcodec.rs
 1	dead_code	crates/tsrs_parser/src/parser_1.rs
 1	unused_variables	crates/tsrs_lsp/src/dynamic_queue.rs
 7	unused_variables	crates/tsrs_lsp/src/server.rs
