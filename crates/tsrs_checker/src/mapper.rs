@@ -298,9 +298,11 @@ pub(crate) unsafe fn recycle_mapping(m: P<TypeMapper>, appended: bool) {
 pub(crate) unsafe fn recycle_mapper_with_targets(m: P<TypeMapper>, targets: *const [P<Type>]) {
     if !m.escaped() {
         tsrs_core::free!(m);
-        tsrs_core::free_slice_ptr(targets);
+        // SAFETY: the list the caller made for `m` (this function's contract); `m`, its only holder, is gone.
+        unsafe { tsrs_core::free_slice_ptr(targets) };
     } else if targets.len() == 1 {
-        tsrs_core::free_slice_ptr(targets);
+        // SAFETY: a one-type list is not kept by the simple mapper made from it.
+        unsafe { tsrs_core::free_slice_ptr(targets) };
     }
 }
 
