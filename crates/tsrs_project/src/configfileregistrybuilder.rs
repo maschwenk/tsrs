@@ -78,13 +78,6 @@ pub(crate) struct changeFileResult {
     pub(crate) affected_files: Option<FxHashSet<Path>>,
 }
 
-impl changeFileResult {
-    // configfileregistrybuilder.go:400
-    pub(crate) fn is_empty(&self) -> bool {
-        self.affected_projects.as_ref().is_none_or(|p| p.is_empty()) && self.affected_files.as_ref().is_none_or(|f| f.is_empty())
-    }
-}
-
 // Go `core.CopyMapInto` over set-like maps.
 fn copy_set_into<T: std::hash::Hash + Eq + Clone>(dst: Option<FxHashSet<T>>, src: Option<&FxHashSet<T>>) -> Option<FxHashSet<T>> {
     let mut dst = dst.unwrap_or_default();
@@ -377,18 +370,6 @@ impl configFileRegistryBuilder {
                     if let Some(r) = &mut config.retaining_projects {
                         r.remove(project_id);
                     }
-                },
-            );
-        }
-    }
-
-    // configfileregistrybuilder.go:357
-    pub(crate) fn retain_config_for_project(&self, config_file_path: &Path, project_id: &ID) {
-        if let Some(entry) = self.configs.load(config_file_path) {
-            entry.change_if(
-                |config| !config.retaining_projects.as_ref().is_some_and(|r| r.contains(project_id)),
-                |config| {
-                    config.retaining_projects.get_or_insert_with(FxHashSet::default).insert(project_id.clone());
                 },
             );
         }

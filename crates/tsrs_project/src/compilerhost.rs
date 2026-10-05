@@ -28,8 +28,8 @@ pub(crate) struct hostBuilder {
     pub(crate) ctx: Context,
 }
 
+// compilerhost.go:21 (Go's configFilePath field is never read)
 pub(crate) struct compilerHost {
-    config_file_path: Path,
     current_directory: String,
     pub(crate) session_options: Arc<SessionOptions>,
 
@@ -45,7 +45,6 @@ pub(crate) struct compilerHost {
 // compilerhost.go:36
 pub(crate) fn new_compiler_host(current_directory: &str, project: &Project, builder: &ProjectCollectionBuilder, logger: LogTree) -> Arc<compilerHost> {
     Arc::new(compilerHost {
-        config_file_path: project.config_file_path.clone(),
         current_directory: current_directory.to_string(),
         session_options: Arc::clone(&builder.session_options),
 

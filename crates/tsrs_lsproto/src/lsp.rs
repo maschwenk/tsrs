@@ -468,6 +468,7 @@ pub(crate) fn assert_at_most_one(message: &str, count: usize) {
 
 // lsp.go:131: the value of a top-level field of a JSON object; None if `data` is not an object or has
 // no such field. (Go's jsonKeyCheck compares raw key tokens; decoded keys are compared directly.)
+#[expect(dead_code, reason = "tools/gen-lsproto emits calls for a union with a discriminator field; no generated union has one now (same in Go)")]
 pub(crate) fn json_object_raw_field<'a>(data: &'a Value, field: &str) -> Option<&'a Value> {
     let Value::Object(members) = data else {
         return None;
