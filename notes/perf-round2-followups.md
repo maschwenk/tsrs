@@ -70,7 +70,7 @@ pointer compression costs about +4.9% instructions and took back most of the che
 8. **Parallel `affectedfileshandler` / `emitfileshandler`** (notes/perf-incremental-parallel.md): still sequential in
    the port; costs nothing under `--noEmit`. Worth doing with an emit-on incremental benchmark.
 
-## Landed in round 3, union and inference work (notes/perf-union-inference.md)
+## Round 3, union and inference work (#100, draft; notes/perf-union-inference.md)
 
 - **Union front cache** (`TSRS_UNION_CACHE`, on by default and off under `--checkerAssignment go`; its shadow mode is
   in docs/DEBUGGING.md). It is a direct-mapped table in front of `getUnionType` for calls without an origin. It stores
