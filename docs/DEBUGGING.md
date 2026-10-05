@@ -68,6 +68,11 @@ what a checker saw first (`tsrs_core::compat`), so it is the mode for byte-ident
 fourslash and tsc harnesses run in it; set `TSRS_CHECKER_ASSIGNMENT=locality` to run them in the default mode.
 `TSRS_CHECKER_ASSIGNMENT=random:<seed>` puts each file on a random checker with a random visit order in each checker:
 the default mode must print the same text for every seed and checker count. Single-threaded runs have no assignment.
+Without a named assignment the type-check pass also steals work: a checker that has run out of files takes unstarted
+files from the back of the busiest checker (notes/perf-checker-stealing.md). Output is unchanged by it, but the
+counters vary from run to run; naming an assignment (`--checkerAssignment locality`) turns stealing off for fully
+reproducible counters. `TSRS_HISTORY=canonical` runs the tsgo-baseline harnesses in the default mode, stealing
+included, without naming an assignment.
 `--checkerCostCache <file>` (opt-in, locality only) balances the checkers on the previous run's per-file CPU times
 (notes/perf-balance.md); `TSRS_ASSIGNMENT_STATS=times` prints per-checker wall and CPU seconds.
 

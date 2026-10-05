@@ -178,6 +178,16 @@ default mode must not lose passes either. Conformance with the flag on: no outpu
 `.types`, `.symbols`). The private monorepo, medians of 3 (flag off -> on): single-threaded peak 15.34 -> 11.77 GB, check
 26.3 -> 22.9 s; 4 checkers peak 23.32 -> 17.49 GB, check 13.2 -> 11.1 s. Details: `notes/lazy-members.md`.
 
+## 2026-10-05: checker threads steal work
+
+With output independent of the assignment, the type-check pass schedules dynamically. A checker that has run out of
+its locality-assigned files takes unstarted files from the back of the busiest checker. 38k-file codebase, total
+time: -10.9% at 4 checkers and -12.3% at 8 on the Mac; -13.8% and -17.0% on Linux. Instructions are +1-5% at those
+counts (first touches of stolen files); the gain shrinks at 16. Diagnostics are identical (stealing vs static on the
+40k-error corpus, and conformance with 4 checkers per test and stealing active). Counters vary from run to run
+unless an assignment is named. Forked checker processes with shared queues were measured and not landed: they tie
+threads on the large codebase and lose on small ones (notes/perf-checker-stealing.md, notes/perf-checker-processes.md).
+
 ## 2026-10-05: diagnostics no longer depend on the checker assignment
 
 On the 40k-error corpus, tsgo and tsrs printed different text for `--checkers 1, 2, 4, 8, 12, 16`: four distinct
