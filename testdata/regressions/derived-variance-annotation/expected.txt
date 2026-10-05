@@ -1,0 +1,5 @@
+a.ts(8,14): error TS2322: Type 'D<"a">' is not assignable to type 'B<string>'.
+  Types of property 'f' are incompatible.
+    Type '(x: "a") => void' is not assignable to type '(x: string) => void'.
+      Types of parameters 'x' and 'x' are incompatible.
+        Type 'string' is not assignable to type '"a"'.

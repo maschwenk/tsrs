@@ -1,0 +1,3 @@
+a.ts(10,14): error TS2322: Type 'D<any>' is not assignable to type 'T0<"b">'.
+  Types of property 't' are incompatible.
+    Type '`a${any}`' is not assignable to type '"ab"'.

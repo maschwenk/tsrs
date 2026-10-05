@@ -1,0 +1,3 @@
+a.ts(11,14): error TS2322: Type 'D<{ a?: string | undefined; }>' is not assignable to type 'B<{}>'.
+  Types of property 'k' are incompatible.
+    Type '"a"' is not assignable to type 'never'.
