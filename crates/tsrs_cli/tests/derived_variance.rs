@@ -27,8 +27,8 @@ fn run_without(case: &str, mode: &str, no_guard: &str) -> (String, Option<i32>) 
     (String::from_utf8_lossy(&out.stdout).into_owned(), out.status.code())
 }
 
-// (case, guard that closes it). Guards 1-3: notes/perf-derived-variance.md; 4 and 5: notes/fuzz-derived-variance.md.
-// Guards 1-3 are not switchable; for 4 and 5 the test also checks that the case fails without its guard.
+// (case, guard that closes it). Guards 1-3: notes/perf-derived-variance.md; 4-6: notes/fuzz-derived-variance.md.
+// Guards 1-3 are not switchable; for 4-6 the test also checks that the case fails without its guard.
 const CASES: &[(&str, u8)] = &[
     ("derived-variance-this-type", 1),
     ("derived-variance-any-conditional", 3),
@@ -39,6 +39,8 @@ const CASES: &[(&str, u8)] = &[
     ("derived-variance-any-template", 4),
     ("derived-variance-intersection", 4),
     ("derived-variance-annotation", 5),
+    ("derived-variance-void-arity", 6),
+    ("derived-variance-void-rest", 6),
 ];
 
 #[test]
@@ -55,5 +57,19 @@ fn derived_variance_guards() {
             assert_eq!(run_without(case, "shadow", &g).1, Some(7), "{case}: no disagreement without guard {guard}");
             assert_ne!(run_without(case, "on", &g).0, expected, "{case}: the error is kept without guard {guard}");
         }
+    }
+}
+
+// Open, cosmetic (notes/fuzz-derived-variance.md): with the switch on, an error involving an expanding recursive
+// generic is elaborated one level deeper than tsgo does; the reported errors are the same. Shadow mode reports no
+// disagreement and prints tsgo-ref's output.
+#[test]
+fn derived_variance_open_elaboration() {
+    let case = "derived-variance-expanding-elaboration";
+    let expected = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/regressions").join(case).join("expected.txt")).unwrap();
+    for mode in ["off", "shadow"] {
+        let (stdout, code) = run(case, mode);
+        assert_eq!(stdout, expected, "{case} with TSRS_DERIVED_VARIANCE={mode}");
+        assert_ne!(code, Some(7), "{case}: shadow mode found a disagreement");
     }
 }

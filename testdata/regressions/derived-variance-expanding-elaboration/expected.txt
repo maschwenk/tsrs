@@ -1,0 +1,6 @@
+a.ts(15,14): error TS2322: Type 'D<null>' is not assignable to type 'B<string>'.
+  The types of 'next.next' are incompatible between these types.
+    Type 'B<null[][]>' is not assignable to type 'B<string[][]>'.
+      Type 'string[][]' is not assignable to type 'null[][]'.
+        Type 'string[]' is not assignable to type 'null[]'.
+          Type 'string' is not assignable to type 'null'.

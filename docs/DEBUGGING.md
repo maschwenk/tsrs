@@ -197,12 +197,17 @@ as related and only the others are compared (`crates/tsrs_checker/src/relater_de
 Off by default, and always off under `--checkerAssignment go`.
 
 What it trusts: TypeScript's variance digest, across a derivation. Its failure mode is a missed error (a relation
-answered True that the member-by-member comparison answers False), never a spurious one. Three guards close the
-disagreements found so far: the `this` type's variance is measured and must be covariant, bivariant or independent
-(`testdata/regressions/derived-variance-this-type`); no decisions inside a variance computation; an `any` argument
-falls back when its parameter reaches the check type of a conditional type in the generic's members
-(`testdata/regressions/derived-variance-any-conditional`). `cargo test -p tsrs_cli --test derived_variance` runs the
-two cases in all three modes against tsgo-ref's output.
+answered True that the member-by-member comparison answers False), never a spurious one. Five guards close the
+disagreements found so far (notes/perf-derived-variance.md, notes/fuzz-derived-variance.md): the `this` type's
+variance must be covariant, bivariant or independent; no decisions inside a variance computation; an `any` argument
+falls back when its parameter reaches a conditional's check type; inherited members whose declarations put a type
+parameter or `this` under keyof, a conditional, mapped, indexed access, template literal or intersection type are
+compared structurally (unless that slot is `any` / `unknown` in the target); `in` / `out` annotations are verified
+before they are trusted. With guards 4 and 5 the savings on the 38k-file codebase are gone (notes/fuzz-derived-variance.md).
+`cargo test -p tsrs_cli --test derived_variance` runs the nine `testdata/regressions/derived-variance-*` cases in all
+three modes against tsgo-ref's output, and without guards 4 / 5 (`TSRS_DERIVED_VARIANCE_NO_GUARD=4,5`) checks that
+their cases fail. `tools/fuzz/derived_variance.py` generates adversarial programs and runs them in shadow mode and
+`on` against `off`; `tools/fuzz/derived_variance_corpus.sh` runs shadow mode over 15 pinned open-source projects.
 
 `TSRS_DERIVED_VARIANCE=shadow` audits a codebase: it computes both answers, prints each disagreement on stderr (the
 generic base, the two types and the members that do not relate), continues, prints the totals at the end and exits
@@ -210,7 +215,8 @@ with status 7 if there was any. It costs about as much as `off` plus the varianc
 Only targets with at least 16 properties are tried (`TSRS_DERIVED_VARIANCE_MIN_MEMBERS=<n>`; the regression test
 sets 0). `TSRS_DERIVED_VARIANCE_RELIABLE=params` limits it to bases whose type parameters' variances carry neither
 Unmeasurable nor Unreliable (`=1`: also the `this` variance); `TSRS_DERIVED_VARIANCE_BASES=A,B` (or `=-A,B`) limits it
-to (or excludes) bases by name; `TSRS_DERIVED_VARIANCE_LOG=<file>` logs every decision with its timing.
+to (or excludes) bases by name; `TSRS_DERIVED_VARIANCE_LOG=<file>` logs every decision with its timing (and every
+member compared structurally, `M <base> <member> sensitive|declared`).
 
 ## The union front cache and its shadow mode: `TSRS_UNION_CACHE`
 

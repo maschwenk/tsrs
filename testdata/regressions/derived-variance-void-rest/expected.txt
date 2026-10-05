@@ -1,0 +1,1 @@
+a.ts(10,14): error TS2322: Type '(B<[unknown]> | D<[void]>)[]' is not assignable to type 'number'.

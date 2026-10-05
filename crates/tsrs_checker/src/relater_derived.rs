@@ -5,16 +5,25 @@
 //! to `ZodObject`, whose base-type chain contains `R = ZodType<any, any, $ZodObjectInternals<Shape>>` (with the source
 //! as its `this` argument, as `resolveObjectTypeMembers` builds it). TypeScript relates two references to the same
 //! generic by variances, but never across a derivation, so it compares the source member by member. With the switch
-//! on, `R` is first related to the target by variances; if that is True, every target member the source inherits
+//! on, `R` is first related to the target by variances; if that holds, every target member the source inherits
 //! unchanged from `R` (the same member symbol) counts as related, and only the others are compared structurally,
-//! followed by signatures and index signatures. It only ever answers True; anything else runs the normal comparison.
-//! So it trusts TypeScript's variance digest across a derivation, and its failure mode is a missed error (a relation
-//! answered True that the structural comparison answers False), never a spurious one. Three guards close the
-//! disagreements found so far, each with a regression test (`testdata/regressions/derived-variance-*`):
-//! - the `this` type must be measured covariant, bivariant or independent (the digest covers type parameters only);
-//! - no decisions while a variance computation is running (its comparisons have marker arguments);
-//! - an `any` argument in the base reference falls back when its parameter reaches the check type of a conditional
-//!   type in the generic's members (`any` takes both branches where the measuring markers kept it deferred).
+//! followed by signatures and index signatures. It answers True (or Maybe, when a member comparison meets a pair
+//! already being compared) or falls back to the normal comparison. So it trusts TypeScript's variance digest across a
+//! derivation, and its failure mode is a missed error, never a spurious one. Six guards close the disagreements found
+//! so far, each with a regression test (`testdata/regressions/derived-variance-*`, notes/fuzz-derived-variance.md):
+//! 1. the `this` type must be measured covariant, bivariant or independent (the digest covers type parameters only);
+//! 2. no decisions while a variance computation is running (its comparisons have marker arguments);
+//! 3. an `any` argument in the base reference falls back when its parameter reaches the check type of a conditional
+//!    type in the generic's members (`any` takes both branches where the measuring markers kept it deferred);
+//! 4. an inherited member counts as related only if its declaration is monotone: no type parameter or `this` under
+//!    keyof, a conditional, mapped, indexed access, template literal or intersection type (directly or through a type
+//!    alias), where the markers' answer and the real arguments' answer differ; other members are compared
+//!    structurally, unless every such slot is `any` / `unknown` in the target (a property type, a method's return or
+//!    parameter type). This subsumes guard 3;
+//! 5. `in` / `out` annotations are verified with markers before the variances they imply are trusted (TypeScript
+//!    does not measure them, and under skipLibCheck never reports a wrong one in a declaration file);
+//! 6. no decisions under the strict subtype relation when an argument contains `void` (a trailing `void` parameter
+//!    is optional for its arity check).
 //!
 //! `TSRS_DERIVED_VARIANCE=shadow` computes both answers, reports each disagreement on stderr and continues; the CLI
 //! then exits with status 7 if there was any. `=on` uses the variance answer. Both are forced off under Go-compatible
@@ -23,7 +32,8 @@
 //! Only targets with at least 16 properties are tried (`TSRS_DERIVED_VARIANCE_MIN_MEMBERS=<n>`): below that the
 //! member-by-member comparison is cheaper than measuring and checking variances.
 //! `TSRS_DERIVED_VARIANCE_BASES=A,B` limits it to the generic bases named A and B (`=-A,B`: all but those);
-//! `TSRS_DERIVED_VARIANCE_LOG=<file>` appends one line per decision and per measured `this` variance.
+//! `TSRS_DERIVED_VARIANCE_LOG=<file>` appends one line per decision, per measured `this` variance and per member
+//! compared structurally; `TSRS_DERIVED_VARIANCE_NO_GUARD=4,5,6` switches guards 4-6 off (tests and measurements).
 
 use crate::*;
 use std::io::Write as _;
@@ -273,6 +283,13 @@ impl Relater {
                     return None;
                 }
             }
+        }
+        // Guard 6: under the strict subtype relation (union reduction) a trailing parameter whose type contains `void`
+        // is optional for the arity check (`getMinArgumentCount`), so `(x: void) => void` is not a strict subtype of
+        // `(x: unknown) => void`; the markers never are `void`, so the digest cannot see it. A tuple argument spreads into
+        // a rest parameter (`m(...a: T)` with `T = [void]`), so tuple and array elements count too.
+        if guard_enabled(6) && self.rel() == c.strict_subtype_relation && base_arguments.iter().chain(target_arguments.iter()).any(|&a| reaches_void(c, a, 0)) {
+            return None;
         }
         let mut result = self.type_arguments_related_to(c, base_arguments, target_arguments, &variances, false, intersection_state);
         if result == Ternary::False {
@@ -547,6 +564,20 @@ impl Relater {
     }
 }
 
+/// Guard 6: whether `void` is a constituent of `t`, or of an element of a tuple or array constituent of `t`.
+fn reaches_void(c: &mut Checker, t: P<Type>, depth: u32) -> bool {
+    some_type(c, t, |c, t| {
+        if t.flags().intersects(TypeFlags::Void) {
+            return true;
+        }
+        if depth < 4 && (is_tuple_type(t) || c.is_array_or_tuple_type(t)) {
+            let arguments = c.get_type_arguments(t);
+            return arguments.iter().any(|&a| reaches_void(c, a, depth + 1));
+        }
+        false
+    })
+}
+
 /// Guard 4's exception: a sensitive member still counts as related when every sensitive slot of its declaration is
 /// `any` or `unknown` in the target, and the slot is one where any source type relates to that: a property's type,
 /// a method's return type, or a method parameter (compared bivariantly, so the source -> target direction suffices).
@@ -651,6 +682,8 @@ fn sensitive_type(c: &mut Checker, node: P<Node>, under: bool, alias_vars: &[P<S
     let mut under_here = under;
     match node.kind() {
         Kind::ThisType => return under,
+        // `typeof this.x` depends on `this` through an expression, not a `this` type node.
+        Kind::TypeQuery if tsrs_ast::is_this_identifier(tsrs_ast::get_first_identifier(node.as_type_query_node().expr_name)) => return true,
         Kind::ConditionalType | Kind::IndexedAccessType | Kind::MappedType | Kind::TemplateLiteralType | Kind::IntersectionType | Kind::InferType | Kind::TypeQuery => {
             under_here = true;
         }
