@@ -48,9 +48,10 @@ pub enum Cat {
     KeyOf,
     ExportAssign,
     VarInit,
+    RelUnion,
 }
 
-const CAT_COUNT: usize = 16;
+const CAT_COUNT: usize = 17;
 
 impl Cat {
     fn name(self) -> &'static str {
@@ -71,6 +72,7 @@ impl Cat {
             Cat::KeyOf => "getIndexType (keyof)",
             Cat::ExportAssign => "export assignment type (checkExpressionCached)",
             Cat::VarInit => "variable initializer type (checkDeclarationInitializer)",
+            Cat::RelUnion => "typeRelatedToSomeType (relation to a union target)",
         }
     }
 }
@@ -154,6 +156,8 @@ pub struct Census {
     pub flow_sampled_steps: u64,
     pub flow_sampled_repeats: u64,
     pub flow_sampled_invocations: u64,
+    /// typeRelatedToSomeType outcomes: (source kind, key property state, exit) -> count, constituents tried, time.
+    pub rel_union: FxHashMap<(u8, u8, u8), Stat>,
     /// The callee of the innermost resolveCall (for checkExpressionWithContextualType).
     pub call_stack: Vec<Option<P<Node>>>,
     pub file_cpu: f64,
@@ -201,6 +205,7 @@ impl Census {
             flow_sampled_repeats: 0,
             flow_sampled_invocations: 0,
             call_stack: Vec::new(),
+            rel_union: FxHashMap::default(),
             file_cpu: 0.0,
             file_wall_ns: 0,
         });
@@ -470,6 +475,7 @@ struct Global {
     flow_sampled_steps: u64,
     flow_sampled_repeats: u64,
     flow_sampled_invocations: u64,
+    rel_union: FxHashMap<(u8, u8, u8), Stat>,
 }
 
 static GLOBAL: Mutex<Option<Global>> = Mutex::new(None);
@@ -557,6 +563,10 @@ impl Checker {
         for (i, s) in c.flow_hist.iter().enumerate() {
             add_stat(&mut g.flow_hist[i], s);
         }
+        let ru: Vec<((u8, u8, u8), Stat)> = c.rel_union.iter().map(|(k, v)| (*k, *v)).collect();
+        for (k, s) in ru {
+            add_stat(g.rel_union.entry(k).or_default(), &s);
+        }
         g.flow_sampled_steps += c.flow_sampled_steps;
         g.flow_sampled_repeats += c.flow_sampled_repeats;
         g.flow_sampled_invocations += c.flow_sampled_invocations;
@@ -623,7 +633,8 @@ pub fn census_report() {
             s.c
         );
     }
-    let extras: [(Cat, &str, &str, &str); 16] = [
+    let extras: [(Cat, &str, &str, &str); 17] = [
+        (Cat::RelUnion, "constituents tried", "matched by key map", "related"),
         (Cat::File, "-", "-", "-"),
         (Cat::CondInst, "distributed constituents", "never results", "distributions"),
         (Cat::Cond, "-", "-", "-"),
@@ -717,5 +728,15 @@ pub fn census_report() {
         g.flow_sampled_repeats,
         100.0 * g.flow_sampled_repeats as f64 / g.flow_sampled_steps.max(1) as f64
     );
+    let mut ru: Vec<(&(u8, u8, u8), &Stat)> = g.rel_union.iter().collect();
+    ru.sort_by(|x, y| y.1.key_incl_ns.cmp(&x.1.key_incl_ns).then(x.0.cmp(y.0)));
+    let _ = writeln!(out, "\n## typeRelatedToSomeType outcomes (source kind / key map / exit)\n");
+    let _ = writeln!(out, "source kinds: 0 fresh object literal, 1 object literal, 2 other object, 3 intersection, 4 primitive/literal, 5 other");
+    let _ = writeln!(out, "key map: 0 union < 10 or not computed, 1 no key property, 2 key property + match related, 3 key property + match failed, 4 key property + no match");
+    let _ = writeln!(out, "exit: 0 contains, 1 primitive-union fast path, 2 by key match, 3 first constituent, 4 within first 10%, 5 later, 6 none (false)\n");
+    let _ = writeln!(out, "| source | key map | exit | calls | constituents tried | incl ms | incl % |\n| --- | --- | --- | --- | --- | --- | --- |");
+    for ((sk, km, ex), s) in ru.iter().take(60) {
+        let _ = writeln!(out, "| {sk} | {km} | {ex} | {} | {} | {:.1} | {:.2} |", s.count, s.a, ms(s.key_incl_ns), pct(s.key_incl_ns));
+    }
     std::fs::write(path, out).expect("TSRS_WORK_CENSUS");
 }

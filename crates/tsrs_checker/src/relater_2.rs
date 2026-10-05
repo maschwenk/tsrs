@@ -522,9 +522,73 @@ impl Relater {
 
     // relater.go:3004
     pub(crate) fn type_related_to_some_type(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, intersection_state: IntersectionState) -> Ternary {
+        if c.census.is_none() {
+            return self.type_related_to_some_type_worker(c, source, target, report_errors, intersection_state, &mut (0, 0, 0));
+        }
+        let span = c.census_begin(crate::workcensus::Cat::RelUnion, || {
+            let (sym, label) = crate::workcensus::type_identity(target);
+            crate::workcensus::CKey::Rel(0, sym, label)
+        });
+        let mut outcome = (0u8, 0u8, 0u32);
+        let r = self.type_related_to_some_type_worker(c, source, target, report_errors, intersection_state, &mut outcome);
+        let timing = c.census_end(span).unwrap();
+        let k = crate::workcensus::rel_kind(c, self.rel());
+        let (sym, label) = crate::workcensus::type_identity(target);
+        let n = target.types().len();
+        let source_kind = if is_object_literal_type(source) && source.object_flags().intersects(ObjectFlags::FreshLiteral) {
+            0
+        } else if is_object_literal_type(source) {
+            1
+        } else if source.flags().intersects(TypeFlags::Object) {
+            2
+        } else if source.flags().intersects(TypeFlags::Intersection) {
+            3
+        } else if source.flags().intersects(TypeFlags::Primitive) {
+            4
+        } else {
+            5
+        };
+        let key_state = if !target.flags().intersects(TypeFlags::Union) || target.as_union_type().key_property_name().is_empty() {
+            0
+        } else if target.as_union_type().key_property_name() == InternalSymbolNameMissing {
+            1
+        } else {
+            outcome.1
+        };
+        let exit = match outcome.0 {
+            0 => 0,
+            1 => 1,
+            2 => 2,
+            _ => {
+                if r == Ternary::False {
+                    6
+                } else if outcome.2 <= 1 {
+                    3
+                } else if (outcome.2 as usize) * 10 <= n.max(10) {
+                    4
+                } else {
+                    5
+                }
+            }
+        };
+        let census = c.census.as_mut().unwrap();
+        census.record(crate::workcensus::Cat::RelUnion, crate::workcensus::CKey::Rel(k, sym, label), timing, outcome.2 as u64, (outcome.0 == 2) as u64, (r != Ternary::False) as u64);
+        let s = census.rel_union.entry((source_kind, key_state, exit)).or_default();
+        s.count += 1;
+        s.a += outcome.2 as u64;
+        if timing.key_outer {
+            s.key_incl_ns += timing.incl_ns;
+        }
+        census.charge_bookkeeping();
+        r
+    }
+
+    /// `outcome`: (exit path: 0 contains, 1 primitive union, 2 key match, 3 loop; key map state; constituents tried).
+    fn type_related_to_some_type_worker(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, intersection_state: IntersectionState, outcome: &mut (u8, u8, u32)) -> Ternary {
         let target_types = target.types();
         if target.flags().intersects(TypeFlags::Union) {
             if contains_type(c, target_types, source) {
+                outcome.0 = 0;
                 return Ternary::True;
             }
             if self.rel() != c.comparable_relation
@@ -552,20 +616,27 @@ impl Relater {
                 } else if source.flags().intersects(TypeFlags::BigIntLiteral) {
                     primitive = Some(c.bigint_type);
                 }
+                outcome.0 = 1;
                 if primitive.is_some_and(|p| contains_type(c, target_types, p)) || alternate_form.is_some_and(|a| contains_type(c, target_types, a)) {
                     return Ternary::True;
                 }
                 return Ternary::False;
             }
             let match_ = c.get_matching_union_constituent_for_type(target, source);
+            outcome.1 = 4;
             if let Some(match_) = match_ {
+                outcome.1 = 3;
                 let related = self.is_related_to_ex(c, source, match_, RecursionFlags::Target, false /*reportErrors*/, None /*headMessage*/, intersection_state);
                 if related != Ternary::False {
+                    outcome.0 = 2;
+                    outcome.1 = 2;
                     return related;
                 }
             }
         }
+        outcome.0 = 3;
         for &t in target_types {
+            outcome.2 += 1;
             let related = self.is_related_to_ex(c, source, t, RecursionFlags::Target, false /*reportErrors*/, None /*headMessage*/, intersection_state);
             if related != Ternary::False {
                 return related;
