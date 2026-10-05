@@ -448,10 +448,13 @@ then-current main:
   The rest of factory.go is `tsrs_printer/src/factory_2.rs` (`PrivateIdentifierKind` is an enum with `as_str`).
 - **Content mappers** are not supported by tsrs (the harness skips `runExternalCode`). Go's branch structure is
   kept where emit code checks `ContentMapper()`/`SpanMap()`, with the mapper always absent.
-- **Checker assignment.** With several checkers, tsrs assigns files to checkers by directory locality (Go: FENNEL),
-  and inferred types printed into `.d.ts` files can depend on which files a checker saw first (2 of the private
-  monorepo's 2,325 declaration files differed in property order). The monorepo oracle therefore runs tsrs with
-  `TSRS_CHECKER_ASSIGNMENT=go`; with it every declaration file is identical.
+- **Checker assignment.** With several checkers, tsrs assigns files to checkers by directory locality (Go: FENNEL).
+  In tsgo, inferred types printed into `.d.ts` files can depend on which files a checker saw first: it caches the
+  filled-in `x?: undefined` property of widened object literals per name. tsrs keys it by the property it stands for,
+  so declaration output does not depend on the assignment (notes/perf-order-independence.md). That puts filled-in
+  properties in source order, which differs from tsgo in 8 of the private monorepo's 2,460 declaration files. The
+  monorepo oracle therefore runs tsrs with `TSRS_CHECKER_ASSIGNMENT=go` (Go's assignment and Go's cache); with it every
+  declaration file is identical.
 - **Incremental programs** (E13, `emit/incremental`): under the gate the CLI runs `performIncrementalCompilation`
   (reads and writes `.tsbuildinfo`, section 10b). The `--baselines js` harness wraps the 5 `@incremental` test
   variants in `incremental.NewProgram` like Go's `createProgram` (with `testBuildInfoReader`), through

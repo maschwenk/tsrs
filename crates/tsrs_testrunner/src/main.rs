@@ -500,6 +500,8 @@ fn cmd_types_dump(mut args: Args) {
 }
 
 fn main() {
+    // The baselines are tsgo's output (one checker in program order): keep Go's check history (tsrs_core::compat).
+    tsrs_core::compat::use_go_history_for_tsgo_baselines();
     let mut argv: Vec<String> = std::env::args().skip(1).collect();
     if argv.is_empty() {
         eprintln!("{USAGE}");

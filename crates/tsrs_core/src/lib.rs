@@ -12,6 +12,7 @@ mod frozen;
 pub use frozen::{FrozenCell, FrozenRef, FrozenRefMut, OwnedCell, OwnedPSliceCell, OwnedSliceCell, OwnedStrCell, OwnedTaggedStrCell};
 
 pub mod collections;
+pub mod compat;
 pub mod debug;
 pub mod glob;
 pub mod goslices;

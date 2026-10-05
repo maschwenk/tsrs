@@ -328,6 +328,8 @@ fn collect(dir: &FsPath, out: &mut Vec<PathBuf>) {
 
 #[test]
 fn tsctests() {
+    // The baselines are tsgo's output: keep Go's check history (tsrs_core::compat).
+    tsrs_core::compat::use_go_history_for_tsgo_baselines();
     let root = repo_root();
     let dump = std::env::var("TSCTESTS_DUMP").map(PathBuf::from).unwrap_or_else(|_| root.join("target/tsctests-dump"));
     let filter = std::env::var("TSCTESTS_FILTER").unwrap_or_default();

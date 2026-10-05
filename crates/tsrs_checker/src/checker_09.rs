@@ -1697,13 +1697,24 @@ impl Checker {
     }
 
     // checker.go:18837
+    // Go caches one symbol per property name, so the declaration it copies (which decides where `name?: undefined`
+    // sorts among the widened literal's properties, `get_named_members`) is that of the first property of that name
+    // this checker ever widened: the printed property order then depends on which files the checker saw before.
+    // Canonically the cache is keyed by the sibling property, so the filled-in property sorts by the declaration it
+    // stands for; `go_compatible_history()` keeps Go's per-name cache (tsrs_core::compat).
     pub(crate) fn get_undefined_property(&mut self, prop: P<Symbol>) -> P<Symbol> {
-        if let Some(&cached) = self.undefined_properties.get(prop.name()) {
+        let go = tsrs_core::compat::go_compatible_history();
+        let cached = if go { self.undefined_properties.get(prop.name()) } else { self.undefined_properties_by_prop.get(&prop) };
+        if let Some(&cached) = cached {
             return cached;
         }
         let result = self.create_symbol_with_type(prop, Some(self.undefined_or_missing_type));
         result.flags.set(result.flags.get() | SymbolFlags::Optional);
-        self.undefined_properties.insert(prop.name().to_string(), result);
+        if go {
+            self.undefined_properties.insert(prop.name().to_string(), result);
+        } else {
+            self.undefined_properties_by_prop.insert(prop, result);
+        }
         result
     }
 

@@ -178,6 +178,30 @@ default mode must not lose passes either. Conformance with the flag on: no outpu
 `.types`, `.symbols`). The private monorepo, medians of 3 (flag off -> on): single-threaded peak 15.34 -> 11.77 GB, check
 26.3 -> 22.9 s; 4 checkers peak 23.32 -> 17.49 GB, check 13.2 -> 11.1 s. Details: `notes/lazy-members.md`.
 
+## 2026-10-05: checker threads steal work
+
+With output independent of the assignment, the type-check pass schedules dynamically. A checker that has run out of
+its locality-assigned files takes unstarted files from the back of the busiest checker. 38k-file codebase, total
+time: -10.9% at 4 checkers and -12.3% at 8 on the Mac; -13.8% and -17.0% on Linux. Instructions are +1-5% at those
+counts (first touches of stolen files); the gain shrinks at 16. Diagnostics are identical (stealing vs static on the
+40k-error corpus, and conformance with 4 checkers per test and stealing active). Counters vary from run to run
+unless an assignment is named. Forked checker processes with shared queues were measured and not landed: they tie
+threads on the large codebase and lose on small ones (notes/perf-checker-stealing.md, notes/perf-checker-processes.md).
+
+## 2026-10-05: diagnostics no longer depend on the checker assignment
+
+On the 40k-error corpus, tsgo and tsrs printed different text for `--checkers 1, 2, 4, 8, 12, 16`: four distinct
+outputs, 2-6 lines each. The cause is one tsgo cache. `getUndefinedProperty` keeps the filled-in `x?: undefined` of
+widened object literals per name, with the declaration of the first `x` a checker saw, and properties are sorted by
+declaration. By default tsrs keys it by the property it stands for (one line; `upstream/determinism-undefined-property.md`).
+Output is then a function of the program alone: identical for N = 1-16 x 20 random assignments
+(`TSRS_CHECKER_ASSIGNMENT=random:<seed>`) on the error-rich corpora, and for conformance run with 4 checkers per test
+and random assignments. `--checkerAssignment go` keeps tsgo's cache; the conformance, fourslash and tsc harnesses run
+that way, so their counts are unchanged (13,458 / 12,779 / 12,779). In the default mode one test differs from tsgo by
+design (`objectLiteralNormalization` `.types` / `.symbols` / `.js`), as do 8 of the private monorepo's 2,460
+declaration files and 8 of vscode's 9,399. The 2026-10-01 entry below said the assignment cannot change any file's
+diagnostics: that was not true for this cache before this change. Details: notes/perf-order-independence.md.
+
 ## 2026-10-01: checker assignment by locality (multi-checker memory)
 
 Files are now assigned to checkers by directory locality (`--checkerAssignment locality`, the default;
@@ -310,3 +334,7 @@ identical. Details: `notes/mem-small.md`.
 ## 2026-10-01: first Linux profile (x86_64 cloud VM)
 
 The private monorepo on an 18-vCPU x86_64 sandbox VM (kernel 7.2, THP `madvise`): release 0.1.5 takes 37-48 s with one checker and 16-20 s with four (TS 7.1 nightly `tsc`: 127 s / 75 s), sys 3.5-7.7 s, ~25 K page faults, because mimalloc already puts ~97% of memory on transparent huge pages (THP off: +11-12% wall); explicit `MADV_HUGEPAGE` on arena chunks changes no wall time (-2% RSS) and pre-faulting adds 16-36% RSS for nothing, so nothing landed. Details: `notes/linux-perf.md`.
+
+## 2026-10-05: huge pages for the compressed arena on Linux
+
+Pointer compression moved the arena out of mimalloc into a 32 GiB reservation that never asked for transparent huge pages, so on Linux hosts with THP `madvise` (Ubuntu's default) the arena ran on 4 KiB pages: ~0.9 M page faults per 4-checker run of the private monorepo instead of ~30 K. Thread-arena chunks from 2 MiB up are now 2 MiB-aligned and advised with `MADV_HUGEPAGE`: 2-6% less wall time, a third less sys time, half the dTLB misses, +0.1-0.7% peak RSS; macOS unchanged. With huge pages on both sides, compressed handles cost about 1% of wall time against `plain-ptrs` on x86-64, not the 4-7% measured before. Details: `notes/linux-x86-round.md`.

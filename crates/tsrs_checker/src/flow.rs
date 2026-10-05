@@ -125,6 +125,28 @@ impl Checker {
         f.shared_flow_start.set(self.shared_flows.len() as i32);
         f.walk_floor.set(self.flow_memo.next_serial());
         self.flow_invocation_count += 1;
+        let mut census_container = None;
+        let census_t0 = self.census_mut().map(|c| c.now_ns());
+        if census_t0.is_some() {
+            census_container = ast::get_containing_function(reference);
+            let sampled = (census_container.map_or(0, |n| n.to_bits()) as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 60 == 0;
+            let key = sampled.then(|| {
+                let text = if reference.pos() >= 0 && ast::get_source_file_of_node(reference).is_some() { tsrs_scanner::get_text_of_node(reference) } else { format!("#{}", reference.to_bits()) };
+                let mut bytes = text.into_bytes();
+                bytes.extend_from_slice(&declared_type.id.0.to_le_bytes());
+                bytes.extend_from_slice(&initial_type.id.0.to_le_bytes());
+                bytes.extend_from_slice(&(census_container.map_or(0, |n| n.to_bits()) as u64).to_le_bytes());
+                xxhash_rust::xxh3::xxh3_64(&bytes)
+            });
+            let census = self.census.as_mut().unwrap();
+            if sampled {
+                census.flow_sampled_invocations += 1;
+            }
+            let steps = census.flow_steps;
+            census.flow_stack.push((steps, 0, key));
+            census.charge_since(census_t0.unwrap());
+        }
+        let census_span = self.census_begin(crate::workcensus::Cat::Flow, || crate::workcensus::CKey::OptNode(census_container));
         self.flow_memo.stats.walks += 1;
         if self.flow_memo.mode != FlowMemoMode::Off {
             self.flow_memo_key(f);
@@ -146,6 +168,25 @@ impl Checker {
         }
         self.flow_memo.restore_height(saved_height);
         let evolved_type = flow_type.t.unwrap();
+        if let Some(timing) = self.census_end(census_span) {
+            let census = self.census.as_mut().unwrap();
+            let (start, nested, _) = census.flow_stack.pop().unwrap();
+            let total = census.flow_steps - start;
+            let own = total - nested;
+            if let Some(parent) = census.flow_stack.last_mut() {
+                parent.1 += total;
+            }
+            let b = crate::workcensus::bucket(own as usize) as usize;
+            let h = &mut census.flow_hist[b.min(23)];
+            h.count += 1;
+            h.a += own;
+            if timing.outer {
+                h.incl_ns += timing.incl_ns;
+            }
+            census.record(crate::workcensus::Cat::Flow, crate::workcensus::CKey::OptNode(census_container), timing, own, 0, 0);
+            let s = census.stats.get_mut(&(crate::workcensus::Cat::Flow, crate::workcensus::CKey::OptNode(census_container))).unwrap();
+            s.b = s.b.max(own);
+        }
         self.shared_flows.truncate(f.shared_flow_start.get() as usize);
         self.put_flow_state(f);
         // When the reference is 'x' in an 'x.length', 'x.push(value)', 'x.unshift(value)' or x[n] = value' operation,
@@ -205,6 +246,15 @@ impl Checker {
         let mut hit: Option<MemoHit> = None;
         let t = loop {
             steps += 1;
+            if let Some(census) = self.census_mut() {
+                census.flow_steps += 1;
+                if let Some(&(_, _, Some(key))) = census.flow_stack.last() {
+                    census.flow_sampled_steps += 1;
+                    if !census.flow_seen.insert((key, flow.to_bits())) {
+                        census.flow_sampled_repeats += 1;
+                    }
+                }
+            }
             let flags = flow.flags();
             if flags.intersects(FlowFlags::Shared) {
                 // We cache results of flow type resolution for shared nodes that were previously visited in

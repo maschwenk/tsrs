@@ -22,10 +22,13 @@ pointer compression costs about +4.9% instructions and took back most of the che
 - **The 32 GiB reservation outside macOS and GitHub runners: verified.** main ran in a Linux x86-64 dev sandbox
   (gVisor-style microVM, `ulimit -v` unlimited, overcommit 1): check, emit and incremental all work. It still needs
   a 47-bit address space and no `ulimit -v` below 32 GiB.
-- **x86-64 cost of compression: measured, not free.** Intel Xeon 8259CL, 18 vCPU, the 38k-file codebase, compressed
-  vs `plain-ptrs`: `--release` +6.6% wall / +7.0% instructions (one and four checkers); `dist` profile (fat LTO, no
-  PGO) +4.4% wall with four checkers (27.0 -> 28.2 s), +2.3% with one, +7.1% instructions; peak -15.2%. With PGO: not
-  measured. Shipping the Linux binaries with `plain-ptrs` is a one-line release choice if speed matters more there.
+- **x86-64 cost of compression: 0-1.5% wall, once both builds have huge pages** (notes/linux-x86-round.md). The
+  earlier figures (`--release` +6.6% wall, `dist` +4.4% with four checkers and +2.3% with one, Intel Xeon 8259CL)
+  compared a compressed build whose arena had silently lost its transparent huge pages (the 32 GiB reservation never
+  asked for them; mimalloc, which backs `plain-ptrs` chunks, does) with a `plain-ptrs` build that had them. With the
+  arena advised again (Xeon 8259CL, 5 rounds): wall +0.6% / +1.4% / -0.9% (1 / 4 / 8 checkers), cycles +1-2.6%,
+  instructions still +6.5%, peak -15%; an Ice Lake host agreed within its noise. Shipping `plain-ptrs` on Linux would
+  buy about 1% for 15% more memory.
 - **Linux emit.** The 38k-file codebase is bound by file creation on macOS (4 writer permits). On Linux file creation
   runs in parallel, so the writer cap and the remaining transform CPU may both matter (notes/perf-emit.md).
 - **CI on main: fine.** CI moved to Depot (`.depot/workflows/ci.yml`: `check-and-test`, `lint-ratchet`); results are
@@ -67,6 +70,16 @@ pointer compression costs about +4.9% instructions and took back most of the che
 
 ## Measured and rejected (do not redo)
 
+- A1, deciding `getConditionalType`'s definitely-false test for discriminated unions without the relater (draft #88,
+  notes/perf-checker-algorithms.md): exact (it replays the relater's side effects; cross-checked on the suite and five
+  corpora), but -0.5% instructions on one corpus at four checkers and neutral elsewhere, not worth a second
+  implementation of part of the relater.
+- A2, skipping the non-matching constituents of such a conditional through a key index: asymptotically better, but the
+  skipped evaluations' instantiation counts depend on cache states, so it moves the instantiation-budget (TS2589)
+  boundary that `testdata/regressions/conditional-instantiation-limit-*` pins.
+- A full unit-property index for relations to union targets: would skip at most 0.2% (big) / 0.1% (vscode) of failed
+  constituent checks; the rest is inherent (notes/perf-checker-algorithms.md, "Row 1").
+
 - Zero-based handles on Linux (reserve 4-32 GiB so a dereference needs no base; #62, notes/mem-pointer-compression.md
   section 6): removes 2.7 of the 7 points of extra x86 instructions, but wall and cycles move by 0.7-2%, inside the
   host's drift, and it adds low-address-space failure modes. The rest of the cost is the 32-bit handle itself.
@@ -81,8 +94,12 @@ pointer compression costs about +4.9% instructions and took back most of the che
 - Persisted, mmap-able front end: 26% of nodes cacheable, 0.02-0.03 s at 18 threads, at most 0.15 GiB
   (docs/PERSISTED_FRONTEND.md on #36).
 - Scope regions for inference contexts: 25-50% of scopes keep a live block (notes/mem-scoped-arenas.md).
-- Work stealing between checkers: counters vary between runs. Partition changes: +-4% with no consistent winner
-  (notes/perf-checker-scaling.md).
+- Work stealing between checkers: landed after all (notes/perf-checker-stealing.md), once output stopped depending on
+  the assignment (notes/perf-order-independence.md); only the counters vary between runs, and naming an assignment
+  keeps them fixed. Partition changes: +-4% with no consistent winner (notes/perf-checker-scaling.md).
+- Forked checker processes sharing one warm checker copy-on-write (notes/perf-checker-processes.md): 17-47% fewer
+  instructions and 0.2-1.9 GiB less memory at 8-16 workers, but no faster than threads, static or with stealing; worse
+  on small programs. Children's private state is mostly their own caches and copied hash-table pages.
 - Sharing types across checkers: cannot be exact (notes/mem-shared-base.md).
 - Directory listings instead of existence probes, `openat`, a typed tsbuildinfo decode, skip-if-identical
   tsbuildinfo writes (notes/perf-dev-loop.md, perf-dev-loop2.md).
