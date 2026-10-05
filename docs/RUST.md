@@ -114,6 +114,7 @@ In place:
 | Lazy members, line maps and rare-field tails | `notes/lazy-members.md`, `notes/mem-lazy.md` | |
 | `#[cold]` slow-path splits | `notes/perf-parse.md` changes 6 to 8: parse instructions 16.66 G -> 15.07 G | oxc, Bun |
 | Instruction counts per merge, flagged on regression | `bench/README.md` "Regression flag": single-threaded tsrs repeats to about 0.001%; a project up more than 1% gets a comment on the PR | CodSpeed in oxc, Rolldown, Ruff, Biome, swc (simulated counts) |
+| Generated-code freshness check | `tools/gen-check.sh` (CI job `generated-code`) re-runs the eight generators and fails on a diff; it found two hand edits the generators no longer reproduced | oxc, Ruff, rust-analyzer |
 
 Measured and rejected (do not retry without new evidence): explicit huge pages, pre-faulting and mmap'd arena chunks
 (`notes/linux-perf.md`); global identifier interning (`notes/mem-round2.md`: parse +9% time); rolling back whole
@@ -136,7 +137,6 @@ Not tried. Each needs a measurement and a note before it is adopted; none is app
 | Call-graph lints | mordant, used by Bun with a per-file baseline, advisory there | `forbidden_reach` ("nothing reachable from this function may allocate"), `generic_body_not_generic` (code compiled again per type for no reason). | A nightly with `rustc-dev` that compiles the workspace. |
 | Source-pattern lints | Bun `test/internal/source-lints/` (one regex per rule, a per-file count allowlist, a check that the scan is not empty), rust-analyzer `xtask/src/tidy.rs` | Bans that clippy cannot express. | A rule that needs it; put it next to `ratchet.py`. |
 | Dependency checks in CI | cargo-deny (oxc, Ruff, Biome, swc), cargo-shear or machete (oxc, Rolldown, Ruff, rust-analyzer) | `deny.toml` exists but no job runs it; unused dependencies cost fat-LTO build time. | A CI step. |
-| Generated-code freshness check | oxc, Ruff, rust-analyzer (regenerate in CI, then `git diff --exit-code`) | A hand edit to generated code (`tools/gen-*` output) fails CI instead of being lost at the next regeneration; `clippy --fix` once edited `lsp_generated.rs`. | A CI job that runs the generators that need no network. |
 | Unused code under the ratchet | Bun (`dead_code` and `unreachable_pub` denied), Ruff (hawk `dead_public`) | `dead_code`, `unused_imports`, `unused_variables` and `unused_mut` are allowed workspace-wide (left over from porting); counted by the ratchet, new unused code stops landing and the old is visible. | Adding them to the ratchet's rustc lints and a baseline. |
 | Inventory of `unsafe impl Send` / `Sync` | Bun `vm-thread-door.inventory.json` (exact snapshot; any change fails until regenerated) | 29 such impls today; each new cross-thread escape becomes a reviewed line, which matters because `P<T>` is `Send + Sync` by decree. | A script and a checked-in list, run with the ratchet. |
 | Weakened atomic orderings need a reason | Bun review rule ("default to seq_cst and comment any weakened ordering") | 110 `Relaxed`, 5 `Acquire`, 5 `Release` today; a source-pattern check (ratcheted per file) asks for a comment at new ones. | A script, run with the ratchet. |
