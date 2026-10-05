@@ -517,7 +517,7 @@ impl RuntimeSyntaxTransformer {
     }
 
     // runtimesyntax.go:509
-    fn transform_module_body(&self, node: P<Node>, namespace_local_name: P<Node>) -> P<Node> {
+    fn transform_module_body(&self, node: P<Node>, _namespace_local_name: P<Node>) -> P<Node> {
         let saved_current_namespace = self.current_namespace.get();
         let saved_current_scope = self.current_scope.get();
         let saved_current_scope_first_declarations_of_name = self.current_scope_first_declarations_of_name.borrow().clone();

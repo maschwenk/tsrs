@@ -190,7 +190,7 @@ impl Printer {
     pub(crate) fn emit_parenthesized_expression(&mut self, node: P<Node>) {
         let state = self.enter_node(node);
         let expression = node.as_parenthesized_expression().expression();
-        let open_paren_pos = self.emit_token(Kind::OpenParenToken, node.pos(), WriteKind::Punctuation, node);
+        let _open_paren_pos = self.emit_token(Kind::OpenParenToken, node.pos(), WriteKind::Punctuation, node);
         let indented = self.write_line_separators_and_indent_before(expression, node);
         self.emit_expression(expression, OperatorPrecedence::Comma);
         self.write_line_separators_after(expression, node);
@@ -2124,7 +2124,7 @@ impl Printer {
 //
 
 impl Printer {
-    pub(crate) fn emit_jsdoc_node(&mut self, node: P<Node>) {
+    pub(crate) fn emit_jsdoc_node(&mut self, _node: P<Node>) {
         // !!!
         panic!("not implemented");
     }

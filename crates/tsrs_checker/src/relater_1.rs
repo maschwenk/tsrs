@@ -2328,7 +2328,7 @@ impl Checker {
             let mut i = min_argument_count - 1;
             while i >= 0 {
                 let t = self.get_type_at_position(signature, i);
-                if !some_type(self, t, |c, t| t.flags().intersects(TypeFlags::Void)) {
+                if !some_type(self, t, |_, t| t.flags().intersects(TypeFlags::Void)) {
                     break;
                 }
                 min_argument_count = i;

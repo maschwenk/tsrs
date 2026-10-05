@@ -106,17 +106,6 @@ impl LegacyDecoratorsTransformer {
     }
 }
 
-// legacydecorators.go:94
-fn elide_nodes(f: &printer::NodeFactory, nodes: Option<P<NodeList>>) -> Option<P<NodeList>> {
-    let nodes = nodes?;
-    if nodes.nodes().is_empty() {
-        return Some(nodes);
-    }
-    let replacement = f.new_node_list(vec![]);
-    replacement.loc.set(nodes.loc.get());
-    Some(replacement)
-}
-
 // legacydecorators.go:106
 fn elide_modifiers(f: &printer::NodeFactory, nodes: Option<P<ModifierList>>) -> Option<P<ModifierList>> {
     let nodes = nodes?;

@@ -289,10 +289,6 @@ impl<'a> Decoder<'a> {
         Ok(if ci == 0 { None } else { self.nodes[ci] })
     }
 
-    pub(crate) fn node_at(&self, ci: usize) -> Result<P<Node>, DecodeError> {
-        self.nodes[ci].ok_or(DecodeError::MissingChild)
-    }
-
     pub(crate) fn list_at(&self, ci: usize) -> Result<Option<P<NodeList>>, DecodeError> {
         Ok(if ci == 0 { None } else { self.lists[ci] })
     }

@@ -73,13 +73,6 @@ impl eventList {
         el.create_locked(path, seq);
     }
 
-    // event.go:58
-    pub(crate) fn create_at(&self, path: &str, seq: u64) {
-        let mut el = self.mu.lock().unwrap();
-        el.advance_seq_locked(seq);
-        el.create_locked(path, seq);
-    }
-
     // event.go:79
     // update records an update event for path.
     pub(crate) fn update(&self, path: &str) {
@@ -89,6 +82,7 @@ impl eventList {
     }
 
     // event.go:86
+    #[cfg(target_os = "macos")] // only the FSEvents backend reports its own sequence numbers
     pub(crate) fn update_at(&self, path: &str, seq: u64) {
         let mut el = self.mu.lock().unwrap();
         el.advance_seq_locked(seq);
@@ -96,6 +90,7 @@ impl eventList {
     }
 
     // event.go:93
+    #[cfg(target_os = "macos")] // only the FSEvents backend reports its own sequence numbers
     pub(crate) fn update_watch_root_at(&self, path: &str, seq: u64) {
         let mut el = self.mu.lock().unwrap();
         el.advance_seq_locked(seq);
@@ -112,6 +107,7 @@ impl eventList {
     }
 
     // event.go:113
+    #[expect(dead_code, reason = "its only Go caller, windows.go (windowsSubscription.processOne), is not ported")]
     pub(crate) fn remove_and_get_sequence(&self, path: &str) -> u64 {
         let mut el = self.mu.lock().unwrap();
         let seq = el.next_seq_locked();
@@ -120,6 +116,7 @@ impl eventList {
     }
 
     // event.go:121
+    #[cfg(target_os = "macos")] // only the FSEvents backend reports its own sequence numbers
     pub(crate) fn remove_at(&self, path: &str, seq: u64) {
         let mut el = self.mu.lock().unwrap();
         el.advance_seq_locked(seq);
@@ -127,6 +124,7 @@ impl eventList {
     }
 
     // event.go:128
+    #[cfg(target_os = "macos")] // only the FSEvents backend reports its own sequence numbers
     pub(crate) fn remove_watch_root_at(&self, path: &str, seq: u64) {
         let mut el = self.mu.lock().unwrap();
         el.advance_seq_locked(seq);
@@ -144,6 +142,7 @@ impl eventList {
     // event.go:168
     // getEvents returns a snapshot of events, skipping entries that were both
     // created and deleted. Order is not guaranteed.
+    #[cfg(test)] // only tests call it, in Go too
     pub(crate) fn get_events(&self) -> Vec<Event> {
         self.mu.lock().unwrap().snapshot_locked()
     }
@@ -186,6 +185,7 @@ impl eventList {
 
     // event.go:217
     // getError returns the stored error (or nil if none).
+    #[cfg(test)] // only tests call it, in Go too
     pub(crate) fn get_error(&self) -> Option<Error> {
         self.mu.lock().unwrap().err.clone()
     }
@@ -233,6 +233,7 @@ impl eventListState {
     // event.go:154
     fn snapshot_since_locked(&self, start_seq: u64) -> Vec<Event> {
         let mut out = Vec::with_capacity(self.entries.len());
+        #[expect(clippy::iter_over_hash_type, reason = "order-independent: entries are keyed by path, so a batch has at most one event per path, and Go ranges the map too (getEvents: \"Order is not guaranteed\")")]
         for (path, e) in &self.entries {
             let Some(kind) = e.kind_since(start_seq) else {
                 continue;
@@ -257,6 +258,7 @@ impl eventListState {
     }
 
     // event.go:246
+    #[cfg(target_os = "macos")] // only the FSEvents backend reports its own sequence numbers
     fn advance_seq_locked(&mut self, seq: u64) {
         if seq > self.seq {
             self.seq = seq;

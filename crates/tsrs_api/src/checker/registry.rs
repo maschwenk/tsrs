@@ -44,6 +44,7 @@ pub struct CheckerRegistry {
 }
 
 impl CheckerRegistry {
+    #[cfg(test)]
     pub fn new() -> CheckerRegistry {
         CheckerRegistry::default()
     }
@@ -74,13 +75,9 @@ impl CheckerRegistry {
         Ok(())
     }
 
+    #[cfg(test)]
     pub fn is_released(&self) -> bool {
         self.lock().released
-    }
-
-    /// Drops the type/signature registry of one project (Go: project removed from the snapshot).
-    pub fn release_project(&self, project: &str) {
-        self.lock().projects.remove(project);
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, RegistryState> {

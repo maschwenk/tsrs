@@ -1648,20 +1648,6 @@ impl Checker {
         self.get_or_create_type_from_signature(instantiated)
     }
 
-    // checker.go:7843
-    pub(crate) fn get_outer_inference_type_parameters(&mut self) -> Vec<P<Type>> {
-        let mut result: Vec<P<Type>> = Vec::new();
-        for i in 0..self.inference_context_infos.len() {
-            let context = self.inference_context_infos[i].context;
-            if let Some(context) = context {
-                for info in context.inferences.get() {
-                    result.push(info.type_parameter.get().unwrap());
-                }
-            }
-        }
-        result
-    }
-
     // checker.go:7856
     pub(crate) fn get_unique_type_parameters(&mut self, context: P<InferenceContext>, type_parameters: &[P<Type>]) -> Vec<P<Type>> {
         let mut old_type_parameters: Vec<P<Type>> = Vec::new();
