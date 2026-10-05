@@ -133,13 +133,16 @@ In place:
 | Instruction counts and peak memory per merge, flagged on regression | `bench/README.md` "Regression flag": single-threaded tsrs repeats to about 0.001% (instructions) and under 0.4% (peak RSS); a project up more than 1% (and 2 MiB for memory) gets a comment on the PR | CodSpeed in oxc, Rolldown, Ruff, Biome, swc (simulated counts); Ruff's PR memory report |
 | Generated-code freshness check | `tools/gen-check.sh` (CI job `generated-code`) re-runs the eight generators and fails on a diff; it found two hand edits the generators no longer reproduced | oxc, Ruff, rust-analyzer |
 | Differential parser fuzzing | `tools/fuzz/parser.py` mutates conformance files and compares the AST hashes of the Go and Rust oracles (`tools/oracle/ast`); the Depot `Fuzz` workflow runs 200,000 mutants nightly with a date seed. First 320,000 mutants: no divergence, no crash (inputs kept valid UTF-8; invalid UTF-8 is read lossily on purpose) | Ruff (`cargo fuzz` on its parser) |
+| Frame pointers for profiling | `docs/DEBUGGING.md` "Profiling": a `dist` build with `-C force-frame-pointers=yes` for samply / `perf` on Linux (Apple arm64 always keeps them) | Bun |
 
 Measured and rejected (do not retry without new evidence): explicit huge pages, pre-faulting and mmap'd arena chunks
 (`notes/linux-perf.md`); global identifier interning (`notes/mem-round2.md`: parse +9% time); rolling back whole
 regions of speculative work (`notes/mem-overload-rollback.md`); bump regions per inference scope
 (`notes/mem-scoped-arenas.md`: 25 to 50% of scopes keep something reachable). Restructuring generic
 callbacks to cut monomorphization (`notes/monomorphization-audit.md`: closures are 3.6% of the checker's LLVM IR, the
-largest tsrs generic `filter_type` 1.1%, on a hot path).
+largest tsrs generic `filter_type` 1.1%, on a hot path). PGO hot/cold text grouping (`-z keep-text-section-prefix`;
+`notes/perf-probes-2026-10-05.md`: about 0.5% more cycles on every project). Identifiers that carry their hash (same
+note: all Fx hashing is 0.7-1.4% of instructions, not worth a hash field on every name).
 
 Not tried. Each needs a measurement and a note before it is adopted; none is applied yet:
 
@@ -157,9 +160,6 @@ Not tried. Each needs a measurement and a note before it is adopted; none is app
 | Call-graph lints | mordant, used by Bun with a per-file baseline, advisory there | `forbidden_reach` ("nothing reachable from this function may allocate"), `generic_body_not_generic` (code compiled again per type for no reason). | A nightly with `rustc-dev` that compiles the workspace. |
 | Source-pattern lints | Bun `test/internal/source-lints/` (one regex per rule, a per-file count allowlist, a check that the scan is not empty), rust-analyzer `xtask/src/tidy.rs` | Bans that clippy cannot express. | A rule that needs it; put it next to `ratchet.py`. |
 | Dependency checks in CI | cargo-deny (oxc, Ruff, Biome, swc), cargo-shear or machete (oxc, Rolldown, Ruff, rust-analyzer) | `deny.toml` exists but no job runs it; unused dependencies cost fat-LTO build time. | A CI step. |
-| Hot/cold text grouping with PGO (`-Wl,-z,keep-text-section-prefix`) | Bun (only when a profile is loaded) | PGO already marks functions hot or cold; the linker flag keeps them grouped, for fewer instruction-cache misses on Linux. | A cycles or wall-time A/B; instruction counts will not show it. |
-| Identifiers that carry their hash | oxc `Ident` (pointer, length, precomputed hash; `IdentHashMap` does not rehash) | Symbol-table lookups by name hash the string every time. | A profile showing what share of instructions string hashing takes before any change. |
-| Frame pointers for profiling | Bun (`-Cforce-frame-pointers=yes`) | Reliable stacks in samply and `perf` profiles of the `dist` build, at a small cost, so not for release. | A documented profiling build command. |
 
 Not pursued: a binary-size check (Bun fails a pull request that grows the binary by more than 0.5 MB); size is not a
 goal here (owner decision, 2026-10-05).

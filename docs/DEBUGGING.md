@@ -132,6 +132,23 @@ packed word, flag bits above an address or a new enum payload is not). Stale reg
 when they were hard-coded offsets. A violation that survives that check is a real bug: fix the escape tracking or
 stop freeing that class.
 
+## Profiling
+
+Profile the `dist` profile (fat LTO, one codegen unit; release builds also add PGO, `.github/workflows/release.yml`),
+not `--release`. For reliable stacks on Linux x86-64 build it with frame pointers, in its own target directory (Apple
+arm64 always keeps frame pointers):
+
+```sh
+RUSTFLAGS="-C force-frame-pointers=yes" CARGO_TARGET_DIR=target/profiling cargo build --profile dist -p tsrs_cli
+samply record ./target/profiling/dist/tsrs -p <project> --noEmit --incremental false
+```
+
+For before/after numbers, compare instruction counts, not wall time: `python3 bench/count.py out.json -- <tsrs command>`
+on Linux (single-threaded, with `--singleThreaded` and `RAYON_NUM_THREADS=1`, counts repeat to about 0.001%), or
+`/usr/bin/time -l` on macOS. Per-function counts: `valgrind --tool=callgrind --callgrind-out-file=cg.out <tsrs command>`
+on a `--release` build, then `callgrind_annotate --inclusive=no --tree=none cg.out` (`--tree=none`, or call-graph lines
+are counted twice). The bench flags regressions on main by itself (`bench/README.md`, "Regression flag").
+
 ## How to fix
 
 - The Go source (`ts-ref/tsc/internal/…`) is the specification. Find the Go function behind the wrong behavior, read it
