@@ -290,14 +290,17 @@ pub(crate) unsafe fn recycle_mapping(m: P<TypeMapper>, appended: bool) {
 /// `alloc_slice_recycled`), with that list: an array mapper is its list's only holder, a simple mapper does not
 /// refer to it (`getConditionalTypeInstantiation` does the same inline).
 ///
+/// `targets` is a raw slice, not a `&[P<Type>]`: a reference parameter is a protected borrow for the whole call, and
+/// freeing the memory it points to inside the call let LLVM drop the free-list link (`tsrs_core::free_raw`).
+///
 /// # Safety
 /// As for `recycle_mapper`; `targets` is the list the caller made for `m`.
-pub(crate) unsafe fn recycle_mapper_with_targets(m: P<TypeMapper>, targets: &'static [P<Type>]) {
+pub(crate) unsafe fn recycle_mapper_with_targets(m: P<TypeMapper>, targets: *const [P<Type>]) {
     if !m.escaped() {
         tsrs_core::free!(m);
-        tsrs_core::free_slice!(targets);
+        tsrs_core::free_slice_ptr(targets);
     } else if targets.len() == 1 {
-        tsrs_core::free_slice!(targets);
+        tsrs_core::free_slice_ptr(targets);
     }
 }
 
