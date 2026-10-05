@@ -894,6 +894,8 @@ pub fn set_checker_assignment_from_cli(name: &str) -> bool {
         return false;
     }
     let _ = CLI_CHECKER_ASSIGNMENT.set(name.to_string());
+    // `go` also means Go's check history in the caches that have two behaviours (tsrs_core::compat).
+    tsrs_core::compat::set_go_compatible_history(name == "go");
     true
 }
 
