@@ -296,8 +296,9 @@ impl Checker {
     }
 
     // checker.go:9028
+    #[cfg_attr(not(feature = "work-census"), inline(always), expect(clippy::inline_always, reason = "without the census the wrapper is a forwarding call; inlined, callers call the body as before (notes/perf-checker-algorithms.md)"))]
     pub(crate) fn resolve_call(&mut self, node: P<Node>, signatures: &[P<Signature>], candidates_out_array: Option<&mut Vec<P<Signature>>>, check_mode: CheckMode, call_chain_flags: SignatureFlags, head_message: Option<&'static Message>) -> P<Signature> {
-        if self.census.is_some() {
+        if self.census_on() {
             let callee = signatures.first().and_then(|s| s.declaration());
             let generic = signatures.iter().filter(|s| !s.type_parameters().is_empty()).count() as u64;
             self.census.as_mut().unwrap().call_stack.push(callee);
@@ -958,8 +959,9 @@ impl Checker {
     }
 
     // checker.go:9582
+    #[cfg_attr(not(feature = "work-census"), inline(always), expect(clippy::inline_always, reason = "without the census the wrapper is a forwarding call; inlined, callers call the body as before (notes/perf-checker-algorithms.md)"))]
     pub(crate) fn infer_type_arguments(&mut self, node: P<Node>, signature: P<Signature>, args: &[P<Node>], check_mode: CheckMode, context: P<InferenceContext>) -> Vec<P<Type>> {
-        if self.census.is_some() {
+        if self.census_on() {
             let start = self.census.as_ref().unwrap().infer_args.len();
             let span = self.census_begin(crate::workcensus::Cat::Infer, || crate::workcensus::CKey::OptNode(signature.declaration()));
             let r = self.infer_type_arguments_worker(node, signature, args, check_mode, context);
@@ -1000,7 +1002,7 @@ impl Checker {
             }
             let contextual_type = self.get_contextual_type(node, if skip_binding_patterns { ContextFlags::SkipBindingPatterns } else { ContextFlags::None });
             if let Some(contextual_type) = contextual_type {
-                if let Some(census) = self.census.as_mut() {
+                if let Some(census) = self.census_mut() {
                     census.infer_args.push(contextual_type.id.0 | 0x8000_0000);
                 }
                 let inference_target_type = self.get_return_type_of_signature(signature);
@@ -1102,7 +1104,7 @@ impl Checker {
                 let param_type = self.get_type_at_position(signature, i);
                 if self.could_contain_type_variables(param_type) {
                     let arg_type = self.check_expression_with_contextual_type(arg, param_type, Some(context), check_mode);
-                    if let Some(census) = self.census.as_mut() {
+                    if let Some(census) = self.census_mut() {
                         census.infer_args.push(arg_type.id.0);
                     }
                     self.infer_types(context.inferences.get(), arg_type, param_type, InferencePriority::None, false);

@@ -97,7 +97,7 @@ impl Checker {
         f.shared_flow_start.set(self.shared_flows.len() as i32);
         self.flow_invocation_count += 1;
         let mut census_container = None;
-        let census_t0 = self.census.as_ref().map(|c| c.now_ns());
+        let census_t0 = self.census_mut().map(|c| c.now_ns());
         if census_t0.is_some() {
             census_container = ast::get_containing_function(reference);
             let sampled = (census_container.map_or(0, |n| n.to_bits()) as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 60 == 0;
@@ -173,7 +173,7 @@ impl Checker {
         f.depth.set(f.depth.get() + 1);
         let mut shared_flow: Option<P<FlowNode>> = None;
         loop {
-            if let Some(census) = self.census.as_mut() {
+            if let Some(census) = self.census_mut() {
                 census.flow_steps += 1;
                 if let Some(&(_, _, Some(key))) = census.flow_stack.last() {
                     census.flow_sampled_steps += 1;

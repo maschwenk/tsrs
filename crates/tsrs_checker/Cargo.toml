@@ -10,6 +10,8 @@ workspace = true
 [features]
 # Creation-site counters (tsrs_core::sitecount): `#[track_caller]` on the checker's object constructors.
 site-counts = ["tsrs_core/site-counts"]
+# TSRS_WORK_CENSUS: attribute checker work to source patterns (workcensus.rs, docs/DEBUGGING.md).
+work-census = []
 # Instrumentation only (tsrs_compiler checkerpool_stats.rs): records every type/symbol the checker creates.
 assignment-stats = []
 

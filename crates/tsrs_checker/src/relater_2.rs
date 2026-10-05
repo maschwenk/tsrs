@@ -521,8 +521,9 @@ impl Relater {
     }
 
     // relater.go:3004
+    #[cfg_attr(not(feature = "work-census"), inline(always), expect(clippy::inline_always, reason = "without the census the wrapper is a forwarding call; inlined, callers call the body as before (notes/perf-checker-algorithms.md)"))]
     pub(crate) fn type_related_to_some_type(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, intersection_state: IntersectionState) -> Ternary {
-        if c.census.is_none() {
+        if !c.census_on() {
             return self.type_related_to_some_type_worker(c, source, target, report_errors, intersection_state, &mut (0, 0, 0));
         }
         let span = c.census_begin(crate::workcensus::Cat::RelUnion, || {
@@ -584,6 +585,7 @@ impl Relater {
     }
 
     /// `outcome`: (exit path: 0 contains, 1 primitive union, 2 key match, 3 loop; key map state; constituents tried).
+    #[cfg_attr(not(feature = "work-census"), inline(always), expect(clippy::inline_always, reason = "its only call without the census; inlined, the outcome stores disappear"))]
     fn type_related_to_some_type_worker(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, intersection_state: IntersectionState, outcome: &mut (u8, u8, u32)) -> Ternary {
         let target_types = target.types();
         if target.flags().intersects(TypeFlags::Union) {
@@ -635,7 +637,7 @@ impl Relater {
             }
         }
         outcome.0 = 3;
-        let census_on = c.census.is_some();
+        let census_on = c.census_on();
         let mut fail_ns = 0u64;
         let mut fail_cached = 0u64;
         for (i, &t) in target_types.iter().enumerate() {
@@ -755,7 +757,7 @@ impl Relater {
         let (id, constrained) = get_relation_key(c, source, target, intersection_state, is_identity, false /*ignoreConstraints*/);
         let entry = self.rel().lookup(id);
         tsrs_core::sitecount::hit("relation cache (recursiveTypeRelatedTo)", if entry != RelationComparisonResult::None { "hit" } else { "miss" });
-        if c.census.is_some() {
+        if c.census_on() {
             let k = crate::workcensus::rel_kind(c, self.rel()) as usize;
             let census = c.census.as_mut().unwrap();
             if entry != RelationComparisonResult::None {
@@ -891,10 +893,11 @@ impl Relater {
     }
 
     // relater.go:3224
+    #[cfg_attr(not(feature = "work-census"), inline(always), expect(clippy::inline_always, reason = "without the census the wrapper is a forwarding call; inlined, callers call the body as before (notes/perf-checker-algorithms.md)"))]
     pub(crate) fn structured_type_related_to(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, intersection_state: IntersectionState) -> Ternary {
-        if c.census.is_some() {
+        if c.census_on() {
             let span = c.census_begin(crate::workcensus::Cat::Rel, || { let (sym, label) = crate::workcensus::type_identity(target); crate::workcensus::CKey::Rel(0, sym, label) });
-            let r = self.structured_type_related_to_censused(c, source, target, report_errors, intersection_state);
+            let r = self.structured_type_related_to_inner(c, source, target, report_errors, intersection_state);
             let timing = c.census_end(span).unwrap();
             let k = crate::workcensus::rel_kind(c, self.rel());
             let (sym, label) = crate::workcensus::type_identity(target);
@@ -905,10 +908,10 @@ impl Relater {
             census.record(crate::workcensus::Cat::Rel, crate::workcensus::CKey::Rel(k, sym, label), timing, (r == Ternary::False) as u64, 0, 0);
             return r;
         }
-        self.structured_type_related_to_censused(c, source, target, report_errors, intersection_state)
+        self.structured_type_related_to_inner(c, source, target, report_errors, intersection_state)
     }
 
-    fn structured_type_related_to_censused(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, intersection_state: IntersectionState) -> Ternary {
+    fn structured_type_related_to_inner(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, intersection_state: IntersectionState) -> Ternary {
         let save_error_state = self.get_error_state(c);
         let mut result = self.structured_type_related_to_worker(c, source, target, report_errors, intersection_state);
         if self.rel() != c.identity_relation {

@@ -67,6 +67,16 @@ pointer compression costs about +4.9% instructions and took back most of the che
 
 ## Measured and rejected (do not redo)
 
+- A1, deciding `getConditionalType`'s definitely-false test for discriminated unions without the relater (draft #88,
+  notes/perf-checker-algorithms.md): exact (it replays the relater's side effects; cross-checked on the suite and five
+  corpora), but -0.5% instructions on one corpus at four checkers and neutral elsewhere, not worth a second
+  implementation of part of the relater.
+- A2, skipping the non-matching constituents of such a conditional through a key index: asymptotically better, but the
+  skipped evaluations' instantiation counts depend on cache states, so it moves the instantiation-budget (TS2589)
+  boundary that `testdata/regressions/conditional-instantiation-limit-*` pins.
+- A full unit-property index for relations to union targets: would skip at most 0.2% (big) / 0.1% (vscode) of failed
+  constituent checks; the rest is inherent (notes/perf-checker-algorithms.md, "Row 1").
+
 - Zero-based handles on Linux (reserve 4-32 GiB so a dereference needs no base; #62, notes/mem-pointer-compression.md
   section 6): removes 2.7 of the 7 points of extra x86 instructions, but wall and cycles move by 0.7-2%, inside the
   host's drift, and it adds low-address-space failure modes. The rest of the cost is the 32-bit handle itself.

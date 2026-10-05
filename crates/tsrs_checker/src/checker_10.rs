@@ -2277,7 +2277,7 @@ impl Checker {
     #[inline(never)] // out of get_type_of_symbol, which then needs no frame for its common cases
     pub(crate) fn get_type_of_mapped_symbol(&mut self, symbol: P<Symbol>) -> P<Type> {
         let links = self.value_symbol_links.get(symbol);
-        if links.resolved_type.get().is_none() && self.census.is_some() {
+        if links.resolved_type.get().is_none() && self.census_on() {
             let span = self.census_begin(crate::workcensus::Cat::MappedProp, || { let mt = links.containing_type().unwrap(); crate::workcensus::CKey::OptNode(mt.as_mapped_type().target.get().unwrap_or(mt).as_mapped_type().declaration.get()) });
             let r = self.get_type_of_mapped_symbol_worker(symbol);
             let timing = self.census_end(span).unwrap();

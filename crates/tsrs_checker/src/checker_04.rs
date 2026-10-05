@@ -1418,8 +1418,9 @@ impl Checker {
     }
 
     // checker.go:7656
+    #[cfg_attr(not(feature = "work-census"), inline(always), expect(clippy::inline_always, reason = "without the census the wrapper is a forwarding call; inlined, callers call the body as before (notes/perf-checker-algorithms.md)"))]
     pub(crate) fn check_expression_with_contextual_type(&mut self, node: P<Node>, contextual_type: P<Type>, inference_context: Option<P<InferenceContext>>, check_mode: CheckMode) -> P<Type> {
-        if self.census.is_some() {
+        if self.census_on() {
             let callee = self.census.as_ref().unwrap().call_stack.last().copied().flatten();
             let span = self.census_begin(crate::workcensus::Cat::CtxCheck, || crate::workcensus::CKey::OptNode(callee));
             let r = self.check_expression_with_contextual_type_worker(node, contextual_type, inference_context, check_mode);

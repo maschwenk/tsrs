@@ -1,12 +1,13 @@
-//! Work census (`TSRS_WORK_CENSUS=<output file>`): attributes checker work to source-level identities (the
-//! conditional type's alias, the callee's declaration, the relation target's symbol, the flow container) instead of
-//! to functions. Off unless the variable is set; every hook first tests `Checker::census`.
+//! Work census (`TSRS_WORK_CENSUS=<output file>`, docs/DEBUGGING.md): attributes checker work to source-level
+//! identities (the conditional type's root alias, the callee's declaration, the relation target's symbol, the flow
+//! container) instead of to functions. Off unless the variable is set; every hook first tests `Checker::census`.
 //!
-//! Timing: each hooked call is a span on a stack. A span's inclusive time counts toward its key only when no other
-//! span of the same category encloses it ("outer"), so per-category totals do not double count recursion; self time
-//! excludes every nested span. Spans read `Instant` (~12 ns here); `thread_cpu_seconds`-style thread CPU time
-//! (~105 ns a read) is read only per file, to check that one checker's wall time is its CPU time. The cost of the
-//! nested spans' own clock reads is subtracted from the enclosing span (calibrated at startup).
+//! Timing: each hooked call is a span on a stack. A span's inclusive time counts toward its category only when no
+//! other span of that category encloses it, and toward its key only when no span with the same key encloses it, so
+//! totals do not double count recursion; self time excludes every nested span. Spans read `Instant` (~12 ns on Apple
+//! Silicon; thread CPU time costs ~105 ns a read, too much per span, and with one checker the two agree). Each span's
+//! bookkeeping after it ends is measured and charged to the enclosing span; the remaining per-span cost is calibrated
+//! at startup and subtracted.
 
 use crate::checker::Checker;
 use crate::types::{ConditionalRoot, Type};
@@ -24,7 +25,11 @@ pub fn slow_threshold_ns() -> u64 {
     *NS.get_or_init(|| std::env::var("TSRS_WORK_CENSUS_SLOW").ok().and_then(|v| v.parse::<f64>().ok()).map_or(u64::MAX, |ms| (ms * 1e6) as u64))
 }
 
+/// The output file; None unless the binary was built with `--features work-census` and `TSRS_WORK_CENSUS` is set.
 pub fn census_path() -> Option<&'static str> {
+    if !cfg!(feature = "work-census") {
+        return None;
+    }
     static PATH: OnceLock<Option<String>> = OnceLock::new();
     PATH.get_or_init(|| std::env::var("TSRS_WORK_CENSUS").ok().filter(|v| !v.is_empty() && v != "0")).as_deref()
 }
@@ -163,7 +168,6 @@ pub struct Census {
     pub rel_union_late: FxHashMap<(u8, u8), Stat>,
     /// The callee of the innermost resolveCall (for checkExpressionWithContextualType).
     pub call_stack: Vec<Option<P<Node>>>,
-    pub file_cpu: f64,
     pub file_wall_ns: u64,
 }
 
@@ -210,7 +214,6 @@ impl Census {
             call_stack: Vec::new(),
             rel_union: FxHashMap::default(),
             rel_union_late: FxHashMap::default(),
-            file_cpu: 0.0,
             file_wall_ns: 0,
         });
         // Calibrate what a nested span costs its parent beyond the measured bookkeeping (the clock reads at its
@@ -388,8 +391,9 @@ fn file_and_line(node: P<Node>) -> String {
     let short: String = match name.find("/node_modules/") {
         Some(i) => name[i + 1..].to_string(),
         None => {
-            let parts: Vec<&str> = name.rsplit('/').take(3).collect();
-            parts.into_iter().rev().collect::<Vec<_>>().join("/")
+            // The last three path components.
+            let start = name.rmatch_indices('/').nth(2).map_or(0, |(i, _)| i + 1);
+            name[start..].to_string()
         }
     };
     format!("{short}:{}", line + 1)
@@ -458,7 +462,6 @@ impl CKey {
 #[derive(Default)]
 struct Global {
     total_wall_ns: u64,
-    total_cpu: f64,
     frames: u64,
     pair_ns: f64,
     stats: FxHashMap<(Cat, String), Stat>,
@@ -494,9 +497,25 @@ impl Checker {
         census_report();
     }
 
+    /// Whether the census is recording. A constant false unless built with `--features work-census` (the runtime
+    /// test alone cost 0.3-0.5% instructions: notes/perf-checker-algorithms.md), so the hooks compile away.
+    #[inline]
+    pub(crate) fn census_on(&self) -> bool {
+        cfg!(feature = "work-census") && self.census.is_some()
+    }
+
+    #[inline]
+    pub(crate) fn census_mut(&mut self) -> Option<&mut Census> {
+        if cfg!(feature = "work-census") {
+            self.census.as_deref_mut()
+        } else {
+            None
+        }
+    }
+
     #[inline]
     pub(crate) fn census_begin(&mut self, cat: Cat, key: impl FnOnce() -> CKey) -> Option<Span> {
-        match self.census.as_mut() {
+        match self.census_mut() {
             Some(c) => Some(c.begin(cat, key())),
             None => None,
         }
@@ -504,7 +523,7 @@ impl Checker {
 
     #[inline]
     pub(crate) fn census_end(&mut self, span: Option<Span>) -> Option<Timing> {
-        match (span, self.census.as_mut()) {
+        match (span, self.census_mut()) {
             (Some(span), Some(c)) => Some(c.end(span)),
             _ => None,
         }
@@ -516,7 +535,6 @@ impl Checker {
         let mut guard = GLOBAL.lock().unwrap();
         let g = guard.get_or_insert_with(Global::default);
         g.total_wall_ns += c.file_wall_ns;
-        g.total_cpu += c.file_cpu;
         g.frames += c.frames;
         g.pair_ns = c.pair_ns;
         let mut rows: Vec<((Cat, CKey), Stat)> = c.stats.iter().map(|(k, v)| (*k, *v)).collect();
@@ -608,9 +626,8 @@ pub fn census_report() {
     let mut out = String::new();
     let _ = writeln!(
         out,
-        "# work census\ncheck wall (sum of checkSourceFile) {:.1} ms, thread CPU {:.1} ms, spans {}, span cost {:.1} ns (subtracted from parents; total ~{:.0} ms)",
+        "# work census\ncheck wall (sum of checkSourceFile) {:.1} ms, spans {}, span cost {:.1} ns (subtracted from parents; total ~{:.0} ms)",
         ms(g.total_wall_ns),
-        g.total_cpu * 1e3,
         g.frames,
         g.pair_ns,
         g.frames as f64 * g.pair_ns / 1e6
