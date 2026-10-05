@@ -84,6 +84,7 @@ mod unioncache;
 mod flow;
 pub(crate) use flow::*;
 pub mod flowmemo;
+pub mod heapcensus;
 mod inference;
 pub(crate) use inference::*;
 mod grammarchecks;

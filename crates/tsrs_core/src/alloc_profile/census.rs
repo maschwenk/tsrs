@@ -370,54 +370,7 @@ pub fn run(roots: &[usize]) {
     with_guard(|| run_frozen(roots));
 }
 
-#[repr(C)]
-struct MachHeader64 {
-    magic: u32,
-    cputype: i32,
-    cpusubtype: i32,
-    filetype: u32,
-    ncmds: u32,
-    sizeofcmds: u32,
-    flags: u32,
-    reserved: u32,
-}
-
-#[repr(C)]
-struct SegmentCommand64 {
-    cmd: u32,
-    cmdsize: u32,
-    segname: [u8; 16],
-    vmaddr: u64,
-    vmsize: u64,
-}
-
-extern "C" {
-    fn _dyld_get_image_header(index: u32) -> *const c_void;
-    fn _dyld_get_image_vmaddr_slide(index: u32) -> isize;
-    fn pthread_self() -> *mut c_void;
-    fn pthread_get_stackaddr_np(thread: *mut c_void) -> *mut c_void;
-}
-
-/// The main executable's `__DATA`, `__DATA_CONST` and `__DATA_DIRTY` segments (statics).
-fn data_segments() -> Vec<(usize, usize, String)> {
-    const LC_SEGMENT_64: u32 = 0x19;
-    let mut out = Vec::new();
-    // SAFETY: image 0 is the main executable; its load commands follow the header and are mapped.
-    unsafe {
-        let header = _dyld_get_image_header(0) as *const MachHeader64;
-        let slide = _dyld_get_image_vmaddr_slide(0);
-        let mut p = (header as *const u8).add(std::mem::size_of::<MachHeader64>());
-        for _ in 0..(*header).ncmds {
-            let cmd = &*(p as *const SegmentCommand64);
-            if cmd.cmd == LC_SEGMENT_64 && cmd.segname.starts_with(b"__DATA") {
-                let name = String::from_utf8_lossy(&cmd.segname).trim_end_matches('\0').to_string();
-                out.push(((cmd.vmaddr as isize + slide) as usize, cmd.vmsize as usize, name));
-            }
-            p = p.add(cmd.cmdsize as usize);
-        }
-    }
-    out
-}
+use super::os::data_segments;
 
 /// The low end of the stack range the census scans (set by `run`).
 static STACK_LOW: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
@@ -425,8 +378,7 @@ static STACK_LOW: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsiz
 #[inline(never)]
 fn scan_stack(table: &mut Table, work: &mut Vec<u32>) -> usize {
     let low = STACK_LOW.load(Ordering::SeqCst);
-    // SAFETY: plain libc queries about the current thread.
-    let high = unsafe { pthread_get_stackaddr_np(pthread_self()) } as usize;
+    let high = super::os::stack_high();
     table.scan(low, high - low, work);
     high - low
 }
@@ -1032,8 +984,7 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
         }
     }
     let low = STACK_LOW.load(Ordering::SeqCst);
-    // SAFETY: plain libc queries about the current thread.
-    let high = unsafe { pthread_get_stackaddr_np(pthread_self()) } as usize;
+    let high = super::os::stack_high();
     let mut roots_ranges: Vec<(usize, usize, String)> = data_segments();
     roots_ranges.push((low, high - low, "stack".into()));
     for (start, len, name) in &roots_ranges {
@@ -1282,7 +1233,7 @@ fn arena_wrapper(name: &str) -> bool {
 
 /// `atos` output line -> readable function name: no image/offset noise, no hash suffix, legacy-mangling escapes
 /// decoded, `<impl path::Type>::f` shortened to `Type::f`.
-fn function_name(line: &str) -> String {
+pub(super) fn function_name(line: &str) -> String {
     let mut s = line;
     if let Some(i) = s.find(" (in ") {
         s = &s[..i];
@@ -1338,25 +1289,5 @@ fn function_name(line: &str) -> String {
 }
 
 fn atos(ips: &[usize], names: &mut FxHashMap<usize, String>) {
-    let mut todo: Vec<usize> = ips.iter().copied().filter(|ip| *ip > 1 && !names.contains_key(ip)).collect();
-    todo.sort_unstable();
-    todo.dedup();
-    if todo.is_empty() {
-        return;
-    }
-    let exe = std::env::current_exe().unwrap();
-    // SAFETY: image 0 is the main executable.
-    let load = unsafe { _dyld_get_image_header(0) } as usize;
-    for chunk in todo.chunks(20_000) {
-        let mut cmd = std::process::Command::new("atos");
-        cmd.arg("-o").arg(&exe).arg("-l").arg(format!("{load:#x}"));
-        for ip in chunk {
-            cmd.arg(format!("{:#x}", ip - 1));
-        }
-        let out = cmd.output().map(|o| String::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default();
-        let mut lines = out.lines();
-        for ip in chunk {
-            names.insert(*ip, lines.next().map(function_name).unwrap_or_else(|| format!("{ip:#x}")));
-        }
-    }
+    super::os::resolve_into(ips, names, function_name);
 }

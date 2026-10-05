@@ -189,6 +189,16 @@ pub struct FlowMemo {
     pub(crate) stats: FlowMemoStats,
 }
 
+impl crate::heapcensus::HeapSize for FlowMemo {
+    fn heap_stat(&self) -> crate::heapcensus::HeapStat {
+        let mut stat = self.slots.heap_stat();
+        stat.add(self.shadow_keys.heap_stat());
+        stat.add(self.shadow_origin.heap_stat());
+        stat.add(self.checkpoints.heap_stat());
+        stat
+    }
+}
+
 impl FlowMemo {
     pub fn new() -> FlowMemo {
         FlowMemo {

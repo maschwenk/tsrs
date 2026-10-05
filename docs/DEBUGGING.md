@@ -141,6 +141,22 @@ packed word, flag bits above an address or a new enum payload is not). Stale reg
 when they were hard-coded offsets. A violation that survives that check is a real bug: fix the escape tracking or
 stop freeing that class.
 
+## What each checker holds on the heap: the heap census
+
+`TSRS_HEAP_CENSUS=1` with `--extendedDiagnostics` prints, per checker on stderr, every hash table and vector the
+checker owns directly (cache maps, relation caches, link stores, lazy member tables, ...) with entries, capacity,
+bytes per slot, load factor and heap bytes (`crates/tsrs_checker/src/heapcensus.rs`, notes/mem-checker-heap.md).
+`TSRS_HEAP_CENSUS_MIN=<bytes>` sets the smallest row (default 1 MiB). It works in any build. Containers owned by
+arena objects are attributed by the heap sampler of the alloc-profile build instead:
+
+```sh
+CARGO_TARGET_DIR=target/prof cargo build --release -p tsrs_cli --features alloc-profile
+TSRS_HEAP_PROFILE=1 TSRS_HEAP_PROFILE_RATE=65536 TSRS_HEAP_PROFILE_TSV=/tmp/heap.tsv target/prof/release/tsrs -p . --noEmit --checkers 8
+```
+
+The TSV has one row per sampled stack and thread group (`main`, `checker-N`, `other`) with live, at-peak and
+cumulative bytes. Symbols come from `atos` on macOS and `addr2line` on Linux.
+
 ## Where checker time goes by source pattern: the work census
 
 A function profile cannot tell which type alias or call site the time belongs to. The work census
