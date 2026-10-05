@@ -521,7 +521,7 @@ impl Checker {
             return signature;
         }
         let key = CachedSignatureKey { sig: signature, key: if call_chain_flags == SignatureFlags::IsInnerCallChain { SignatureKeyInner } else { SignatureKeyOuter } };
-        if let Some(&cached) = self.cached_signatures.get(&key) {
+        if let Some(cached) = self.cached_signatures.get(&key) {
             return cached;
         }
         let result = self.clone_signature(signature);

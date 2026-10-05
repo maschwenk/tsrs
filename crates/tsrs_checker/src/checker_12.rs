@@ -122,7 +122,7 @@ impl Checker {
             let alias_type_arguments: Vec<P<Type>> = type_arguments.iter().map(|&n| self.get_type_from_type_node(n)).collect();
             let alias = P::new(TypeAlias { symbol: Cell::new(Some(symbol)), type_arguments: ThinSliceCell::new(alloc_vec(alias_type_arguments)) });
             let key = get_alias_key(Some(alias).into());
-            let mut error_type = self.error_types.get(&key).copied();
+            let mut error_type = self.error_types.get(&key);
             if error_type.is_none() {
                 let t = self.new_intrinsic_type(TypeFlags::Any, "error");
                 t.set_alias(Some(alias));
@@ -980,7 +980,7 @@ impl Checker {
                 is_distributive: Cell::new(check_type.flags().intersects(TypeFlags::TypeParameter)),
                 infer_type_parameters: Cell::new(alloc_vec(infer_type_parameters)),
                 outer_type_parameters: Cell::new(outer_type_parameters),
-                instantiations: GoMap::default(),
+                instantiations: GoPackedMap::default(),
                 alias: Cell::new(alias),
             });
             links.resolved_type.set(Some(self.get_conditional_type(root, None /*mapper*/, false /*forConstraint*/, None)));
@@ -1593,7 +1593,7 @@ impl Checker {
             return self.global_array_type;
         }
         let key = get_tuple_key(element_infos, readonly);
-        let mut t = self.tuple_types.get(&key).copied();
+        let mut t = self.tuple_types.get(&key);
         if t.is_none() {
             let target = self.create_tuple_target_type(element_infos, readonly);
             self.tuple_types.insert(key, target);

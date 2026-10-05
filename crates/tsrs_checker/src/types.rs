@@ -530,7 +530,7 @@ pub struct ExportTypeLinks {
 pub struct TypeAliasLinks {
     pub declared_type: Cell<Option<P<Type>>>,
     pub type_parameters: Cell<&'static [P<Type>]>, // Type parameters of type alias (undefined if non-generic)
-    pub instantiations: GoMap<CacheHashKey, P<Type>>, // Instantiations of generic type alias (undefined if non-generic)
+    pub instantiations: GoPackedMap<CacheHashKey, P<Type>>, // Instantiations of generic type alias (undefined if non-generic)
     pub is_constructor_declared_property: Cell<bool>,
 }
 
@@ -2692,7 +2692,7 @@ pub struct ConditionalRoot {
     pub is_distributive: Cell<bool>,
     pub infer_type_parameters: Cell<&'static [P<Type>]>,
     pub outer_type_parameters: Cell<&'static [P<Type>]>,
-    pub instantiations: GoMap<CacheHashKey, P<Type>>,
+    pub instantiations: GoPackedMap<CacheHashKey, P<Type>>,
     pub alias: Cell<Option<P<TypeAlias>>>,
 }
 
