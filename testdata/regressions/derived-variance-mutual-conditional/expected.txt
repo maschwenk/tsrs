@@ -1,0 +1,3 @@
+a.ts(11,14): error TS2322: Type 'E<{}>' is not assignable to type 'C<{ a?: string | undefined; }>'.
+  Types of property 'c' are incompatible.
+    Type '1' is not assignable to type '2'.
