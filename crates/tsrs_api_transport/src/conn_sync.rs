@@ -93,19 +93,19 @@ impl SyncConn {
                 Err(e) => return Err(e),
             };
             if msg.is_request() {
-                self.handle_request(msg, 0)?;
+                self.handle_request(&msg, 0)?;
             } else if msg.is_notification() {
-                self.handle_notification(msg, 0);
+                self.handle_notification(&msg, 0);
             } else {
                 return Err(TransportError::Unexpected("ipc: unexpected response message in sync connection".to_string()));
             }
         }
     }
 
-    fn write_response(&self, msg: &Message, result: Result<Response, ResponseError>) -> Result<(), TransportError> {
+    fn write_response(&self, msg: &Message, result: &Result<Response, ResponseError>) -> Result<(), TransportError> {
         let id = msg.id.as_ref().expect("requests have an id");
         let mut io = self.lock();
-        let written = match &result {
+        let written = match result {
             Ok(response) => match io.writer.write_response(id, response) {
                 // An unencodable result (invalid JSON from the handler) becomes an error response
                 // instead of corrupting the stream.
@@ -117,23 +117,23 @@ impl SyncConn {
         written.map_err(|e| TransportError::Io(std::io::Error::other(format!("ipc: failed to write response: {e}"))))
     }
 
-    fn handle_request(&self, msg: Message, depth: u32) -> Result<(), TransportError> {
+    fn handle_request(&self, msg: &Message, depth: u32) -> Result<(), TransportError> {
         match msg.method.as_str() {
             METHOD_GET_SERVER_TIMING => {
                 let snapshot = server_timing_snapshot(self.timing.as_ref());
                 let json = serde_json::to_vec(&snapshot).expect("timing serializes");
-                return self.write_response(&msg, Ok(Response::Json(json)));
+                return self.write_response(msg, &Ok(Response::Json(json)));
             }
             METHOD_RESET_SERVER_TIMING => {
                 if let Some(t) = &self.timing {
                     t.reset();
                 }
-                return self.write_response(&msg, Ok(Response::null()));
+                return self.write_response(msg, &Ok(Response::null()));
             }
             _ => {}
         }
         let start = self.timing.as_ref().map(|_| Instant::now());
-        let cx = RequestContext { cancel: self.cancel.clone(), depth, callbacks: self.callbacks.clone(), state: Default::default() };
+        let cx = RequestContext { cancel: self.cancel.clone(), depth, callbacks: Arc::clone(&self.callbacks), state: Default::default() };
         let outcome = catch_unwind(AssertUnwindSafe(|| {
             crate::reentrancy::with_request(&cx, || self.handler.handle_request(&cx, &msg.method, msg.params_bytes()))
         }));
@@ -145,11 +145,11 @@ impl SyncConn {
             Ok(Err(err)) => Err(ResponseError { code: err.code, message: err.message }),
             Err(payload) => Err(ResponseError::internal(panic_message(&*payload))),
         };
-        self.write_response(&msg, result)
+        self.write_response(msg, &result)
     }
 
-    fn handle_notification(&self, msg: Message, depth: u32) {
-        let cx = RequestContext { cancel: self.cancel.clone(), depth, callbacks: self.callbacks.clone(), state: Default::default() };
+    fn handle_notification(&self, msg: &Message, depth: u32) {
+        let cx = RequestContext { cancel: self.cancel.clone(), depth, callbacks: Arc::clone(&self.callbacks), state: Default::default() };
         let _ = catch_unwind(AssertUnwindSafe(|| self.handler.handle_notification(&cx, &msg.method, msg.params_bytes())));
     }
 
@@ -177,14 +177,14 @@ impl SyncConn {
             }
             if msg.is_request() {
                 drop(io);
-                let handled = self.handle_request(msg, depth);
+                let handled = self.handle_request(&msg, depth);
                 io = self.lock();
                 handled?;
                 continue;
             }
             if msg.is_notification() {
                 drop(io);
-                self.handle_notification(msg, depth);
+                self.handle_notification(&msg, depth);
                 io = self.lock();
                 continue;
             }

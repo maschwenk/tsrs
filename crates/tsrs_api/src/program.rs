@@ -39,7 +39,7 @@ pub(crate) enum DiagnosticKind {
 }
 
 impl Session {
-    fn program_of(&self, p: &Params) -> ApiResult<(std::sync::Arc<crate::session::SnapshotData>, &'static Program)> {
+    fn program_of(&self, p: Params) -> ApiResult<(std::sync::Arc<crate::session::SnapshotData>, &'static Program)> {
         let sd = self.snapshot_data(p.u64("snapshot")?)?;
         let program = sd.get_program(&ProjectID(p.str("project")?.to_string()))?;
         Ok((sd, program))
@@ -47,7 +47,7 @@ impl Session {
 
     /// Go `getDiagnostics` with the per-kind getter.
     pub(crate) fn handle_get_diagnostics(&self, p: Params, kind: DiagnosticKind) -> ApiResult<Value> {
-        let (_sd, program) = self.program_of(&p)?;
+        let (_sd, program) = self.program_of(p)?;
         let ctx = with_checker_lifetime(&Context::background(), CheckerLifetime::Diagnostics);
         let get = |file: Option<P<SourceFile>>| -> Vec<P<Diagnostic>> {
             match kind {
@@ -70,12 +70,12 @@ impl Session {
     }
 
     pub(crate) fn handle_get_config_file_parsing_diagnostics(&self, p: Params) -> ApiResult<Value> {
-        let (_sd, program) = self.program_of(&p)?;
+        let (_sd, program) = self.program_of(p)?;
         Ok(nullable_diagnostics(&program.get_config_file_parsing_diagnostics()))
     }
 
     pub(crate) fn handle_get_program_diagnostics(&self, p: Params) -> ApiResult<Value> {
-        let (_sd, program) = self.program_of(&p)?;
+        let (_sd, program) = self.program_of(p)?;
         Ok(nullable_diagnostics(&program.get_program_diagnostics()))
     }
 
@@ -92,11 +92,11 @@ impl Session {
     }
 
     pub(crate) fn handle_get_source_file_names(&self, p: Params) -> ApiResult<Value> {
-        let (_sd, program) = self.program_of(&p)?;
+        let (_sd, program) = self.program_of(p)?;
         Ok(strings(program.get_source_files().iter().map(|f| f.file_name().to_string())))
     }
 
-    fn emit_only(p: &Params) -> ApiResult<EmitOnly> {
+    fn emit_only(p: Params) -> ApiResult<EmitOnly> {
         match p.opt_u64("emitOnly")? {
             None | Some(0) => Ok(EmitOnly::EmitAll),
             Some(1) => Ok(EmitOnly::EmitOnlyJs),
@@ -108,10 +108,10 @@ impl Session {
     /// Go `handleEmit`: outputs are captured in memory for snapshots with a full request filesystem and
     /// written through the session host filesystem otherwise.
     pub(crate) fn handle_emit(&self, p: Params) -> ApiResult<Value> {
-        let (sd, program) = self.program_of(&p)?;
-        let emit_only = Self::emit_only(&p)?;
+        let (sd, program) = self.program_of(p)?;
+        let emit_only = Self::emit_only(p)?;
         let capture = sd.file_system.as_ref().is_some_and(|fs| fs.is_full());
-        let outputs: Mutex<std::collections::HashMap<String, String>> = Mutex::new(Default::default());
+        let outputs: Mutex<rustc_hash::FxHashMap<String, String>> = Mutex::new(Default::default());
         let fs = self.base_fs();
         let write = |file_name: &str, text: &str, _data: &mut WriteFileData| -> Result<(), String> {
             if capture {
@@ -138,13 +138,13 @@ impl Session {
     }
 
     pub(crate) fn handle_emit_to_string(&self, p: Params) -> ApiResult<Value> {
-        let (_sd, program) = self.program_of(&p)?;
-        let emit_only = Self::emit_only(&p)?;
+        let (_sd, program) = self.program_of(p)?;
+        let emit_only = Self::emit_only(p)?;
         Ok(emit_to_output(program, None, emit_only, false))
     }
 
     pub(crate) fn handle_selected_files_emit(&self, p: Params, emit_only: EmitOnly) -> ApiResult<Value> {
-        let (_sd, program) = self.program_of(&p)?;
+        let (_sd, program) = self.program_of(p)?;
         if !p.has("files") {
             return Err(ApiError::client("files is required"));
         }
@@ -182,7 +182,7 @@ fn emit_to_output(program: &'static Program, targets: Option<Vec<P<SourceFile>>>
 impl Session {
     /// Go `handleGetConfigFileNames` (`null` when the program has no tsconfig).
     pub(crate) fn handle_get_config_file_names(&self, p: Params) -> ApiResult<Value> {
-        let (_sd, program) = self.program_of(&p)?;
+        let (_sd, program) = self.program_of(p)?;
         let command_line = program.command_line();
         // Go returns a nil []string, written as `[]` by encoding/json/v2.
         let Some(config) = command_line.config_file else { return Ok(Value::Array(Vec::new())) };
@@ -193,7 +193,7 @@ impl Session {
 
     /// Go `handleGetSourceFileMetadata` (`null` when the file is not in the program).
     pub(crate) fn handle_get_source_file_metadata(&self, p: Params) -> ApiResult<Value> {
-        let (_sd, program) = self.program_of(&p)?;
+        let (_sd, program) = self.program_of(p)?;
         let file = p.document("file")?;
         let Some(source_file) = program.get_source_file(&file.to_file_name()) else { return Ok(Value::Null) };
         let path = source_file.path();

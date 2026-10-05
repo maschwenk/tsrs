@@ -38,7 +38,7 @@ fn language_service(snapshot: &Arc<Snapshot>, program: &'static Program, project
     if snapshot.project_collection.get_project(&tsrs_project::ID(project.to_string())).is_none() {
         return Err(CheckerError::client(format!("project {project} not found")));
     }
-    let host: Arc<dyn tsrs_ls::Host> = snapshot.clone();
+    let host: Arc<dyn tsrs_ls::Host> = Arc::<Snapshot>::clone(snapshot);
     Ok(tsrs_ls::new_language_service(LsProjectID(project.to_string()), program, host, active_file))
 }
 
@@ -252,12 +252,12 @@ pub(crate) fn get_import_adder_edits(host: &dyn CheckerHost, p: &Params) -> Chec
         Ok(out)
     };
 
-    let mut working = sd.scope.snapshot.clone();
+    let mut working = Arc::clone(&sd.scope.snapshot);
     let mut prepared: Option<Arc<Snapshot>> = None;
     let prepared_for_file = working.auto_import_registry().is_some_and(|r| r.is_prepared_for_importing_file(source_file.file_name(), &project_id, working.user_preferences()));
     if !prepared_for_file {
         let snapshot = host.clone_snapshot_with_auto_imports(&working, &file_name)?;
-        prepared = Some(snapshot.clone());
+        prepared = Some(Arc::clone(&snapshot));
         working = snapshot;
         let resolved = program_of(&working, &sd.project).and_then(|prog| {
             let sf = prog.get_source_file(&file_name).ok_or_else(|| CheckerError::client(format!("source file not found: {}", file.display())))?;

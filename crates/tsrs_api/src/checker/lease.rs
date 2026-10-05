@@ -56,8 +56,8 @@ pub(crate) struct ApiCheckerLease {
 const RESOURCE: &str = "the program's API checker";
 
 pub(crate) fn acquire(program: &'static Program) -> CheckerResult<ApiCheckerLease> {
-    let key = program as *const Program as usize;
-    let gate = lock_gates().get_or_insert_with(FxHashMap::default).entry(key).or_default().clone();
+    let key = std::ptr::from_ref::<Program>(program) as usize;
+    let gate = Arc::clone(lock_gates().get_or_insert_with(FxHashMap::default).entry(key).or_default());
     let lease = |gate: Arc<Gate>| ApiCheckerLease { key, gate };
     let result = (|| {
         let mut st = gate.state.lock().unwrap_or_else(|e| e.into_inner());

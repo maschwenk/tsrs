@@ -8,7 +8,7 @@
 // (Go reports the first invalid field in document order, this in struct order) except for DocumentIdentifier,
 // whose custom decoder text is reproduced.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 use tsrs_core::json::Value;
 
@@ -135,7 +135,7 @@ fn base_type(go_type: &str) -> &str {
 }
 
 /// The fields of an api-package struct value at `pointer`, recursively (Go decodes the whole params struct).
-fn check_struct(go_type: &str, o: &tsrs_core::collections::OrderedMap<String, Value>, pointer: &str, lexemes: &HashMap<String, String>) -> Result<(), String> {
+fn check_struct(go_type: &str, o: &tsrs_core::collections::OrderedMap<String, Value>, pointer: &str, lexemes: &FxHashMap<String, String>) -> Result<(), String> {
     for spec in struct_fields(base_type(go_type)) {
         if let Some(v) = o.get(spec.name) {
             check_field(spec, v, &format!("{pointer}/{}", token(spec.name)), lexemes)?;
@@ -147,7 +147,7 @@ fn check_struct(go_type: &str, o: &tsrs_core::collections::OrderedMap<String, Va
 /// Integer fields of structs from other Go packages, decoded by `gojson` from the parsed value: Go's decoder
 /// needs plain integer syntax within the Go type's range there too (`"target":1e1`, `"builders":1e1`, a `*int`
 /// above int64). Wrong JSON kinds and int32 ranges are reported by `gojson`.
-fn check_external_integers(go_type: &str, o: &tsrs_core::collections::OrderedMap<String, Value>, pointer: &str, lexemes: &HashMap<String, String>) -> Result<(), String> {
+fn check_external_integers(go_type: &str, o: &tsrs_core::collections::OrderedMap<String, Value>, pointer: &str, lexemes: &FxHashMap<String, String>) -> Result<(), String> {
     let fields: Vec<(&str, u32)> = match base_type(go_type) {
         "core.CompilerOptions" => tsrs_tsoptions::gojson::compiler_options_integer_fields(),
         "core.BuildOptions" => tsrs_tsoptions::gojson::BUILD_OPTIONS_INTEGER_FIELDS.to_vec(),
@@ -259,7 +259,7 @@ fn check_request_file_system(go_type: &str, o: &tsrs_core::collections::OrderedM
     Ok(())
 }
 
-fn check_field(spec: &FieldSpec, v: &Value, pointer: &str, lexemes: &HashMap<String, String>) -> Result<(), String> {
+fn check_field(spec: &FieldSpec, v: &Value, pointer: &str, lexemes: &FxHashMap<String, String>) -> Result<(), String> {
     let pointer = pointer.to_string();
     let mismatch = |v: &Value, pointer: &str, go_type: &str| format!("cannot unmarshal JSON {} into Go {} within \"{pointer}\"", json_kind(v), go_type_name(go_type));
     // project.SyntheticProjectID has its own decoder, called for null too (unlike a plain string).
@@ -368,7 +368,7 @@ impl<'a> Scanner<'a> {
         self.i += 1;
     }
     /// Scans one value. `path` is its JSON pointer; with `numbers`, number literals are recorded by pointer.
-    fn value(&mut self, path: &mut String, numbers: Option<&mut HashMap<String, String>>) {
+    fn value(&mut self, path: &mut String, numbers: Option<&mut FxHashMap<String, String>>) {
         let mut numbers = numbers;
         self.ws();
         if self.i >= self.b.len() {
@@ -436,8 +436,8 @@ impl<'a> Scanner<'a> {
 }
 
 /// Number literals anywhere in `raw`, keyed by JSON pointer (`/key`, `/key/<i>/inner`).
-fn number_lexemes(raw: &[u8]) -> HashMap<String, String> {
-    let mut out = HashMap::new();
+fn number_lexemes(raw: &[u8]) -> FxHashMap<String, String> {
+    let mut out = FxHashMap::default();
     Scanner { b: raw, i: 0 }.value(&mut String::new(), Some(&mut out));
     out
 }
@@ -503,8 +503,8 @@ pub(crate) fn raw_value_at<'a>(raw: &'a [u8], pointer: &str) -> Option<&'a [u8]>
 
 /// Checks `params` (an object, or `{}` for `null`) against the method's pinned params struct, nested api structs
 /// included. `raw` is the request payload the value was parsed from. Returns the number literals by pointer.
-pub(crate) fn predecode(method: &str, go_type: &str, params: &Value, raw: &[u8]) -> ApiResult<HashMap<String, String>> {
-    let Value::Object(o) = params else { return Ok(HashMap::new()) };
+pub(crate) fn predecode(method: &str, go_type: &str, params: &Value, raw: &[u8]) -> ApiResult<FxHashMap<String, String>> {
+    let Value::Object(o) = params else { return Ok(FxHashMap::default()) };
     let lexemes = number_lexemes(raw);
     for spec in params_fields(method) {
         if let Some(v) = o.get(spec.name) {
@@ -520,18 +520,18 @@ pub(crate) fn predecode(method: &str, go_type: &str, params: &Value, raw: &[u8])
 /// field elsewhere). Stacked for nested dispatch (batchRequests, callback re-entry).
 struct Frame {
     raw: Vec<u8>,
-    lexemes: HashMap<String, String>,
-    objects: HashMap<usize, String>,
+    lexemes: FxHashMap<String, String>,
+    objects: FxHashMap<usize, String>,
 }
 
 thread_local! {
     static FRAMES: std::cell::RefCell<Vec<Frame>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
-fn index_objects(v: &Value, pointer: &mut String, out: &mut HashMap<usize, String>) {
+fn index_objects(v: &Value, pointer: &mut String, out: &mut FxHashMap<usize, String>) {
     match v {
         Value::Object(o) => {
-            out.insert(v as *const Value as usize, pointer.clone());
+            out.insert(std::ptr::from_ref::<Value>(v) as usize, pointer.clone());
             for (k, item) in o.iter() {
                 let len = pointer.len();
                 pointer.push('/');
@@ -555,8 +555,8 @@ fn index_objects(v: &Value, pointer: &mut String, out: &mut HashMap<usize, Strin
 
 /// Makes `root` (the parsed params, alive and unmodified until the guard drops), its raw payload and number
 /// literals the current request.
-pub(crate) fn enter_request(raw: &[u8], lexemes: HashMap<String, String>, root: &Value) -> RequestGuard {
-    let mut objects = HashMap::new();
+pub(crate) fn enter_request(raw: &[u8], lexemes: FxHashMap<String, String>, root: &Value) -> RequestGuard {
+    let mut objects = FxHashMap::default();
     if !lexemes.is_empty() {
         index_objects(root, &mut String::new(), &mut objects);
     }
@@ -580,7 +580,7 @@ pub(crate) fn exact_u64(object: &Value, key: &str) -> Option<u64> {
     FRAMES.with(|f| {
         let f = f.borrow();
         let frame = f.last()?;
-        let pointer = frame.objects.get(&(object as *const Value as usize))?;
+        let pointer = frame.objects.get(&(std::ptr::from_ref::<Value>(object) as usize))?;
         frame.lexemes.get(&format!("{pointer}/{}", token(key))).and_then(|s| s.parse::<u64>().ok())
     })
 }
@@ -590,7 +590,7 @@ pub(crate) fn exact_i64(object: &Value, key: &str) -> Option<i64> {
     FRAMES.with(|f| {
         let f = f.borrow();
         let frame = f.last()?;
-        let pointer = frame.objects.get(&(object as *const Value as usize))?;
+        let pointer = frame.objects.get(&(std::ptr::from_ref::<Value>(object) as usize))?;
         frame.lexemes.get(&format!("{pointer}/{}", token(key))).and_then(|s| s.parse::<i64>().ok())
     })
 }

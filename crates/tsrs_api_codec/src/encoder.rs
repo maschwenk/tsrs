@@ -134,7 +134,7 @@ impl<T> Present for Option<T> {
         self.is_some()
     }
 }
-pub(crate) fn present<T: Present>(v: T) -> bool {
+pub(crate) fn present<T: Present + Copy>(v: T) -> bool {
     v.present()
 }
 
@@ -154,7 +154,7 @@ pub fn set_source_file_id(data: &mut [u8], id: u64) {
     data[HEADER_OFFSET_SOURCE_FILE_ID..HEADER_OFFSET_SOURCE_FILE_ID + 8].copy_from_slice(&id.to_le_bytes());
 }
 
-fn encode_parse_options(opts: &ExternalModuleIndicatorOptions) -> u32 {
+fn encode_parse_options(opts: ExternalModuleIndicatorOptions) -> u32 {
     (opts.jsx as u32) | ((opts.force as u32) << 1)
 }
 
@@ -181,7 +181,7 @@ trait Walker {
 
 fn walk_children<W: Walker + 'static>(root: P<Node>, file: Option<&'static SourceFile>, state: Rc<RefCell<W>>) {
     let visit: VisitFn = {
-        let state = state.clone();
+        let state = Rc::clone(&state);
         Rc::new(move |v: &mut NodeVisitor, node: P<Node>| -> Option<P<Node>> {
             let saved = state.borrow_mut().enter_node(node);
             v.visit_each_child(Some(node));
@@ -196,7 +196,6 @@ fn walk_children<W: Walker + 'static>(root: P<Node>, file: Option<&'static Sourc
         })
     };
     let visit_list = {
-        let state = state.clone();
         move |list: &NodeList, v: &mut NodeVisitor| {
             let saved = state.borrow_mut().enter_list(list);
             v.visit_slice(list.nodes());
@@ -206,7 +205,7 @@ fn walk_children<W: Walker + 'static>(root: P<Node>, file: Option<&'static Sourc
     let visit_list = Rc::new(visit_list);
     let hooks = NodeVisitorHooks {
         visit_nodes: Some({
-            let visit_list = visit_list.clone();
+            let visit_list = Rc::clone(&visit_list);
             Rc::new(move |list: Option<P<NodeList>>, v: &mut NodeVisitor| {
                 if let Some(list) = list {
                     visit_list(&list, v);
@@ -215,7 +214,7 @@ fn walk_children<W: Walker + 'static>(root: P<Node>, file: Option<&'static Sourc
             })
         }),
         visit_modifiers: Some({
-            let visit_list = visit_list.clone();
+            let visit_list = Rc::clone(&visit_list);
             Rc::new(move |mods: Option<P<ModifierList>>, v: &mut NodeVisitor| {
                 if let Some(m) = mods {
                     if !m.list.nodes().is_empty() {
@@ -375,7 +374,7 @@ fn encode_tree(root: P<Node>, source_file: Option<&'static SourceFile>) -> Resul
     append_u32s(&mut state.nodes, &values);
 
     let state = Rc::new(RefCell::new(state));
-    walk_children(root, source_file, state.clone());
+    walk_children(root, source_file, Rc::clone(&state));
     let mut state = Rc::try_unwrap(state).ok().expect("visitor released").into_inner();
     if let Some(e) = state.error.take() {
         return Err(e);
@@ -386,7 +385,7 @@ fn encode_tree(root: P<Node>, source_file: Option<&'static SourceFile>) -> Resul
     if is_source_file {
         let sf = root.as_source_file();
         hash = source_file.map_or(sf.hash.get(), |f| f.hash.get());
-        parse_opts = encode_parse_options(&sf.parse_options().external_module_indicator_options);
+        parse_opts = encode_parse_options(sf.parse_options().external_module_indicator_options);
         let map = state.node_index_map.take().unwrap_or_default();
         let imports_offset = encode_node_index_array(sf.imports.get(), &map, &mut state.cx.structured_data);
         let augmentations_offset = encode_node_index_array(sf.module_augmentations.get(), &map, &mut state.cx.structured_data);
@@ -463,7 +462,7 @@ pub fn build_node_index_table(file: &'static SourceFile) -> NodeIndexTable {
     table.push(None);
     table.push(Some(root));
     let state = Rc::new(RefCell::new(Indexer { table }));
-    walk_children(root, Some(file), state.clone());
+    walk_children(root, Some(file), Rc::clone(&state));
     let Indexer { table } = Rc::try_unwrap(state).ok().expect("visitor released").into_inner();
     NodeIndexTable::new(table)
 }

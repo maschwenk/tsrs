@@ -68,7 +68,7 @@ impl Session {
             } else {
                 0
             };
-            let ctx = tsrs_ls::format::with_format_code_settings(&Default::default(), format_options.clone(), &new_line);
+            let ctx = tsrs_ls::format::with_format_code_settings(&Default::default(), format_options, &new_line);
             let changes = tsrs_ls::format::format_node_given_indentation(&ctx, node_with_pos, synthetic, target.language_variant(), initial, delta);
             tsrs_core::apply_bulk_edits(&text, &changes)
         };

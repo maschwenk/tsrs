@@ -143,7 +143,7 @@ impl Session {
             (tspath::get_normalized_absolute_path(p.str("configDirectory")?, cwd), String::new())
         } else {
             let name = p.document("configFileName")?.to_absolute_file_name(cwd);
-            (tspath::get_directory_path(&name).to_string(), name)
+            (tspath::get_directory_path(&name), name)
         };
         let parsed = tsrs_tsoptions::parse_json_config_file_content(
             json_to_options_value(p.get("json")),
@@ -163,7 +163,7 @@ impl Session {
         let Some(content) = self.base_fs().read_file(&config_file_name) else {
             return Err(ApiError::client(format!("could not read file {config_file_name:?}")));
         };
-        let config_dir = tspath::get_directory_path(&config_file_name).to_string();
+        let config_dir = tspath::get_directory_path(&config_file_name);
         let source = tsrs_tsoptions::new_tsconfig_source_file_from_file_path(&config_file_name, self.to_path(&config_file_name), &content);
         let parsed = tsrs_tsoptions::parse_json_source_file_config_file_content(
             source,

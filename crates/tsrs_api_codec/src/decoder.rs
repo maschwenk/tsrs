@@ -200,7 +200,9 @@ impl<'a> Decoder<'a> {
         }
         // SAFETY: UTF-8 or WTF-8 (the tsrs convention for JS strings with lone surrogates, see
         // tsrs_core::stringutil::encode_js_string_rune); `alloc_str` copies the bytes.
-        Ok(alloc_str(unsafe { std::str::from_utf8_unchecked(bytes) }))
+        #[expect(clippy::disallowed_methods, reason = "WTF-8 lone surrogates are not UTF-8, so the checked from_utf8 would reject valid input; is_wtf8 checked the bytes above")]
+        let text = unsafe { std::str::from_utf8_unchecked(bytes) };
+        Ok(alloc_str(text))
     }
 
     /// Go `collectChildren`, additionally requiring every sibling link to point forward to a record whose parent
