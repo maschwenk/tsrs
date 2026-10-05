@@ -1,5 +1,41 @@
 # Status
 
+## 2026-10-05: 0.4.0 release
+
+A performance and memory release; the TypeScript source pin remains `b85298b6a81f772d080b0455de0ca9d744cd6fd6`
+(7.1.0-dev.20260929) and the published package set is unchanged. On the typescript-benchmarking suite against
+tsgo 7.0.2 (Depot `depot-ubuntu-24.04-8`, commit 32318a02bd47, README table) tsrs type-checks 3.5-9.4x faster with
+0.15-0.86x the peak memory in the default 4-checker mode (vscode 11.75 s -> 2.84 s, 7.66 GiB -> 2.38 GiB; mui-docs
+13.60 s -> 1.45 s, 8.20 GiB -> 1.19 GiB), and 2.8-4.6x faster with 0.21-0.43x the memory under `--singleThreaded`.
+Diagnostics and emitted output are unchanged against tsgo at the same pin.
+
+Checker: threads steal unstarted files from the busiest checker (#93; -11 to -17% wall at 4-8 checkers on the
+38k-file codebase), diagnostics and `.d.ts` no longer depend on the checker count or assignment (#92;
+`--checkerAssignment go` keeps tsgo's history-dependent output, which the tsgo-baseline harnesses use), complete
+flow-analysis results are remembered across walks (#97; -2 to -5% instructions on vscode and webpack), a front cache
+for small union constructions (#100), and checker threads take node and symbol ids in blocks (#94). Relating derived
+generics to their generic base by variances landed behind `TSRS_DERIVED_VARIANCE` (#96); differential fuzzing found
+nine disagreements and added guards 4-6, and the verdict is to keep it **off** by default (#98,
+notes/fuzz-derived-variance.md).
+
+Memory: compressed 32-bit pointers on unix and scoped arenas (perf round 2, #37-#51; cold 1-checker peak -16% on the
+38k-file codebase), transparent huge pages for the compressed arena's thread chunks on Linux (#89; sys time
+-26 to -36%, page faults 0.9M -> 30K), and the checker-heap stack (#99, #105-#110: lazy member tables in the arena
+with one-word slices, CacheHashKey caches in a 20-byte PackedMap, a string literal cache without key copies, flat
+export indexes, 16-bit link store slot offsets): peak -3.3% / -6.4% at 1 / 8 checkers on the 38k-file codebase with
+instructions flat (-0.004% with PGO). `TSRS_HEAP_CENSUS=1` with `--extendedDiagnostics` prints what each checker
+owns; the heap sampler symbolizes on Linux. The emit print backlog is bounded at 2,048 files.
+
+Safety and build: a panic=abort crash in the arena is fixed (#103; a freed `&[T]` parameter let LLVM drop the
+free-list link) and guarded by a source check, Miri tests and an arena-safety CI job (#104, leak checking off because
+the arena leaks its chunks by design). The Linux release binaries are BOLT-optimized on top of PGO + LTO, with the
+gates run on the optimized binaries (#101; -1 to -3% wall; notes/perf-build-level.md records the build-level space:
+text huge pages, panic=abort, allocators, opt-level, PGO training, #102). CI and the Linux Node API jobs run on
+Depot CI, macOS stays on GitHub; nightly differential parser fuzzing against tsgo (#76); the bench flags instruction
+and peak-memory regressions on main (#74); Rust is pinned at 1.99.0 (#78); the clippy ratchet and the unused-code
+ratchet were paid down across the workspace (#53, #57-#72, #79-#87) and generated code is checked against its
+generators. notes/perf-round3.md indexes what landed, what was rejected and what is open.
+
 ## 2026-10-03: 0.3.0 release
 
 The npm package includes default JavaScript/declaration/source-map emit, incremental builds and project references,
