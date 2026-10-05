@@ -30,7 +30,6 @@ struct inotifySubscription {
     path: String,
     watch_path: String,
     dir_watch: Arc<dirWatch>,
-    wd: i32,
 }
 
 pub(crate) struct inotifyBackend {
@@ -45,8 +44,9 @@ pub(crate) struct inotifyBackend {
 }
 
 // inotify_linux.go:66 (init)
-pub(crate) fn init(w: &mut watcher) {
+pub(crate) fn init(mut w: watcher) -> watcher {
     w.factory = Some(|| Arc::new(new_inotify_backend()) as Arc<dyn watcherImpl>);
+    w
 }
 
 // inotify_linux.go:70
@@ -130,7 +130,7 @@ impl inotifyBackend {
         if wd < 0 {
             return Err(Error::from_errno(last_errno()));
         }
-        let sub = inotifySubscription { path: path.to_string(), watch_path: watch_path.to_string(), dir_watch: Arc::clone(w), wd };
+        let sub = inotifySubscription { path: path.to_string(), watch_path: watch_path.to_string(), dir_watch: Arc::clone(w) };
         subs.entry(wd).or_default().push(sub);
         Ok(wd)
     }
