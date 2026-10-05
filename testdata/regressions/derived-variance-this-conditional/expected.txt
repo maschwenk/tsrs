@@ -1,0 +1,3 @@
+a.ts(10,14): error TS2322: Type 'D<string>' is not assignable to type 'B<string>'.
+  Types of property 'kind' are incompatible.
+    Type '1' is not assignable to type '2'.

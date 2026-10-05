@@ -1,0 +1,4 @@
+a.ts(13,14): error TS2322: Type 'D<any>' is not assignable to type 'B<{ a: 1; }>'.
+  Types of property 'k' are incompatible.
+    Type 'string | number | symbol' is not assignable to type '"a"'.
+      Type 'string' is not assignable to type '"a"'.

@@ -33,3 +33,26 @@ fn derived_variance_guards() {
         }
     }
 }
+
+// Disagreements found by tools/fuzz/derived_variance.py that no guard closes (notes/fuzz-derived-variance.md). The
+// switch off and shadow mode print tsgo-ref's output; shadow mode must report them (exit 7). When a guard closes one,
+// move it to `derived_variance_guards`.
+const OPEN: &[&str] = &[
+    "derived-variance-any-keyof",
+    "derived-variance-keyof-optional",
+    "derived-variance-mutual-conditional",
+    "derived-variance-this-conditional",
+    "derived-variance-any-template",
+];
+
+#[test]
+fn derived_variance_open_findings() {
+    for case in OPEN {
+        let expected = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/regressions").join(case).join("expected.txt")).unwrap();
+        for mode in ["off", "shadow"] {
+            let (stdout, _) = run(case, mode);
+            assert_eq!(stdout, expected, "{case} with TSRS_DERIVED_VARIANCE={mode}");
+        }
+        assert_eq!(run(case, "shadow").1, Some(7), "{case}: shadow mode no longer reports the disagreement (move it to the guarded cases)");
+    }
+}
