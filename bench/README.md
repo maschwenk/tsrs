@@ -92,6 +92,11 @@ more than 1% is a regression: the step prints a warning and comments on the pull
 the run covers more than three merges, on the commit. It never fails the job; a deliberate trade (memory for CPU, say)
 needs no action. Results store the count under `projects.<name>.single.tsrs.instructions`.
 
+The same untimed run records the process's peak RSS (`ru_maxrss` via `wait4`). With one thread it repeats to
+0.04-0.39% (five runs per project: webpack 0.04%, mui-docs 0.07%, xstate 0.10%, Compiler 0.24%, Compiler-Unions 0.39%;
+the small projects move by a few hundred KiB), so peak memory is flagged when it rises by more than 1% and more than
+2 MiB. Results store it as `projects.<name>.single.tsrs.max_rss_bytes`.
+
 ## CI
 
 The benchmark is a [Depot CI](https://depot.dev/docs/ci/overview) workflow, `.depot/workflows/bench.yml` (this
