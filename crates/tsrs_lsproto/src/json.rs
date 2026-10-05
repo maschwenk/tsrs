@@ -13,10 +13,15 @@ pub use tsrs_core::json::Value;
 
 use crate::ErrorCode;
 
+// A decoding error. Boxed so that every `Result<T, JsonError>` the decoders pass around stays small; the
+// fields are reached through `Deref`.
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct JsonError(Box<SemanticError>);
+
 // json/v2's `SemanticError` (plus plain syntactic errors). `pointer` holds the JSON pointer tokens
 // innermost first; `within` appends as the error propagates outwards.
 #[derive(Clone, Debug, PartialEq, Default)]
-pub struct JsonError {
+pub struct SemanticError {
     pub go_type: String,
     pub json_kind: u8,
     pub json_value: String,
@@ -30,35 +35,55 @@ pub struct JsonError {
     pub sealed: bool,
 }
 
+impl std::ops::Deref for JsonError {
+    type Target = SemanticError;
+    fn deref(&self) -> &SemanticError {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for JsonError {
+    fn deref_mut(&mut self) -> &mut SemanticError {
+        &mut self.0
+    }
+}
+
+impl From<SemanticError> for JsonError {
+    fn from(err: SemanticError) -> JsonError {
+        JsonError(Box::new(err))
+    }
+}
+
 impl JsonError {
     // An error returned by a type's own unmarshal method (Go `UnmarshalJSONFrom`).
     pub fn method(go_type: &str, err: impl Into<String>) -> JsonError {
-        JsonError { go_type: go_type.to_string(), err: err.into(), ..Default::default() }
+        SemanticError { go_type: go_type.to_string(), err: err.into(), ..Default::default() }.into()
     }
 
     // An error returned by a v1-style `UnmarshalJSON` method; json/v2 reports the JSON kind too.
     pub fn method_v1(kind: u8, go_type: &str, err: impl Into<String>) -> JsonError {
-        JsonError { go_type: go_type.to_string(), json_kind: kind, err: err.into(), ..Default::default() }
+        SemanticError { go_type: go_type.to_string(), json_kind: kind, err: err.into(), ..Default::default() }.into()
     }
 
     // json/v2: a JSON value of the wrong kind for the Go type.
     pub fn mismatch(v: &Value, go_type: &str) -> JsonError {
-        JsonError { go_type: go_type.to_string(), json_kind: kind(v), ..Default::default() }
+        SemanticError { go_type: go_type.to_string(), json_kind: kind(v), ..Default::default() }.into()
     }
 
     // json/v2: a JSON number that does not fit the Go number type.
     pub fn number(n: f64, go_type: &str, err: &str) -> JsonError {
-        JsonError {
+        SemanticError {
             go_type: go_type.to_string(),
             json_kind: b'0',
             json_value: tsrs_core::json::marshal_f64(n).unwrap_or_default(),
             err: err.to_string(),
             ..Default::default()
         }
+        .into()
     }
 
     pub fn plain(err: impl Into<String>) -> JsonError {
-        JsonError { err: err.into(), plain: true, ..Default::default() }
+        SemanticError { err: err.into(), plain: true, ..Default::default() }.into()
     }
 
     pub fn within(mut self, token: &str) -> JsonError {
