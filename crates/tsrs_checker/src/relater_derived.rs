@@ -72,6 +72,12 @@ impl Checker {
     }
 }
 
+/// `TSRS_DERIVED_VARIANCE_NO_GUARD=4,5`: switch guards off, to measure them and to test that their cases fail.
+fn guard_enabled(n: u8) -> bool {
+    static OFF: OnceLock<Vec<u8>> = OnceLock::new();
+    !OFF.get_or_init(|| std::env::var("TSRS_DERIVED_VARIANCE_NO_GUARD").map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect()).unwrap_or_default()).contains(&n)
+}
+
 fn no_any_arguments() -> bool {
     static V: OnceLock<bool> = OnceLock::new();
     *V.get_or_init(|| std::env::var("TSRS_DERIVED_VARIANCE_NOANY").is_ok_and(|v| v == "1"))
@@ -230,6 +236,12 @@ impl Relater {
         if variances.is_empty() {
             return None;
         }
+        // Guard 5: TypeScript takes `in` / `out` annotations as the variances without measuring them, and reports a
+        // wrong one only where it checks the declaration (never under skipLibCheck for a .d.ts). Across a derivation
+        // a wrong annotation would hide an error, so the annotations must hold for the check markers.
+        if guard_enabled(5) && !self.annotations_hold(c, generic) {
+            return None;
+        }
         // The variance digest covers the declared type parameters only; the base reference carries the source as its
         // `this` argument where the target has its own, so `this` must not be used contravariantly or invariantly.
         let this_variance = self.this_type_variance(c, generic)?;
@@ -279,7 +291,10 @@ impl Relater {
                 continue;
             }
             let bp = c.get_property_of_type(base, tp.name());
-            if bp == Some(sp) {
+            // Guard 4: the variance digest speaks for a member only where its type is monotone in the type
+            // parameters and `this`; a member that puts them under keyof, a conditional, a mapped, indexed access,
+            // template literal or intersection type (directly or through a type alias) is compared structurally.
+            if bp == Some(sp) && !(guard_enabled(4) && self.member_sensitive(c, sp)) {
                 covered.push((sp, tp));
                 continue;
             }
@@ -296,6 +311,71 @@ impl Relater {
             return None;
         }
         Some(DerivedDecision { base_symbol: generic.symbol()?, reliable, this_reliable, members_total: properties.len(), members_structural: structural, covered, elapsed_ns: 0 })
+    }
+
+    /// Guard 5: every `in` / `out` annotation of `generic`'s type parameters holds when checked the way
+    /// `checkTypeParameterDeferred` checks it (with markers of its own), silently. Cached.
+    fn annotations_hold(&self, c: &mut Checker, generic: P<Type>) -> bool {
+        if let Some(&ok) = c.derived_annotations_ok.get(&generic) {
+            return ok;
+        }
+        // No decisions for this generic while its annotations are being checked.
+        c.derived_annotations_ok.insert(generic, false);
+        let Some(symbol) = generic.symbol() else { return true };
+        let mut ok = true;
+        for &tp in generic.as_interface_type().type_parameters() {
+            let modifiers = c.get_type_parameter_modifiers(tp) & (ModifierFlags::In | ModifierFlags::Out);
+            if modifiers != ModifierFlags::In && modifiers != ModifierFlags::Out {
+                continue;
+            }
+            let out = modifiers == ModifierFlags::Out;
+            let (sup, sub) = match c.derived_annotation_markers {
+                Some(m) => m,
+                None => {
+                    let sup = c.new_type_parameter(None);
+                    let sub = c.new_type_parameter(None);
+                    sub.as_type_parameter().constraint.set(Some(sup));
+                    c.derived_annotation_markers = Some((sup, sub));
+                    (sup, sub)
+                }
+            };
+            let source = c.create_marker_type(symbol, tp, if out { sub } else { sup });
+            let target = c.create_marker_type(symbol, tp, if out { sup } else { sub });
+            if !c.is_type_assignable_to(source, target) {
+                ok = false;
+                break;
+            }
+        }
+        c.derived_annotations_ok.insert(generic, ok);
+        ok
+    }
+
+    /// Guard 4: whether a member's declarations use a type parameter (other than a mapped type's key or an `infer`
+    /// variable) or `this` under a type operator whose result is not monotone in assignability: keyof / unique,
+    /// conditional types, mapped types, indexed access, template literal types, intersections, `infer`, type queries,
+    /// or an intrinsic string mapping; type aliases are followed into their bodies. References to classes and
+    /// interfaces are not followed: two instantiations of one are related by its own variances on both routes.
+    /// A declaration whose type is inferred (no annotation) counts as sensitive. Cached per declaration.
+    fn member_sensitive(&self, c: &mut Checker, prop: P<Symbol>) -> bool {
+        let declarations = prop.declarations();
+        if declarations.is_empty() {
+            return true;
+        }
+        for &d in declarations {
+            if let Some(&v) = c.derived_sensitive_decls.get(&d) {
+                if v {
+                    return true;
+                }
+                continue;
+            }
+            let mut aliases = Vec::new();
+            let v = sensitive_declaration(c, d, &mut aliases);
+            c.derived_sensitive_decls.insert(d, v);
+            if v {
+                return true;
+            }
+        }
+        false
     }
 
     /// Which of `generic`'s type parameters reach the check type of a conditional type in its declarations: directly,
@@ -451,4 +531,117 @@ impl Relater {
         }
         None
     }
+}
+
+/// Guard 4 walker for one member declaration (see `member_sensitive`).
+fn sensitive_declaration(c: &mut Checker, d: P<Node>, aliases: &mut Vec<P<Symbol>>) -> bool {
+    match d.kind() {
+        Kind::PropertySignature | Kind::PropertyDeclaration => match d.type_node() {
+            Some(t) => sensitive_type(c, t, false, &[], aliases),
+            None => d.kind() == Kind::PropertyDeclaration,
+        },
+        Kind::MethodSignature | Kind::MethodDeclaration | Kind::GetAccessor | Kind::SetAccessor => {
+            if d.type_node().is_none() && d.body().is_some() && d.kind() != Kind::SetAccessor {
+                return true;
+            }
+            for &tp in d.type_parameters() {
+                if sensitive_type(c, tp, false, &[], aliases) {
+                    return true;
+                }
+            }
+            for &p in d.parameters() {
+                match p.type_node() {
+                    Some(t) => {
+                        if sensitive_type(c, t, false, &[], aliases) {
+                            return true;
+                        }
+                    }
+                    None => {
+                        if p.initializer().is_some() {
+                            return true;
+                        }
+                    }
+                }
+            }
+            d.type_node().is_some_and(|t| sensitive_type(c, t, false, &[], aliases))
+        }
+        // Parameter properties, enum members, JS declarations and the rest: not analysed.
+        _ => true,
+    }
+}
+
+/// Whether `node` (a type node or a part of one) references a variable under a non-monotone operator; `under` says
+/// whether an enclosing node already is one. Variables: `this`, class / interface / signature type parameters, and
+/// the type parameters in `alias_vars` (those of the type alias being walked whose arguments mention a variable).
+fn sensitive_type(c: &mut Checker, node: P<Node>, under: bool, alias_vars: &[P<Symbol>], aliases: &mut Vec<P<Symbol>>) -> bool {
+    let mut under_here = under;
+    match node.kind() {
+        Kind::ThisType => return under,
+        Kind::ConditionalType | Kind::IndexedAccessType | Kind::MappedType | Kind::TemplateLiteralType | Kind::IntersectionType | Kind::InferType | Kind::TypeQuery => {
+            under_here = true;
+        }
+        Kind::TypeOperator => {
+            if node.as_type_operator_node().operator != Kind::ReadonlyKeyword {
+                under_here = true;
+            }
+        }
+        Kind::TypeReference => {
+            let mut symbol = c.get_symbol_from_type_reference(node);
+            if symbol.flags().intersects(SymbolFlags::Alias) {
+                symbol = c.resolve_alias(symbol);
+            }
+            if symbol.flags().intersects(SymbolFlags::TypeParameter) {
+                if !under {
+                    return false;
+                }
+                let decl = symbol.declarations().first().copied();
+                let owner = decl.and_then(|d| d.parent());
+                return match owner.map(|o| o.kind()) {
+                    // A mapped type's key and an `infer` variable are bound inside the operator.
+                    Some(Kind::MappedType) | Some(Kind::InferType) => false,
+                    Some(Kind::TypeAliasDeclaration) | Some(Kind::JSTypeAliasDeclaration) => alias_vars.contains(&symbol),
+                    _ => true,
+                };
+            }
+            if symbol.flags().intersects(SymbolFlags::TypeAlias) && !node.type_arguments().is_empty() {
+                let Some(decl) = symbol.declarations().first().copied() else { return true };
+                let params = decl.type_parameters();
+                let mut vars = Vec::new();
+                for (i, &arg) in node.type_arguments().iter().enumerate() {
+                    if sensitive_type(c, arg, under, alias_vars, aliases) {
+                        return true;
+                    }
+                    // Does the argument mention a variable at all?
+                    if sensitive_type(c, arg, true, alias_vars, aliases) {
+                        if let Some(p) = params.get(i).and_then(|p| c.get_symbol_of_declaration(*p)) {
+                            vars.push(p);
+                        }
+                    }
+                }
+                if vars.is_empty() {
+                    return false;
+                }
+                if aliases.contains(&symbol) {
+                    return true;
+                }
+                let Some(body) = decl.type_node() else { return true };
+                if body.kind() == Kind::IntrinsicKeyword {
+                    return true;
+                }
+                aliases.push(symbol);
+                let v = sensitive_type(c, body, under, &vars, aliases);
+                aliases.pop();
+                return v;
+            }
+        }
+        _ => {}
+    }
+    let mut found = false;
+    node.for_each_child(&mut |child| {
+        if !found && sensitive_type(c, child, under_here, alias_vars, aliases) {
+            found = true;
+        }
+        found
+    });
+    found
 }

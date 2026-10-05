@@ -945,6 +945,13 @@ pub struct Checker {
     pub(crate) derived_this_variances: FxHashMap<P<Type>, Option<VarianceFlags>>,
     /// Per generic: which type parameters reach the check type of a conditional type in its members.
     pub(crate) derived_conditional_params: FxHashMap<P<Type>, Vec<bool>>,
+    /// Per member declaration: whether it uses a type parameter or `this` under a non-monotone type operator (guard 4).
+    pub(crate) derived_sensitive_decls: FxHashMap<P<Node>, bool>,
+    /// Per generic: whether its `in` / `out` annotations hold when measured with the check markers (guard 5).
+    pub(crate) derived_annotations_ok: FxHashMap<P<Type>, bool>,
+    /// Guard 5's own (super, sub) markers, created on first use: sharing the `*_for_check` markers would leave
+    /// relation-cache entries that change how the declaration's TS2636 is elaborated.
+    pub(crate) derived_annotation_markers: Option<(P<Type>, P<Type>)>,
     pub instantiation_stack: Vec<P<Type>>,
     pub conditional_constraint_depth: u32,
     pub inline_level: i32,
@@ -1339,6 +1346,9 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         derived_depth: 0,
         derived_this_variances: FxHashMap::default(),
         derived_conditional_params: FxHashMap::default(),
+        derived_sensitive_decls: FxHashMap::default(),
+        derived_annotations_ok: FxHashMap::default(),
+        derived_annotation_markers: None,
         instantiation_stack: Vec::new(),
         conditional_constraint_depth: 0,
         inline_level: 0,

@@ -7,6 +7,10 @@ use std::path::Path;
 use std::process::Command;
 
 fn run(case: &str, mode: &str) -> (String, Option<i32>) {
+    run_without(case, mode, "")
+}
+
+fn run_without(case: &str, mode: &str, no_guard: &str) -> (String, Option<i32>) {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/regressions").join(case);
     let out = Command::new(env!("CARGO_BIN_EXE_tsrs"))
         .current_dir(&dir)
@@ -17,42 +21,39 @@ fn run(case: &str, mode: &str) -> (String, Option<i32>) {
         .env_remove("TSRS_CHECKER_ASSIGNMENT")
         .env_remove("TSRS_DERIVED_VARIANCE_RELIABLE")
         .env_remove("TSRS_DERIVED_VARIANCE_LOG")
+        .env("TSRS_DERIVED_VARIANCE_NO_GUARD", no_guard)
         .output()
         .expect("run tsrs");
     (String::from_utf8_lossy(&out.stdout).into_owned(), out.status.code())
 }
 
+// (case, guard that closes it). Guards 1-3: notes/perf-derived-variance.md; 4 and 5: notes/fuzz-derived-variance.md.
+// Guards 1-3 are not switchable; for 4 and 5 the test also checks that the case fails without its guard.
+const CASES: &[(&str, u8)] = &[
+    ("derived-variance-this-type", 1),
+    ("derived-variance-any-conditional", 3),
+    ("derived-variance-any-keyof", 4),
+    ("derived-variance-keyof-optional", 4),
+    ("derived-variance-mutual-conditional", 4),
+    ("derived-variance-this-conditional", 4),
+    ("derived-variance-any-template", 4),
+    ("derived-variance-intersection", 4),
+    ("derived-variance-annotation", 5),
+];
+
 #[test]
 fn derived_variance_guards() {
-    for case in ["derived-variance-this-type", "derived-variance-any-conditional"] {
+    for &(case, guard) in CASES {
         let expected = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/regressions").join(case).join("expected.txt")).unwrap();
         for mode in ["off", "on", "shadow"] {
             let (stdout, code) = run(case, mode);
             assert_eq!(stdout, expected, "{case} with TSRS_DERIVED_VARIANCE={mode}");
             assert_ne!(code, Some(7), "{case}: shadow mode found a disagreement");
         }
-    }
-}
-
-// Disagreements found by tools/fuzz/derived_variance.py that no guard closes (notes/fuzz-derived-variance.md). The
-// switch off and shadow mode print tsgo-ref's output; shadow mode must report them (exit 7). When a guard closes one,
-// move it to `derived_variance_guards`.
-const OPEN: &[&str] = &[
-    "derived-variance-any-keyof",
-    "derived-variance-keyof-optional",
-    "derived-variance-mutual-conditional",
-    "derived-variance-this-conditional",
-    "derived-variance-any-template",
-];
-
-#[test]
-fn derived_variance_open_findings() {
-    for case in OPEN {
-        let expected = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/regressions").join(case).join("expected.txt")).unwrap();
-        for mode in ["off", "shadow"] {
-            let (stdout, _) = run(case, mode);
-            assert_eq!(stdout, expected, "{case} with TSRS_DERIVED_VARIANCE={mode}");
+        if guard >= 4 {
+            let g = guard.to_string();
+            assert_eq!(run_without(case, "shadow", &g).1, Some(7), "{case}: no disagreement without guard {guard}");
+            assert_ne!(run_without(case, "on", &g).0, expected, "{case}: the error is kept without guard {guard}");
         }
-        assert_eq!(run(case, "shadow").1, Some(7), "{case}: shadow mode no longer reports the disagreement (move it to the guarded cases)");
     }
 }

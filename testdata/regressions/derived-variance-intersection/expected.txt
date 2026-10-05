@@ -1,0 +1,6 @@
+a.ts(11,14): error TS2322: Type 'D<{}>' is not assignable to type 'B<{ [k: string]: string; }>'.
+  Types of property 'i' are incompatible.
+    Type '{ z?: 1 | undefined; }' is not assignable to type '{ [k: string]: string; } & { z?: 1 | undefined; }'.
+      Type '{ z?: 1 | undefined; }' is not assignable to type '{ [k: string]: string; }'.
+        Property 'z' is incompatible with index signature.
+          Type 'number' is not assignable to type 'string'.
