@@ -10,6 +10,43 @@ use crate::*;
 static NEXT_NODE_ID: AtomicU64 = AtomicU64::new(0);
 static NEXT_SYMBOL_ID: AtomicU64 = AtomicU64::new(0);
 
+/// Ids a thread in id-block mode (`use_id_blocks`) takes from a counter at a time.
+const ID_BLOCK: u64 = 1024;
+
+thread_local! {
+    /// Whether this thread takes ids in blocks (`use_id_blocks`).
+    static ID_BLOCK_MODE: Cell<bool> = const { Cell::new(false) };
+    /// Id-block mode: the rest of the thread's current block of node / symbol ids, `(next, end)`.
+    static NODE_ID_BLOCK: Cell<(u64, u64)> = const { Cell::new((0, 0)) };
+    static SYMBOL_ID_BLOCK: Cell<(u64, u64)> = const { Cell::new((0, 0)) };
+}
+
+/// Makes the current thread take node and symbol ids from the process-wide counters in blocks of `ID_BLOCK`. For the
+/// threads of a parallel checker group: their ids interleave in an order that depends on timing anyway (as Go's
+/// do), and one counter that every checker increments is a contended cache line. Each thread's ids still increase in
+/// the order it assigns them, and blocks are taken only after the group started, so ids assigned before, during and
+/// after the group keep that order; other threads take ids one at a time, exactly as before.
+pub fn use_id_blocks() {
+    ID_BLOCK_MODE.set(true);
+}
+
+#[inline]
+fn next_id(counter: &AtomicU64, block: &'static std::thread::LocalKey<Cell<(u64, u64)>>) -> u64 {
+    if !ID_BLOCK_MODE.get() {
+        return counter.fetch_add(1, Ordering::Relaxed) + 1;
+    }
+    block.with(|b| {
+        let (next, end) = b.get();
+        if next < end {
+            b.set((next + 1, end));
+            return next;
+        }
+        let start = counter.fetch_add(ID_BLOCK, Ordering::Relaxed) + 1;
+        b.set((start + 1, start + ID_BLOCK));
+        start
+    })
+}
+
 #[inline]
 pub fn get_node_id(node: P<Node>) -> NodeId {
     let id = node.id.load(Ordering::Relaxed);
@@ -22,7 +59,7 @@ pub fn get_node_id(node: P<Node>) -> NodeId {
 #[inline(never)]
 fn assign_node_id(node: P<Node>) -> NodeId {
     // Worst case, we burn a few ids if we have to CAS.
-    let next = NEXT_NODE_ID.fetch_add(1, Ordering::Relaxed) + 1;
+    let next = next_id(&NEXT_NODE_ID, &NODE_ID_BLOCK);
     // Nodes store their id in 32 bits (memory); Go's ids are 64-bit but no program gets near 2^32.
     let mut id = u32::try_from(next).expect("more than u32::MAX node ids");
     if node.id.compare_exchange(0, id, Ordering::Relaxed, Ordering::Relaxed).is_err() {
@@ -50,7 +87,7 @@ pub fn get_assigned_symbol_id(symbol: P<Symbol>) -> Option<u32> {
 #[inline(never)]
 fn assign_symbol_id(symbol: P<Symbol>) -> SymbolId {
     // Worst case, we burn a few ids if we have to CAS.
-    let next = NEXT_SYMBOL_ID.fetch_add(1, Ordering::Relaxed) + 1;
+    let next = next_id(&NEXT_SYMBOL_ID, &SYMBOL_ID_BLOCK);
     // Symbols store their id in 32 bits (memory); Go's ids are 64-bit but no program gets near 2^32.
     let mut id = u32::try_from(next).expect("more than u32::MAX symbol ids");
     if symbol.id.compare_exchange(0, id, Ordering::Relaxed, Ordering::Relaxed).is_err() {

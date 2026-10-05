@@ -187,7 +187,10 @@ fn run_work_group(single_threaded: bool, count: usize, task: impl Fn(usize) + Sy
                 std::thread::Builder::new()
                     .name(format!("checker-{i}"))
                     .stack_size(CHECKER_STACK_SIZE)
-                    .spawn_scoped(s, move || task(i))
+                    .spawn_scoped(s, move || {
+                        tsrs_ast::use_id_blocks();
+                        task(i)
+                    })
                     .expect("failed to spawn checker thread")
             })
             .collect();
