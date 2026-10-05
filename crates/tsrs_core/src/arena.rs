@@ -1098,22 +1098,58 @@ mod tests {
         assert_eq!(b.addr(), addr);
         assert_eq!(*b, [3, 4]);
         let s = alloc_slice_recycled(&[5u64, 6]);
-        assert_ne!(s.as_ptr() as usize, addr);
-        // SAFETY: `s` is not used again.
+        let s_addr = s.as_ptr() as usize;
+        assert_ne!(s_addr, addr);
+        // SAFETY: `s` is not used again (not even for its address: Miri).
         unsafe { free_slice!(s) };
         let t = alloc_slice_recycled(&[7u64, 8]);
-        assert_eq!(t.as_ptr() as usize, s.as_ptr() as usize);
+        assert_eq!(t.as_ptr() as usize, s_addr);
         assert_eq!(t, &[7, 8]);
+    }
+
+    /// A callee that frees a slice its caller made takes it as `*const [T]` (`free_slice_ptr`): a `&[T]` parameter
+    /// is a protected borrow for the whole call, and the free-list link written into the block would be undefined
+    /// behaviour (Miri reports it; LLVM deleted that write once, notes/fix-arena-recycle-uaf.md). Run under Miri:
+    /// `cargo +nightly miri test -p tsrs_core --features plain-ptrs --lib arena::tests`.
+    #[test]
+    fn a_callee_frees_a_slice_passed_as_a_raw_pointer() {
+        /// # Safety
+        /// `s` is a whole arena slice that nothing uses afterwards.
+        unsafe fn recycle_list(s: *const [u64]) {
+            // SAFETY: this function's contract.
+            unsafe { crate::free_slice_ptr(s) };
+        }
+        let s = alloc_slice_recycled(&[1u64, 2, 3]);
+        let s_addr = s.as_ptr() as usize;
+        // SAFETY: `s` is not used again.
+        unsafe { recycle_list(s) };
+        let t = alloc_slice_recycled(&[4u64, 5, 6]);
+        assert_eq!(t.as_ptr() as usize, s_addr);
+        assert_eq!(t, &[4, 5, 6]);
+        // The link was written: the list is empty again, so the next block of that size is fresh.
+        let u = alloc_slice_recycled(&[7u64, 8, 9]);
+        assert_ne!(u.as_ptr() as usize, s_addr);
+        assert_eq!((t, u), (&[4u64, 5, 6][..], &[7u64, 8, 9][..]));
+    }
+
+    #[test]
+    #[ignore = "a negative control for Miri: it must report undefined behaviour (a write through a protected borrow)"]
+    fn miri_rejects_freeing_a_reference_parameter() {
+        fn recycle_list(s: &'static [u64]) {
+            // SAFETY: deliberately wrong: `s` is a protected borrow of the block for this whole call.
+            unsafe { free_slice!(s) }; // source.py: deliberate
+        }
+        recycle_list(alloc_slice_recycled(&[1u64, 2, 3]));
     }
 
     #[test]
     fn rewind_discards_speculative_allocations_unless_pinned() {
         let before = P::new(1u64);
         let cp = arena_checkpoint();
-        let spec = P::new(2u64);
+        let spec = P::new(2u64).addr();
         arena_rewind(cp);
         let after = P::new(3u64);
-        assert_eq!(after.addr(), spec.addr());
+        assert_eq!(after.addr(), spec);
         assert_eq!((*before, *after), (1, 3));
 
         let cp = arena_checkpoint();
@@ -1175,14 +1211,16 @@ mod tests {
         {
             let _scope = region.enter();
             let a = P::new([1u64, 2]);
+            let a_addr = a.addr();
             unsafe { free!(a) };
             let b = P::new_recycled([3u64, 4]);
-            assert_eq!(b.addr(), a.addr());
+            assert_eq!(b.addr(), a_addr);
             // A value that needs drop is not recycled in a region: its drop entry stays.
             let c = P::new(Rc::clone(&counter));
+            let c_addr = c.addr();
             unsafe { free!(c) };
             let d = P::new_recycled(Rc::clone(&counter));
-            assert_ne!(d.addr(), c.addr());
+            assert_ne!(d.addr(), c_addr);
             let cp = arena_checkpoint();
             let _spec = P::new(Rc::clone(&counter));
             arena_rewind(cp);
