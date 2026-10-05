@@ -2473,10 +2473,6 @@ impl Checker {
         if t.object_flags().intersects(ObjectFlags::MembersResolved) {
             return Some(t.as_structured_type());
         }
-        if self.census_on() {
-            let (decl, inst) = census_type_origin(t);
-            return self.census_origin(decl, inst, 2, |c| c.resolve_structured_type_members_worker(t));
-        }
         self.resolve_structured_type_members_worker(t)
     }
 
@@ -3093,34 +3089,4 @@ impl Checker {
         }
         t.as_interface_type().resolved_base_types.set(alloc_vec(vec![reduced_base_type]));
     }
-}
-
-/// The declaration and instantiation state of a type for the work census's origin keys.
-fn census_type_origin(t: P<Type>) -> (Option<P<Node>>, crate::workcensus::CensusInst) {
-    use crate::workcensus::CensusInst;
-    let symbol = t.alias().and_then(|a| a.symbol()).or_else(|| t.symbol());
-    let decl = symbol.and_then(|s| s.declarations().first().copied());
-    let inst = match t.try_as_object_type() {
-        Some(o) => {
-            if t.object_flags().intersects(ObjectFlags::Reference) {
-                if o.target.get().is_some_and(|x| x != t) {
-                    match (t.as_type_reference().resolved_type_arguments.get(), o.mapper.get()) {
-                        (Some(args), _) => CensusInst::Types(args),
-                        (None, Some(m)) => CensusInst::Mapper(m),
-                        (None, None) => CensusInst::Unknown,
-                    }
-                } else {
-                    CensusInst::Declared
-                }
-            } else if let Some(m) = o.mapper.get() {
-                CensusInst::Mapper(m)
-            } else if o.target.get().is_some() {
-                CensusInst::Unknown
-            } else {
-                CensusInst::Declared
-            }
-        }
-        None => CensusInst::Declared,
-    };
-    (decl, inst)
 }

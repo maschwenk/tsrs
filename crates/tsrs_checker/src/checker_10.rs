@@ -681,13 +681,6 @@ impl Checker {
         if let Some(resolved_signature) = links.resolved_signature.get() {
             return resolved_signature;
         }
-        if self.census_on() {
-            return self.census_origin(Some(declaration), crate::workcensus::CensusInst::Declared, 3, |c| c.get_signature_from_declaration_uncached(declaration, links));
-        }
-        self.get_signature_from_declaration_uncached(declaration, links)
-    }
-
-    fn get_signature_from_declaration_uncached(&mut self, declaration: P<Node>, links: P<SignatureLinks>) -> P<Signature> {
         let mut parameters: Vec<P<Symbol>> = Vec::new();
         let mut flags = SignatureFlags::None;
         let mut this_parameter: Option<P<Symbol>> = None;

@@ -1284,11 +1284,7 @@ impl Checker {
         if links.resolved_exports.get().is_none() {
             // A nested computation of the same table (export * cycles) caches its result, which this one then replaces.
             self.alias_cache_blockers += 1;
-            let (exports, type_only_export_star_map) = if self.census_on() {
-                self.census_origin(module_symbol.declarations().first().copied(), crate::workcensus::CensusInst::Declared, 4, |c| c.get_exports_of_module_worker(Some(module_symbol)))
-            } else {
-                self.get_exports_of_module_worker(Some(module_symbol))
-            };
+            let (exports, type_only_export_star_map) = self.get_exports_of_module_worker(Some(module_symbol));
             links.resolved_exports.set(Some(exports));
             links.type_only_export_star_map.assign(type_only_export_star_map);
             self.alias_cache_blockers -= 1;
@@ -1721,33 +1717,6 @@ impl Checker {
                 return t;
             }
         }
-        if self.census_on() {
-            let inst = if check_flags.intersects(CheckFlags::Instantiated) {
-                match self.value_symbol_links.try_get(symbol).and_then(|l| l.mapper()) {
-                    Some(m) => crate::workcensus::CensusInst::Mapper(m),
-                    None => crate::workcensus::CensusInst::Unknown,
-                }
-            } else if check_flags.intersects(CheckFlags::Mapped) {
-                match self.value_symbol_links.try_get(symbol).and_then(|l| l.containing_type()) {
-                    Some(t) => crate::workcensus::CensusInst::Type(t),
-                    None => crate::workcensus::CensusInst::Unknown,
-                }
-            } else if check_flags.intersects(CheckFlags::DeferredType) {
-                match self.deferred_symbol_links.try_get(symbol).and_then(|l| l.parent.get()) {
-                    Some(t) => crate::workcensus::CensusInst::Type(t),
-                    None => crate::workcensus::CensusInst::Unknown,
-                }
-            } else if check_flags.intersects(CheckFlags::ReverseMapped) {
-                crate::workcensus::CensusInst::Unknown
-            } else {
-                crate::workcensus::CensusInst::Declared
-            };
-            return self.census_origin(symbol.declarations().first().copied(), inst, 0, |c| c.get_type_of_symbol_uncached(symbol, check_flags));
-        }
-        self.get_type_of_symbol_uncached(symbol, check_flags)
-    }
-
-    fn get_type_of_symbol_uncached(&mut self, symbol: P<Symbol>, check_flags: CheckFlags) -> P<Type> {
         if check_flags.intersects(CheckFlags::DeferredType) {
             return self.get_type_of_symbol_with_deferred_type(symbol);
         }
