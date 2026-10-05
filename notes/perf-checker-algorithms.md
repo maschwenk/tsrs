@@ -174,6 +174,28 @@ next consumer: L4 answered 202K such queries for -2.2K symbols on big, half of t
 anyway (31K vs 21K), and property lookups went from 494K to 5.1M. The work is keys x constituents in the type itself;
 not pursued.
 
+## Row 2: derived generics related to their generic base by variances (handoff)
+
+Full write-up: notes/perf-derived-variance.md. Code: `crates/tsrs_checker/src/relater_derived.rs`, switch
+`TSRS_DERIVED_VARIANCE=off|shadow|on` (default off; forced off under `--checkerAssignment go`), docs/DEBUGGING.md.
+
+- Design: when the target is a reference to a generic `G` and the source's base chain contains a reference `R` to `G`
+  (with the source as `this`), relate `R` to the target by `G`'s variances; if True, members the source inherits
+  unchanged count as related, the rest (and signatures, index signatures) are compared structurally. True-only; else
+  the normal comparison runs. Only targets with 16+ properties.
+- Guards (each from a shadow disagreement): `this` variance measured and covariant/bivariant/independent
+  (`testdata/regressions/derived-variance-this-type`); no decisions inside a variance computation (mui-docs); no `any`
+  argument at a parameter reaching a conditional check type (`testdata/regressions/derived-variance-any-conditional`).
+  `cargo test -p tsrs_cli --test derived_variance` runs both cases off/on/shadow against tsgo-ref.
+- Shadow (with guards): suite 661 decisions (both lazy modes), big 39,907, error-rich clone 35,510, vscode 2,671,
+  webpack 470, mui 358, xstate 91; 0 disagreements. Failure mode if a digest error slips through: a missed error,
+  never a spurious one; counters and the TS2589/TS2859 budgets drop (errors at the limit can fire later than in Go).
+- Savings on big (on, all bases): -16.8% instructions / -18.5% check / -18.3% peak at 8 checkers, -12.9% at 4,
+  -8.4% single-threaded; type-parameter-reliable variant -9.6% / -8.6% / -7.0%. Other corpora: no such hierarchies,
+  within noise. Shadow costs +0.4-1.3%.
+- Recommendation: all bases with the threshold and guards (TypeScript accepts True variance answers regardless of
+  reliability flags). Default on/off is the owner's decision.
+
 ## Candidate B: `export default <expression>` (known, deferred)
 
 With one checker the census sees 2,495 export-assignment type requests costing 8 ms on big: the expression is checked

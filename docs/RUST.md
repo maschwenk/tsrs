@@ -156,9 +156,11 @@ needs the advice: `notes/linux-x86-round.md`); global identifier interning (`not
 regions of speculative work (`notes/mem-overload-rollback.md`); bump regions per inference scope
 (`notes/mem-scoped-arenas.md`: 25 to 50% of scopes keep something reachable). Restructuring generic
 callbacks to cut monomorphization (`notes/monomorphization-audit.md`: closures are 3.6% of the checker's LLVM IR, the
-largest tsrs generic `filter_type` 1.1%, on a hot path). PGO hot/cold text grouping (`-z keep-text-section-prefix`;
-`notes/perf-probes-2026-10-05.md`: about 0.5% more cycles on every project). Identifiers that carry their hash (same
-note: all Fx hashing is 0.7-1.4% of instructions, not worth a hash field on every name).
+largest tsrs generic `filter_type` 1.1%, on a hot path). A target CPU above the x86-64 baseline
+(`notes/linux-x86-round.md`: `x86-64-v3` takes 1-2% more cycles, `v2` changes nothing). PGO hot/cold text grouping
+(`-z keep-text-section-prefix`; `notes/perf-probes-2026-10-05.md`: about 0.5% more cycles on every project).
+Identifiers that carry their hash (same note: all Fx hashing is 0.7-1.4% of instructions, not worth a hash field on
+every name).
 
 Not tried. Each needs a measurement and a note before it is adopted; none is applied yet:
 
@@ -168,7 +170,6 @@ Not tried. Each needs a measurement and a note before it is adopted; none is app
 | Miri on `tsrs_core` | oxc (strict provenance, allocator and AST crates), rust-analyzer (`intern`), Bun (tree borrows, 17 crates) | Soundness of the handle and arena code, where a third of the `unsafe` is. | Nightly; the unit tests must run on the system allocator. |
 | Conformance with `debug-assertions` and `overflow-checks` in an optimized profile | oxc `[profile.coverage]` | Overflow and failed debug assertions that release builds skip. | A profile and a second conformance run. |
 | `panic = "abort"` | oxc, swc, Bun | No landing pads: smaller, slightly faster code. | A CLI-only binary or profile: the LSP, the API and the test runner use `catch_unwind`. |
-| A target CPU above the default baseline | Bun (`nehalem` on x64, `apple-m1` on arm64 macOS; never `native`) | Wider instructions for hashing and scanning. | A decision on the oldest CPU to support. |
 | Post-link layout: BOLT, or a symbol order file | Bun (order file from a function-entry trace) | Fewer instruction-cache and TLB misses on top of PGO. | Linux only for BOLT. |
 | Allocator comparison and options | Ruff (jemalloc on Unix), oxc and Rolldown (mimalloc `skip_collect_on_exit`) | Unknown; mimalloc was never compared here. | Same build, allocator swapped. |
 | Arena-backed temporaries | oxc (arena `Vec` and `HashMap`), Bun (hashbrown on its arenas through `allocator-api2`, the stable stand-in for the nightly `Allocator` API) | Scratch vectors and maps skip malloc and free. | A scratch allocator whose reset point is provable; scope regions were rejected (above), so per-call scratch is the experiment. |
