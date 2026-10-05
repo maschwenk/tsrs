@@ -130,10 +130,13 @@ jobs:
           echo "path=$RUNNER_TEMP/pgo/$sum.profdata" >> "$GITHUB_OUTPUT"
       # Linux: --emit-relocs keeps the relocations BOLT needs to move code (the code itself is unchanged), and the
       # test runners are built too so that the BOLT step can run the gates on BOLT-optimized binaries.
+      # aarch64 Linux: Ubuntu's GNU ld links with --fix-cortex-a53-843419 by default, and llvm-bolt refuses a binary
+      # with the erratum veneers ("relink without --fix-cortex-a53-843419"). The release binaries are linked without
+      # the workaround; it only matters on Cortex-A53 r0p0-r0p4 cores.
       - name: cargo build
         shell: bash
         env:
-          RUSTFLAGS: -Cprofile-use=${{ steps.profile.outputs.path }}${{ runner.os == 'Linux' && ' -Clink-arg=-Wl,--emit-relocs' || '' }}
+          RUSTFLAGS: -Cprofile-use=${{ steps.profile.outputs.path }}${{ runner.os == 'Linux' && ' -Clink-arg=-Wl,--emit-relocs' || '' }}${{ matrix.target == 'aarch64-unknown-linux-gnu' && ' -Clink-arg=-Wl,--no-fix-cortex-a53-843419' || '' }}
           CFLAGS: ${{ runner.os == 'macOS' && '-fno-profile-use' || '' }}
         run: |
           pkgs=(-p tsrs_cli)
