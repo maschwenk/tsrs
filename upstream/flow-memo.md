@@ -74,8 +74,21 @@ were produced by the first walk (Go deduplicates them).
 | mui (`docs`) | 43.8 G | 43.6 G | -0.5% |
 | xstate | 5.35 G | 5.36 G | +0.1% |
 
-The cost is per walk and per frame (key, bookkeeping, stores); it pays where functions are long and mention the same
-variables often, and is neutral on code made of short functions.
+These are paired runs of builds made before merging the latest main. The final whole-process runs (median of 3,
+release builds) gave the following instruction deltas:
+
+| project | 1 checker | 4 checkers |
+| --- | --- | --- |
+| webpack | -5.0% | -4.5% |
+| vscode | -2.2% | -2.1% |
+| 38k-file monorepo | -0.4% | -0.3% |
+| mui | -2.1% | +0.1% |
+| xstate | +0.1% | +0.05% |
+
+Peak memory moved by less than 0.5%.
+
+The cost is paid per walk and per frame: computing the key, the bookkeeping and the stores. It pays off where
+functions are long and mention the same variables often. It is neutral on code made of short functions.
 
 ## To reproduce in Go
 

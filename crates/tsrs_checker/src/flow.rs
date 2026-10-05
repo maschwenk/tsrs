@@ -1,4 +1,4 @@
-use crate::flowmemo::{FlowFrame, FlowMemoMode, FrameTaint, MemoHit, ShadowHit, FLAG_EFFECTS, FLAG_COUNT_RESET, FLAG_TYPE_CACHE, FLOW_DEPTH_LIMIT, UNTAINTED};
+use crate::flowmemo::{FlowMemoMode, FrameTaint, MemoHit, ShadowHit, FLAG_EFFECTS, FLAG_COUNT_RESET, FLAG_TYPE_CACHE, FLOW_DEPTH_LIMIT, UNTAINTED};
 use crate::*;
 use tsrs_ast::*;
 use tsrs_ast as ast;

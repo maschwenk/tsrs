@@ -3,8 +3,8 @@
 Handoff note, 2026-10-05. Branch `perf/flow-memo` (worktree `~/Developer/tsrs-work/wt/flow`), merged with origin/main
 at e2916f3.
 
-- **Flow memo:** implemented, on by default, exact on everything run so far. The PR is not open yet. The list under
-  "To land it" is what is left.
+- **Flow memo:** implemented, on by default, exact on every gate, with a draft PR. The numbers are under "Final
+  numbers".
 - **Union front cache:** not started. Notes below.
 - **Generic-call inference memo:** not started. Notes below.
 
@@ -76,7 +76,7 @@ results. `docs/DEBUGGING.md` ("The flow memo and its shadow mode") has the switc
   - Shadow mode is the check on all of this.
 - **Key.** Exact for identifiers and `this`. Hashed for property chains; shadow mode compares the full key.
 - **Lifetime and memory.** One table per checker, kept for the program's life: 128 KB per checker, plus small
-  `checkpoints` and `shadow` vectors. Peak RSS has not been measured yet.
+  `checkpoints` and `shadow` vectors. Peak memory is unchanged within noise ("Final numbers").
 - **Skipping the walk for never-assigned, never-narrowed references.** Not done.
   - Assignment is known (`isSymbolAssigned`), but "never narrowed" needs a per-container index of the references that
     flow conditions mention, which neither Go nor tsrs keeps.
@@ -86,40 +86,76 @@ results. `docs/DEBUGGING.md` ("The flow memo and its shadow mode") has the switc
 
 ### Verified
 
-All of this is with the post-merge build of 4a69f5a, unless marked.
+These results are for the post-merge build (main e2916f3) against `wt/flow-base`, the same commit without the memo.
 
-- Gates 1-3 against wt/flow-base (origin/main e2916f3), with identical result trees (`treecmp.py`):
-  - the suite in default mode and with `TSRS_LAZY_MEMBERS=0`: 13,458 pass, 2 codes, 2 fail; 12,779 types; 12,779
-    symbols;
-  - js 13,392 and sourcemap 156;
-  - fourslash 4,066 pass / 63 fail, with the same lists.
-- Shadow mode over the whole suite, in default mode and with `TSRS_LAZY_MEMBERS=0`: trees identical to base, 0 panics.
-- Shadow mode over the five corpora (pre-merge build), clean. Shadow checks: the 38k-file codebase 5.08M, vscode 7.92M,
-  webpack 924K, mui 450K, xstate 52K.
-- The `flow_memo` integration test passes.
+- **Suite gates 1-3.** Result trees are identical (`treecmp.py`):
+  - suite in default mode and with `TSRS_LAZY_MEMBERS=0`: 13,458 pass, 2 codes, 2 fail; 12,779 types; 12,779 symbols;
+  - js 13,392, sourcemap 156;
+  - fourslash 4,066 pass / 63 fail, same lists.
+- **Shadow mode over the suite**, in default mode and with `TSRS_LAZY_MEMBERS=0`: trees identical, 0 panics.
+- **Lint and tests.**
+  - `cargo test -p tsrs_cli --test '*'` passes, including `flow_memo`. The bin target does not link on macOS, because
+    `api::memory_tests` needs `malloc_trim`.
+  - `RUSTFLAGS="-D warnings" cargo check --workspace --locked`, `tools/lint/ratchet.py` and `tools/lint/source.py`
+    pass.
+- **Diagnostics on all five corpora** are byte-identical with default checkers, `--checkers 4` and `--singleThreaded`.
+  vscode has 371 errors and webpack 840.
+- **Error-rich run** on the 38k-file codebase: 3,221 errors, identical to base, and identical in shadow mode. The edit
+  script is the `edit` string in `final.py` below. It appends a function with narrowing errors to every 50th `.ts`
+  file under `apps/olympus/src`.
+- **Shadow mode over the five corpora** is clean: diagnostics identical, no panic.
 
-### Not verified yet
+  | corpus | shadow checks |
+  | --- | --- |
+  | 38k-file codebase | 5.10M |
+  | vscode | 7.59M (clean at 4 checkers too) |
+  | webpack | 1.03M |
+  | mui | 388K |
+  | xstate | 44K |
 
-- `cargo test -p tsrs_cli`. The bin target does not link on macOS (`api::memory_tests` needs `malloc_trim`), so run
-  `cargo test -p tsrs_cli --test '*'`.
-- `RUSTFLAGS="-D warnings" cargo check --workspace --locked`, `python3 tools/lint/ratchet.py` and
-  `python3 tools/lint/source.py`.
-- Post-merge shadow run over the five corpora, including one multi-checker run.
-- Corpora diagnostics byte-identical to base, both with default checkers and with `--checkers 1`.
-- The error-rich run, in an APFS clone.
-- `--extendedDiagnostics` counters (types, symbols, instantiations) identical to base.
-- The final five-corpus table: instructions with 1 and 4 checkers, check time, peak memory.
+- **`--extendedDiagnostics` counters.**
+  - With one checker they are deterministic, and types, symbols and instantiations are identical.
+  - Only work counters differ, because skipped walks do fewer lookups: "Lazy member lookups", "Lazy signature queries",
+    "Lazy index info queries", "Lazy every-property queries", "Lazy mapped member lookups", "Mapped signature early
+    returns".
+  - With several checkers the counters vary from run to run in main itself, so they cannot be compared.
 
-### Measured so far
+### Final numbers
 
-Check-phase instructions, one checker, CGU=1 builds, pre-merge:
+Release builds, median of 3 interleaved runs per cell. Instructions are whole-process instructions retired. "1" means
+`--singleThreaded` with `RAYON_NUM_THREADS=1`.
+
+| corpus | instructions, 1 | instructions, 4 | check time, 1 | check time, 4 | peak, 1 | peak, 4 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 38k-file codebase | 275.55 → 274.33 G (-0.44%) | 374.60 → 373.60 G (-0.27%) | 16.54 → 16.30 s (-1.5%) | 5.86 → 5.75 s (-1.9%)\* | 4297 → 4298 MB (+0.04%) | 5879 → 5876 MB (-0.05%)\* |
+| vscode | 115.84 → 113.25 G (-2.23%) | 121.15 → 118.56 G (-2.14%) | 7.61 → 7.15 s (-6.0%)\* | 1.77 → 1.74 s (-1.4%) | 2018 → 2018 MB (0%) | 2326 → 2325 MB (-0.02%) |
+| webpack | 14.59 → 13.85 G (-5.03%) | 16.40 → 15.66 G (-4.48%) | 0.65 → 0.63 s (-3.8%) | 0.21 → 0.20 s (-5.7%) | 311 → 310 MB (-0.06%) | 400 → 399 MB (-0.21%) |
+| mui | 55.44 → 54.26 G (-2.12%) | 86.84 → 86.91 G (+0.08%) | 2.31 → 2.31 s (+0.3%) | 1.08 → 1.08 s (-0.3%) | 746 → 746 MB (+0.01%) | 1097 → 1096 MB (-0.12%) |
+| xstate | 7.73 → 7.74 G (+0.13%) | 9.04 → 9.05 G (+0.05%) | 0.34 → 0.34 s (+0.9%) | 0.11 → 0.11 s (+0.9%) | 184 → 184 MB (+0.10%) | 243 → 243 MB (+0.14%) |
+
+\* These cells come from a 5-round rerun with `peak.py`, which rotates the order of base, new and new with
+`TSRS_FLOW_MEMO=0`. In the 3-run pass, those cells read +10.8% (check time, 4), +23.9% (check time, 1) and +0.43%
+(peak, 4).
+
+The machine was shared with other agents during these runs (1-minute load 7-19), which made the results noisy:
+
+- Wall-clock check time varied by up to ±15% between runs of the same binary.
+- Single runs' instruction counts sometimes rose by 1-2%, from kernel work under memory pressure. For example, mui
+  "new, 1" read 54.12, 54.26 and 55.46 G.
+- So the mui 1-checker delta (-2.1%) is probably too large. The paired check-phase measurement below gave -0.4% to
+  -0.5% for mui.
+
+The `peak.py` rerun also shows what the hooks cost when the memo is off (`TSRS_FLOW_MEMO=0`, same binary): vscode at 1
+checker went from 115.75 G to 116.04 G (+0.25%), and the 38k-file codebase at 4 checkers did not change (373.10 G).
+
+Earlier paired measurement, check-phase instructions, one checker, CGU=1 builds, before the merge:
 
 | corpus | before | after | delta |
 | --- | --- | --- | --- |
 | webpack | 10.93 G | 10.18 G | -7.0% |
-| vscode (`src`) | 89.5 G | 86.7 G | -3.1% |
+| vscode | 89.5 G | 86.7 G | -3.1% |
 | 38k-file codebase | 227.7 G | 226.1 G | -0.7% |
-| mui (`docs`) | 43.8 G | 43.6 G | -0.4% to -0.5% |
+| mui | 43.8 G | 43.6 G | -0.4% to -0.5% |
 | xstate | 5.35 G | 5.36 G | +0.13% |
 
 xstate is under the 0.2% bar but close. Its walks are short, so the bookkeeping cost is not paid back.
@@ -146,33 +182,22 @@ xstate is under the 0.2% bar but close. Its walks are short, so the bookkeeping 
     (the `measpatch.py` patch, never committed), CGU=1 builds and paired interleaved runs.
   - Never measure through a bash wrapper: its startup is counted. Pass env vars directly (`VAR=VAL@binary` specs).
   - Always rebuild both sides before measuring.
+  - Compare `--extendedDiagnostics` counters with one checker only.
 - **Test runner.** A new worktree needs `ln -s ~/Developer/tsrs-work/TypeScript ts-ref` or `tsrs-test` fails with
   "Could not read compiler test files".
 
-### To land it
+### Builds
 
-1. Run the lints and tests listed under "Not verified yet".
-2. Corpora. Wait while the 1-minute load is above 40 (`waitload.sh`), and run one corpus at a time. For each corpus,
-   compare the diagnostics of base and new with default checkers and with `--checkers 1`. Then run the new binary once
-   with `TSRS_FLOW_MEMO=shadow`, and once more with `--checkers 4`.
-3. The error-rich run, in an APFS clone of owner-clone:
-   - Inject errors into a few hundred files, for example by appending `const __e: number = "x";` and an unused
-     `@ts-expect-error` to every 50th `.ts` file under `apps/olympus/src`.
-   - Diff the diagnostics of base and new, then delete the clone.
-   - Put the script you used in this note.
-4. Final numbers:
-   - `meas.py <corpus> 5 <base> <new>` on a plain release build, for whole-process instructions and peak memory with
-     one checker; run it again with `--checkers 4`;
-   - check time from `--extendedDiagnostics` (median of 3);
-   - `checkmeas.py` for check-phase instructions.
-5. Update the tables in `upstream/flow-memo.md` and here, commit, push, and open the PR:
-   `gh pr create --draft -R maschwenk/tsrs --label coder-task-generated`.
+The base tree is `~/Developer/tsrs-work/wt/flow-base`, detached at e2916f3.
 
-Builds. The base tree is `~/Developer/tsrs-work/wt/flow-base` (detached at e2916f3). Build both trees the same way:
-`CARGO_BUILD_JOBS=8 cargo build --release -p tsrs_cli -p tsrs_testrunner -p tsrs_fourslash`. For check-phase
-instructions, first apply `python3 measpatch.py <tree>`, then build with
-`CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 cargo build --release -p tsrs_cli --target-dir target/meas-cgu1`. Run
-`measpatch.py <tree> --revert` before committing.
+- Build both trees the same way: `CARGO_BUILD_JOBS=8 cargo build --release -p tsrs_cli -p tsrs_testrunner -p tsrs_fourslash`.
+- Run the corpus gates and the table with `final.py`, then `recheck.py`. They classify the output into diagnostics,
+  counters and timings.
+- For check-phase instructions:
+  1. apply `python3 measpatch.py <tree>`;
+  2. build with `CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 cargo build --release -p tsrs_cli --target-dir target/meas-cgu1`;
+  3. run `checkmeas.py`;
+  4. revert with `measpatch.py <tree> --revert`.
 
 ## 2. Union front cache (not started)
 
@@ -458,4 +483,199 @@ python3 $S/treecmp.py $OUT/tr-base $OUT/tr-shadow
 python3 $S/treecmp.py $OUT/tr-nolazy-base $OUT/tr-nolazy-shadow
 for f in pass.txt fail.txt skip.txt; do cmp -s $OUT/fs-base/$f $OUT/fs-new/$f && echo "fourslash $f identical" || echo "fourslash $f DIFFERS"; done
 echo GATES-DONE
+```
+
+### final.py
+
+```
+#!/usr/bin/env python3
+"""final.py: corpus gates and the before/after table for the flow memo, base (wt/flow-base) vs new (wt/flow).
+Per corpus: diagnostics + counters identical (default checkers, 4, 1); medians of REPS interleaved runs for
+instructions / check time / peak with 1 checker (single-threaded) and 4; shadow run (1 checker; vscode also 4).
+Then the error-rich run in an APFS clone. Writes summary.md."""
+import os, re, shutil, statistics, subprocess, sys
+S = os.path.dirname(os.path.abspath(__file__))
+OUT = S + '/final'; os.makedirs(OUT, exist_ok=True)
+W = '/Users/maxschwenk/Developer/tsrs-work'
+BASE = W + '/wt/flow-base/target/release/tsrs'
+NEW = W + '/wt/flow/target/release/tsrs'
+CORPORA = [('big', W + '/owner-clone/apps/olympus', '.'), ('vscode', W + '/bench-cache/solutions/vscode', 'src'),
+           ('webpack', W + '/bench-cache/solutions/webpack', '.'), ('mui', W + '/bench-cache/solutions/mui-docs', 'docs'),
+           ('xstate', W + '/bench-cache/solutions/xstate-main', '.')]
+REPS = int(os.environ.get('REPS', '3'))
+only = sys.argv[1:]
+summary = open(OUT + '/summary.md', 'a')
+def say(s):
+    print(s, flush=True); summary.write(s + '\n'); summary.flush()
+STAT = re.compile(r'^[A-Za-z][A-Za-z0-9 ()/.,_-]*:\s+[\d.]+[A-Za-z%]*$')
+def split(out):
+    diags, counters = [], []
+    for l in out.splitlines():
+        if STAT.match(l):
+            if 'time' not in l.lower() and 'memory' not in l.lower():
+                counters.append(l)
+        else:
+            diags.append(l)
+    return '\n'.join(diags), '\n'.join(counters)
+def run(tag, binary, d, p, checkers, env=None, ext=True):
+    subprocess.run([S + '/waitload.sh'])
+    e = dict(os.environ)
+    args = ['/usr/bin/time', '-l', binary, '-p', p, '--noEmit', '--incremental', 'false', '--pretty', 'false']
+    if ext:
+        args.append('--extendedDiagnostics')
+    if checkers == 1:
+        args.append('--singleThreaded'); e['RAYON_NUM_THREADS'] = '1'
+    elif checkers:
+        args += ['--checkers', str(checkers)]
+    e.update(env or {})
+    r = subprocess.run(args, cwd=d, env=e, capture_output=True, text=True)
+    open(f'{OUT}/{tag}.out', 'w').write(r.stdout); open(f'{OUT}/{tag}.err', 'w').write(r.stderr)
+    m = re.search(r'Check time:\s+([\d.]+)s', r.stdout)
+    return dict(rc=r.returncode, instr=int(re.search(r'(\d+)\s+instructions retired', r.stderr).group(1)),
+                peak=int(re.search(r'(\d+)\s+peak memory footprint', r.stderr).group(1)), check=float(m.group(1)) if m else 0.0,
+                out=r.stdout, err=r.stderr)
+def pct(a, b):
+    return f'{100.0 * (b - a) / a:+.2f}%'
+rows = []
+for name, d, p in CORPORA:
+    if only and name not in only:
+        continue
+    res = {}
+    ok = True
+    for mode in (None, 4, 1):
+        diag = {}
+        for rep in range(REPS if mode else 1):
+            for side, binary in (('base', BASE), ('new', NEW)) if rep % 2 == 0 else (('new', NEW), ('base', BASE)):
+                r = run(f'{name}-{side}-{mode}-{rep}', binary, d, p, mode)
+                res.setdefault((side, mode), []).append(r)
+                dg = split(r['out'])
+                if (side, mode) in diag and diag[(side, mode)] != dg:
+                    say(f'{name}: NONDETERMINISTIC {side} checkers={mode}')
+                diag[(side, mode)] = dg
+        dd, cc = diag[('base', mode)], diag[('new', mode)]
+        if dd[0] != cc[0]:
+            ok = False; say(f'{name}: DIAGNOSTICS DIFFER checkers={mode}')
+        if dd[1] != cc[1]:
+            ok = False; say(f'{name}: COUNTERS DIFFER checkers={mode}')
+            for a, b in zip(dd[1].splitlines(), cc[1].splitlines()):
+                if a != b:
+                    say(f'    {a} | {b}')
+    ndiag = sum(1 for l in split(res[('base', 1)][0]['out'])[0].splitlines() if ': error TS' in l)
+    sh = run(f'{name}-shadow-1', NEW, d, p, 1, env={'TSRS_FLOW_MEMO': 'shadow', 'TSRS_FLOW_MEMO_STATS': '1'})
+    shadow_ok = sh['rc'] == res[('base', 1)][0]['rc'] and split(sh['out'])[0] == split(res[('base', 1)][0]['out'])[0] and 'panicked' not in sh['err']
+    checks = re.findall(r'shadow[^\n]*', sh['err'])
+    say(f'{name}: diags+counters identical={ok} ({ndiag} errors); shadow 1 checker clean={shadow_ok} [{"; ".join(checks)[:300]}]')
+    if name == 'vscode':
+        sh4 = run(f'{name}-shadow-4', NEW, d, p, 4, env={'TSRS_FLOW_MEMO': 'shadow'})
+        say(f'{name}: shadow 4 checkers clean={sh4["rc"] == res[("base", 4)][0]["rc"] and split(sh4["out"])[0] == split(res[("base", 4)][0]["out"])[0] and "panicked" not in sh4["err"]}')
+    med = lambda side, mode, k: statistics.median(r[k] for r in res[(side, mode)])
+    row = [name]
+    for mode in (1, 4):
+        a, b = med('base', mode, 'instr'), med('new', mode, 'instr')
+        row.append(f'{a / 1e9:.2f} → {b / 1e9:.2f} G ({pct(a, b)})')
+    for mode in (1, 4):
+        a, b = med('base', mode, 'check'), med('new', mode, 'check')
+        row.append(f'{a:.2f} → {b:.2f} s ({pct(a, b)})')
+    for mode in (1, 4):
+        a, b = med('base', mode, 'peak'), med('new', mode, 'peak')
+        row.append(f'{a / 2**20:.0f} → {b / 2**20:.0f} MB ({pct(a, b)})')
+    rows.append('| ' + ' | '.join(row) + ' |')
+    say(rows[-1])
+say('| corpus | instructions, 1 checker | instructions, 4 checkers | check time, 1 | check time, 4 | peak, 1 | peak, 4 |')
+say('| --- | --- | --- | --- | --- | --- | --- |')
+for r in rows:
+    say(r)
+if not only or 'errors' in only:
+    clone = W + '/owner-clone-flow'
+    if not os.path.exists(clone):
+        subprocess.run(['cp', '-c', '-R', W + '/owner-clone', clone], check=True)
+    edit = r'''find src -name '*.ts' ! -name '*.d.ts' | LC_ALL=C sort | awk 'NR % 50 == 0' | while read -r f; do
+  printf '\nexport function __flowErr(x: string | number | undefined, o: { v?: string | number }) {\n  if (x === undefined) return;\n  if (typeof x === "string") { const a: boolean = x; } else { const b: boolean = x; }\n  const c: boolean = x;\n  if (o.v !== undefined && typeof o.v !== "number") { const d: number = o.v; }\n  let e = Math.random() > 0.5 ? "s" : 1; while (typeof e === "string") { e = 2; } const f: string = e;\n}\nconst __flowErr2: number = "x";\n' >> "$f"; done'''
+    subprocess.run(['bash', '-c', edit], cwd=clone + '/apps/olympus', check=True)
+    d = clone + '/apps/olympus'
+    a = run('errors-base', BASE, d, '.', None, ext=False); b = run('errors-new', NEW, d, '.', None, ext=False)
+    s1 = run('errors-shadow-1', NEW, d, '.', 1, env={'TSRS_FLOW_MEMO': 'shadow'}, ext=False)
+    n = sum(1 for l in a['out'].splitlines() if ': error TS' in l)
+    say(f'error-rich (38k-file codebase, every 50th file edited): {n} errors; new identical={a["out"] == b["out"] and a["rc"] == b["rc"]}; '
+        f'shadow 1 checker identical={a["out"] == s1["out"] and "panicked" not in s1["err"]}')
+    shutil.rmtree(clone)
+    say('clone removed')
+say('FINAL-DONE')
+```
+
+### recheck.py
+
+```
+#!/usr/bin/env python3
+"""recheck.py: re-classify final/*.out (diagnostics vs counters vs timings) and compare base/new and reps."""
+import glob, os, re, sys
+OUT = os.path.dirname(os.path.abspath(__file__)) + '/final'
+TIMING = re.compile(r'(time|memory|Memory)|[\d.]+s$')
+def split(path):
+    diags, counters = [], []
+    for l in open(path).read().splitlines():
+        if 'error TS' in l or l.startswith(' ') or not l.strip():
+            diags.append(l)
+        elif not TIMING.search(l):
+            counters.append(re.sub(r'\s+', ' ', l))
+    return diags, counters
+for name in sys.argv[1:] or ['big', 'vscode', 'webpack', 'mui', 'xstate']:
+    for mode in ('None', '4', '1'):
+        reps = {s: sorted(glob.glob(f'{OUT}/{name}-{s}-{mode}-*.out')) for s in ('base', 'new')}
+        if not reps['base'] or not reps['new']:
+            continue
+        res = {s: [split(p) for p in ps] for s, ps in reps.items()}
+        det = {s: (all(r[0] == v[0][0] for r in v), all(r[1] == v[0][1] for r in v)) for s, v in res.items()}
+        same_d = res['base'][0][0] == res['new'][0][0]
+        same_c = any(b[1] == n[1] for b in res['base'] for n in res['new'])
+        nerr = sum(1 for l in res['base'][0][0] if 'error TS' in l)
+        print(f'{name} checkers={mode}: diags identical={same_d} ({nerr} errors); counters identical={same_c}; '
+              f'deterministic base diags/counters={det["base"]} new={det["new"]} (reps {len(reps["base"])})')
+        if not same_c and mode == '1':
+            for a, b in zip(res['base'][0][1], res['new'][0][1]):
+                if a != b:
+                    print(f'    {a} | {b}')
+for sh in sorted(glob.glob(f'{OUT}/*-shadow-*.out')):
+    name, mode = os.path.basename(sh).split('-shadow-')[0], os.path.basename(sh).split('-shadow-')[1][:-4]
+    base = f'{OUT}/{name}-base-{mode}-0.out' if name != 'errors' else f'{OUT}/errors-base.out'
+    err = open(sh[:-4] + '.err').read()
+    same = split(sh)[0] == split(base)[0] if os.path.exists(base) else None
+    print(f'shadow {name} checkers={mode}: diags identical to base={same}; panicked={"panicked" in err}; {" ".join(re.findall(r"shadow checks \d+", err))}')
+```
+
+### peak.py
+
+```
+#!/usr/bin/env python3
+"""peak.py <corpus> <rounds> <checkers>: peak / check time / instructions for base, new, new with TSRS_FLOW_MEMO=0,
+rotating order each round."""
+import os, re, statistics, subprocess, sys
+S = os.path.dirname(os.path.abspath(__file__))
+W = '/Users/maxschwenk/Developer/tsrs-work'
+C = {'big': (W + '/owner-clone/apps/olympus', '.'), 'vscode': (W + '/bench-cache/solutions/vscode', 'src'),
+     'webpack': (W + '/bench-cache/solutions/webpack', '.'), 'mui': (W + '/bench-cache/solutions/mui-docs', 'docs'),
+     'xstate': (W + '/bench-cache/solutions/xstate-main', '.')}
+corpus, rounds, checkers = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+d, p = C[corpus]
+sides = [('base', W + '/wt/flow-base/target/release/tsrs', {}), ('new', W + '/wt/flow/target/release/tsrs', {}),
+         ('new-off', W + '/wt/flow/target/release/tsrs', {'TSRS_FLOW_MEMO': '0'})]
+res = {s[0]: [] for s in sides}
+for r in range(rounds):
+    for name, binary, env in sides[r % 3:] + sides[:r % 3]:
+        subprocess.run([S + '/waitload.sh'])
+        e = dict(os.environ, **env)
+        args = ['/usr/bin/time', '-l', binary, '-p', p, '--noEmit', '--incremental', 'false', '--pretty', 'false', '--extendedDiagnostics']
+        if checkers == '1':
+            args.append('--singleThreaded'); e['RAYON_NUM_THREADS'] = '1'
+        else:
+            args += ['--checkers', checkers]
+        o = subprocess.run(args, cwd=d, env=e, capture_output=True, text=True)
+        res[name].append((int(re.search(r'(\d+)\s+peak memory footprint', o.stderr).group(1)) / 2**20,
+                          float(re.search(r'Check time:\s+([\d.]+)s', o.stdout).group(1)),
+                          int(re.search(r'(\d+)\s+instructions retired', o.stderr).group(1)) / 1e9,
+                          float(os.getloadavg()[0])))
+for name, v in res.items():
+    print(f'{corpus} c={checkers} {name:8s} peak MB med {statistics.median(x[0] for x in v):.0f} [{" ".join(f"{x[0]:.0f}" for x in v)}] '
+          f'check s med {statistics.median(x[1] for x in v):.2f} [{" ".join(f"{x[1]:.2f}" for x in v)}] '
+          f'instr G med {statistics.median(x[2] for x in v):.2f} load [{" ".join(f"{x[3]:.0f}" for x in v)}]', flush=True)
 ```
