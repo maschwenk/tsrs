@@ -25,6 +25,18 @@ fn literal_value_to_string(value: Option<LiteralValue>) -> String {
 impl Checker {
     // checker.go:26123
     pub(crate) fn get_union_type_worker(&mut self, types: &[P<Type>], union_reduction: UnionReduction, alias: AliasArg<'_>, origin: Option<P<Type>>) -> P<Type> {
+        if self.census.is_some() {
+            let span = self.census_begin(crate::workcensus::Cat::Union, || crate::workcensus::CKey::Bucket(crate::workcensus::bucket(types.len())));
+            let r = self.get_union_type_worker_censused(types, union_reduction, alias, origin);
+            let timing = self.census_end(span).unwrap();
+            let key = crate::workcensus::CKey::Bucket(crate::workcensus::bucket(types.len()));
+            self.census.as_mut().unwrap().record(crate::workcensus::Cat::Union, key, timing, types.len() as u64, (union_reduction == UnionReduction::Subtype) as u64, 0);
+            return r;
+        }
+        self.get_union_type_worker_censused(types, union_reduction, alias, origin)
+    }
+
+    fn get_union_type_worker_censused(&mut self, types: &[P<Type>], union_reduction: UnionReduction, alias: AliasArg<'_>, origin: Option<P<Type>>) -> P<Type> {
         let mut origin = origin;
         let (mut type_set, includes) = self.add_types_to_union(types);
         if union_reduction != UnionReduction::None {
@@ -322,6 +334,19 @@ impl Checker {
     // Go returns nil ("too complex") as a distinct result, hence Option.
     // checker.go:26404
     pub(crate) fn remove_subtypes(&mut self, types: &[P<Type>], has_object_types: bool) -> Option<Vec<P<Type>>> {
+        if self.census.is_some() {
+            let span = self.census_begin(crate::workcensus::Cat::RemoveSubtypes, || crate::workcensus::CKey::Bucket(crate::workcensus::bucket(types.len())));
+            let r = self.remove_subtypes_censused(types, has_object_types);
+            let timing = self.census_end(span).unwrap();
+            let removed = r.as_ref().map_or(0, |r| types.len() - r.len()) as u64;
+            let key = crate::workcensus::CKey::Bucket(crate::workcensus::bucket(types.len()));
+            self.census.as_mut().unwrap().record(crate::workcensus::Cat::RemoveSubtypes, key, timing, types.len() as u64, removed, r.is_none() as u64);
+            return r;
+        }
+        self.remove_subtypes_censused(types, has_object_types)
+    }
+
+    fn remove_subtypes_censused(&mut self, types: &[P<Type>], has_object_types: bool) -> Option<Vec<P<Type>>> {
         // [] and [T] immediately reduce to [] and [T] respectively
         if types.len() < 2 {
             return Some(types.to_vec());
@@ -1160,6 +1185,19 @@ impl Checker {
 
     // checker.go:27154
     pub(crate) fn get_index_type_ex(&mut self, t: P<Type>, index_flags: IndexFlags) -> P<Type> {
+        if self.census.is_some() {
+            let span = self.census_begin(crate::workcensus::Cat::KeyOf, || crate::workcensus::CKey::None);
+            let r = self.get_index_type_ex_censused(t, index_flags);
+            let timing = self.census_end(span).unwrap();
+            let n = if t.flags().intersects(TypeFlags::Union) { t.types().len() } else { 1 };
+            let key = crate::workcensus::CKey::Bucket(crate::workcensus::bucket(n));
+            self.census.as_mut().unwrap().record(crate::workcensus::Cat::KeyOf, key, timing, n as u64, 0, 0);
+            return r;
+        }
+        self.get_index_type_ex_censused(t, index_flags)
+    }
+
+    fn get_index_type_ex_censused(&mut self, t: P<Type>, index_flags: IndexFlags) -> P<Type> {
         let t = self.get_reduced_type(t);
         if self.is_no_infer_type(t) {
             let index_type = self.get_index_type_ex(t.as_substitution_type().base_type().unwrap(), index_flags);
@@ -1452,6 +1490,20 @@ impl Checker {
 
     // checker.go:27405
     pub fn get_indexed_access_type_or_undefined(&mut self, object_type: P<Type>, index_type: P<Type>, access_flags: AccessFlags, access_node: Option<P<Node>>, alias: AliasArg<'_>) -> Option<P<Type>> {
+        if self.census.is_some() {
+            let span = self.census_begin(crate::workcensus::Cat::IndexedAccess, || crate::workcensus::CKey::None);
+            let r = self.get_indexed_access_type_or_undefined_censused(object_type, index_type, access_flags, access_node, alias);
+            let timing = self.census_end(span).unwrap();
+            let n = if object_type.flags().intersects(TypeFlags::Union) { object_type.types().len() } else { 1 };
+            let literal_index = index_type.flags().intersects(TypeFlags::StringOrNumberLiteralOrUnique) as u64;
+            let key = crate::workcensus::CKey::Bucket(crate::workcensus::bucket(n));
+            self.census.as_mut().unwrap().record(crate::workcensus::Cat::IndexedAccess, key, timing, n as u64, literal_index, 0);
+            return r;
+        }
+        self.get_indexed_access_type_or_undefined_censused(object_type, index_type, access_flags, access_node, alias)
+    }
+
+    fn get_indexed_access_type_or_undefined_censused(&mut self, object_type: P<Type>, index_type: P<Type>, access_flags: AccessFlags, access_node: Option<P<Node>>, alias: AliasArg<'_>) -> Option<P<Type>> {
         let mut index_type = index_type;
         let mut access_flags = access_flags;
         if object_type == self.wildcard_type || index_type == self.wildcard_type {
