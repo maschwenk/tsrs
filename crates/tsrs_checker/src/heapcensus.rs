@@ -174,10 +174,10 @@ impl Checker {
         h.row("derived_conditional_params", self.derived_conditional_params.heap_stat());
         h.row("derived_conditional_params (values)", inner);
         let mut keys = HeapStat::default();
-        for k in self.string_literal_types.keys().chain(self.undefined_properties.keys()).chain(self.unresolved_symbols.keys()) {
+        for k in self.undefined_properties.keys().chain(self.unresolved_symbols.keys()) {
             keys.add(HeapStat { containers: 1, len: k.len() as u64, cap: k.capacity() as u64, slot: 1, bytes: k.capacity() as u64 });
         }
-        h.row("string keys (string_literal_types, undefined_properties, unresolved_symbols)", keys);
+        h.row("string keys (undefined_properties, unresolved_symbols)", keys);
         let mut inner = HeapStat::default();
         for m in self.object_type_instantiations.values() {
             inner.add(m.heap_stat());
