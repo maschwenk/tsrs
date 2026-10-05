@@ -98,7 +98,7 @@ impl EmitTextWriter for singleLineStringWriter {
         self.push(" ");
     }
 
-    fn write_line_force(&mut self, force: bool) {
+    fn write_line_force(&mut self, _force: bool) {
         self.push(" ");
     }
 
@@ -130,7 +130,7 @@ impl EmitTextWriter for singleLineStringWriter {
         self.push(text);
     }
 
-    fn write_symbol(&mut self, text: &str, symbol: P<Symbol>) {
+    fn write_symbol(&mut self, text: &str, _symbol: P<Symbol>) {
         self.push(text);
     }
 

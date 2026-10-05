@@ -122,7 +122,7 @@ impl Session {
             }
         };
         let ctx = Context::background();
-        let result = program.emit(&ctx, EmitOptions { target_source_files: None, emit_only, force_emit: false, write_file: Some(&write) });
+        let result = program.emit(&ctx, &EmitOptions { target_source_files: None, emit_only, force_emit: false, write_file: Some(&write) });
         let outputs = outputs.into_inner().unwrap();
         let contents = if capture {
             result.emitted_files.iter().map(|f| s(outputs.get(f).cloned().unwrap_or_default())).collect()
@@ -165,7 +165,7 @@ fn emit_to_output(program: &'static Program, targets: Option<Vec<P<SourceFile>>>
         Ok(())
     };
     let ctx = Context::background();
-    let result: EmitResult = program.emit(&ctx, EmitOptions { target_source_files: targets, emit_only, force_emit, write_file: Some(&write) });
+    let result: EmitResult = program.emit(&ctx, &EmitOptions { target_source_files: targets, emit_only, force_emit, write_file: Some(&write) });
     let mut outputs = outputs.into_inner().unwrap();
     outputs.sort_by(|a, b| a.0.cmp(&b.0));
     let files = outputs

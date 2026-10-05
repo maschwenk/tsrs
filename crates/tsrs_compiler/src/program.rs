@@ -12,14 +12,14 @@ use crate::checkerpool::{Checker, CheckerHandle, CheckerPool, Context};
 use tsrs_core::tspath::{self, ComparePathsOptions, Path};
 use tsrs_core::{CompilerOptions, JsxEmit, ModuleKind, ModuleResolutionKind, ResolutionMode, ScriptKind, ScriptTarget, Tristate, P};
 use tsrs_diagnostics::{self as diagnostics, Message};
-use tsrs_module::{self as module, ModeAwareCache, ModeAwareCacheKey, ResolvedModule, ResolvedTypeReferenceDirective, Resolver, ResolverOptions};
+use tsrs_module::{self as module, ModeAwareCache, ResolvedModule, ResolvedTypeReferenceDirective, Resolver, ResolverOptions};
 use tsrs_tsoptions::{self as tsoptions, ParsedCommandLine};
 
 use crate::checkerpool::checkerPool;
 use crate::emitter::source_file_may_be_emitted;
 use crate::file_include::{self, FileIncludeReason};
 use crate::fileloader::{
-    self, get_default_resolution_mode_for_file, get_emit_syntax_for_usage_location_worker, get_mode_for_usage_location,
+    get_default_resolution_mode_for_file, get_emit_syntax_for_usage_location_worker, get_mode_for_usage_location,
     process_all_program_files, processedFiles, DuplicateSourceFile, LibFile,
 };
 use tsrs_core::collections::Set;
@@ -31,7 +31,7 @@ use crate::projectreferencefilemapper::projectReferenceFileMapper;
 use tsrs_tsoptions::SourceOutputAndProjectReference;
 use crate::fileloader::str_slice;
 use tsrs_module::symlinks::{self, KnownSymlinks};
-use tsrs_module::{ResolutionHost, ResolvedProjectReference};
+use tsrs_module::ResolutionHost;
 
 pub type CreateModuleResolver = Arc<dyn Fn(ResolverOptions) -> Box<dyn Resolver> + Send + Sync>;
 

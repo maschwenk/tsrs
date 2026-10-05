@@ -11,7 +11,7 @@ use tsrs_core::tspath::{self, Path};
 use tsrs_core::P;
 
 use crate::affectedfileshandler::collect_all_affected_files;
-use crate::emit::{combine_emit_results, compiler_program_emit, EmitOnly, EmitOptions, EmitResult, ProgramLike, WriteFileData};
+use crate::emit::{combine_emit_results, compiler_program_emit, EmitOnly, EmitOptions, EmitResult, WriteFileData};
 use crate::program::{Program, SignatureUpdateKind};
 use crate::snapshot::{get_pending_emit_kind, get_text_handling_source_map_for_signature, DiagnosticsOrBuildInfoDiagnosticsWithFileName, EmitSignature, FileEmitKind};
 
@@ -89,7 +89,7 @@ impl<'a> emitFilesHandler<'a> {
             }
         } else if !self.is_for_dts_errors {
             let write_file = self.get_emit_write_file(options);
-            let mut result = compiler_program_emit(program, self.ctx, self.get_emit_options(options, write_file.as_deref())).unwrap_or_default();
+            let mut result = compiler_program_emit(program, self.ctx, &self.get_emit_options(options, write_file.as_deref())).unwrap_or_default();
             self.update_has_emit_diagnostics(Some(&result));
             self.update_snapshot();
             self.emit_build_info(options, &mut result);
@@ -163,7 +163,7 @@ impl<'a> emitFilesHandler<'a> {
                 let result = if !self.is_for_dts_errors {
                     let file_options = EmitOptions { target_source_files: Some(vec![affected_file]), emit_only, write_file: options.write_file, ..Default::default() };
                     let write_file = self.get_emit_write_file(&file_options);
-                    compiler_program_emit(program, self.ctx, self.get_emit_options(&file_options, write_file.as_deref()))
+                    compiler_program_emit(program, self.ctx, &self.get_emit_options(&file_options, write_file.as_deref()))
                 } else {
                     Some(EmitResult { emit_skipped: true, diagnostics: program.get_declaration_diagnostics(self.ctx, Some(affected_file)), ..Default::default() })
                 };
@@ -388,7 +388,7 @@ pub(crate) fn emit_files(ctx: &Context, program: P<Program>, options: &EmitOptio
     // Single file emit - do direct from program
     if !is_for_dts_errors && options.target_source_files.is_some() {
         let write_file = emit_handler.get_emit_write_file(options);
-        let result = compiler_program_emit(program.p(), ctx, emit_handler.get_emit_options(options, write_file.as_deref()));
+        let result = compiler_program_emit(program.p(), ctx, &emit_handler.get_emit_options(options, write_file.as_deref()));
         emit_handler.update_has_emit_diagnostics(result.as_ref());
         if ctx.err().is_some() {
             return None;

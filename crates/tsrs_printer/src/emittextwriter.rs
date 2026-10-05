@@ -31,7 +31,7 @@ pub trait EmitTextWriter {
     fn is_at_start_of_line(&self) -> bool;
     fn has_trailing_comment(&self) -> bool;
     fn has_trailing_whitespace(&self) -> bool;
-    fn grow(&mut self, n: usize) {}
+    fn grow(&mut self, _n: usize) {}
 }
 
 // Lets a `Box<dyn EmitTextWriter>` (what `new_text_writer`/`get_single_line_string_writer` return) be passed

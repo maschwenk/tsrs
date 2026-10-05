@@ -820,11 +820,6 @@ impl classFieldsTransformer {
         visitor(self, node)
     }
 
-    // classfields.go:745
-    pub(crate) fn clear_class_element_and_visit_each_child(&self, node: P<Node>) -> Option<P<Node>> {
-        self.set_current_class_element_and(None, Self::visit_each_child_of_node, node)
-    }
-
     // classfields.go:761
     // visitFunctionExpressionOrDeclaration handles lexical environment scoping for function
     // expressions and declarations, mirroring Strada's onEmitNode behavior.
