@@ -241,7 +241,7 @@ Each against main after part 1, interleaved, 5 rounds unless noted, paired media
 | --- | --- | --- | --- | --- |
 | `-C target-cpu=x86-64-v2` | wall +0.2%, cycles +0.3%, instructions -0.2% | wall +3.1%, cycles +2.4% | - | rejected |
 | `-C target-cpu=x86-64-v3` | wall +0.9%, cycles +1.2%, instructions -0.6% | wall +1.4%, cycles +2.0%, instructions -0.6% | - | rejected |
-| zero-based handles (#62 rebased on part 1) | wall -0.4% (-2.1..+0.4), cycles -0.4%, instructions -2.2% | wall -2.2% (-5.2..+1.9), cycles -3.2% (-4.7..+0.6), instructions -2.2% | - | not reopened |
+| zero-based handles (#62 merged onto part 1: branch `perf/linux-zero-thp`) | wall -0.4% (-2.1..+0.4), cycles -0.4%, instructions -2.2% | wall -2.2% (-5.2..+1.9), cycles -3.2% (-4.7..+0.6), instructions -2.2% | - | not reopened |
 | front end (`--noCheck`) | 1.05 s at 18 parse threads, 1.31 s at 8, 1.9 s at 4 | 5.6% of the 4-checker run | 6.6% of the 8-checker run | not pursued |
 | `MIMALLOC_ARENA_EAGER_COMMIT=1` (4 rounds) | - | wall +4.1%, cycles +3.7% | - | rejected |
 | `MIMALLOC_PURGE_DELAY=-1` (never give heap pages back) | wall -0.1%, cycles -0.3%, faults -77% | wall -2.7%, cycles -1.7% (-6.4..+0.4), faults -69% | wall +0.6%, cycles +0.9%, faults -55% | rejected |
