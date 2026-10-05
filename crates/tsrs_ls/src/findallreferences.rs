@@ -36,21 +36,18 @@ use crate::utilities::{
 };
 
 // === types for settings ===
-// findallreferences.go:29
+// findallreferences.go:29 (Go never uses referenceUseOther)
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub(crate) enum ReferenceUse {
     #[default]
     None = 0,
-    Other = 1,
     References = 2,
     Rename = 3,
 }
 
-// findallreferences.go:38
+// findallreferences.go:38 (Go's findInStrings and findInComments fields are never read)
 #[derive(Clone, Copy, Default)]
 pub(crate) struct RefOptions {
-    pub(crate) find_in_strings: bool,
-    pub(crate) find_in_comments: bool,
     pub(crate) use_: ReferenceUse, // other, references, rename
     pub(crate) implementations: bool,
     pub(crate) use_aliases_for_rename: bool, // renamed from providePrefixAndSuffixTextForRename. default: true
@@ -58,12 +55,11 @@ pub(crate) struct RefOptions {
 
 // === types for results ===
 
-// findallreferences.go:48
+// findallreferences.go:48 (Go's unverified field is never read)
 pub(crate) struct RefInfo {
     pub(crate) file: Option<P<SourceFile>>,
     pub(crate) file_name: String,
     pub(crate) reference: Option<P<FileReference>>,
-    pub(crate) unverified: bool,
 }
 
 // findallreferences.go:55
@@ -1040,9 +1036,8 @@ impl LanguageService {
 }
 
 // referencedSymbolDefinitionInfo holds the computed info for a definition
-// findallreferences.go:866
+// findallreferences.go:866 (Go's node field is never read)
 pub(crate) struct referencedSymbolDefinitionInfo {
-    pub(crate) node: P<Node>,
     pub(crate) location: lsproto::Location,
     pub(crate) display_text: Option<lsproto::VSClassifiedTextElement>,
 }
@@ -1075,20 +1070,20 @@ impl LanguageService {
                 let node = if let Some(&decl) = symbol.declarations().first() { decl.name().unwrap_or(decl) } else { original_node.unwrap() };
 
                 let loc = self.get_location_of_entry_for_feature(&ReferenceEntry::new(EntryKind::Node, Some(node), None), feature)?;
-                Some(referencedSymbolDefinitionInfo { node, location: loc, display_text: Some(element) })
+                Some(referencedSymbolDefinitionInfo { location: loc, display_text: Some(element) })
             }
 
             DefinitionKind::Label => {
                 let node = def.node?;
                 let loc = self.get_location_of_entry_for_feature(&ReferenceEntry::new(EntryKind::Node, Some(node), None), feature)?;
-                Some(referencedSymbolDefinitionInfo { node, location: loc, display_text: Some(single_run(node.text(), lsproto::ClassificationTypeName::Text)) })
+                Some(referencedSymbolDefinitionInfo { location: loc, display_text: Some(single_run(node.text(), lsproto::ClassificationTypeName::Text)) })
             }
 
             DefinitionKind::Keyword => {
                 let node = def.node?;
                 let name = scanner::token_to_string(node.kind());
                 let loc = self.get_location_of_entry_for_feature(&ReferenceEntry::new(EntryKind::Node, Some(node), None), feature)?;
-                Some(referencedSymbolDefinitionInfo { node, location: loc, display_text: Some(single_run(name, lsproto::ClassificationTypeName::Keyword)) })
+                Some(referencedSymbolDefinitionInfo { location: loc, display_text: Some(single_run(name, lsproto::ClassificationTypeName::Keyword)) })
             }
 
             DefinitionKind::This => {
@@ -1096,13 +1091,13 @@ impl LanguageService {
                 let symbol = def.symbol?;
                 let element = self.get_definition_kind_and_display_parts(ctx, symbol, node, vs_capability);
                 let loc = self.get_location_of_entry_for_feature(&ReferenceEntry::new(EntryKind::Node, Some(node), None), feature)?;
-                Some(referencedSymbolDefinitionInfo { node, location: loc, display_text: Some(element) })
+                Some(referencedSymbolDefinitionInfo { location: loc, display_text: Some(element) })
             }
 
             DefinitionKind::String => {
                 let node = def.node?;
                 let loc = self.get_location_of_entry_for_feature(&ReferenceEntry::new(EntryKind::Node, Some(node), None), feature)?;
-                Some(referencedSymbolDefinitionInfo { node, location: loc, display_text: Some(single_run(node.text(), lsproto::ClassificationTypeName::String)) })
+                Some(referencedSymbolDefinitionInfo { location: loc, display_text: Some(single_run(node.text(), lsproto::ClassificationTypeName::String)) })
             }
 
             DefinitionKind::TripleSlashReference => {
@@ -1111,7 +1106,7 @@ impl LanguageService {
                 let node = file.as_node();
                 let loc = self.get_location_of_entry_for_feature(&ReferenceEntry::new(EntryKind::Node, Some(node), None), feature)?;
                 let text = format!("\"{}\"", triple_slash_file_ref.reference.unwrap().file_name);
-                Some(referencedSymbolDefinitionInfo { node, location: loc, display_text: Some(single_run(&text, lsproto::ClassificationTypeName::String)) })
+                Some(referencedSymbolDefinitionInfo { location: loc, display_text: Some(single_run(&text, lsproto::ClassificationTypeName::String)) })
             }
         }
     }

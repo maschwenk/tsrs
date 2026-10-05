@@ -413,13 +413,6 @@ pub(crate) fn is_type_keyword(kind: Kind) -> bool {
     TYPE_KEYWORDS.contains(&kind)
 }
 
-// utilities.go:346
-pub(crate) fn is_separator(node: P<Node>, candidate: Option<P<Node>>) -> bool {
-    let Some(candidate) = candidate else { return false };
-    let Some(parent) = node.parent() else { return false };
-    candidate.kind() == Kind::CommaToken || (candidate.kind() == Kind::SemicolonToken && parent.kind() == Kind::ObjectLiteralExpression)
-}
-
 // utilities.go:350
 pub(crate) fn is_literal_name_of_property_declaration_or_index_access(node: P<Node>) -> bool {
     // utilities
@@ -906,23 +899,6 @@ pub(crate) fn get_adjusted_location_for_export_declaration(node: P<Node>, for_re
         return decl.module_specifier;
     }
     None
-}
-
-// utilities.go:776
-pub(crate) fn symbol_flags_have_meaning(flags: SymbolFlags, meaning: SemanticMeaning) -> bool {
-    if meaning == SemanticMeaning::All {
-        return true;
-    }
-    if meaning.intersects(SemanticMeaning::Value) {
-        return flags.intersects(SymbolFlags::Value);
-    }
-    if meaning.intersects(SemanticMeaning::Type) {
-        return flags.intersects(SymbolFlags::Type);
-    }
-    if meaning.intersects(SemanticMeaning::Namespace) {
-        return flags.intersects(SymbolFlags::Namespace);
-    }
-    false
 }
 
 // utilities.go:792
@@ -1501,13 +1477,6 @@ pub(crate) fn is_object_literal_or_jsx_element(node: P<Node>) -> bool {
     ast::is_object_literal_element(node) || ast::is_jsx_attribute(node) || ast::is_jsx_spread_attribute(node)
 }
 
-// Return a function that returns true if the given node has not been seen
-// utilities.go:1289
-pub(crate) fn node_seen_tracker() -> impl FnMut(P<Node>) -> bool {
-    let mut seen: FxHashSet<P<Node>> = FxHashSet::default();
-    move |node| seen.insert(node)
-}
-
 // FindAllReferences.toContextSpan
 // utilities.go:1297
 pub(crate) fn to_context_range(text_range: Option<TextRange>, context_file: P<SourceFile>, context: Option<P<Node>>) -> Option<TextRange> {
@@ -1527,7 +1496,7 @@ pub(crate) fn to_context_range(text_range: Option<TextRange>, context_file: P<So
 pub(crate) fn get_reference_at_position(source_file: P<SourceFile>, position: i32, program: &Program) -> Option<RefInfo> {
     if let Some(reference_path) = find_reference_in_position(source_file.referenced_files(), position) {
         if let Some(file) = program.get_source_file_from_reference(source_file, reference_path) {
-            return Some(RefInfo { reference: Some(reference_path), file_name: file.file_name().to_string(), file: Some(file), unverified: false });
+            return Some(RefInfo { reference: Some(reference_path), file_name: file.file_name().to_string(), file: Some(file) });
         }
         return None;
     }
@@ -1535,7 +1504,7 @@ pub(crate) fn get_reference_at_position(source_file: P<SourceFile>, position: i3
     if let Some(type_reference_directive) = find_reference_in_position(source_file.type_reference_directives(), position) {
         if let Some(reference) = program.get_resolved_type_reference_directive_from_type_reference_directive(type_reference_directive, source_file) {
             if let Some(file) = program.get_source_file(&reference.resolved_file_name) {
-                return Some(RefInfo { reference: Some(type_reference_directive), file_name: file.file_name().to_string(), file: Some(file), unverified: false });
+                return Some(RefInfo { reference: Some(type_reference_directive), file_name: file.file_name().to_string(), file: Some(file) });
             }
         }
         return None;
@@ -1543,7 +1512,7 @@ pub(crate) fn get_reference_at_position(source_file: P<SourceFile>, position: i3
 
     if let Some(lib_reference_directive) = find_reference_in_position(source_file.lib_reference_directives(), position) {
         if let Some(file) = program.get_lib_file_from_reference(lib_reference_directive) {
-            return Some(RefInfo { reference: Some(lib_reference_directive), file_name: file.file_name().to_string(), file: Some(file), unverified: false });
+            return Some(RefInfo { reference: Some(lib_reference_directive), file_name: file.file_name().to_string(), file: Some(file) });
         }
         return None;
     }
@@ -1558,12 +1527,11 @@ pub(crate) fn get_reference_at_position(source_file: P<SourceFile>, position: i3
     }
 
     if let Some(resolution) = program.get_resolved_module_from_module_specifier(source_file, node) {
-        let verified_file_name = resolution.resolved_file_name;
         let mut file_name = resolution.resolved_file_name.to_string();
         if file_name.is_empty() {
             file_name = tspath::resolve_path(&tspath::get_directory_path(source_file.file_name()), &[node.text()]);
         }
-        return Some(RefInfo { file: program.get_source_file(&file_name), file_name, reference: None, unverified: !verified_file_name.is_empty() });
+        return Some(RefInfo { file: program.get_source_file(&file_name), file_name, reference: None });
     }
 
     None

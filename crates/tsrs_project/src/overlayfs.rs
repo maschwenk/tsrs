@@ -576,10 +576,6 @@ struct fileEvents {
 }
 
 impl overlayFS {
-    pub(crate) fn host(&self) -> &FsRef {
-        &self.host
-    }
-
     // overlayfs.go:407
     pub(crate) fn process_changes(&self, changes: &[FileChange]) -> (FileChangeSummary, OverlayMap) {
         let mut st = self.mu.write().unwrap();

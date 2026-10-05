@@ -29,6 +29,7 @@ pub(crate) struct missingMemberFixer<'a> {
     program: &'static Program,
     preferences: UserPreferences,
     import_adder: Option<&'a mut (dyn ImportAdder + 'static)>,
+    #[expect(dead_code, reason = "Go reads it for Method_not_implemented.Localize(f.locale); Message::localize has no locale parameter (English only)")]
     locale: Locale,
 }
 

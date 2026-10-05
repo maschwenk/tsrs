@@ -103,16 +103,6 @@ pub(crate) fn insert_space_before_type_annotation_option(options: &FormatCodeSet
     options.insert_space_before_type_annotation
 }
 
-// rulecontext.go:94
-pub(crate) fn indent_multi_line_object_literal_beginning_on_blank_line_option(options: &FormatCodeSettings) -> Tristate {
-    options.indent_multi_line_object_literal_beginning_on_blank_line
-}
-
-// rulecontext.go:98
-pub(crate) fn indent_switch_case_option(options: &FormatCodeSettings) -> Tristate {
-    options.indent_switch_case
-}
-
 // rulecontext.go:102
 pub(crate) fn option_equals<T: PartialEq + Copy + Send + Sync + 'static>(option_name: fn(&FormatCodeSettings) -> T, option_value: T) -> ContextPredicate {
     Box::leak(Box::new(move |context: &FormattingContext| option_name(&context.options) == option_value))

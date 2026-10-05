@@ -621,7 +621,7 @@ impl LanguageService {
     // completions.go:4029
     pub(crate) fn get_js_completion_entries(
         &self,
-        ctx: &Context,
+        _ctx: &Context,
         file: P<SourceFile>,
         position: i32,
         unique_names: &mut FxHashSet<String>,
@@ -827,14 +827,6 @@ pub(crate) fn get_scope_node(initial_token: Option<P<Node>>, position: i32, file
         scope = s.parent();
     }
     scope
-}
-
-// completions.go:4239
-pub(crate) fn is_snippet_scope(scope_node: P<Node>) -> bool {
-    match scope_node.kind() {
-        Kind::SourceFile | Kind::TemplateExpression | Kind::JsxExpression | Kind::Block => true,
-        _ => ast::is_statement(scope_node),
-    }
 }
 
 // Determines if a type is exactly the same type resolved by the global 'self', 'global', or 'globalThis'.
@@ -1616,7 +1608,7 @@ impl LanguageService {
     // completions.go:5023
     pub(crate) fn create_lsp_completion_item(
         &self,
-        ctx: &Context,
+        _ctx: &Context,
         name: &str,
         insert_text: &str,
         filter_text: &str,

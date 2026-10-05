@@ -27,6 +27,7 @@ impl RuleImpl {
     }
 
     // rule.go:24
+    #[expect(dead_code, reason = "Go's String() makes ruleImpl a fmt.Stringer for debug output; no Go code calls it")]
     pub(crate) fn string(&self) -> &'static str {
         self.debug_name
     }
