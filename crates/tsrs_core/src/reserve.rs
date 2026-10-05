@@ -6,8 +6,8 @@
 //! address: `base() + (handle << UNIT_SHIFT)`. The first `GRANULE` is never handed out, so handle 0 is never an
 //! object (the `Option<P<T>>` niche). Released chunks (region slabs) are decommitted and their ranges reused.
 //!
-//! Linux: thread-arena chunks (`alloc_chunk` with `huge`) are whole, aligned 2 MiB blocks advised with
-//! `MADV_HUGEPAGE`, so the kernel backs them with transparent huge pages where THP is `madvise` or `always`
+//! Linux: thread-arena chunks from 2 MiB up (`alloc_chunk` with `huge`) are whole, aligned 2 MiB blocks advised
+//! with `MADV_HUGEPAGE`, so the kernel backs them with transparent huge pages where THP is `madvise` or `always`
 //! (notes/linux-x86-round.md). Region slabs are released piecemeal and keep 4 KiB pages.
 
 use std::collections::BTreeMap;
@@ -187,7 +187,7 @@ impl Chunks {
     }
 }
 
-/// A committed, zero-filled chunk of at least `size` bytes, `GRANULE`-aligned. With `huge` (thread-arena chunks,
+/// A committed, zero-filled chunk of at least `size` bytes, `GRANULE`-aligned. With `huge` (large thread-arena chunks,
 /// which are never released): `HUGE_CHUNK`-aligned, a multiple of it, and on Linux advised for transparent huge pages;
 /// callers round `size` to `HUGE_CHUNK` themselves so that they use the whole chunk.
 pub(crate) fn alloc_chunk(size: usize, huge: bool) -> *mut u8 {

@@ -33,12 +33,14 @@ use std::sync::{Arc, Condvar, Mutex, RwLock, Weak};
 const FIRST_CHUNK: usize = 1 << 20;
 const CHUNK_ALIGN: usize = 16;
 const PAGE: usize = 4096;
-/// Thread-arena chunk sizes are multiples of this. Linux with compressed pointers: the reservation's huge-chunk size,
-/// since those chunks get transparent huge pages and an unused tail would be resident with the page it shares.
+/// Linux with compressed pointers: thread-arena chunks of at least this size (all but a thread's first chunk) are
+/// whole 2 MiB blocks backed by transparent huge pages (`reserve::alloc_chunk`), and their sizes are rounded to it,
+/// since an unused tail would be resident with the huge page it shares. A thread that allocates less than its first
+/// chunk keeps 4 KiB pages.
 #[cfg(all(compressed_ptrs, target_os = "linux"))]
-const THREAD_CHUNK_UNIT: usize = crate::reserve::HUGE_CHUNK;
+const HUGE_THREAD_CHUNK: usize = crate::reserve::HUGE_CHUNK;
 #[cfg(not(all(compressed_ptrs, target_os = "linux")))]
-const THREAD_CHUNK_UNIT: usize = PAGE;
+const HUGE_THREAD_CHUNK: usize = usize::MAX;
 /// Largest chunk a thread arena grows to in compressed mode (larger single allocations still get their own size).
 #[cfg(compressed_ptrs)]
 const MAX_CHUNK: usize = 64 << 20;
@@ -210,9 +212,10 @@ impl Arena {
             self.slabs.borrow_mut().push(slab);
             self.new_chunk_at(base, size);
         } else {
-            let size = size.next_multiple_of(THREAD_CHUNK_UNIT);
+            let huge = size >= HUGE_THREAD_CHUNK;
+            let size = if huge { size.next_multiple_of(HUGE_THREAD_CHUNK) } else { size.next_multiple_of(PAGE) };
             let layout = Layout::from_size_align(size, CHUNK_ALIGN).expect("arena chunk layout");
-            self.new_chunk_at(os_chunk(layout, true), size);
+            self.new_chunk_at(os_chunk(layout, huge), size);
         }
     }
 
@@ -418,8 +421,8 @@ fn census_chunk(size: usize) -> *mut u8 {
     p.cast()
 }
 
-/// A chunk for a thread's arena (`huge`) or a slab. Compressed pointers: from the process-wide reservation
-/// (`reserve`), where `huge` asks for transparent huge pages on Linux.
+/// A chunk for a thread's arena or a slab. Compressed pointers: from the process-wide reservation (`reserve`), where
+/// `huge` asks for transparent huge pages on Linux.
 fn os_chunk(layout: Layout, huge: bool) -> *mut u8 {
     #[cfg(compressed_ptrs)]
     return crate::reserve::alloc_chunk(layout.size(), huge);
