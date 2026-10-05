@@ -36,11 +36,11 @@ const PAGE: usize = 4096;
 /// Linux with compressed pointers: thread-arena chunks of at least this size (all but a thread's first chunk) are
 /// whole 2 MiB blocks backed by transparent huge pages (`reserve::alloc_chunk`), and their sizes are rounded to it,
 /// since an unused tail would be resident with the huge page it shares. A thread that allocates less than its first
-/// chunk keeps 4 KiB pages.
+/// chunk keeps 4 KiB pages. `None` elsewhere.
 #[cfg(all(compressed_ptrs, target_os = "linux"))]
-const HUGE_THREAD_CHUNK: usize = crate::reserve::HUGE_CHUNK;
+const HUGE_THREAD_CHUNK: Option<usize> = Some(crate::reserve::HUGE_CHUNK);
 #[cfg(not(all(compressed_ptrs, target_os = "linux")))]
-const HUGE_THREAD_CHUNK: usize = usize::MAX;
+const HUGE_THREAD_CHUNK: Option<usize> = None;
 /// Largest chunk a thread arena grows to in compressed mode (larger single allocations still get their own size).
 #[cfg(compressed_ptrs)]
 const MAX_CHUNK: usize = 64 << 20;
@@ -212,10 +212,10 @@ impl Arena {
             self.slabs.borrow_mut().push(slab);
             self.new_chunk_at(base, size);
         } else {
-            let huge = size >= HUGE_THREAD_CHUNK;
-            let size = if huge { size.next_multiple_of(HUGE_THREAD_CHUNK) } else { size.next_multiple_of(PAGE) };
+            let huge = HUGE_THREAD_CHUNK.filter(|&h| size >= h);
+            let size = size.next_multiple_of(huge.unwrap_or(PAGE));
             let layout = Layout::from_size_align(size, CHUNK_ALIGN).expect("arena chunk layout");
-            self.new_chunk_at(os_chunk(layout, huge), size);
+            self.new_chunk_at(os_chunk(layout, huge.is_some()), size);
         }
     }
 

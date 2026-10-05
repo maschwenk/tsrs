@@ -53,7 +53,7 @@ the free list, where region slabs (64 KiB granularity) reuse it. The first chunk
   the advice) only sees region slabs. A range that a slab gave back and a thread chunk later takes gets the advice
   again at its commit.
 - Region slabs keep 4 KiB pages (no advice): see "Region slabs" below.
-- macOS and other unixes: unchanged. No chunk is `huge` there (the arena's `HUGE_THREAD_CHUNK` is `usize::MAX`), so
+- macOS and other unixes: unchanged. No chunk is `huge` there (the arena's `HUGE_THREAD_CHUNK` is `None`), so
   chunk sizes, offsets and system calls are what they were.
 
 ### Result
