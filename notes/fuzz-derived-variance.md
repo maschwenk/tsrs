@@ -1,12 +1,130 @@
 # fuzz-derived-variance: attacking TSRS_DERIVED_VARIANCE
 
-Work in progress. Findings so far (each confirmed against tsgo built from the pinned commit; the switch off and
-tsgo agree, `on` loses the error, `shadow` exits 7):
+`TSRS_DERIVED_VARIANCE` (notes/perf-derived-variance.md, `crates/tsrs_checker/src/relater_derived.rs`) relates a derived
+generic instance to a reference to its generic base by the base's variances instead of member by member. It is exact
+only as far as TypeScript's variance digest agrees with the member-by-member comparison. Before this work: three
+guards, zero disagreements on the conformance suite and five projects. This note: an adversarial generator, 15 more
+projects, seven new kinds of disagreement (every one a lost error, confirmed against tsgo), two new guards that close
+them, and what the guards cost.
 
-| case | cause |
-| --- | --- |
-| `testdata/regressions/derived-variance-any-keyof` | `any` argument: `keyof any` and a homomorphic mapped type over `any` evaluate eagerly; the markers kept them deferred |
-| `testdata/regressions/derived-variance-keyof-optional` | `{}` and `{ a?: string }` are mutually assignable, `keyof` tells them apart (no `any`, no conditional) |
-| `testdata/regressions/derived-variance-mutual-conditional` | a conditional's check type measures bivariant; mutually assignable arguments pick different branches |
-| `testdata/regressions/derived-variance-this-conditional` | `this` in a conditional's check type measures bivariant; the derived type picks the other branch (identical arguments) |
-| `testdata/regressions/derived-variance-any-template` | `any` in a template literal type gives `` `a${any}` `` |
+**Verdict: do not turn it on by default.** The unguarded shortcut is wrong in many simple, ordinary shapes (`keyof T`,
+a conditional on `this`, `T & {...}`, a wrong `out`), each giving up an error tsgo reports. The guards that make it
+exact on everything found compare exactly the members that held the savings: on the 38k-file codebase the guarded
+switch saves 0.9% of instantiations and no check time (unguarded: 17% and 11%). See "Judgement" at the end.
+
+## The generator
+
+`tools/fuzz/derived_variance.py` (deterministic from a seed; `gen --seed S` writes one program, `run` runs a range).
+Each program declares one generic base (interface, class or abstract class; 1-3 type parameters, sometimes
+constrained to `string`, with defaults or `in` / `out` / `in out` annotations) with 16-26 members drawn from 60
+member shapes (interfaces) plus 7 class-only ones, named `<feature>_<n>` so a disagreement's culprit list names its
+features:
+
+- positions: property, readonly, optional, method parameter / return / both (bivariant), function-typed property
+  parameter / return / both (contravariant under strictFunctionTypes), construct signature types, type predicates,
+  rest parameters and rest tuples, `NoInfer`, overloads, generic methods with constraints on the parameters, `this`
+  as property type, return (polymorphic `this`), method parameter, function-property parameter, `Box<this>`,
+  `keyof this`, `this["x"]`, `this` in a conditional's check type and in a generic method's callback;
+- operators: conditional types (distributive, non-distributive `[T] extends [...]`, `infer`, the parameter in the
+  extends type, through a conditional alias, in a branch, in a parameter type), mapped types (homomorphic, `-readonly`
+  `-?`, `readonly ?`, key remapping with template literals, `Partial`, `Record`, `Pick`), `keyof` (as a type, as a
+  method parameter, as a function-property parameter), indexed access (`T[keyof T]`, `X[T & K]`), template literal
+  types, `Uppercase`, unions with `undefined | null`, intersections, arrays, readonly arrays, tuples, `Promise`, a
+  generic interface `Box<T>`, recursive references to the base (`B<T>` and expanding `B<T[]>`), unique symbols and
+  enums in unions;
+- class-only: accessors, getter-only, `private`, `protected`, `#private`, abstract properties and methods; static
+  members; a numeric index signature; interface merging of the base.
+
+Derived types (3-7 per program): pass the arguments through, fix one, permute them, wrap one (`T[]`, `Box<T>`,
+`T | undefined`, `Partial<T>`, `[T]`), add a parameter, a second level (`D1x extends D1`), interface merging of the
+derived type, a class merged with an interface that extends the base, a mixin (`class extends mix(Base)<T>`),
+compatible and incompatible added members, a `tag` member that steers `this`-conditionals.
+
+Sites (60-120 per program) relate derived instances to base references: assignment (`const t: B<..> = d`), a
+conditional type (`D<..> extends B<..> ? "yes" : "no"`), array literals and `pick(d, b)` (subtype reduction, the
+subtype relation), `d as B<..>` (comparable relation), nested in an object type, and generic functions
+(`function g<G, H extends G>(s: D<H>): B<G>`: type parameters as arguments). Argument pairs come from a lattice of 46
+sub/supertype edges (literal / widened, `{}` / `{ a?: string }` / index signatures / `object`, readonly / mutable,
+tuples / arrays, enums / members / numbers, unique symbols, template literal types, `string & {}`, functions with
+fewer parameters, `void` / `undefined`), identical pairs, `any` / `unknown` / `never` / `{}` on either side, and
+unrelated pairs. Option sets: strict (twice as often), strict + exactOptionalPropertyTypes, strict without
+strictFunctionTypes, strict without strictNullChecks, and no strict flags.
+
+`run` type-checks each program with `TSRS_DERIVED_VARIANCE=shadow` (exit 7 or a report = finding; the decision count
+comes from `TSRS_DERIVED_VARIANCE_LOG`), and also runs `off` and `on` and compares them byte for byte, and shadow's
+diagnostics against `off`'s. Findings are kept with the program and the report. About half the programs reach a
+decision at all (the rest relate pairs the shortcut does not take: unrelated arguments, mixins, failing declared
+members); see the tables for the counts.
+
+## Findings
+
+All seven are lost errors: tsgo built from the pinned commit and tsrs with the switch off report the error; `on`
+drops it; `shadow` reports the disagreement and exits 7. Each has a minimal repro under `testdata/regressions/`
+(run in all three modes, and without its guard, by `cargo test -p tsrs_cli --test derived_variance`).
+
+| case | cause | guard |
+| --- | --- | --- |
+| `derived-variance-any-keyof` | `any` argument: `keyof any` is `string \| number \| symbol` and a homomorphic mapped type over `any` is an index signature; the markers kept both deferred, and `any` satisfies every variance (also invariant) | 4 |
+| `derived-variance-keyof-optional` | `{}` and `{ a?: string }` are assignable to each other, so they satisfy any variance, but `keyof` tells them apart; no `any` and no conditional type involved | 4 |
+| `derived-variance-mutual-conditional` | in a conditional's check type the markers make a parameter bivariant (deferred conditionals relate when their check types relate either way); mutually assignable arguments pick different branches | 4 |
+| `derived-variance-this-conditional` | `this` in a conditional's check type measures bivariant, so guard 1 accepts it; the derived type (which adds `tag: 1`) picks the other branch. Identical type arguments; only `this` differs | 4 |
+| `derived-variance-any-template` | `any` in a template literal type gives `` `a${any}` ``, not assignable to `"ab"` | 4 |
+| `derived-variance-intersection` | assignability is not monotone under intersection: `{}` is assignable to `{ [k: string]: string }` (implicit index signature), but `{} & { z?: 1 }` reduces to `{ z?: 1 }`, which is not | 4 |
+| `derived-variance-annotation` | TypeScript takes `in` / `out` as the variances without measuring them; a wrong `out` in a `.d.ts` under skipLibCheck is never reported, and the derived comparison is the only place the error surfaces | 5 |
+
+By feature, before the new guards (campaign B below, the generator's culprit lists): conditional types in every form
+(`cond_*`, `this_cond`), `keyof` in every position, mapped types in every form including `Partial`, indexed access,
+template literals, `Uppercase`, intersections, and, in programs whose base has a wrong annotation (TS2636), any
+member at all. Nothing else: no disagreement had only "structural" culprits (properties, methods, function types,
+unions, arrays, tuples, `Promise`, `Box<T>`, recursive references, overloads, generic methods, accessors,
+private / protected / `#private`, abstract, `NoInfer`, predicates, rest) outside TS2636 programs, apart from the
+intersection case.
+
+A side finding: in a program with a wrong annotation, measuring the `this` variance of that base (guard 1) before the
+declaration check ran changed which member the TS2636 elaboration names (`on` and `shadow` printed a different
+message from `off` and tsgo, 36 programs in 3000). Guard 5 removes it (such a base never reaches the measurement; a
+base whose annotations are being verified takes no decisions). The original code had it too, hidden behind the
+disagreements in the same programs.
+
+## The guards
+
+**Guard 4, monotone members** (`member_sensitive`, `sensitive_type`). The variance digest is a statement about
+marker arguments. For a member whose type uses the type parameters and `this` only in monotone positions (property
+types, function parameters and returns, unions, arrays, tuples, references to generic classes and interfaces, which
+both routes relate by the same variances) the markers' answer carries over to real arguments. The seven cases are
+all operators where it does not: they evaluate eagerly for real arguments and stay deferred for markers, or are not
+monotone in assignability. So an inherited member counts as related only if its declarations put no class /
+interface / signature type parameter and no `this` under keyof / unique, a conditional type, a mapped type, indexed
+access, a template literal type, an intersection, `infer`, a type query (`typeof this.x` always), or an intrinsic
+alias (`Uppercase`, `NoInfer`); type aliases are followed into their bodies with their parameters bound to the
+arguments that mention a variable. Declarations without a type annotation count as sensitive. Sensitive members are
+compared structurally like the members the derived type declares. Exception: a sensitive slot that is `any` or
+`unknown` in the target (a property's type, a method's return or parameter type; methods with one declaration, no
+type parameters, no `this` parameter) relates whatever the source is, so it stays covered. Guard 4 subsumes guard 3.
+
+**Guard 5, verified annotations** (`annotations_hold`). Before trusting variances that come from `in` / `out`, check
+them as `checkTypeParameterDeferred` does (marker instantiations related in the annotated direction), silently, with
+markers of its own (sharing the `*_for_check` markers left relation-cache entries that changed TS2636 elaborations).
+
+Also: member comparisons inside a decision now combine like the relater's (`result &= related`) and accept Maybe
+(recursion through `this` back to the pair being decided); requiring True made most decisions with structural members
+fall back.
+
+## Campaigns
+
+CAMPAIGN_TABLES
+
+## Real code
+
+`tools/fuzz/derived_variance_corpus.sh` (clone / install / run) pins 15 projects and type-checks 16 tsconfigs in
+shadow mode, with overrides for options TypeScript 7 removed (node10 resolution, ES5, baseUrl) and composite projects:
+
+CORPUS_TABLE
+
+## Cost on the 38k-file codebase
+
+BENCH_TABLE
+
+## Judgement
+
+JUDGEMENT

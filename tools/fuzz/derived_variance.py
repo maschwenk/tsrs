@@ -53,6 +53,12 @@ PRIM = ["string", "number", "boolean", "\"a\"", "\"b\"", "\"a\" | \"b\"", "1", "
 SPECIAL = ["any", "unknown", "never", "undefined", "null", "void", "string | undefined", "E", "E.A", "E.B", "S1",
            "typeof sym", "symbol", "Box<string>", "Box<any>", "Box<never>", "string[]", "readonly string[]",
            "[string]", "[string, number?]", "() => void", "(x: string) => void", "Function"]
+TUPLES = ["[]", "[string]", "[string?]", "[string, number?]", "[string, ...number[]]", "string[]", "unknown[]", "any[]",
+          "[void]", "[unknown]", "[x: string]", "[string | undefined]", "never[]", "any", "never",
+          "[string, number]", "[...string[], number]"]
+TUPLE_SUB = [("[string]", "[string?]"), ("[string]", "string[]"), ("[string, number]", "[string, number?]"), ("[]", "[string?]"),
+             ("[string?]", "unknown[]"), ("[void]", "[unknown]"), ("[string | undefined]", "[string?]"), ("[string]", "[string, ...number[]]"),
+             ("never[]", "string[]"), ("[string, ...number[]]", "unknown[]"), ("[...string[], number]", "unknown[]"), ("[]", "string[]")]
 STRINGY = ["string", "\"a\"", "\"b\"", "\"a\" | \"b\"", "`x${string}`", "any", "never", "Lowercase<string>",
            "string & {}", "S1", "\"a\" | \"c\""]
 
@@ -111,6 +117,8 @@ FEATURES = [
     ("template", "{n}: `p${{X & string}}`;", ""),
     ("uppercase", "{n}: Uppercase<X & string>;", ""),
     ("tuple", "{n}: [X, ...X[]];", ""),
+    ("rest_generic", "{n}(...a: X): void;", "r"),
+    ("rest_generic_fn", "{n}: (...a: X) => void;", "r"),
     ("tuple_opt", "{n}: readonly [X?];", ""),
     ("rest_param", "{n}(...a: X[]): void;", ""),
     ("rest_tuple", "{n}(...a: [X, string?]): void;", ""),
@@ -171,6 +179,8 @@ class Gen:
 
     def pick_args(self, constraint):
         r = self.r
+        if constraint == "array":
+            return r.choice(TUPLES)
         if constraint == "string":
             return r.choice(STRINGY)
         pool = r.choice([OBJ, PRIM, SPECIAL, OBJ, PRIM])
@@ -180,6 +190,12 @@ class Gen:
         """A (source argument, target argument) pair around the edges."""
         r = self.r
         k = r.random()
+        if constraint == "array":
+            if k < 0.6:
+                a, b = r.choice(TUPLE_SUB)
+                return (a, b) if r.random() < 0.7 else (b, a)
+            a = r.choice(TUPLES)
+            return a, (a if k < 0.75 else r.choice(TUPLES))
         if constraint == "string":
             a = r.choice(STRINGY)
             b = r.choice(STRINGY) if k < 0.5 else a
@@ -210,6 +226,9 @@ class Gen:
             if r.random() < 0.15:
                 c = "string"
                 text += " extends string"
+            elif r.random() < 0.15:
+                c = "array"
+                text += " extends unknown[]"
             if r.random() < 0.15:
                 text = r.choice(["in ", "out ", "in out "]) + text
             if r.random() < 0.2:
@@ -231,8 +250,12 @@ class Gen:
             n = self.name(fname)
             X = r.choice(params)
             Y = r.choice(params)
-            if constraints[X] == "string" and fname in ("cond_infer", "mapped_homo", "mapped_minus"):
-                pass
+            if "r" in flags:
+                arrays = [p for p in params if constraints[p] == "array"]
+                if arrays:
+                    X = r.choice(arrays)
+                else:
+                    fname, tmpl, flags = "rest_param", "{n}(...a: X[]): void;", ""
             P = ", ".join(params)
             PW = ", ".join(f"{p}[]" if constraints[p] is None else p for p in params)
             if fname == "this_indexed" and first is None:
@@ -310,7 +333,7 @@ class Gen:
             elif mode == "extra_param":
                 own = params + ["W"]
                 own_cons["W"] = None
-            own_decl = ", ".join(f"{p} extends string" if own_cons.get(p) == "string" else p for p in own)
+            own_decl = ", ".join(f"{p} extends string" if own_cons.get(p) == "string" else f"{p} extends unknown[]" if own_cons.get(p) == "array" else p for p in own)
             own_decl_full = f"<{own_decl}>" if own else ""
             extra = []
             nextra = r.randint(0, 3)
@@ -409,7 +432,7 @@ class Gen:
                 for j, p in enumerate(params):
                     g = f"G{j}"
                     h = f"H{j}"
-                    c = " extends string" if cons[p] == "string" else ""
+                    c = " extends string" if cons[p] == "string" else " extends unknown[]" if cons[p] == "array" else ""
                     gp.append(f"{g}{c}, {h} extends {g}")
                 for p in own:
                     j = params.index(p) if p in params else 0
