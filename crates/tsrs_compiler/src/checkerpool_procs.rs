@@ -144,33 +144,84 @@ fn warmup_files(program: &Program, files: &[P<SourceFile>], checked: &[bool], we
     }
 }
 
-// TSRS_CHECKER_PREASSIGN_IDS=1 (measurement): give every node and binder symbol of the program its id before the
-// fork, in program order, so children do not write ids into shared AST and binder pages.
-fn preassign_ids(files: &[P<SourceFile>]) -> usize {
-    fn walk(node: P<tsrs_ast::Node>, count: &mut usize) {
-        tsrs_ast::get_node_id(node);
-        *count += 1;
-        if let Some(symbol) = node.symbol() {
-            tsrs_ast::get_symbol_id(symbol);
+// Gives every node and binder symbol of the program its id before the fork, so the children do not write ids into
+// shared AST and binder pages (lazy ids were 70% of the arena pages children copied; notes/perf-checker-processes.md).
+// Deterministic: each file gets a range of node ids and of symbol ids (prefix sums of a counting pass) and assigns
+// them in tree order; a symbol belongs to the file of its first declaration. Runs on the worker pool, which is idle
+// again when this returns.
+fn preassign_ids(program: &Program, files: &[P<SourceFile>]) -> (u64, u64) {
+    use rayon::prelude::*;
+    fn owned(symbol: P<tsrs_ast::Symbol>, file: P<SourceFile>) -> bool {
+        tsrs_ast::symbol_id_unset(symbol)
+            && symbol.declarations().first().is_some_and(|&d| tsrs_ast::get_source_file_of_node(d) == Some(file))
+    }
+    // Visits the nodes of `file` in tree order with the symbols each one introduces.
+    fn walk(node: P<tsrs_ast::Node>, file: P<SourceFile>, on_node: &mut dyn FnMut(P<tsrs_ast::Node>), on_symbol: &mut dyn FnMut(P<tsrs_ast::Symbol>)) {
+        on_node(node);
+        if let Some(symbol) = node.symbol().filter(|&s| owned(s, file)) {
+            on_symbol(symbol);
         }
-        if let Some(symbol) = node.local_symbol() {
-            tsrs_ast::get_symbol_id(symbol);
+        if let Some(symbol) = node.local_symbol().filter(|&s| owned(s, file)) {
+            on_symbol(symbol);
         }
         if let Some(locals) = node.locals() {
             for symbol in locals.values() {
-                tsrs_ast::get_symbol_id(symbol);
+                if owned(symbol, file) {
+                    on_symbol(symbol);
+                }
             }
         }
         node.for_each_child(&mut |child| {
-            walk(child, count);
+            walk(child, file, on_node, on_symbol);
             false
         });
     }
-    let mut count = 0;
-    for &file in files {
-        walk(file.as_node(), &mut count);
+    let parallel = |f: &(dyn Fn(usize) -> (u64, u64) + Sync)| -> Vec<(u64, u64)> {
+        if program.single_threaded() {
+            (0..files.len()).map(f).collect()
+        } else {
+            crate::program::worker_pool().install(|| (0..files.len()).into_par_iter().map(f).collect())
+        }
+    };
+    let counts = parallel(&|i| {
+        let file = files[i];
+        let mut nodes = 0u64;
+        let mut seen: rustc_hash::FxHashSet<P<tsrs_ast::Symbol>> = rustc_hash::FxHashSet::default();
+        walk(file.as_node(), file, &mut |n| nodes += u64::from(tsrs_ast::node_id_unset(n)), &mut |s| {
+            seen.insert(s);
+        });
+        (nodes, seen.len() as u64)
+    });
+    let (total_nodes, total_symbols) = counts.iter().fold((0, 0), |a, c| (a.0 + c.0, a.1 + c.1));
+    let mut node_next = tsrs_ast::reserve_node_ids(total_nodes);
+    let mut symbol_next = tsrs_ast::reserve_symbol_ids(total_symbols);
+    let mut starts = Vec::with_capacity(files.len());
+    for &(nodes, symbols) in &counts {
+        starts.push((node_next, symbol_next));
+        node_next += nodes;
+        symbol_next += symbols;
     }
-    count
+    parallel(&|i| {
+        let file = files[i];
+        let (mut node_id, mut symbol_id) = starts[i];
+        walk(
+            file.as_node(),
+            file,
+            &mut |n| {
+                if tsrs_ast::set_node_id_if_unset(n, node_id) {
+                    node_id += 1;
+                }
+            },
+            &mut |s| {
+                if tsrs_ast::set_symbol_id_if_unset(s, symbol_id) {
+                    symbol_id += 1;
+                }
+            },
+        );
+        debug_assert_eq!((node_id, symbol_id), (starts[i].0 + counts[i].0, starts[i].1 + counts[i].1));
+        (0, 0)
+    });
+    (total_nodes, total_symbols)
 }
 
 fn put_u32(out: &mut Vec<u8>, v: u32) {
@@ -230,9 +281,9 @@ impl checkerPool {
         let warm_wall = start.elapsed().as_secs_f64();
         if std::env::var("TSRS_CHECKER_PREASSIGN_IDS").is_ok() {
             let t = std::time::Instant::now();
-            let nodes = preassign_ids(files);
+            let (nodes, symbols) = preassign_ids(program, files);
             if stats {
-                eprintln!("procs\tpre-assigned ids: {nodes} nodes walked in {:.3}s", t.elapsed().as_secs_f64());
+                eprintln!("procs\tpre-assigned ids: {nodes} nodes, {symbols} symbols in {:.3}s", t.elapsed().as_secs_f64());
             }
         }
         let hw_at_fork = tsrs_core::ptr::reserve_stats().map_or(0, |s| s.1);
@@ -270,6 +321,11 @@ impl checkerPool {
             #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
             if let Some(dir) = &write_trace {
                 tsrs_core::procs::writetrace::dump(&format!("{dir}/writes-{slice}.txt"));
+            }
+            #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+            if stats {
+                let (private, shared, resident) = tsrs_core::procs::writetrace::vm_breakdown();
+                eprintln!("procs\tvm child {slice}\tprivate {} MiB\tshared {} MiB\tresident {} MiB", private >> 20, shared >> 20, resident >> 20);
             }
             pause_point(&format!("child-{slice}"), true);
             let encode_file = |f: P<SourceFile>| *file_index.get(&f).expect("a diagnostic in a file of the program");
@@ -322,6 +378,11 @@ impl checkerPool {
                 }
                 parent_info.1 = parent_start.elapsed().as_secs_f64();
                 parent_info.2 = thread_cpu_seconds() - cpu;
+            }
+            #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+            if stats {
+                let (private, shared, resident) = tsrs_core::procs::writetrace::vm_breakdown();
+                eprintln!("procs\tvm parent\tprivate {} MiB\tshared {} MiB\tresident {} MiB", private >> 20, shared >> 20, resident >> 20);
             }
             pause_point("parent", false);
             (reader.join().expect("checker process reader"), parent_info)

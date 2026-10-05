@@ -59,6 +59,39 @@ fn assign_symbol_id(symbol: P<Symbol>) -> SymbolId {
     SymbolId(id as u64)
 }
 
+/// Process mode (notes/perf-checker-processes.md): reserves `count` consecutive node ids and returns the first, for
+/// `set_node_id_if_unset`. Ids taken this way are never handed out by `get_node_id`.
+pub fn reserve_node_ids(count: u64) -> u64 {
+    NEXT_NODE_ID.fetch_add(count, Ordering::Relaxed) + 1
+}
+
+/// Like `reserve_node_ids`, for symbol ids.
+pub fn reserve_symbol_ids(count: u64) -> u64 {
+    NEXT_SYMBOL_ID.fetch_add(count, Ordering::Relaxed) + 1
+}
+
+/// Whether the node has no id yet.
+pub fn node_id_unset(node: P<Node>) -> bool {
+    node.id.load(Ordering::Relaxed) == 0
+}
+
+/// Whether the symbol has no id yet.
+pub fn symbol_id_unset(symbol: P<Symbol>) -> bool {
+    symbol.id.load(Ordering::Relaxed) == 0
+}
+
+/// Gives the node `id` (from `reserve_node_ids`) unless it already has one; true if it took it.
+pub fn set_node_id_if_unset(node: P<Node>, id: u64) -> bool {
+    let id = u32::try_from(id).expect("more than u32::MAX node ids");
+    node.id.compare_exchange(0, id, Ordering::Relaxed, Ordering::Relaxed).is_ok()
+}
+
+/// Gives the symbol `id` (from `reserve_symbol_ids`) unless it already has one; true if it took it.
+pub fn set_symbol_id_if_unset(symbol: P<Symbol>, id: u64) -> bool {
+    let id = u32::try_from(id).expect("more than u32::MAX symbol ids");
+    symbol.id.compare_exchange(0, id, Ordering::Relaxed, Ordering::Relaxed).is_ok()
+}
+
 pub fn get_symbol_table(data: &Cell<Option<P<SymbolTable>>>) -> P<SymbolTable> {
     if let Some(table) = data.get() {
         return table;

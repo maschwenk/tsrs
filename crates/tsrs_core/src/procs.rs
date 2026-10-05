@@ -398,6 +398,44 @@ pub mod writetrace {
         i > 0 && addr < ranges[i - 1].1
     }
 
+    /// Physical memory of this process from its VM regions (macOS): (private, shared, resident) bytes. Private:
+    /// pages of private regions plus, in copy-on-write regions, the pages in the top object (written or
+    /// zero-filled after the fork); shared: resident pages found deeper in a shadow chain (still shared with the
+    /// parent). Submaps (the dyld shared cache) are skipped.
+    pub fn vm_breakdown() -> (u64, u64, u64) {
+        let mut addr: u64 = 0;
+        let (mut private, mut shared, mut resident) = (0u64, 0u64, 0u64);
+        loop {
+            let mut size: u64 = 0;
+            let mut depth: u32 = 0;
+            let mut info = SubmapInfo64::default();
+            let mut count: u32 = (std::mem::size_of::<SubmapInfo64>() / 4) as u32;
+            // SAFETY: valid out-pointers of the documented sizes.
+            #[expect(deprecated, reason = "measurement code; mach2 is not a dependency")]
+            let task = unsafe { libc::mach_task_self() };
+            // SAFETY: as above.
+            let kr = unsafe { mach_vm_region_recurse(task, &raw mut addr, &raw mut size, &raw mut depth, (&raw mut info).cast(), &raw mut count) };
+            if kr != 0 {
+                break;
+            }
+            let (is_submap, share_mode, res, snp) = (info.is_submap, info.share_mode, info.pages_resident, info.pages_shared_now_private);
+            if is_submap == 0 {
+                let page = PAGE as u64;
+                resident += res as u64 * page;
+                match share_mode {
+                    1 => {
+                        private += snp as u64 * page;
+                        shared += (res.saturating_sub(snp)) as u64 * page;
+                    }
+                    2 | 6 => private += res as u64 * page,
+                    _ => shared += res as u64 * page,
+                }
+            }
+            addr += size;
+        }
+        (private, shared, resident)
+    }
+
     /// Adds every read-write region with VM user tag `tag` (mimalloc's: 100) to the protected set.
     pub fn add_tagged_regions(tag: u32) -> usize {
         let mut addr: u64 = 0;
