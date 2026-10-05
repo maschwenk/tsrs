@@ -362,6 +362,45 @@ impl FlowMemo {
     }
 }
 
+/// Where a memo key is serialized: a `Vec`, or a stack buffer for the common short keys.
+pub(crate) trait KeySink {
+    fn reset(&mut self);
+    /// False when full.
+    fn put(&mut self, bytes: &[u8]) -> bool;
+}
+
+impl KeySink for Vec<u8> {
+    fn reset(&mut self) {
+        self.clear();
+    }
+
+    fn put(&mut self, bytes: &[u8]) -> bool {
+        self.extend_from_slice(bytes);
+        true
+    }
+}
+
+struct StackKey {
+    bytes: [u8; 128],
+    len: usize,
+}
+
+impl KeySink for StackKey {
+    fn reset(&mut self) {
+        self.len = 0;
+    }
+
+    #[inline]
+    fn put(&mut self, bytes: &[u8]) -> bool {
+        let Some(slot) = self.bytes.get_mut(self.len..self.len + bytes.len()) else {
+            return false;
+        };
+        slot.copy_from_slice(bytes);
+        self.len += bytes.len();
+        true
+    }
+}
+
 impl Default for FlowMemo {
     fn default() -> Self {
         FlowMemo::new()
@@ -468,22 +507,25 @@ impl Checker {
     }
 
     fn compute_hashed_flow_memo_key(&mut self, f: P<FlowState>) -> Option<u128> {
+        let mut key = StackKey { bytes: [0; 128], len: 0 };
+        if self.serialize_flow_memo_key(&mut key, f) {
+            return Some(xxhash_rust::xxh3::xxh3_128(&key.bytes[..key.len]) | 1 << 63);
+        }
+        // Not a key, or longer than the stack buffer.
         let mut buf = std::mem::take(&mut self.flow_memo.key_buf);
         let key = self.serialize_flow_memo_key(&mut buf, f).then(|| xxhash_rust::xxh3::xxh3_128(&buf) | 1 << 63);
         self.flow_memo.key_buf = buf;
         key
     }
 
-    /// The full key a hashed or packed memo key stands for (shadow mode compares these).
-    pub(crate) fn serialize_flow_memo_key(&self, buf: &mut Vec<u8>, f: P<FlowState>) -> bool {
-        buf.clear();
-        if !self.write_flow_memo_reference(buf, f.reference.get().unwrap()) {
-            return false;
-        }
-        buf.extend_from_slice(&f.declared_type.get().unwrap().id.0.to_le_bytes());
-        buf.extend_from_slice(&f.initial_type.get().unwrap().id.0.to_le_bytes());
-        buf.extend_from_slice(&(P::key_opt(f.flow_container.get()) as u64).to_le_bytes());
-        true
+    /// The full key a hashed or packed memo key stands for (shadow mode compares these). False if the reference has
+    /// no key or the sink is full.
+    pub(crate) fn serialize_flow_memo_key(&self, sink: &mut impl KeySink, f: P<FlowState>) -> bool {
+        sink.reset();
+        self.write_flow_memo_reference(sink, f.reference.get().unwrap())
+            && sink.put(&f.declared_type.get().unwrap().id.0.to_le_bytes())
+            && sink.put(&f.initial_type.get().unwrap().id.0.to_le_bytes())
+            && sink.put(&(P::key_opt(f.flow_container.get()) as u64).to_le_bytes())
     }
 
     /// The symbol an identifier reference resolved to, if it is cached (no side effects), and the identifier is not
@@ -496,29 +538,19 @@ impl Checker {
         Some(symbol)
     }
 
-    fn write_flow_memo_reference(&self, buf: &mut Vec<u8>, node: P<Node>) -> bool {
+    fn write_flow_memo_reference(&self, sink: &mut impl KeySink, node: P<Node>) -> bool {
         match node.kind() {
-            Kind::Identifier => {
-                let Some(symbol) = self.flow_memo_root_symbol(node) else {
-                    return false;
-                };
-                buf.push(b'I');
-                buf.extend_from_slice(&(symbol.key() as u64).to_le_bytes());
-                true
-            }
-            Kind::ThisKeyword => {
-                buf.push(b'T');
-                true
-            }
+            Kind::Identifier => match self.flow_memo_root_symbol(node) {
+                Some(symbol) => sink.put(b"I") && sink.put(&(symbol.key() as u64).to_le_bytes()),
+                None => false,
+            },
+            Kind::ThisKeyword => sink.put(b"T"),
             Kind::PropertyAccessExpression => {
-                if node.flags().intersects(NodeFlags::OptionalChain) || !self.write_flow_memo_reference(buf, node.expression().unwrap()) {
+                if node.flags().intersects(NodeFlags::OptionalChain) || !self.write_flow_memo_reference(sink, node.expression().unwrap()) {
                     return false;
                 }
                 let name = node.name().unwrap().text();
-                buf.push(b'P');
-                buf.extend_from_slice(&(name.len() as u32).to_le_bytes());
-                buf.extend_from_slice(name.as_bytes());
-                true
+                sink.put(b"P") && sink.put(&(name.len() as u32).to_le_bytes()) && sink.put(name.as_bytes())
             }
             _ => false,
         }
