@@ -73,7 +73,12 @@ medians:
 | webpack | 4 / 8 / 16 | 0.25 / 0.19 / 0.16 | 0.28 / 0.22 / 0.21 | +9 / +13 / +32% | | |
 | xstate | 4 / 8 / 16 | 0.17 / 0.12 / 0.10 | 0.18 / 0.16 / 0.18 | +6 / +27 / +74% | | |
 
-Processes balance just as well and do 15-27% fewer instructions on the 38k-file codebase, but they are not faster. On
+Linux (40k-error corpus, huge pages, 2 rounds): N = 8: threads 13.2 s / 477 G / 7.93 GiB, processes 13.9 s (+5.6%) /
+394 G / 6.90 GiB; N = 16: threads 10.2 s / 628 G / 10.80 GiB, processes 10.6 s (+4.3%) / 453 G / 8.19 GiB (process
+memory: summed PSS paused at the peak).
+
+Processes balance just as well, do 15-28% fewer instructions and use 1-2.6 GiB less memory on the large codebase, but
+they are not faster. On
 small and medium programs the warm-up, id pre-assignment and forks cost more than they save. They also cannot run in
 build mode, the language server, the API or on Windows, and they need a diagnostics wire format and the fork-safety
 rules. Threads with stealing win; the process back-end stays parked on `perf/checker-processes-queue`.
