@@ -156,3 +156,51 @@ impl<K: PackedKey + 'static, V: Copy + 'static> GoPackedMap<K, V> {
         self.0.get().map_or(0, |m| m.borrow().len())
     }
 }
+
+/// Go `c.stringLiteralTypes` (`map[string]*Type`): the literal types by their value. The key was a heap `String`
+/// copy of the text the literal type already holds in the arena; the table now stores only the type and compares
+/// its value (one 4-byte slot instead of a 32-byte `(String, P<Type>)` slot plus the copied text).
+#[derive(Default)]
+pub struct StringLiteralTypes {
+    table: hashbrown::HashTable<P<Type>>,
+}
+
+impl StringLiteralTypes {
+    #[inline]
+    fn hash(value: &str) -> u64 {
+        use std::hash::BuildHasher;
+        rustc_hash::FxBuildHasher.hash_one(value)
+    }
+
+    #[inline]
+    fn value_of(t: P<Type>) -> &'static str {
+        match t.as_literal_type().value() {
+            Some(LiteralValue::String(s)) => s,
+            _ => unreachable!("string literal cache entry without a string value"),
+        }
+    }
+
+    #[inline]
+    pub fn get(&self, value: &str) -> Option<P<Type>> {
+        self.table.find(Self::hash(value), |&t| Self::value_of(t) == value).copied()
+    }
+
+    /// Adds a string literal type whose value is not in the table yet.
+    pub fn insert_new(&mut self, t: P<Type>) {
+        let value = Self::value_of(t);
+        debug_assert!(self.get(value).is_none());
+        self.table.insert_unique(Self::hash(value), t, |&t| Self::hash(Self::value_of(t)));
+    }
+
+    pub fn len(&self) -> usize {
+        self.table.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.table.is_empty()
+    }
+
+    pub(crate) fn heap_stat(&self) -> crate::heapcensus::HeapStat {
+        crate::heapcensus::HeapStat::table(self.table.len(), self.table.capacity(), std::mem::size_of::<P<Type>>())
+    }
+}

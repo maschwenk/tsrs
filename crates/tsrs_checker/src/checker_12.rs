@@ -2260,10 +2260,10 @@ pub(crate) fn is_fresh_literal_type(t: P<Type>) -> bool {
 impl Checker {
     // checker.go:25775
     pub(crate) fn get_string_literal_type(&mut self, value: &str) -> P<Type> {
-        let mut t = self.string_literal_types.get(value).copied();
+        let mut t = self.string_literal_types.get(value);
         if t.is_none() {
             let literal = self.new_literal_type(TypeFlags::StringLiteral, Some(LiteralValue::String(alloc_str(value))), None);
-            self.string_literal_types.insert(value.to_string(), literal);
+            self.string_literal_types.insert_new(literal);
             t = Some(literal);
         }
         t.unwrap()
