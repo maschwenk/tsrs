@@ -106,8 +106,9 @@ leave it off too), the cast lints (the port has about 1,000 `as usize`), `print_
    one checker and the default: `/usr/bin/time -l` on macOS, `perf stat` on Linux. Wall time on a shared machine is
    noise. Write the result in `notes/`. (Bun: "Performance claims need numbers ... must not regress ANY measured case".)
 2. **Build settings are measurements, not defaults.** `[profile.dist]` (fat LTO, one codegen unit, PGO:
-   `notes/perf-pgo.md`), mimalloc, no explicit huge pages (`notes/linux-perf.md`), 32-bit handles
-   (`notes/mem-pointer-compression.md`). Change one only with a measurement. (Bun: "Never change optimization levels,
+   `notes/perf-pgo.md`), mimalloc, transparent huge pages for the arena on Linux (`notes/linux-perf.md`,
+   `notes/linux-x86-round.md`), 32-bit handles (`notes/mem-pointer-compression.md`). Change one only with a
+   measurement. (Bun: "Never change optimization levels,
    LTO modes, or tuning knobs assuming higher is better — existing settings encode prior measurements.")
 3. **Arena struct sizes are pinned.** A type with one instance per node, symbol, type, signature or link has
    `const _: () = assert!(std::mem::size_of::<T>() == N);` next to it. A change that edits `N` states the old and new
@@ -147,9 +148,11 @@ In place:
 | Generated-code freshness check | `tools/gen-check.sh` (CI job `generated-code`) re-runs the eight generators and fails on a diff; it found two hand edits the generators no longer reproduced | oxc, Ruff, rust-analyzer |
 | Differential parser fuzzing | `tools/fuzz/parser.py` mutates conformance files and compares the AST hashes of the Go and Rust oracles (`tools/oracle/ast`); the Depot `Fuzz` workflow runs 200,000 mutants nightly with a date seed. First 320,000 mutants: no divergence, no crash (inputs kept valid UTF-8; invalid UTF-8 is read lossily on purpose) | Ruff (`cargo fuzz` on its parser) |
 | Frame pointers for profiling | `docs/DEBUGGING.md` "Profiling": a `dist` build with `-C force-frame-pointers=yes` for samply / `perf` on Linux (Apple arm64 always keeps them) | Bun |
+| Transparent huge pages for the arena on Linux: large thread-arena chunks 2 MiB-aligned and advised with `MADV_HUGEPAGE` | `notes/linux-x86-round.md`: 2-6% less wall time, 21-48x fewer page faults; `notes/linux-perf.md`: THP off costs 11-12% | mimalloc (advises its own OS memory) |
 
-Measured and rejected (do not retry without new evidence): explicit huge pages, pre-faulting and mmap'd arena chunks
-(`notes/linux-perf.md`); global identifier interning (`notes/mem-round2.md`: parse +9% time); rolling back whole
+Measured and rejected (do not retry without new evidence): explicit huge pages on top of mimalloc's, pre-faulting and
+mmap'd arena chunks without advice (`notes/linux-perf.md`; the compressed arena's reservation is not mimalloc memory and
+needs the advice: `notes/linux-x86-round.md`); global identifier interning (`notes/mem-round2.md`: parse +9% time); rolling back whole
 regions of speculative work (`notes/mem-overload-rollback.md`); bump regions per inference scope
 (`notes/mem-scoped-arenas.md`: 25 to 50% of scopes keep something reachable). Restructuring generic
 callbacks to cut monomorphization (`notes/monomorphization-audit.md`: closures are 3.6% of the checker's LLVM IR, the

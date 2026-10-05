@@ -313,6 +313,28 @@ would be "reached" by integers and the violation count would be noise unless eve
 scalar fields; the packed words would also need handle-specific decoders (`to_bits` byte offsets in mappers and
 value-symbol links, `pack` in headers). The precise walk (`TSRS_CENSUS_VERIFY`) uses `addr()` and would work.
 
+## 6. x86-64, both builds on transparent huge pages
+
+The first x86-64 measurements (Intel Xeon 8259CL; `dist` +4.4% wall with four checkers, `--release` +6.6%, and the
+zero-based-handles branch's +3-8%) were confounded: the reservation never asked for transparent huge pages, so on a
+THP `madvise` host the compressed arena ran on 4 KiB pages, while `plain-ptrs` builds take their arena chunks from
+mimalloc, which advises its memory. With the reservation's thread-arena chunks 2 MiB-aligned and advised
+(notes/linux-x86-round.md), the 38k-file codebase (40,543 errors), `dist` profile without PGO, 5 interleaved rounds,
+compressed against `plain-ptrs` at the same commit, paired per round (host A: Xeon 8259CL; host B: Xeon 8375C, noisier):
+
+| host, checkers | wall | cycles | instructions | max RSS |
+| --- | --- | --- | --- | --- |
+| A, 1 | +0.6% (+0.1..+4.3) | +0.9% (-0.1..+3.4) | +6.5% | -15.7% |
+| A, 4 | +1.4% (-0.5..+9.2) | +2.6% (+1.3..+6.1) | +6.6% | -15.0% |
+| A, 8 | -0.9% (-1.2..+3.3) | +1.4% (-0.8..+3.5) | +6.6% | -14.6% |
+| B, 1 | +7.2% (-7.0..+28.0) | +6.0% (-5.1..+10.6) | +6.6% | -15.4% |
+| B, 4 | +1.3% (-2.0..+12.6) | +0.8% (-1.9..+9.1) | +6.6% | -14.8% |
+| B, 8 | +2.2% (-6.7..+4.4) | +0.3% (-2.9..+1.9) | +6.8% | -14.5% |
+
+So on x86-64 the handles cost about 1% of wall time and 1-3% of cycles for 15% less memory: the 6.5% extra
+instructions are mostly register moves and shifts that retire cheaply, and the smaller working set pays for part of
+them.
+
 ## Not done
 
 - Instructions below +2% on arm64 (section 5: what is left is one `add` per pointer chase).
