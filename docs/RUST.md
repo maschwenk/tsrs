@@ -160,7 +160,12 @@ largest tsrs generic `filter_type` 1.1%, on a hot path). A target CPU above the 
 (`notes/linux-x86-round.md`: `x86-64-v3` takes 1-2% more cycles, `v2` changes nothing). PGO hot/cold text grouping
 (`-z keep-text-section-prefix`; `notes/perf-probes-2026-10-05.md`: about 0.5% more cycles on every project).
 Identifiers that carry their hash (same note: all Fx hashing is 0.7-1.4% of instructions, not worth a hash field on
-every name).
+every name). Build-level options on top of PGO (`notes/perf-build-level.md`, Linux x86-64): text on 2 MiB pages (BOLT
+`-hugify`; instruction page walks are 1.2-1.5% of cycles and it gains nothing measurable over BOLT alone);
+`panic = "abort"` (every such build segfaults in the arena's free list, see that note; it would also need a CLI-only
+binary); mimalloc v2, jemalloc and glibc malloc instead of mimalloc v3 (3-14% slower, 3-7% less peak memory);
+`opt-level = "s"` for the language-server, API and emit crates (`.text` -6%, speed unchanged); adding vscode at eight
+checkers to the PGO training (-3% instructions, cycles unchanged).
 
 Not tried. Each needs a measurement and a note before it is adopted; none is applied yet:
 
@@ -169,9 +174,7 @@ Not tried. Each needs a measurement and a note before it is adopted; none is app
 | Allocation-count snapshot gate | oxc `tasks/track_memory_allocations` (`cargo allocs`, then `git diff --exit-code` in CI), Rolldown | A stray heap allocation on a hot path becomes a diff in a checked-in snapshot. Counts are exact on one thread. | A fixed corpus, one checker, the counting allocator behind `alloc-profile`. |
 | Miri on `tsrs_core` | oxc (strict provenance, allocator and AST crates), rust-analyzer (`intern`), Bun (tree borrows, 17 crates) | Soundness of the handle and arena code, where a third of the `unsafe` is. | Nightly; the unit tests must run on the system allocator. |
 | Conformance with `debug-assertions` and `overflow-checks` in an optimized profile | oxc `[profile.coverage]` | Overflow and failed debug assertions that release builds skip. | A profile and a second conformance run. |
-| `panic = "abort"` | oxc, swc, Bun | No landing pads: smaller, slightly faster code. | A CLI-only binary or profile: the LSP, the API and the test runner use `catch_unwind`. |
-| Post-link layout: BOLT, or a symbol order file | Bun (order file from a function-entry trace) | Fewer instruction-cache and TLB misses on top of PGO. | Linux only for BOLT. |
-| Allocator comparison and options | Ruff (jemalloc on Unix), oxc and Rolldown (mimalloc `skip_collect_on_exit`) | Unknown; mimalloc was never compared here. | Same build, allocator swapped. |
+| A symbol order file at link time | Bun (order file from a function-entry trace) | Part of BOLT's gain without a post-link step, on every platform. | A function-entry trace and `-Wl,--symbol-ordering-file` / `-order_file`. |
 | Arena-backed temporaries | oxc (arena `Vec` and `HashMap`), Bun (hashbrown on its arenas through `allocator-api2`, the stable stand-in for the nightly `Allocator` API) | Scratch vectors and maps skip malloc and free. | A scratch allocator whose reset point is provable; scope regions were rejected (above), so per-call scratch is the experiment. |
 | Inline small vectors | `smallvec` in oxc, Rolldown, Ruff, Bun | No heap allocation for short temporaries. | An allocation profile showing which temporaries are short. |
 | Call-graph lints | mordant, used by Bun with a per-file baseline, advisory there | `forbidden_reach` ("nothing reachable from this function may allocate"), `generic_body_not_generic` (code compiled again per type for no reason). | A nightly with `rustc-dev` that compiles the workspace. |
