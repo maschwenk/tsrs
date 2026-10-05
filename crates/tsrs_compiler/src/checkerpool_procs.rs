@@ -180,6 +180,7 @@ impl checkerPool {
         let stats = stats_enabled();
         let start = std::time::Instant::now();
         let mut guard = state.checkers[0].0.lock().unwrap();
+        let hw_before_warmup = tsrs_core::ptr::reserve_stats().map_or(0, |s| s.1);
 
         let checked: Vec<bool> = files.iter().map(|&f| !program.skip_type_checking(f, false)).collect();
         let weights = crate::checkerpool::checked_file_weights(program);
@@ -198,6 +199,10 @@ impl checkerPool {
         }
         let warm_cpu = thread_cpu_seconds() - warm_cpu;
         let warm_wall = start.elapsed().as_secs_f64();
+        let hw_at_fork = tsrs_core::ptr::reserve_stats().map_or(0, |s| s.1);
+        if stats {
+            eprintln!("procs\tarena high water: before warm-up {:#x}, at fork {:#x}", hw_before_warmup, hw_at_fork);
+        }
         let base_counts = counts_of(&guard);
         let file_index: FxHashMap<P<SourceFile>, u32> = files.iter().enumerate().map(|(i, &f)| (f, i as u32)).collect();
 
