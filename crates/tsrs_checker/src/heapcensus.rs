@@ -136,7 +136,72 @@ macro_rules! rows {
     };
 }
 
+/// A symbol table as a census row: entries, entry capacity, heap bytes.
+#[cfg(feature = "assignment-stats")]
+fn symbol_table_stat(t: P<SymbolTable>) -> HeapStat {
+    let (len, cap, bytes) = t.heap_usage();
+    HeapStat { containers: 1, len: len as u64, cap: cap as u64, slot: 8, bytes: bytes as u64 }
+}
+
 impl Checker {
+    /// `--features assignment-stats` only (it records every type the checker creates): the containers owned by this
+    /// checker's types: resolved member tables (with a histogram of their sizes and the unused capacity), union and
+    /// intersection property caches, reference instantiation tables, conditional-root instantiation maps.
+    #[cfg(feature = "assignment-stats")]
+    fn heap_census_objects(&self, h: &mut HeapCensus) {
+        let mut members = HeapStat::default();
+        let mut by_len = [HeapStat::default(); 7]; // 0-1, 2, 3-4, 5-8, 9-16, 17-64, more
+        let mut prop_caches = HeapStat::default();
+        let mut references = HeapStat::default();
+        let mut roots = HeapStat::default();
+        let mut seen_roots: FxHashSet<P<ConditionalRoot>> = FxHashSet::default();
+        let mut seen_tables: FxHashSet<P<SymbolTable>> = FxHashSet::default();
+        for &t in &self.stats_created.0 {
+            if let Some(st) = t.try_as_structured_type() {
+                if let Some(m) = st.members().filter(|&m| seen_tables.insert(m)) {
+                    let s = symbol_table_stat(m);
+                    members.add(s);
+                    let bucket = match s.len {
+                        0..=1 => 0,
+                        2 => 1,
+                        3..=4 => 2,
+                        5..=8 => 3,
+                        9..=16 => 4,
+                        17..=64 => 5,
+                        _ => 6,
+                    };
+                    by_len[bucket].add(s);
+                }
+            }
+            if let Some(u) = t.try_as_union_or_intersection_type() {
+                for skip in [false, true] {
+                    if let Some(m) = u.property_cache(skip).filter(|&m| seen_tables.insert(m)) {
+                        prop_caches.add(symbol_table_stat(m));
+                    }
+                }
+            }
+            if let Some(i) = t.try_as_interface_type() {
+                if let Some(s) = i.instantiations.heap_stat() {
+                    references.add(s);
+                }
+            }
+            if t.flags().intersects(TypeFlags::Conditional) {
+                if let Some(root) = t.as_conditional_type().root.get().filter(|&r| seen_roots.insert(r)) {
+                    if let Some(s) = root.instantiations.heap_stat() {
+                        roots.add(s);
+                    }
+                }
+            }
+        }
+        h.row("objects: resolved member tables of created types", members);
+        for (i, name) in ["0-1", "2", "3-4", "5-8", "9-16", "17-64", ">64"].iter().enumerate() {
+            h.row(&format!("objects: resolved member tables with {name} entries"), by_len[i]);
+        }
+        h.row("objects: union/intersection property caches", prop_caches);
+        h.row("objects: reference instantiation tables", references);
+        h.row("objects: conditional-root instantiation maps", roots);
+    }
+
     pub fn heap_census_enabled() -> bool {
         heap_census_enabled()
     }
@@ -226,6 +291,8 @@ impl Checker {
             inner.add(index.heap_stat());
         }
         h.row("exports_by_target_index (inner maps and lists)", inner);
+        #[cfg(feature = "assignment-stats")]
+        self.heap_census_objects(&mut h);
         h.row("flow_memo", self.flow_memo.heap_stat());
         h.row("module_export_index", self.module_export_index.heap_stat());
         h
