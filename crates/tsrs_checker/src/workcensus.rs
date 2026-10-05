@@ -158,6 +158,9 @@ pub struct Census {
     pub flow_sampled_invocations: u64,
     /// typeRelatedToSomeType outcomes: (source kind, key property state, exit) -> count, constituents tried, time.
     pub rel_union: FxHashMap<(u8, u8, u8), Stat>,
+    /// typeRelatedToSomeType loops: (union size bucket, 0 late success / 1 late success an index would find / 2 no
+    /// success) -> calls, failed checks, of which cache hits, time in failed checks.
+    pub rel_union_late: FxHashMap<(u8, u8), Stat>,
     /// The callee of the innermost resolveCall (for checkExpressionWithContextualType).
     pub call_stack: Vec<Option<P<Node>>>,
     pub file_cpu: f64,
@@ -206,6 +209,7 @@ impl Census {
             flow_sampled_invocations: 0,
             call_stack: Vec::new(),
             rel_union: FxHashMap::default(),
+            rel_union_late: FxHashMap::default(),
             file_cpu: 0.0,
             file_wall_ns: 0,
         });
@@ -476,6 +480,7 @@ struct Global {
     flow_sampled_repeats: u64,
     flow_sampled_invocations: u64,
     rel_union: FxHashMap<(u8, u8, u8), Stat>,
+    rel_union_late: FxHashMap<(u8, u8), Stat>,
 }
 
 static GLOBAL: Mutex<Option<Global>> = Mutex::new(None);
@@ -562,6 +567,10 @@ impl Checker {
         }
         for (i, s) in c.flow_hist.iter().enumerate() {
             add_stat(&mut g.flow_hist[i], s);
+        }
+        let rl: Vec<((u8, u8), Stat)> = c.rel_union_late.iter().map(|(k, v)| (*k, *v)).collect();
+        for (k, s) in rl {
+            add_stat(g.rel_union_late.entry(k).or_default(), &s);
         }
         let ru: Vec<((u8, u8, u8), Stat)> = c.rel_union.iter().map(|(k, v)| (*k, *v)).collect();
         for (k, s) in ru {
@@ -737,6 +746,14 @@ pub fn census_report() {
     let _ = writeln!(out, "| source | key map | exit | calls | constituents tried | incl ms | incl % |\n| --- | --- | --- | --- | --- | --- | --- |");
     for ((sk, km, ex), s) in ru.iter().take(60) {
         let _ = writeln!(out, "| {sk} | {km} | {ex} | {} | {} | {:.1} | {:.2} |", s.count, s.a, ms(s.key_incl_ns), pct(s.key_incl_ns));
+    }
+    let mut rl: Vec<(&(u8, u8), &Stat)> = g.rel_union_late.iter().collect();
+    rl.sort_by_key(|(k, _)| **k);
+    let _ = writeln!(out, "\n## typeRelatedToSomeType constituent loop: failed checks before the related one\n");
+    let _ = writeln!(out, "| union size | outcome | calls | failed checks | of which cache hits | ms in failed checks | % |\n| --- | --- | --- | --- | --- | --- | --- |");
+    for ((b, kind), s) in rl {
+        let what = match kind { 0 => "related later, no single-property index", 1 => "related later, a property index excludes all earlier", _ => "none related" };
+        let _ = writeln!(out, "| {} | {what} | {} | {} | {} | {:.1} | {:.2} |", bucket_label(*b as u32), s.count, s.a, s.b, ms(s.incl_ns), pct(s.incl_ns));
     }
     std::fs::write(path, out).expect("TSRS_WORK_CENSUS");
 }

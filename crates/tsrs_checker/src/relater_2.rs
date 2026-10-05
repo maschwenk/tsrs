@@ -635,12 +635,71 @@ impl Relater {
             }
         }
         outcome.0 = 3;
-        for &t in target_types {
+        let census_on = c.census.is_some();
+        let mut fail_ns = 0u64;
+        let mut fail_cached = 0u64;
+        for (i, &t) in target_types.iter().enumerate() {
             outcome.2 += 1;
+            let (t0, cached) = if census_on {
+                let (id, _) = get_relation_key(c, source, t, intersection_state, false, false);
+                (c.census.as_ref().unwrap().now_ns(), self.rel().lookup(id) != RelationComparisonResult::None)
+            } else {
+                (0, false)
+            };
             let related = self.is_related_to_ex(c, source, t, RecursionFlags::Target, false /*reportErrors*/, None /*headMessage*/, intersection_state);
+            if census_on && related == Ternary::False {
+                fail_ns += c.census.as_ref().unwrap().now_ns() - t0;
+                fail_cached += cached as u64;
+            }
             if related != Ternary::False {
+                if census_on && i > 0 {
+                    // Would an index on one of the source's unit-typed properties have excluded every constituent tried
+                    // before this one? (census only; the lookups below may resolve members early)
+                    let mut indexable = false;
+                    if source.flags().intersects(TypeFlags::Object | TypeFlags::Intersection) {
+                        let props = c.get_properties_of_type(source);
+                        for &p in props {
+                            let pt = c.get_type_of_symbol(p);
+                            if !is_unit_type(pt) {
+                                continue;
+                            }
+                            let mut all = true;
+                            for &tj in &target_types[..i] {
+                                let excluded = tj.flags().intersects(TypeFlags::Object | TypeFlags::Intersection)
+                                    && c.get_property_of_type(tj, p.name()).is_some_and(|q| {
+                                        let qt = c.get_type_of_symbol(q);
+                                        is_unit_type(qt) && !c.is_type_assignable_to(pt, qt)
+                                    });
+                                if !excluded {
+                                    all = false;
+                                    break;
+                                }
+                            }
+                            if all {
+                                indexable = true;
+                                break;
+                            }
+                        }
+                    }
+                    let n = target_types.len();
+                    let census = c.census.as_mut().unwrap();
+                    let s = census.rel_union_late.entry((crate::workcensus::bucket(n) as u8, indexable as u8)).or_default();
+                    s.count += 1;
+                    s.a += i as u64;
+                    s.b += fail_cached;
+                    s.incl_ns += fail_ns;
+                }
                 return related;
             }
+        }
+        if census_on {
+            let n = target_types.len();
+            let census = c.census.as_mut().unwrap();
+            let s = census.rel_union_late.entry((crate::workcensus::bucket(n) as u8, 2)).or_default();
+            s.count += 1;
+            s.a += target_types.len() as u64;
+            s.b += fail_cached;
+            s.incl_ns += fail_ns;
         }
         if report_errors {
             // Elaborate only if we can find a best matching type in the target union
