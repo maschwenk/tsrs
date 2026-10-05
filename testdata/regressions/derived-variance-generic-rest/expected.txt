@@ -1,0 +1,5 @@
+a.ts(11,14): error TS2322: Type 'D<never[]>' is not assignable to type 'B<any>'.
+  Types of property 'f' are incompatible.
+    Type '(...a: never[]) => void' is not assignable to type '(...a: any) => void'.
+      Types of parameters 'a' and 'a' are incompatible.
+        Type 'any' is not assignable to type 'never'.
