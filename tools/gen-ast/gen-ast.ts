@@ -518,7 +518,7 @@ function genNewFactory(node: NodeType) {
 
 function diffExpr(ty: string, a: string, b: string): string {
     if (ty.startsWith("&'static [")) return `!same_slice(${a}, ${b})`;
-    if (ty === "&'static dyn Any") return `!std::ptr::addr_eq(${a} as *const dyn Any, ${b} as *const dyn Any)`;
+    if (ty === "&'static dyn Any") return `!std::ptr::addr_eq(std::ptr::from_ref::<dyn Any>(${a}), std::ptr::from_ref::<dyn Any>(${b}))`;
     return `${a} != ${b}`;
 }
 
