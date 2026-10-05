@@ -220,7 +220,8 @@ impl Checker {
     }
 
     /// One node of `getTypeAtFlowNode`'s loop: the node passes the type on (`Next`) or determines it (`Done`).
-    #[inline]
+    #[expect(clippy::inline_always, reason = "out of line it costs a call per flow node: +0.17% check instructions on xstate (notes/perf-flow-union-inference.md)")]
+    #[inline(always)]
     fn get_type_at_flow_node_step(&mut self, f: P<FlowState>, flow: P<FlowNode>, flags: FlowFlags) -> FlowStep {
         let t: FlowType;
         if flags.intersects(FlowFlags::Assignment) {
