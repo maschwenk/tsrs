@@ -178,6 +178,20 @@ default mode must not lose passes either. Conformance with the flag on: no outpu
 `.types`, `.symbols`). The private monorepo, medians of 3 (flag off -> on): single-threaded peak 15.34 -> 11.77 GB, check
 26.3 -> 22.9 s; 4 checkers peak 23.32 -> 17.49 GB, check 13.2 -> 11.1 s. Details: `notes/lazy-members.md`.
 
+## 2026-10-05: diagnostics no longer depend on the checker assignment
+
+On the 40k-error corpus, tsgo and tsrs printed different text for `--checkers 1, 2, 4, 8, 12, 16`: four distinct
+outputs, 2-6 lines each. The cause is one tsgo cache. `getUndefinedProperty` keeps the filled-in `x?: undefined` of
+widened object literals per name, with the declaration of the first `x` a checker saw, and properties are sorted by
+declaration. By default tsrs keys it by the property it stands for (one line; `upstream/determinism-undefined-property.md`).
+Output is then a function of the program alone: identical for N = 1-16 x 20 random assignments
+(`TSRS_CHECKER_ASSIGNMENT=random:<seed>`) on the error-rich corpora, and for conformance run with 4 checkers per test
+and random assignments. `--checkerAssignment go` keeps tsgo's cache; the conformance, fourslash and tsc harnesses run
+that way, so their counts are unchanged (13,458 / 12,779 / 12,779). In the default mode one test differs from tsgo by
+design (`objectLiteralNormalization` `.types` / `.symbols` / `.js`), as do 8 of the private monorepo's 2,460
+declaration files and 8 of vscode's 9,399. The 2026-10-01 entry below said the assignment cannot change any file's
+diagnostics: that was not true for this cache before this change. Details: notes/perf-order-independence.md.
+
 ## 2026-10-01: checker assignment by locality (multi-checker memory)
 
 Files are now assigned to checkers by directory locality (`--checkerAssignment locality`, the default;

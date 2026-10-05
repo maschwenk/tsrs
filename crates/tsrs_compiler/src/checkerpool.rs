@@ -619,9 +619,9 @@ impl checkerPool {
 
     // checkerpool.go:476
     // forEachCheckerGroupDo runs one task per checker in parallel. Each task iterates the provided files,
-    // processing only those assigned to its checker. Within each checker's set, files are
-    // visited in their original order (load-bearing: another order can change the property order of
-    // types printed in messages, notes/perf-balance.md).
+    // processing only those assigned to its checker. Within each checker's set, files are visited in their original
+    // order (`visit_order`). Output does not depend on it in the default mode (notes/perf-order-independence.md); it
+    // keeps Go's history under `--checkerAssignment go` and the counters stable.
     pub(crate) fn for_each_checker_group_do(
         &self,
         files: &[P<SourceFile>],
