@@ -212,6 +212,14 @@ def summarize(runs: list[dict]) -> dict:
     return s
 
 
+def rustc_version() -> str | None:
+    """`rustc -V` in the checkout: the toolchain rust-toolchain.toml pins, which the bench workflow builds with."""
+    try:
+        return subprocess.run(["rustc", "-V"], capture_output=True, text=True, cwd=REPO, check=True).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return None
+
+
 def machine_info(local: bool, label: str | None) -> dict:
     info = {"platform": f"{platform.system()} {platform.machine()}", "cpus": os.cpu_count()}
     if sys.platform == "darwin":
@@ -407,7 +415,7 @@ def main() -> None:
     result: dict = {
         "date": now.strftime("%Y-%m-%d %H:%M UTC"),
         "machine": machine_info(args.local, args.label),
-        "tsrs": {"commit": commit, "dirty": dirty, "version": tsrs_version, "build": args.tsrs_build},
+        "tsrs": {"commit": commit, "dirty": dirty, "version": tsrs_version, "build": args.tsrs_build, "rustc": rustc_version()},
         "tsgo": {"version": cfg["tsgo"]["version"], "binary": str(tsgo).replace(str(Path.home()), "~")},
         "suite": cfg["suite"],
         "reference": ref_cfg,

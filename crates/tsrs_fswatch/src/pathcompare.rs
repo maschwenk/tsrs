@@ -60,6 +60,7 @@ impl pathComparer {
 
     // pathcompare.go:56
     // suffix returns the part of path below root, respecting directory boundaries.
+    #[cfg(test)] // only contains and tests call it, in Go too
     pub(crate) fn suffix(self, root: &str, path: &str) -> Option<String> {
         let mut p = comparisonPath::new(path);
         self.suffix_prepared(&comparisonPath::new(root), &mut p)
@@ -119,6 +120,7 @@ impl pathComparer {
     }
 
     // pathcompare.go:166
+    #[cfg(test)] // only tests call it, in Go too
     pub(crate) fn contains(self, root: &str, path: &str) -> bool {
         self.suffix(root, path).is_some()
     }

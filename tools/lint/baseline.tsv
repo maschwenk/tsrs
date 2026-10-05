@@ -1,7 +1,6 @@
 # Lint ratchet baseline: findings that predate the ratchet, as count<TAB>lint<TAB>file.
 # Written by `tools/lint/ratchet.py --update` with clippy from Rust 1.99.0. Counts only go down; never edit by hand.
 3	clippy::iter_over_hash_type	crates/tsrs_api/src/requestfs.rs
-1	clippy::iter_over_hash_type	crates/tsrs_fswatch/src/event.rs
 12	clippy::iter_over_hash_type	crates/tsrs_ls/src/autoimport/registry.rs
 4	clippy::iter_over_hash_type	crates/tsrs_project/src/configfileregistrybuilder.rs
 1	clippy::iter_over_hash_type	crates/tsrs_project/src/overlayfs.rs
@@ -11,9 +10,6 @@
 1	clippy::iter_over_hash_type	crates/tsrs_projectutil/src/dirty/map.rs
 1	clippy::iter_over_hash_type	crates/tsrs_projectutil/src/dirty/syncmap.rs
 1	clippy::needless_pass_by_value	crates/tsrs_compiler/src/program_emit.rs
-1	clippy::needless_pass_by_value	crates/tsrs_fswatch/src/fsevents_darwin.rs
-1	clippy::needless_pass_by_value	crates/tsrs_fswatch/src/fsevents_darwin_ffi.rs
-1	clippy::needless_pass_by_value	crates/tsrs_fswatch/src/watcher.rs
 1	clippy::needless_pass_by_value	crates/tsrs_ls/src/autoimport/registry.rs
 1	clippy::needless_pass_by_value	crates/tsrs_ls/src/callhierarchy.rs
 2	clippy::needless_pass_by_value	crates/tsrs_ls/src/crossproject.rs
@@ -59,11 +55,6 @@
 2	dead_code	crates/tsrs_compiler/src/fileloader.rs
 2	dead_code	crates/tsrs_core/src/jsnum/jsnum.rs
 2	dead_code	crates/tsrs_core/src/semver/version.rs
-2	dead_code	crates/tsrs_fswatch/src/event.rs
-7	dead_code	crates/tsrs_fswatch/src/fsevents_darwin.rs
-1	dead_code	crates/tsrs_fswatch/src/inotify_linux.rs
-1	dead_code	crates/tsrs_fswatch/src/pathcompare.rs
-7	dead_code	crates/tsrs_fswatch/src/watcher.rs
 1	dead_code	crates/tsrs_incremental/src/referencemap.rs
 1	dead_code	crates/tsrs_ls/src/autoimport/import_adder.rs
 2	dead_code	crates/tsrs_ls/src/autoimport/registry.rs
@@ -125,7 +116,6 @@
 1	unused_imports	crates/tsrs_ls/src/string_completions.rs
 1	unused_imports	crates/tsrs_project/src/snapshot.rs
 1	unused_mut	crates/tsrs_checker/src/checker_12.rs
-2	unused_mut	crates/tsrs_fswatch/src/watcher.rs
 1	unused_variables	crates/tsrs_ast/src/utilities_3.rs
 2	unused_variables	crates/tsrs_checker/src/checker_10.rs
 1	unused_variables	crates/tsrs_checker/src/checker_12.rs

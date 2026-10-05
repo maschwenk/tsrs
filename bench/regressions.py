@@ -8,6 +8,8 @@ Compares each project's single-threaded instruction count and peak RSS (bench/co
 with the newest earlier result in bench/results from the same runner label and build. The instruction count repeats
 to about 0.001% and peak RSS to under 0.4%, so a change past the thresholds below is the code's; only a different CPU
 model or C library (which pick different memcpy-style routines) can move them otherwise, and then nothing is judged.
+A different Rust compiler (a rust-toolchain.toml bump) moves them too: the table is printed as the upgrade's
+measurement, and nothing is flagged.
 Regressions are printed as warnings and, with --comment, posted as a comment on each pull request merged since the
 previous run (or on the commit when there is none). This script never fails the job.
 """
@@ -68,6 +70,12 @@ def machine_difference(old, new):
         if a != b:
             return f"{key} differs ({a!r} -> {b!r})"
     return None
+
+
+def compiler_difference(old, new):
+    """The rustc change between the two runs, or None (bench/run.py records `rustc -V`)."""
+    a, b = old.get(TOOL, {}).get("rustc"), new.get(TOOL, {}).get("rustc")
+    return None if a == b else f"{a or 'unrecorded'} -> {b or 'unrecorded'}"
 
 
 def compare(old, new, metrics=METRICS):
@@ -150,10 +158,13 @@ def main(argv):
     metrics = [dict(m, percent=args.threshold) if m["key"] == "instructions" and args.threshold is not None else m
                for m in METRICS]
     rows = compare(old, new, metrics)
-    regressions = [r for r in rows if r[5] == "regression"]
+    compiler = compiler_difference(old, new)
+    regressions = [r for r in rows if r[5] == "regression"] if not compiler else []
     rules = "; ".join(f"{m['label']} up more than {m['percent']:g}%" + (f" and {m['floor'] / m['unit']:g} {m['suffix']}"
                                                                         if m["floor"] else "") for m in metrics)
-    summary = (f"Bench, {WHAT}, {old_commit[:12]} -> {new_commit[:12]} (regression: {rules})\n\n" + table(rows) + "\n")
+    judged = (f"rustc changed, {compiler}: the changes measure the compiler, nothing is flagged" if compiler else
+              f"regression: {rules}")
+    summary = (f"Bench, {WHAT}, {old_commit[:12]} -> {new_commit[:12]} ({judged})\n\n" + table(rows) + "\n")
     print(summary)
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
