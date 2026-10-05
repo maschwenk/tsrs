@@ -75,6 +75,21 @@ builds); the tsserver/LSP/startup scenarios (not `tsc` runs). All six included p
   (vscode 359 vs 371, webpack 848 vs 840: tsrs's lists equal the nightly's line for line). When the port moves to a
   newer TypeScript commit, update `reference` to the nightly built from it (the harness warns when they differ).
 
+## Regression flag
+
+Wall time on a shared VM moves 2-4% between runs with no code change (2026-10-04, 64 runs: the tsrs/tsgo ratio moved
+2.0% run to run at the median, and a README-only commit showed a 3.4% step), so it cannot show a small regression. Each
+run therefore also counts the user-space instructions of one single-threaded tsrs type check per project
+(`bench/count.py`, Linux `perf_event_open`; untimed, after the timed runs; `--singleThreaded` and
+`RAYON_NUM_THREADS=1`). That count repeats to about 0.001% (five runs on the bench machine: 0.0000-0.0005% spread),
+so any change in it comes from the code. tsgo is not counted: the Go runtime makes its count vary 2-4%.
+
+`bench/regressions.py --latest` compares the counts with the newest earlier result from the same runner label and
+build, and only when the CPU model and C library match (they pick different `memcpy`-style routines). A project up
+more than 1% is a regression: the step prints a warning and comments on the pull request merged in between, or, when
+the run covers more than three merges, on the commit. It never fails the job; a deliberate trade (memory for CPU, say)
+needs no action. Results store the count under `projects.<name>.single.tsrs.instructions`.
+
 ## CI
 
 The benchmark is a [Depot CI](https://depot.dev/docs/ci/overview) workflow, `.depot/workflows/bench.yml` (this

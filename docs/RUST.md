@@ -108,6 +108,7 @@ In place:
 | Fx hashing everywhere | `notes/perf-checker-cpu2.md` | oxc, Rolldown, Ruff, rust-analyzer |
 | Lazy members, line maps and rare-field tails | `notes/lazy-members.md`, `notes/mem-lazy.md` | |
 | `#[cold]` slow-path splits | `notes/perf-parse.md` changes 6 to 8: parse instructions 16.66 G -> 15.07 G | oxc, Bun |
+| Instruction counts per merge, flagged on regression | `bench/README.md` "Regression flag": single-threaded tsrs repeats to about 0.001%; a project up more than 1% gets a comment on the PR | CodSpeed in oxc, Rolldown, Ruff, Biome, swc (simulated counts) |
 
 Measured and rejected (do not retry without new evidence): explicit huge pages, pre-faulting and mmap'd arena chunks
 (`notes/linux-perf.md`); global identifier interning (`notes/mem-round2.md`: parse +9% time); rolling back whole
@@ -119,7 +120,6 @@ Not tried. Each needs a measurement and a note before it is adopted; none is app
 | Candidate | Who does it | What it would give | What it needs |
 | --- | --- | --- | --- |
 | Allocation-count snapshot gate | oxc `tasks/track_memory_allocations` (`cargo allocs`, then `git diff --exit-code` in CI), Rolldown | A stray heap allocation on a hot path becomes a diff in a checked-in snapshot. Counts are exact on one thread. | A fixed corpus, one checker, the counting allocator behind `alloc-profile`. |
-| Instruction-count benchmarks per change | CodSpeed in oxc, Rolldown, Ruff, Biome, swc | CPU regressions that leave allocation counts unchanged. Today the bench runs on `main` after the fact, in wall time. | A simulated-CPU runner, or `perf stat` on a quiet machine. |
 | Miri on `tsrs_core` | oxc (strict provenance, allocator and AST crates), rust-analyzer (`intern`), Bun (tree borrows, 17 crates) | Soundness of the handle and arena code, where a third of the `unsafe` is. | Nightly; the unit tests must run on the system allocator. |
 | Conformance with `debug-assertions` and `overflow-checks` in an optimized profile | oxc `[profile.coverage]` | Overflow and failed debug assertions that release builds skip. | A profile and a second conformance run. |
 | `panic = "abort"` | oxc, swc, Bun | No landing pads: smaller, slightly faster code. | A CLI-only binary or profile: the LSP, the API and the test runner use `catch_unwind`. |
