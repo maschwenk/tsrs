@@ -136,7 +136,9 @@ In place:
 Measured and rejected (do not retry without new evidence): explicit huge pages, pre-faulting and mmap'd arena chunks
 (`notes/linux-perf.md`); global identifier interning (`notes/mem-round2.md`: parse +9% time); rolling back whole
 regions of speculative work (`notes/mem-overload-rollback.md`); bump regions per inference scope
-(`notes/mem-scoped-arenas.md`: 25 to 50% of scopes keep something reachable).
+(`notes/mem-scoped-arenas.md`: 25 to 50% of scopes keep something reachable). Restructuring generic
+callbacks to cut monomorphization (`notes/monomorphization-audit.md`: closures are 3.6% of the checker's LLVM IR, the
+largest tsrs generic `filter_type` 1.1%, on a hot path).
 
 Not tried. Each needs a measurement and a note before it is adopted; none is applied yet:
 
@@ -155,7 +157,6 @@ Not tried. Each needs a measurement and a note before it is adopted; none is app
 | Source-pattern lints | Bun `test/internal/source-lints/` (one regex per rule, a per-file count allowlist, a check that the scan is not empty), rust-analyzer `xtask/src/tidy.rs` | Bans that clippy cannot express. | A rule that needs it; put it next to `ratchet.py`. |
 | Dependency checks in CI | cargo-deny (oxc, Ruff, Biome, swc), cargo-shear or machete (oxc, Rolldown, Ruff, rust-analyzer) | `deny.toml` exists but no job runs it; unused dependencies cost fat-LTO build time. | A CI step. |
 | Hot/cold text grouping with PGO (`-Wl,-z,keep-text-section-prefix`) | Bun (only when a profile is loaded) | PGO already marks functions hot or cold; the linker flag keeps them grouped, for fewer instruction-cache misses on Linux. | A cycles or wall-time A/B; instruction counts will not show it. |
-| Monomorphization audit | oxc (`cargo llvm-lines` workflow), rust-analyzer style guide ("Avoid Monomorphization") | The port's `impl FnMut` callback convention compiles a copy per caller; a list of the largest instantiations shows where a non-generic inner function would cut code size and compile time. | `cargo llvm-lines` on the checker crate; a note. |
 | Identifiers that carry their hash | oxc `Ident` (pointer, length, precomputed hash; `IdentHashMap` does not rehash) | Symbol-table lookups by name hash the string every time. | A profile showing what share of instructions string hashing takes before any change. |
 | Differential fuzzing of the parser and scanner | Ruff (`cargo fuzz` on its parser) | Crashes and divergences from tsgo on inputs the conformance suite never has. | A fuzz target, a Go oracle to diff against, a corpus. |
 | Frame pointers for profiling | Bun (`-Cforce-frame-pointers=yes`) | Reliable stacks in samply and `perf` profiles of the `dist` build, at a small cost, so not for release. | A documented profiling build command. |
