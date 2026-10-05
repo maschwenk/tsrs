@@ -341,3 +341,167 @@ pub fn self_stats() -> SelfStats {
     }
     stats
 }
+
+/// Measurement (macOS arm64, `TSRS_CHECKER_PROCESSES_WRITETRACE`): makes `[lo, hi)` read-only in a forked child and
+/// records, for the first write to each page, the faulting pc and the return addresses of up to 7 callers (frame
+/// pointers); the page is then opened for writing. `write_trace_dump` writes one line per page.
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+pub mod writetrace {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    const PAGE: usize = 16384;
+    const MAX: usize = 1 << 18;
+    const FRAMES: usize = 8;
+    static mut RECORDS: [[u64; FRAMES + 1]; MAX] = [[0; FRAMES + 1]; MAX];
+    static COUNT: AtomicUsize = AtomicUsize::new(0);
+    static LO: AtomicUsize = AtomicUsize::new(0);
+    static HI: AtomicUsize = AtomicUsize::new(0);
+    // Extra protected ranges (mimalloc's regions), sorted.
+    static mut EXTRA: [(usize, usize); 4096] = [(0, 0); 4096];
+    static EXTRA_N: AtomicUsize = AtomicUsize::new(0);
+
+    #[repr(C, packed(4))]
+    #[derive(Default, Clone, Copy)]
+    struct SubmapInfo64 {
+        protection: i32,
+        max_protection: i32,
+        inheritance: u32,
+        offset: u64,
+        user_tag: u32,
+        pages_resident: u32,
+        pages_shared_now_private: u32,
+        pages_swapped_out: u32,
+        pages_dirtied: u32,
+        ref_count: u32,
+        shadow_depth: u16,
+        external_pager: u8,
+        share_mode: u8,
+        is_submap: i32,
+        behavior: i32,
+        object_id: u32,
+        user_wired_count: u16,
+        pad: u16,
+        pages_reusable: u32,
+        object_id_full: u64,
+    }
+
+    extern "C" {
+        fn mach_vm_region_recurse(task: u32, address: *mut u64, size: *mut u64, depth: *mut u32, info: *mut i32, count: *mut u32) -> i32;
+    }
+
+    fn in_extra(addr: usize) -> bool {
+        let n = EXTRA_N.load(Ordering::Relaxed);
+        // SAFETY: written before the handler is installed, read-only afterwards.
+        let extra = unsafe { &*std::ptr::addr_of!(EXTRA) };
+        let ranges = &extra[..n];
+        let i = ranges.partition_point(|r| r.0 <= addr);
+        i > 0 && addr < ranges[i - 1].1
+    }
+
+    /// Adds every read-write region with VM user tag `tag` (mimalloc's: 100) to the protected set.
+    pub fn add_tagged_regions(tag: u32) -> usize {
+        let mut addr: u64 = 0;
+        let mut n = 0;
+        let mut total = 0;
+        loop {
+            let mut size: u64 = 0;
+            let mut depth: u32 = 1;
+            let mut info = SubmapInfo64::default();
+            let mut count: u32 = (std::mem::size_of::<SubmapInfo64>() / 4) as u32;
+            // SAFETY: valid out-pointers of the documented sizes.
+            let kr = unsafe { mach_vm_region_recurse(libc::mach_task_self(), &raw mut addr, &raw mut size, &raw mut depth, (&raw mut info).cast(), &raw mut count) };
+            if kr != 0 {
+                break;
+            }
+            let (tag_of, prot) = (info.user_tag, info.protection);
+            if tag_of == tag && prot & 3 == 3 && n < 4096 {
+                // SAFETY: single-threaded setup before the handler is installed.
+                unsafe { (*std::ptr::addr_of_mut!(EXTRA))[n] = (addr as usize, (addr + size) as usize) };
+                n += 1;
+                total += size as usize;
+            }
+            addr += size;
+        }
+        EXTRA_N.store(n, Ordering::Relaxed);
+        total
+    }
+
+    extern "C" {
+        fn _dyld_get_image_vmaddr_slide(image_index: u32) -> isize;
+    }
+
+    extern "C" fn handler(_sig: libc::c_int, info: *mut libc::siginfo_t, ctx: *mut libc::c_void) {
+        // SAFETY: the kernel passes a valid siginfo and ucontext; RECORDS is only touched by this single thread.
+        unsafe {
+            let addr = (*info).si_addr as usize;
+            if (addr < LO.load(Ordering::Relaxed) || addr >= HI.load(Ordering::Relaxed)) && !in_extra(addr) {
+                libc::signal(libc::SIGBUS, libc::SIG_DFL);
+                libc::signal(libc::SIGSEGV, libc::SIG_DFL);
+                return;
+            }
+            let page = addr & !(PAGE - 1);
+            let uc = ctx.cast::<libc::ucontext_t>();
+            let ss = &(*(*uc).uc_mcontext).__ss;
+            let k = COUNT.fetch_add(1, Ordering::Relaxed);
+            if k < MAX {
+                let rec = &mut *std::ptr::addr_of_mut!(RECORDS[k]);
+                rec[0] = page as u64;
+                rec[1] = ss.__pc;
+                rec[2] = ss.__lr;
+                let mut fp = ss.__fp as usize;
+                let sp = ss.__sp as usize;
+                for slot in rec.iter_mut().skip(3) {
+                    if fp < sp || fp >= sp + (512 << 20) || fp % 16 != 0 {
+                        break;
+                    }
+                    *slot = *((fp + 8) as *const u64);
+                    fp = *(fp as *const usize);
+                }
+            }
+            libc::mprotect(page as *mut libc::c_void, PAGE, libc::PROT_READ | libc::PROT_WRITE);
+        }
+    }
+
+    /// # Safety
+    /// Single-threaded process; `[lo, hi)` must be mapped memory nobody else protects.
+    pub unsafe fn start(lo: usize, hi: usize) {
+        LO.store(lo, Ordering::Relaxed);
+        HI.store(hi, Ordering::Relaxed);
+        // SAFETY: the caller's contract.
+        unsafe {
+            let mut sa: libc::sigaction = std::mem::zeroed();
+            sa.sa_sigaction = handler as *const () as usize;
+            sa.sa_flags = libc::SA_SIGINFO | libc::SA_NODEFER;
+            libc::sigemptyset(&raw mut sa.sa_mask);
+            libc::sigaction(libc::SIGSEGV, &raw const sa, std::ptr::null_mut());
+            libc::sigaction(libc::SIGBUS, &raw const sa, std::ptr::null_mut());
+            libc::mprotect(lo as *mut libc::c_void, hi - lo, libc::PROT_READ);
+            let n = EXTRA_N.load(Ordering::Relaxed);
+            for k in 0..n {
+                let (a, b) = (*std::ptr::addr_of!(EXTRA))[k];
+                libc::mprotect(a as *mut libc::c_void, b - a, libc::PROT_READ);
+            }
+        }
+    }
+
+    pub fn dump(path: &str) {
+        use std::fmt::Write;
+        let n = COUNT.load(Ordering::Relaxed).min(MAX);
+        // SAFETY: plain dyld query.
+        let slide = unsafe { _dyld_get_image_vmaddr_slide(0) } as u64;
+        let mut out = String::new();
+        for k in 0..n {
+            // SAFETY: written by the handler on this thread before.
+            let rec = unsafe { &*std::ptr::addr_of!(RECORDS[k]) };
+            let _ = write!(out, "{:#x}", rec[0]);
+            for &pc in &rec[1..] {
+                if pc == 0 {
+                    break;
+                }
+                let _ = write!(out, " {:#x}", pc.wrapping_sub(slide));
+            }
+            out.push('\n');
+        }
+        let _ = std::fs::write(path, out);
+    }
+}

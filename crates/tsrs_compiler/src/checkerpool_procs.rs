@@ -144,6 +144,35 @@ fn warmup_files(program: &Program, files: &[P<SourceFile>], checked: &[bool], we
     }
 }
 
+// TSRS_CHECKER_PREASSIGN_IDS=1 (measurement): give every node and binder symbol of the program its id before the
+// fork, in program order, so children do not write ids into shared AST and binder pages.
+fn preassign_ids(files: &[P<SourceFile>]) -> usize {
+    fn walk(node: P<tsrs_ast::Node>, count: &mut usize) {
+        tsrs_ast::get_node_id(node);
+        *count += 1;
+        if let Some(symbol) = node.symbol() {
+            tsrs_ast::get_symbol_id(symbol);
+        }
+        if let Some(symbol) = node.local_symbol() {
+            tsrs_ast::get_symbol_id(symbol);
+        }
+        if let Some(locals) = node.locals() {
+            for symbol in locals.values() {
+                tsrs_ast::get_symbol_id(symbol);
+            }
+        }
+        node.for_each_child(&mut |child| {
+            walk(child, count);
+            false
+        });
+    }
+    let mut count = 0;
+    for &file in files {
+        walk(file.as_node(), &mut count);
+    }
+    count
+}
+
 fn put_u32(out: &mut Vec<u8>, v: u32) {
     out.extend_from_slice(&v.to_le_bytes());
 }
@@ -199,6 +228,13 @@ impl checkerPool {
         }
         let warm_cpu = thread_cpu_seconds() - warm_cpu;
         let warm_wall = start.elapsed().as_secs_f64();
+        if std::env::var("TSRS_CHECKER_PREASSIGN_IDS").is_ok() {
+            let t = std::time::Instant::now();
+            let nodes = preassign_ids(files);
+            if stats {
+                eprintln!("procs\tpre-assigned ids: {nodes} nodes walked in {:.3}s", t.elapsed().as_secs_f64());
+            }
+        }
         let hw_at_fork = tsrs_core::ptr::reserve_stats().map_or(0, |s| s.1);
         if stats {
             eprintln!("procs\tarena high water: before warm-up {:#x}, at fork {:#x}", hw_before_warmup, hw_at_fork);
@@ -209,8 +245,18 @@ impl checkerPool {
         // Child `k` checks slice `k`; the parent checks slice 0 itself unless TSRS_CHECKER_PARENT_IDLE is set.
         let parent_checks = std::env::var("TSRS_CHECKER_PARENT_IDLE").is_err();
         let first_child = usize::from(parent_checks);
+        let write_trace = std::env::var("TSRS_CHECKER_PROCESSES_WRITETRACE").ok();
         let mut work = |k: usize| -> Vec<u8> {
             let slice = first_child + k;
+            #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+            if write_trace.is_some() {
+                let base = 0x4001_0000_0000usize;
+                if std::env::var("TSRS_CHECKER_PROCESSES_WRITETRACE_HEAP").is_ok() {
+                    tsrs_core::procs::writetrace::add_tagged_regions(100);
+                }
+                // SAFETY: the child is single-threaded; the range is the arena handed out before the fork.
+                unsafe { tsrs_core::procs::writetrace::start(base + (64 << 10), base + hw_at_fork) };
+            }
             let child_start = std::time::Instant::now();
             let mut checked_files = 0u32;
             for i in 0..files.len() {
@@ -221,6 +267,10 @@ impl checkerPool {
             }
             let globals = guard.get_global_diagnostics();
             let wall = child_start.elapsed().as_secs_f64();
+            #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+            if let Some(dir) = &write_trace {
+                tsrs_core::procs::writetrace::dump(&format!("{dir}/writes-{slice}.txt"));
+            }
             pause_point(&format!("child-{slice}"), true);
             let encode_file = |f: P<SourceFile>| *file_index.get(&f).expect("a diagnostic in a file of the program");
             let mut out = Vec::new();
