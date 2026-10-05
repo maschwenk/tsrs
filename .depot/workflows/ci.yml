@@ -124,6 +124,10 @@ jobs:
       - name: Lint ratchet
         run: python3 tools/lint/ratchet.py --self-test && python3 tools/lint/ratchet.py
 
+      # Unsafe Send/Sync inventory and comments on weakened atomic orderings (docs/RUST.md, "Source checks").
+      - name: Source checks
+        run: python3 tools/lint/source.py --self-test && python3 tools/lint/source.py
+
   # tools/gen-check.sh: re-runs the code generators and fails if a generated file differs from its generator's output
   # (docs/RUST.md, "Generated-code freshness check").
   generated-code:
