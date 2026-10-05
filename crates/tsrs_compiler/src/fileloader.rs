@@ -277,17 +277,6 @@ impl fileLoader {
         }
     }
 
-    fn add_root_file_task(&mut self, file_name: &str, lib_file: Option<P<LibFile>>, include_reason: P<FileIncludeReason>) {
-        let curr_dir = self.host.get_current_directory().to_string();
-        let abs_path = tspath::get_normalized_absolute_path(file_name, &curr_dir);
-        let mut containing_file = curr_dir.clone();
-        if let Some(config_file) = &self.opts.config.config_file {
-            containing_file = tspath::get_normalized_absolute_path(config_file.source_file.file_name(), &curr_dir);
-        }
-        let (resolved_file, diagnostic) = self.get_source_file_from_reference(&abs_path, file_name, &containing_file, Some(include_reason));
-        self.add_root_file_task_with(abs_path, resolved_file, diagnostic, lib_file, include_reason);
-    }
-
     fn add_root_file_task_with(
         &mut self,
         abs_path: String,
@@ -588,25 +577,6 @@ pub(crate) fn prefetch_resolutions(ctx: &prefetchContext, file: P<SourceFile>, m
 impl fileLoader {
     pub(crate) fn is_supported_extension(&self, canonical_file_name: &str) -> bool {
         is_supported_extension(&self.supported_extensions_with_json_if_resolve_json_module, canonical_file_name)
-    }
-
-    pub(crate) fn get_source_file_from_reference(
-        &self,
-        file_name: &str,
-        reference_text: &str,
-        containing_file: &str,
-        include_reason: Option<P<FileIncludeReason>>,
-    ) -> (String, Option<sourceFileFromReferenceDiagnostic>) {
-        source_file_from_reference(
-            &self.opts.config.compiler_options().unwrap(),
-            self.host.fs(),
-            &self.supported_extensions,
-            &self.supported_extensions_with_json_if_resolve_json_module,
-            file_name,
-            reference_text,
-            containing_file,
-            include_reason.is_some_and(|r| r.is_referenced_file()),
-        )
     }
 
     // `prefetched` is the lookup computed ahead by the prefetch (tripleslash_reference_lookup), if any.

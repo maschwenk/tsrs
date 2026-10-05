@@ -235,7 +235,7 @@ fn sort_by_checker(s: &mut Setup, symbols: &mut [P<Symbol>]) {
 
 /// The owner a context-free symbol reference resolved through (Go `resolveSymbolReference`).
 enum Owner<'h> {
-    File(CachedFileScope),
+    File(#[expect(dead_code, reason = "held for its Drop: the lease keeps the cached file retained while the symbol is used")] CachedFileScope),
     Snapshot(SnapshotCtx<'h>),
 }
 

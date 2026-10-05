@@ -68,11 +68,6 @@ pub struct ReferenceMap {
 const SCAN_QUERIES: usize = 256;
 
 impl ReferenceMap {
-    // referencemap.go:18
-    pub(crate) fn store_references(&self, path: Path, refs: Set<Path>) {
-        self.references.store(path, Arc::new(RefSet::flat(refs)));
-    }
-
     // referencemap.go:18, for a set that other entries share.
     pub(crate) fn store_shared_references(&self, path: Path, refs: Arc<RefSet>) {
         self.references.store(path, refs);

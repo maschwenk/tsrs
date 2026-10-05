@@ -125,8 +125,6 @@ fn go_quote(bytes: &[u8]) -> String {
 struct WireError {
     code: i32,
     message: String,
-    #[serde(default)]
-    data: Option<serde::de::IgnoredAny>,
 }
 
 // Unknown fields are ignored (encoding/json/v2 default); duplicate names are rejected by both.

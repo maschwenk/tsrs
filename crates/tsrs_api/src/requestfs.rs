@@ -124,6 +124,7 @@ impl Node {
         if !self.has_symlinks {
             return;
         }
+        #[expect(clippy::iter_over_hash_type, reason = "order-independent: callers OR a flag or collect an alias closure that ends up in sets; Go ranges the map too")]
         for child in self.children.values() {
             if let Some(Entry::Symlink(s)) = child.entry.as_deref() {
                 visit(s);
@@ -254,6 +255,7 @@ fn compose(base: Option<&Arc<Node>>, overlay: Option<&Arc<Node>>, mut fallback: 
     if let Some(Entry::Directory { directory_name, listing: Some(listing) }) = result.entry.as_deref() {
         if !overlay_has_listing {
             let mut entries = listing.clone();
+            #[expect(clippy::iter_over_hash_type, reason = "order-independent: one child per name, and merge_entries sorts the listing; Go ranges the map too")]
             for (path, child) in &overlay.children {
                 let name = tspath::get_base_file_name(path);
                 if child.fallback == Fallback::Missing || child.replaces_subtree() {
@@ -673,6 +675,7 @@ impl RequestFileSystem {
         let mut symlinks = r.symlinks.take().unwrap_or_default();
         let mut links = Vec::new();
         if let (Some(node), _) = self.paths.lookup(&self.to_path(dir)) {
+            #[expect(clippy::iter_over_hash_type, reason = "order-independent: one link per name, files and directories are sorted below and symlinks is a set; Go ranges the map too")]
             for child in node.children.values() {
                 if let Some(Entry::Symlink(s)) = child.entry.as_deref() {
                     links.push(s.clone());

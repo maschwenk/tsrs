@@ -31,9 +31,8 @@ if let Some(result) = tsrs_api::checker::handle(&host, method, &params) { /* map
     `signatureToSignatureDeclaration`; the handler returns `CheckerResponse::EncodedNode(bytes)` and the
     transport emits raw binary (msgpack) or `{ "data": base64 }` (JSON-RPC).
 * `CheckerRegistry` (checker/registry.rs) — one per API snapshot handle, stored in core's snapshot data.
-  Core must call `registry.release()` before releasing the snapshot's last API reference (and
-  `release_project(id)` if a project is dropped from a still-live snapshot). After release every lookup
-  is a client error; no raw pointer outlives its snapshot.
+  Core must call `registry.release()` before releasing the snapshot's last API reference. After release
+  every lookup is a client error; no raw pointer outlives its snapshot.
 * Errors: `CheckerError { kind: InvalidRequest | Client, message }` = Go `ErrInvalidRequest` /
   `ErrClientError`. Handlers do not panic on bad input (wrong JSON types, out-of-range numbers, wrong
   type kind for a property, stale/foreign handles); panics from deep checker invariants are not caught
