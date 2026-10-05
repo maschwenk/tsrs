@@ -79,6 +79,8 @@ pub struct TypeResolution {
     pub target: TypeSystemEntity,
     pub property_name: TypeSystemPropertyName,
     pub result: bool,
+    /// Flow memo taint source of what is computed while this resolution is in progress (flowmemo.rs).
+    pub serial: u32,
 }
 
 // ContextualInfo
@@ -285,6 +287,8 @@ pub struct FlowLoopKey {
 pub struct FlowLoopInfo {
     pub key: FlowLoopKey,
     pub types: Vec<P<Type>>,
+    /// Flow memo taint source of the in-process types (flowmemo.rs).
+    pub serial: u32,
 }
 
 // InferenceFlags
@@ -1186,6 +1190,8 @@ pub struct Checker {
     pub flow_analysis_disabled: bool,
     pub flow_invocation_count: i32,
     pub flow_type_cache: Option<FxHashMap<P<Node>, P<Type>>>, // Go nil map, saved/restored as a whole
+    /// The flow memo (flowmemo.rs). Boxed: the checker's hot fields keep their offsets.
+    pub flow_memo: Box<crate::flowmemo::FlowMemo>,
     pub last_flow_node: Option<P<FlowNode>>,
     pub last_flow_node_reachable: bool,
     pub flow_node_reachable: FxHashMap<P<FlowNode>, bool>,
@@ -1562,6 +1568,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         flow_analysis_disabled: false,
         flow_invocation_count: 0,
         flow_type_cache: None,
+        flow_memo: Box::new(crate::flowmemo::FlowMemo::new()),
         last_flow_node: None,
         last_flow_node_reachable: false,
         flow_node_reachable: FxHashMap::default(),

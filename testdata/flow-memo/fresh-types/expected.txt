@@ -1,0 +1,4 @@
+a.ts(9,15): error TS2322: Type '{ message: string; n: number; }' is not assignable to type 'never'.
+a.ts(12,11): error TS2322: Type '{ message: string; n: number; }' is not assignable to type 'never'.
+a.ts(16,11): error TS2322: Type '(string | number)[]' is not assignable to type 'never'.
+a.ts(18,11): error TS2322: Type '((string | number)[] | { message: string; n: number; })[]' is not assignable to type 'never'.

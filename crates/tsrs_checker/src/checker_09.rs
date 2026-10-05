@@ -2030,7 +2030,8 @@ impl Checker {
             }
             return false;
         }
-        self.type_resolutions.push(TypeResolution { target, property_name, result: true });
+        let serial = self.flow_memo.source_now();
+        self.type_resolutions.push(TypeResolution { target, property_name, result: true, serial });
         true
     }
 
@@ -2050,6 +2051,9 @@ impl Checker {
                 return -1;
             }
             if resolution.target == target && resolution.property_name == property_name {
+                // A circular or in-progress resolution: what the caller does next is not final until this
+                // resolution is done (flow memo).
+                self.flow_memo.taint(resolution.serial);
                 return i;
             }
             i -= 1;

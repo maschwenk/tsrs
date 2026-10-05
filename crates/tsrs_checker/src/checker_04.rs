@@ -1258,13 +1258,20 @@ impl Checker {
         }
         // If a type has been cached for the node, return it.
         if let Some(cached_type) = self.flow_type_cache.as_ref().and_then(|m| m.get(&node).copied()) {
+            // A later flow walk reads this answer only while the same cache is current (flow memo).
+            self.flow_memo.add_flags(crate::flowmemo::FLAG_TYPE_CACHE);
             return cached_type;
         }
         let start_invocation_count = self.flow_invocation_count;
         let t = self.check_expression_ex(node, CheckMode::TypeOnly);
         // If control flow analysis was required to determine the type, it is worth caching.
         if self.flow_invocation_count != start_invocation_count {
-            self.flow_type_cache.get_or_insert_with(FxHashMap::default).insert(node, t);
+            let previous = self.flow_type_cache.get_or_insert_with(FxHashMap::default).insert(node, t);
+            if previous.is_some() {
+                // A nested evaluation of this node cached it first, so a cached type changed: memo answers that read
+                // this cache no longer describe it.
+                self.flow_memo.type_cache_epoch = self.flow_memo.next_serial();
+            }
         }
         t
     }
@@ -1485,10 +1492,10 @@ impl Checker {
             // analysis because variables may have transient types in indeterminable states. Moving flowLoopStart
             // to the top of the stack ensures all transient types are computed from a known point.
             let save_flow_loop_stack = std::mem::take(&mut self.flow_loop_stack);
-            let save_flow_type_cache = self.flow_type_cache.take();
+            let save_flow_type_cache = self.take_flow_type_cache();
             let t = self.check_expression_ex(node, check_mode);
             links.resolved_type.set(Some(t));
-            self.flow_type_cache = save_flow_type_cache;
+            self.restore_flow_type_cache(save_flow_type_cache);
             self.flow_loop_stack = save_flow_loop_stack;
         }
         links.resolved_type.get().unwrap()
@@ -2497,6 +2504,10 @@ impl Checker {
         if let Some(cached) = cached {
             if cached != self.resolving_signature && candidates_out_array.is_none() {
                 return cached;
+            }
+            if cached == self.resolving_signature {
+                // Re-entered while this call is resolved: the inner answer may not be the final one (flow memo).
+                self.flow_memo.taint(0);
             }
         }
         let save_resolution_start = self.resolution_start;

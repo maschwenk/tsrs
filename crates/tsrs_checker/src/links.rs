@@ -341,6 +341,13 @@ impl<V: 'static> NodeLinkStore<V> {
     pub fn has(&self, node: P<Node>) -> bool {
         self.store.has(ast::get_node_id(node).0)
     }
+
+    /// `try_get` that returns `None` for a node without an id instead of assigning one (no side effect).
+    #[inline]
+    pub fn try_get_if_id_assigned(&self, node: P<Node>) -> Option<P<V>> {
+        let id = ast::get_assigned_node_id(node)?;
+        self.store.narrow_slot(id).map(|slot| self.store.at(slot))
+    }
 }
 
 /// Go `symbolArenaLinkStore`: keyed by the symbol id, so every access assigns the symbol its id

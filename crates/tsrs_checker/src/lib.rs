@@ -82,6 +82,7 @@ mod relater_2;
 mod relater_derived;
 mod flow;
 pub(crate) use flow::*;
+pub mod flowmemo;
 mod inference;
 pub(crate) use inference::*;
 mod grammarchecks;

@@ -2159,6 +2159,8 @@ impl Checker {
         // If we're already in the process of resolving the given signature, don't resolve again as
         // that could cause infinite recursion. Instead, return anySignature.
         let signature = if self.signature_links.get(call_target).resolved_signature.get() == Some(self.resolving_signature) {
+            // Not the final contextual type (flow memo).
+            self.flow_memo.taint(0);
             self.resolving_signature
         } else {
             self.get_resolved_signature(call_target, None, CheckMode::Normal)

@@ -58,6 +58,14 @@ pub fn get_node_id(node: P<Node>) -> NodeId {
     assign_node_id(node)
 }
 
+/// The node's id if it has one; unlike `get_node_id`, never assigns one.
+#[inline]
+pub fn get_assigned_node_id(node: P<Node>) -> Option<u32> {
+    // Relaxed, as in `get_node_id`: the id is the only data read, and it is written once.
+    let id = node.id.load(Ordering::Relaxed);
+    (id != 0).then_some(id)
+}
+
 #[inline(never)]
 fn assign_node_id(node: P<Node>) -> NodeId {
     // Worst case, we burn a few ids if we have to CAS.

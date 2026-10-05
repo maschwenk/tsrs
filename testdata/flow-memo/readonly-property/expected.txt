@@ -1,0 +1,3 @@
+a.ts(8,19): error TS2322: Type 'string' is not assignable to type 'never'.
+a.ts(13,15): error TS2322: Type 'string | undefined' is not assignable to type 'never'.
+  Type 'undefined' is not assignable to type 'never'.

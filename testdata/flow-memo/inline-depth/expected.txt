@@ -1,0 +1,6 @@
+a.ts(10,15): error TS2322: Type 'string | number | bigint | symbol | boolean | null | undefined' is not assignable to type 'never'.
+  Type 'undefined' is not assignable to type 'never'.
+a.ts(12,15): error TS2322: Type 'string | number | symbol' is not assignable to type 'never'.
+  Type 'string' is not assignable to type 'never'.
+a.ts(16,15): error TS2322: Type 'string | number | boolean | null | undefined' is not assignable to type 'never'.
+  Type 'undefined' is not assignable to type 'never'.
