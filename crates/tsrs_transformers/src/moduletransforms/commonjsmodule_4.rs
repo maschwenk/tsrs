@@ -339,7 +339,7 @@ impl CommonJSModuleTransformer {
 
     // Visits a prefix unary expression that might modify an exported identifier.
     // commonjsmodule.go:1709
-    pub(crate) fn visit_prefix_unary_expression(&self, node: P<Node>, result_is_discarded: bool) -> P<Node> {
+    pub(crate) fn visit_prefix_unary_expression(&self, node: P<Node>, _result_is_discarded: bool) -> P<Node> {
         // When we see a prefix increment expression whose operand is an exported
         // symbol, we should ensure all exports of that symbol are updated with the correct
         // value.

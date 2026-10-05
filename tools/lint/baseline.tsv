@@ -1,6 +1,5 @@
 # Lint ratchet baseline: findings that predate the ratchet, as count<TAB>lint<TAB>file.
 # Written by `tools/lint/ratchet.py --update` with clippy from Rust 1.99.0. Counts only go down; never edit by hand.
-1	clippy::iter_over_hash_type	crates/tsrs_fswatch/src/event.rs
 12	clippy::iter_over_hash_type	crates/tsrs_ls/src/autoimport/registry.rs
 4	clippy::iter_over_hash_type	crates/tsrs_project/src/configfileregistrybuilder.rs
 1	clippy::iter_over_hash_type	crates/tsrs_project/src/overlayfs.rs
@@ -9,9 +8,6 @@
 1	clippy::iter_over_hash_type	crates/tsrs_project/src/snapshotfs.rs
 1	clippy::iter_over_hash_type	crates/tsrs_projectutil/src/dirty/map.rs
 1	clippy::iter_over_hash_type	crates/tsrs_projectutil/src/dirty/syncmap.rs
-1	clippy::needless_pass_by_value	crates/tsrs_fswatch/src/fsevents_darwin.rs
-1	clippy::needless_pass_by_value	crates/tsrs_fswatch/src/fsevents_darwin_ffi.rs
-1	clippy::needless_pass_by_value	crates/tsrs_fswatch/src/watcher.rs
 1	clippy::needless_pass_by_value	crates/tsrs_ls/src/autoimport/registry.rs
 1	clippy::needless_pass_by_value	crates/tsrs_ls/src/callhierarchy.rs
 2	clippy::needless_pass_by_value	crates/tsrs_ls/src/crossproject.rs
@@ -42,11 +38,6 @@
 18	dead_code	crates/tsrs_checker/src/utilities.rs
 2	dead_code	crates/tsrs_core/src/jsnum/jsnum.rs
 2	dead_code	crates/tsrs_core/src/semver/version.rs
-2	dead_code	crates/tsrs_fswatch/src/event.rs
-7	dead_code	crates/tsrs_fswatch/src/fsevents_darwin.rs
-1	dead_code	crates/tsrs_fswatch/src/inotify_linux.rs
-1	dead_code	crates/tsrs_fswatch/src/pathcompare.rs
-7	dead_code	crates/tsrs_fswatch/src/watcher.rs
 1	dead_code	crates/tsrs_ls/src/autoimport/import_adder.rs
 2	dead_code	crates/tsrs_ls/src/autoimport/registry.rs
 1	dead_code	crates/tsrs_ls/src/autoimport/util.rs
@@ -72,10 +63,6 @@
 3	dead_code	crates/tsrs_module/src/cache.rs
 1	dead_code	crates/tsrs_modulespecifiers/src/util.rs
 1	dead_code	crates/tsrs_parser/src/parser_1.rs
-1	dead_code	crates/tsrs_printer/src/changetrackerwriter.rs
-3	dead_code	crates/tsrs_printer/src/printer_1.rs
-1	dead_code	crates/tsrs_printer/src/printer_3.rs
-1	dead_code	crates/tsrs_printer/src/utilities.rs
 1	dead_code	crates/tsrs_project/src/compilerhost.rs
 1	dead_code	crates/tsrs_project/src/configfileregistry.rs
 2	dead_code	crates/tsrs_project/src/configfileregistrybuilder.rs
@@ -89,12 +76,6 @@
 3	dead_code	crates/tsrs_scanner/src/regexp.rs
 1	dead_code	crates/tsrs_scanner/src/scanner.rs
 1	dead_code	crates/tsrs_testrunner/src/type_symbol_baseline.rs
-1	dead_code	crates/tsrs_transformers/src/estransforms/classfields_1.rs
-1	dead_code	crates/tsrs_transformers/src/inliners/constenum.rs
-1	dead_code	crates/tsrs_transformers/src/moduletransforms/esmodule.rs
-1	dead_code	crates/tsrs_transformers/src/moduletransforms/externalmoduleinfo.rs
-1	dead_code	crates/tsrs_transformers/src/moduletransforms/utilities.rs
-1	dead_code	crates/tsrs_transformers/src/tstransforms/legacydecorators.rs
 1	dead_code	crates/tsrs_tsoptions/src/commandlineoption.rs
 1	dead_code	crates/tsrs_tsoptions/src/diagnostics.rs
 4	dead_code	crates/tsrs_tsoptions/src/tsconfigparsing.rs
@@ -113,9 +94,7 @@
 3	unused_imports	crates/tsrs_ls/src/format/mod.rs
 1	unused_imports	crates/tsrs_ls/src/string_completions.rs
 1	unused_imports	crates/tsrs_project/src/snapshot.rs
-4	unused_imports	crates/tsrs_transformers/src/estransforms/mod.rs
 1	unused_mut	crates/tsrs_checker/src/checker_12.rs
-2	unused_mut	crates/tsrs_fswatch/src/watcher.rs
 1	unused_variables	crates/tsrs_ast/src/utilities_3.rs
 2	unused_variables	crates/tsrs_checker/src/checker_10.rs
 1	unused_variables	crates/tsrs_checker/src/checker_12.rs
@@ -143,19 +122,7 @@
 1	unused_variables	crates/tsrs_parser/src/jsdoc.rs
 1	unused_variables	crates/tsrs_parser/src/parser_3.rs
 1	unused_variables	crates/tsrs_parser/src/utilities.rs
-1	unused_variables	crates/tsrs_printer/src/emittextwriter.rs
-1	unused_variables	crates/tsrs_printer/src/factory_2.rs
-1	unused_variables	crates/tsrs_printer/src/printer_1.rs
-2	unused_variables	crates/tsrs_printer/src/printer_2.rs
-5	unused_variables	crates/tsrs_printer/src/printer_3.rs
-2	unused_variables	crates/tsrs_printer/src/singlelinestringwriter.rs
-1	unused_variables	crates/tsrs_printer/src/textwriter.rs
 1	unused_variables	crates/tsrs_project/src/project.rs
-1	unused_variables	crates/tsrs_transformers/src/jsxtransforms/jsx.rs
-1	unused_variables	crates/tsrs_transformers/src/moduletransforms/commonjsmodule_4.rs
-1	unused_variables	crates/tsrs_transformers/src/moduletransforms/externalmoduleinfo.rs
-9	unused_variables	crates/tsrs_transformers/src/moduletransforms/utilities.rs
-1	unused_variables	crates/tsrs_transformers/src/tstransforms/runtimesyntax.rs
 3	unused_variables	crates/tsrs_tsoptions/src/contentmappers.rs
 1	unused_variables	crates/tsrs_tsoptions/src/tsconfigparsing.rs
 1	unused_variables	crates/tsrs_vfs/src/vfstest/vfstest.rs

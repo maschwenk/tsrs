@@ -608,7 +608,7 @@ impl crate::NodeFactory {
     // ES2018 Helpers
     // Chains a sequence of expressions using the __assign helper or Object.assign if available in the target
     // factory.go:821
-    pub fn new_assign_helper(&self, attributes_segments: Vec<P<Node>>, script_target: ScriptTarget) -> P<Node> {
+    pub fn new_assign_helper(&self, attributes_segments: Vec<P<Node>>, _script_target: ScriptTarget) -> P<Node> {
         self.new_call_expression(
             self.new_property_access_expression(self.new_identifier("Object"), None, self.new_identifier("assign"), NodeFlags::None),
             None,

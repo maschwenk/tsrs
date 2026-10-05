@@ -3,11 +3,9 @@ use super::*;
 pub struct ESModuleTransformer {
     pub base: Transformer,
     compiler_options: P<CompilerOptions>,
-    resolver: ReferenceResolverRef,
     get_emit_module_format_of_file: Rc<dyn Fn(P<SourceFile>) -> ModuleKind>,
     current_source_file: Cell<Option<P<SourceFile>>>,
     import_require_statements: RefCell<Option<importRequireStatements>>,
-    helper_name_substitutions: RefCell<FxHashMap<String, P<Node>>>,
 }
 
 #[derive(Clone)]
@@ -22,11 +20,9 @@ pub fn new_es_module_transformer(opts: &TransformOptions) -> Option<P<Transforme
     let tx = P::new(ESModuleTransformer {
         base: Transformer::default(),
         compiler_options,
-        resolver: opts.resolver,
         get_emit_module_format_of_file: Rc::clone(&opts.get_emit_module_format_of_file),
         current_source_file: Cell::new(None),
         import_require_statements: RefCell::new(None),
-        helper_name_substitutions: RefCell::new(FxHashMap::default()),
     });
     Some(tx.get().base.new_transformer(Rc::new(move |_: &mut NodeVisitor, n: P<Node>| tx.visit(n)), Some(opts.context)))
 }
