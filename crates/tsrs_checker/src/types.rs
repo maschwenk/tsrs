@@ -2136,6 +2136,14 @@ embeds!(TypeReference, object_type, ObjectType);
 pub struct ReferenceInstantiations(Cell<Option<P<RefCell<hashbrown::HashTable<P<Type>>>>>>);
 
 impl ReferenceInstantiations {
+    /// Heap census: the table's slots (4 bytes each).
+    #[cfg(feature = "assignment-stats")]
+    pub(crate) fn heap_stat(&self) -> Option<crate::heapcensus::HeapStat> {
+        let cell = self.0.get()?;
+        let table = cell.borrow();
+        Some(crate::heapcensus::HeapStat::table(table.len(), table.capacity(), std::mem::size_of::<P<Type>>()))
+    }
+
     fn hash(type_arguments: &[P<Type>]) -> u64 {
         use std::hash::Hasher;
         let mut h = rustc_hash::FxHasher::default();
