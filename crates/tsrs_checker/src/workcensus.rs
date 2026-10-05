@@ -54,9 +54,13 @@ pub enum Cat {
     ExportAssign,
     VarInit,
     RelUnion,
+    /// Lazy resolution keyed by where the resolved entity is declared: library (lib + node_modules) vs the rest.
+    OriginClass,
+    /// The same spans keyed by (origin, declared / instantiated, what is resolved).
+    Origin,
 }
 
-const CAT_COUNT: usize = 17;
+const CAT_COUNT: usize = 19;
 
 impl Cat {
     fn name(self) -> &'static str {
@@ -78,6 +82,8 @@ impl Cat {
             Cat::ExportAssign => "export assignment type (checkExpressionCached)",
             Cat::VarInit => "variable initializer type (checkDeclarationInitializer)",
             Cat::RelUnion => "typeRelatedToSomeType (relation to a union target)",
+            Cat::OriginClass => "lazy resolution by origin class (library = lib + node_modules)",
+            Cat::Origin => "lazy resolution by origin / instantiation / kind",
         }
     }
 }
@@ -96,7 +102,12 @@ pub enum CKey {
     Bucket(u32),
     /// A mapped type (its declaration node) with the bucket of its key count.
     Mapped(Option<P<Node>>, u32),
+    /// Origin of a lazily resolved entity (0 lib, 1 node_modules, 2 project, 3 none; or class 10 library / 11 other),
+    /// declared (0) or instantiated (1), and the kind of resolution (ORIGIN_WHAT).
+    Origin(u8, u8, u8),
 }
+
+pub(crate) const ORIGIN_WHAT: [&str; 5] = ["type of symbol", "declared type", "structured members", "signature", "module exports"];
 
 #[derive(Default, Clone, Copy)]
 pub struct Stat {
@@ -169,6 +180,98 @@ pub struct Census {
     /// The callee of the innermost resolveCall (for checkExpressionWithContextualType).
     pub call_stack: Vec<Option<P<Node>>>,
     pub file_wall_ns: u64,
+    /// Origin class per source file (Origin keys).
+    pub origin_cache: FxHashMap<P<ast::SourceFile>, u8>,
+    /// Exclusive attribution to the innermost origin span's class (0 library declared, 1 library instantiated,
+    /// 2 other, 3 outside any origin span): ns, types + symbols created.
+    pub origin_stack: Vec<u8>,
+    pub origin_excl_ns: [u64; 6],
+    pub origin_excl_objs: [u64; 6],
+    pub origin_last_ns: u64,
+    pub origin_last_objs: u64,
+}
+
+/// What an origin span resolves: a declared entity, or an instantiation whose type arguments are given by a list or
+/// a mapper (classified one or two levels deep as library-only or not).
+pub(crate) enum CensusInst {
+    Declared,
+    Unknown,
+    Types(&'static [P<Type>]),
+    Type(P<Type>),
+    Mapper(P<crate::mapper::TypeMapper>),
+}
+
+pub(crate) fn origin_of(cache: &mut FxHashMap<P<ast::SourceFile>, u8>, program: &'static dyn crate::program::Program, decl: Option<P<Node>>) -> u8 {
+    match decl.and_then(ast::get_source_file_of_node) {
+        None => 3u8,
+        Some(sf) => *cache.entry(sf).or_insert_with(|| {
+            if program.is_source_file_default_library(sf.path()) {
+                0
+            } else if sf.file_name().contains("/node_modules/") {
+                1
+            } else {
+                2
+            }
+        }),
+    }
+}
+
+/// Whether a type is built from library declarations only, looking a few levels into type arguments and
+/// constituents. Types without a symbol (object literals, ...) count as not library.
+fn type_is_library(cache: &mut FxHashMap<P<ast::SourceFile>, u8>, program: &'static dyn crate::program::Program, t: P<Type>, depth: u32) -> bool {
+    use crate::types::{ObjectFlags, TypeFlags};
+    let f = t.flags();
+    if f.intersects(TypeFlags::Any | TypeFlags::Unknown | TypeFlags::Never | TypeFlags::Void | TypeFlags::Undefined | TypeFlags::Null | TypeFlags::String | TypeFlags::Number | TypeFlags::Boolean | TypeFlags::BigInt | TypeFlags::ESSymbol | TypeFlags::NonPrimitive | TypeFlags::StringLiteral | TypeFlags::NumberLiteral | TypeFlags::BooleanLiteral | TypeFlags::BigIntLiteral) {
+        return true;
+    }
+    if depth > 3 {
+        return false;
+    }
+    if f.intersects(TypeFlags::UnionOrIntersection) {
+        return t.as_union_or_intersection_type().types.get().iter().all(|&u| type_is_library(cache, program, u, depth + 1));
+    }
+    let symbol = t.alias().and_then(|a| a.symbol()).or_else(|| t.symbol());
+    let Some(symbol) = symbol else { return false };
+    if origin_of(cache, program, symbol.declarations().first().copied()) > 1 {
+        return false;
+    }
+    if let Some(alias) = t.alias() {
+        return alias.type_arguments.get().iter().all(|&a| type_is_library(cache, program, a, depth + 1));
+    }
+    if t.object_flags().intersects(ObjectFlags::Reference) {
+        return match t.as_type_reference().resolved_type_arguments.get() {
+            Some(args) => args.iter().all(|&a| type_is_library(cache, program, a, depth + 1)),
+            None => false,
+        };
+    }
+    if let Some(o) = t.try_as_object_type() {
+        if let Some(m) = o.mapper.get() {
+            return mapper_is_library(cache, program, m, depth + 1).unwrap_or(false);
+        }
+    }
+    true
+}
+
+/// Whether every target of a mapper is library-only; None for mappers whose targets are computed (deferred,
+/// function, inference).
+fn mapper_is_library(cache: &mut FxHashMap<P<ast::SourceFile>, u8>, program: &'static dyn crate::program::Program, m: P<crate::mapper::TypeMapper>, depth: u32) -> Option<bool> {
+    use crate::mapper::TypeMapperData;
+    if depth > 4 {
+        return Some(false);
+    }
+    match m.data() {
+        TypeMapperData::Simple { target, .. } => Some(type_is_library(cache, program, target, depth)),
+        TypeMapperData::Array { targets, .. } => Some(targets.iter().all(|&t| type_is_library(cache, program, t, depth))),
+        TypeMapperData::ArrayToSingle { target, .. } => Some(type_is_library(cache, program, target, depth)),
+        TypeMapperData::Merged { m1, m2 } | TypeMapperData::Composite { m1, m2 } => {
+            match (mapper_is_library(cache, program, m1, depth + 1), mapper_is_library(cache, program, m2, depth + 1)) {
+                (Some(false), _) | (_, Some(false)) => Some(false),
+                (Some(true), Some(true)) => Some(true),
+                _ => None,
+            }
+        }
+        _ => None,
+    }
 }
 
 pub(crate) fn bucket(n: usize) -> u32 {
@@ -215,6 +318,12 @@ impl Census {
             rel_union: FxHashMap::default(),
             rel_union_late: FxHashMap::default(),
             file_wall_ns: 0,
+            origin_cache: FxHashMap::default(),
+            origin_stack: Vec::new(),
+            origin_excl_ns: [0; 6],
+            origin_excl_objs: [0; 6],
+            origin_last_ns: 0,
+            origin_last_objs: 0,
         });
         // Calibrate what a nested span costs its parent beyond the measured bookkeeping (the clock reads at its
         // edges): run empty spans with a record each inside an outer span.
@@ -312,6 +421,24 @@ impl Census {
         if let Some(parent) = self.stack.last_mut() {
             parent.overhead_ns += now.saturating_sub(t0);
         }
+    }
+
+    /// Charges the time and objects since the last switch to the innermost origin class, then pushes push (or pops).
+    pub fn origin_switch(&mut self, objs: u64, push: Option<u8>) {
+        let now = self.now();
+        let top = self.origin_stack.last().copied().unwrap_or(5) as usize;
+        if self.origin_last_ns != 0 {
+            self.origin_excl_ns[top] += now.saturating_sub(self.origin_last_ns);
+            self.origin_excl_objs[top] += objs.saturating_sub(self.origin_last_objs);
+        }
+        match push {
+            Some(k) => self.origin_stack.push(k),
+            None => {
+                self.origin_stack.pop();
+            }
+        }
+        self.origin_last_ns = now;
+        self.origin_last_objs = objs;
     }
 
     pub fn count(&mut self, cat: Cat, key: CKey, a: u64, b: u64, c: u64) {
@@ -454,6 +581,14 @@ impl CKey {
             },
             CKey::Bucket(b) => format!("size {}", bucket_label(b)),
             CKey::Mapped(n, b) => format!("{} | keys {}", n.map(node_label).unwrap_or_else(|| "?".to_string()), bucket_label(b)),
+            CKey::Origin(o, inst, what) => {
+                let origin = ["lib", "node_modules", "project", "none", "", "", "", "", "", "", "library", "other"][o as usize];
+                if o >= 10 {
+                    origin.to_string()
+                } else {
+                    format!("{origin} / {} / {}", ["declared", "inst, library args", "inst, project args", "inst, args unknown"][inst as usize], ORIGIN_WHAT[what as usize])
+                }
+            }
         }
     }
 }
@@ -484,6 +619,8 @@ struct Global {
     flow_sampled_invocations: u64,
     rel_union: FxHashMap<(u8, u8, u8), Stat>,
     rel_union_late: FxHashMap<(u8, u8), Stat>,
+    origin_excl_ns: [u64; 6],
+    origin_excl_objs: [u64; 6],
 }
 
 static GLOBAL: Mutex<Option<Global>> = Mutex::new(None);
@@ -511,6 +648,50 @@ impl Checker {
         } else {
             None
         }
+    }
+
+    /// Runs f inside an OriginClass span and an Origin span keyed by the source file of decl. Only call when
+    /// census_on().
+    #[inline(never)]
+    pub(crate) fn census_origin<R>(&mut self, decl: Option<P<Node>>, inst: CensusInst, what: u8, f: impl FnOnce(&mut Checker) -> R) -> R {
+        let program = self.program;
+        let self_objs = self.type_count as u64 + self.symbol_count as u64;
+        let c = self.census.as_deref_mut().unwrap();
+        let t0 = c.now_ns();
+        let origin = origin_of(&mut c.origin_cache, program, decl);
+        let inst: u8 = match inst {
+            CensusInst::Declared => 0,
+            CensusInst::Unknown => 3,
+            CensusInst::Types(ts) => {
+                if ts.iter().all(|&t| type_is_library(&mut c.origin_cache, program, t, 0)) { 1 } else { 2 }
+            }
+            CensusInst::Type(t) => {
+                if type_is_library(&mut c.origin_cache, program, t, 0) { 1 } else { 2 }
+            }
+            CensusInst::Mapper(m) => match mapper_is_library(&mut c.origin_cache, program, m, 0) {
+                Some(true) => 1,
+                Some(false) => 2,
+                None => 3,
+            },
+        };
+        let class_key = CKey::Origin(if origin <= 1 { 10 } else { 11 }, 0, 0);
+        let key = CKey::Origin(origin, inst, what);
+        let excl_class = if origin <= 1 { inst } else { 4 };
+        let objs = self_objs;
+        c.origin_switch(objs, Some(excl_class));
+        c.charge_since(t0);
+        let s1 = c.begin(Cat::OriginClass, class_key);
+        let s2 = c.begin(Cat::Origin, key);
+        let r = f(self);
+        let c = self.census.as_deref_mut().unwrap();
+        let t2 = c.end(s2);
+        c.record(Cat::Origin, key, t2, 0, 0, 0);
+        let t1 = c.end(s1);
+        c.record(Cat::OriginClass, class_key, t1, 0, 0, 0);
+        let objs = self.type_count as u64 + self.symbol_count as u64;
+        let c = self.census.as_deref_mut().unwrap();
+        c.origin_switch(objs, None);
+        r
     }
 
     #[inline]
@@ -597,6 +778,10 @@ impl Checker {
         g.flow_sampled_steps += c.flow_sampled_steps;
         g.flow_sampled_repeats += c.flow_sampled_repeats;
         g.flow_sampled_invocations += c.flow_sampled_invocations;
+        for i in 0..6 {
+            g.origin_excl_ns[i] += c.origin_excl_ns[i];
+            g.origin_excl_objs[i] += c.origin_excl_objs[i];
+        }
     }
 }
 
@@ -632,6 +817,14 @@ pub fn census_report() {
         g.pair_ns,
         g.frames as f64 * g.pair_ns / 1e6
     );
+    {
+        let names = ["library declared", "library inst, library args", "library inst, project args", "library inst, args unknown", "other (project / workspace / no declaration)", "outside any lazy resolution"];
+        let sum: u64 = g.origin_excl_ns.iter().sum::<u64>().max(1);
+        let _ = writeln!(out, "\n## exclusive attribution to the innermost lazy resolution (origin_excl)\n\n| class | ms | % | types + symbols created |\n| --- | --- | --- | --- |");
+        for i in 0..6 {
+            let _ = writeln!(out, "| {} | {:.1} | {:.2} | {} |", names[i], ms(g.origin_excl_ns[i]), 100.0 * g.origin_excl_ns[i] as f64 / sum as f64, g.origin_excl_objs[i]);
+        }
+    }
     // Category totals.
     let mut cats: FxHashMap<Cat, Stat> = FxHashMap::default();
     let all: Vec<(&(Cat, String), &Stat)> = g.stats.iter().collect();
@@ -659,7 +852,9 @@ pub fn census_report() {
             s.c
         );
     }
-    let extras: [(Cat, &str, &str, &str); 17] = [
+    let extras: [(Cat, &str, &str, &str); 19] = [
+        (Cat::OriginClass, "-", "-", "-"),
+        (Cat::Origin, "-", "-", "-"),
         (Cat::RelUnion, "constituents tried", "matched by key map", "related"),
         (Cat::File, "-", "-", "-"),
         (Cat::CondInst, "distributed constituents", "never results", "distributions"),

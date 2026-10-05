@@ -223,7 +223,11 @@ pub(crate) fn is_local_type_alias(symbol: P<Symbol>) -> bool {
 impl Checker {
     // checker.go:24131
     pub fn get_declared_type_of_symbol(&mut self, symbol: P<Symbol>) -> P<Type> {
-        let mut result = self.try_get_declared_type_of_symbol(symbol);
+        let mut result = if self.census_on() {
+            self.census_origin(symbol.declarations().first().copied(), crate::workcensus::CensusInst::Declared, 1, |c| c.try_get_declared_type_of_symbol(symbol))
+        } else {
+            self.try_get_declared_type_of_symbol(symbol)
+        };
         if result.is_none() {
             result = Some(self.error_type);
         }
