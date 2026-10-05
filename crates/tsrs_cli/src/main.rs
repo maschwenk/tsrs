@@ -42,5 +42,10 @@ fn main() {
         .unwrap()
         .join()
         .unwrap_or(tsc::ExitStatus::NotImplemented);
+    // TSRS_DERIVED_VARIANCE=shadow reports each disagreement as it is found and fails the run at the end.
+    #[cfg(feature = "checker")]
+    if tsrs_compiler::Checker::derived_variance_finish() > 0 {
+        std::process::exit(7);
+    }
     std::process::exit(status as i32);
 }

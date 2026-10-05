@@ -1363,7 +1363,7 @@ impl Checker {
     }
 
     // The `containsReference` closure of isTypeParameterPossiblyReferenced (checker.go:22830).
-    fn type_parameter_contains_reference(&mut self, tp: P<Type>, node: P<Node>) -> bool {
+    pub(crate) fn type_parameter_contains_reference(&mut self, tp: P<Type>, node: P<Node>) -> bool {
         match node.kind() {
             Kind::ThisType => {
                 return tp.as_type_parameter().is_this_type();

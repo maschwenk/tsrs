@@ -934,6 +934,13 @@ pub struct Checker {
     pub instantiation_count: u32,
     /// TSRS_WORK_CENSUS (workcensus.rs); None unless the variable is set.
     pub census: Option<Box<crate::workcensus::Census>>,
+    /// TSRS_DERIVED_VARIANCE (relater_derived.rs; off by default and under Go-compatible history).
+    pub(crate) derived_variance: crate::relater_derived::DerivedVarianceMode,
+    pub(crate) derived_depth: u32,
+    /// Variance of each generic's `this` type (relater_derived.rs); None while being computed.
+    pub(crate) derived_this_variances: FxHashMap<P<Type>, Option<VarianceFlags>>,
+    /// Per generic: which type parameters reach the check type of a conditional type in its members.
+    pub(crate) derived_conditional_params: FxHashMap<P<Type>, Vec<bool>>,
     pub instantiation_stack: Vec<P<Type>>,
     pub conditional_constraint_depth: u32,
     pub inline_level: i32,
@@ -1322,6 +1329,10 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         total_instantiation_count: 0,
         instantiation_count: 0,
         census: crate::workcensus::census_path().map(|_| crate::workcensus::Census::new()),
+        derived_variance: crate::relater_derived::derived_variance_mode(),
+        derived_depth: 0,
+        derived_this_variances: FxHashMap::default(),
+        derived_conditional_params: FxHashMap::default(),
         instantiation_stack: Vec::new(),
         conditional_constraint_depth: 0,
         inline_level: 0,

@@ -166,6 +166,31 @@ the type. Use one checker: with several, each checker's spans are merged and wal
 about 18% instructions; its span cost is calibrated and subtracted, but patterns made of many short spans (unions,
 relations, indexed access) still read a little high.
 
+## Relating derived generics by variances: `TSRS_DERIVED_VARIANCE`
+
+TypeScript relates two references to the same generic (`ZodType<A>` and `ZodType<B>`) by the generic's variances,
+but a derived instance (`ZodObject<Shape>`, whose bases lead to `ZodType<any, any, $ZodObjectInternals<Shape>>`)
+against a reference to the base is compared member by member. `TSRS_DERIVED_VARIANCE=on` relates the base reference
+in the source's chain to the target by variances first; if that holds, the members the source inherits unchanged count
+as related and only the others are compared (`crates/tsrs_checker/src/relater_derived.rs`, notes/perf-derived-variance.md).
+Off by default, and always off under `--checkerAssignment go`.
+
+What it trusts: TypeScript's variance digest, across a derivation. Its failure mode is a missed error (a relation
+answered True that the member-by-member comparison answers False), never a spurious one. Three guards close the
+disagreements found so far: the `this` type's variance is measured and must be covariant, bivariant or independent
+(`testdata/regressions/derived-variance-this-type`); no decisions inside a variance computation; an `any` argument
+falls back when its parameter reaches the check type of a conditional type in the generic's members
+(`testdata/regressions/derived-variance-any-conditional`). `cargo test -p tsrs_cli --test derived_variance` runs the
+two cases in all three modes against tsgo-ref's output.
+
+`TSRS_DERIVED_VARIANCE=shadow` audits a codebase: it computes both answers, prints each disagreement on stderr (the
+generic base, the two types and the members that do not relate), continues, prints the totals at the end and exits
+with status 7 if there was any. It costs about as much as `off` plus the variance work (notes/perf-derived-variance.md).
+Only targets with at least 16 properties are tried (`TSRS_DERIVED_VARIANCE_MIN_MEMBERS=<n>`; the regression test
+sets 0). `TSRS_DERIVED_VARIANCE_RELIABLE=params` limits it to bases whose type parameters' variances carry neither
+Unmeasurable nor Unreliable (`=1`: also the `this` variance); `TSRS_DERIVED_VARIANCE_BASES=A,B` (or `=-A,B`) limits it
+to (or excludes) bases by name; `TSRS_DERIVED_VARIANCE_LOG=<file>` logs every decision with its timing.
+
 ## Profiling
 
 Profile the `dist` profile (fat LTO, one codegen unit; release builds also add PGO, `.github/workflows/release.yml`),
