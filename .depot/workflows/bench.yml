@@ -208,9 +208,9 @@ jobs:
           python3 bench/run.py --readme README.md --tsrs-build pgo-dist
           --tsrs /tmp/tsrs-pgo/target/x86_64-unknown-linux-gnu/dist/tsrs
 
-      # Flag only (bench/README.md "Regression flag"): compares tsrs instruction counts with the previous run and, on a
-      # regression, comments on the pull requests merged in between. Never fails the job.
-      - name: Flag instruction-count regressions
+      # Flag only (bench/README.md "Regression flag"): compares tsrs instruction counts and peak memory with the previous
+      # run and, on a regression, comments on the pull requests merged in between. Never fails the job.
+      - name: Flag bench regressions
         continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ github.token }}

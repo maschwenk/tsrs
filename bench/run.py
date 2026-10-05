@@ -177,8 +177,9 @@ def run_once(exe: Path, cwd: Path, proj: Path, single: bool, log_path: Path, tim
     return r
 
 
-def count_instructions(exe: Path, cwd: Path, proj: Path, log_path: Path, timeout: float) -> int | None:
-    """User-space instructions of one single-threaded type check (bench/count.py), or None where it cannot count.
+def count_instructions(exe: Path, cwd: Path, proj: Path, log_path: Path, timeout: float) -> dict | None:
+    """User-space instructions and peak RSS of one single-threaded type check (bench/count.py), or None where it cannot
+    count.
 
     Untimed and separate from the timed runs. One thread (`--singleThreaded`, and RAYON_NUM_THREADS=1 for the parse
     pool) makes the count reproducible to about 0.001%, so one run is enough."""
@@ -191,7 +192,9 @@ def count_instructions(exe: Path, cwd: Path, proj: Path, log_path: Path, timeout
         subprocess.run([sys.executable, str(BENCH / "count.py"), str(out), "--", *argv], cwd=cwd, stdout=log_file,
                        stderr=subprocess.STDOUT, env=dict(os.environ, RAYON_NUM_THREADS="1"), timeout=timeout)
     r = json.loads(out.read_text())
-    return r["instructions"] if r.get("exit") in (0, 1, 2) else None
+    if r.get("exit") not in (0, 1, 2) or r.get("instructions") is None:
+        return None
+    return {"instructions": r["instructions"], "max_rss_bytes": r["max_rss_bytes"]}
 
 
 def median(xs: list[float]) -> float | None:
@@ -460,10 +463,11 @@ def main() -> None:
                     log(f"{name} {mode}: reference {ref_cfg['version']}: {rr['errors']} errors, same as tsrs: "
                         f"{pr[mode]['reference']['same_as_tsrs']}")
         if "single" in modes and not args.no_instructions:
-            n = count_instructions(tsrs, cwd, proj, logs / f"{name}-instructions-tsrs.log", args.timeout)
-            if n is not None:
-                pr["single"]["tsrs"]["instructions"] = n
-                log(f"{name} single  tsrs: {n / 1e9:.3f} G instructions (user space, one thread)")
+            counted = count_instructions(tsrs, cwd, proj, logs / f"{name}-instructions-tsrs.log", args.timeout)
+            if counted is not None:
+                pr["single"]["tsrs"].update(counted)
+                log(f"{name} single  tsrs: {counted['instructions'] / 1e9:.3f} G instructions, peak "
+                    f"{fmt_mem(counted['max_rss_bytes'])} (one thread, untimed)")
         result["projects"][name] = pr
     result["duration_s"] = round(time.perf_counter() - t_start)
 

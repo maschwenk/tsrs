@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Flag instruction-count regressions between this bench run and the previous one (bench/README.md "Regression flag").
+"""Flag instruction-count and peak-memory regressions between this bench run and the previous one (bench/README.md
+"Regression flag").
 
   bench/regressions.py (<result.json> | --latest) [--threshold 1] [--comment]
 
-Compares each project's single-threaded instruction count (bench/count.py, recorded by bench/run.py) with the
-newest earlier result in bench/results from the same runner label and build. The count repeats to about 0.001%, so
-any change is the code's; only a different CPU model or C library (which pick different memcpy-style routines) can
-move it otherwise, and then nothing is judged. A count up by more than --threshold percent is a regression.
+Compares each project's single-threaded instruction count and peak RSS (bench/count.py, recorded by bench/run.py)
+with the newest earlier result in bench/results from the same runner label and build. The instruction count repeats
+to about 0.001% and peak RSS to under 0.4%, so a change past the thresholds below is the code's; only a different CPU
+model or C library (which pick different memcpy-style routines) can move them otherwise, and then nothing is judged.
 Regressions are printed as warnings and, with --comment, posted as a comment on each pull request merged since the
 previous run (or on the commit when there is none). This script never fails the job.
 """
@@ -23,15 +24,22 @@ from pathlib import Path
 # The result fields this repository's bench/run.py writes. maschwenk/tsrslint keeps a copy of this script; the
 # differences are these constants.
 TOOL = "tsrs"
-COUNT_PATH = ("single", "tsrs", "instructions")
+COUNT_PATH = ("single", "tsrs")
 WHAT = "single-threaded type check"
+
+# A metric regresses when it rises by more than `percent` and by more than `floor` (peak RSS of an 80 MiB run moves
+# by up to 0.4 MiB between identical runs).
+METRICS = [
+    {"key": "instructions", "label": "instructions", "percent": 1.0, "floor": 0, "unit": 1e9, "suffix": "G"},
+    {"key": "max_rss_bytes", "label": "peak memory", "percent": 1.0, "floor": 2 * 2**20, "unit": 2**20, "suffix": "MiB"},
+]
 MAX_PR_COMMENTS = 3
 
 
-def instructions(result, project):
+def measured(result, project, key="instructions"):
     node = result.get("projects", {}).get(project)
-    for key in COUNT_PATH:
-        node = node.get(key) if isinstance(node, dict) else None
+    for k in COUNT_PATH + (key,):
+        node = node.get(k) if isinstance(node, dict) else None
     return node
 
 
@@ -47,7 +55,7 @@ def previous_result(new, path, results_dir):
             continue
         same_setup = (r.get("machine", {}).get("label") == new.get("machine", {}).get("label")
                       and r.get(TOOL, {}).get("build") == new.get(TOOL, {}).get("build"))
-        has_counts = any(instructions(r, name) for name in r.get("projects", {}))
+        has_counts = any(measured(r, name) for name in r.get("projects", {}))
         if same_setup and has_counts and r.get("date", "") <= new.get("date", ""):
             candidates.append(r)
     return max(candidates, key=lambda r: r["date"]) if candidates else None
@@ -62,23 +70,33 @@ def machine_difference(old, new):
     return None
 
 
-def compare(old, new, threshold):
-    """Rows of (project, old, new, change %, verdict)."""
+def compare(old, new, metrics=METRICS):
+    """Rows of (project, metric, old, new, change %, verdict)."""
     rows = []
-    for name in new.get("projects", {}):
-        before, after = instructions(old, name), instructions(new, name)
-        if not before or not after:
-            continue
-        change = 100.0 * (after / before - 1)
-        verdict = "regression" if change > threshold else "improvement" if change < -threshold else "unchanged"
-        rows.append((name, before, after, change, verdict))
+    for metric in metrics:
+        for name in new.get("projects", {}):
+            before, after = measured(old, name, metric["key"]), measured(new, name, metric["key"])
+            if not before or not after:
+                continue
+            change = 100.0 * (after / before - 1)
+            if change > metric["percent"] and after - before > metric["floor"]:
+                verdict = "regression"
+            elif change < -metric["percent"] and before - after > metric["floor"]:
+                verdict = "improvement"
+            else:
+                verdict = "unchanged"
+            rows.append((name, metric, before, after, change, verdict))
     return rows
 
 
+def fmt(value, metric):
+    return f"{value / metric['unit']:.3f} {metric['suffix']}" if metric["suffix"] == "G" else f"{value / metric['unit']:.1f} {metric['suffix']}"
+
+
 def table(rows):
-    lines = [f"| project | {TOOL} instructions before | after | change | |", "| --- | ---: | ---: | ---: | --- |"]
-    for name, before, after, change, verdict in rows:
-        lines.append(f"| {name} | {before / 1e9:.3f} G | {after / 1e9:.3f} G | {change:+.2f}% | {verdict} |")
+    lines = [f"| project | {TOOL} | before | after | change | |", "| --- | --- | ---: | ---: | ---: | --- |"]
+    for name, metric, before, after, change, verdict in rows:
+        lines.append(f"| {name} | {metric['label']} | {fmt(before, metric)} | {fmt(after, metric)} | {change:+.2f}% | {verdict} |")
     return "\n".join(lines)
 
 
@@ -109,7 +127,7 @@ def main(argv):
     ap.add_argument("result", type=Path, nargs="?")
     ap.add_argument("--latest", action="store_true", help="judge the newest result in --results-dir (by its date)")
     ap.add_argument("--results-dir", type=Path, default=Path(__file__).parent / "results")
-    ap.add_argument("--threshold", type=float, default=1.0, help="percent increase that counts as a regression")
+    ap.add_argument("--threshold", type=float, help="override the percent for instructions (default 1)")
     ap.add_argument("--comment", action="store_true", help="comment on the merged pull requests (needs GITHUB_TOKEN)")
     ap.add_argument("--repo", default=os.environ.get("GITHUB_REPOSITORY"))
     args = ap.parse_args(argv)
@@ -129,27 +147,30 @@ def main(argv):
     if why_not:
         print(f"regressions: not comparing with {old_commit[:12]}: {why_not}")
         return
-    rows = compare(old, new, args.threshold)
-    regressions = [r for r in rows if r[4] == "regression"]
-    summary = (f"Instruction counts, {WHAT}, {old_commit[:12]} -> {new_commit[:12]} "
-               f"(regression: {TOOL} up more than {args.threshold:g}%)\n\n" + table(rows) + "\n")
+    metrics = [dict(m, percent=args.threshold) if m["key"] == "instructions" and args.threshold is not None else m
+               for m in METRICS]
+    rows = compare(old, new, metrics)
+    regressions = [r for r in rows if r[5] == "regression"]
+    rules = "; ".join(f"{m['label']} up more than {m['percent']:g}%" + (f" and {m['floor'] / m['unit']:g} {m['suffix']}"
+                                                                        if m["floor"] else "") for m in metrics)
+    summary = (f"Bench, {WHAT}, {old_commit[:12]} -> {new_commit[:12]} (regression: {rules})\n\n" + table(rows) + "\n")
     print(summary)
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
             f.write("### " + summary)
-    for name, before, after, change, _ in regressions:
-        print(f"::warning title=Instruction-count regression::{name}: {TOOL} instructions {change:+.2f}% "
-              f"({before / 1e9:.3f} G -> {after / 1e9:.3f} G) since {old_commit[:12]}")
+    for name, metric, before, after, change, _ in regressions:
+        print(f"::warning title=Bench regression::{name}: {TOOL} {metric['label']} {change:+.2f}% "
+              f"({fmt(before, metric)} -> {fmt(after, metric)}) since {old_commit[:12]}")
     if not regressions or not args.comment:
         return
 
     prs = merged_pull_requests(old_commit, new_commit)
     scope = (f"this merge" if len(prs) <= 1 else
              f"one of the {len(prs)} merges in this range ({', '.join(f'#{n}' for n in prs)})")
-    body = (f"**Bench: instruction-count regression** after {scope}.\n\n"
-            f"The bench on `{new_commit[:12]}` measured more user-space instructions for {TOOL} than the previous run on "
-            f"`{old_commit[:12]}` ({WHAT}, same CPU model and C library). The count repeats to about "
-            f"0.001%, so the change comes from the code. Wall time and memory are in `bench/results/`.\n\n"
+    body = (f"**Bench: regression** after {scope}.\n\n"
+            f"The bench on `{new_commit[:12]}` measured {TOOL} higher than the previous run on `{old_commit[:12]}` "
+            f"({WHAT}, same CPU model and C library). Instruction counts repeat to about 0.001% and peak memory to "
+            f"under 0.4%, so the change comes from the code. Wall time is in `bench/results/`.\n\n"
             f"{table(regressions)}\n\n"
             f"Flag only; nothing fails. A deliberate trade (such as memory for CPU) needs no action. "
             f"Details: `bench/README.md`, \"Regression flag\".")

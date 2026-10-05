@@ -130,7 +130,7 @@ In place:
 | Fx hashing everywhere | `notes/perf-checker-cpu2.md` | oxc, Rolldown, Ruff, rust-analyzer |
 | Lazy members, line maps and rare-field tails | `notes/lazy-members.md`, `notes/mem-lazy.md` | |
 | `#[cold]` slow-path splits | `notes/perf-parse.md` changes 6 to 8: parse instructions 16.66 G -> 15.07 G | oxc, Bun |
-| Instruction counts per merge, flagged on regression | `bench/README.md` "Regression flag": single-threaded tsrs repeats to about 0.001%; a project up more than 1% gets a comment on the PR | CodSpeed in oxc, Rolldown, Ruff, Biome, swc (simulated counts) |
+| Instruction counts and peak memory per merge, flagged on regression | `bench/README.md` "Regression flag": single-threaded tsrs repeats to about 0.001% (instructions) and under 0.4% (peak RSS); a project up more than 1% (and 2 MiB for memory) gets a comment on the PR | CodSpeed in oxc, Rolldown, Ruff, Biome, swc (simulated counts); Ruff's PR memory report |
 | Generated-code freshness check | `tools/gen-check.sh` (CI job `generated-code`) re-runs the eight generators and fails on a diff; it found two hand edits the generators no longer reproduced | oxc, Ruff, rust-analyzer |
 
 Measured and rejected (do not retry without new evidence): explicit huge pages, pre-faulting and mmap'd arena chunks
@@ -154,7 +154,6 @@ Not tried. Each needs a measurement and a note before it is adopted; none is app
 | Call-graph lints | mordant, used by Bun with a per-file baseline, advisory there | `forbidden_reach` ("nothing reachable from this function may allocate"), `generic_body_not_generic` (code compiled again per type for no reason). | A nightly with `rustc-dev` that compiles the workspace. |
 | Source-pattern lints | Bun `test/internal/source-lints/` (one regex per rule, a per-file count allowlist, a check that the scan is not empty), rust-analyzer `xtask/src/tidy.rs` | Bans that clippy cannot express. | A rule that needs it; put it next to `ratchet.py`. |
 | Dependency checks in CI | cargo-deny (oxc, Ruff, Biome, swc), cargo-shear or machete (oxc, Rolldown, Ruff, rust-analyzer) | `deny.toml` exists but no job runs it; unused dependencies cost fat-LTO build time. | A CI step. |
-| Peak memory in the regression flag | Ruff (memory report on each PR, merge base vs head) | Memory is tsrs's main win; the bench flags instructions only. | A stability check of single-threaded peak RSS like the one for instructions. |
 | Hot/cold text grouping with PGO (`-Wl,-z,keep-text-section-prefix`) | Bun (only when a profile is loaded) | PGO already marks functions hot or cold; the linker flag keeps them grouped, for fewer instruction-cache misses on Linux. | A cycles or wall-time A/B; instruction counts will not show it. |
 | Monomorphization audit | oxc (`cargo llvm-lines` workflow), rust-analyzer style guide ("Avoid Monomorphization") | The port's `impl FnMut` callback convention compiles a copy per caller; a list of the largest instantiations shows where a non-generic inner function would cut code size and compile time. | `cargo llvm-lines` on the checker crate; a note. |
 | Identifiers that carry their hash | oxc `Ident` (pointer, length, precomputed hash; `IdentHashMap` does not rehash) | Symbol-table lookups by name hash the string every time. | A profile showing what share of instructions string hashing takes before any change. |
