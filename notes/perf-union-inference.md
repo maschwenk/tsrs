@@ -20,7 +20,8 @@ baselines must not change, and anything on by default that departs from Go is of
   - vscode `src`, webpack and xstate, at the commits and with the install steps in `bench/projects.json`.
   - mui was not set up.
 - Instructions: `perf stat -e instructions:u` over the whole process, run without a wrapper.
-  - Base is a release build of origin/main 453a12d; new is the same tree plus the change, built the same way.
+  - Base is a release build of origin/main 453a12d (`cargo build --release`, without PGO); new is the same tree plus
+    the change, built the same way.
   - Five interleaved rounds after a warm-up, medians.
   - Single-threaded runs (`--singleThreaded`, `RAYON_NUM_THREADS=1`) are deterministic, so every paired delta is
     identical.
