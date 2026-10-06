@@ -675,31 +675,40 @@ impl checkerPool {
         let single = single_threaded || self.single_threaded || active.len() <= 1;
         let steal = allow_steal && !single && stealing_enabled();
         let weight = |i: u32| index_of[i as usize].map_or(1, |fi| state.weights.get(fi).copied().unwrap_or(1).max(0) as u64);
+        // Files above HEAVY_FACTOR x the mean weight of a queue are its "heavy" files.
+        let heavy_threshold = |p: &[u32]| (p.iter().map(|&i| weight(i)).sum::<u64>() / p.len().max(1) as u64).saturating_mul(HEAVY_FACTOR);
+        let mut heavy_lens: Vec<usize> = vec![0; n];
         if steal {
             // Experiment knob (TSRS_CHECKER_FILE_ORDER, notes/perf-checker-64.md): the order in which an owner visits
-            // its own queue. Thieves always take from the back.
+            // its own queue; TSRS_CHECKER_STEAL decides which end thieves take from.
             match checker_file_order() {
                 FileOrder::Program => {}
-                FileOrder::Weight => positions.iter_mut().for_each(|p| p.sort_by_key(|&i| std::cmp::Reverse(weight(i)))),
-                FileOrder::Heavy => positions.iter_mut().for_each(|p| {
-                    // Files above 4x the queue's mean weight first (heaviest first); the rest keep program order.
-                    let threshold = (p.iter().map(|&i| weight(i)).sum::<u64>() / p.len().max(1) as u64).saturating_mul(4);
+                FileOrder::Weight => positions.iter_mut().zip(&mut heavy_lens).for_each(|(p, heavy_len)| {
+                    let threshold = heavy_threshold(p);
+                    p.sort_by_key(|&i| std::cmp::Reverse(weight(i)));
+                    *heavy_len = p.iter().take_while(|&&i| weight(i) > threshold).count();
+                }),
+                FileOrder::Heavy => positions.iter_mut().zip(&mut heavy_lens).for_each(|(p, heavy_len)| {
+                    // The heavy files first (heaviest first); the rest keep program order.
+                    let threshold = heavy_threshold(p);
                     let (mut heavy, light): (Vec<u32>, Vec<u32>) = p.iter().partition(|&&i| weight(i) > threshold);
                     heavy.sort_by_key(|&i| std::cmp::Reverse(weight(i)));
+                    *heavy_len = heavy.len();
                     heavy.extend(light);
                     *p = heavy;
                 }),
                 FileOrder::Reverse => positions.iter_mut().for_each(|p| p.reverse()),
             }
         }
-        let queues: Vec<FileQueue> = positions.into_iter().map(|p| FileQueue::new(p, weight)).collect();
+        let queues: Vec<FileQueue> = positions.into_iter().zip(heavy_lens).map(|(p, heavy_len)| FileQueue::new(p, heavy_len, weight)).collect();
+        let steal_side = checker_steal_side();
         let run = |checker_idx: usize| {
             let start = stats.then(std::time::Instant::now);
             let cpu_start = if stats { thread_cpu_seconds() } else { 0.0 };
             let mut count = 0;
             let mut file_cpu: Vec<(P<SourceFile>, f64)> = Vec::new();
             let mut guard = state.checkers[checker_idx].0.lock().unwrap();
-            while let Some((i, from_other)) = queues_next(&queues, checker_idx, steal) {
+            while let Some((i, from_other)) = queues_next(&queues, checker_idx, steal, steal_side) {
                 let file = files[i];
                 if from_other {
                     // Later passes over this file go to the checker that checked it.
@@ -774,6 +783,26 @@ enum FileOrder {
     Reverse,
 }
 
+const HEAVY_FACTOR: u64 = 4;
+
+// TSRS_CHECKER_STEAL=back|front|heavy (experiment): the end of a victim's queue a thief takes from. `heavy`: the front
+// while the victim's front is still inside its heavy prefix, else the back.
+#[derive(Clone, Copy)]
+enum StealSide {
+    Back,
+    Front,
+    Heavy,
+}
+
+fn checker_steal_side() -> StealSide {
+    static SIDE: OnceLock<StealSide> = OnceLock::new();
+    *SIDE.get_or_init(|| match std::env::var("TSRS_CHECKER_STEAL").as_deref() {
+        Ok("front") => StealSide::Front,
+        Ok("heavy") => StealSide::Heavy,
+        _ => StealSide::Back,
+    })
+}
+
 fn checker_file_order() -> FileOrder {
     static ORDER: OnceLock<FileOrder> = OnceLock::new();
     *ORDER.get_or_init(|| match std::env::var("TSRS_CHECKER_FILE_ORDER").as_deref() {
@@ -791,12 +820,14 @@ struct FileQueue {
     positions: Vec<u32>,
     prefix: Vec<u64>,
     range: std::sync::atomic::AtomicU64,
+    // The leading positions that hold the queue's heavy files (StealSide::Heavy).
+    heavy_len: usize,
 }
 
 const QUEUE_LOW: u64 = u32::MAX as u64;
 
 impl FileQueue {
-    fn new(positions: Vec<u32>, weight: impl Fn(u32) -> u64) -> FileQueue {
+    fn new(positions: Vec<u32>, heavy_len: usize, weight: impl Fn(u32) -> u64) -> FileQueue {
         let mut prefix = Vec::with_capacity(positions.len() + 1);
         let mut sum = 0;
         prefix.push(0);
@@ -805,7 +836,12 @@ impl FileQueue {
             prefix.push(sum);
         }
         let len = positions.len() as u64;
-        FileQueue { positions, prefix, range: std::sync::atomic::AtomicU64::new(len << 32) }
+        FileQueue { positions, prefix, range: std::sync::atomic::AtomicU64::new(len << 32), heavy_len }
+    }
+
+    // Whether the next front position is one of the heavy files (a heuristic read, like `remaining`).
+    fn front_is_heavy(&self) -> bool {
+        ((self.range.load(std::sync::atomic::Ordering::Relaxed) & QUEUE_LOW) as usize) < self.heavy_len
     }
 
     fn remaining(&self) -> u64 {
@@ -839,7 +875,7 @@ impl FileQueue {
 }
 
 // The next position for checker `me` and whether it came from another checker's queue.
-fn queues_next(queues: &[FileQueue], me: usize, steal: bool) -> Option<(usize, bool)> {
+fn queues_next(queues: &[FileQueue], me: usize, steal: bool, side: StealSide) -> Option<(usize, bool)> {
     if let Some(i) = queues[me].take(true) {
         return Some((i, false));
     }
@@ -852,7 +888,12 @@ fn queues_next(queues: &[FileQueue], me: usize, steal: bool) -> Option<(usize, b
             // Queues whose remaining files weigh 0 (unchecked declaration files) are still drained by their owners.
             return queues.iter().enumerate().find_map(|(c, q)| if c == me { None } else { q.take(false).map(|i| (i, true)) });
         }
-        if let Some(i) = queues[victim].take(false) {
+        let front = match side {
+            StealSide::Back => false,
+            StealSide::Front => true,
+            StealSide::Heavy => queues[victim].front_is_heavy(),
+        };
+        if let Some(i) = queues[victim].take(front) {
             return Some((i, true));
         }
     }
@@ -1488,7 +1529,7 @@ mod stealing_tests {
                 let positions: Vec<u32> = (base..base + n as u32).collect();
                 base += n as u32;
                 // Some positions weigh 0 (unchecked declaration files): they must still be handed out.
-                FileQueue::new(positions, |i| u64::from(i % 7 != 0) * u64::from(i % 5 + 1))
+                FileQueue::new(positions, n / 3, |i| u64::from(i % 7 != 0) * u64::from(i % 5 + 1))
             })
             .collect();
         let taken: Mutex<Vec<(usize, bool)>> = Mutex::new(Vec::new());
@@ -1497,7 +1538,7 @@ mod stealing_tests {
                 let (queues, taken) = (&queues, &taken);
                 s.spawn(move || {
                     let mut mine = Vec::new();
-                    while let Some(t) = queues_next(queues, me, true) {
+                    while let Some(t) = queues_next(queues, me, true, super::StealSide::Heavy) {
                         mine.push(t);
                     }
                     taken.lock().unwrap().extend(mine);
@@ -1513,8 +1554,8 @@ mod stealing_tests {
     /// Without stealing a checker runs exactly its own files, in visiting order.
     #[test]
     fn without_stealing_a_checker_keeps_its_own_files_in_order() {
-        let queues = vec![FileQueue::new(vec![0, 2, 4], |_| 1), FileQueue::new(vec![1, 3], |_| 1)];
-        let order: Vec<(usize, bool)> = std::iter::from_fn(|| queues_next(&queues, 0, false)).collect();
+        let queues = vec![FileQueue::new(vec![0, 2, 4], 0, |_| 1), FileQueue::new(vec![1, 3], 0, |_| 1)];
+        let order: Vec<(usize, bool)> = std::iter::from_fn(|| queues_next(&queues, 0, false, super::StealSide::Back)).collect();
         assert_eq!(order, vec![(0, false), (2, false), (4, false)]);
         assert_eq!(queues[1].remaining(), 2);
     }
