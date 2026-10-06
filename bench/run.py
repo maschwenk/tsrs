@@ -29,6 +29,13 @@ REPO = Path(__file__).resolve().parent.parent
 BENCH = REPO / "bench"
 MARKER = ".tsrs-bench.json"
 START, END = "<!-- bench:start -->", "<!-- bench:end -->"
+# --modes: extra compiler flags per mode. "default" passes none (each compiler picks its own checker count), "single"
+# is one checker thread, "checkers8" gives both compilers 8 checker threads (the scaling comparison).
+MODE_FLAGS = {
+    "default": [],
+    "single": ["--singleThreaded"],
+    "checkers8": ["--checkers", "8"],
+}
 # --tsrs-build: how the measured tsrs binary was built, for the table header.
 TSRS_BUILDS = {
     "release": "`cargo build --release`",
@@ -173,10 +180,9 @@ def ensure_tsgo(pkgcfg: dict, work: Path) -> Path:
     return exe
 
 
-def run_once(exe: Path, cwd: Path, proj: Path, single: bool, log_path: Path, timeout: float) -> dict:
+def run_once(exe: Path, cwd: Path, proj: Path, mode: str, log_path: Path, timeout: float) -> dict:
     argv = [str(exe), "-p", str(proj), "--noEmit", "--incremental", "false", "--extendedDiagnostics", "--pretty", "false"]
-    if single:
-        argv.append("--singleThreaded")
+    argv += MODE_FLAGS[mode]
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with open(log_path, "wb") as out:
         t0 = time.perf_counter()
@@ -321,7 +327,8 @@ def markdown(result: dict) -> str:
     ]
     drift = False
     titles = {"default": "Default mode: 4 checker threads in both (tsrs also resolves members lazily, its default)",
-              "single": "`--singleThreaded`: one checker thread in both"}
+              "single": "`--singleThreaded`: one checker thread in both",
+              "checkers8": "`--checkers 8`: 8 checker threads in both (how each compiler scales with more checkers)"}
     for mode in result["modes"]:
         lines += [f"**{titles[mode]}**", "",
                   "| project | errors, tsgo / tsrs | tsgo wall (s) | tsrs wall (s) | speedup | tsgo peak memory | "
@@ -354,6 +361,23 @@ def markdown(result: dict) -> str:
                  "cell is a disagreement, i.e. a correctness bug). wall: process wall-clock time. speedup: tsgo wall / "
                  "tsrs wall (above 1 = tsrs faster). peak memory: maximum resident set size. memory, tsrs / tsgo: below 1 "
                  "= tsrs uses less.")
+    if {"single", "checkers8"} <= set(result["modes"]):
+        lines += ["", "**Scaling: wall time of `--singleThreaded` / wall time of `--checkers 8`, per compiler**", "",
+                  "| project | tsgo | tsrs | tsrs scaling / tsgo scaling | tsgo memory, 8 checkers / 1 | "
+                  "tsrs memory, 8 checkers / 1 |",
+                  "| --- | ---: | ---: | ---: | ---: | ---: |"]
+        for name, pr in result["projects"].items():
+            if "single" not in pr or "checkers8" not in pr:
+                continue
+            sg, st, eg, et = (pr[m][c] for m in ("single", "checkers8") for c in ("tsgo", "tsrs"))
+            if not all(s["ok_runs"] for s in (sg, st, eg, et)):
+                continue
+            gs, ts = sg["wall_s"] / eg["wall_s"], st["wall_s"] / et["wall_s"]
+            lines.append(f"| {name} | {fmt_ratio(gs)} | {fmt_ratio(ts)} | {fmt_ratio(ts / gs)} | "
+                         f"{fmt_ratio(eg['peak_rss_bytes'] / sg['peak_rss_bytes'])} | "
+                         f"{fmt_ratio(et['peak_rss_bytes'] / st['peak_rss_bytes'])} |")
+        lines += ["", "scaling: how many times faster a compiler gets going from one checker thread to eight; "
+                      "memory: peak memory with 8 checkers divided by peak memory with one."]
     if drift:
         ref = result["reference"]
         lines += ["", f"(ref N): tsgo {tv} and tsrs disagree, but `typescript@{ref['version']}`, built from the "
@@ -387,7 +411,7 @@ def main() -> None:
                     help="how --tsrs was built (named in the table header; CI: pgo-dist, see .depot/workflows/bench.yml)")
     ap.add_argument("--tsgo", type=Path, help="native tsgo binary (default: install typescript@<version> from npm)")
     ap.add_argument("--projects", help="comma-separated subset of bench/projects.json")
-    ap.add_argument("--modes", default="default,single")
+    ap.add_argument("--modes", default="default,single,checkers8", help="comma-separated: " + ", ".join(MODE_FLAGS))
     ap.add_argument("--reps", type=int, default=3)
     ap.add_argument("--timeout", type=float, default=900, help="per-run timeout in seconds")
     ap.add_argument("--no-warmup", action="store_true")
@@ -416,6 +440,8 @@ def main() -> None:
             sys.exit(f"unknown projects: {', '.join(sorted(unknown))}")
         projects = [p for p in projects if p["name"] in want]
     modes = args.modes.split(",")
+    if unknown_modes := set(modes) - set(MODE_FLAGS):
+        sys.exit(f"unknown modes: {', '.join(sorted(unknown_modes))}")
     work = args.work_dir.resolve()
     if args.print_cache_keys:
         digest = lambda x: hashlib.sha256(json.dumps(x, sort_keys=True).encode()).hexdigest()[:16]
@@ -469,14 +495,13 @@ def main() -> None:
         cwd, proj = project_path(cfg, p, work)
         if not args.no_warmup:
             log(f"{name}: warm-up (tsgo, untimed)")
-            run_once(tsgo, cwd, proj, False, logs / f"{name}-warmup.log", args.timeout)
+            run_once(tsgo, cwd, proj, "default", logs / f"{name}-warmup.log", args.timeout)
         runs: dict = {m: {"tsgo": [], "tsrs": []} for m in modes}
         for rep in range(args.reps):
             order = ["tsgo", "tsrs"] if rep % 2 == 0 else ["tsrs", "tsgo"]
             for mode in modes:
                 for c in order:
-                    r = run_once(compilers[c], cwd, proj, mode == "single", logs / f"{name}-{mode}-{c}-{rep}.log",
-                                 args.timeout)
+                    r = run_once(compilers[c], cwd, proj, mode, logs / f"{name}-{mode}-{c}-{rep}.log", args.timeout)
                     log(f"{name} {mode:7} {c} rep {rep}: wall {r['wall_s']:.2f} s, check {r.get('check_s')} s, "
                         f"peak {fmt_mem(r['peak_rss_bytes'])}, errors {r['errors']}, exit {r['exit']}")
                     if not r["ok"]:
@@ -503,8 +528,7 @@ def main() -> None:
                 if ref_cfg:
                     if "ref" not in compilers:
                         compilers["ref"] = ensure_tsgo(ref_cfg, work).resolve()
-                    rr = run_once(compilers["ref"], cwd, proj, mode == "single", logs / f"{name}-{mode}-ref.log",
-                                  args.timeout)
+                    rr = run_once(compilers["ref"], cwd, proj, mode, logs / f"{name}-{mode}-ref.log", args.timeout)
                     pr[mode]["reference"] = {"ok": rr["ok"], "errors": rr["errors"],
                                              "same_as_tsrs": rr["ok"] and tuple(rr["error_keys"]) in tk}
                     log(f"{name} {mode}: reference {ref_cfg['version']}: {rr['errors']} errors, same as tsrs: "

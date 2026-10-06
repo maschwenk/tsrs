@@ -94,8 +94,10 @@ tsrs's errors (`(ref N)` in the table).
 ## What is measured
 
 - Invocation, identical for both: `-p <project> --noEmit --incremental false --extendedDiagnostics --pretty false`,
-  in the default mode (both 4 checker threads; tsrs additionally resolves members lazily, its default) and with
-  `--singleThreaded`. `--noEmit` instead of the suite's `--outdir` keeps the measurement to type checking; `--pretty
+  in the default mode (both 4 checker threads; tsrs additionally resolves members lazily, its default), with
+  `--singleThreaded`, and with `--checkers 8` (the `checkers8` mode: how each compiler scales when given twice the
+  default checkers; select modes with `--modes default,single,checkers8`, flags in `MODE_FLAGS` in `run.py`).
+  `--noEmit` instead of the suite's `--outdir` keeps the measurement to type checking; `--pretty
   false` makes the error lines parseable.
 - tsgo: `npm install typescript@7.0.2`. Its `bin/tsc` is a Node launcher (`lib/tsc.js` -> `getExePath.js`) that
   `execve`s the Go binary `@typescript/typescript-<os>-<arch>/lib/tsc`; the harness runs that binary directly (checked
