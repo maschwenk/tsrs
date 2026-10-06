@@ -167,3 +167,81 @@ depot ci run --workflow .depot/workflows/perf-probe.yml      # tools/perf/probe.
 TSRS_ASSIGNMENT_STATS=times tsrs -p src --noEmit --incremental false --extendedDiagnostics --pretty false --checkers 64
 TSRS_FILE_TIMES=ft64.tsv tsrs -p src --noEmit --incremental false --checkers 64   # checker, wall, cpu, nodes, text, imports, file
 ```
+
+## 5. The hot file: why `mapSessionEvents.test.ts` costs 0.34 s, and whether tsrs is slow on it
+
+Setup: a tsconfig next to vscode's (`src/tsconfig.hot.json`: `extends: ./tsconfig.json`, `plugins: []`,
+`include: [./typings, ./vscode-dts/...]`, `files: [./vs/platform/agentHost/test/node/mapSessionEvents.test.ts]`), 831
+files in the program, `--noEmit --incremental false --singleThreaded --extendedDiagnostics --pretty false`, Mac,
+medians of 3. Both compilers print the same diagnostics (none in that file).
+
+| | tsrs | tsgo 7.1-dev (`typescript@7.1.0-dev.20260930.4` darwin-arm64) |
+| --- | --- | --- |
+| Check time | 0.42 s | 0.66 s |
+| Total time | 0.50 s | 0.79 s |
+| Types / Instantiations | 67,379 / 133,515 | 67,389 / 133,579 |
+
+**tsgo is 1.6x slower on it, so this is not a tsrs checker bug: it is TypeScript's inference algorithm on this file's
+pattern.** Per-file CPU (`TSRS_FILE_TIMES`) attributes 0.33 s of the 0.42 s to the test file itself; samply (10 kHz)
+and the work census (`--features work-census`) agree on where it goes:
+
+- 62% of the check is `inferTypeArguments` for `fusionTestEvent` (146 calls, 2.1 ms each, all of it inference proper:
+  `inferTypeArguments` self time 297 ms of a 477 ms check), another 10% the relation checks it issues.
+- The cause is the signature `fusionTestEvent<K extends SessionEventType>(type: K, data: SessionEventPayload<K>['data'],
+  overrides?: Partial<Omit<SessionEventPayload<K>, 'type' | 'data'>>)` with `SessionEventPayload<T> = Extract<SessionEvent,
+  { type: T }>` and `SessionEvent` a union of 155 event interfaces (`@github/copilot-sdk`). With `K` unresolved the
+  conditional cannot be decided (`{ type: K }` is not a generic object type, so it is tried: `M_i` is not assignable to
+  `{ type: K' }` under the restrictive instantiation and not definitely unrelated under the permissive one), so
+  `SessionEventPayload<K>` is a union of 155 deferred conditionals `M_i extends { type: K } ? M_i : never`, and
+  `[\'data\']` on it a deferred indexed access whose simplification distributes into a union of 155 indexed accesses.
+  Inferring from each call's `data` object literal into that target does, per call: 155 identity comparisons
+  (`inferFromMatchingTypes`), 155 closely-matched checks, a 155-member union construction, and 155 `inferFromTypes`
+  walks (`invokeOnce` bookkeeping, simplification, apparent type, `typesDefinitelyUnrelated` over the constituent's
+  `data` type, signatures and index infos). None of them can produce a candidate for `K`: `K` only occurs in the
+  `extends` clause of the deferred conditionals, which inference never descends into; `K` is inferred from the
+  first argument alone. The `overrides` argument adds the same again through a generic mapped type. It is 2 ms per
+  `fusionTestEvent` call of pure bookkeeping, in tsgo as in tsrs.
+- Nothing syntactic predicts it: the file has 15,102 nodes and 609 calls; `agentService.test.ts` next to it has 11x
+  the nodes and 11x the calls and costs 0.10 s. Over the 300 most expensive vscode files, node count has Spearman 0.68
+  with cost, call count 0.53, import count 0.37; no node kind beats node count. The static weights are as good as a
+  syntactic estimate gets.
+
+**Landed (exact):** `is_type_related_to` (crates/tsrs_checker/src/relater_1.rs) answers the identity relation without
+borrowing a relater when the kinds of the two normalized types differ: that is what `is_related_to_ex` decides first,
+before any recursion, and it is the whole answer for "is this object literal identical to this deferred indexed
+access" x 155 per call. Same normalization calls, same order, no relation-cache or type creation on either path.
+
+| | before | after |
+| --- | --- | --- |
+| reduced program, instructions / check s | 10.60 G / 0.47 | 10.04 G (-5.3%) / 0.44 |
+| vscode `--singleThreaded`, instructions / peak | 114.08 G / 1.97 GiB | 113.43 G (-0.57%) / 1.96 GiB |
+| hot file CPU inside the full vscode run (two runs each) | 0.304 / 0.311 s | 0.289 / 0.287 s (-6%) |
+
+Counters (Symbols 4,823,773 / Types 2,667,411 / Instantiations 3,501,192) and output unchanged; vscode, webpack and
+xstate-main byte-identical at 1, 4 and 16 checkers; conformance suite with `--baselines types,symbols` at the documented
+counts (13,458 error baselines, 2 codes, 2 fail; 12,779 / 12,779 .types / .symbols) in Go history mode, and with
+`TS_TEST_PROGRAM_SINGLE_THREADED=false TSRS_HISTORY=canonical` (4 checkers, stealing and heavy-first order active) the
+same pass list with the one by-design canonical difference (`conformance/objectLiteralNormalization`).
+
+**Not done, and why.** The remaining 94% is the algorithm itself, which tsgo runs too: `inferFromTypes` self time (a
+dozen flag tests, three `visited`-map operations and two simplification lookups per constituent), the apparent-type
+and unmatched-property walks. Skipping the 155-way inference when the target's reachable parts contain no type variable
+would be the real fix, but it is not exact: `inferFromIndexTypes` builds a union of the source's property types before
+it finds that the target's index type has no type variable, so skipping it changes type ids and with them the order of
+union members in printed types. Reusing `target` instead of `getUnionType(targets)` when nothing was matched (2%) was
+not landed either: the identity of unions created with `UnionReduction.None` (filterType) is not guaranteed to
+round-trip.
+
+**Structurally** the file cannot be split (one `checkSourceFile`), its cost is intrinsic (0.33 s on a warm checker,
+0.39 s on a cold one: first-touch is only 15% of it), and section 2 already starts it as early as the static weights
+allow. The vscode-side fix is a precomputed map, `type Data = { [E in SessionEvent as E['type']]: E['data'] }` and
+`data: Data[K]`: a single indexed access into a mapped type, inferred in one step instead of 155.
+
+Reproduce: write the tsconfig above into vscode's `src/`, then
+
+```sh
+tsrs -p src/tsconfig.hot.json --noEmit --incremental false --singleThreaded --extendedDiagnostics --pretty false
+samply record --save-only -o hot.json.gz -r 10000 -- tsrs -p src/tsconfig.hot.json --noEmit --incremental false --singleThreaded --pretty false
+CARGO_TARGET_DIR=target/census cargo build --release -p tsrs_cli --features work-census
+TSRS_WORK_CENSUS=census.md target/census/release/tsrs -p src/tsconfig.hot.json --noEmit --incremental false --checkers 1 --extendedDiagnostics
+```
