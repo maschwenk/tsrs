@@ -29,16 +29,37 @@ pub enum Cat {
     VfsOps,
     /// Number of jobs (a count, not nanoseconds).
     Jobs,
+    /// The longest job (nanoseconds; a maximum, not a sum).
+    JobMax,
 }
 
-pub const CATS: usize = Cat::Jobs as usize + 1;
+pub const CATS: usize = Cat::JobMax as usize + 1;
 
-pub const NAMES: [&str; CATS] =
-    ["job wall", "metadata", "read", "parse", "bind", "resolve", "lock: claimed", "lock: syncmap", "lock: vfs", "claim ops", "syncmap ops", "vfs ops", "jobs"];
+pub const NAMES: [&str; CATS] = [
+    "job wall",
+    "metadata",
+    "read",
+    "parse",
+    "bind",
+    "resolve",
+    "lock: claimed",
+    "lock: syncmap",
+    "lock: vfs",
+    "claim ops",
+    "syncmap ops",
+    "vfs ops",
+    "jobs",
+    "longest job",
+];
 
 /// Whether the category is a count rather than nanoseconds.
 pub fn is_count(cat: usize) -> bool {
-    cat >= Cat::ClaimOps as usize
+    cat >= Cat::ClaimOps as usize && cat <= Cat::Jobs as usize
+}
+
+/// Whether the category combines by maximum rather than by sum.
+pub fn is_max(cat: usize) -> bool {
+    cat == Cat::JobMax as usize
 }
 
 static ENABLED: OnceLock<bool> = OnceLock::new();
@@ -57,6 +78,16 @@ pub fn add(cat: Cat, n: u64) {
     ACC.with(|a| {
         let mut v = a.get();
         v[cat as usize] += n;
+        a.set(v);
+    });
+}
+
+/// Raises `cat` to `n` if larger (maximum categories).
+#[inline]
+pub fn add_max(cat: Cat, n: u64) {
+    ACC.with(|a| {
+        let mut v = a.get();
+        v[cat as usize] = v[cat as usize].max(n);
         a.set(v);
     });
 }

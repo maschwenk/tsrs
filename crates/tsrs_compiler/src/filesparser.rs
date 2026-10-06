@@ -379,9 +379,8 @@ struct speculativeParse {
 // The shared state of one speculative walk (`prefetch`).
 struct speculation<'a> {
     ctx: &'a crate::fileloader::prefetchContext<'a>,
-    // The files that have a task already (the round's own, read-only here) and the files a speculative job claimed
-    // (sharded; one mutex for all of them serialized the workers on vscode's 110k import edges at 64 threads).
-    queued: FxHashSet<Path>,
+    // The files a speculative job claimed, beyond those with a task already (`ctx.task_data_by_path`, read-only during
+    // the walk). Sharded: one mutex for all of them serialized the workers on vscode's 110k import edges at 64 threads.
     claimed: tsrs_core::collections::SyncSet<Path>,
     results: std::sync::Mutex<Vec<(Path, speculativeParse)>>,
 }
@@ -426,7 +425,7 @@ impl<'a> speculation<'a> {
     // speculative job has it.
     fn claim(&self, file_name: &str, path: &Path) -> bool {
         let ctx = self.ctx;
-        if self.queued.contains(path) {
+        if ctx.task_data_by_path.contains_key(path) {
             return false;
         }
         if !tsrs_core::festats::timed_counted(tsrs_core::festats::Cat::LockClaim, tsrs_core::festats::Cat::ClaimOps, || {
@@ -471,7 +470,9 @@ impl<'a> speculation<'a> {
         }
         self.results.lock().unwrap().push((path, speculativeParse { file_name, metadata, file, resolutions }));
         if let Some(start) = job_start {
-            festats::add(Cat::JobWall, start.elapsed().as_nanos() as u64);
+            let wall = start.elapsed().as_nanos() as u64;
+            festats::add(Cat::JobWall, wall);
+            festats::add_max(Cat::JobMax, wall);
             festats::add(Cat::Jobs, 1);
         }
     }
@@ -654,16 +655,24 @@ impl filesParser {
             && loader.opts.config.resolved_project_reference_paths().is_empty()
             && !loader.opts.config.compiler_options().unwrap().lib_replacement.is_true();
         loader.files_parser.speculated = true;
-        let jobs: Vec<(TaskId, String, Path, bool)> = to_parse
+        let mut jobs: Vec<(TaskId, Arc<str>, Path, bool)> = to_parse
             .into_iter()
-            .map(|t| (t, loader.tasks[t].normalized_file_path.to_string(), loader.tasks[t].path.clone(), loader.tasks[t].lib_file.is_some()))
+            .map(|t| (t, Arc::clone(&loader.tasks[t].normalized_file_path), loader.tasks[t].path.clone(), loader.tasks[t].lib_file.is_some()))
             .collect();
-        let queued: FxHashSet<Path> = if speculate { loader.files_parser.task_data_by_path.keys().cloned().collect() } else { FxHashSet::default() };
         let ctx = loader.prefetch_context();
-        let spec = speculation { ctx: &ctx, queued, claimed: tsrs_core::collections::SyncSet::default(), results: std::sync::Mutex::new(Vec::new()) };
+        let spec = speculation { ctx: &ctx, claimed: tsrs_core::collections::SyncSet::default(), results: std::sync::Mutex::new(Vec::new()) };
         let (opts, host, resolver, project_references) = (ctx.opts, ctx.host, ctx.resolver, ctx.project_references);
         let parse_start = std::time::Instant::now();
         let stats = tsrs_core::festats::enabled();
+        if std::env::var_os("TSRS_FE_LPT").is_some() {
+            // Experiment: largest files first (longest-processing-time order), so the biggest parse does not start
+            // last and run alone at the end of the phase. Job order changes no result: results go back by task.
+            let sizes: Vec<i64> =
+                crate::program::worker_pool().install(|| jobs.par_iter().map(|(_, name, _, _)| host.fs().stat(name).map_or(0, |s| s.size)).collect());
+            let mut by_size: Vec<(i64, (TaskId, Arc<str>, Path, bool))> = sizes.into_iter().zip(jobs).collect();
+            by_size.sort_by_key(|(size, _)| std::cmp::Reverse(*size));
+            jobs = by_size.into_iter().map(|(_, job)| job).collect();
+        }
         let cpu_before: Vec<f64> = if stats { crate::program::worker_pool().broadcast(|_| crate::checkerpool::thread_cpu_seconds()) } else { Vec::new() };
         let prefetched: Vec<(TaskId, SourceFileMetaData, Option<P<SourceFile>>, Option<Box<prefetchedResolutions>>)> =
             crate::program::worker_pool().install(|| {
@@ -673,12 +682,13 @@ impl filesParser {
                         .map(|(t, file_name, path, is_lib)| {
                             use tsrs_core::festats::{self, Cat};
                             let job_start = festats::enabled().then(std::time::Instant::now);
+                            let file_name: &str = &file_name;
                             let metadata = if is_lib {
                                 SourceFileMetaData { implied_node_format: ModuleKind::CommonJS, ..Default::default() }
                             } else {
-                                festats::timed(Cat::Meta, || source_file_meta_data(opts, resolver, project_references, &file_name))
+                                festats::timed(Cat::Meta, || source_file_meta_data(opts, resolver, project_references, file_name))
                             };
-                            let file = host.get_source_file(parse_options_for(host, project_references, &file_name, &path, &metadata));
+                            let file = host.get_source_file(parse_options_for(host, project_references, file_name, &path, &metadata));
                             // Bind here too: the round is bound by file system calls, and the checkers would bind every
                             // file on the same pool later (binding depends only on the file).
                             festats::timed(Cat::Bind, || file.map(tsrs_binder::bind_source_file));
@@ -692,7 +702,9 @@ impl filesParser {
                                 }
                             }
                             if let Some(start) = job_start {
-                                festats::add(Cat::JobWall, start.elapsed().as_nanos() as u64);
+                                let wall = start.elapsed().as_nanos() as u64;
+                                festats::add(Cat::JobWall, wall);
+                                festats::add_max(Cat::JobMax, wall);
                                 festats::add(Cat::Jobs, 1);
                             }
                             (t, metadata, file, resolutions)
@@ -708,8 +720,8 @@ impl filesParser {
             let per_thread: Vec<[u64; tsrs_core::festats::CATS]> = pool.broadcast(|_| tsrs_core::festats::take_thread());
             let mut sum = [0u64; tsrs_core::festats::CATS];
             for t in &per_thread {
-                for (s, v) in sum.iter_mut().zip(t) {
-                    *s += v;
+                for (i, (s, v)) in sum.iter_mut().zip(t).enumerate() {
+                    *s = if tsrs_core::festats::is_max(i) { (*s).max(*v) } else { *s + v };
                 }
             }
             let threads = per_thread.len() as u64;
@@ -731,6 +743,7 @@ impl filesParser {
                 "Program:     stats: syncmap ops",
                 "Program:     stats: vfs ops",
                 "Program:     stats: jobs",
+                "Program:     stats: longest job",
             ];
             for (i, (row, v)) in ROWS.iter().zip(sum).enumerate() {
                 if tsrs_core::festats::is_count(i) {
@@ -792,7 +805,8 @@ impl filesParser {
 
         struct Collector<'a> {
             loader: &'a mut fileLoader,
-            seen: FxHashMap<DataId, std::sync::Arc<str>>,
+            // By data: the casing a data was first walked under (a map keyed by data hashed once per visit).
+            seen: Vec<Option<std::sync::Arc<str>>>,
         }
 
         // An explicit stack replaces Go's recursive collectFiles (the import graph of a large
@@ -817,7 +831,7 @@ impl filesParser {
         let mut reasons_by_data: Vec<Vec<P<FileIncludeReason>>> = Vec::new();
         reasons_by_data.resize_with(loader.files_parser.datas.len(), Vec::new);
         let mut reasons_order: Vec<(DataId, Path)> = Vec::new();
-        let mut c = Collector { loader, seen: FxHashMap::default() };
+        let mut c = Collector { loader, seen: vec![None; reasons_by_data.len()] };
         let mut stack: Vec<Frame> = vec![Frame::List { tasks: c.loader.root_tasks.clone(), next: 0 }];
 
         while let Some(frame) = stack.pop() {
@@ -899,7 +913,7 @@ impl filesParser {
                     }
 
                     // ensure we only walk each task once
-                    if let Some(checked_name) = c.seen.get(&data) {
+                    if let Some(checked_name) = &c.seen[data] {
                         if let Some(file) = loader.tasks[task].file {
                             if *checked_name != loader.tasks[task].normalized_file_path
                                 && recorded_duplicates.entry(data).or_default().insert(loader.tasks[task].normalized_file_path.to_string())
@@ -928,7 +942,7 @@ impl filesParser {
                         }
                         continue;
                     } else {
-                        c.seen.insert(data, Arc::clone(&loader.tasks[task].normalized_file_path));
+                        c.seen[data] = Some(Arc::clone(&loader.tasks[task].normalized_file_path));
                     }
 
                     if let Some(seen_ignore_case) = &mut tasks_seen_by_name_ignore_case {

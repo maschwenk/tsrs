@@ -56,6 +56,20 @@ for t in 4 16 64; do
   { echo "fe-stats new t=$t: $(cat "$out.time")"; grep -E '^Program|^Parse time|^FS' "$out"; } | tee -a "$summary"
 done
 
+# 2b. Experiment: largest files first in the parallel phase (TSRS_FE_LPT=1), 64 and 16 threads, interleaved with off.
+for t in 16 64; do
+  for rep in 1 2 3 4; do
+    for lpt in 0 1; do
+      out="$PROBE_OUT/fe-lpt$lpt-t$t-rep$rep.txt"
+      env_lpt=(); [ "$lpt" = 1 ] && env_lpt=(TSRS_FE_LPT=1)
+      /usr/bin/time -f "wall %e s, user %U s, sys %S s, maxrss %M KiB" -o "$out.time" \
+        env RAYON_NUM_THREADS=$t "${env_lpt[@]}" TSRS_FRONTEND_STATS=1 /tmp/tsrs-new "${flags[@]}" --listFilesOnly > "$out" 2>&1 || true
+      printf 'fe lpt=%s t=%s rep=%s: %s; %s\n' "$lpt" "$t" "$rep" "$(cat "$out.time")" \
+        "$(grep -E '^Parse time|parallel parse|longest job|job wall' "$out" | sed -E 's/ +/ /g' | tr '\n' ';')" | tee -a "$summary"
+    done
+  done
+done
+
 # 3. Full check at 64 and 16 checkers, both binaries.
 for k in 16 64; do
   for rep in 1 2 3; do
@@ -69,13 +83,17 @@ for k in 16 64; do
     done
   done
 done
-# Output identity (full check, 16 checkers) between the binaries.
+# Output identity (full check) between the binaries: everything but the statistics block (its checker counters vary
+# from run to run with work stealing, for the base binary too).
+diags() { grep -v -E '^[A-Z][A-Za-z: -]*: +[0-9]' "$1" | grep -v -E '^(Program|Config|Checkers|Diagnostics|FS|Lazy|Statistics|List|Error summary|Mapped|some|Conditional|Augmented|Existence|Empty)'; }
 if [ -n "$base_bin" ]; then
-  if diff <(grep -v 'time\|Memory' "$PROBE_OUT/full-base-k16-rep1.txt") <(grep -v 'time\|Memory' "$PROBE_OUT/full-new-k16-rep1.txt") > "$PROBE_OUT/full-k16-diff.txt"; then
-    echo "output identical: base vs new at 16 checkers" | tee -a "$summary"
-  else
-    echo "OUTPUT DIFFERS: base vs new at 16 checkers (full-k16-diff.txt)" | tee -a "$summary"
-  fi
+  for k in 16 64; do
+    if diff <(diags "$PROBE_OUT/full-base-k$k-rep1.txt") <(diags "$PROBE_OUT/full-new-k$k-rep1.txt") > "$PROBE_OUT/full-k$k-diff.txt"; then
+      echo "output identical: base vs new at $k checkers ($(diags "$PROBE_OUT/full-new-k$k-rep1.txt" | grep -c 'error TS') errors)" | tee -a "$summary"
+    else
+      echo "OUTPUT DIFFERS: base vs new at $k checkers (full-k$k-diff.txt)" | tee -a "$summary"
+    fi
+  done
 fi
 
 # 4. perf (best effort): flat profile of the front end at 64 threads, user + kernel symbols.
