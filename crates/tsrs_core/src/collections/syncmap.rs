@@ -132,7 +132,7 @@ impl<K: Hash + Eq + Clone, V: Clone> SyncMap<K, V> {
     pub fn clone_map(&self) -> SyncMap<K, V> {
         let clone = SyncMap::default();
         for (i, shard) in self.shards.iter().enumerate() {
-            *clone.shards[i].write().unwrap() = shard.read().unwrap().clone();
+            clone.shards[i].write().unwrap().clone_from(&shard.read().unwrap());
         }
         clone
     }
