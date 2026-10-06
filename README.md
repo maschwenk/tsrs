@@ -1,52 +1,52 @@
 <!-- bench:start -->
 ## Benchmark: tsrs vs tsgo 7.0.2
 
-tsrs is a Rust port of the TypeScript 7 type checker (the Go compiler, "tsgo"). Each row type-checks one project from [microsoft/typescript-benchmarking](https://github.com/microsoft/typescript-benchmarking), the suite the TypeScript team benchmarks tsgo on (vscode, xstate-main, webpack, mui-docs, Compiler, Compiler-Unions), or from a set of large open-source applications (cal-diy, formbricks-web, supabase-studio, t3code-server), with tsgo 7.0.2 (npm `typescript@7.0.2`) and with tsrs at commit `bd945842ada5` (the PGO-optimized `dist` build, built like the npm release binaries): `tsc -p <project> --noEmit`, median of 3 interleaved runs, on Depot CI `depot-ubuntu-24.04-8` (8 vCPU, 31 GB RAM, Linux x86_64, AMD EPYC 9R45 96-Core Processor).
+tsrs is a Rust port of the TypeScript 7 type checker (the Go compiler, "tsgo"). Each row type-checks one project from [microsoft/typescript-benchmarking](https://github.com/microsoft/typescript-benchmarking), the suite the TypeScript team benchmarks tsgo on (vscode, xstate-main, webpack, mui-docs, Compiler, Compiler-Unions), or from a set of large open-source applications (cal-diy, formbricks-web, supabase-studio, t3code-server), with tsgo 7.0.2 (npm `typescript@7.0.2`) and with tsrs at commit `b2aaa532765c` (the PGO-optimized `dist` build, built like the npm release binaries): `tsc -p <project> --noEmit`, median of 3 interleaved runs, on Depot CI `depot-ubuntu-24.04-8` (8 vCPU, 31 GB RAM, Linux x86_64, AMD EPYC 9R45 96-Core Processor).
 
 **Default mode: 4 checker threads in both (tsrs also resolves members lazily, its default)**
 
 | project | errors, tsgo / tsrs | tsgo wall (s) | tsrs wall (s) | speedup | tsgo peak memory | tsrs peak memory | memory, tsrs / tsgo |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| vscode | 359 / 371 (ref 371) | 14.18 | 3.27 | 4.34x | 7.68 GiB | 2.39 GiB | 0.31x |
-| xstate-main | 0 / 0 | 0.97 | 0.20 | 4.95x | 752 MiB | 425 MiB | 0.57x |
-| webpack | 848 / 840 (ref 840) | 1.51 | 0.35 | 4.36x | 1.21 GiB | 590 MiB | 0.47x |
-| mui-docs | 0 / 0 | 14.61 | 1.51 | 9.66x | 8.33 GiB | 1.19 GiB | 0.14x |
-| Compiler | 43 / 43 | 0.33 | 0.09 | 3.66x | 224 MiB | 185 MiB | 0.83x |
-| Compiler-Unions | 41 / 41 | 0.61 | 0.15 | 4.11x | 250 MiB | 183 MiB | 0.73x |
-| cal-diy | 136 / 136 | 7.35 | 1.42 | 5.16x | 4.70 GiB | 1.39 GiB | 0.30x |
-| formbricks-web | 0 / 0 | 8.97 | 1.64 | 5.48x | 5.80 GiB | 1.95 GiB | 0.34x |
-| supabase-studio | 0 / 9 (ref 9) | 8.45 | 1.78 | 4.75x | 4.92 GiB | 1.46 GiB | 0.30x |
-| t3code-server | 5 / 6 (ref 6) | 17.13 | 2.12 | 8.08x | 6.29 GiB | 1.47 GiB | 0.23x |
+| vscode | 359 / 371 (ref 371) | 12.14 | 2.89 | 4.20x | 7.70 GiB | 2.38 GiB | 0.31x |
+| xstate-main | 0 / 0 | 0.89 | 0.20 | 4.50x | 770 MiB | 427 MiB | 0.55x |
+| webpack | 848 / 840 (ref 840) | 1.43 | 0.34 | 4.22x | 1.14 GiB | 596 MiB | 0.51x |
+| mui-docs | 0 / 0 | 13.43 | 1.45 | 9.28x | 8.25 GiB | 1.18 GiB | 0.14x |
+| Compiler | 43 / 43 | 0.28 | 0.08 | 3.56x | 222 MiB | 187 MiB | 0.84x |
+| Compiler-Unions | 41 / 41 | 0.54 | 0.14 | 3.87x | 251 MiB | 181 MiB | 0.72x |
+| cal-diy | 136 / 136 | 6.34 | 1.29 | 4.91x | 4.68 GiB | 1.39 GiB | 0.30x |
+| formbricks-web | 0 / 0 | 7.91 | 1.56 | 5.07x | 5.95 GiB | 1.95 GiB | 0.33x |
+| supabase-studio | 0 / 9 (ref 9) | 7.46 | 1.69 | 4.42x | 4.64 GiB | 1.47 GiB | 0.32x |
+| t3code-server | 5 / 6 (ref 6) | 14.11 | 1.95 | 7.26x | 6.30 GiB | 1.46 GiB | 0.23x |
 
 **`--singleThreaded`: one checker thread in both**
 
 | project | errors, tsgo / tsrs | tsgo wall (s) | tsrs wall (s) | speedup | tsgo peak memory | tsrs peak memory | memory, tsrs / tsgo |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| vscode | 359 / 371 (ref 371) | 36.78 | 11.77 | 3.13x | 6.66 GiB | 1.97 GiB | 0.30x |
-| xstate-main | 0 / 0 | 1.81 | 0.62 | 2.90x | 618 MiB | 230 MiB | 0.37x |
-| webpack | 848 / 840 (ref 840) | 3.24 | 1.18 | 2.74x | 947 MiB | 359 MiB | 0.38x |
-| mui-docs | 0 / 0 | 16.72 | 3.30 | 5.07x | 3.80 GiB | 794 MiB | 0.20x |
-| Compiler | 43 / 43 | 0.58 | 0.19 | 3.08x | 192 MiB | 81 MiB | 0.42x |
-| Compiler-Unions | 41 / 41 | 1.00 | 0.37 | 2.70x | 204 MiB | 87 MiB | 0.42x |
-| cal-diy | 136 / 136 | 10.61 | 3.44 | 3.08x | 2.75 GiB | 874 MiB | 0.31x |
-| formbricks-web | 0 / 0 | 16.34 | 4.59 | 3.56x | 4.37 GiB | 1.41 GiB | 0.32x |
-| supabase-studio | 0 / 9 (ref 9) | 14.74 | 5.22 | 2.82x | 3.13 GiB | 997 MiB | 0.31x |
-| t3code-server | 5 / 6 (ref 6) | 20.79 | 4.79 | 4.34x | 3.39 GiB | 878 MiB | 0.25x |
+| vscode | 359 / 371 (ref 371) | 31.86 | 10.70 | 2.98x | 6.63 GiB | 1.98 GiB | 0.30x |
+| xstate-main | 0 / 0 | 1.72 | 0.62 | 2.78x | 609 MiB | 232 MiB | 0.38x |
+| webpack | 848 / 840 (ref 840) | 3.01 | 1.11 | 2.71x | 920 MiB | 360 MiB | 0.39x |
+| mui-docs | 0 / 0 | 15.03 | 3.29 | 4.56x | 3.59 GiB | 789 MiB | 0.21x |
+| Compiler | 43 / 43 | 0.49 | 0.17 | 2.82x | 190 MiB | 81 MiB | 0.42x |
+| Compiler-Unions | 41 / 41 | 0.89 | 0.29 | 3.01x | 205 MiB | 87 MiB | 0.42x |
+| cal-diy | 136 / 136 | 9.79 | 3.21 | 3.05x | 2.85 GiB | 874 MiB | 0.30x |
+| formbricks-web | 0 / 0 | 13.88 | 4.47 | 3.10x | 4.15 GiB | 1.41 GiB | 0.34x |
+| supabase-studio | 0 / 9 (ref 9) | 13.39 | 4.68 | 2.86x | 3.13 GiB | 997 MiB | 0.31x |
+| t3code-server | 5 / 6 (ref 6) | 18.51 | 4.39 | 4.22x | 3.20 GiB | 875 MiB | 0.27x |
 
 **`--checkers 8`: 8 checker threads in both (how each compiler scales with more checkers)**
 
 | project | errors, tsgo / tsrs | tsgo wall (s) | tsrs wall (s) | speedup | tsgo peak memory | tsrs peak memory | memory, tsrs / tsgo |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| vscode | 359 / 371 (ref 371) | 11.65 | 1.86 | 6.28x | 8.77 GiB | 2.60 GiB | 0.30x |
-| xstate-main | 0 / 0 | 0.89 | 0.15 | 5.84x | 937 MiB | 516 MiB | 0.55x |
-| webpack | 848 / 840 (ref 840) | 1.43 | 0.25 | 5.77x | 1.49 GiB | 705 MiB | 0.46x |
-| mui-docs | 0 / 0 | 17.21 | 1.50 | 11.48x | 13.19 GiB | 1.54 GiB | 0.12x |
-| Compiler | 43 / 43 | 0.30 | 0.09 | 3.39x | 253 MiB | 231 MiB | 0.91x |
-| Compiler-Unions | 41 / 41 | 0.51 | 0.16 | 3.17x | 265 MiB | 230 MiB | 0.87x |
-| cal-diy | 136 / 136 | 7.54 | 1.14 | 6.62x | 6.16 GiB | 1.78 GiB | 0.29x |
-| formbricks-web | 0 / 0 | 8.71 | 1.23 | 7.06x | 7.39 GiB | 2.31 GiB | 0.31x |
-| supabase-studio | 0 / 9 (ref 9) | 9.17 | 1.19 | 7.73x | 6.97 GiB | 1.74 GiB | 0.25x |
-| t3code-server | 5 / 6 (ref 6) | 17.69 | 2.13 | 8.31x | 8.51 GiB | 2.10 GiB | 0.25x |
+| vscode | 359 / 371 (ref 371) | 9.70 | 1.83 | 5.30x | 8.32 GiB | 2.60 GiB | 0.31x |
+| xstate-main | 0 / 0 | 0.81 | 0.16 | 5.04x | 938 MiB | 510 MiB | 0.54x |
+| webpack | 848 / 840 (ref 840) | 1.27 | 0.24 | 5.36x | 1.41 GiB | 719 MiB | 0.50x |
+| mui-docs | 0 / 0 | 15.35 | 1.26 | 12.19x | 13.19 GiB | 1.52 GiB | 0.12x |
+| Compiler | 43 / 43 | 0.25 | 0.08 | 2.99x | 256 MiB | 235 MiB | 0.92x |
+| Compiler-Unions | 41 / 41 | 0.42 | 0.14 | 3.01x | 282 MiB | 236 MiB | 0.83x |
+| cal-diy | 136 / 136 | 6.79 | 1.01 | 6.70x | 6.16 GiB | 1.80 GiB | 0.29x |
+| formbricks-web | 0 / 0 | 7.57 | 1.19 | 6.39x | 7.38 GiB | 2.30 GiB | 0.31x |
+| supabase-studio | 0 / 9 (ref 9) | 7.49 | 1.15 | 6.50x | 6.99 GiB | 1.76 GiB | 0.25x |
+| t3code-server | 5 / 6 (ref 6) | 14.69 | 1.98 | 7.43x | 8.95 GiB | 2.11 GiB | 0.24x |
 
 errors: the number of type errors each compiler reports on the project; they must be equal (a bold cell is a disagreement, i.e. a correctness bug). wall: process wall-clock time. speedup: tsgo wall / tsrs wall (above 1 = tsrs faster). peak memory: maximum resident set size. memory, tsrs / tsgo: below 1 = tsrs uses less.
 
@@ -54,22 +54,22 @@ errors: the number of type errors each compiler reports on the project; they mus
 
 | project | tsgo | tsrs | tsrs scaling / tsgo scaling | tsgo memory, 8 checkers / 1 | tsrs memory, 8 checkers / 1 |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| vscode | 3.16x | 6.34x | 2.01x | 1.32x | 1.32x |
-| xstate-main | 2.03x | 4.08x | 2.02x | 1.52x | 2.25x |
-| webpack | 2.26x | 4.76x | 2.10x | 1.62x | 1.96x |
-| mui-docs | 0.97x | 2.20x | 2.26x | 3.47x | 1.98x |
-| Compiler | 1.95x | 2.15x | 1.10x | 1.32x | 2.86x |
-| Compiler-Unions | 1.97x | 2.31x | 1.17x | 1.30x | 2.65x |
-| cal-diy | 1.41x | 3.02x | 2.15x | 2.24x | 2.09x |
-| formbricks-web | 1.87x | 3.72x | 1.99x | 1.69x | 1.64x |
-| supabase-studio | 1.61x | 4.40x | 2.74x | 2.23x | 1.79x |
-| t3code-server | 1.17x | 2.25x | 1.91x | 2.51x | 2.45x |
+| vscode | 3.28x | 5.84x | 1.78x | 1.25x | 1.31x |
+| xstate-main | 2.12x | 3.83x | 1.81x | 1.54x | 2.20x |
+| webpack | 2.36x | 4.66x | 1.97x | 1.57x | 2.00x |
+| mui-docs | 0.98x | 2.62x | 2.67x | 3.68x | 1.97x |
+| Compiler | 1.96x | 2.08x | 1.06x | 1.34x | 2.91x |
+| Compiler-Unions | 2.09x | 2.09x | 1.00x | 1.38x | 2.71x |
+| cal-diy | 1.44x | 3.16x | 2.19x | 2.16x | 2.10x |
+| formbricks-web | 1.83x | 3.78x | 2.06x | 1.78x | 1.64x |
+| supabase-studio | 1.79x | 4.06x | 2.27x | 2.23x | 1.81x |
+| t3code-server | 1.26x | 2.22x | 1.76x | 2.79x | 2.46x |
 
 scaling: how many times faster a compiler gets going from one checker thread to eight; memory: peak memory with 8 checkers divided by peak memory with one.
 
 (ref N): tsgo 7.0.2 and tsrs disagree, but `typescript@7.1.0-dev.20260930.4`, built from the TypeScript commit tsrs ports (`b85298b6`), reports exactly tsrs's errors: a TypeScript 7.0 vs 7.1-dev difference, not a tsrs bug.
 
-Runner: Depot CI `depot-ubuntu-24.04-8` (8 vCPU, 31 GB RAM, Linux x86_64, AMD EPYC 9R45 96-Core Processor). Date: 2026-10-06 19:39 UTC. tsrs commit: `bd945842ada5`. Numbers from shared CI machines are noisy; compare trends, not single runs. How it is measured: [`bench/README.md`](bench/README.md).
+Runner: Depot CI `depot-ubuntu-24.04-8` (8 vCPU, 31 GB RAM, Linux x86_64, AMD EPYC 9R45 96-Core Processor). Date: 2026-10-06 20:07 UTC. tsrs commit: `b2aaa532765c`. Numbers from shared CI machines are noisy; compare trends, not single runs. How it is measured: [`bench/README.md`](bench/README.md).
 <!-- bench:end -->
 
 # tsrs
