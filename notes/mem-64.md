@@ -53,8 +53,8 @@ Read:
 
 At 64 checkers each checker makes 55-99K symbols, 67-124K types and 59-315K instantiations for 59-1,004 own files:
 the lib and shared-module working set resolved again per checker (notes/mem-shared-base.md: cannot be shared
-exactly). An idle checker (a one-file project, 1 -> 64 checkers) costs 0.6 MiB including its threads, so the
-per-checker cost is all work-related.
+exactly). An idle checker (a one-file project, 1 -> 64 checkers) costs 0.6 MiB on macOS and 1.4 MiB on Linux including
+its threads, so the per-checker cost is all work-related.
 
 ### macOS (M5 Max, 18 cores, 16 KiB pages, no THP), vscode: arena / heap / rest per checker
 
@@ -140,7 +140,7 @@ reads through `try_get` and answers `None` for a missing record: vscode single 9
 (The 4-64 checker instruction counts move +-0.5% from run to run with stealing; single-checker vscode is -0.1%.)
 Diagnostics identical in every run (full `--pretty false` output compared).
 
-### Results, Linux 64 vCPUs (probe runs rkbqgw4n6w and nh2qw0m6kr; 2 + 3 reps; GiB)
+### Results, Linux 64 vCPUs (probe runs rkbqgw4n6w, nh2qw0m6kr, 5kwpqvqln2; GiB)
 
 Probe nh2qw0m6kr (3 reps base / new, 2 reps the `no_thp` builds, 1 rep the allocator knobs; medians, range of the
 peak; `arena` / `other` sampled at the peak; instructions from a perf counter over all threads):
@@ -163,12 +163,28 @@ peak; `arena` / `other` sampled at the peak; instructions from a perf counter ov
 | new, `MIMALLOC_PURGE_DELAY=100`, 4 / 64 | 2.970 / 4.925 | 1.58 / 2.13 | 1.39 / 2.79 | 123.4 / 161.0 | 2.764 / 0.686 | |
 | new, `MIMALLOC_ALLOW_THP=0`, 4 / 64 | 2.121 / 3.097 | 1.51 / 2.01 | 0.63 / 1.10 | 123.3 / 161.8 | 2.963 / 0.711 | |
 
-With the huge-page heap (the shipped configuration) the two checker changes are worth -0.02 / -0.06 / -0.03 GiB at
-4 / 16 / 64 checkers: the id groups move ~100 MB from the heap into the arena, and under THP the heap they leave
-behind stays largely resident (partly filled pages). With a 4 KiB-page heap they are worth -0.03 / -0.06 / -0.10 GiB
-(-1.5% / -2.2% / -2.9%), on macOS -0.03 / -0.06 / -0.12 GiB. Instructions: -0.2% / -0.5% / -0.2% (within the
-run-to-run spread of stealing). Diagnostics identical in every row (371 errors; `error TS` lines compared across the
-variants).
+Probe 5kwpqvqln2 (the runner's default of 8 checkers, 3 reps; 4 and 64 again, 2 reps):
+
+| run | peak RSS GiB (range) | arena | other | instructions G | check s |
+| --- | --- | --- | --- | --- | --- |
+| base, 8 checkers | 3.232-3.246 | 1.63 | 1.59-1.61 | 129.0-129.1 | 1.432-1.447 |
+| new, 8 checkers | 3.186-3.207 | 1.66-1.67 | 1.52-1.54 | 128.7-128.9 | 1.405-1.437 |
+| base + no_thp, 8 checkers | 2.466-2.485 | 1.63-1.64 | 0.84-0.86 | 129.0-129.1 | 1.456-1.467 |
+| new + no_thp, 8 checkers | 2.440-2.445 | 1.66-1.67 | 0.78-0.79 | 128.8-128.9 | 1.456-1.475 |
+| base / new, 4 checkers | 3.015-3.027 / 2.970-2.994 | | | 123.6 / 123.3-123.4 | 2.66-2.78 / 2.69-2.71 |
+| base / new, 64 checkers | 5.017-5.019 / 4.921-4.952 | | | 161.1-161.5 / 161.2 | 0.67-0.78 / 0.67 |
+| one-file project, base, 1 / 8 / 64 checkers | 0.115 / 0.143 / 0.201 (no_thp: 0.066 / 0.079 / 0.111) | | | | |
+
+An idle checker (the one-file project: it initializes, owns two OS threads, checks nothing) costs 1.4 MiB on Linux
+with the huge-page heap and 0.7 MiB without (0.6 MiB on macOS), so the 33 MiB of a working checker is its work: the
+heap pages a checking thread touches in every size class.
+
+With the huge-page heap (the shipped configuration) the two checker changes are worth -0.03 / -0.05 / -0.06 /
+-0.08 GiB at 4 / 8 / 16 / 64 checkers (-1.0% / -1.4% / -1.7% / -1.6%): the id groups move ~100 MB from the heap
+into the arena, and under THP the heap they leave behind stays largely resident (partly filled pages). With a
+4 KiB-page heap they are worth -0.03 / -0.03 / -0.06 / -0.10 GiB (-1.5% / -1.0% / -2.2% / -2.9%), on macOS
+-0.03 / - / -0.06 / -0.12 GiB. Instructions: -0.2% / -0.5% / -0.2% (within the run-to-run spread of stealing).
+Diagnostics identical in every row (371 errors; `error TS` lines compared across the variants).
 
 ## 3. The allocator: huge pages on the mimalloc heap
 
@@ -176,32 +192,36 @@ mimalloc v3 (libmimalloc-sys 0.1.49) advises `MADV_HUGEPAGE` on the 1 GiB arenas
 `allow_thp`), so on a THP `madvise` host every 2 MiB block of the heap that any thread touched is resident in full.
 Partly filled thread-local pages (one per size class per thread: 64 KiB small, 512 KiB medium, 4 MiB large) then
 cost their whole size, and with 64 parse threads plus two threads per checker that is most of the "other" column
-above. The arena of tsrs (`tsrs_core::reserve`) advises its chunks too, but a bump allocator wastes at most the
-finger's block per thread.
+above (~10 MiB per allocating thread). The arena of tsrs (`tsrs_core::reserve`) advises its chunks too, but a bump
+allocator wastes at most the finger's block per thread.
 
 The crate feature `mimalloc/no_thp` (`MI_NO_THP`) compiles mimalloc's advice out while the tsrs arena keeps its huge
 pages. Measured on the probe with that one-line change in crates/tsrs_cli/Cargo.toml (`mimalloc = { version =
-"0.1.52", features = ["no_thp"] }`), base and new (2a + 2b) binaries, 2 reps:
+"0.1.52", features = ["no_thp"] }`), base and new (2a + 2b) binaries, 2-3 reps:
 
 | run | base | base + no_thp | new | new + no_thp | check time, base -> new + no_thp |
 | --- | --- | --- | --- | --- | --- |
-| noCheck | 2.02 | 1.32 | 1.99 | 1.33 | 0.31 -> 0.34 s total |
-| 1 checker | 2.77 | 2.10 | 2.75 | 2.10 | 10.4 -> 10.7 s (one 13.1 s outlier) |
-| 4 checkers | 3.01-3.02 | 2.31-2.32 | 2.97-3.01 | 2.29-2.30 | 2.67-2.68 -> 2.72-2.73 s (+2%) |
-| 16 checkers | 3.56-3.61 | 2.67-2.69 | 3.55-3.56 | 2.63-2.65 | 0.79 -> 0.80-0.83 s (+2-5%) |
-| 64 checkers | 4.97-4.99 | 3.46 | 4.94-4.96 | 3.35 | 0.67-0.69 -> 0.66-0.68 s |
+| noCheck | 2.02-2.03 | 1.32-1.33 | 1.99-2.01 | 1.33 | 0.31-0.32 -> 0.33-0.34 s total |
+| 1 checker | 2.75-2.77 | 2.10 | 2.75 | 2.08-2.10 | 10.4-10.5 -> 10.6 s (one 13.1 s outlier) |
+| 4 checkers | 3.00-3.03 | 2.30-2.32 | 2.96-3.01 | 2.26-2.30 | 2.67-2.70 -> 2.72-2.85 s (+2-5%) |
+| 8 checkers (the runner's default) | 3.23-3.25 | 2.47-2.49 | 3.19-3.21 | 2.44-2.45 | 1.43-1.45 -> 1.46-1.48 s (+2%) |
+| 16 checkers | 3.56-3.62 | 2.67-2.69 | 3.50-3.56 | 2.63-2.65 | 0.79-0.80 -> 0.80-0.84 s (+2-5%) |
+| 64 checkers | 4.97-5.02 | 3.45-3.46 | 4.92-4.99 | 3.35-3.36 | 0.67-0.69 -> 0.67-0.68 s |
 
-Instructions identical (123.4-123.6 G at 4, 136.2-136.7 G at 16, 160.4-161.6 G at 64). Per extra checker, 4 -> 64:
-33.4 MiB base, 19.6 base + no_thp, 33.0 new, **18.0 new + no_thp**. Against bun: 2.29 vs 1.45 GiB at 4 threads,
-3.35 vs 2.97 GiB at 64.
+Instructions identical (123.3-123.6 G at 4, 128.7-129.1 at 8, 136.2-136.9 G at 16, 160.3-161.8 G at 64). Per extra
+checker, 4 -> 64: 33.4 MiB base, 19.6 base + no_thp, 33.0 new, **18.0 new + no_thp**. Against bun: 2.27 vs 1.45 GiB
+at 4 threads, 3.35 vs 2.97 GiB at 64.
 
 This is an allocator-policy decision outside this task's write set (tsrs_cli), with a wall-time cost of ~2-5% of
-check time at 4-16 checkers (page faults and TLB on the heap; 0 at 64) against -23% / -26% / -32% peak RSS at 4 /
-16 / 64 checkers, and it would show on the 8-vCPU README benchmark as a small wall regression. Not applied here;
-the numbers are for the owner. Knobs that keep the advice do not help: `MIMALLOC_PURGE_DELAY=0` gives back
-0.1-0.2 GiB at 64 checkers for +25% check time; `MIMALLOC_ARENA_EAGER_COMMIT=0` / `PURGE_DELAY=100`: see the
-probe-3 rows. Disabling THP for the whole process (`MIMALLOC_ALLOW_THP=0`) saves another 0.1-0.2 GiB (the arena's
-finger blocks) for +4-10% check time at 4 checkers.
+check time at 4-16 checkers (page faults and TLB on the heap; 0 at 64) against -23% / -24% / -26% / -32% peak RSS
+at 4 / 8 / 16 / 64 checkers, and it would show on the 8-vCPU README benchmark as a small wall regression. Not
+applied here; the numbers are for the owner. Knobs that keep the advice: `MIMALLOC_PURGE_DELAY=0` gives back
+0.1-0.2 GiB at 64 checkers for +25% check time; `MIMALLOC_ARENA_EAGER_COMMIT=0` gives the same memory as `no_thp`
+(2.27 / 3.33 GiB at 4 / 64: piecemeal commits split the mappings so that no huge page forms) for +7% check time at
+4 checkers (the commits are system calls); `MIMALLOC_PURGE_DELAY=100` nothing (2.97 / 4.93). Disabling THP for the
+whole process (`MIMALLOC_ALLOW_THP=0`) saves another 0.1-0.2 GiB (the arena's finger blocks) for +4-10% check time
+at 4 checkers. Fewer allocating threads would cut the same amplification without touching the allocator (each
+parse worker holds ~11 MiB of it at the peak; the 64 creation threads hold little, see the one-file project).
 
 ## 4. Tried, rejected, not done
 
