@@ -81,8 +81,33 @@ def read_marker(d: Path) -> dict | None:
         return None
 
 
-def ensure_checkout(name: str, repo: str, commit: str, install: str | None, dest: Path) -> None:
+def overlay_files(p: dict) -> list[tuple[str, bytes]]:
+    """The files of a project's `overlay` directory (bench/overlays/<name>), as (relative path, content)."""
+    if "overlay" not in p:
+        return []
+    root = REPO / p["overlay"]
+    files = sorted((f.relative_to(root).as_posix(), f.read_bytes()) for f in root.rglob("*") if f.is_file())
+    if not files:
+        sys.exit(f"{p['name']}: overlay {p['overlay']} has no files")
+    return files
+
+
+def overlay_digest(p: dict) -> str | None:
+    """Content hash of a project's overlay; part of its checkout marker and CI cache key, so editing it re-installs."""
+    files = overlay_files(p)
+    if not files:
+        return None
+    h = hashlib.sha256()
+    for rel, data in files:
+        h.update(rel.encode() + b"\0" + hashlib.sha256(data).digest())
+    return h.hexdigest()[:16]
+
+
+def ensure_checkout(name: str, repo: str, commit: str, install: str | None, dest: Path, p: dict | None = None) -> None:
     want = {"repo": repo, "commit": commit, "install": install}
+    overlay = overlay_files(p) if p else []
+    if overlay:
+        want["overlay"] = overlay_digest(p)
     if read_marker(dest) == want:
         log(f"{name}: cached checkout {commit[:12]}")
         return
@@ -91,6 +116,10 @@ def ensure_checkout(name: str, repo: str, commit: str, install: str | None, dest
 
     def attempt() -> None:
         git_checkout(repo, commit, dest)
+        # Overlay files replace or add checkout files before the install (bench/README.md "Application projects").
+        for rel, data in overlay:
+            (dest / rel).parent.mkdir(parents=True, exist_ok=True)
+            (dest / rel).write_bytes(data)
         if install:
             sh(install, cwd=dest, env=dict(os.environ, CI="true", HUSKY="0"))
 
@@ -112,7 +141,7 @@ def setup_project(cfg: dict, p: dict, work: Path) -> None:
     if "suite_dir" in p:
         ensure_checkout("typescript-benchmarking", cfg["suite"]["repo"], cfg["suite"]["commit"], None, work / "suite")
     else:
-        ensure_checkout(p["name"], p["repo"], p["commit"], p.get("install"), work / "solutions" / p["name"])
+        ensure_checkout(p["name"], p["repo"], p["commit"], p.get("install"), work / "solutions" / p["name"], p)
 
 
 def native_platform() -> str:
@@ -273,13 +302,19 @@ def markdown(result: dict) -> str:
     m = result["machine"]
     tv = result["tsgo"]["version"]
     commit = result["tsrs"]["commit"][:12]
-    names = ", ".join(result["projects"])
+    suite_names = [n for n, pr in result["projects"].items() if pr.get("source") != "application"]
+    app_names = [n for n, pr in result["projects"].items() if pr.get("source") == "application"]
+    sources = []
+    if suite_names:
+        sources.append(f"[microsoft/typescript-benchmarking](https://github.com/microsoft/typescript-benchmarking), "
+                       f"the suite the TypeScript team benchmarks tsgo on ({', '.join(suite_names)})")
+    if app_names:
+        sources.append(f"a set of large open-source applications ({', '.join(app_names)})")
     lines = [
         f"## Benchmark: tsrs vs tsgo {tv}",
         "",
         f"tsrs is a Rust port of the TypeScript 7 type checker (the Go compiler, \"tsgo\"). Each row type-checks one "
-        f"project from [microsoft/typescript-benchmarking](https://github.com/microsoft/typescript-benchmarking), the "
-        f"suite the TypeScript team benchmarks tsgo on ({names}), with tsgo {tv} (npm `typescript@{tv}`) and with tsrs "
+        f"project from {', or from '.join(sources)}, with tsgo {tv} (npm `typescript@{tv}`) and with tsrs "
         f"at commit `{commit}` ({TSRS_BUILDS[result['tsrs'].get('build', 'release')]}): `tsc -p <project> --noEmit`, "
         f"median of {result['reps']} interleaved runs, on {m['label']}.",
         "",
@@ -389,7 +424,8 @@ def main() -> None:
         # bench/.work/solutions/<name>: one cache per cloned project, keyed on its commit and install command.
         for p in projects:
             if "repo" in p:
-                print(f"{p['name']}={p['commit'][:12]}-{digest([p['repo'], p['commit'], p.get('install')])}")
+                key = [p["repo"], p["commit"], p.get("install")] + ([overlay_digest(p)] if "overlay" in p else [])
+                print(f"{p['name']}={p['commit'][:12]}-{digest(key)}")
         return
 
     tsgo = (args.tsgo or ensure_tsgo(cfg["tsgo"], work)).resolve()
@@ -448,7 +484,10 @@ def main() -> None:
                     runs[mode][c].append(r)
                     result["raw"].append({"project": name, "mode": mode, "compiler": c, "rep": rep,
                                           **{k: v for k, v in r.items() if k != "error_keys"}})
-        pr: dict = {"commit": p.get("commit") or cfg["suite"]["commit"], "project": p["project"]}
+        pr: dict = {"commit": p.get("commit") or cfg["suite"]["commit"], "project": p["project"],
+                    "source": "suite" if "case" in p else "application"}
+        if "overlay" in p:
+            pr["overlay"] = overlay_digest(p)
         for mode in modes:
             g, t = summarize(runs[mode]["tsgo"]), summarize(runs[mode]["tsrs"])
             gk = {tuple(r["error_keys"]) for r in runs[mode]["tsgo"] if r["ok"]}
