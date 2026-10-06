@@ -190,3 +190,35 @@ the PGO pipeline, measured on Depot run `ps_h83310tmld`: TypeScript testdata spa
 of tsrs + tsrs-test 100 s, training run 15 s, profile merge < 1 s, final build 74 s, so ~3 min more per run (job 7 min
 13 s -> 10 min 4 s). The dependencies, the only part rust-cache can reuse, compile in ~3 s; the time is the
 workspace crates with one codegen unit and fat LTO, which change with every commit.
+
+## Head-to-head on a wide machine
+
+`bench/compare.py` answers a different question from `run.py`: how tsrs, both TypeScript 7 builds and `bun check`
+compare on one wide machine, the way Bun's `bun check` announcement measured them (vscode, Linux x64, 64 threads,
+mean of 20 runs). It runs four compilers on the same checkouts:
+
+- `tsgo`: `typescript@7.0.2` (as in `run.py`);
+- `tsgo-dev`: `typescript@7.1.0-dev.20260930.4` (`reference` in `projects.json`), built from the TypeScript commit
+  tsrs ports, so it is both the like-for-like Go baseline and the error oracle;
+- `tsrs`: the binary given with `--tsrs`;
+- `bun`: `bun check` from the binary given with `--bun` (1.4.3 canary or later), run as
+  `bun check -p <project> --no-pretty --all` (`--all` turns off the grouping of repeated errors so every error line is
+  counted).
+
+Thread settings (`--threads`, default `default,4,8,16,all`): `default` passes no flag (tsgo and tsrs use 4 checker
+threads, bun one thread per core); a number N passes `--checkers N` to tsgo and tsrs and `--threads N` to bun;
+`all` is the machine's thread count. The knobs are not identical: `--checkers` sets only the checker threads (parsing
+and binding still use every core), while bun's `--threads` caps all of its threads. Per project, one untimed warm-up
+per compiler, then `--reps` (default 20) reps in which the compiler order rotates; the table reports mean ± standard
+deviation, median and minimum wall time and mean peak RSS, plus whether each compiler's (file, line, column, code)
+error list equals 7.1-dev's. bun prints its own file count, which leaves out the default `lib` files (13 fewer on
+`Compiler`).
+
+```sh
+python3 bench/compare.py --tsrs target/release/tsrs --bun ~/.bun/bin/bun --projects vscode --reps 20
+python3 bench/compare.py --tsrs ... --bun ... --projects Compiler --threads default,4 --reps 2   # smoke test
+```
+
+The Depot CI workflow `.depot/workflows/bench-compare.yml` (manual dispatch only) runs it on `depot-ubuntu-24.04-64`
+(64 vCPU) with the PGO `dist` build of the commit (built and trained as in `bench.yml`) and Bun canary, and uploads
+`bench/results/compare/<date>-<commit>-<threads>t.{json,md}` plus the logs as the `bench-compare` artifact.
