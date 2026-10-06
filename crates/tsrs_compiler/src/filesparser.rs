@@ -17,8 +17,6 @@ use crate::includeprocessor::fileIncludeData;
 use crate::processing_diagnostic::{includeExplainingDiagnostic, processingDiagnostic};
 
 pub(crate) type TaskId = usize;
-
-
 pub(crate) type DataId = usize;
 
 pub(crate) struct parseTask {
@@ -666,7 +664,6 @@ impl filesParser {
         let (opts, host, resolver, project_references) = (ctx.opts, ctx.host, ctx.resolver, ctx.project_references);
         let parse_start = std::time::Instant::now();
         let stats = tsrs_core::festats::enabled();
-
         let cpu_before: Vec<f64> = if stats { crate::program::worker_pool().broadcast(|_| crate::checkerpool::thread_cpu_seconds()) } else { Vec::new() };
         let prefetched: Vec<(TaskId, SourceFileMetaData, Option<P<SourceFile>>, Option<Box<prefetchedResolutions>>)> =
             crate::program::worker_pool().install(|| {
@@ -720,7 +717,6 @@ impl filesParser {
             }
             let threads = per_thread.len() as u64;
             let cpu: f64 = cpu_after.iter().zip(&cpu_before).map(|(a, b)| a - b).sum();
-            tsrs_core::phases::count("Program:     stats: pool threads", threads);
             tsrs_core::phases::record("Program:     stats: thread-seconds (wall x threads)", parse_elapsed * threads as u32);
             tsrs_core::phases::record("Program:     stats: thread cpu", std::time::Duration::from_secs_f64(cpu));
             const ROWS: [&str; tsrs_core::festats::CATS] = [
