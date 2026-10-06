@@ -79,30 +79,43 @@ options computed a canonical absolute path per file that only its error path rea
    path only for a file outside the root directory, and the `contains_path` comparisons run on the pool (diagnostics
    stay in file order).
 
-## Result (64-thread runner, interleaved, 3 reps each; front end = `--listFilesOnly`)
+## Result (64-thread runner, final build vs origin/main, interleaved, medians of 3; front end = `--listFilesOnly`)
 
-| threads | Parse time base | Parse time new | parallel phase base -> new | sequential load | collect | verify | user / sys base | user / sys new |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | 1.755-1.792 | 1.737-1.746 | 1.62-1.66 -> 1.65-1.66 | 0.063 -> 0.018 | 0.014 -> 0.010 | 0.012 -> 0.013 | 1.84 / 0.11 | 1.83 / 0.11 |
-| 4 | 0.559-0.608 | 0.498-0.501 | 0.44 -> 0.44 | 0.067 -> 0.018 | 0.015 -> 0.010 | 0.012 -> 0.002 | 1.93 / 0.12 | 1.93 / 0.12 |
-| 16 | 0.267-0.269 | 0.168-0.172 | 0.139-0.142 -> 0.117-0.120 | 0.066 -> 0.017 | 0.015 -> 0.010 | 0.012 -> 0.003 | 2.17 / 0.32 | 2.0 / 0.1-0.2 |
-| 32 | 0.245-0.252 | 0.115-0.117 | 0.122-0.129 -> 0.066-0.068 | 0.064 -> 0.017 | 0.014 -> 0.010 | 0.012 -> 0.002 | 2.7 / 1.4 | 2.2 / 0.1-0.3 |
-| 64 | 0.255-0.265 | 0.109-0.112 | 0.134-0.146 -> 0.057-0.062 | 0.062 -> 0.017 | 0.014 -> 0.010 | 0.012 -> 0.003 | 2.6-3.4 / 4.0-5.0 | 2.5-2.7 / 0.3-0.4 |
+| threads | Parse time base -> new | parallel phase | sequential load | roots | collect | verify | user / sys s base | user / sys s new | peak RSS MB |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 1.764 -> 1.770 (1.765-1.806) | 1.630 -> 1.684 | 0.064 -> 0.016 | 0.021 -> 0.022 | 0.014 -> 0.010 | 0.012 -> 0.013 | 1.84 / 0.12 | 1.86 / 0.12 | 1259 -> 1251 |
+| 4 | 0.570 -> 0.520 | 0.443 -> 0.458 | 0.065 -> 0.016 | 0.011 -> 0.009 | 0.014 -> 0.010 | 0.012 -> 0.005 | 1.97 / 0.11 | 1.95 / 0.16 | 1340 -> 1341 |
+| 16 | 0.266 -> 0.171 | 0.141 -> 0.120 | 0.065 -> 0.016 | 0.014 -> 0.005 | 0.015 -> 0.010 | 0.012 -> 0.003 | 2.23 / 0.28 | 2.04 / 0.18 | 1525 -> 1517 |
+| 32 | 0.255 -> 0.122 | 0.127 -> 0.074 | 0.067 -> 0.016 | 0.016 -> 0.005 | 0.015 -> 0.010 | 0.012 -> 0.002 | 2.71 / 1.40 | 2.23 / 0.31 | 1712 -> 1749 |
+| 64 | 0.260 -> 0.109 | 0.139 -> 0.060 | 0.060 -> 0.016 | 0.017 -> 0.006 | 0.014 -> 0.010 | 0.012 -> 0.003 | 2.91 / 4.59 | 2.53 / 0.46 | 2059 -> 2122 |
 
-- `perf` at 64 threads: `__pv_queued_spin_lock_slowpath` 52% of samples -> 3.8%; `perf stat`: task-clock 8.10 s ->
-  3.19 s for a 0.38 s -> 0.21 s process; instructions 25.7 G -> 24.5 G. One thread: 23.715 G -> 23.642 G instructions
-  (-0.3%), peak RSS 1.288 -> 1.283 GB. On this Mac, one thread, `/usr/bin/time -l`: 27.29-27.35 G -> 27.11-27.17 G
-  instructions, peak 1275.6 -> 1267.2 MB.
-- Full check, vscode, 64 checkers: Parse 0.257-0.263 -> 0.111-0.122, Total 0.962-0.995 -> 0.786-0.803 s, wall
-  0.99-1.02 -> 0.81-0.83 s; 16 checkers: Total 1.075-1.110 -> 0.912-0.927 s. bun check in the same run: 64 threads
-  "loaded in" 247-267 ms, 16 threads 336-345 ms. (Final-build table: see below.)
+At one thread the work the prefetch now does (sub tasks, include reasons, per-file maps) moves from the sequential
+load into the "parallel" phase, which is the same thread: Parse time is unchanged, instructions are 23.72 -> 23.63 G
+(`perf stat`, -0.4%). At 64 threads: instructions 25.60 -> 24.23 G, task-clock 7.78 -> 3.08 s, `perf`:
+`__pv_queued_spin_lock_slowpath` 52% of samples -> 3.8%. On this Mac, one thread, `/usr/bin/time -l`: 27.29-27.35 G
+-> 27.11-27.17 G instructions, peak 1275.6 -> 1267.2 MB.
+
+Full check, vscode, 371 errors, same run (wall from `/usr/bin/time`, medians of 3):
+
+| checkers | Parse base -> new | Check base -> new | Total base -> new | wall base -> new | user / sys base -> new | peak RSS GB |
+| --- | --- | --- | --- | --- | --- | --- |
+| 4 | 0.262 -> 0.113 | 2.685 -> 2.705 | 2.990 -> 2.865 | 3.01 -> 2.88 | 14.2 / 4.7 -> 13.1 / 0.6 | 3.18 -> 3.20 |
+| 8 | 0.259 -> 0.112 | 1.420 -> 1.384 | 1.719 -> 1.542 | 1.74 -> 1.56 | 14.3 / 5.2 -> 13.4 / 0.6 | 3.41 -> 3.45 |
+| 16 | 0.260 -> 0.113 | 0.793 -> 0.765 | 1.096 -> 0.922 | 1.12 -> 0.94 | 15.8 / 4.4 -> 14.7 / 0.5 | 3.76 -> 3.83 |
+| 64 | 0.257 -> 0.106 | 0.728 -> 0.627 | 1.036 -> 0.787 | 1.06 -> 0.82 | 23.5 / 5.0 -> 20.6 / 0.8 | 5.26 -> 5.24 |
+
+The check phase also gets faster at many checkers (0.73 -> 0.63 s at 64): the checker threads go through the same
+cached-vfs and package.json maps (`realpath`, `file_exists`, `get_packages_map`), and the kernel time of the whole
+process drops from 4-5 s to under 1 s at every checker count. bun check in the same run: "loaded in" 253-262 ms at
+64 threads, 333-345 ms at 16; tsrs's Config + Parse is 0.135 s at 64 and 0.195 s at 16.
+
 - Output: the diagnostics of vscode at 16 and 64 checkers are byte-identical base vs new on the runner (the Symbols /
   Types / Instantiations counters of `--extendedDiagnostics` differ from run to run at many checkers for the base
   binary too); vscode / webpack / xstate-main at 1, 4, 16 checkers identical on this Mac; `--listFiles` and
-  `--explainFiles` identical.
-- Peak RSS: unchanged at 1-16 threads; +50-70 MB (+2-3%) at 32-64 threads for the front end and +70-90 MB (+1.5%)
-  for the 64-checker full check, with the work moved from the main thread to 64 workers (per-thread allocator
-  retention; not chased, see risks).
+  `--explainFiles` (142k lines) identical.
+- Peak RSS: within the run-to-run spread at 1-16 threads for the front end; +40-60 MB (+2-3%) at 32-64 threads, and
+  +20-70 MB (about +1%) for the full check at 4-16 checkers (within the spread at 64), with the work moved from the
+  main thread to the workers (per-thread allocator retention; not chased, see risks).
 
 ## What the parallel phase is now (64 threads, `TSRS_FRONTEND_STATS`)
 
