@@ -166,11 +166,13 @@ fn load(t: TaskId, loader: &mut fileLoader) {
         return;
     }
 
-    let normalized_file_path = loader.tasks[t].normalized_file_path.to_string();
-    if tspath::has_extension(&normalized_file_path) {
+    // A prefetched file passed these checks in task_needs_parse (the same conditions); only an unparsed task repeats
+    // them here, where a failure becomes the task's diagnostic.
+    if loader.tasks[t].file.is_none() && tspath::has_extension(&loader.tasks[t].normalized_file_path) {
         let compiler_options = loader.opts.config.compiler_options().unwrap();
         let allow_non_ts_extensions = compiler_options.allow_non_ts_extensions.is_true();
         if !allow_non_ts_extensions {
+            let normalized_file_path = loader.tasks[t].normalized_file_path.to_string();
             let canonical_file_name =
                 tspath::get_canonical_file_name(&normalized_file_path, loader.host.fs().use_case_sensitive_file_names());
             if !loader.is_supported_extension(&canonical_file_name) {
