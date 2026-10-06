@@ -1,50 +1,31 @@
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::RwLock;
 use std::time::SystemTime;
-
-use rustc_hash::FxHashMap;
 
 use crate::FS as VFS;
 use crate::{Entries, FileInfo};
 
-/// Shards per cache: program construction probes these caches from every worker (vscode: 250k acquisitions in the
-/// 64-thread parse phase, notes/perf-frontend-64.md); keys spread over the shards by hash, like
-/// `tsrs_core::collections::SyncMap`.
-const SHARDS: usize = 64;
-
-// SyncMap is collections.SyncMap: a concurrent map with Load/Store/Clear.
+// SyncMap is collections.SyncMap: a concurrent map with Load/Store/Clear, keyed by path strings and probed with
+// `&str` (the sharded `tsrs_core::collections::SyncMap`: program construction probes these caches from every
+// worker, vscode: 250k acquisitions in the 64-thread parse phase, notes/perf-frontend-64.md).
 struct SyncMap<V> {
-    shards: Box<[RwLock<FxHashMap<String, V>>]>,
+    m: tsrs_core::collections::SyncMap<String, V>,
 }
 
 impl<V: Clone> SyncMap<V> {
     fn new() -> Self {
-        SyncMap { shards: (0..SHARDS).map(|_| RwLock::new(FxHashMap::default())).collect() }
-    }
-
-    #[inline]
-    fn shard(&self, key: &str) -> &RwLock<FxHashMap<String, V>> {
-        use std::hash::{Hash, Hasher};
-        let mut h = rustc_hash::FxHasher::default();
-        key.hash(&mut h);
-        &self.shards[(h.finish() >> (u64::BITS - SHARDS.trailing_zeros())) as usize]
+        SyncMap { m: tsrs_core::collections::SyncMap::default() }
     }
 
     fn load(&self, key: &str) -> Option<V> {
-        let m = tsrs_core::festats::timed_counted(tsrs_core::festats::Cat::LockVfs, tsrs_core::festats::Cat::VfsOps, || self.shard(key).read().unwrap());
-        m.get(key).cloned()
+        self.m.load(key)
     }
 
     fn store(&self, key: &str, value: V) {
-        let mut m =
-            tsrs_core::festats::timed_counted(tsrs_core::festats::Cat::LockVfs, tsrs_core::festats::Cat::VfsOps, || self.shard(key).write().unwrap());
-        m.insert(key.to_string(), value);
+        self.m.store(key.to_string(), value);
     }
 
     fn clear(&self) {
-        for shard in &self.shards {
-            shard.write().unwrap().clear();
-        }
+        self.m.clear();
     }
 }
 
