@@ -206,7 +206,7 @@ mean of 20 runs). It runs four compilers on the same checkouts:
   counted).
 
 Thread settings (`--threads`, default `default,4,8,16,all`): `default` passes no flag (tsgo uses 4 checker threads,
-tsrs half the cores between 4 and 8, bun one thread per core); a number N passes `--checkers N` to tsgo and tsrs and
+tsrs half the cores clamped to 4..32, bun one thread per core); a number N passes `--checkers N` to tsgo and tsrs and
 `--threads N` to bun;
 `all` is the machine's thread count. The knobs are not identical: `--checkers` sets only the checker threads (parsing
 and binding still use every core), while bun's `--threads` caps all of its threads. Per project, one untimed warm-up

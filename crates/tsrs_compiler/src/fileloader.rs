@@ -338,7 +338,7 @@ impl fileLoader {
                 reason.automatic_type_directive =
                     Some(P::new(automaticTypeDirectiveFileData { type_reference: name.clone(), package_id: resolved.package_id }));
                 to_parse.push(resolvedRef {
-                    file_name: resolved.resolved_file_name.to_string(),
+                    file_name: std::borrow::Cow::Borrowed(resolved.resolved_file_name),
                     increase_depth: resolved.is_external_library_import,
                     elide_on_depth: false,
                     include_reason: P::new(reason),
@@ -472,13 +472,34 @@ pub(crate) struct prefetchedResolutions {
     pub(crate) referenced_files: Vec<(String, Option<sourceFileFromReferenceDiagnostic>)>,
     pub(crate) imports: Vec<Option<prefetchedImport>>,
     pub(crate) type_references: Vec<(P<ResolvedTypeReferenceDirective>, Vec<DiagAndArgs>)>,
+    // The task's path as its include reasons store it (`parseTask::reason_path`), when a prepared sub task needed one.
+    pub(crate) reason_path: Option<&'static str>,
+    // The file's resolutions keyed by module name and mode, inserted in import order: what the sequential load builds
+    // for a file without synthetic imports, so it takes this one instead (the same hashing and insertion sequence).
+    pub(crate) resolutions_in_file: ModeAwareCache<P<ResolvedModule>>,
 }
 
 pub(crate) struct prefetchedImport {
     pub(crate) resolution: Result<(P<ResolvedModule>, Vec<DiagAndArgs>), String>,
-    // For a resolved module: the normalized resolved file name and its path, as add_sub_task and
-    // filesParser::start would compute them.
-    pub(crate) normalized: Option<(String, Path)>,
+    // The import's resolution mode.
+    pub(crate) mode: ResolutionMode,
+    // For a resolved module that `resolved_import_sub_task` adds to the program: the sub task's fields, so the
+    // sequential load only appends the task (vscode: 110k import edges; computing this there was most of it).
+    pub(crate) prepared: Option<preparedSubTask>,
+}
+
+// A sub task of an import, as `add_sub_task_normalized` would build it, computed on the worker pool from what the task
+// map held when the round's prefetch started. Everything depends only on the file, its metadata, the resolution and
+// the tasks that exist before the round; `data_id` is `NO_DATA` for a path first seen in this round, and the
+// sequential load then looks it up again (an earlier file of the round may have added it).
+pub(crate) struct preparedSubTask {
+    pub(crate) normalized_file_path: Arc<str>,
+    pub(crate) path: Path,
+    pub(crate) data_id: u32,
+    pub(crate) include_reason: P<FileIncludeReason>,
+    pub(crate) increase_depth: bool,
+    pub(crate) elide_on_depth: bool,
+    pub(crate) package_id: tsrs_module::PackageId,
 }
 
 // The parts of the file loader that the parallel prefetch reads (the loader itself is not Sync).
@@ -489,6 +510,9 @@ pub(crate) struct prefetchContext<'a> {
     pub(crate) project_references: &'a projectReferenceFileMapperBuilder,
     pub(crate) supported_extensions: &'a [Vec<String>],
     pub(crate) supported_extensions_with_json: &'a [Vec<String>],
+    // The tasks that exist when the round starts (read-only until its sequential load).
+    pub(crate) task_data_by_path: &'a FxHashMap<Path, crate::filesparser::DataId>,
+    pub(crate) datas: &'a [crate::filesparser::parseTaskData],
 }
 
 impl fileLoader {
@@ -500,6 +524,8 @@ impl fileLoader {
             project_references: &self.project_references,
             supported_extensions: &self.supported_extensions,
             supported_extensions_with_json: &self.supported_extensions_with_json_if_resolve_json_module,
+            task_data_by_path: &self.files_parser.task_data_by_path,
+            datas: &self.files_parser.datas,
         }
     }
 }
@@ -550,9 +576,12 @@ pub(crate) fn prefetch_resolutions(ctx: &prefetchContext, file: P<SourceFile>, m
         }
     }
     let mut imports = Vec::new();
+    let mut resolutions_in_file: ModeAwareCache<P<ResolvedModule>> = ModeAwareCache::default();
+    let mut reason_path: Option<&'static str> = None;
     if !opts.skip_module_resolution {
+        let imports_of_file = file.imports();
         let augmentations = file.module_augmentations.get().iter().copied().filter(|imp| imp.kind() == Kind::StringLiteral);
-        for entry in file.imports().iter().copied().chain(augmentations) {
+        for (import_index, entry) in imports_of_file.iter().copied().chain(augmentations).enumerate() {
             let module_name = entry.text();
             if module_name.is_empty() {
                 imports.push(None);
@@ -560,18 +589,58 @@ pub(crate) fn prefetch_resolutions(ctx: &prefetchContext, file: P<SourceFile>, m
             }
             let mode = get_mode_for_usage_location(file.file_name(), meta, entry, Some(&options_for_file));
             let resolution = resolver.resolve_module_name(module_name, &file_name, mode, redirect);
-            let normalized = match &resolution {
-                Ok((resolved, _)) if resolved.is_resolved() => {
-                    let normalized_file_path = tspath::normalize_path(resolved.resolved_file_name);
-                    let path = tspath::to_path(&normalized_file_path, ctx.host.get_current_directory(), ctx.host.fs().use_case_sensitive_file_names());
-                    Some((normalized_file_path, path))
-                }
-                _ => None,
+            // As resolve_imports_and_module_augmentations inserts them, in the same order (a failed resolution gets a
+            // default module).
+            let resolved_module = match &resolution {
+                Ok((resolved, _)) => *resolved,
+                Err(_) => P::new(ResolvedModule::default()),
             };
-            imports.push(Some(prefetchedImport { resolution, normalized }));
+            resolutions_in_file.insert(ModeAwareCacheKey { name: module_name, mode }, resolved_module);
+            let mut prepared = None;
+            if let Ok((resolved, _)) = &resolution {
+                if resolved.is_resolved() {
+                    let (should_add_file, is_js_file_from_node_modules) =
+                        resolved_import_sub_task(project_references, ctx.host, &options_for_file, file, module_name, import_index as i32, resolved);
+                    if should_add_file {
+                        let reason_path = *reason_path.get_or_insert_with(|| tsrs_core::alloc_str(file.path().as_str()));
+                        let include_reason = FileIncludeReason::new_referenced(fileIncludeKind::Import, reason_path, import_index as i32, None);
+                        prepared = Some(prepare_sub_task(ctx, resolved, include_reason, is_js_file_from_node_modules));
+                    }
+                }
+            }
+            imports.push(Some(prefetchedImport { resolution, mode, prepared }));
         }
     }
-    prefetchedResolutions { referenced_files, imports, type_references }
+    prefetchedResolutions { referenced_files, imports, type_references, reason_path, resolutions_in_file }
+}
+
+// The sub task for a resolved import (what `add_sub_task_normalized` builds), from the tasks known before the round.
+fn prepare_sub_task(
+    ctx: &prefetchContext,
+    resolved: &ResolvedModule,
+    include_reason: P<FileIncludeReason>,
+    elide_on_depth: bool,
+) -> preparedSubTask {
+    let normalized_file_path = tspath::normalize_path(resolved.resolved_file_name);
+    let mut path = tspath::to_path(&normalized_file_path, ctx.host.get_current_directory(), ctx.host.fs().use_case_sensitive_file_names());
+    // A reference to a file that already has a task shares that task's strings (one copy per file name, as Go's
+    // strings are shared); the values are equal either way.
+    let mut shared_name: Option<Arc<str>> = None;
+    let mut data_id = crate::filesparser::NO_DATA;
+    if let Some((known_path, &data)) = ctx.task_data_by_path.get_key_value(&path) {
+        path = known_path.clone();
+        shared_name = ctx.datas[data].tasks.get_key_value(&normalized_file_path).map(|(name, _)| Arc::clone(name));
+        data_id = data as u32;
+    }
+    preparedSubTask {
+        normalized_file_path: shared_name.unwrap_or_else(|| Arc::from(normalized_file_path)),
+        path,
+        data_id,
+        include_reason,
+        increase_depth: resolved.is_external_library_import,
+        elide_on_depth,
+        package_id: resolved.package_id,
+    }
 }
 
 impl fileLoader {
@@ -609,7 +678,7 @@ impl fileLoader {
         }
 
         Ok(resolvedRef {
-            file_name: resolved_file_name,
+            file_name: std::borrow::Cow::Owned(resolved_file_name),
             increase_depth: false,
             elide_on_depth: false,
             include_reason,
@@ -652,7 +721,7 @@ impl fileLoader {
                 self.add_sub_task(
                     t,
                     &resolvedRef {
-                        file_name: resolved.resolved_file_name.to_string(),
+                        file_name: std::borrow::Cow::Borrowed(resolved.resolved_file_name),
                         increase_depth: resolved.is_external_library_import,
                         elide_on_depth: false,
                         include_reason,
@@ -672,7 +741,6 @@ impl fileLoader {
 
     pub(crate) fn resolve_imports_and_module_augmentations(&mut self, t: TaskId) {
         let file = self.tasks[t].file.unwrap();
-        let meta = self.tasks[t].metadata();
 
         let imports = file.imports();
         let mut module_names: Vec<P<Node>> = Vec::with_capacity(imports.len() + file.module_augmentations.get().len() + 2);
@@ -718,7 +786,35 @@ impl fileLoader {
         if !module_names.is_empty() {
             let mut resolutions_in_file: ModeAwareCache<P<ResolvedModule>> = ModeAwareCache::default();
             let mut resolutions_trace = Vec::new();
-            let mut prefetched = self.tasks[t].data().prefetched_resolutions.take().map(|p| p.imports);
+            let prefetched = self.tasks[t].data().prefetched_resolutions.take();
+            if imports_start == 0 {
+                if let Some(prefetched) = prefetched {
+                    // Without synthetic imports the module names are the prefetch's, in its order: its map of
+                    // resolutions is the one this loop would build. Only the sub tasks and the first resolution
+                    // error remain.
+                    resolutions_in_file = prefetched.resolutions_in_file;
+                    for import in prefetched.imports.into_iter().flatten() {
+                        match import.resolution {
+                            Ok((_, trace)) => resolutions_trace.extend(trace),
+                            Err(err) => {
+                                if self.module_resolution_error.is_none() {
+                                    self.module_resolution_error = Some(err);
+                                }
+                            }
+                        }
+                        if let Some(prepared) = import.prepared {
+                            self.add_prepared_sub_task(t, prepared);
+                        }
+                    }
+                    let data = self.tasks[t].data();
+                    data.resolutions_in_file = resolutions_in_file;
+                    data.resolutions_trace = resolutions_trace;
+                    return;
+                }
+            }
+            let mut prefetched = prefetched.map(|p| p.imports);
+            // The metadata (two strings, cloned) only serves resolution modes the prefetch did not compute.
+            let meta = if prefetched.is_none() || imports_start > 0 { Some(self.tasks[t].metadata()) } else { None };
 
             for (index, &entry) in module_names.iter().enumerate() {
                 let prefetched_resolution = match prefetched.as_mut() {
@@ -730,10 +826,12 @@ impl fileLoader {
                     continue;
                 }
 
-                let mode = get_mode_for_usage_location(file.file_name(), &meta, entry, Some(&options_for_file));
-                let (resolution, normalized) = match prefetched_resolution {
-                    Some(prefetched) => (prefetched.resolution, prefetched.normalized),
-                    None => (self.resolver.resolve_module_name(module_name, &file_name, mode, redirect), None),
+                let (resolution, mode, prepared) = match prefetched_resolution {
+                    Some(prefetched) => (prefetched.resolution, prefetched.mode, Some(prefetched.prepared)),
+                    None => {
+                        let mode = get_mode_for_usage_location(file.file_name(), meta.as_ref().expect("metadata"), entry, Some(&options_for_file));
+                        (self.resolver.resolve_module_name(module_name, &file_name, mode, redirect), mode, None)
+                    }
                 };
                 let (resolved_module, trace) = match resolution {
                     Ok((resolved_module, trace)) => (resolved_module, trace),
@@ -753,28 +851,34 @@ impl fileLoader {
 
                 let resolved_file_name = resolved_module.resolved_file_name;
                 let import_index = index as i32 - imports_start;
-                let (should_add_file, is_js_file_from_node_modules) =
-                    resolved_import_sub_task(&self.project_references, &*self.host, &options_for_file, file, module_name, import_index, &resolved_module);
-
-                if should_add_file {
-                    let include_reason = FileIncludeReason::new_referenced(
-                        fileIncludeKind::Import,
-                        self.tasks[t].reason_path(),
-                        import_index,
-                        if import_index < 0 { Some(entry) } else { None },
-                    );
-                    self.add_sub_task_normalized(
-                        t,
-                        &resolvedRef {
-                            file_name: resolved_file_name.to_string(),
-                            increase_depth: resolved_module.is_external_library_import,
-                            elide_on_depth: is_js_file_from_node_modules,
-                            include_reason,
-                            package_id: resolved_module.package_id,
-                        },
-                        None,
-                        normalized,
-                    );
+                let Some(prepared) = prepared else {
+                    // Not prefetched (`--traceResolution`, a single file, or a synthetic import).
+                    let (should_add_file, is_js_file_from_node_modules) =
+                        resolved_import_sub_task(&self.project_references, &*self.host, &options_for_file, file, module_name, import_index, &resolved_module);
+                    if should_add_file {
+                        let include_reason = FileIncludeReason::new_referenced(
+                            fileIncludeKind::Import,
+                            self.tasks[t].reason_path(),
+                            import_index,
+                            if import_index < 0 { Some(entry) } else { None },
+                        );
+                        self.add_sub_task_normalized(
+                            t,
+                            &resolvedRef {
+                                file_name: std::borrow::Cow::Borrowed(resolved_file_name),
+                                increase_depth: resolved_module.is_external_library_import,
+                                elide_on_depth: is_js_file_from_node_modules,
+                                include_reason,
+                                package_id: resolved_module.package_id,
+                            },
+                            None,
+                            None,
+                        );
+                    }
+                    continue;
+                };
+                if let Some(prepared) = prepared {
+                    self.add_prepared_sub_task(t, prepared);
                 }
             }
 
@@ -832,6 +936,29 @@ impl fileLoader {
         self.add_sub_task_normalized(t, ref_, lib_file, None);
     }
 
+    // Appends a sub task the prefetch prepared (`prepare_sub_task`). A path the prefetch did not know may have got a task
+    // from an earlier file of the round: share its strings then, as `add_sub_task_normalized` does.
+    pub(crate) fn add_prepared_sub_task(&mut self, t: TaskId, prepared: preparedSubTask) {
+        let mut sub_task = parseTask::new(prepared.normalized_file_path);
+        sub_task.path = prepared.path;
+        sub_task.data_id = prepared.data_id;
+        if sub_task.data_id == crate::filesparser::NO_DATA {
+            if let Some((known_path, &data)) = self.files_parser.task_data_by_path.get_key_value(&sub_task.path) {
+                sub_task.path = known_path.clone();
+                if let Some((name, _)) = self.files_parser.datas[data].tasks.get_key_value(&sub_task.normalized_file_path) {
+                    sub_task.normalized_file_path = Arc::clone(name);
+                }
+                sub_task.data_id = data as u32;
+            }
+        }
+        sub_task.increase_depth = prepared.increase_depth;
+        sub_task.elide_on_depth = prepared.elide_on_depth;
+        sub_task.include_reason = Some(prepared.include_reason);
+        sub_task.package_id = prepared.package_id;
+        let id = self.new_task(sub_task);
+        self.tasks[t].sub_tasks.push(id);
+    }
+
     // `normalized` is the normalized file name and path of `ref_.file_name` when the caller already has them.
     pub(crate) fn add_sub_task_normalized(
         &mut self,
@@ -847,15 +974,18 @@ impl fileLoader {
         // A reference to a file that already has a task shares that task's strings (one copy per file name, as Go's
         // strings are shared); the values are equal either way.
         let mut shared_name: Option<std::sync::Arc<str>> = None;
+        let mut data_id = crate::filesparser::NO_DATA;
         if let Some((known_path, &data)) = self.files_parser.task_data_by_path.get_key_value(&path) {
             path = known_path.clone();
             shared_name = self.files_parser.datas[data].tasks.get_key_value(&normalized_file_path).map(|(name, _)| Arc::clone(name));
+            data_id = data as u32;
         }
         let mut sub_task = match shared_name {
             Some(name) => parseTask::new(name),
             None => parseTask::new(normalized_file_path),
         };
         sub_task.path = path;
+        sub_task.data_id = data_id;
         sub_task.lib_file = lib_file;
         sub_task.increase_depth = ref_.increase_depth;
         sub_task.elide_on_depth = ref_.elide_on_depth;

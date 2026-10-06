@@ -17,7 +17,7 @@ use crate::includeprocessor::fileIncludeData;
 use crate::processing_diagnostic::{includeExplainingDiagnostic, processingDiagnostic};
 
 pub(crate) type TaskId = usize;
-type DataId = usize;
+pub(crate) type DataId = usize;
 
 pub(crate) struct parseTask {
     // Shared (like `path`) by the tasks of every reference to the same file name (`add_sub_task_normalized`).
@@ -41,7 +41,14 @@ pub(crate) struct parseTask {
     // Everything only a loaded (or metadata-prefetched) task fills, allocated on the first write: most tasks are
     // one per import edge and only point at the task that loads their file (`loaded_task`, filesParser::start).
     data: Option<Box<parseTaskLoaded>>,
+    // The index in `filesParser::datas` of this task's path, `NO_DATA` until known: set by `add_sub_task_normalized`
+    // when the path has a task already and by `start` always (a data is never removed), so neither `start` nor
+    // `get_processed_files` hashes the path again (one hash of a 100-byte path per import edge was a tenth of the
+    // sequential load).
+    pub(crate) data_id: u32,
 }
+
+pub(crate) const NO_DATA: u32 = u32::MAX;
 
 #[derive(Default)]
 pub(crate) struct parseTaskLoaded {
@@ -78,7 +85,14 @@ impl parseTask {
             package_id: PackageId::default(),
             loaded_task: None,
             data: None,
+            data_id: NO_DATA,
         }
+    }
+
+    /// The task's data index when known (`data_id`).
+    #[inline]
+    pub(crate) fn data_hint(&self) -> Option<DataId> {
+        (self.data_id != NO_DATA).then_some(self.data_id as DataId)
     }
 
     /// The loaded-task data, created on first use.
@@ -150,11 +164,13 @@ fn load(t: TaskId, loader: &mut fileLoader) {
         return;
     }
 
-    let normalized_file_path = loader.tasks[t].normalized_file_path.to_string();
-    if tspath::has_extension(&normalized_file_path) {
+    // A prefetched file passed these checks in task_needs_parse (the same conditions); only an unparsed task repeats
+    // them here, where a failure becomes the task's diagnostic.
+    if loader.tasks[t].file.is_none() && tspath::has_extension(&loader.tasks[t].normalized_file_path) {
         let compiler_options = loader.opts.config.compiler_options().unwrap();
         let allow_non_ts_extensions = compiler_options.allow_non_ts_extensions.is_true();
         if !allow_non_ts_extensions {
+            let normalized_file_path = loader.tasks[t].normalized_file_path.to_string();
             let canonical_file_name =
                 tspath::get_canonical_file_name(&normalized_file_path, loader.host.fs().use_case_sensitive_file_names());
             if !loader.is_supported_extension(&canonical_file_name) {
@@ -194,6 +210,10 @@ fn load(t: TaskId, loader: &mut fileLoader) {
     loader.tasks[t].file = Some(file);
     loader.tasks[t].sub_tasks =
         Vec::with_capacity(file.referenced_files.get().len() + file.imports().len() + file.module_augmentations.get().len());
+    // The prefetch's include reasons name the task by this string; every reason of the task shares it.
+    if let Some(reason_path) = loader.tasks[t].data_ref().and_then(|d| d.prefetched_resolutions.as_ref()).and_then(|p| p.reason_path) {
+        loader.tasks[t].data().reason_path.get_or_insert(reason_path);
+    }
 
     let compiler_options = loader.opts.config.compiler_options().unwrap();
     if !compiler_options.no_resolve.is_true() && !loader.opts.skip_module_resolution {
@@ -225,7 +245,7 @@ fn load(t: TaskId, loader: &mut fileLoader) {
                 loader.add_sub_task(
                     t,
                     &resolvedRef {
-                        file_name: lib_file.path.clone(),
+                        file_name: std::borrow::Cow::Owned(lib_file.path.clone()),
                         increase_depth: false,
                         elide_on_depth: false,
                         include_reason,
@@ -283,7 +303,8 @@ fn load_automatic_type_directives(t: TaskId, loader: &mut fileLoader) {
 }
 
 pub(crate) struct resolvedRef {
-    pub(crate) file_name: String,
+    // Borrowed for a resolved module (an arena string); owned for libs and triple-slash references.
+    pub(crate) file_name: std::borrow::Cow<'static, str>,
     pub(crate) increase_depth: bool,
     pub(crate) elide_on_depth: bool,
     pub(crate) include_reason: P<FileIncludeReason>,
@@ -358,7 +379,9 @@ struct speculativeParse {
 // The shared state of one speculative walk (`prefetch`).
 struct speculation<'a> {
     ctx: &'a crate::fileloader::prefetchContext<'a>,
-    claimed: std::sync::Mutex<FxHashSet<Path>>,
+    // The files a speculative job claimed, beyond those with a task already (`ctx.task_data_by_path`, read-only during
+    // the walk). Sharded: one mutex for all of them serialized the workers on vscode's 110k import edges at 64 threads.
+    claimed: tsrs_core::collections::SyncSet<Path>,
     results: std::sync::Mutex<Vec<(Path, speculativeParse)>>,
 }
 
@@ -388,29 +411,11 @@ impl<'a> speculation<'a> {
                 }
             }
         }
-        let (redirect, _) = ctx.project_references.get_redirect_for_resolution(file.file_name(), &file.path());
-        let redirect = redirect.map(crate::projectreferencefilemapper::as_resolved_project_reference);
-        let options_for_file = tsrs_module::get_compiler_options_with_redirect(compiler_options, redirect);
         let imports = file.imports();
-        for (import_index, entry) in resolutions.imports.iter().enumerate().take(imports.len()) {
-            let Some(entry) = entry else { continue };
-            let Ok((resolved, _)) = &entry.resolution else { continue };
-            if !resolved.is_resolved() {
-                continue;
-            }
-            let (should_add_file, elide_on_depth) = crate::fileloader::resolved_import_sub_task(
-                ctx.project_references,
-                host,
-                &options_for_file,
-                file,
-                imports[import_index].text(),
-                import_index as i32,
-                resolved,
-            );
-            if should_add_file && !elide_on_depth {
-                if let Some((name, path)) = &entry.normalized {
-                    out.push((name.clone(), path.clone()));
-                }
+        for entry in resolutions.imports.iter().take(imports.len()) {
+            let Some(prepared) = entry.as_ref().and_then(|entry| entry.prepared.as_ref()) else { continue };
+            if !prepared.elide_on_depth {
+                out.push((prepared.normalized_file_path.to_string(), prepared.path.clone()));
             }
         }
         out
@@ -420,7 +425,12 @@ impl<'a> speculation<'a> {
     // speculative job has it.
     fn claim(&self, file_name: &str, path: &Path) -> bool {
         let ctx = self.ctx;
-        if !self.claimed.lock().unwrap().insert(path.clone()) {
+        if ctx.task_data_by_path.contains_key(path) {
+            return false;
+        }
+        if !tsrs_core::festats::timed_counted(tsrs_core::festats::Cat::LockClaim, tsrs_core::festats::Cat::ClaimOps, || {
+            self.claimed.add_if_absent(path.clone())
+        }) {
             return false;
         }
         // A bundled lib file can also be loaded as a lib (with lib metadata) through a lib reference.
@@ -449,14 +459,22 @@ impl<'a> speculation<'a> {
 
     fn run<'s>(&'s self, scope: &rayon::Scope<'s>, file_name: String, path: Path) {
         let ctx = self.ctx;
-        let metadata = source_file_meta_data(ctx.opts, ctx.resolver, ctx.project_references, &file_name);
+        use tsrs_core::festats::{self, Cat};
+        let job_start = festats::enabled().then(std::time::Instant::now);
+        let metadata = festats::timed(Cat::Meta, || source_file_meta_data(ctx.opts, ctx.resolver, ctx.project_references, &file_name));
         let file = ctx.host.get_source_file(parse_options_for(ctx.host, ctx.project_references, &file_name, &path, &metadata));
-        file.map(tsrs_binder::bind_source_file);
-        let resolutions = file.map(|file| Box::new(prefetch_resolutions(ctx, file, &metadata)));
+        festats::timed(Cat::Bind, || file.map(tsrs_binder::bind_source_file));
+        let resolutions = festats::timed(Cat::Resolve, || file.map(|file| Box::new(prefetch_resolutions(ctx, file, &metadata))));
         if let (Some(file), Some(resolutions)) = (file, &resolutions) {
             self.spawn_sub_tasks(scope, file, resolutions);
         }
         self.results.lock().unwrap().push((path, speculativeParse { file_name, metadata, file, resolutions }));
+        if let Some(start) = job_start {
+            let wall = start.elapsed().as_nanos() as u64;
+            festats::add(Cat::JobWall, wall);
+            festats::add_max(Cat::JobMax, wall);
+            festats::add(Cat::Jobs, 1);
+        }
     }
 }
 
@@ -499,19 +517,23 @@ impl filesParser {
             if loader.tasks[task].path.as_str().is_empty() {
                 loader.tasks[task].path = loader.to_path(&loader.tasks[task].normalized_file_path);
             }
-            let path = loader.tasks[task].path.clone();
             let w = &mut loader.files_parser;
-            let (data, loaded) = match w.task_data_by_path.get(&path) {
-                Some(&data) => (data, true),
+            let known = match loader.tasks[task].data_hint() {
+                Some(data) => Some(data),
+                None => w.task_data_by_path.get(&loader.tasks[task].path).copied(),
+            };
+            let (data, loaded) = match known {
+                Some(data) => (data, true),
                 None => {
                     let mut tasks = TasksByCasing::default();
                     tasks.insert(Arc::clone(&loader.tasks[task].normalized_file_path), task);
                     w.datas.push(parseTaskData { tasks, lowest_depth: i32::MAX, started_sub_tasks: false, package_id: PackageId::default() });
                     let id = w.datas.len() - 1;
-                    w.task_data_by_path.insert(path, id);
+                    w.task_data_by_path.insert(loader.tasks[task].path.clone(), id);
                     (id, false)
                 }
             };
+            loader.tasks[task].data_id = data as u32;
             w.queue.push(queuedTask { task, loaded, data, depth });
         }
     }
@@ -633,45 +655,94 @@ impl filesParser {
             && loader.opts.config.resolved_project_reference_paths().is_empty()
             && !loader.opts.config.compiler_options().unwrap().lib_replacement.is_true();
         loader.files_parser.speculated = true;
-        let jobs: Vec<(TaskId, String, Path, bool)> = to_parse
+        let jobs: Vec<(TaskId, Arc<str>, Path, bool)> = to_parse
             .into_iter()
-            .map(|t| (t, loader.tasks[t].normalized_file_path.to_string(), loader.tasks[t].path.clone(), loader.tasks[t].lib_file.is_some()))
+            .map(|t| (t, Arc::clone(&loader.tasks[t].normalized_file_path), loader.tasks[t].path.clone(), loader.tasks[t].lib_file.is_some()))
             .collect();
-        let claimed: FxHashSet<Path> = if speculate { loader.files_parser.task_data_by_path.keys().cloned().collect() } else { FxHashSet::default() };
         let ctx = loader.prefetch_context();
-        let spec = speculation { ctx: &ctx, claimed: std::sync::Mutex::new(claimed), results: std::sync::Mutex::new(Vec::new()) };
+        let spec = speculation { ctx: &ctx, claimed: tsrs_core::collections::SyncSet::default(), results: std::sync::Mutex::new(Vec::new()) };
         let (opts, host, resolver, project_references) = (ctx.opts, ctx.host, ctx.resolver, ctx.project_references);
         let parse_start = std::time::Instant::now();
+        let stats = tsrs_core::festats::enabled();
+        let cpu_before: Vec<f64> = if stats { crate::program::worker_pool().broadcast(|_| crate::checkerpool::thread_cpu_seconds()) } else { Vec::new() };
         let prefetched: Vec<(TaskId, SourceFileMetaData, Option<P<SourceFile>>, Option<Box<prefetchedResolutions>>)> =
             crate::program::worker_pool().install(|| {
                 rayon::scope(|scope| {
                     let spec = &spec;
                     jobs.into_par_iter()
                         .map(|(t, file_name, path, is_lib)| {
+                            use tsrs_core::festats::{self, Cat};
+                            let job_start = festats::enabled().then(std::time::Instant::now);
+                            let file_name: &str = &file_name;
                             let metadata = if is_lib {
                                 SourceFileMetaData { implied_node_format: ModuleKind::CommonJS, ..Default::default() }
                             } else {
-                                source_file_meta_data(opts, resolver, project_references, &file_name)
+                                festats::timed(Cat::Meta, || source_file_meta_data(opts, resolver, project_references, file_name))
                             };
-                            let file = host.get_source_file(parse_options_for(host, project_references, &file_name, &path, &metadata));
+                            let file = host.get_source_file(parse_options_for(host, project_references, file_name, &path, &metadata));
                             // Bind here too: the round is bound by file system calls, and the checkers would bind every
                             // file on the same pool later (binding depends only on the file).
-                            file.map(tsrs_binder::bind_source_file);
-                            let resolutions = match file {
+                            festats::timed(Cat::Bind, || file.map(tsrs_binder::bind_source_file));
+                            let resolutions = festats::timed(Cat::Resolve, || match file {
                                 Some(file) if resolve_ahead => Some(Box::new(prefetch_resolutions(&ctx, file, &metadata))),
                                 _ => None,
-                            };
+                            });
                             if speculate && !is_lib {
                                 if let (Some(file), Some(resolutions)) = (file, &resolutions) {
                                     spec.spawn_sub_tasks(scope, file, resolutions);
                                 }
+                            }
+                            if let Some(start) = job_start {
+                                let wall = start.elapsed().as_nanos() as u64;
+                                festats::add(Cat::JobWall, wall);
+                                festats::add_max(Cat::JobMax, wall);
+                                festats::add(Cat::Jobs, 1);
                             }
                             (t, metadata, file, resolutions)
                         })
                         .collect()
                 })
             });
-        tsrs_core::phases::record("Program:   parallel parse + resolve", parse_start.elapsed());
+        let parse_elapsed = parse_start.elapsed();
+        tsrs_core::phases::record("Program:   parallel parse + resolve", parse_elapsed);
+        if stats {
+            let pool = crate::program::worker_pool();
+            let cpu_after: Vec<f64> = pool.broadcast(|_| crate::checkerpool::thread_cpu_seconds());
+            let per_thread: Vec<[u64; tsrs_core::festats::CATS]> = pool.broadcast(|_| tsrs_core::festats::take_thread());
+            let mut sum = [0u64; tsrs_core::festats::CATS];
+            for t in &per_thread {
+                for (i, (s, v)) in sum.iter_mut().zip(t).enumerate() {
+                    *s = if tsrs_core::festats::is_max(i) { (*s).max(*v) } else { *s + v };
+                }
+            }
+            let threads = per_thread.len() as u64;
+            let cpu: f64 = cpu_after.iter().zip(&cpu_before).map(|(a, b)| a - b).sum();
+            tsrs_core::phases::record("Program:     stats: thread-seconds (wall x threads)", parse_elapsed * threads as u32);
+            tsrs_core::phases::record("Program:     stats: thread cpu", std::time::Duration::from_secs_f64(cpu));
+            const ROWS: [&str; tsrs_core::festats::CATS] = [
+                "Program:     stats: job wall",
+                "Program:     stats: metadata",
+                "Program:     stats: read",
+                "Program:     stats: parse",
+                "Program:     stats: bind",
+                "Program:     stats: resolve",
+                "Program:     stats: lock claimed",
+                "Program:     stats: lock syncmap",
+                "Program:     stats: lock vfs",
+                "Program:     stats: claim ops",
+                "Program:     stats: syncmap ops",
+                "Program:     stats: vfs ops",
+                "Program:     stats: jobs",
+                "Program:     stats: longest job",
+            ];
+            for (i, (row, v)) in ROWS.iter().zip(sum).enumerate() {
+                if tsrs_core::festats::is_count(i) {
+                    tsrs_core::phases::count(row, v);
+                } else {
+                    tsrs_core::phases::record(row, std::time::Duration::from_nanos(v));
+                }
+            }
+        }
         let speculative = spec.results.into_inner().unwrap();
         if speculate {
             tsrs_core::phases::count("Program:   parsed ahead", speculative.len() as u64);
@@ -724,7 +795,8 @@ impl filesParser {
 
         struct Collector<'a> {
             loader: &'a mut fileLoader,
-            seen: FxHashMap<DataId, std::sync::Arc<str>>,
+            // By data: the casing a data was first walked under (a map keyed by data hashed once per visit).
+            seen: Vec<Option<std::sync::Arc<str>>>,
         }
 
         // An explicit stack replaces Go's recursive collectFiles (the import graph of a large
@@ -744,7 +816,12 @@ impl filesParser {
         // was acquired when the snapshot is disposed, leaving a dangling cache entry that
         // panics the next time it is referenced.
         let mut recorded_duplicates: FxHashMap<DataId, FxHashSet<String>> = FxHashMap::default();
-        let mut c = Collector { loader, seen: FxHashMap::default() };
+        // Include reasons by data (one per path), moved into the path-keyed map at the end in first-seen order:
+        // keying by path here would hash each file's path once per import edge (vscode: 110k edges, 10k files).
+        let mut reasons_by_data: Vec<Vec<P<FileIncludeReason>>> = Vec::new();
+        reasons_by_data.resize_with(loader.files_parser.datas.len(), Vec::new);
+        let mut reasons_order: Vec<(DataId, Path)> = Vec::new();
+        let mut c = Collector { loader, seen: vec![None; reasons_by_data.len()] };
         let mut stack: Vec<Frame> = vec![Frame::List { tasks: c.loader.root_tasks.clone(), next: 0 }];
 
         while let Some(frame) = stack.pop() {
@@ -818,15 +895,15 @@ impl filesParser {
                         if let Some(loaded_task) = loader.tasks[task].loaded_task {
                             task = loaded_task;
                         }
-                        add_include_reason(loader, &mut include_data, task, include_reason);
+                        add_include_reason(loader, &mut reasons_by_data, &mut reasons_order, task, include_reason);
                     }
-                    let data = loader.files_parser.task_data_by_path[&loader.tasks[task].path];
+                    let data = task_data(loader, task);
                     if !loader.tasks[task].loaded {
                         continue;
                     }
 
                     // ensure we only walk each task once
-                    if let Some(checked_name) = c.seen.get(&data) {
+                    if let Some(checked_name) = &c.seen[data] {
                         if let Some(file) = loader.tasks[task].file {
                             if *checked_name != loader.tasks[task].normalized_file_path
                                 && recorded_duplicates.entry(data).or_default().insert(loader.tasks[task].normalized_file_path.to_string())
@@ -855,7 +932,7 @@ impl filesParser {
                         }
                         continue;
                     } else {
-                        c.seen.insert(data, Arc::clone(&loader.tasks[task].normalized_file_path));
+                        c.seen[data] = Some(Arc::clone(&loader.tasks[task].normalized_file_path));
                     }
 
                     if let Some(seen_ignore_case) = &mut tasks_seen_by_name_ignore_case {
@@ -927,6 +1004,9 @@ impl filesParser {
         }
 
         let loader = c.loader;
+        for (data, path) in reasons_order {
+            include_data.file_include_reasons.insert(path, std::mem::take(&mut reasons_by_data[data]));
+        }
         loader.sort_libs(&mut lib_files);
 
         let lib_len = lib_files.len();
@@ -977,13 +1057,31 @@ fn duplicate_source_file(file: P<SourceFile>) -> DuplicateSourceFile {
     DuplicateSourceFile { parse_options: file.parse_options().clone(), hash: file.hash.get(), script_kind: file.script_kind.get() }
 }
 
-fn add_include_reason(loader: &fileLoader, include_processor: &mut fileIncludeData, task: TaskId, reason: Option<P<FileIncludeReason>>) {
+fn add_include_reason(
+    loader: &fileLoader,
+    reasons_by_data: &mut [Vec<P<FileIncludeReason>>],
+    reasons_order: &mut Vec<(DataId, Path)>,
+    task: TaskId,
+    reason: Option<P<FileIncludeReason>>,
+) {
     if let Some(redirected) = loader.tasks[task].redirected_parse_task {
-        add_include_reason(loader, include_processor, redirected, reason);
+        add_include_reason(loader, reasons_by_data, reasons_order, redirected, reason);
     } else if loader.tasks[task].loaded {
         if let Some(reason) = reason {
-            include_processor.file_include_reasons.entry(loader.tasks[task].path.clone()).or_default().push(reason);
+            let data = task_data(loader, task);
+            if reasons_by_data[data].is_empty() {
+                reasons_order.push((data, loader.tasks[task].path.clone()));
+            }
+            reasons_by_data[data].push(reason);
         }
+    }
+}
+
+/// The data of a task's path (`data_id` when `start` set it, else the map).
+fn task_data(loader: &fileLoader, task: TaskId) -> DataId {
+    match loader.tasks[task].data_hint() {
+        Some(data) => data,
+        None => loader.files_parser.task_data_by_path[&loader.tasks[task].path],
     }
 }
 

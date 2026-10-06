@@ -1,32 +1,31 @@
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::RwLock;
 use std::time::SystemTime;
-
-use rustc_hash::FxHashMap;
 
 use crate::FS as VFS;
 use crate::{Entries, FileInfo};
 
-// SyncMap is collections.SyncMap: a concurrent map with Load/Store/Clear.
+// SyncMap is collections.SyncMap: a concurrent map with Load/Store/Clear, keyed by path strings and probed with
+// `&str` (the sharded `tsrs_core::collections::SyncMap`: program construction probes these caches from every
+// worker, vscode: 250k acquisitions in the 64-thread parse phase, notes/perf-frontend-64.md).
 struct SyncMap<V> {
-    m: RwLock<FxHashMap<String, V>>,
+    m: tsrs_core::collections::SyncMap<String, V>,
 }
 
 impl<V: Clone> SyncMap<V> {
     fn new() -> Self {
-        SyncMap { m: RwLock::new(FxHashMap::default()) }
+        SyncMap { m: tsrs_core::collections::SyncMap::default() }
     }
 
     fn load(&self, key: &str) -> Option<V> {
-        self.m.read().unwrap().get(key).cloned()
+        self.m.load(key)
     }
 
     fn store(&self, key: &str, value: V) {
-        self.m.write().unwrap().insert(key.to_string(), value);
+        self.m.store(key.to_string(), value);
     }
 
     fn clear(&self) {
-        self.m.write().unwrap().clear();
+        self.m.clear();
     }
 }
 

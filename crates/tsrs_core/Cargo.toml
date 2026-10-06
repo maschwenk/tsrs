@@ -23,6 +23,7 @@ plain-ptrs = []
 
 [dependencies]
 rustc-hash.workspace = true
+hashbrown.workspace = true
 indexmap.workspace = true
 bitflags.workspace = true
 memchr.workspace = true

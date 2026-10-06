@@ -191,6 +191,26 @@ impl Checker {
         if source.flags().intersects(TypeFlags::StructuredOrInstantiable)
             || target.flags().intersects(TypeFlags::StructuredOrInstantiable)
         {
+            if relation == self.identity_relation
+                && (source.flags() | target.flags()).intersects(TypeFlags::UnionOrIntersection | TypeFlags::IndexedAccess | TypeFlags::Conditional | TypeFlags::Substitution)
+                && !(source.flags().intersects(TypeFlags::Object) && target.flags().intersects(TypeFlags::Primitive))
+            {
+                // tsrs-only (notes/perf-checker-64.md): what is_related_to_ex decides for the identity relation before
+                // it recurses, without borrowing a relater. Inference asks whether an argument type is identical to
+                // each constituent of a union target (infer_from_matching_types); for a union of deferred indexed
+                // accesses every answer is "no, different kinds", and this is the whole cost of that question.
+                let s = self.get_normalized_type(source, false /*writing*/);
+                let t = self.get_normalized_type(target, true /*writing*/);
+                if s == t {
+                    return true;
+                }
+                if s.flags() != t.flags() {
+                    return false;
+                }
+                if s.flags().intersects(TypeFlags::Singleton) {
+                    return true;
+                }
+            }
             return self.check_type_related_to(source, target, relation, None /*errorNode*/);
         }
         false

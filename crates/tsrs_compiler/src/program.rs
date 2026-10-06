@@ -2226,12 +2226,19 @@ impl Program {
 
     fn check_source_files_belong_to_path(&self, source_files: &[String], root_directory: &str) -> bool {
         let mut all_files_belong_to_path = true;
-        for file in source_files {
-            let absolute_source_file_path = tspath::get_canonical_file_name(
-                &tspath::get_normalized_absolute_path(file, self.get_current_directory()),
-                self.use_case_sensitive_file_names(),
-            );
-            if !tspath::contains_path(root_directory, file, &self.compare_paths_options) {
+        // The path comparisons are independent (vscode: 10k files, ~1 us each); the diagnostics stay in file order.
+        let outside: Vec<bool> = if self.single_threaded() {
+            source_files.iter().map(|file| !tspath::contains_path(root_directory, file, &self.compare_paths_options)).collect()
+        } else {
+            worker_pool().install(|| source_files.par_iter().map(|file| !tspath::contains_path(root_directory, file, &self.compare_paths_options)).collect())
+        };
+        for (file, &outside) in source_files.iter().zip(&outside) {
+            if outside {
+                // Only the diagnostic needs the canonical absolute path (two allocations per file otherwise).
+                let absolute_source_file_path = tspath::get_canonical_file_name(
+                    &tspath::get_normalized_absolute_path(file, self.get_current_directory()),
+                    self.use_case_sensitive_file_names(),
+                );
                 self.add_processing_diagnostic(processingDiagnostic::explaining(includeExplainingDiagnostic {
                     file: Some(Path::from(absolute_source_file_path)),
                     diagnostic_reason: None,
