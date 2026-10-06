@@ -630,8 +630,9 @@ impl checkerPool {
     // checkerpool.go:476
     // forEachCheckerGroupDo runs one task per checker in parallel. Each task iterates the provided files,
     // processing only those assigned to its checker. Within each checker's set, files are visited in their original
-    // order (`visit_order`). Output does not depend on it in the default mode (notes/perf-order-independence.md); it
-    // keeps Go's history under `--checkerAssignment go` and the counters stable.
+    // order (`visit_order`), except that the type-check pass with stealing starts each checker on its heavy files
+    // (heavy_files_first). Output does not depend on the order in the default mode (notes/perf-order-independence.md);
+    // program order keeps Go's history under `--checkerAssignment go` and the counters stable.
     pub(crate) fn for_each_checker_group_do(
         &self,
         files: &[P<SourceFile>],
@@ -675,47 +676,20 @@ impl checkerPool {
         let single = single_threaded || self.single_threaded || active.len() <= 1;
         let steal = allow_steal && !single && stealing_enabled();
         let weight = |i: u32| index_of[i as usize].map_or(1, |fi| state.weights.get(fi).copied().unwrap_or(1).max(0) as u64);
-        // Files above HEAVY_FACTOR x the mean weight of a queue are its "heavy" files.
-        let heavy_threshold = |p: &[u32]| (p.iter().map(|&i| weight(i)).sum::<u64>() / p.len().max(1) as u64).saturating_mul(HEAVY_FACTOR);
-        let mut heavy_lens: Vec<usize> = vec![0; n];
         if steal {
-            // Experiment knob (TSRS_CHECKER_FILE_ORDER, notes/perf-checker-64.md): the order in which an owner visits
-            // its own queue; TSRS_CHECKER_STEAL decides which end thieves take from.
-            let hoist = |p: &mut Vec<u32>, threshold: u64| {
-                // The heavy files first (heaviest first); the rest keep program order.
-                let (mut heavy, light): (Vec<u32>, Vec<u32>) = p.iter().partition(|&&i| weight(i) > threshold);
-                heavy.sort_by_key(|&i| std::cmp::Reverse(weight(i)));
-                let heavy_len = heavy.len();
-                heavy.extend(light);
-                *p = heavy;
-                heavy_len
-            };
-            match checker_file_order() {
-                FileOrder::Program => {}
-                FileOrder::Weight => positions.iter_mut().zip(&mut heavy_lens).for_each(|(p, heavy_len)| {
-                    let threshold = heavy_threshold(p);
-                    p.sort_by_key(|&i| std::cmp::Reverse(weight(i)));
-                    *heavy_len = p.iter().take_while(|&&i| weight(i) > threshold).count();
-                }),
-                FileOrder::Heavy => positions.iter_mut().zip(&mut heavy_lens).for_each(|(p, heavy_len)| *heavy_len = hoist(p, heavy_threshold(p))),
-                FileOrder::HeavyShare => {
-                    // Files heavier than 1/HEAVY_SHARE_DIVISOR of an average checker's share of this pass.
-                    let total: u64 = positions.iter().flatten().map(|&i| weight(i)).sum();
-                    let threshold = total / (active.len().max(1) as u64 * HEAVY_SHARE_DIVISOR);
-                    positions.iter_mut().zip(&mut heavy_lens).for_each(|(p, heavy_len)| *heavy_len = hoist(p, threshold));
-                }
-                FileOrder::Reverse => positions.iter_mut().for_each(|p| p.reverse()),
-            }
+            // Each owner starts with the files that could be the pass's tail (heavy_files_first).
+            let total: u64 = positions.iter().flatten().map(|&i| weight(i)).sum();
+            let threshold = total / (active.len() as u64 * HEAVY_SHARE_DIVISOR);
+            positions.iter_mut().for_each(|p| heavy_files_first(p, threshold, weight));
         }
-        let queues: Vec<FileQueue> = positions.into_iter().zip(heavy_lens).map(|(p, heavy_len)| FileQueue::new(p, heavy_len, weight)).collect();
-        let steal_side = checker_steal_side();
+        let queues: Vec<FileQueue> = positions.into_iter().map(|p| FileQueue::new(p, weight)).collect();
         let run = |checker_idx: usize| {
             let start = stats.then(std::time::Instant::now);
             let cpu_start = if stats { thread_cpu_seconds() } else { 0.0 };
             let mut count = 0;
             let mut file_cpu: Vec<(P<SourceFile>, f64)> = Vec::new();
             let mut guard = state.checkers[checker_idx].0.lock().unwrap();
-            while let Some((i, from_other)) = queues_next(&queues, checker_idx, steal, steal_side) {
+            while let Some((i, from_other)) = queues_next(&queues, checker_idx, steal) {
                 let file = files[i];
                 if from_other {
                     // Later passes over this file go to the checker that checked it.
@@ -780,47 +754,25 @@ fn stealing_enabled() -> bool {
     !named && !tsrs_core::compat::go_compatible_history()
 }
 
-// TSRS_CHECKER_FILE_ORDER=program|weight|reverse (experiment, notes/perf-checker-64.md): the order in which a checker
-// visits its own queue in the stealing mode. `weight`: heaviest static weight first (stable: ties keep program order).
-#[derive(Clone, Copy)]
-enum FileOrder {
-    Program,
-    Weight,
-    Heavy,
-    HeavyShare,
-    Reverse,
-}
-
-const HEAVY_FACTOR: u64 = 4;
+// A file heavier than 1/HEAVY_SHARE_DIVISOR of an average checker's share of a pass is "heavy": with many checkers
+// a single such file can be the pass's tail, so its owner starts with it (heavy_files_first).
 const HEAVY_SHARE_DIVISOR: u64 = 100;
 
-// TSRS_CHECKER_STEAL=back|front|heavy (experiment): the end of a victim's queue a thief takes from. `heavy`: the front
-// while the victim's front is still inside its heavy prefix, else the back.
-#[derive(Clone, Copy)]
-enum StealSide {
-    Back,
-    Front,
-    Heavy,
-}
-
-fn checker_steal_side() -> StealSide {
-    static SIDE: OnceLock<StealSide> = OnceLock::new();
-    *SIDE.get_or_init(|| match std::env::var("TSRS_CHECKER_STEAL").as_deref() {
-        Ok("front") => StealSide::Front,
-        Ok("heavy") => StealSide::Heavy,
-        _ => StealSide::Back,
-    })
-}
-
-fn checker_file_order() -> FileOrder {
-    static ORDER: OnceLock<FileOrder> = OnceLock::new();
-    *ORDER.get_or_init(|| match std::env::var("TSRS_CHECKER_FILE_ORDER").as_deref() {
-        Ok("weight") => FileOrder::Weight,
-        Ok("heavy") => FileOrder::Heavy,
-        Ok("heavyshare") => FileOrder::HeavyShare,
-        Ok("reverse") => FileOrder::Reverse,
-        _ => FileOrder::Program,
-    })
+// tsrs-only (notes/perf-checker-64.md): moves the heavy files (weight above `threshold`) of one checker's queue to its
+// front, heaviest first; the other files keep their order. Stealing cannot split a file, so with many checkers the pass
+// ends when the checker that holds the costliest file finishes it; started first, that file overlaps the other
+// checkers' work instead of following it. Only the heavy files move: visiting the rest in program order keeps the
+// locality of the checker's caches (sorting a whole queue by weight costs 5-8% more CPU per instruction) and keeps the
+// thieves' end of the queue (the back) as it was. On vscode at 32 and 64 checkers the check phase went from 0.65 s
+// to 0.50 s, with no change at 8 and 16.
+fn heavy_files_first(positions: &mut Vec<u32>, threshold: u64, weight: impl Fn(u32) -> u64) {
+    let (mut heavy, light): (Vec<u32>, Vec<u32>) = positions.iter().partition(|&&i| weight(i) > threshold);
+    if heavy.is_empty() {
+        return;
+    }
+    heavy.sort_by_key(|&i| std::cmp::Reverse(weight(i)));
+    heavy.extend(light);
+    *positions = heavy;
 }
 
 // One checker's positions in the files of a group pass, in visiting order. The owner takes from the front, other
@@ -830,14 +782,12 @@ struct FileQueue {
     positions: Vec<u32>,
     prefix: Vec<u64>,
     range: std::sync::atomic::AtomicU64,
-    // The leading positions that hold the queue's heavy files (StealSide::Heavy).
-    heavy_len: usize,
 }
 
 const QUEUE_LOW: u64 = u32::MAX as u64;
 
 impl FileQueue {
-    fn new(positions: Vec<u32>, heavy_len: usize, weight: impl Fn(u32) -> u64) -> FileQueue {
+    fn new(positions: Vec<u32>, weight: impl Fn(u32) -> u64) -> FileQueue {
         let mut prefix = Vec::with_capacity(positions.len() + 1);
         let mut sum = 0;
         prefix.push(0);
@@ -846,12 +796,7 @@ impl FileQueue {
             prefix.push(sum);
         }
         let len = positions.len() as u64;
-        FileQueue { positions, prefix, range: std::sync::atomic::AtomicU64::new(len << 32), heavy_len }
-    }
-
-    // Whether the next front position is one of the heavy files (a heuristic read, like `remaining`).
-    fn front_is_heavy(&self) -> bool {
-        ((self.range.load(std::sync::atomic::Ordering::Relaxed) & QUEUE_LOW) as usize) < self.heavy_len
+        FileQueue { positions, prefix, range: std::sync::atomic::AtomicU64::new(len << 32) }
     }
 
     fn remaining(&self) -> u64 {
@@ -885,7 +830,7 @@ impl FileQueue {
 }
 
 // The next position for checker `me` and whether it came from another checker's queue.
-fn queues_next(queues: &[FileQueue], me: usize, steal: bool, side: StealSide) -> Option<(usize, bool)> {
+fn queues_next(queues: &[FileQueue], me: usize, steal: bool) -> Option<(usize, bool)> {
     if let Some(i) = queues[me].take(true) {
         return Some((i, false));
     }
@@ -898,12 +843,7 @@ fn queues_next(queues: &[FileQueue], me: usize, steal: bool, side: StealSide) ->
             // Queues whose remaining files weigh 0 (unchecked declaration files) are still drained by their owners.
             return queues.iter().enumerate().find_map(|(c, q)| if c == me { None } else { q.take(false).map(|i| (i, true)) });
         }
-        let front = match side {
-            StealSide::Back => false,
-            StealSide::Front => true,
-            StealSide::Heavy => queues[victim].front_is_heavy(),
-        };
-        if let Some(i) = queues[victim].take(front) {
+        if let Some(i) = queues[victim].take(false) {
             return Some((i, true));
         }
     }
@@ -1158,9 +1098,10 @@ const LOCALITY_PENALTY_MULTIPLIER: i64 = 1;
 
 // Go's checker count without --checkers.
 const GO_DEFAULT_CHECKERS: i64 = 4;
-// Past 8 checkers the duplicated first-touch work, the imbalance and the slower cores eat the gain while every checker
-// adds memory (notes/perf-checker-scaling.md).
-const MAX_DEFAULT_CHECKERS: i64 = 8;
+// Every checker adds memory (vscode ~30 MiB, the 38k-file codebase ~0.4 GiB) and duplicated first-touch work, and
+// past 32 the check phase stops getting shorter: on a 64-core machine vscode takes 0.82 s at 32 and at 64 checkers
+// (notes/perf-checker-64.md; notes/perf-checker-scaling.md for the 1-16 range).
+const MAX_DEFAULT_CHECKERS: i64 = 32;
 // A checker beyond Go's 4 needs at least this many type-checked files to be worth its creation and duplicated work.
 const MIN_CHECKED_FILES_PER_DEFAULT_CHECKER: i64 = 32;
 
@@ -1174,9 +1115,10 @@ pub fn use_go_default_checker_count() {
 
 // tsrs-only: the checker count when neither --checkers nor --singleThreaded is given. Go always uses 4. Here: half the
 // available parallelism, at least Go's 4 and at most MAX_DEFAULT_CHECKERS, and no more than one checker per
-// MIN_CHECKED_FILES_PER_DEFAULT_CHECKER type-checked files, so small programs keep Go's 4. Diagnostics do not depend
-// on the count; the --extendedDiagnostics Types / Symbols / Instantiations counters do (each checker counts what it
-// creates), so they now depend on the machine unless --checkers is given.
+// MIN_CHECKED_FILES_PER_DEFAULT_CHECKER type-checked files, so small programs keep Go's 4: 4 checkers on 8 cores, 9 on
+// 18, 32 on 64 or more. Diagnostics do not depend on the count; the --extendedDiagnostics Types / Symbols /
+// Instantiations counters do (each checker counts what it creates), so they depend on the machine unless --checkers
+// is given.
 fn default_checker_count(program: &Program) -> i64 {
     if GO_DEFAULT_CHECKER_COUNT.load(std::sync::atomic::Ordering::Relaxed) {
         return GO_DEFAULT_CHECKERS;
@@ -1524,7 +1466,7 @@ fn get_import_adjacency(program: &Program) -> Vec<Vec<usize>> {
 
 #[cfg(test)]
 mod stealing_tests {
-    use super::{queues_next, FileQueue};
+    use super::{heavy_files_first, queues_next, FileQueue};
     use std::sync::Mutex;
 
     /// Owners taking from the front and thieves from the back of the same queues must hand out every position exactly
@@ -1539,7 +1481,7 @@ mod stealing_tests {
                 let positions: Vec<u32> = (base..base + n as u32).collect();
                 base += n as u32;
                 // Some positions weigh 0 (unchecked declaration files): they must still be handed out.
-                FileQueue::new(positions, n / 3, |i| u64::from(i % 7 != 0) * u64::from(i % 5 + 1))
+                FileQueue::new(positions, |i| u64::from(i % 7 != 0) * u64::from(i % 5 + 1))
             })
             .collect();
         let taken: Mutex<Vec<(usize, bool)>> = Mutex::new(Vec::new());
@@ -1548,7 +1490,7 @@ mod stealing_tests {
                 let (queues, taken) = (&queues, &taken);
                 s.spawn(move || {
                     let mut mine = Vec::new();
-                    while let Some(t) = queues_next(queues, me, true, super::StealSide::Heavy) {
+                    while let Some(t) = queues_next(queues, me, true) {
                         mine.push(t);
                     }
                     taken.lock().unwrap().extend(mine);
@@ -1564,9 +1506,22 @@ mod stealing_tests {
     /// Without stealing a checker runs exactly its own files, in visiting order.
     #[test]
     fn without_stealing_a_checker_keeps_its_own_files_in_order() {
-        let queues = vec![FileQueue::new(vec![0, 2, 4], 0, |_| 1), FileQueue::new(vec![1, 3], 0, |_| 1)];
-        let order: Vec<(usize, bool)> = std::iter::from_fn(|| queues_next(&queues, 0, false, super::StealSide::Back)).collect();
+        let queues = vec![FileQueue::new(vec![0, 2, 4], |_| 1), FileQueue::new(vec![1, 3], |_| 1)];
+        let order: Vec<(usize, bool)> = std::iter::from_fn(|| queues_next(&queues, 0, false)).collect();
         assert_eq!(order, vec![(0, false), (2, false), (4, false)]);
         assert_eq!(queues[1].remaining(), 2);
+    }
+
+    /// The heavy files move to the front, heaviest first; everything else keeps its (program) order, so the back of the
+    /// queue, where thieves take from, is unchanged.
+    #[test]
+    fn heavy_files_come_first_and_the_rest_keep_their_order() {
+        let weights = [3u64, 50, 1, 80, 2, 50, 4];
+        let mut positions: Vec<u32> = (0..weights.len() as u32).collect();
+        heavy_files_first(&mut positions, 10, |i| weights[i as usize]);
+        assert_eq!(positions, vec![3, 1, 5, 0, 2, 4, 6]);
+        let mut unchanged = positions.clone();
+        heavy_files_first(&mut unchanged, 100, |i| weights[i as usize]);
+        assert_eq!(unchanged, positions);
     }
 }

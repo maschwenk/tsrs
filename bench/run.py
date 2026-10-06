@@ -326,7 +326,10 @@ def markdown(result: dict) -> str:
         "",
     ]
     drift = False
-    titles = {"default": "Default mode: 4 checker threads in both (tsrs also resolves members lazily, its default)",
+    # tsrs's default checker count (checkerpool.rs default_checker_count; the small-program floor does not bind here).
+    tsrs_default = max(4, min(32, (m.get("cpus") or 1) // 2))
+    titles = {"default": f"Default mode: no thread flag; tsgo uses 4 checker threads, tsrs half the cores clamped to 4..32 "
+                         f"({tsrs_default} here; tsrs also resolves members lazily, its default)",
               "single": "`--singleThreaded`: one checker thread in both",
               "checkers8": "`--checkers 8`: 8 checker threads in both (how each compiler scales with more checkers)"}
     for mode in result["modes"]:
