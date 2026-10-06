@@ -1,0 +1,92 @@
+# Depot CI workflow: one-off performance probe on a 64-thread machine, for hill-climbing experiments that need more
+# cores than a laptop (notes/perf-*.md). Not scheduled and not triggered by pushes: run it from a branch or a dirty
+# worktree with
+#
+#   depot ci run --workflow .depot/workflows/perf-probe.yml
+#
+# which uploads the local diff against origin/main and applies it on the runner, so the probe script and any tsrs
+# change under test need not be pushed. Builds `cargo build --release -p tsrs_cli` (not the PGO dist build: relative
+# comparisons only; confirm wins with bench-compare.yml), sets up the bench projects named in PROBE_PROJECTS, downloads
+# Bun canary and tsgo, then runs tools/perf/probe.sh, which writes everything it wants to keep to probe-out/. That
+# directory is the `perf-probe` artifact (depot ci artifacts list <run>; depot ci artifacts download <id>).
+# actions/cache is not available to `depot ci run` (API-triggered runs are not tied to a ref), so every run clones and
+# installs its projects (vscode: ~2 min) and builds from scratch (~4 min on 64 cores).
+
+name: Perf probe (64 threads)
+
+on:
+  workflow_dispatch:
+    inputs:
+      projects:
+        description: comma-separated bench/projects.json names to set up
+        default: vscode
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  PROBE_PROJECTS: ${{ inputs.projects || 'vscode' }}
+
+jobs:
+  probe:
+    runs-on: depot-ubuntu-24.04-64
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Runner hardware
+        run: |
+          nproc; free -g; uname -r
+          lscpu | grep -E 'Model name|^CPU\(s\)|Thread|Socket|NUMA' || true
+          mkdir -p probe-out
+          { nproc; lscpu; free -g; } > probe-out/machine.txt
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+
+      - name: Install Bun canary and perf
+        run: |
+          curl -fsSL -o /tmp/bun.zip https://github.com/oven-sh/bun/releases/download/canary/bun-linux-x64.zip
+          unzip -oq /tmp/bun.zip -d /tmp/bun
+          /tmp/bun/bun-linux-x64/bun --revision
+          # linux perf is best-effort: the packaged tools may not match the runner kernel.
+          (sudo apt-get update -qq && sudo apt-get install -y -qq linux-tools-common linux-tools-generic >/dev/null 2>&1 \
+            && ls /usr/lib/linux-tools/*/perf) || echo "perf not installed"
+
+      - name: Read the pinned Rust toolchain (rust-toolchain.toml)
+        id: rust
+        shell: bash
+        run: echo "toolchain=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: ${{ steps.rust.outputs.toolchain }}
+          targets: x86_64-unknown-linux-gnu
+          components: llvm-tools
+
+      - name: Set up projects and compilers
+        run: python3 bench/run.py --setup-only --projects "$PROBE_PROJECTS"
+
+      - name: Build tsrs (release)
+        run: cargo build --release --locked -p tsrs_cli
+
+      - name: Probe
+        env:
+          TSRS_BIN: ${{ github.workspace }}/target/release/tsrs
+          BUN_BIN: /tmp/bun/bun-linux-x64/bun
+          BENCH_WORK: ${{ github.workspace }}/bench/.work
+          PROBE_OUT: ${{ github.workspace }}/probe-out
+        run: bash tools/perf/probe.sh
+
+      - name: Upload probe output
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: perf-probe
+          path: probe-out
+          if-no-files-found: warn
