@@ -680,7 +680,13 @@ impl filesParser {
             crate::program::worker_pool().install(|| {
                 rayon::scope(|scope| {
                     let spec = &spec;
+                    // Rayon splits the jobs into about one leaf per thread (vscode: 150 files each) that a thread
+                    // then runs sequentially; files next to each other in the root list are often alike in size
+                    // (a directory of large .d.ts files), so a leaf can run on alone at the end. Small leaves keep
+                    // the tail stealable (the split overhead is a few microseconds per leaf).
+                    let max_len: usize = std::env::var("TSRS_FE_MAXLEN").ok().and_then(|v| v.parse().ok()).unwrap_or(usize::MAX);
                     jobs.into_par_iter()
+                        .with_max_len(max_len)
                         .map(|(t, file_name, path, is_lib)| {
                             use tsrs_core::festats::{self, Cat};
                             let job_start = festats::enabled().then(std::time::Instant::now);
