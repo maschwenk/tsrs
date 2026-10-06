@@ -1,8 +1,9 @@
 # Benchmarks: tsrs vs tsgo
 
 `bench/run.py` type-checks the projects the TypeScript team benchmarks the Go compiler on
-([microsoft/typescript-benchmarking](https://github.com/microsoft/typescript-benchmarking), `cases/`) with tsrs and
-with tsgo 7.0.2 (npm `typescript@7.0.2`), and reports wall time, peak memory and the error count of each.
+([microsoft/typescript-benchmarking](https://github.com/microsoft/typescript-benchmarking), `cases/`) and four large
+open-source applications (see "Application projects") with tsrs and with tsgo 7.0.2 (npm `typescript@7.0.2`), and
+reports wall time, peak memory and the error count of each.
 The Depot CI workflow `.depot/workflows/bench.yml` runs it on every push to `main` and rewrites the table at the top of `README.md`.
 
 ```sh
@@ -44,6 +45,51 @@ Not included: `angular-1` (its tsconfig uses options TypeScript 7 removed); the 
 baseline copies of the same four projects at older pinned commits, e.g. vscode `f88bce8f`); `strada-compiler`,
 `ts-pre-modules`, `strada-build-src`, `self-build-src-public-api` (TypeScript's own 5.x sources, two of them `tsc -b`
 builds); the tsserver/LSP/startup scenarios (not `tsc` runs). All six included projects fit a standard runner.
+
+## Application projects
+
+The suite has one application-shaped workload (`mui-docs`), and none of its projects leans on schema-validation
+types. Four large applications fill that gap: three Next.js/React apps built on Zod and tested with Vitest, and an
+Effect server (Effect Schema, `@effect/vitest`). Each is pinned to one commit and checks the tsconfig its own
+`typecheck` script checks, so test files are part of the program.
+
+| project | repository @ commit | `-p` | files / types (tsgo) | workload |
+| --- | --- | --- | ---: | --- |
+| `cal-diy` | calcom/cal.diy @ `54343aa685ae` | `apps/web` | 10,166 / 2.48 M | Zod 3, tRPC 11, Prisma-generated Zod types |
+| `formbricks-web` | formbricks/formbricks @ `ec45c28e4d20` | `apps/web/tsconfig.typecheck.json` | 10,451 / 2.85 M | Zod 4, Vitest, Prisma 7 |
+| `supabase-studio` | supabase/supabase @ `12afe3999951` | `apps/studio` | 12,546 / 2.22 M | Zod 3, Vitest, Next.js route types |
+| `t3code-server` | pingdotgg/t3code @ `9bd1d8009a6b` | `apps/server` | 3,007 / 3.18 M | Effect 4, Effect Schema, `@effect/vitest` |
+
+Each install command does what the app's own `typecheck` needs before `tsc` runs, with package scripts off:
+
+- `cal-diy`: Yarn 4 install, then `turbo run post-install @calcom/trpc#build` (Prisma client, Zod and Kysely types,
+  the platform packages, and the tRPC router declarations `apps/web` imports). `YARN_NM_MODE=classic` keeps a global
+  Yarn configuration (hardlinked node_modules) from changing the install, and the package cache goes to `$TMPDIR` so
+  it is not part of the project's CI cache.
+- `formbricks-web`: pnpm install, then `turbo run build --filter='@formbricks/web^...'`, which generates the Prisma
+  client and builds the workspace packages whose `dist/*.d.ts` the app imports. The build scripts call `pnpm`, so the
+  command puts a `.bench-bin/pnpm` shim (`npx pnpm@<packageManager version>`) on `PATH`. `DATABASE_URL` is a dummy
+  (Prisma's config requires one to generate; nothing connects).
+- `supabase-studio`: pnpm install of `studio` and its workspace dependencies, then `next typegen` (the app's
+  `pretypecheck`).
+- `t3code-server`: pnpm install of `t3`, `@t3tools/scripts` (`apps/server`'s tsconfig includes `scripts/lib`) and
+  their workspace dependencies. The repository's `prepare` script patches its TypeScript for the Effect language
+  service, which neither compiler measured here runs.
+
+**Overlays.** cal.diy and Formbricks still compile with TypeScript 5.9, whose tsconfig options TypeScript 7 removed
+(`baseUrl`, `moduleResolution: node`, `target: es5`); unmodified, both stop at config errors before checking a
+file. `bench/overlays/<name>/` holds the minimal TypeScript 7 replacements, copied over the checkout before the
+install: `baseUrl` becomes a `"*": ["./*"]` path, `node` resolution becomes `bundler`, ES5 becomes ES2017.
+cal.diy's generated tRPC declarations import `@trpc/server/dist/...`, which `bundler` resolution blocks through the
+package's `exports`, so a `paths` entry maps it to the package directory as `node` resolution did (without it,
+tsgo reports 727 errors instead of 136). Formbricks also gets the `next-env.d.ts` Next.js writes on `next dev`
+(image module types). The overlay's content hash is part of the checkout marker and the CI cache key.
+
+**Errors.** The applications are not error-free under TypeScript 7 with these settings (cal.diy: 136, mostly test
+matchers and untyped resolver modules). As with vscode and webpack, the count is a correctness signal between the two
+compilers. On 2026-10-06 (local, macOS arm64), tsgo 7.0.2 and tsrs reported identical errors on cal.diy (136) and
+Formbricks (0); on Supabase Studio (0 vs 9) and t3code (5 vs 6), `typescript@7.1.0-dev.20260930.4` reported exactly
+tsrs's errors (`(ref N)` in the table).
 
 ## What is measured
 

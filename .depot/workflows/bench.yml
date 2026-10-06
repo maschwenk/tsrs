@@ -140,6 +140,34 @@ jobs:
           path: bench/.work/solutions/mui-docs
           key: bench-mui-docs-${{ runner.os }}-${{ steps.keys.outputs['mui-docs'] }}
 
+      - name: Restore cal-diy
+        id: cache-cal
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/cal-diy
+          key: bench-cal-diy-${{ runner.os }}-${{ steps.keys.outputs['cal-diy'] }}
+
+      - name: Restore formbricks-web
+        id: cache-formbricks
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/formbricks-web
+          key: bench-formbricks-web-${{ runner.os }}-${{ steps.keys.outputs['formbricks-web'] }}
+
+      - name: Restore supabase-studio
+        id: cache-supabase
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/supabase-studio
+          key: bench-supabase-studio-${{ runner.os }}-${{ steps.keys.outputs['supabase-studio'] }}
+
+      - name: Restore t3code-server
+        id: cache-t3code
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/t3code-server
+          key: bench-t3code-server-${{ runner.os }}-${{ steps.keys.outputs['t3code-server'] }}
+
       # A no-op for everything restored above. Also sets up xstate-main and webpack for the PGO training run.
       - name: Set up benchmark projects
         run: python3 bench/run.py --setup-only
@@ -180,6 +208,34 @@ jobs:
         with:
           path: bench/.work/solutions/mui-docs
           key: ${{ steps.cache-mui.outputs.cache-primary-key }}
+
+      - name: Save cal-diy
+        if: steps.cache-cal.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: bench/.work/solutions/cal-diy
+          key: ${{ steps.cache-cal.outputs.cache-primary-key }}
+
+      - name: Save formbricks-web
+        if: steps.cache-formbricks.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: bench/.work/solutions/formbricks-web
+          key: ${{ steps.cache-formbricks.outputs.cache-primary-key }}
+
+      - name: Save supabase-studio
+        if: steps.cache-supabase.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: bench/.work/solutions/supabase-studio
+          key: ${{ steps.cache-supabase.outputs.cache-primary-key }}
+
+      - name: Save t3code-server
+        if: steps.cache-t3code.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: bench/.work/solutions/t3code-server
+          key: ${{ steps.cache-t3code.outputs.cache-primary-key }}
 
       # tsrs is measured as released: the PGO build of the `dist` profile, with the same commands as the build job of
       # .github/workflows/release.yml (target x86_64-unknown-linux-gnu) and the same training workload

@@ -1,0 +1,58 @@
+{
+  "extends": "@calcom/tsconfig/nextjs.json",
+  "compilerOptions": {
+    "target": "ES2017",
+    "moduleResolution": "bundler",
+    "paths": {
+      "*": [
+        "./*"
+      ],
+      "~/*": [
+        "./modules/*"
+      ],
+      "@components/*": [
+        "./components/*"
+      ],
+      "@pages/*": [
+        "./pages/*"
+      ],
+      "@lib/*": [
+        "./lib/*"
+      ],
+      "@server/*": [
+        "./server/*"
+      ],
+      "@calcom/testing/*": [
+        "../../packages/testing/src/*"
+      ],
+      "@coss/ui/*": [
+        "../../packages/coss-ui/src/*"
+      ],
+      "@trpc/server/dist/*": [
+        "../../node_modules/@trpc/server/dist/*"
+      ]
+    },
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "strictNullChecks": true,
+    "experimentalDecorators": true
+  },
+  "include": [
+    "../../packages/app-store/routing-forms/env.d.ts",
+    "next-env.d.ts",
+    "../../packages/trpc/types/router.d.ts",
+    "../../packages/types/*.d.ts",
+    "../../packages/types/next-auth.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": [
+    "**/node_modules/**",
+    ".next",
+    "playwright"
+  ]
+}

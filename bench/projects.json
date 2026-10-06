@@ -57,6 +57,36 @@
       "case": "cases/scenarios/Compiler-Unions",
       "suite_dir": "cases/solutions/Compiler-Unions",
       "project": "tsconfig.json"
+    },
+    {
+      "name": "cal-diy",
+      "repo": "https://github.com/calcom/cal.diy.git",
+      "commit": "54343aa685ae8f33159d2f485ec4a57bad5c574a",
+      "project": "apps/web",
+      "install": "export YARN_NM_MODE=classic YARN_ENABLE_GLOBAL_CACHE=false YARN_CACHE_FOLDER=\"${TMPDIR:-/tmp}/tsrs-bench-yarn-cache\" TURBO_TELEMETRY_DISABLED=1 && node .yarn/releases/yarn-4.12.0.cjs install --immutable --mode=skip-build && node .yarn/releases/yarn-4.12.0.cjs turbo run post-install @calcom/trpc#build --output-logs=errors-only",
+      "overlay": "bench/overlays/cal-diy"
+    },
+    {
+      "name": "formbricks-web",
+      "repo": "https://github.com/formbricks/formbricks.git",
+      "commit": "ec45c28e4d20bd9daf3191c991b67981aabf5db8",
+      "project": "apps/web/tsconfig.typecheck.json",
+      "install": "mkdir -p .bench-bin && printf '#!/bin/sh\\nexec npx --yes pnpm@11.7.0 \"$@\"\\n' > .bench-bin/pnpm && chmod +x .bench-bin/pnpm && export PATH=\"$PWD/.bench-bin:$PWD/node_modules/.bin:$PATH\" DATABASE_URL=postgresql://bench@localhost:5432/bench TURBO_TELEMETRY_DISABLED=1 && pnpm install --frozen-lockfile --ignore-scripts && turbo run build --filter='@formbricks/web^...' --output-logs=errors-only",
+      "overlay": "bench/overlays/formbricks-web"
+    },
+    {
+      "name": "supabase-studio",
+      "repo": "https://github.com/supabase/supabase.git",
+      "commit": "12afe399995143a2cc699eabbbd29596f4e64945",
+      "project": "apps/studio",
+      "install": "npx --yes pnpm@11.13.1 install --frozen-lockfile --ignore-scripts --filter studio... && cd apps/studio && NEXT_TELEMETRY_DISABLED=1 node node_modules/next/dist/bin/next typegen"
+    },
+    {
+      "name": "t3code-server",
+      "repo": "https://github.com/pingdotgg/t3code.git",
+      "commit": "9bd1d8009a6b7c50f9dd9458e2bf27d481ff3b43",
+      "project": "apps/server",
+      "install": "npx --yes pnpm@11.10.0 install --frozen-lockfile --ignore-scripts --filter t3... --filter @t3tools/scripts..."
     }
   ]
 }
