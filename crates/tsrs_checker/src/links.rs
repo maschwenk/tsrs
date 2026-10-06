@@ -134,7 +134,7 @@ struct IdGroup {
     slots: [Cell<u16>; ID_GROUP],
 }
 
-const _: () = assert!(std::mem::size_of::<IdGroup>() == 2 * ID_GROUP + 4 + std::mem::size_of::<Option<P<()>>>());
+const _: () = assert!(std::mem::size_of::<IdGroup>() == if tsrs_core::COMPRESSED_PTRS { 264 } else { 272 });
 
 /// Kept for embedders (tsrslint) and the pool, which chose sparse id pages for multi-checker runs: the groups above
 /// made the sparse form unnecessary, so these are inert and `TSRS_SPARSE_ID_PAGES` is ignored.

@@ -139,31 +139,34 @@ cat /sys/kernel/mm/transparent_hugepage/enabled /sys/kernel/mm/transparent_hugep
 cd "$proj"
 "$TSRS_BIN" "${flags[@]}" > /dev/null 2>&1 || true   # warm the page cache
 
+# The default checker count on this runner (8), 3 reps: the wall / RSS trade of the heap without huge pages.
 for rep in 1 2 3; do
-  for k in 4 16 64; do
+  for bin in base new base-nothp new-nothp; do
+    measure "$bin-k8-rep$rep" -- "/tmp/bins/$bin" "${flags[@]}" --checkers 8
+  done
+done
+for rep in 1 2; do
+  for k in 4 64; do
     for bin in base new; do
       measure "$bin-k$k-rep$rep" -- "/tmp/bins/$bin" "${flags[@]}" --checkers "$k"
     done
-    if [ "$rep" != 3 ]; then
-      for bin in base-nothp new-nothp; do
-        measure "$bin-k$k-rep$rep" -- "/tmp/bins/$bin" "${flags[@]}" --checkers "$k"
-      done
-    fi
   done
 done
-for bin in base new base-nothp new-nothp; do
-  measure "$bin-k1-rep1" -- "/tmp/bins/$bin" "${flags[@]}" --checkers 1
-  measure "$bin-nocheck-rep1" -- "/tmp/bins/$bin" "${flags[@]}" --noCheck
-done
-# mimalloc knobs that could cut the huge-page amplification of its heap without giving up the advice.
-for k in 4 64; do
-  measure "new-eagercommit0-k$k-rep1" MIMALLOC_ARENA_EAGER_COMMIT=0 -- /tmp/bins/new "${flags[@]}" --checkers "$k"
-  measure "new-purge100-k$k-rep1" MIMALLOC_PURGE_DELAY=100 -- /tmp/bins/new "${flags[@]}" --checkers "$k"
-  measure "new-allthpoff-k$k-rep1" MIMALLOC_ALLOW_THP=0 -- /tmp/bins/new "${flags[@]}" --checkers "$k"
+# What an idle checker costs (a one-file project: the checkers that get no file still initialize and own two OS
+# threads whose mimalloc pages stay resident).
+tiny=/tmp/tiny-project
+mkdir -p "$tiny/src"
+printf 'export const x: number = 1;\n' > "$tiny/src/a.ts"
+printf '{"compilerOptions":{"strict":true,"noEmit":true},"include":["src"]}\n' > "$tiny/tsconfig.json"
+for k in 1 8 64; do
+  for bin in base base-nothp; do
+    measure "tiny-$bin-k$k" -- "/tmp/bins/$bin" -p "$tiny" --noEmit --incremental false --extendedDiagnostics --pretty false --checkers "$k"
+  done
 done
 # Diagnostics identity between the variants (the statistics block differs).
-for k in 4 16 64; do
+for k in 4 8 64; do
   for bin in new base-nothp new-nothp; do
+    [ -f "$PROBE_OUT/$bin-k$k-rep1.txt" ] || continue
     if ! diff <(grep -E 'error TS' "$PROBE_OUT/base-k$k-rep1.txt") <(grep -E 'error TS' "$PROBE_OUT/$bin-k$k-rep1.txt") > /dev/null; then
       echo "OUTPUT DIFFERS: base vs $bin at $k checkers" | tee -a "$PROBE_OUT/summary.txt"
     fi
