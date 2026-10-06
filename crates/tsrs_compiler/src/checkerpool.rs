@@ -681,6 +681,15 @@ impl checkerPool {
         if steal {
             // Experiment knob (TSRS_CHECKER_FILE_ORDER, notes/perf-checker-64.md): the order in which an owner visits
             // its own queue; TSRS_CHECKER_STEAL decides which end thieves take from.
+            let hoist = |p: &mut Vec<u32>, threshold: u64| {
+                // The heavy files first (heaviest first); the rest keep program order.
+                let (mut heavy, light): (Vec<u32>, Vec<u32>) = p.iter().partition(|&&i| weight(i) > threshold);
+                heavy.sort_by_key(|&i| std::cmp::Reverse(weight(i)));
+                let heavy_len = heavy.len();
+                heavy.extend(light);
+                *p = heavy;
+                heavy_len
+            };
             match checker_file_order() {
                 FileOrder::Program => {}
                 FileOrder::Weight => positions.iter_mut().zip(&mut heavy_lens).for_each(|(p, heavy_len)| {
@@ -688,15 +697,13 @@ impl checkerPool {
                     p.sort_by_key(|&i| std::cmp::Reverse(weight(i)));
                     *heavy_len = p.iter().take_while(|&&i| weight(i) > threshold).count();
                 }),
-                FileOrder::Heavy => positions.iter_mut().zip(&mut heavy_lens).for_each(|(p, heavy_len)| {
-                    // The heavy files first (heaviest first); the rest keep program order.
-                    let threshold = heavy_threshold(p);
-                    let (mut heavy, light): (Vec<u32>, Vec<u32>) = p.iter().partition(|&&i| weight(i) > threshold);
-                    heavy.sort_by_key(|&i| std::cmp::Reverse(weight(i)));
-                    *heavy_len = heavy.len();
-                    heavy.extend(light);
-                    *p = heavy;
-                }),
+                FileOrder::Heavy => positions.iter_mut().zip(&mut heavy_lens).for_each(|(p, heavy_len)| *heavy_len = hoist(p, heavy_threshold(p))),
+                FileOrder::HeavyShare => {
+                    // Files heavier than 1/HEAVY_SHARE_DIVISOR of an average checker's share of this pass.
+                    let total: u64 = positions.iter().flatten().map(|&i| weight(i)).sum();
+                    let threshold = total / (active.len().max(1) as u64 * HEAVY_SHARE_DIVISOR);
+                    positions.iter_mut().zip(&mut heavy_lens).for_each(|(p, heavy_len)| *heavy_len = hoist(p, threshold));
+                }
                 FileOrder::Reverse => positions.iter_mut().for_each(|p| p.reverse()),
             }
         }
@@ -780,10 +787,12 @@ enum FileOrder {
     Program,
     Weight,
     Heavy,
+    HeavyShare,
     Reverse,
 }
 
 const HEAVY_FACTOR: u64 = 4;
+const HEAVY_SHARE_DIVISOR: u64 = 100;
 
 // TSRS_CHECKER_STEAL=back|front|heavy (experiment): the end of a victim's queue a thief takes from. `heavy`: the front
 // while the victim's front is still inside its heavy prefix, else the back.
@@ -808,6 +817,7 @@ fn checker_file_order() -> FileOrder {
     *ORDER.get_or_init(|| match std::env::var("TSRS_CHECKER_FILE_ORDER").as_deref() {
         Ok("weight") => FileOrder::Weight,
         Ok("heavy") => FileOrder::Heavy,
+        Ok("heavyshare") => FileOrder::HeavyShare,
         Ok("reverse") => FileOrder::Reverse,
         _ => FileOrder::Program,
     })

@@ -33,33 +33,28 @@ run() {
     "$(grep -E '^(Check|Total) time' "$base.txt" | tr -s ' ' | tr '\n' ' ')" "$(tr -d '{}"' < "$base.json")" | tee -a "$summary"
 }
 
-# Run 2 (notes/perf-checker-64.md): visiting order x stealing side, 3 reps each.
-#   order:  program (today), weight (heaviest first), heavy (files above 4x the queue mean first, the rest program order)
-#   steal:  back (today), front (the heaviest remaining), heavy (the front while it is a heavy file, then the back)
-for k in 16 24 32 48 64; do
+# Run 3 (notes/perf-checker-64.md): the heavy-share prefix (files heavier than 1% of a checker's share first, heaviest
+# first, then program order; thieves take from the back) against program order, 3 reps each.
+for k in 8 16 24 32 48 64; do
   for rep in 1 2 3; do
-    run "heavy-heavy-k$k-rep$rep" "$k" TSRS_CHECKER_FILE_ORDER=heavy TSRS_CHECKER_STEAL=heavy
-    run "weight-front-k$k-rep$rep" "$k" TSRS_CHECKER_FILE_ORDER=weight TSRS_CHECKER_STEAL=front
+    run "heavyshare-k$k-rep$rep" "$k" TSRS_CHECKER_FILE_ORDER=heavyshare
+    if [ "$k" -le 24 ]; then run "program-k$k-rep$rep" "$k"; fi
   done
 done
-for k in 32 48 64; do
-  for rep in 1 2 3; do run "weight-heavy-k$k-rep$rep" "$k" TSRS_CHECKER_FILE_ORDER=weight TSRS_CHECKER_STEAL=heavy; done
-done
-for k in 16 24 48; do
-  for rep in 1 2 3; do run "heavy-back-k$k-rep$rep" "$k" TSRS_CHECKER_FILE_ORDER=heavy TSRS_CHECKER_STEAL=back; done
-done
-run "filetimes-heavy-heavy-k48" 48 TSRS_CHECKER_FILE_ORDER=heavy TSRS_CHECKER_STEAL=heavy TSRS_FILE_TIMES="$PROBE_OUT/filetimes-heavy-heavy-k48.tsv"
-run "filetimes-weight-front-k48" 48 TSRS_CHECKER_FILE_ORDER=weight TSRS_CHECKER_STEAL=front TSRS_FILE_TIMES="$PROBE_OUT/filetimes-weight-front-k48.tsv"
+run "filetimes-heavyshare-k48" 48 TSRS_CHECKER_FILE_ORDER=heavyshare TSRS_FILE_TIMES="$PROBE_OUT/filetimes-heavyshare-k48.tsv"
+run "filetimes-heavyshare-k64" 64 TSRS_CHECKER_FILE_ORDER=heavyshare TSRS_FILE_TIMES="$PROBE_OUT/filetimes-heavyshare-k64.tsv"
+# Front-end instructions (no checking), for the duplicated-work column.
+python3 "$count" "$PROBE_OUT/listfiles.json" -- "$TSRS_BIN" -p src --noEmit --incremental false --listFilesOnly > /dev/null 2>&1 || true
+echo "listFilesOnly: $(cat "$PROBE_OUT/listfiles.json")" | tee -a "$summary"
 
 # Headline walls without --extendedDiagnostics or stats, 5 reps, interleaved.
 echo "== headline walls (no stats, no extendedDiagnostics)" | tee -a "$summary"
 for rep in 1 2 3 4 5; do
-  for k in 32 48 64; do
-    for variant in program:back heavy:heavy weight:front; do
-      order=${variant%%:*}; side=${variant##*:}
-      t="$PROBE_OUT/wall-$order-$side-k$k-rep$rep.time"
-      "${TIME_BIN:-/usr/bin/time}" -f "%e %M" -o "$t" env TSRS_CHECKER_FILE_ORDER=$order TSRS_CHECKER_STEAL=$side "$TSRS_BIN" -p src --noEmit --incremental false --pretty false --checkers "$k" > /dev/null 2>&1 || true
-      printf 'wall %-14s k=%-3s rep %s: %s s, %s KiB\n' "$order/$side" "$k" "$rep" $(tail -1 "$t") | tee -a "$summary"
+  for k in 16 24 32 48 64; do
+    for order in program heavyshare; do
+      t="$PROBE_OUT/wall-$order-k$k-rep$rep.time"
+      "${TIME_BIN:-/usr/bin/time}" -f "%e %M" -o "$t" env TSRS_CHECKER_FILE_ORDER=$order "$TSRS_BIN" -p src --noEmit --incremental false --pretty false --checkers "$k" > /dev/null 2>&1 || true
+      printf 'wall %-10s k=%-3s rep %s: %s s, %s KiB\n' "$order" "$k" "$rep" $(tail -1 "$t") | tee -a "$summary"
     done
   done
 done
