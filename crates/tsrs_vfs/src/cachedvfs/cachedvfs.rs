@@ -7,26 +7,44 @@ use rustc_hash::FxHashMap;
 use crate::FS as VFS;
 use crate::{Entries, FileInfo};
 
+/// Shards per cache: program construction probes these caches from every worker (vscode: 250k acquisitions in the
+/// 64-thread parse phase, notes/perf-frontend-64.md); keys spread over the shards by hash, like
+/// `tsrs_core::collections::SyncMap`.
+const SHARDS: usize = 64;
+
 // SyncMap is collections.SyncMap: a concurrent map with Load/Store/Clear.
 struct SyncMap<V> {
-    m: RwLock<FxHashMap<String, V>>,
+    shards: Box<[RwLock<FxHashMap<String, V>>]>,
 }
 
 impl<V: Clone> SyncMap<V> {
     fn new() -> Self {
-        SyncMap { m: RwLock::new(FxHashMap::default()) }
+        SyncMap { shards: (0..SHARDS).map(|_| RwLock::new(FxHashMap::default())).collect() }
+    }
+
+    #[inline]
+    fn shard(&self, key: &str) -> &RwLock<FxHashMap<String, V>> {
+        use std::hash::{Hash, Hasher};
+        let mut h = rustc_hash::FxHasher::default();
+        key.hash(&mut h);
+        &self.shards[(h.finish() >> (u64::BITS - SHARDS.trailing_zeros())) as usize]
     }
 
     fn load(&self, key: &str) -> Option<V> {
-        self.m.read().unwrap().get(key).cloned()
+        let m = tsrs_core::festats::timed_counted(tsrs_core::festats::Cat::LockVfs, tsrs_core::festats::Cat::VfsOps, || self.shard(key).read().unwrap());
+        m.get(key).cloned()
     }
 
     fn store(&self, key: &str, value: V) {
-        self.m.write().unwrap().insert(key.to_string(), value);
+        let mut m =
+            tsrs_core::festats::timed_counted(tsrs_core::festats::Cat::LockVfs, tsrs_core::festats::Cat::VfsOps, || self.shard(key).write().unwrap());
+        m.insert(key.to_string(), value);
     }
 
     fn clear(&self) {
-        self.m.write().unwrap().clear();
+        for shard in &self.shards {
+            shard.write().unwrap().clear();
+        }
     }
 }
 

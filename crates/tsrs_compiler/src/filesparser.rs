@@ -358,7 +358,10 @@ struct speculativeParse {
 // The shared state of one speculative walk (`prefetch`).
 struct speculation<'a> {
     ctx: &'a crate::fileloader::prefetchContext<'a>,
-    claimed: std::sync::Mutex<FxHashSet<Path>>,
+    // The files that have a task already (the round's own, read-only here) and the files a speculative job claimed
+    // (sharded; one mutex for all of them serialized the workers on vscode's 110k import edges at 64 threads).
+    queued: FxHashSet<Path>,
+    claimed: tsrs_core::collections::SyncSet<Path>,
     results: std::sync::Mutex<Vec<(Path, speculativeParse)>>,
 }
 
@@ -420,7 +423,12 @@ impl<'a> speculation<'a> {
     // speculative job has it.
     fn claim(&self, file_name: &str, path: &Path) -> bool {
         let ctx = self.ctx;
-        if !self.claimed.lock().unwrap().insert(path.clone()) {
+        if self.queued.contains(path) {
+            return false;
+        }
+        if !tsrs_core::festats::timed_counted(tsrs_core::festats::Cat::LockClaim, tsrs_core::festats::Cat::ClaimOps, || {
+            self.claimed.add_if_absent(path.clone())
+        }) {
             return false;
         }
         // A bundled lib file can also be loaded as a lib (with lib metadata) through a lib reference.
@@ -449,14 +457,20 @@ impl<'a> speculation<'a> {
 
     fn run<'s>(&'s self, scope: &rayon::Scope<'s>, file_name: String, path: Path) {
         let ctx = self.ctx;
-        let metadata = source_file_meta_data(ctx.opts, ctx.resolver, ctx.project_references, &file_name);
+        use tsrs_core::festats::{self, Cat};
+        let job_start = festats::enabled().then(std::time::Instant::now);
+        let metadata = festats::timed(Cat::Meta, || source_file_meta_data(ctx.opts, ctx.resolver, ctx.project_references, &file_name));
         let file = ctx.host.get_source_file(parse_options_for(ctx.host, ctx.project_references, &file_name, &path, &metadata));
-        file.map(tsrs_binder::bind_source_file);
-        let resolutions = file.map(|file| Box::new(prefetch_resolutions(ctx, file, &metadata)));
+        festats::timed(Cat::Bind, || file.map(tsrs_binder::bind_source_file));
+        let resolutions = festats::timed(Cat::Resolve, || file.map(|file| Box::new(prefetch_resolutions(ctx, file, &metadata))));
         if let (Some(file), Some(resolutions)) = (file, &resolutions) {
             self.spawn_sub_tasks(scope, file, resolutions);
         }
         self.results.lock().unwrap().push((path, speculativeParse { file_name, metadata, file, resolutions }));
+        if let Some(start) = job_start {
+            festats::add(Cat::JobWall, start.elapsed().as_nanos() as u64);
+            festats::add(Cat::Jobs, 1);
+        }
     }
 }
 
@@ -637,41 +651,88 @@ impl filesParser {
             .into_iter()
             .map(|t| (t, loader.tasks[t].normalized_file_path.to_string(), loader.tasks[t].path.clone(), loader.tasks[t].lib_file.is_some()))
             .collect();
-        let claimed: FxHashSet<Path> = if speculate { loader.files_parser.task_data_by_path.keys().cloned().collect() } else { FxHashSet::default() };
+        let queued: FxHashSet<Path> = if speculate { loader.files_parser.task_data_by_path.keys().cloned().collect() } else { FxHashSet::default() };
         let ctx = loader.prefetch_context();
-        let spec = speculation { ctx: &ctx, claimed: std::sync::Mutex::new(claimed), results: std::sync::Mutex::new(Vec::new()) };
+        let spec = speculation { ctx: &ctx, queued, claimed: tsrs_core::collections::SyncSet::default(), results: std::sync::Mutex::new(Vec::new()) };
         let (opts, host, resolver, project_references) = (ctx.opts, ctx.host, ctx.resolver, ctx.project_references);
         let parse_start = std::time::Instant::now();
+        let stats = tsrs_core::festats::enabled();
+        let cpu_before: Vec<f64> = if stats { crate::program::worker_pool().broadcast(|_| crate::checkerpool::thread_cpu_seconds()) } else { Vec::new() };
         let prefetched: Vec<(TaskId, SourceFileMetaData, Option<P<SourceFile>>, Option<Box<prefetchedResolutions>>)> =
             crate::program::worker_pool().install(|| {
                 rayon::scope(|scope| {
                     let spec = &spec;
                     jobs.into_par_iter()
                         .map(|(t, file_name, path, is_lib)| {
+                            use tsrs_core::festats::{self, Cat};
+                            let job_start = festats::enabled().then(std::time::Instant::now);
                             let metadata = if is_lib {
                                 SourceFileMetaData { implied_node_format: ModuleKind::CommonJS, ..Default::default() }
                             } else {
-                                source_file_meta_data(opts, resolver, project_references, &file_name)
+                                festats::timed(Cat::Meta, || source_file_meta_data(opts, resolver, project_references, &file_name))
                             };
                             let file = host.get_source_file(parse_options_for(host, project_references, &file_name, &path, &metadata));
                             // Bind here too: the round is bound by file system calls, and the checkers would bind every
                             // file on the same pool later (binding depends only on the file).
-                            file.map(tsrs_binder::bind_source_file);
-                            let resolutions = match file {
+                            festats::timed(Cat::Bind, || file.map(tsrs_binder::bind_source_file));
+                            let resolutions = festats::timed(Cat::Resolve, || match file {
                                 Some(file) if resolve_ahead => Some(Box::new(prefetch_resolutions(&ctx, file, &metadata))),
                                 _ => None,
-                            };
+                            });
                             if speculate && !is_lib {
                                 if let (Some(file), Some(resolutions)) = (file, &resolutions) {
                                     spec.spawn_sub_tasks(scope, file, resolutions);
                                 }
+                            }
+                            if let Some(start) = job_start {
+                                festats::add(Cat::JobWall, start.elapsed().as_nanos() as u64);
+                                festats::add(Cat::Jobs, 1);
                             }
                             (t, metadata, file, resolutions)
                         })
                         .collect()
                 })
             });
-        tsrs_core::phases::record("Program:   parallel parse + resolve", parse_start.elapsed());
+        let parse_elapsed = parse_start.elapsed();
+        tsrs_core::phases::record("Program:   parallel parse + resolve", parse_elapsed);
+        if stats {
+            let pool = crate::program::worker_pool();
+            let cpu_after: Vec<f64> = pool.broadcast(|_| crate::checkerpool::thread_cpu_seconds());
+            let per_thread: Vec<[u64; tsrs_core::festats::CATS]> = pool.broadcast(|_| tsrs_core::festats::take_thread());
+            let mut sum = [0u64; tsrs_core::festats::CATS];
+            for t in &per_thread {
+                for (s, v) in sum.iter_mut().zip(t) {
+                    *s += v;
+                }
+            }
+            let threads = per_thread.len() as u64;
+            let cpu: f64 = cpu_after.iter().zip(&cpu_before).map(|(a, b)| a - b).sum();
+            tsrs_core::phases::count("Program:     stats: pool threads", threads);
+            tsrs_core::phases::record("Program:     stats: thread-seconds (wall x threads)", parse_elapsed * threads as u32);
+            tsrs_core::phases::record("Program:     stats: thread cpu", std::time::Duration::from_secs_f64(cpu));
+            const ROWS: [&str; tsrs_core::festats::CATS] = [
+                "Program:     stats: job wall",
+                "Program:     stats: metadata",
+                "Program:     stats: read",
+                "Program:     stats: parse",
+                "Program:     stats: bind",
+                "Program:     stats: resolve",
+                "Program:     stats: lock claimed",
+                "Program:     stats: lock syncmap",
+                "Program:     stats: lock vfs",
+                "Program:     stats: claim ops",
+                "Program:     stats: syncmap ops",
+                "Program:     stats: vfs ops",
+                "Program:     stats: jobs",
+            ];
+            for (i, (row, v)) in ROWS.iter().zip(sum).enumerate() {
+                if tsrs_core::festats::is_count(i) {
+                    tsrs_core::phases::count(row, v);
+                } else {
+                    tsrs_core::phases::record(row, std::time::Duration::from_nanos(v));
+                }
+            }
+        }
         let speculative = spec.results.into_inner().unwrap();
         if speculate {
             tsrs_core::phases::count("Program:   parsed ahead", speculative.len() as u64);
