@@ -319,6 +319,17 @@ impl Arena {
         self.capacity.get()
     }
 
+    /// The unused part of the current chunk (below the finger of a thread arena, above it in a region); the
+    /// allocation profile reports it per arena.
+    #[cfg(feature = "alloc-profile")]
+    pub(crate) fn current_chunk_unused(&self) -> usize {
+        if self.up {
+            self.end.get().addr() - self.ptr.get().addr()
+        } else {
+            self.ptr.get().addr() - self.start.get().addr()
+        }
+    }
+
     /// The used part of every chunk, (start, len).
     pub(crate) fn used_ranges(&self) -> Vec<(usize, usize)> {
         if self.up {
