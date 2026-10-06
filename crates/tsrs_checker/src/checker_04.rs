@@ -925,7 +925,7 @@ impl Checker {
 
     // checker.go:7245
     pub(crate) fn is_referenced(&mut self, symbol: P<Symbol>) -> bool {
-        !self.symbol_reference_links.get(symbol).reference_kinds.get().is_empty()
+        !self.reference_kinds(symbol).is_empty()
     }
 
     // checker.go:7256
@@ -1011,7 +1011,7 @@ impl Checker {
         let mut import_clauses: OrderedMap<P<Node>, Vec<P<Node>>> = OrderedMap::default();
         let locals = node.locals().map(|l| l.values()).unwrap_or_default();
         for local in locals {
-            let reference_kinds = self.symbol_reference_links.get(local).reference_kinds.get();
+            let reference_kinds = self.reference_kinds(local);
             if local.flags().intersects(SymbolFlags::TypeParameter)
                 && (!local.flags().intersects(SymbolFlags::Variable) || reference_kinds.intersects(SymbolFlags::Variable))
                 || !local.flags().intersects(SymbolFlags::TypeParameter)
@@ -1105,7 +1105,7 @@ impl Checker {
             return name.elements().iter().all(|&e| self.is_unreferenced_variable_declaration(e));
         }
         let symbol = self.get_symbol_of_declaration(node).unwrap();
-        if self.symbol_reference_links.get(symbol).reference_kinds.get().intersects(SymbolFlags::Variable) {
+        if self.reference_kinds(symbol).intersects(SymbolFlags::Variable) {
             return false;
         }
         if is_binding_element(node) && is_object_binding_pattern(node.parent().unwrap()) {
@@ -1209,7 +1209,7 @@ impl Checker {
     // checker.go:7482
     pub(crate) fn is_unreferenced_type_parameter(&mut self, type_parameter: P<Node>) -> bool {
         let symbol = self.get_merged_symbol(type_parameter.symbol().unwrap());
-        !self.symbol_reference_links.get(symbol).reference_kinds.get().intersects(SymbolFlags::TypeParameter)
+        !self.reference_kinds(symbol).intersects(SymbolFlags::TypeParameter)
             && !is_identifier_that_starts_with_underscore(type_parameter.name().unwrap())
     }
 
@@ -1218,7 +1218,7 @@ impl Checker {
         let nodes = self.renamed_binding_elements_in_types.clone();
         for node in nodes {
             let symbol = self.get_symbol_of_declaration(node).unwrap();
-            if self.symbol_reference_links.get(symbol).reference_kinds.get().is_empty() {
+            if self.reference_kinds(symbol).is_empty() {
                 let wrapping_declaration = walk_up_binding_elements_and_patterns(node);
                 assert!(is_part_of_parameter_declaration(wrapping_declaration), "Only parameter declaration should be checked here");
                 let diagnostic = new_diagnostic_for_node(

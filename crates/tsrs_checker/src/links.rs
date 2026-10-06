@@ -260,7 +260,13 @@ impl<V: Default + 'static> IdLinkStore<V> {
         if id <= u32::MAX as u64 {
             let group_index = (id >> ID_GROUP_SHIFT) as usize;
             if group_index >= self.index.len() {
-                self.index.resize(group_index + 1, None);
+                // Grow by a quarter, not double: ids keep arriving in every checker's blocks for the whole run, so the
+                // index ends near the top of the id space in every checker (a checker's index is a few hundred KB).
+                let need = group_index + 1;
+                if need > self.index.capacity() {
+                    self.index.reserve_exact((need - self.index.len()).max(self.index.len() / 4));
+                }
+                self.index.resize(need, None);
             }
             let i = id as usize & (ID_GROUP - 1);
             let group = *self.index[group_index].get_or_insert_with(|| {
