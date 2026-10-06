@@ -1,18 +1,22 @@
 # Depot CI workflow (https://depot.dev/docs/ci/overview); Depot CI has no macOS sandboxes, so the macOS jobs stay in
-# .github/workflows/. Security: read-only token, no secrets. Runs only on pushes to main and manual dispatch by
-# collaborators; pull requests do not trigger CI.
+# .github/workflows/. Security: read-only token, no secrets. Runs on pushes to main, on pull requests into main
+# (drafts included, so a branch gets feedback as soon as it is pushed), and on manual dispatch by collaborators.
+# Depot CI does not run pull requests from forks.
 
 name: CI
 
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
-# Superseded pull-request runs are cancelled; every push to main runs to completion (several agents push to main).
+# A newer commit on the same pull request cancels its older run; every push to main runs to completion (several
+# agents push to main).
 concurrency:
-  group: ci-${{ github.sha }}
-  cancel-in-progress: false
+  group: ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

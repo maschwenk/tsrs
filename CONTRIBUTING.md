@@ -54,8 +54,9 @@ For a bug outside the suite, add a reproduction under `testdata/regressions/<nam
 ## Landing changes
 
 - External contributors: open a pull request against `main`. CI (`.depot/workflows/ci.yml`, on Depot CI) runs on pushes
-  to `main` and by manual dispatch, and must pass. Pull requests from forks run only the macOS job of
-  `.github/workflows/node-api.yml`, after a maintainer's approval, and never get repository secrets.
+  to `main`, on pull requests into `main` (drafts too) and by manual dispatch, and must pass. Depot CI does not run
+  pull requests from forks, so those run only the macOS job of `.github/workflows/node-api.yml`, after a
+  maintainer's approval, and never get repository secrets.
 - Maintainers land small commits directly on `main` (rebase onto `origin/main`, `cargo check --workspace`, re-run the
   affected tests and the full suite, then `git push origin HEAD:main`; never force-push). See `docs/DEBUGGING.md`.
 - Commit messages: `<area>: <what and why>`, plus the conformance totals when they change.
