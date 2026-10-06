@@ -205,14 +205,15 @@ mean of 20 runs). It runs four compilers on the same checkouts:
   `bun check -p <project> --no-pretty --all` (`--all` turns off the grouping of repeated errors so every error line is
   counted).
 
-Thread settings (`--threads`, default `default,4,8,16,all`): `default` passes no flag (tsgo and tsrs use 4 checker
-threads, bun one thread per core); a number N passes `--checkers N` to tsgo and tsrs and `--threads N` to bun;
+Thread settings (`--threads`, default `default,4,8,16,all`): `default` passes no flag (tsgo uses 4 checker threads,
+tsrs half the cores between 4 and 8, bun one thread per core); a number N passes `--checkers N` to tsgo and tsrs and
+`--threads N` to bun;
 `all` is the machine's thread count. The knobs are not identical: `--checkers` sets only the checker threads (parsing
 and binding still use every core), while bun's `--threads` caps all of its threads. Per project, one untimed warm-up
 per compiler, then `--reps` (default 20) reps in which the compiler order rotates; the table reports mean ± standard
 deviation, median and minimum wall time and mean peak RSS, plus whether each compiler's (file, line, column, code)
-error list equals 7.1-dev's. bun prints its own file count, which leaves out the default `lib` files (13 fewer on
-`Compiler`).
+error list equals 7.1-dev's. bun's file count is its own "checked N files" summary, which is not the program's file
+count (13 fewer on `Compiler`, 1,028 fewer on vscode).
 
 ```sh
 python3 bench/compare.py --tsrs target/release/tsrs --bun ~/.bun/bin/bun --projects vscode --reps 20
@@ -222,3 +223,8 @@ python3 bench/compare.py --tsrs ... --bun ... --projects Compiler --threads defa
 The Depot CI workflow `.depot/workflows/bench-compare.yml` (manual dispatch only) runs it on `depot-ubuntu-24.04-64`
 (64 vCPU) with the PGO `dist` build of the commit (built and trained as in `bench.yml`) and Bun canary, and uploads
 `bench/results/compare/<date>-<commit>-<threads>t.{json,md}` plus the logs as the `bench-compare` artifact.
+
+First run, 2026-10-06 (Depot run `rnfhvvd79g`, vscode, 20 reps, `bench/results/compare/2026-10-06-2420b7ed410b-64t.md`):
+at each compiler's default, bun check (64 threads) 0.85 s / 2.86 GiB, tsrs (8 checkers) 1.51 s / 3.25 GiB, tsgo 7.0.2
+9.58 s / 7.51 GiB, tsgo 7.1-dev 7.99 s / 6.85 GiB; at 64 threads tsrs 0.89 s / 4.97 GiB. bun check's 359 errors equal
+tsgo 7.0.2's line for line; tsrs's 371 equal 7.1-dev's.

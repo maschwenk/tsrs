@@ -33,9 +33,9 @@ BUN_FILES_RE = re.compile(r"checked ([\d,]+) files?")
 
 
 def thread_flags(compiler: str, threads: str) -> list[str]:
-    """`default` passes nothing (tsgo/tsrs: 4 checkers; bun: one thread per core). A number gives tsgo/tsrs that many
-    checker threads (`--checkers N`; parsing still uses every core) and bun that many threads (`--threads N`, its
-    only knob)."""
+    """`default` passes nothing (tsgo: 4 checkers; tsrs: half the cores, between 4 and 8 checkers; bun: one thread
+    per core). A number gives tsgo/tsrs that many checker threads (`--checkers N`; parsing still uses every core) and
+    bun that many threads (`--threads N`, its only knob)."""
     if threads == "default":
         return []
     return ["--threads", threads] if compiler == "bun" else ["--checkers", threads]
@@ -135,9 +135,9 @@ def markdown(result: dict) -> str:
         "",
         "Compilers: " + "; ".join(f"{LABELS[c]} = `{v[c]}`" for c in result["compilers"]) + ".",
         "",
-        "Threads: `default` passes no flag (tsgo and tsrs then use 4 checker threads, bun one thread per core). N "
-        "passes `--checkers N` to tsgo/tsrs (checker threads; parsing still uses every core) and `--threads N` to "
-        "bun (all of its threads).",
+        "Threads: `default` passes no flag (tsgo then uses 4 checker threads, tsrs half the cores between 4 and 8, bun "
+        "one thread per core). N passes `--checkers N` to tsgo/tsrs (checker threads; parsing still uses every core) "
+        "and `--threads N` to bun (all of its threads, so bun at small N is capped harder than the others).",
         "",
     ]
     base = "tsgo"
@@ -163,8 +163,8 @@ def markdown(result: dict) -> str:
                              f"{w['min']:.2f} | {gib(rss['mean'])} | {vs_d} | {vs_s} | "
                              f"{'/'.join(map(str, s['error_counts']))} | {eq} |")
         files = {c: pr.get("default", {}).get(c, {}).get("files") for c in result["compilers"]}
-        lines += ["", "Files in the program: " + ", ".join(f"{LABELS[c]} {'/'.join(map(str, f))}"
-                                                           for c, f in files.items() if f) + ".", ""]
+        lines += ["", "Files: " + ", ".join(f"{LABELS[c]} {'/'.join(map(str, f))}" for c, f in files.items() if f)
+                  + " (tsgo/tsrs: files in the program; bun: its own \"checked N files\" count, not comparable).", ""]
     lines += ["vs tsgo 7.0.2: tsgo 7.0.2's mean wall divided by this row's (above 1 = faster). = 7.1-dev errors: the "
               "(file, line, column, code) list equals tsgo 7.1-dev's at default threads, the TypeScript commit tsrs "
               "ports. Peak RSS: `ru_maxrss` from `wait4`. Wall: process wall clock including startup."]
@@ -173,8 +173,8 @@ def markdown(result: dict) -> str:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--tsrs", type=Path, required=True)
-    ap.add_argument("--bun", type=Path, required=True, help="bun executable that has `bun check` (1.4.3 canary or later)")
+    ap.add_argument("--tsrs", type=Path)
+    ap.add_argument("--bun", type=Path, help="bun executable that has `bun check` (1.4.3 canary or later)")
     ap.add_argument("--compilers", default=",".join(COMPILERS), help="comma-separated subset of " + ", ".join(COMPILERS))
     ap.add_argument("--projects", default="vscode", help="comma-separated subset of bench/projects.json")
     ap.add_argument("--threads", default="default,4,8,16,all",
@@ -184,7 +184,13 @@ def main() -> None:
     ap.add_argument("--work-dir", type=Path, default=rb.BENCH / ".work")
     ap.add_argument("--label", help="machine label")
     ap.add_argument("--out-dir", type=Path, default=rb.BENCH / "results" / "compare")
+    ap.add_argument("--render", type=Path, help="only re-render the .md of this results .json (no benchmarking)")
     args = ap.parse_args()
+    if args.render:
+        args.render.with_suffix(".md").write_text(markdown(json.loads(args.render.read_text())))
+        return
+    if ("tsrs" in args.compilers and not args.tsrs) or ("bun" in args.compilers and not args.bun):
+        ap.error("--tsrs and --bun are required for those compilers")
 
     cfg = json.loads((rb.BENCH / "projects.json").read_text())
     by_name = {p["name"]: p for p in cfg["projects"]}
