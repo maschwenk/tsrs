@@ -675,6 +675,23 @@ impl checkerPool {
         let single = single_threaded || self.single_threaded || active.len() <= 1;
         let steal = allow_steal && !single && stealing_enabled();
         let weight = |i: u32| index_of[i as usize].map_or(1, |fi| state.weights.get(fi).copied().unwrap_or(1).max(0) as u64);
+        if steal {
+            // Experiment knob (TSRS_CHECKER_FILE_ORDER, notes/perf-checker-64.md): the order in which an owner visits
+            // its own queue. Thieves always take from the back.
+            match checker_file_order() {
+                FileOrder::Program => {}
+                FileOrder::Weight => positions.iter_mut().for_each(|p| p.sort_by_key(|&i| std::cmp::Reverse(weight(i)))),
+                FileOrder::Heavy => positions.iter_mut().for_each(|p| {
+                    // Files above 4x the queue's mean weight first (heaviest first); the rest keep program order.
+                    let threshold = (p.iter().map(|&i| weight(i)).sum::<u64>() / p.len().max(1) as u64).saturating_mul(4);
+                    let (mut heavy, light): (Vec<u32>, Vec<u32>) = p.iter().partition(|&&i| weight(i) > threshold);
+                    heavy.sort_by_key(|&i| std::cmp::Reverse(weight(i)));
+                    heavy.extend(light);
+                    *p = heavy;
+                }),
+                FileOrder::Reverse => positions.iter_mut().for_each(|p| p.reverse()),
+            }
+        }
         let queues: Vec<FileQueue> = positions.into_iter().map(|p| FileQueue::new(p, weight)).collect();
         let run = |checker_idx: usize| {
             let start = stats.then(std::time::Instant::now);
@@ -745,6 +762,26 @@ impl poolState {
 fn stealing_enabled() -> bool {
     let named = CLI_CHECKER_ASSIGNMENT.get().is_some() || std::env::var("TSRS_CHECKER_ASSIGNMENT").is_ok_and(|v| !v.is_empty());
     !named && !tsrs_core::compat::go_compatible_history()
+}
+
+// TSRS_CHECKER_FILE_ORDER=program|weight|reverse (experiment, notes/perf-checker-64.md): the order in which a checker
+// visits its own queue in the stealing mode. `weight`: heaviest static weight first (stable: ties keep program order).
+#[derive(Clone, Copy)]
+enum FileOrder {
+    Program,
+    Weight,
+    Heavy,
+    Reverse,
+}
+
+fn checker_file_order() -> FileOrder {
+    static ORDER: OnceLock<FileOrder> = OnceLock::new();
+    *ORDER.get_or_init(|| match std::env::var("TSRS_CHECKER_FILE_ORDER").as_deref() {
+        Ok("weight") => FileOrder::Weight,
+        Ok("heavy") => FileOrder::Heavy,
+        Ok("reverse") => FileOrder::Reverse,
+        _ => FileOrder::Program,
+    })
 }
 
 // One checker's positions in the files of a group pass, in visiting order. The owner takes from the front, other
