@@ -591,6 +591,51 @@ pub fn dump() {
     eprintln!("heap non-arena now:  {} MB", mb(heap_cur.saturating_sub(arena_chunks)));
     eprintln!("heap peak:           {} MB", mb(heap_peak));
     eprintln!("heap allocs:         {}", HEAP_ALLOCS.load(Ordering::Relaxed));
+    // Per arena: chunk capacity against the bump-used part, and the unused part of the current chunk (the tail a
+    // transparent huge page keeps resident up to 2 MiB; notes/mem-64.md). Histogram by used size.
+    {
+        let mut rows: Vec<(u64, u64, u64)> = ARENAS
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|&a| {
+                // SAFETY: arenas are leaked; the chunk list and the finger are read after every thread is done.
+                let a = unsafe { &*(a as *const crate::arena::Arena) };
+                let used: usize = a.used_ranges().iter().map(|&(_, len)| len).sum();
+                (a.capacity() as u64, used as u64, a.current_chunk_unused() as u64)
+            })
+            .collect();
+        rows.sort_by_key(|r| std::cmp::Reverse(r.1));
+        eprintln!("\n-- arenas (capacity / used / unused tail of the current chunk, MB) --");
+        for (cap, used, tail) in rows.iter().take(top.min(12)) {
+            eprintln!("{:>10} {:>10} {:>10}", mb(*cap), mb(*used), mb(*tail));
+        }
+        let bucket = |used: u64| match used >> 20 {
+            0 => "< 1 MB",
+            1 => "1-2 MB",
+            2..=3 => "2-4 MB",
+            4..=7 => "4-8 MB",
+            8..=15 => "8-16 MB",
+            16..=63 => "16-64 MB",
+            _ => ">= 64 MB",
+        };
+        let mut hist: Vec<(&str, u64, u64, u64)> = Vec::new();
+        for (cap, used, tail) in &rows {
+            let b = bucket(*used);
+            match hist.iter_mut().find(|h| h.0 == b) {
+                Some(h) => {
+                    h.1 += 1;
+                    h.2 += *cap;
+                    h.3 += *tail;
+                }
+                None => hist.push((b, 1, *cap, *tail)),
+            }
+        }
+        eprintln!("{:>10} {:>7} {:>12} {:>12}", "used", "arenas", "capacity MB", "tails MB");
+        for (b, n, cap, tail) in hist {
+            eprintln!("{:>10} {:>7} {:>12} {:>12}", b, n, mb(cap), mb(tail));
+        }
+    }
 
     let mut by_type: FxHashMap<String, Entry> = FxHashMap::default();
     for v in sites.values() {
