@@ -1,0 +1,171 @@
+# Depot CI workflow: head-to-head type-check benchmark on a 64-thread machine (bench/compare.py, bench/README.md
+# "Head-to-head on a wide machine"): tsgo 7.0.2, the TypeScript 7.1-dev nightly tsrs ports, tsrs (PGO dist build of
+# this commit, built like bench.yml) and `bun check` (Bun canary), at default threads and 4/8/16/64 threads, 20 reps.
+# Mirrors Bun's `bun check` announcement setup (vscode, Linux x64, 64 threads, mean of 20 runs). Manual only: the
+# 64-vCPU machine is expensive and the fixed-spec regression bench (bench.yml) stays on 8 vCPU. Results are the
+# `bench-compare` artifact and the job summary; nothing is committed.
+
+name: Bench (64-thread head-to-head)
+
+on:
+  workflow_dispatch:
+    inputs:
+      projects:
+        description: comma-separated bench/projects.json names
+        default: vscode
+      reps:
+        description: timed runs per cell
+        default: "20"
+      threads:
+        description: comma-separated thread settings (default, a number, all)
+        default: default,4,8,16,all
+      bun_version:
+        description: Bun release tag (canary, or a version such as 1.4.3)
+        default: canary
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  PROJECTS: ${{ inputs.projects || 'vscode' }}
+  REPS: ${{ inputs.reps || '20' }}
+  THREADS: ${{ inputs.threads || 'default,4,8,16,all' }}
+  BUN_VERSION: ${{ inputs.bun_version || 'canary' }}
+
+jobs:
+  compare:
+    runs-on: depot-ubuntu-24.04-64
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Runner hardware
+        run: |
+          nproc; free -g; df -h / | tail -1
+          lscpu | grep -E 'Model name|^CPU\(s\)|Thread|Socket' || true
+          if [ "$(nproc)" -lt 64 ] || [ "$(uname -m)" != x86_64 ]; then
+            echo "::error::expected 64 vCPU x86_64, got $(nproc) vCPU $(uname -m)"; exit 1
+          fi
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+
+      - name: Install Bun (${{ env.BUN_VERSION }})
+        run: |
+          tag=$([ "$BUN_VERSION" = canary ] && echo canary || echo "bun-v$BUN_VERSION")
+          for attempt in 1 2 3; do
+            curl -fsSL -o /tmp/bun.zip "https://github.com/oven-sh/bun/releases/download/$tag/bun-linux-x64.zip" && break
+            sleep $((attempt * 10))
+          done
+          unzip -oq /tmp/bun.zip -d /tmp/bun
+          /tmp/bun/bun-linux-x64/bun --revision
+          /tmp/bun/bun-linux-x64/bun check --help | head -3
+
+      # The conformance suite (part of the PGO training workload) reads its tests from ts-ref/tsc/testdata.
+      - name: Read TypeScript reference commit
+        id: ts
+        run: echo "commit=$(node npm/build.mjs --print-typescript-commit)" >> "$GITHUB_OUTPUT"
+
+      - name: Check out TypeScript testdata
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: microsoft/TypeScript
+          ref: ${{ steps.ts.outputs.commit }}
+          path: ts-ref
+          fetch-depth: 1
+          sparse-checkout: tsc/testdata
+          persist-credentials: false
+
+      - name: Read the pinned Rust toolchain (rust-toolchain.toml)
+        id: rust
+        shell: bash
+        run: echo "toolchain=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: ${{ steps.rust.outputs.toolchain }}
+          targets: x86_64-unknown-linux-gnu
+          components: llvm-tools
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: bench-pgo
+
+      # Same cache keys as bench.yml, so the project checkouts it saved are reused (restore only).
+      - name: Cache keys
+        id: keys
+        run: python3 bench/run.py --print-cache-keys | tee -a "$GITHUB_OUTPUT"
+
+      - name: Restore suite and compilers
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            bench/.work/suite
+            bench/.work/tsgo
+          key: bench-shared-${{ runner.os }}-${{ steps.keys.outputs.shared }}
+
+      - name: Restore vscode
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/vscode
+          key: bench-vscode-${{ runner.os }}-${{ steps.keys.outputs['vscode'] }}
+
+      - name: Restore xstate-main
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/xstate-main
+          key: bench-xstate-main-${{ runner.os }}-${{ steps.keys.outputs['xstate-main'] }}
+
+      - name: Restore webpack
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/webpack
+          key: bench-webpack-${{ runner.os }}-${{ steps.keys.outputs['webpack'] }}
+
+      # Also installs the 7.1-dev reference nightly. Projects outside these three are set up by compare.py.
+      - name: Set up benchmark projects
+        run: python3 bench/run.py --setup-only --projects vscode,xstate-main,webpack
+
+      # tsrs as released: PGO `dist` build with the release workflow's commands and training (as in bench.yml).
+      - name: PGO instrumented build
+        env:
+          RUSTFLAGS: -Cprofile-generate=/tmp/tsrs-pgo/raw
+        run: cargo build --profile dist --locked -p tsrs_cli -p tsrs_testrunner -p tsrs_fourslash --target x86_64-unknown-linux-gnu
+
+      - name: PGO training run
+        run: .github/scripts/pgo-train.sh target/x86_64-unknown-linux-gnu/dist /tmp/tsrs-pgo/raw bench/.work
+
+      - name: PGO merge profiles
+        id: profile
+        run: |
+          profdata="$(rustc --print sysroot)/lib/rustlib/$(rustc -vV | sed -n 's/^host: //p')/bin/llvm-profdata"
+          "$profdata" merge -o /tmp/tsrs-pgo/merged.profdata /tmp/tsrs-pgo/raw/*.profraw
+          echo "path=/tmp/tsrs-pgo/merged.profdata" >> "$GITHUB_OUTPUT"
+
+      - name: Build tsrs (PGO, dist profile)
+        env:
+          RUSTFLAGS: -Cprofile-use=${{ steps.profile.outputs.path }}
+          CARGO_TARGET_DIR: /tmp/tsrs-pgo/target
+        run: cargo build --profile dist --locked -p tsrs_cli --target x86_64-unknown-linux-gnu
+
+      - name: Benchmark
+        env:
+          BENCH_RUNNER: Depot CI `depot-ubuntu-24.04-64`
+        run: >-
+          python3 bench/compare.py --tsrs /tmp/tsrs-pgo/target/x86_64-unknown-linux-gnu/dist/tsrs
+          --bun /tmp/bun/bun-linux-x64/bun --projects "$PROJECTS" --reps "$REPS" --threads "$THREADS"
+
+      - name: Upload results and logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: bench-compare
+          path: |
+            bench/results/compare
+            bench/.work/logs
+          if-no-files-found: ignore
