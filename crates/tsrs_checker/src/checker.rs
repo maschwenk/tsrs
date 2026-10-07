@@ -954,6 +954,8 @@ pub struct Checker {
     /// Calls of `add_diagnostic` and `add_suggestion_diagnostic`, duplicates included (wrapping): the inference memo
     /// stores only walks that added none.
     pub(crate) diagnostic_adds: u32,
+    /// Calls of `check_expression_ex`, each of which resets `instantiation_count` (wrapping; the inference memo).
+    pub(crate) expression_checks: u32,
     pub(crate) derived_depth: u32,
     /// Variance of each generic's `this` type (relater_derived.rs); None while being computed.
     pub(crate) derived_this_variances: FxHashMap<P<Type>, Option<VarianceFlags>>,
@@ -1360,6 +1362,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         union_front_cache: crate::unioncache::UnionFrontCache::new(),
         infer_memo: crate::infermemo::InferMemo::new(),
         diagnostic_adds: 0,
+        expression_checks: 0,
         derived_depth: 0,
         derived_this_variances: FxHashMap::default(),
         derived_conditional_params: FxHashMap::default(),

@@ -51,8 +51,23 @@ it wrote.
   - ran with no language-service inference blocking (`skipDirectInferenceNodes` empty);
   - did not start inside an instantiation: there it could take instantiations from the active mappers' caches
     without counting them, and the same walk made later outside it would count them (the flow memo's frames treat
-    this the same way). Added after the measurements below, from review; on t3code it keeps 2,954 of 9,305 stores
-    and 27,363 of 27,668 hits (one checker, isolated `server.ts` program), so the numbers do not move.
+    this the same way);
+  - if it started with the instantiation count at 0, checked no expression: `checkExpression` resets the count, a
+    reset from 0 to 0 is invisible, and the same walk made later at another count would reset it (a new
+    `expression_checks` counter).
+
+  The last two were added after the measurements below. Shadow mode at threshold 4 on vscode found the second
+  through its flags: walks stored at count 0 reported `FLAG_COUNT_RESET` from their inner flow frames (which set it
+  whenever the count is 0 at their start), and the same walks re-walked at another count did not. The outcome was the
+  same in every case. A hit now replays `FLAG_COUNT_RESET` whenever the stored walk did flow work (the flag only
+  restricts the flow memo, so reporting it in excess is safe), and shadow mode checks that the replayed flags cover
+  the re-walk's. Shadow mode at threshold 1 then found one more difference, on Compiler and Compiler-Unions: a
+  re-walk instantiated lazy member symbols (notes/mem-lazy.md) that the stored walk had not needed, because
+  `getUnmatchedProperty` only asks whether the source has a property while the target's members are unresolved and
+  looks the property up once they are resolved. That creation is the lazy-member deferral itself (any later caller
+  makes it; it disappears with `TSRS_LAZY_MEMBERS=0`, where shadow mode is clean), so shadow mode now allows exactly
+  the symbols counted by `member_table_declared_instantiated` and no other creation. On t3code's isolated `server.ts` program the memo keeps 27,363 of its 27,668 hits, and on vscode's
+  isolated program it still skips 20.9M steps, so the numbers below do not move.
 - **Why a hit is exact:** such a walk read only finished values (caches that only grow, types that never change)
   besides its inputs, so the same inputs walked again take the same path and write the same outcome. A mapper that
   reads the infos' inferred types runs only inside an instantiation, so a walk that consulted one is never stored. A
@@ -63,8 +78,8 @@ it wrote.
   instructions on projects where it never hits (xstate, webpack, mui-docs in the first probe); with it, -0.04% to
   -0.4% there.
 - **Modes:** on by default, off under `--checkerAssignment go` (like the union front cache). `TSRS_INFER_MEMO=shadow`
-  walks every hit again from the same starting state and panics unless the walk has no effects and ends in the stored
-  outcome, height and flags; `=0` / `=1`; `TSRS_INFER_MEMO_STATS=1`; `TSRS_INFER_MEMO_MIN_STEPS` (docs/DEBUGGING.md).
+  walks every hit again from the same starting state and panics unless the walk has no effects, ends in the stored
+  outcome and height, and reports no flag the hit did not replay; `=0` / `=1`; `TSRS_INFER_MEMO_STATS=1`; `TSRS_INFER_MEMO_MIN_STEPS` (docs/DEBUGGING.md).
 
 The first version memoized only walks that found no inference info (a no-op memo). It hit 74 times on the file and
 saved nothing: the 99,829-step walk does find `K`.

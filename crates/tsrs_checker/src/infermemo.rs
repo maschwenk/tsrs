@@ -18,6 +18,8 @@
 //!   were, added no diagnostic and took no impure union reduction (`union_front_cache.impure`): it read only values
 //!   that were already computed, and computed nothing new (a mapper that reads the infos' inferred types runs only
 //!   inside an instantiation, so such a walk is never stored);
+//! - it checked no expression if it started with the instantiation count at 0 (`checkExpression` resets the count,
+//!   and a reset from 0 to 0 cannot be seen in it);
 //! - it did not start inside an instantiation: there it could take instantiations from the active mappers' caches
 //!   without counting them, and the same walk made later outside it would count them (the flow memo's frames treat
 //!   this the same way). A hit inside an instantiation is fine: the stored walk made no instantiation that was not
@@ -33,11 +35,18 @@
 //! Such a walk read only finished values (caches that only grow, types that never change) besides its inputs, so the
 //! same inputs walked again take the same path and write the same outcome. A hit writes the outcome without the walk,
 //! and replays what the walk reported to the enclosing flow memo frame (the height of the flow sub-walks inside it,
-//! their flags), so the flow memo sees what it would have seen. Types are never freed while their checker lives, so a
+//! their flags, plus `FLAG_COUNT_RESET` when it did flow work: that flag depends on the count at the time and only
+//! restricts the flow memo), so the flow memo sees what it would have seen or more. Types are never freed while their checker lives, so a
 //! handle in a key or an outcome never names another type.
 //!
-//! `TSRS_INFER_MEMO=shadow` also walks every hit (from the same starting state) and panics unless that walk has no
-//! effects and ends in the stored outcome. `TSRS_INFER_MEMO=0` turns the memo off, `=1` forces it on under
+//! One kind of creation is not stable: lazy members (notes/mem-lazy.md) instantiate a declared member symbol when a
+//! path first needs it, and a relation's path can depend on whether the other side's members are resolved yet, so a
+//! walk made later may instantiate member symbols the stored walk did not need (any later caller would instantiate
+//! them as well; when they are created is already history-dependent under lazy members, and with
+//! `TSRS_LAZY_MEMBERS=0` the difference does not exist).
+//!
+//! `TSRS_INFER_MEMO=shadow` also walks every hit (from the same starting state) and panics unless that walk creates
+//! nothing but such member symbols, has no other effects and ends in the stored outcome. `TSRS_INFER_MEMO=0` turns the memo off, `=1` forces it on under
 //! Go-compatible history too. `TSRS_INFER_MEMO_STATS=1` prints the totals on stderr at exit.
 //! `TSRS_INFER_MEMO_MIN_STEPS=<n>` sets the shortest walk that is stored (default `MIN_STEPS`).
 
@@ -154,7 +163,7 @@ fn total(counter: &AtomicU64) -> u64 {
 }
 
 /// The checker state a walk must leave alone to be stored, measured around it.
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Debug)]
 struct Effects {
     created: u32,
     instantiation_count: u32,
@@ -241,6 +250,11 @@ impl Checker {
             self.flow_memo.add_flags(flags);
             return;
         }
+        // A reset of the instantiation count (`checkExpression`) at 0 cannot be seen in the count; the same walk made
+        // later at another count would reset it.
+        let count_zero = self.instantiation_count == 0;
+        let expression_checks = self.expression_checks;
+        let serial_before = self.flow_memo.source_now();
         n.cleared_inferences.set(false);
         // Inside an instantiation the walk can take instantiations from the active mappers' caches without counting
         // them; walked again outside it, it would count them (as for flow memo frames, FLAG_EFFECTS).
@@ -252,7 +266,8 @@ impl Checker {
         let (taint, height, flags) = self.flow_memo.end_transparent(frame);
         let steps = self.infer_memo.steps.wrapping_sub(steps_before);
         let after = self.infer_memo_effects();
-        let effects = in_instantiation || after != before || flags & (crate::flowmemo::FLAG_EFFECTS | crate::flowmemo::FLAG_TYPE_CACHE) != 0;
+        let hidden_reset = count_zero && self.expression_checks != expression_checks;
+        let effects = in_instantiation || hidden_reset || after != before || flags & (crate::flowmemo::FLAG_EFFECTS | crate::flowmemo::FLAG_TYPE_CACHE) != 0;
         let tainted = !taint.is_pure() || self.skip_direct_inference_nodes.len() != 0;
         if steps < min_steps() || effects || tainted {
             count(stats && steps >= min_steps() && after.created != before.created, &NOT_STORED_CREATED, 1);
@@ -263,6 +278,11 @@ impl Checker {
             return;
         }
         count(stats, &STORES, 1);
+        // Flow frames inside the walk add FLAG_COUNT_RESET when the count is 0 at their start, which depends on when
+        // the walk is made, not on its inputs; the flag only restricts the flow memo, so a hit replays it whenever the
+        // walk did flow work.
+        let flowed = self.flow_memo.source_now() != serial_before;
+        let flags = if flowed { flags | crate::flowmemo::FLAG_COUNT_RESET } else { flags };
         let entry = Entry { infos: info_outcomes(n), cleared: n.cleared_inferences.get(), height, flags, steps };
         self.infer_memo.entries.insert(key.into_boxed_slice(), entry);
     }
@@ -300,18 +320,29 @@ impl Checker {
     fn infer_memo_shadow(&mut self, n: P<InferenceState>, source: P<Type>, target: P<Type>, key: &[u32]) {
         n.cleared_inferences.set(false);
         let before = self.infer_memo_effects();
+        let lazy_before = self.lazy_member_stats.member_table_declared_instantiated;
         let frame = self.flow_frame_begin();
         self.infer_from_types(n, source, target);
         let (taint, height, flags) = self.flow_memo.end_transparent(frame);
-        let effects = self.infer_memo_effects() != before;
+        let after = self.infer_memo_effects();
+        // Lazy members (notes/mem-lazy.md) instantiate a declared member symbol when a path first needs it, and which
+        // path a relation takes can depend on whether the other side's members are resolved yet: the walk made again
+        // may instantiate member symbols the stored walk did not need, as any later caller could. Those are the only
+        // creations it may make.
+        let lazy_created = (self.lazy_member_stats.member_table_declared_instantiated - lazy_before) as u32;
+        let effects = Effects { created: before.created.wrapping_add(lazy_created), ..before } != after;
         let outcome = info_outcomes(n);
         let entry = &self.infer_memo.entries[key];
-        if effects || !taint.is_pure() || outcome != entry.infos || n.cleared_inferences.get() != entry.cleared || height != entry.height || flags != entry.flags {
+        let flags_covered = flags & !entry.flags == 0 && (flags ^ entry.flags) & !crate::flowmemo::FLAG_COUNT_RESET == 0;
+        if effects || !taint.is_pure() || outcome != entry.infos || n.cleared_inferences.get() != entry.cleared || height != entry.height || !flags_covered {
             panic!(
-                "TSRS_INFER_MEMO=shadow: inferring from type {} to type {} (priority {:?}): the walk again has effects {effects}, pure {}, outcome {:?} (stored {:?}), cleared {} (stored {}), height {height} (stored {}), flags {flags} (stored {})",
+                "TSRS_INFER_MEMO=shadow: inferring from type {} to type {} (priority {:?}): the walk again has effects {effects} ({before:?} -> {after:?}; types/symbols/signatures now {}/{}/{}), pure {}, outcome {:?} (stored {:?}), cleared {} (stored {}), height {height} (stored {}), flags {flags} (stored {})",
                 source.id.0,
                 target.id.0,
                 n.priority.get(),
+                self.type_count,
+                self.symbol_count,
+                self.signature_count,
                 taint.is_pure(),
                 outcome,
                 entry.infos,
