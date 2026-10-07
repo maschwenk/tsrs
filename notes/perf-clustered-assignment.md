@@ -191,11 +191,12 @@ mui-docs -73 / -92, vscode -60 / -117 (16 / 32 checkers). Capping the refinement
   experiments. The cost cache path (`--checkerCostCache`) keeps its own placement.
 
 The assignment is on the critical path (notes/perf-front-end-fixed-costs.md), and the new work costs 2-13 ms. So the
-branch also computes the assignment on its own thread while the checkers are created (it reads only the program; the
-phases are recorded in the same order as before), builds the import graph while the groups are formed (they do not
-depend on each other), and sorts the paths in parallel (a total order, ties by index). `Checkers: create` and
-`Checkers: assign files`, ms, medians on the runner (round 2, section 5): main runs them in sequence, the branch side by
-side, so the larger one gates the check:
+branch also computed the assignment on its own thread while the checkers are created; main has since done the same
+(#162, notes/perf-serial-assign-overlap.md), and the branch now uses main's version. What remains here: the import graph
+is built while the groups are formed (they do not depend on each other), and the paths are sorted in parallel (a total
+order, ties by index). `Checkers: create` and `Checkers: assign files`, ms, medians on the runner (round 2, section 5):
+the measured main (3540ffa, before #162) runs them in sequence, the branch side by side, so the larger one gates the
+check:
 
 | project | checkers | main: create + assign | branch, 3 passes: create, assign | branch, 10 passes: assign |
 | --- | ---: | --- | --- | ---: |
@@ -240,7 +241,12 @@ main.
 | 6 | czbkknp6kv | main, branch at 4 and 8 checkers (+ mikro-orm) | both from 16 checkers on (as landed) |
 
 The branch as it lands at 16 and 32 checkers, round 3 (12 runs per cell; the 16-checker gate added later does not
-change anything at these counts):
+change anything at these counts). The measured main predates #162, which overlaps the assignment with checker creation
+as the branch does; the round's `off` variant (the branch's binary with the old placement and stealing) stands in for
+main after #162, and the branch against it reads the same: wall -2.4 / -3.2% on vscode, -5.9 / -8.0% on
+formbricks-web, -7.6 / -0.7% on supabase-studio, -3.8 / -2.6% on t3code-server, +3.1 / -1.0% on mui-docs, CPU -1 to -5%
+on the app projects except cal-diy at 16 (+0.2%), next-packages-next at 16 +1.5% CPU and +1.4% peak (16 / 32
+checkers).
 
 | project | checkers | wall s, main -> branch | wall | check | CPU (user+sys) | checker CPU s | peak MiB, main -> branch | peak |
 | --- | ---: | --- | ---: | ---: | ---: | --- | --- | ---: |
