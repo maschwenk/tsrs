@@ -1,5 +1,9 @@
 # perf-serial-assign-overlap: assign files while the checkers are created
 
+**Reverted in https://github.com/maschwenk/tsrs/pull/190 (2026-10-07):** the change bought 3-4 ms at 32 checkers on the 64-vCPU
+runner by adding a thread or an overlap around checker creation, which is below the bar in AGENTS.md ("A performance
+change must pay for its complexity"). The measurements below stand; do not re-land the mechanism for this gain.
+
 Goal: shorten the serial step before the check pass of a CLI run on the 64-vCPU runner (`depot-ubuntu-24.04-64`),
 from the "what remains" list of notes/perf-front-end-fixed-costs.md. Base: main 025b496, vscode `-p src` (10,427
 files), the default 32 checkers.

@@ -1,5 +1,4 @@
 use std::ptr::NonNull;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, MutexGuard, OnceLock};
 
 use rustc_hash::FxHashMap;
@@ -177,43 +176,11 @@ pub const CHECKER_STACK_SIZE: usize = 512 << 20;
 
 // Go core.WorkGroup as used by the checker pool: runs `task(i)` for every index, each on its own OS thread,
 // and waits for all of them. Single-threaded runs execute the tasks in order on the calling thread.
-//
-// tsrs-only: the threads are kept for the process (`checker_threads`) instead of being spawned and joined for every
-// work group. A program runs several groups (creating the checkers, the check pass, global diagnostics, each
-// --extendedDiagnostics counter), and starting 32 threads with 512 MB stacks and joining them cost about a
-// millisecond each time on the program thread. A broadcast runs `task` exactly once on each pool thread, the same
-// thread for the same index in every group; a panic is resumed here after every task has finished, as before.
 fn run_work_group(single_threaded: bool, count: usize, task: impl Fn(usize) + Sync) {
     if single_threaded || count <= 1 {
         (0..count).for_each(task);
         return;
     }
-    // One group at a time uses the kept threads. A group that starts while another one runs (programs checked
-    // concurrently in one process, or a group started from inside a group) gets threads of its own, as every group
-    // did before, instead of queueing behind the other group's tasks.
-    static IN_USE: AtomicBool = AtomicBool::new(false);
-    // Acquire/Release: the flag hands the pool from one group to the next; the broadcast itself synchronizes the
-    // tasks with this thread.
-    if IN_USE.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
-        spawn_work_group(count, task);
-        return;
-    }
-    struct Release;
-    impl Drop for Release {
-        fn drop(&mut self) {
-            // Release: pairs with the Acquire above; the next group to take the pool starts after this one ended.
-            IN_USE.store(false, Ordering::Release);
-        }
-    }
-    let _release = Release;
-    checker_threads(count).broadcast(|ctx| {
-        if ctx.index() < count {
-            task(ctx.index());
-        }
-    });
-}
-
-fn spawn_work_group(count: usize, task: impl Fn(usize) + Sync) {
     std::thread::scope(|s| {
         let task = &task;
         let handles: Vec<_> = (0..count)
@@ -238,30 +205,6 @@ fn spawn_work_group(count: usize, task: impl Fn(usize) + Sync) {
             std::panic::resume_unwind(payload);
         }
     });
-}
-
-/// The checker threads: one pool with at least `count` threads, named `checker-<n>` (the alloc profile groups threads
-/// by that name) and with the checkers' stack size. A larger count than any before gets a new pool; the old one is
-/// left idle.
-fn checker_threads(count: usize) -> &'static rayon::ThreadPool {
-    static POOL: Mutex<Option<&'static rayon::ThreadPool>> = Mutex::new(None);
-    let mut pool = POOL.lock().unwrap();
-    match *pool {
-        Some(existing) if existing.current_num_threads() >= count => existing,
-        _ => {
-            let built: &'static rayon::ThreadPool = Box::leak(Box::new(
-                rayon::ThreadPoolBuilder::new()
-                    .num_threads(count)
-                    .stack_size(CHECKER_STACK_SIZE)
-                    .thread_name(|i| format!("checker-{i}"))
-                    .start_handler(|_| tsrs_ast::use_id_blocks())
-                    .build()
-                    .expect("failed to spawn the checker threads"),
-            ));
-            *pool = Some(built);
-            built
-        }
-    }
 }
 
 // A checker is mutated only while its mutex is held, by exactly one thread at a time; the pool
@@ -627,36 +570,17 @@ impl checkerPool {
                 tsrs_core::ptr::shared_check::freeze_shared_objects();
             }
             let create_and_assign = || {
+                let create_start = std::time::Instant::now();
                 #[cfg(feature = "checker")]
                 tsrs_checker::links::set_multiple_checkers(self.checker_count > 1);
-                let create = || {
-                    let create_start = std::time::Instant::now();
-                    let slots: Vec<Mutex<Option<CheckerSlot>>> = (0..self.checker_count).map(|_| Mutex::new(None)).collect();
-                    run_work_group(self.single_threaded, self.checker_count, |i| {
-                        *slots[i].lock().unwrap() = Some(CheckerSlot(Mutex::new(new_checker(program))));
-                    });
-                    let checkers: &'static [CheckerSlot] =
-                        Box::leak(slots.into_iter().map(|s| s.into_inner().unwrap().unwrap()).collect::<Vec<_>>().into_boxed_slice());
-                    (checkers, create_start.elapsed())
-                };
-                let assign = || {
-                    let assign_start = std::time::Instant::now();
-                    (compute_associations(program, self.checker_count), assign_start.elapsed())
-                };
-                // tsrs-only: the assignment reads only the loaded program (like the leaf classification below), so it
-                // runs on this thread while the checker threads create the checkers (notes/perf-serial-assign-overlap.md).
-                let ((checkers, create_time), (associations, assign_time)) = if self.single_threaded {
-                    (create(), assign())
-                } else {
-                    std::thread::scope(|s| {
-                        let created = s.spawn(create);
-                        let assigned = assign();
-                        (created.join().unwrap_or_else(|payload| std::panic::resume_unwind(payload)), assigned)
-                    })
-                };
-                // Recorded after both ended, so the rows keep their order.
-                tsrs_core::phases::record("Checkers: create", create_time);
-                tsrs_core::phases::record("Checkers: assign files", assign_time);
+                let slots: Vec<Mutex<Option<CheckerSlot>>> = (0..self.checker_count).map(|_| Mutex::new(None)).collect();
+                run_work_group(self.single_threaded, self.checker_count, |i| {
+                    *slots[i].lock().unwrap() = Some(CheckerSlot(Mutex::new(new_checker(program))));
+                });
+                let checkers: &'static [CheckerSlot] =
+                    Box::leak(slots.into_iter().map(|s| s.into_inner().unwrap().unwrap()).collect::<Vec<_>>().into_boxed_slice());
+                tsrs_core::phases::record("Checkers: create", create_start.elapsed());
+                let associations = tsrs_core::phases::time("Checkers: assign files", || compute_associations(program, self.checker_count));
                 (checkers, associations)
             };
             // tsrs-only: the CLI's leaf classification reads only the loaded program; it runs meanwhile
