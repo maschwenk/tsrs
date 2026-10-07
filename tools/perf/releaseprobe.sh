@@ -41,11 +41,16 @@ tsgo=$(find "$BENCH_WORK/tsgo" -type f \( -name tsgo -o -name 'tsgo*' \) -perm -
 if [ -n "$tsgo" ]; then echo "== tsgo: $("$tsgo" --version 2>&1 | head -1) ($tsgo)" | tee -a "$PROBE_OUT/summary.txt"; else echo "== tsgo: not found under $BENCH_WORK/tsgo" | tee -a "$PROBE_OUT/summary.txt"; fi
 if [ -n "${BUN_BIN:-}" ]; then echo "== bun: $("$BUN_BIN" --revision 2>&1 | head -1)" | tee -a "$PROBE_OUT/summary.txt"; fi
 
-cd "$BENCH_WORK/solutions/vscode"
-flags=(-p src --noEmit --incremental false --extendedDiagnostics --pretty false)
+root="$(cd "$(dirname "$0")/../.." && pwd)"
+IFS=',' read -r -a projects <<< "${PROBE_PROJECTS:-vscode}"
+for project in "${projects[@]}"; do
+proj=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); d=d["projects"] if isinstance(d, dict) else d; print(next(p["project"] for p in d if p["name"] == sys.argv[2]))' "$root/bench/projects.json" "$project")
+cd "$BENCH_WORK/solutions/$project" || { echo "no checkout for $project" | tee -a "$PROBE_OUT/summary.txt"; continue; }
+flags=(-p "$proj" --noEmit --incremental false --extendedDiagnostics --pretty false)
 run() { # name mode rep cmd...
   local name=$1 mode=$2 rep=$3; shift 3
-  local out="$PROBE_OUT/$name-$mode-rep$rep.txt"
+  name="$project/$name"
+  local out="$PROBE_OUT/${name//\//_}-$mode-rep$rep.txt"
   /usr/bin/time -f "%e %M" -o "$out.time" "$@" > "$out" 2>&1 || true
   read -r wall kib < <(tail -n 1 "$out.time")
   local check; check=$(grep -E '^Check time' "$out" | tr -s ' ' | awk '{print $3}' | tr -d 's')
@@ -59,11 +64,12 @@ for rep in $(seq 1 "$reps"); do
   for v in "${vs[@]}"; do run "tsrs-$v" default "$rep" "${bin[$v]}" "${flags[@]}"; done
   for v in "${vs[@]}"; do run "tsrs-$v" checkers32 "$rep" "${bin[$v]}" "${flags[@]}" --checkers 32; done
   if [ -n "$tsgo" ]; then run tsgo default "$rep" "$tsgo" "${flags[@]}"; fi
-  if [ -n "${BUN_BIN:-}" ]; then run bun default "$rep" "$BUN_BIN" check -p src --no-pretty --all; fi
+  if [ -n "${BUN_BIN:-}" ]; then run bun default "$rep" "$BUN_BIN" check -p "$proj" --no-pretty --all; fi
 done
 for rep in $(seq 1 "$single_reps"); do
   for v in "${vs[@]}"; do run "tsrs-$v" single "$rep" "${bin[$v]}" "${flags[@]}" --singleThreaded; done
   if [ -n "$tsgo" ]; then run tsgo single "$rep" "$tsgo" "${flags[@]}" --singleThreaded; fi
+done
 done
 python3 - "$PROBE_OUT/runs.tsv" "$PROBE_OUT/medians.md" <<'EOF'
 import collections, statistics, sys
