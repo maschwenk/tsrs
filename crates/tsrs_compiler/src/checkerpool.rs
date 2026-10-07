@@ -1039,6 +1039,19 @@ impl FileQueue {
         }
     }
 
+    // TSRS_STEAL_RATE (experiment): the work left relative to the work the owner has taken from the front so far. All
+    // owners start together, so this orders the queues by the owner's time to finish alone, at the rate it has had.
+    fn time_left(&self) -> f64 {
+        // A heuristic read, as in `remaining`.
+        let r = self.range.load(std::sync::atomic::Ordering::Relaxed);
+        let (front, back) = ((r & QUEUE_LOW) as usize, (r >> 32) as usize);
+        if front < back {
+            (self.prefix[back] - self.prefix[front]) as f64 / (self.prefix[front] + 1) as f64
+        } else {
+            0.0
+        }
+    }
+
     fn take(&self, front: bool) -> Option<usize> {
         // The compare-exchange on `range` alone decides who gets a position; nothing else is published through it.
         let mut r = self.range.load(std::sync::atomic::Ordering::Relaxed);
@@ -1067,6 +1080,12 @@ fn steal_sticky() -> bool {
     *VALUE.get_or_init(|| !std::env::var("TSRS_STEAL_STICKY").is_ok_and(|v| v == "0" || v == "off"))
 }
 
+// TSRS_STEAL_RATE=1 (experiment): pick the victim by `FileQueue::time_left` instead of the work left.
+fn steal_rate() -> bool {
+    static VALUE: OnceLock<bool> = OnceLock::new();
+    *VALUE.get_or_init(|| std::env::var("TSRS_STEAL_RATE").is_ok_and(|v| v == "1"))
+}
+
 // The next position for checker `me` and whether it came from another checker's queue. `last_victim` is the queue `me`
 // last took from (usize::MAX for none), for TSRS_STEAL_STICKY.
 fn queues_next(queues: &[FileQueue], me: usize, steal: bool, last_victim: &mut usize) -> Option<(usize, bool)> {
@@ -1077,10 +1096,21 @@ fn queues_next(queues: &[FileQueue], me: usize, steal: bool, last_victim: &mut u
         return None;
     }
     loop {
-        let (mut victim, left) = queues.iter().enumerate().map(|(c, q)| (c, q.remaining())).max_by_key(|&(c, left)| (left, std::cmp::Reverse(c)))?;
-        if *last_victim != usize::MAX && steal_sticky() && queues[*last_victim].remaining() * 2 >= left && left > 0 {
-            victim = *last_victim;
-        }
+        let (mut victim, left) = if steal_rate() {
+            let (victim, time) = queues.iter().enumerate().map(|(c, q)| (c, q.time_left())).max_by(|a, b| a.1.total_cmp(&b.1).then(b.0.cmp(&a.0)))?;
+            if *last_victim != usize::MAX && steal_sticky() && queues[*last_victim].time_left() * 2.0 >= time && time > 0.0 {
+                (*last_victim, queues[*last_victim].remaining())
+            } else {
+                (victim, queues[victim].remaining())
+            }
+        } else {
+            let (victim, left) = queues.iter().enumerate().map(|(c, q)| (c, q.remaining())).max_by_key(|&(c, left)| (left, std::cmp::Reverse(c)))?;
+            if *last_victim != usize::MAX && steal_sticky() && queues[*last_victim].remaining() * 2 >= left && left > 0 {
+                (*last_victim, left)
+            } else {
+                (victim, left)
+            }
+        };
         *last_victim = victim;
         if left == 0 {
             // Queues whose remaining files weigh 0 (unchecked declaration files) are still drained by their owners.
@@ -1805,7 +1835,8 @@ mod stealing_tests {
     #[test]
     fn without_stealing_a_checker_keeps_its_own_files_in_order() {
         let queues = vec![FileQueue::new(vec![0, 2, 4], |_| 1), FileQueue::new(vec![1, 3], |_| 1)];
-        let order: Vec<(usize, bool)> = std::iter::from_fn(|| queues_next(&queues, 0, false, &mut usize::MAX)).collect();
+        let mut last_victim = usize::MAX;
+        let order: Vec<(usize, bool)> = std::iter::from_fn(|| queues_next(&queues, 0, false, &mut last_victim)).collect();
         assert_eq!(order, vec![(0, false), (2, false), (4, false)]);
         assert_eq!(queues[1].remaining(), 2);
     }
