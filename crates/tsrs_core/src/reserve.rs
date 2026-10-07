@@ -223,7 +223,7 @@ pub(crate) unsafe fn release_chunk(p: *mut u8, size: usize) {
 
 /// The system page size (16 KiB on Apple silicon, 4 KiB on most Linux machines).
 #[cfg(unix)]
-fn page_size() -> usize {
+pub(crate) fn page_size() -> usize {
     static PAGE_SIZE: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
     // SAFETY: sysconf reads a system constant.
     *PAGE_SIZE.get_or_init(|| usize::try_from(unsafe { libc::sysconf(libc::_SC_PAGESIZE) }).ok().filter(|p| p.is_power_of_two()).unwrap_or(4096))

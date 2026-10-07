@@ -555,13 +555,10 @@ fn slab_release_ex(slab: *const Slab, retire: bool) {
     }
     // Relaxed: every store happened before its thread's decrement, which the AcqRel decrement above acquired.
     if s.retired.load(Ordering::Relaxed) {
-        // Its pages go back to the system; its range is never reused (`reserve::discard`). Without compressed
-        // pointers the slab's memory is kept (it came from the allocator, which would hand the addresses out again).
+        // Its pages go back to the system; its range is never reused (`retired`). Without compressed pointers the
+        // slab's memory is kept (it came from the allocator, which would hand the addresses out again).
         #[cfg(all(compressed_ptrs, unix))]
-        // SAFETY: from `os_chunk` with this size; every chunk carved from it was released.
-        unsafe {
-            crate::reserve::discard(s.base, s.size)
-        };
+        retired::retire(s.base.addr(), s.size);
         // SAFETY: made by `Box::into_raw` in `new_slab`; this was the last reference.
         drop(unsafe { Box::from_raw(slab.cast_mut()) });
         return;
@@ -1138,8 +1135,7 @@ impl Drop for RegionInner {
         #[cfg(all(compressed_ptrs, unix))]
         if retire {
             for &(start, size) in &chunks {
-                // SAFETY: a chunk of this region, which nothing uses any more; only the pages wholly inside it go.
-                unsafe { crate::reserve::discard(std::ptr::with_exposed_provenance_mut::<u8>(start), size) };
+                retired::retire(start, size);
             }
         }
         drop(chunks);
@@ -1147,6 +1143,177 @@ impl Drop for RegionInner {
             slab_release_ex(slab, retire);
         }
     }
+}
+
+/// Gives back the pages of retired regions (`Region::retire_on_free`) that nothing uses any more, without ever giving
+/// their ranges back (`reserve::discard`).
+///
+/// Retired ranges (the chunks of retired regions, and retired slabs once their last chunk goes) are kept as coalesced
+/// spans, so the page that two neighbouring chunks share goes once both are retired: file regions are carved back to
+/// back, leaves are often neighbours (vscode: 4,691 leaf chunks form 924 runs), and with 16 KiB pages the shared pages
+/// are a tenth of what the leaves hold. They are given back in batches of `BATCH` bytes (`flush_retired` gives back the
+/// rest): each `madvise` / `mmap` call flushes the TLB of every core running a thread of the process, and one call per
+/// chunk cost the check pass 2-3% at 32 checkers on Linux, against one per run of neighbouring pages in a batch.
+#[cfg(all(compressed_ptrs, unix))]
+mod retired {
+    use std::collections::BTreeMap;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Mutex;
+
+    /// Bytes retired before a batch is given back.
+    const BATCH: usize = 16 << 20;
+
+    struct State {
+        /// Retired spans, start -> end, coalesced (touching or overlapping ranges merge).
+        spans: BTreeMap<usize, usize>,
+        /// Retired since the last batch, not given back yet.
+        pending: Vec<(usize, usize)>,
+        pending_bytes: usize,
+    }
+
+    static STATE: Mutex<State> = Mutex::new(State { spans: BTreeMap::new(), pending: Vec::new(), pending_bytes: 0 });
+    /// `stats`: calls that gave pages back, and their bytes.
+    static CALLS: AtomicUsize = AtomicUsize::new(0);
+    static BYTES: AtomicUsize = AtomicUsize::new(0);
+
+    /// Retires `start .. start + len` (nothing uses it any more, and it is never handed out again).
+    pub(super) fn retire(start: usize, len: usize) {
+        let pages = {
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            s.pending.push((start, start + len));
+            s.pending_bytes += len;
+            if s.pending_bytes < BATCH {
+                return;
+            }
+            take_pages(&mut s)
+        };
+        give_back(&pages);
+    }
+
+    pub(super) fn flush() {
+        let pages = take_pages(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()));
+        give_back(&pages);
+    }
+
+    pub(super) fn stats() -> (usize, usize) {
+        // Relaxed: counters, read after the threads that retire joined.
+        (CALLS.load(Ordering::Relaxed), BYTES.load(Ordering::Relaxed))
+    }
+
+    /// Merges the pending ranges into the spans and returns the pages that became wholly retired: for each pending
+    /// range, the whole pages of its coalesced span minus those of the spans it absorbed (given back already, or
+    /// earlier in this batch), merged where they touch.
+    fn take_pages(s: &mut State) -> Vec<(usize, usize)> {
+        let page = crate::reserve::page_size();
+        let interior = |lo: usize, hi: usize| (lo.next_multiple_of(page), hi & !(page - 1));
+        let mut pages = Vec::new();
+        for (start, end) in std::mem::take(&mut s.pending) {
+            let (mut lo, mut hi) = (start, end);
+            let mut absorbed: Vec<(usize, usize)> = Vec::new();
+            if let Some((&ps, &pe)) = s.spans.range(..=start).next_back() {
+                if pe >= start {
+                    absorbed.push((ps, pe));
+                    lo = ps;
+                    hi = hi.max(pe);
+                    s.spans.remove(&ps);
+                }
+            }
+            while let Some((&ns, &ne)) = s.spans.range(lo..).next() {
+                if ns > hi {
+                    break;
+                }
+                absorbed.push((ns, ne));
+                hi = hi.max(ne);
+                s.spans.remove(&ns);
+            }
+            s.spans.insert(lo, hi);
+            // The span's whole pages, minus the absorbed spans' (sorted, disjoint, inside it).
+            let (mut next, last) = interior(lo, hi);
+            for (a, b) in absorbed {
+                let (done_first, done_last) = interior(a, b);
+                if done_last <= done_first {
+                    continue;
+                }
+                if done_first > next {
+                    pages.push((next, done_first.min(last)));
+                }
+                next = next.max(done_last);
+            }
+            if last > next {
+                pages.push((next, last));
+            }
+        }
+        pages.retain(|&(first, last)| last > first);
+        s.pending_bytes = 0;
+        pages.sort_unstable();
+        let mut merged: Vec<(usize, usize)> = Vec::with_capacity(pages.len());
+        for (first, last) in pages {
+            match merged.last_mut() {
+                Some(prev) if prev.1 >= first => prev.1 = prev.1.max(last),
+                _ => merged.push((first, last)),
+            }
+        }
+        merged
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::{take_pages, State};
+        use std::collections::BTreeMap;
+
+        fn batch(s: &mut State, ranges: &[(usize, usize)]) -> Vec<(usize, usize)> {
+            for &(start, end) in ranges {
+                s.pending.push((start, end));
+            }
+            take_pages(s)
+        }
+
+        /// A page two neighbouring retired chunks share goes once both are retired; pages given back are not given
+        /// back again when a slab around them is retired.
+        #[test]
+        fn neighbours_share_their_boundary_page() {
+            let p = crate::reserve::page_size();
+            let mut s = State { spans: BTreeMap::new(), pending: Vec::new(), pending_bytes: 0 };
+            let a = (10 * p + 100, 12 * p + 50);
+            let b = (12 * p + 50, 14 * p);
+            assert_eq!(batch(&mut s, &[a]), [(11 * p, 12 * p)]);
+            // The page at 12p (part a, part b) goes with b.
+            assert_eq!(batch(&mut s, &[b]), [(12 * p, 14 * p)]);
+            // Their slab: only what is outside them.
+            assert_eq!(batch(&mut s, &[(8 * p, 16 * p)]), [(8 * p, 11 * p), (14 * p, 16 * p)]);
+            // In one batch, in any order: the same pages, merged.
+            let mut t = State { spans: BTreeMap::new(), pending: Vec::new(), pending_bytes: 0 };
+            assert_eq!(batch(&mut t, &[b, a]), [(11 * p, 14 * p)]);
+            // A chunk not touching them: its own whole pages only.
+            assert_eq!(batch(&mut t, &[(20 * p + 1, 23 * p - 1)]), [(21 * p, 22 * p)]);
+        }
+    }
+
+    fn give_back(pages: &[(usize, usize)]) {
+        for &(first, last) in pages {
+            // SAFETY: whole pages inside retired spans: chunks and slabs nothing uses any more, never handed out
+            // again; `first` is page aligned (and so is `last - first`).
+            unsafe { crate::reserve::discard(std::ptr::with_exposed_provenance_mut::<u8>(first), last - first) };
+            // Relaxed: counters (see `stats`).
+            CALLS.fetch_add(1, Ordering::Relaxed);
+            BYTES.fetch_add(last - first, Ordering::Relaxed);
+        }
+    }
+}
+
+/// Gives back the pages of the regions retired since the last batch (`Region::retire_on_free`), for a caller that has
+/// freed the last of them (the end of the type-check pass).
+pub fn flush_retired() {
+    #[cfg(all(compressed_ptrs, unix))]
+    retired::flush();
+}
+
+/// (calls that gave pages of retired regions back to the system, bytes given back), for `TSRS_FREE_LEAVES=stats`.
+pub fn retired_stats() -> (usize, usize) {
+    #[cfg(all(compressed_ptrs, unix))]
+    return retired::stats();
+    #[cfg(not(all(compressed_ptrs, unix)))]
+    (0, 0)
 }
 
 #[cfg(test)]
