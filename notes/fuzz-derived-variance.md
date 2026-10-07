@@ -1,5 +1,10 @@
 # fuzz-derived-variance: attacking TSRS_DERIVED_VARIANCE
 
+> Removed on 2026-10-07: the mechanism shipped switched off and, guarded, saved nothing (the judgement in
+> notes/fuzz-derived-variance.md), so `relater_derived.rs`, its seven `TSRS_DERIVED_VARIANCE*` switches, the fuzzers under
+> tools/fuzz and the `derived_variance` CLI test were deleted. The `testdata/regressions/derived-variance-*` cases stay:
+> they are tsgo's output on the shapes the fuzzer found.
+
 `TSRS_DERIVED_VARIANCE` (notes/perf-derived-variance.md, `crates/tsrs_checker/src/relater_derived.rs`) relates a derived
 generic instance to a reference to its generic base by the base's variances instead of member by member. It is exact
 only as far as TypeScript's variance digest agrees with the member-by-member comparison. Before this work: three

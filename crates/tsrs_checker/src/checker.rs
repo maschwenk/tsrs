@@ -945,8 +945,6 @@ pub struct Checker {
     pub instantiation_count: u32,
     /// TSRS_WORK_CENSUS (workcensus.rs); None unless the variable is set.
     pub census: Option<Box<crate::workcensus::Census>>,
-    /// TSRS_DERIVED_VARIANCE (relater_derived.rs; off by default and under Go-compatible history).
-    pub(crate) derived_variance: crate::relater_derived::DerivedVarianceMode,
     /// TSRS_UNION_CACHE (unioncache.rs; on by default, off under Go-compatible history).
     pub(crate) union_front_cache: crate::unioncache::UnionFrontCache,
     /// TSRS_INFER_MEMO (infermemo.rs; on by default, off under Go-compatible history).
@@ -956,18 +954,6 @@ pub struct Checker {
     pub(crate) diagnostic_adds: u32,
     /// Calls of `check_expression_ex`, each of which resets `instantiation_count` (wrapping; the inference memo).
     pub(crate) expression_checks: u32,
-    pub(crate) derived_depth: u32,
-    /// Variance of each generic's `this` type (relater_derived.rs); None while being computed.
-    pub(crate) derived_this_variances: FxHashMap<P<Type>, Option<VarianceFlags>>,
-    /// Per generic: which type parameters reach the check type of a conditional type in its members.
-    pub(crate) derived_conditional_params: FxHashMap<P<Type>, Vec<bool>>,
-    /// Per member declaration: whether it uses a type parameter or `this` under a non-monotone type operator (guard 4).
-    pub(crate) derived_sensitive_decls: FxHashMap<P<Node>, bool>,
-    /// Per generic: whether its `in` / `out` annotations hold when measured with the check markers (guard 5).
-    pub(crate) derived_annotations_ok: FxHashMap<P<Type>, bool>,
-    /// Guard 5's own (super, sub) markers, created on first use: sharing the `*_for_check` markers would leave
-    /// relation-cache entries that change how the declaration's TS2636 is elaborated.
-    pub(crate) derived_annotation_markers: Option<(P<Type>, P<Type>)>,
     pub instantiation_stack: Vec<P<Type>>,
     pub conditional_constraint_depth: u32,
     pub inline_level: i32,
@@ -1375,17 +1361,10 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         total_instantiation_count: 0,
         instantiation_count: 0,
         census: crate::workcensus::census_path().map(|_| crate::workcensus::Census::new()),
-        derived_variance: crate::relater_derived::derived_variance_mode(),
         union_front_cache: crate::unioncache::UnionFrontCache::new(),
         infer_memo: crate::infermemo::InferMemo::new(),
         diagnostic_adds: 0,
         expression_checks: 0,
-        derived_depth: 0,
-        derived_this_variances: FxHashMap::default(),
-        derived_conditional_params: FxHashMap::default(),
-        derived_sensitive_decls: FxHashMap::default(),
-        derived_annotations_ok: FxHashMap::default(),
-        derived_annotation_markers: None,
         instantiation_stack: Vec::new(),
         conditional_constraint_depth: 0,
         inline_level: 0,
