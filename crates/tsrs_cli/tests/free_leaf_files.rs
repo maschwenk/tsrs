@@ -1,10 +1,11 @@
 // The CLI's `--noEmit` check frees the tree of each leaf file once it is checked (TSRS_FREE_LEAVES, tsrs_compiler
-// fileregions.rs, notes/mem-free-leaf-files.md). In testdata/regressions/leaf-alternative-containers, leaf.ts is a
-// leaf that is checked and freed before a.ts (one checker, program order: q.ts, m.ts, leaf.ts, a.ts). a.ts's error
-// prints `{ a: Q; }` with the object literal as the enclosing declaration; `Q` is not imported there, so the node
-// builder searches every module of the program for one that re-exports it (getAlternativeContainingModules),
-// which must pass over the freed leaf.ts (`Checker::is_unreadable_check_leaf`). Without that guard the poison run
-// (TSRS_ARENA_POISON=1: freed memory is filled with 0xA5 and kept) crashes, failing this test.
+// fileregions.rs, notes/mem-free-leaf-files.md). In testdata/regressions/leaf-alternative-containers, leaf.test.ts is
+// a leaf (predicted by its name) that is checked and freed before a.ts (one checker, program order: q.ts, m.ts,
+// leaf.test.ts, a.ts). a.ts's error prints `{ a: Q; }` with the object literal as the enclosing declaration; `Q` is
+// not imported there, so the node builder searches every module of the program for one that re-exports it
+// (getAlternativeContainingModules), which must pass over the freed leaf.test.ts (`Checker::is_unreadable_check_leaf`).
+// Without that guard the poison run (TSRS_ARENA_POISON=1: freed memory is filled with 0xA5 and kept) crashes, failing
+// this test.
 
 use std::path::Path;
 use std::process::Command;
@@ -32,12 +33,17 @@ fn run(free_leaves: &str, poison: bool) -> (String, String) {
 #[test]
 fn freed_leaf_is_skipped_by_the_alternative_container_search() {
     let expected = std::fs::read_to_string(case_dir().join("expected.txt")).unwrap();
-    for (free_leaves, poison) in [("1", false), ("0", false), ("keep", false), ("stats", false), ("stats", true)] {
+    let cases = [("1", false), ("0", false), ("keep", false), ("stats", false), ("stats", true), ("all,stats", false), ("all,stats", true)];
+    for (free_leaves, poison) in cases {
         let (stdout, stderr) = run(free_leaves, poison);
         assert_eq!(stdout, expected, "TSRS_FREE_LEAVES={free_leaves} poison={poison}");
+        // leaf.test.ts and a.ts are leaves (nothing imports them); q.ts and m.ts are imported. Only leaf.test.ts is
+        // predicted, unless every file gets a region (`all`).
         if free_leaves == "stats" {
-            // leaf.ts and a.ts are leaves (nothing imports them); q.ts and m.ts are imported.
-            assert!(stderr.contains("leaf files: 2 of 4 checked files") && stderr.contains("freed 2 "), "{stderr}");
+            assert!(stderr.contains("leaf files: 1 of 4 checked files (1 more not predicted") && stderr.contains("freed 1 "), "{stderr}");
+        }
+        if free_leaves == "all,stats" {
+            assert!(stderr.contains("leaf files: 2 of 4 checked files (0 more not predicted") && stderr.contains("freed 2 "), "{stderr}");
         }
     }
 }
