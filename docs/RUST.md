@@ -174,7 +174,9 @@ every name). Build-level options on top of PGO (`notes/perf-build-level.md`, Lin
 `panic = "abort"` (it crashed until `notes/fix-arena-recycle-uaf.md`, and it would also need a CLI-only
 binary); mimalloc v2, jemalloc and glibc malloc instead of mimalloc v3 (3-14% slower, 3-7% less peak memory);
 THP off for the whole process (`MIMALLOC_ALLOW_THP=0`, which also drops the arena's huge pages: +4-10% check time at
-4 checkers, `notes/mem-no-thp.md`);
+4 checkers, `notes/mem-no-thp.md`); releasing memory before the exit to shorten the kernel's teardown (an arena
+`munmap` cost 3 ms and moved the ~15 ms teardown within noise, `madvise` from 16 threads was slower than one
+`munmap`; `notes/perf-front-end-fixed-costs.md`);
 `opt-level = "s"` for the language-server, API and emit crates (`.text` -6%, speed unchanged); adding vscode at eight
 checkers to the PGO training (-3% instructions, cycles unchanged).
 
