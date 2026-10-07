@@ -198,3 +198,15 @@ declarations whichever member is entered, so the TS2310 lines do not change eith
   `.symbols`) and default mode with several checkers (13,458 / 12,778 / 12,778).
 - vscode, t3code-server, formbricks-web, supabase-studio, cal-diy, mui-docs, webpack and xstate-main print the same
   bytes as main single-threaded and at 4 and 32 checkers.
+- pr-verify (PR 177): 97 of 102 cells identical; the five drizzle-orm cells differ by the TS2769, which new prints in
+  every run (10846) and base printed in some (at 16 checkers in reps 1 and 2 but not rep 0). Single-threaded
+  instructions on drizzle-orm +0.05% (each checker that enters the cycle at `Env` resolves it twice).
+
+### Sweep for other history-dependent diagnostics
+
+`--checkerAssignment random:1..8` at 2 and 4 checkers on vscode, t3code-server, formbricks-web, supabase-studio,
+cal-diy, mui-docs, webpack and xstate-main (128 runs), and `random:1..12` at 2 and 4 on drizzle-orm, against each
+project's single-threaded output with the fixed binary: every run byte-identical. Not covered locally: nuxt, next,
+storybook, playwright, mikro-orm and the Compiler projects (pr-verify runs them at fixed checker counts only).
+Base-type cycles through a class (`class A extends B` with `B` reaching `A`) are not canonicalized and were not
+seen; they also resolve the base constructor type, which would need resetting too.
