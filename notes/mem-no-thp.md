@@ -143,5 +143,27 @@ main, huge pages on the heap (run wfpm41kpd7, same conditions):
   2.94 -> 2.85 GiB at 32 checkers, under bun check's 2.87. Machines with 32 or fewer cores are unaffected; the
   8-vCPU README bench and its single-threaded counter (`RAYON_NUM_THREADS=1`) are unchanged.
 
-The 20-rep head-to-head of the combined branch (bench-compare.yml, runs 2nzst77p3q and ck9bqglbpt) follows below when
-it lands.
+## 64 threads, head-to-head of the combined change (`bench/compare.py`, 20 reps)
+
+Depot run 2nzst77p3q on b05f05b (the two commits of PR 121; results in
+bench/results/compare/2026-10-07-b05f05bc6e3f-64t.md), PGO dist build, vscode, mean of 20 interleaved runs; the
+same harness and machine type as the main run xlz11b8b2f (db191be = main dc8bfa8) and the no_thp-only run above.
+
+| threads | compiler | wall mean ± sd (s) | peak RSS |
+| --- | --- | ---: | ---: |
+| default | tsrs | 0.60 ± 0.02 | 2.87 GiB |
+| default | bun check | 0.87 ± 0.03 | 2.85 GiB |
+| 4 | tsrs | 2.49 ± 0.05 | 2.23 GiB |
+| 4 | bun check | 4.40 ± 0.06 | 1.45 GiB |
+| 8 | tsrs | 1.39 ± 0.02 | 2.37 GiB |
+| 8 | bun check | 2.40 ± 0.02 | 1.59 GiB |
+| 16 | tsrs | 0.86 ± 0.01 | 2.57 GiB |
+| 16 | bun check | 1.45 ± 0.02 | 1.84 GiB |
+| 64 | tsrs | 0.59 ± 0.01 | 3.31 GiB |
+| 64 | bun check | 0.87 ± 0.02 | 2.85 GiB |
+
+Against main (xlz11b8b2f) at each tool's default: tsrs 0.547 -> 0.60 s (+9%) and 4.13 -> 2.87 GiB (-31%); bun check
+0.84-0.87 s / 2.85-2.87 GiB. tsrs is 1.45x faster than bun check at the default and within 1% of its peak memory, a
+tie at this precision; at 4, 8 and 16 threads bun check uses 25-35% less, at 64 threads 14% less. The parse cap moved
+the default from 2.94 GiB (no_thp alone, run wb4933tkmt) to 2.87 GiB; the 8-rep check of the same configuration (run
+ck9bqglbpt) gave 0.58 s / 2.87 GiB.
