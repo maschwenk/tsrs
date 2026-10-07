@@ -41,6 +41,12 @@ for p in xstate-main webpack; do
 done
 
 ls -l "$raw"
+# Every workload must have left a profile with counts in it: an instrumented binary that ends with `_exit` leaves a
+# 0-byte file (the profile is written from an exit handler), which `llvm-profdata merge` accepts silently.
 for f in suite fourslash xstate-main webpack; do
-  compgen -G "$raw/$f-*.profraw" > /dev/null || { echo "::error::no profile from $f"; exit 1; }
+  found=0
+  for g in "$raw"/$f-*.profraw; do
+    [ -s "$g" ] && found=1
+  done
+  [ "$found" = 1 ] || { echo "::error::no profile with counts from $f"; ls -l "$raw"; exit 1; }
 done
