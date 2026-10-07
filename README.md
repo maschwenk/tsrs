@@ -29,20 +29,20 @@ vscode (10,427 files) on a 64-vCPU Linux machine, each tool at its own default t
 
 | | wall time | peak memory | tsrs speedup | tsrs memory efficiency |
 | --- | ---: | ---: | ---: | ---: |
-| tsc 7 (tsgo 7.0.2) | 9.53 s | 7.56 GiB | **19.65x** | **2.85x** |
-| `bun check` (Bun 1.4.3 canary) | 0.84 s | 2.88 GiB | 1.74x | 1.08x |
-| **tsrs** | **0.48 s** | 2.65 GiB | | |
+| tsc 7 (tsgo 7.0.2) | 9.60 s | 7.54 GiB | **20.25x** | **2.85x** |
+| `bun check` (Bun 1.4.3 canary) | 0.83 s | 2.87 GiB | 1.76x | 1.08x |
+| **tsrs** | **0.47 s** | 2.65 GiB | | |
 
-- **Against tsc 7:** 19.65x faster and 2.85x more memory efficient (2.65 GiB against 7.56 GiB).
-- **Against `bun check`:** 1.74x faster and 1.08x more memory efficient on vscode. Thread for thread, tsrs is 1.83x to
+- **Against tsc 7:** 20.25x faster and 2.85x more memory efficient (2.65 GiB against 7.54 GiB).
+- **Against `bun check`:** 1.76x faster and 1.08x more memory efficient on vscode. Thread for thread, tsrs is 1.83x to
   1.98x faster and `bun check` is 1.07x to 1.25x more memory efficient; across the seventeen projects tsrs is more
-  memory efficient on twelve and less on five ([details](#tsrs-against-bun-check-thread-for-thread)).
-- **Across the seventeen projects:** 3.89x (Compiler) to 19.92x (next-packages-next) faster than tsgo, and faster than
-  `bun check` on all seventeen, 1.47x (xstate-main) to 3.12x (nuxt) on sixteen (the mui-docs row has a caveat, in
+  memory efficient on eleven and less on five ([details](#tsrs-against-bun-check-thread-for-thread)).
+- **Across the seventeen projects:** 3.90x (Compiler) to 20.25x (vscode) faster than tsgo, and faster than
+  `bun check` on all seventeen, 1.47x (xstate-main) to 3.04x (nuxt) on sixteen (the mui-docs row has a caveat, in
   [More numbers](#more-numbers)).
 
-Source: [`bench/results/2026-10-07-311fcea33269.md`](bench/results/2026-10-07-311fcea33269.md), the table below.
-This code is in release 0.6.0 and later (0.5.0 and earlier predate it); to reproduce the numbers from source, build
+Source: [`bench/results/2026-10-07-6db7beec77d9.md`](bench/results/2026-10-07-6db7beec77d9.md), the table below.
+This code is in release 0.7.0 and later (0.6.0 and earlier predate it); to reproduce the numbers from source, build
 `main` with the PGO `dist` profile ([Build from source](#build-from-source)).
 
 The table below is generated: the bench workflow rewrites it on every push to `main`, and `bench/results/` keeps every
