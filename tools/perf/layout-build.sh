@@ -2,10 +2,11 @@
 # Builds the binaries the layout probe compares (.depot/workflows/perf-layout-probe.yml, notes/perf-binary-layout.md),
 # all from one instrumented build and one training run, Linux x86-64:
 #
-#   A    today's bench pipeline (bench.yml `build`): -Cprofile-generate build, pgo-train.sh, merge, dist build
-#   B    A's profile plus EXTRA_TRAIN runs of tsrs (the README workload: big projects, default and 32 checkers)
+#   A0   main's bench binary since tsrs ends with _exit (#143): the profile has only the suite and fourslash counts,
+#        because the tsrs runs of pgo-train.sh write empty profiles
+#   A    today's bench pipeline with the tsrs training runs writing their profiles (pgo-train.sh's MIMALLOC_SHOW_STATS)
+#   B    A's profile plus EXTRA_TRAIN runs of tsrs (the README workload: big projects, at EXTRA_CHECKERS)
 #   R    A linked with --emit-relocs, then BOLT as release.yml does it (bolt.sh: trained on xstate-main + webpack)
-#   Rx   R with the BOLT training set extended by the EXTRA_TRAIN runs
 #   RB   B linked with --emit-relocs, BOLT trained on xstate-main + webpack + the EXTRA_TRAIN runs
 #   RBH  RB with -hugify (hot text remapped onto 2 MiB pages at startup)
 #
@@ -21,6 +22,7 @@ work=$(cd "$2" && pwd)
 tgt=x86_64-unknown-linux-gnu
 profdata="$(rustc --print sysroot)/lib/rustlib/$tgt/bin/llvm-profdata"
 EXTRA_TRAIN=${EXTRA_TRAIN:-vscode,t3code-server,formbricks-web}
+EXTRA_CHECKERS=${EXTRA_CHECKERS:-4 32}
 mkdir -p "$out/bin" "$out/raw-base" "$out/raw-extra" "$out/bolt"
 : > "$out/times.txt"
 
@@ -36,17 +38,21 @@ project_path() {
 cfg = json.load(open("bench/projects.json")); p = next(p for p in cfg["projects"] if p["name"] == sys.argv[1])
 cwd, proj = rb.project_path(cfg, p, rb.Path(sys.argv[2])); print(f"{cwd}\t{proj}")' "$1" "$work"
 }
-# Runs tsrs binary $1 on every EXTRA_TRAIN project at the default checker count and at 32; $2 = env assignment.
+# Runs tsrs binary $1 on every EXTRA_TRAIN project at each of EXTRA_CHECKERS (`default`: no flag); $2 = env
+# assignment. MIMALLOC_SHOW_STATS: tsrs then ends with `exit`, which writes the profile (pgo-train.sh).
 extra_runs() {
   local exe=$1 envset=$2 p cwd proj c
   IFS=, read -ra projects <<< "$EXTRA_TRAIN"
   for p in "${projects[@]}"; do
     IFS=$'\t' read -r cwd proj < <(project_path "$p")
-    for c in default 32; do
+    for c in $EXTRA_CHECKERS; do
       args=(); [ "$c" = default ] || args=(--checkers "$c")
-      (cd "$cwd" && env "${envset//@P@/$p-$c}" "$exe" -p "$proj" --noEmit --incremental false --pretty false "${args[@]}" \
-        > /dev/null) && status=0 || status=$?
+      t0=$(date +%s.%N)
+      (cd "$cwd" && env "${envset//@P@/$p-$c}" MIMALLOC_SHOW_STATS=1 "$exe" -p "$proj" --noEmit --incremental false \
+        --pretty false "${args[@]}" > /dev/null 2>> "$out/train-stderr.log") && status=0 || status=$?
       check_exit "$status" "$exe -p $p ($c)"
+      awk -v n="  $(basename "$(dirname "$exe")")/$(basename "$exe") $p $c" -v a="$t0" -v b="$(date +%s.%N)" \
+        'BEGIN { printf "%-50s %6.1f s\n", n, b - a }' | tee -a "$out/times.txt"
     done
   done
 }
@@ -59,9 +65,11 @@ train() { .github/scripts/pgo-train.sh "$inst" "$out/raw-base" "$work" > "$out/p
 step "pgo-train.sh" train
 step "extra PGO training ($EXTRA_TRAIN)" extra_runs "$inst/tsrs" "LLVM_PROFILE_FILE=$out/raw-extra/@P@-%p.profraw"
 
+ls -l "$out"/raw-base "$out"/raw-extra
+"$profdata" merge -o "$out/A0.profdata" "$out"/raw-base/suite-*.profraw "$out"/raw-base/fourslash-*.profraw
 "$profdata" merge -o "$out/A.profdata" "$out"/raw-base/*.profraw
 "$profdata" merge -o "$out/B.profdata" "$out"/raw-base/*.profraw "$out"/raw-extra/*.profraw
-for v in A B; do
+for v in A0 A B; do
   echo "== $v.profdata"; "$profdata" show "$out/$v.profdata" | tail -4
   # Functions with a non-zero entry count, per crate of the workspace (the first tsrs_* path component).
   "$profdata" show --all-functions "$out/$v.profdata" | python3 -c '
@@ -85,13 +93,14 @@ dist_build() { # $1 = name, $2 = profile, $3 = extra RUSTFLAGS
 }
 t0=$(date +%s)
 pids=()
+dist_build A0 "$out/A0.profdata" "" & pids+=($!)
 dist_build A "$out/A.profdata" "" & pids+=($!)
 dist_build Ar "$out/A.profdata" "-Clink-arg=-Wl,--emit-relocs" & pids+=($!)
 dist_build B "$out/B.profdata" "" & pids+=($!)
 dist_build Br "$out/B.profdata" "-Clink-arg=-Wl,--emit-relocs" & pids+=($!)
 for pid in "${pids[@]}"; do wait "$pid"; done
-echo "final builds (4 in parallel)          $(($(date +%s) - t0)) s" | tee -a "$out/times.txt"
-for v in A B; do mkdir -p "$out/bin/$v"; cp "$out/t-$v/$tgt/dist/tsrs" "$out/bin/$v/tsrs"; done
+echo "final builds (5 in parallel)          $(($(date +%s) - t0)) s" | tee -a "$out/times.txt"
+for v in A0 A B; do mkdir -p "$out/bin/$v"; cp "$out/t-$v/$tgt/dist/tsrs" "$out/bin/$v/tsrs"; done
 
 # 3. BOLT (instrumentation mode, as .github/scripts/bolt.sh; LBR sampling is not assumed on a VM).
 flags=(-reorder-blocks=ext-tsp -reorder-functions=cdsort -split-functions -split-all-cold -split-eh -icf=1
@@ -104,7 +113,8 @@ instrument() { # $1 = input binary, $2 = name
 release_runs() { # bolt.sh's tsrs workload: xstate-main and webpack, default checker count
   local exe=$1 p
   for p in xstate-main webpack; do
-    (cd "$work/solutions/$p" && "$exe" -p . --noEmit --incremental false --pretty false > /dev/null) && status=0 || status=$?
+    (cd "$work/solutions/$p" && MIMALLOC_SHOW_STATS=1 "$exe" -p . --noEmit --incremental false --pretty false \
+      > /dev/null 2>> "$out/train-stderr.log") && status=0 || status=$?
     check_exit "$status" "$exe -p $p"
   done
 }
@@ -120,14 +130,11 @@ optimize() { # $1 = input binary, $2 = output name, $3.. = fdata files, then opt
 }
 Ar=$out/t-Ar/$tgt/dist/tsrs; Br=$out/t-Br/$tgt/dist/tsrs
 step "BOLT instrument (R)" instrument "$Ar" Ar-rel
-instrument "$Ar" Ar-ext
 instrument "$Br" Br
 step "BOLT training, release set (R)" release_runs "$out/bolt/Ar-rel.inst"
 step "BOLT training, release set (RB)" release_runs "$out/bolt/Br.inst"
-step "BOLT training, extra set (Rx)" extra_runs "$out/bolt/Ar-ext.inst" "BOLT_UNUSED=1"
 step "BOLT training, extra set (RB)" extra_runs "$out/bolt/Br.inst" "BOLT_UNUSED=1"
 step "BOLT optimize R" optimize "$Ar" R "$out"/bolt/Ar-rel.d/prof*
-optimize "$Ar" Rx "$out"/bolt/Ar-rel.d/prof* "$out"/bolt/Ar-ext.d/prof*
 optimize "$Br" RB "$out"/bolt/Br.d/prof*
 optimize "$Br" RBH "$out"/bolt/Br.d/prof* -- -hugify || echo "::warning::llvm-bolt -hugify failed; no RBH"
 

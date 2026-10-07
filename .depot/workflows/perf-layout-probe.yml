@@ -1,7 +1,7 @@
 # Depot CI workflow: one-off probe of how the Linux x86-64 dist binary is built (notes/perf-binary-layout.md). In one
-# job on the 64-vCPU bench machine it builds today's bench binary (PGO, bench.yml `build`) and variants of it from the
-# same instrumented build (a larger PGO training set, BOLT as release.yml does it, a larger BOLT training set, BOLT
-# with -hugify: tools/perf/layout-build.sh), then measures them interleaved on every bench project
+# job on the 64-vCPU bench machine it builds main's bench binary (PGO, bench.yml `build`) and variants of it from the
+# same instrumented build (the training runs of tsrs writing their profiles again, a larger PGO training set, BOLT as
+# release.yml does it, a larger BOLT training set, BOLT with -hugify: tools/perf/layout-build.sh), then measures them interleaved on every bench project
 # (tools/perf/layout-measure.py) and profiles the baseline on vscode. Not scheduled; run it from a pushed branch, which
 # restores the bench caches:
 #
@@ -19,7 +19,7 @@ on:
         default: "7"
       bins:
         description: comma-separated binaries of layout-build.sh to measure (the first is the baseline)
-        default: A,B,R,Rx,RB,RBH
+        default: A0,A,B,R,RB,RBH
 
 permissions:
   contents: read
@@ -28,7 +28,7 @@ env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
   REPS: ${{ inputs.reps || '7' }}
-  BINS: ${{ inputs.bins || 'A,B,R,Rx,RB,RBH' }}
+  BINS: ${{ inputs.bins || 'A0,A,B,R,RB,RBH' }}
 
 jobs:
   probe:
@@ -180,7 +180,7 @@ jobs:
       - name: Build the variants
         run: |
           bash tools/perf/layout-build.sh /tmp/layout bench/.work 2>&1 | tee probe-out/build.txt
-          cp /tmp/layout/times.txt /tmp/layout/profile-coverage.txt probe-out/
+          cp /tmp/layout/times.txt /tmp/layout/profile-coverage.txt /tmp/layout/bolt/*.log probe-out/ || true
           mkdir -p probe-out/bin && for b in /tmp/layout/bin/*; do cp "$b/tsrs" "probe-out/bin/$(basename "$b")"; done
 
       # Where the baseline spends its cycles on vscode at the default checker count (flat profile, user + kernel).
