@@ -232,7 +232,8 @@ once the four application projects were in):
    restores the caches the `measure` jobs save (a project added to `projects.json` needs a restore step in it too). If
    it fails, the results file is published without the 64-vCPU sections and the README table is left as it was.
 4. `merge`: `bench/run.py --merge <results...>` joins them into one result, projects in `bench/projects.json` order
-   and modes in `MODE_FLAGS` order, after checking that the binary, the compilers, reps and flags agree and that no
+   and modes in `MODE_FLAGS` order, after checking that the binary, the compilers and flags agree (the rep counts may differ, as the
+   `measure` jobs' 5 and `measure-wide`'s 10 do; the result records every mode's in `mode_reps`) and that no
    (project, mode) is measured twice; then the regression flag and the results commit, as before. The machine that
    measured the most cells is the run's; a cell measured on another records its own `machine`. All `--checkers 64`
    cells do, and the table names their machine. A fixed-spec project measured on a different CPU model or C library
