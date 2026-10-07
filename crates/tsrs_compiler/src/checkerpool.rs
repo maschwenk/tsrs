@@ -1354,7 +1354,7 @@ const GO_DEFAULT_CHECKERS: i64 = 4;
 // Every checker adds memory (vscode ~30 MiB, the 38k-file codebase ~0.4 GiB) and duplicated first-touch work, and
 // past 32 the check phase stops getting shorter: on a 64-core machine vscode takes 0.82 s at 32 and at 64 checkers
 // (notes/perf-checker-64.md; notes/perf-checker-scaling.md for the 1-16 range).
-const MAX_DEFAULT_CHECKERS: i64 = 32;
+const MAX_DEFAULT_CHECKERS: i64 = 48; // measurement branch: notes/tsrs-checker-cap (probe 8z12kqpf59: vscode 0.58 -> 0.48 s at 2919 MiB, bun 2946)
 // A checker beyond Go's 4 needs at least this many type-checked files to be worth its creation and duplicated work.
 const MIN_CHECKED_FILES_PER_DEFAULT_CHECKER: i64 = 32;
 // Up to this many cores every core gets a checker: on the 8-vCPU README bench, 8 checkers instead of 4 cut vscode's wall
