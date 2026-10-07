@@ -202,11 +202,18 @@ whose bench was skipped or cancelled (before 2026-10-07, most commits of a burst
 commit=<sha>`: the build and measuring jobs check out that commit, the merge job runs the current scripts, the results
 file is committed, and the README table is applied only when no newer commit's table is there.
 
+**Noise**: the fixed-spec and 64-vCPU machines are shared cloud VMs; between publishes of the same code vscode's
+64-vCPU wall moved by a median 2% and up to 10% on 2026-10-07 (median of 3). The single-threaded instruction count is
+the deterministic measure (repeats to 0.001%). The `measure` jobs run 5 reps and `measure-wide` 10 for tsrs and
+`bun check`, both with 3 for tsgo (`--reps N --tsgo-reps M`: tsgo takes 10-20x longer per run), and the README's
+headline is the 20-run mean of `bench-compare.yml`, not one publish's median.
+
 **History**: `bench/history.py` prints one table per metric over `bench/results/*.json` in `main`'s first-parent
 order, a column per project, each cell with its change against the previous benchmarked commit (with one run per
 push, the previous merge): `--metrics instructions,peak,wall,wide_wall,wide_peak`, `--projects`, `--since <commit>`,
 `--tsv`. Instructions and peak RSS are deterministic, so a `!` cell (past the regression thresholds) is the commit's
-doing; the wall columns are the noisy ones and say whether the cost bought anything.
+doing; the wall columns are the noisy ones and say whether the cost bought anything, and a `~` marks a wall or
+wide-peak change next to an instruction change under 0.3%: the code did not change, that is the runner.
 
 Four jobs (since 2026-10-07; until then one job did everything in sequence, and the measurement alone took 18-20 min
 once the four application projects were in):

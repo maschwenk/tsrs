@@ -25,23 +25,26 @@ flags that matter for speed and memory.
 
 ## How fast
 
-vscode (10,427 files) on a 64-vCPU Linux machine, each tool at its own default thread count, median of 3 runs.
+vscode (10,427 files) on a 64-vCPU Linux machine, each tool at its own default thread count, mean of 20 interleaved
+runs ([`bench/results/compare/2026-10-07-ae33f10b1b8b-64t.md`](bench/results/compare/2026-10-07-ae33f10b1b8b-64t.md)).
 
 | | wall time | peak memory | tsrs speedup | tsrs memory efficiency |
 | --- | ---: | ---: | ---: | ---: |
-| tsc 7 (tsgo 7.0.2) | 9.60 s | 7.54 GiB | **20.25x** | **2.85x** |
-| `bun check` (Bun 1.4.3 canary) | 0.83 s | 2.87 GiB | 1.76x | 1.08x |
-| **tsrs** | **0.47 s** | 2.65 GiB | | |
+| tsc 7 (tsgo 7.0.2) | 9.79 s | 7.52 GiB | **18.47x** | **2.85x** |
+| `bun check` (Bun 1.4.3 canary) | 0.87 s | 2.86 GiB | 1.64x | 1.08x |
+| **tsrs** | **0.53 s** | 2.64 GiB | | |
 
-- **Against tsc 7:** 20.25x faster and 2.85x more memory efficient (2.65 GiB against 7.54 GiB).
-- **Against `bun check`:** 1.76x faster and 1.08x more memory efficient on vscode. Thread for thread, tsrs is 1.83x to
+- **Against tsc 7:** 18.47x faster and 2.85x more memory efficient (2.64 GiB against 7.52 GiB).
+- **Against `bun check`:** 1.64x faster and 1.08x more memory efficient on vscode. Thread for thread, tsrs is 1.83x to
   1.98x faster and `bun check` is 1.07x to 1.25x more memory efficient; across the seventeen projects tsrs is more
   memory efficient on eleven and less on five ([details](#tsrs-against-bun-check-thread-for-thread)).
 - **Across the seventeen projects:** 3.90x (Compiler) to 20.25x (vscode) faster than tsgo, and faster than
   `bun check` on all seventeen, 1.47x (xstate-main) to 3.04x (nuxt) on sixteen (the mui-docs row has a caveat, in
   [More numbers](#more-numbers)).
 
-Source: [`bench/results/2026-10-07-6db7beec77d9.md`](bench/results/2026-10-07-6db7beec77d9.md), the table below.
+Source for the per-project figures: [`bench/results/2026-10-07-6db7beec77d9.md`](bench/results/2026-10-07-6db7beec77d9.md),
+the table below, whose single-publish medians move by a few percent between runs of the same code (the 20-run mean
+above is the steadier headline; the single-threaded instruction counts in `bench/results/` are the deterministic measure).
 This code is in release 0.7.0 and later (0.6.0 and earlier predate it; 0.8.0 adds two instruction cuts that leave it within noise); to reproduce the numbers from source, build
 `main` with the PGO `dist` profile ([Build from source](#build-from-source)).
 

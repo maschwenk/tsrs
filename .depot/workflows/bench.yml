@@ -340,7 +340,7 @@ jobs:
       - name: Benchmark ${{ matrix.project }}
         run: >-
           python3 bench/run.py --projects "$PROJECT" --tsrs /tmp/tsrs-pgo/dist/tsrs --tsrs-build pgo-dist
-          --rustc "$(cat /tmp/tsrs-pgo/dist/rustc.txt)" --out-dir "/tmp/bench-partial/$PROJECT"
+          --rustc "$(cat /tmp/tsrs-pgo/dist/rustc.txt)" --out-dir "/tmp/bench-partial/$PROJECT" --reps 5 --tsgo-reps 3
 
       - name: Upload the result
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -541,7 +541,7 @@ jobs:
         run: >-
           python3 bench/run.py --projects "$PROJECTS" --modes wide,checkers64 --tsrs /tmp/tsrs-pgo/dist/tsrs
           --tsrs-build pgo-dist --rustc "$(cat /tmp/tsrs-pgo/dist/rustc.txt)" --bun /tmp/bun/bun-linux-x64/bun
-          --out-dir /tmp/bench-partial/wide
+          --out-dir /tmp/bench-partial/wide --reps 10 --tsgo-reps 3
 
       - name: Upload the result
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

@@ -408,7 +408,10 @@ def markdown(result: dict, modes: list[str] | None = None) -> str:
         f"tsrs is a Rust port of the TypeScript 7 type checker (the Go compiler, \"tsgo\"). Each row type-checks one "
         f"project from {', or from '.join(sources)}, with tsgo {tv} (npm `typescript@{tv}`), with tsrs "
         f"at commit `{commit}` ({TSRS_BUILDS[result['tsrs'].get('build', 'release')]}){bun_text}: "
-        f"`tsc -p <project> --noEmit`, median of {result['reps']} interleaved runs, {machine_text}.",
+        f"`tsc -p <project> --noEmit`, median of {result['reps']} interleaved runs"
+        + (f" ({result['tsgo_reps']} for tsgo)" if result.get('tsgo_reps') not in (None, result['reps']) else "")
+        + f", {machine_text}. Walls on this shared machine move by a few percent between runs of the same code; "
+        f"the single-threaded instruction counts are the deterministic measure.",
         "",
     ]
     drift = False
@@ -635,6 +638,8 @@ def main() -> None:
     ap.add_argument("--projects", help="comma-separated subset of bench/projects.json")
     ap.add_argument("--modes", default="default,single,checkers8", help="comma-separated: " + ", ".join(MODE_FLAGS))
     ap.add_argument("--reps", type=int, default=3)
+    ap.add_argument("--tsgo-reps", type=int, help="runs of tsgo per cell (default: --reps). tsgo takes 10-20x longer "
+                    "than tsrs, so more tsrs and bun reps against the runner's +-5-10%% noise need not cost tsgo runs")
     ap.add_argument("--timeout", type=float, default=900, help="per-run timeout in seconds")
     ap.add_argument("--no-warmup", action="store_true")
     ap.add_argument("--no-instructions", action="store_true",
@@ -724,6 +729,7 @@ def main() -> None:
         "suite": cfg["suite"],
         "reference": ref_cfg,
         "reps": args.reps,
+        "tsgo_reps": args.tsgo_reps if args.tsgo_reps is not None else args.reps,
         "modes": modes,
         "flags": "--noEmit --incremental false --extendedDiagnostics --pretty false",
         "projects": {},
@@ -745,10 +751,13 @@ def main() -> None:
                 log(f"{name}: warm-up (bun, untimed)")
                 run_once(bun, cwd, proj, "default", logs / f"{name}-warmup-bun.log", args.timeout, compiler="bun")
         runs: dict = {m: {c: [] for c in measured} for m in modes}
+        tsgo_reps = args.tsgo_reps if args.tsgo_reps is not None else args.reps
         for rep in range(args.reps):
             order = measured[rep % len(measured):] + measured[:rep % len(measured)]
             for mode in modes:
                 for c in order:
+                    if c == "tsgo" and rep >= tsgo_reps:
+                        continue
                     r = run_once(compilers[c], cwd, proj, mode, logs / f"{name}-{mode}-{c}-{rep}.log", args.timeout,
                                  compiler=c)
                     log(f"{name} {mode:7} {c} rep {rep}: wall {r['wall_s']:.2f} s, check {r.get('check_s')} s, "
