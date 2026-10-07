@@ -212,31 +212,29 @@ fn referred_files(program: &Program) -> FxHashSet<P<SourceFile>> {
             }
         }
     }
-    let mut add = |from: Option<P<SourceFile>>, resolved_file_name: &str| {
-        if let Some(target) = program.get_source_file_for_resolved_module(resolved_file_name) {
-            if Some(target) != from {
-                referred.insert(target);
-            }
-        }
-    };
-    #[expect(clippy::iter_over_hash_type, reason = "builds a set; the order of insertion cannot be seen")]
+    // The targets of every importer's resolutions. Looking a resolved file name up normalizes it (vscode: 110k
+    // imports, 24 ms on one thread, all of it inside the check time), so this runs on the worker pool, like the
+    // import graph of the checker assignment (checkerpool.rs `get_import_adjacency`).
+    let mut importers: Vec<(&tsrs_core::tspath::Path, Vec<&'static str>)> = Vec::new();
+    #[expect(clippy::iter_over_hash_type, reason = "builds a set from them; the order cannot be seen")]
     for (path, resolutions) in &program.resolved_modules {
-        let from = program.files_by_path.get(path).copied();
-        for resolved in resolutions.values() {
-            if resolved.is_resolved() {
-                add(from, resolved.resolved_file_name);
-            }
-        }
+        importers.push((path, resolutions.values().filter(|r| r.is_resolved()).map(|r| r.resolved_file_name).collect()));
     }
-    #[expect(clippy::iter_over_hash_type, reason = "builds a set; the order of insertion cannot be seen")]
+    #[expect(clippy::iter_over_hash_type, reason = "builds a set from them; the order cannot be seen")]
     for (path, resolutions) in &program.type_resolutions_in_file {
-        let from = program.files_by_path.get(path).copied();
-        for resolved in resolutions.values() {
-            if resolved.is_resolved() {
-                add(from, resolved.resolved_file_name);
-            }
-        }
+        importers.push((path, resolutions.values().filter(|r| r.is_resolved()).map(|r| r.resolved_file_name).collect()));
     }
+    let targets_of = |(path, names): &(&tsrs_core::tspath::Path, Vec<&'static str>)| -> Vec<P<SourceFile>> {
+        let from = program.files_by_path.get(*path).copied();
+        names.iter().filter_map(|name| program.get_source_file_for_resolved_module(name)).filter(|&target| Some(target) != from).collect()
+    };
+    let targets: Vec<Vec<P<SourceFile>>> = if program.single_threaded() {
+        importers.iter().map(targets_of).collect()
+    } else {
+        use rayon::prelude::*;
+        crate::program::worker_pool().install(|| importers.par_iter().map(targets_of).collect())
+    };
+    referred.extend(targets.into_iter().flatten());
     referred
 }
 
@@ -271,6 +269,11 @@ fn adds_nothing(program: &Program, file: P<SourceFile>) -> bool {
     })
 }
 
+/// After the type-check pass that freed leaves: gives back the pages of the last batch of freed regions.
+pub(crate) fn pass_done() {
+    tsrs_core::arena::flush_retired();
+}
+
 /// Frees `file`'s region (a leaf whose diagnostics the pass has collected). Called on the checker thread that
 /// checked it; nothing reads the file's tree or binder output afterwards (`classify`).
 pub(crate) fn free(file: P<SourceFile>) {
@@ -293,8 +296,9 @@ pub fn stats_report() -> Option<String> {
     // Relaxed (all loads): read on the main thread after the pass's threads joined.
     let load = |c: &AtomicUsize| c.load(Ordering::Relaxed);
     let reserve = tsrs_core::ptr::reserve_stats().map(|(_, high)| format!("; arena address space used {:.1} MB", mb(high))).unwrap_or_default();
+    let (calls, bytes) = tsrs_core::arena::retired_stats();
     Some(format!(
-        "tsrs: leaf files: {} of {} checked files, {:.1} MB of the {:.1} MB used by {} file regions ({:.1} MB reserved); freed {} ({:.1} MB reserved){reserve}\n",
+        "tsrs: leaf files: {} of {} checked files, {:.1} MB of the {:.1} MB used by {} file regions ({:.1} MB reserved); freed {} ({:.1} MB reserved, {:.1} MB of pages given back in {calls} calls){reserve}\n",
         load(&LEAVES),
         load(&CHECKED_FILES),
         mb(load(&LEAF_BYTES)),
@@ -303,5 +307,6 @@ pub fn stats_report() -> Option<String> {
         mb(load(&REGION_BYTES)),
         load(&FREED),
         mb(load(&FREED_BYTES)),
+        mb(bytes),
     ))
 }

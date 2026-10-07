@@ -1052,7 +1052,11 @@ impl Program {
                     }
                     diagnostics
                 };
-                filter_and_sort_diagnostics(&self.collect_checker_diagnostics_from_files_ex(ctx, self.files, true, &collect).concat())
+                let diagnostics = self.collect_checker_diagnostics_from_files_ex(ctx, self.files, true, &collect).concat();
+                if free_leaves {
+                    crate::fileregions::pass_done();
+                }
+                filter_and_sort_diagnostics(&diagnostics)
             }
             Some(_) => self.collect_checker_diagnostics(ctx, source_file, collect),
         }
