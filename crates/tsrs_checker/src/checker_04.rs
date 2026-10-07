@@ -1529,6 +1529,7 @@ impl Checker {
         let save_current_node = self.current_node;
         self.current_node = Some(node);
         self.instantiation_count = 0;
+        self.expression_checks = self.expression_checks.wrapping_add(1);
         let uninstantiated_type = self.check_expression_worker(node, check_mode);
         let t = self.instantiate_type_with_single_generic_call_signature(node, uninstantiated_type, check_mode);
         if is_const_enum_object_type(t) {

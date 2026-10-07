@@ -263,6 +263,21 @@ impl FlowMemo {
         taint
     }
 
+    /// Ends a frame that is not a flow walk level (the inference memo's): the parent's registers become what they would
+    /// be had the frame not been begun. Returns the frame's taint, the height and the flags its children reported.
+    #[inline]
+    pub(crate) fn end_transparent(&mut self, frame: FlowFrame) -> (FrameTaint, u16, u8) {
+        let r = self.regs;
+        let taint = FrameTaint {
+            transient: if r.transient < frame.start { r.transient } else { UNTAINTED },
+            reference: if r.reference < frame.start { r.reference } else { UNTAINTED },
+            flags: r.flags,
+        };
+        let p = frame.saved;
+        self.regs = Regs { transient: r.transient.min(p.transient), reference: r.reference.min(p.reference), height: p.height.max(r.height), flags: r.flags | p.flags };
+        (taint, r.height, r.flags)
+    }
+
     /// Ends a frame that computed its result: its height is what its children reported.
     #[inline]
     fn end(&mut self, frame: FlowFrame) -> (FrameTaint, u16) {

@@ -47,12 +47,13 @@ impl Checker {
         n.priority.set(priority);
         n.inference_priority.set(InferencePriority::MaxValue);
         n.contravariant.set(contravariant);
-        self.infer_from_types(n, original_source, original_target);
+        self.infer_from_types_memo(n, original_source, original_target);
         self.put_inference_state(n);
     }
 
     // inference.go:65
     pub(crate) fn infer_from_types(&mut self, n: P<InferenceState>, source: P<Type>, target: P<Type>) {
+        self.infer_memo.steps = self.infer_memo.steps.wrapping_add(1);
         let mut source = source;
         let mut target = target;
         if !self.could_contain_type_variables(target) || self.is_no_infer_type(target) {
@@ -184,10 +185,12 @@ impl Checker {
                             if !inference.contra_candidates.contains(&candidate) {
                                 inference.contra_candidates.push(candidate);
                                 clear_cached_inferences(&n.inferences.borrow());
+                                n.cleared_inferences.set(true);
                             }
                         } else if !inference.candidates.contains(&candidate) {
                             inference.candidates.push(candidate);
                             clear_cached_inferences(&n.inferences.borrow());
+                            n.cleared_inferences.set(true);
                         }
                     }
                     if !n.priority.get().intersects(InferencePriority::ReturnType)
@@ -197,6 +200,7 @@ impl Checker {
                     {
                         inference.top_level.set(false);
                         clear_cached_inferences(&n.inferences.borrow());
+                        n.cleared_inferences.set(true);
                     }
                 }
                 n.inference_priority.set(min_priority(n.inference_priority.get(), n.priority.get()));

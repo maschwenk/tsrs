@@ -294,6 +294,7 @@ impl Checker {
         #[cfg(feature = "assignment-stats")]
         self.heap_census_objects(&mut h);
         h.row("flow_memo", self.flow_memo.heap_stat());
+        h.row("infer_memo", self.infer_memo.heap_stat());
         h.row("module_export_index", self.module_export_index.heap_stat());
         h
     }
