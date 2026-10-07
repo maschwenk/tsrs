@@ -23,8 +23,9 @@
 // granularity, a checker visiting some statements of a file without the others. Only declaration files are split:
 // they have no function bodies, so no control flow, no unreachable-code or unused-identifier checks, and nothing
 // later passes need from the checker that checked them (they are not emitted, and have no declaration diagnostics).
-// Default library files are not split unless forced (`plan_splits`): lib.dom.d.ts is never a pass's tail, and splitting it
-// cost webpack and next-root 3-4% of wall time at 16-32 checkers.
+// Default library files are split only when they weigh most of a share (`LIB_MIN_SHARE_PERCENT`, `plan_splits`): at half a
+// share (webpack at 16 checkers) splitting lib.dom.d.ts cost 3-4% of wall time, at a whole share (webpack and
+// next-packages-next at 32) not splitting it made it the pass's tail.
 //
 // `TSRS_SPLIT_FILES` (read once): unset = on in the stealing pass; `0`/`off`; a comma list of `shadow` (the pieces run
 // as usual, then the owner also checks the other checkers' pieces itself and reports the file as one checker finds
@@ -55,6 +56,10 @@ use crate::checkerpool::{Checker, Context};
 // Pieces of 1/8 of a share bring the MCP file's largest piece from 0.17 to 0.085 s at 16 checkers on a Mac (1/16 does
 // not go lower). Measured in the note.
 const MIN_SHARE_PERCENT: u64 = 40;
+/// The share a default library file must weigh to be split (`plan_splits`): its weight is a fair estimate of its cost,
+/// so splitting pays only when it would be most of a checker's work (webpack and next-packages-next at 32 checkers),
+/// not at half a share (webpack at 16: +3-4% wall when it was split).
+pub(crate) const LIB_MIN_SHARE_PERCENT: u64 = 80;
 const PIECE_DIVISOR: u64 = 8;
 
 pub(crate) struct SplitConfig {
