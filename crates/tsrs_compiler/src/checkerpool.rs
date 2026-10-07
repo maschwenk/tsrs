@@ -1058,12 +1058,13 @@ impl FileQueue {
     }
 }
 
-// TSRS_STEAL_STICKY=1 (experiment, notes/perf-clustered-assignment.md): a thief keeps taking from the queue it took
-// from last while that queue has at least half the work of the fullest one. The back of a queue is one directory
-// region, whose files share modules; re-picking the fullest queue for every file mixes regions on the thief.
+// tsrs-only (notes/perf-clustered-assignment.md): a thief keeps taking from the queue it took from last while that
+// queue has at least half the work of the fullest one. The back of a queue is one directory region, whose files share
+// modules with each other; re-picking the fullest queue for every file mixes regions on the thief, and each file
+// stolen from a new region brings its modules onto the thief. `TSRS_STEAL_STICKY=0` re-picks for every file.
 fn steal_sticky() -> bool {
     static VALUE: OnceLock<bool> = OnceLock::new();
-    *VALUE.get_or_init(|| std::env::var("TSRS_STEAL_STICKY").is_ok_and(|v| v == "1"))
+    *VALUE.get_or_init(|| !std::env::var("TSRS_STEAL_STICKY").is_ok_and(|v| v == "0" || v == "off"))
 }
 
 // The next position for checker `me` and whether it came from another checker's queue. `last_victim` is the queue `me`
