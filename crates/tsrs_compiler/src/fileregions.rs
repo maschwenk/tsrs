@@ -87,12 +87,20 @@ pub struct LeafSettings {
     pub every_file: bool,
 }
 
-/// `TSRS_FREE_LEAVES`, a comma-separated list: unset or `1` frees the predicted leaves, `0` turns file regions off,
-/// `keep` makes the regions but frees nothing, `stats` reports (`stats_report`), `all` gives every TypeScript root file
-/// a region (`LeafSettings::every_file`). Off under the debug modes that walk files or checker data after the pass
-/// (`TSRS_FILE_TIMES` walks every tree; `TSRS_ASSIGNMENT_STATS`, the work and heap censuses walk checker tables) or
-/// that must see every block alive (the reachability census, `TSRS_CENSUS=1`).
-pub fn leaf_settings_from_env() -> LeafSettings {
+/// The most checkers for which leaf freeing is on by default (`leaf_settings_from_env`). Measured on vscode on the 64-vCPU
+/// runner (notes/mem-free-leaf-files.md): at 16 checkers the wall time is 1.6% over main for 11% less peak memory; at 32
+/// it is 2.5-5% over main (the predicted files' trees in 4 KiB pages, and the TLB shootdowns of giving pages back,
+/// which grow with the number of threads), for 10% less. `TSRS_FREE_LEAVES=1` turns it on at any count.
+pub const MAX_DEFAULT_CHECKERS: usize = 16;
+
+/// `TSRS_FREE_LEAVES`, a comma-separated list: unset frees the predicted leaves when the program gets at most
+/// `MAX_DEFAULT_CHECKERS` checkers (`checkers`: the most it can get, `checker_count_upper_bound`); `1` frees them at any
+/// count; `0` turns file regions off; `keep` makes the regions (at any count) but frees nothing; `stats` reports
+/// (`stats_report`); `all` gives every TypeScript root file a region (`LeafSettings::every_file`), at any count. Off
+/// under the debug modes that walk files or checker data after the pass (`TSRS_FILE_TIMES` walks every tree;
+/// `TSRS_ASSIGNMENT_STATS`, the work and heap censuses walk checker tables) or that must see every block alive (the
+/// reachability census, `TSRS_CENSUS=1`).
+pub fn leaf_settings_from_env(checkers: usize) -> LeafSettings {
     let census = std::env::var_os("TSRS_CENSUS").is_some_and(|v| v == "1") || tsrs_core::census_recording();
     #[cfg(feature = "checker")]
     let checker_census = crate::Checker::census_enabled() || crate::Checker::heap_census_enabled();
@@ -104,19 +112,30 @@ pub fn leaf_settings_from_env() -> LeafSettings {
     // Only where a freed region's pages go back to the system and its range is never reused (`Region::retire_on_free`
     // gives back pages only with compressed pointers on unix): elsewhere a freed region's memory stays mapped with its
     // old contents while the heap buffers its values owned are freed and reused, so a stale read would see a live
-    // object instead of zeros or a fault, and nothing would be saved.
+    // object, and nothing would be saved.
     if !(tsrs_core::COMPRESSED_PTRS && cfg!(unix)) {
         return LeafSettings::default();
     }
     let mut settings = LeafSettings { mode: LeafMode::Free, stats: false, every_file: false };
+    let mut forced = false;
     for word in std::env::var("TSRS_FREE_LEAVES").unwrap_or_default().split(',') {
         match word.trim() {
             "0" | "off" => return LeafSettings::default(),
-            "keep" => settings.mode = LeafMode::Keep,
+            "1" | "on" => forced = true,
+            "keep" => {
+                settings.mode = LeafMode::Keep;
+                forced = true;
+            }
             "stats" => settings.stats = true,
-            "all" => settings.every_file = true,
+            "all" => {
+                settings.every_file = true;
+                forced = true;
+            }
             _ => {}
         }
+    }
+    if !forced && checkers > MAX_DEFAULT_CHECKERS {
+        return LeafSettings::default();
     }
     settings
 }

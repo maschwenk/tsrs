@@ -284,7 +284,11 @@ fn perform_compilation(
         && !options.get_emit_declarations()
         && !options.explain_files.is_true()
         && !tsrs_core::compat::go_compatible_history();
-    let leaf_settings = if leaf_freeing_allowed { tsrs_compiler::leaf_settings_from_env() } else { tsrs_compiler::LeafSettings::default() };
+    let leaf_settings = if leaf_freeing_allowed {
+        tsrs_compiler::leaf_settings_from_env(tsrs_compiler::checker_count_upper_bound(&options, false))
+    } else {
+        tsrs_compiler::LeafSettings::default()
+    };
     if leaf_settings.mode != tsrs_compiler::LeafMode::Off {
         tsrs_compiler::enable_file_regions(leaf_settings, sys.get_current_directory());
     }
