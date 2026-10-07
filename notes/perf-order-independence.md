@@ -126,3 +126,14 @@ TSRS_CHECKER_ASSIGNMENT=go tsrs -p . --noEmit --incremental false --pretty false
 TSRS_CHECKER_ASSIGNMENT=locality tsrs-test run --suite all --baselines types,symbols                  # canonical suite
 TSGO=tsgo-ref TSRS_CHECKER_ASSIGNMENT=locality tools/oracle/emit/monorepo.sh <monorepo> -j 4 -- --emitDeclarationOnly --declarationMap false
 ```
+
+## Gate
+
+`tools/ci/determinism.sh` (CI's `check-and-test` job, on every pull request and push to main) is the standing check of
+this note's claim: on xstate-main, webpack, nuxt and drizzle-orm and on every `testdata/regressions` case, the default
+mode at 2 and 4 checkers (three runs each; stealing moves files between checkers) and `random:1..6` at 2 and 4 checkers
+must print the single-threaded run's bytes and exit status (504 runs, about a minute on 8 vCPUs). Its `--self-test`
+checks that an assignment-dependent binary fails it. Positive control, 2026-10-07: a tsrs 0.4.0 build from 2026-10-06
+(before the fixes of notes/fix-history-dependent-diagnostics.md) failed nuxt at 4 checkers under five of the six seeds
+(the builder-env.ts TS2320 lost) and drizzle-orm at 4 checkers under seed 4 (the cli-check.test.ts TS2769 gained);
+main's binary passed all 504 runs.

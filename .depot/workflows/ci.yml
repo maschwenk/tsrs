@@ -135,6 +135,53 @@ jobs:
           printf 'const x: number = "no";\n' > bad.ts
           if npx tsrs bad.ts; then echo "expected a type error"; exit 1; fi
 
+      # tools/ci/determinism.sh: diagnostics must not depend on which checker checks a file or in what order. Four bench
+      # projects (checkouts restored from the bench caches, bench/README.md "CI") and the regression cases, under random
+      # checker assignments and work stealing at 2 and 4 checkers, must print the single-threaded run's bytes.
+      - name: Determinism cache keys
+        id: determinism-keys
+        run: python3 bench/run.py --print-cache-keys --projects xstate-main,webpack,nuxt,drizzle-orm | tee -a "$GITHUB_OUTPUT"
+
+      - name: Restore the bench compilers
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            bench/.work/suite
+            bench/.work/tsgo
+          key: bench-shared-${{ runner.os }}-${{ steps.determinism-keys.outputs.shared }}
+
+      - name: Restore xstate-main
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/xstate-main
+          key: bench-xstate-main-${{ runner.os }}-${{ steps.determinism-keys.outputs['xstate-main'] }}
+
+      - name: Restore webpack
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/webpack
+          key: bench-webpack-${{ runner.os }}-${{ steps.determinism-keys.outputs['webpack'] }}
+
+      - name: Restore nuxt
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/nuxt
+          key: bench-nuxt-${{ runner.os }}-${{ steps.determinism-keys.outputs['nuxt'] }}
+
+      - name: Restore drizzle-orm
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/drizzle-orm
+          key: bench-drizzle-orm-${{ runner.os }}-${{ steps.determinism-keys.outputs['drizzle-orm'] }}
+
+      # A no-op for everything restored above; clones and installs the rest (the bench workflow saves these caches on
+      # every push to main, so a miss means a changed pin or an evicted cache).
+      - name: Set up the determinism projects
+        run: python3 bench/run.py --setup-only --projects xstate-main,webpack,nuxt,drizzle-orm
+
+      - name: Determinism
+        run: tools/ci/determinism.sh --self-test && tools/ci/determinism.sh target/release/tsrs
+
       - name: Upload conformance results
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

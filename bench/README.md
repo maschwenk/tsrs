@@ -255,7 +255,9 @@ cache for the suite checkout plus the npm-installed compilers (`typescript@7.0.2
 per cloned project (checkout + `node_modules`) keyed on its pinned commit and install command
 (`bench/run.py --print-cache-keys`), so changing one pin re-installs only that project. Each measuring job restores
 the shared cache and its own project's; the build job restores the two training projects (xstate-main, webpack) and
-saves the shared cache. The build job, and `ci.yml`'s `check-and-test` and `arena-safety` jobs, restore the TypeScript
+saves the shared cache; `ci.yml`'s `check-and-test` job restores the shared cache and four projects (xstate-main, webpack,
+nuxt, drizzle-orm) for the determinism gate, `tools/ci/determinism.sh` (notes/perf-order-independence.md "Gate"). The
+build job, and `ci.yml`'s `check-and-test` and `arena-safety` jobs, restore the TypeScript
 testdata (`ts-ref/tsc/testdata`, 22 MB compressed) from a cache keyed on the TypeScript commit; on a miss they run the
 sparse checkout and save it. That saves about 4 s per job (2026-10-07: checkout 4.9-5.7 s, restore 1.4 s).
 
