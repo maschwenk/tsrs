@@ -24,6 +24,11 @@
 // pass lengthens the assignment (vscode at 32 checkers: 17 ms with 3 passes, 24 ms with 10, against 6 ms to create the
 // checkers it overlaps).
 //
+// Only from MIN_CHECKERS checkers on. With fewer, each checker already holds most of the modules, so there is little to
+// save, while concentrating the costly files makes the checkers' real costs uneven and stealing moves more files: at 4
+// checkers t3code-server took 10.8% more instructions and cal-diy 4.5% (with stealing), at 8 all five app projects
+// took 0.6-6.5% fewer.
+//
 // `TSRS_MODULE_AFFINITY=<mu>` (read once) sets MU, `0`/`off` turns this off (the plain locality assignment);
 // `TSRS_MODULE_AFFINITY_GAMMA=<g>` sets GAMMA and `TSRS_MODULE_AFFINITY_PASSES=<n>` the most refinement passes, for
 // experiments.
@@ -36,6 +41,7 @@ use tsrs_core::P;
 const MU: f64 = 1.0;
 const GAMMA: f64 = 0.5;
 const MAX_PASSES: usize = 3;
+const MIN_CHECKERS: usize = 8;
 
 struct Config {
     mu: f64,
@@ -74,7 +80,7 @@ pub(crate) struct ModuleAffinity {
 }
 
 impl ModuleAffinity {
-    // None when the term is off. `targets[i]` are the files program file `i` imports (resolved, in the program);
+    // None when the term is off or there are fewer than MIN_CHECKERS checkers. `targets[i]` are the files program file `i` imports (resolved, in the program);
     // `group_of_file[i]` is its locality group, usize::MAX for files outside the groups (unchecked ones);
     // `group_adjacency` is FENNEL's group graph.
     pub(crate) fn new(
@@ -85,7 +91,7 @@ impl ModuleAffinity {
         checker_count: usize,
     ) -> Option<ModuleAffinity> {
         let config = config();
-        if config.mu <= 0.0 {
+        if config.mu <= 0.0 || checker_count < MIN_CHECKERS {
             return None;
         }
         let worth: Vec<f64> = files.iter().map(|f| (f.node_count.get().max(1) as f64).powf(config.gamma)).collect();
