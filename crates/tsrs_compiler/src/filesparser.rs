@@ -492,6 +492,9 @@ impl filesParser {
     }
 
     pub(crate) fn parse(loader: &mut fileLoader, tasks: &[TaskId]) {
+        // One entry per root file (vscode: 10.4k); the map is only probed, never iterated.
+        loader.files_parser.task_data_by_path.reserve(tasks.len());
+        loader.files_parser.datas.reserve(tasks.len());
         Self::start(loader, tasks, 0);
         loop {
             let round = std::mem::take(&mut loader.files_parser.queue);
@@ -602,19 +605,18 @@ impl filesParser {
                 continue;
             }
             let data = &loader.files_parser.datas[item.data];
-            let mut candidates: Vec<TaskId> = data.tasks.values().copied().collect();
-            if !data.tasks.contains_key(&task.normalized_file_path) {
-                candidates.push(item.task);
-            }
-            for candidate in candidates {
-                let key = (item.data, Arc::clone(&loader.tasks[candidate].normalized_file_path));
-                if planned.contains(&key) || !task_needs_parse(loader, candidate) {
-                    continue;
+            let unlisted = (!data.tasks.contains_key(&task.normalized_file_path)).then_some(item.task);
+            // `task_needs_parse` before the key: it is false for a loaded task, and most of a later round's queued
+            // sub tasks name files that an earlier round loaded (vscode's round 2: ~110k of them for 16 files).
+            for candidate in data.tasks.values().copied().chain(unlisted) {
+                if task_needs_parse(loader, candidate) && planned.insert((item.data, Arc::clone(&loader.tasks[candidate].normalized_file_path))) {
+                    to_parse.push(candidate);
                 }
-                planned.insert(key);
-                to_parse.push(candidate);
             }
         }
+        // The sub tasks the round's loads will append to `loader.tasks` (at most), reserved at once: on vscode the first
+        // sequential load appends ~110k tasks, and growing the vector by doubling copied and faulted it repeatedly.
+        let mut sub_tasks = 0;
         // Files that an earlier round's speculative walk parsed. The walk only takes files that are certainly loaded
         // as non-lib tasks under this name, so its metadata, file and resolutions are what this round would compute.
         if !loader.files_parser.speculative.is_empty() {
@@ -632,13 +634,15 @@ impl filesParser {
                 task.data().metadata = speculative.metadata;
                 task.metadata_loaded = true;
                 task.file = speculative.file;
-                if speculative.resolutions.is_some() {
-                    task.data().prefetched_resolutions = speculative.resolutions;
+                if let Some(resolutions) = speculative.resolutions {
+                    sub_tasks += resolutions.sub_task_bound();
+                    task.data().prefetched_resolutions = Some(resolutions);
                 }
             }
             to_parse = rest;
         }
         if to_parse.len() < 2 || loader.files_parser.single_threaded {
+            loader.tasks.reserve(sub_tasks);
             return;
         }
         // Each job computes the file's metadata, parses it and, unless resolution traces are requested, resolves
@@ -761,10 +765,12 @@ impl filesParser {
             task.metadata_loaded = task.lib_file.is_none();
             // A missing file stays None; load() asks the host again and records it as missing.
             task.file = file;
-            if resolutions.is_some() {
-                task.data().prefetched_resolutions = resolutions;
+            if let Some(resolutions) = resolutions {
+                sub_tasks += resolutions.sub_task_bound();
+                task.data().prefetched_resolutions = Some(resolutions);
             }
         }
+        loader.tasks.reserve(sub_tasks);
     }
 
     pub(crate) fn get_processed_files(loader: &mut fileLoader) -> processedFiles {
@@ -776,7 +782,9 @@ impl filesParser {
         let mut files: Vec<P<SourceFile>> = Vec::with_capacity(total_file_count.saturating_sub(lib_file_count));
         let mut lib_files: Vec<P<SourceFile>> = Vec::with_capacity(total_file_count);
 
-        let mut files_by_path: FxHashMap<Path, P<SourceFile>> = FxHashMap::default();
+        // The per-file maps get one entry per file: sized once (vscode: 10.4k entries; a map's iteration order is never
+        // relied on, see the `iter_over_hash_type` expectations of their readers).
+        let mut files_by_path: FxHashMap<Path, P<SourceFile>> = FxHashMap::with_capacity_and_hasher(total_file_count, Default::default());
         // stores 'filename -> file association' ignoring case
         // used to track cases when two file names differ only in casing
         let mut tasks_seen_by_name_ignore_case: Option<FxHashMap<String, TaskId>> =
@@ -785,9 +793,9 @@ impl filesParser {
         let mut include_data = fileIncludeData::default();
         let can_use_project_reference_source = loader.opts.can_use_project_reference_source();
         let mut output_file_to_project_reference_source: FxHashMap<Path, String> = FxHashMap::default();
-        let mut resolved_modules: FxHashMap<Path, ModeAwareCache<P<ResolvedModule>>> = FxHashMap::default();
-        let mut type_resolutions_in_file: FxHashMap<Path, ModeAwareCache<P<ResolvedTypeReferenceDirective>>> = FxHashMap::default();
-        let mut source_file_meta_datas: FxHashMap<Path, SourceFileMetaData> = FxHashMap::default();
+        let mut resolved_modules: FxHashMap<Path, ModeAwareCache<P<ResolvedModule>>> = FxHashMap::with_capacity_and_hasher(total_file_count, Default::default());
+        let mut type_resolutions_in_file: FxHashMap<Path, ModeAwareCache<P<ResolvedTypeReferenceDirective>>> = FxHashMap::with_capacity_and_hasher(total_file_count, Default::default());
+        let mut source_file_meta_datas: FxHashMap<Path, SourceFileMetaData> = FxHashMap::with_capacity_and_hasher(total_file_count, Default::default());
         let mut jsx_runtime_import_specifiers: FxHashMap<Path, P<jsxRuntimeImportSpecifier>> = FxHashMap::default();
         let mut import_helpers_import_specifiers: FxHashMap<Path, P<Node>> = FxHashMap::default();
         let mut source_files_found_searching_node_modules: FxHashSet<Path> = FxHashSet::default();
