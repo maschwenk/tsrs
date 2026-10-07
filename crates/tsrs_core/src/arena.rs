@@ -463,6 +463,9 @@ struct Slab {
     size: usize,
     /// Chunks carved and not yet released, plus one while the slab is a thread's current slab.
     live: AtomicUsize,
+    /// A chunk of a retired region (`Region::retire_on_free`) was carved from it: once every chunk is released, its
+    /// pages go back to the system but its range is never handed out again (`slab_release`).
+    retired: AtomicBool,
 }
 
 const SLAB_SIZE: usize = 1 << 20;
@@ -492,11 +495,11 @@ fn new_slab(size: usize, live: usize) -> *const Slab {
         let cached = SLAB_CACHE.lock().unwrap().pop();
         if let Some(addr) = cached {
             let base = std::ptr::with_exposed_provenance_mut::<u8>(addr);
-            return Box::into_raw(Box::new(Slab { base, size, live: AtomicUsize::new(live) }));
+            return Box::into_raw(Box::new(Slab { base, size, live: AtomicUsize::new(live), retired: AtomicBool::new(false) }));
         }
     }
     let base = os_chunk(Layout::from_size_align(size, CHUNK_ALIGN).expect("arena slab layout"), false);
-    Box::into_raw(Box::new(Slab { base, size, live: AtomicUsize::new(live) }))
+    Box::into_raw(Box::new(Slab { base, size, live: AtomicUsize::new(live), retired: AtomicBool::new(false) }))
 }
 
 fn slab_carve(size: usize) -> (*mut u8, *const Slab) {
@@ -536,9 +539,31 @@ fn slab_trim(slab: *const Slab, end: usize, new_end: usize) -> bool {
 }
 
 fn slab_release(slab: *const Slab) {
+    slab_release_ex(slab, false);
+}
+
+/// `slab_release`; `retire`: the reference is a chunk of a retired region.
+fn slab_release_ex(slab: *const Slab, retire: bool) {
     // SAFETY: the caller holds one of the slab's references.
     let s = unsafe { &*slab };
+    if retire {
+        // Relaxed: the reference count's AcqRel decrement below orders this store before the last release's load.
+        s.retired.store(true, Ordering::Relaxed);
+    }
     if s.live.fetch_sub(1, Ordering::AcqRel) != 1 {
+        return;
+    }
+    // Relaxed: every store happened before its thread's decrement, which the AcqRel decrement above acquired.
+    if s.retired.load(Ordering::Relaxed) {
+        // Its pages go back to the system; its range is never reused (`reserve::discard`). Without compressed
+        // pointers the slab's memory is kept (it came from the allocator, which would hand the addresses out again).
+        #[cfg(all(compressed_ptrs, unix))]
+        // SAFETY: from `os_chunk` with this size; every chunk carved from it was released.
+        unsafe {
+            crate::reserve::discard(s.base, s.size)
+        };
+        // SAFETY: made by `Box::into_raw` in `new_slab`; this was the last reference.
+        drop(unsafe { Box::from_raw(slab.cast_mut()) });
         return;
     }
     // Profile builds map slabs with `mmap` (`census_chunk`) and keep them.
@@ -762,6 +787,8 @@ pub(crate) struct RegionInner {
     owners: Mutex<Vec<usize>>,
     /// Run when the region is freed, before anything else (`on_free`).
     on_free: Mutex<Vec<Box<dyn FnOnce() + Send>>>,
+    /// `retire_on_free`.
+    retire: AtomicBool,
 }
 
 #[expect(clippy::non_send_fields_in_send_ty, reason = "the arena's cells: see the SAFETY comment")]
@@ -796,7 +823,17 @@ impl Region {
             lock: OwnerLock { state: Mutex::new((None, 0)), released: Condvar::new() },
             owners: Mutex::new(Vec::new()),
             on_free: Mutex::new(Vec::new()),
+            retire: AtomicBool::new(false),
         }))
+    }
+
+    /// When the region is freed, its pages go back to the system and its address range is never handed out again
+    /// (`reserve::discard`), instead of its slabs being reused: for a region freed while tables keyed by the address
+    /// of an object in it may keep stale entries (a checked file's tree, `tsrs_compiler` fileregions.rs). The pages a
+    /// chunk shares with a neighbouring chunk of the slab stay until the whole slab is released.
+    pub fn retire_on_free(&self) {
+        // Relaxed: read by `Drop`, after the last handle's release, which the `Arc` orders after this store.
+        self.0.retire.store(true, Ordering::Relaxed);
     }
 
     /// Makes this region the current thread's allocation target until the scope is dropped. Waits while another
@@ -869,6 +906,14 @@ impl Region {
     /// Number of values waiting to be dropped when the region is freed (diagnostics).
     pub fn drop_entries(&self) -> usize {
         self.0.arena.drops.borrow().len()
+    }
+
+    /// Forgets the values waiting to be dropped (and frees the list): for a region that will never be freed, whose
+    /// values then live for the rest of the process like those of a thread arena. Values allocated afterwards are
+    /// tracked again.
+    pub fn forget_drops(&self) {
+        let _scope = self.enter();
+        *self.0.arena.drops.borrow_mut() = Vec::new();
     }
 
     pub fn ptr_eq(&self, other: &Region) -> bool {
@@ -1088,9 +1133,18 @@ impl Drop for RegionInner {
             }
             return;
         }
+        // Relaxed: see `retire_on_free`.
+        let retire = self.retire.load(Ordering::Relaxed);
+        #[cfg(all(compressed_ptrs, unix))]
+        if retire {
+            for &(start, size) in &chunks {
+                // SAFETY: a chunk of this region, which nothing uses any more; only the pages wholly inside it go.
+                unsafe { crate::reserve::discard(std::ptr::with_exposed_provenance_mut::<u8>(start), size) };
+            }
+        }
         drop(chunks);
         for &slab in arena.slabs.borrow().iter() {
-            slab_release(slab);
+            slab_release_ex(slab, retire);
         }
     }
 }
@@ -1271,6 +1325,38 @@ mod tests {
         assert!(Region::containing(P::new(6u64).addr()).unwrap().ptr_eq(&outer));
         // Without a scratch region, `new_scratch` is `new`.
         assert!(Region::containing(P::new_scratch(7u64).addr()).unwrap().ptr_eq(&outer));
+    }
+
+    /// A retired region's range is never handed out again (fileregions.rs in tsrs_compiler frees a checked file's
+    /// tree while caches keyed by the address of a node in it may keep stale entries): no later chunk, of any
+    /// arena or region on any thread, overlaps it.
+    #[cfg(compressed_ptrs)]
+    #[test]
+    fn retired_regions_are_never_reused() {
+        use super::Region;
+        // More than a quarter of a slab: the region's chunk is a slab of its own, which a plain free would give back
+        // to the reservation (or the slab cache) for reuse.
+        const SIZE: usize = 1 << 20;
+        let retired = Region::new(SIZE);
+        let first = {
+            let _s = retired.enter();
+            P::new([1u64; 8]).addr()
+        };
+        let range = first..first + retired.allocated_bytes();
+        retired.retire_on_free();
+        drop(retired);
+        let mut later = Vec::new();
+        for i in 0..32u64 {
+            let r = Region::new(SIZE);
+            {
+                let _s = r.enter();
+                let p = P::new([i; 8]);
+                assert!(!range.contains(&p.addr()), "a retired region's range was reused");
+            }
+            later.push(r);
+        }
+        let big = crate::alloc_slice(&vec![0u8; 4 * SIZE]);
+        assert!(!range.contains(&(big.as_ptr() as usize)) && !range.contains(&(big.as_ptr() as usize + big.len() - 1)));
     }
 
     #[test]
