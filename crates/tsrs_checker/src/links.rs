@@ -206,6 +206,63 @@ impl<K: 'static, V: KeyedLinks + Default + 'static> KeyedLinkStore<K, V> {
     }
 }
 
+/// Go `symbolReferenceLinks` (`core.LinkStore[*ast.Symbol, SymbolReferenceLinks]`). The record has one field,
+/// `referenceKinds`, a 4-byte `SymbolFlags`, kept in the slot next to the key (8 bytes with compressed pointers, the
+/// size of `LinkStore`'s key-and-index slot) instead of in an 8-byte arena slot of its own: -6.5 MB on vscode at one
+/// checker (notes/mem-dense-link-tables.md).
+///
+/// No stable address: the flags move when the table grows, so the store hands out no reference. Go's callers never
+/// keep the record: `symbolReferenced` ORs meanings into it and the unused-locals checks read it, each on the spot.
+#[derive(Default)]
+pub struct SymbolReferenceLinkStore {
+    slots: hashbrown::HashTable<ReferenceKindsSlot>,
+}
+
+#[derive(Clone, Copy)]
+struct ReferenceKindsSlot {
+    key: PKey,
+    kinds: SymbolFlags,
+}
+
+const _: () = assert!(std::mem::size_of::<ReferenceKindsSlot>() == if tsrs_core::COMPRESSED_PTRS { 8 } else { 16 });
+
+impl SymbolReferenceLinkStore {
+    #[inline]
+    fn hash(key: PKey) -> u64 {
+        use std::hash::BuildHasher;
+        rustc_hash::FxBuildHasher.hash_one(key)
+    }
+
+    /// Go `c.symbolReferenceLinks.Get(symbol).referenceKinds |= meaning`: creates the record on first use.
+    #[inline]
+    #[cfg_attr(feature = "site-counts", track_caller)]
+    pub fn add_reference_kinds(&mut self, symbol: P<Symbol>, meaning: SymbolFlags) {
+        let key = symbol.key();
+        let slot = match self.slots.entry(Self::hash(key), |s| s.key == key, |s| Self::hash(s.key)) {
+            hashbrown::hash_table::Entry::Occupied(slot) => slot.into_mut(),
+            hashbrown::hash_table::Entry::Vacant(slot) => {
+                tsrs_core::sitecount::hit("links", "SymbolReferenceLinks");
+                slot.insert(ReferenceKindsSlot { key, kinds: SymbolFlags::None }).into_mut()
+            }
+        };
+        slot.kinds |= meaning;
+    }
+
+    /// Go `c.symbolReferenceLinks.Get(symbol).referenceKinds`, without creating a record for a symbol never
+    /// referenced (`SymbolFlags::None` either way).
+    #[inline]
+    pub fn reference_kinds(&self, symbol: P<Symbol>) -> SymbolFlags {
+        let key = symbol.key();
+        self.slots.find(Self::hash(key), |s| s.key == key).map_or(SymbolFlags::None, |s| s.kinds)
+    }
+
+    /// Heap census: the slots (key and flags; nothing in the arena).
+    pub fn heap_parts(&self) -> Vec<(&'static str, crate::heapcensus::HeapStat)> {
+        use crate::heapcensus::HeapSize;
+        vec![("slots (key, kinds)", self.slots.heap_stat())]
+    }
+}
+
 /// Links keyed by a node/symbol id (Go `PagedLinkStore`-backed stores). Like Go, the id is looked up by indexing,
 /// not hashing: a group of `ID_GROUP` consecutive ids holds 2 bytes per id (the slot's offset from the group's first
 /// slot, 0 = no links), found through a vector indexed by group number (one `Option<P<IdGroup>>` per group of the id
@@ -734,6 +791,29 @@ mod tests {
             assert!(store.try_get(absent).is_none());
             assert!(!store.has(absent));
         }
+    }
+
+    // Reference kinds live in the slot: meanings must accumulate per symbol through the table's growth, and a symbol
+    // never referenced must read as `None` without getting a record.
+    #[test]
+    fn reference_kinds_accumulate_in_their_slots() {
+        let symbols: Vec<P<Symbol>> = (0..20_000).map(|_| P::new(Symbol::default())).collect();
+        let mut store = SymbolReferenceLinkStore::default();
+        for (i, &symbol) in symbols.iter().enumerate().filter(|(i, _)| i % 3 != 0) {
+            store.add_reference_kinds(symbol, SymbolFlags::Value);
+            if i % 2 == 0 {
+                store.add_reference_kinds(symbol, SymbolFlags::Type);
+            }
+        }
+        for (i, &symbol) in symbols.iter().enumerate() {
+            let expected = match (i % 3 != 0, i % 2 == 0) {
+                (false, _) => SymbolFlags::None,
+                (true, false) => SymbolFlags::Value,
+                (true, true) => SymbolFlags::Value | SymbolFlags::Type,
+            };
+            assert_eq!(store.reference_kinds(symbol), expected, "symbol {i}");
+        }
+        assert_eq!(store.slots.len(), symbols.len() - symbols.len().div_ceil(3));
     }
 
     // A wrong index hands out another id's links: the checker would read a foreign symbol's type without any visible

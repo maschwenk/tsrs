@@ -250,12 +250,8 @@ pub struct TypeId(pub u32);
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub struct SignatureId(pub u32);
 
-// Links for referenced symbols
-
-#[derive(Default)]
-pub struct SymbolReferenceLinks {
-    pub reference_kinds: Cell<SymbolFlags>, // Flags for the meanings of the symbol that were referenced
-}
+// Links for referenced symbols: Go's `SymbolReferenceLinks` has one field, `referenceKinds` (the meanings the symbol
+// was referenced with), which `SymbolReferenceLinkStore` (links.rs) keeps in its slots.
 
 // Links for value symbols
 //
