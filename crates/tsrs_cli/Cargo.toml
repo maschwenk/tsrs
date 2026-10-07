@@ -24,7 +24,8 @@ tsrs_project.workspace = true
 tsrs_incremental.workspace = true
 tsrs_api.workspace = true
 tsrs_api_transport.workspace = true
-mimalloc = "0.1.52"
+# no_thp: no MADV_HUGEPAGE on the mimalloc heap (huge-page amplification on Linux; see notes/mem-no-thp.md).
+mimalloc = { version = "0.1.52", features = ["no_thp"] }
 libc = "0.2"
 [dev-dependencies]
 similar = "3"
