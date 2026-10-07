@@ -809,7 +809,7 @@ impl FrozenTable {
         unsafe { entries.as_ptr().sub(1).read().0 as usize }
     }
 
-    #[inline(never)]
+    #[inline]
     fn search(self, name: &str, hash: u32) -> Option<SymbolMapEntry> {
         let entries = self.entries();
         if entries.len() > Self::WIDE_FILTER_MIN {
@@ -822,7 +822,9 @@ impl FrozenTable {
         entries.iter().copied().find(|e| e.print() == print && same_text(e.symbol().name(), name))
     }
 
-    #[inline]
+    /// Out of line, like `SymbolMap::search`: the callers inline only the test for the frozen form, so the mutable
+    /// path stays as small as it was.
+    #[inline(never)]
     fn find(self, name: &str) -> Option<SymbolMapEntry> {
         let hash = hash_name(name);
         if !self.may_contain(hash) {
