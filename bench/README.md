@@ -286,8 +286,9 @@ or labelled run restores the caches `bench.yml` saves.
 
 Duration with the defaults (10 projects x 4 checker counts x 3 reps, poison on), Depot run `8fp8bp2jk1`
 (2026-10-07, `depot ci run`, so no caches): 10 min 44 s for the job, of which setup and project clone + install
-2 min 39 s, both release builds (at the same time) 35 s, measurement 7 min 23 s. A pull request with the `verify`
-label restores the project caches instead (see the pull request that added the workflow for its time).
+2 min 39 s, both release builds (at the same time) 35 s, measurement 7 min 23 s. With the caches (a pull request
+with the `verify` label, run `8hc5870p99`): 8 min 42 s, of which cache restores 34 s, builds 35 s, measurement
+7 min 21 s; the comment job adds about 10 s.
 
 ## Head-to-head on a wide machine
 
