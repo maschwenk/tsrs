@@ -73,8 +73,16 @@ impl CompilerHost for compilerHost {
     }
 
     fn get_source_file(&self, opts: SourceFileParseOptions) -> Option<P<SourceFile>> {
-        let text = tsrs_core::festats::timed(tsrs_core::festats::Cat::Read, || self.fs().read_file(&opts.file_name))?;
         let script_kind = ensure_script_kind_from_file_name(&opts.file_name);
+        // tsrs-only: a bundled lib (`bundled:///libs/lib.*.d.ts`) is text in the binary; parse it in place instead of
+        // reading a heap copy and leaking it (about 2.9 MB for a typical lib set; notes/mem-zero-copy-libs.md). Same
+        // bytes, same `&'static str` the identifiers point into, so nothing downstream changes.
+        if let Some(text) = tsrs_vfs::bundled::embedded_file(&opts.file_name) {
+            return Some(tsrs_core::festats::timed(tsrs_core::festats::Cat::Parse, || {
+                tsrs_parser::parse_source_file_embedded(opts, text, script_kind)
+            }));
+        }
+        let text = tsrs_core::festats::timed(tsrs_core::festats::Cat::Read, || self.fs().read_file(&opts.file_name))?;
         Some(tsrs_core::festats::timed(tsrs_core::festats::Cat::Parse, || tsrs_parser::parse_source_file_owned(opts, text, script_kind)))
     }
 
