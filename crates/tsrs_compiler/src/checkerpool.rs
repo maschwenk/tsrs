@@ -1354,7 +1354,7 @@ const GO_DEFAULT_CHECKERS: i64 = 4;
 // Every checker adds memory (vscode ~30 MiB, the 38k-file codebase ~0.4 GiB) and duplicated first-touch work, and
 // past 32 the check phase stops getting shorter: on a 64-core machine vscode takes 0.82 s at 32 and at 64 checkers
 // (notes/perf-checker-64.md; notes/perf-checker-scaling.md for the 1-16 range).
-const MAX_DEFAULT_CHECKERS: i64 = 48; // measurement branch: notes/tsrs-checker-cap (probe 8z12kqpf59: vscode 0.58 -> 0.48 s at 2919 MiB, bun 2946)
+const MAX_DEFAULT_CHECKERS: i64 = 48; // measurement branch: three quarters of the cores up to 48 (probe 8z12kqpf59: vscode 0.58 -> 0.48 s at 2919 MiB, bun 2946)
 // A checker beyond Go's 4 needs at least this many type-checked files to be worth its creation and duplicated work.
 const MIN_CHECKED_FILES_PER_DEFAULT_CHECKER: i64 = 32;
 // Up to this many cores every core gets a checker: on the 8-vCPU README bench, 8 checkers instead of 4 cut vscode's wall
@@ -1400,7 +1400,7 @@ fn default_checker_count_by_machine() -> i64 {
 // The machine rule of `default_checker_count_by_machine` for a core count (bench/run.py `tsrs_default_checkers` mirrors
 // it for the results tables).
 fn default_checkers_for_parallelism(parallelism: i64) -> i64 {
-    (parallelism / 2).max(parallelism.min(SMALL_MACHINE_CHECKERS)).min(MAX_DEFAULT_CHECKERS).max(GO_DEFAULT_CHECKERS)
+    (parallelism * 3 / 4).max(parallelism.min(SMALL_MACHINE_CHECKERS)).min(MAX_DEFAULT_CHECKERS).max(GO_DEFAULT_CHECKERS)
 }
 
 #[cfg(test)]
@@ -1411,7 +1411,7 @@ mod default_checker_tests {
     /// machine keeps 8 (half its cores rounds below the small-machine count), 18 cores get 9, 64 or more get 32.
     #[test]
     fn every_core_up_to_eight_then_half_the_cores() {
-        let table = [(1, 4), (2, 4), (4, 4), (6, 6), (8, 8), (9, 8), (12, 8), (16, 8), (18, 9), (32, 16), (64, 32), (128, 32)];
+        let table = [(1, 4), (2, 4), (4, 4), (6, 6), (8, 8), (9, 8), (12, 9), (16, 12), (18, 13), (32, 24), (64, 48), (128, 48)];
         for (cores, checkers) in table {
             assert_eq!(default_checkers_for_parallelism(cores), checkers, "{cores} cores");
         }

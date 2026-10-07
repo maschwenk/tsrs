@@ -368,7 +368,7 @@ def tsrs_default_checkers(machine: dict) -> int:
     """tsrs's default checker count on a machine (checkerpool.rs default_checker_count; the small-program floor does
     not bind on these projects)."""
     cpus = machine.get("cpus") or 1
-    return max(4, min(32, max(cpus // 2, min(cpus, 8))))
+    return max(4, min(48, max(cpus * 3 // 4, min(cpus, 8))))
 
 
 def markdown(result: dict, modes: list[str] | None = None) -> str:
