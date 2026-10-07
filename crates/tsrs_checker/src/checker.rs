@@ -959,6 +959,9 @@ pub struct Checker {
     pub inline_level: i32,
     pub serialization_level: i32,
     pub current_node: Option<P<Node>>,
+    /// tsrs-only: the file `check_source_file` is checking. The one check leaf (`SourceFile::is_check_leaf`) whose tree
+    /// this checker may read.
+    pub(crate) checking_file: Option<P<SourceFile>>,
     pub variance_type_parameter: Option<P<Type>>,
     pub language_version: ScriptTarget,
     pub module_kind: ModuleKind,
@@ -1357,6 +1360,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         inline_level: 0,
         serialization_level: 0,
         current_node: None,
+        checking_file: None,
         variance_type_parameter: None,
         language_version: compiler_options.get_emit_script_target(),
         module_kind: compiler_options.get_emit_module_kind(),

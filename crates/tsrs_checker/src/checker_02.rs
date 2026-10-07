@@ -87,14 +87,16 @@ impl Checker {
 
     // checker.go:2237
     pub(crate) fn check_source_file(&mut self, ctx: &Context, source_file: P<SourceFile>, check_unused: bool) {
+        let saved_checking_file = self.checking_file.replace(source_file);
         if self.census_on() {
             let span = self.census_begin(crate::workcensus::Cat::File, || crate::workcensus::CKey::None);
             self.check_source_file_worker(ctx, source_file, check_unused);
             let t = self.census_end(span).unwrap();
             self.census.as_mut().unwrap().file_wall_ns += t.incl_ns;
-            return;
+        } else {
+            self.check_source_file_worker(ctx, source_file, check_unused);
         }
-        self.check_source_file_worker(ctx, source_file, check_unused);
+        self.checking_file = saved_checking_file;
     }
 
     fn check_source_file_worker(&mut self, ctx: &Context, source_file: P<SourceFile>, check_unused: bool) {
