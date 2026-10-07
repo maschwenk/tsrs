@@ -16,6 +16,11 @@ pub fn lib_path() -> String {
     embed::lib_path()
 }
 
+// The embedded text of a bundled lib path without a copy (tsrs-only, see embed::embedded_file).
+pub fn embedded_file(path: &str) -> Option<&'static str> {
+    embed::embedded_file(path)
+}
+
 // TestingLibPath returns the path to the source bundled libs directory.
 // It's only valid to use where the source code is available.
 pub fn testing_lib_path() -> String {

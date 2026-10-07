@@ -215,6 +215,21 @@ pub fn parse_source_file_owned(opts: SourceFileParseOptions, source_text: String
     }
 }
 
+/// Parses text that lives for the whole process (the bundled libs, `include_str!` in the binary): outside a region
+/// the file reads the text in place, with no copy and nothing to leak; inside a region it behaves like
+/// `parse_source_file_owned` (the region holds the text the file reads, and forgets it when it is freed).
+pub fn parse_source_file_embedded(opts: SourceFileParseOptions, source_text: &'static str, script_kind: ScriptKind) -> P<SourceFile> {
+    match tsrs_core::arena::current_region() {
+        None => parse_source_file_static(opts, source_text, script_kind),
+        Some(region) => {
+            let file = parse_source_file(opts, source_text, script_kind);
+            let text_index = file.text_index.get();
+            region.on_free(Box::new(move || ast::unregister_source_text(text_index)));
+            file
+        }
+    }
+}
+
 fn parse_source_file_static(opts: SourceFileParseOptions, source_text: &'static str, script_kind: ScriptKind) -> P<SourceFile> {
     crate::jsdoc::init();
     let mut p = new_parser();
