@@ -5,7 +5,7 @@
 
 **tsrs is a Rust port of the TypeScript 7 compiler and language server.** It takes `tsc`'s flags and tsconfig and
 reports the same diagnostics as the Go compiler it ports. On the vscode codebase, on a 64-vCPU machine, it type-checks
-[about 16x faster than tsc 7 and 1.45x faster than `bun check`](bench/results/compare/2026-10-07-b05f05bc6e3f-64t.md).
+[about 16x faster than tsc 7 and 1.41x faster than `bun check`](#benchmark-tsrs-vs-tsgo-702-vs-bun-check).
 On the TypeScript conformance suite it matches the reference on 13,458 of 13,462 error baselines and on all 12,779
 `.types` and `.symbols` baselines, in Go-compatible mode ([evidence](#what-tsrs-is)).
 
@@ -25,31 +25,38 @@ flags that matter for speed and memory.
 
 ## How fast
 
-vscode (10,427 files) on a 64-vCPU Linux machine, each tool at its own default thread count. Mean of 20 interleaved runs.
+vscode (10,427 files) on a 64-vCPU Linux machine, each tool at its own default thread count. Median of 3 runs, from
+[the generated table below](#benchmark-tsrs-vs-tsgo-702-vs-bun-check).
 
-| | wall time | peak memory | speed vs tsc 7 |
-| --- | ---: | ---: | ---: |
-| tsc 7 (tsgo 7.0.2) | 9.62 s | 7.50 GiB | 1x |
-| `bun check` (Bun 1.4.3 canary) | 0.87 s | 2.85 GiB | 11.02x |
-| **tsrs** | **0.60 s** | 2.87 GiB | **15.96x** |
+| | wall time | peak memory | tsrs speedup | tsrs memory / its |
+| --- | ---: | ---: | ---: | ---: |
+| tsc 7 (tsgo 7.0.2) | 9.65 s | 7.56 GiB | **16.11x** | 0.38x |
+| `bun check` (Bun 1.4.3 canary) | 0.84 s | 2.87 GiB | 1.41x | 1.00x |
+| **tsrs** | **0.60 s** | 2.87 GiB | | |
 
-- **Against tsc 7:** about 16x faster, with 2.6x less memory (7.50 GiB down to 2.87 GiB).
-- **Against `bun check`:** 1.45x faster, with the same peak memory (2.87 GiB against 2.85 GiB).
-- **Thread for thread, `bun check` uses less memory**, 14% to 35% less. tsrs stays 1.47x to 1.77x faster.
-  [Table below](#tsrs-against-bun-check-thread-for-thread).
+- **Against tsc 7:** 16.11x faster, at 0.38x of its memory (2.87 GiB against 7.56 GiB).
+- **Against `bun check`:** 1.41x faster, at the same peak memory (2.87 GiB each).
+- **Memory against `bun check` is mixed.** Thread for thread, `bun check` uses 14% to 35% less. Across the ten
+  projects tsrs uses more than `bun check` on four (1.18x to 1.90x), about the same on two (vscode, webpack) and less
+  on the other four. [Details below](#tsrs-against-bun-check-thread-for-thread).
+- **Across the ten projects** the same run has tsrs 3.43x (Compiler) to 16.11x (vscode) faster than tsgo, and faster
+  than `bun check` on all of them, 1.29x to 2.38x on nine. The tenth, mui-docs, is left out of that range: `bun check`
+  took 40.53 s and 18.24 GiB there and reported 23 errors where tsgo and tsrs report none.
+- **A 20-run mean gives the same picture.** A separate head-to-head, 20 interleaved runs per cell on the same machine type, measured
+  the same code: tsgo 9.62 s, tsrs 0.60 s, `bun check` 0.87 s, which is 15.96x and 1.45x. It is the source of the
+  thread-for-thread table below.
 - **On an 8-vCPU machine** (default settings, ten projects, median of 3 runs): 3.63x to 9.38x faster than tsgo 7.0.2,
   at 0.13x to 0.46x of its memory. vscode is 4.08x faster, and 2.86x faster with one checker thread in each (10.57 s
   against 30.20 s), so threads are not the whole gain.
-  Source: [`bench/results/2026-10-07-bd86c6d7a6ba.md`](bench/results/2026-10-07-bd86c6d7a6ba.md).
 
-Source for the table and the first three bullets:
-[`bench/results/compare/2026-10-07-b05f05bc6e3f-64t.md`](bench/results/compare/2026-10-07-b05f05bc6e3f-64t.md), run on
-Depot CI `depot-ubuntu-24.04-64` (Linux x86_64, AMD EPYC 9R45). tsc 7 is TypeScript's Go compiler, `typescript@7.0.2`
-from npm. tsrs is a PGO `dist` build of [PR #121](https://github.com/maschwenk/tsrs/pull/121) (commit `b05f05bc6e3f`, the
-same source as `main` at `626da9d`). A second run of the same code, median of 3 on the same machine type
-([`bench/results/2026-10-07-bd86c6d7a6ba.md`](bench/results/2026-10-07-bd86c6d7a6ba.md)), gives 16.11x against tsgo and
-1.41x against `bun check` on vscode. The npm release 0.4.0 and earlier do not include this code; to reproduce these
-numbers, build `main` with the PGO `dist` profile ([Build from source](#build-from-source)).
+Sources: [`bench/results/2026-10-07-bd86c6d7a6ba.md`](bench/results/2026-10-07-bd86c6d7a6ba.md) (the table, the ten
+projects and the 8-vCPU bullet; Depot CI `depot-ubuntu-24.04-64` for the 64-vCPU rows, `depot-ubuntu-24.04-8` for the
+8-vCPU ones, Linux x86_64, AMD EPYC 9R45) and
+[`bench/results/compare/2026-10-07-b05f05bc6e3f-64t.md`](bench/results/compare/2026-10-07-b05f05bc6e3f-64t.md) (the
+20-run mean). tsc 7 is TypeScript's Go compiler, `typescript@7.0.2` from npm. tsrs is a PGO `dist` build of
+[PR #121](https://github.com/maschwenk/tsrs/pull/121): commit `bd86c6d7a6ba` in the table, `b05f05bc6e3f` in the
+20-run mean, with the same source in `crates/`. The npm release 0.4.0 and earlier do not include this code; to
+reproduce these numbers, build `main` with the PGO `dist` profile ([Build from source](#build-from-source)).
 
 ## tsrs against bun check, thread for thread
 
@@ -73,12 +80,13 @@ for `bun check`. Same machine, same 20 runs per cell, wall time then peak memory
 - `bun check` uses less memory than tsrs at every thread count: 35% less at 4 threads, 33% at 8, 28% at 16, 14% at 64.
   At each tool's default the two peak at the same memory (tsrs runs 32 checker threads there, `bun check` 64).
 - tsrs is 3.87x to 6.67x faster than tsgo at the same thread counts (the "same threads" column of the source table).
-- Across the ten projects of the median-of-3 run on this machine type
-  ([`bench/results/2026-10-07-bd86c6d7a6ba.md`](bench/results/2026-10-07-bd86c6d7a6ba.md), default settings), tsrs is
-  faster than `bun check` on all of them: 1.29x to 2.38x on nine, and on mui-docs `bun check` takes 40.53 s and
-  reports 23 errors where tsgo and tsrs report none. Peak memory is mixed. tsrs uses 1.18x to 1.90x of `bun check`'s on
-  cal-diy, formbricks-web, supabase-studio and t3code-server, is level on vscode and webpack (1.00x, 1.01x), and uses
-  less on the other four.
+- At each tool's default across the ten projects
+  ([`bench/results/2026-10-07-bd86c6d7a6ba.md`](bench/results/2026-10-07-bd86c6d7a6ba.md), median of 3), tsrs is
+  faster than `bun check` on all of them: 1.29x to 2.38x on nine, and 48.37x on mui-docs, where `bun check` took
+  40.53 s and 18.24 GiB and reported 23 errors against none from tsgo and tsrs (do not read that row as a speed
+  comparison). Peak memory is mixed. tsrs uses less than `bun check` on xstate-main (0.58x), Compiler (0.34x) and
+  Compiler-Unions (0.35x), about the same on vscode and webpack (1.00x, 1.01x), and more on cal-diy (1.36x),
+  formbricks-web (1.43x), supabase-studio (1.18x) and t3code-server (1.90x). mui-docs is 0.12x, on the row above.
 - `--threads` limits all of `bun check`'s threads, while `--checkers` limits only the checker threads of tsgo and tsrs
   (parsing still uses every core), so at small counts `bun check` is held back harder.
 
