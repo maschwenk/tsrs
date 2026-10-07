@@ -175,6 +175,33 @@ jobs:
       - name: Source checks
         run: python3 tools/lint/source.py --self-test && python3 tools/lint/source.py
 
+  # tools/ci/skip_marker.py: a pull request that changes code must not carry a CI-skip marker in its title, body or
+  # commit subjects, because `gh pr merge --squash` copies them into the commit message and the commit then lands on
+  # main without CI and without a bench run (bench/README.md "CI"). Notes-only pull requests carry it on purpose.
+  skip-marker:
+    if: github.event_name == 'pull_request'
+    runs-on: depot-ubuntu-24.04-4
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0 # the base..head subjects and the base...head diff
+          persist-credentials: false
+
+      - name: Write the pull request's title and body
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          printf '%s' "$TITLE" > /tmp/pr-title.txt
+          printf '%s' "$BODY" > /tmp/pr-body.txt
+
+      - name: Skip marker
+        run: >-
+          python3 tools/ci/skip_marker.py --self-test && python3 tools/ci/skip_marker.py
+          --title-file /tmp/pr-title.txt --body-file /tmp/pr-body.txt
+          --base ${{ github.event.pull_request.base.sha }} --head ${{ github.event.pull_request.head.sha }}
+
   # tools/gen-check.sh: re-runs the code generators and fails if a generated file differs from its generator's output
   # (docs/RUST.md, "Generated-code freshness check").
   generated-code:
