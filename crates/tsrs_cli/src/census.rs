@@ -164,12 +164,11 @@ fn verify(program: &'static Program) {
             if let Some(n) = flow.node.get() {
                 freed.check(n.addr(), &|| format!("node of flow node {:?} in {}", flow.flags.get(), file.file_name()));
             }
-            let mut list = flow.antecedents();
-            while let Some(l) = list {
-                freed.check(l.addr(), &|| format!("antecedent list of {:?} in {}", flow.flags.get(), file.file_name()));
-                flow_work.push(l.flow);
-                list = l.next.get();
+            let antecedents = flow.antecedents();
+            if !antecedents.is_empty() {
+                freed.check(antecedents.as_ptr() as usize, &|| format!("antecedents of {:?} in {}", flow.flags.get(), file.file_name()));
             }
+            flow_work.extend(antecedents.iter().copied());
         }
         while let Some(symbol) = pending_symbols.pop() {
             if !seen_symbols.insert(symbol) {
@@ -186,7 +185,7 @@ fn verify(program: &'static Program) {
         }
     }
     eprintln!(
-        "census verify (recycling): {} program references checked (nodes, parents, JSDoc, diagnostics, flow nodes, flow lists, declarations), {} to freed or rewound blocks{}",
+        "census verify (recycling): {} program references checked (nodes, parents, JSDoc, diagnostics, flow nodes, flow edges, declarations), {} to freed or rewound blocks{}",
         freed.checked,
         freed.freed,
         if freed.examples.is_empty() { String::new() } else { format!(" (e.g. {})", freed.examples.join("; ")) }
