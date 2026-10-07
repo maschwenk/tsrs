@@ -38,6 +38,11 @@ pub enum LeafMode {
 static REGIONS_ON: AtomicBool = AtomicBool::new(false);
 static STATS: AtomicBool = AtomicBool::new(false);
 
+thread_local! {
+    /// The host is parsing a root file of the program (`parse_task`).
+    static ROOT_PARSE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
 /// File regions by file. Filled by the parse workers, read by the binding ones, emptied of leaves by the checkers.
 static REGIONS: LazyLock<Mutex<FxHashMap<P<SourceFile>, Region>>> = LazyLock::new(Default::default);
 
@@ -87,10 +92,27 @@ fn stats() -> bool {
     STATS.load(Ordering::Relaxed)
 }
 
-/// Whether a file of this name and kind is parsed into a region of its own: only files that can be leaves.
+/// Runs `parse` (the host's `get_source_file` for a task of the loader) knowing whether the task is a root file of the
+/// program (`root`, its include reason): only a file parsed for one can be a leaf, as a file parsed for an import or a
+/// reference has a referrer, so only it gets a region (`wants_region`). In a monorepo app most files come from other
+/// packages through imports (cal-diy: 2,643 of 3,550 files), and their regions would cost and free nothing.
+pub(crate) fn parse_task<T>(root: bool, parse: impl FnOnce() -> T) -> T {
+    // Relaxed: see `enable`.
+    if !root || !REGIONS_ON.load(Ordering::Relaxed) {
+        return parse();
+    }
+    let saved = ROOT_PARSE.replace(true);
+    let file = parse();
+    ROOT_PARSE.set(saved);
+    file
+}
+
+/// Whether a file of this name and kind is parsed into a region of its own: only files that can be leaves, TypeScript
+/// files (not declaration files) parsed for a root file of the program (`parse_task`).
 pub(crate) fn wants_region(file_name: &str, script_kind: ScriptKind) -> bool {
     // Relaxed: see `enable`.
     REGIONS_ON.load(Ordering::Relaxed)
+        && ROOT_PARSE.get()
         && matches!(script_kind, ScriptKind::TS | ScriptKind::TSX)
         && !tsrs_core::tspath::is_declaration_file_name(file_name)
 }

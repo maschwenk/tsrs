@@ -655,9 +655,13 @@ impl filesParser {
             && loader.opts.config.resolved_project_reference_paths().is_empty()
             && !loader.opts.config.compiler_options().unwrap().lib_replacement.is_true();
         loader.files_parser.speculated = true;
-        let jobs: Vec<(TaskId, Arc<str>, Path, bool)> = to_parse
+        // The last flag: a root file of the program (fileregions.rs `parse_task`).
+        let jobs: Vec<(TaskId, Arc<str>, Path, bool, bool)> = to_parse
             .into_iter()
-            .map(|t| (t, Arc::clone(&loader.tasks[t].normalized_file_path), loader.tasks[t].path.clone(), loader.tasks[t].lib_file.is_some()))
+            .map(|t| {
+                let task = &loader.tasks[t];
+                (t, Arc::clone(&task.normalized_file_path), task.path.clone(), task.lib_file.is_some(), task.include_reason.is_some_and(|r| r.is_root_file()))
+            })
             .collect();
         let ctx = loader.prefetch_context();
         let spec = speculation { ctx: &ctx, claimed: tsrs_core::collections::SyncSet::default(), results: std::sync::Mutex::new(Vec::new()) };
@@ -670,7 +674,7 @@ impl filesParser {
                 rayon::scope(|scope| {
                     let spec = &spec;
                     jobs.into_par_iter()
-                        .map(|(t, file_name, path, is_lib)| {
+                        .map(|(t, file_name, path, is_lib, is_root)| {
                             use tsrs_core::festats::{self, Cat};
                             let job_start = festats::enabled().then(std::time::Instant::now);
                             let file_name: &str = &file_name;
@@ -679,7 +683,9 @@ impl filesParser {
                             } else {
                                 festats::timed(Cat::Meta, || source_file_meta_data(opts, resolver, project_references, file_name))
                             };
-                            let file = host.get_source_file(parse_options_for(host, project_references, file_name, &path, &metadata));
+                            let file = crate::fileregions::parse_task(is_root, || {
+                                host.get_source_file(parse_options_for(host, project_references, file_name, &path, &metadata))
+                            });
                             // Bind here too: the round is bound by file system calls, and the checkers would bind every
                             // file on the same pool later (binding depends only on the file).
                             festats::timed(Cat::Bind, || file.map(crate::fileregions::bind));
