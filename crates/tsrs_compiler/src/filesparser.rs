@@ -67,9 +67,16 @@ pub(crate) struct parseTaskLoaded {
 
 impl parseTask {
     pub(crate) fn new(normalized_file_path: impl Into<std::sync::Arc<str>>) -> parseTask {
+        parseTask::with_path(normalized_file_path, Path::default())
+    }
+
+    /// A task whose path is known when it is created. The sub tasks (one per import edge, vscode: 110k in the
+    /// sequential load) are made with it: an empty `Path` placeholder is a clone of the one static empty `Arc<str>`,
+    /// and that refcount update and the placeholder's drop waited for the loop's stores (notes/perf-serial-load.md).
+    pub(crate) fn with_path(normalized_file_path: impl Into<std::sync::Arc<str>>, path: Path) -> parseTask {
         parseTask {
             normalized_file_path: normalized_file_path.into(),
-            path: Path::default(),
+            path,
             file: None,
             lib_file: None,
             redirected_parse_task: None,
@@ -326,7 +333,9 @@ pub(crate) struct TasksByCasing(Vec<(std::sync::Arc<str>, TaskId)>);
 
 impl TasksByCasing {
     pub(crate) fn get_key_value(&self, casing: &str) -> Option<(&std::sync::Arc<str>, TaskId)> {
-        self.0.iter().find(|(name, _)| &**name == casing).map(|(name, task)| (name, *task))
+        // The tasks of a file name share one string (`add_sub_task_normalized`): the address answers without reading it.
+        let same = |name: &str| (name.as_ptr() == casing.as_ptr() && name.len() == casing.len()) || name == casing;
+        self.0.iter().find(|(name, _)| same(name)).map(|(name, task)| (name, *task))
     }
     fn get(&self, casing: &str) -> Option<TaskId> {
         self.get_key_value(casing).map(|(_, task)| task)
@@ -545,10 +554,11 @@ impl filesParser {
         let queuedTask { task, loaded, data, depth } = item;
         let mut start_subtasks = false;
         if loaded {
-            let casing = Arc::clone(&loader.tasks[task].normalized_file_path);
-            if let Some(existing_task) = loader.files_parser.datas[data].tasks.get(&casing) {
+            // The name is cloned only when it is new: nearly every queued task (vscode: 110k) names a known one.
+            if let Some(existing_task) = loader.files_parser.datas[data].tasks.get(&loader.tasks[task].normalized_file_path) {
                 loader.tasks[task].loaded_task = Some(existing_task);
             } else {
+                let casing = Arc::clone(&loader.tasks[task].normalized_file_path);
                 loader.files_parser.datas[data].tasks.insert(casing, task);
                 // This is new task for file name - so load subtasks if there was loading for any other casing
                 start_subtasks = loader.files_parser.datas[data].started_sub_tasks;

@@ -959,8 +959,7 @@ impl fileLoader {
     // Appends a sub task the prefetch prepared (`prepare_sub_task`). A path the prefetch did not know may have got a task
     // from an earlier file of the round: share its strings then, as `add_sub_task_normalized` does.
     pub(crate) fn add_prepared_sub_task(&mut self, t: TaskId, prepared: preparedSubTask) {
-        let mut sub_task = parseTask::new(prepared.normalized_file_path);
-        sub_task.path = prepared.path;
+        let mut sub_task = parseTask::with_path(prepared.normalized_file_path, prepared.path);
         sub_task.data_id = prepared.data_id;
         if sub_task.data_id == crate::filesparser::NO_DATA {
             if let Some((known_path, &data)) = self.files_parser.task_data_by_path.get_key_value(&sub_task.path) {
@@ -1001,10 +1000,9 @@ impl fileLoader {
             data_id = data as u32;
         }
         let mut sub_task = match shared_name {
-            Some(name) => parseTask::new(name),
-            None => parseTask::new(normalized_file_path),
+            Some(name) => parseTask::with_path(name, path),
+            None => parseTask::with_path(normalized_file_path, path),
         };
-        sub_task.path = path;
         sub_task.data_id = data_id;
         sub_task.lib_file = lib_file;
         sub_task.increase_depth = ref_.increase_depth;
