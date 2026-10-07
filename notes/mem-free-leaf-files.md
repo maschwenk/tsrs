@@ -3,9 +3,10 @@
 The one exact, double-digit lever from the Bun study (notes/bun-check-memory.md): Bun's `bun check` marks a module
 `is_leaf` when no file refers to it and it adds nothing globally visible, and frees its tree and binder output at the
 end of the task that checked it (`free_tree`). tsrs never freed any of the front end. This change does the same for
-the CLI's `--noEmit` check, for the files whose path predicts a leaf (tests, specs, stories, mocks). On vscode that is
-2,289 of its 2,337 leaves, 321 MB of parse and bind output; the peak goes down 10-11% on Linux at 16 and 32 checkers
-and 12-14% on macOS at 4 and 16, with byte-identical output and wall time within 0-1.5% of main.
+the CLI's `--noEmit` check, for the files whose path predicts a leaf (tests, specs, stories, mocks), by default only
+when the program gets at most 16 checkers. On vscode that is 2,289 of its 2,337 leaves, 321 MB of parse and bind
+output; the peak goes down 11% on Linux at 16 checkers for 1.6-2% more wall time, and 12-14% on macOS at 4 and 16, with
+byte-identical output. At 32 checkers it costs 2.5-5% wall time, so it is off there unless asked for.
 
 ## Mechanism
 
@@ -41,6 +42,10 @@ and 12-14% on macOS at 4 and 16, with byte-identical output and wall time within
   formed 924 runs; with 16 KiB pages the shared pages were a tenth of the leaves' bytes) and cuts the system calls from
   one per chunk to about one per run. A retired range is never handed out again, so no later object takes the address
   of a freed one that an address-keyed cache may still name.
+- **Default: at most 16 checkers** (`MAX_DEFAULT_CHECKERS`). The CLI turns file regions on only when the program can
+  get at most 16 checkers (`checker_count_upper_bound`: `--checkers`, one when single-threaded, else the machine's
+  default before the file-count cap: half the threads, so machines up to 33 threads). Above that the measured cost was
+  2.5-5% wall time on vscode (below). `TSRS_FREE_LEAVES=1` (and `keep`, `all`) turns it on at any count.
 - **Platforms.** Only with compressed pointers on unix, where retiring gives pages back and never reuses the range.
   Elsewhere (`plain-ptrs`, non-unix) a retired region's memory stays mapped with its old contents while the heap
   buffers its values owned are freed and reused, so a stale read would see a live object, and nothing is saved: file
@@ -137,10 +142,10 @@ Leaves, predicted placement (`TSRS_FREE_LEAVES=stats`, 4 checkers, macOS; bytes 
 The every-file placement frees 2,337 / 1,136 / 727 / 518 / 206 / 129 leaves (vscode: 319 MB of 794 MB in 9,399 regions).
 
 Linux, 64-vCPU Depot runner, `--noEmit --incremental false --extendedDiagnostics`, main 249561e (the branch merged
-with it), median of 5 interleaved runs (`depot ci run` 230c9j763w of .depot/workflows/perf-probe.yml with a probe
-script that is not committed):
+with it), freeing at every checker count (as before the 16-checker default), median of 5 interleaved runs (`depot ci
+run` 230c9j763w of .depot/workflows/perf-probe.yml with a probe script that is not committed):
 
-| project | checkers | maxrss main | predicted (default) | every file (`all`) | wall main | predicted | every file | Check time main | predicted | every file |
+| project | checkers | maxrss main | predicted | every file (`all`) | wall main | predicted | every file | Check time main | predicted | every file |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | vscode | 32 | 2,861 MB | 2,564 MB (-10.4%) | 2,595 MB (-9.3%) | 0.68 s | 0.68 s | 0.70 s | 0.482 s | 0.479 s | 0.485 s |
 | vscode | 16 | 2,582 MB | 2,287 MB (-11.4%) | 2,323 MB (-10.0%) | 0.97 s | 0.98 s | 0.99 s | 0.775 s | 0.782 s | 0.789 s |
@@ -162,12 +167,32 @@ t3code-server; wall time median, mean in brackets):
 | supabase-studio | 32 | 0.65 s | 0.66 s | +1.5% (+1.4%) | -0.7% |
 | t3code-server | 32 | 1.65 s | 1.60 s | -3.0% (-1.1%) | -2.1% |
 
-Where the remaining time goes (0rnsp0p9cv, means of 12 / 10 runs against main): formbricks-web at 32 checkers is
-+1.7% with file regions off (`TSRS_FREE_LEAVES=0`, the same instructions as main: a different binary's layout or the
-run order), +2.1% with the regions and nothing freed (`keep`), +2.4% freeing; giving pages back in 64 MiB or 4 MiB
-batches or not at all changes nothing measurable. vscode at 16: off -0.1%, keep +1.2%, on +1.1%. So what is left is
-the predicted files' own trees in 4 KiB pages, about 1% on vscode; madvise(MADV_COLLAPSE) of the regions was not
-tried, as those trees are each read by one checker and a later discard would split the huge page again.
+After merging main again (#138-#141, main d94c544), vscode at 32 checkers no longer came out even. A pr-verify run (3
+runs) reported +5.5%; four probes of interleaved runs, both binaries built in the same job, settle it (always freeing,
+`TSRS_FREE_LEAVES=1`):
+
+| probe | checkers | runs | wall change, median (mean) | Check time change, mean | maxrss change |
+| --- | --- | --- | --- | --- | --- |
+| 818kt6d663 | 32 | 20 | +4.5% (+4.2%) | +5.4% | -10.3% |
+| 818kt6d663 | 16 | 20 | +1.6% (+1.7%) | +1.9% | -11.4% |
+| g8t4jk2q6s | 32 | 15 | +1.5% (+2.3%) | +2.8% | -10.2% |
+| 4q7p39slvf | 32 | 15 | +6.3% (+4.9%) | +5.5% | -10.5% |
+
+Decomposed at 32 checkers (means against main; g8t4jk2q6s and 4q7p39slvf): file regions off in the branch -0.7%;
+regions for the predicted files, nothing freed (`keep`) +1.3%; freed with the pages kept (a throwaway switch) +1.2% and
++3.1%; freed and given back +2.3% and +4.9%. Giving pages back in 64 MiB or 256 MiB batches instead of 16 MiB does not
+help (+4.9%, +4.5%; 256 MiB also gives back 110 MB less by the peak). So at 32 checkers both the predicted files' trees
+in 4 KiB pages and the TLB shootdowns of each `madvise` (which interrupt every core running a checker) cost about 1-3%,
+above the 1-2% bar; at 16 the total is 1.6-2.1%. Hence the default: on up to 16 checkers. The confirmation run
+(0p5njbn70r, default switch): 16 checkers, 20 runs, wall +2.1% (+2.0%), Check time +1.8% (+2.0%), maxrss -11.4%; 32
+checkers, 12 runs (off by default), wall +0.0% (-0.3%), maxrss +0.0%.
+
+Where the remaining time goes at 16 checkers and below (0rnsp0p9cv, means of 12 / 10 runs against main):
+formbricks-web at 32 checkers is +1.7% with file regions off (`TSRS_FREE_LEAVES=0`, the same instructions as main: a
+different binary's layout or the run order), +2.1% with the regions and nothing freed (`keep`), +2.4% freeing; giving
+pages back in 64 MiB or 4 MiB batches or not at all changes nothing measurable there. vscode at 16: off -0.1%, keep
++1.2%, on +1.1%. madvise(MADV_COLLAPSE) of the regions was not tried: the trees in them are each read by one checker,
+and a later discard would split the huge page again.
 
 For comparison, the every-file placement against main 1cbf079 (29kcl2x5zp, 5 runs, 32 checkers): vscode wall 0.68 ->
 0.74 s (+8.8%), maxrss -8.7%; formbricks-web +4.1% / -1.2%; supabase-studio +3.1% / -0.6%; t3code-server +2.5% /
@@ -201,7 +226,7 @@ Alloc-profile build, vscode, 4 checkers: arena requested 1,581.0 -> 1,580.6 MB (
 - Output: stdout byte-identical to main (`cmp`, `--pretty false`) on vscode (371 errors), webpack (840), xstate-main
   (0), cal-diy (136), formbricks-web (0), supabase-studio (9), t3code-server (6) at 1, 4 and 16 checkers: 21 runs with
   the default switch and 21 with `TSRS_ARENA_POISON=1 TSRS_FREE_LEAVES=stats`, all identical, no crash, for both
-  placements and again on the final head. On Linux at 32 checkers: predicted, poisoned and main identical for the five
+  placements and again on the final head (merged with main d94c544; at 1, 4 and 16 checkers the default frees). On Linux at 32 checkers: predicted, poisoned and main identical for the five
   application projects. vscode `--pretty true`, `--listFiles` and the `--extendedDiagnostics` counters (single-threaded)
   identical with poisoned freed leaves.
 - Conformance (`tsrs-test run --suite all`, 15,197 variants): 13,458 pass on main and the branch; with leaf freeing
@@ -220,6 +245,8 @@ Alloc-profile build, vscode, 4 checkers: arena requested 1,581.0 -> 1,580.6 MB (
 - Runs that emit (JavaScript or declarations), `--explainFiles`, `--incremental` / `composite`, `--build`, the
   language server, the native API and the test harnesses: the trees are read after the check, or programs are reused.
 - JavaScript, declaration and JSON files: never leaves. Builds without compressed pointers: off.
+- Programs with more than 16 checkers by default (the default on machines with more than 33 threads):
+  `TSRS_FREE_LEAVES=1` turns it on there.
 - Leaves whose paths the prediction misses (cal-diy: 145 of its 206 leaves, 29% of the leaves' nodes, but 5.6 MB in
   all): not freed. `TSRS_FREE_LEAVES=all` frees them at the every-file placement's time cost.
 - Files that re-export (barrel files) or that another file imports: by definition not leaves.
