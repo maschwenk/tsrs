@@ -212,12 +212,22 @@ of tsrs + tsrs-test 100 s, training run 15 s, profile merge < 1 s, final build 7
 13 s -> 10 min 4 s). The dependencies, the only part rust-cache can reuse, compile in ~3 s; the time is the
 workspace crates with one codegen unit and fat LTO, which change with every commit.
 
-Parallel layout (2026-10-07), expected from the per-project times of the 2026-10-06 run
-(`bench/results/2026-10-06-bd945842ada5.json`; sequential job 26 min 35 s, measurement 18 min 19 s): vscode 5.3 min,
-t3code-server 4.6, mui-docs 3.0, supabase-studio 2.8, formbricks-web 2.3, cal-diy 1.8, the other four under 35 s
-each. The critical path is the build job (about 7.5 min: instrumented build 4 min 21 s, training 27 s, final build
-2 min 21 s, plus setup), then the vscode job, then the merge: about 14 min. Runner minutes go up by one start-up and
-cache restore per project, about a minute each. (To be replaced by the measured split of the first parallel runs.)
+Parallel layout, first run on `main` (2026-10-07, commit `ad65e977b0d7`, all caches warm): 13 min 51 s from the push
+to the results commit, down from 26 min 35 s for the last sequential run (`bd945842ada5`, measurement 18 min 19 s).
+
+| job | duration |
+| --- | ---: |
+| `build`: setup and cache restore | 27 s |
+| `build`: instrumented build | 4 min 39 s |
+| `build`: training run | 26 s |
+| `build`: final build, package, upload | 2 min 37 s |
+| `measure (vscode)`, the longest; measurement 295 s | 5 min 10 s |
+| `merge` | 7 s |
+
+The other measurements, in `partials` of the result: t3code-server 254 s, mui-docs 157 s, supabase-studio 143 s,
+formbricks-web 122 s, cal-diy 91 s, webpack 34 s, xstate-main 15 s, Compiler-Unions 8 s, Compiler 5 s. All ten jobs
+landed on the same CPU model. Each measuring job adds a runner start-up and cache restore (about 15 s for vscode) to
+the runner minutes.
 
 ## Head-to-head on a wide machine
 
