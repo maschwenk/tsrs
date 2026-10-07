@@ -2160,12 +2160,15 @@ impl ReferenceInstantiations {
         Some(crate::heapcensus::HeapStat::table(table.len(), table.capacity(), std::mem::size_of::<P<Type>>()))
     }
 
+    /// Hashes the argument handles, not their type ids: a rehash of a growing table then reads each reference and its
+    /// argument list but not every argument type (DRAM misses at 32 checkers, notes/perf-memory-traffic-32.md). The
+    /// table is never iterated, so the hash only places slots.
     fn hash(type_arguments: &[P<Type>]) -> u64 {
-        use std::hash::Hasher;
+        use std::hash::{Hash, Hasher};
         let mut h = rustc_hash::FxHasher::default();
         h.write_usize(type_arguments.len());
         for t in type_arguments {
-            h.write_u32(t.id.0);
+            t.hash(&mut h);
         }
         h.finish()
     }

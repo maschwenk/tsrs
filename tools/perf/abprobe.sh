@@ -18,7 +18,7 @@ python3 tools/perf/abprobe.py --base "$PROBE_OUT/../tsrs-base" --new "$PROBE_OUT
 fi
 
 # Program-thread profile of the new binary built with frame pointers (FP_PROFILE=0 skips it).
-if [ "${FP_PROFILE:-1}" = 1 ] && [ -n "${PERF:-}" ]; then
+if [ "${FP_PROFILE:-0}" = 1 ] && [ -n "${PERF:-}" ]; then
   RUSTFLAGS="-C force-frame-pointers=yes" cargo build --release --locked -p tsrs_cli --target-dir target/fp 2>&1 | tail -2
   proj="$BENCH_WORK/solutions/vscode"
   for rep in 1 2 3; do

@@ -115,7 +115,7 @@ def main():
             cwd, args = cmd(cfg, name, b, work, [])
             perf = os.environ.get("PERF") or shutil.which("perf")
             if perf:
-                r = subprocess.run([perf, "stat", "-x,", "-e", "instructions:u,instructions:k,page-faults,task-clock"] + args,
+                r = subprocess.run([perf, "stat", "-x,", "-e", "cycles:u,instructions:u,instructions:k,page-faults,task-clock"] + args,
                                    cwd=cwd, capture_output=True, text=True)
                 stat = [l.split(",")[0] + " " + l.split(",")[2] for l in r.stderr.splitlines() if l.count(",") > 3]
                 summary.append(f"- perf stat {name} {k}: {'; '.join(stat)}")
