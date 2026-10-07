@@ -23,6 +23,8 @@
 // granularity, a checker visiting some statements of a file without the others. Only declaration files are split:
 // they have no function bodies, so no control flow, no unreachable-code or unused-identifier checks, and nothing
 // later passes need from the checker that checked them (they are not emitted, and have no declaration diagnostics).
+// Default library files are not split unless forced (`plan_splits`): lib.dom.d.ts is never a pass's tail, and splitting it
+// cost webpack and next-root 3-4% of wall time at 16-32 checkers.
 //
 // `TSRS_SPLIT_FILES` (read once): unset = on in the stealing pass; `0`/`off`; a comma list of `shadow` (the pieces run
 // as usual, then the owner also checks the other checkers' pieces itself and reports the file as one checker finds
@@ -233,9 +235,8 @@ impl SplitFile {
             by_other.sort_unstable();
             let mut found = Vec::new();
             for k in by_other {
-                let before: rustc_hash::FxHashSet<P<Diagnostic>> = checker.file_diagnostics_so_far(self.file).into_iter().collect();
-                let (after, _) = checker.check_source_file_piece(ctx, self.file, self.pieces[k].clone());
-                found.extend(after.into_iter().filter(|d| !before.contains(d)));
+                let (added, _) = checker.check_source_file_piece(ctx, self.file, self.pieces[k].clone());
+                found.extend(added);
             }
             *self.owner_found.lock().unwrap() = found;
             checker.add_piece_diagnostics(self.file, &[], &[]);
