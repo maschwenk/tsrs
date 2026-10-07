@@ -1,9 +1,9 @@
 # fix-history-dependent-diagnostics: TS2320 on a merged interface depended on which files shared a checker
 
-PR 163 (split default library files when they weigh most of a share) ran pr-verify, and on nuxt at 32 checkers one
-run of three printed three errors instead of four: the TS2320 at `packages/nuxt/src/app/types/augments.ts(8,13)`
-(`Interface 'ImportMeta' cannot simultaneously extend types 'NitroImportMeta' and 'NitroStaticBuildFlags'`) was
-missing. On this Mac (18 cores, `--checkers 32`) PR 163's binary lost it in 1 of 20 runs. The cause is not the split
+PR 163 (split default library files when they weigh most of a share) ran pr-verify, and on nuxt at 32 checkers one run
+of three printed three errors instead of four: the TS2320 at `packages/nuxt/src/app/types/augments.ts(8,13)` (`Interface
+'ImportMeta' cannot simultaneously extend types 'NitroImportMeta' and 'NitroStaticBuildFlags'`) was missing. On this Mac
+(18 cores, `--checkers 32`) PR 163's binary lost it in 1 of 20 runs and main's in 1 of 60. The cause is not the split
 check and not the identity relation: TypeScript runs the merged-interface checks once per checker, at whichever
 declaration that checker visits first. This note shows it, fixes it in the default mode, and keeps Go's behaviour under
 `--checkerAssignment go`.
@@ -36,8 +36,10 @@ Evidence:
 - tsgo itself (npm 7.1.0-dev.20260930.4) prints one TS2320 (augments.ts) at `--checkers 1` and `2`, two at `4` and `32`.
 - A debug print in `check_interface_declaration` (not landed) on PR 163's binary, in the failing run (run 51 of 60):
   one checker checked `builder-env.ts` and then `augments.ts`, and skipped the second because the link was set. In a
-  passing run the two files were on two checkers. Stealing moves whole files between checkers, and the split pieces of
-  PR 163 changed how much each checker had left, so the two files sometimes ended up together.
+  passing run the two files were on two checkers. Stealing moves whole files between checkers, so the two files
+  sometimes end up together. PR 163 is not needed for that: nuxt sets `skipLibCheck`, so no library file is checked
+  and nothing is split there (`TSRS_SPLIT_FILES=stats` prints nothing), and main's binary (4a00ada) lost the error in
+  1 of 60 runs on the Mac too.
 - Whole-file assignment shows it without stealing or splitting: `TSRS_SPLIT_FILES=0 --checkerAssignment random:<seed>`
   at 2 checkers lost the builder-env.ts error for seed 2 and the augments.ts error for seed 8 (8 seeds). At 32 checkers
   the 8 seeds tried kept both.
