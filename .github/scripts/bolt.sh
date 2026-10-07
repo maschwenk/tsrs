@@ -35,9 +35,11 @@ done
 check_exit() { # $1 = exit status, $2 = what ran; 0/1/2 are tsc exit codes, anything else is a crash
   if [ "$1" -gt 2 ]; then echo "::error::$2 exited with $1"; exit 1; fi
 }
+# MIMALLOC_SHOW_STATS: tsrs then ends with `exit`, not `_exit`, so BOLT's exit handler writes the profile
+# (pgo-train.sh has the details).
 for p in xstate-main webpack; do
-  (cd "$bench/solutions/$p" && "$work/tsrs.inst" -p . --noEmit --incremental false --pretty false > /dev/null) \
-    && status=0 || status=$?
+  (cd "$bench/solutions/$p" && MIMALLOC_SHOW_STATS=1 "$work/tsrs.inst" -p . --noEmit --incremental false --pretty false \
+    > /dev/null 2>> "$work/tsrs-train-stderr.log") && status=0 || status=$?
   check_exit "$status" "instrumented tsrs -p $p"
 done
 TSRS_TEST_RESULTS="$work/train-test-results" "$work/tsrs-test.inst" run --suite all --timeout 300 > /dev/null \
@@ -48,7 +50,7 @@ TSRS_FOURSLASH_RESULTS="$work/train-fourslash-results" "$work/tsrs-fourslash.ins
 check_exit "$status" "instrumented tsrs-fourslash run"
 
 for b in tsrs tsrs-test tsrs-fourslash; do
-  compgen -G "$work/$b.fdata.d/prof*" > /dev/null || { echo "::error::no BOLT profile from $b"; exit 1; }
+  [ -n "$(find "$work/$b.fdata.d" -name 'prof*' -size +0)" ] || { echo "::error::no BOLT profile from $b"; exit 1; }
   merge-fdata "$work/$b.fdata.d"/prof* > "$work/$b.fdata"
   llvm-bolt "$dist/$b" -o "$work/$b.bolt" -data="$work/$b.fdata" "${flags[@]}" "${arch_flags[@]}" > "$work/$b.bolt.log" 2>&1 \
     || { cat "$work/$b.bolt.log"; exit 1; }
