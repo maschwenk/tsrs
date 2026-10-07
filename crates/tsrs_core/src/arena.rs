@@ -1203,9 +1203,11 @@ mod retired {
         /// Retired since the last batch, not given back yet.
         pending: Vec<(usize, usize)>,
         pending_bytes: usize,
+        /// Wholly retired pages not given back yet (`min_span`).
+        held: Vec<(usize, usize)>,
     }
 
-    static STATE: Mutex<State> = Mutex::new(State { spans: BTreeMap::new(), pending: Vec::new(), pending_bytes: 0 });
+    static STATE: Mutex<State> = Mutex::new(State { spans: BTreeMap::new(), pending: Vec::new(), pending_bytes: 0, held: Vec::new() });
     /// `stats`: calls that gave pages back, and their bytes.
     static CALLS: AtomicUsize = AtomicUsize::new(0);
     static BYTES: AtomicUsize = AtomicUsize::new(0);
@@ -1222,8 +1224,33 @@ mod retired {
                 return;
             }
             let pages = take_pages(&mut s);
-            let calls = spans_of(&s, &pages);
-            (pages, calls)
+            let min = min_span();
+            if min == 0 {
+                let calls = spans_of(&s, &pages);
+                (pages, calls)
+            } else {
+                let mut held = std::mem::take(&mut s.held);
+                held.extend(pages);
+                held.sort_unstable();
+                // Held pages by span: a span goes back once its pages not given back yet reach `min`.
+                let mut by_span: Vec<((usize, usize), usize)> = Vec::new();
+                for &(first, last) in &held {
+                    let Some((&lo, &hi)) = s.spans.range(..=first).next_back() else { continue };
+                    match by_span.last_mut() {
+                        Some((span, bytes)) if *span == (lo, hi) => *bytes += last - first,
+                        _ => by_span.push(((lo, hi), last - first)),
+                    }
+                }
+                let page = crate::reserve::page_size();
+                let go: Vec<(usize, usize)> = by_span.iter().filter(|&&(_, b)| b >= min).map(|&((lo, hi), _)| (lo, hi)).collect();
+                let (gone, kept): (Vec<_>, Vec<_>) = held.into_iter().partition(|&(first, _)| {
+                    let i = go.partition_point(|&(lo, _)| lo <= first);
+                    i > 0 && go[i - 1].1 > first
+                });
+                s.held = kept;
+                let calls = go.iter().map(|&(lo, hi)| (lo.next_multiple_of(page), hi & !(page - 1))).collect();
+                (gone, calls)
+            }
         };
         give_back(&pages, &calls);
     }
@@ -1231,11 +1258,25 @@ mod retired {
     pub(super) fn flush() {
         let (pages, calls) = {
             let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
-            let pages = take_pages(&mut s);
+            let mut pages = take_pages(&mut s);
+            if std::env::var_os("TSRS_LEAF_LOG").is_some() {
+                eprintln!("held at flush {} MB, new at flush {} MB", s.held.iter().map(|&(a, b)| b - a).sum::<usize>() >> 20, pages.iter().map(|&(a, b)| b - a).sum::<usize>() >> 20);
+            }
+            pages.append(&mut s.held);
+            pages.sort_unstable();
             let calls = spans_of(&s, &pages);
             (pages, calls)
         };
+        if std::env::var_os("TSRS_LEAF_LOG").is_some() {
+            eprintln!("flush {} calls", calls.len());
+        }
         give_back(&pages, &calls);
+    }
+
+    /// `TSRS_LEAF_MIN_KIB` (throwaway): during the pass a span goes back only once this much of it is held.
+    fn min_span() -> usize {
+        static M: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+        *M.get_or_init(|| std::env::var("TSRS_LEAF_MIN_KIB").ok().and_then(|v| v.parse::<usize>().ok()).unwrap_or(0) << 10)
     }
 
     /// The whole pages of each span that `pages` (from `take_pages`) lie in: a span's pages are all retired, and the
@@ -1334,7 +1375,7 @@ mod retired {
         #[test]
         fn neighbours_share_their_boundary_page() {
             let p = crate::reserve::page_size();
-            let mut s = State { spans: BTreeMap::new(), pending: Vec::new(), pending_bytes: 0 };
+            let mut s = State { spans: BTreeMap::new(), pending: Vec::new(), pending_bytes: 0, held: Vec::new() };
             let a = (10 * p + 100, 12 * p + 50);
             let b = (12 * p + 50, 14 * p);
             assert_eq!(batch(&mut s, &[a]), [(11 * p, 12 * p)]);
@@ -1343,7 +1384,7 @@ mod retired {
             // Their slab: only what is outside them.
             assert_eq!(batch(&mut s, &[(8 * p, 16 * p)]), [(8 * p, 11 * p), (14 * p, 16 * p)]);
             // In one batch, in any order: the same pages, merged.
-            let mut t = State { spans: BTreeMap::new(), pending: Vec::new(), pending_bytes: 0 };
+            let mut t = State { spans: BTreeMap::new(), pending: Vec::new(), pending_bytes: 0, held: Vec::new() };
             assert_eq!(batch(&mut t, &[b, a]), [(11 * p, 14 * p)]);
             // A chunk not touching them: its own whole pages only.
             assert_eq!(batch(&mut t, &[(20 * p + 1, 23 * p - 1)]), [(21 * p, 22 * p)]);
@@ -1353,7 +1394,7 @@ mod retired {
         #[test]
         fn a_batch_gives_back_whole_spans() {
             let p = crate::reserve::page_size();
-            let mut s = State { spans: BTreeMap::new(), pending: Vec::new(), pending_bytes: 0 };
+            let mut s = State { spans: BTreeMap::new(), pending: Vec::new(), pending_bytes: 0, held: Vec::new() };
             assert_eq!(batch(&mut s, &[(10 * p, 12 * p)]), [(10 * p, 12 * p)]);
             let pages = batch(&mut s, &[(8 * p, 10 * p), (12 * p, 14 * p), (30 * p, 31 * p)]);
             assert_eq!(pages, [(8 * p, 10 * p), (12 * p, 14 * p), (30 * p, 31 * p)]);
@@ -1395,6 +1436,11 @@ mod retired {
     }
 
     fn discard_all(calls: &[(usize, usize)]) {
+        if std::env::var_os("TSRS_LEAF_LOG").is_some() {
+            for &(first, last) in calls {
+                eprintln!("giveback {}", last - first);
+            }
+        }
         for &(first, last) in calls {
             // SAFETY: whole pages inside retired spans: chunks and slabs nothing uses any more, never handed out
             // again; `first` is page aligned (and so is `last - first`).

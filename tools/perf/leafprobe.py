@@ -11,6 +11,8 @@ top symbols. Everything goes to $PROBE_OUT; summary.md has the tables.
     tools/perf/leafprobe.py --tsrs target/release/tsrs --work bench/.work --out probe-out \
         --projects vscode,formbricks-web --checkers 1,4 --reps 5 \
         --variant off:TSRS_FREE_LEAVES=0 --variant on:TSRS_FREE_LEAVES=1 [--profile vscode:1] [--no-strace]
+
+A variant's `BIN=<path>` runs another binary (tools/perf/leafab.sh: the base build next to the new one).
 """
 
 import argparse
@@ -106,6 +108,11 @@ def main() -> None:
         name, _, kvs = v.partition(":")
         env = dict(kv.split("=", 1) for kv in kvs.split(";") if kv)
         variants.append((name, env))
+
+    def with_bin(cmd: list[str], venv: dict) -> tuple[list[str], dict]:
+        venv = dict(venv)
+        binary = venv.pop("BIN", None)
+        return ([binary] + cmd[1:] if binary else cmd), venv
     cfg = json.loads((ROOT / "bench" / "projects.json").read_text())
     out = args.out
     (out / "runs").mkdir(parents=True, exist_ok=True)
@@ -129,7 +136,8 @@ def main() -> None:
             for rep in range(args.reps):
                 for vname, venv in variants:
                     o = out / "runs" / f"{name}-c{k}-{vname}-rep{rep}.txt"
-                    r = timed(cwd, cmd, dict(base_env, **venv), o)
+                    vcmd, venv_ = with_bin(cmd, venv)
+                    r = timed(cwd, vcmd, dict(base_env, **venv_), o)
                     r.update(project=name, checkers=k, variant=vname, rep=rep)
                     results.append(r)
                     print(f"{name} c{k} {vname:>10} rep{rep}: wall {r['wall']:.3f} user {r['user']:.2f} sys {r['sys']:.2f}"
@@ -142,6 +150,21 @@ def main() -> None:
         return statistics.median(xs) if xs else float("nan")
 
     lines = [f"# leaf probe\n\n`{machine['version']}`, {machine['nproc']} CPUs, THP {machine['thp']}\n"]
+    lines.append("| project | checkers | variant | wall s (median) | vs first | paired | min-max | user+sys s | peak GiB | vs first |")
+    lines.append("| --- | --- | --- | ---: | ---: | ---: | --- | ---: | ---: | ---: |")
+    for name in projects:
+        for k in checkers:
+            cell = [r for r in results if r["project"] == name and r["checkers"] == k]
+            base = {r["rep"]: r for r in cell if r["variant"] == variants[0][0]}
+            first = None
+            for vname, _ in variants:
+                rs = [r for r in cell if r["variant"] == vname]
+                w, rss, cpu = med([r["wall"] for r in rs]), med([r["maxrss_kib"] for r in rs]), med([r["user"] + r["sys"] for r in rs])
+                paired = med([r["wall"] / base[r["rep"]]["wall"] for r in rs if r["rep"] in base])
+                first = first or (w, rss)
+                lines.append(f"| {name} | {k} | {vname} | {w:.3f} | {100 * (w / first[0] - 1):+.1f}% | {100 * (paired - 1):+.1f}% | "
+                             f"{min(r['wall'] for r in rs):.3f}-{max(r['wall'] for r in rs):.3f} | {cpu:.2f} | {rss / 1048576:.3f} | {100 * (rss / first[1] - 1):+.1f}% |")
+    lines.append("")
     lines.append("| project | checkers | variant | wall s (median) | vs first | user s | sys s | peak GiB | vs first | minor faults | thp_fault_alloc | compact_stall | tlb_remote_flush | Parse s | Bind s | Check s | errors |")
     lines.append("| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |")
     for name in projects:
@@ -174,16 +197,17 @@ def main() -> None:
         for k in checkers:
             cwd, cmd = project_cmd(cfg, name, args.tsrs, args.work, k)
             for vname, venv in variants:
+                vcmd, venv = with_bin(cmd, venv)
                 env = dict(base_env, **venv)
                 tag = f"{name}-c{k}-{vname}"
                 if perf and not args.no_perf_stat:
                     ev = "page-faults,minor-faults,dTLB-load-misses,dTLB-store-misses,context-switches,cpu-migrations,cycles:u,cycles:k,instructions:u,instructions:k"
-                    res = subprocess.run([perf, "stat", "-r", "2", "-e", ev, "-x", ",", "-o", str(out / f"perfstat-{tag}.csv"), "--"] + cmd,
+                    res = subprocess.run([perf, "stat", "-r", "2", "-e", ev, "-x", ",", "-o", str(out / f"perfstat-{tag}.csv"), "--"] + vcmd,
                                          cwd=cwd, env=env, capture_output=True)
                     extras.append(f"### perf stat {tag}\n```\n{(out / f'perfstat-{tag}.csv').read_text() if (out / f'perfstat-{tag}.csv').exists() else res.stderr.decode()[-2000:]}\n```")
                 if shutil.which("strace") and not args.no_strace:
                     so = out / f"strace-{tag}.txt"
-                    subprocess.run(["strace", "-f", "-c", "-o", str(so), "--"] + cmd, cwd=cwd, env=env, capture_output=True)
+                    subprocess.run(["strace", "-f", "-c", "-o", str(so), "--"] + vcmd, cwd=cwd, env=env, capture_output=True)
                     if so.exists():
                         extras.append(f"### strace -f -c {tag}\n```\n{so.read_text()[:4000]}\n```")
     for spec in args.profile:
@@ -193,10 +217,11 @@ def main() -> None:
             break
         cwd, cmd = project_cmd(cfg, name, args.tsrs, args.work, k)
         for vname, venv in variants:
+            vcmd, venv = with_bin(cmd, venv)
             env = dict(base_env, **venv)
             tag = f"{name}-c{k}-{vname}"
             data = out / f"perf-{tag}.data"
-            subprocess.run([perf, "record", "-F", "999", "-g", "-o", str(data), "--"] + cmd, cwd=cwd, env=env, capture_output=True)
+            subprocess.run([perf, "record", "-F", "999", "-g", "-o", str(data), "--"] + vcmd, cwd=cwd, env=env, capture_output=True)
             for sort, what in [("dso", "dso"), ("sym", "sym")]:
                 rep = sh([perf, "report", "-i", str(data), "--no-children", "--sort", sort, "--stdio", "-g", "none", "--percent-limit", "0.3"])
                 (out / f"perf-{tag}-{what}.txt").write_text(rep)
