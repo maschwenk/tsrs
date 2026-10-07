@@ -169,6 +169,18 @@ impl Checker {
         Some(decl.as_source_file_p())
     }
 
+    // tsrs-only: the program's lookup turns the name into a path (normalized, a new string, lowercased where the file
+    // system ignores case) and hashes it, per import of every resolution; its tables do not change while checking.
+    fn get_source_file_for_resolved_module(&mut self, file_name: &'static str) -> Option<P<SourceFile>> {
+        let key = (file_name.as_ptr() as usize, file_name.len());
+        if let Some(&file) = self.resolved_module_source_files.get(&key) {
+            return file;
+        }
+        let file = self.program.get_source_file_for_resolved_module(file_name);
+        self.resolved_module_source_files.insert(key, file);
+        file
+    }
+
     // checker.go:15399
     pub(crate) fn resolve_external_module(&mut self, location: Option<P<Node>>, module_reference: &str, module_not_found_error: Option<&'static Message>, error_node: Option<P<Node>>, is_for_augmentation: bool, import_attributes_type: Option<P<Type>>) -> Option<P<Symbol>> {
         if error_node.is_some() && module_reference.starts_with("@types/") {
@@ -243,7 +255,7 @@ impl Checker {
 
         let mut source_file: Option<P<SourceFile>> = None;
         if is_resolved && (resolution_diagnostic.is_none() || std::ptr::eq(resolution_diagnostic.unwrap(), &raw const diagnostics::Module_0_was_resolved_to_1_but_jsx_is_not_set)) {
-            source_file = self.program.get_source_file_for_resolved_module(resolved_module.unwrap().resolved_file_name);
+            source_file = self.get_source_file_for_resolved_module(resolved_module.unwrap().resolved_file_name);
         }
 
         if let Some(source_file) = source_file {

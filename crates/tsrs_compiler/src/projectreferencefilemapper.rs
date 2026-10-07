@@ -146,26 +146,37 @@ impl projectReferenceFileMapper {
     }
 
     // projectreferencefilemapper.go:94
-    pub(crate) fn get_redirect_parsed_command_line_for_resolution(&self, file_name: &str, path: &Path) -> Option<P<ParsedCommandLine>> {
-        self.get_redirect_for_resolution(file_name, path).0
+    pub(crate) fn get_redirect_parsed_command_line_for_resolution(&self, _file_name: &str, path: &Path) -> Option<P<ParsedCommandLine>> {
+        self.redirect_reference(path).map(|reference| reference.resolved)
     }
 
     // projectreferencefilemapper.go:99
     pub(crate) fn get_redirect_for_resolution(&self, file_name: &str, path: &Path) -> (Option<P<ParsedCommandLine>>, String) {
+        match self.redirect_reference(path) {
+            Some(reference) => (Some(reference.resolved), reference.source.clone()),
+            None => (None, file_name.to_string()),
+        }
+    }
+
+    // The reference `get_redirect_for_resolution` answers from, without building its file name string: the checker
+    // asks for the compiler options of a file per import and per declaration (module format, emit syntax). A program
+    // without references has empty source and output maps and never stores into `realpath_dts_to_source` (see
+    // `projectReferenceFileMapperBuilder::has_no_references`), so it skips hashing the path and the shared map's lock.
+    fn redirect_reference(&self, path: &Path) -> Option<P<SourceOutputAndProjectReference>> {
+        if self.config.resolved_project_reference_paths().is_empty() {
+            return None;
+        }
         // Check if outputdts of source file from project reference
         if let Some(output) = self.get_project_reference_from_source(path) {
-            return (Some(output.resolved), output.source.clone());
+            return Some(output);
         }
 
         // Source file from project reference
         if let Some(result_from_dts) = self.get_project_reference_from_output_dts(path) {
-            return (Some(result_from_dts.resolved), result_from_dts.source.clone());
+            return Some(result_from_dts);
         }
 
-        if let Some(realpath_dts_to_source) = self.realpath_dts_to_source.load(path).flatten() {
-            return (Some(realpath_dts_to_source.resolved), realpath_dts_to_source.source.clone());
-        }
-        (None, file_name.to_string())
+        self.realpath_dts_to_source.load(path).flatten()
     }
 
     // projectreferencefilemapper.go:119
