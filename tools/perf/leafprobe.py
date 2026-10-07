@@ -12,7 +12,7 @@ top symbols. Everything goes to $PROBE_OUT; summary.md has the tables.
         --projects vscode,formbricks-web --checkers 1,4 --reps 5 \
         --variant off:TSRS_FREE_LEAVES=0 --variant on:TSRS_FREE_LEAVES=1 [--profile vscode:1] [--no-strace]
 
-A variant's `BIN=<path>` runs another binary (tools/perf/leafab.sh: the base build next to the new one).
+A variant's `BIN=<path>` runs another binary (a base build next to the new one).
 """
 
 import argparse

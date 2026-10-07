@@ -13,8 +13,8 @@ less peak instead of 10.8%). The wall time does not follow: in three jobs of 20-
 measured +2.0%, +3.8% and +0.9% at 32 checkers on vscode, and freeing with no give-back at all +0.4%, +2.2% and
 +0.3% (paired +2.0% and +1.2% where measured). No variant was within 1% with at least 8% less peak in more than one
 job, so `MAX_DEFAULT_CHECKERS` stays 16 and the freeing code does not change. Kept: `tools/perf/leafprobe.py` gets a
-paired-ratio and min-max column and per-variant binaries (`BIN=`), and `tools/perf/leafab.sh` builds the merge base
-next to the branch for base-against-new probes.
+paired-ratio, min-max and user+sys column, and a variant can run another binary (`BIN=<path>`, for base-against-new
+probes).
 
 ## Method
 
