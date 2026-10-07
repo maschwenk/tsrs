@@ -142,3 +142,10 @@ and at 4 and 32 checkers, and at 4 and 32 checkers with `--checkerAssignment go`
 identical single-threaded (timing and memory rows excluded): 48 of 48 cells. `cargo check --workspace` without
 warnings, `tools/lint/ratchet.py`, `tools/lint/source.py`, `cargo test -p tsrs_core -p tsrs_ast -p tsrs_checker -p
 tsrs_compiler` (new: `name_filter_keeps_every_key`).
+
+`pr-verify` (17 projects x 1/4/16/32 checkers plus a poisoned-arena run, 64-vCPU runner, `--release`, against main
+7d7e54a): identical diagnostics in 102 of 102 cells. Its single-threaded instruction deltas: supabase-studio -9.573%,
+mui-docs -4.879%, cal-diy -3.161%, formbricks-web -2.904%, xstate-main -2.231%, playwright -2.153%, storybook
+-1.892%, next-packages-next -0.836%, mikro-orm -0.680%, Compiler-Unions -0.560%, vscode -0.360%, next-root -0.207%,
+t3code-server -0.130%, nuxt -0.101%, webpack -0.092%, drizzle-orm +0.079%, Compiler +0.270%. Wall and peak RSS moved
+within its three-run spread.
