@@ -1,0 +1,8 @@
+a.ts(1,11): error TS2320: Interface 'Merged' cannot simultaneously extend types 'Left' and 'Right'.
+  Named property 'kind' of types 'Left' and 'Right' are not identical.
+b.ts(1,11): error TS2320: Interface 'Merged' cannot simultaneously extend types 'Left' and 'Right'.
+  Named property 'kind' of types 'Left' and 'Right' are not identical.
+c.ts(1,11): error TS2320: Interface 'Merged' cannot simultaneously extend types 'Left' and 'Right'.
+  Named property 'kind' of types 'Left' and 'Right' are not identical.
+d.d.ts(1,11): error TS2320: Interface 'Merged' cannot simultaneously extend types 'Left' and 'Right'.
+  Named property 'kind' of types 'Left' and 'Right' are not identical.

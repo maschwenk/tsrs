@@ -6,7 +6,9 @@
 // `declaration-errors` has errors in most statements of its declaration file, including ones that span statements
 // (merged interfaces with different type parameters, redeclared variables, overloads); `ambient-statements` has two
 // executable statements at the top level of a declaration file, of which only the first may report TS1036, so the
-// file must not be split at all.
+// file must not be split at all; `merged-interface-pieces` declares one interface twice in its declaration file with
+// different bases, so the TS2320 belongs to the first declaration only, even when the second is in a piece checked by a
+// checker that has not checked the interface (notes/fix-history-dependent-diagnostics.md).
 
 use std::path::Path;
 use std::process::Command;
