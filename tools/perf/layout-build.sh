@@ -27,7 +27,7 @@ mkdir -p "$out/bin" "$out/raw-base" "$out/raw-extra" "$out/bolt"
 step() { # $1 = name; runs the rest and records its duration
   local name=$1 t0; shift; t0=$(date +%s.%N)
   "$@"
-  printf '%-34s %6.1f s\n' "$name" "$(echo "$(date +%s.%N) - $t0" | bc)" | tee -a "$out/times.txt"
+  awk -v n="$name" -v a="$t0" -v b="$(date +%s.%N)" 'BEGIN { printf "%-34s %6.1f s\n", n, b - a }' | tee -a "$out/times.txt"
 }
 check_exit() { if [ "$1" -gt 2 ]; then echo "::error::$2 exited with $1"; exit 1; fi; }
 # "<cwd>\t<-p path>" of a bench project (bench/run.py project_path).
@@ -54,8 +54,9 @@ extra_runs() {
 # 1. The instrumented build and the training of today's pipeline (bench.yml / release.yml).
 step "instrumented build" env RUSTFLAGS=-Cprofile-generate="$out/raw-base" \
   cargo build --profile dist --locked -p tsrs_cli -p tsrs_testrunner -p tsrs_fourslash --target "$tgt"
-inst=target/$tgt/dist
-step "pgo-train.sh" .github/scripts/pgo-train.sh "$inst" "$out/raw-base" "$work" > "$out/pgo-train.log" 2>&1
+inst=$PWD/target/$tgt/dist
+train() { .github/scripts/pgo-train.sh "$inst" "$out/raw-base" "$work" > "$out/pgo-train.log" 2>&1 || { tail -40 "$out/pgo-train.log"; return 1; }; }
+step "pgo-train.sh" train
 step "extra PGO training ($EXTRA_TRAIN)" extra_runs "$inst/tsrs" "LLVM_PROFILE_FILE=$out/raw-extra/@P@-%p.profraw"
 
 "$profdata" merge -o "$out/A.profdata" "$out"/raw-base/*.profraw
@@ -128,7 +129,7 @@ step "BOLT training, extra set (RB)" extra_runs "$out/bolt/Br.inst" "BOLT_UNUSED
 step "BOLT optimize R" optimize "$Ar" R "$out"/bolt/Ar-rel.d/prof*
 optimize "$Ar" Rx "$out"/bolt/Ar-rel.d/prof* "$out"/bolt/Ar-ext.d/prof*
 optimize "$Br" RB "$out"/bolt/Br.d/prof*
-optimize "$Br" RBH "$out"/bolt/Br.d/prof* -- -hugify
+optimize "$Br" RBH "$out"/bolt/Br.d/prof* -- -hugify || echo "::warning::llvm-bolt -hugify failed; no RBH"
 
 ls -l "$out"/bin/*/tsrs
 for b in "$out"/bin/*/tsrs; do size -A "$b" | awk -v b="$b" '$1 ~ /^\.(text|bolt|text\.cold)/ {printf "%s %s %.2f MB\n", b, $1, $2/1048576}'; done

@@ -200,7 +200,7 @@ jobs:
         run: |
           args=()
           IFS=, read -ra names <<< "$BINS"
-          for n in "${names[@]}"; do args+=(--bin "$n=/tmp/layout/bin/$n/tsrs"); done
+          for n in "${names[@]}"; do if [ -x "/tmp/layout/bin/$n/tsrs" ]; then args+=(--bin "$n=/tmp/layout/bin/$n/tsrs"); fi; done
           [ -n "${PERF:-}" ] && args+=(--perf "$PERF")
           python3 tools/perf/layout-measure.py "${args[@]}" --reps "$REPS" --out probe-out
           cat probe-out/layout.md >> "$GITHUB_STEP_SUMMARY"
