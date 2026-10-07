@@ -443,6 +443,7 @@ fn get_checker_associations_in_order(
     file_order: Option<&[usize]>,
     checker_count: usize,
     penalty_multiplier: i64,
+    mut affinity: Option<&mut crate::affinity::ModuleAffinity>,
 ) -> Vec<usize> {
     if file_weights.is_empty() {
         return Vec::new();
@@ -481,6 +482,8 @@ fn get_checker_associations_in_order(
             }
         }
 
+        // tsrs-only: the locality assignment also counts the modules a group shares with each checker (affinity.rs).
+        let module_affinities = affinity.as_deref_mut().map(|a| a.affinities(file_index));
         let mut best_checker: i64 = -1;
         let mut best_score = f64::NEG_INFINITY;
         for (checker_index, &checker_weight) in checker_weights.iter().enumerate() {
@@ -492,7 +495,7 @@ fn get_checker_associations_in_order(
             let new_penalty = new_weight * new_weight.sqrt();
             let old_penalty = old_weight * old_weight.sqrt();
             let penalty = alpha * (new_penalty - old_penalty);
-            let score = neighbor_counts[checker_index] as f64 - penalty;
+            let score = neighbor_counts[checker_index] as f64 - penalty + module_affinities.map_or(0.0, |a| a[checker_index]);
             if score > best_score
                 || score == best_score && (best_checker < 0 || checker_weight < checker_weights[best_checker as usize])
             {
@@ -510,6 +513,9 @@ fn get_checker_associations_in_order(
         }
         associations[file_index] = best_checker;
         checker_weights[best_checker as usize] += file_weights[file_index];
+        if let Some(affinity) = affinity.as_deref_mut() {
+            affinity.place(file_index, best_checker as usize);
+        }
     }
     associations.into_iter().map(|a| a as usize).collect()
 }
@@ -621,17 +627,36 @@ impl checkerPool {
                 tsrs_core::ptr::shared_check::freeze_shared_objects();
             }
             let create_and_assign = || {
-                let create_start = std::time::Instant::now();
-                #[cfg(feature = "checker")]
-                tsrs_checker::links::set_multiple_checkers(self.checker_count > 1);
-                let slots: Vec<Mutex<Option<CheckerSlot>>> = (0..self.checker_count).map(|_| Mutex::new(None)).collect();
-                run_work_group(self.single_threaded, self.checker_count, |i| {
-                    *slots[i].lock().unwrap() = Some(CheckerSlot(Mutex::new(new_checker(program))));
-                });
-                let checkers: &'static [CheckerSlot] =
-                    Box::leak(slots.into_iter().map(|s| s.into_inner().unwrap().unwrap()).collect::<Vec<_>>().into_boxed_slice());
-                tsrs_core::phases::record("Checkers: create", create_start.elapsed());
-                let associations = tsrs_core::phases::time("Checkers: assign files", || compute_associations(program, self.checker_count));
+                let create = || {
+                    let create_start = std::time::Instant::now();
+                    #[cfg(feature = "checker")]
+                    tsrs_checker::links::set_multiple_checkers(self.checker_count > 1);
+                    let slots: Vec<Mutex<Option<CheckerSlot>>> = (0..self.checker_count).map(|_| Mutex::new(None)).collect();
+                    run_work_group(self.single_threaded, self.checker_count, |i| {
+                        *slots[i].lock().unwrap() = Some(CheckerSlot(Mutex::new(new_checker(program))));
+                    });
+                    let checkers: &'static [CheckerSlot] =
+                        Box::leak(slots.into_iter().map(|s| s.into_inner().unwrap().unwrap()).collect::<Vec<_>>().into_boxed_slice());
+                    (checkers, create_start.elapsed())
+                };
+                let assign = || {
+                    let assign_start = std::time::Instant::now();
+                    (compute_associations(program, self.checker_count), assign_start.elapsed())
+                };
+                // tsrs-only: the assignment reads only the program, so with several checkers it runs while they are
+                // created (it is on the critical path: 2-30 ms, notes/perf-clustered-assignment.md). The phases are
+                // recorded afterwards, in the same order as before.
+                let ((checkers, create_time), (associations, assign_time)) = if self.single_threaded {
+                    (create(), assign())
+                } else {
+                    std::thread::scope(|s| {
+                        let assigned = s.spawn(assign);
+                        let created = create();
+                        (created, assigned.join().unwrap())
+                    })
+                };
+                tsrs_core::phases::record("Checkers: create", create_time);
+                tsrs_core::phases::record("Checkers: assign files", assign_time);
                 (checkers, associations)
             };
             // tsrs-only: the CLI's leaf classification reads only the loaded program; it runs meanwhile
@@ -774,7 +799,8 @@ impl checkerPool {
             let mut count = 0;
             let mut file_cpu: Vec<(P<SourceFile>, f64)> = Vec::new();
             let mut guard = state.checkers[checker_idx].0.lock().unwrap();
-            while let Some((i, from_other)) = queues_next(&queues, checker_idx, steal) {
+            let mut last_victim = usize::MAX;
+            while let Some((i, from_other)) = queues_next(&queues, checker_idx, steal, &mut last_victim) {
                 if let Some(&(s, k, _)) = i.checked_sub(files.len()).map(|p| &split.piece_items[p]) {
                     let piece_start = file_times.then(std::time::Instant::now);
                     let cpu_start = if file_times { thread_cpu_seconds() } else { 0.0 };
@@ -1032,8 +1058,17 @@ impl FileQueue {
     }
 }
 
-// The next position for checker `me` and whether it came from another checker's queue.
-fn queues_next(queues: &[FileQueue], me: usize, steal: bool) -> Option<(usize, bool)> {
+// TSRS_STEAL_STICKY=1 (experiment, notes/perf-clustered-assignment.md): a thief keeps taking from the queue it took
+// from last while that queue has at least half the work of the fullest one. The back of a queue is one directory
+// region, whose files share modules; re-picking the fullest queue for every file mixes regions on the thief.
+fn steal_sticky() -> bool {
+    static VALUE: OnceLock<bool> = OnceLock::new();
+    *VALUE.get_or_init(|| std::env::var("TSRS_STEAL_STICKY").is_ok_and(|v| v == "1"))
+}
+
+// The next position for checker `me` and whether it came from another checker's queue. `last_victim` is the queue `me`
+// last took from (usize::MAX for none), for TSRS_STEAL_STICKY.
+fn queues_next(queues: &[FileQueue], me: usize, steal: bool, last_victim: &mut usize) -> Option<(usize, bool)> {
     if let Some(i) = queues[me].take(true) {
         return Some((i, false));
     }
@@ -1041,7 +1076,11 @@ fn queues_next(queues: &[FileQueue], me: usize, steal: bool) -> Option<(usize, b
         return None;
     }
     loop {
-        let (victim, left) = queues.iter().enumerate().map(|(c, q)| (c, q.remaining())).max_by_key(|&(c, left)| (left, std::cmp::Reverse(c)))?;
+        let (mut victim, left) = queues.iter().enumerate().map(|(c, q)| (c, q.remaining())).max_by_key(|&(c, left)| (left, std::cmp::Reverse(c)))?;
+        if *last_victim != usize::MAX && steal_sticky() && queues[*last_victim].remaining() * 2 >= left && left > 0 {
+            victim = *last_victim;
+        }
+        *last_victim = victim;
         if left == 0 {
             // Queues whose remaining files weigh 0 (unchecked declaration files) are still drained by their owners.
             return queues.iter().enumerate().find_map(|(c, q)| if c == me { None } else { q.take(false).map(|i| (i, true)) });
@@ -1118,6 +1157,7 @@ fn go_associations(program: &Program, checker_count: usize) -> Vec<usize> {
         file_order.as_deref(),
         checker_count,
         policy.balance_penalty_multiplier,
+        None,
     )
 }
 
@@ -1367,6 +1407,18 @@ pub fn checker_count_upper_bound(options: &tsrs_core::CompilerOptions, single_th
 // sorted, groups are numbered in path order, ties are broken by index. Unchecked declaration files go to
 // checker 0 (no checker ever runs over them).
 fn locality_associations(program: &Program, checker_count: usize) -> Vec<usize> {
+    // tsrs-only: the import graph (built on the worker pool) does not depend on the groups; it is built while they
+    // are formed.
+    if program.single_threaded() {
+        return locality_associations_with(program, checker_count, || get_import_targets(program));
+    }
+    std::thread::scope(|s| {
+        let targets = s.spawn(|| get_import_targets(program));
+        locality_associations_with(program, checker_count, || targets.join().unwrap())
+    })
+}
+
+fn locality_associations_with(program: &Program, checker_count: usize, import_targets: impl FnOnce() -> Vec<Vec<usize>>) -> Vec<usize> {
     let files = &program.files;
     let weights = checked_file_weights(program);
     let mut order: Vec<usize> = (0..files.len()).filter(|&i| weights[i] > 0).collect();
@@ -1374,7 +1426,14 @@ fn locality_associations(program: &Program, checker_count: usize) -> Vec<usize> 
     if order.is_empty() {
         return associations;
     }
-    order.sort_by(|&a, &b| files[a].path().cmp(files[b].path()).then(a.cmp(&b)));
+    // A total order (ties by index), so the parallel sort is deterministic.
+    let by_path = |&a: &usize, &b: &usize| files[a].path().cmp(files[b].path()).then(a.cmp(&b));
+    if program.single_threaded() {
+        order.sort_unstable_by(by_path);
+    } else {
+        use rayon::prelude::*;
+        crate::program::worker_pool().install(|| order.par_sort_unstable_by(by_path));
+    }
 
     // With a cost cache, groups are formed and placed by measured cost (see measured_file_costs).
     let measured = checker_cost_cache_path().and_then(|path| measured_file_costs(&read_cost_cache(path), checker_count, files, &order, &weights));
@@ -1406,7 +1465,8 @@ fn locality_associations(program: &Program, checker_count: usize) -> Vec<usize> 
     }
 
     // Import edges between groups of checked files, one adjacency entry per file-level edge and direction.
-    let adjacent_files = get_import_adjacency(program);
+    let import_targets = import_targets();
+    let adjacent_files = undirected(&import_targets);
     let mut group_adjacency: Vec<Vec<usize>> = vec![Vec::new(); group_weights.len()];
     for &i in &order {
         for &j in &adjacent_files[i] {
@@ -1420,7 +1480,12 @@ fn locality_associations(program: &Program, checker_count: usize) -> Vec<usize> 
     let fennel = |group_weights: &[i64]| {
         let mut group_order: Vec<usize> = (0..group_weights.len()).collect();
         group_order.sort_by(|&a, &b| group_weights[b].cmp(&group_weights[a]).then(a.cmp(&b)));
-        get_checker_associations_in_order(group_weights, &group_adjacency, Some(&group_order), checker_count, LOCALITY_PENALTY_MULTIPLIER)
+        let mut affinity = crate::affinity::ModuleAffinity::new(files, &import_targets, &group_of_file, &group_adjacency, checker_count);
+        let mut placed = get_checker_associations_in_order(group_weights, &group_adjacency, Some(&group_order), checker_count, LOCALITY_PENALTY_MULTIPLIER, affinity.as_mut());
+        if let Some(affinity) = &affinity {
+            affinity.refine(&mut placed, group_weights, checker_count);
+        }
+        placed
     };
     let group_associations = match &measured {
         None => fennel(&group_weights),
@@ -1649,6 +1714,11 @@ fn dump_assignment_inputs(program: &Program, associations: &[usize], path: &str)
 
 // getImportAdjacency returns an undirected import graph represented by file index.
 fn get_import_adjacency(program: &Program) -> Vec<Vec<usize>> {
+    undirected(&get_import_targets(program))
+}
+
+// The in-program files each program file imports (resolved, other than itself), by file index.
+fn get_import_targets(program: &Program) -> Vec<Vec<usize>> {
     let files = &program.files;
     let mut file_indices: FxHashMap<P<SourceFile>, usize> = FxHashMap::default();
     for (i, &file) in files.iter().enumerate() {
@@ -1676,9 +1746,13 @@ fn get_import_adjacency(program: &Program) -> Vec<Vec<usize>> {
         use rayon::prelude::*;
         crate::program::worker_pool().install(|| (0..files.len()).into_par_iter().map(targets_of).collect())
     };
-    let mut adjacent_files: Vec<Vec<usize>> = vec![Vec::new(); files.len()];
-    for (file_index, file_targets) in targets.into_iter().enumerate() {
-        for imported_index in file_targets {
+    targets
+}
+
+fn undirected(targets: &[Vec<usize>]) -> Vec<Vec<usize>> {
+    let mut adjacent_files: Vec<Vec<usize>> = vec![Vec::new(); targets.len()];
+    for (file_index, file_targets) in targets.iter().enumerate() {
+        for &imported_index in file_targets {
             adjacent_files[file_index].push(imported_index);
             adjacent_files[imported_index].push(file_index);
         }
@@ -1712,7 +1786,8 @@ mod stealing_tests {
                 let (queues, taken) = (&queues, &taken);
                 s.spawn(move || {
                     let mut mine = Vec::new();
-                    while let Some(t) = queues_next(queues, me, true) {
+                    let mut last_victim = usize::MAX;
+                    while let Some(t) = queues_next(queues, me, true, &mut last_victim) {
                         mine.push(t);
                     }
                     taken.lock().unwrap().extend(mine);
@@ -1729,7 +1804,7 @@ mod stealing_tests {
     #[test]
     fn without_stealing_a_checker_keeps_its_own_files_in_order() {
         let queues = vec![FileQueue::new(vec![0, 2, 4], |_| 1), FileQueue::new(vec![1, 3], |_| 1)];
-        let order: Vec<(usize, bool)> = std::iter::from_fn(|| queues_next(&queues, 0, false)).collect();
+        let order: Vec<(usize, bool)> = std::iter::from_fn(|| queues_next(&queues, 0, false, &mut usize::MAX)).collect();
         assert_eq!(order, vec![(0, false), (2, false), (4, false)]);
         assert_eq!(queues[1].remaining(), 2);
     }
