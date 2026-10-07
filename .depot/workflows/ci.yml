@@ -74,8 +74,26 @@ jobs:
       - name: Build release binaries
         run: cargo build --release --locked -p tsrs_cli -p tsrs_testrunner -p tsrs_fourslash
 
+      # Errors, .types and .symbols baselines, in tsgo's check history (`--checkerAssignment go`, tsrs_core::compat),
+      # which the reference baselines need for byte-identity.
       - name: Conformance suite
         run: .github/scripts/conformance-gate.sh
+
+      # The same suite in the mode tsrs ships by default: canonical check history, 4 checkers per test, work stealing
+      # (notes/perf-order-independence.md, notes/perf-checker-stealing.md). By design one test,
+      # conformance/objectLiteralNormalization, differs from tsgo there in its .types / .symbols.
+      - name: Conformance suite (default checker mode)
+        env:
+          TS_TEST_PROGRAM_SINGLE_THREADED: "false"
+          TSRS_HISTORY: canonical
+          MIN_TYPES: "12778"
+          MIN_SYMBOLS: "12778"
+          TSRS_TEST_RESULTS: ${{ github.workspace }}/target/test-results-default
+        run: .github/scripts/conformance-gate.sh
+
+      # testdata/regressions: bugs found outside the conformance suite, each with tsgo-ref's output.
+      - name: Regression cases
+        run: tools/regressions.sh target/release/tsrs
 
       - name: Fourslash (language service) suite
         run: .github/scripts/fourslash-gate.sh
@@ -106,7 +124,9 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: conformance-results
-          path: target/test-results/*.txt
+          path: |
+            target/test-results/*.txt
+            target/test-results-default/*.txt
           if-no-files-found: ignore
 
   # docs/RUST.md: clippy findings per (lint, file) may not grow past tools/lint/baseline.tsv.
