@@ -965,42 +965,60 @@ impl Checker {
             return self.error_type;
         }
         let index = self.find_active_mapper(m);
-        if index == -1 {
+        // A mapper that was not active gets a cleared cache, and nothing is stored in it for this call (the result is
+        // stored only when the mapper was already active), so its lookup can only miss: no key is built for it.
+        let key = if index == -1 {
             self.push_active_mapper(m);
-        }
-        let key = match alias {
-            // The bytes `write_type` + `write_alias(None)` produce, without zeroing a key builder.
-            None => {
-                let id = t.id.0.to_le_bytes();
-                CacheHashKey::hash_128(&[id[0], id[1], id[2], id[3], 0])
+            debug_assert!(self.active_type_mappers_caches.last().is_some_and(|cache| cache.is_empty()));
+            None
+        } else {
+            let key = active_mapper_cache_key(t, alias);
+            if let Some(cached_type) = self.active_type_mappers_caches[index as usize].get(&key) {
+                tsrs_core::sitecount::hit("active mapper cache (instantiateTypeWithAlias)", "hit");
+                return cached_type;
             }
-            Some(_) => {
-                let mut b = keyBuilder::default();
-                b.write_type(t);
-                b.write_alias(alias);
-                b.hash()
-            }
+            Some(key)
         };
-        let cache_index = if index != -1 { index as usize } else { self.active_type_mappers_caches.len() - 1 };
-        if let Some(cached_type) = self.active_type_mappers_caches[cache_index].get(&key) {
-            tsrs_core::sitecount::hit("active mapper cache (instantiateTypeWithAlias)", "hit");
-            return cached_type;
-        }
         tsrs_core::sitecount::hit("active mapper cache (instantiateTypeWithAlias)", if index == -1 { "miss (new mapper)" } else { "miss (active mapper)" });
         self.total_instantiation_count += 1;
         self.instantiation_count += 1;
         tsrs_core::sitecount::hit("instantiation", type_kind_label(t.flags(), t.object_flags()));
         self.instantiation_stack.push(t);
         let result = self.instantiate_type_worker(t, m, alias);
-        if index == -1 {
-            self.pop_active_mapper();
-        } else {
-            self.active_type_mappers_caches[cache_index].insert(key, result);
+        match key {
+            None => self.pop_active_mapper(),
+            Some(key) => {
+                self.active_type_mappers_caches[index as usize].insert(key, result);
+            }
         }
         self.instantiation_stack.pop();
         result
     }
+}
 
+/// The high word of an active mapper cache key without an alias (any constant; see `active_mapper_cache_key`).
+const ACTIVE_MAPPER_TYPE_KEY: u64 = 0x7f4a_7c15_9e37_79b9;
+
+/// The key of `t` (instantiated with `alias`) in an active mapper's cache (Go `instantiateTypeWithAlias`).
+///
+/// Go hashes `write_type` + `write_alias` with xxh3-128 and only compares keys for equality, and these caches are
+/// private to this function. Without an alias the key is the type id itself, spread by an odd multiplier (a
+/// bijection, so two ids never share a key) under a fixed high word; an xxh3 key of an aliased instantiation
+/// matches one of these with the same 2^-128 odds as two xxh3 keys match each other.
+#[inline]
+fn active_mapper_cache_key(t: P<Type>, alias: Option<P<TypeAlias>>) -> CacheHashKey {
+    match alias {
+        None => CacheHashKey { hi: ACTIVE_MAPPER_TYPE_KEY, lo: u64::from(t.id.0).wrapping_mul(0x9e37_79b9_7f4a_7c15) },
+        Some(_) => {
+            let mut b = keyBuilder::default();
+            b.write_type(t);
+            b.write_alias(alias);
+            b.hash()
+        }
+    }
+}
+
+impl Checker {
     // checker.go:22551
     pub(crate) fn get_circular_type_names(&mut self) -> Vec<String> {
         let mut type_counts: FxHashMap<P<Type>, i32> = FxHashMap::default();
