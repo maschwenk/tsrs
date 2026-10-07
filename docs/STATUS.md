@@ -1,5 +1,38 @@
 # Status
 
+## 2026-10-07: 0.5.0 release
+
+A performance and memory release for machines with many cores; the TypeScript source pin remains
+`b85298b6a81f772d080b0455de0ca9d744cd6fd6` (7.1.0-dev.20260929) and the published package set is unchanged. README
+bench at commit bd86c6d7a6ba (`bench/results/2026-10-07-bd86c6d7a6ba.md`): on Depot `depot-ubuntu-24.04-8` in the
+default mode (4 checkers there) tsrs type-checks 3.6-9.4x faster than tsgo 7.0.2 with 0.13-0.46x its peak memory
+(vscode 11.32 s -> 2.78 s, 7.75 GiB -> 2.14 GiB). On `depot-ubuntu-24.04-64` with no thread flags tsrs (32 checkers)
+is 3.4-16.1x faster than tsgo (vscode 9.65 s -> 0.60 s) and 1.3-2.4x faster than `bun check` 1.4.3-canary on its 64
+threads (vscode 0.84 s -> 0.60 s at the same 2.87 GiB peak; mui-docs left out, where bun takes 40 s and reports 23
+errors); on the four application projects tsrs peaks at 1.2-1.9x bun's memory. Diagnostics and emitted output are
+unchanged against tsgo at the same pin.
+
+Default checker count: half the available cores clamped to 4..32 (was 4..8), still at most one checker per 32
+type-checked files (#120, notes/perf-checker-64.md). It stays 4 on 8 vCPUs and is 32 on 64 or more, which takes
+vscode from 1.73 s to 0.82 s on the 64-vCPU machine for +0.9 GiB peak. Large programs on wide machines therefore use
+more memory by default than in 0.4.0; `--checkers N` sets the count.
+
+Checker and front end (#120): each checker starts with its heaviest files (above 1% of its share), then program
+order, and thieves take from the back (notes/perf-checker-64.md); `is_type_related_to` answers the identity relation
+without a relater when the normalized kinds differ; program construction scales past 16 threads (vscode on 64
+threads 0.26 s -> 0.11 s, the file loader's lock contention removed; notes/perf-frontend-64.md). Memory: link stores
+in 128-id groups in the arena, and reads of reference kinds make no links (#120, notes/mem-64.md); on Linux mimalloc
+is built with `no_thp`, so its heap no longer takes a 2 MiB huge page per partly filled thread page, and the parse
+pool is capped at 32 threads (#121, notes/mem-no-thp.md): vscode on the 64-vCPU machine peaks at 2.94 GiB instead of
+4.13 GiB at the default (-29%) and 25-33% lower at 4 to 64 checkers, for 6-10% more wall time (0.547 s -> 0.602 s at
+the default).
+
+Bench: the README bench measures each project on its own machine at the same time (push to results 13 min 51 s, was
+26 min 35 s), adds the application projects cal.diy, Formbricks, Supabase Studio and T3 Code (#116), `--checkers 8`
+and `--checkers 64` tables, a 64-vCPU default-mode table with `bun check`, and bolds speedups from 5x and memory
+ratios at 0.25x or less (#117, #122, #126, #127). bench/compare.py runs the 64-thread head-to-head with tsgo, the
+7.1-dev nightly and `bun check` (#119).
+
 ## 2026-10-05: 0.4.0 release
 
 A performance and memory release; the TypeScript source pin remains `b85298b6a81f772d080b0455de0ca9d744cd6fd6`
