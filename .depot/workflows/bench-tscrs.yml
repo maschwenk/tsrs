@@ -1,0 +1,77 @@
+# Depot CI workflow: tsrs vs tsc-rs (pingdotgg/ts-rust) vs tsgo 7.0.2 vs `bun check` on the six real-world apps from the
+# tsc-rs README (bench/tscrs-compare.sh), on one 64-vCPU and one 8-vCPU Linux x64 machine, each tool at its default
+# threads. Manual only; nothing is committed. Results: job summary and the `bench-tscrs-<runner>` artifact.
+
+name: Bench (tsrs vs tsc-rs)
+
+on:
+  workflow_dispatch:
+    inputs:
+      reps:
+        description: timed runs per cell
+        default: "5"
+      apps:
+        description: space-separated app names (blank = all six)
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [depot-ubuntu-24.04-64, depot-ubuntu-24.04-8]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Runner hardware
+        run: |
+          nproc; free -g; df -h / | tail -1
+          lscpu | grep -E 'Model name|^CPU\(s\)' || true
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+
+      - name: Install pnpm, hyperfine, Bun canary
+        run: |
+          npm i -g pnpm@10 >/dev/null
+          for attempt in 1 2 3; do
+            curl -fsSL -o /tmp/hf.tgz https://github.com/sharkdp/hyperfine/releases/download/v1.19.0/hyperfine-v1.19.0-x86_64-unknown-linux-gnu.tar.gz && break
+            sleep $((attempt * 10))
+          done
+          tar xzf /tmp/hf.tgz -C /tmp && sudo install /tmp/hyperfine-v1.19.0-x86_64-unknown-linux-gnu/hyperfine /usr/local/bin/hyperfine
+          for attempt in 1 2 3; do
+            curl -fsSL -o /tmp/bun.zip https://github.com/oven-sh/bun/releases/download/canary/bun-linux-x64.zip && break
+            sleep $((attempt * 10))
+          done
+          unzip -oq /tmp/bun.zip -d /tmp/bun
+          /tmp/bun/bun-linux-x64/bun --revision
+          /tmp/bun/bun-linux-x64/bun check --help | head -3
+
+      - name: Set up apps and run
+        env:
+          RUNS: ${{ inputs.reps || '5' }}
+          BUN: /tmp/bun/bun-linux-x64/bun
+        run: bench/tscrs-compare.sh "$RUNNER_TEMP/cmp" ${{ inputs.apps }}
+
+      - name: Summary
+        if: always()
+        run: |
+          { echo "### ${{ matrix.runner }} ($(nproc) vCPU)"; python3 bench/tscrs-summary.py "$RUNNER_TEMP/cmp/results"; } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: bench-tscrs-${{ matrix.runner }}
+          path: |
+            ${{ runner.temp }}/cmp/results
+            ${{ runner.temp }}/cmp/logs
+          if-no-files-found: ignore
