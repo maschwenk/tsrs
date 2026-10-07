@@ -2199,7 +2199,12 @@ impl Checker {
     pub(crate) fn get_property_of_type_worker(&mut self, t: P<Type>, name: &str, skip_object_function_property_augment: bool, include_type_only_members: bool, instantiate: bool) -> Option<P<Symbol>> {
         let t = self.get_reduced_apparent_type(t);
         if t.flags().intersects(TypeFlags::Object) {
-            let symbol = self.get_member_of_structured_type_ex(t, name, instantiate);
+            let key = HashedName::new(name);
+            let symbol = if t.object_flags().intersects(ObjectFlags::MembersResolved) {
+                t.as_structured_type().members().and_then(|m| m.lookup_hashed(key))
+            } else {
+                self.get_member_of_unresolved_structured_type(t, name, instantiate)
+            };
             if let Some(symbol) = symbol {
                 if !include_type_only_members
                     && t.symbol().is_some_and(|s| s.flags().intersects(SymbolFlags::ValueModule))
@@ -2217,6 +2222,11 @@ impl Checker {
             if skip_object_function_property_augment {
                 return None;
             }
+            // A name that no member of `Function`, `CallableFunction`, `NewableFunction` or `Object` has is not found
+            // below; with `t` resolved, the signature tests below have no side effects to keep.
+            if t.object_flags().intersects(ObjectFlags::MembersResolved) && !self.may_be_augment_member(key) {
+                return None;
+            }
             let function_type = if t == self.any_function_type {
                 Some(self.global_function_type)
             } else if !self.signatures_of_structured_type(t, SignatureKind::Call).is_empty() {
@@ -2227,12 +2237,12 @@ impl Checker {
                 None
             };
             if let Some(function_type) = function_type {
-                let symbol = self.get_property_of_object_type(function_type, name);
+                let symbol = self.get_property_of_object_type_hashed(function_type, key);
                 if symbol.is_some() {
                     return symbol;
                 }
             }
-            return self.get_property_of_object_type(self.global_object_type, name);
+            return self.get_property_of_object_type_hashed(self.global_object_type, key);
         } else if t.flags().intersects(TypeFlags::Intersection) {
             let prop = self.get_property_of_union_or_intersection_type(t, name, true /*skipObjectFunctionPropertyAugment*/);
             if prop.is_some() {
@@ -2246,6 +2256,37 @@ impl Checker {
             return self.get_property_of_union_or_intersection_type(t, name, skip_object_function_property_augment);
         }
         None
+    }
+
+    /// False if `key` is a member of none of the global types `get_property_of_type_worker` looks up a missing
+    /// property in (most lookups that miss a type's own members). True until all four are resolved: the filter is
+    /// built from their member tables, which do not change after resolution, and asking must not resolve them early.
+    /// The base-type cycle resets that make a type resolve its members again drop the filter.
+    #[inline]
+    fn may_be_augment_member(&mut self, key: HashedName<'_>) -> bool {
+        match &self.augment_filter {
+            Some(filter) => filter.may_contain(key),
+            None => self.build_augment_filter(key),
+        }
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn build_augment_filter(&mut self, key: HashedName<'_>) -> bool {
+        let mut filter = NameFilter::default();
+        for t in [self.global_function_type, self.global_callable_function_type, self.global_newable_function_type, self.global_object_type] {
+            if !t.flags().intersects(TypeFlags::Object) {
+                continue; // get_property_of_object_type finds nothing in it
+            }
+            if !t.object_flags().intersects(ObjectFlags::MembersResolved) {
+                return true;
+            }
+            if let Some(members) = self.resolve_structured_type_members(t).unwrap().members() {
+                filter.add_keys(&members);
+            }
+        }
+        self.augment_filter = Some(filter);
+        filter.may_contain(key)
     }
 
     // Return the type of the given property in the given type, or nil if no such property exists
@@ -3015,6 +3056,7 @@ impl Checker {
             // members partially resolved. Here we ensure any such partial resolution is reset.
             // See https://github.com/microsoft/TypeScript/issues/16861 for an example.
             t.object_flags.set(t.object_flags.get() & !ObjectFlags::MembersResolved);
+            self.augment_filter = None; // t may be one of the filter's four types: its members are resolved again
             data.base_types_resolved.set(true);
             if canonical {
                 self.base_types_depth -= 1;
@@ -3066,6 +3108,7 @@ impl Checker {
             data.resolved_base_types.set(&[]);
             r.object_flags.set(r.object_flags.get() & !ObjectFlags::MembersResolved);
         }
+        self.augment_filter = None; // as in get_base_types
         // Each pass resolves `first` for good, so a later reset (another cycle) covers fewer types and this ends.
         self.get_base_types(first);
         self.get_base_types(t);

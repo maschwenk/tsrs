@@ -1109,6 +1109,9 @@ pub struct Checker {
     /// notes/mem-lazy.md L11: empty-object tests on lazy tables.
     pub lazy_empty: bool,
     pub lazy_member_stats: tsrs_core::lazymembers::LazyMemberStats,
+    /// The member names of `Function`, `CallableFunction`, `NewableFunction` and `Object`, once all four are
+    /// resolved (`may_be_augment_member`).
+    pub(crate) augment_filter: Option<tsrs_ast::NameFilter>,
     /// Instrumentation (feature `assignment-stats`): every type / symbol this checker created.
     #[cfg(feature = "assignment-stats")]
     pub stats_created: (Vec<P<Type>>, Vec<P<Symbol>>),
@@ -1503,6 +1506,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         lazy_unmatched: tsrs_core::lazymembers::lazy_unmatched(),
         lazy_empty: tsrs_core::lazymembers::lazy_empty(),
         lazy_member_stats: Default::default(),
+        augment_filter: None,
         #[cfg(feature = "assignment-stats")]
         stats_created: Default::default(),
         context_free_types: FxHashMap::default(),

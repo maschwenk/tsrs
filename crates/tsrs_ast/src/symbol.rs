@@ -629,7 +629,12 @@ impl SymbolMap {
     /// the search's registers first.
     #[inline]
     fn position(&self, name: &str) -> Option<usize> {
-        let hash = hash_name(name);
+        self.position_hashed(name, hash_name(name))
+    }
+
+    /// `position` of a name hashed beforehand (`hash` = `hash_name(name)`).
+    #[inline]
+    fn position_hashed(&self, name: &str, hash: u32) -> Option<usize> {
         if !self.extra.may_contain(hash) {
             return None;
         }
@@ -719,7 +724,56 @@ impl SymbolMap {
     }
 }
 
+/// A name with its hash, for looking one name up in several tables (a property lookup's own members, then
+/// `Function`'s and `Object`'s) and testing it against a `NameFilter` without hashing it again for each.
+#[derive(Clone, Copy)]
+pub struct HashedName<'a> {
+    pub name: &'a str,
+    hash: u32,
+}
+
+impl<'a> HashedName<'a> {
+    #[inline]
+    pub fn new(name: &'a str) -> HashedName<'a> {
+        HashedName { name, hash: hash_name(name) }
+    }
+}
+
+/// A 256-bit Bloom filter of the keys of a few tables taken together (two bits per key, other hash bits than a
+/// table's own filter), for a lookup that tries the same tables for every name: a name it rejects is a key of none
+/// of them. It holds the keys the tables had when they were added; the owner drops it when they may change.
+#[derive(Clone, Copy, Default)]
+pub struct NameFilter([u64; 4]);
+
+impl NameFilter {
+    #[inline]
+    fn bit_positions(hash: u32) -> [u32; 2] {
+        [(hash >> 12) & 255, (hash >> 20) & 255]
+    }
+
+    pub fn add_keys(&mut self, table: &SymbolTable) {
+        let m = table.0.borrow();
+        for i in 0..m.entries.len() {
+            for b in Self::bit_positions(m.entry_hash(i)) {
+                self.0[(b >> 6) as usize] |= 1 << (b & 63);
+            }
+        }
+    }
+
+    #[inline]
+    pub fn may_contain(&self, key: HashedName<'_>) -> bool {
+        Self::bit_positions(key.hash).iter().all(|&b| self.0[(b >> 6) as usize] & 1 << (b & 63) != 0)
+    }
+}
+
 impl SymbolTable {
+    /// `lookup` of a name hashed beforehand.
+    #[inline]
+    pub fn lookup_hashed(&self, key: HashedName<'_>) -> Option<P<Symbol>> {
+        let m = self.0.borrow();
+        m.position_hashed(key.name, key.hash).map(|i| m.entries[i].symbol())
+    }
+
     /// Go `make(ast.SymbolTable)`.
     pub fn new() -> P<SymbolTable> {
         P::new(SymbolTable::default())
@@ -878,4 +932,32 @@ pub fn escape_symbol_name(name: &str) -> String {
         return format!("_{name}");
     }
     name.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn name_filter_keeps_every_key() {
+        // Linear and indexed tables, keys up to and past 16 bytes, and an odd key (not its symbol's name).
+        let small = SymbolTable::new();
+        let large = SymbolTable::new();
+        let mut names = Vec::new();
+        for i in 0..200 {
+            let name: &'static str = Box::leak(format!("member{i}{}", "x".repeat(i % 23)).into_boxed_str());
+            names.push(name);
+            let table = if i < 10 { &small } else { &large };
+            table.set(name, Symbol::new(SymbolFlags::Property, name));
+        }
+        small.set("odd", Symbol::new(SymbolFlags::Property, "other"));
+        names.push("odd");
+        let mut filter = NameFilter::default();
+        filter.add_keys(&small);
+        filter.add_keys(&large);
+        for name in names {
+            assert!(filter.may_contain(HashedName::new(name)), "{name}");
+        }
+        assert!(!NameFilter::default().may_contain(HashedName::new("member0")));
+    }
 }
