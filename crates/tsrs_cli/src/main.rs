@@ -63,9 +63,14 @@ fn finish(status: tsc::ExitStatus) -> ! {
     }
     let _ = std::io::stdout().flush();
     let _ = std::io::stderr().flush();
-    // mimalloc prints its statistics from the process-done handler.
+    // mimalloc prints its statistics from the process-done handler, and an instrumented (PGO training) binary writes
+    // its profile from an exit handler too: `LLVM_PROFILE_FILE` is set only by .github/scripts/pgo-train.sh, and
+    // `_exit` would leave the profile at 0 bytes (which it did between #143 and this check).
     #[cfg(unix)]
-    if std::env::var_os("MIMALLOC_SHOW_STATS").is_none() && std::env::var_os("MIMALLOC_VERBOSE").is_none() {
+    if std::env::var_os("MIMALLOC_SHOW_STATS").is_none()
+        && std::env::var_os("MIMALLOC_VERBOSE").is_none()
+        && std::env::var_os("LLVM_PROFILE_FILE").is_none()
+    {
         // SAFETY: the output is flushed and nothing else in the process needs to run before it ends.
         unsafe { libc::_exit(code) }
     }

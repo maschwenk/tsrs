@@ -123,3 +123,15 @@ process: 94.4 G -> 85.0 G instructions (-10%), ~34.9 G -> ~31.5 G cycles (2 roun
 checker is unaffected on the private monorepo: 269.2 G vs 268.9 G instructions with one checker, 365.9 G vs
 363.7 G with four; identical output. A `workflow_dispatch` dry run of the release produced a fourslash profile on
 all four targets (macOS x86_64 under Rosetta included).
+
+## 2026-10-07: the CLI's `_exit` skipped the profile write
+
+PR #143 ends a command-line run with `_exit` once the output is flushed. The LLVM profile runtime writes `.profraw`
+from an exit handler, so the two `tsrs -p` training runs (xstate-main, webpack) left 0-byte files from the bench
+build of 8b3e4f4 on (`depot ci logs w7mq83j6f0`: `webpack-46807.profraw` and `xstate-main-46772.profraw` at 0 bytes,
+against 6.1 MB each in the build of 7262f61), `llvm-profdata merge` took them without a word, and the dist binary
+was trained on the in-process suites only. The README bench showed it as +1.8-3.5% single-threaded user-space
+instructions on every project between those two publishes while a release-build pr-verify of the same sources
+measured -0.2%. `finish` now calls `exit` when `LLVM_PROFILE_FILE` is set (only the training sets it), and
+pgo-train.sh fails on an empty profile.
+
