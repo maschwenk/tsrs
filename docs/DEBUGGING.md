@@ -259,6 +259,27 @@ and the diagnostics must equal a `TSRS_UNION_CACHE=0` run, with no panics (`tsrs
 failure means a stored call was not a function of its inputs: find which branch of `get_union_type_worker_inner` it
 took and either keep it out of the cache (count it in `union_front_cache.impure`) or fix the state it read.
 
+## Freeing checked leaf files: `TSRS_FREE_LEAVES`
+
+A CLI `--noEmit` check parses each TypeScript source file into a region of its own and frees the tree and binder
+output of each leaf as soon as its diagnostics are collected (`crates/tsrs_compiler/src/fileregions.rs`,
+notes/mem-free-leaf-files.md). A leaf is a checked TypeScript module that no other file refers to and that exports
+only its own declarations; on vscode that is 2,337 of 9,399 checked files. The text, the `SourceFile` and the
+diagnostics are kept, so the report is the same. It is off with declaration emit (`declaration`, `composite`),
+`--explainFiles`, `--incremental`, `--build`, `--checkerAssignment go`, in the language server, the API and the test
+harnesses, and under the debug modes that walk files or checker tables after the check (`TSRS_FILE_TIMES`,
+`TSRS_ASSIGNMENT_STATS`, the work and heap censuses, `TSRS_CENSUS=1`).
+
+| variable | values | effect |
+| --- | --- | --- |
+| `TSRS_FREE_LEAVES` | unset or `1` (free), `0`, `keep`, `stats` | `0`: no file regions (the layout before). `keep`: file regions and the leaf marks, nothing freed (what the regions alone cost). `stats`: free, and one line on stderr: the leaves, the bytes their regions used, all file regions' bytes, the pages given back and in how many system calls, and the arena address space the run used (`keep` prints it too) |
+
+After a change that reads a file after the check pass (a new report, a new whole-program loop in the checker, such as
+`getAlternativeContainingModules`'s), run a corpus with `TSRS_ARENA_POISON=1`: a freed region is then filled with
+`0xA5` and kept, so a read of a freed leaf crashes. The output must equal a `TSRS_FREE_LEAVES=0` run. `cargo test
+-p tsrs_cli --test free_leaf_files` covers the checker's loop over every module
+(testdata/regressions/leaf-alternative-containers).
+
 ## Profiling
 
 Profile the `dist` profile (fat LTO, one codegen unit; release builds also add PGO, `.github/workflows/release.yml`),
