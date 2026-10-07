@@ -353,6 +353,17 @@ def notable(text: str, value: float | None, better) -> str:
     return f"**{text}**" if value is not None and better(round(value, 2)) else text
 
 
+def speedup_sort_key(project: dict, mode: str) -> tuple[int, float]:
+    """Sort key for a table's rows: the biggest speedup vs tsgo (at the printed precision) first, rows without one (a
+    failed run, or a project that skipped the mode) last. sorted() is stable, so ties keep projects.json order."""
+    cell = project.get(mode)
+    if cell:
+        g, t = cell["tsgo"], cell["tsrs"]
+        if g["ok_runs"] and t["ok_runs"] and g["wall_s"] and t["wall_s"]:
+            return (0, -round(g["wall_s"] / t["wall_s"], 2))
+    return (1, 0.0)
+
+
 def tsrs_default_checkers(machine: dict) -> int:
     """tsrs's default checker count on a machine (checkerpool.rs default_checker_count; the small-program floor does
     not bind on these projects)."""
@@ -423,7 +434,7 @@ def markdown(result: dict, modes: list[str] | None = None) -> str:
                       "tsrs peak memory | memory efficiency vs tsgo |")
             rule = "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |"
         lines += [f"**{title}**", "", header, rule]
-        for name, pr in result["projects"].items():
+        for name, pr in sorted(result["projects"].items(), key=lambda item: speedup_sort_key(item[1], mode)):
             if mode not in pr:
                 continue
             g, t = pr[mode]["tsgo"], pr[mode]["tsrs"]
