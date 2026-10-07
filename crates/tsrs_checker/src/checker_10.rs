@@ -2784,10 +2784,15 @@ impl Checker {
      * return the symbol for that property. Otherwise return undefined.
      */
     // checker.go:21744
+    #[inline]
     pub(crate) fn get_property_of_object_type(&mut self, t: P<Type>, name: &str) -> Option<P<Symbol>> {
+        self.get_property_of_object_type_hashed(t, HashedName::new(name))
+    }
+
+    pub(crate) fn get_property_of_object_type_hashed(&mut self, t: P<Type>, key: HashedName<'_>) -> Option<P<Symbol>> {
         if t.flags().intersects(TypeFlags::Object) {
             let resolved = self.resolve_structured_type_members(t).unwrap();
-            let symbol = resolved.members().and_then(|m| m.lookup(name));
+            let symbol = resolved.members().and_then(|m| m.lookup_hashed(key));
             if let Some(symbol) = symbol {
                 if self.symbol_is_value(symbol) {
                     return Some(symbol);
