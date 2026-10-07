@@ -24,7 +24,7 @@ echo "== tsrs: $("$TSRS_BIN" --version); counts $counts; reps $reps; projects ${
 IFS=',' read -r -a names <<< "${PROBE_PROJECTS:-vscode}"
 IFS=',' read -r -a ks <<< "$counts"
 for name in "${names[@]}"; do
-  proj=$(python3 -c 'import json,sys; print(next(p["project"] for p in json.load(open(sys.argv[1])) if p["name"] == sys.argv[2]))' "$root/bench/projects.json" "$name")
+  proj=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); d=d["projects"] if isinstance(d, dict) else d; print(next(p["project"] for p in d if p["name"] == sys.argv[2]))' "$root/bench/projects.json" "$name")
   dir="$BENCH_WORK/solutions/$name"
   [ -d "$dir" ] || { echo "no checkout for $name at $dir" | tee -a "$PROBE_OUT/summary.txt"; continue; }
   cd "$dir"
@@ -34,7 +34,7 @@ for name in "${names[@]}"; do
     for k in "${ks[@]}"; do
       out="$PROBE_OUT/$name-checkers$k-rep$rep.txt"
       /usr/bin/time -f "%e %M" -o "$out.time" "$TSRS_BIN" "${flags[@]}" --checkers "$k" > "$out" 2>&1 || true
-      read -r wall kib < "$out.time"
+      read -r wall kib < <(tail -n 1 "$out.time")   # GNU time puts "Command exited with non-zero status" first when tsrs reports errors
       check=$(grep -E '^Check time' "$out" | tr -s ' ' | awk '{print $3}' | tr -d 's')
       printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$name" "$k" "$rep" "$wall" "$kib" "${check:-}" >> "$PROBE_OUT/runs.tsv"
       printf '%-18s --checkers %-3s rep %s: wall %s s, peak %s MiB, check %s s\n' "$name" "$k" "$rep" "$wall" "$((kib / 1024))" "${check:-?}" | tee -a "$PROBE_OUT/summary.txt"
