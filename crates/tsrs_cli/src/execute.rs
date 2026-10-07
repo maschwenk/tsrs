@@ -274,8 +274,29 @@ fn perform_compilation(
         Some(get_trace_from_sys(sys, testing)),
     );
 
+    // tsrs-only (notes/mem-free-leaf-files.md): a `--noEmit` check frees the tree of each file that nothing else
+    // refers to once it is checked. Not when anything reads the trees after the check pass: declaration
+    // diagnostics (`declaration`, `composite`), `--explainFiles` (the import nodes of each file), the tsctests harness,
+    // or Go's check history (`--checkerAssignment go`, a per-name cache that keeps another file's declarations).
+    let options = config.compiler_options().unwrap();
+    let leaf_freeing_allowed = testing.is_none()
+        && options.no_emit.is_true()
+        && !options.get_emit_declarations()
+        && !options.explain_files.is_true()
+        && !tsrs_core::compat::go_compatible_history();
+    let leaf_settings = if leaf_freeing_allowed {
+        tsrs_compiler::leaf_settings_from_env(tsrs_compiler::checker_count_upper_bound(&options, false))
+    } else {
+        tsrs_compiler::LeafSettings::default()
+    };
+    if leaf_settings.mode != tsrs_compiler::LeafMode::Off {
+        tsrs_compiler::enable_file_regions(leaf_settings, sys.get_current_directory());
+    }
+    let mut program_options = ProgramOptions::new(config, host);
+    program_options.leaf_files = leaf_settings.mode;
+
     let parse_start = sys.now();
-    let program = new_program(ProgramOptions::new(config, host));
+    let program = new_program(program_options);
     compile_times.parse_time = sys.now() - parse_start;
     let (result, _) = emit_and_report_statistics(&EmitInput {
         sys,
@@ -290,6 +311,9 @@ fn perform_compilation(
         testing,
         testing_m_times_cache: None,
     });
+    if let Some(line) = tsrs_compiler::leaf_stats_report() {
+        eprint!("{line}");
+    }
     #[cfg(feature = "alloc-profile")]
     crate::census::run(program, &[config.addr(), result.diagnostics.as_ptr() as usize]);
 

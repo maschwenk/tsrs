@@ -1,4 +1,5 @@
 use std::ptr::NonNull;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, MutexGuard, OnceLock};
 
 use rustc_hash::FxHashMap;
@@ -175,11 +176,43 @@ pub const CHECKER_STACK_SIZE: usize = 512 << 20;
 
 // Go core.WorkGroup as used by the checker pool: runs `task(i)` for every index, each on its own OS thread,
 // and waits for all of them. Single-threaded runs execute the tasks in order on the calling thread.
+//
+// tsrs-only: the threads are kept for the process (`checker_threads`) instead of being spawned and joined for every
+// work group. A program runs several groups (creating the checkers, the check pass, global diagnostics, each
+// --extendedDiagnostics counter), and starting 32 threads with 512 MB stacks and joining them cost about a
+// millisecond each time on the program thread. A broadcast runs `task` exactly once on each pool thread, the same
+// thread for the same index in every group; a panic is resumed here after every task has finished, as before.
 fn run_work_group(single_threaded: bool, count: usize, task: impl Fn(usize) + Sync) {
     if single_threaded || count <= 1 {
         (0..count).for_each(task);
         return;
     }
+    // One group at a time uses the kept threads. A group that starts while another one runs (programs checked
+    // concurrently in one process, or a group started from inside a group) gets threads of its own, as every group
+    // did before, instead of queueing behind the other group's tasks.
+    static IN_USE: AtomicBool = AtomicBool::new(false);
+    // Acquire/Release: the flag hands the pool from one group to the next; the broadcast itself synchronizes the
+    // tasks with this thread.
+    if IN_USE.compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed).is_err() {
+        spawn_work_group(count, task);
+        return;
+    }
+    struct Release;
+    impl Drop for Release {
+        fn drop(&mut self) {
+            // Release: pairs with the Acquire above; the next group to take the pool starts after this one ended.
+            IN_USE.store(false, Ordering::Release);
+        }
+    }
+    let _release = Release;
+    checker_threads(count).broadcast(|ctx| {
+        if ctx.index() < count {
+            task(ctx.index());
+        }
+    });
+}
+
+fn spawn_work_group(count: usize, task: impl Fn(usize) + Sync) {
     std::thread::scope(|s| {
         let task = &task;
         let handles: Vec<_> = (0..count)
@@ -204,6 +237,30 @@ fn run_work_group(single_threaded: bool, count: usize, task: impl Fn(usize) + Sy
             std::panic::resume_unwind(payload);
         }
     });
+}
+
+/// The checker threads: one pool with at least `count` threads, named `checker-<n>` (the alloc profile groups threads
+/// by that name) and with the checkers' stack size. A larger count than any before gets a new pool; the old one is
+/// left idle.
+fn checker_threads(count: usize) -> &'static rayon::ThreadPool {
+    static POOL: Mutex<Option<&'static rayon::ThreadPool>> = Mutex::new(None);
+    let mut pool = POOL.lock().unwrap();
+    match *pool {
+        Some(existing) if existing.current_num_threads() >= count => existing,
+        _ => {
+            let built: &'static rayon::ThreadPool = Box::leak(Box::new(
+                rayon::ThreadPoolBuilder::new()
+                    .num_threads(count)
+                    .stack_size(CHECKER_STACK_SIZE)
+                    .thread_name(|i| format!("checker-{i}"))
+                    .start_handler(|_| tsrs_ast::use_id_blocks())
+                    .build()
+                    .expect("failed to spawn the checker threads"),
+            ));
+            *pool = Some(built);
+            built
+        }
+    }
 }
 
 // A checker is mutated only while its mutex is held, by exactly one thread at a time; the pool
@@ -1133,11 +1190,7 @@ pub fn use_go_default_checker_count() {
 // Instantiations counters do (each checker counts what it creates), so they depend on the machine unless --checkers
 // is given.
 fn default_checker_count(program: &Program) -> i64 {
-    if GO_DEFAULT_CHECKER_COUNT.load(std::sync::atomic::Ordering::Relaxed) {
-        return GO_DEFAULT_CHECKERS;
-    }
-    let parallelism = std::thread::available_parallelism().map_or(1, |n| n.get()) as i64;
-    let by_machine = (parallelism / 2).min(MAX_DEFAULT_CHECKERS);
+    let by_machine = default_checker_count_by_machine();
     if by_machine <= GO_DEFAULT_CHECKERS {
         return GO_DEFAULT_CHECKERS;
     }
@@ -1145,6 +1198,29 @@ fn default_checker_count(program: &Program) -> i64 {
     let checked =
         program.files.iter().filter(|&&f| !((f.is_declaration_file.get() || ast::is_json_source_file(f)) && program.skip_type_checking(f, false))).count();
     by_machine.min(checked as i64 / MIN_CHECKED_FILES_PER_DEFAULT_CHECKER).max(GO_DEFAULT_CHECKERS)
+}
+
+// `default_checker_count` before the program's files are known: what the machine allows (the file count only lowers it).
+fn default_checker_count_by_machine() -> i64 {
+    if GO_DEFAULT_CHECKER_COUNT.load(std::sync::atomic::Ordering::Relaxed) {
+        return GO_DEFAULT_CHECKERS;
+    }
+    let parallelism = std::thread::available_parallelism().map_or(1, |n| n.get()) as i64;
+    (parallelism / 2).min(MAX_DEFAULT_CHECKERS).max(GO_DEFAULT_CHECKERS)
+}
+
+/// tsrs-only: the most checkers a program created with these options can get (`checkerPool::new`), known before its
+/// files are: `--checkers`, one when single-threaded, else the machine's default (fileregions.rs decides its default
+/// with it).
+pub fn checker_count_upper_bound(options: &tsrs_core::CompilerOptions, single_threaded: bool) -> usize {
+    let count = if single_threaded || options.single_threaded.is_true() {
+        1
+    } else if let Some(c) = options.checkers {
+        c
+    } else {
+        default_checker_count_by_machine()
+    };
+    count.clamp(1, 256) as usize
 }
 
 // Checker assignment by locality. Checker state duplication comes from files on different checkers that

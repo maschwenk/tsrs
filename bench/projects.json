@@ -87,6 +87,55 @@
       "commit": "9bd1d8009a6b7c50f9dd9458e2bf27d481ff3b43",
       "project": "apps/server",
       "install": "npx --yes pnpm@11.10.0 install --frozen-lockfile --ignore-scripts --filter t3... --filter @t3tools/scripts..."
+    },
+    {
+      "name": "mikro-orm",
+      "repo": "https://github.com/mikro-orm/mikro-orm.git",
+      "commit": "97fb2318067eae37ef52da57e2975eb7539ed729",
+      "project": ".",
+      "install": "npx --yes @yarnpkg/cli-dist@4.18.1 install --mode=skip-build"
+    },
+    {
+      "name": "next-packages-next",
+      "repo": "https://github.com/vercel/next.js.git",
+      "commit": "fa8dcf34f1629dacc62f1952ee8a66a2439781a5",
+      "project": "packages/next",
+      "install": "npx --yes pnpm@10.33.0 install --frozen-lockfile --ignore-scripts"
+    },
+    {
+      "name": "next-root",
+      "repo": "https://github.com/vercel/next.js.git",
+      "commit": "fa8dcf34f1629dacc62f1952ee8a66a2439781a5",
+      "project": ".",
+      "install": "npx --yes pnpm@10.33.0 install --frozen-lockfile --ignore-scripts"
+    },
+    {
+      "name": "storybook",
+      "repo": "https://github.com/storybookjs/storybook.git",
+      "commit": "48dfcc6becd3ab813b9d1de7966ef7fd9c8c9bc0",
+      "project": "scripts",
+      "install": "npx --yes @yarnpkg/cli-dist@4.18.0 install --mode=skip-build"
+    },
+    {
+      "name": "nuxt",
+      "repo": "https://github.com/nuxt/nuxt.git",
+      "commit": "85b8d54f6ce49f4d0f199e90513b1e5d5fa22196",
+      "project": ".",
+      "install": "npx --yes pnpm@12.9.1 install --frozen-lockfile --ignore-scripts"
+    },
+    {
+      "name": "playwright",
+      "repo": "https://github.com/microsoft/playwright.git",
+      "commit": "d469960fdfc461e2d5795a3fa48a58a52a91ecaf",
+      "project": ".",
+      "install": "npm ci --ignore-scripts --no-audit --no-fund"
+    },
+    {
+      "name": "drizzle-orm",
+      "repo": "https://github.com/drizzle-team/drizzle-orm.git",
+      "commit": "15454dbe49d827c6081f3d0231e2e7985e517295",
+      "project": ".",
+      "install": "npx --yes pnpm@10.6.3 install --frozen-lockfile --ignore-scripts"
     }
   ]
 }

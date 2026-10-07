@@ -2314,12 +2314,24 @@ pub fn match_pattern_or_exact(patterns: &ParsedPatterns, candidate: &str) -> Pat
 // in `.` are actually normalized to `./` before proceeding with the resolution algorithm.
 fn normalize_path_for_cjs_resolution(containing_directory: &str, module_name: &str) -> String {
     let combined = tspath::combine_paths(containing_directory, &[module_name]);
-    let parts = tspath::get_path_components(&combined, "");
-    let last_part = &parts[parts.len() - 1];
+    let last_part = last_path_component(&combined);
     if last_part == "." || last_part == ".." {
         return tspath::ensure_trailing_directory_separator(&tspath::normalize_path(&combined));
     }
     tspath::normalize_path(&combined)
+}
+
+// tsrs-only: the last element of `tspath::get_path_components(path, "")` for a path with forward slashes (as
+// `combine_paths` returns it), without building the list (one string per component, on every relative import):
+// the last "/"-separated part after the root, one trailing empty part dropped, or the root when nothing follows it.
+fn last_path_component(path: &str) -> &str {
+    let root_length = tspath::get_root_length(path);
+    let rest = &path[root_length..];
+    if rest.is_empty() {
+        return &path[..root_length];
+    }
+    let rest = rest.strip_suffix('/').unwrap_or(rest);
+    &rest[rest.rfind('/').map_or(0, |i| i + 1)..]
 }
 
 fn matches_pattern_with_trailer(target: &str, name: &str) -> bool {
@@ -2708,5 +2720,21 @@ impl ResolutionState<'_> {
         }
 
         None
+    }
+}
+
+#[cfg(test)]
+mod last_path_component_test {
+    use super::*;
+
+    #[test]
+    fn matches_the_last_path_component() {
+        for path in [
+            "/", "/a", "/a/", "/a/.", "/a/..", "/a/./", "/a/../", "/a//", "/a/b/c.ts", "/a/b//", "c:/", "c:/x/..", "//server/share/x",
+            "file:///a/b", "a", "a/", "", ".", "..", "./", "/.", "/..",
+        ] {
+            let parts = tspath::get_path_components(path, "");
+            assert_eq!(last_path_component(path), parts[parts.len() - 1], "{path:?}");
+        }
     }
 }

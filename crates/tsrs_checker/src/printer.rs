@@ -616,6 +616,13 @@ impl Checker {
                     if !ast::is_external_module(file) {
                         continue;
                     }
+                    // tsrs-only: a check leaf another checker may have freed; its answer is nil for any symbol this
+                    // checker can name here. Its export table holds only symbols declared in it (no alias, `export *`
+                    // or `export =`) and nothing outside it refers to it, so `symbol`, declared elsewhere, is neither
+                    // its export nor re-exported by it (`is_unreadable_check_leaf`).
+                    if self.is_unreadable_check_leaf(file) {
+                        continue;
+                    }
                     let sym = self.get_symbol_of_declaration(file.as_node()).unwrap();
                     let ref_ = self.get_alias_for_symbol_in_container(sym, symbol);
                     if ref_.is_none() {
@@ -842,6 +849,15 @@ impl Checker {
         let pending = std::mem::take(&mut self.module_export_index.pending);
         let mut still_pending = Vec::with_capacity(pending.len());
         for i in pending {
+            // tsrs-only: a check leaf another checker may have freed; its answer is nil for any symbol this checker
+            // can name here. Its export table holds only symbols declared in it (no alias, `export *` or `export =`)
+            // and nothing outside it refers to it, so `symbol`, declared elsewhere, is neither its export nor
+            // re-exported by it (`is_unreadable_check_leaf`). It stays pending: if this checker checks it later, it is
+            // asked then, as before.
+            if self.is_unreadable_check_leaf(files[i as usize]) {
+                still_pending.push(i);
+                continue;
+            }
             let sym = self.get_symbol_of_declaration(files[i as usize].as_node()).unwrap();
             if self.get_alias_for_symbol_in_container(sym, symbol).is_some() {
                 found.push(i);
@@ -864,6 +880,23 @@ impl Checker {
         found.sort_unstable();
         found.dedup();
         Some(found.into_iter().map(|i| self.get_symbol_of_declaration(files[i as usize].as_node()).unwrap()).collect())
+    }
+
+    // tsrs-only (notes/mem-free-leaf-files.md): whether the whole-program loops of getAlternativeContainingModules
+    // must pass over `file` without reading it: a check leaf (`SourceFile::is_check_leaf`, CLI `--noEmit` only) other
+    // than the file this checker is checking, whose tree the checker that checks it frees when it is done (possibly
+    // while this loop runs). Skipping it gives the answer asking it would give, nil:
+    // - Nothing outside a leaf refers to it and it declares nothing global, so a symbol this checker names while it
+    //   checks another file is declared outside the leaf: the leaf is not its parent.
+    // - A leaf's export table holds only symbols declared in it: it has no alias export (`export { x }`, `export ...
+    //   from`, `export import`, `export default <name>`), no `export *` and no `export =`. So no entry resolves to a
+    //   symbol declared elsewhere, and `getAliasForSymbolInContainer(leaf, symbol)` is nil.
+    // - Asking has no effect that reaches output: the leaf's export table needs no `export *` merge (the only part
+    //   of `getExportsOfModule` that reports), and the module export index entries it would add are keyed by the
+    //   leaf's own symbols.
+    // The checker that checks the leaf asks it as before (`checking_file`).
+    fn is_unreadable_check_leaf(&self, file: P<SourceFile>) -> bool {
+        file.is_check_leaf() && self.checking_file != Some(file)
     }
 
     // See modules_exporting; true when module `i` (symbol `sym`) is summarized.

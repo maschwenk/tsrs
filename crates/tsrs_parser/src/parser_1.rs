@@ -215,6 +215,13 @@ pub fn parse_source_file_owned(opts: SourceFileParseOptions, source_text: String
     }
 }
 
+/// `parse_source_file_owned` that keeps the text (leaked, as outside a region) even inside a region: for the CLI's
+/// per-file regions (`tsrs_compiler` fileregions.rs), which may free a checked file's tree but keep its text, its
+/// `SourceFile` and its diagnostics for the report.
+pub fn parse_source_file_keep_text(opts: SourceFileParseOptions, source_text: String, script_kind: ScriptKind) -> P<SourceFile> {
+    parse_source_file_static(opts, source_text.leak(), script_kind)
+}
+
 /// Parses text that lives for the whole process (the bundled libs, `include_str!` in the binary): outside a region
 /// the file reads the text in place, with no copy and nothing to leak; inside a region it behaves like
 /// `parse_source_file_owned` (the region holds the text the file reads, and forgets it when it is freed).
@@ -628,7 +635,12 @@ impl Parser {
             statements.append(&mut self.reparse_list);
         }
         let statement_list = self.new_node_list(new_text_range(pos, end), &statements);
-        let node = self.factory.new_source_file(self.opts.clone(), self.source_text, statement_list, eof);
+        let node = {
+            // tsrs-only: the `SourceFile` outlives a scratch region the file is parsed in (fileregions.rs in
+            // tsrs_compiler frees a checked file's tree, not the file); a no-op outside one.
+            let _outer = tsrs_core::arena::escape_scratch();
+            self.factory.new_source_file(self.opts.clone(), self.source_text, statement_list, eof)
+        };
         node.as_source_file().text_index.set(self.source_text_index);
         let node = self.finish_node(node, pos);
         let mut result = node.as_source_file_p();
@@ -785,7 +797,11 @@ impl Parser {
 
         let loc = source_file.statements.loc.get();
         let list = self.new_node_list(loc, &statements);
-        let result = self.factory.new_source_file(source_file.parse_options().clone(), self.source_text, list, source_file.end_of_file_token);
+        let result = {
+            // See parse_source_file_worker.
+            let _outer = tsrs_core::arena::escape_scratch();
+            self.factory.new_source_file(source_file.parse_options().clone(), self.source_text, list, source_file.end_of_file_token)
+        };
         result.as_source_file().text_index.set(self.source_text_index);
         for s in &statements {
             s.set_parent(Some(result)); // force (re)set parent to reparsed source file

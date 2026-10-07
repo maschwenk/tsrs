@@ -221,6 +221,49 @@ pub(crate) unsafe fn release_chunk(p: *mut u8, size: usize) {
     CHUNKS.lock().unwrap_or_else(|e| e.into_inner()).put(off, size);
 }
 
+/// The system page size (16 KiB on Apple silicon, 4 KiB on most Linux machines).
+#[cfg(unix)]
+pub(crate) fn page_size() -> usize {
+    static PAGE_SIZE: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+    // SAFETY: sysconf reads a system constant.
+    *PAGE_SIZE.get_or_init(|| usize::try_from(unsafe { libc::sysconf(libc::_SC_PAGESIZE) }).ok().filter(|p| p.is_power_of_two()).unwrap_or(4096))
+}
+
+/// Gives the memory of the whole pages inside `p .. p + len` (part of a chunk from `alloc_chunk`) back to the system
+/// without returning the range: it is never handed out again, so no later object gets the address of one that was
+/// there (a stale key in a table keyed by address stays stale). For a freed file region whose neighbours in its slab
+/// are alive (`arena::Region::retire_on_free`). Linux: `MADV_DONTNEED` (no mapping split, so no growth in the
+/// number of mappings; a stray read sees zeros). Elsewhere: a no-access mapping over the pages, as `decommit` (a stray
+/// access faults), which also takes them out of the macOS footprint at once (`MADV_FREE` only marks them reclaimable).
+///
+/// Bound: a discarded range stays taken, so a run uses as much of the reservation as if the memory had never been
+/// freed, which is what the batch compiler did before. The retired file regions of a `--noEmit` check hold their
+/// chunks' capacity (vscode: 408 MB for 2,337 leaves; 2.0 GB of the reservation in use at the peak with 4 checkers,
+/// with or without freeing). File regions take about a third more reservation than the bytes they use (unused chunk
+/// tails: vscode 1,050 MB for 794 MB), so about 0.3 GiB more on the 38k-file codebase (27.5k TypeScript files, 954 MiB
+/// of parse and bind output), whose worst measured peak is 11.4 GiB of the 32 GiB (notes/mem-free-leaf-files.md).
+///
+/// # Safety
+/// Nothing may use the memory afterwards.
+#[cfg(unix)]
+pub(crate) unsafe fn discard(p: *mut u8, len: usize) {
+    let page = page_size();
+    let start = p.addr().next_multiple_of(page);
+    let end = (p.addr() + len) & !(page - 1);
+    if end <= start {
+        return;
+    }
+    let q = p.with_addr(start);
+    #[cfg(target_os = "linux")]
+    // SAFETY: whole pages inside the reservation that nothing uses any more (this function's contract). Advice
+    // only: if it fails the pages stay resident and nothing else changes.
+    unsafe {
+        libc::madvise(q.cast(), end - start, libc::MADV_DONTNEED)
+    };
+    #[cfg(not(target_os = "linux"))]
+    decommit(q, end - start);
+}
+
 /// Bytes of the reservation handed out as chunks and not released.
 pub fn reserved_in_use() -> usize {
     CHUNKS.lock().unwrap_or_else(|e| e.into_inner()).live

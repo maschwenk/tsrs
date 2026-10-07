@@ -210,18 +210,21 @@ pub(crate) fn process_all_program_files(opts: &ProgramOptions, single_threaded: 
             &containing_file,
             false,
         );
-        (abs_path, looked_up)
+        // The task's path, which `filesParser::start` would otherwise compute from the task's file name on this thread.
+        let name = if looked_up.1.is_some() { &abs_path } else { &looked_up.0 };
+        let path = tspath::to_path(name, host.get_current_directory(), host.fs().use_case_sensitive_file_names());
+        (abs_path, looked_up, path)
     };
-    let looked_up: Vec<(String, (String, Option<sourceFileFromReferenceDiagnostic>))> = if single_threaded {
+    let looked_up: Vec<(String, (String, Option<sourceFileFromReferenceDiagnostic>), Path)> = if single_threaded {
         root_files.iter().map(lookup).collect()
     } else {
         use rayon::prelude::*;
         crate::program::worker_pool().install(|| root_files.par_iter().map(lookup).collect())
     };
-    for (index, (abs_path, (resolved_file, diagnostic))) in looked_up.into_iter().enumerate() {
+    for (index, (abs_path, (resolved_file, diagnostic), path)) in looked_up.into_iter().enumerate() {
         let mut reason = FileIncludeReason::new(fileIncludeKind::RootFile);
         reason.index = index;
-        loader.add_root_file_task_with(abs_path, resolved_file, diagnostic, None, P::new(reason));
+        loader.add_root_file_task_with(abs_path, resolved_file, diagnostic, None, P::new(reason), path);
     }
     tsrs_core::phases::record("Program: root file lookups", roots_start.elapsed());
     if !root_files.is_empty() && compiler_options.no_lib.is_false_or_unknown() {
@@ -253,7 +256,14 @@ pub(crate) fn process_all_program_files(opts: &ProgramOptions, single_threaded: 
 
     let processed = tsrs_core::phases::time("Program: collect files", || filesParser::get_processed_files(&mut loader));
     let resolution_data = loader.resolver.get_resolution_data();
-    (processed, resolution_data, loader.module_resolution_error.take())
+    let module_resolution_error = loader.module_resolution_error.take();
+    // tsrs-only: the loader's tasks and maps and the resolver's caches (heap only; nothing the program refers to) are
+    // freed on a helper thread while the program is set up, not on this thread (vscode: 3-4 ms of frees).
+    if !single_threaded {
+        let fileLoader { tasks, files_parser, resolver, .. } = loader;
+        std::thread::spawn(move || drop((tasks, files_parser, resolver)));
+    }
+    (processed, resolution_data, module_resolution_error)
 }
 
 impl fileLoader {
@@ -284,8 +294,10 @@ impl fileLoader {
         diagnostic: Option<sourceFileFromReferenceDiagnostic>,
         lib_file: Option<P<LibFile>>,
         include_reason: P<FileIncludeReason>,
+        path: Path,
     ) {
         let mut root_task = parseTask::new(resolved_file);
+        root_task.path = path;
         root_task.lib_file = lib_file;
         root_task.include_reason = Some(include_reason);
         if let Some(diagnostic) = diagnostic {
@@ -396,7 +408,8 @@ impl fileLoader {
     }
 
     pub(crate) fn parse_source_file(&self, t: TaskId) -> Option<P<SourceFile>> {
-        self.host.get_source_file(self.parse_options_for_task(t))
+        let is_root = self.tasks[t].include_reason.is_some_and(|r| r.is_root_file());
+        crate::fileregions::parse_task(is_root, || self.host.get_source_file(self.parse_options_for_task(t)))
     }
 }
 
@@ -477,6 +490,13 @@ pub(crate) struct prefetchedResolutions {
     // The file's resolutions keyed by module name and mode, inserted in import order: what the sequential load builds
     // for a file without synthetic imports, so it takes this one instead (the same hashing and insertion sequence).
     pub(crate) resolutions_in_file: ModeAwareCache<P<ResolvedModule>>,
+}
+
+impl prefetchedResolutions {
+    /// At most the number of sub tasks that loading the file adds from these resolutions.
+    pub(crate) fn sub_task_bound(&self) -> usize {
+        self.referenced_files.len() + self.imports.len() + self.type_references.len()
+    }
 }
 
 pub(crate) struct prefetchedImport {

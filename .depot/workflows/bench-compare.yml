@@ -127,7 +127,56 @@ jobs:
           path: bench/.work/solutions/webpack
           key: bench-webpack-${{ runner.os }}-${{ steps.keys.outputs['webpack'] }}
 
-      # Also installs the 7.1-dev reference nightly. Projects outside these three are set up by compare.py.
+      - name: Restore mikro-orm
+        if: steps.keys.outputs['mikro-orm'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/mikro-orm
+          key: bench-mikro-orm-${{ runner.os }}-${{ steps.keys.outputs['mikro-orm'] }}
+
+      - name: Restore next-packages-next
+        if: steps.keys.outputs['next-packages-next'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/next-packages-next
+          key: bench-next-packages-next-${{ runner.os }}-${{ steps.keys.outputs['next-packages-next'] }}
+
+      - name: Restore next-root
+        if: steps.keys.outputs['next-root'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/next-root
+          key: bench-next-root-${{ runner.os }}-${{ steps.keys.outputs['next-root'] }}
+
+      - name: Restore storybook
+        if: steps.keys.outputs['storybook'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/storybook
+          key: bench-storybook-${{ runner.os }}-${{ steps.keys.outputs['storybook'] }}
+
+      - name: Restore nuxt
+        if: steps.keys.outputs['nuxt'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/nuxt
+          key: bench-nuxt-${{ runner.os }}-${{ steps.keys.outputs['nuxt'] }}
+
+      - name: Restore playwright
+        if: steps.keys.outputs['playwright'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/playwright
+          key: bench-playwright-${{ runner.os }}-${{ steps.keys.outputs['playwright'] }}
+
+      - name: Restore drizzle-orm
+        if: steps.keys.outputs['drizzle-orm'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/drizzle-orm
+          key: bench-drizzle-orm-${{ runner.os }}-${{ steps.keys.outputs['drizzle-orm'] }}
+
+      # Also installs the 7.1-dev reference nightly. Cache-miss projects are set up by compare.py.
       - name: Set up benchmark projects
         run: python3 bench/run.py --setup-only --projects vscode,xstate-main,webpack
 

@@ -1,0 +1,1 @@
+a.ts(6,14): error TS2322: Type '{ a: Q; }' is not assignable to type 'string'.

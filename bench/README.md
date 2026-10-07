@@ -52,18 +52,27 @@ builds); the tsserver/LSP/startup scenarios (not `tsc` runs). All six included p
 ## Application projects
 
 The suite has one application-shaped workload (`mui-docs`), and none of its projects leans on schema-validation
-types. Four large applications fill that gap: three Next.js/React apps built on Zod and tested with Vitest, and an
-Effect server (Effect Schema, `@effect/vitest`). Each is pinned to one commit and checks the tsconfig its own
-`typecheck` script checks, so test files are part of the program.
+types. Application projects include four large applications (three Next.js/React apps built on Zod and tested with Vitest, and an
+Effect server), plus Bun's published benchmark set (mikro-orm, next.js root and packages/next, storybook, nuxt, playwright)
+and one more popular library (drizzle-orm). Each is pinned to one commit.
 
-| project | repository @ commit | `-p` | files / types (tsgo) | workload |
+| project | repository @ commit | `-p` | files | workload |
 | --- | --- | --- | ---: | --- |
-| `cal-diy` | calcom/cal.diy @ `54343aa685ae` | `apps/web` | 10,166 / 2.48 M | Zod 3, tRPC 11, Prisma-generated Zod types |
-| `formbricks-web` | formbricks/formbricks @ `ec45c28e4d20` | `apps/web/tsconfig.typecheck.json` | 10,451 / 2.85 M | Zod 4, Vitest, Prisma 7 |
-| `supabase-studio` | supabase/supabase @ `12afe3999951` | `apps/studio` | 12,546 / 2.22 M | Zod 3, Vitest, Next.js route types |
-| `t3code-server` | pingdotgg/t3code @ `9bd1d8009a6b` | `apps/server` | 3,007 / 3.18 M | Effect 4, Effect Schema, `@effect/vitest` |
+| `cal-diy` | calcom/cal.diy @ `54343aa685ae` | `apps/web` | 10,166 | Zod 3, tRPC 11, Prisma-generated Zod types |
+| `formbricks-web` | formbricks/formbricks @ `ec45c28e4d20` | `apps/web/tsconfig.typecheck.json` | 10,451 | Zod 4, Vitest, Prisma 7 |
+| `supabase-studio` | supabase/supabase @ `12afe3999951` | `apps/studio` | 12,546 | Zod 3, Vitest, Next.js route types |
+| `t3code-server` | pingdotgg/t3code @ `9bd1d8009a6b` | `apps/server` | 3,007 | Effect 4, Effect Schema, `@effect/vitest` |
+| **Bun benchmark set** | | | | |
+| `mikro-orm` | mikro-orm/mikro-orm @ `97fb231` | `.` | 2,911 | TypeScript 7 monorepo, ORM with schema types |
+| `next-packages-next` | vercel/next.js @ `fa8dcf3` | `packages/next` | 2,882 | Next.js core package (Bun measured 2,881 files) |
+| `next-root` | vercel/next.js @ `fa8dcf3` | `.` | 3,549 | Next.js repo root monorepo (Bun measured 3,547 files) |
+| `storybook` | storybookjs/storybook @ `48dfcc6` | `scripts` | ~1,039 | Storybook scripts (Bun measured 1,039 files) |
+| `nuxt` | nuxt/nuxt @ `85b8d54` | `.` | ~3,901 | Nuxt framework monorepo (broader tsconfig than Bun's 839; same commit) |
+| `playwright` | microsoft/playwright @ `d469960` | `.` | ~1,515 | Playwright testing framework (broader tsconfig than Bun's 706; same commit) |
+| **Other popular libraries** | | | | |
+| `drizzle-orm` | drizzle-team/drizzle-orm @ `15454db` | `.` | ~943 | Drizzle ORM (large popular project) |
 
-Each install command does what the app's own `typecheck` needs before `tsc` runs, with package scripts off:
+**Original application projects:** Each install command does what the app's own `typecheck` needs before `tsc` runs, with package scripts off:
 
 - `cal-diy`: Yarn 4 install, then `turbo run post-install @calcom/trpc#build` (Prisma client, Zod and Kysely types,
   the platform packages, and the tRPC router declarations `apps/web` imports). `YARN_NM_MODE=classic` keeps a global
@@ -78,6 +87,15 @@ Each install command does what the app's own `typecheck` needs before `tsc` runs
 - `t3code-server`: pnpm install of `t3`, `@t3tools/scripts` (`apps/server`'s tsconfig includes `scripts/lib`) and
   their workspace dependencies. The repository's `prepare` script patches its TypeScript for the Effect language
   service, which neither compiler measured here runs.
+
+**Bun benchmark set and large popular projects:** Minimal installs without build steps (the projects' tsconfigs require only node_modules):
+
+- `mikro-orm`: Yarn 4 install.
+- `next-packages-next` and `next-root`: pnpm install with `--frozen-lockfile`.
+- `storybook`: Yarn 4 install (scripts directory).
+- `nuxt`: pnpm install.
+- `playwright`: npm ci.
+- `drizzle-orm`: pnpm install.
 
 **Overlays.** cal.diy and Formbricks still compile with TypeScript 5.9, whose tsconfig options TypeScript 7 removed
 (`baseUrl`, `moduleResolution: node`, `target: es5`); unmodified, both stop at config errors before checking a
@@ -209,7 +227,9 @@ cache for the suite checkout plus the npm-installed compilers (`typescript@7.0.2
 per cloned project (checkout + `node_modules`) keyed on its pinned commit and install command
 (`bench/run.py --print-cache-keys`), so changing one pin re-installs only that project. Each measuring job restores
 the shared cache and its own project's; the build job restores the two training projects (xstate-main, webpack) and
-saves the shared cache.
+saves the shared cache. The build job, and `ci.yml`'s `check-and-test` and `arena-safety` jobs, restore the TypeScript
+testdata (`ts-ref/tsc/testdata`, 22 MB compressed) from a cache keyed on the TypeScript commit; on a miss they run the
+sparse checkout and save it. That saves about 4 s per job (2026-10-07: checkout 4.9-5.7 s, restore 1.4 s).
 
 Job duration split, 2026-10-01:
 
@@ -248,6 +268,13 @@ The other measurements, in `partials` of the result: t3code-server 254 s, mui-do
 formbricks-web 122 s, cal-diy 91 s, webpack 34 s, xstate-main 15 s, Compiler-Unions 8 s, Compiler 5 s. All ten jobs
 landed on the same CPU model. Each measuring job adds a runner start-up and cache restore (about 15 s for vscode) to
 the runner minutes.
+
+The measuring jobs still start when the build job ends. Starting them with the build and having them wait for its
+artifact works on Depot CI (a job can download an artifact that a still-running job uploaded). It was tried on
+2026-10-07 (Depot run `tdzf0g0cqn` vs `main`'s `ps_ghllxhtgmq`): measuring began 2-3 s after the build instead of
+20 s (vscode) and 50 s (`measure-wide`) after it. But build start to merge end was 20 min 53 s vs 20 min 56 s,
+because the 64-vCPU job's 13-minute measurement varies by more than that (762 s vs 779 s). And eleven runners, one of
+them 64 vCPU, sat idle through the 7-minute build.
 
 ## Verifying a branch
 
