@@ -1216,7 +1216,9 @@ mod retired {
             let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             s.pending.push((start, start + len));
             s.pending_bytes += len;
-            if s.pending_bytes < BATCH {
+            let x = experiment();
+            let batch = if x & X_BATCH64 != 0 { 64 << 20 } else { BATCH };
+            if x & X_DEFER != 0 || s.pending_bytes < batch {
                 return;
             }
             let pages = take_pages(&mut s);
@@ -1362,6 +1364,37 @@ mod retired {
     /// Gives back `calls` (whole pages of retired spans, `spans_of`); `pages`, the ones not given back before, are
     /// what `stats` counts.
     fn give_back(pages: &[(usize, usize)], calls: &[(usize, usize)]) {
+        // Relaxed: counters (see `stats`).
+        BYTES.fetch_add(pages.iter().map(|&(first, last)| last - first).sum(), Ordering::Relaxed);
+        let x = experiment();
+        if x & X_NOGIVE != 0 {
+            return;
+        }
+        let calls: Vec<(usize, usize)> = if x & X_SMALL != 0 {
+            let piece = 32 * crate::reserve::page_size();
+            calls.iter().flat_map(|&(first, last)| (first..last).step_by(piece).map(move |a| (a, (a + piece).min(last)))).collect()
+        } else {
+            calls.to_vec()
+        };
+        if x & X_BG != 0 {
+            static TX: Mutex<Option<std::sync::mpsc::Sender<Vec<(usize, usize)>>>> = Mutex::new(None);
+            let mut tx = TX.lock().unwrap();
+            let tx = tx.get_or_insert_with(|| {
+                let (tx, rx) = std::sync::mpsc::channel::<Vec<(usize, usize)>>();
+                std::thread::spawn(move || {
+                    for calls in rx {
+                        discard_all(&calls);
+                    }
+                });
+                tx
+            });
+            let _ = tx.send(calls);
+            return;
+        }
+        discard_all(&calls);
+    }
+
+    fn discard_all(calls: &[(usize, usize)]) {
         for &(first, last) in calls {
             // SAFETY: whole pages inside retired spans: chunks and slabs nothing uses any more, never handed out
             // again; `first` is page aligned (and so is `last - first`).
@@ -1369,7 +1402,30 @@ mod retired {
         }
         // Relaxed: counters (see `stats`).
         CALLS.fetch_add(calls.len(), Ordering::Relaxed);
-        BYTES.fetch_add(pages.iter().map(|&(first, last)| last - first).sum(), Ordering::Relaxed);
+    }
+
+    const X_NOGIVE: u32 = 1;
+    const X_SMALL: u32 = 2;
+    const X_BG: u32 = 4;
+    const X_BATCH64: u32 = 8;
+    const X_DEFER: u32 = 16;
+
+    /// Throwaway switches for the 32-checker probe (`TSRS_LEAF_EXPERIMENT`, comma-separated).
+    fn experiment() -> u32 {
+        static X: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
+        *X.get_or_init(|| {
+            let v = std::env::var("TSRS_LEAF_EXPERIMENT").unwrap_or_default();
+            v.split(',').fold(0, |acc, w| {
+                acc | match w.trim() {
+                    "nogive" => X_NOGIVE,
+                    "small" => X_SMALL,
+                    "bg" => X_BG,
+                    "batch64" => X_BATCH64,
+                    "defer" => X_DEFER,
+                    _ => 0,
+                }
+            })
+        })
     }
 }
 
