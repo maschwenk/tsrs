@@ -192,13 +192,18 @@ fn tsc_compilation(
             }
             _ => None,
         };
-        let (config_parse_result, errors) = tsoptions::get_parsed_command_line_of_config_file(
-            &config_file_name,
-            Some(&compiler_options_from_command_line),
-            command_line_raw.as_ref(),
-            host,
-            Some(&*extended_config_cache),
-        );
+        // tsrs-only: parsed on the compiler's worker pool, so that the include glob's parallel listing prefetch runs on
+        // the pool program construction uses next instead of starting rayon's global pool (one thread per vCPU, which
+        // nothing else in a run needs).
+        let (config_parse_result, errors) = tsrs_compiler::worker_pool().install(|| {
+            tsoptions::get_parsed_command_line_of_config_file(
+                &config_file_name,
+                Some(&compiler_options_from_command_line),
+                command_line_raw.as_ref(),
+                host,
+                Some(&*extended_config_cache),
+            )
+        });
         compile_times.config_time = sys.now() - config_start;
         if !errors.is_empty() {
             // these are unrecoverable errors--exit to report them as diagnostics

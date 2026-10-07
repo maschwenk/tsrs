@@ -948,7 +948,7 @@ impl Program {
         if !concurrent || self.single_threaded() {
             source_files.iter().map(|&f| collect(ctx, f)).collect()
         } else {
-            source_files.par_iter().map(|&f| collect(ctx, f)).collect()
+            worker_pool().install(|| source_files.par_iter().map(|&f| collect(ctx, f)).collect())
         }
     }
 
