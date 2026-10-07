@@ -195,7 +195,10 @@ a results file), never cancelled, network steps retried, and the results commit 
 `main` before pushing. Runs overlap and finish in any order, so `README.md` keeps the newest commit's table: a run
 whose commit is an ancestor of the one the table came from (its last line names it) adds its results file and leaves
 the table alone, and the regression flag compares a run with the nearest earlier benchmarked ancestor of its commit,
-not with the newest file by date.
+not with the newest file by date. A commit whose bench was skipped or cancelled (before 2026-10-07, most commits of
+a burst of merges) is backfilled with `depot ci dispatch --repo maschwenk/tsrs --workflow bench.yml --ref main --input
+commit=<sha>`: the build and measuring jobs check out that commit, the merge job runs the current scripts, the results
+file is committed, and the README table is applied only when no newer commit's table is there.
 
 **History**: `bench/history.py` prints one table per metric over `bench/results/*.json` in `main`'s first-parent
 order, a column per project, each cell with its change against the previous benchmarked commit (with one run per
