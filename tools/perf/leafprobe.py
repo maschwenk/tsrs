@@ -201,14 +201,16 @@ def main() -> None:
                 rep = sh([perf, "report", "-i", str(data), "--no-children", "--sort", sort, "--stdio", "-g", "none", "--percent-limit", "0.3"])
                 (out / f"perf-{tag}-{what}.txt").write_text(rep)
                 extras.append(f"### perf report --sort {sort} {tag}\n```\n{rep[:6000]}\n```")
-            kern = sh([perf, "report", "-i", str(data), "--no-children", "--sort", "sym", "--stdio", "-g", "caller,0.5,callee", "--percent-limit", "1",
-                       "--dsos", "[kernel.kallsyms]"])
+            # Kernel symbols: every `[k]` line of a flat report (the kernel is a few percent of the samples).
+            flat = sh([perf, "report", "-i", str(data), "--no-children", "--sort", "sym", "--stdio", "-g", "none", "--percent-limit", "0.005"])
+            kern = "\n".join(l for l in flat.splitlines() if "[k]" in l)
             (out / f"perf-{tag}-kernel-callers.txt").write_text(kern)
             extras.append(f"### kernel symbols with callers {tag}\n```\n{kern[:12000]}\n```")
         datas = [out / f"perf-{name}-c{k}-{vname}.data" for vname, _ in variants]
         for other in datas[1:]:
             if datas[0].exists() and other.exists():
-                d = sh([perf, "diff", "--sort", "dso,sym", "--percent-limit", "0.2", str(datas[0]), str(other)])
+                d = subprocess.run([perf, "diff", "--sort", "dso,sym", str(datas[0]), str(other)], capture_output=True, text=True)
+                d = d.stdout + d.stderr[-2000:]
                 (out / f"perf-diff-{datas[0].stem}-{other.stem}.txt").write_text(d)
                 extras.append(f"### perf diff {datas[0].stem} -> {other.stem}\n```\n{d[:8000]}\n```")
         for data in datas:
