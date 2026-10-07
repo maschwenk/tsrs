@@ -1,5 +1,44 @@
 # Status
 
+## 2026-10-07: 0.6.0 release
+
+A performance and memory release; the TypeScript source pin remains `b85298b6a81f772d080b0455de0ca9d744cd6fd6`
+(7.1.0-dev.20260929) and the published package set is unchanged. README bench at commit `313e834a19e0`
+(`bench/results/`), default mode on `depot-ubuntu-24.04-64`: vscode 0.60 s -> 0.54 s and 2.87 GiB -> 2.73 GiB against
+the 0.5.0 table. Emitted output is unchanged against tsgo at the same pin, and so are diagnostics in
+`--checkerAssignment go` mode; the default mode differs in one case (below).
+
+Checker and memory: the checker memoizes repeated inference walks by their inputs (#145, vscode -7.2% and t3code -11.9%
+instructions); link values and 4-byte buckets sit inline in four link stores (#136, -72 MiB at 32 checkers on vscode)
+and export-star re-exports leave no dead scratch (#135, -150 MiB on formbricks at 32 checkers); the binder keeps flat
+per-file label edges (#139, -5.4 MB on vscode); the bundled libs are parsed from the binary's text (#131). Checked leaf
+files' trees are freed in `--noEmit` runs, on by default up to 16 checkers (#137, #159: vscode -13 to -16% peak, within
+1.6% wall at 1 to 8 checkers on 8 vCPUs). A heavy declaration file is checked in statement ranges on several checkers
+(#158, next-packages-next check 0.40 s -> 0.12 s at 32 checkers), and a piece hands back only the diagnostics it added
+(#160), except that a default library file is split again when it weighs at least 80% of a share (#169: lib.dom.d.ts had
+become the tail at 32 checkers, webpack +13% and next-packages-next +21% wall). The heavy-first threshold is 1/200 of a
+checker's share (#124). At larger checker counts files are placed by the modules they share with each checker, and
+thieves keep stealing from one queue (#171, instructions -3 to -15% at 16-32 checkers on the application projects);
+`TSRS_MODULE_AFFINITY=off` and `TSRS_STEAL_STICKY=0` restore the old behavior (docs/DEBUGGING.md).
+
+Diagnostics: tsgo runs the merged-interface checks (TS2320, TS2430, index constraints) once per checker, so a merged
+interface declared in several files reported in files that depended on which files shared a checker. By default tsrs
+now runs them at the first declaration of the symbol in each file (#165, notes/fix-history-dependent-diagnostics.md);
+`--checkerAssignment go` keeps Go's placement for byte-identity.
+
+Front end and start-up: the config is parsed on the worker pool and a CLI run creates no rayon global pool (#156, -64
+threads and -50 MB peak on vscode); checkers are created while files are assigned (#162) and program diagnostics are
+computed beside checker creation (#164); the file loader and collect walk make fewer refcount updates (#154, #166,
+#167); include-glob listings are matched on the prefetch pool (#141); checker threads survive between work groups
+(#150); the CLI ends with `_exit` once its output is written (#143); `--extendedDiagnostics` statistics no longer
+spawn `ps` (#140). #143's `_exit` skipped the PGO and BOLT training profiles; #153 and #155 write them again, so this
+release is built with both (+1.8-3.5% instructions in the README bench otherwise).
+
+CI and bench: CI gates the `.types` / `.symbols` baselines, the default checker mode and `testdata/regressions`
+(#132); `pr-verify` reports before/after identity and numbers for a branch on the 64-vCPU runner (#138); the bench
+restores the TypeScript testdata from a cache (#142), adds Bun's benchmark projects and drizzle-orm (#144) and
+BOLTs the measured binary as `release.yml` does (#161).
+
 ## 2026-10-07: 0.5.0 release
 
 A performance and memory release for machines with many cores; the TypeScript source pin remains
