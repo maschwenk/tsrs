@@ -2,16 +2,19 @@
 //! "leaf" file as soon as its checker is done with it (notes/mem-free-leaf-files.md, after Bun's `free_tree`).
 //!
 //! When the CLI turns file regions on (`enable`, before it creates the program), the host parses each TypeScript
-//! source file (`.ts`, `.tsx`, `.mts`, `.cts`; not declaration files) into a scratch region of its own, and the file
-//! is bound in that region too (`bind`). The text, the `SourceFile` itself and the diagnostics stay outside it (the
-//! parser and the diagnostics escape the scratch region), so a freed file still has what the report reads: name,
-//! text, line map, counters, and its diagnostics, collected before the free.
+//! source file (`.ts`, `.tsx`, `.mts`, `.cts`; not declaration files) that is loaded as a root file of the program and
+//! whose path predicts a leaf (`PREDICTED_LEAF_PATTERNS`: tests, specs, stories, mocks) into a scratch region of its
+//! own, and the file is bound in that region too (`bind`). Every other file is parsed into the thread arena as before,
+//! where the large chunks are huge pages on Linux. The text, the `SourceFile` itself and the diagnostics stay outside
+//! the region (the parser and the diagnostics escape the scratch region), so a freed file still has what the report
+//! reads: name, text, line map, counters, and its diagnostics, collected before the free.
 //!
 //! A program created with `ProgramOptions::leaf_files` set marks its leaves right before its type-check pass
 //! (`classify`, `SourceFile::is_check_leaf`): type-checked TypeScript modules that no other file refers to and that
-//! declare nothing another file can reach. After a leaf's semantic diagnostics are collected (the pass's callback),
-//! `free` drops its region with `Region::retire_on_free`: its pages go back to the system and its address range is
-//! never reused. Every other region lives for the rest of the process, as the thread arenas did.
+//! declare nothing another file can reach. Only a file with a region can be one: a predicted file that is not a leaf
+//! keeps its region, a leaf that was not predicted is not freed. After a leaf's semantic diagnostics are collected (the
+//! pass's callback), `free` drops its region with `Region::retire_on_free`: its pages go back to the system and its
+//! address range is never reused. Every other region lives for the rest of the process, as the thread arenas did.
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{LazyLock, Mutex};
@@ -96,6 +99,13 @@ pub fn leaf_settings_from_env() -> LeafSettings {
     #[cfg(not(feature = "checker"))]
     let checker_census = false;
     if census || checker_census || crate::checkerpool::file_times_path().is_some() || crate::checkerpool::assignment_stats_enabled() {
+        return LeafSettings::default();
+    }
+    // Only where a freed region's pages go back to the system and its range is never reused (`Region::retire_on_free`
+    // gives back pages only with compressed pointers on unix): elsewhere a freed region's memory stays mapped with its
+    // old contents while the heap buffers its values owned are freed and reused, so a stale read would see a live
+    // object instead of zeros or a fault, and nothing would be saved.
+    if !(tsrs_core::COMPRESSED_PTRS && cfg!(unix)) {
         return LeafSettings::default();
     }
     let mut settings = LeafSettings { mode: LeafMode::Free, stats: false, every_file: false };
@@ -356,6 +366,17 @@ fn adds_nothing(program: &Program, file: P<SourceFile>) -> bool {
             && name != ast::InternalSymbolNameExportStar
             && !s.flags().intersects(SymbolFlags::Alias | SymbolFlags::ExportStar)
     })
+}
+
+/// Panics if `file`'s tree was freed (a leaf after the type-check pass that freed it): for the single-file
+/// diagnostic entry points, which read the tree, the bind and parse diagnostics and the comment directives. The CLI
+/// never asks for one file's diagnostics after that pass, and the pass does not keep each file's settled diagnostics
+/// (it returns them all together), so a caller that did would read freed memory; this makes it a clear error instead.
+/// One atomic load for any other file.
+pub(crate) fn assert_not_freed(file: P<SourceFile>) {
+    if file.is_check_leaf() && !REGIONS.lock().unwrap().contains_key(&file) {
+        panic!("fileregions: {} was freed after the type-check pass; its tree can no longer be read", file.file_name());
+    }
 }
 
 /// After the type-check pass that freed leaves: gives back the pages of the last batch of freed regions.

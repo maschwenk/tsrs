@@ -184,3 +184,24 @@ fn external_checker_pool_diagnostics() {
     assert_eq!(acquired.load(Ordering::Relaxed), 6);
     assert!(!idle.lock().unwrap().is_empty());
 }
+
+// tsrs-only (fileregions.rs): after a type-check pass that freed a leaf, asking for that one file's diagnostics would
+// read its freed tree and bind diagnostics; it panics instead (`fileregions::assert_not_freed`). The CLI never asks.
+#[test]
+#[should_panic(expected = "was freed after the type-check pass")]
+fn single_file_diagnostics_of_a_freed_leaf_panic() {
+    // The file is predicted (`.test.`) and loaded as a root file, so it gets a region; nothing imports it.
+    let files = [
+        ("/src/tsconfig.json", r#"{"compilerOptions":{"noLib":true,"noEmit":true},"files":["a.test.ts"]}"#),
+        ("/src/a.test.ts", "export const a: number = 1;"),
+    ];
+    crate::fileregions::enable(crate::LeafSettings { mode: crate::LeafMode::Free, stats: false, every_file: false }, "/");
+    let mut opts = ProgramOptions::new(config_for(&files), host_for(&files));
+    opts.leaf_files = crate::LeafMode::Free;
+    let program = new_program(opts);
+    let ctx = Context::default();
+    let _ = program.get_semantic_diagnostics(&ctx, None);
+    let file = program.get_source_file("/src/a.test.ts").unwrap();
+    assert!(file.is_check_leaf());
+    let _ = program.get_semantic_diagnostics(&ctx, Some(file));
+}

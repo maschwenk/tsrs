@@ -921,7 +921,10 @@ impl Program {
         collect: impl Fn(&Context, P<SourceFile>) -> Vec<P<Diagnostic>> + Sync,
     ) -> Vec<P<Diagnostic>> {
         let result = match source_file {
-            Some(file) => collect(ctx, file),
+            Some(file) => {
+                crate::fileregions::assert_not_freed(file);
+                collect(ctx, file)
+            }
             None => {
                 let diagnostics = self.collect_diagnostics_from_files(ctx, self.files, concurrent, &collect);
                 diagnostics.concat()
@@ -958,6 +961,7 @@ impl Program {
         collect: impl Fn(&Context, &mut Checker, P<SourceFile>) -> Vec<P<Diagnostic>> + Sync,
     ) -> Vec<P<Diagnostic>> {
         if let Some(source_file) = source_file {
+            crate::fileregions::assert_not_freed(source_file);
             if self.skip_type_checking(source_file, false) {
                 return Vec::new();
             }
@@ -1952,6 +1956,7 @@ impl Program {
     // the pool); with `None` it is taken here.
     #[cfg(feature = "checker")]
     fn get_declaration_diagnostics_for_file(&'static self, ctx: &Context, c: Option<&mut Checker>, source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
+        crate::fileregions::assert_not_freed(source_file);
         if source_file.is_declaration_file.get() {
             return Vec::new();
         }
