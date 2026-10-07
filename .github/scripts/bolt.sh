@@ -12,6 +12,9 @@
 #
 # Needs llvm-bolt and merge-fdata (LLVM release matching rustc's LLVM) on PATH, ts-ref/tsc/testdata, and the bench
 # projects pgo-train.sh set up in <bench work dir>.
+#
+# BOLT_TSRS_ONLY=1 (.depot/workflows/bench.yml): only tsrs, whose BOLT training and byte comparison are the same as
+# above; <dist dir> then needs no tsrs-test or tsrs-fourslash, and the suite gates (release.yml's job) are not run.
 set -euo pipefail
 
 dist=$(cd "$1" && pwd)
@@ -25,8 +28,10 @@ flags=(-reorder-blocks=ext-tsp -reorder-functions=cdsort -split-functions -split
 # binaries therefore carry no 843419 workaround; it only matters on Cortex-A53 r0p0-r0p4 cores.
 arch_flags=()
 [ "$(uname -m)" = aarch64 ] && arch_flags=(--drop-cortex-a53-843419-veneers)
+bins=(tsrs tsrs-test tsrs-fourslash)
+[ "${BOLT_TSRS_ONLY:-}" = 1 ] && bins=(tsrs)
 
-for b in tsrs tsrs-test tsrs-fourslash; do
+for b in "${bins[@]}"; do
   rm -rf "${work:?}/$b.fdata.d"; mkdir -p "$work/$b.fdata.d"
   llvm-bolt "$dist/$b" -instrument -o "$work/$b.inst" --instrumentation-file="$work/$b.fdata.d/prof" \
     --instrumentation-file-append-pid "${arch_flags[@]}" | tail -1
@@ -42,14 +47,16 @@ for p in xstate-main webpack; do
     > /dev/null 2>> "$work/tsrs-train-stderr.log") && status=0 || status=$?
   check_exit "$status" "instrumented tsrs -p $p"
 done
-TSRS_TEST_RESULTS="$work/train-test-results" "$work/tsrs-test.inst" run --suite all --timeout 300 > /dev/null \
-  && status=0 || status=$?
-check_exit "$status" "instrumented tsrs-test run --suite all"
-TSRS_FOURSLASH_RESULTS="$work/train-fourslash-results" "$work/tsrs-fourslash.inst" run > /dev/null \
-  && status=0 || status=$?
-check_exit "$status" "instrumented tsrs-fourslash run"
+if [ ${#bins[@]} -gt 1 ]; then
+  TSRS_TEST_RESULTS="$work/train-test-results" "$work/tsrs-test.inst" run --suite all --timeout 300 > /dev/null \
+    && status=0 || status=$?
+  check_exit "$status" "instrumented tsrs-test run --suite all"
+  TSRS_FOURSLASH_RESULTS="$work/train-fourslash-results" "$work/tsrs-fourslash.inst" run > /dev/null \
+    && status=0 || status=$?
+  check_exit "$status" "instrumented tsrs-fourslash run"
+fi
 
-for b in tsrs tsrs-test tsrs-fourslash; do
+for b in "${bins[@]}"; do
   [ -n "$(find "$work/$b.fdata.d" -name 'prof*' -size +0)" ] || { echo "::error::no BOLT profile from $b"; exit 1; }
   merge-fdata "$work/$b.fdata.d"/prof* > "$work/$b.fdata"
   llvm-bolt "$dist/$b" -o "$work/$b.bolt" -data="$work/$b.fdata" "${flags[@]}" "${arch_flags[@]}" > "$work/$b.bolt.log" 2>&1 \
@@ -58,9 +65,11 @@ for b in tsrs tsrs-test tsrs-fourslash; do
 done
 
 # Gates on the BOLT-optimized binaries (same thresholds as ci.yml).
-TSRS_TEST="$work/tsrs-test.bolt" TSRS_TEST_RESULTS="$work/test-results" .github/scripts/conformance-gate.sh | tail -1
-TSRS_FOURSLASH="$work/tsrs-fourslash.bolt" TSRS_FOURSLASH_RESULTS="$work/fourslash-results" \
-  .github/scripts/fourslash-gate.sh | tail -1
+if [ ${#bins[@]} -gt 1 ]; then
+  TSRS_TEST="$work/tsrs-test.bolt" TSRS_TEST_RESULTS="$work/test-results" .github/scripts/conformance-gate.sh | tail -1
+  TSRS_FOURSLASH="$work/tsrs-fourslash.bolt" TSRS_FOURSLASH_RESULTS="$work/fourslash-results" \
+    .github/scripts/fourslash-gate.sh | tail -1
+fi
 for p in xstate-main webpack; do
   for c in 1 4; do
     for v in prebolt bolt; do
