@@ -551,24 +551,58 @@ fn simple_normalize_path(path: &str) -> Option<std::borrow::Cow<'_, str>> {
 }
 
 // hasRelativePathSegment reports whether p contains ".", "..", "./", "../", "/.", "/..", "//", "/./", or "/../".
-fn has_relative_path_segment(p: &str) -> bool {
-    // A segment that is "." or "..", or an empty segment between two slashes. Scans slash to slash (memchr).
+pub fn has_relative_path_segment(p: &str) -> bool {
+    // A segment that is "." or "..", or an empty segment between two slashes. Every segment but the first starts
+    // after a slash, so only a slash followed by '/' or '.' can start one. Module resolution normalizes paths of
+    // ~100 bytes and many short segments, so this looks for such pairs eight bytes at a time (seven slash
+    // positions per word) instead of calling memchr per segment, and checks each candidate exactly.
+    const ONES: u64 = u64::from_ne_bytes([0x01; 8]);
+    const HIGHS: u64 = u64::from_ne_bytes([0x80; 8]);
+    // The high bit of each zero byte of `x`, and possibly of a 0x01 byte just above one (checked exactly below).
+    let zero_bytes = |x: u64| x.wrapping_sub(ONES) & !x & HIGHS;
     let p = p.as_bytes();
     let n = p.len();
-    let is_dot_segment = |segment: &[u8]| segment == b"." || segment == b"..";
-    let mut end = memchr::memchr(b'/', p).unwrap_or(n);
-    if is_dot_segment(&p[..end]) {
+    if p.first() == Some(&b'.') && dot_segment_at(p, 0) {
         return true;
     }
-    while end < n {
-        let start = end + 1;
-        end = memchr::memchr(b'/', &p[start..]).map_or(n, |i| start + i);
-        let segment = &p[start..end];
-        if segment.is_empty() && end < n || is_dot_segment(segment) {
+    let mut i = 0;
+    while i + 8 <= n {
+        let word = u64::from_le_bytes(p[i..i + 8].try_into().unwrap());
+        let slashes = zero_bytes(word ^ u64::from_ne_bytes([b'/'; 8]));
+        let dots = zero_bytes(word ^ u64::from_ne_bytes([b'.'; 8]));
+        // Byte k: a slash at i + k and a slash or dot at i + k + 1 (k < 7).
+        let mut pairs = slashes & ((slashes | dots) >> 8);
+        while pairs != 0 {
+            if relative_segment_after(p, i + (pairs.trailing_zeros() / 8) as usize) {
+                return true;
+            }
+            pairs &= pairs - 1;
+        }
+        i += 7;
+    }
+    while i + 1 < n {
+        if relative_segment_after(p, i) {
             return true;
         }
+        i += 1;
     }
     false
+}
+
+// Whether p[slash] is a slash that ends an empty segment or starts a "." or ".." segment (`has_relative_path_segment`).
+#[inline]
+fn relative_segment_after(p: &[u8], slash: usize) -> bool {
+    p[slash] == b'/' && p.get(slash + 1).is_some_and(|&c| c == b'/' || c == b'.' && dot_segment_at(p, slash + 1))
+}
+
+// Whether the segment at p[start] (a dot) is "." or "..".
+#[inline]
+fn dot_segment_at(p: &[u8], start: usize) -> bool {
+    match p.get(start + 1) {
+        None | Some(b'/') => true,
+        Some(b'.') => matches!(p.get(start + 2), None | Some(b'/')),
+        Some(_) => false,
+    }
 }
 
 pub fn normalize_path(path: &str) -> String {

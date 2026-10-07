@@ -468,6 +468,31 @@ fn test_has_relative_path_segment() {
 }
 
 #[test]
+fn test_has_relative_path_segment_matches_segment_split() {
+    // Every string of up to 11 bytes over '/', '.', 'a' (so every word and tail position of the eight-byte scan),
+    // also behind a 5-byte prefix, against splitting on '/'.
+    fn by_segments(p: &str) -> bool {
+        let segments: Vec<&str> = p.split('/').collect();
+        segments.iter().enumerate().any(|(i, s)| *s == "." || *s == ".." || s.is_empty() && i > 0 && i + 1 < segments.len())
+    }
+    let alphabet = [b'/', b'.', b'a'];
+    let mut bytes = Vec::new();
+    for len in 0..=11 {
+        for mut code in 0..3usize.pow(len) {
+            bytes.clear();
+            for _ in 0..len {
+                bytes.push(alphabet[code % 3]);
+                code /= 3;
+            }
+            let p = std::str::from_utf8(&bytes).unwrap();
+            assert_eq!(has_relative_path_segment(p), by_segments(p), "{p}");
+            let prefixed = format!("/ab/c{p}");
+            assert_eq!(has_relative_path_segment(&prefixed), by_segments(&prefixed), "{prefixed}");
+        }
+    }
+}
+
+#[test]
 fn test_path_is_relative() {
     let mut tests: Vec<(String, bool)> = vec![
         // relative
