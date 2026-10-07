@@ -136,6 +136,13 @@ checkers vscode's check is no longer bound by one file (the next heaviest is 0.1
 Stats (`TSRS_INFER_MEMO_STATS=1`, one checker, threshold 32 build): vscode 947 hits skipping 21.4M `inferFromTypes`
 steps; t3code-server 12,778 hits skipping 3.0M steps (63,834 at 16 checkers).
 
+The `verify` run of `.depot/workflows/pr-verify.yml` on the final code (17 projects, 1/4/16/32 checkers, base
+origin/main a8391138): identical diagnostics in 102 of 102 cells. One-thread instructions: t3code-server -11.97%,
+drizzle-orm -8.37%, vscode -7.27%, mikro-orm -2.14%, Compiler -2.10%, supabase-studio -1.89%, cal-diy -1.52%,
+Compiler-Unions -1.39%, formbricks-web -1.28%, next-packages-next -1.14%, playwright -0.83%, storybook -0.47%,
+xstate-main -0.38%, webpack -0.16%, nuxt -0.13%, next-root -0.09%, mui-docs -0.00%. Peak RSS within -1.5% / +2.0%.
+Median wall over the checker counts: drizzle-orm -9.3%, t3code-server -5.5%, vscode -3.2%, the rest within ±3%.
+
 ## Gates
 
 - Output identical to origin/main (`--pretty false`, diagnostics and exit code) on the ten bench projects at 1, 16 and
