@@ -1,5 +1,45 @@
 # Status
 
+## 2026-10-07: 0.7.0 release
+
+A speed release for small machines, a diagnostics fix and two instruction cuts; the TypeScript source pin remains
+`b85298b6a81f772d080b0455de0ca9d744cd6fd6` (7.1.0-dev.20260929) and the published package set is unchanged. README bench
+at commit `6db7beec77d9` (`bench/results/`), default mode on `depot-ubuntu-24.04-64`: vscode 0.54 s -> 0.47 s and
+2.73 GiB -> 2.65 GiB against the 0.6.0 table (`bun check` 0.83 s and 2.87 GiB). The 20-run head-to-head at each tool's
+default (`bench/results/compare/2026-10-07-ae33f10b1b8b-64t.md`) has tsrs 1.64x faster and 1.08x more memory efficient
+than `bun check` on vscode, and 1.83x to 1.98x faster thread for thread. Emitted output is unchanged against tsgo at
+the same pin, and so are diagnostics in `--checkerAssignment go` mode; the default mode differs in one more case
+(below).
+
+Checker count: without `--checkers`, a machine of up to 8 cores now runs one checker thread per core instead of half
+the cores (#174). On the 8-vCPU README bench 15 of 17 projects type-check 19-43% faster (vscode 2.96 s -> 1.68 s,
+mikro-orm 2.29 -> 1.41, supabase-studio 1.81 -> 1.07) for 9-28% more peak memory; t3code-server is 3% slower there,
+its Effect declarations being re-resolved by every checker. 9-16 cores keep 8 checkers, 18 keep 9, 64 or more keep 32,
+so the 64-vCPU table is unaffected (notes/perf-default-checkers-small-machines.md).
+
+Diagnostics: a cycle of base types (`interface A extends B` and `interface B extends A`, as two bun-types versions
+declare `NodeJS.ProcessEnv` and `Bun.Env`) was resolved from whichever member a checker asked about first, and the
+inherited members, and the diagnostics that follow from them, depended on that: drizzle-orm printed a TS2769 in some
+runs and not in others, and tsgo prints it at some checker counts and not at others. By default tsrs now enters every
+such cycle at the member declared first in program order (#177, notes/fix-history-dependent-diagnostics.md), so
+drizzle-orm prints the same 10846 errors at every checker count; `--checkerAssignment go` keeps Go's behaviour.
+
+Checker and front end: the checker's questions to the program about a source file (its module format, the emit
+syntax at an import, the file a module resolved to) no longer take a locked map lookup or rebuild a path per import
+(#180, vscode -1.5% single-threaded instructions, -0.4 to -0.7% on the application projects); module resolution finds
+relative path segments eight bytes at a time and joins vfs paths in one allocation (#181, front end -1.4 to -3.6%
+instructions on the five largest projects).
+
+CI and bench: the bench runs once per push to `main`, one concurrency group per commit, where before a push replaced
+the queued bench and bursts of merges went unmeasured; README.md keeps the newest commit's table whatever order the
+runs finish in, the regression flag compares a run with the nearest benchmarked ancestor of its commit, `bench/history.py`
+prints the per-commit history of each metric, and a `commit` input backfills a commit's results (#175, #176). CI fails
+a code pull request whose title, body or commit subjects carry a CI-skip marker, which the squash commit would copy
+(#182). Notes: leaf freeing at 32 checkers stays off, the give-backs' TLB-flush interrupts cost more than the memory
+is worth (#184); the check at 32 checkers has no per-instruction memory penalty, its extra CPU is duplicated work
+(#179); instruction round 4 (#183). README: memory as a multiple of efficiency and the refreshed head-to-head (#173,
+#178).
+
 ## 2026-10-07: 0.6.0 release
 
 A performance and memory release; the TypeScript source pin remains `b85298b6a81f772d080b0455de0ca9d744cd6fd6`
