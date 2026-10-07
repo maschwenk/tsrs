@@ -25,9 +25,10 @@
 // checkers it overlaps).
 //
 // Only from MIN_CHECKERS checkers on. With fewer, each checker already holds most of the modules, so there is little to
-// save, while concentrating the costly files makes the checkers' real costs uneven and stealing moves more files: at 4
-// checkers t3code-server took 10.8% more instructions and cal-diy 4.5% (with stealing), at 8 all five app projects
-// took 0.6-6.5% fewer.
+// save, while concentrating the costly files makes the checkers' real costs uneven and stealing moves more files: with
+// stealing, at 4 checkers t3code-server took 10.8% more instructions and cal-diy 4.5% (Mac), and at 8 on the 64-vCPU
+// runner mui-docs took 5.9% longer and cal-diy 3.8% more CPU, while 16 and 32 checkers were lower or equal on all but
+// one cell (notes/perf-clustered-assignment.md).
 //
 // `TSRS_MODULE_AFFINITY=<mu>` (read once) sets MU, `0`/`off` turns this off (the plain locality assignment);
 // `TSRS_MODULE_AFFINITY_GAMMA=<g>` sets GAMMA and `TSRS_MODULE_AFFINITY_PASSES=<n>` the most refinement passes, for
@@ -41,7 +42,7 @@ use tsrs_core::P;
 const MU: f64 = 1.0;
 const GAMMA: f64 = 0.5;
 const MAX_PASSES: usize = 3;
-const MIN_CHECKERS: usize = 8;
+pub(crate) const MIN_CHECKERS: usize = 16;
 
 struct Config {
     mu: f64,

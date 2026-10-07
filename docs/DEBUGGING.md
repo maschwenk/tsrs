@@ -78,12 +78,12 @@ checker's share, heaviest first, then the rest in program order (notes/perf-chec
 notes/perf-heavy-first-threshold.md); `TSRS_HEAVY_SHARE_DIVISOR=<n>` changes the divisor for experiments.
 `--checkerCostCache <file>` (opt-in, locality only) balances the checkers on the previous run's per-file CPU times
 (notes/perf-balance.md); `TSRS_ASSIGNMENT_STATS=times` prints per-checker wall and CPU seconds.
-The locality placement also counts the modules (files and their imports, library declaration files included) a group
-shares with each checker, then moves groups while that lowers the modules held per checker
+From 16 checkers on, the locality placement also counts the modules (files and their imports, library declaration
+files included) a group shares with each checker, then moves groups while that lowers the modules held per checker
 (notes/perf-clustered-assignment.md); `TSRS_MODULE_AFFINITY=off` restores the placement by import edges alone, and
 `TSRS_MODULE_AFFINITY=<mu>`, `TSRS_MODULE_AFFINITY_GAMMA=<g>` and `TSRS_MODULE_AFFINITY_PASSES=<n>` are for experiments.
-A thief keeps stealing from the checker it stole from last while that checker has at least half the busiest one's
-work left; `TSRS_STEAL_STICKY=0` picks the busiest checker for every file.
+From 16 checkers on, a thief also keeps stealing from the checker it stole from last while that checker has at least
+half the busiest one's work left; `TSRS_STEAL_STICKY=0` picks the busiest checker for every file.
 
 ## `.types` / `.symbols` equivalence on the private monorepo against the cached reference
 
