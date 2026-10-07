@@ -1,5 +1,9 @@
 # mem-flow-compaction: flat label edges and one shared Start for bodyless signatures
 
+**Reverted in https://github.com/maschwenk/tsrs/pull/191 (2026-10-07):** 377 lines of binder representation for -5.4 MB
+(0.2% of vscode's peak), below the bar in AGENTS.md ("A performance change must pay for its complexity"). The
+measurements below stand; do not re-land the mechanism for this gain.
+
 Two layout-only changes to the binder's flow graph, from the "Flow compaction" row of notes/bun-check-memory.md
 (what Bun's `bun check` does: one node-less Start per file, label antecedents as ranges of one per-file edge array).
 Diagnostics are unchanged by construction and were checked byte for byte (Gates below). Base: origin/main 0b4d117.

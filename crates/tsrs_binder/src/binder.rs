@@ -3,10 +3,10 @@ use bitflags::bitflags;
 use rustc_hash::FxHashSet;
 use tsrs_ast as ast;
 use tsrs_ast::{
-    Diagnostic, DiagnosticExt, FlowFlags, FlowNode, Kind, ModifierFlags, Node, NodeFlags, NodeList, SourceFile, Symbol,
+    Diagnostic, DiagnosticExt, FlowFlags, FlowList, FlowNode, Kind, ModifierFlags, Node, NodeFlags, NodeList, SourceFile, Symbol,
     SymbolFlags, SymbolTable,
 };
-use tsrs_core::{alloc_str, tspath, PKey, P};
+use tsrs_core::{alloc_str, tspath, OwnedCell, P};
 use tsrs_diagnostics as diagnostics;
 use tsrs_diagnostics::Message;
 use tsrs_scanner as scanner;
@@ -77,33 +77,6 @@ pub struct Binder {
     // Go appends to file.BindDiagnostics on every report; they are collected here and stored on the
     // file once binding completes (nothing reads them in between).
     bind_diagnostics: Vec<P<Diagnostic>>,
-    // Go's label antecedent lists while the file is bound: a label's slot (`FlowNode::label_slot`) is its index here
-    // plus 1, and its antecedents are linked through `flow_edges`. Written to the file's edge array once binding
-    // completes (`ast::write_flow_edge_runs`, notes/mem-flow-compaction.md).
-    flow_labels: Vec<LabelEdges>,
-    flow_edges: Vec<FlowEdge>,
-    // Not in Go: the Start of every bodyless signature that gives its Start no node (`uses_shared_flow_start`) is this
-    // one node, created on first use. While such a signature is bound, `shared_start_nodes` collects the flow nodes
-    // made with an antecedent, so that a signature whose Start turns out to be referenced gets its own
-    // (`unshare_flow_start`).
-    shared_flow_start: Option<P<FlowNode>>,
-    shared_start_depth: u32,
-    shared_start_nodes: Vec<P<FlowNode>>,
-}
-
-const NO_EDGE: u32 = u32::MAX;
-
-/// A label's antecedents while its file is bound (`label` is `None` once the label is recycled).
-struct LabelEdges {
-    label: Option<P<FlowNode>>,
-    head: u32,
-    tail: u32,
-    len: u32,
-}
-
-struct FlowEdge {
-    flow: P<FlowNode>,
-    next: u32,
 }
 
 pub struct ActiveLabel {
@@ -133,7 +106,6 @@ fn bind_source_file_worker(file: P<SourceFile>) {
         let mut b = Binder::new(file);
         b.bind(file.as_node());
         b.bind_deferred_expando_assignments();
-        b.write_flow_edge_runs();
         file.set_bind_diagnostics(&b.bind_diagnostics);
         file.symbol_count.set(b.symbol_count);
     });
@@ -171,11 +143,6 @@ impl Binder {
             not_const_enum_only_modules: FxHashSet::default(),
             expando_assignments: Vec::new(),
             bind_diagnostics: file.bind_diagnostics().to_vec(),
-            flow_labels: Vec::new(),
-            flow_edges: Vec::new(),
-            shared_flow_start: None,
-            shared_start_depth: 0,
-            shared_start_nodes: Vec::new(),
         }
     }
 
@@ -568,11 +535,7 @@ impl Binder {
     }
 
     pub(crate) fn new_flow_node_ex(&mut self, flags: FlowFlags, node: Option<P<Node>>, antecedent: Option<P<FlowNode>>) -> P<FlowNode> {
-        let flow = new_flow_node_value(flags, node, antecedent, self.file.text_index.get());
-        if self.shared_start_depth != 0 && antecedent.is_some() {
-            self.shared_start_nodes.push(flow);
-        }
-        flow
+        new_flow_node_value(flags, node, antecedent, self.file.text_index.get())
     }
 
     pub(crate) fn create_loop_label(&mut self) -> P<FlowNode> {
@@ -583,7 +546,7 @@ impl Binder {
         self.new_flow_node(FlowFlags::BranchLabel)
     }
 
-    pub(crate) fn create_reduce_label(&mut self, target: P<FlowNode>, antecedents: P<FlowNode>, antecedent: P<FlowNode>) -> P<FlowNode> {
+    pub(crate) fn create_reduce_label(&mut self, target: P<FlowNode>, antecedents: Option<P<FlowList>>, antecedent: P<FlowNode>) -> P<FlowNode> {
         self.new_flow_node_ex(FlowFlags::ReduceLabel, Some(ast::new_flow_reduce_label_data(target, antecedents)), Some(antecedent))
     }
 
@@ -642,137 +605,17 @@ impl Binder {
         self.new_flow_node_ex(FlowFlags::Call, Some(node), Some(antecedent))
     }
 
-    /// Index of `label` in `flow_labels`, giving it a slot first if it has none.
-    fn label_index(&mut self, label: P<FlowNode>) -> usize {
-        let slot = label.label_slot();
-        if slot != 0 {
-            return slot as usize - 1;
-        }
-        self.flow_labels.push(LabelEdges { label: Some(label), head: NO_EDGE, tail: NO_EDGE, len: 0 });
-        label.set_label_slot(self.flow_labels.len() as PKey);
-        self.flow_labels.len() - 1
+    pub(crate) fn new_flow_list(&mut self, head: P<FlowNode>, tail: Option<P<FlowList>>) -> P<FlowList> {
+        P::new_recycled(FlowList { flow: head, next: OwnedCell::new(tail) })
     }
 
-    /// Go `len(label.Antecedents)` (as a list) while the file is bound.
-    pub(crate) fn antecedent_count(&self, label: P<FlowNode>) -> u32 {
-        match label.label_slot() {
-            0 => 0,
-            slot => self.flow_labels[slot as usize - 1].len,
-        }
-    }
-
-    /// Go `label.Antecedents` while the file is bound.
-    fn label_antecedents(&self, label: P<FlowNode>) -> impl Iterator<Item = P<FlowNode>> + '_ {
-        let mut e = match label.label_slot() {
-            0 => NO_EDGE,
-            slot => self.flow_labels[slot as usize - 1].head,
+    pub(crate) fn combine_flow_lists(&mut self, head: Option<P<FlowList>>, tail: Option<P<FlowList>>) -> Option<P<FlowList>> {
+        let Some(head) = head else {
+            return tail;
         };
-        std::iter::from_fn(move || {
-            if e == NO_EDGE {
-                return None;
-            }
-            let edge = &self.flow_edges[e as usize];
-            e = edge.next;
-            Some(edge.flow)
-        })
+        let rest = self.combine_flow_lists(head.next.get(), tail);
+        Some(self.new_flow_list(head.flow, rest))
     }
-
-    /// Appends `antecedent` to the antecedents of `label` (no duplicate check, no Referenced flag).
-    fn push_antecedent(&mut self, label: P<FlowNode>, antecedent: P<FlowNode>) {
-        let i = self.label_index(label);
-        let e = self.flow_edges.len() as u32;
-        self.flow_edges.push(FlowEdge { flow: antecedent, next: NO_EDGE });
-        let entry = &mut self.flow_labels[i];
-        match entry.tail {
-            NO_EDGE => entry.head = e,
-            tail => self.flow_edges[tail as usize].next = e,
-        }
-        entry.tail = e;
-        entry.len += 1;
-    }
-
-    /// Go `label.Antecedents = combineFlowLists(a, combineFlowLists(b, c))` for the labels in `lists`: their
-    /// antecedents, concatenated (a fresh list; Go copies the cells).
-    pub(crate) fn set_combined_antecedents(&mut self, label: P<FlowNode>, lists: &[P<FlowNode>]) {
-        let edges: Vec<P<FlowNode>> = lists.iter().flat_map(|&l| self.label_antecedents(l)).collect();
-        for flow in edges {
-            self.push_antecedent(label, flow);
-        }
-    }
-
-    /// Writes the antecedents of the file's live labels to its edge array (`ast::write_flow_edge_runs`).
-    fn write_flow_edge_runs(&mut self) {
-        let mut edges: Vec<P<FlowNode>> = Vec::with_capacity(self.flow_edges.len());
-        let mut spans: Vec<(P<FlowNode>, usize, usize)> = Vec::with_capacity(self.flow_labels.len());
-        for entry in &self.flow_labels {
-            let Some(label) = entry.label else { continue };
-            let start = edges.len();
-            edges.extend(self.label_antecedents(label));
-            spans.push((label, start, edges.len()));
-        }
-        let labels: Vec<(P<FlowNode>, &[P<FlowNode>])> = spans.iter().map(|&(label, start, end)| (label, &edges[start..end])).collect();
-        ast::write_flow_edge_runs(&labels);
-        self.flow_labels = Vec::new();
-        self.flow_edges = Vec::new();
-    }
-
-    /// The bodyless signature `container` was bound with the file's shared Start, and something made it an
-    /// antecedent: Go's binder gave the signature a Start of its own, with these Referenced / Shared flags. Gives it
-    /// one: every reference made while the signature was bound (edges from `edges_mark`, flow nodes from
-    /// `nodes_mark`, and the signature's AST) moves to a new Start with the shared Start's flags.
-    fn unshare_flow_start(&mut self, container: P<Node>, shared: P<FlowNode>, edges_mark: usize, nodes_mark: usize) {
-        let own = new_flow_node_value(shared.flags.get(), None, None, self.file.text_index.get());
-        for edge in &mut self.flow_edges[edges_mark..] {
-            if edge.flow == shared {
-                edge.flow = own;
-            }
-        }
-        for &flow in &self.shared_start_nodes[nodes_mark..] {
-            if flow.antecedent() == Some(shared) {
-                flow.replace_antecedent(own);
-            }
-        }
-        fn repoint(node: P<Node>, shared: P<FlowNode>, own: P<FlowNode>) -> bool {
-            if node.flow_node() == Some(shared) {
-                node.set_flow_node(Some(own));
-            }
-            if let Some(body_data) = node.body_data() {
-                if body_data.end_flow_node.get() == Some(shared) {
-                    body_data.end_flow_node.set(Some(own));
-                }
-            }
-            match node.kind() {
-                Kind::Constructor if node.as_constructor_declaration().return_flow_node() == Some(shared) => {
-                    set_return_flow_node(node, Some(own));
-                }
-                Kind::ClassStaticBlockDeclaration if node.as_class_static_block_declaration().return_flow_node() == Some(shared) => {
-                    set_return_flow_node(node, Some(own));
-                }
-                Kind::CaseClause | Kind::DefaultClause if node.as_case_or_default_clause().fallthrough_flow_node() == Some(shared) => {
-                    node.as_case_or_default_clause().set_fallthrough_flow_node(Some(own));
-                }
-                _ => {}
-            }
-            // A nested bodyless signature's own references to the shared Start are its own.
-            if !uses_shared_flow_start(node) {
-                node.for_each_child(&mut |child| repoint(child, shared, own));
-            }
-            false
-        }
-        container.for_each_child(&mut |child| repoint(child, shared, own));
-    }
-}
-
-/// Not in Go: whether the binder gives this control flow container the file's shared Start. A function-like
-/// without a body (signatures, function and constructor types, overloads, abstract and ambient members) whose Start
-/// carries no node: nothing can tell such Starts apart (the checker answers the initial type at any node-less Start,
-/// and caches by node only for `Shared` nodes, giving the same answer); Go makes one per signature.
-pub fn uses_shared_flow_start(node: P<Node>) -> bool {
-    let flags = get_container_flags(node);
-    flags.contains(ContainerFlags::IsControlFlowContainer | ContainerFlags::IsFunctionLike)
-        && !flags.intersects(ContainerFlags::IsFunctionExpression | ContainerFlags::IsObjectLiteralOrClassExpressionMethodOrAccessor)
-        && !matches!(node.kind(), Kind::Constructor | Kind::ClassStaticBlockDeclaration)
-        && node.body().is_none()
 }
 
 pub(crate) fn set_flow_node_referenced(flow: P<FlowNode>) {
@@ -791,19 +634,31 @@ impl Binder {
         }
         let label = label.unwrap();
         // If antecedent isn't already on the Antecedents list, add it to the end of the list
-        if self.label_antecedents(label).any(|flow| flow == antecedent) {
-            return;
+        let mut last: Option<P<FlowList>> = None;
+        let mut list = label.antecedents();
+        while let Some(l) = list {
+            if l.flow == antecedent {
+                return;
+            }
+            last = Some(l);
+            list = l.next.get();
         }
-        self.push_antecedent(label, antecedent);
+        let new_list = self.new_flow_list(antecedent, None);
+        match last {
+            None => label.set_antecedents(Some(new_list)),
+            Some(last) => last.next.set(Some(new_list)),
+        }
         set_flow_node_referenced(antecedent);
     }
 
     pub(crate) fn finish_flow_label(&mut self, label: P<FlowNode>) -> P<FlowNode> {
-        match self.antecedent_count(label) {
-            0 => self.unreachable_flow,
-            1 => self.label_antecedents(label).next().unwrap(),
-            _ => label,
+        let Some(antecedents) = label.antecedents() else {
+            return self.unreachable_flow;
+        };
+        if antecedents.next.get().is_none() {
+            return antecedents.flow;
         }
+        label
     }
 
     /// `finishFlowLabel` for a branch label that only its creator and the binder's target fields have seen (if
@@ -816,8 +671,8 @@ impl Binder {
         result
     }
 
-    /// Gives a branch label that nothing references any more back to the arena (its antecedents stay in
-    /// `flow_edges`, which binding the file drops). Kept when it was ever used as an antecedent or a binder field still holds it.
+    /// Gives a branch label that nothing references any more (and its antecedent list cells, not the antecedents)
+    /// back to the arena. Kept when it was ever used as an antecedent or a binder field still holds it.
     pub(crate) fn recycle_flow_label(&mut self, label: P<FlowNode>) {
         debug_assert!(label.flags.get().intersects(FlowFlags::BranchLabel));
         let held = |t: Option<P<FlowNode>>| t == Some(label);
@@ -835,9 +690,12 @@ impl Binder {
         {
             return;
         }
-        if label.label_slot() != 0 {
-            // Reduce labels name only try/finally labels, which are never recycled.
-            self.flow_labels[label.label_slot() as usize - 1].label = None;
+        let mut list = label.antecedents();
+        while let Some(l) = list {
+            list = l.next.get();
+            // SAFETY: a label's antecedent list cells are referenced only by the label (combineFlowLists copies
+            // them; only try/finally labels, which are never recycled, hand their lists to reduce labels).
+            unsafe { tsrs_core::free!(l) };
         }
         // SAFETY: never an antecedent (no Referenced flag), not held by the binder, and its creator dropped it.
         unsafe { tsrs_core::free!(label) };
@@ -1907,23 +1765,11 @@ impl Binder {
                 || node.kind() == Kind::ClassStaticBlockDeclaration;
             // A non-async, non-generator IIFE is considered part of the containing control flow. Return statements behave
             // similarly to break statements that exit to a label just past the statement body.
-            // Not in Go: (saved flags of the shared Start, `flow_edges` and `shared_start_nodes` lengths) when this
-            // container uses the file's shared Start.
-            let mut shared_start_scope = None;
             if !is_immediately_invoked {
-                if uses_shared_flow_start(node) {
-                    let text_index = self.file.text_index.get();
-                    let flow_start = *self.shared_flow_start.get_or_insert_with(|| new_flow_node_value(FlowFlags::Start, None, None, text_index));
-                    shared_start_scope = Some((flow_start.flags.get(), self.flow_edges.len(), self.shared_start_nodes.len()));
-                    flow_start.flags.set(FlowFlags::Start);
-                    self.shared_start_depth += 1;
-                    self.current_flow = Some(flow_start);
-                } else {
-                    let flow_start = self.new_flow_node(FlowFlags::Start);
-                    self.current_flow = Some(flow_start);
-                    if container_flags.intersects(ContainerFlags::IsFunctionExpression | ContainerFlags::IsObjectLiteralOrClassExpressionMethodOrAccessor) {
-                        flow_start.node.set(Some(node));
-                    }
+                let flow_start = self.new_flow_node(FlowFlags::Start);
+                self.current_flow = Some(flow_start);
+                if container_flags.intersects(ContainerFlags::IsFunctionExpression | ContainerFlags::IsObjectLiteralOrClassExpressionMethodOrAccessor) {
+                    flow_start.node.set(Some(node));
                 }
             }
             // We create a return control flow graph for IIFEs and constructors. For constructors
@@ -1964,15 +1810,6 @@ impl Binder {
                 if node.kind() == Kind::Constructor || node.kind() == Kind::ClassStaticBlockDeclaration {
                     set_return_flow_node(node, self.current_flow);
                 }
-            }
-            if let Some((saved_flags, edges_mark, nodes_mark)) = shared_start_scope {
-                let shared = self.shared_flow_start.unwrap();
-                if shared.flags.get() != FlowFlags::Start {
-                    self.unshare_flow_start(node, shared, edges_mark, nodes_mark);
-                }
-                shared.flags.set(saved_flags);
-                self.shared_start_nodes.truncate(nodes_mark);
-                self.shared_start_depth -= 1;
             }
             if !is_immediately_invoked {
                 self.current_flow = save_current_flow;
@@ -2464,7 +2301,9 @@ impl Binder {
             // set of antecedents for the pre-finally label. As control flow analysis passes by a ReduceLabel
             // node, the pre-finally label is temporarily switched to the reduced antecedent set.
             let finally_label = self.create_branch_label();
-            self.set_combined_antecedents(finally_label, &[normal_exit_label, exception_label, return_label]);
+            let rest = self.combine_flow_lists(exception_label.antecedents(), return_label.antecedents());
+            let combined = self.combine_flow_lists(normal_exit_label.antecedents(), rest);
+            finally_label.set_antecedents(combined);
             self.current_flow = Some(finally_label);
             self.bind(stmt.finally_block());
             if self.current_flow().flags.get().intersects(FlowFlags::Unreachable) {
@@ -2473,21 +2312,21 @@ impl Binder {
             } else {
                 // If we have an IIFE return target and return statements in the try or catch blocks, add a control
                 // flow that goes back through the finally block and back through only the return statements.
-                if self.current_return_target.is_some() && self.antecedent_count(return_label) != 0 {
-                    let reduce = self.create_reduce_label(finally_label, return_label, self.current_flow());
+                if self.current_return_target.is_some() && return_label.antecedents().is_some() {
+                    let reduce = self.create_reduce_label(finally_label, return_label.antecedents(), self.current_flow());
                     self.add_antecedent(self.current_return_target, reduce);
                 }
                 // If we have an outer exception target (i.e. a containing try-finally or try-catch-finally), add a
                 // control flow that goes back through the finally block and back through each possible exception source.
-                if self.current_exception_target.is_some() && self.antecedent_count(exception_label) != 0 {
-                    let reduce = self.create_reduce_label(finally_label, exception_label, self.current_flow());
+                if self.current_exception_target.is_some() && exception_label.antecedents().is_some() {
+                    let reduce = self.create_reduce_label(finally_label, exception_label.antecedents(), self.current_flow());
                     self.add_antecedent(self.current_exception_target, reduce);
                 }
                 // If the end of the finally block is reachable, but the end of the try and catch blocks are not,
                 // convert the current flow to unreachable. For example, 'try { return 1; } finally { ... }' should
                 // result in an unreachable current control flow.
-                if self.antecedent_count(normal_exit_label) != 0 {
-                    self.current_flow = Some(self.create_reduce_label(finally_label, normal_exit_label, self.current_flow()));
+                if normal_exit_label.antecedents().is_some() {
+                    self.current_flow = Some(self.create_reduce_label(finally_label, normal_exit_label.antecedents(), self.current_flow()));
                 } else {
                     self.current_flow = Some(self.unreachable_flow);
                 }
