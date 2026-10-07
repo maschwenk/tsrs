@@ -579,6 +579,13 @@ impl<T: Copy + PartialEq> LazyVec<T> {
     pub fn to_vec(&self) -> Vec<T> {
         self.0.get().map_or_else(Vec::new, |v| v.borrow().clone())
     }
+    /// Calls `f` with the items, without copying them.
+    pub fn with_slice<R>(&self, f: impl FnOnce(&[T]) -> R) -> R {
+        match self.0.get() {
+            Some(v) => f(&v.borrow()),
+            None => f(&[]),
+        }
+    }
     /// Frees the list (heap buffer and arena cell) of a dead owner (`InferenceContext::recycle`).
     pub(crate) fn recycle(&self) {
         if let Some(v) = self.0.take() {
@@ -942,6 +949,11 @@ pub struct Checker {
     pub(crate) derived_variance: crate::relater_derived::DerivedVarianceMode,
     /// TSRS_UNION_CACHE (unioncache.rs; on by default, off under Go-compatible history).
     pub(crate) union_front_cache: crate::unioncache::UnionFrontCache,
+    /// TSRS_INFER_MEMO (infermemo.rs; on by default, off under Go-compatible history).
+    pub(crate) infer_memo: crate::infermemo::InferMemo,
+    /// Calls of `add_diagnostic` and `add_suggestion_diagnostic`, duplicates included (wrapping): the inference memo
+    /// stores only walks that added none.
+    pub(crate) diagnostic_adds: u32,
     pub(crate) derived_depth: u32,
     /// Variance of each generic's `this` type (relater_derived.rs); None while being computed.
     pub(crate) derived_this_variances: FxHashMap<P<Type>, Option<VarianceFlags>>,
@@ -1346,6 +1358,8 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         census: crate::workcensus::census_path().map(|_| crate::workcensus::Census::new()),
         derived_variance: crate::relater_derived::derived_variance_mode(),
         union_front_cache: crate::unioncache::UnionFrontCache::new(),
+        infer_memo: crate::infermemo::InferMemo::new(),
+        diagnostic_adds: 0,
         derived_depth: 0,
         derived_this_variances: FxHashMap::default(),
         derived_conditional_params: FxHashMap::default(),

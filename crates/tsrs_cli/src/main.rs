@@ -46,6 +46,9 @@ fn main() {
     // TSRS_UNION_CACHE_STATS / TSRS_UNION_CACHE=shadow: the union front cache's totals.
     #[cfg(feature = "checker")]
     tsrs_compiler::Checker::union_cache_finish();
+    // TSRS_INFER_MEMO_STATS / TSRS_INFER_MEMO=shadow: the inference memo's totals.
+    #[cfg(feature = "checker")]
+    tsrs_compiler::Checker::infer_memo_finish();
     // TSRS_DERIVED_VARIANCE=shadow reports each disagreement as it is found and fails the run at the end.
     #[cfg(feature = "checker")]
     if tsrs_compiler::Checker::derived_variance_finish() > 0 {

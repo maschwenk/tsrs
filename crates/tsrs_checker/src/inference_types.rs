@@ -24,4 +24,6 @@ pub struct InferenceState {
     pub source_stack: RefCell<Vec<P<Type>>>,
     pub target_stack: RefCell<Vec<P<Type>>>,
     pub next: Cell<Option<P<InferenceState>>>,
+    /// The walk called `clear_cached_inferences` (the inference memo, infermemo.rs).
+    pub cleared_inferences: Cell<bool>,
 }
