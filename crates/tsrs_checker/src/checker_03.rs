@@ -935,9 +935,7 @@ impl Checker {
         let symbol = self.get_symbol_of_declaration(node).unwrap();
         self.check_type_parameter_lists_identical(symbol);
         // Only check this symbol once
-        let links = self.declared_type_links.get(symbol);
-        if !links.interface_checked.get() {
-            links.interface_checked.set(true);
+        if self.is_interface_check_site(symbol, node) {
             let t = self.get_declared_type_of_symbol(symbol);
             let type_with_this = self.get_type_with_this_argument(t, None, false);
             // run subsequent checks only if first set succeeded
@@ -962,6 +960,25 @@ impl Checker {
         self.check_source_elements(node.members());
         self.check_class_or_interface_for_duplicate_index_signatures(node);
         self.register_for_unused_identifiers_check(node);
+    }
+
+    // Whether `node` runs the checks of its merged interface that report at the declaration being checked (TS2320,
+    // TS2430). Go runs them once per checker, at whichever declaration that checker visits first
+    // (`interfaceChecked`), so with declarations in several files the errors depend on which files share a checker and
+    // in what order it visits them (notes/fix-history-dependent-diagnostics.md). By default they run at the first
+    // interface declaration of the symbol in each file: every file that declares the interface reports, whatever
+    // checked it before. `go_compatible_history()` keeps Go's flag.
+    fn is_interface_check_site(&mut self, symbol: P<Symbol>, node: P<Node>) -> bool {
+        if tsrs_core::compat::go_compatible_history() {
+            let links = self.declared_type_links.get(symbol);
+            if links.interface_checked.get() {
+                return false;
+            }
+            links.interface_checked.set(true);
+            return true;
+        }
+        let file = get_source_file_of_node(node);
+        symbol.declarations().iter().copied().find(|&d| is_interface_declaration(d) && get_source_file_of_node(d) == file) == Some(node)
     }
 
     // checker.go:5127
