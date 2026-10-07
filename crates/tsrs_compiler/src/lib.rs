@@ -20,6 +20,7 @@ mod program;
 mod program_emit;
 #[cfg(feature = "checker")]
 mod programlike;
+mod splitcheck;
 mod projectreferencedtsfakinghost;
 mod projectreferencefilemapper;
 mod projectreferenceparser;

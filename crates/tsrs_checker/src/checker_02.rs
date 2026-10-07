@@ -106,7 +106,9 @@ impl Checker {
             // Grammar checking
             self.check_grammar_source_file(source_file);
             self.renamed_binding_elements_in_types = Vec::new();
-            self.check_source_elements(source_file.statements.nodes());
+            if self.statements_checked_in_pieces.take() != Some(source_file) {
+                self.check_source_elements(source_file.statements.nodes());
+            }
             self.check_deferred_nodes(source_file);
             if ast::is_external_or_common_js_module(source_file) {
                 self.check_external_module_exports(source_file.as_node());
@@ -131,6 +133,54 @@ impl Checker {
             self.was_canceled = true;
         }
         self.ctx = None;
+    }
+
+    /// tsrs-only (notes/perf-next-heavy-files.md): checks `statements` of a declaration file as `check_source_file` would
+    /// (the statements, then the nodes they deferred and the deferred diagnostics) without the file-level steps, and
+    /// returns this checker's diagnostics and suggestions for the file. The compiler's checker pool splits a heavy
+    /// declaration file over several checkers this way; the checker that owns the file merges the other pieces'
+    /// diagnostics (`add_piece_diagnostics`), then runs `check_source_file`, which skips the statements.
+    pub fn check_source_file_piece(
+        &mut self,
+        ctx: &Context,
+        source_file: P<SourceFile>,
+        statements: std::ops::Range<usize>,
+    ) -> (Vec<P<Diagnostic>>, Vec<P<Diagnostic>>) {
+        debug_assert!(source_file.is_declaration_file());
+        self.check_not_canceled();
+        let saved_checking_file = self.checking_file.replace(source_file);
+        self.ctx = Some(ctx.clone());
+        if !self.source_file_links.get(source_file).type_checked.get() {
+            self.check_source_elements(&source_file.statements.nodes()[statements]);
+            self.check_deferred_nodes(source_file);
+            self.produce_deferred_diagnostics();
+            self.reported_unreachable_nodes.clear();
+        }
+        if self.is_canceled() {
+            self.was_canceled = true;
+        }
+        self.ctx = None;
+        self.checking_file = saved_checking_file;
+        (self.diagnostics.get_diagnostics_for_file(source_file), self.suggestion_diagnostics.get_diagnostics_for_file(source_file))
+    }
+
+    /// tsrs-only: adds the diagnostics another checker found while checking pieces of `source_file`
+    /// (`check_source_file_piece`), and marks the file's statements as checked: the next `check_source_file` of it
+    /// runs only the file-level steps. The collections deduplicate and sort, so the file's diagnostics are the union.
+    pub fn add_piece_diagnostics(&mut self, source_file: P<SourceFile>, diagnostics: &[P<Diagnostic>], suggestions: &[P<Diagnostic>]) {
+        for &d in diagnostics {
+            self.diagnostics.add(d);
+        }
+        for &d in suggestions {
+            self.suggestion_diagnostics.add(d);
+        }
+        self.statements_checked_in_pieces = Some(source_file);
+    }
+
+    /// tsrs-only: the diagnostics this checker holds for `source_file` so far, without checking anything (the split
+    /// check's shadow mode compares them).
+    pub fn file_diagnostics_so_far(&mut self, source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
+        self.diagnostics.get_diagnostics_for_file(source_file)
     }
 
     // checker.go:2273
