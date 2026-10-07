@@ -167,7 +167,14 @@ checkers, 1/8 0.086 s, 1/16 0.088 s; at 32 checkers 0.085 s for all three. 1/16 
 ## 6. Gates
 
 `cargo check --workspace` clean, `tools/lint/ratchet.py` ok (none new), `tools/lint/source.py` ok,
-`cargo test -p tsrs_checker -p tsrs_compiler` ok, `cargo test -p tsrs_cli --test split_check` ok. PR_VERIFY_LINE
+`cargo test -p tsrs_checker -p tsrs_compiler` ok, `cargo test -p tsrs_cli --test split_check` ok.
+
+pr-verify (`depot ci run --workflow .depot/workflows/pr-verify.yml`, run n1187b8sgs, main 0257e3e against this branch,
+all 17 bench projects at 1, 4, 16 and 32 checkers plus a poisoned-arena run): identical diagnostics in 102 of 102 cells.
+next-packages-next wall 0.46 -> 0.24 s at 16 checkers and 0.47 -> 0.19 s at 32 (check 0.40 -> 0.17 / 0.12),
+unchanged at 1 and 4; single-threaded instructions +0.000-0.005% on every project. The other projects' wall medians
+are within -1.1% to +1.8% (webpack and next-root +3-4% at 16-32 checkers, 0.01 s, where they split lib.dom.d.ts; mikro-orm
++6% at 32 and -2.4% at 16, which does not split anything). Peak RSS at most +3.8% (webpack, 16 checkers).
 
 ## 7. Not done
 
