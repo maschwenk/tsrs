@@ -2016,12 +2016,7 @@ impl SourceFile {
         if let Some(m) = self.ecma_line_map.get() {
             return m.len();
         }
-        let mut n = 0;
-        tsrs_core::compute_ecma_line_starts_seq(self.text, |_| {
-            n += 1;
-            true
-        });
-        n
+        tsrs_core::count_ecma_line_starts(self.text)
     }
 
     pub fn ecma_line_map(&self) -> &'static [TextPos] {

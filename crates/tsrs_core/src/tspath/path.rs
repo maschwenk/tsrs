@@ -902,11 +902,14 @@ fn get_any_extension_from_path_worker(path: &str, extensions: &[&str], string_eq
 
 // Go's unexported tryGetExtensionFromPath; renamed because it collides with TryGetExtensionFromPath after snake-casing.
 fn try_get_extension_from_path_with(path: &str, extension: &str, string_equality_comparer: fn(&str, &str) -> bool) -> String {
-    let extension = if !extension.starts_with('.') { format!(".{extension}") } else { extension.to_string() };
+    // Go prefixes a missing "." to the extension; both comparers match the "." alike, so the rest is compared
+    // without building the prefixed string (this runs once per candidate extension of every changeExtension).
+    let without_dot = extension.strip_prefix('.').unwrap_or(extension);
+    let len = without_dot.len() + 1;
     let pb = path.as_bytes();
-    if pb.len() >= extension.len() && pb[pb.len() - extension.len()] == b'.' {
-        let path_extension = &path[path.len() - extension.len()..];
-        if string_equality_comparer(path_extension, &extension) {
+    if pb.len() >= len && pb[pb.len() - len] == b'.' {
+        let path_extension = &path[path.len() - len..];
+        if string_equality_comparer(&path_extension[1..], without_dot) {
             return path_extension.to_string();
         }
     }

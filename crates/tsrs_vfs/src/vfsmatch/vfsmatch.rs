@@ -712,43 +712,76 @@ struct GlobVisitor {
     visited: FxHashSet<String>,
     results: Vec<Vec<String>>,
     // Directory listings read ahead in parallel (prefetch_listings), by absolute path.
-    listings: FxHashMap<String, Entries>,
+    listings: FxHashMap<String, PrefetchedListing>,
+}
+
+// A directory listing read ahead, with the matching that the visit of the directory does on it.
+struct PrefetchedListing {
+    entries: Entries,
+    // (include index, index in `entries.files`) of each file that has one of the extensions and matches, in order.
+    files: Vec<(usize, usize)>,
+    // `directory_matcher.matches_directory_parts` of each of `entries.directories`; empty where the visit stops at
+    // this depth.
+    directories: Vec<bool>,
 }
 
 impl GlobVisitor {
     // tsrs-only: reads the listings of every directory the visit below will enter, in parallel, so that the
     // sequential visit (whose order and symlink-cycle handling are unchanged) finds them ready. Symlinked
     // directories are not followed here (the visit resolves them itself, with its cycle check), and neither is
-    // anything below a listing without symlink information.
-    fn prefetch_listings(&mut self, host: &dyn FS, base_paths: &[String], depth: usize) {
-        let listings: std::sync::Mutex<FxHashMap<String, Entries>> = std::sync::Mutex::new(FxHashMap::default());
-        let matcher = &self.directory_matcher;
-        fn walk<'s>(s: &rayon::Scope<'s>, host: &'s dyn FS, matcher: &'s GlobMatcher, listings: &'s std::sync::Mutex<FxHashMap<String, Entries>>, path: String, depth: usize) {
-            let entries = host.get_accessible_entries(&path);
+    // anything below a listing without symlink information. Each listing is also matched here, against the same
+    // matchers and with the same prefix as in the visit, which then only collects the results in its order.
+    fn prefetch_listings(&mut self, host: &dyn FS, extensions: &[&str], base_paths: &[String], depth: usize) {
+        struct Walk<'a> {
+            host: &'a dyn FS,
+            extensions: &'a [&'a str],
+            file_matcher: &'a GlobMatcher,
+            directory_matcher: &'a GlobMatcher,
+            listings: std::sync::Mutex<FxHashMap<String, PrefetchedListing>>,
+        }
+        fn walk<'s>(s: &rayon::Scope<'s>, w: &'s Walk<'s>, path: String, depth: usize) {
+            let entries = w.host.get_accessible_entries(&path);
+            let prefix = ensure_trailing_slash(&path);
+            let files = entries
+                .files
+                .iter()
+                .enumerate()
+                .filter(|(_, file)| w.extensions.is_empty() || w.extensions.iter().any(|ext| tspath::file_extension_is(file, ext)))
+                .filter_map(|(i, file)| w.file_matcher.matches_file_parts(&prefix, file).map(|idx| (idx, i)))
+                .collect();
             let child_depth = if depth == UNLIMITED_DEPTH { UNLIMITED_DEPTH } else { depth - 1 };
-            if let (Some(symlinks), true) = (&entries.symlinks, child_depth != 0) {
-                let prefix = ensure_trailing_slash(&path);
-                for dir in &entries.directories {
-                    if symlinks.contains(dir) || !matcher.matches_directory_parts(&prefix, dir) {
-                        continue;
+            let mut directories = Vec::new();
+            if child_depth != 0 {
+                directories = entries.directories.iter().map(|dir| w.directory_matcher.matches_directory_parts(&prefix, dir)).collect();
+                if let Some(symlinks) = &entries.symlinks {
+                    for (dir, &matched) in entries.directories.iter().zip(&directories) {
+                        if matched && !symlinks.contains(dir) {
+                            let child = format!("{}{}", prefix, dir);
+                            s.spawn(move |s| walk(s, w, child, child_depth));
+                        }
                     }
-                    let child = format!("{}{}", prefix, dir);
-                    s.spawn(move |s| walk(s, host, matcher, listings, child, child_depth));
                 }
             }
-            listings.lock().unwrap().insert(path, entries);
+            w.listings.lock().unwrap().insert(path, PrefetchedListing { entries, files, directories });
         }
+        let w = Walk {
+            host,
+            extensions,
+            file_matcher: &self.file_matcher,
+            directory_matcher: &self.directory_matcher,
+            listings: std::sync::Mutex::new(FxHashMap::default()),
+        };
         let mut seen: FxHashSet<&str> = FxHashSet::default();
         rayon::scope(|s| {
             for path in base_paths {
                 if seen.insert(path) {
                     let path = path.clone();
-                    let listings = &listings;
-                    s.spawn(move |s| walk(s, host, matcher, listings, path, depth));
+                    let w = &w;
+                    s.spawn(move |s| walk(s, w, path, depth));
                 }
             }
         });
-        self.listings = listings.into_inner().unwrap();
+        self.listings = w.listings.into_inner().unwrap();
     }
 }
 
@@ -766,20 +799,26 @@ impl GlobVisitor {
         }
         self.visited.insert(canonical_path);
 
-        let entries = match self.listings.remove(absolute_path) {
-            Some(entries) => entries,
-            None => host.get_accessible_entries(absolute_path),
+        let (entries, prefetched) = match self.listings.remove(absolute_path) {
+            Some(PrefetchedListing { entries, files, directories }) => (entries, Some((files, directories))),
+            None => (host.get_accessible_entries(absolute_path), None),
         };
 
         let path_prefix = ensure_trailing_slash(path);
         let abs_prefix = ensure_trailing_slash(absolute_path);
 
-        for file in &entries.files {
-            if !extensions.is_empty() && !extensions.iter().any(|ext| tspath::file_extension_is(file, ext.as_ref())) {
-                continue;
+        if let Some((files, _)) = &prefetched {
+            for &(idx, i) in files {
+                self.results[idx].push(format!("{}{}", path_prefix, entries.files[i]));
             }
-            if let Some(idx) = self.file_matcher.matches_file_parts(&abs_prefix, file) {
-                self.results[idx].push(format!("{}{}", path_prefix, file));
+        } else {
+            for file in &entries.files {
+                if !extensions.is_empty() && !extensions.iter().any(|ext| tspath::file_extension_is(file, ext.as_ref())) {
+                    continue;
+                }
+                if let Some(idx) = self.file_matcher.matches_file_parts(&abs_prefix, file) {
+                    self.results[idx].push(format!("{}{}", path_prefix, file));
+                }
             }
         }
 
@@ -790,8 +829,12 @@ impl GlobVisitor {
             }
         }
 
-        for dir in &entries.directories {
-            if !self.directory_matcher.matches_directory_parts(&abs_prefix, dir) {
+        for (i, dir) in entries.directories.iter().enumerate() {
+            let matched = match prefetched.as_ref().and_then(|(_, directories)| directories.get(i)) {
+                Some(&matched) => matched,
+                None => self.directory_matcher.matches_directory_parts(&abs_prefix, dir),
+            };
+            if !matched {
                 continue;
             }
             let abs_dir = format!("{}{}", abs_prefix, dir);
@@ -839,7 +882,8 @@ fn match_files(
 
     let base_paths = get_base_paths(&path, includes, use_case_sensitive_file_names);
     let absolute_base_paths: Vec<String> = base_paths.iter().map(|base_path| tspath::combine_paths(&current_directory, &[base_path])).collect();
-    tsrs_core::phases::time("Config:   listing prefetch", || v.prefetch_listings(host, &absolute_base_paths, depth));
+    let extension_strs: Vec<&str> = extensions.iter().map(AsRef::as_ref).collect();
+    tsrs_core::phases::time("Config:   listing prefetch", || v.prefetch_listings(host, &extension_strs, &absolute_base_paths, depth));
     for (base_path, abs) in base_paths.iter().zip(&absolute_base_paths) {
         v.visit(host, extensions, base_path, abs, depth, "");
     }

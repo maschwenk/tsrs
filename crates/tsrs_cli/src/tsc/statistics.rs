@@ -64,6 +64,32 @@ pub struct Statistics {
 
 // Go reports runtime.MemStats (live heap and malloc count). There is no GC heap here; the resident
 // set size of the process stands in for "Memory used", and allocation counts are not tracked.
+// The number `ps -o rss=` prints, read without starting `ps` (about 2 ms and a process spawn at the end of every
+// `--extendedDiagnostics` run): the resident pages of /proc/self/statm, which is where Linux `ps` reads it.
+#[cfg(target_os = "linux")]
+fn memory_used_bytes() -> u64 {
+    let statm = std::fs::read_to_string("/proc/self/statm").unwrap_or_default();
+    let pages = statm.split_whitespace().nth(1).and_then(|s| s.parse::<u64>().ok()).unwrap_or(0);
+    // SAFETY: sysconf has no preconditions.
+    let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
+    pages * page_size.max(0) as u64
+}
+
+// macOS `ps` reports the task's resident size from proc_pidinfo(PROC_PIDTASKINFO), in KiB.
+#[cfg(target_os = "macos")]
+fn memory_used_bytes() -> u64 {
+    // SAFETY: proc_taskinfo is plain integers, for which all zeroes is a valid value.
+    let mut info: libc::proc_taskinfo = unsafe { std::mem::zeroed() };
+    let size = std::mem::size_of::<libc::proc_taskinfo>() as libc::c_int;
+    // SAFETY: `info` is a writable proc_taskinfo of `size` bytes, as PROC_PIDTASKINFO requires.
+    let n = unsafe { libc::proc_pidinfo(std::process::id() as libc::c_int, libc::PROC_PIDTASKINFO, 0, std::ptr::addr_of_mut!(info).cast(), size) };
+    if n != size {
+        return 0;
+    }
+    info.pti_resident_size / 1024 * 1024
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 fn memory_used_bytes() -> u64 {
     let pid = std::process::id().to_string();
     std::process::Command::new("ps")
