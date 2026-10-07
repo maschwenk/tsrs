@@ -104,6 +104,11 @@ impl FileIncludeReason {
         self.kind <= fileIncludeKind::LibReferenceDirective
     }
 
+    /// tsrs-only: a root file of the program (fileregions.rs: a file with only such reasons is referred to by none).
+    pub(crate) fn is_root_file(&self) -> bool {
+        self.kind == fileIncludeKind::RootFile
+    }
+
     pub(crate) fn as_referenced_file_data(&self) -> &referencedFileData {
         self.referenced_file.as_ref().unwrap()
     }

@@ -83,6 +83,11 @@ impl CompilerHost for compilerHost {
             }));
         }
         let text = tsrs_core::festats::timed(tsrs_core::festats::Cat::Read, || self.fs().read_file(&opts.file_name))?;
+        // tsrs-only: the CLI's `--noEmit` check parses each file that may be a leaf into a region of its own, freed
+        // once the file is checked if it is one (fileregions.rs).
+        if crate::fileregions::wants_region(&opts.file_name, script_kind) {
+            return Some(tsrs_core::festats::timed(tsrs_core::festats::Cat::Parse, || crate::fileregions::parse(opts, text, script_kind)));
+        }
         Some(tsrs_core::festats::timed(tsrs_core::festats::Cat::Parse, || tsrs_parser::parse_source_file_owned(opts, text, script_kind)))
     }
 

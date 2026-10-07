@@ -463,7 +463,7 @@ impl<'a> speculation<'a> {
         let job_start = festats::enabled().then(std::time::Instant::now);
         let metadata = festats::timed(Cat::Meta, || source_file_meta_data(ctx.opts, ctx.resolver, ctx.project_references, &file_name));
         let file = ctx.host.get_source_file(parse_options_for(ctx.host, ctx.project_references, &file_name, &path, &metadata));
-        festats::timed(Cat::Bind, || file.map(tsrs_binder::bind_source_file));
+        festats::timed(Cat::Bind, || file.map(crate::fileregions::bind));
         let resolutions = festats::timed(Cat::Resolve, || file.map(|file| Box::new(prefetch_resolutions(ctx, file, &metadata))));
         if let (Some(file), Some(resolutions)) = (file, &resolutions) {
             self.spawn_sub_tasks(scope, file, resolutions);
@@ -682,7 +682,7 @@ impl filesParser {
                             let file = host.get_source_file(parse_options_for(host, project_references, file_name, &path, &metadata));
                             // Bind here too: the round is bound by file system calls, and the checkers would bind every
                             // file on the same pool later (binding depends only on the file).
-                            festats::timed(Cat::Bind, || file.map(tsrs_binder::bind_source_file));
+                            festats::timed(Cat::Bind, || file.map(crate::fileregions::bind));
                             let resolutions = festats::timed(Cat::Resolve, || match file {
                                 Some(file) if resolve_ahead => Some(Box::new(prefetch_resolutions(&ctx, file, &metadata))),
                                 _ => None,
