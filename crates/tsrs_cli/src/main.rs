@@ -49,11 +49,6 @@ fn main() {
     // TSRS_INFER_MEMO_STATS / TSRS_INFER_MEMO=shadow: the inference memo's totals.
     #[cfg(feature = "checker")]
     tsrs_compiler::Checker::infer_memo_finish();
-    // TSRS_DERIVED_VARIANCE=shadow reports each disagreement as it is found and fails the run at the end.
-    #[cfg(feature = "checker")]
-    if tsrs_compiler::Checker::derived_variance_finish() > 0 {
-        std::process::exit(7);
-    }
     let _ = std::io::Write::flush(&mut std::io::stdout());
     let _ = std::io::Write::flush(&mut std::io::stderr());
     std::process::exit(status as i32)

@@ -1,5 +1,10 @@
 # perf-derived-variance: relating a derived generic to its generic base by variances
 
+> Removed on 2026-10-07: the mechanism shipped switched off and, guarded, saved nothing (the judgement in
+> notes/fuzz-derived-variance.md), so `relater_derived.rs`, its seven `TSRS_DERIVED_VARIANCE*` switches, the fuzzers under
+> tools/fuzz and the `derived_variance` CLI test were deleted. The `testdata/regressions/derived-variance-*` cases stay:
+> they are tsgo's output on the shapes the fuzzer found.
+
 > Update: an adversarial generator found nine more kinds of disagreement; guards 4-6 close them and remove the
 > savings below. notes/fuzz-derived-variance.md has the findings, the guards, the new numbers and the judgement.
 

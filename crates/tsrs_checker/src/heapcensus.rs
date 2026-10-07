@@ -215,7 +215,7 @@ impl Checker {
         let mut h = HeapCensus::default();
         rows!(
             h, self,
-            file_index_map, derived_this_variances, instantiation_stack, string_literal_types, number_literal_types,
+            file_index_map, instantiation_stack, string_literal_types, number_literal_types,
             bigint_literal_types, enum_literal_types, enum_nan_literal_types, indexed_access_types,
             template_literal_types, string_mapping_types, unique_es_symbol_types, this_expando_kinds,
             this_expando_locations, subtype_reduction_cache, cached_types, cached_signatures, undefined_properties,
@@ -232,12 +232,6 @@ impl Checker {
             contextual_infos, inference_context_infos, shared_flows, antecedent_types,
         );
         // Values that own heap memory themselves.
-        let mut inner = HeapStat::default();
-        for v in self.derived_conditional_params.values() {
-            inner.add(v.heap_stat());
-        }
-        h.row("derived_conditional_params", self.derived_conditional_params.heap_stat());
-        h.row("derived_conditional_params (values)", inner);
         let mut keys = HeapStat::default();
         for k in self.undefined_properties.keys().chain(self.unresolved_symbols.keys()) {
             keys.add(HeapStat { containers: 1, len: k.len() as u64, cap: k.capacity() as u64, slot: 1, bytes: k.capacity() as u64 });

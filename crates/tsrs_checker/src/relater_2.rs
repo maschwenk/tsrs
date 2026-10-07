@@ -897,7 +897,7 @@ impl Relater {
     pub(crate) fn structured_type_related_to(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, intersection_state: IntersectionState) -> Ternary {
         if c.census_on() {
             let span = c.census_begin(crate::workcensus::Cat::Rel, || { let (sym, label) = crate::workcensus::type_identity(target); crate::workcensus::CKey::Rel(0, sym, label) });
-            let r = self.structured_type_related_to_inner(c, source, target, report_errors, intersection_state);
+            let r = self.structured_type_related_to_body(c, source, target, report_errors, intersection_state);
             let timing = c.census_end(span).unwrap();
             let k = crate::workcensus::rel_kind(c, self.rel());
             let (sym, label) = crate::workcensus::type_identity(target);
@@ -908,33 +908,7 @@ impl Relater {
             census.record(crate::workcensus::Cat::Rel, crate::workcensus::CKey::Rel(k, sym, label), timing, (r == Ternary::False) as u64, 0, 0);
             return r;
         }
-        self.structured_type_related_to_inner(c, source, target, report_errors, intersection_state)
-    }
-
-    fn structured_type_related_to_inner(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, intersection_state: IntersectionState) -> Ternary {
-        if c.derived_variance != crate::relater_derived::DerivedVarianceMode::Off {
-            return self.structured_type_related_to_derived(c, source, target, report_errors, intersection_state);
-        }
         self.structured_type_related_to_body(c, source, target, report_errors, intersection_state)
-    }
-
-    /// TSRS_DERIVED_VARIANCE (relater_derived.rs): a derived generic against a reference to its generic base.
-    #[cold]
-    #[inline(never)]
-    fn structured_type_related_to_derived(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, intersection_state: IntersectionState) -> Ternary {
-        let (early, decision) = self.derived_variance_pre(c, source, target, report_errors, intersection_state);
-        if let Some(result) = early {
-            return result;
-        }
-        let Some(decision) = decision else { return self.structured_type_related_to_body(c, source, target, report_errors, intersection_state) };
-        let outermost = c.derived_depth == 0;
-        c.derived_depth += 1;
-        let t0 = std::time::Instant::now();
-        let result = self.structured_type_related_to_body(c, source, target, report_errors, intersection_state);
-        let base_ns = t0.elapsed().as_nanos() as u64;
-        c.derived_depth -= 1;
-        self.derived_variance_post(c, source, target, &decision, result, base_ns, outermost);
-        result
     }
 
     fn structured_type_related_to_body(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, intersection_state: IntersectionState) -> Ternary {

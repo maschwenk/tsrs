@@ -79,7 +79,6 @@ pub(crate) use checker_15::*;
 mod relater_1;
 pub(crate) use relater_1::*;
 mod relater_2;
-mod relater_derived;
 mod unioncache;
 mod infermemo;
 mod flow;
