@@ -2834,13 +2834,39 @@ pub fn get_diagnostics_of_any_program(
     // If we didn't have any syntactic errors, then also try getting the program (options),
     // global and semantic errors.
     if all_diagnostics.len() == config_file_parsing_diagnostics_length {
-        all_diagnostics.extend(tsrs_core::phases::time("Diagnostics: program", || program.get_program_diagnostics()));
+        let list_files_only = !program.options().list_files_only.is_false_or_unknown();
+        // tsrs-only: the program diagnostics (processing and resolution diagnostics; vscode: a walk over 110k
+        // resolutions) read only the loaded program, so they are computed on a helper thread while this thread binds
+        // and creates the checkers (notes/perf-serial-program-diagnostics.md). They are added first, as in Go.
+        let (program_diagnostics, global_diagnostics) = if !list_files_only && !program.single_threaded() {
+            std::thread::scope(|s| {
+                let program_diagnostics = s.spawn(|| {
+                    let start = std::time::Instant::now();
+                    (program.get_program_diagnostics(), start.elapsed())
+                });
+                // Do binding early so we can track the time.
+                append_diagnostics_for_all_files(&mut Vec::new(), get_bind_diagnostics);
+                let start = std::time::Instant::now();
+                let global = program.get_global_diagnostics(ctx);
+                let global_time = start.elapsed();
+                let (diagnostics, program_time) = program_diagnostics.join().unwrap_or_else(|payload| std::panic::resume_unwind(payload));
+                // Recorded after both ended, so the rows keep their order.
+                tsrs_core::phases::record("Diagnostics: program", program_time);
+                tsrs_core::phases::record("Diagnostics: global (first)", global_time);
+                (diagnostics, Some(global))
+            })
+        } else {
+            let diagnostics = tsrs_core::phases::time("Diagnostics: program", || program.get_program_diagnostics());
+            // Do binding early so we can track the time.
+            append_diagnostics_for_all_files(&mut Vec::new(), get_bind_diagnostics);
+            let global =
+                (!list_files_only).then(|| tsrs_core::phases::time("Diagnostics: global (first)", || program.get_global_diagnostics(ctx)));
+            (diagnostics, global)
+        };
+        all_diagnostics.extend(program_diagnostics);
 
-        // Do binding early so we can track the time.
-        append_diagnostics_for_all_files(&mut Vec::new(), get_bind_diagnostics);
-
-        if program.options().list_files_only.is_false_or_unknown() {
-            all_diagnostics.extend(tsrs_core::phases::time("Diagnostics: global (first)", || program.get_global_diagnostics(ctx)));
+        if let Some(global_diagnostics) = global_diagnostics {
+            all_diagnostics.extend(global_diagnostics);
 
             if all_diagnostics.len() == config_file_parsing_diagnostics_length {
                 append_diagnostics_for_all_files(&mut all_diagnostics, get_semantic_diagnostics);
