@@ -9,7 +9,7 @@
 # PROBE_ARGS: --versions 0.3.0,0.4.0,0.5.0,0.6.0,0.7.0,0.8.0 --reps 5 --single-reps 2 (defaults). Environment from the
 # workflow: BUN_BIN, BENCH_WORK, PROBE_OUT, PROBE_PROJECTS (vscode). Writes $PROBE_OUT/summary.txt (one line per run),
 # runs.tsv, and medians.md (the table).
-set -euo pipefail
+set -uo pipefail   # no -e: a reference tool that is missing or exits non-zero must not end the probe
 : "${BENCH_WORK:?}" "${PROBE_OUT:?}"
 versions="0.3.0,0.4.0,0.5.0,0.6.0,0.7.0,0.8.0"
 reps=5
@@ -37,9 +37,9 @@ for v in "${vs[@]}"; do
   chmod +x "${bin[$v]}"
   echo "== tsrs $v: $("${bin[$v]}" --version 2>&1 | head -1)" | tee -a "$PROBE_OUT/summary.txt"
 done
-tsgo=$(find "$BENCH_WORK/tsgo" -type f -name tsgo 2>/dev/null | head -1 || true)
-[ -n "$tsgo" ] && echo "== tsgo: $("$tsgo" --version 2>&1 | head -1)" | tee -a "$PROBE_OUT/summary.txt"
-[ -n "${BUN_BIN:-}" ] && echo "== bun: $("$BUN_BIN" --revision 2>&1 | head -1)" | tee -a "$PROBE_OUT/summary.txt"
+tsgo=$(find "$BENCH_WORK/tsgo" -type f \( -name tsgo -o -name 'tsgo*' \) -perm -u+x 2>/dev/null | grep -v '\.js$' | head -1)
+if [ -n "$tsgo" ]; then echo "== tsgo: $("$tsgo" --version 2>&1 | head -1) ($tsgo)" | tee -a "$PROBE_OUT/summary.txt"; else echo "== tsgo: not found under $BENCH_WORK/tsgo" | tee -a "$PROBE_OUT/summary.txt"; fi
+if [ -n "${BUN_BIN:-}" ]; then echo "== bun: $("$BUN_BIN" --revision 2>&1 | head -1)" | tee -a "$PROBE_OUT/summary.txt"; fi
 
 cd "$BENCH_WORK/solutions/vscode"
 flags=(-p src --noEmit --incremental false --extendedDiagnostics --pretty false)
@@ -58,12 +58,12 @@ for v in "${vs[@]}"; do "${bin[$v]}" "${flags[@]}" > /dev/null 2>&1 || true; don
 for rep in $(seq 1 "$reps"); do
   for v in "${vs[@]}"; do run "tsrs-$v" default "$rep" "${bin[$v]}" "${flags[@]}"; done
   for v in "${vs[@]}"; do run "tsrs-$v" checkers32 "$rep" "${bin[$v]}" "${flags[@]}" --checkers 32; done
-  [ -n "$tsgo" ] && run tsgo default "$rep" "$tsgo" "${flags[@]}"
-  [ -n "${BUN_BIN:-}" ] && run bun default "$rep" "$BUN_BIN" check -p src --no-pretty --all
+  if [ -n "$tsgo" ]; then run tsgo default "$rep" "$tsgo" "${flags[@]}"; fi
+  if [ -n "${BUN_BIN:-}" ]; then run bun default "$rep" "$BUN_BIN" check -p src --no-pretty --all; fi
 done
 for rep in $(seq 1 "$single_reps"); do
   for v in "${vs[@]}"; do run "tsrs-$v" single "$rep" "${bin[$v]}" "${flags[@]}" --singleThreaded; done
-  [ -n "$tsgo" ] && run tsgo single "$rep" "$tsgo" "${flags[@]}" --singleThreaded
+  if [ -n "$tsgo" ]; then run tsgo single "$rep" "$tsgo" "${flags[@]}" --singleThreaded; fi
 done
 python3 - "$PROBE_OUT/runs.tsv" "$PROBE_OUT/medians.md" <<'EOF'
 import collections, statistics, sys
