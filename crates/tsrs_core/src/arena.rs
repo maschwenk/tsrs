@@ -802,7 +802,8 @@ thread_local! {
 
 /// A lock that the thread holding it may take again (a region entered while it is already entered).
 struct OwnerLock {
-    state: Mutex<(Option<std::thread::ThreadId>, u32)>,
+    /// (owner, depth, threads waiting).
+    state: Mutex<(Option<std::thread::ThreadId>, u32, u32)>,
     released: Condvar,
 }
 
@@ -813,14 +814,19 @@ impl OwnerLock {
         loop {
             match st.0 {
                 None => {
-                    *st = (Some(me), 1);
+                    st.0 = Some(me);
+                    st.1 = 1;
                     return;
                 }
                 Some(owner) if owner == me => {
                     st.1 += 1;
                     return;
                 }
-                Some(_) => st = self.released.wait(st).unwrap(),
+                Some(_) => {
+                    st.2 += 1;
+                    st = self.released.wait(st).unwrap();
+                    st.2 -= 1;
+                }
             }
         }
     }
@@ -830,8 +836,13 @@ impl OwnerLock {
         st.1 -= 1;
         if st.1 == 0 {
             st.0 = None;
+            // A notification is a system call even when nobody waits (std's futex condvar); a file region is entered
+            // and left about four times by one thread (parse, bind, two trims) and nearly never waited for.
+            let waiting = st.2 != 0;
             drop(st);
-            self.released.notify_one();
+            if waiting {
+                self.released.notify_one();
+            }
         }
     }
 }
@@ -877,7 +888,7 @@ impl Region {
     fn new_in(first_chunk: usize, registered: bool) -> Region {
         Region(Arc::new_cyclic(|weak| RegionInner {
             arena: Box::new(Arena::with_first_chunk(first_chunk.max(PAGE), Some(Weak::clone(weak)), registered)),
-            lock: OwnerLock { state: Mutex::new((None, 0)), released: Condvar::new() },
+            lock: OwnerLock { state: Mutex::new((None, 0, 0)), released: Condvar::new() },
             owners: Mutex::new(Vec::new()),
             on_free: Mutex::new(Vec::new()),
             retire: AtomicBool::new(false),
