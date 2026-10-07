@@ -129,4 +129,7 @@ Local, each PR's binary against origin/main 530787c built here: `--pretty false`
 t3code-server, formbricks-web, supabase-studio, cal-diy, mui-docs, webpack and xstate-main, single-threaded and at 4
 and 32 checkers; `--extendedDiagnostics` counters identical single-threaded (timing rows excluded). `cargo check
 --workspace` without warnings, `tools/lint/ratchet.py`, `tools/lint/source.py`, `cargo test -p tsrs_checker -p
-tsrs_compiler` (and `-p tsrs_core -p tsrs_vfs` for PR 2). `pr-verify` on each PR: VERIFY.
+tsrs_compiler` (and `-p tsrs_core -p tsrs_vfs` for PR 2). `pr-verify` (17 projects x 1/4/16/32 checkers, 64-vCPU runner): PR 1 (#180) 102 of 102 cells identical on a re-run;
+its first run had 101, the miss being drizzle-orm at 16 checkers where main's own repetitions listed two diagnostics
+in different orders. PR 2 (#181) 102 of 102. The single-threaded instruction deltas pr-verify measured match the
+table above (vscode -1.470% / -0.626%).
