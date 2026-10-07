@@ -245,6 +245,9 @@ impl projectReferenceFileMapperBuilder {
 
     // projectreferencefilemapper.go:174
     pub(crate) fn get_parse_file_redirect(&self, file_name: &str, path: &Path) -> String {
+        if self.has_no_references() {
+            return String::new();
+        }
         if self.mapper.use_source_of_project_reference && self.mapper.get_project_reference_from_output_dts(path).is_none() {
             self.resolve_symlink(file_name, path);
         }
@@ -253,6 +256,9 @@ impl projectReferenceFileMapperBuilder {
 
     // projectreferencefilemapper.go:181
     pub(crate) fn get_redirect_for_resolution(&self, file_name: &str, path: &Path) -> (Option<P<ParsedCommandLine>>, String) {
+        if self.has_no_references() {
+            return (None, file_name.to_string());
+        }
         if self.mapper.get_project_reference_from_source(path).is_none() && self.mapper.get_project_reference_from_output_dts(path).is_none() {
             self.resolve_symlink(file_name, path);
         }
@@ -269,6 +275,13 @@ impl projectReferenceFileMapperBuilder {
     pub(crate) fn get_redirect_parsed_command_line_for_resolution(&self, file_name: &str, path: &Path) -> Option<P<ParsedCommandLine>> {
         let (redirect, _) = self.get_redirect_for_resolution(file_name, path);
         redirect
+    }
+
+    // tsrs-only: a program without project references has empty source and output maps, and `resolve_symlink` stores
+    // into `realpath_dts_to_source` only with references, so every redirect query misses. Answering that up front
+    // skips hashing the file's path into three maps (one of them a shared, locked map) per file and per import.
+    fn has_no_references(&self) -> bool {
+        self.mapper.config.resolved_project_reference_paths().is_empty()
     }
 
     // projectreferencefilemapper.go:198

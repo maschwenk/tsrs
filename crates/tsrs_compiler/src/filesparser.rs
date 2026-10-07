@@ -573,8 +573,10 @@ impl filesParser {
             return;
         }
 
-        let tasks_by_file_name: Vec<TaskId> = loader.files_parser.datas[data].tasks.values().copied().collect();
-        for task_by_file_name in tasks_by_file_name {
+        // The data's casings, by index: loading and starting sub tasks add tasks and datas but no casing to this data
+        // (only a later `run_queued` of one of its tasks does), so the list stays as it is (one entry, nearly always).
+        for index in 0..loader.files_parser.datas[data].tasks.0.len() {
+            let task_by_file_name = loader.files_parser.datas[data].tasks.0[index].1;
             let mut load_sub_tasks = start_subtasks;
             if !loader.tasks[task_by_file_name].loaded {
                 load(task_by_file_name, loader);
@@ -586,9 +588,11 @@ impl filesParser {
             }
             if !loader.tasks[task_by_file_name].started_sub_tasks && load_sub_tasks {
                 loader.tasks[task_by_file_name].started_sub_tasks = true;
-                let sub_tasks = loader.tasks[task_by_file_name].sub_tasks.clone();
+                // `start` reads the sub tasks themselves, never this task's list; it is lent out and put back.
+                let sub_tasks = std::mem::take(&mut loader.tasks[task_by_file_name].sub_tasks);
                 let lowest_depth = loader.files_parser.datas[data].lowest_depth;
                 Self::start(loader, &sub_tasks, lowest_depth);
+                loader.tasks[task_by_file_name].sub_tasks = sub_tasks;
             }
         }
     }
@@ -817,8 +821,9 @@ impl filesParser {
         // project is deeper than the default thread stack allows). Each frame is a task list and
         // the index of the next task to visit; the post-subtask work of a task runs when its
         // child frame is popped.
+        // A list frame names the task whose sub tasks it walks (None: the root tasks) instead of copying the list.
         enum Frame {
-            List { tasks: Vec<TaskId>, next: usize },
+            List { owner: Option<TaskId>, next: usize },
             After { task: TaskId, data: DataId },
         }
 
@@ -836,7 +841,8 @@ impl filesParser {
         reasons_by_data.resize_with(loader.files_parser.datas.len(), Vec::new);
         let mut reasons_order: Vec<(DataId, Path)> = Vec::new();
         let mut c = Collector { loader, seen: vec![None; reasons_by_data.len()] };
-        let mut stack: Vec<Frame> = vec![Frame::List { tasks: c.loader.root_tasks.clone(), next: 0 }];
+        let roots = c.loader.root_tasks.clone();
+        let mut stack: Vec<Frame> = vec![Frame::List { owner: None, next: 0 }];
 
         while let Some(frame) = stack.pop() {
             match frame {
@@ -893,12 +899,16 @@ impl filesParser {
                         source_files_found_searching_node_modules.insert(path);
                     }
                 }
-                Frame::List { tasks, next } => {
+                Frame::List { owner, next } => {
+                    let tasks: &[TaskId] = match owner {
+                        Some(owner) => &c.loader.tasks[owner].sub_tasks,
+                        None => &roots,
+                    };
                     if next >= tasks.len() {
                         continue;
                     }
                     let mut task = tasks[next];
-                    stack.push(Frame::List { tasks, next: next + 1 });
+                    stack.push(Frame::List { owner, next: next + 1 });
 
                     let loader = &mut *c.loader;
                     let include_reason = loader.tasks[task].include_reason;
@@ -1009,9 +1019,8 @@ impl filesParser {
                     }
 
                     stack.push(Frame::After { task, data });
-                    let sub_tasks = loader.tasks[task].sub_tasks.clone();
-                    if !sub_tasks.is_empty() {
-                        stack.push(Frame::List { tasks: sub_tasks, next: 0 });
+                    if !loader.tasks[task].sub_tasks.is_empty() {
+                        stack.push(Frame::List { owner: Some(task), next: 0 });
                     }
                 }
             }
