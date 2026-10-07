@@ -259,6 +259,22 @@ and the diagnostics must equal a `TSRS_UNION_CACHE=0` run, with no panics (`tsrs
 failure means a stored call was not a function of its inputs: find which branch of `get_union_type_worker_inner` it
 took and either keep it out of the cache (count it in `union_front_cache.impure`) or fix the state it read.
 
+## Variances shared between checkers: `TSRS_SHARED_VARIANCE`
+
+The variances a checker measures for a generic interface, class or type alias (`getVariancesWorker`) go into a
+table shared by the checkers of the program (`crates/tsrs_checker/src/sharedvariance.rs`), and a checker that needs
+the variances of a declaration another checker measured takes them from there instead of measuring again; if another
+checker is measuring it right now, it waits for the result. A result is published only from a measurement that
+started with an empty variance stack, read no transient state (the flow memo's taint frame around it) and added no
+diagnostic; the module comment has the argument for why using it is the same as having measured earlier. On by
+default, off under `--checkerAssignment go`. It pays where large library generics are measured in every checker
+(MUI's `Components<Theme>`, Zod's wrappers, react-select's props; notes/perf-heavy-files-shared-variance.md).
+
+| variable | values | effect |
+| --- | --- | --- |
+| `TSRS_SHARED_VARIANCE` | unset (on; off under `--checkerAssignment go`), `0`/`off`, `1`/`on` (on in every mode), `shadow` | `shadow` measures locally even when the table has the answer and panics if they differ (the panic names the declaration and both answers) |
+| `TSRS_SHARED_VARIANCE_STATS` | `1` | at exit, one line on stderr: lookups, answers found (and how many after waiting for another checker), measurements published and not published (shadow mode prints it too) |
+
 ## Profiling
 
 Profile the `dist` profile (fat LTO, one codegen unit; release builds also add PGO, `.github/workflows/release.yml`),

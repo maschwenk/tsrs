@@ -131,20 +131,24 @@ pub(crate) enum SharedVariance {
 /// releases the declaration for the waiters to measure themselves.
 pub(crate) struct SharedVarianceClaim {
     key: SharedVarianceKey,
+    published: bool,
 }
 
 impl SharedVarianceClaim {
-    pub(crate) fn publish(self, variances: &[VarianceFlags]) {
+    pub(crate) fn publish(mut self, variances: &[VarianceFlags]) {
         let t = table();
         t.slots.lock().unwrap().insert(self.key, Slot::Done(variances.into()));
+        self.published = true;
         count(&PUBLISHED);
-        std::mem::forget(self);
         t.published.notify_all();
     }
 }
 
 impl Drop for SharedVarianceClaim {
     fn drop(&mut self) {
+        if self.published {
+            return;
+        }
         let t = table();
         if let Ok(mut slots) = t.slots.lock() {
             slots.remove(&self.key);
@@ -159,7 +163,7 @@ impl Checker {
         let declaration = *symbol.declarations().first()?;
         let file = *self.file_index_map.get(&tsrs_ast::get_source_file_of_node(declaration)?)?;
         Some(SharedVarianceKey {
-            program: self.program as *const dyn Program as *const () as usize,
+            program: std::ptr::from_ref(self.program).cast::<()>().addr(),
             file,
             pos: declaration.pos(),
             end: declaration.end(),
@@ -197,7 +201,7 @@ impl Checker {
                 }
                 None => {
                     slots.insert(key, Slot::Measuring);
-                    return SharedVariance::Claimed(SharedVarianceClaim { key });
+                    return SharedVariance::Claimed(SharedVarianceClaim { key, published: false });
                 }
             }
         }
