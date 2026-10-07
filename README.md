@@ -51,35 +51,35 @@ table it has produced.
 <!-- bench:start -->
 ## Benchmark: tsrs vs tsgo 7.0.2 vs bun check
 
-tsrs is a Rust port of the TypeScript 7 type checker (the Go compiler, "tsgo"). Each row type-checks one project from [microsoft/typescript-benchmarking](https://github.com/microsoft/typescript-benchmarking), the suite the TypeScript team benchmarks tsgo on (vscode, xstate-main, webpack, mui-docs, Compiler, Compiler-Unions), or from a set of large open-source applications (cal-diy, formbricks-web, supabase-studio, t3code-server, mikro-orm, next-packages-next, next-root, storybook, nuxt, playwright, drizzle-orm), with tsgo 7.0.2 (npm `typescript@7.0.2`), with tsrs at commit `4c054d474c99` (the PGO-optimized `dist` build, built like the npm release binaries) and with `bun check` from Bun 1.4.3-canary.1+bd599f5af (one thread per core unless a `--threads` flag is named): `tsc -p <project> --noEmit`, median of 3 interleaved runs, on Depot CI `depot-ubuntu-24.04-64` (64 vCPU, 252 GB RAM, Linux x86_64, AMD EPYC 9R45 96-Core Processor).
+tsrs is a Rust port of the TypeScript 7 type checker (the Go compiler, "tsgo"). Each row type-checks one project from [microsoft/typescript-benchmarking](https://github.com/microsoft/typescript-benchmarking), the suite the TypeScript team benchmarks tsgo on (vscode, xstate-main, webpack, mui-docs, Compiler, Compiler-Unions), or from a set of large open-source applications (cal-diy, formbricks-web, supabase-studio, t3code-server, mikro-orm, next-packages-next, next-root, storybook, nuxt, playwright, drizzle-orm), with tsgo 7.0.2 (npm `typescript@7.0.2`), with tsrs at commit `88b58f515cb7` (the PGO-optimized `dist` build, built like the npm release binaries) and with `bun check` from Bun 1.4.3-canary.1+bd599f5af (one thread per core unless a `--threads` flag is named): `tsc -p <project> --noEmit`, median of 3 interleaved runs, on Depot CI `depot-ubuntu-24.04-64` (64 vCPU, 252 GB RAM, Linux x86_64, AMD EPYC 9R45 96-Core Processor).
 
 **Default mode on a 64-vCPU machine: no thread flag; tsgo uses 4 checker threads, tsrs half the cores, at least min(cores, 8), at most 32 (32 here; tsrs also resolves members lazily, its default), bun all 64 cores**
 
 | project | errors, tsgo / tsrs / bun | tsgo wall (s) | tsrs wall (s) | bun check wall (s) | speedup vs tsgo | speedup vs bun | tsgo peak memory | tsrs peak memory | bun check peak memory | memory efficiency vs tsgo | memory efficiency vs bun |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| vscode | 359 / 371 (ref 371) / 359 | 9.80 | 0.52 | 0.86 | **18.89x** | 1.66x | 7.18 GiB | 2.64 GiB | 2.86 GiB | 2.72x | 1.08x |
-| next-packages-next | 6 / 5 (ref 5) / 6 | 2.75 | 0.15 | 0.41 | **18.85x** | 2.79x | 1.81 GiB | 831 MiB | 1.08 GiB | 2.23x | 1.33x |
-| mui-docs | 0 / 0 / 23 | 11.54 | 0.77 | 40.98 | **14.91x** | 52.94x | 7.82 GiB | 2.10 GiB | 18.29 GiB | 3.72x | 8.71x |
-| mikro-orm | 43651 / 43651 / 43651 | 9.59 | 0.67 | 1.33 | **14.42x** | 2.00x | 6.51 GiB | 2.67 GiB | 2.78 GiB | 2.44x | 1.04x |
-| supabase-studio | 0 / 9 (ref 9) / 0 | 6.15 | 0.52 | 1.20 | **11.76x** | 2.30x | 4.48 GiB | 2.28 GiB | 2.11 GiB | 1.97x | 0.93x |
-| storybook | 93 / 93 / 93 | 1.58 | 0.14 | 0.27 | **11.60x** | 2.01x | 1.42 GiB | 720 MiB | 854 MiB | 2.02x | 1.19x |
-| webpack | 848 / 840 (ref 840) / 836 | 1.24 | 0.11 | 0.24 | **11.09x** | 2.12x | 1.12 GiB | 765 MiB | 767 MiB | 1.49x | 1.00x |
-| formbricks-web | 0 / 0 / 0 | 6.16 | 0.56 | 0.95 | **11.01x** | 1.71x | 5.51 GiB | 2.88 GiB | 2.18 GiB | 1.92x | 0.76x |
-| drizzle-orm | **10845 / 10845 (locations differ)** / 10845 | 1.66 | 0.16 | 0.43 | **10.36x** | 2.68x | 1.73 GiB | 1.13 GiB | 1.01 GiB | 1.54x | 0.89x |
-| playwright | 13 / 13 / 13 | 1.09 | 0.11 | 0.22 | **9.97x** | 1.98x | 1.09 GiB | 586 MiB | 711 MiB | 1.90x | 1.21x |
-| t3code-server | 5 / 6 (ref 6) / 5 | 12.84 | 1.32 | 2.45 | **9.74x** | 1.86x | 6.12 GiB | 2.78 GiB | 1.53 GiB | 2.20x | 0.55x |
-| next-root | 441 / 438 (ref 438) / 441 | 1.45 | 0.15 | 0.28 | **9.68x** | 1.88x | 1.31 GiB | 667 MiB | 859 MiB | 2.01x | 1.29x |
-| cal-diy | 136 / 136 / 136 | 5.17 | 0.55 | 1.36 | **9.41x** | 2.48x | 4.33 GiB | 2.57 GiB | 2.01 GiB | 1.68x | 0.78x |
-| nuxt | 3 / 4 (ref 4) / 3 | 1.23 | 0.14 | 0.43 | **8.72x** | 3.06x | 1.11 GiB | 665 MiB | 775 MiB | 1.71x | 1.17x |
-| xstate-main | 0 / 0 / 0 | 0.78 | 0.12 | 0.18 | **6.53x** | 1.47x | 739 MiB | 326 MiB | 623 MiB | 2.27x | 1.91x |
-| Compiler-Unions | 41 / 41 / 41 | 0.53 | 0.13 | 0.21 | 4.18x | 1.67x | 235 MiB | 112 MiB | 321 MiB | 2.11x | 2.88x |
-| Compiler | 43 / 43 / 43 | 0.28 | 0.07 | 0.12 | 3.85x | 1.59x | 214 MiB | 105 MiB | 304 MiB | 2.03x | 2.88x |
+| vscode | 359 / 371 (ref 371) / 359 | 9.58 | 0.50 | 0.85 | **19.28x** | 1.70x | 7.56 GiB | 2.64 GiB | 2.85 GiB | 2.87x | 1.08x |
+| next-packages-next | 6 / 5 (ref 5) / 6 | 2.79 | 0.14 | 0.42 | **19.26x** | 2.88x | 1.80 GiB | 834 MiB | 1.07 GiB | 2.21x | 1.32x |
+| mui-docs | 0 / 0 / 23 | 11.58 | 0.77 | 39.63 | **14.98x** | 51.27x | 7.29 GiB | 2.11 GiB | 17.62 GiB | 3.46x | 8.36x |
+| mikro-orm | 43651 / 43651 / 43651 | 9.48 | 0.65 | 1.30 | **14.62x** | 2.00x | 6.41 GiB | 2.62 GiB | 2.81 GiB | 2.45x | 1.07x |
+| storybook | 93 / 93 / 93 | 1.51 | 0.13 | 0.26 | **11.74x** | 2.04x | 1.43 GiB | 721 MiB | 857 MiB | 2.03x | 1.19x |
+| supabase-studio | 0 / 9 (ref 9) / 0 | 6.19 | 0.54 | 1.20 | **11.50x** | 2.24x | 4.36 GiB | 2.28 GiB | 2.12 GiB | 1.91x | 0.93x |
+| formbricks-web | 0 / 0 / 0 | 6.34 | 0.55 | 0.95 | **11.47x** | 1.72x | 5.44 GiB | 2.86 GiB | 2.18 GiB | 1.90x | 0.76x |
+| webpack | 848 / 840 (ref 840) / 836 | 1.24 | 0.11 | 0.25 | **11.24x** | 2.25x | 1.17 GiB | 767 MiB | 777 MiB | 1.56x | 1.01x |
+| drizzle-orm | 10845 / 10846 (ref 10846) / 10845 | 1.61 | 0.16 | 0.41 | **10.24x** | 2.63x | 1.75 GiB | 1.14 GiB | 1.01 GiB | 1.53x | 0.89x |
+| next-root | 441 / 438 (ref 438) / 441 | 1.46 | 0.14 | 0.28 | **10.15x** | 1.94x | 1.28 GiB | 666 MiB | 867 MiB | 1.96x | 1.30x |
+| playwright | 13 / 13 / 13 | 1.05 | 0.10 | 0.21 | **10.10x** | 2.02x | 1.08 GiB | 585 MiB | 714 MiB | 1.89x | 1.22x |
+| t3code-server | 5 / 6 (ref 6) / 5 | 12.56 | 1.27 | 2.49 | **9.90x** | 1.97x | 6.35 GiB | 2.80 GiB | 1.56 GiB | 2.27x | 0.56x |
+| cal-diy | 136 / 136 / 136 | 5.12 | 0.53 | 1.34 | **9.72x** | 2.55x | 4.57 GiB | 2.59 GiB | 2.03 GiB | 1.76x | 0.78x |
+| nuxt | 3 / 4 (ref 4) / 3 | 1.23 | 0.14 | 0.42 | **8.81x** | 3.03x | 1.16 GiB | 664 MiB | 775 MiB | 1.79x | 1.17x |
+| xstate-main | 0 / 0 / 0 | 0.80 | 0.12 | 0.18 | **6.80x** | 1.49x | 729 MiB | 324 MiB | 616 MiB | 2.25x | 1.90x |
+| Compiler-Unions | 41 / 41 / 41 | 0.55 | 0.13 | 0.21 | 4.36x | 1.66x | 230 MiB | 110 MiB | 313 MiB | 2.10x | 2.85x |
+| Compiler | 43 / 43 / 43 | 0.28 | 0.07 | 0.12 | 3.86x | 1.64x | 210 MiB | 106 MiB | 307 MiB | 1.98x | 2.90x |
 
 errors: the number of type errors each compiler reports on the project; tsgo's and tsrs's must be equal (a bold errors cell is a disagreement, i.e. a correctness bug). wall: process wall-clock time. speedup: tsgo wall / tsrs wall (above 1 = tsrs faster; bold from 5x). peak memory: maximum resident set size. memory efficiency vs tsgo: tsgo peak memory / tsrs peak memory (2x = tsrs uses half the memory; below 1 = tsrs uses more; bold from 4x). speedup vs bun: bun check wall / tsrs wall; memory efficiency vs bun: bun check peak memory / tsrs peak memory. bun check follows TypeScript 7.0, tsrs the 7.1-dev commit it ports, so their error counts can differ where the two TypeScript versions do.
 
 (ref N): tsgo 7.0.2 and tsrs disagree, but `typescript@7.1.0-dev.20260930.4`, built from the TypeScript commit tsrs ports (`b85298b6`), reports exactly tsrs's errors: a TypeScript 7.0 vs 7.1-dev difference, not a tsrs bug.
 
-Runner: Depot CI `depot-ubuntu-24.04-64` (64 vCPU, 252 GB RAM, Linux x86_64, AMD EPYC 9R45 96-Core Processor). Date: 2026-10-07 13:43 UTC. tsrs commit: `4c054d474c99`. Numbers from shared CI machines are noisy; compare trends, not single runs. How it is measured: [`bench/README.md`](bench/README.md).
+Runner: Depot CI `depot-ubuntu-24.04-64` (64 vCPU, 252 GB RAM, Linux x86_64, AMD EPYC 9R45 96-Core Processor). Date: 2026-10-07 14:08 UTC. tsrs commit: `88b58f515cb7`. Numbers from shared CI machines are noisy; compare trends, not single runs. How it is measured: [`bench/README.md`](bench/README.md).
 <!-- bench:end -->
 
 ## tsrs against bun check, thread for thread
