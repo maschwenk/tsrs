@@ -2978,6 +2978,11 @@ impl Checker {
             if !self.push_type_resolution(t.into(), TypeSystemPropertyName::ResolvedBaseTypes) {
                 return data.resolved_base_types.get();
             }
+            let canonical = !tsrs_core::compat::go_compatible_history();
+            if canonical {
+                self.base_types_depth += 1;
+                self.base_types_resolved_log.push(t);
+            }
             let symbol = t.symbol();
             if t.object_flags().intersects(ObjectFlags::Tuple) {
                 let base = self.get_tuple_base_type(t);
@@ -2995,6 +3000,9 @@ impl Checker {
             }
             // Go: `t.symbol.Declarations != nil`; a nil and an empty declaration list both iterate nothing.
             if !self.pop_type_resolution() {
+                if canonical {
+                    self.base_types_circular.push(t);
+                }
                 let declarations = t.symbol().unwrap().declarations();
                 for &declaration in declarations {
                     if is_class_declaration(declaration) || is_interface_declaration(declaration) {
@@ -3008,8 +3016,71 @@ impl Checker {
             // See https://github.com/microsoft/TypeScript/issues/16861 for an example.
             t.object_flags.set(t.object_flags.get() & !ObjectFlags::MembersResolved);
             data.base_types_resolved.set(true);
+            if canonical {
+                self.base_types_depth -= 1;
+                if self.base_types_depth == 0 {
+                    self.canonicalize_base_type_cycles(t);
+                }
+            }
         }
         data.resolved_base_types.get()
+    }
+
+    // Go resolves a cycle of base types (`interface A extends B`, `interface B extends A`) from whichever member a
+    // checker asks about first: that member drops its edge into the cycle (TS2310) and the others keep theirs, so the
+    // inherited members, and the diagnostics that follow from them, depend on what the checker resolved before
+    // (notes/fix-history-dependent-diagnostics.md). By default tsrs enters every cycle at the member declared first
+    // in program order (`earliest_declaration`): when the outermost resolution `t` found a cycle entered elsewhere,
+    // the base types it resolved are reset and resolved again from that member. `go_compatible_history()` keeps
+    // Go's result.
+    fn canonicalize_base_type_cycles(&mut self, t: P<Type>) {
+        if self.base_types_circular.is_empty() {
+            self.base_types_resolved_log.clear();
+            return;
+        }
+        let resolved = std::mem::take(&mut self.base_types_resolved_log);
+        let circular = std::mem::take(&mut self.base_types_circular);
+        // The cycle was entered at the circular type resolved outermost, the last one to finish. Class cycles also
+        // go through the base constructor type, which is not reset here.
+        let Some(&entry) = circular.last() else {
+            return;
+        };
+        if circular.iter().any(|c| c.symbol().is_none_or(|s| s.flags().intersects(SymbolFlags::Class))) {
+            return;
+        }
+        let mut first = entry;
+        let mut first_declaration = self.earliest_declaration(entry);
+        for &c in &circular {
+            let declaration = self.earliest_declaration(c);
+            if self.compare_nodes(declaration, first_declaration) < 0 {
+                first = c;
+                first_declaration = declaration;
+            }
+        }
+        if first == entry {
+            return;
+        }
+        for &r in &resolved {
+            let data = r.as_interface_type();
+            data.base_types_resolved.set(false);
+            data.resolved_base_types.set(&[]);
+            r.object_flags.set(r.object_flags.get() & !ObjectFlags::MembersResolved);
+        }
+        // Each pass resolves `first` for good, so a later reset (another cycle) covers fewer types and this ends.
+        self.get_base_types(first);
+        self.get_base_types(t);
+    }
+
+    // The declaration of `t`'s symbol that comes first in program order (`compareNodes`). The symbol's first
+    // declaration is not always that one: global augmentations are merged after the files' globals.
+    fn earliest_declaration(&mut self, t: P<Type>) -> Option<P<Node>> {
+        let mut earliest = None;
+        for &d in t.symbol().unwrap().declarations() {
+            if earliest.is_none() || self.compare_nodes(Some(d), earliest) < 0 {
+                earliest = Some(d);
+            }
+        }
+        earliest
     }
 
     // checker.go:19547

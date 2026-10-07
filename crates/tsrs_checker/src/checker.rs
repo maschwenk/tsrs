@@ -1202,6 +1202,11 @@ pub struct Checker {
     pub zero_big_int_type: P<Type>,
     pub typeof_type: P<Type>,
     pub type_resolutions: Vec<TypeResolution>,
+    // Canonical base-type cycles (`canonicalize_base_type_cycles`): first resolutions of base types in progress, the
+    // types they resolved, and the ones found circular.
+    pub base_types_depth: u32,
+    pub base_types_resolved_log: Vec<P<Type>>,
+    pub base_types_circular: Vec<P<Type>>,
     pub resolution_start: i32,
     pub variance_stack: Vec<VarianceStackEntry>,
     pub call_resolution_stack: Vec<P<Node>>,
@@ -1589,6 +1594,9 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         zero_big_int_type: dummy_type,
         typeof_type: dummy_type,
         type_resolutions: Vec::new(),
+        base_types_depth: 0,
+        base_types_resolved_log: Vec::new(),
+        base_types_circular: Vec::new(),
         resolution_start: 0,
         variance_stack: Vec::new(),
         call_resolution_stack: Vec::new(),

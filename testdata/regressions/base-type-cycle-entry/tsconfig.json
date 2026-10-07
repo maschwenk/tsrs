@@ -1,0 +1,1 @@
+{"compilerOptions":{"strict":true,"noEmit":true,"target":"es2020","types":[],"skipLibCheck":true},"files":["env-a.d.ts","env-b.d.ts","env-c.d.ts","read-env.ts","spawn.ts"]}
