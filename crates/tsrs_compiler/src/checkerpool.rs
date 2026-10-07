@@ -739,7 +739,7 @@ impl checkerPool {
         let file_weight = |i: u32| index_of[i as usize].map_or(1, |fi| state.weights.get(fi).copied().unwrap_or(1).max(0) as u64);
         // Positions from `files.len()` on are the queued pieces of split files (`piece_items`).
         let split = match split_ctx {
-            Some(_) if steal && splitcheck::split_config().enabled => plan_splits(files, &mut positions, &active, file_weight),
+            Some(_) if steal && splitcheck::split_config().enabled => plan_splits(self.program, files, &mut positions, &active, file_weight),
             _ => SplitPlan::default(),
         };
         let weight = |i: u32| match split.item_weight(files.len(), i) {
@@ -904,7 +904,7 @@ impl SplitPlan {
 // a share (with `force:<k>`, every checked declaration file into k pieces); a file that would be one piece is not
 // split. Each queued piece goes to the active checker, other than the file's owner, with the least work in heavy items
 // so far, so the pieces start at once on different checkers.
-fn plan_splits(files: &[P<SourceFile>], positions: &mut [Vec<u32>], active: &[usize], weight: impl Fn(u32) -> u64) -> SplitPlan {
+fn plan_splits(program: &Program, files: &[P<SourceFile>], positions: &mut [Vec<u32>], active: &[usize], weight: impl Fn(u32) -> u64) -> SplitPlan {
     let config = splitcheck::split_config();
     let mut plan = SplitPlan::default();
     if active.len() < 2 {
@@ -917,7 +917,11 @@ fn plan_splits(files: &[P<SourceFile>], positions: &mut [Vec<u32>], active: &[us
     for &owner in active {
         for &i in &positions[owner] {
             let (file, w) = (files[i as usize], weight(i));
-            if !file.is_declaration_file() || w == 0 || (config.force.is_none() && w * 100 < share * config.min_share_percent) {
+            // Default library files are not split unless forced: their cost is about their weight (lib.dom.d.ts: 2.7% of
+            // webpack's weight, 3% of its CPU), so they are never the tail, and a piece costs its checker the library
+            // types it touches again (webpack and next-root: +3-4% wall at 16-32 checkers when lib.dom.d.ts was split).
+            let default_lib = program.is_source_file_default_library(file.path());
+            if !file.is_declaration_file() || w == 0 || (config.force.is_none() && (default_lib || w * 100 < share * config.min_share_percent)) {
                 continue;
             }
             let count = config.force.unwrap_or(w.div_ceil(piece_size) as usize).min(active.len());

@@ -150,6 +150,11 @@ impl Checker {
         self.check_not_canceled();
         let saved_checking_file = self.checking_file.replace(source_file);
         self.ctx = Some(ctx.clone());
+        // Only what this piece adds is handed back: this checker may already hold diagnostics located in the file from
+        // checking its own files (a symbol-level check reports at every declaration of the symbol); those the owner
+        // finds for itself when it checks the file, exactly as it does for a file that is not split.
+        let before: rustc_hash::FxHashSet<P<Diagnostic>> = self.diagnostics.get_diagnostics_for_file(source_file).into_iter().collect();
+        let suggestions_before: rustc_hash::FxHashSet<P<Diagnostic>> = self.suggestion_diagnostics.get_diagnostics_for_file(source_file).into_iter().collect();
         if !self.source_file_links.get(source_file).type_checked.get() {
             self.check_source_elements(&source_file.statements.nodes()[statements]);
             self.check_deferred_nodes(source_file);
@@ -161,7 +166,8 @@ impl Checker {
         }
         self.ctx = None;
         self.checking_file = saved_checking_file;
-        (self.diagnostics.get_diagnostics_for_file(source_file), self.suggestion_diagnostics.get_diagnostics_for_file(source_file))
+        let added = |all: Vec<P<Diagnostic>>, before: &rustc_hash::FxHashSet<P<Diagnostic>>| all.into_iter().filter(|d| !before.contains(d)).collect::<Vec<_>>();
+        (added(self.diagnostics.get_diagnostics_for_file(source_file), &before), added(self.suggestion_diagnostics.get_diagnostics_for_file(source_file), &suggestions_before))
     }
 
     /// tsrs-only: adds the diagnostics another checker found while checking pieces of `source_file`
@@ -177,8 +183,8 @@ impl Checker {
         self.statements_checked_in_pieces = Some(source_file);
     }
 
-    /// tsrs-only: the diagnostics this checker holds for `source_file` so far, without checking anything (the split
-    /// check's shadow mode compares them).
+    /// tsrs-only: the diagnostics this checker holds for `source_file`, without checking anything (the split check's
+    /// shadow mode compares the owner's whole-file result with the merged pieces).
     pub fn file_diagnostics_so_far(&mut self, source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
         self.diagnostics.get_diagnostics_for_file(source_file)
     }
