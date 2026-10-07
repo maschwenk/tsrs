@@ -1034,6 +1034,9 @@ pub struct Checker {
     pub unresolved_symbols: FxHashMap<String, P<Symbol>>,
     pub error_types: PackedMap<CacheHashKey, P<Type>>,
     pub module_symbols: FxHashMap<P<Node>, P<Symbol>>,
+    /// `Program::get_source_file_for_resolved_module` by the address and length of the resolved file name (the
+    /// resolver's string, alive and unchanged as long as the program): `resolve_external_module`.
+    pub(crate) resolved_module_source_files: FxHashMap<(usize, usize), Option<P<SourceFile>>>,
     pub global_this_symbol: P<Symbol>,
     pub symbol_table_alias_cache: FxHashMap<symbolTableID, &'static [P<Symbol>]>,
     pub class_expression_name_tables: FxHashMap<NodeId, P<SymbolTable>>,
@@ -1441,6 +1444,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         unresolved_symbols: FxHashMap::default(),
         error_types: PackedMap::default(),
         module_symbols: FxHashMap::default(),
+        resolved_module_source_files: FxHashMap::default(),
         global_this_symbol: dummy_symbol,
         symbol_table_alias_cache: FxHashMap::default(),
         class_expression_name_tables: FxHashMap::default(),

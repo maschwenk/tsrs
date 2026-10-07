@@ -267,7 +267,7 @@ impl Program {
 
     // program.go:226
     pub fn get_redirect_for_resolution(&self, file: P<SourceFile>) -> Option<P<ParsedCommandLine>> {
-        self.project_reference_file_mapper.get_redirect_for_resolution(file.file_name(), &file.path()).0
+        self.project_reference_file_mapper.get_redirect_parsed_command_line_for_resolution(file.file_name(), &file.path())
     }
 
     // program.go:231
@@ -681,7 +681,7 @@ impl Program {
 
     // program.go:480
     fn needs_import_helpers_import_specifier(&self, file: P<SourceFile>) -> bool {
-        let (redirect, _) = self.project_reference_file_mapper.get_redirect_for_resolution(file.file_name(), file.path());
+        let redirect = self.project_reference_file_mapper.get_redirect_parsed_command_line_for_resolution(file.file_name(), file.path());
         let redirect = redirect.map(crate::projectreferencefilemapper::as_resolved_project_reference);
         let options_for_file = module::get_compiler_options_with_redirect(self.opts.config.compiler_options().unwrap(), redirect);
         if !options_for_file.import_helpers.is_true() {
@@ -700,7 +700,7 @@ impl Program {
         if !ast::is_source_file_js(file) && file.script_kind.get() != ScriptKind::TSX {
             return String::new();
         }
-        let (redirect, _) = self.project_reference_file_mapper.get_redirect_for_resolution(file.file_name(), file.path());
+        let redirect = self.project_reference_file_mapper.get_redirect_parsed_command_line_for_resolution(file.file_name(), file.path());
         let redirect = redirect.map(crate::projectreferencefilemapper::as_resolved_project_reference);
         let options_for_file = module::get_compiler_options_with_redirect(self.opts.config.compiler_options().unwrap(), redirect);
         ast::get_jsx_runtime_import(&ast::get_jsx_implicit_import_base(&options_for_file, Some(file)), &options_for_file)
