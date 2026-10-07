@@ -73,6 +73,9 @@ files from the back of the busiest checker (notes/perf-checker-stealing.md). Out
 counters vary from run to run; naming an assignment (`--checkerAssignment locality`) turns stealing off for fully
 reproducible counters. `TSRS_HISTORY=canonical` runs the tsgo-baseline harnesses in the default mode, stealing
 included, without naming an assignment.
+Each checker begins the type-check pass with the files of its queue whose static weight exceeds 1/200 of an average
+checker's share, heaviest first, then the rest in program order (notes/perf-checker-64.md,
+notes/perf-heavy-first-threshold.md); `TSRS_HEAVY_SHARE_DIVISOR=<n>` changes the divisor for experiments.
 `--checkerCostCache <file>` (opt-in, locality only) balances the checkers on the previous run's per-file CPU times
 (notes/perf-balance.md); `TSRS_ASSIGNMENT_STATS=times` prints per-checker wall and CPU seconds.
 
