@@ -143,8 +143,9 @@ tsrs's errors (`(ref N)` in the table).
   prints). The JSON also has the `--extendedDiagnostics` check/total time, "Memory used", files, symbols, types and
   instantiations of every run. tsrs's default-mode counters are lower than tsgo's by design (lazy members); compare
   counters in `--singleThreaded` runs or with `--noLazyMembers`.
-- Bold in the speedup and memory columns marks a notable tsrs win: at least 5x faster, or at most a quarter of tsgo's
-  peak memory (`NOTABLE_SPEEDUP`, `NOTABLE_MEMORY` in `run.py`; compared at the printed two decimals).
+- Bold in the speedup and memory columns marks a notable tsrs win: at least 5x faster, or at least 4x more memory
+  efficient (tsgo's peak memory / tsrs's; `NOTABLE_SPEEDUP`, `NOTABLE_MEMORY` in `run.py`; compared at the printed two
+  decimals). The memory columns are always `other tool's peak / tsrs's peak`, so above 1x is a tsrs win.
 - Errors: every `error TSxxxx` line is counted, and the (file, line, col, code) lists are compared. A differing count is
   shown as **MISMATCH** in the table and a differing location set as "(locations differ)" — a correctness signal,
   not a performance one.
