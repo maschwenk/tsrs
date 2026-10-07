@@ -9,13 +9,9 @@
 # takes about 5); `measure-wide` measures every project with `--checkers 64` on one 64-vCPU machine; `merge` joins
 # the partial results into one result file (bench/run.py --merge), flags regressions and commits.
 #
-# The measuring jobs do not wait for the build job to finish before they start: they need only `plan` (the project
-# list), set up their machine, caches and projects while `build` runs, and then wait for its tsrs-pgo-dist artifact
-# (.github/scripts/wait-for-artifact.js). `merge` needs `build` itself, so a failed build never publishes.
-#
 # Loop guards: the results commit only touches README.md and bench/results/** (excluded by `paths`), and carries
-# [skip ci], which the build and plan jobs' `if` also checks (the commit is pushed by Depot's GitHub app, which may
-# trigger Depot CI); the other jobs need one of them, so they are skipped with them.
+# [skip ci], which the build job's `if` also checks (the commit is pushed by Depot's GitHub app, which may trigger
+# Depot CI); the other jobs need the build job, so they are skipped with it.
 
 name: Bench
 
@@ -47,23 +43,6 @@ env:
   CARGO_INCREMENTAL: "0"
 
 jobs:
-  # The measuring matrix: every project of bench/projects.json, so a new project gets a job without a workflow change.
-  # A job of its own so that the measuring jobs can start without waiting for the build.
-  plan:
-    if: github.repository == 'maschwenk/tsrs' && !contains(github.event.head_commit.message, '[skip ci]')
-    runs-on: depot-ubuntu-24.04
-    timeout-minutes: 10
-    outputs:
-      projects: ${{ steps.plan.outputs.projects }}
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          persist-credentials: false
-
-      - name: Projects to measure
-        id: plan
-        run: echo "projects=$(python3 bench/run.py --print-projects)" >> "$GITHUB_OUTPUT"
-
   # tsrs is measured as released: the PGO build of the `dist` profile, with the same commands as the build job of
   # .github/workflows/release.yml (target x86_64-unknown-linux-gnu) and the same training workload
   # (.github/scripts/pgo-train.sh), which runs on the xstate-main and webpack checkouts set up here (bench/.work). The
@@ -74,6 +53,8 @@ jobs:
     if: github.repository == 'maschwenk/tsrs' && !contains(github.event.head_commit.message, '[skip ci]')
     runs-on: depot-ubuntu-24.04-8
     timeout-minutes: 60
+    outputs:
+      projects: ${{ steps.plan.outputs.projects }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -239,29 +220,21 @@ jobs:
           if-no-files-found: error
           retention-days: 3
 
-      # The measuring jobs are already waiting for tsrs-pgo-dist; this tells them to stop.
-      - name: Tell the measuring jobs that the build failed
-        if: failure()
-        run: mkdir -p /tmp/build-failed && echo "build failed" > /tmp/build-failed/failed.txt
-
-      - name: Upload the failure marker
-        if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: tsrs-build-failed
-          path: /tmp/build-failed
-          retention-days: 3
+      # The measuring matrix: every project of bench/projects.json, so a new project gets a job without a workflow change.
+      - name: Projects to measure
+        id: plan
+        run: echo "projects=$(python3 bench/run.py --print-projects)" >> "$GITHUB_OUTPUT"
 
   # One project per job, each on an idle machine of the fixed spec: the measurement is what it was in the sequential
   # run (one project at a time, nothing else running), only the projects no longer wait for each other.
   measure:
-    needs: plan
+    needs: build
     runs-on: depot-ubuntu-24.04-8
     timeout-minutes: 60 # a warm run takes a few minutes; a cold project cache adds its clone and install
     strategy:
       fail-fast: false # one project's failure must not cancel the others; the merge job then waits for a re-run
       matrix:
-        project: ${{ fromJSON(needs.plan.outputs.projects) }}
+        project: ${{ fromJSON(needs.build.outputs.projects) }}
     env:
       BENCH_RUNNER: Depot CI `depot-ubuntu-24.04-8`
       PROJECT: ${{ matrix.project }}
@@ -317,13 +290,6 @@ jobs:
           path: bench/.work/solutions/${{ matrix.project }}
           key: ${{ steps.cache-project.outputs.cache-primary-key }}
 
-      # Everything above ran while the build job was still building.
-      - name: Wait for the build
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
-        with:
-          script: |
-            await require('./.github/scripts/wait-for-artifact.js')({core, name: 'tsrs-pgo-dist', failName: 'tsrs-build-failed'})
-
       - name: Download tsrs (PGO, dist profile)
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -365,12 +331,12 @@ jobs:
   # run's only 64-vCPU job. Its cells record their machine (bench/run.py --merge). The regression flag never reads them:
   # it compares the single-threaded counts of the fixed-spec jobs.
   measure-wide:
-    needs: plan
+    needs: build
     runs-on: depot-ubuntu-24.04-64
     timeout-minutes: 60
     env:
       BENCH_RUNNER: Depot CI `depot-ubuntu-24.04-64`
-      PROJECTS: ${{ join(fromJSON(needs.plan.outputs.projects), ',') }}
+      PROJECTS: ${{ join(fromJSON(needs.build.outputs.projects), ',') }}
       BUN_VERSION: canary
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -473,13 +439,6 @@ jobs:
           unzip -oq /tmp/bun.zip -d /tmp/bun
           /tmp/bun/bun-linux-x64/bun --revision
           /tmp/bun/bun-linux-x64/bun check --help | head -3
-
-      # Everything above ran while the build job was still building.
-      - name: Wait for the build
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
-        with:
-          script: |
-            await require('./.github/scripts/wait-for-artifact.js')({core, name: 'tsrs-pgo-dist', failName: 'tsrs-build-failed'})
 
       - name: Download tsrs (PGO, dist profile)
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
