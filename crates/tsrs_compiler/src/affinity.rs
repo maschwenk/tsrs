@@ -17,9 +17,12 @@
 // modules. After it, `refine` moves single groups (lightest first) to the checker where the group's modules cost least:
 // the move's gain is the worth of the modules only that group holds on its checker, minus the worth of its modules the
 // destination does not hold yet. A move must keep the destination under FENNEL's cap of 101% of an average load. The
-// measured cost follows that sum (the worth of every module a checker's files are or import, summed over checkers):
-// over 100 assignments of five projects, its rank correlation with the instructions of the check was 0.73-0.91 on four
-// of them, against 0.5-0.8 for the import edges FENNEL cuts (notes/perf-clustered-assignment.md).
+// measured cost follows the sum this lowers (the worth of every module a checker's files are or import, summed over
+// checkers): over 100 static assignments of five projects, its rank correlation with the instructions of the check was
+// 0.73-0.91 on four of them, against 0.42-0.79 for the import edges FENNEL cuts. At most MAX_PASSES passes: convergence
+// takes 4-9, but the later passes' share of the gain was not measurable with stealing on the 64-vCPU runner, while each
+// pass lengthens the assignment (vscode at 32 checkers: 17 ms with 3 passes, 24 ms with 10, against 6 ms to create the
+// checkers it overlaps).
 //
 // `TSRS_MODULE_AFFINITY=<mu>` (read once) sets MU, `0`/`off` turns this off (the plain locality assignment);
 // `TSRS_MODULE_AFFINITY_GAMMA=<g>` sets GAMMA and `TSRS_MODULE_AFFINITY_PASSES=<n>` the most refinement passes, for
@@ -32,7 +35,7 @@ use tsrs_core::P;
 
 const MU: f64 = 1.0;
 const GAMMA: f64 = 0.5;
-const MAX_PASSES: usize = 10;
+const MAX_PASSES: usize = 3;
 
 struct Config {
     mu: f64,
