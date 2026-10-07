@@ -994,7 +994,7 @@ impl Program {
     ) -> Vec<Vec<P<Diagnostic>>> {
         let diagnostics: Vec<Mutex<Vec<P<Diagnostic>>>> = source_files.iter().map(|_| Mutex::new(Vec::new())).collect();
         if let Some(pool) = self.compiler_checker_pool() {
-            pool.for_each_checker_group_do_ex(source_files, self.single_threaded(), allow_steal, |c, file_index, file| {
+            pool.for_each_checker_group_do_ex(source_files, self.single_threaded(), allow_steal, allow_steal.then_some(ctx), |c, file_index, file| {
                 *diagnostics[file_index].lock().unwrap() = collect(ctx, c, file);
             });
         } else {
