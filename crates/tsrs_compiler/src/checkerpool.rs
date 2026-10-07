@@ -679,7 +679,7 @@ impl checkerPool {
         if steal {
             // Each owner starts with the files that could be the pass's tail (heavy_files_first).
             let total: u64 = positions.iter().flatten().map(|&i| weight(i)).sum();
-            let threshold = total / (active.len() as u64 * HEAVY_SHARE_DIVISOR);
+            let threshold = total / (active.len() as u64 * heavy_share_divisor());
             positions.iter_mut().for_each(|p| heavy_files_first(p, threshold, weight));
         }
         let queues: Vec<FileQueue> = positions.into_iter().map(|p| FileQueue::new(p, weight)).collect();
@@ -754,9 +754,22 @@ fn stealing_enabled() -> bool {
     !named && !tsrs_core::compat::go_compatible_history()
 }
 
-// A file heavier than 1/HEAVY_SHARE_DIVISOR of an average checker's share of a pass is "heavy": with many checkers
-// a single such file can be the pass's tail, so its owner starts with it (heavy_files_first).
-const HEAVY_SHARE_DIVISOR: u64 = 100;
+// A file heavier than 1/HEAVY_SHARE_DIVISOR of an average checker's share of a pass is "heavy": a single such file
+// started late can be the pass's tail, so its owner starts with it (heavy_files_first). The divisor was 100
+// (notes/perf-checker-64.md); it is 200 because vscode's costliest file (0.30 s, but 15k nodes, so a static weight
+// that ranks it 199th of 9,399 files) was heavy only from 24 checkers on, and at 13-18 checkers whether it started
+// early was luck: the check phase took 0.67 s at 16 checkers and 0.92 s at 17 on an 18-core Mac. At 1/200 it is heavy
+// from 11 checkers; the heavy set is 1.3% of vscode's files at 8 checkers and 6% at 16, so the rest keeps the locality
+// of program order (notes/perf-heavy-first-threshold.md: CPU per instruction unchanged, where a divisor of 300 or more
+// costs 1-3%). TSRS_HEAVY_SHARE_DIVISOR=<n> overrides it for experiments.
+const HEAVY_SHARE_DIVISOR: u64 = 200;
+
+fn heavy_share_divisor() -> u64 {
+    static VALUE: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+    *VALUE.get_or_init(|| {
+        std::env::var("TSRS_HEAVY_SHARE_DIVISOR").ok().and_then(|v| v.parse().ok()).filter(|&d| d > 0).unwrap_or(HEAVY_SHARE_DIVISOR)
+    })
+}
 
 // tsrs-only (notes/perf-checker-64.md): moves the heavy files (weight above `threshold`) of one checker's queue to its
 // front, heaviest first; the other files keep their order. Stealing cannot split a file, so with many checkers the pass
@@ -764,7 +777,7 @@ const HEAVY_SHARE_DIVISOR: u64 = 100;
 // checkers' work instead of following it. Only the heavy files move: visiting the rest in program order keeps the
 // locality of the checker's caches (sorting a whole queue by weight costs 5-8% more CPU per instruction) and keeps the
 // thieves' end of the queue (the back) as it was. On vscode at 32 and 64 checkers the check phase went from 0.65 s
-// to 0.50 s, with no change at 8 and 16.
+// to 0.50 s, with no change at 8 and 16 (at 1/100; notes/perf-heavy-first-threshold.md has the 1/200 curve).
 fn heavy_files_first(positions: &mut Vec<u32>, threshold: u64, weight: impl Fn(u32) -> u64) {
     let (mut heavy, light): (Vec<u32>, Vec<u32>) = positions.iter().partition(|&&i| weight(i) > threshold);
     if heavy.is_empty() {
