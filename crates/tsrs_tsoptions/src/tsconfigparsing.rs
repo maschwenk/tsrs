@@ -2227,11 +2227,11 @@ fn handle_option_config_dir_template_substitution(compiler_options: Option<&mut 
 
 // hasFileWithHigherPriorityExtension determines whether a literal or wildcard file has already been included that has a higher extension priority.
 // file is the path to the file.
-fn has_file_with_higher_priority_extension(file: &str, extensions: &[Vec<String>], has_file: impl Fn(&str) -> bool) -> bool {
+// (`extensions` is getSupportedExtensions' result as string slices, built once per call of the caller.)
+fn has_file_with_higher_priority_extension(file: &str, extensions: &[Vec<&str>], has_file: impl Fn(&str) -> bool) -> bool {
     let mut extension_group: Vec<&str> = Vec::new();
     for group in extensions {
-        let group: Vec<&str> = group.iter().map(|s| s.as_str()).collect();
-        if tspath::file_extension_is_one_of(file, &group) {
+        if tspath::file_extension_is_one_of(file, group) {
             extension_group.extend(group);
         }
     }
@@ -2265,13 +2265,12 @@ fn has_file_with_higher_priority_extension(file: &str, extensions: &[Vec<String>
 fn remove_wildcard_files_with_lower_priority_extension(
     file: &str,
     wildcard_files: &mut OrderedMap<String, String>,
-    extensions: &[Vec<String>],
+    extensions: &[Vec<&str>],
     key_mapper: impl Fn(&str) -> String,
 ) {
     let mut extension_group: Option<Vec<&str>> = None;
     for group in extensions {
-        let group: Vec<&str> = group.iter().map(|s| s.as_str()).collect();
-        if tspath::file_extension_is_one_of(file, &group) {
+        if tspath::file_extension_is_one_of(file, group) {
             extension_group.get_or_insert_with(Vec::new).extend(group);
         }
     }
@@ -2333,6 +2332,8 @@ pub(crate) fn get_file_names_from_config_specs(
     let mut json_only_include_matchers: Option<Option<vfsmatch::SpecMatcher>> = None;
     if !validated_include_specs.is_empty() {
         let flat_extensions: Vec<String> = supported_extensions_with_json_if_resolve_json_module.iter().flatten().cloned().collect();
+        let supported_extension_groups: Vec<Vec<&str>> =
+            supported_extensions.iter().map(|group| group.iter().map(String::as_str).collect()).collect();
         let files = tsrs_core::phases::time("Config: include glob", || {
             vfsmatch::read_directory(
                 host,
@@ -2369,7 +2370,7 @@ pub(crate) fn get_file_names_from_config_specs(
             // This handles cases where we may encounter both <file>.ts and
             // <file>.d.ts (or <file>.js if "allowJs" is enabled) in the same
             // directory when they are compilation outputs.
-            if has_file_with_higher_priority_extension(&file, &supported_extensions, |file_name| {
+            if has_file_with_higher_priority_extension(&file, &supported_extension_groups, |file_name| {
                 let canonical_file_name = key_mappper(file_name);
                 literal_file_map.contains_key(&canonical_file_name) || wildcard_file_map.contains_key(&canonical_file_name)
             }) {
@@ -2379,7 +2380,7 @@ pub(crate) fn get_file_names_from_config_specs(
             // extension due to the user-defined order of entries in the
             // "include" array. If there is a lower priority extension in the
             // same directory, we should remove it.
-            remove_wildcard_files_with_lower_priority_extension(&file, &mut wildcard_file_map, &supported_extensions, key_mappper);
+            remove_wildcard_files_with_lower_priority_extension(&file, &mut wildcard_file_map, &supported_extension_groups, key_mappper);
             let key = key_mappper(&file);
             if !literal_file_map.contains_key(&key) && !wildcard_file_map.contains_key(&key) {
                 wildcard_file_map.set(key, file.clone());
