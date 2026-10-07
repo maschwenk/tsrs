@@ -1133,11 +1133,7 @@ pub fn use_go_default_checker_count() {
 // Instantiations counters do (each checker counts what it creates), so they depend on the machine unless --checkers
 // is given.
 fn default_checker_count(program: &Program) -> i64 {
-    if GO_DEFAULT_CHECKER_COUNT.load(std::sync::atomic::Ordering::Relaxed) {
-        return GO_DEFAULT_CHECKERS;
-    }
-    let parallelism = std::thread::available_parallelism().map_or(1, |n| n.get()) as i64;
-    let by_machine = (parallelism / 2).min(MAX_DEFAULT_CHECKERS);
+    let by_machine = default_checker_count_by_machine();
     if by_machine <= GO_DEFAULT_CHECKERS {
         return GO_DEFAULT_CHECKERS;
     }
@@ -1145,6 +1141,29 @@ fn default_checker_count(program: &Program) -> i64 {
     let checked =
         program.files.iter().filter(|&&f| !((f.is_declaration_file.get() || ast::is_json_source_file(f)) && program.skip_type_checking(f, false))).count();
     by_machine.min(checked as i64 / MIN_CHECKED_FILES_PER_DEFAULT_CHECKER).max(GO_DEFAULT_CHECKERS)
+}
+
+// `default_checker_count` before the program's files are known: what the machine allows (the file count only lowers it).
+fn default_checker_count_by_machine() -> i64 {
+    if GO_DEFAULT_CHECKER_COUNT.load(std::sync::atomic::Ordering::Relaxed) {
+        return GO_DEFAULT_CHECKERS;
+    }
+    let parallelism = std::thread::available_parallelism().map_or(1, |n| n.get()) as i64;
+    (parallelism / 2).min(MAX_DEFAULT_CHECKERS).max(GO_DEFAULT_CHECKERS)
+}
+
+/// tsrs-only: the most checkers a program created with these options can get (`checkerPool::new`), known before its
+/// files are: `--checkers`, one when single-threaded, else the machine's default (fileregions.rs decides its default
+/// with it).
+pub fn checker_count_upper_bound(options: &tsrs_core::CompilerOptions, single_threaded: bool) -> usize {
+    let count = if single_threaded || options.single_threaded.is_true() {
+        1
+    } else if let Some(c) = options.checkers {
+        c
+    } else {
+        default_checker_count_by_machine()
+    };
+    count.clamp(1, 256) as usize
 }
 
 // Checker assignment by locality. Checker state duplication comes from files on different checkers that

@@ -51,6 +51,9 @@ pub struct ProgramOptions {
     pub host: Arc<dyn CompilerHost>,
     pub create_checker_pool: Option<CreateCheckerPool>,
     pub create_module_resolver: Option<CreateModuleResolver>,
+    /// tsrs-only: whether the type-check pass frees the tree of each leaf file once it is checked (fileregions.rs;
+    /// the CLI's `--noEmit` check, with file regions on). Nothing may read a leaf's tree after the pass.
+    pub leaf_files: crate::fileregions::LeafMode,
 }
 
 impl ProgramOptions {
@@ -65,6 +68,7 @@ impl ProgramOptions {
             host,
             create_checker_pool: None,
             create_module_resolver: None,
+            leaf_files: crate::fileregions::LeafMode::Off,
         }
     }
 
@@ -85,6 +89,7 @@ impl ProgramOptions {
             host,
             create_checker_pool,
             create_module_resolver,
+            leaf_files: crate::fileregions::LeafMode::Off,
         }
     }
 
@@ -177,6 +182,10 @@ pub struct Program {
 
     // tsrs-only (tsrs_modulespecifiers::ExportsModuleNameCache)
     pub(crate) exports_module_name_cache: tsrs_modulespecifiers::ExportsModuleNameCache,
+
+    // tsrs-only: `ProgramOptions::leaf_files`, and whether the type-check pass that may free leaves has started.
+    pub(crate) leaf_files: crate::fileregions::LeafMode,
+    pub(crate) leaf_pass_started: std::sync::atomic::AtomicBool,
 }
 
 impl std::ops::Deref for Program {
@@ -388,6 +397,8 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
         has_ts_file: OnceLock::new(),
         packages_map: OnceLock::new(),
         exports_module_name_cache: Default::default(),
+        leaf_files: opts.leaf_files,
+        leaf_pass_started: std::sync::atomic::AtomicBool::new(false),
     };
     // Go initializes the checker pool before verifying options; the pool factory takes the program by
     // `&'static`, so here it runs after verification, once the program is leaked. Neither pool reads anything
@@ -582,6 +593,9 @@ impl Program {
             has_ts_file: OnceLock::new(),
             packages_map: OnceLock::new(),
             exports_module_name_cache: Default::default(),
+            // A reused program keeps the files of this one, so nothing of them may be freed.
+            leaf_files: crate::fileregions::LeafMode::Off,
+            leaf_pass_started: std::sync::atomic::AtomicBool::new(false),
         };
         try_reuse(&result.unresolved_imports, &self.unresolved_imports);
         try_reuse(&result.known_symlinks, &self.known_symlinks);
@@ -792,9 +806,9 @@ impl Program {
         if self.single_threaded() {
             // Go's single-threaded work group runs queued functions last-queued first, so files bind in reverse
             // program order. The order is observable: the binder assigns symbol ids (private names).
-            unbound.into_iter().rev().for_each(tsrs_binder::bind_source_file);
+            unbound.into_iter().rev().for_each(crate::fileregions::bind);
         } else {
-            worker_pool().install(|| unbound.into_par_iter().for_each(tsrs_binder::bind_source_file));
+            worker_pool().install(|| unbound.into_par_iter().for_each(crate::fileregions::bind));
         }
     }
 
@@ -907,7 +921,10 @@ impl Program {
         collect: impl Fn(&Context, P<SourceFile>) -> Vec<P<Diagnostic>> + Sync,
     ) -> Vec<P<Diagnostic>> {
         let result = match source_file {
-            Some(file) => collect(ctx, file),
+            Some(file) => {
+                crate::fileregions::assert_not_freed(file);
+                collect(ctx, file)
+            }
             None => {
                 let diagnostics = self.collect_diagnostics_from_files(ctx, self.files, concurrent, &collect);
                 diagnostics.concat()
@@ -944,6 +961,7 @@ impl Program {
         collect: impl Fn(&Context, &mut Checker, P<SourceFile>) -> Vec<P<Diagnostic>> + Sync,
     ) -> Vec<P<Diagnostic>> {
         if let Some(source_file) = source_file {
+            crate::fileregions::assert_not_freed(source_file);
             if self.skip_type_checking(source_file, false) {
                 return Vec::new();
             }
@@ -1016,7 +1034,7 @@ impl Program {
     // program.go:795
     pub fn get_bind_diagnostics(&self, ctx: &Context, source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
         match source_file {
-            Some(file) => tsrs_binder::bind_source_file(file),
+            Some(file) => crate::fileregions::bind(file),
             None => self.bind_source_files(),
         }
         self.collect_diagnostics(ctx, source_file, false /*concurrent*/, |_, file| file.bind_diagnostics().to_vec())
@@ -1027,7 +1045,23 @@ impl Program {
         let collect = |ctx: &Context, c: &mut Checker, file: P<SourceFile>| self.get_semantic_diagnostics_with_checker(ctx, c, file);
         match source_file {
             // All files: the type-check pass, the one that may move files between checkers.
-            None => filter_and_sort_diagnostics(&self.collect_checker_diagnostics_from_files_ex(ctx, self.files, true, &collect).concat()),
+            None => {
+                // tsrs-only: the CLI's `--noEmit` check frees a leaf's tree and binder output once its diagnostics are
+                // collected (fileregions.rs).
+                let free_leaves = crate::fileregions::classify(self);
+                let collect = |ctx: &Context, c: &mut Checker, file: P<SourceFile>| {
+                    let diagnostics = collect(ctx, c, file);
+                    if free_leaves && file.is_check_leaf() {
+                        crate::fileregions::free(file);
+                    }
+                    diagnostics
+                };
+                let diagnostics = self.collect_checker_diagnostics_from_files_ex(ctx, self.files, true, &collect).concat();
+                if free_leaves {
+                    crate::fileregions::pass_done();
+                }
+                filter_and_sort_diagnostics(&diagnostics)
+            }
             Some(_) => self.collect_checker_diagnostics(ctx, source_file, collect),
         }
     }
@@ -1922,6 +1956,7 @@ impl Program {
     // the pool); with `None` it is taken here.
     #[cfg(feature = "checker")]
     fn get_declaration_diagnostics_for_file(&'static self, ctx: &Context, c: Option<&mut Checker>, source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
+        crate::fileregions::assert_not_freed(source_file);
         if source_file.is_declaration_file.get() {
             return Vec::new();
         }

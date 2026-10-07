@@ -1705,6 +1705,10 @@ pub struct SourceFile {
     pub pattern_ambient_modules: OwnedCell<&'static [P<PatternAmbientModule>]>,
     pub global_exports: OwnedCell<Option<P<SymbolTable>>>,
 
+    // tsrs-only: set before the type-check pass when the CLI frees this file's tree once it is checked
+    // (`tsrs_compiler` fileregions.rs); see `is_check_leaf`.
+    check_leaf: AtomicBool,
+
     // Fields set by ECMALineMap
     ecma_line_map: OnceLock<&'static [TextPos]>,
 
@@ -1774,6 +1778,7 @@ impl NodeFactory {
             symbol_count: OwnedCell::new(0),
             pattern_ambient_modules: OwnedCell::new(&[]),
             global_exports: OwnedCell::new(None),
+            check_leaf: AtomicBool::new(false),
             ecma_line_map: OnceLock::new(),
             position_map: OnceLock::new(),
             token_cache: std::sync::Mutex::new(FxHashMap::default()),
@@ -2024,6 +2029,19 @@ impl SourceFile {
 
     pub fn is_bound(&self) -> bool {
         self.is_bound.load(Ordering::Acquire)
+    }
+
+    /// tsrs-only: no other file refers to this file and it declares nothing another file can reach, and its tree and
+    /// binder output are freed right after the checker that checks it is done with it (CLI `--noEmit`, `tsrs_compiler`
+    /// fileregions.rs). Only that checker, while checking it, may read its tree; whole-program scans skip it otherwise.
+    pub fn is_check_leaf(&self) -> bool {
+        // Relaxed: written before the checker threads of the pass are spawned, which orders it before their reads.
+        self.check_leaf.load(Ordering::Relaxed)
+    }
+
+    pub fn set_check_leaf(&self, leaf: bool) {
+        // Relaxed: see `is_check_leaf`.
+        self.check_leaf.store(leaf, Ordering::Relaxed);
     }
 
     // GetPositionMap returns the PositionMap for this source file, computing it lazily.

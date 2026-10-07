@@ -396,7 +396,8 @@ impl fileLoader {
     }
 
     pub(crate) fn parse_source_file(&self, t: TaskId) -> Option<P<SourceFile>> {
-        self.host.get_source_file(self.parse_options_for_task(t))
+        let is_root = self.tasks[t].include_reason.is_some_and(|r| r.is_root_file());
+        crate::fileregions::parse_task(is_root, || self.host.get_source_file(self.parse_options_for_task(t)))
     }
 }
 
