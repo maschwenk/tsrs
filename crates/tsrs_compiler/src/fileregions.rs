@@ -257,8 +257,7 @@ pub(crate) fn classify(program: &Program) -> bool {
     program.bind_source_files();
     let files = program.files;
     let regions = REGIONS.lock().unwrap();
-    // Only a file with a region can be a leaf; `stats` also counts the leaves the prediction missed.
-    let referred = referred_files(program, |file| stats() || regions.contains_key(&file));
+    let referred = leaf_referred(program, |file| regions.contains_key(&file));
     let (mut leaves, mut leaf_bytes, mut checked) = (0, 0, 0);
     // `stats`: leaves the prediction missed (parsed into the thread arena, so not freed), and the nodes of both kinds.
     let (mut missed, mut missed_nodes, mut leaf_nodes) = (0, 0, 0);
@@ -315,6 +314,25 @@ pub(crate) fn classify(program: &Program) -> bool {
         }
     }
     mode == LeafMode::Free
+}
+
+/// Computes the part of `classify` that reads only the loaded program (`leaf_referred`) ahead of the pass, while the
+/// checker pool creates its checkers and assigns them files (checkerpool.rs `create_checkers`), so that it is not
+/// one more serial step between them and the pass (vscode: 4-5 ms on the 64-vCPU runner, about 1% of the check time
+/// at 32 checkers). Does nothing for a program that frees nothing.
+pub(crate) fn prepare(program: &Program) {
+    if program.leaf_files != LeafMode::Off {
+        // Not under the lock: binding (`bind`) takes it, and creating a checker may bind.
+        let with_region: FxHashSet<P<SourceFile>> = REGIONS.lock().unwrap().keys().copied().collect();
+        leaf_referred(program, |file| with_region.contains(&file));
+    }
+}
+
+/// `referred_files` of the files that can be leaves (those with a region; every file with `stats`, which also counts
+/// the leaves the prediction missed), computed once per program. The program's files, include reasons and resolutions
+/// do not change once it is loaded, and the regions are all made while it loads.
+fn leaf_referred(program: &Program, has_region: impl Fn(P<SourceFile>) -> bool + Sync) -> &FxHashSet<P<SourceFile>> {
+    program.leaf_referred.get_or_init(|| referred_files(program, |file| stats() || has_region(file)))
 }
 
 /// The files for which `wanted` holds that another file of the program refers to: every file with an include reason
