@@ -1,0 +1,4 @@
+spawn.ts(3,9): error TS2322: Type '{ TZ?: string; NODE_ENV?: string; EXTRA: string; }' is not assignable to type 'ProcessEnv'.
+  Types of property 'NODE_ENV' are incompatible.
+    Type 'string | undefined' is not assignable to type 'string'.
+      Type 'undefined' is not assignable to type 'string'.

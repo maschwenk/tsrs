@@ -99,3 +99,102 @@ So the only lines that change are the ones that used to depend on the assignment
 `type_parameters_checked` (TS2428), `enum_checked` (TS2473/TS2432) and `index_signatures_checked` (TS2374) are also
 set once per checker, but they report at every declaration of the symbol, so a file's checker always reports the
 file's own lines, whichever declaration it reaches first.
+
+## A base-type cycle entered at a different member: TS2769 on drizzle-orm
+
+pr-verify of PRs 165 and 171 printed one error more on drizzle-orm at 32 checkers than at 1, 4 and 16, and the README
+bench at 8 checkers printed 10845 where tsgo-ref printed 10846. The extra line is
+
+```
+drizzle-kit/tests/cli-check.test.ts(75,3): error TS2769: No overload matches this call.
+  ...
+      Property 'NODE_ENV' is optional in type '{ NODE_ENV?: string; ... }' but required in type 'ProcessEnv'.
+```
+
+at `spawnSync(..., { env: { ...process.env, TEST_CONFIG_PATH_PREFIX: '' } })`.
+
+### The dependence
+
+drizzle's program has two bun-types versions, and their declarations make two global interfaces extend each other:
+
+- bun-types 0.6.14 (`types.d.ts`): `declare module "bun" { interface Env extends Dict<string>, NodeJS.ProcessEnv {
+  NODE_ENV: string; ... } }`, and the global `process`, whose `env` is that `Env` (its declaration is the first
+  one of `process`, so `process.env` is `Env`).
+- bun-types 1.2.15 (`overrides.d.ts`): `namespace NodeJS { interface ProcessEnv extends Bun.Env, ImportMetaEnv {} }`,
+  and `bun.d.ts` merges `NODE_ENV?: string` into the same `Env`, which makes the merged property optional.
+- `@types/node` (three versions) declares `ProcessEnv extends Dict<string>`, and expo-modules-core
+  `ProcessEnv extends ExpoProcessEnv`, whose `NODE_ENV: string` is required.
+
+`getBaseTypes` (checker.go:19508) resolves `ProcessEnv -> Env -> ProcessEnv` from whichever member the checker asks
+about first. That member's `hasBaseType` check finds the cycle through the other member, which is resolved fully
+meanwhile, so the first member drops its base in the cycle and the second keeps its own. Both report TS2310 at all
+their declarations, so the TS2310 lines are the same either way (they are in `.d.ts` files, unchecked under
+`skipLibCheck`). What changes is what `ProcessEnv` inherits:
+
+- Entered at `Env` (`process.env.X` anywhere): `ProcessEnv` extends `Env`, its first base with `NODE_ENV`, so
+  `ProcessEnv.NODE_ENV` is `Env`'s optional property, the one the spread of `process.env` copies, and the call checks.
+- Entered at `ProcessEnv` (cli-check.test.ts's object literal is contextually typed by `NodeJS.ProcessEnv`): it
+  loses `Env` and inherits expo's required `NODE_ENV`, while the spread still has `Env`'s optional one: TS2769.
+
+So the error appears exactly when cli-check.test.ts is checked before any file that reads `process.env` on its
+checker. Evidence:
+
+- A debug print in `get_base_types` (not landed): in `--checkers 4 --checkerAssignment random:4` (the only one of seeds
+  1-12 at 2 and 4 checkers that printed the error) one checker resolved `Env: [Dict<string>, ProcessEnv]` and
+  `ProcessEnv` without `Env`, and the property the relation compared was expo's `NODE_ENV` (required) against bun's
+  (optional); in the other checkers and seeds `Env: [Dict<string>]` and `ProcessEnv` with `Env`. A print of the
+  checked node at the cycle's entry: single-threaded, `drizzle-kit/src/cli/commands/utils.ts`
+  (`process.env.X`) enters at `Env`; in the failing checker, cli-check.test.ts enters at `ProcessEnv`.
+- tsrs's `get_base_types` / `resolve_base_types_of_interface` / `has_base_type` are line-for-line ports, and Go has
+  the same dependence: tsgo 7.0.2 prints the error at `--checkers 32` but not at 1 or 4; tsgo-ref (the pinned commit)
+  at 4 but not at 1 or 32. On main, 1 of 3 runs at 32 checkers printed it.
+- With the declaring files checked (`--skipLibCheck false`), tsgo-ref at one checker reaches `ProcessEnv`'s first
+  declaration (`@types/node@18`'s `process.d.ts`, file 164 of 3473) before any user file and prints the TS2769.
+
+### The fix
+
+`Checker::canonicalize_base_type_cycles` (checker_09.rs), default mode only:
+
+- `get_base_types` records the types whose base types it resolves within one outermost call and the ones whose
+  resolution was circular. When the outermost call ends with a cycle, the cycle's entry is the circular type that
+  finished last.
+- If that entry is not the cycle's member declared first in program order (the earliest of its declarations by
+  `compareNodes`; the symbol's first declaration is not always it, global augmentations are merged after the files'
+  globals), the base types resolved in the call are reset and resolved again from that member, then from the type
+  asked for. Each pass resolves the chosen member for good, so the loop ends.
+- Cycles through a class are left alone: they also go through the base constructor type, which this does not reset.
+- `go_compatible_history()` keeps Go's result.
+
+So the default output is what tsgo prints when the cycle is entered at its first declaration, as it is when the
+declaring files are checked in program order. On drizzle-orm that is `ProcessEnv`, so tsrs now prints the TS2769 in
+every run and at every checker count: 10846 errors, tsgo-ref's count at 4 and 8 checkers and tsgo 7.0.2's at 32, one
+more than tsgo prints at 1 checker (and 7.0.2 at its default 4), where a user file happens to reach `Env` first.
+Choosing `Env` instead would need a rule that knows which checked file reaches the cycle first in program order, which
+a checker that checks only some of the files cannot know.
+
+### Why no other diagnostic can change
+
+Programs without a base-type cycle reset nothing and run as before. When a cycle is met, only the base types resolved
+within that outermost `get_base_types` call are reset (with `MembersResolved`, which `get_base_types` clears anyway).
+Within the call only the heritage clauses' types are resolved; a clause that read the members of a type being reset
+(say `extends Pick<A, "x">` inside the cycle) would keep what it read from the first pass. That shape has not been
+seen; drizzle's cycle and the regression case extend plain interfaces. Each cycle member reports TS2310 at all its
+declarations whichever member is entered, so the TS2310 lines do not change either.
+
+### Results
+
+- drizzle-orm, the fixed binary: `--singleThreaded`, `--checkers` 1, 4, 8 and 16, 20 runs at 32, and
+  `--checkerAssignment random:1..12` at 2 and 4 checkers all print the same 10846 errors (main's single-threaded
+  output plus the TS2769). Go mode at one checker prints main's 10845. With `--skipLibCheck false` Go mode at one
+  checker prints tsgo-ref's output byte for byte, and the default mode differs from it only in PR 165's TS2320/TS2430
+  lines.
+- `testdata/regressions/base-type-cycle-entry` (env-a.d.ts, env-b.d.ts and env-c.d.ts declare the cycle, read-env.ts
+  enters at `Env`, spawn.ts at `ProcessEnv`; expected.txt is tsgo-ref at 8 checkers, which prints the error, as it
+  does at 16; at 1-5 it does not): main's binary printed the wrong output for 9 of 32 random assignments (1-4 checkers,
+  seeds 1-8); the fix prints expected.txt for all of them, single-threaded and at 1-4 checkers with stealing. Go mode
+  at one checker prints tsgo-ref's empty output, and with `--skipLibCheck false` tsrs prints tsgo-ref's output in both
+  modes. `crates/tsrs_cli/tests/base_type_cycle_entry.rs` runs it.
+- Conformance suite: identical pass lists before and after, Go mode (13,458 / 12,779 / 12,779 errors / `.types` /
+  `.symbols`) and default mode with several checkers (13,458 / 12,778 / 12,778).
+- vscode, t3code-server, formbricks-web, supabase-studio, cal-diy, mui-docs, webpack and xstate-main print the same
+  bytes as main single-threaded and at 4 and 32 checkers.
