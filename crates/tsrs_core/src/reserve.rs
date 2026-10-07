@@ -264,19 +264,6 @@ pub(crate) unsafe fn discard(p: *mut u8, len: usize) {
     decommit(q, end - start);
 }
 
-/// Faults in the pages of `p .. p + len` (part of a chunk from `alloc_chunk`) in one call where the system can
-/// (Linux 5.14+ `MADV_POPULATE_WRITE`), instead of one fault per page on first touch. Advice only.
-#[cfg(unix)]
-pub(crate) fn populate(p: *mut u8, len: usize) {
-    #[cfg(target_os = "linux")]
-    // SAFETY: committed memory inside the reservation; populating writes nothing a reader could see (zero pages).
-    unsafe {
-        libc::madvise(p.cast(), len, libc::MADV_POPULATE_WRITE)
-    };
-    #[cfg(not(target_os = "linux"))]
-    let _ = (p, len);
-}
-
 /// Bytes of the reservation handed out as chunks and not released.
 pub fn reserved_in_use() -> usize {
     CHUNKS.lock().unwrap_or_else(|e| e.into_inner()).live

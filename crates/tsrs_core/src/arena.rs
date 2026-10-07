@@ -461,9 +461,6 @@ fn os_chunk(layout: Layout, huge: bool) -> *mut u8 {
 struct Slab {
     base: *mut u8,
     size: usize,
-    /// A 2 MiB slab advised for transparent huge pages (`TSRS_LEAF_EXPERIMENT=huge`): its pages go back only as a
-    /// whole, once every chunk carved from it is released, so a huge page is never split.
-    huge: bool,
     /// Chunks carved and not yet released, plus one while the slab is a thread's current slab.
     live: AtomicUsize,
     /// A chunk of a retired region (`Region::retire_on_free`) was carved from it: once every chunk is released, its
@@ -491,79 +488,22 @@ static SLAB_CACHE: Mutex<Vec<usize>> = Mutex::new(Vec::new());
 #[cfg(compressed_ptrs)]
 const SLAB_CACHE_MAX: usize = 64;
 
-/// Measurement switches for leaf-file regions (`TSRS_LEAF_EXPERIMENT`, a comma list; notes/mem-leaf-regions-cost.md):
-/// `huge` carves region chunks from 2 MiB huge-page slabs, `populate` pre-faults each new region slab in one call,
-/// `nogive` retires freed regions without giving their pages back.
-#[cfg(all(compressed_ptrs, unix))]
-pub(crate) mod experiment {
-    use std::sync::atomic::{AtomicU8, Ordering};
-    pub const HUGE: u8 = 1;
-    pub const POPULATE: u8 = 2;
-    pub const NOGIVE: u8 = 4;
-    static FLAGS: AtomicU8 = AtomicU8::new(0x80);
-    #[inline]
-    pub fn on(flag: u8) -> bool {
-        // Relaxed: a value derived from the environment; every thread computes the same one.
-        let mut f = FLAGS.load(Ordering::Relaxed);
-        if f == 0x80 {
-            f = 0;
-            for w in std::env::var("TSRS_LEAF_EXPERIMENT").unwrap_or_default().split(',') {
-                f |= match w.trim() {
-                    "huge" => HUGE,
-                    "populate" => POPULATE,
-                    "nogive" => NOGIVE,
-                    _ => 0,
-                };
-            }
-            // Relaxed: as above.
-            FLAGS.store(f, Ordering::Relaxed);
-        }
-        f & flag != 0
-    }
-}
-
-#[cfg(all(compressed_ptrs, unix))]
-fn huge_slabs() -> bool {
-    experiment::on(experiment::HUGE)
-}
-#[cfg(not(all(compressed_ptrs, unix)))]
-fn huge_slabs() -> bool {
-    false
-}
-
-/// The size of a shared slab: `SLAB_SIZE`, or a huge page (`huge_slabs`).
-fn slab_size() -> usize {
-    if huge_slabs() {
-        HUGE_SLAB_SIZE
-    } else {
-        SLAB_SIZE
-    }
-}
-
-const HUGE_SLAB_SIZE: usize = 2 << 20;
-
 fn new_slab(size: usize, live: usize) -> *const Slab {
     let size = size.div_ceil(PAGE) * PAGE;
-    let huge = huge_slabs() && size == HUGE_SLAB_SIZE;
     #[cfg(compressed_ptrs)]
-    if size == SLAB_SIZE && !huge {
+    if size == SLAB_SIZE {
         let cached = SLAB_CACHE.lock().unwrap().pop();
         if let Some(addr) = cached {
             let base = std::ptr::with_exposed_provenance_mut::<u8>(addr);
-            return Box::into_raw(Box::new(Slab { base, size, huge, live: AtomicUsize::new(live), retired: AtomicBool::new(false) }));
+            return Box::into_raw(Box::new(Slab { base, size, live: AtomicUsize::new(live), retired: AtomicBool::new(false) }));
         }
     }
-    let base = os_chunk(Layout::from_size_align(size, CHUNK_ALIGN).expect("arena slab layout"), huge);
-    #[cfg(all(compressed_ptrs, unix))]
-    if experiment::on(experiment::POPULATE) {
-        crate::reserve::populate(base, size);
-    }
-    Box::into_raw(Box::new(Slab { base, size, huge, live: AtomicUsize::new(live), retired: AtomicBool::new(false) }))
+    let base = os_chunk(Layout::from_size_align(size, CHUNK_ALIGN).expect("arena slab layout"), false);
+    Box::into_raw(Box::new(Slab { base, size, live: AtomicUsize::new(live), retired: AtomicBool::new(false) }))
 }
 
 fn slab_carve(size: usize) -> (*mut u8, *const Slab) {
-    let slab_size = slab_size();
-    if size > slab_size / 4 {
+    if size > SLAB_SIZE / 4 {
         let slab = new_slab(size, 1);
         // SAFETY: just made.
         return (unsafe { (*slab).base }, slab);
@@ -574,7 +514,7 @@ fn slab_carve(size: usize) -> (*mut u8, *const Slab) {
         if !cur.is_null() {
             slab_release(cur);
         }
-        cur = new_slab(slab_size, 1);
+        cur = new_slab(SLAB_SIZE, 1);
         // SAFETY: just made.
         bump = unsafe { (*cur).base.addr() };
     }
@@ -632,7 +572,7 @@ fn slab_release_ex(slab: *const Slab, retire: bool) {
     #[cfg(compressed_ptrs)]
     {
         let mut cache = SLAB_CACHE.lock().unwrap();
-        if s.size == SLAB_SIZE && !s.huge && cache.len() < SLAB_CACHE_MAX {
+        if s.size == SLAB_SIZE && cache.len() < SLAB_CACHE_MAX {
             cache.push(s.base.expose_provenance());
         } else {
             drop(cache);
@@ -1205,15 +1145,8 @@ impl Drop for RegionInner {
         let retire = self.retire.load(Ordering::Relaxed);
         #[cfg(all(compressed_ptrs, unix))]
         if retire {
-            // `chunks` lists the current chunk first, then the older ones; `slabs` the older ones first.
-            let slabs = arena.slabs.borrow();
-            let in_chunk_order = slabs.last().into_iter().chain(slabs.iter().take(slabs.len().saturating_sub(1)));
-            for (&(start, size), &slab) in chunks.iter().zip(in_chunk_order) {
-                // A huge slab goes back as a whole once its last chunk is released (`slab_release_ex`).
-                // SAFETY: the slab is kept alive by this chunk's reference, released below.
-                if !unsafe { (*slab).huge } {
-                    retired::retire(start, size);
-                }
+            for &(start, size) in &chunks {
+                retired::retire(start, size);
             }
         }
         drop(chunks);
@@ -1368,9 +1301,6 @@ mod retired {
     }
 
     fn give_back(pages: &[(usize, usize)]) {
-        if super::experiment::on(super::experiment::NOGIVE) {
-            return;
-        }
         for &(first, last) in pages {
             // SAFETY: whole pages inside retired spans: chunks and slabs nothing uses any more, never handed out
             // again; `first` is page aligned (and so is `last - first`).
