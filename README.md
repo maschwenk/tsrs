@@ -42,7 +42,7 @@ vscode (10,427 files) on a 64-vCPU Linux machine, each tool at its own default t
   [More numbers](#more-numbers)).
 
 Source: [`bench/results/2026-10-07-6db7beec77d9.md`](bench/results/2026-10-07-6db7beec77d9.md), the table below.
-This code is in release 0.7.0 and later (0.6.0 and earlier predate it); to reproduce the numbers from source, build
+This code is in release 0.7.0 and later (0.6.0 and earlier predate it; 0.8.0 adds two instruction cuts that leave it within noise); to reproduce the numbers from source, build
 `main` with the PGO `dist` profile ([Build from source](#build-from-source)).
 
 The table below is generated: the bench workflow rewrites it on every push to `main`, and `bench/results/` keeps every

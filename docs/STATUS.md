@@ -1,5 +1,23 @@
 # Status
 
+## 2026-10-07: 0.8.0 release
+
+Two checker instruction cuts on top of 0.7.0; the TypeScript source pin remains `b85298b6a81f772d080b0455de0ca9d744cd6fd6`
+(7.1.0-dev.20260929) and the published package set is unchanged. Diagnostics, `--extendedDiagnostics` counters and
+emitted output are byte-identical to 0.7.0 on every bench project (pr-verify: 102 of 102 cells identical for each
+change, single-threaded and at 4, 16 and 32 checkers).
+
+Checker: when a property is missing from an object type's own members, `getPropertyOfType` falls back to the global
+`Function` (`CallableFunction`, `NewableFunction`) and `Object` members; that fallback was 14% of all symbol-table
+lookups on vscode and 41% on supabase-studio, and nearly every name misses all four tables. A 256-bit filter of the
+four types' member names, built once they are resolved and dropped when a base-type cycle reset resolves them again,
+answers those misses without the lookups, and a name is hashed once for the own-member and fallback lookups (#187:
+single-threaded instructions supabase-studio -11.9%, cal-diy -4.3%, formbricks-web -3.9%, vscode -1.0%,
+t3code-server -0.7%; notes/perf-symbol-map-lookups.md). The active type-mapper cache key is built only when the
+mapper was already active, since a freshly pushed cache can only miss, and without an alias it is the type id spread
+by an odd multiplier instead of an xxh3 hash (#186: t3code-server -1.0%, supabase-studio -0.9%, cal-diy -0.9%,
+formbricks-web -0.7%; notes/perf-t3code-instantiation.md).
+
 ## 2026-10-07: 0.7.0 release
 
 A speed release for small machines, a diagnostics fix and two instruction cuts; the TypeScript source pin remains
