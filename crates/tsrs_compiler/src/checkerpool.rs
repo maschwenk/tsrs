@@ -620,19 +620,34 @@ impl checkerPool {
                 program.bind_source_files();
                 tsrs_core::ptr::shared_check::freeze_shared_objects();
             }
-            let create_start = std::time::Instant::now();
-            #[cfg(feature = "checker")]
-            tsrs_checker::links::set_multiple_checkers(self.checker_count > 1);
-            let slots: Vec<Mutex<Option<CheckerSlot>>> = (0..self.checker_count).map(|_| Mutex::new(None)).collect();
-            run_work_group(self.single_threaded, self.checker_count, |i| {
-                *slots[i].lock().unwrap() = Some(CheckerSlot(Mutex::new(new_checker(program))));
-            });
-            let checkers: &'static [CheckerSlot] =
-                Box::leak(slots.into_iter().map(|s| s.into_inner().unwrap().unwrap()).collect::<Vec<_>>().into_boxed_slice());
-            tsrs_core::phases::record("Checkers: create", create_start.elapsed());
+            let create_and_assign = || {
+                let create_start = std::time::Instant::now();
+                #[cfg(feature = "checker")]
+                tsrs_checker::links::set_multiple_checkers(self.checker_count > 1);
+                let slots: Vec<Mutex<Option<CheckerSlot>>> = (0..self.checker_count).map(|_| Mutex::new(None)).collect();
+                run_work_group(self.single_threaded, self.checker_count, |i| {
+                    *slots[i].lock().unwrap() = Some(CheckerSlot(Mutex::new(new_checker(program))));
+                });
+                let checkers: &'static [CheckerSlot] =
+                    Box::leak(slots.into_iter().map(|s| s.into_inner().unwrap().unwrap()).collect::<Vec<_>>().into_boxed_slice());
+                tsrs_core::phases::record("Checkers: create", create_start.elapsed());
+                let associations = tsrs_core::phases::time("Checkers: assign files", || compute_associations(program, self.checker_count));
+                (checkers, associations)
+            };
+            // tsrs-only: the CLI's leaf classification reads only the loaded program; it runs meanwhile
+            // (fileregions.rs `prepare`).
+            let (checkers, associations) = if program.leaf_files != crate::fileregions::LeafMode::Off && !self.single_threaded {
+                std::thread::scope(|s| {
+                    let prepare = s.spawn(|| crate::fileregions::prepare(program));
+                    let created = create_and_assign();
+                    prepare.join().unwrap();
+                    created
+                })
+            } else {
+                create_and_assign()
+            };
 
             let files = &program.files;
-            let associations = tsrs_core::phases::time("Checkers: assign files", || compute_associations(program, self.checker_count));
             let file_indices: FxHashMap<P<SourceFile>, usize> = files.iter().enumerate().map(|(i, &f)| (f, i)).collect();
             let owners = associations.iter().map(|&c| std::sync::atomic::AtomicU32::new(c as u32)).collect();
             let weights = if self.checker_count > 1 { checked_file_weights(program) } else { Vec::new() };

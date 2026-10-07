@@ -77,6 +77,8 @@ pub struct Arena {
     slabs: RefCell<Vec<*const Slab>>,
     /// Regions only: the chunks are in the registry (`Region::containing`); scratch regions are not.
     registered: bool,
+    /// Regions only: chunks are carved from the thread's large slabs (`Region::new_scratch_in_large_slabs`).
+    large_slabs: bool,
 }
 
 struct DropEntry {
@@ -105,10 +107,10 @@ pub struct Checkpoint {
 
 impl Arena {
     pub(crate) fn new() -> Arena {
-        Arena::with_first_chunk(FIRST_CHUNK, None, false)
+        Arena::with_first_chunk(FIRST_CHUNK, None, false, false)
     }
 
-    fn with_first_chunk(first_chunk: usize, region: Option<Weak<RegionInner>>, registered: bool) -> Arena {
+    fn with_first_chunk(first_chunk: usize, region: Option<Weak<RegionInner>>, registered: bool, large_slabs: bool) -> Arena {
         let a = Arena {
             ptr: Cell::new(std::ptr::null_mut()),
             up: region.is_some(),
@@ -122,6 +124,7 @@ impl Arena {
             drops: RefCell::new(Vec::new()),
             slabs: RefCell::new(Vec::new()),
             registered,
+            large_slabs,
         };
         a.new_chunk(first_chunk);
         a
@@ -208,7 +211,7 @@ impl Arena {
     fn new_chunk(&self, size: usize) {
         if self.up {
             let size = (size + CENSUS_GAP).next_multiple_of(CHUNK_ALIGN);
-            let (base, slab) = slab_carve(size);
+            let (base, slab) = slab_carve(size, self.large_slabs);
             self.slabs.borrow_mut().push(slab);
             self.new_chunk_at(base, size);
         } else {
@@ -470,6 +473,13 @@ struct Slab {
 
 const SLAB_SIZE: usize = 1 << 20;
 
+/// Slab size of the regions of `Region::new_scratch_in_large_slabs` (the CLI's file regions, most of which are
+/// retired once checked). A retired region's pages go back in one system call per run of neighbouring retired pages,
+/// and each call flushes the TLB of every core running a thread of the process (`retired`); one thread's file regions
+/// in 1 MiB slabs scattered among the other threads' chunks made about 850 calls for vscode's 409 MB of leaves.
+/// Untouched pages of a slab cost address space only.
+const LARGE_SLAB_SIZE: usize = 16 << 20;
+
 /// Profile builds leave a gap after each carved chunk: a chunk's one-past-the-end pointer (in its arena and in the
 /// region registry) would otherwise be the address of the next region's first block, which the census would count
 /// as a reference to it.
@@ -478,6 +488,8 @@ const CENSUS_GAP: usize = if cfg!(feature = "alloc-profile") { CHUNK_ALIGN } els
 thread_local! {
     /// The thread's current slab and its bump position (upwards).
     static SLAB: Cell<(*const Slab, usize)> = const { Cell::new((std::ptr::null(), 0)) };
+    /// The same for large slabs (`LARGE_SLAB_SIZE`).
+    static LARGE_SLAB: Cell<(*const Slab, usize)> = const { Cell::new((std::ptr::null(), 0)) };
 }
 
 /// Released standard-size slabs kept for reuse instead of going back to the system (compressed pointers: a
@@ -502,39 +514,42 @@ fn new_slab(size: usize, live: usize) -> *const Slab {
     Box::into_raw(Box::new(Slab { base, size, live: AtomicUsize::new(live), retired: AtomicBool::new(false) }))
 }
 
-fn slab_carve(size: usize) -> (*mut u8, *const Slab) {
-    if size > SLAB_SIZE / 4 {
+fn slab_carve(size: usize, large: bool) -> (*mut u8, *const Slab) {
+    let (current, slab_size) = if large { (&LARGE_SLAB, LARGE_SLAB_SIZE) } else { (&SLAB, SLAB_SIZE) };
+    if size > slab_size / 4 {
         let slab = new_slab(size, 1);
         // SAFETY: just made.
         return (unsafe { (*slab).base }, slab);
     }
-    let (mut cur, mut bump) = SLAB.with(|s| s.get());
+    let (mut cur, mut bump) = current.with(|s| s.get());
     // SAFETY: the current slab is kept alive by the thread's reference.
     if cur.is_null() || bump + size + CENSUS_GAP > unsafe { (*cur).base.addr() + (*cur).size } {
         if !cur.is_null() {
             slab_release(cur);
         }
-        cur = new_slab(SLAB_SIZE, 1);
+        cur = new_slab(slab_size, 1);
         // SAFETY: just made.
         bump = unsafe { (*cur).base.addr() };
     }
     // SAFETY: as above.
     let slab = unsafe { &*cur };
     slab.live.fetch_add(1, Ordering::Relaxed);
-    SLAB.with(|s| s.set((cur, bump + size + CENSUS_GAP)));
+    current.with(|s| s.set((cur, bump + size + CENSUS_GAP)));
     (slab.base.with_addr(bump), cur)
 }
 
 /// Moves the thread's slab position back from `end` to `new_end` if the chunk ending at `end` was its last carve.
 fn slab_trim(slab: *const Slab, end: usize, new_end: usize) -> bool {
-    SLAB.with(|s| {
-        let (cur, bump) = s.get();
-        if cur == slab && bump == end + CENSUS_GAP {
-            s.set((cur, new_end + CENSUS_GAP));
-            true
-        } else {
-            false
-        }
+    [&SLAB, &LARGE_SLAB].into_iter().any(|current| {
+        current.with(|s| {
+            let (cur, bump) = s.get();
+            if cur == slab && bump == end + CENSUS_GAP {
+                s.set((cur, new_end + CENSUS_GAP));
+                true
+            } else {
+                false
+            }
+        })
     })
 }
 
@@ -742,7 +757,8 @@ thread_local! {
 
 /// A lock that the thread holding it may take again (a region entered while it is already entered).
 struct OwnerLock {
-    state: Mutex<(Option<std::thread::ThreadId>, u32)>,
+    /// (owner, depth, threads waiting).
+    state: Mutex<(Option<std::thread::ThreadId>, u32, u32)>,
     released: Condvar,
 }
 
@@ -753,14 +769,19 @@ impl OwnerLock {
         loop {
             match st.0 {
                 None => {
-                    *st = (Some(me), 1);
+                    st.0 = Some(me);
+                    st.1 = 1;
                     return;
                 }
                 Some(owner) if owner == me => {
                     st.1 += 1;
                     return;
                 }
-                Some(_) => st = self.released.wait(st).unwrap(),
+                Some(_) => {
+                    st.2 += 1;
+                    st = self.released.wait(st).unwrap();
+                    st.2 -= 1;
+                }
             }
         }
     }
@@ -770,8 +791,13 @@ impl OwnerLock {
         st.1 -= 1;
         if st.1 == 0 {
             st.0 = None;
+            // A notification is a system call even when nobody waits (std's futex condvar); a file region is entered
+            // and left about four times by one thread (parse, bind, two trims) and nearly never waited for.
+            let waiting = st.2 != 0;
             drop(st);
-            self.released.notify_one();
+            if waiting {
+                self.released.notify_one();
+            }
         }
     }
 }
@@ -803,7 +829,7 @@ impl Region {
     /// A new, empty region whose first chunk has at least `first_chunk` bytes (rounded up to a page).
     pub fn new(first_chunk: usize) -> Region {
         ANY_REGION.store(true, Ordering::Relaxed);
-        Region::new_in(first_chunk, true)
+        Region::new_in(first_chunk, true, false)
     }
 
     /// A region to be used only through `enter_scratch` (one file's emit): like `new`, but its chunks are not in the
@@ -811,13 +837,21 @@ impl Region {
     /// of an object inside it (`enter_owner`) goes to the current target, the region itself while it is entered. A
     /// process with only scratch regions (the CLI) keeps `enter_owner` / `enter_table_owner` free.
     pub fn new_scratch(first_chunk: usize) -> Region {
-        Region::new_in(first_chunk, false)
+        Region::new_in(first_chunk, false, false)
     }
 
-    fn new_in(first_chunk: usize, registered: bool) -> Region {
+    /// `new_scratch` for one of many regions that are mostly retired (`retire_on_free`) in an order unrelated to
+    /// their creation (the CLI's file regions): its chunks are carved from the thread's large slabs
+    /// (`LARGE_SLAB_SIZE`), so the regions one thread made lie together and retired neighbours give their pages back
+    /// in long runs, one system call (and one TLB flush on every core of the process) each.
+    pub fn new_scratch_in_large_slabs(first_chunk: usize) -> Region {
+        Region::new_in(first_chunk, false, true)
+    }
+
+    fn new_in(first_chunk: usize, registered: bool, large_slabs: bool) -> Region {
         Region(Arc::new_cyclic(|weak| RegionInner {
-            arena: Box::new(Arena::with_first_chunk(first_chunk.max(PAGE), Some(Weak::clone(weak)), registered)),
-            lock: OwnerLock { state: Mutex::new((None, 0)), released: Condvar::new() },
+            arena: Box::new(Arena::with_first_chunk(first_chunk.max(PAGE), Some(Weak::clone(weak)), registered, large_slabs)),
+            lock: OwnerLock { state: Mutex::new((None, 0, 0)), released: Condvar::new() },
             owners: Mutex::new(Vec::new()),
             on_free: Mutex::new(Vec::new()),
             retire: AtomicBool::new(false),
@@ -1178,21 +1212,46 @@ mod retired {
 
     /// Retires `start .. start + len` (nothing uses it any more, and it is never handed out again).
     pub(super) fn retire(start: usize, len: usize) {
-        let pages = {
+        let (pages, calls) = {
             let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             s.pending.push((start, start + len));
             s.pending_bytes += len;
             if s.pending_bytes < BATCH {
                 return;
             }
-            take_pages(&mut s)
+            let pages = take_pages(&mut s);
+            let calls = spans_of(&s, &pages);
+            (pages, calls)
         };
-        give_back(&pages);
+        give_back(&pages, &calls);
     }
 
     pub(super) fn flush() {
-        let pages = take_pages(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()));
-        give_back(&pages);
+        let (pages, calls) = {
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            let pages = take_pages(&mut s);
+            let calls = spans_of(&s, &pages);
+            (pages, calls)
+        };
+        give_back(&pages, &calls);
+    }
+
+    /// The whole pages of each span that `pages` (from `take_pages`) lie in: a span's pages are all retired, and the
+    /// ones it absorbed were given back before (they hold no memory, and giving them back again costs nothing), so
+    /// one call per span gives back what `pages` lists. Freed with many checkers, a batch's ranges sit between ranges
+    /// retired earlier, and their pages would take a call for each piece; each call flushes the TLB of every core
+    /// running a thread of the process.
+    fn spans_of(s: &State, pages: &[(usize, usize)]) -> Vec<(usize, usize)> {
+        let page = crate::reserve::page_size();
+        let mut out: Vec<(usize, usize)> = Vec::with_capacity(pages.len());
+        for &(first, _) in pages {
+            let Some((&lo, &hi)) = s.spans.range(..=first).next_back() else { continue };
+            let whole = (lo.next_multiple_of(page), hi & !(page - 1));
+            if out.last() != Some(&whole) {
+                out.push(whole);
+            }
+        }
+        out
     }
 
     pub(super) fn stats() -> (usize, usize) {
@@ -1258,7 +1317,7 @@ mod retired {
 
     #[cfg(test)]
     mod tests {
-        use super::{take_pages, State};
+        use super::{spans_of, take_pages, State};
         use std::collections::BTreeMap;
 
         fn batch(s: &mut State, ranges: &[(usize, usize)]) -> Vec<(usize, usize)> {
@@ -1287,17 +1346,30 @@ mod retired {
             // A chunk not touching them: its own whole pages only.
             assert_eq!(batch(&mut t, &[(20 * p + 1, 23 * p - 1)]), [(21 * p, 22 * p)]);
         }
+
+        /// Ranges retired on both sides of a span given back earlier go back in one call over the whole span.
+        #[test]
+        fn a_batch_gives_back_whole_spans() {
+            let p = crate::reserve::page_size();
+            let mut s = State { spans: BTreeMap::new(), pending: Vec::new(), pending_bytes: 0 };
+            assert_eq!(batch(&mut s, &[(10 * p, 12 * p)]), [(10 * p, 12 * p)]);
+            let pages = batch(&mut s, &[(8 * p, 10 * p), (12 * p, 14 * p), (30 * p, 31 * p)]);
+            assert_eq!(pages, [(8 * p, 10 * p), (12 * p, 14 * p), (30 * p, 31 * p)]);
+            assert_eq!(spans_of(&s, &pages), [(8 * p, 14 * p), (30 * p, 31 * p)]);
+        }
     }
 
-    fn give_back(pages: &[(usize, usize)]) {
-        for &(first, last) in pages {
+    /// Gives back `calls` (whole pages of retired spans, `spans_of`); `pages`, the ones not given back before, are
+    /// what `stats` counts.
+    fn give_back(pages: &[(usize, usize)], calls: &[(usize, usize)]) {
+        for &(first, last) in calls {
             // SAFETY: whole pages inside retired spans: chunks and slabs nothing uses any more, never handed out
             // again; `first` is page aligned (and so is `last - first`).
             unsafe { crate::reserve::discard(std::ptr::with_exposed_provenance_mut::<u8>(first), last - first) };
-            // Relaxed: counters (see `stats`).
-            CALLS.fetch_add(1, Ordering::Relaxed);
-            BYTES.fetch_add(last - first, Ordering::Relaxed);
         }
+        // Relaxed: counters (see `stats`).
+        CALLS.fetch_add(calls.len(), Ordering::Relaxed);
+        BYTES.fetch_add(pages.iter().map(|&(first, last)| last - first).sum(), Ordering::Relaxed);
     }
 }
 

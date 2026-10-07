@@ -42,8 +42,9 @@ byte-identical output. At 32 checkers it costs 2.5-5% wall time, so it is off th
   formed 924 runs; with 16 KiB pages the shared pages were a tenth of the leaves' bytes) and cuts the system calls from
   one per chunk to about one per run. A retired range is never handed out again, so no later object takes the address
   of a freed one that an address-keyed cache may still name.
-- **Default: off** (`MAX_DEFAULT_CHECKERS` is 0 since the 8-vCPU bench below; it was 16). With a positive value the CLI turns file regions on only when the program can
-  get at most 16 checkers (`checker_count_upper_bound`: `--checkers`, one when single-threaded, else the machine's
+- **Default: at most 16 checkers** (`MAX_DEFAULT_CHECKERS`; 0 for a while after the 8-vCPU bench below, 16 again
+  after notes/mem-leaf-regions-cost.md). The CLI turns file regions on only when the program can get at most 16
+  checkers (`checker_count_upper_bound`: `--checkers`, one when single-threaded, else the machine's
   default before the file-count cap: half the threads, so machines up to 33 threads). Above that the measured cost was
   2.5-5% wall time on vscode (below). `TSRS_FREE_LEAVES=1` (and `keep`, `all`) turns it on at any count.
 - **Platforms.** Only with compressed pointers on unix, where retiring gives pages back and never reuses the range.
@@ -255,7 +256,12 @@ Alloc-profile build, vscode, 4 checkers: arena requested 1,581.0 -> 1,580.6 MB (
 - On Linux a stray read of a freed leaf reads zeros (`MADV_DONTNEED`) instead of faulting.
 - The pages a leaf shares with a live neighbouring chunk stay.
 
-## 8-vCPU bench: why the default is off
+## 8-vCPU bench: why the default was off for a while
+
+notes/mem-leaf-regions-cost.md re-measured this with one binary, freeing on against off on the same machine: 0-1.5%
+on the 8-vCPU runner, kernel time unchanged. The pair below compared a slower runner (tsgo, unchanged, was 6-27%
+slower on the same cells) and PGO builds without their training profiles (#153: the CLI's `_exit` skipped writing
+them, which is the +1.8-3.5% instructions on every project, file regions or not). The default is 16 checkers again.
 
 The README bench (`bench/run.py`, `depot-ubuntu-24.04-8`, PGO `dist` build) measured main 8b3e4f4 (this change, on by
 default up to 16 checkers) against 7262f61 (`bench/results/2026-10-07-*.json`). Wall time and peak RSS of tsrs,

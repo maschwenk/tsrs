@@ -87,13 +87,14 @@ pub struct LeafSettings {
     pub every_file: bool,
 }
 
-/// The most checkers for which leaf freeing is on by default: none, so it is opt-in (`TSRS_FREE_LEAVES=1`). It was on
-/// up to 16 checkers (on the 64-vCPU runner, vscode at 16: wall +1.6-2.1% for -11% peak; at 32: +2.5-5% for -10%,
-/// the predicted files' trees in 4 KiB pages and the TLB shootdowns of giving pages back). The README bench on the
-/// 8-vCPU runner (bench/results, 8b3e4f4 against 7262f61) then showed the kernel side of that cost dominating with
-/// few checkers: vscode +21% wall at 1 and 4 checkers (-15% peak), formbricks-web +16-24%, supabase-studio and
-/// t3code-server +7-9%, xstate-main +8-17%; notes/mem-free-leaf-files.md "8-vCPU bench".
-pub const MAX_DEFAULT_CHECKERS: usize = 0;
+/// The most checkers for which leaf freeing is on by default (`leaf_settings_from_env`). Measured with one binary,
+/// freeing on against off, 20 interleaved runs (notes/mem-leaf-regions-cost.md): on the 8-vCPU runner within 2% wall
+/// time at 1, 4 and 8 checkers for 13-16% less peak memory on vscode; on the 64-vCPU runner within 1% at 16 checkers
+/// for 11% less, and +2.4-3.9% at 32 for 10% less (each give-back flushes the TLB of every core running a checker,
+/// and more checkers free leaves in a more scattered order). The README bench's +21% on the 8-vCPU runner was a
+/// slower runner and a PGO build without its training profiles (#153), not freeing. `TSRS_FREE_LEAVES=1` turns it on
+/// at any count.
+pub const MAX_DEFAULT_CHECKERS: usize = 16;
 
 /// `TSRS_FREE_LEAVES`, a comma-separated list: unset frees the predicted leaves when the program gets at most
 /// `MAX_DEFAULT_CHECKERS` checkers (`checkers`: the most it can get, `checker_count_upper_bound`); `1` frees them at any
@@ -212,7 +213,7 @@ fn first_chunk(text_len: usize) -> usize {
 /// used page. Binding on the same thread right away (the parallel loader) grows the region into the space just given
 /// back.
 pub(crate) fn parse(opts: SourceFileParseOptions, text: String, script_kind: ScriptKind) -> P<SourceFile> {
-    let region = Region::new_scratch(first_chunk(text.len()));
+    let region = Region::new_scratch_in_large_slabs(first_chunk(text.len()));
     let file = {
         let _scratch = region.enter_scratch();
         tsrs_parser::parse_source_file_keep_text(opts, text, script_kind)
@@ -259,7 +260,7 @@ pub(crate) fn classify(program: &Program) -> bool {
     program.bind_source_files();
     let files = program.files;
     let regions = REGIONS.lock().unwrap();
-    let referred = referred_files(program);
+    let referred = leaf_referred(program, |file| regions.contains_key(&file));
     let (mut leaves, mut leaf_bytes, mut checked) = (0, 0, 0);
     // `stats`: leaves the prediction missed (parsed into the thread arena, so not freed), and the nodes of both kinds.
     let (mut missed, mut missed_nodes, mut leaf_nodes) = (0, 0, 0);
@@ -318,44 +319,78 @@ pub(crate) fn classify(program: &Program) -> bool {
     mode == LeafMode::Free
 }
 
-/// Files that another file of the program refers to: every file with an include reason other than being a root
-/// (an import, a `/// <reference path>`, a type reference directive, a lib reference, a default lib, an automatic
-/// type directive), and every target of a resolved import, module augmentation or type reference directive of
-/// another file. A file that refers only to itself is not counted.
-fn referred_files(program: &Program) -> FxHashSet<P<SourceFile>> {
+/// Computes the part of `classify` that reads only the loaded program (`leaf_referred`) ahead of the pass, while the
+/// checker pool creates its checkers and assigns them files (checkerpool.rs `create_checkers`), so that it is not
+/// one more serial step between them and the pass (vscode: 4-5 ms on the 64-vCPU runner, about 1% of the check time
+/// at 32 checkers). Does nothing for a program that frees nothing.
+pub(crate) fn prepare(program: &Program) {
+    if program.leaf_files != LeafMode::Off {
+        // Not under the lock: binding (`bind`) takes it, and creating a checker may bind.
+        let with_region: FxHashSet<P<SourceFile>> = REGIONS.lock().unwrap().keys().copied().collect();
+        leaf_referred(program, |file| with_region.contains(&file));
+    }
+}
+
+/// `referred_files` of the files that can be leaves (those with a region; every file with `stats`, which also counts
+/// the leaves the prediction missed), computed once per program. The program's files, include reasons and resolutions
+/// do not change once it is loaded, and the regions are all made while it loads.
+fn leaf_referred(program: &Program, has_region: impl Fn(P<SourceFile>) -> bool + Sync) -> &FxHashSet<P<SourceFile>> {
+    program.leaf_referred.get_or_init(|| referred_files(program, |file| stats() || has_region(file)))
+}
+
+/// The files for which `wanted` holds that another file of the program refers to: every file with an include reason
+/// other than being a root (an import, a `/// <reference path>`, a type reference directive, a lib reference, a
+/// default lib, an automatic type directive), and every target of a resolved import, module augmentation or type
+/// reference directive of another file. A file that refers only to itself is not counted.
+///
+/// This runs inside the check time, before the pass. The resolutions (vscode: 110k) are read on the worker pool, like
+/// the import graph of the checker assignment (checkerpool.rs `get_import_adjacency`), and a resolved name is looked
+/// up by the name itself first (`files_by_name`): normalizing every name (`get_source_file_for_resolved_module`) took
+/// 24 ms on one thread, and collecting every importer's names before that another 3-5 ms on one thread.
+fn referred_files(program: &Program, wanted: impl Fn(P<SourceFile>) -> bool + Sync) -> FxHashSet<P<SourceFile>> {
     let mut referred = FxHashSet::default();
     #[expect(clippy::iter_over_hash_type, reason = "builds a set; the order of insertion cannot be seen")]
     for (path, reasons) in &program.file_include_data.file_include_reasons {
         if reasons.iter().any(|r| !r.is_root_file()) {
             if let Some(&file) = program.files_by_path.get(path) {
-                referred.insert(file);
+                if wanted(file) {
+                    referred.insert(file);
+                }
             }
         }
     }
-    // The targets of every importer's resolutions. Looking a resolved file name up normalizes it (vscode: 110k
-    // imports, 24 ms on one thread, all of it inside the check time), so this runs on the worker pool, like the
-    // import graph of the checker assignment (checkerpool.rs `get_import_adjacency`).
-    let mut importers: Vec<(&tsrs_core::tspath::Path, Vec<&'static str>)> = Vec::new();
-    #[expect(clippy::iter_over_hash_type, reason = "builds a set from them; the order cannot be seen")]
-    for (path, resolutions) in &program.resolved_modules {
-        importers.push((path, resolutions.values().filter(|r| r.is_resolved()).map(|r| r.resolved_file_name).collect()));
-    }
-    #[expect(clippy::iter_over_hash_type, reason = "builds a set from them; the order cannot be seen")]
-    for (path, resolutions) in &program.type_resolutions_in_file {
-        importers.push((path, resolutions.values().filter(|r| r.is_resolved()).map(|r| r.resolved_file_name).collect()));
-    }
-    let targets_of = |(path, names): &(&tsrs_core::tspath::Path, Vec<&'static str>)| -> Vec<P<SourceFile>> {
-        let from = program.files_by_path.get(*path).copied();
-        names.iter().filter_map(|name| program.get_source_file_for_resolved_module(name)).filter(|&target| Some(target) != from).collect()
+    let by_name = files_by_name(program);
+    let target = |from: Option<P<SourceFile>>, name: &str| -> Option<P<SourceFile>> {
+        let file = by_name.get(name).copied().or_else(|| program.get_source_file_for_resolved_module(name))?;
+        (Some(file) != from && wanted(file)).then_some(file)
+    };
+    let modules = |(path, resolutions): (&tsrs_core::tspath::Path, &tsrs_module::ModeAwareCache<P<tsrs_module::ResolvedModule>>)| {
+        let from = program.files_by_path.get(path).copied();
+        resolutions.values().filter(|r| r.is_resolved()).filter_map(|r| target(from, r.resolved_file_name)).collect::<Vec<_>>()
+    };
+    let types = |(path, resolutions): (&tsrs_core::tspath::Path, &tsrs_module::ModeAwareCache<P<tsrs_module::ResolvedTypeReferenceDirective>>)| {
+        let from = program.files_by_path.get(path).copied();
+        resolutions.values().filter(|r| r.is_resolved()).filter_map(|r| target(from, r.resolved_file_name)).collect::<Vec<_>>()
     };
     let targets: Vec<Vec<P<SourceFile>>> = if program.single_threaded() {
-        importers.iter().map(targets_of).collect()
+        program.resolved_modules.iter().map(modules).chain(program.type_resolutions_in_file.iter().map(types)).collect()
     } else {
         use rayon::prelude::*;
-        crate::program::worker_pool().install(|| importers.par_iter().map(targets_of).collect())
+        crate::program::worker_pool().install(|| {
+            let mut targets: Vec<Vec<P<SourceFile>>> = program.resolved_modules.par_iter().map(modules).collect();
+            targets.par_extend(program.type_resolutions_in_file.par_iter().map(types));
+            targets
+        })
     };
     referred.extend(targets.into_iter().flatten());
     referred
+}
+
+/// The program's files by name, for `referred_files`: only files that `files_by_path` maps their own path to, so that
+/// finding a resolved name here gives the file `get_source_file_for_resolved_module` would (it looks the normalized
+/// name up in `files_by_path`, and a file's path is its normalized name).
+fn files_by_name(program: &Program) -> FxHashMap<&str, P<SourceFile>> {
+    program.files.iter().filter(|&&file| program.files_by_path.get(file.path()) == Some(&file)).map(|file| (file.file_name(), *file)).collect()
 }
 
 /// Whether nothing of `file` can be reached from another file that does not refer to it. It is a type-checked,

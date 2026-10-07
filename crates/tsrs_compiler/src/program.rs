@@ -186,6 +186,8 @@ pub struct Program {
     // tsrs-only: `ProgramOptions::leaf_files`, and whether the type-check pass that may free leaves has started.
     pub(crate) leaf_files: crate::fileregions::LeafMode,
     pub(crate) leaf_pass_started: std::sync::atomic::AtomicBool,
+    // tsrs-only: the files that can be leaves and that another file refers to (`fileregions::prepare`).
+    pub(crate) leaf_referred: OnceLock<rustc_hash::FxHashSet<P<SourceFile>>>,
 }
 
 impl std::ops::Deref for Program {
@@ -399,6 +401,7 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
         exports_module_name_cache: Default::default(),
         leaf_files: opts.leaf_files,
         leaf_pass_started: std::sync::atomic::AtomicBool::new(false),
+        leaf_referred: OnceLock::new(),
     };
     // Go initializes the checker pool before verifying options; the pool factory takes the program by
     // `&'static`, so here it runs after verification, once the program is leaked. Neither pool reads anything
@@ -596,6 +599,7 @@ impl Program {
             // A reused program keeps the files of this one, so nothing of them may be freed.
             leaf_files: crate::fileregions::LeafMode::Off,
             leaf_pass_started: std::sync::atomic::AtomicBool::new(false),
+            leaf_referred: OnceLock::new(),
         };
         try_reuse(&result.unresolved_imports, &self.unresolved_imports);
         try_reuse(&result.known_symlinks, &self.known_symlinks);
@@ -1048,7 +1052,7 @@ impl Program {
             None => {
                 // tsrs-only: the CLI's `--noEmit` check frees a leaf's tree and binder output once its diagnostics are
                 // collected (fileregions.rs).
-                let free_leaves = crate::fileregions::classify(self);
+                let free_leaves = tsrs_core::phases::time("Checkers: leaf files", || crate::fileregions::classify(self));
                 let collect = |ctx: &Context, c: &mut Checker, file: P<SourceFile>| {
                     let diagnostics = collect(ctx, c, file);
                     if free_leaves && file.is_check_leaf() {
