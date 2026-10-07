@@ -166,7 +166,9 @@ def main() -> None:
     (out / "summary.md").write_text("\n".join(lines) + "\n")
     print("\n".join(lines), flush=True)
 
-    perf = shutil.which("perf")
+    # The packaged `perf` wrapper refuses kernels it has no tools for (Depot's 6.12); the binary itself works.
+    import glob
+    perf = next(iter(sorted(glob.glob("/usr/lib/linux-tools/*/perf"), reverse=True)), None) or shutil.which("perf")
     extras = []
     for name in projects:
         for k in checkers:
@@ -203,6 +205,13 @@ def main() -> None:
                        "--dsos", "[kernel.kallsyms]"])
             (out / f"perf-{tag}-kernel-callers.txt").write_text(kern)
             extras.append(f"### kernel symbols with callers {tag}\n```\n{kern[:12000]}\n```")
+        datas = [out / f"perf-{name}-c{k}-{vname}.data" for vname, _ in variants]
+        for other in datas[1:]:
+            if datas[0].exists() and other.exists():
+                d = sh([perf, "diff", "--sort", "dso,sym", "--percent-limit", "0.2", str(datas[0]), str(other)])
+                (out / f"perf-diff-{datas[0].stem}-{other.stem}.txt").write_text(d)
+                extras.append(f"### perf diff {datas[0].stem} -> {other.stem}\n```\n{d[:8000]}\n```")
+        for data in datas:
             data.unlink(missing_ok=True)
     with open(out / "summary.md", "a") as f:
         f.write("\n\n" + "\n\n".join(extras) + "\n")
