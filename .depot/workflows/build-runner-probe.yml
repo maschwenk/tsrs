@@ -1,0 +1,105 @@
+# Depot CI workflow: how long bench.yml's `build` job takes on 8, 16 and 32 vCPU runners. Same steps and flags as
+# that job, timed phase by phase. Caches are not available to `depot ci run`, so the instrumented build runs twice:
+# cold (all dependencies) and again after touching the workspace sources (dependencies reused, as with bench.yml's
+# rust-cache). Manual only; nothing is uploaded or committed. Timings are in the job summary.
+
+name: Build runner probe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [depot-ubuntu-24.04-8, depot-ubuntu-24.04-16, depot-ubuntu-24.04-32]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Runner hardware
+        run: |
+          nproc; free -g; lscpu | grep -E 'Model name|^CPU\(s\)' || true
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+
+      - name: Read TypeScript reference commit
+        id: ts
+        run: echo "commit=$(node npm/build.mjs --print-typescript-commit)" >> "$GITHUB_OUTPUT"
+
+      - name: Check out TypeScript testdata
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: microsoft/TypeScript
+          ref: ${{ steps.ts.outputs.commit }}
+          path: ts-ref
+          fetch-depth: 1
+          sparse-checkout: tsc/testdata
+          persist-credentials: false
+
+      - name: Read the pinned Rust toolchain (rust-toolchain.toml)
+        id: rust
+        shell: bash
+        run: echo "toolchain=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: ${{ steps.rust.outputs.toolchain }}
+          targets: x86_64-unknown-linux-gnu
+          components: llvm-tools
+
+      - name: Set up the training projects
+        run: python3 bench/run.py --setup-only --projects xstate-main,webpack
+
+      - name: Timed build pipeline
+        run: |
+          set -euo pipefail
+          T=x86_64-unknown-linux-gnu
+          : >/tmp/phases.txt
+          phase() { # name command...
+            local name=$1; shift; local s=$(date +%s)
+            "$@"; echo "$name $(( $(date +%s) - s ))" >>/tmp/phases.txt
+          }
+          instr() { RUSTFLAGS=-Cprofile-generate=/tmp/tsrs-pgo/raw cargo build --profile dist --locked -p tsrs_cli -p tsrs_testrunner -p tsrs_fourslash --target $T; }
+          touch_ws() { find crates -name '*.rs' -exec touch {} +; }
+          train() { .github/scripts/pgo-train.sh target/$T/dist /tmp/tsrs-pgo/raw bench/.work; }
+          merge() {
+            profdata="$(rustc --print sysroot)/lib/rustlib/$(rustc -vV | sed -n 's/^host: //p')/bin/llvm-profdata"
+            "$profdata" merge -o /tmp/tsrs-pgo/merged.profdata /tmp/tsrs-pgo/raw/*.profraw
+          }
+          final() {
+            RUSTFLAGS="-Cprofile-use=/tmp/tsrs-pgo/merged.profdata -Clink-arg=-Wl,--emit-relocs" CARGO_TARGET_DIR=/tmp/tsrs-pgo/target \
+              cargo build --profile dist --locked -p tsrs_cli --target $T
+          }
+          install_bolt() {
+            llvm=$(rustc -vV | sed -n 's/^LLVM version: //p'); name="LLVM-$llvm-Linux-X64"; mkdir -p /tmp/llvm
+            curl -fsSL "https://github.com/llvm/llvm-project/releases/download/llvmorg-$llvm/$name.tar.zst" |
+              tar -x --zstd -C /tmp/llvm --strip-components=1 --wildcards \
+                "$name/bin/llvm-bolt" "$name/bin/merge-fdata" "$name/lib/libbolt_rt_instr.a"
+            echo /tmp/llvm/bin >>"$GITHUB_PATH"; export PATH=/tmp/llvm/bin:$PATH
+          }
+          bolt() { BOLT_TSRS_ONLY=1 .github/scripts/bolt.sh /tmp/tsrs-pgo/target/$T/dist /tmp/tsrs-pgo/bolt bench/.work; }
+          phase instrumented_build_cold instr
+          rm -rf /tmp/tsrs-pgo/raw; touch_ws
+          phase instrumented_build_deps_cached instr
+          phase training train
+          phase merge merge
+          phase final_build final
+          phase install_bolt install_bolt
+          export PATH=/tmp/llvm/bin:$PATH
+          phase bolt bolt
+          {
+            echo "### ${{ matrix.runner }} ($(nproc) vCPU)"
+            echo "| phase | seconds |"; echo "| --- | ---: |"
+            awk '{printf "| %s | %s |\n", $1, $2}' /tmp/phases.txt
+            awk '$1!="instrumented_build_cold"{t+=$2} END{printf "| **bench.yml equivalent (deps cached)** | **%d** |\n", t}' /tmp/phases.txt
+          } | tee -a "$GITHUB_STEP_SUMMARY"
