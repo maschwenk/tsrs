@@ -3,7 +3,7 @@ use std::sync::atomic::AtomicU32;
 
 use hashbrown::HashTable;
 use rustc_hash::FxBuildHasher;
-use tsrs_core::{FrozenCell, OwnedCell, OwnedPSliceCell, OwnedTaggedStrCell, PKey, P};
+use tsrs_core::{OwnedCell, OwnedPSliceCell, OwnedTaggedStrCell, PKey, P};
 
 use crate::ast::{Node, SourceFile};
 use crate::checkflags::CheckFlags;
@@ -260,13 +260,38 @@ pub fn get_source_file_of_symbol(symbol: P<Symbol>) -> Option<P<SourceFile>> {
 // length up to 63 and 12 bits of its hash), which rejects non-matching entries without reading the symbol (see
 // `SymbolMapEntry`). A key with other text than its symbol's name is kept in `SymbolMapExtra::odd_keys`. Keys
 // are compared by text, so returning the symbol's name where the caller stored an equal string is unobservable.
+//
+// Frozen tables (not in Go; notes/mem-flat-symbol-tables.md): when the binder finishes a file it replaces the small
+// tables it made with frozen ones (`freeze_symbol_tables`): a one-word header (`FrozenTable`, bit 63 set, where a
+// mutable table's first word is its entry buffer's address) whose entries are a run in one exactly sized arena
+// array per file. Nothing writes to a binder table once its file is bound (the checker clones a table before it
+// merges into it); a write to a frozen table panics.
 
-#[derive(Default)]
-pub struct SymbolTable(FrozenCell<SymbolMap>);
+/// The ownership contract of `tsrs_core::FrozenCell`: only the owning thread writes, and never while other threads
+/// can read (a binder table is written only while its file is bound). Not a `FrozenCell`, whose layout is free in
+/// checked builds: the first word must be the entry buffer's address in every build (`repr(C)` down to
+/// `EntryVec::ptr`), so that a frozen table (`FrozenTable`) can be told from it.
+#[repr(C)]
+pub struct SymbolTable(std::cell::UnsafeCell<SymbolMap>);
+
+impl Default for SymbolTable {
+    fn default() -> SymbolTable {
+        SymbolTable::from_map(SymbolMap::default())
+    }
+}
+
+// SAFETY: the map owns plain words and boxes of them (`EntryVec`, `ExtraSlot`, both Send).
+unsafe impl Send for SymbolTable {}
+// SAFETY: `FrozenCell`'s contract (above): shared access only reads, and the owning thread writes only while no other
+// thread can read the table; a frozen table is never written.
+unsafe impl Sync for SymbolTable {}
+
+const _: () = assert!(std::mem::size_of::<SymbolTable>() == 24);
 
 const SYMBOL_TABLE_LINEAR_MAX: usize = 16;
 
 #[derive(Default, Clone)]
+#[repr(C)]
 struct SymbolMap {
     entries: EntryVec,
     extra: ExtraSlot,
@@ -275,7 +300,8 @@ struct SymbolMap {
 const _: () = assert!(std::mem::size_of::<SymbolMap>() == 24);
 
 /// `Vec<SymbolMapEntry>` with a `u32` length and capacity (16 bytes instead of 24; 3.5M symbol tables on the private monorepo).
-/// Grows like `Vec` (`push` doubles from 4; `reserve_exact` adds exactly).
+/// Grows like `Vec` (`push` doubles from 4; `reserve_exact` adds exactly). `ptr` is first (`SymbolTable`).
+#[repr(C)]
 struct EntryVec {
     ptr: std::ptr::NonNull<SymbolMapEntry>,
     len: u32,
@@ -719,20 +745,217 @@ impl SymbolMap {
     }
 }
 
+/// A frozen table: one word, bit 63 set (a mutable table's first word is a user-space address, below 2^48), its
+/// length in bits 58..63, the filter of its keys (`ExtraSlot`'s, narrower) and its run of entries in the file's
+/// frozen-entries array (`P::to_bits` of the first, 0 for an empty table): with compressed pointers the run / 8 in
+/// bits 26..58 and the filter in bits 0..26; with plain pointers the run's address in the low 48 bits (a tagged
+/// pointer to the census, `census_layout_frozen`) and the filter in bits 48..58. A table of more than
+/// `WIDE_FILTER_MIN` entries, whose keys would fill so narrow a filter, also keeps its mutable form's 64-bit filter
+/// in the word before its run (`ExtraSlot`). `P<SymbolTable>` handles of frozen tables point at one of these.
+#[derive(Clone, Copy)]
+#[repr(transparent)]
+struct FrozenTable(u64);
+
+/// One entry of a file's frozen-entries array (its own type so the allocation profile shows the array as a row).
+#[derive(Clone, Copy)]
+#[repr(transparent)]
+struct FrozenEntry(SymbolMapEntry);
+
+impl FrozenTable {
+    const TAG: u64 = 1 << 63;
+    const LEN_SHIFT: u32 = 58;
+    const FILTER_SHIFT: u32 = if tsrs_core::COMPRESSED_PTRS { 0 } else { 48 };
+    const FILTER_BITS: u64 = if tsrs_core::COMPRESSED_PTRS { 26 } else { 10 };
+    const RUN_SHIFT: u32 = 26;
+    const WIDE_FILTER_MIN: usize = 4;
+
+    fn new(run: Option<P<FrozenEntry>>, len: usize, filter: u64) -> FrozenTable {
+        assert!(len <= SYMBOL_TABLE_LINEAR_MAX);
+        let bits = P::to_bits_opt(run) as u64;
+        let run = if tsrs_core::COMPRESSED_PTRS { bits >> 3 << Self::RUN_SHIFT } else { bits };
+        FrozenTable(Self::TAG | (len as u64) << Self::LEN_SHIFT | run | filter)
+    }
+
+    #[inline]
+    fn entries(self) -> &'static [SymbolMapEntry] {
+        let len = ((self.0 >> Self::LEN_SHIFT) & 31) as usize;
+        if len == 0 {
+            return &[];
+        }
+        let bits = if tsrs_core::COMPRESSED_PTRS { ((self.0 >> Self::RUN_SHIFT) as u32 as u64) << 3 } else { self.0 & ((1 << 48) - 1) };
+        // SAFETY: `new` stored `to_bits` of the first of this table's `len` entries, in an arena array that is never
+        // freed; `FrozenEntry` is a transparent `SymbolMapEntry`.
+        unsafe { std::slice::from_raw_parts(std::ptr::from_ref(P::<FrozenEntry>::from_bits(bits as usize).get()).cast::<SymbolMapEntry>(), len) }
+    }
+
+    /// Two of the filter's bits, from the 12 hash bits an entry keeps (`KeyPrint::hash`, so freezing rehashes
+    /// nothing), by multiply-shift over the filter's width.
+    #[inline]
+    fn filter_bits(print_hash: u64) -> u64 {
+        let bit = |h: u64| 1 << ((h & 63) * Self::FILTER_BITS >> 6);
+        (bit(print_hash) | bit(print_hash >> 6)) << Self::FILTER_SHIFT
+    }
+
+    #[inline]
+    fn may_contain(self, hash: u32) -> bool {
+        let bits = Self::filter_bits(KeyPrint::hash_bits(hash));
+        self.0 & bits == bits
+    }
+
+    /// The 64-bit filter (`ExtraSlot`'s word) of a table of more than `WIDE_FILTER_MIN` entries.
+    #[inline]
+    fn wide_filter(entries: &'static [SymbolMapEntry]) -> usize {
+        // SAFETY: the word before the run of such a table is its 64-bit filter (`freeze_symbol_tables`).
+        unsafe { entries.as_ptr().sub(1).read().0 as usize }
+    }
+
+    #[inline(never)]
+    fn search(self, name: &str, hash: u32) -> Option<SymbolMapEntry> {
+        let entries = self.entries();
+        if entries.len() > Self::WIDE_FILTER_MIN {
+            let bits = ExtraSlot::filter_bits(hash);
+            if Self::wide_filter(entries) & bits != bits {
+                return None;
+            }
+        }
+        let print = KeyPrint::of(name, hash);
+        entries.iter().copied().find(|e| e.print() == print && same_text(e.symbol().name(), name))
+    }
+
+    #[inline]
+    fn find(self, name: &str) -> Option<SymbolMapEntry> {
+        let hash = hash_name(name);
+        if !self.may_contain(hash) {
+            return None;
+        }
+        self.search(name, hash)
+    }
+}
+
+/// Census builds (plain pointers): a frozen table's word is the run's address with flag bits above it.
+pub(crate) fn census_layout_frozen() {
+    tsrs_core::census_layout(std::any::type_name::<FrozenTable>(), &[tsrs_core::CensusField::Tagged { off: 0 }]);
+}
+
+/// The frozen replacement of each of the binder's `tables` of a bound file (`None` for a table that stays mutable:
+/// one with a hash index or odd keys, i.e. more than `SYMBOL_TABLE_LINEAR_MAX` entries or a key that is not its
+/// symbol's name). The entries of all of them go to one exactly sized arena array, in each table's order (odd-key
+/// bits clear, so a frozen entry's key is its symbol's name). `tables` must not repeat a table. The caller points
+/// the tables' owners at the replacements and then gives the old tables back (`release_symbol_table`).
+pub fn freeze_symbol_tables(tables: &[P<SymbolTable>]) -> Vec<Option<P<SymbolTable>>> {
+    debug_assert!({
+        let mut keys: Vec<PKey> = tables.iter().map(|t| t.key()).collect();
+        keys.sort_unstable();
+        keys.windows(2).all(|w| w[0] != w[1])
+    });
+    let freezable = |t: P<SymbolTable>| t.frozen().is_none() && t.map().extra.get().is_none();
+    let mut words: Vec<FrozenEntry> = Vec::new();
+    let mut runs: Vec<Option<(usize, usize)>> = Vec::with_capacity(tables.len());
+    for &t in tables {
+        if !freezable(t) {
+            runs.push(None);
+            continue;
+        }
+        let entries = &t.map().entries;
+        if entries.len() > FrozenTable::WIDE_FILTER_MIN {
+            // The filter of a table without an `ExtraSlot` box (`freezable`), bit 0 (its tag) included.
+            words.push(FrozenEntry(SymbolMapEntry(t.map().extra.0.addr() as u64)));
+        }
+        runs.push(Some((words.len(), entries.len())));
+        words.extend(entries.iter().map(|&e| FrozenEntry(e)));
+    }
+    let array = tsrs_core::alloc_slice(&words);
+    tables
+        .iter()
+        .zip(runs)
+        .map(|(t, run)| {
+            let (start, len) = run?;
+            let filter = t.map().entries.iter().fold(0, |f, e| f | FrozenTable::filter_bits(e.print().hash));
+            // SAFETY: an element of the fresh arena array (8-byte entries, 8-aligned).
+            let run = (len != 0).then(|| unsafe { P::from_arena(&array[start]) });
+            // SAFETY: a `SymbolTable` handle may point at a `FrozenTable`: every method reads only the first word
+            // until it has seen that the table is not frozen.
+            Some(unsafe { P::new(FrozenTable::new(run, len, filter)).cast::<SymbolTable>() })
+        })
+        .collect()
+}
+
+/// Gives a table that `freeze_symbol_tables` replaced back to the arena (its entry buffer to the heap).
+///
+/// # Safety
+/// Nothing may point to the table any more (its owners point at the replacement).
+pub unsafe fn release_symbol_table(table: P<SymbolTable>) {
+    // An empty map: dropping the table again (a region's drop list) frees nothing.
+    *table.map_mut() = SymbolMap::default();
+    // SAFETY: the caller's contract.
+    unsafe { tsrs_core::free!(table) };
+}
+
 impl SymbolTable {
+    fn from_map(map: SymbolMap) -> SymbolTable {
+        SymbolTable(std::cell::UnsafeCell::new(map))
+    }
+
+    /// The table's frozen form, if it is one.
+    #[inline]
+    fn frozen(&self) -> Option<FrozenTable> {
+        // SAFETY: the first word is `EntryVec::ptr` (an address below 2^48) or a `FrozenTable` (bit 63 set), and is
+        // written only by the owning thread while no other thread reads (the contract above).
+        let word = unsafe { self.0.get().cast::<u64>().read() };
+        (word & FrozenTable::TAG != 0).then_some(FrozenTable(word))
+    }
+
+    /// The map of a mutable table.
+    #[inline]
+    fn map(&self) -> &SymbolMap {
+        // SAFETY: the contract above; the callers checked that the table is not frozen.
+        unsafe { &*self.0.get() }
+    }
+
+    #[inline]
+    #[expect(clippy::mut_from_ref, reason = "`FrozenCell::borrow_mut`: only the owning thread writes, while nobody reads")]
+    fn map_mut(&self) -> &mut SymbolMap {
+        assert!(self.frozen().is_none(), "write to a frozen binder symbol table");
+        // SAFETY: the contract above.
+        unsafe { &mut *self.0.get() }
+    }
+
     /// Go `make(ast.SymbolTable)`.
     pub fn new() -> P<SymbolTable> {
         P::new(SymbolTable::default())
     }
 
+    /// `new` in a block that a replaced binder table gave back (`release_symbol_table`), if the thread has one.
+    pub fn new_recycled() -> P<SymbolTable> {
+        P::new_recycled(SymbolTable::default())
+    }
+
     /// Go `make(ast.SymbolTable, n)`.
     pub fn with_capacity(n: usize) -> P<SymbolTable> {
-        P::new(SymbolTable(FrozenCell::new(SymbolMap::with_capacity(n))))
+        P::new(SymbolTable::from_map(SymbolMap::with_capacity(n)))
     }
 
     /// Go `maps.Clone(table)` for a non-nil table.
     pub fn clone_table(&self) -> P<SymbolTable> {
-        P::new(SymbolTable(FrozenCell::new(self.0.borrow().clone())))
+        let map = match self.frozen() {
+            None => self.map().clone(),
+            Some(f) => {
+                let entries = f.entries();
+                let mut map = SymbolMap::with_capacity(entries.len());
+                for &e in entries {
+                    map.entries.push(e);
+                }
+                if entries.len() > FrozenTable::WIDE_FILTER_MIN {
+                    map.extra = ExtraSlot(std::ptr::without_provenance_mut(FrozenTable::wide_filter(entries)));
+                } else {
+                    for e in entries {
+                        map.extra.add_to_filter(hash_name(e.symbol().name()));
+                    }
+                }
+                map
+            }
+        };
+        P::new(SymbolTable::from_map(map))
     }
 
     /// Go `table[name]`. On a `P<SymbolTable>` receiver `table.get(name)` resolves to `P::get`, so use
@@ -744,40 +967,56 @@ impl SymbolTable {
 
     #[inline]
     pub fn lookup(&self, name: &str) -> Option<P<Symbol>> {
-        let m = self.0.borrow();
+        if let Some(f) = self.frozen() {
+            return f.find(name).map(SymbolMapEntry::symbol);
+        }
+        let m = self.map();
         m.position(name).map(|i| m.entries[i].symbol())
     }
 
     /// `lookup` that also returns the stored key.
     #[inline]
     pub fn lookup_entry(&self, name: &str) -> Option<(&'static str, P<Symbol>)> {
-        let m = self.0.borrow();
+        if let Some(f) = self.frozen() {
+            return f.find(name).map(|e| (e.symbol().name(), e.symbol()));
+        }
+        let m = self.map();
         m.position(name).map(|i| (m.key(i), m.entries[i].symbol()))
     }
 
     #[inline]
     pub fn set(&self, name: &'static str, symbol: P<Symbol>) {
-        self.0.borrow_mut().insert(name, symbol);
+        self.map_mut().insert(name, symbol);
     }
 
     pub fn delete(&self, name: &str) {
-        self.0.borrow_mut().shift_remove(name);
+        self.map_mut().shift_remove(name);
     }
 
     #[inline]
     pub fn has(&self, name: &str) -> bool {
-        self.0.borrow().position(name).is_some()
+        if let Some(f) = self.frozen() {
+            return f.find(name).is_some();
+        }
+        self.map().position(name).is_some()
     }
 
     #[inline]
     pub fn len(&self) -> usize {
-        self.0.borrow().entries.len()
+        if let Some(f) = self.frozen() {
+            return f.entries().len();
+        }
+        self.map().entries.len()
     }
 
     /// Heap census (notes/mem-checker-heap.md): entries, entry capacity, and the heap bytes of the entry buffer
-    /// plus the boxed index of a large table.
+    /// plus the boxed index of a large table (a frozen table's entries are in the arena).
     pub fn heap_usage(&self) -> (usize, usize, usize) {
-        let m = self.0.borrow();
+        if let Some(f) = self.frozen() {
+            let len = f.entries().len();
+            return (len, len, 0);
+        }
+        let m = self.map();
         let mut bytes = m.entries.capacity() * std::mem::size_of::<SymbolMapEntry>();
         if let Some(extra) = m.extra.get() {
             bytes += std::mem::size_of::<SymbolMapExtra>() + extra.odd_keys.capacity() * 24;
@@ -792,7 +1031,10 @@ impl SymbolTable {
 
     #[inline]
     pub fn is_empty(&self) -> bool {
-        self.0.borrow().entries.is_empty()
+        if let Some(f) = self.frozen() {
+            return f.entries().is_empty();
+        }
+        self.map().entries.is_empty()
     }
 
     /// Iterates over a snapshot, so `f` may mutate the table.
@@ -803,16 +1045,25 @@ impl SymbolTable {
     }
 
     pub fn entries(&self) -> Vec<(&'static str, P<Symbol>)> {
-        self.0.borrow().pairs()
+        if let Some(f) = self.frozen() {
+            return f.entries().iter().map(|e| (e.symbol().name(), e.symbol())).collect();
+        }
+        self.map().pairs()
     }
 
     pub fn keys(&self) -> Vec<&'static str> {
-        let m = self.0.borrow();
+        if let Some(f) = self.frozen() {
+            return f.entries().iter().map(|e| e.symbol().name()).collect();
+        }
+        let m = self.map();
         (0..m.entries.len()).map(|i| m.key(i)).collect()
     }
 
     pub fn values(&self) -> Vec<P<Symbol>> {
-        self.0.borrow().entries.iter().map(|e| e.symbol()).collect()
+        if let Some(f) = self.frozen() {
+            return f.entries().iter().map(|e| e.symbol()).collect();
+        }
+        self.map().entries.iter().map(|e| e.symbol()).collect()
     }
 }
 

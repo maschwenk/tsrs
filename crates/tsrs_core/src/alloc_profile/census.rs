@@ -950,9 +950,10 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
                 }
             }
         }
-        if heap {
+        if heap || from.is_some_and(|j| class_is(table.blocks[j].class, "FrozenEntry]")) {
             // Symbol table entries (`SymbolMapEntry`: address >> 3 in the low 45 bits) live in a `Vec` buffer whose
-            // first word is an entry too. Other heap blocks hold no entries; a random 64-bit word there (a hash in a
+            // first word is an entry too, or in a file's frozen-entries array (`tsrs_ast::freeze_symbol_tables`). Other
+            // heap blocks hold no entries; a random 64-bit word there (a hash in a
             // cache keyed by hashes) decodes to a symbol's address once in ~10^7 words, so it is not an edge.
             let is_symbol_entry = |w: u64| {
                 let c = (w & MASK45) << 3;

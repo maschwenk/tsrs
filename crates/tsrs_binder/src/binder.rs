@@ -89,6 +89,10 @@ pub struct Binder {
     shared_flow_start: Option<P<FlowNode>>,
     shared_start_depth: u32,
     shared_start_nodes: Vec<P<FlowNode>>,
+    // Not in Go: the owner of every symbol table this binder made; the tables are replaced by frozen ones when the
+    // file is bound (`freeze_symbol_tables`). A `RefCell` so that the table getters take `&self` and can be arguments
+    // of `&mut self` calls.
+    symbol_tables: std::cell::RefCell<Vec<TableOwner>>,
 }
 
 const NO_EDGE: u32 = u32::MAX;
@@ -104,6 +108,33 @@ struct LabelEdges {
 struct FlowEdge {
     flow: P<FlowNode>,
     next: u32,
+}
+
+/// Where the binder keeps a symbol table it made.
+#[derive(Clone, Copy)]
+enum TableOwner {
+    Locals(P<Node>),
+    Members(P<Symbol>),
+    Exports(P<Symbol>),
+}
+
+impl TableOwner {
+    fn table(self) -> P<SymbolTable> {
+        match self {
+            TableOwner::Locals(node) => node.locals(),
+            TableOwner::Members(symbol) => symbol.members(),
+            TableOwner::Exports(symbol) => symbol.exports(),
+        }
+        .unwrap()
+    }
+
+    fn set_table(self, table: P<SymbolTable>) {
+        match self {
+            TableOwner::Locals(node) => node.locals_container_data().unwrap().locals.set(Some(table)),
+            TableOwner::Members(symbol) => symbol.set_members(Some(table)),
+            TableOwner::Exports(symbol) => symbol.set_exports(Some(table)),
+        }
+    }
 }
 
 pub struct ActiveLabel {
@@ -134,6 +165,7 @@ fn bind_source_file_worker(file: P<SourceFile>) {
         b.bind(file.as_node());
         b.bind_deferred_expando_assignments();
         b.write_flow_edge_runs();
+        b.freeze_symbol_tables();
         file.set_bind_diagnostics(&b.bind_diagnostics);
         file.symbol_count.set(b.symbol_count);
     });
@@ -176,6 +208,53 @@ impl Binder {
             shared_flow_start: None,
             shared_start_depth: 0,
             shared_start_nodes: Vec::new(),
+            symbol_tables: std::cell::RefCell::new(Vec::new()),
+        }
+    }
+
+    /// `ast::get_exports`, recording a table it creates.
+    fn exports_table(&self, symbol: P<Symbol>) -> P<SymbolTable> {
+        symbol.exports().unwrap_or_else(|| self.new_table(TableOwner::Exports(symbol)))
+    }
+
+    /// `ast::get_members`, recording a table it creates.
+    fn members_table(&self, symbol: P<Symbol>) -> P<SymbolTable> {
+        symbol.members().unwrap_or_else(|| self.new_table(TableOwner::Members(symbol)))
+    }
+
+    /// `ast::get_locals`, recording a table it creates.
+    fn locals_table(&self, container: P<Node>) -> P<SymbolTable> {
+        container.locals().unwrap_or_else(|| self.new_table(TableOwner::Locals(container)))
+    }
+
+    /// A new table for `owner` (in a block an earlier file's replaced table gave back, if there is one), recorded
+    /// for `freeze_symbol_tables`.
+    fn new_table(&self, owner: TableOwner) -> P<SymbolTable> {
+        let table = SymbolTable::new_recycled();
+        owner.set_table(table);
+        self.symbol_tables.borrow_mut().push(owner);
+        table
+    }
+
+    /// Not in Go: replaces the tables this binder made by frozen ones (`ast::freeze_symbol_tables`) and gives the old
+    /// ones back to the arena, where the next file's tables reuse them.
+    fn freeze_symbol_tables(&mut self) {
+        let owners = std::mem::take(self.symbol_tables.get_mut());
+        let tables: Vec<P<SymbolTable>> = owners.iter().map(|o| o.table()).collect();
+        let frozen = ast::freeze_symbol_tables(&tables);
+        let mut released: Vec<P<SymbolTable>> = Vec::new();
+        for ((owner, table), frozen) in owners.into_iter().zip(tables).zip(frozen) {
+            if let Some(frozen) = frozen {
+                owner.set_table(frozen);
+                released.push(table);
+            }
+        }
+        released.sort_unstable_by_key(|t| t.key());
+        released.dedup();
+        for table in released {
+            // SAFETY: the owners of the table now point at its replacement, and nothing else holds a binder table
+            // once its file is bound.
+            unsafe { ast::release_symbol_table(table) };
         }
     }
 
@@ -473,9 +552,9 @@ impl Binder {
             ast::get_combined_modifier_flags(node).intersects(ModifierFlags::Export) || ast::is_implicitly_exported_jsdoc_declaration(node);
         if symbol_flags.intersects(SymbolFlags::Alias) {
             if node.kind() == Kind::ExportSpecifier || (node.kind() == Kind::ImportEqualsDeclaration && has_export_modifier) {
-                return self.declare_symbol(ast::get_exports(container.symbol().unwrap()), container.symbol(), node, symbol_flags, symbol_excludes);
+                return self.declare_symbol(self.exports_table(container.symbol().unwrap()), container.symbol(), node, symbol_flags, symbol_excludes);
             }
-            return self.declare_symbol(ast::get_locals(container), None /*parent*/, node, symbol_flags, symbol_excludes);
+            return self.declare_symbol(self.locals_table(container), None /*parent*/, node, symbol_flags, symbol_excludes);
         }
         // Exported module members are given 2 symbols: A local symbol that is classified with an ExportValue flag,
         // and an associated export symbol with all the correct flags set on it. There are 2 main reasons:
@@ -496,33 +575,33 @@ impl Binder {
             if !ast::is_locals_container(container)
                 || (ast::has_syntactic_modifier(node, ModifierFlags::Default) && self.get_declaration_name(node) == ast::InternalSymbolNameMissing)
             {
-                return self.declare_symbol(ast::get_exports(container.symbol().unwrap()), container.symbol(), node, symbol_flags, symbol_excludes);
+                return self.declare_symbol(self.exports_table(container.symbol().unwrap()), container.symbol(), node, symbol_flags, symbol_excludes);
                 // No local symbol for an unnamed default!
             }
             let export_kind = if symbol_flags.intersects(SymbolFlags::Value) { SymbolFlags::ExportValue } else { SymbolFlags::None };
-            let local = self.declare_symbol(ast::get_locals(container), None /*parent*/, node, export_kind, symbol_excludes);
+            let local = self.declare_symbol(self.locals_table(container), None /*parent*/, node, export_kind, symbol_excludes);
             let export_symbol =
-                self.declare_symbol(ast::get_exports(container.symbol().unwrap()), container.symbol(), node, symbol_flags, symbol_excludes);
+                self.declare_symbol(self.exports_table(container.symbol().unwrap()), container.symbol(), node, symbol_flags, symbol_excludes);
             local.set_export_symbol(Some(export_symbol));
             node.exportable_data().unwrap().local_symbol.set(Some(local));
             return local;
         }
-        self.declare_symbol(ast::get_locals(container), None /*parent*/, node, symbol_flags, symbol_excludes)
+        self.declare_symbol(self.locals_table(container), None /*parent*/, node, symbol_flags, symbol_excludes)
     }
 
     pub(crate) fn declare_class_member(&mut self, node: P<Node>, symbol_flags: SymbolFlags, symbol_excludes: SymbolFlags) -> P<Symbol> {
         let container_symbol = self.container().symbol();
         if ast::is_static(node) {
-            return self.declare_symbol(ast::get_exports(container_symbol.unwrap()), container_symbol, node, symbol_flags, symbol_excludes);
+            return self.declare_symbol(self.exports_table(container_symbol.unwrap()), container_symbol, node, symbol_flags, symbol_excludes);
         }
-        self.declare_symbol(ast::get_members(container_symbol.unwrap()), container_symbol, node, symbol_flags, symbol_excludes)
+        self.declare_symbol(self.members_table(container_symbol.unwrap()), container_symbol, node, symbol_flags, symbol_excludes)
     }
 
     pub(crate) fn declare_source_file_member(&mut self, node: P<Node>, symbol_flags: SymbolFlags, symbol_excludes: SymbolFlags) -> P<Symbol> {
         if ast::is_external_module(self.file) {
             return self.declare_module_member(node, symbol_flags, symbol_excludes);
         }
-        self.declare_symbol(ast::get_locals(self.file.as_node()), None /*parent*/, node, symbol_flags, symbol_excludes)
+        self.declare_symbol(self.locals_table(self.file.as_node()), None /*parent*/, node, symbol_flags, symbol_excludes)
     }
 
     pub(crate) fn declare_symbol_and_add_to_symbol_table(
@@ -537,10 +616,10 @@ impl Binder {
             Kind::SourceFile => self.declare_source_file_member(node, symbol_flags, symbol_excludes),
             Kind::ClassExpression | Kind::ClassDeclaration => self.declare_class_member(node, symbol_flags, symbol_excludes),
             Kind::EnumDeclaration => {
-                self.declare_symbol(ast::get_exports(container.symbol().unwrap()), container.symbol(), node, symbol_flags, symbol_excludes)
+                self.declare_symbol(self.exports_table(container.symbol().unwrap()), container.symbol(), node, symbol_flags, symbol_excludes)
             }
             Kind::TypeLiteral | Kind::ObjectLiteralExpression | Kind::InterfaceDeclaration | Kind::JsxAttributes => {
-                self.declare_symbol(ast::get_members(container.symbol().unwrap()), container.symbol(), node, symbol_flags, symbol_excludes)
+                self.declare_symbol(self.members_table(container.symbol().unwrap()), container.symbol(), node, symbol_flags, symbol_excludes)
             }
             Kind::FunctionType
             | Kind::ConstructorType
@@ -558,7 +637,7 @@ impl Binder {
             | Kind::ClassStaticBlockDeclaration
             | Kind::TypeAliasDeclaration
             | Kind::JSTypeAliasDeclaration
-            | Kind::MappedType => self.declare_symbol(ast::get_locals(container), None /*parent*/, node, symbol_flags, symbol_excludes),
+            | Kind::MappedType => self.declare_symbol(self.locals_table(container), None /*parent*/, node, symbol_flags, symbol_excludes),
             _ => panic!("Unhandled case in declareSymbolAndAddToSymbolTable"),
         }
     }
@@ -1020,7 +1099,7 @@ impl Binder {
             let file_node = self.file.as_node();
             let original_symbol = file_node.symbol();
             self.declare_symbol(
-                ast::get_exports(original_symbol.unwrap()),
+                self.exports_table(original_symbol.unwrap()),
                 original_symbol,
                 file_node,
                 SymbolFlags::Property,
@@ -1137,7 +1216,7 @@ impl Binder {
                 if let Some(export_clause) = decl.export_clause() {
                     if ast::is_namespace_export(export_clause) {
                         self.declare_symbol(
-                            ast::get_exports(container_symbol),
+                            self.exports_table(container_symbol),
                             Some(container_symbol),
                             export_clause,
                             SymbolFlags::Alias,
@@ -1146,7 +1225,7 @@ impl Binder {
                     }
                 } else {
                     // All export * declarations are collected in an __export symbol
-                    self.declare_symbol(ast::get_exports(container_symbol), Some(container_symbol), node, SymbolFlags::ExportStar, SymbolFlags::None);
+                    self.declare_symbol(self.exports_table(container_symbol), Some(container_symbol), node, SymbolFlags::ExportStar, SymbolFlags::None);
                 }
             }
         }
@@ -1162,7 +1241,7 @@ impl Binder {
             // If there is an `export default x;` alias declaration, can't `export default` anything else.
             // (In contrast, you can still have `export default function f() {}` and `export default interface I {}`.)
             let flags = if ast::expression_is_alias(node.expression().unwrap()) { SymbolFlags::Alias } else { SymbolFlags::Property };
-            let symbol = self.declare_symbol(ast::get_exports(container.symbol().unwrap()), container.symbol(), node, flags, SymbolFlags::All);
+            let symbol = self.declare_symbol(self.exports_table(container.symbol().unwrap()), container.symbol(), node, flags, SymbolFlags::All);
             if node.as_export_assignment().is_export_equals() {
                 // Ensure export assignments have a ValueDeclaration set.
                 set_value_declaration(symbol, node);
@@ -1270,12 +1349,12 @@ impl Binder {
         // module might have an exported variable called 'prototype'.  We can't allow that as
         // that would clash with the built-in 'prototype' for the class.
         let prototype_symbol = self.new_symbol(SymbolFlags::Property | SymbolFlags::Prototype, "prototype");
-        let symbol_export = (*ast::get_exports(symbol)).get(prototype_symbol.name.get());
+        let symbol_export = (*self.exports_table(symbol)).get(prototype_symbol.name.get());
         if let Some(symbol_export) = symbol_export {
             let first_declaration = symbol_export.declarations()[0];
             self.error_on_node(first_declaration, &diagnostics::Duplicate_identifier_0, &[&ast::symbol_name(prototype_symbol)]);
         }
-        ast::get_exports(symbol).set(prototype_symbol.name.get(), prototype_symbol);
+        self.exports_table(symbol).set(prototype_symbol.name.get(), prototype_symbol);
         prototype_symbol.set_parent(Some(symbol));
     }
 
@@ -1305,13 +1384,12 @@ impl Binder {
         self.add_declaration_to_symbol(symbol, node, SymbolFlags::Signature);
         let type_literal_symbol = self.new_symbol(SymbolFlags::TypeLiteral, ast::InternalSymbolNameType);
         self.add_declaration_to_symbol(type_literal_symbol, node, SymbolFlags::TypeLiteral);
-        let members = SymbolTable::new();
+        let members = self.members_table(type_literal_symbol);
         members.set(symbol.name.get(), symbol);
-        type_literal_symbol.set_members(Some(members));
     }
 
     pub(crate) fn add_late_bound_assignment_declaration_to_symbol(&mut self, node: P<Node>, symbol: P<Symbol>) {
-        let exports = ast::get_exports(symbol);
+        let exports = self.exports_table(symbol);
         let assignment_symbol = match (*exports).get(ast::InternalSymbolNameAssignmentDeclaration) {
             Some(s) => s,
             None => {
@@ -1328,7 +1406,7 @@ impl Binder {
             let container = self.file.as_node();
             let flags =
                 if ast::expression_is_alias(node.as_binary_expression().right()) { SymbolFlags::Alias } else { SymbolFlags::Property };
-            let symbol = self.declare_symbol(ast::get_exports(container.symbol().unwrap()), container.symbol(), node, flags, SymbolFlags::None);
+            let symbol = self.declare_symbol(self.exports_table(container.symbol().unwrap()), container.symbol(), node, flags, SymbolFlags::None);
             set_value_declaration(symbol, node);
         }
     }
@@ -1361,7 +1439,7 @@ impl Binder {
         if let Some(export_equals) = (*module_exports).get(ast::InternalSymbolNameExportEquals) {
             for symbol in module_exports.values() {
                 if symbol.name.get() != ast::InternalSymbolNameExportEquals && symbol.flags.get().intersects(SymbolFlags::Type | SymbolFlags::Namespace) {
-                    ast::get_exports(export_equals).set(symbol.name.get(), symbol);
+                    self.exports_table(export_equals).set(symbol.name.get(), symbol);
                     export_equals.flags.set(export_equals.flags.get() | SymbolFlags::NamespaceModule);
                 }
             }
@@ -1380,7 +1458,7 @@ impl Binder {
                 self.add_late_bound_assignment_declaration_to_symbol(node, symbol);
             } else {
                 // We declare expandos only when there are no non-expando declarations for that name.
-                let exports = ast::get_exports(symbol);
+                let exports = self.exports_table(symbol);
                 let existing = (*exports).get(self.get_declaration_name(node));
                 if existing.is_none() || existing.unwrap().flags.get().intersects(SymbolFlags::Assignment) {
                     self.declare_symbol(exports, Some(symbol), node, SymbolFlags::Property | SymbolFlags::Assignment, SymbolFlags::PropertyExcludes);
@@ -1408,7 +1486,7 @@ impl Binder {
                 SymbolFlags::FunctionScopedVariable
             };
             self.declare_symbol(
-                ast::get_exports(container.symbol().unwrap()),
+                self.exports_table(container.symbol().unwrap()),
                 container.symbol(),
                 node,
                 flags,
@@ -1496,9 +1574,9 @@ impl Binder {
                 // this.property assignment in class member -- bind to the containing class
                 class_symbol = this_container.parent().unwrap().symbol();
                 if ast::is_static(this_container) {
-                    symbol_table = Some(ast::get_exports(class_symbol.unwrap()));
+                    symbol_table = Some(self.exports_table(class_symbol.unwrap()));
                 } else {
-                    symbol_table = Some(ast::get_members(class_symbol.unwrap()));
+                    symbol_table = Some(self.members_table(class_symbol.unwrap()));
                 }
             }
             _ => {}
@@ -1563,7 +1641,7 @@ impl Binder {
             let class_declaration = node.parent().unwrap().parent().unwrap();
             let flags = SymbolFlags::Property | if decl.question_token().is_some() { SymbolFlags::Optional } else { SymbolFlags::None };
             self.declare_symbol(
-                ast::get_members(class_declaration.symbol().unwrap()),
+                self.members_table(class_declaration.symbol().unwrap()),
                 class_declaration.symbol(),
                 node,
                 flags,
@@ -1609,7 +1687,7 @@ impl Binder {
                 self.declare_module_member(node, symbol_flags, symbol_excludes);
             }
             _ => {
-                self.declare_symbol(ast::get_locals(block_scope_container), None /*parent*/, node, symbol_flags, symbol_excludes);
+                self.declare_symbol(self.locals_table(block_scope_container), None /*parent*/, node, symbol_flags, symbol_excludes);
             }
         }
     }
@@ -1618,7 +1696,7 @@ impl Binder {
         if node.parent().unwrap().kind() == Kind::InferType {
             let container = self.get_infer_type_container(node.parent().unwrap());
             if let Some(container) = container {
-                self.declare_symbol(ast::get_locals(container), None /*parent*/, node, SymbolFlags::TypeParameter, SymbolFlags::TypeParameterExcludes);
+                self.declare_symbol(self.locals_table(container), None /*parent*/, node, SymbolFlags::TypeParameter, SymbolFlags::TypeParameterExcludes);
             } else {
                 let name = self.get_declaration_name(node);
                 self.bind_anonymous_declaration(node, SymbolFlags::TypeParameter, name);
@@ -2024,7 +2102,7 @@ impl Binder {
     }
 
     pub(crate) fn declare_common_js_variable(&mut self, name: &'static str) {
-        let locals = ast::get_locals(self.file.as_node());
+        let locals = self.locals_table(self.file.as_node());
         if (*locals).get(name).is_none() {
             let symbol = self.new_symbol(SymbolFlags::FunctionScopedVariable | SymbolFlags::ModuleExports, name);
             symbol.set_declarations(&[self.file.as_node()]);
@@ -2034,9 +2112,8 @@ impl Binder {
                 exports_property.set_declarations_static(symbol.declarations());
                 exports_property.set_value_declaration(symbol.value_declaration());
                 exports_property.set_parent(Some(symbol));
-                let members = SymbolTable::new();
+                let members = self.members_table(symbol);
                 members.set("exports", exports_property);
-                symbol.set_members(Some(members));
             }
             locals.set(name, symbol);
         }

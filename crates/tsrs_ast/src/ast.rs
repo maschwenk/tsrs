@@ -418,6 +418,7 @@ pub fn census_layouts() {
         crate::flow::census_layout();
         crate::identifier::census_layout();
         crate::symbol::census_layout();
+        crate::symbol::census_layout_frozen();
         crate::diagnostic::census_layout();
     });
 }
@@ -2697,6 +2698,56 @@ mod tests {
         small.set(names[4], syms[4]);
         small.delete("alias");
         assert_eq!(small.entries(), vec![(names[4], syms[4])]);
+    }
+
+    // A frozen table answers like the table it replaced (order, hits, misses, empty; with and without the wide
+    // filter), a table with a hash index or an odd key stays mutable, and a clone of a frozen table is mutable.
+    #[test]
+    fn symbol_table_freeze() {
+        let names: Vec<&'static str> = (0..20).map(|i| &*Box::leak(format!("f{i}").into_boxed_str())).collect();
+        let syms: Vec<P<Symbol>> = names.iter().map(|n| Symbol::new(SymbolFlags::Property, n)).collect();
+        let small = SymbolTable::new();
+        for i in [4, 1, 3] {
+            small.set(names[i], syms[i]);
+        }
+        let empty = SymbolTable::new();
+        let large = SymbolTable::new();
+        for i in 0..20 {
+            large.set(names[i], syms[i]);
+        }
+        let odd = SymbolTable::new();
+        odd.set("alias", syms[0]);
+        let six = SymbolTable::new();
+        for i in 10..16 {
+            six.set(names[i], syms[i]);
+        }
+        let frozen = freeze_symbol_tables(&[small, empty, large, odd, six]);
+        let (f, e, w) = (frozen[0].unwrap(), frozen[1].unwrap(), frozen[4].unwrap());
+        assert_eq!((frozen[2], frozen[3]), (None, None));
+        assert_eq!(w.keys(), names[10..16].to_vec());
+        for i in 0..20 {
+            assert_eq!(w.lookup(names[i]), (10..16).contains(&i).then(|| syms[i]));
+        }
+        let w2 = w.clone_table();
+        w2.delete(names[12]);
+        assert_eq!((w2.len(), w2.lookup(names[15]), w2.lookup(names[12]), w.len()), (5, Some(syms[15]), None, 6));
+        assert_eq!(f.keys(), vec![names[4], names[1], names[3]]);
+        assert_eq!(f.entries(), small.entries());
+        assert_eq!((f.len(), f.is_empty(), e.len(), e.is_empty()), (3, false, 0, true));
+        for i in 0..20 {
+            let expected = [1, 3, 4].contains(&i).then(|| syms[i]);
+            assert_eq!(f.lookup(names[i]), expected);
+            assert_eq!(f.has(names[i]), expected.is_some());
+            assert_eq!(e.lookup(names[i]), None);
+        }
+        assert_eq!(f.lookup_entry(names[3]), Some((names[3], syms[3])));
+        let copy = f.clone_table();
+        copy.set(names[0], syms[0]);
+        assert_eq!(copy.keys(), vec![names[4], names[1], names[3], names[0]]);
+        assert_eq!(f.len(), 3);
+        // SAFETY: nothing else points at the replaced table.
+        unsafe { release_symbol_table(small) };
+        assert_eq!(f.lookup(names[4]), Some(syms[4]));
     }
 
     #[test]
