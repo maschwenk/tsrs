@@ -78,7 +78,16 @@ jobs:
         id: ts
         run: echo "commit=$(node npm/build.mjs --print-typescript-commit)" >> "$GITHUB_OUTPUT"
 
+      # The testdata checkout (~5 s) is cached per TypeScript commit; the sparse checkout below runs only on a miss.
+      - name: Restore TypeScript testdata
+        id: ts-ref
+        uses: actions/cache/restore@v4
+        with:
+          path: ts-ref/tsc/testdata
+          key: ts-ref-testdata-${{ steps.ts.outputs.commit }}
+
       - name: Check out TypeScript testdata
+        if: steps.ts-ref.outputs.cache-hit != 'true'
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           repository: microsoft/TypeScript
@@ -87,6 +96,13 @@ jobs:
           fetch-depth: 1
           sparse-checkout: tsc/testdata
           persist-credentials: false
+
+      - name: Save TypeScript testdata
+        if: steps.ts-ref.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ts-ref/tsc/testdata
+          key: ${{ steps.ts-ref.outputs.cache-primary-key }}
 
       - name: Read the pinned Rust toolchain (rust-toolchain.toml)
         id: rust
