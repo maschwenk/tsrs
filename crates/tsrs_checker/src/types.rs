@@ -2145,29 +2145,40 @@ embeds!(TypeReference, object_type, ObjectType);
 /// Go's `instantiations` map of a generic class, interface or tuple target (`map[CacheHashKey]*Type`, keyed by
 /// `getTypeListKey(typeArguments)`). Every value is a non-deferred reference whose `resolved_type_arguments` are
 /// exactly the list its key was made from (the target itself for its type parameters), and they never change, so
-/// the table stores only the references and compares type-argument lists: one word per slot instead of the 128-bit
-/// key plus the value, and a lookup hashes the type ids instead of xxh3 over the key bytes. Exact list equality maps
-/// lists to references like Go's collision-free 128-bit key does. Nil until `make()`, like the Go map.
+/// the table stores only the references, each with a 32-bit hash of its argument handles, and compares type-argument
+/// lists: 8 bytes per slot (compressed pointers) instead of the 128-bit key plus the value, and a lookup hashes the
+/// handles instead of xxh3 over the key bytes. The stored hash lets a growing table rehash without loading every
+/// reference and its arguments (the largest DRAM-miss site at 32 checkers, notes/perf-memory-traffic-32.md) and lets
+/// a probe skip most references whose hash differs. Exact list equality maps lists to references like Go's
+/// collision-free 128-bit key does. Never iterated, so the hash only places slots. Nil until `make()`, like the Go map.
 #[derive(Default)]
-pub struct ReferenceInstantiations(Cell<Option<P<RefCell<hashbrown::HashTable<P<Type>>>>>>);
+pub struct ReferenceInstantiations(Cell<Option<P<RefCell<hashbrown::HashTable<(P<Type>, u32)>>>>>);
 
 impl ReferenceInstantiations {
-    /// Heap census: the table's slots (4 bytes each).
+    /// Heap census: the table's slots (reference and hash).
     #[cfg(feature = "assignment-stats")]
     pub(crate) fn heap_stat(&self) -> Option<crate::heapcensus::HeapStat> {
         let cell = self.0.get()?;
         let table = cell.borrow();
-        Some(crate::heapcensus::HeapStat::table(table.len(), table.capacity(), std::mem::size_of::<P<Type>>()))
+        Some(crate::heapcensus::HeapStat::table(table.len(), table.capacity(), std::mem::size_of::<(P<Type>, u32)>()))
     }
 
-    fn hash(type_arguments: &[P<Type>]) -> u64 {
-        use std::hash::Hasher;
+    /// A 32-bit hash of the argument handles (not their type ids, which would load every argument type).
+    fn hash32(type_arguments: &[P<Type>]) -> u32 {
+        use std::hash::{Hash, Hasher};
         let mut h = rustc_hash::FxHasher::default();
         h.write_usize(type_arguments.len());
         for t in type_arguments {
-            h.write_u32(t.id.0);
+            t.hash(&mut h);
         }
-        h.finish()
+        let h = h.finish();
+        (h ^ (h >> 32)) as u32
+    }
+
+    /// The table hash of a stored 32-bit hash: spread over 64 bits, since hashbrown takes its 7-bit tag from the top.
+    #[inline]
+    fn table_hash(h: u32) -> u64 {
+        u64::from(h).wrapping_mul(0x9E37_79B9_7F4A_7C15)
     }
 
     fn arguments_of(reference: P<Type>) -> &'static [P<Type>] {
@@ -2183,7 +2194,8 @@ impl ReferenceInstantiations {
     pub fn get(&self, type_arguments: &[P<Type>]) -> Option<P<Type>> {
         let cell = self.0.get()?;
         let table = cell.borrow();
-        table.find(Self::hash(type_arguments), |&t| Self::arguments_of(t) == type_arguments).copied()
+        let h = Self::hash32(type_arguments);
+        table.find(Self::table_hash(h), |&(t, th)| th == h && Self::arguments_of(t) == type_arguments).map(|&(t, _)| t)
     }
 
     /// Go `m[getTypeListKey(reference's type arguments)] = reference` for a key that is not present yet.
@@ -2194,8 +2206,10 @@ impl ReferenceInstantiations {
         let cell = self.0.get().unwrap();
         let mut table = cell.borrow_mut();
         let arguments = Self::arguments_of(reference);
-        debug_assert!(table.find(Self::hash(arguments), |&t| Self::arguments_of(t) == arguments).is_none());
-        table.insert_unique(Self::hash(arguments), reference, |&t| Self::hash(Self::arguments_of(t)));
+        let h = Self::hash32(arguments);
+        debug_assert!(table.find(Self::table_hash(h), |&(t, th)| th == h && Self::arguments_of(t) == arguments).is_none());
+        // The stored hash: growing the table rehashes from the slots alone, without loading the references.
+        table.insert_unique(Self::table_hash(h), (reference, h), |&(_, th)| Self::table_hash(th));
     }
 }
 
