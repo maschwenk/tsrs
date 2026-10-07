@@ -48,7 +48,11 @@ it wrote.
   - read no transient state: the flow memo's taint frame around it (`flow_frame_begin` / a new
     `FlowMemo::end_transparent` that leaves the parent's registers as if the frame had not been begun) saw no
     in-progress or circular resolution older than the walk, no `resolvingSignature` and no `flowTypeCache` entry;
-  - ran with no language-service inference blocking (`skipDirectInferenceNodes` empty).
+  - ran with no language-service inference blocking (`skipDirectInferenceNodes` empty);
+  - did not start inside an instantiation: there it could take instantiations from the active mappers' caches
+    without counting them, and the same walk made later outside it would count them (the flow memo's frames treat
+    this the same way). Added after the measurements below, from review; on t3code it keeps 2,954 of 9,305 stores
+    and 27,363 of 27,668 hits (one checker, isolated `server.ts` program), so the numbers do not move.
 - **Why a hit is exact:** such a walk read only finished values (caches that only grow, types that never change)
   besides its inputs, so the same inputs walked again take the same path and write the same outcome. A mapper that
   reads the infos' inferred types runs only inside an instantiation, so a walk that consulted one is never stored. A

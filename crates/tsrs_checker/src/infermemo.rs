@@ -18,6 +18,10 @@
 //!   were, added no diagnostic and took no impure union reduction (`union_front_cache.impure`): it read only values
 //!   that were already computed, and computed nothing new (a mapper that reads the infos' inferred types runs only
 //!   inside an instantiation, so such a walk is never stored);
+//! - it did not start inside an instantiation: there it could take instantiations from the active mappers' caches
+//!   without counting them, and the same walk made later outside it would count them (the flow memo's frames treat
+//!   this the same way). A hit inside an instantiation is fine: the stored walk made no instantiation that was not
+//!   already cached for good, so neither does the walk it stands for;
 //! - it read no transient state: the flow memo's taint frame (flowmemo.rs) around it saw no in-progress or circular
 //!   resolution older than the walk, no `resolvingSignature` and no `flowTypeCache` entry;
 //! - the language service is not blocking inference from some nodes (`skipDirectInferenceNodes` is empty);
@@ -238,6 +242,9 @@ impl Checker {
             return;
         }
         n.cleared_inferences.set(false);
+        // Inside an instantiation the walk can take instantiations from the active mappers' caches without counting
+        // them; walked again outside it, it would count them (as for flow memo frames, FLAG_EFFECTS).
+        let in_instantiation = !self.active_mappers.is_empty();
         let before = self.infer_memo_effects();
         let steps_before = self.infer_memo.steps;
         let frame = self.flow_frame_begin();
@@ -245,7 +252,7 @@ impl Checker {
         let (taint, height, flags) = self.flow_memo.end_transparent(frame);
         let steps = self.infer_memo.steps.wrapping_sub(steps_before);
         let after = self.infer_memo_effects();
-        let effects = after != before || flags & (crate::flowmemo::FLAG_EFFECTS | crate::flowmemo::FLAG_TYPE_CACHE) != 0;
+        let effects = in_instantiation || after != before || flags & (crate::flowmemo::FLAG_EFFECTS | crate::flowmemo::FLAG_TYPE_CACHE) != 0;
         let tainted = !taint.is_pure() || self.skip_direct_inference_nodes.len() != 0;
         if steps < min_steps() || effects || tainted {
             count(stats && steps >= min_steps() && after.created != before.created, &NOT_STORED_CREATED, 1);
