@@ -47,9 +47,9 @@ PY
        sleep 0.01
      done
      printf '%s\n' "$best" > "$PROBE_OUT/$tag-smaps-peak.txt")
-    (cd "$cwd" && "$PERF" record -F 1999 -e cycles:u --call-graph dwarf,8192 -o "$root/dw-$tag.data" -- \
+    (cd "$cwd" && "$PERF" record -F 499 -e cycles:u --call-graph dwarf,4096 -o "$root/dw-$tag.data" -- \
       "$TSRS_BIN" "${flags[@]}" --checkers "$k" > /dev/null 2>&1) || true
-    "$PERF" script -i "$root/dw-$tag.data" -F ip,sym,dso 2>/dev/null | python3 tools/perf/callers.py \
+    "$PERF" script --no-inline -i "$root/dw-$tag.data" -F ip,sym,dso 2>/dev/null | python3 tools/perf/callers.py \
       > "$PROBE_OUT/$tag-callers.txt" 2>&1 || true
   done
 done
