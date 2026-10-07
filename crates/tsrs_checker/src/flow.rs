@@ -352,15 +352,15 @@ impl Checker {
         } else if flags.intersects(FlowFlags::SwitchClause) {
             t = self.get_type_at_switch_clause(f, flow);
         } else if flags.intersects(FlowFlags::BranchLabel) {
-            let antecedents = get_branch_label_antecedents(flow, &f.reduce_labels.borrow()).unwrap();
-            if antecedents.next.get().is_none() {
-                return FlowStep::Next(antecedents.flow);
+            let antecedents = get_branch_label_antecedents(flow, &f.reduce_labels.borrow());
+            if antecedents.len() == 1 {
+                return FlowStep::Next(antecedents[0]);
             }
             t = self.get_type_at_flow_branch_label(f, flow, antecedents);
         } else if flags.intersects(FlowFlags::LoopLabel) {
-            let antecedents = flow.antecedents().unwrap();
-            if antecedents.next.get().is_none() {
-                return FlowStep::Next(antecedents.flow);
+            let antecedents = flow.antecedents();
+            if antecedents.len() == 1 {
+                return FlowStep::Next(antecedents[0]);
             }
             t = self.get_type_at_flow_loop_label(f, flow);
         } else if flags.intersects(FlowFlags::ArrayMutation) {
@@ -409,7 +409,7 @@ impl Checker {
     /// is the frame's answer (the nodes iterated past pass the type on).
     fn flow_memo_at_node(&mut self, f: P<FlowState>, entry_flow: P<FlowNode>, flow: P<FlowNode>, flags: FlowFlags, key: u128, entry_depth: i32) -> Option<(MemoHit, bool)> {
         let ends_iteration = flags.intersects(FlowFlags::Condition | FlowFlags::SwitchClause)
-            || flags.intersects(FlowFlags::BranchLabel | FlowFlags::LoopLabel) && flow.antecedents().is_some_and(|a| a.next.get().is_some());
+            || flags.intersects(FlowFlags::BranchLabel | FlowFlags::LoopLabel) && flow.antecedents().len() > 1;
         if !ends_iteration && flow != entry_flow {
             if !is_flow_memo_checkpoint(flow) {
                 return None;
@@ -534,13 +534,13 @@ impl Checker {
 }
 
 // flow.go:208
-pub(crate) fn get_branch_label_antecedents(flow: P<FlowNode>, reduce_labels: &[P<ast::FlowReduceLabelData>]) -> Option<P<FlowList>> {
+pub(crate) fn get_branch_label_antecedents(flow: P<FlowNode>, reduce_labels: &[P<ast::FlowReduceLabelData>]) -> &'static [P<FlowNode>] {
     let mut i = reduce_labels.len();
     while i != 0 {
         i -= 1;
         let data = reduce_labels[i];
         if data.target == flow {
-            return data.antecedents;
+            return data.antecedents();
         }
     }
     flow.antecedents()
@@ -1725,15 +1725,12 @@ impl Checker {
     }
 
     // flow.go:1253
-    pub(crate) fn get_type_at_flow_branch_label(&mut self, f: P<FlowState>, _flow: P<FlowNode>, antecedents: P<FlowList>) -> FlowType {
+    pub(crate) fn get_type_at_flow_branch_label(&mut self, f: P<FlowState>, _flow: P<FlowNode>, antecedents: &'static [P<FlowNode>]) -> FlowType {
         let antecedent_start = self.antecedent_types.len();
         let mut subtype_reduction = false;
         let mut seen_incomplete = false;
         let mut bypass_flow: Option<P<FlowNode>> = None;
-        let mut next = Some(antecedents);
-        while let Some(list) = next {
-            next = list.next.get();
-            let antecedent = list.flow;
+        for &antecedent in antecedents {
             if bypass_flow.is_none() && antecedent.flags().intersects(FlowFlags::SwitchClause) && antecedent.node().unwrap().as_flow_switch_clause_data().is_empty() {
                 // The antecedent is the bypass branch of a potentially exhaustive switch statement.
                 bypass_flow = Some(antecedent);
@@ -1862,14 +1859,12 @@ impl Checker {
         let mut antecedent_types: Vec<P<Type>> = Vec::with_capacity(4);
         let mut subtype_reduction = false;
         let mut first_antecedent_type = FlowType::default();
-        let mut next = flow.antecedents();
-        while let Some(list) = next {
-            next = list.next.get();
+        for &antecedent in flow.antecedents() {
             let flow_type: FlowType;
             if first_antecedent_type.is_nil() {
                 // The first antecedent of a loop junction is always the non-looping control
                 // flow path that leads to the top.
-                first_antecedent_type = self.get_type_at_flow_node(f, list.flow);
+                first_antecedent_type = self.get_type_at_flow_node(f, antecedent);
                 if f.memo_aborted.get() {
                     return first_antecedent_type;
                 }
@@ -1880,7 +1875,7 @@ impl Checker {
                 let serial = self.flow_memo.next_serial();
                 self.flow_loop_stack.push(FlowLoopInfo { key, types: antecedent_types.clone(), serial });
                 let save_flow_type_cache = self.take_flow_type_cache();
-                flow_type = self.get_type_at_flow_node(f, list.flow);
+                flow_type = self.get_type_at_flow_node(f, antecedent);
                 self.restore_flow_type_cache(save_flow_type_cache);
                 self.flow_loop_stack.pop();
                 if f.memo_aborted.get() {
@@ -3273,21 +3268,19 @@ impl Checker {
                 flow = flow.antecedent().unwrap();
             } else if flags.intersects(FlowFlags::BranchLabel) {
                 // A branching point is reachable if any branch is reachable.
-                let mut next = get_branch_label_antecedents(flow, &f.reduce_labels.borrow());
-                while let Some(list) = next {
-                    next = list.next.get();
-                    if self.is_reachable_flow_node_worker(f, list.flow, false /*noCacheCheck*/) {
+                let antecedents = get_branch_label_antecedents(flow, &f.reduce_labels.borrow());
+                for &antecedent in antecedents {
+                    if self.is_reachable_flow_node_worker(f, antecedent, false /*noCacheCheck*/) {
                         return true;
                     }
                 }
                 return false;
             } else if flags.intersects(FlowFlags::LoopLabel) {
-                let antecedents = match flow.antecedents() {
-                    Some(antecedents) => antecedents,
-                    None => return false,
+                let Some(&first) = flow.antecedents().first() else {
+                    return false;
                 };
                 // A loop is reachable if the control flow path that leads to the top is reachable.
-                flow = antecedents.flow;
+                flow = first;
             } else if flags.intersects(FlowFlags::SwitchClause) {
                 // The control flow path representing an unmatched value in a switch statement with
                 // no default clause is unreachable if the switch statement is exhaustive.
@@ -3357,17 +3350,16 @@ impl Checker {
                 }
                 flow = flow.antecedent().unwrap();
             } else if flags.intersects(FlowFlags::BranchLabel) {
-                let mut next = get_branch_label_antecedents(flow, &f.reduce_labels.borrow());
-                while let Some(list) = next {
-                    next = list.next.get();
-                    if !self.is_post_super_flow_node_worker(f, list.flow, false /*noCacheCheck*/) {
+                let antecedents = get_branch_label_antecedents(flow, &f.reduce_labels.borrow());
+                for &antecedent in antecedents {
+                    if !self.is_post_super_flow_node_worker(f, antecedent, false /*noCacheCheck*/) {
                         return false;
                     }
                 }
                 return true;
             } else if flags.intersects(FlowFlags::LoopLabel) {
                 // A loop is post-super if the control flow path that leads to the top is post-super.
-                flow = flow.antecedents().unwrap().flow;
+                flow = flow.antecedents()[0];
             } else if flags.intersects(FlowFlags::ReduceLabel) {
                 f.reduce_labels.borrow_mut().push(flow.node().unwrap().as_flow_reduce_label_data_p());
                 let result = self.is_post_super_flow_node_worker(f, flow.antecedent().unwrap(), false /*noCacheCheck*/);
