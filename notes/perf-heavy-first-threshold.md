@@ -90,7 +90,28 @@ matter are the ones the first two probes did not run; see section 5.
 
 ## 5. Linux at the tail-prone counts
 
-(Probe 7l4nj0j464: 10, 11, 13, 14, 15, 17, 18, 19, 22 and 28 checkers at 100 and 200; filled in below.)
+Probe 7l4nj0j464, same setup as section 4, the counts the first two probes skipped. Medians of 3: check s / user CPU s /
+instructions G / slowest checker over mean checker.
+
+| checkers | 100 (was) | 200 (now) | check |
+| --- | --- | --- | --- |
+| 10 | 1.229 / 17.8 / 152.4 / 1.00 | 1.268 / 18.5 / 152.4 / 1.01 | +0.04 |
+| 11 | 1.186 / 18.7 / 155.4 / 1.01 | 1.152 / 19.0 / 155.7 / 1.00 | -0.03 |
+| 13 | 1.187 / 19.7 / 162.2 / **1.22** | 1.002 / 19.7 / 162.8 / 1.00 | **-16%** |
+| 14 | 1.135 / 20.7 / 164.9 / **1.22** | 0.955 / 20.6 / 165.1 / 1.01 | **-16%** |
+| 15 | 0.911 / 21.0 / 168.4 / 1.03 | 0.889 / 21.2 / 168.6 / 1.01 | -0.02 |
+| 17 | 1.081 / 22.1 / 174.5 / **1.37** | 0.824 / 22.3 / 175.1 / 1.01 | **-24%** |
+| 18 | 0.924 / 22.1 / 176.7 / **1.22** | 0.805 / 22.1 / 176.9 / 1.04 | **-13%** |
+| 19 | 1.002 / 23.1 / 180.1 / **1.39** | 0.767 / 23.1 / 180.1 / 1.01 | **-23%** |
+| 22 | 0.658 / 24.5 / 187.7 / 1.01 | 0.675 / 24.6 / 187.7 / 1.01 | +0.02 |
+| 28 | 0.606 / 28.1 / 206.7 / 1.09 | 0.607 / 29.0 / 207.5 / 1.09 | 0 |
+
+The same counts as on the Mac (13, 14, 17, 18, plus 19) have the tail on Linux: the slowest checker runs 22-39% longer
+than the mean, and on main 13 or 17 checkers were no faster than 11. The file-to-checker assignment is deterministic and
+does not depend on the machine, so this is where the file sits in its owner's queue at each count, not scheduling. With
+1/200 every count is balanced (1.00-1.04 apart from the 1.09 at 28 that both columns share: at 28 the file is heavy under
+both rules and the floor is the file itself), instructions are identical to 0.4%, user CPU within the spread, peak RSS
+unchanged, 371 errors in every run.
 
 ## 6. Gates
 
