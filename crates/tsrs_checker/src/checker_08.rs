@@ -1339,13 +1339,11 @@ impl Checker {
                 )]
                 for (id, s) in lookup_table.iter() {
                     // It's not an error if the file with multiple `export *`s with duplicate names exports a member with that name itself
-                    if id == InternalSymbolNameExportEquals || s.exports_with_duplicate.borrow().is_empty() || symbols.lookup(id).is_some() {
+                    if id == InternalSymbolNameExportEquals || s.exports_with_duplicate.is_empty() || symbols.lookup(id).is_some() {
                         continue;
                     }
-                    let nodes = s.exports_with_duplicate.borrow().clone();
-                    let specifier_text = s.specifier_text.borrow().clone();
-                    for node in nodes {
-                        c.add_diagnostic(create_diagnostic_for_node(Some(node), &diagnostics::Module_0_has_already_exported_a_member_named_1_Consider_explicitly_re_exporting_to_resolve_the_ambiguity, &[&specifier_text, id]));
+                    for &node in &s.exports_with_duplicate {
+                        c.add_diagnostic(create_diagnostic_for_node(Some(node), &diagnostics::Module_0_has_already_exported_a_member_named_1_Consider_explicitly_re_exporting_to_resolve_the_ambiguity, &[&s.specifier_text, id]));
                     }
                 }
                 c.extend_export_symbols(symbols, Some(nested_symbols), None, None);
@@ -1404,7 +1402,7 @@ impl Checker {
      * Not passing `lookupTable` and `exportNode` disables this collection, and just extends the tables
      */
     // checker.go:16558
-    pub(crate) fn extend_export_symbols(&mut self, target: P<SymbolTable>, source: Option<P<SymbolTable>>, lookup_table: Option<&mut FxHashMap<String, P<ExportCollision>>>, export_node: Option<P<Node>>) {
+    pub(crate) fn extend_export_symbols(&mut self, target: P<SymbolTable>, source: Option<P<SymbolTable>>, lookup_table: Option<&mut ExportCollisionTable>, export_node: Option<P<Node>>) {
         let Some(source) = source else { return };
         let mut lookup_table = lookup_table;
         for (id, source_symbol) in source.entries() {
@@ -1418,17 +1416,17 @@ impl Checker {
                     if let (Some(lookup_table), Some(export_node)) = (lookup_table.as_deref_mut(), export_node) {
                         lookup_table.insert(
                             id.to_string(),
-                            P::new(ExportCollision {
-                                specifier_text: std::cell::RefCell::new(tsrs_scanner::get_text_of_node(export_node.module_specifier().unwrap())),
-                                ..Default::default()
-                            }),
+                            ExportCollision {
+                                specifier_text: tsrs_scanner::get_text_of_node(export_node.module_specifier().unwrap()),
+                                exports_with_duplicate: Vec::new(),
+                            },
                         );
                     }
                 }
                 Some(target_symbol) => {
                     if lookup_table.is_some() && export_node.is_some() && self.resolve_symbol(target_symbol) != self.resolve_symbol(source_symbol) {
-                        let s = *lookup_table.as_deref_mut().unwrap().get(id).unwrap();
-                        s.exports_with_duplicate.borrow_mut().push(export_node.unwrap());
+                        let s = lookup_table.as_deref_mut().unwrap().get_mut(id).unwrap();
+                        s.exports_with_duplicate.push(export_node.unwrap());
                     }
                 }
             }
