@@ -1,1 +1,0 @@
-{"rustc":17356518491003051113,"features":"","declared_features":"","target":0,"profile":0,"path":0,"deps":[[7844361780047552118,"build_script_build",false,8668727103237548577]],"local":[{"RerunIfChanged":{"output":"release/build/tsrs_cli-bf53874c36b4f2bf/output","paths":["../../Cargo.toml"]}}],"rustflags":[],"config":0,"compile_kind":0}

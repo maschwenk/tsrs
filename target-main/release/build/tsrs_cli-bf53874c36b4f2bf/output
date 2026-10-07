@@ -1,3 +1,0 @@
-cargo:rerun-if-changed=/Users/maxschwenk/Developer/tsrs-claude-cb2-cpu-main/crates/tsrs_cli/../../Cargo.toml
-cargo:rustc-env=TSRS_RELEASE_VERSION=0.6.0-ts7.1.0-dev.20260929
-cargo:rustc-env=TSRS_TYPESCRIPT_COMMIT=b85298b6a81f
