@@ -157,6 +157,7 @@ In place:
 | Differential parser fuzzing | `tools/fuzz/parser.py` mutates conformance files and compares the AST hashes of the Go and Rust oracles (`tools/oracle/ast`); the Depot `Fuzz` workflow runs 200,000 mutants nightly with a date seed. First 320,000 mutants: no divergence, no crash (inputs kept valid UTF-8; invalid UTF-8 is read lossily on purpose) | Ruff (`cargo fuzz` on its parser) |
 | Frame pointers for profiling | `docs/DEBUGGING.md` "Profiling": a `dist` build with `-C force-frame-pointers=yes` for samply / `perf` on Linux (Apple arm64 always keeps them) | Bun |
 | Transparent huge pages for the arena on Linux: large thread-arena chunks 2 MiB-aligned and advised with `MADV_HUGEPAGE` | `notes/linux-x86-round.md`: 2-6% less wall time, 21-48x fewer page faults; `notes/linux-perf.md`: THP off costs 11-12% | mimalloc (advises its own OS memory) |
+| No huge pages for the mimalloc heap (`mimalloc/no_thp`): its threads' partly filled medium and large pages stop holding whole 2 MiB blocks | `notes/mem-thp.md`: -25% / -27% / -33% peak RSS at 4 / 16 / 64 checkers on 64 vCPUs (-9% on 8), +1-3.5% check time, +3-17% wall; a second 4 KiB-page heap for large objects only: half the saving at no measurable cost | |
 
 Measured and rejected (do not retry without new evidence): explicit huge pages on top of mimalloc's, pre-faulting and
 mmap'd arena chunks without advice (`notes/linux-perf.md`; the compressed arena's reservation is not mimalloc memory and

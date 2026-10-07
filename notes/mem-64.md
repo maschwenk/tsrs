@@ -188,6 +188,8 @@ Diagnostics identical in every row (371 errors; `error TS` lines compared across
 
 ## 3. The allocator: huge pages on the mimalloc heap
 
+Applied later, with more variants measured: notes/mem-thp.md (`mimalloc/no_thp`).
+
 mimalloc v3 (libmimalloc-sys 0.1.49) advises `MADV_HUGEPAGE` on the 1 GiB arenas it reserves (prim/unix/prim.c,
 `allow_thp`), so on a THP `madvise` host every 2 MiB block of the heap that any thread touched is resident in full.
 Partly filled thread-local pages (one per size class per thread: 64 KiB small, 512 KiB medium, 4 MiB large) then

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # THP probe (notes/mem-thp.md): wall, Check time, peak RSS, instructions and minor faults of tsrs on vscode at 4 / 16 / 64
-# checkers on the 64-thread runner for mimalloc huge-page variants: the shipped build, the no_thp build (mimalloc drops
-# MADV_HUGEPAGE on its arenas; the tsrs arena keeps its advice), and mimalloc options set through the environment
-# (the same options main.rs could set with mi_option_set before the first allocation). Everything goes to $PROBE_OUT.
+# checkers on the 64-thread runner, and at 4 checkers on 8 CPUs (taskset; the README benchmark's 8-vCPU runner), for
+# this tree's build ("nothp": mimalloc without MADV_HUGEPAGE on its arenas; the tsrs arena keeps its advice) against the
+# same tree with mimalloc's advice back ("thp", the build before notes/mem-thp.md). The note's earlier runs measured
+# mimalloc options and a second heap with this script's previous revisions. Everything goes to $PROBE_OUT.
 #
 # Environment (set by the workflow; set them yourself to run locally):
 #   TSRS_BIN    tsrs binary          BUN_BIN   bun binary with `bun check` (unused here)
@@ -81,57 +82,44 @@ for (v, k), ds in sorted(rows.items(), key=lambda x: (x[0][1], x[0][0])):
           f"{med([(d['instructions'] or 0) for d in ds])/1e9:8.1f} {med([d['minflt'] for d in ds])/1e3:9.1f} {med([d['sys'] for d in ds]):6.2f}")
 PY
 
-measure() { # <tag> <bin> <env...>; runs tsrs with the flags and --checkers from $k
-  local tag="$1" bin="$2"; shift 2
+measure() { # <tag> <bin> <cpu list or ""> <env...>; runs tsrs with the flags and --checkers from $k
+  local tag="$1" bin="$2" cpus="$3"; shift 3
   local out="$PROBE_OUT/$tag"
-  COUNT_DIR="$repo/bench" env "$@" python3 "$PROBE_OUT/measure.py" "$out.json" -- "/tmp/bins/$bin" "${flags[@]}" --checkers "$k" > "$out.txt" 2>&1 || true
+  local pin=()
+  [ -z "$cpus" ] || pin=(taskset -c "$cpus")
+  COUNT_DIR="$repo/bench" env "$@" python3 "$PROBE_OUT/measure.py" "$out.json" -- "${pin[@]}" "/tmp/bins/$bin" "${flags[@]}" --checkers "$k" > "$out.txt" 2>&1 || true
 }
 
 mkdir -p /tmp/bins
 cd "$repo"
 { git log --oneline -1; git status --short; } > "$PROBE_OUT/tree.txt"
 build() { cargo build --release --locked -p tsrs_cli >> "$PROBE_OUT/build.log" 2>&1 && cp target/release/tsrs "/tmp/bins/$1"; }
-cp "$TSRS_BIN" /tmp/bins/split   # this branch: src/alloc.rs, the cold heap off unless TSRS_MI_COLD_MIN is set
-sed -i 's/^mimalloc = "0.1.52"$/mimalloc = { version = "0.1.52", features = ["no_thp"] }/' crates/tsrs_cli/Cargo.toml
+cp "$TSRS_BIN" /tmp/bins/nothp
+sed -i 's/^mimalloc = { version = "0.1.52", features = \["no_thp"\] }$/mimalloc = "0.1.52"/' crates/tsrs_cli/Cargo.toml
 grep -n '^mimalloc' crates/tsrs_cli/Cargo.toml >> "$PROBE_OUT/build.log"
-build nothp
+build thp
 git checkout -q crates/tsrs_cli/Cargo.toml
-git stash -q
-build main
-git stash pop -q
 ls -la /tmp/bins >> "$PROBE_OUT/build.log"
 
-{ echo "== tsrs: $(/tmp/bins/main --version)"; cat /sys/kernel/mm/transparent_hugepage/enabled /sys/kernel/mm/transparent_hugepage/defrag 2>/dev/null; } | tee "$PROBE_OUT/summary.txt" || true
+{ echo "== tsrs: $(/tmp/bins/nothp --version)"; cat /sys/kernel/mm/transparent_hugepage/enabled /sys/kernel/mm/transparent_hugepage/defrag 2>/dev/null; } | tee "$PROBE_OUT/summary.txt" || true
 cd "$proj"
-/tmp/bins/main "${flags[@]}" > /dev/null 2>&1 || true   # warm the page cache
+/tmp/bins/thp "${flags[@]}" > /dev/null 2>&1 || true   # warm the page cache
 
-# variant name | binary | environment
-variants=(
-  "main|main|"
-  "thp|split|"
-  "nothp|nothp|"
-  "cold-LH|split|TSRS_MI_COLD_MIN=86699"
-  "cold-L|split|TSRS_MI_COLD_MIN=86699 TSRS_MI_COLD_MAX=524288"
-  "cold-H|split|TSRS_MI_COLD_MIN=524289"
-  "cold-MLH|split|TSRS_MI_COLD_MIN=10241"
-)
-for rep in 1 2 3; do
+# Interleaved: thp, nothp, thp, nothp, ... so that drift on the runner hits both alike.
+for rep in 1 2 3 4 5; do
+  k=4
+  for bin in thp nothp; do measure "$bin-cpu8-k$k-rep$rep" "$bin" 0-7; done
+  [ "$rep" -le 3 ] || continue
   for k in 4 16 64; do
-    for v in "${variants[@]}"; do
-      IFS='|' read -r name bin envs <<< "$v"
-      # shellcheck disable=SC2086
-      measure "$name-k$k-rep$rep" "$bin" $envs
-    done
+    for bin in thp nothp; do measure "$bin-k$k-rep$rep" "$bin" ""; done
   done
 done
 python3 "$PROBE_OUT/table.py" "$PROBE_OUT" | tee -a "$PROBE_OUT/summary.txt"
-# Diagnostics identity between the variants (the statistics block differs).
-for k in 4 16 64; do
-  for v in "${variants[@]}"; do
-    name="${v%%|*}"
-    if ! diff <(grep -E 'error TS' "$PROBE_OUT/main-k$k-rep1.txt") <(grep -E 'error TS' "$PROBE_OUT/$name-k$k-rep1.txt") > /dev/null; then
-      echo "OUTPUT DIFFERS: main vs $name at $k checkers" | tee -a "$PROBE_OUT/summary.txt"
-    fi
-  done
+# Diagnostics identity (everything before the statistics block).
+diags() { awk '/^Files:/{exit} {print}' "$1"; }
+for t in k4 k16 k64 cpu8-k4; do
+  if ! diff <(diags "$PROBE_OUT/thp-$t-rep1.txt") <(diags "$PROBE_OUT/nothp-$t-rep1.txt") > /dev/null; then
+    echo "OUTPUT DIFFERS: thp vs nothp, $t" | tee -a "$PROBE_OUT/summary.txt"
+  fi
 done
-echo "errors at 4 checkers: $(grep -c 'error TS' "$PROBE_OUT/main-k4-rep1.txt")" | tee -a "$PROBE_OUT/summary.txt"
+echo "errors at 4 checkers: $(grep -c 'error TS' "$PROBE_OUT/nothp-k4-rep1.txt")" | tee -a "$PROBE_OUT/summary.txt"
