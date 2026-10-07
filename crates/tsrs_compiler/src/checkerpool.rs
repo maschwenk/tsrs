@@ -627,36 +627,17 @@ impl checkerPool {
                 tsrs_core::ptr::shared_check::freeze_shared_objects();
             }
             let create_and_assign = || {
+                let create_start = std::time::Instant::now();
                 #[cfg(feature = "checker")]
                 tsrs_checker::links::set_multiple_checkers(self.checker_count > 1);
-                let create = || {
-                    let create_start = std::time::Instant::now();
-                    let slots: Vec<Mutex<Option<CheckerSlot>>> = (0..self.checker_count).map(|_| Mutex::new(None)).collect();
-                    run_work_group(self.single_threaded, self.checker_count, |i| {
-                        *slots[i].lock().unwrap() = Some(CheckerSlot(Mutex::new(new_checker(program))));
-                    });
-                    let checkers: &'static [CheckerSlot] =
-                        Box::leak(slots.into_iter().map(|s| s.into_inner().unwrap().unwrap()).collect::<Vec<_>>().into_boxed_slice());
-                    (checkers, create_start.elapsed())
-                };
-                let assign = || {
-                    let assign_start = std::time::Instant::now();
-                    (compute_associations(program, self.checker_count), assign_start.elapsed())
-                };
-                // tsrs-only: the assignment reads only the loaded program (like the leaf classification below), so it
-                // runs on this thread while the checker threads create the checkers (notes/perf-serial-assign-overlap.md).
-                let ((checkers, create_time), (associations, assign_time)) = if self.single_threaded {
-                    (create(), assign())
-                } else {
-                    std::thread::scope(|s| {
-                        let created = s.spawn(create);
-                        let assigned = assign();
-                        (created.join().unwrap_or_else(|payload| std::panic::resume_unwind(payload)), assigned)
-                    })
-                };
-                // Recorded after both ended, so the rows keep their order.
-                tsrs_core::phases::record("Checkers: create", create_time);
-                tsrs_core::phases::record("Checkers: assign files", assign_time);
+                let slots: Vec<Mutex<Option<CheckerSlot>>> = (0..self.checker_count).map(|_| Mutex::new(None)).collect();
+                run_work_group(self.single_threaded, self.checker_count, |i| {
+                    *slots[i].lock().unwrap() = Some(CheckerSlot(Mutex::new(new_checker(program))));
+                });
+                let checkers: &'static [CheckerSlot] =
+                    Box::leak(slots.into_iter().map(|s| s.into_inner().unwrap().unwrap()).collect::<Vec<_>>().into_boxed_slice());
+                tsrs_core::phases::record("Checkers: create", create_start.elapsed());
+                let associations = tsrs_core::phases::time("Checkers: assign files", || compute_associations(program, self.checker_count));
                 (checkers, associations)
             };
             // tsrs-only: the CLI's leaf classification reads only the loaded program; it runs meanwhile
