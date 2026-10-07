@@ -17,8 +17,9 @@ checkers repeat); the offline objective it minimizes predicts the measured instr
 on four of the five projects. With stealing much of that is lost at the tail, and it took a second change, thieves that
 keep taking from one queue, to keep it. On the 64-vCPU runner (dist builds, 12 interleaved runs) the branch lowers
 wall time by 2-8% on formbricks-web, supabase-studio (16), vscode, next-packages-next and t3code-server (16), CPU by
-0-5% and peak RSS by 0-4% on the app projects, with one cell worse: mui-docs at 16 checkers, +1.8-3.4% wall in two
-of four rounds (a tail effect, CPU and memory unchanged). Below 16 checkers the same changes hurt (mui-docs +5.9% wall
+0-5% and peak RSS by 0-4% on the app projects. Worse: mui-docs at 16 checkers, +1.8-3.4% wall in two of four rounds (a
+tail effect, CPU and memory unchanged); next-packages-next at 16, +0.8-2.1% CPU (wall 2-4% lower); and in pr-verify only,
+drizzle-orm at 16, +4.9% peak. Below 16 checkers the same changes hurt (mui-docs +5.9% wall
 and cal-diy +3.8% CPU at 8, mikro-orm +3.7% wall at 4), so both apply from 16 checkers on. Diagnostics are the same as
 main's in every run; pr-verify's one difference (drizzle-orm) is a diagnostic that depends on check order in main and in
 tsgo alike (section 6).
@@ -27,8 +28,9 @@ Base: origin/main 3540ffa. macOS numbers: Apple M5 Max (18 cores), `cargo build 
 (load 10-30), so they are instructions retired and peak footprint (`/usr/bin/time -l`), not wall. Flags `--noEmit
 --incremental false --pretty false --extendedDiagnostics --checkers N` from each checkout root (mui-docs `-p docs`,
 formbricks-web `-p apps/web/tsconfig.typecheck.json`, cal-diy `-p apps/web`, supabase-studio `-p apps/studio`,
-t3code-server `-p apps/server`, vscode `-p src`). Sections 1-4 compare static assignments (`--checkerAssignment
-locality` or `file:<path>`: no stealing), so an assignment's instruction count is reproducible to ~1%.
+t3code-server `-p apps/server`, vscode `-p src`). Sections 1-2 compare static assignments (`--checkerAssignment
+locality` or `file:<path>`: no stealing), so an assignment's instruction count is reproducible to ~1%; sections 3-5
+are the default mode (stealing on), mostly on the 64-vCPU runner.
 
 ## 1. The ceiling: what more checkers repeat
 
