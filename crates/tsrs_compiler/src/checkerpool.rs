@@ -932,11 +932,14 @@ fn plan_splits(program: &Program, files: &[P<SourceFile>], positions: &mut [Vec<
     for &owner in active {
         for &i in &positions[owner] {
             let (file, w) = (files[i as usize], weight(i));
-            // Default library files are not split unless forced: their cost is about their weight (lib.dom.d.ts: 2.7% of
-            // webpack's weight, 3% of its CPU), so they are never the tail, and a piece costs its checker the library
-            // types it touches again (webpack and next-root: +3-4% wall at 16-32 checkers when lib.dom.d.ts was split).
-            let default_lib = program.is_source_file_default_library(file.path());
-            if !file.is_declaration_file() || w == 0 || (config.force.is_none() && (default_lib || w * 100 < share * config.min_share_percent)) {
+            // A default library file's cost is about its weight (lib.dom.d.ts: 2.7% of webpack's weight, 3% of its
+            // CPU), unlike a generated declaration file's (the MCP file: 4x), so it is split only when it is most of a
+            // share (`splitcheck::LIB_MIN_SHARE_PERCENT`): at 16 checkers on webpack lib.dom.d.ts is half a share and
+            // splitting it cost 3-4% of wall time (pieces re-touch the library types); at 32 checkers on webpack and
+            // next-packages-next it is about a whole share, and not splitting it made it the tail (README bench
+            // 92c3149 against afb54cb: +13% and +21% wall).
+            let min_share = if program.is_source_file_default_library(file.path()) { config.min_share_percent.max(splitcheck::LIB_MIN_SHARE_PERCENT) } else { config.min_share_percent };
+            if !file.is_declaration_file() || w == 0 || (config.force.is_none() && w * 100 < share * min_share) {
                 continue;
             }
             let count = config.force.unwrap_or(w.div_ceil(piece_size) as usize).min(active.len());
