@@ -355,6 +355,19 @@ pub fn compute_ecma_line_starts_seq(text: &str, mut yield_: impl FnMut(TextPos) 
     yield_(line_start as TextPos);
 }
 
+/// tsrs-only: the number of positions `compute_ecma_line_starts_seq` yields (one per line terminator, with CR LF as
+/// one, plus the last line), counted with vectorized byte searches instead of the per-byte loop.
+pub fn count_ecma_line_starts(text: &str) -> usize {
+    let bytes = text.as_bytes();
+    let mut n = 1 + memchr::memchr_iter(b'\n', bytes).count();
+    n += memchr::memchr_iter(b'\r', bytes).filter(|&i| bytes.get(i + 1) != Some(&b'\n')).count();
+    if !text.is_ascii() {
+        // U+2028 and U+2029 are E2 80 A8 and E2 80 A9; in valid UTF-8, 0xE2 is always a lead byte.
+        n += memchr::memchr_iter(0xE2, bytes).filter(|&i| bytes.get(i + 1) == Some(&0x80) && matches!(bytes.get(i + 2), Some(0xA8 | 0xA9))).count();
+    }
+    n
+}
+
 // PositionToLineAndByteOffset returns the 0-based line and byte offset from the
 // start of that line for the given byte position, using the provided line starts.
 // The byte offset is a raw UTF-8 byte offset from the line start, not a UTF-16 code unit count.
@@ -769,6 +782,31 @@ mod tests {
         assert_eq!(position_to_line_and_byte_offset(4, &[0, 3, 5]), (1, 1));
         assert_eq!(utf16_len("a😀é"), 4);
         assert_eq!(get_script_kind_from_file_name("a.D.TS"), ScriptKind::TS);
+    }
+
+    #[test]
+    fn line_start_count() {
+        for text in [
+            "",
+            "a",
+            "\n",
+            "\r",
+            "\r\n",
+            "\n\r",
+            "a\r\nb\nc\u{2028}d\re",
+            "x\r",
+            "\r\r\n\n",
+            "\u{2029}\u{2028}",
+            "é\u{2020}\u{2027}\u{202A}\u{2029}é\r\n",
+            "\u{2028}\r\n\u{E280}",
+        ] {
+            let mut expected = 0;
+            compute_ecma_line_starts_seq(text, |_| {
+                expected += 1;
+                true
+            });
+            assert_eq!(count_ecma_line_starts(text), expected, "{text:?}");
+        }
     }
 
     #[test]

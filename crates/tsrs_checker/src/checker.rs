@@ -1031,16 +1031,16 @@ pub struct Checker {
     pub merged_symbols: FxHashMap<P<Symbol>, P<Symbol>>,
     pub factory: ast::NodeFactory,
     pub node_links: LinkStore<Node, NodeLinks>,
-    pub signature_links: LinkStore<Node, SignatureLinks>,
+    pub signature_links: KeyedLinkStore<Node, SignatureLinks>,
     pub symbol_node_links: NodeLinkStore<SymbolNodeLinks>,
-    pub type_node_links: LinkStore<Node, TypeNodeLinks>,
+    pub type_node_links: KeyedLinkStore<Node, TypeNodeLinks>,
     pub enum_member_links: LinkStore<Node, EnumMemberLinks>,
     pub assertion_links: LinkStore<Node, AssertionLinks>,
     pub array_literal_links: LinkStore<Node, ArrayLiteralLinks>,
     pub switch_statement_links: LinkStore<Node, SwitchStatementLinks>,
     pub jsx_element_links: LinkStore<Node, JsxElementLinks>,
     pub computed_name_links: LinkStore<Node, ComputedNameNodeLinks>,
-    pub symbol_reference_links: LinkStore<Symbol, SymbolReferenceLinks>,
+    pub symbol_reference_links: SymbolReferenceLinkStore,
     pub value_symbol_links: SymbolArenaLinkStore<ValueSymbolLinks>,
     pub mapped_symbol_links: LinkStore<Symbol, MappedSymbolLinks>,
     pub deferred_symbol_links: LinkStore<Symbol, DeferredSymbolLinks>,
@@ -1426,16 +1426,16 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         merged_symbols: FxHashMap::default(),
         factory: ast::NodeFactory::default(),
         node_links: LinkStore::default(),
-        signature_links: LinkStore::default(),
+        signature_links: KeyedLinkStore::default(),
         symbol_node_links: NodeLinkStore::default(),
-        type_node_links: LinkStore::default(),
+        type_node_links: KeyedLinkStore::default(),
         enum_member_links: LinkStore::default(),
         assertion_links: LinkStore::default(),
         array_literal_links: LinkStore::default(),
         switch_statement_links: LinkStore::default(),
         jsx_element_links: LinkStore::default(),
         computed_name_links: LinkStore::default(),
-        symbol_reference_links: LinkStore::default(),
+        symbol_reference_links: SymbolReferenceLinkStore::default(),
         value_symbol_links: SymbolArenaLinkStore::default(),
         mapped_symbol_links: LinkStore::default(),
         deferred_symbol_links: LinkStore::default(),
@@ -2389,13 +2389,15 @@ bitflags! {
     }
 }
 
-#[derive(Default)]
+/// Go `*ExportCollision` in `ExportCollisionTable`: owned by the table here. The table is local to one
+/// `getExportsOfModuleWorker` visit and nothing keeps a record past it, so an arena record (never freed) would only
+/// leak; owned records and their strings are dropped with the table (notes/mem-export-star-scratch.md).
 pub struct ExportCollision {
-    pub specifier_text: RefCell<String>,
-    pub exports_with_duplicate: RefCell<Vec<P<Node>>>,
+    pub specifier_text: String,
+    pub exports_with_duplicate: Vec<P<Node>>,
 }
 
-pub type ExportCollisionTable = FxHashMap<String, P<ExportCollision>>;
+pub type ExportCollisionTable = FxHashMap<String, ExportCollision>;
 
 /// Go `type CacheHashKey xxh3.Uint128`.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]

@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::io::{BufRead, Write as _};
 
-use tsrs_ast::{FlowFlags, FlowList, FlowNode, Kind, Node, NodeFlags, SourceFileParseOptions, Symbol, SymbolTable};
+use tsrs_ast::{FlowFlags, FlowNode, Kind, Node, NodeFlags, SourceFileParseOptions, Symbol, SymbolTable};
 use tsrs_core::tspath::Path;
 use tsrs_core::P;
 
@@ -43,29 +43,33 @@ fn node_ref(n: Option<P<Node>>) -> String {
     }
 }
 
+/// Flow nodes are numbered per (node, signature): the Rust binder gives every bodyless signature whose Start has no
+/// node one shared Start (`tsrs_binder::uses_shared_flow_start`) where Go makes one each, so a node-less Start is
+/// numbered once per innermost such signature it is reached from (Go's numbering).
 #[derive(Default)]
 struct Dumper {
     sb: String,
-    ids: HashMap<P<FlowNode>, usize>,
-    queue: Vec<P<FlowNode>>,
+    ids: HashMap<(P<FlowNode>, Option<P<Node>>), usize>,
+    queue: Vec<(P<FlowNode>, Option<P<Node>>)>,
+    signature: Option<P<Node>>,
 }
 
 impl Dumper {
     fn flow_ref(&mut self, f: Option<P<FlowNode>>) -> String {
         let Some(f) = f else { return "-".to_string() };
+        let signature = (f.flags.get().intersects(FlowFlags::Start) && f.node.get().is_none()).then_some(self.signature).flatten();
         let next = self.ids.len() + 1;
-        let id = *self.ids.entry(f).or_insert_with(|| next);
+        let id = *self.ids.entry((f, signature)).or_insert_with(|| next);
         if id == next {
-            self.queue.push(f);
+            self.queue.push((f, self.signature));
         }
         format!("#{}", id)
     }
 
-    fn flow_list(&mut self, mut l: Option<P<FlowList>>) -> String {
+    fn flow_list(&mut self, l: &[P<FlowNode>]) -> String {
         let mut parts = Vec::new();
-        while let Some(list) = l {
-            parts.push(self.flow_ref(Some(list.flow)));
-            l = list.next.get();
+        for &flow in l {
+            parts.push(self.flow_ref(Some(flow)));
         }
         format!("[{}]", parts.join(","))
     }
@@ -149,7 +153,13 @@ impl Dumper {
         if !body.is_empty() {
             let _ = writeln!(self.sb, "N {} {} {}{}", n.kind() as i16, n.pos(), n.end(), body);
         }
-        n.for_each_child(&mut |child| self.visit(child))
+        let save_signature = self.signature;
+        if tsrs_binder::uses_shared_flow_start(n) {
+            self.signature = Some(n);
+        }
+        let stop = n.for_each_child(&mut |child| self.visit(child));
+        self.signature = save_signature;
+        stop
     }
 
     fn flow_node(&mut self, id: usize, f: P<FlowNode>) {
@@ -160,7 +170,7 @@ impl Dumper {
         } else if f.flags.get().intersects(FlowFlags::ReduceLabel) {
             let data = f.node.get().unwrap().as_flow_reduce_label_data();
             let target = self.flow_ref(Some(data.target));
-            let list = self.flow_list(data.antecedents);
+            let list = self.flow_list(data.antecedents());
             let _ = write!(self.sb, "RL({},{})", target, list);
         } else {
             self.sb.push_str(&node_ref(f.node.get()));
@@ -219,7 +229,8 @@ fn dump_unit(out: &mut String, name: &str, text: &str) {
     d.visit(file.as_node());
     let mut i = 0;
     while i < d.queue.len() {
-        let f = d.queue[i];
+        let (f, signature) = d.queue[i];
+        d.signature = signature;
         d.flow_node(i + 1, f);
         i += 1;
     }

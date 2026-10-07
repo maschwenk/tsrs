@@ -563,15 +563,14 @@ impl Checker {
 
     // checker.go:1540
     pub(crate) fn symbol_referenced(&mut self, symbol: P<Symbol>, meaning: SymbolFlags) {
-        let links = self.symbol_reference_links.get(symbol);
-        links.reference_kinds.set(links.reference_kinds.get() | meaning);
+        self.symbol_reference_links.add_reference_kinds(symbol, meaning);
     }
 
     /// The meanings `symbol` was referenced with: Go reads `c.symbolReferenceLinks.Get(symbol).referenceKinds`, which
     /// creates empty links for a symbol never referenced; the links hold nothing but the flags, so a read makes none
     /// (the unused-locals checks ask about every local).
     pub(crate) fn reference_kinds(&self, symbol: P<Symbol>) -> SymbolFlags {
-        self.symbol_reference_links.try_get(symbol).map_or(SymbolFlags::None, |links| links.reference_kinds.get())
+        self.symbol_reference_links.reference_kinds(symbol)
     }
 
     // checker.go:1544
