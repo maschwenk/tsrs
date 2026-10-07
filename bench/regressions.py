@@ -8,7 +8,7 @@ Compares each project's single-threaded instruction count and peak RSS (bench/co
 with the newest earlier result in bench/results from the same runner label and build. The instruction count repeats
 to about 0.001% and peak RSS to under 0.4%, so a change past the thresholds below is the code's; only a different CPU
 model or C library (which pick different memcpy-style routines) can move them otherwise, and then the project is not
-judged (the machine is compared per project: a parallel run records a project's machine when it is not the run's).
+judged (the machine is compared per project: bench/run.py --merge records the machine on a cell measured elsewhere).
 A different Rust compiler (a rust-toolchain.toml bump) moves them too: the table is printed as the upgrade's
 measurement, and nothing is flagged.
 Regressions are printed as warnings and, with --comment, posted as a comment on each pull request merged since the
@@ -65,8 +65,10 @@ def previous_result(new, path, results_dir):
 
 
 def project_machine(result, project):
-    """The machine a project was measured on: the run's, unless bench/run.py --merge recorded another on the project."""
-    return result.get("projects", {}).get(project, {}).get("machine") or result.get("machine", {})
+    """The machine that measured a project's counts: the run's, unless bench/run.py --merge recorded another on the
+    cell that holds them."""
+    cell = result.get("projects", {}).get(project, {}).get(COUNT_PATH[0])
+    return (cell.get("machine") if isinstance(cell, dict) else None) or result.get("machine", {})
 
 
 def machine_difference(old, new, project):

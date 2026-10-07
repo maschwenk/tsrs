@@ -7,6 +7,7 @@ See bench/README.md. Typical use:
     python3 bench/run.py --local --projects webpack,Compiler --reps 1
     python3 bench/run.py --setup-only                  # clone + install only (CI cache warm-up)
     python3 bench/run.py --projects vscode --out-dir /tmp/p/vscode   # one project of a parallel run (CI)
+    python3 bench/run.py --modes checkers64 --out-dir /tmp/p/wide    # the 64-checker table (CI: 64 vCPU)
     python3 bench/run.py --merge /tmp/p/*/*.json --readme README.md  # join such results into one
 """
 
@@ -33,12 +34,19 @@ BENCH = REPO / "bench"
 MARKER = ".tsrs-bench.json"
 START, END = "<!-- bench:start -->", "<!-- bench:end -->"
 # --modes: extra compiler flags per mode. "default" passes none (each compiler picks its own checker count), "single"
-# is one checker thread, "checkers8" gives both compilers 8 checker threads (the scaling comparison).
+# is one checker thread, "checkers8" gives both compilers 8 checker threads (the scaling comparison), "checkers64"
+# gives them 64 (CI measures it on a 64-vCPU machine, .depot/workflows/bench.yml `measure-wide`).
 MODE_FLAGS = {
     "default": [],
     "single": ["--singleThreaded"],
     "checkers8": ["--checkers", "8"],
+    "checkers64": ["--checkers", "64"],
 }
+MODE_NAMES = {"default": "default mode", "single": "`--singleThreaded`", "checkers8": "`--checkers 8`",
+              "checkers64": "`--checkers 64`"}
+# Bold in the tables' speedup and memory columns: a notable tsrs win, compared at the printed precision.
+NOTABLE_SPEEDUP = 5.0  # tsgo wall / tsrs wall at least this
+NOTABLE_MEMORY = 0.25  # tsrs peak memory / tsgo peak memory at most this (a quarter)
 # --tsrs-build: how the measured tsrs binary was built, for the table header.
 TSRS_BUILDS = {
     "release": "`cargo build --release`",
@@ -307,10 +315,37 @@ def fmt_ratio(x: float | None) -> str:
     return "n/a" if x is None else f"{x:.2f}x"
 
 
+def cell_machines(result: dict) -> tuple[dict, list]:
+    """Where the cells were measured, when not on the run's machine (bench/run.py --merge records `machine` on such a
+    cell): ({mode: machine} for a mode measured entirely on one other machine, such as the 64-checker jobs, and
+    [(project, mode, machine)] for the other cells measured elsewhere)."""
+    run = result["machine"]
+    whole, odd = {}, []
+    for mode in result["modes"]:
+        cells = [(name, pr[mode].get("machine") or run) for name, pr in result["projects"].items() if mode in pr]
+        machines = {json.dumps(mm, sort_keys=True) for _, mm in cells}
+        if len(machines) == 1 and cells and cells[0][1] != run:
+            whole[mode] = cells[0][1]
+        else:
+            odd += [(name, mode, mm) for name, mm in cells if mm != run]
+    return whole, odd
+
+
+def notable(text: str, value: float | None, better) -> str:
+    """Bold a ratio cell when `better(value at the printed precision)` holds (NOTABLE_SPEEDUP, NOTABLE_MEMORY)."""
+    return f"**{text}**" if value is not None and better(round(value, 2)) else text
+
+
 def markdown(result: dict) -> str:
     m = result["machine"]
     tv = result["tsgo"]["version"]
     commit = result["tsrs"]["commit"][:12]
+    whole, odd = cell_machines(result)
+    elsewhere: dict = {}  # machine label -> the modes measured entirely on it
+    for mode, mm in whole.items():
+        elsewhere.setdefault(mm["label"], []).append(MODE_NAMES[mode])
+    elsewhere_text = "".join(f"; the {' and '.join(names)} table{'s' if len(names) > 1 else ''} on {label}"
+                             for label, names in elsewhere.items())
     suite_names = [n for n, pr in result["projects"].items() if pr.get("source") != "application"]
     app_names = [n for n, pr in result["projects"].items() if pr.get("source") == "application"]
     sources = []
@@ -325,7 +360,7 @@ def markdown(result: dict) -> str:
         f"tsrs is a Rust port of the TypeScript 7 type checker (the Go compiler, \"tsgo\"). Each row type-checks one "
         f"project from {', or from '.join(sources)}, with tsgo {tv} (npm `typescript@{tv}`) and with tsrs "
         f"at commit `{commit}` ({TSRS_BUILDS[result['tsrs'].get('build', 'release')]}): `tsc -p <project> --noEmit`, "
-        f"median of {result['reps']} interleaved runs, on {m['label']}.",
+        f"median of {result['reps']} interleaved runs, on {m['label']}{elsewhere_text}.",
         "",
     ]
     drift = False
@@ -334,9 +369,11 @@ def markdown(result: dict) -> str:
     titles = {"default": f"Default mode: no thread flag; tsgo uses 4 checker threads, tsrs half the cores clamped to 4..32 "
                          f"({tsrs_default} here; tsrs also resolves members lazily, its default)",
               "single": "`--singleThreaded`: one checker thread in both",
-              "checkers8": "`--checkers 8`: 8 checker threads in both (how each compiler scales with more checkers)"}
+              "checkers8": "`--checkers 8`: 8 checker threads in both (how each compiler scales with more checkers)",
+              "checkers64": "`--checkers 64`: 64 checker threads in both (how each compiler scales on a wide machine)"}
     for mode in result["modes"]:
-        lines += [f"**{titles[mode]}**", "",
+        title = titles[mode] + (f", on {whole[mode]['label']}" if mode in whole else "")
+        lines += [f"**{title}**", "",
                   "| project | errors, tsgo / tsrs | tsgo wall (s) | tsrs wall (s) | speedup | tsgo peak memory | "
                   "tsrs peak memory | memory, tsrs / tsgo |",
                   "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |"]
@@ -360,13 +397,16 @@ def markdown(result: dict) -> str:
                 err = f"**{err} (locations differ)**"
             speed = g["wall_s"] / t["wall_s"] if g["wall_s"] and t["wall_s"] else None
             mem = t["peak_rss_bytes"] / g["peak_rss_bytes"] if g["peak_rss_bytes"] and t["peak_rss_bytes"] else None
-            lines.append(f"| {name} | {err} | {fmt_num(g['wall_s'])} | {fmt_num(t['wall_s'])} | {fmt_ratio(speed)} | "
-                         f"{fmt_mem(g['peak_rss_bytes'])} | {fmt_mem(t['peak_rss_bytes'])} | {fmt_ratio(mem)} |")
+            speed_cell = notable(fmt_ratio(speed), speed, lambda x: x >= NOTABLE_SPEEDUP)
+            mem_cell = notable(fmt_ratio(mem), mem, lambda x: x <= NOTABLE_MEMORY)
+            lines.append(f"| {name} | {err} | {fmt_num(g['wall_s'])} | {fmt_num(t['wall_s'])} | {speed_cell} | "
+                         f"{fmt_mem(g['peak_rss_bytes'])} | {fmt_mem(t['peak_rss_bytes'])} | {mem_cell} |")
         lines.append("")
     lines.append("errors: the number of type errors each compiler reports on the project; they must be equal (a bold "
-                 "cell is a disagreement, i.e. a correctness bug). wall: process wall-clock time. speedup: tsgo wall / "
-                 "tsrs wall (above 1 = tsrs faster). peak memory: maximum resident set size. memory, tsrs / tsgo: below 1 "
-                 "= tsrs uses less.")
+                 "errors cell is a disagreement, i.e. a correctness bug). wall: process wall-clock time. speedup: tsgo "
+                 f"wall / tsrs wall (above 1 = tsrs faster; bold from {NOTABLE_SPEEDUP:g}x). peak memory: maximum "
+                 "resident set size. memory, tsrs / tsgo: below 1 = tsrs uses less (bold at "
+                 f"{NOTABLE_MEMORY:.2f}x or less, a quarter of tsgo's memory).")
     if {"single", "checkers8"} <= set(result["modes"]):
         lines += ["", "**Scaling: wall time of `--singleThreaded` / wall time of `--checkers 8`, per compiler**", "",
                   "| project | tsgo | tsrs | tsrs scaling / tsgo scaling | tsgo memory, 8 checkers / 1 | "
@@ -389,10 +429,15 @@ def markdown(result: dict) -> str:
         lines += ["", f"(ref N): tsgo {tv} and tsrs disagree, but `typescript@{ref['version']}`, built from the "
                       f"TypeScript commit tsrs ports (`{ref['commit'][:8]}`), reports exactly tsrs's errors: a TypeScript "
                       f"7.0 vs 7.1-dev difference, not a tsrs bug."]
-    if mixed := [n for n, pr in result["projects"].items() if "machine" in pr]:
+    if odd:
+        by_project: dict = {}
+        for name, mode, mm in odd:
+            by_project.setdefault((name, mm["label"]), []).append(MODE_NAMES[mode])
         lines += ["", "Not measured on the machine named below (a parallel run landed on more than one machine model): "
-                      + "; ".join(f"{n} on {result['projects'][n]['machine']['label']}" for n in mixed) + "."]
-    lines += ["", f"Runner: {m['label']}. Date: {result['date']}. tsrs commit: `{commit}`. "
+                      + "; ".join(f"{name} ({', '.join(modes)}) on {label}" for (name, label), modes in by_project.items())
+                      + "."]
+    runners = m["label"] + "".join(f"; {' and '.join(names)}: {label}" for label, names in elsewhere.items())
+    lines += ["", f"Runner: {runners}. Date: {result['date']}. tsrs commit: `{commit}`. "
                   + ("Numbers from shared CI machines are noisy; compare trends, not single runs. " if m.get("ci") else "")
                   + "How it is measured: [`bench/README.md`](bench/README.md)."]
     return "\n".join(lines).rstrip() + "\n"
@@ -411,43 +456,65 @@ def update_readme(readme: Path, table: str) -> None:
 
 
 def merge_results(cfg: dict, paths: list[Path]) -> dict:
-    """One result from the per-project results of a parallel run (.depot/workflows/bench.yml: one measuring job per
-    project, each `run.py --projects <name> --out-dir <dir>`), in bench/projects.json order.
+    """One result from the partial results of a parallel run (.depot/workflows/bench.yml): one job per project on the
+    fixed-spec machine (`run.py --projects <name> --out-dir <dir>`, the default modes) and the wide job (`run.py
+    --modes checkers64`, every project on a 64-vCPU machine). Projects in bench/projects.json order, modes in
+    MODE_FLAGS order.
 
-    The binary, the compilers, reps and modes must agree. The machines need not: the machine most projects ran on is
-    the run's (ties: the first project's), and a project measured on another records its own `machine`
-    (bench/regressions.py then compares its counts only with runs on the same CPU model and C library)."""
+    The binary, the compilers, reps and flags must agree, and no (project, mode) may be measured twice. The machines
+    need not: the one that measured the most (project, mode) cells is the run's machine (ties: the first partial's),
+    and a cell measured on another records its own `machine` (all 64-checker cells do). bench/regressions.py compares
+    a project's single-threaded counts only with runs on the same CPU model and C library."""
     order = {p["name"]: i for i, p in enumerate(cfg["projects"])}
-    rank = lambda names: min((order.get(n, len(order)) for n in names), default=len(order))
-    partials = sorted((json.loads(p.read_text()) for p in paths), key=lambda r: rank(r["projects"]))
+    mode_order = {mode: i for i, mode in enumerate(MODE_FLAGS)}
+    first = lambda keys, ranks: min((ranks.get(k, len(ranks)) for k in keys), default=len(ranks))
+    # The fixed-spec partials (their first mode is `default`) in project order, then the wide one.
+    partials = sorted((json.loads(p.read_text()) for p in paths),
+                      key=lambda r: (first(r["modes"], mode_order), first(r["projects"], order)))
     base = partials[0]
     fixed = lambda r: {"tsrs": r["tsrs"], "tsgo": r["tsgo"]["version"], "suite": r["suite"],
-                       "reference": r.get("reference"), "reps": r["reps"], "modes": r["modes"], "flags": r["flags"]}
+                       "reference": r.get("reference"), "reps": r["reps"], "flags": r["flags"]}
     for r in partials[1:]:
         for k, v in fixed(base).items():
             if fixed(r)[k] != v:
                 sys.exit(f"--merge: {k} differs: {json.dumps(v)} ({', '.join(base['projects'])}) vs "
                          f"{json.dumps(fixed(r)[k])} ({', '.join(r['projects'])})")
-    # most_common keeps insertion order among equal counts, so a tie goes to the first project's machine.
-    machine = json.loads(Counter(json.dumps(r["machine"], sort_keys=True) for r in partials).most_common(1)[0][0])
+    cells: Counter = Counter()
+    for r in partials:
+        cells[json.dumps(r["machine"], sort_keys=True)] += sum(mode in pr for pr in r["projects"].values()
+                                                               for mode in r["modes"])
+    # most_common keeps insertion order among equal counts, so a tie goes to the first partial's machine.
+    machine = json.loads(cells.most_common(1)[0][0])
+    modes = sorted({mode for r in partials for mode in r["modes"]}, key=lambda mode: mode_order.get(mode, len(mode_order)))
     result: dict = {"date": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"), "machine": machine,
-                    **{k: base.get(k) for k in ("tsrs", "tsgo", "suite", "reference", "reps", "modes", "flags")},
-                    "projects": {}, "raw": [], "partials": [], "duration_s": 0}
+                    **{k: base.get(k) for k in ("tsrs", "tsgo", "suite", "reference", "reps")}, "modes": modes,
+                    "flags": base["flags"], "projects": {}, "raw": [], "partials": [], "duration_s": 0}
     for r in partials:
         for name, pr in r["projects"].items():
-            if name in result["projects"]:
-                sys.exit(f"--merge: {name} is in two results")
-            # The table header names the run's machine; a project measured elsewhere says so.
-            result["projects"][name] = dict(pr, machine=r["machine"]) if r["machine"] != machine else pr
+            merged = result["projects"].setdefault(name, {k: v for k, v in pr.items() if k not in MODE_FLAGS})
+            for mode in r["modes"]:
+                if mode not in pr:
+                    continue
+                if mode in merged:
+                    sys.exit(f"--merge: {name} {mode} is in two results")
+                # The table header names the run's machine; a cell measured elsewhere records its own.
+                merged[mode] = dict(pr[mode], machine=r["machine"]) if r["machine"] != machine else pr[mode]
         result["raw"] += r["raw"]
-        result["partials"].append({"projects": list(r["projects"]), "date": r["date"], "duration_s": r.get("duration_s")})
+        result["partials"].append({"projects": list(r["projects"]), "modes": r["modes"], "machine": r["machine"]["label"],
+                                   "date": r["date"], "duration_s": r.get("duration_s")})
         result["duration_s"] += r.get("duration_s") or 0
-    result["projects"] = dict(sorted(result["projects"].items(), key=lambda kv: order.get(kv[0], len(order))))
+    result["projects"] = {name: dict(sorted(pr.items(), key=lambda kv: mode_order.get(kv[0], -1)))
+                          for name, pr in sorted(result["projects"].items(), key=lambda kv: order.get(kv[0], len(order)))}
     result["raw"].sort(key=lambda row: order.get(row["project"], len(order)))
-    if mixed := [n for n, pr in result["projects"].items() if "machine" in pr]:
+    whole, odd = cell_machines(result)
+    for mode, mm in whole.items():
+        log(f"{mode}: measured on {mm['label']}")
+    if odd:
         log(f"WARNING: not measured on the run's machine ({machine['label']}): "
-            + "; ".join(f"{n} on {result['projects'][n]['machine']['label']}" for n in mixed))
+            + "; ".join(f"{name} {mode} on {mm['label']}" for name, mode, mm in odd))
     if missing := [p["name"] for p in cfg["projects"] if p["name"] not in result["projects"]]:
+        log(f"WARNING: no result for {', '.join(missing)}")
+    if missing := [f"{name} {mode}" for name, pr in result["projects"].items() for mode in modes if mode not in pr]:
         log(f"WARNING: no result for {', '.join(missing)}")
     return result
 
@@ -463,9 +530,9 @@ def write_results(result: dict, args: argparse.Namespace, note: str = "") -> Non
         update_readme(args.readme, table)
     print(table)
     log(f"wrote {args.out_dir / stem}.json/.md in {result['duration_s']} s" + (f"; {note}" if note else ""))
-    bad = [n for n, pr in result["projects"].items() for m in result["modes"]
-           if (pr[m]["errors_match"] is False and not pr[m].get("reference", {}).get("same_as_tsrs"))
-           or not pr[m]["tsgo"]["ok_runs"] or not pr[m]["tsrs"]["ok_runs"]]
+    bad = [n for n, pr in result["projects"].items() for m in result["modes"] if m in pr
+           and ((pr[m]["errors_match"] is False and not pr[m].get("reference", {}).get("same_as_tsrs"))
+                or not pr[m]["tsgo"]["ok_runs"] or not pr[m]["tsrs"]["ok_runs"])]
     if bad:
         log(f"WARNING: error-count mismatch or failed runs: {', '.join(sorted(set(bad)))}")
 
