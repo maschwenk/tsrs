@@ -1,0 +1,275 @@
+# Depot CI workflow: before/after check of a branch on the 64-vCPU machine (bench/README.md "Verifying a branch").
+# Builds the branch's tsrs and the tsrs of its merge base with `base` (`cargo build --release` of each: relative
+# comparisons only, as in perf-probe.yml), then runs tools/perf/verify.py on the bench projects: identical
+# diagnostics and exit codes at each checker count, wall time, peak RSS and check time before/after, instructions of
+# one single-threaded run, and one run with poisoned arenas. The run fails when any diagnostic differs, so its status
+# answers "is this branch exact". The table is the `pr-verify` artifact (verify-out/) and the job summary.
+#
+# Three ways to start it:
+#   depot ci run --workflow .depot/workflows/pr-verify.yml       # any branch or dirty worktree; the inputs below take
+#                                                                # their defaults (edit them in the working copy to change)
+#   depot ci dispatch --repo maschwenk/tsrs --workflow pr-verify.yml --ref <pushed branch> --input projects=vscode
+#   the `verify` label on a pull request into main: runs now and on every push, and posts the table as a comment
+# A `depot ci run` is not tied to a ref, so Depot skips actions/cache there: every project is cloned and installed
+# (bench/README.md "Verifying a branch" has the durations). Dispatched and pull request runs restore bench.yml's caches.
+
+name: PR verify
+
+on:
+  workflow_dispatch:
+    inputs:
+      base:
+        description: branch to compare against (the baseline is the merge base of this commit and origin/<base>)
+        default: main
+      projects:
+        description: comma-separated bench/projects.json names, or all
+        default: all
+      checkers:
+        description: comma-separated checker counts
+        default: 1,4,16,32
+      reps:
+        description: timed runs per binary and checker count
+        default: "3"
+      poison:
+        description: also run the new binary once per project with TSRS_ARENA_POISON=1
+        type: choice
+        options: ["true", "false"]
+        default: "true"
+  # Only pull requests labelled `verify` run it (the job's `if`): it takes a 64-vCPU machine for half an hour.
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize, labeled]
+
+# A newer push to a labelled pull request cancels its older run.
+concurrency:
+  group: pr-verify-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  # `depot ci run` and pull request runs have no inputs; these fallbacks are the defaults above.
+  BASE: ${{ inputs.base || 'main' }}
+  PROJECTS: ${{ inputs.projects || 'all' }}
+  CHECKERS: ${{ inputs.checkers || '1,4,16,32' }}
+  REPS: ${{ inputs.reps || '3' }}
+  POISON: ${{ inputs.poison || 'true' }}
+
+jobs:
+  verify:
+    # On a pull request: only with the `verify` label, and not again when some other label is added.
+    if: >-
+      github.event_name != 'pull_request' ||
+      (contains(github.event.pull_request.labels.*.name, 'verify') &&
+       (github.event.action != 'labeled' || github.event.label.name == 'verify'))
+    runs-on: depot-ubuntu-24.04-64
+    timeout-minutes: 120
+    outputs:
+      identical: ${{ steps.verify.outputs.identical }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0 # the merge base with origin/<base>
+          persist-credentials: false
+
+      - name: Runner hardware (64 vCPU x86_64)
+        run: |
+          nproc; free -g; df -h / | tail -1
+          lscpu | grep -E 'Model name|^CPU\(s\)' || true
+          if [ "$(nproc)" != 64 ] || [ "$(uname -m)" != x86_64 ]; then
+            echo "::error::expected 64 vCPU x86_64, got $(nproc) vCPU $(uname -m)"; exit 1
+          fi
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+
+      - name: Read the pinned Rust toolchain (rust-toolchain.toml)
+        id: rust
+        shell: bash
+        run: echo "toolchain=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: ${{ steps.rust.outputs.toolchain }}
+          targets: x86_64-unknown-linux-gnu
+
+      # ~/.cargo and the dependencies in target/ (the branch's build; the base builds in its own target dir).
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: pr-verify
+
+      - name: Projects
+        id: projects
+        run: |
+          if [ "$PROJECTS" = all ]; then
+            list=$(python3 bench/run.py --print-projects | python3 -c 'import json, sys; print(",".join(json.load(sys.stdin)))')
+          else
+            list="$PROJECTS"
+          fi
+          echo "list=$list" | tee -a "$GITHUB_OUTPUT"
+
+      # The caches bench.yml saves, with its keys (restore only, as in its measure-wide job). A project added to
+      # bench/projects.json needs a restore step here too; without one, every run clones and installs it.
+      - name: Cache keys
+        id: keys
+        run: python3 bench/run.py --print-cache-keys --projects "${{ steps.projects.outputs.list }}" | tee -a "$GITHUB_OUTPUT"
+
+      - name: Restore suite and compilers
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            bench/.work/suite
+            bench/.work/tsgo
+          key: bench-shared-${{ runner.os }}-${{ steps.keys.outputs.shared }}
+
+      - name: Restore vscode
+        if: steps.keys.outputs['vscode'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/vscode
+          key: bench-vscode-${{ runner.os }}-${{ steps.keys.outputs['vscode'] }}
+
+      - name: Restore xstate-main
+        if: steps.keys.outputs['xstate-main'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/xstate-main
+          key: bench-xstate-main-${{ runner.os }}-${{ steps.keys.outputs['xstate-main'] }}
+
+      - name: Restore webpack
+        if: steps.keys.outputs['webpack'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/webpack
+          key: bench-webpack-${{ runner.os }}-${{ steps.keys.outputs['webpack'] }}
+
+      - name: Restore mui-docs
+        if: steps.keys.outputs['mui-docs'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/mui-docs
+          key: bench-mui-docs-${{ runner.os }}-${{ steps.keys.outputs['mui-docs'] }}
+
+      - name: Restore cal-diy
+        if: steps.keys.outputs['cal-diy'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/cal-diy
+          key: bench-cal-diy-${{ runner.os }}-${{ steps.keys.outputs['cal-diy'] }}
+
+      - name: Restore formbricks-web
+        if: steps.keys.outputs['formbricks-web'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/formbricks-web
+          key: bench-formbricks-web-${{ runner.os }}-${{ steps.keys.outputs['formbricks-web'] }}
+
+      - name: Restore supabase-studio
+        if: steps.keys.outputs['supabase-studio'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/supabase-studio
+          key: bench-supabase-studio-${{ runner.os }}-${{ steps.keys.outputs['supabase-studio'] }}
+
+      - name: Restore t3code-server
+        if: steps.keys.outputs['t3code-server'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/t3code-server
+          key: bench-t3code-server-${{ runner.os }}-${{ steps.keys.outputs['t3code-server'] }}
+
+      - name: Set up the projects
+        run: python3 bench/run.py --setup-only --projects "${{ steps.projects.outputs.list }}"
+
+      # The baseline: the merge base of this commit and origin/<base>, so that commits that landed on the base since
+      # the branch was cut are not counted as the branch's. On a pull request this commit is the merge with main.
+      - name: Base commit
+        id: commits
+        run: |
+          git fetch -q --no-tags origin "+refs/heads/$BASE:refs/remotes/origin/$BASE"
+          base=$(git merge-base HEAD "origin/$BASE")
+          new=$(git rev-parse HEAD)
+          dirty=$([ -n "$(git status --porcelain)" ] && echo true || echo false)
+          { echo "base=$base"; echo "new=$new"; echo "dirty=$dirty"; } >> "$GITHUB_OUTPUT"
+          echo "base: $base (merge base with origin/$BASE)"; echo "new: $new (local changes: $dirty)"
+          git log --oneline "$base..HEAD" | head -20
+          git worktree add -q --detach /tmp/verify/base-src "$base"
+
+      # Both release builds at once (separate target dirs; one build does not use 64 cores for most of its time).
+      - name: Build tsrs, branch and base (release)
+        run: |
+          mkdir -p /tmp/verify/new /tmp/verify/base
+          (cd /tmp/verify/base-src && CARGO_TARGET_DIR=/tmp/verify/base-target \
+            cargo build --release --locked -p tsrs_cli > /tmp/verify/base-build.log 2>&1) &
+          base_pid=$!
+          cargo build --release --locked -p tsrs_cli
+          cp target/release/tsrs /tmp/verify/new/tsrs
+          if ! wait "$base_pid"; then tail -50 /tmp/verify/base-build.log; echo "::error::base build failed"; exit 1; fi
+          tail -3 /tmp/verify/base-build.log
+          cp /tmp/verify/base-target/release/tsrs /tmp/verify/base/tsrs
+          sha256sum /tmp/verify/*/tsrs
+          /tmp/verify/new/tsrs --version; /tmp/verify/base/tsrs --version
+
+      - name: Verify
+        id: verify
+        env:
+          BASE_SHA: ${{ steps.commits.outputs.base }}
+          NEW_SHA: ${{ steps.commits.outputs.new }}
+          DIRTY: ${{ steps.commits.outputs.dirty }}
+          LABEL: ${{ github.event_name == 'pull_request' && format('#{0}', github.event.pull_request.number) || github.ref_name }}
+        run: |
+          extra=(--poison); [ "$POISON" = true ] || extra=(--no-poison)
+          new_label="${LABEL:-HEAD}@${NEW_SHA::12}"
+          if [ "$DIRTY" = true ]; then extra+=(--new-dirty); new_label+=" + local changes"; fi
+          set +e
+          python3 tools/perf/verify.py --base /tmp/verify/base/tsrs --new /tmp/verify/new/tsrs \
+            --base-commit "$BASE_SHA" --new-commit "$NEW_SHA" --base-label "$BASE@${BASE_SHA::12}" --new-label "$new_label" \
+            --projects "${{ steps.projects.outputs.list }}" --checkers "$CHECKERS" --reps "$REPS" "${extra[@]}" --out verify-out
+          rc=$?
+          [ -f verify-out/verify.md ] && cat verify-out/verify.md >> "$GITHUB_STEP_SUMMARY"
+          echo "identical=$([ $rc = 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          exit $rc
+
+      - name: Upload the result
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pr-verify
+          path: verify-out
+          if-no-files-found: warn
+
+  # Posts the table on the pull request, replacing this workflow's previous comment (marked `<!-- pr-verify -->`).
+  # A job of its own so that only it gets a token that can write to pull requests.
+  comment:
+    needs: verify
+    if: >-
+      always() && github.event_name == 'pull_request' &&
+      (needs.verify.result == 'success' || needs.verify.result == 'failure')
+    runs-on: depot-ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Download the result
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: pr-verify
+          path: verify-out
+
+      - name: Comment on the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          id=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
+            --jq '[.[] | select(.body | startswith("<!-- pr-verify -->"))][0].id // empty' | head -1)
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$id" -F body=@verify-out/verify.md --jq .html_url
+          else
+            gh api "repos/$REPO/issues/$PR/comments" -F body=@verify-out/verify.md --jq .html_url
+          fi
