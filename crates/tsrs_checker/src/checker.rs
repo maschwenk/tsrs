@@ -976,6 +976,9 @@ pub struct Checker {
     /// tsrs-only: the file `check_source_file` is checking. The one check leaf (`SourceFile::is_check_leaf`) whose tree
     /// this checker may read.
     pub(crate) checking_file: Option<P<SourceFile>>,
+    /// tsrs-only: a file whose statements this checker and others already checked in pieces
+    /// (`check_source_file_piece`); the next `check_source_file` of it runs only the file-level steps.
+    pub(crate) statements_checked_in_pieces: Option<P<SourceFile>>,
     pub variance_type_parameter: Option<P<Type>>,
     pub language_version: ScriptTarget,
     pub module_kind: ModuleKind,
@@ -1378,6 +1381,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         serialization_level: 0,
         current_node: None,
         checking_file: None,
+        statements_checked_in_pieces: None,
         variance_type_parameter: None,
         language_version: compiler_options.get_emit_script_target(),
         module_kind: compiler_options.get_emit_module_kind(),

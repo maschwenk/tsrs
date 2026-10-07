@@ -7,6 +7,7 @@ use tsrs_ast::{self as ast, Diagnostic, SourceFile};
 use tsrs_core::P;
 
 use crate::program::{sort_and_deduplicate_diagnostics, Program};
+use crate::splitcheck;
 
 #[cfg(feature = "checker")]
 pub use tsrs_checker::{Checker, Context};
@@ -619,19 +620,34 @@ impl checkerPool {
                 program.bind_source_files();
                 tsrs_core::ptr::shared_check::freeze_shared_objects();
             }
-            let create_start = std::time::Instant::now();
-            #[cfg(feature = "checker")]
-            tsrs_checker::links::set_multiple_checkers(self.checker_count > 1);
-            let slots: Vec<Mutex<Option<CheckerSlot>>> = (0..self.checker_count).map(|_| Mutex::new(None)).collect();
-            run_work_group(self.single_threaded, self.checker_count, |i| {
-                *slots[i].lock().unwrap() = Some(CheckerSlot(Mutex::new(new_checker(program))));
-            });
-            let checkers: &'static [CheckerSlot] =
-                Box::leak(slots.into_iter().map(|s| s.into_inner().unwrap().unwrap()).collect::<Vec<_>>().into_boxed_slice());
-            tsrs_core::phases::record("Checkers: create", create_start.elapsed());
+            let create_and_assign = || {
+                let create_start = std::time::Instant::now();
+                #[cfg(feature = "checker")]
+                tsrs_checker::links::set_multiple_checkers(self.checker_count > 1);
+                let slots: Vec<Mutex<Option<CheckerSlot>>> = (0..self.checker_count).map(|_| Mutex::new(None)).collect();
+                run_work_group(self.single_threaded, self.checker_count, |i| {
+                    *slots[i].lock().unwrap() = Some(CheckerSlot(Mutex::new(new_checker(program))));
+                });
+                let checkers: &'static [CheckerSlot] =
+                    Box::leak(slots.into_iter().map(|s| s.into_inner().unwrap().unwrap()).collect::<Vec<_>>().into_boxed_slice());
+                tsrs_core::phases::record("Checkers: create", create_start.elapsed());
+                let associations = tsrs_core::phases::time("Checkers: assign files", || compute_associations(program, self.checker_count));
+                (checkers, associations)
+            };
+            // tsrs-only: the CLI's leaf classification reads only the loaded program; it runs meanwhile
+            // (fileregions.rs `prepare`).
+            let (checkers, associations) = if program.leaf_files != crate::fileregions::LeafMode::Off && !self.single_threaded {
+                std::thread::scope(|s| {
+                    let prepare = s.spawn(|| crate::fileregions::prepare(program));
+                    let created = create_and_assign();
+                    prepare.join().unwrap();
+                    created
+                })
+            } else {
+                create_and_assign()
+            };
 
             let files = &program.files;
-            let associations = tsrs_core::phases::time("Checkers: assign files", || compute_associations(program, self.checker_count));
             let file_indices: FxHashMap<P<SourceFile>, usize> = files.iter().enumerate().map(|(i, &f)| (f, i)).collect();
             let owners = associations.iter().map(|&c| std::sync::atomic::AtomicU32::new(c as u32)).collect();
             let weights = if self.checker_count > 1 { checked_file_weights(program) } else { Vec::new() };
@@ -696,17 +712,20 @@ impl checkerPool {
         single_threaded: bool,
         cb: impl Fn(&mut Checker, usize, P<SourceFile>) + Sync,
     ) {
-        self.for_each_checker_group_do_ex(files, single_threaded, false, cb);
+        self.for_each_checker_group_do_ex(files, single_threaded, false, None, cb);
     }
 
     // `allow_steal`: the pass may move files between checkers (stealing_enabled). Only the type-check pass does: later
     // passes over a file (declaration diagnostics, emit) must run on the checker that checked it, and the incremental
-    // pass records which checker found a global diagnostic first.
+    // pass records which checker found a global diagnostic first. `split_ctx`: with stealing, heavy declaration files
+    // may be checked in pieces on several checkers before `cb` runs for them (splitcheck.rs); only the type-check pass,
+    // whose `cb` collects the file's diagnostics from its checker, passes it.
     pub(crate) fn for_each_checker_group_do_ex(
         &self,
         files: &[P<SourceFile>],
         single_threaded: bool,
         allow_steal: bool,
+        split_ctx: Option<&Context>,
         cb: impl Fn(&mut Checker, usize, P<SourceFile>) + Sync,
     ) {
         let state = self.create_checkers();
@@ -732,7 +751,16 @@ impl checkerPool {
         let active: Vec<usize> = (0..n).filter(|&c| !positions[c].is_empty()).collect();
         let single = single_threaded || self.single_threaded || active.len() <= 1;
         let steal = allow_steal && !single && stealing_enabled();
-        let weight = |i: u32| index_of[i as usize].map_or(1, |fi| state.weights.get(fi).copied().unwrap_or(1).max(0) as u64);
+        let file_weight = |i: u32| index_of[i as usize].map_or(1, |fi| state.weights.get(fi).copied().unwrap_or(1).max(0) as u64);
+        // Positions from `files.len()` on are the queued pieces of split files (`piece_items`).
+        let split = match split_ctx {
+            Some(_) if steal && splitcheck::split_config().enabled => plan_splits(self.program, files, &mut positions, &active, file_weight),
+            _ => SplitPlan::default(),
+        };
+        let weight = |i: u32| match split.item_weight(files.len(), i) {
+            Some(w) => w,
+            None => file_weight(i),
+        };
         if steal {
             // Each owner starts with the files that could be the pass's tail (heavy_files_first).
             let total: u64 = positions.iter().flatten().map(|&i| weight(i)).sum();
@@ -747,6 +775,17 @@ impl checkerPool {
             let mut file_cpu: Vec<(P<SourceFile>, f64)> = Vec::new();
             let mut guard = state.checkers[checker_idx].0.lock().unwrap();
             while let Some((i, from_other)) = queues_next(&queues, checker_idx, steal) {
+                if let Some(&(s, k, _)) = i.checked_sub(files.len()).map(|p| &split.piece_items[p]) {
+                    let piece_start = file_times.then(std::time::Instant::now);
+                    let cpu_start = if file_times { thread_cpu_seconds() } else { 0.0 };
+                    split.files[s].run_queued_piece(&mut guard, split_ctx.unwrap(), k);
+                    if let Some(piece_start) = piece_start {
+                        let cpu = thread_cpu_seconds() - cpu_start;
+                        state.file_times.lock().unwrap().push((split.files[s].file, checker_idx, piece_start.elapsed().as_secs_f64(), cpu));
+                    }
+                    count += 1;
+                    continue;
+                }
                 let file = files[i];
                 if from_other {
                     // Later passes over this file go to the checker that checked it.
@@ -759,7 +798,15 @@ impl checkerPool {
                 }
                 let file_start = file_times.then(std::time::Instant::now);
                 let cpu_start = if cost_cache || file_times { thread_cpu_seconds() } else { 0.0 };
+                let split_file = split.split_of.get(&(i as u32)).map(|&s| &split.files[s]);
+                if let Some(split_file) = split_file {
+                    split_file.run_owner(&mut guard, split_ctx.unwrap());
+                }
                 cb(&mut guard, i, file);
+                if let Some(split_file) = split_file.filter(|f| f.is_shadow()) {
+                    let whole = guard.file_diagnostics_so_far(file);
+                    split_file.shadow_compare(&whole);
+                }
                 if let Some(file_start) = file_start {
                     let cpu = thread_cpu_seconds() - cpu_start;
                     state.file_times.lock().unwrap().push((file, checker_idx, file_start.elapsed().as_secs_f64(), cpu));
@@ -778,6 +825,7 @@ impl checkerPool {
             }
         };
         run_work_group(single, active.len(), |k| run(active[k]));
+        splitcheck::SplitFile::report_stats(&split.files);
         if stats {
             state.group_runs.lock().unwrap().push(times.into_iter().map(|t| t.into_inner().unwrap()).collect());
             state.group_cpu.lock().unwrap().push(cpu.into_iter().map(|t| t.into_inner().unwrap()).collect());
@@ -843,6 +891,91 @@ fn heavy_files_first(positions: &mut Vec<u32>, threshold: u64, weight: impl Fn(u
     heavy.sort_by_key(|&i| std::cmp::Reverse(weight(i)));
     heavy.extend(light);
     *positions = heavy;
+}
+
+// The split files of one pass (splitcheck.rs) and their queued pieces.
+#[derive(Default)]
+struct SplitPlan {
+    files: Vec<splitcheck::SplitFile>,
+    // Position in `files` of each split file's own item -> index in `files` above.
+    split_of: FxHashMap<u32, usize>,
+    // The weight of each split file's own item: its first piece.
+    owner_weights: Vec<u64>,
+    // (split file, piece, weight) of each queued piece; queue position `files.len() + j` is piece item `j`.
+    piece_items: Vec<(usize, usize, u64)>,
+}
+
+impl SplitPlan {
+    fn item_weight(&self, file_count: usize, i: u32) -> Option<u64> {
+        if let Some(j) = (i as usize).checked_sub(file_count) {
+            return Some(self.piece_items[j].2);
+        }
+        self.split_of.get(&i).map(|&s| self.owner_weights[s])
+    }
+}
+
+// Chooses the declaration files to check in pieces and queues each piece at another checker. A checked declaration
+// file that weighs at least `min_share_percent` of an average checker's share is cut into pieces of about 1/divisor of
+// a share (with `force:<k>`, every checked declaration file into k pieces); a file that would be one piece is not
+// split. Each queued piece goes to the active checker, other than the file's owner, with the least work in heavy items
+// so far, so the pieces start at once on different checkers.
+fn plan_splits(program: &Program, files: &[P<SourceFile>], positions: &mut [Vec<u32>], active: &[usize], weight: impl Fn(u32) -> u64) -> SplitPlan {
+    let config = splitcheck::split_config();
+    let mut plan = SplitPlan::default();
+    if active.len() < 2 {
+        return plan;
+    }
+    let total: u64 = positions.iter().flatten().map(|&i| weight(i)).sum();
+    let share = total / active.len() as u64;
+    let piece_size = (share / config.divisor).max(1);
+    let mut owners: Vec<usize> = Vec::new();
+    for &owner in active {
+        for &i in &positions[owner] {
+            let (file, w) = (files[i as usize], weight(i));
+            // Default library files are not split unless forced: their cost is about their weight (lib.dom.d.ts: 2.7% of
+            // webpack's weight, 3% of its CPU), so they are never the tail, and a piece costs its checker the library
+            // types it touches again (webpack and next-root: +3-4% wall at 16-32 checkers when lib.dom.d.ts was split).
+            let default_lib = program.is_source_file_default_library(file.path());
+            if !file.is_declaration_file() || w == 0 || (config.force.is_none() && (default_lib || w * 100 < share * config.min_share_percent)) {
+                continue;
+            }
+            let count = config.force.unwrap_or(w.div_ceil(piece_size) as usize).min(active.len());
+            let pieces = splitcheck::statement_pieces(file, count);
+            if pieces.is_empty() {
+                continue;
+            }
+            let lengths: Vec<u64> = pieces
+                .iter()
+                .map(|r| file.statements.nodes()[r.clone()].iter().map(|s| (s.end() - s.pos()).max(1) as u64).sum())
+                .collect();
+            let length: u64 = lengths.iter().sum();
+            let piece_weights: Vec<u64> = lengths.iter().map(|&l| (w * l / length.max(1)).max(1)).collect();
+            let s = plan.files.len();
+            let split_file = splitcheck::SplitFile::new(file, pieces, config.shadow);
+            for k in split_file.queued_pieces() {
+                plan.piece_items.push((s, k, piece_weights[k]));
+            }
+            plan.owner_weights.push(piece_weights[0]);
+            plan.split_of.insert(i, s);
+            plan.files.push(split_file);
+            owners.push(owner);
+        }
+    }
+    if plan.files.is_empty() {
+        return plan;
+    }
+    let threshold = total / (active.len() as u64 * heavy_share_divisor());
+    let item_weight = |i: u32| plan.split_of.get(&i).map_or_else(|| weight(i), |&s| plan.owner_weights[s]);
+    let mut load: Vec<u64> = positions.iter().map(|p| p.iter().map(|&i| item_weight(i)).filter(|&w| w > threshold).sum()).collect();
+    let mut order: Vec<usize> = (0..plan.piece_items.len()).collect();
+    order.sort_by_key(|&j| std::cmp::Reverse(plan.piece_items[j].2));
+    for j in order {
+        let (s, _, w) = plan.piece_items[j];
+        let target = active.iter().copied().filter(|&c| c != owners[s]).min_by_key(|&c| (load[c], c)).unwrap();
+        load[target] += w;
+        positions[target].push((files.len() + j) as u32);
+    }
+    plan
 }
 
 // One checker's positions in the files of a group pass, in visiting order. The owner takes from the front, other

@@ -280,8 +280,8 @@ notes/perf-heavy-files-infer-memo.md).
 
 ## Freeing checked leaf files: `TSRS_FREE_LEAVES`
 
-A CLI `--noEmit` check with `TSRS_FREE_LEAVES=1` (opt-in: `MAX_DEFAULT_CHECKERS` is 0; on by default it cost the 8-vCPU bench 7-24% wall time at 1-4 checkers,
-so it is off unless `TSRS_FREE_LEAVES=1`) parses each TypeScript root file whose path predicts a leaf (tests, specs,
+A CLI `--noEmit` check with at most 16 checkers (`MAX_DEFAULT_CHECKERS`: above that it costs vscode 2.4-3.9% wall time,
+so it is off unless `TSRS_FREE_LEAVES=1`; notes/mem-leaf-regions-cost.md) parses each TypeScript root file whose path predicts a leaf (tests, specs,
 stories, mocks: `PREDICTED_LEAF_PATTERNS`) into a region of its own and frees the tree and binder output of each leaf
 among them as soon as its diagnostics are collected (`crates/tsrs_compiler/src/fileregions.rs`,
 notes/mem-free-leaf-files.md). A leaf is a checked TypeScript module that no other file refers to and that exports
@@ -296,7 +296,7 @@ saved. Asking a program for one freed leaf's diagnostics after the pass panics (
 
 | variable | values | effect |
 | --- | --- | --- |
-| `TSRS_FREE_LEAVES` | a comma list of: unset (off), `1` (free at any count), `0`, `keep`, `stats`, `all` | `0`: no file regions (the layout before). `keep` (any count): file regions and the leaf marks, nothing freed (what the regions alone cost). `all` (any count): every TypeScript root file gets a region, not only the predicted ones (frees every leaf, but moves every tree out of the huge-page thread arenas: +6-9% wall time on vscode at 32 checkers on Linux against +2.5-5% predicted). `stats`: one line on stderr: the leaves freed and the ones the prediction missed (with their share of the leaves' nodes), the bytes their regions used, all file regions' bytes, the pages given back and in how many system calls, and the arena address space the run used. Example: `TSRS_FREE_LEAVES=all,stats` |
+| `TSRS_FREE_LEAVES` | a comma list of: unset (free with at most 16 checkers), `1` (free at any count), `0`, `keep`, `stats`, `all` | `0`: no file regions (the layout before). `keep` (any count): file regions and the leaf marks, nothing freed (what the regions alone cost). `all` (any count): every TypeScript root file gets a region, not only the predicted ones (frees every leaf, but moves every tree out of the huge-page thread arenas: +6-9% wall time on vscode at 32 checkers on Linux against +2.5-5% predicted). `stats`: one line on stderr: the leaves freed and the ones the prediction missed (with their share of the leaves' nodes), the bytes their regions used, all file regions' bytes, the pages given back and in how many system calls, and the arena address space the run used. Example: `TSRS_FREE_LEAVES=all,stats` |
 
 After a change that reads a file after the check pass (a new report, a new whole-program loop in the checker, such as
 `getAlternativeContainingModules`'s), run a corpus with `TSRS_ARENA_POISON=1`: a freed region is then filled with
@@ -304,6 +304,32 @@ After a change that reads a file after the check pass (a new report, a new whole
 -p tsrs_cli --test free_leaf_files` covers the checker's loop over every module
 (testdata/regressions/leaf-alternative-containers) and a structurally identical instantiation after a freed leaf
 (leaf-structural-instantiation).
+
+## Checking a heavy declaration file on several checkers: `TSRS_SPLIT_FILES`
+
+In the type-check pass with stealing (the default mode with more than one checker), a checked declaration file that
+weighs at least 40% of an average checker's share is cut into contiguous statement ranges of about 1/8 of a share
+(`crates/tsrs_compiler/src/splitcheck.rs`, notes/perf-next-heavy-files.md). The checker that owns the file checks the
+first range; each other range is a queue item at the front of another checker's queue, which checks only those
+statements (`Checker::check_source_file_piece`) and hands its diagnostics for the file to the owner. The owner adds
+them to its collection, which deduplicates and sorts, and then runs the file-level steps as usual. A file is split only
+if all its top-level statements are declarations (`TS1036` is reported on the first executable statement of a block
+only, so two ranges would each report one). It is off with a named assignment (`--checkerAssignment`, `go`,
+`random:<seed>`), single-threaded, and in every other pass (declaration diagnostics, emit, incremental, the language
+server).
+
+| variable | values | effect |
+| --- | --- | --- |
+| `TSRS_SPLIT_FILES` | a comma list of: unset (on), `0`/`off`, `shadow`, `force:<k>`, `stats`, `stats:<file>` | `shadow`: the owner also checks the other checkers' ranges itself, reports the file as one checker finds it, and panics if the split would have reported anything else (a diagnostic another checker found that it did not, or one it found in another checker's range that no other checker did). `force:<k>`: split every checked declaration file with at least two statements into up to k ranges, whatever its weight (the test mode). `stats`: one line per pass on stderr (files split, ranges, ranges run by another checker); `stats:<file>` appends it to a file (the test harnesses keep stderr) |
+| `TSRS_SPLIT_MIN_SHARE` | percent, default `40` | which files are split (weight relative to an average checker's share) |
+| `TSRS_SPLIT_PIECE_DIVISOR` | default `8` | range size: 1/n of an average checker's share |
+
+After a change to what checking a declaration statement reads or writes outside the statement, run the conformance
+suite in the default checker mode with forced splits and compare its lists with an unsplit run:
+`TS_TEST_PROGRAM_SINGLE_THREADED=false TSRS_HISTORY=canonical TSRS_SPLIT_FILES=force:3,shadow tsrs-test run --suite all
+--baselines types,symbols --panic-summary` against the same with `TSRS_SPLIT_FILES=0` (about 630 declaration files in
+330 test programs are split). `cargo test -p tsrs_cli --test split_check` runs testdata/split-check in every mode
+against tsgo-ref's output.
 
 ## Profiling
 

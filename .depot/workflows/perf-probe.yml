@@ -1,5 +1,6 @@
-# Depot CI workflow: one-off performance probe on a 64-thread machine, for hill-climbing experiments that need more
-# cores than a laptop (notes/perf-*.md). Not scheduled and not triggered by pushes: run it from a branch or a dirty
+# Depot CI workflow: one-off performance probe on a 64-thread machine (or the `runner` input's, such as the 8-vCPU
+# `depot-ubuntu-24.04-8` of the README bench), for hill-climbing experiments that need more cores than a laptop, or
+# Linux (notes/perf-*.md). Not scheduled and not triggered by pushes: run it from a branch or a dirty
 # worktree with
 #
 #   depot ci run --workflow .depot/workflows/perf-probe.yml
@@ -10,9 +11,14 @@
 # Bun canary and tsgo, then runs tools/perf/probe.sh, which writes everything it wants to keep to probe-out/. That
 # directory is the `perf-probe` artifact (depot ci artifacts list <run>; depot ci artifacts download <id>).
 # actions/cache is not available to `depot ci run` (API-triggered runs are not tied to a ref), so every run clones and
-# installs its projects (vscode: ~2 min) and builds from scratch (~4 min on 64 cores).
+# installs its projects (vscode: ~2 min) and builds from scratch (~4 min on 64 cores). A run of a pushed branch with
+#
+#   depot ci dispatch --repo maschwenk/tsrs --workflow perf-probe.yml --ref <branch> --input runner=depot-ubuntu-24.04-8 \
+#     --input projects=vscode,formbricks-web --input script=tools/perf/leafprobe.sh --input probe_args='--reps 5'
+#
+# restores the projects from bench.yml's caches. `script` picks the probe (it gets `probe_args` as PROBE_ARGS).
 
-name: Perf probe (64 threads)
+name: Perf probe
 
 on:
   workflow_dispatch:
@@ -20,6 +26,15 @@ on:
       projects:
         description: comma-separated bench/projects.json names to set up
         default: vscode
+      runner:
+        description: Depot runner label
+        default: depot-ubuntu-24.04-64
+      script:
+        description: probe script to run with bash
+        default: tools/perf/probe.sh
+      probe_args:
+        description: passed to the probe script as PROBE_ARGS
+        default: ""
 
 permissions:
   contents: read
@@ -31,7 +46,7 @@ env:
 
 jobs:
   probe:
-    runs-on: depot-ubuntu-24.04-64
+    runs-on: ${{ inputs.runner || 'depot-ubuntu-24.04-64' }}
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -51,12 +66,14 @@ jobs:
 
       - name: Install Bun canary and perf
         run: |
+          sudo apt-get install -y -qq strace >/dev/null 2>&1 || echo "strace not installed"
           curl -fsSL -o /tmp/bun.zip https://github.com/oven-sh/bun/releases/download/canary/bun-linux-x64.zip
           unzip -oq /tmp/bun.zip -d /tmp/bun
           /tmp/bun/bun-linux-x64/bun --revision
           # linux perf is best-effort: the packaged tools may not match the runner kernel.
           (sudo apt-get update -qq && sudo apt-get install -y -qq linux-tools-common linux-tools-generic >/dev/null 2>&1 \
             && ls /usr/lib/linux-tools/*/perf) || echo "perf not installed"
+          sudo sysctl -q -w kernel.perf_event_paranoid=-1 kernel.kptr_restrict=0 || true
 
       - name: Read the pinned Rust toolchain (rust-toolchain.toml)
         id: rust
@@ -69,8 +86,61 @@ jobs:
           targets: x86_64-unknown-linux-gnu
           components: llvm-tools
 
+      # bench.yml's caches (restore only; dispatched runs of a pushed branch get them, `depot ci run` does not).
+      - name: Cache keys
+        id: keys
+        run: python3 bench/run.py --print-cache-keys --projects "$PROBE_PROJECTS" | tee -a "$GITHUB_OUTPUT"
+
+      - name: Restore suite and compilers
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            bench/.work/suite
+            bench/.work/tsgo
+          key: bench-shared-${{ runner.os }}-${{ steps.keys.outputs.shared }}
+
+      - name: Restore vscode
+        if: steps.keys.outputs['vscode'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/vscode
+          key: bench-vscode-${{ runner.os }}-${{ steps.keys.outputs['vscode'] }}
+
+      - name: Restore formbricks-web
+        if: steps.keys.outputs['formbricks-web'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/formbricks-web
+          key: bench-formbricks-web-${{ runner.os }}-${{ steps.keys.outputs['formbricks-web'] }}
+
+      - name: Restore xstate-main
+        if: steps.keys.outputs['xstate-main'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/xstate-main
+          key: bench-xstate-main-${{ runner.os }}-${{ steps.keys.outputs['xstate-main'] }}
+
+      - name: Restore supabase-studio
+        if: steps.keys.outputs['supabase-studio'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/supabase-studio
+          key: bench-supabase-studio-${{ runner.os }}-${{ steps.keys.outputs['supabase-studio'] }}
+
+      - name: Restore t3code-server
+        if: steps.keys.outputs['t3code-server'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/t3code-server
+          key: bench-t3code-server-${{ runner.os }}-${{ steps.keys.outputs['t3code-server'] }}
+
       - name: Set up projects and compilers
         run: python3 bench/run.py --setup-only --projects "$PROBE_PROJECTS"
+
+      # ~/.cargo and the dependencies in target/ (a build takes ~4 min on 64 cores, far longer on 8).
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: perf-probe-${{ inputs.runner || 'depot-ubuntu-24.04-64' }}
 
       - name: Build tsrs (release)
         run: cargo build --release --locked -p tsrs_cli
@@ -81,7 +151,9 @@ jobs:
           BUN_BIN: /tmp/bun/bun-linux-x64/bun
           BENCH_WORK: ${{ github.workspace }}/bench/.work
           PROBE_OUT: ${{ github.workspace }}/probe-out
-        run: bash tools/perf/probe.sh
+          PROBE_ARGS: ${{ inputs.probe_args || '' }}
+          PROBE_SCRIPT: ${{ inputs.script || 'tools/perf/probe.sh' }}
+        run: bash "$PROBE_SCRIPT"
 
       - name: Upload probe output
         if: always()
