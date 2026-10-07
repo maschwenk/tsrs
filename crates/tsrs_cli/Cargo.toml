@@ -25,6 +25,8 @@ tsrs_incremental.workspace = true
 tsrs_api.workspace = true
 tsrs_api_transport.workspace = true
 mimalloc = "0.1.52"
+# The heap split in src/alloc.rs (mi_heap_new_in_arena, mi_manage_os_memory_ex).
+libmimalloc-sys = { version = "0.1.49", features = ["extended", "arena"] }
 libc = "0.2"
 [dev-dependencies]
 similar = "3"

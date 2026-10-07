@@ -1,8 +1,9 @@
 // The alloc-profile build installs tsrs_core's counting allocator (over mimalloc) instead.
 #[cfg(not(feature = "alloc-profile"))]
 #[global_allocator]
-static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+static GLOBAL: alloc::Alloc = alloc::Alloc;
 
+mod alloc;
 #[cfg(feature = "alloc-profile")]
 mod census;
 mod api;
@@ -15,6 +16,7 @@ mod tsc;
 mod tsctests;
 
 fn main() {
+    alloc::init();
     let args: Vec<String> = std::env::args().skip(1).collect();
     // main.go:21: `--lsp` runs the language server (its threads have their own stacks); `--api` runs the
     // native API server (docs/NODE_API.md).
