@@ -7,7 +7,8 @@
 Compares each project's single-threaded instruction count and peak RSS (bench/count.py, recorded by bench/run.py)
 with the newest earlier result in bench/results from the same runner label and build. The instruction count repeats
 to about 0.001% and peak RSS to under 0.4%, so a change past the thresholds below is the code's; only a different CPU
-model or C library (which pick different memcpy-style routines) can move them otherwise, and then nothing is judged.
+model or C library (which pick different memcpy-style routines) can move them otherwise, and then the project is not
+judged (the machine is compared per project: a parallel run records a project's machine when it is not the run's).
 A different Rust compiler (a rust-toolchain.toml bump) moves them too: the table is printed as the upgrade's
 measurement, and nothing is flagged.
 Regressions are printed as warnings and, with --comment, posted as a comment on each pull request merged since the
@@ -63,10 +64,15 @@ def previous_result(new, path, results_dir):
     return max(candidates, key=lambda r: r["date"]) if candidates else None
 
 
-def machine_difference(old, new):
-    """Why counts from these two runs are not comparable, or None."""
+def project_machine(result, project):
+    """The machine a project was measured on: the run's, unless bench/run.py --merge recorded another on the project."""
+    return result.get("projects", {}).get(project, {}).get("machine") or result.get("machine", {})
+
+
+def machine_difference(old, new, project):
+    """Why the project's counts in these two runs are not comparable, or None."""
     for key in ("cpu", "libc"):
-        a, b = old.get("machine", {}).get(key), new.get("machine", {}).get(key)
+        a, b = project_machine(old, project).get(key), project_machine(new, project).get(key)
         if a != b:
             return f"{key} differs ({a!r} -> {b!r})"
     return None
@@ -84,7 +90,7 @@ def compare(old, new, metrics=METRICS):
     for metric in metrics:
         for name in new.get("projects", {}):
             before, after = measured(old, name, metric["key"]), measured(new, name, metric["key"])
-            if not before or not after:
+            if not before or not after or machine_difference(old, new, name):
                 continue
             change = 100.0 * (after / before - 1)
             if change > metric["percent"] and after - before > metric["floor"]:
@@ -151,9 +157,10 @@ def main(argv):
         print("regressions: no earlier result with instruction counts to compare with")
         return
     old_commit, new_commit = old[TOOL]["commit"], new[TOOL]["commit"]
-    why_not = machine_difference(old, new)
-    if why_not:
-        print(f"regressions: not comparing with {old_commit[:12]}: {why_not}")
+    skipped = {name: why for name in new.get("projects", {}) if (why := machine_difference(old, new, name))}
+    for name, why in skipped.items():
+        print(f"regressions: not comparing {name} with {old_commit[:12]}: {why}")
+    if skipped and len(skipped) == len(new.get("projects", {})):
         return
     metrics = [dict(m, percent=args.threshold) if m["key"] == "instructions" and args.threshold is not None else m
                for m in METRICS]

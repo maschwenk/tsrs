@@ -105,8 +105,8 @@ tsrs's errors (`(ref N)` in the table).
 - tsrs: by default the release build of the checked-out commit (`target/release/tsrs`). CI measures what the npm
   package ships instead: the PGO build of the `dist` profile (fat LTO, one codegen unit), built with the commands of
   the release workflow and trained with `.github/scripts/pgo-train.sh` (conformance suite + xstate-main + webpack) on
-  the bench runner itself (`--tsrs <binary> --tsrs-build pgo-dist`; notes/perf-pgo.md). Training and measurement
-  share the project checkouts in `bench/.work`; the training processes have exited before the first measured run.
+  a machine of the bench spec (`--tsrs <binary> --tsrs-build pgo-dist`; notes/perf-pgo.md), in the build job; each
+  project is then measured on a fresh machine of that spec where nothing else has run (the `measure` jobs, "CI").
 - Per project: one untimed warm-up run (tsgo), then N reps (default 3); within a rep the two modes and the two
   compilers alternate, and the compiler order flips every rep. Tables report medians.
 - Wall: process wall clock measured by the harness. Peak: max RSS from `wait4` rusage (the number `/usr/bin/time -v`
@@ -135,9 +135,10 @@ different profiles and binaries whose counts differed by 0.002-0.046%, well unde
 the Go runtime makes its count vary 2-4%.
 
 `bench/regressions.py --latest` compares the counts with the newest earlier result from the same runner label and
-build, and only when the CPU model and C library match (they pick different `memcpy`-style routines). When the Rust
-compiler differs (results record `tsrs.rustc`; `rust-toolchain.toml` pins it), it prints the change as the upgrade's
-measurement and flags nothing (`docs/RUST.md`, "Upgrading Rust"). A project up
+build, and only when the CPU model and C library match (they pick different `memcpy`-style routines; compared per
+project, since a parallel run can land a project on another machine model, which `run.py --merge` records on the
+project). When the Rust compiler differs (results record `tsrs.rustc`; `rust-toolchain.toml` pins it), it prints the
+change as the upgrade's measurement and flags nothing (`docs/RUST.md`, "Upgrading Rust"). A project up
 more than 1% is a regression: the step prints a warning and comments on the pull request merged in between, or, when
 the run covers more than three merges, on the commit. It never fails the job; a deliberate trade (memory for CPU, say)
 needs no action. Results store the count under `projects.<name>.single.tsrs.instructions`.
@@ -156,6 +157,24 @@ a probe of `depot-ubuntu-*` / `depot-macos-latest` labels from GitHub Actions st
 so it is built for unattended runs: one bench at a time, never cancelled (a push during a run queues the newest
 commit), network steps retried, and the results commit rebased onto the latest `main` before pushing.
 
+Three jobs (since 2026-10-07; until then one job did everything in sequence, and the measurement alone took 18-20 min
+once the four application projects were in):
+
+1. `build`, on one machine of the fixed spec: the PGO `dist` build of the commit (below). The binary and the
+   `rustc -V` that built it go up as the `tsrs-pgo-dist` artifact.
+2. `measure`, one job per project of `bench/projects.json` (the matrix is `bench/run.py --print-projects`, so a new
+   project gets a job without a workflow change), each on its own machine of the fixed spec: it restores the project's
+   cache, downloads the binary and runs `bench/run.py --projects <name> --out-dir <dir>`. The result is the
+   `bench-partial-<name>` artifact, the compiler output `bench-logs-<name>`. The jobs run at the same time but never
+   share a machine, so a measurement is what it was in the sequential run: one project on an idle 8-vCPU machine.
+3. `merge`: `bench/run.py --merge <results...> --readme README.md` joins them into one result in `bench/projects.json`
+   order, after checking that the binary, the compilers, reps and modes agree; then the regression flag and the
+   results commit, as before. The machine most projects ran on is the run's; a project measured on a different CPU
+   model or C library (so far every `depot-ubuntu-24.04-8` has been the same model) records its own `machine`, and
+   the regression flag compares that project only with runs on the same model. A run started from a branch
+   (`depot ci run --workflow .depot/workflows/bench.yml`) ends with the `bench-result` artifact: nothing is committed
+   or commented.
+
 **Fixed machine spec**: `depot-ubuntu-24.04-8`, 8 vCPU, 32 GB RAM, Linux x86_64, for every run, so numbers are
 comparable over time. Sizing: the largest peak measured is tsgo's default mode on vscode and mui-docs (7.5 GiB on an
 18-core Mac, 6.9 GiB on Linux); 32 GB leaves 4x headroom, and 8 vCPUs cover the 4 checker threads plus parallel
@@ -168,7 +187,9 @@ rebuilt: they are what is being measured). The final PGO build is not cached: it
 hash, which changes every run, so cargo rebuilds all of it anyway (as in the release workflow); one
 cache for the suite checkout plus the npm-installed compilers (`typescript@7.0.2` and the reference nightly); one cache
 per cloned project (checkout + `node_modules`) keyed on its pinned commit and install command
-(`bench/run.py --print-cache-keys`), so changing one pin re-installs only that project.
+(`bench/run.py --print-cache-keys`), so changing one pin re-installs only that project. Each measuring job restores
+the shared cache and its own project's; the build job restores the two training projects (xstate-main, webpack) and
+saves the shared cache.
 
 Job duration split, 2026-10-01:
 
@@ -190,6 +211,13 @@ the PGO pipeline, measured on Depot run `ps_h83310tmld`: TypeScript testdata spa
 of tsrs + tsrs-test 100 s, training run 15 s, profile merge < 1 s, final build 74 s, so ~3 min more per run (job 7 min
 13 s -> 10 min 4 s). The dependencies, the only part rust-cache can reuse, compile in ~3 s; the time is the
 workspace crates with one codegen unit and fat LTO, which change with every commit.
+
+Parallel layout (2026-10-07), expected from the per-project times of the 2026-10-06 run
+(`bench/results/2026-10-06-bd945842ada5.json`; sequential job 26 min 35 s, measurement 18 min 19 s): vscode 5.3 min,
+t3code-server 4.6, mui-docs 3.0, supabase-studio 2.8, formbricks-web 2.3, cal-diy 1.8, the other four under 35 s
+each. The critical path is the build job (about 7.5 min: instrumented build 4 min 21 s, training 27 s, final build
+2 min 21 s, plus setup), then the vscode job, then the merge: about 14 min. Runner minutes go up by one start-up and
+cache restore per project, about a minute each. (To be replaced by the measured split of the first parallel runs.)
 
 ## Head-to-head on a wide machine
 
