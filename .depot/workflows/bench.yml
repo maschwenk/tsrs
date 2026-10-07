@@ -1,10 +1,17 @@
 # Depot CI workflow (https://depot.dev/docs/ci/overview). Benchmarks tsrs against tsgo (typescript@7.0.2) on the
-# typescript-benchmarking projects (bench/README.md) and rewrites the table between the bench markers at the top of
-# README.md. Not a GitHub Actions workflow: this repository is connected to Depot CI, and Depot's runners for GitHub
-# Actions only serve organization-owned repositories.
+# typescript-benchmarking projects and four open-source applications (bench/README.md) and rewrites the table between
+# the bench markers at the top of README.md. Not a GitHub Actions workflow: this repository is connected to Depot CI,
+# and Depot's runners for GitHub Actions only serve organization-owned repositories.
+#
+# Three jobs (bench/README.md "CI"): `build` makes the PGO dist binary once; `measure` is one job per project of
+# bench/projects.json, each on its own machine of the fixed spec, so the projects are measured at the same time
+# without ever sharing a CPU (one job measuring them one after the other took 18-20 min; the longest project, vscode,
+# takes about 5); `merge` joins the per-project results into one result file (bench/run.py --merge), flags
+# regressions and commits.
 #
 # Loop guards: the results commit only touches README.md and bench/results/** (excluded by `paths`), and carries
-# [skip ci], which the job's `if` also checks (the commit is pushed by Depot's GitHub app, which may trigger Depot CI).
+# [skip ci], which the build job's `if` also checks (the commit is pushed by Depot's GitHub app, which may trigger
+# Depot CI); the other jobs need the build job, so they are skipped with it.
 
 name: Bench
 
@@ -28,27 +35,30 @@ permissions:
   contents: read
 
 # Fixed machine spec so runs are comparable: Depot depot-ubuntu-24.04-8 = 8 vCPU / 32 GB / x86_64 (bench/README.md
-# "CI"). The first step fails the job on any other machine; there is no fallback runner.
+# "CI"), for the build (PGO training) and for every measuring job. The hardware step fails the job on any other
+# machine; there is no fallback runner.
 
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
 
 jobs:
-  bench:
+  # tsrs is measured as released: the PGO build of the `dist` profile, with the same commands as the build job of
+  # .github/workflows/release.yml (target x86_64-unknown-linux-gnu) and the same training workload
+  # (.github/scripts/pgo-train.sh), which runs on the xstate-main and webpack checkouts set up here (bench/.work). The
+  # measuring jobs get the binary as the `tsrs-pgo-dist` artifact, with the `rustc -V` that built it (results record
+  # the compiler; bench/regressions.py reads it).
+  build:
     # Second loop guard: the results commit says [skip ci] (null on workflow_dispatch, which then runs).
     if: github.repository == 'maschwenk/tsrs' && !contains(github.event.head_commit.message, '[skip ci]')
     runs-on: depot-ubuntu-24.04-8
-    permissions:
-      contents: write # pushes the results commit
-      pull-requests: write # comments on pull requests that regress instruction counts (bench/regressions.py)
-    timeout-minutes: 90
-    env:
-      BENCH_RUNNER: Depot CI `depot-ubuntu-24.04-8`
+    timeout-minutes: 60
+    outputs:
+      projects: ${{ steps.plan.outputs.projects }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          fetch-depth: 0 # full history so the results commit can be rebased onto a newer main
+          persist-credentials: false
 
       - name: Runner hardware (must match the fixed spec)
         run: |
@@ -98,10 +108,10 @@ jobs:
 
       # On Depot runners every cache action below is served by Depot Cache (no workflow changes needed). One cache for
       # the suite checkout + the npm compilers, and one per cloned project (checkout + node_modules) keyed on its pinned
-      # commit and install command, so changing one pin re-installs only that project.
+      # commit and install command. This job needs the two training projects; each measuring job restores its own.
       - name: Cache keys
         id: keys
-        run: python3 bench/run.py --print-cache-keys | tee -a "$GITHUB_OUTPUT"
+        run: python3 bench/run.py --print-cache-keys --projects xstate-main,webpack | tee -a "$GITHUB_OUTPUT"
 
       - name: Restore suite and compilers
         id: cache-shared
@@ -111,13 +121,6 @@ jobs:
             bench/.work/suite
             bench/.work/tsgo
           key: bench-shared-${{ runner.os }}-${{ steps.keys.outputs.shared }}
-
-      - name: Restore vscode
-        id: cache-vscode
-        uses: actions/cache/restore@v4
-        with:
-          path: bench/.work/solutions/vscode
-          key: bench-vscode-${{ runner.os }}-${{ steps.keys.outputs['vscode'] }}
 
       - name: Restore xstate-main
         id: cache-xstate
@@ -133,44 +136,9 @@ jobs:
           path: bench/.work/solutions/webpack
           key: bench-webpack-${{ runner.os }}-${{ steps.keys.outputs['webpack'] }}
 
-      - name: Restore mui-docs
-        id: cache-mui
-        uses: actions/cache/restore@v4
-        with:
-          path: bench/.work/solutions/mui-docs
-          key: bench-mui-docs-${{ runner.os }}-${{ steps.keys.outputs['mui-docs'] }}
-
-      - name: Restore cal-diy
-        id: cache-cal
-        uses: actions/cache/restore@v4
-        with:
-          path: bench/.work/solutions/cal-diy
-          key: bench-cal-diy-${{ runner.os }}-${{ steps.keys.outputs['cal-diy'] }}
-
-      - name: Restore formbricks-web
-        id: cache-formbricks
-        uses: actions/cache/restore@v4
-        with:
-          path: bench/.work/solutions/formbricks-web
-          key: bench-formbricks-web-${{ runner.os }}-${{ steps.keys.outputs['formbricks-web'] }}
-
-      - name: Restore supabase-studio
-        id: cache-supabase
-        uses: actions/cache/restore@v4
-        with:
-          path: bench/.work/solutions/supabase-studio
-          key: bench-supabase-studio-${{ runner.os }}-${{ steps.keys.outputs['supabase-studio'] }}
-
-      - name: Restore t3code-server
-        id: cache-t3code
-        uses: actions/cache/restore@v4
-        with:
-          path: bench/.work/solutions/t3code-server
-          key: bench-t3code-server-${{ runner.os }}-${{ steps.keys.outputs['t3code-server'] }}
-
-      # A no-op for everything restored above. Also sets up xstate-main and webpack for the PGO training run.
-      - name: Set up benchmark projects
-        run: python3 bench/run.py --setup-only
+      # A no-op for everything restored above; installs the compilers and the two training projects otherwise.
+      - name: Set up the training projects
+        run: python3 bench/run.py --setup-only --projects xstate-main,webpack
 
       - name: Save suite and compilers
         if: steps.cache-shared.outputs.cache-hit != 'true'
@@ -180,13 +148,6 @@ jobs:
             bench/.work/suite
             bench/.work/tsgo
           key: ${{ steps.cache-shared.outputs.cache-primary-key }}
-
-      - name: Save vscode
-        if: steps.cache-vscode.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: bench/.work/solutions/vscode
-          key: ${{ steps.cache-vscode.outputs.cache-primary-key }}
 
       - name: Save xstate-main
         if: steps.cache-xstate.outputs.cache-hit != 'true'
@@ -202,45 +163,6 @@ jobs:
           path: bench/.work/solutions/webpack
           key: ${{ steps.cache-webpack.outputs.cache-primary-key }}
 
-      - name: Save mui-docs
-        if: steps.cache-mui.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: bench/.work/solutions/mui-docs
-          key: ${{ steps.cache-mui.outputs.cache-primary-key }}
-
-      - name: Save cal-diy
-        if: steps.cache-cal.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: bench/.work/solutions/cal-diy
-          key: ${{ steps.cache-cal.outputs.cache-primary-key }}
-
-      - name: Save formbricks-web
-        if: steps.cache-formbricks.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: bench/.work/solutions/formbricks-web
-          key: ${{ steps.cache-formbricks.outputs.cache-primary-key }}
-
-      - name: Save supabase-studio
-        if: steps.cache-supabase.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: bench/.work/solutions/supabase-studio
-          key: ${{ steps.cache-supabase.outputs.cache-primary-key }}
-
-      - name: Save t3code-server
-        if: steps.cache-t3code.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: bench/.work/solutions/t3code-server
-          key: ${{ steps.cache-t3code.outputs.cache-primary-key }}
-
-      # tsrs is measured as released: the PGO build of the `dist` profile, with the same commands as the build job of
-      # .github/workflows/release.yml (target x86_64-unknown-linux-gnu) and the same training workload
-      # (.github/scripts/pgo-train.sh), which runs on the project checkouts set up above (bench/.work). The training
-      # processes exit before the measurement starts, and every measured run is a fresh process of the final binary.
       - name: PGO instrumented build
         env:
           RUSTFLAGS: -Cprofile-generate=/tmp/tsrs-pgo/raw
@@ -265,10 +187,176 @@ jobs:
           CARGO_TARGET_DIR: /tmp/tsrs-pgo/target
         run: cargo build --profile dist --locked -p tsrs_cli --target x86_64-unknown-linux-gnu
 
-      - name: Benchmark
+      # The checksum is printed here and in every measuring job, so the logs show that they measured this binary.
+      - name: Package the binary for the measuring jobs
+        run: |
+          mkdir -p /tmp/tsrs-pgo/dist
+          cp /tmp/tsrs-pgo/target/x86_64-unknown-linux-gnu/dist/tsrs /tmp/tsrs-pgo/dist/tsrs
+          rustc -V > /tmp/tsrs-pgo/dist/rustc.txt
+          sha256sum /tmp/tsrs-pgo/dist/tsrs
+          /tmp/tsrs-pgo/dist/tsrs --version
+          cat /tmp/tsrs-pgo/dist/rustc.txt
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: tsrs-pgo-dist
+          path: /tmp/tsrs-pgo/dist
+          if-no-files-found: error
+          retention-days: 3
+
+      # The measuring matrix: every project of bench/projects.json, so a new project gets a job without a workflow change.
+      - name: Projects to measure
+        id: plan
+        run: echo "projects=$(python3 bench/run.py --print-projects)" >> "$GITHUB_OUTPUT"
+
+  # One project per job, each on an idle machine of the fixed spec: the measurement is what it was in the sequential
+  # run (one project at a time, nothing else running), only the projects no longer wait for each other.
+  measure:
+    needs: build
+    runs-on: depot-ubuntu-24.04-8
+    timeout-minutes: 60 # a warm run takes a few minutes; a cold project cache adds its clone and install
+    strategy:
+      fail-fast: false # one project's failure must not cancel the others; the merge job then waits for a re-run
+      matrix:
+        project: ${{ fromJSON(needs.build.outputs.projects) }}
+    env:
+      BENCH_RUNNER: Depot CI `depot-ubuntu-24.04-8`
+      PROJECT: ${{ matrix.project }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Runner hardware (must match the fixed spec)
+        run: |
+          nproc; free -g; df -h / | tail -1
+          lscpu | grep -E 'Model name|^CPU\(s\)' || true
+          mem_gb=$(awk '/MemTotal/ {printf "%d", $2 / 1048576}' /proc/meminfo)
+          if [ "$(nproc)" != 8 ] || [ "$mem_gb" -lt 28 ] || [ "$(uname -m)" != x86_64 ]; then
+            echo "::error::expected 8 vCPU / 32 GB / x86_64, got $(nproc) vCPU / ${mem_gb} GB / $(uname -m)"; exit 1
+          fi
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+
+      # `shared` is the suite + compilers cache; `project` is this project's (none for the two suite-only projects,
+      # Compiler and Compiler-Unions, which live in the suite checkout).
+      - name: Cache keys
+        id: keys
+        run: python3 bench/run.py --print-cache-keys --projects "$PROJECT" | sed "s/^$PROJECT=/project=/" | tee -a "$GITHUB_OUTPUT"
+
+      # Saved by the build job (restore only; a miss installs the compilers again, ~30 s).
+      - name: Restore suite and compilers
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            bench/.work/suite
+            bench/.work/tsgo
+          key: bench-shared-${{ runner.os }}-${{ steps.keys.outputs.shared }}
+
+      - name: Restore ${{ matrix.project }}
+        if: steps.keys.outputs.project != ''
+        id: cache-project
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/${{ matrix.project }}
+          key: bench-${{ matrix.project }}-${{ runner.os }}-${{ steps.keys.outputs.project }}
+
+      # A no-op when the caches hit; clones and installs the project otherwise (and installs the reference compiler).
+      - name: Set up ${{ matrix.project }}
+        run: python3 bench/run.py --setup-only --projects "$PROJECT"
+
+      - name: Save ${{ matrix.project }}
+        if: steps.keys.outputs.project != '' && steps.cache-project.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: bench/.work/solutions/${{ matrix.project }}
+          key: ${{ steps.cache-project.outputs.cache-primary-key }}
+
+      - name: Download tsrs (PGO, dist profile)
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: tsrs-pgo-dist
+          path: /tmp/tsrs-pgo/dist
+
+      # Artifacts drop the executable bit. The checksum must be the one the build job printed.
+      - name: Check the binary
+        run: |
+          chmod +x /tmp/tsrs-pgo/dist/tsrs
+          sha256sum /tmp/tsrs-pgo/dist/tsrs
+          /tmp/tsrs-pgo/dist/tsrs --version
+          cat /tmp/tsrs-pgo/dist/rustc.txt
+
+      - name: Benchmark ${{ matrix.project }}
         run: >-
-          python3 bench/run.py --readme README.md --tsrs-build pgo-dist
-          --tsrs /tmp/tsrs-pgo/target/x86_64-unknown-linux-gnu/dist/tsrs
+          python3 bench/run.py --projects "$PROJECT" --tsrs /tmp/tsrs-pgo/dist/tsrs --tsrs-build pgo-dist
+          --rustc "$(cat /tmp/tsrs-pgo/dist/rustc.txt)" --out-dir "/tmp/bench-partial/$PROJECT"
+
+      - name: Upload the result
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: bench-partial-${{ matrix.project }}
+          path: /tmp/bench-partial/${{ matrix.project }}
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: bench-logs-${{ matrix.project }}
+          path: bench/.work/logs
+          if-no-files-found: ignore
+
+  # Joins the per-project results into bench/results/<date>-<commit>.{json,md} and the README table, flags
+  # regressions, and commits. Runs only when every measuring job succeeded: a table with rows missing would replace a
+  # complete one in the README.
+  merge:
+    needs: [build, measure]
+    runs-on: depot-ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write # pushes the results commit
+      pull-requests: write # comments on pull requests that regress instruction counts (bench/regressions.py)
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0 # full history: regressions.py lists the merges since the previous run; the results commit goes on the latest main
+
+      - name: Download the per-project results
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: bench-partial-*
+          path: /tmp/bench-partials
+
+      - name: Merge results
+        run: |
+          echo "ref=$GITHUB_REF event=$GITHUB_EVENT_NAME sha=$GITHUB_SHA"
+          ls -R /tmp/bench-partials
+          python3 bench/run.py --merge /tmp/bench-partials/*/*.json --out-dir /tmp/bench-merged
+          cp /tmp/bench-merged/* bench/results/
+
+      - name: Upload the merged result
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: bench-result
+          path: /tmp/bench-merged
+
+      # Only a bench of a commit on main, measured without local changes, is published (the results commit and the
+      # regression comments). A run started from a branch or a dirty worktree (`depot ci run --workflow
+      # .depot/workflows/bench.yml`, which applies the local diff on the runner) ends with the `bench-result` artifact.
+      - name: Decide whether to publish
+        id: publish
+        run: |
+          git fetch -q origin main
+          read -r commit dirty < <(python3 -c 'import json, sys; t = json.load(open(sys.argv[1]))["tsrs"]; print(t["commit"], t["dirty"])' /tmp/bench-merged/*.json)
+          if [ "$dirty" = False ] && git merge-base --is-ancestor "$commit" origin/main; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::not publishing: $commit (dirty: $dirty) is not a clean commit on main; the result is the bench-result artifact"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          fi
 
       # Flag only (bench/README.md "Regression flag"): compares tsrs instruction counts and peak memory with the previous
       # run and, on a regression, comments on the pull requests merged in between. Never fails the job.
@@ -276,30 +364,20 @@ jobs:
         continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: python3 bench/regressions.py --latest --comment
-
-      - name: Upload logs
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: bench-logs
-          path: bench/.work/logs
-          if-no-files-found: ignore
+        run: python3 bench/regressions.py --latest ${{ steps.publish.outputs.publish == 'true' && '--comment' || '' }}
 
       - name: Commit results
+        if: steps.publish.outputs.publish == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           # The results commit is re-created on top of the latest main instead of rebased: README.md is edited by
           # people while a bench runs, and rebasing the table commit over such edits conflicts.
-          table=$(ls -t bench/results/*.md | head -1)
-          cp -R bench/results /tmp/bench-results
-          cp "$table" /tmp/bench-table.md
           for attempt in 1 2 3 4 5; do
             git fetch -q origin main
-            git checkout -q -f -B main origin/main # drops the run's README.md edit; the table is re-applied below
-            cp /tmp/bench-results/* bench/results/
-            python3 bench/run.py --apply-table /tmp/bench-table.md --readme README.md
+            git checkout -q -f -B main origin/main
+            cp /tmp/bench-merged/* bench/results/
+            python3 bench/run.py --apply-table /tmp/bench-merged/*.md --readme README.md
             git add README.md bench/results
             git commit -q -m "bench: results for ${GITHUB_SHA::12} [skip ci]"
             git push -q origin HEAD:main && exit 0

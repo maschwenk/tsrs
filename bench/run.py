@@ -6,6 +6,8 @@ See bench/README.md. Typical use:
     python3 bench/run.py --local                       # everything in bench/projects.json
     python3 bench/run.py --local --projects webpack,Compiler --reps 1
     python3 bench/run.py --setup-only                  # clone + install only (CI cache warm-up)
+    python3 bench/run.py --projects vscode --out-dir /tmp/p/vscode   # one project of a parallel run (CI)
+    python3 bench/run.py --merge /tmp/p/*/*.json --readme README.md  # join such results into one
 """
 
 from __future__ import annotations
@@ -23,6 +25,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections import Counter
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -386,6 +389,9 @@ def markdown(result: dict) -> str:
         lines += ["", f"(ref N): tsgo {tv} and tsrs disagree, but `typescript@{ref['version']}`, built from the "
                       f"TypeScript commit tsrs ports (`{ref['commit'][:8]}`), reports exactly tsrs's errors: a TypeScript "
                       f"7.0 vs 7.1-dev difference, not a tsrs bug."]
+    if mixed := [n for n, pr in result["projects"].items() if "machine" in pr]:
+        lines += ["", "Not measured on the machine named below (a parallel run landed on more than one machine model): "
+                      + "; ".join(f"{n} on {result['projects'][n]['machine']['label']}" for n in mixed) + "."]
     lines += ["", f"Runner: {m['label']}. Date: {result['date']}. tsrs commit: `{commit}`. "
                   + ("Numbers from shared CI machines are noisy; compare trends, not single runs. " if m.get("ci") else "")
                   + "How it is measured: [`bench/README.md`](bench/README.md)."]
@@ -402,6 +408,66 @@ def update_readme(readme: Path, table: str) -> None:
     else:
         text = f"{block}\n\n{text}"
     readme.write_text(text)
+
+
+def merge_results(cfg: dict, paths: list[Path]) -> dict:
+    """One result from the per-project results of a parallel run (.depot/workflows/bench.yml: one measuring job per
+    project, each `run.py --projects <name> --out-dir <dir>`), in bench/projects.json order.
+
+    The binary, the compilers, reps and modes must agree. The machines need not: the machine most projects ran on is
+    the run's (ties: the first project's), and a project measured on another records its own `machine`
+    (bench/regressions.py then compares its counts only with runs on the same CPU model and C library)."""
+    order = {p["name"]: i for i, p in enumerate(cfg["projects"])}
+    rank = lambda names: min((order.get(n, len(order)) for n in names), default=len(order))
+    partials = sorted((json.loads(p.read_text()) for p in paths), key=lambda r: rank(r["projects"]))
+    base = partials[0]
+    fixed = lambda r: {"tsrs": r["tsrs"], "tsgo": r["tsgo"]["version"], "suite": r["suite"],
+                       "reference": r.get("reference"), "reps": r["reps"], "modes": r["modes"], "flags": r["flags"]}
+    for r in partials[1:]:
+        for k, v in fixed(base).items():
+            if fixed(r)[k] != v:
+                sys.exit(f"--merge: {k} differs: {json.dumps(v)} ({', '.join(base['projects'])}) vs "
+                         f"{json.dumps(fixed(r)[k])} ({', '.join(r['projects'])})")
+    # most_common keeps insertion order among equal counts, so a tie goes to the first project's machine.
+    machine = json.loads(Counter(json.dumps(r["machine"], sort_keys=True) for r in partials).most_common(1)[0][0])
+    result: dict = {"date": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"), "machine": machine,
+                    **{k: base.get(k) for k in ("tsrs", "tsgo", "suite", "reference", "reps", "modes", "flags")},
+                    "projects": {}, "raw": [], "partials": [], "duration_s": 0}
+    for r in partials:
+        for name, pr in r["projects"].items():
+            if name in result["projects"]:
+                sys.exit(f"--merge: {name} is in two results")
+            # The table header names the run's machine; a project measured elsewhere says so.
+            result["projects"][name] = dict(pr, machine=r["machine"]) if r["machine"] != machine else pr
+        result["raw"] += r["raw"]
+        result["partials"].append({"projects": list(r["projects"]), "date": r["date"], "duration_s": r.get("duration_s")})
+        result["duration_s"] += r.get("duration_s") or 0
+    result["projects"] = dict(sorted(result["projects"].items(), key=lambda kv: order.get(kv[0], len(order))))
+    result["raw"].sort(key=lambda row: order.get(row["project"], len(order)))
+    if mixed := [n for n, pr in result["projects"].items() if "machine" in pr]:
+        log(f"WARNING: not measured on the run's machine ({machine['label']}): "
+            + "; ".join(f"{n} on {result['projects'][n]['machine']['label']}" for n in mixed))
+    if missing := [p["name"] for p in cfg["projects"] if p["name"] not in result["projects"]]:
+        log(f"WARNING: no result for {', '.join(missing)}")
+    return result
+
+
+def write_results(result: dict, args: argparse.Namespace, note: str = "") -> None:
+    """<out-dir>/<date>-<commit>[-local].{json,md}, the README block with --readme, and the table on stdout."""
+    table = markdown(result)
+    args.out_dir.mkdir(parents=True, exist_ok=True)
+    stem = f"{result['date'][:10]}-{result['tsrs']['commit'][:12]}" + ("-local" if args.local else "")
+    (args.out_dir / f"{stem}.json").write_text(json.dumps(result, indent=1) + "\n")
+    (args.out_dir / f"{stem}.md").write_text(table)
+    if args.readme:
+        update_readme(args.readme, table)
+    print(table)
+    log(f"wrote {args.out_dir / stem}.json/.md in {result['duration_s']} s" + (f"; {note}" if note else ""))
+    bad = [n for n, pr in result["projects"].items() for m in result["modes"]
+           if (pr[m]["errors_match"] is False and not pr[m].get("reference", {}).get("same_as_tsrs"))
+           or not pr[m]["tsgo"]["ok_runs"] or not pr[m]["tsrs"]["ok_runs"]]
+    if bad:
+        log(f"WARNING: error-count mismatch or failed runs: {', '.join(sorted(set(bad)))}")
 
 
 def main() -> None:
@@ -423,6 +489,12 @@ def main() -> None:
     ap.add_argument("--setup-only", action="store_true", help="clone and install everything, including the reference compiler")
     ap.add_argument("--print-cache-keys", action="store_true",
                     help="print `<name>=<key>` lines (GITHUB_OUTPUT format) for the CI caches of bench/.work")
+    ap.add_argument("--print-projects", action="store_true",
+                    help="print the project names as a JSON list (the CI matrix: one measuring job per project)")
+    ap.add_argument("--rustc", help="`rustc -V` of the toolchain that built --tsrs (default: this machine's; the CI "
+                                    "measuring jobs have no Rust)")
+    ap.add_argument("--merge", type=Path, nargs="+", metavar="RESULT",
+                    help="only join these per-project results of one run into one result file (no benchmarking)")
     ap.add_argument("--out-dir", type=Path, default=BENCH / "results")
     ap.add_argument("--readme", type=Path, help="rewrite the bench block of this README")
     ap.add_argument("--apply-table", type=Path,
@@ -442,6 +514,12 @@ def main() -> None:
         if unknown:
             sys.exit(f"unknown projects: {', '.join(sorted(unknown))}")
         projects = [p for p in projects if p["name"] in want]
+    if args.print_projects:
+        print(json.dumps([p["name"] for p in projects]))
+        return
+    if args.merge:
+        write_results(merge_results(cfg, args.merge), args)
+        return
     modes = args.modes.split(",")
     if unknown_modes := set(modes) - set(MODE_FLAGS):
         sys.exit(f"unknown modes: {', '.join(sorted(unknown_modes))}")
@@ -480,7 +558,8 @@ def main() -> None:
     result: dict = {
         "date": now.strftime("%Y-%m-%d %H:%M UTC"),
         "machine": machine_info(args.local, args.label),
-        "tsrs": {"commit": commit, "dirty": dirty, "version": tsrs_version, "build": args.tsrs_build, "rustc": rustc_version()},
+        "tsrs": {"commit": commit, "dirty": dirty, "version": tsrs_version, "build": args.tsrs_build,
+                 "rustc": args.rustc or rustc_version()},
         "tsgo": {"version": cfg["tsgo"]["version"], "binary": str(tsgo).replace(str(Path.home()), "~")},
         "suite": cfg["suite"],
         "reference": ref_cfg,
@@ -544,21 +623,7 @@ def main() -> None:
                     f"{fmt_mem(counted['max_rss_bytes'])} (one thread, untimed)")
         result["projects"][name] = pr
     result["duration_s"] = round(time.perf_counter() - t_start)
-
-    table = markdown(result)
-    args.out_dir.mkdir(parents=True, exist_ok=True)
-    stem = f"{now.strftime('%Y-%m-%d')}-{commit[:12]}" + ("-local" if args.local else "")
-    (args.out_dir / f"{stem}.json").write_text(json.dumps(result, indent=1) + "\n")
-    (args.out_dir / f"{stem}.md").write_text(table)
-    if args.readme:
-        update_readme(args.readme, table)
-    print(table)
-    log(f"wrote {args.out_dir / stem}.json/.md in {result['duration_s']} s; logs in {logs}")
-    bad = [n for n, pr in result["projects"].items() for m in modes
-           if (pr[m]["errors_match"] is False and not pr[m].get("reference", {}).get("same_as_tsrs"))
-           or not pr[m]["tsgo"]["ok_runs"] or not pr[m]["tsrs"]["ok_runs"]]
-    if bad:
-        log(f"WARNING: error-count mismatch or failed runs: {', '.join(sorted(set(bad)))}")
+    write_results(result, args, f"logs in {logs}")
 
 
 if __name__ == "__main__":
