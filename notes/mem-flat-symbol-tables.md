@@ -50,8 +50,8 @@ later on a binder symbol (`get_members` of a symbol that has none) is a new, mut
 
 ## Numbers
 
-macOS, M5 Max 18 cores, release builds. Other agents were running (load average 13-86), so wall time is not
-reported, and instruction counts varied by up to 3% between identical runs.
+Allocation profile: macOS, M5 Max 18 cores, release builds (other agents were running, load average 13-86; byte counts
+do not depend on load).
 
 Allocation profile, front end (`--noCheck`, alloc-profile build). "Arena used" is the arena chunks minus their unused
 tails. "Arena requested" counts free-list reuse as new requests, so it does not show the reuse of released tables:
@@ -70,24 +70,46 @@ Net front end: about -9.4 MB on vscode and -8.0 MB on formbricks-web, below the 
 entry buffers' slack and heap blocks were the larger part (13 MB of heap). The 16-byte header saving is mostly
 spent on the 8-byte `FrozenTable` objects and the wide filters.
 
-`/usr/bin/time -l`, `--singleThreaded`, 8 interleaved runs each (min / median / max), base -> new:
+pr-verify (`.depot/workflows/pr-verify.yml`, Linux 64 vCPU, base d94c544, new e6e8ee8): diagnostics identical in
+60 of 60 cells (ten projects at 1 / 4 / 16 / 32 checkers) and in the poisoned-arena run of every project.
+Single-threaded instructions (`bench/count.py`, exact to about 0.001%) and peak RSS:
 
-| project | instructions retired | peak memory footprint |
-| --- | --- | --- |
-| vscode | 110.25 / 111.91 / 114.80 G -> 111.87 / 113.07 / 113.53 G | 1993.6 / 1998.8 / 1999.9 MB -> 1989.5 / 1991.5 / 1996.3 MB |
-| formbricks-web | 54.47 / 54.82 / 55.12 G -> 54.98 / 55.53 / 56.17 G | 1412.5 / 1414.3 / 1415.5 MB -> 1405.4 / 1405.8 / 1408.2 MB |
+| project | instructions | single-threaded peak RSS |
+| --- | ---: | ---: |
+| vscode | 113.793 -> 114.534 G (+0.65%) | 1.86 -> 1.85 GiB (-0.6%) |
+| xstate-main | 7.365 -> 7.441 G (+1.04%) | 191 -> 190 MiB |
+| webpack | 14.002 -> 14.095 G (+0.67%) | 311 -> 309 MiB |
+| mui-docs | 50.938 -> 51.914 G (+1.92%) | 744 -> 741 MiB |
+| Compiler | 2.370 -> 2.380 G (+0.42%) | 58 -> 58 MiB |
+| Compiler-Unions | 5.474 -> 5.496 G (+0.41%) | 62 -> 62 MiB |
+| cal-diy | 41.053 -> 41.573 G (+1.27%) | 820 -> 817 MiB |
+| formbricks-web | 52.747 -> 53.430 G (+1.29%) | 1.32 -> 1.32 GiB (-0.4%) |
+| supabase-studio | 64.477 -> 66.103 G (+2.52%) | 944 -> 939 MiB |
+| t3code-server | 57.738 -> 58.023 G (+0.49%) | 828 -> 825 MiB |
 
-Instructions are about +1% (medians +1.0% / +1.3%). Freezing costs ~0.2 G of formbricks-web's 20 G front end
-(the heap frees of the old entry buffers, the header allocations). The rest is the frozen lookup path: vscode
-does 14.5M frozen-table lookups (8.4M rejected by the header filter, 4.7M hits), formbricks-web 12.1M. A first
-version without the length in the header and without the wide filter cost +1.6% on formbricks-web. Peak footprint
-is 5-9 MB lower.
+Peak RSS with 4 to 32 checkers moves by -0.7% to +3.4%, within the run-to-run spread of those cells.
+
+The instructions are the cost. Freezing costs about 0.2 G of formbricks-web's 20 G front end (macOS, `--noCheck`):
+the heap frees of the old entry buffers and the header allocations. The rest is the frozen lookup path (vscode does
+14.5M frozen-table lookups, 8.4M rejected by the header filter, 4.7M hits; formbricks-web 12.1M) and the frozen-form
+test on every table operation. Steps measured on the way (single-threaded instructions):
+
+| version | vscode | formbricks-web | supabase-studio | mui-docs |
+| --- | ---: | ---: | ---: | ---: |
+| frozen lookup inlined into every caller | +1.01% | +1.91% | +3.95% | +2.76% |
+| frozen lookup out of line (this branch) | +0.65% | +1.29% | +2.52% | +1.92% |
+
+Earlier local versions were worse still: no length in the header (frozen iteration had no size hint), no wide
+filter, and filters rehashed from the names at freeze time. Ways to take more off, not tried: a wider header filter
+(the 26 bits miss more often than the mutable form's 64), freezing in a bulk pass without the per-table header
+allocation, or keeping the binder's tables in the frozen form from the start (no release). At these numbers the trade
+is about 8-9 MB of front-end memory (0.3-0.6% of single-threaded peak) for 0.4-2.5% more instructions.
 
 ## Gates
 
-- `--pretty false` stdout plus exit code byte-identical to the base on vscode, webpack, xstate-main, mui-docs, cal-diy,
-  formbricks-web, supabase-studio, t3code-server, Compiler and Compiler-Unions at 1, 4 and 16 checkers (30/30).
-- `TSRS_ARENA_POISON=1` at 16 checkers on vscode and formbricks-web: identical to the base.
+- pr-verify (above): 60 of 60 cells identical, poisoned-arena runs identical. Locally (macOS, before the rebase onto
+  #139): `--pretty false` stdout plus exit code byte-identical on the ten projects at 1, 4 and 16 checkers (30/30);
+  `TSRS_ARENA_POISON=1` at 16 checkers on vscode and formbricks-web identical.
 - Census (`TSRS_CENSUS=1 TSRS_CENSUS_VERIFY=1 TSRS_CENSUS_ASSERT=1`, plain pointers), one checker: 0 violations,
   0 references to freed blocks, 0 unreachable symbols, 0 not recorded on both projects. The released tables
   are in the would-free set (4.18M / 4.39M blocks), so the strong mark found no owner still pointing at an old table.
