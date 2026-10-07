@@ -103,3 +103,45 @@ Read:
   heap in 4 KiB pages instead of 2 MiB ones. The probe saw a similar absolute cost (`--noCheck` total 0.31-0.32 ->
   0.33-0.34 s) when parse took 0.26 s; since PR #120 parse takes about 0.1 s, so the same cost is now about a third
   of it. Check time is +1-5%, as in the probe, and start-up plus exit +7-11 ms.
+
+## Recovering the parse cost: allocator knobs do not, fewer parse threads do (for memory)
+
+The wall cost above is almost all in the parallel parse. Two probes on the 64-vCPU runner (perf-probe.yml,
+`cargo build --release`, vscode at the default 32 checkers, 5 interleaved reps per variant, medians) tested whether a
+mimalloc runtime setting recovers it, and what fewer parse threads buy on each build.
+
+This branch (`no_thp`; run 20694v5p4s):
+
+| variant | wall s | user CPU s | peak GiB | parse s | check s |
+| --- | --- | --- | --- | --- | --- |
+| as built | 0.680 | 16.83 | 2.94 | 0.131 | 0.483 |
+| `MIMALLOC_PURGE_DELAY=-1` (never purge) | 0.710 | 16.97 | 2.94 | 0.149 | 0.481 |
+| `MIMALLOC_PURGE_DELAY=500` | 0.680 | 17.22 | 2.94 | 0.123 | 0.482 |
+| `MIMALLOC_ARENA_EAGER_COMMIT=1 MIMALLOC_RESERVE_OS_MEMORY=4GiB` | 0.680 | 16.81 | 2.94 | 0.127 | 0.482 |
+| the same plus `MIMALLOC_PURGE_DELAY=-1` | 0.690 | 16.95 | 2.94 | 0.128 | 0.480 |
+| `RAYON_NUM_THREADS=32` (32 parse threads) | 0.680 | 16.68 | **2.85** | 0.124 | 0.482 |
+
+main, huge pages on the heap (run wfpm41kpd7, same conditions):
+
+| variant | wall s | user CPU s | peak GiB | parse s | check s |
+| --- | --- | --- | --- | --- | --- |
+| as built (64 parse threads) | 0.650 | 16.79 | 4.16 | 0.105 | 0.474 |
+| `RAYON_NUM_THREADS=32` | 0.670 | 16.49 | 3.75 | 0.119 | 0.480 |
+| `RAYON_NUM_THREADS=24` | 0.680 | 16.34 | 3.63 | 0.134 | 0.479 |
+| `RAYON_NUM_THREADS=16` | 0.720 | 16.25 | 3.54 | 0.168 | 0.478 |
+| `MIMALLOC_PURGE_DELAY=0` | 0.760 | 19.69 | 3.96 | 0.126 | 0.563 |
+
+- No allocator setting recovers the parse time: purging never is worse (+18 ms parse), a longer purge delay and an
+  eagerly committed 4 GiB reserve change nothing. User CPU is the same on both builds (16.8 s), so the extra 26 ms of
+  parse is kernel time: 64 threads faulting 4 KiB pages at once instead of 2 MiB ones. Only fewer faulting threads
+  trims it (32 threads: 0.124 s), and with 4 KiB pages 32 parse threads are as fast as 64.
+- With huge pages on, fewer parse threads cut the amplification in proportion (64 -> 32 threads: -0.41 GiB) but cost
+  14-63 ms of parse, a worse trade than `no_thp` (-1.22 GiB for about 30 ms). Purging eagerly costs 19% of check time.
+- **Landed with the `no_thp` build: the parse pool is capped at 32 threads** (`PARSE_THREAD_CAP` in
+  `crates/tsrs_compiler/src/program.rs`; `RAYON_NUM_THREADS` still sets the count exactly). On this build it is free
+  (parse 0.124 vs 0.131 s) and saves the 32 extra threads' allocator pages and thread-arena chunk tails: peak
+  2.94 -> 2.85 GiB at 32 checkers, under bun check's 2.87. Machines with 32 or fewer cores are unaffected; the
+  8-vCPU README bench and its single-threaded counter (`RAYON_NUM_THREADS=1`) are unchanged.
+
+The 20-rep head-to-head of the combined branch (bench-compare.yml, runs 2nzst77p3q and ck9bqglbpt) follows below when
+it lands.
