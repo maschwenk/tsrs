@@ -115,8 +115,8 @@ vscode, `perf stat` (2 runs each):
 | 32 | user / kernel cycles | 69.92 / 1.91 G | 70.63 / 2.01 G | 71.00 / 2.24 G |
 
 Freeing nearly doubles the user-side dTLB misses at 32 checkers. Each give-back is a `madvise(MADV_DONTNEED)` over
-more than 33 pages, so the kernel flushes the whole TLB of every core that runs a thread of the process (kernel 6.12
-has no AMD broadcast invalidation), and every checker then refills its TLB, huge-page entries of the thread arenas
+more than 33 pages, so the kernel flushes the whole TLB of every core that runs a thread of the process (by
+interprocessor interrupt on these runners), and every checker then refills its TLB, huge-page entries of the thread arenas
 included. The cost is calls x threads: nothing single-threaded, about 1% at 32. The rest (`keep`) is the regions
 themselves: `perf diff` of off against keep at 32 checkers is flat (no symbol moves more than 0.25% of the samples;
 classify's lookups `get_source_file` and `get_resolved_module` +0.1% each), the `--extendedDiagnostics` sub-phases
@@ -154,8 +154,8 @@ give-backs) is not where the time is, and it would need the stale-address argume
   the slabs' `mprotect` calls go from 642 to 84.
 - **Whole-span give-back** (`retired::spans_of`): a batch gives back each coalesced span it touched in one call,
   including parts given back before (they hold no memory). vscode: 16 checkers 870 -> 712, 32 checkers 1,355 ->
-  1,092 calls; same pages, same peak. Larger batches were measured again and rejected: 64 / 256 MiB batches cut calls
-  at 16 checkers to 712 / 507 but raise the peak by 50 / 140 MB.
+  1,092 calls; same pages, same peak (macOS). Larger batches were measured again and rejected: 64 / 256 MiB batches
+  (with large slabs, before this) cut calls at 16 checkers from 870 to 712 / 507 but raise the peak by 50 / 140 MB.
 - **Cheaper classification** (`fileregions::referred_files`): a resolved name is looked up by the name itself before
   normalizing it, the resolution maps are read on the worker pool without collecting the names first, and only files
   that can be leaves are kept. vscode at 16 checkers on the M5 Max: 5.3 -> 2.6 ms; it has its own line now,
