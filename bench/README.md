@@ -95,8 +95,10 @@ tsrs's errors (`(ref N)` in the table).
 
 - Invocation, identical for both: `-p <project> --noEmit --incremental false --extendedDiagnostics --pretty false`,
   in the default mode (both 4 checker threads; tsrs additionally resolves members lazily, its default), with
-  `--singleThreaded`, and with `--checkers 8` (the `checkers8` mode: how each compiler scales when given twice the
-  default checkers; select modes with `--modes default,single,checkers8`, flags in `MODE_FLAGS` in `run.py`).
+  `--singleThreaded`, with `--checkers 8` (the `checkers8` mode: how each compiler scales when given twice the
+  default checkers), and with `--checkers 64` (the `checkers64` mode: how each scales on a wide machine; CI measures it
+  on a 64-vCPU machine, see "CI"). Select modes with `--modes` (default `default,single,checkers8`; flags in
+  `MODE_FLAGS` in `run.py`).
   `--noEmit` instead of the suite's `--outdir` keeps the measurement to type checking; `--pretty
   false` makes the error lines parseable.
 - tsgo: `npm install typescript@7.0.2`. Its `bin/tsc` is a Node launcher (`lib/tsc.js` -> `getExePath.js`) that
@@ -113,6 +115,8 @@ tsrs's errors (`(ref N)` in the table).
   prints). The JSON also has the `--extendedDiagnostics` check/total time, "Memory used", files, symbols, types and
   instantiations of every run. tsrs's default-mode counters are lower than tsgo's by design (lazy members); compare
   counters in `--singleThreaded` runs or with `--noLazyMembers`.
+- Bold in the speedup and memory columns marks a notable tsrs win: at least 5x faster, or at most a quarter of tsgo's
+  peak memory (`NOTABLE_SPEEDUP`, `NOTABLE_MEMORY` in `run.py`; compared at the printed two decimals).
 - Errors: every `error TSxxxx` line is counted, and the (file, line, col, code) lists are compared. A differing count is
   shown as **MISMATCH** in the table and a differing location set as "(locations differ)" — a correctness signal,
   not a performance one.
@@ -137,7 +141,7 @@ the Go runtime makes its count vary 2-4%.
 `bench/regressions.py --latest` compares the counts with the newest earlier result from the same runner label and
 build, and only when the CPU model and C library match (they pick different `memcpy`-style routines; compared per
 project, since a parallel run can land a project on another machine model, which `run.py --merge` records on the
-project). When the Rust compiler differs (results record `tsrs.rustc`; `rust-toolchain.toml` pins it), it prints the
+project's cells). When the Rust compiler differs (results record `tsrs.rustc`; `rust-toolchain.toml` pins it), it prints the
 change as the upgrade's measurement and flags nothing (`docs/RUST.md`, "Upgrading Rust"). A project up
 more than 1% is a regression: the step prints a warning and comments on the pull request merged in between, or, when
 the run covers more than three merges, on the commit. It never fails the job; a deliberate trade (memory for CPU, say)
@@ -157,7 +161,7 @@ a probe of `depot-ubuntu-*` / `depot-macos-latest` labels from GitHub Actions st
 so it is built for unattended runs: one bench at a time, never cancelled (a push during a run queues the newest
 commit), network steps retried, and the results commit rebased onto the latest `main` before pushing.
 
-Three jobs (since 2026-10-07; until then one job did everything in sequence, and the measurement alone took 18-20 min
+Four jobs (since 2026-10-07; until then one job did everything in sequence, and the measurement alone took 18-20 min
 once the four application projects were in):
 
 1. `build`, on one machine of the fixed spec: the PGO `dist` build of the commit (below). The binary and the
@@ -167,16 +171,23 @@ once the four application projects were in):
    cache, downloads the binary and runs `bench/run.py --projects <name> --out-dir <dir>`. The result is the
    `bench-partial-<name>` artifact, the compiler output `bench-logs-<name>`. The jobs run at the same time but never
    share a machine, so a measurement is what it was in the sequential run: one project on an idle 8-vCPU machine.
-3. `merge`: `bench/run.py --merge <results...> --readme README.md` joins them into one result in `bench/projects.json`
-   order, after checking that the binary, the compilers, reps and modes agree; then the regression flag and the
-   results commit, as before. The machine most projects ran on is the run's; a project measured on a different CPU
-   model or C library (so far every `depot-ubuntu-24.04-8` has been the same model) records its own `machine`, and
-   the regression flag compares that project only with runs on the same model. A run started from a branch
+3. `measure-wide`, one job on `depot-ubuntu-24.04-64` (64 vCPU): every project in `--checkers 64` mode
+   (`bench/run.py --modes checkers64`), the table's last section. 64 checker threads would oversubscribe the fixed-spec
+   machine. The job runs while the `measure` jobs do and is shorter than vscode's, so it adds no wall time; it is the
+   run's only 64-vCPU job. It restores the caches the `measure` jobs save (a project added to `projects.json` needs a
+   restore step in it too). If it fails, the results are published without the `--checkers 64` section.
+4. `merge`: `bench/run.py --merge <results...>` joins them into one result, projects in `bench/projects.json` order
+   and modes in `MODE_FLAGS` order, after checking that the binary, the compilers, reps and flags agree and that no
+   (project, mode) is measured twice; then the regression flag and the results commit, as before. The machine that
+   measured the most cells is the run's; a cell measured on another records its own `machine`. All `--checkers 64`
+   cells do, and the table names their machine. A fixed-spec project measured on a different CPU model or C library
+   (so far every `depot-ubuntu-24.04-8` has been the same model) is noted under the table, and the regression flag
+   compares that project only with runs on the same model. A run started from a branch
    (`depot ci run --workflow .depot/workflows/bench.yml`) ends with the `bench-result` artifact: nothing is committed
    or commented.
 
 **Fixed machine spec**: `depot-ubuntu-24.04-8`, 8 vCPU, 32 GB RAM, Linux x86_64, for every run, so numbers are
-comparable over time. Sizing: the largest peak measured is tsgo's default mode on vscode and mui-docs (7.5 GiB on an
+comparable over time (the `--checkers 64` section: `depot-ubuntu-24.04-64`, 64 vCPU, checked by its own job). Sizing: the largest peak measured is tsgo's default mode on vscode and mui-docs (7.5 GiB on an
 18-core Mac, 6.9 GiB on Linux); 32 GB leaves 4x headroom, and 8 vCPUs cover the 4 checker threads plus parallel
 parsing. The first step fails the job if `nproc`/`MemTotal`/arch differ; there is no fallback runner. (On GitHub's
 standard 2 vCPU / 7 GB runner tsgo swapped on vscode: 146 s wall for a 50 s check.)

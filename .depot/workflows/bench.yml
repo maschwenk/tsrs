@@ -3,11 +3,11 @@
 # the bench markers at the top of README.md. Not a GitHub Actions workflow: this repository is connected to Depot CI,
 # and Depot's runners for GitHub Actions only serve organization-owned repositories.
 #
-# Three jobs (bench/README.md "CI"): `build` makes the PGO dist binary once; `measure` is one job per project of
+# Four jobs (bench/README.md "CI"): `build` makes the PGO dist binary once; `measure` is one job per project of
 # bench/projects.json, each on its own machine of the fixed spec, so the projects are measured at the same time
 # without ever sharing a CPU (one job measuring them one after the other took 18-20 min; the longest project, vscode,
-# takes about 5); `merge` joins the per-project results into one result file (bench/run.py --merge), flags
-# regressions and commits.
+# takes about 5); `measure-wide` measures every project with `--checkers 64` on one 64-vCPU machine; `merge` joins
+# the partial results into one result file (bench/run.py --merge), flags regressions and commits.
 #
 # Loop guards: the results commit only touches README.md and bench/results/** (excluded by `paths`), and carries
 # [skip ci], which the build job's `if` also checks (the commit is pushed by Depot's GitHub app, which may trigger
@@ -35,8 +35,8 @@ permissions:
   contents: read
 
 # Fixed machine spec so runs are comparable: Depot depot-ubuntu-24.04-8 = 8 vCPU / 32 GB / x86_64 (bench/README.md
-# "CI"), for the build (PGO training) and for every measuring job. The hardware step fails the job on any other
-# machine; there is no fallback runner.
+# "CI"), for the build (PGO training) and for every measuring job except `measure-wide` (depot-ubuntu-24.04-64, 64
+# vCPU). The hardware steps fail the job on any other machine; there is no fallback runner.
 
 env:
   CARGO_TERM_COLOR: always
@@ -309,11 +309,149 @@ jobs:
           path: bench/.work/logs
           if-no-files-found: ignore
 
+  # The `--checkers 64` table: every project in one job on a 64-vCPU machine (64 checker threads would oversubscribe
+  # the fixed-spec machine). It runs while the fixed-spec jobs do and is shorter than vscode's, so it adds no wall time;
+  # it is the run's only 64-vCPU job. Its cells record their machine (bench/run.py --merge). The regression flag never
+  # reads them: it compares the single-threaded counts of the fixed-spec jobs.
+  measure-wide:
+    needs: build
+    runs-on: depot-ubuntu-24.04-64
+    timeout-minutes: 45
+    env:
+      BENCH_RUNNER: Depot CI `depot-ubuntu-24.04-64`
+      PROJECTS: ${{ join(fromJSON(needs.build.outputs.projects), ',') }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Runner hardware (64 vCPU x86_64)
+        run: |
+          nproc; free -g; df -h / | tail -1
+          lscpu | grep -E 'Model name|^CPU\(s\)' || true
+          if [ "$(nproc)" != 64 ] || [ "$(uname -m)" != x86_64 ]; then
+            echo "::error::expected 64 vCPU x86_64, got $(nproc) vCPU $(uname -m)"; exit 1
+          fi
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+
+      - name: Cache keys
+        id: keys
+        run: python3 bench/run.py --print-cache-keys --projects "$PROJECTS" | tee -a "$GITHUB_OUTPUT"
+
+      # Restore only: the fixed-spec jobs save these. A project added to bench/projects.json needs a step here too;
+      # without one it is cloned and installed by every run of this job.
+      - name: Restore suite and compilers
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            bench/.work/suite
+            bench/.work/tsgo
+          key: bench-shared-${{ runner.os }}-${{ steps.keys.outputs.shared }}
+
+      - name: Restore vscode
+        if: steps.keys.outputs['vscode'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/vscode
+          key: bench-vscode-${{ runner.os }}-${{ steps.keys.outputs['vscode'] }}
+
+      - name: Restore xstate-main
+        if: steps.keys.outputs['xstate-main'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/xstate-main
+          key: bench-xstate-main-${{ runner.os }}-${{ steps.keys.outputs['xstate-main'] }}
+
+      - name: Restore webpack
+        if: steps.keys.outputs['webpack'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/webpack
+          key: bench-webpack-${{ runner.os }}-${{ steps.keys.outputs['webpack'] }}
+
+      - name: Restore mui-docs
+        if: steps.keys.outputs['mui-docs'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/mui-docs
+          key: bench-mui-docs-${{ runner.os }}-${{ steps.keys.outputs['mui-docs'] }}
+
+      - name: Restore cal-diy
+        if: steps.keys.outputs['cal-diy'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/cal-diy
+          key: bench-cal-diy-${{ runner.os }}-${{ steps.keys.outputs['cal-diy'] }}
+
+      - name: Restore formbricks-web
+        if: steps.keys.outputs['formbricks-web'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/formbricks-web
+          key: bench-formbricks-web-${{ runner.os }}-${{ steps.keys.outputs['formbricks-web'] }}
+
+      - name: Restore supabase-studio
+        if: steps.keys.outputs['supabase-studio'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/supabase-studio
+          key: bench-supabase-studio-${{ runner.os }}-${{ steps.keys.outputs['supabase-studio'] }}
+
+      - name: Restore t3code-server
+        if: steps.keys.outputs['t3code-server'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/t3code-server
+          key: bench-t3code-server-${{ runner.os }}-${{ steps.keys.outputs['t3code-server'] }}
+
+      - name: Set up the projects
+        run: python3 bench/run.py --setup-only --projects "$PROJECTS"
+
+      - name: Download tsrs (PGO, dist profile)
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: tsrs-pgo-dist
+          path: /tmp/tsrs-pgo/dist
+
+      # Artifacts drop the executable bit. The checksum must be the one the build job printed.
+      - name: Check the binary
+        run: |
+          chmod +x /tmp/tsrs-pgo/dist/tsrs
+          sha256sum /tmp/tsrs-pgo/dist/tsrs
+          /tmp/tsrs-pgo/dist/tsrs --version
+          cat /tmp/tsrs-pgo/dist/rustc.txt
+
+      - name: Benchmark (--checkers 64)
+        run: >-
+          python3 bench/run.py --projects "$PROJECTS" --modes checkers64 --tsrs /tmp/tsrs-pgo/dist/tsrs
+          --tsrs-build pgo-dist --rustc "$(cat /tmp/tsrs-pgo/dist/rustc.txt)" --out-dir /tmp/bench-partial/wide
+
+      - name: Upload the result
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: bench-partial-wide
+          path: /tmp/bench-partial/wide
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: bench-logs-wide
+          path: bench/.work/logs
+          if-no-files-found: ignore
+
   # Joins the per-project results into bench/results/<date>-<commit>.{json,md} and the README table, flags
-  # regressions, and commits. Runs only when every measuring job succeeded: a table with rows missing would replace a
-  # complete one in the README.
+  # regressions, and commits. Runs only when every fixed-spec measuring job succeeded: a table with rows missing would
+  # replace a complete one in the README, and the regression flag reads them. The wide job may fail or be cancelled;
+  # the table then has no `--checkers 64` section for this commit.
   merge:
-    needs: [build, measure]
+    needs: [build, measure, measure-wide]
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.measure.result == 'success' }}
     runs-on: depot-ubuntu-24.04
     timeout-minutes: 15
     permissions:
