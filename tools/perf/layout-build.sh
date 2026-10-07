@@ -7,6 +7,8 @@
 #   A    today's bench pipeline with the tsrs training runs writing their profiles (pgo-train.sh's MIMALLOC_SHOW_STATS)
 #   B    A's profile plus EXTRA_TRAIN runs of tsrs (the README workload: big projects, at EXTRA_CHECKERS)
 #   R    A linked with --emit-relocs, then BOLT as release.yml does it (bolt.sh: trained on xstate-main + webpack)
+#   Rv   R with the BOLT training set extended by vscode at 4 checkers
+#   Rx   R with the BOLT training set extended by the EXTRA_TRAIN runs
 #   RB   B linked with --emit-relocs, BOLT trained on xstate-main + webpack + the EXTRA_TRAIN runs
 #   RBH  RB with -hugify (hot text remapped onto 2 MiB pages at startup)
 #
@@ -41,7 +43,7 @@ cwd, proj = rb.project_path(cfg, p, rb.Path(sys.argv[2])); print(f"{cwd}\t{proj}
 # Runs tsrs binary $1 on every EXTRA_TRAIN project at each of EXTRA_CHECKERS (`default`: no flag); $2 = env
 # assignment. MIMALLOC_SHOW_STATS: tsrs then ends with `exit`, which writes the profile (pgo-train.sh).
 extra_runs() {
-  local exe=$1 envset=$2 p cwd proj c
+  local exe=$1 envset=$2 p cwd proj c t0
   IFS=, read -ra projects <<< "$EXTRA_TRAIN"
   for p in "${projects[@]}"; do
     IFS=$'\t' read -r cwd proj < <(project_path "$p")
@@ -133,11 +135,17 @@ optimize() { # $1 = input binary, $2 = output name, $3.. = fdata files, then opt
 }
 Ar=$out/t-Ar/$tgt/dist/tsrs; Br=$out/t-Br/$tgt/dist/tsrs
 step "BOLT instrument (R)" instrument "$Ar" Ar-rel
+instrument "$Ar" Ar-v
+instrument "$Ar" Ar-ext
 instrument "$Br" Br
 step "BOLT training, release set (R)" release_runs "$out/bolt/Ar-rel.inst"
 step "BOLT training, release set (RB)" release_runs "$out/bolt/Br.inst"
+EXTRA_TRAIN=vscode EXTRA_CHECKERS=4 step "BOLT training, vscode at 4 (Rv)" extra_runs "$out/bolt/Ar-v.inst" "BOLT_UNUSED=1"
+step "BOLT training, extra set (Rx)" extra_runs "$out/bolt/Ar-ext.inst" "BOLT_UNUSED=1"
 step "BOLT training, extra set (RB)" extra_runs "$out/bolt/Br.inst" "BOLT_UNUSED=1"
 step "BOLT optimize R" optimize "$Ar" R "$out"/bolt/Ar-rel.d/prof*
+optimize "$Ar" Rv "$out"/bolt/Ar-rel.d/prof* "$out"/bolt/Ar-v.d/prof*
+optimize "$Ar" Rx "$out"/bolt/Ar-rel.d/prof* "$out"/bolt/Ar-ext.d/prof*
 optimize "$Br" RB "$out"/bolt/Br.d/prof*
 optimize "$Br" RBH "$out"/bolt/Br.d/prof* -- -hugify || echo "::warning::llvm-bolt -hugify failed; no RBH"
 

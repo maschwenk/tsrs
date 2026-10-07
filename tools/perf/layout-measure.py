@@ -73,6 +73,7 @@ def main() -> None:
     ap.add_argument("--out", type=Path, default=Path("probe-out"))
     args = ap.parse_args()
 
+    args.out = args.out.resolve()  # perf stat -o runs in the project's directory
     bins = dict(b.split("=", 1) for b in args.bin)
     names = list(bins)
     cfg = json.loads((rb.BENCH / "projects.json").read_text())
@@ -99,6 +100,7 @@ def main() -> None:
                     r = timed(bins[name], cwd, proj, extra(c), logs / f"{name}-{p}-{c}.txt")
                     result["runs"].append({"bin": name, "project": p, "checkers": c, "rep": rep, **r})
         print(f"round {rep + 1}/{args.reps} done", flush=True)
+    (args.out / "layout.json").write_text(json.dumps(result, indent=1))
 
     same = True
     for p, (cwd, proj) in paths.items():
@@ -125,7 +127,7 @@ def main() -> None:
                                 str(proj), *FLAGS, "--singleThreaded"], cwd=cwd, stdout=subprocess.DEVNULL,
                                stderr=subprocess.DEVNULL)
                 counts = {}
-                for line in f.read_text().splitlines():
+                for line in (f.read_text() if f.exists() else "").splitlines():
                     parts = line.split(",")
                     if len(parts) > 2 and parts[0].replace(".", "").isdigit():
                         counts[parts[2].split(":")[0]] = float(parts[0])

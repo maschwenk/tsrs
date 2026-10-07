@@ -19,7 +19,7 @@ on:
         default: "7"
       bins:
         description: comma-separated binaries of layout-build.sh to measure (the first is the baseline)
-        default: A0,A,B,R,RB,RBH
+        default: A,R,Rv,Rx,RB,RBH
 
 permissions:
   contents: read
@@ -28,7 +28,7 @@ env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
   REPS: ${{ inputs.reps || '7' }}
-  BINS: ${{ inputs.bins || 'A0,A,B,R,RB,RBH' }}
+  BINS: ${{ inputs.bins || 'A,R,Rv,Rx,RB,RBH' }}
 
 jobs:
   probe:
