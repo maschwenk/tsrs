@@ -55,6 +55,10 @@ instantiation cache already holds each pair once.
   instantiated extends type. Skipping a type creation changes type ids, and ids are `compareTypes`' last tie-break
   (union order). The caches in this repo keep the set of created types unchanged (union front cache, flow memo,
   inference memo), and this one cannot.
+- Deciding the mismatched pairs from the `_tag` discriminant alone is notes/perf-checker-algorithms.md's A2, rejected
+  because it changes the instantiation count that drives TS2589 (pinned by
+  `testdata/regressions/conditional-instantiation-limit-*`); its exact form, A1, replays the relater and saved about
+  0.5%, and does not apply here anyway (A1 skips type-reference extends types, and `Rpc<...>` is one).
 - In the program: a map type keyed by tag (`{ [R in Rpcs as R['_tag']]: R }`) turns each lookup into one indexed
   access.
 
