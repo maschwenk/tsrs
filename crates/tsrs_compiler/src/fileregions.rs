@@ -210,7 +210,7 @@ fn first_chunk(text_len: usize) -> usize {
 /// used page. Binding on the same thread right away (the parallel loader) grows the region into the space just given
 /// back.
 pub(crate) fn parse(opts: SourceFileParseOptions, text: String, script_kind: ScriptKind) -> P<SourceFile> {
-    let region = Region::new_scratch(first_chunk(text.len()));
+    let region = Region::new_scratch_in_large_slabs(first_chunk(text.len()));
     let file = {
         let _scratch = region.enter_scratch();
         tsrs_parser::parse_source_file_keep_text(opts, text, script_kind)
@@ -257,7 +257,8 @@ pub(crate) fn classify(program: &Program) -> bool {
     program.bind_source_files();
     let files = program.files;
     let regions = REGIONS.lock().unwrap();
-    let referred = referred_files(program);
+    // Only a file with a region can be a leaf; `stats` also counts the leaves the prediction missed.
+    let referred = referred_files(program, |file| stats() || regions.contains_key(&file));
     let (mut leaves, mut leaf_bytes, mut checked) = (0, 0, 0);
     // `stats`: leaves the prediction missed (parsed into the thread arena, so not freed), and the nodes of both kinds.
     let (mut missed, mut missed_nodes, mut leaf_nodes) = (0, 0, 0);
@@ -316,44 +317,59 @@ pub(crate) fn classify(program: &Program) -> bool {
     mode == LeafMode::Free
 }
 
-/// Files that another file of the program refers to: every file with an include reason other than being a root
-/// (an import, a `/// <reference path>`, a type reference directive, a lib reference, a default lib, an automatic
-/// type directive), and every target of a resolved import, module augmentation or type reference directive of
-/// another file. A file that refers only to itself is not counted.
-fn referred_files(program: &Program) -> FxHashSet<P<SourceFile>> {
+/// The files for which `wanted` holds that another file of the program refers to: every file with an include reason
+/// other than being a root (an import, a `/// <reference path>`, a type reference directive, a lib reference, a
+/// default lib, an automatic type directive), and every target of a resolved import, module augmentation or type
+/// reference directive of another file. A file that refers only to itself is not counted.
+///
+/// This runs inside the check time, before the pass. The resolutions (vscode: 110k) are read on the worker pool, like
+/// the import graph of the checker assignment (checkerpool.rs `get_import_adjacency`), and a resolved name is looked
+/// up by the name itself first (`files_by_name`): normalizing every name (`get_source_file_for_resolved_module`) took
+/// 24 ms on one thread, and collecting every importer's names before that another 3-5 ms on one thread.
+fn referred_files(program: &Program, wanted: impl Fn(P<SourceFile>) -> bool + Sync) -> FxHashSet<P<SourceFile>> {
     let mut referred = FxHashSet::default();
     #[expect(clippy::iter_over_hash_type, reason = "builds a set; the order of insertion cannot be seen")]
     for (path, reasons) in &program.file_include_data.file_include_reasons {
         if reasons.iter().any(|r| !r.is_root_file()) {
             if let Some(&file) = program.files_by_path.get(path) {
-                referred.insert(file);
+                if wanted(file) {
+                    referred.insert(file);
+                }
             }
         }
     }
-    // The targets of every importer's resolutions. Looking a resolved file name up normalizes it (vscode: 110k
-    // imports, 24 ms on one thread, all of it inside the check time), so this runs on the worker pool, like the
-    // import graph of the checker assignment (checkerpool.rs `get_import_adjacency`).
-    let mut importers: Vec<(&tsrs_core::tspath::Path, Vec<&'static str>)> = Vec::new();
-    #[expect(clippy::iter_over_hash_type, reason = "builds a set from them; the order cannot be seen")]
-    for (path, resolutions) in &program.resolved_modules {
-        importers.push((path, resolutions.values().filter(|r| r.is_resolved()).map(|r| r.resolved_file_name).collect()));
-    }
-    #[expect(clippy::iter_over_hash_type, reason = "builds a set from them; the order cannot be seen")]
-    for (path, resolutions) in &program.type_resolutions_in_file {
-        importers.push((path, resolutions.values().filter(|r| r.is_resolved()).map(|r| r.resolved_file_name).collect()));
-    }
-    let targets_of = |(path, names): &(&tsrs_core::tspath::Path, Vec<&'static str>)| -> Vec<P<SourceFile>> {
-        let from = program.files_by_path.get(*path).copied();
-        names.iter().filter_map(|name| program.get_source_file_for_resolved_module(name)).filter(|&target| Some(target) != from).collect()
+    let by_name = files_by_name(program);
+    let target = |from: Option<P<SourceFile>>, name: &str| -> Option<P<SourceFile>> {
+        let file = by_name.get(name).copied().or_else(|| program.get_source_file_for_resolved_module(name))?;
+        (Some(file) != from && wanted(file)).then_some(file)
+    };
+    let modules = |(path, resolutions): (&tsrs_core::tspath::Path, &tsrs_module::ModeAwareCache<P<tsrs_module::ResolvedModule>>)| {
+        let from = program.files_by_path.get(path).copied();
+        resolutions.values().filter(|r| r.is_resolved()).filter_map(|r| target(from, r.resolved_file_name)).collect::<Vec<_>>()
+    };
+    let types = |(path, resolutions): (&tsrs_core::tspath::Path, &tsrs_module::ModeAwareCache<P<tsrs_module::ResolvedTypeReferenceDirective>>)| {
+        let from = program.files_by_path.get(path).copied();
+        resolutions.values().filter(|r| r.is_resolved()).filter_map(|r| target(from, r.resolved_file_name)).collect::<Vec<_>>()
     };
     let targets: Vec<Vec<P<SourceFile>>> = if program.single_threaded() {
-        importers.iter().map(targets_of).collect()
+        program.resolved_modules.iter().map(modules).chain(program.type_resolutions_in_file.iter().map(types)).collect()
     } else {
         use rayon::prelude::*;
-        crate::program::worker_pool().install(|| importers.par_iter().map(targets_of).collect())
+        crate::program::worker_pool().install(|| {
+            let mut targets: Vec<Vec<P<SourceFile>>> = program.resolved_modules.par_iter().map(modules).collect();
+            targets.par_extend(program.type_resolutions_in_file.par_iter().map(types));
+            targets
+        })
     };
     referred.extend(targets.into_iter().flatten());
     referred
+}
+
+/// The program's files by name, for `referred_files`: only files that `files_by_path` maps their own path to, so that
+/// finding a resolved name here gives the file `get_source_file_for_resolved_module` would (it looks the normalized
+/// name up in `files_by_path`, and a file's path is its normalized name).
+fn files_by_name(program: &Program) -> FxHashMap<&str, P<SourceFile>> {
+    program.files.iter().filter(|&&file| program.files_by_path.get(file.path()) == Some(&file)).map(|file| (file.file_name(), *file)).collect()
 }
 
 /// Whether nothing of `file` can be reached from another file that does not refer to it. It is a type-checked,
