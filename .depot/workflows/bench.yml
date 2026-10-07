@@ -309,17 +309,19 @@ jobs:
           path: bench/.work/logs
           if-no-files-found: ignore
 
-  # The `--checkers 64` table: every project in one job on a 64-vCPU machine (64 checker threads would oversubscribe
-  # the fixed-spec machine). It runs while the fixed-spec jobs do and is shorter than vscode's, so it adds no wall time;
-  # it is the run's only 64-vCPU job. Its cells record their machine (bench/run.py --merge). The regression flag never
-  # reads them: it compares the single-threaded counts of the fixed-spec jobs.
+  # The 64-vCPU machine's tables: every project in one job, in default mode (`wide`: each compiler at its own thread
+  # count, which is the README table) and at `--checkers 64` (64 checker threads would oversubscribe the fixed-spec
+  # machine), each with `bun check` from Bun canary as a third column. It runs while the fixed-spec jobs do; it is the
+  # run's only 64-vCPU job. Its cells record their machine (bench/run.py --merge). The regression flag never reads them:
+  # it compares the single-threaded counts of the fixed-spec jobs.
   measure-wide:
     needs: build
     runs-on: depot-ubuntu-24.04-64
-    timeout-minutes: 45
+    timeout-minutes: 60
     env:
       BENCH_RUNNER: Depot CI `depot-ubuntu-24.04-64`
       PROJECTS: ${{ join(fromJSON(needs.build.outputs.projects), ',') }}
+      BUN_VERSION: canary
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -410,6 +412,18 @@ jobs:
       - name: Set up the projects
         run: python3 bench/run.py --setup-only --projects "$PROJECTS"
 
+      # `bun check` needs Bun 1.4.3 or later; canary until that is a release (as in bench-compare.yml).
+      - name: Install Bun (${{ env.BUN_VERSION }})
+        run: |
+          tag=$([ "$BUN_VERSION" = canary ] && echo canary || echo "bun-v$BUN_VERSION")
+          for attempt in 1 2 3; do
+            curl -fsSL -o /tmp/bun.zip "https://github.com/oven-sh/bun/releases/download/$tag/bun-linux-x64.zip" && break
+            sleep $((attempt * 10))
+          done
+          unzip -oq /tmp/bun.zip -d /tmp/bun
+          /tmp/bun/bun-linux-x64/bun --revision
+          /tmp/bun/bun-linux-x64/bun check --help | head -3
+
       - name: Download tsrs (PGO, dist profile)
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -424,10 +438,11 @@ jobs:
           /tmp/tsrs-pgo/dist/tsrs --version
           cat /tmp/tsrs-pgo/dist/rustc.txt
 
-      - name: Benchmark (--checkers 64)
+      - name: Benchmark (default mode and --checkers 64, with bun check)
         run: >-
-          python3 bench/run.py --projects "$PROJECTS" --modes checkers64 --tsrs /tmp/tsrs-pgo/dist/tsrs
-          --tsrs-build pgo-dist --rustc "$(cat /tmp/tsrs-pgo/dist/rustc.txt)" --out-dir /tmp/bench-partial/wide
+          python3 bench/run.py --projects "$PROJECTS" --modes wide,checkers64 --tsrs /tmp/tsrs-pgo/dist/tsrs
+          --tsrs-build pgo-dist --rustc "$(cat /tmp/tsrs-pgo/dist/rustc.txt)" --bun /tmp/bun/bun-linux-x64/bun
+          --out-dir /tmp/bench-partial/wide
 
       - name: Upload the result
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -446,9 +461,10 @@ jobs:
           if-no-files-found: ignore
 
   # Joins the per-project results into bench/results/<date>-<commit>.{json,md} and the README table, flags
-  # regressions, and commits. Runs only when every fixed-spec measuring job succeeded: a table with rows missing would
-  # replace a complete one in the README, and the regression flag reads them. The wide job may fail or be cancelled;
-  # the table then has no `--checkers 64` section for this commit.
+  # regressions, and commits. Runs only when every fixed-spec measuring job succeeded: the regression flag reads them.
+  # README.md shows one table, the 64-vCPU machine's default mode (`wide`, with bun check); bench/results/<...>.md has
+  # every mode. If the wide job failed or was cancelled, the results file has no 64-vCPU sections and the README table
+  # is left as it was.
   merge:
     needs: [build, measure, measure-wide]
     if: ${{ !cancelled() && needs.build.result == 'success' && needs.measure.result == 'success' }}
@@ -472,8 +488,10 @@ jobs:
         run: |
           echo "ref=$GITHUB_REF event=$GITHUB_EVENT_NAME sha=$GITHUB_SHA"
           ls -R /tmp/bench-partials
-          python3 bench/run.py --merge /tmp/bench-partials/*/*.json --out-dir /tmp/bench-merged
+          python3 bench/run.py --merge /tmp/bench-partials/*/*.json --out-dir /tmp/bench-merged --readme-modes wide --readme-table /tmp/bench-readme.md
           cp /tmp/bench-merged/* bench/results/
+          # The README table needs the wide job's cells; without them --readme-table holds an empty table.
+          if ! grep -q '^| ' /tmp/bench-readme.md; then echo "::warning::no 64-vCPU results; README.md keeps its table"; rm /tmp/bench-readme.md; fi
 
       - name: Upload the merged result
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -515,7 +533,7 @@ jobs:
             git fetch -q origin main
             git checkout -q -f -B main origin/main
             cp /tmp/bench-merged/* bench/results/
-            python3 bench/run.py --apply-table /tmp/bench-merged/*.md --readme README.md
+            if [ -f /tmp/bench-readme.md ]; then python3 bench/run.py --apply-table /tmp/bench-readme.md --readme README.md; fi
             git add README.md bench/results
             git commit -q -m "bench: results for ${GITHUB_SHA::12} [skip ci]"
             git push -q origin HEAD:main && exit 0

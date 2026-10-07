@@ -2,9 +2,12 @@
 
 `bench/run.py` type-checks the projects the TypeScript team benchmarks the Go compiler on
 ([microsoft/typescript-benchmarking](https://github.com/microsoft/typescript-benchmarking), `cases/`) and four large
-open-source applications (see "Application projects") with tsrs and with tsgo 7.0.2 (npm `typescript@7.0.2`), and
-reports wall time, peak memory and the error count of each.
-The Depot CI workflow `.depot/workflows/bench.yml` runs it on every push to `main` and rewrites the table at the top of `README.md`.
+open-source applications (see "Application projects") with tsrs, with tsgo 7.0.2 (npm `typescript@7.0.2`) and, where a
+Bun binary is given, with `bun check`, and reports wall time, peak memory and the error count of each.
+The Depot CI workflow `.depot/workflows/bench.yml` runs it on every push to `main`. It measures every project on the
+fixed-spec 8-vCPU machine in three modes and on a 64-vCPU machine in two (with bun check); `bench/results/<date>-<commit>.md`
+has every table, and the table at the top of `README.md` is the 64-vCPU machine's default-mode one: each compiler at
+its own thread count, tsgo, tsrs and bun check side by side (`run.py --readme-modes wide`).
 
 ```sh
 cargo build --release -p tsrs_cli
@@ -96,9 +99,14 @@ tsrs's errors (`(ref N)` in the table).
 - Invocation, identical for both: `-p <project> --noEmit --incremental false --extendedDiagnostics --pretty false`,
   in the default mode (both 4 checker threads; tsrs additionally resolves members lazily, its default), with
   `--singleThreaded`, with `--checkers 8` (the `checkers8` mode: how each compiler scales when given twice the
-  default checkers), and with `--checkers 64` (the `checkers64` mode: how each scales on a wide machine; CI measures it
-  on a 64-vCPU machine, see "CI"). Select modes with `--modes` (default `default,single,checkers8`; flags in
-  `MODE_FLAGS` in `run.py`).
+  default checkers), and on a 64-vCPU machine (see "CI") in the default mode again (the `wide` mode: the same flags as
+  `default`, kept apart so that one result can hold both machines) and with `--checkers 64` (the `checkers64` mode: how
+  each scales on a wide machine). Select modes with `--modes` (default `default,single,checkers8`; flags in `MODE_FLAGS`
+  in `run.py`).
+- `bun check` (`--bun <binary>`, Bun 1.4.3 canary or later) is a third column in every mode it is measured in: `bun check
+  -p <project> --no-pretty --all`, with `--threads N` where tsgo and tsrs get `--checkers N` (bun's only thread knob,
+  and it caps every thread). CI measures it on the 64-vCPU machine. Its error count is recorded, not compared: bun check
+  follows TypeScript 7.0 (on vscode its errors equal tsgo 7.0.2's line for line), tsrs the 7.1-dev commit it ports.
   `--noEmit` instead of the suite's `--outdir` keeps the measurement to type checking; `--pretty
   false` makes the error lines parseable.
 - tsgo: `npm install typescript@7.0.2`. Its `bin/tsc` is a Node launcher (`lib/tsc.js` -> `getExePath.js`) that
@@ -171,11 +179,12 @@ once the four application projects were in):
    cache, downloads the binary and runs `bench/run.py --projects <name> --out-dir <dir>`. The result is the
    `bench-partial-<name>` artifact, the compiler output `bench-logs-<name>`. The jobs run at the same time but never
    share a machine, so a measurement is what it was in the sequential run: one project on an idle 8-vCPU machine.
-3. `measure-wide`, one job on `depot-ubuntu-24.04-64` (64 vCPU): every project in `--checkers 64` mode
-   (`bench/run.py --modes checkers64`), the table's last section. 64 checker threads would oversubscribe the fixed-spec
-   machine. The job runs while the `measure` jobs do and is shorter than vscode's, so it adds no wall time; it is the
-   run's only 64-vCPU job. It restores the caches the `measure` jobs save (a project added to `projects.json` needs a
-   restore step in it too). If it fails, the results are published without the `--checkers 64` section.
+3. `measure-wide`, one job on `depot-ubuntu-24.04-64` (64 vCPU): every project in the default mode (`wide`: each
+   compiler at its own thread count, tsrs 32 checkers there) and in `--checkers 64` mode (`bench/run.py --modes
+   wide,checkers64`), each with `bun check` from Bun canary as a third column (`--bun`). 64 checker threads would
+   oversubscribe the fixed-spec machine. The job runs while the `measure` jobs do; it is the run's only 64-vCPU job. It
+   restores the caches the `measure` jobs save (a project added to `projects.json` needs a restore step in it too). If
+   it fails, the results file is published without the 64-vCPU sections and the README table is left as it was.
 4. `merge`: `bench/run.py --merge <results...>` joins them into one result, projects in `bench/projects.json` order
    and modes in `MODE_FLAGS` order, after checking that the binary, the compilers, reps and flags agree and that no
    (project, mode) is measured twice; then the regression flag and the results commit, as before. The machine that

@@ -29,7 +29,8 @@ import run as rb  # noqa: E402  (bench/run.py: project setup, compiler install, 
 
 COMPILERS = ("tsgo", "tsgo-dev", "tsrs", "bun")
 LABELS = {"tsgo": "tsgo 7.0.2", "tsgo-dev": "tsgo 7.1-dev", "tsrs": "tsrs", "bun": "bun check"}
-BUN_FILES_RE = re.compile(r"checked ([\d,]+) files?")
+# bun's summary line: "checked N files" with errors, "No type errors in N files" without.
+BUN_FILES_RE = re.compile(r"(?:checked|No type errors in) ([\d,]+) files?")
 
 
 def thread_flags(compiler: str, threads: str) -> list[str]:
