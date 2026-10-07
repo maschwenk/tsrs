@@ -469,12 +469,19 @@ impl DirFS {
         if !internal::valid_path(name) || name.contains('\0') {
             return Err(FsError::Invalid);
         }
-        let name = from_slash(name);
+        // One allocation of the final size (module resolution stats and reads thousands of paths).
+        let mut full = String::with_capacity(self.dir.len() + 1 + name.len());
+        full.push_str(&self.dir);
         let last = self.dir.as_bytes()[self.dir.len() - 1];
-        if last == b'/' || (cfg!(windows) && last == b'\\') {
-            return Ok(format!("{}{}", self.dir, name));
+        if !(last == b'/' || (cfg!(windows) && last == b'\\')) {
+            full.push(std::path::MAIN_SEPARATOR);
         }
-        Ok(format!("{}{}{}", self.dir, std::path::MAIN_SEPARATOR, name))
+        if cfg!(windows) {
+            full.push_str(&from_slash(name));
+        } else {
+            full.push_str(name);
+        }
+        Ok(full)
     }
 }
 

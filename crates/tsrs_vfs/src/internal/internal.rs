@@ -64,19 +64,9 @@ pub fn valid_path(name: &str) -> bool {
         return true;
     }
 
-    // Iterate over elements in name, checking each.
-    let mut name = name;
-    loop {
-        let i = name.find('/').unwrap_or(name.len());
-        let elem = &name[..i];
-        if elem.is_empty() || elem == "." || elem == ".." {
-            return false;
-        }
-        if i == name.len() {
-            return true; // reached clean ending
-        }
-        name = &name[i + 1..];
-    }
+    // No element is empty, "." or "..": the first and last are not empty (an empty name is one empty element), and
+    // no element is "." or ".." or empty between two slashes (one scan instead of a search per element).
+    !name.is_empty() && !name.starts_with('/') && !name.ends_with('/') && !tspath::has_relative_path_segment(name)
 }
 
 pub type RootForFn = Box<dyn Fn(&str) -> Option<Box<dyn IoFS>> + Send + Sync>;
@@ -234,4 +224,30 @@ fn decode_utf16(s: &[u8], big_endian: bool) -> String {
         }
     });
     char::decode_utf16(ints).map(|r| r.unwrap_or(char::REPLACEMENT_CHARACTER)).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::valid_path;
+
+    #[test]
+    fn valid_path_matches_element_split() {
+        // Every name of up to 9 bytes over '/', '.', 'a', against fs.ValidPath's element loop.
+        fn by_elements(name: &str) -> bool {
+            name == "." || name.split('/').all(|elem| !elem.is_empty() && elem != "." && elem != "..")
+        }
+        let alphabet = [b'/', b'.', b'a'];
+        let mut bytes = Vec::new();
+        for len in 0..=9 {
+            for mut code in 0..3usize.pow(len) {
+                bytes.clear();
+                for _ in 0..len {
+                    bytes.push(alphabet[code % 3]);
+                    code /= 3;
+                }
+                let name = std::str::from_utf8(&bytes).unwrap();
+                assert_eq!(valid_path(name), by_elements(name), "{name}");
+            }
+        }
+    }
 }
