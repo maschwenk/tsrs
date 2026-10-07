@@ -13,6 +13,7 @@ mod fileregions;
 mod filesparser;
 mod host;
 mod includeprocessor;
+mod affinity;
 mod outputpaths;
 mod processing_diagnostic;
 mod program;
