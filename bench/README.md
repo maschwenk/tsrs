@@ -209,7 +209,9 @@ cache for the suite checkout plus the npm-installed compilers (`typescript@7.0.2
 per cloned project (checkout + `node_modules`) keyed on its pinned commit and install command
 (`bench/run.py --print-cache-keys`), so changing one pin re-installs only that project. Each measuring job restores
 the shared cache and its own project's; the build job restores the two training projects (xstate-main, webpack) and
-saves the shared cache.
+saves the shared cache. The build job, and `ci.yml`'s `check-and-test` and `arena-safety` jobs, restore the TypeScript
+testdata (`ts-ref/tsc/testdata`, 22 MB compressed) from a cache keyed on the TypeScript commit; on a miss they run the
+sparse checkout and save it. That saves about 4 s per job (2026-10-07: checkout 4.9-5.7 s, restore 1.4 s).
 
 Job duration split, 2026-10-01:
 
@@ -248,6 +250,13 @@ The other measurements, in `partials` of the result: t3code-server 254 s, mui-do
 formbricks-web 122 s, cal-diy 91 s, webpack 34 s, xstate-main 15 s, Compiler-Unions 8 s, Compiler 5 s. All ten jobs
 landed on the same CPU model. Each measuring job adds a runner start-up and cache restore (about 15 s for vscode) to
 the runner minutes.
+
+The measuring jobs still start when the build job ends. Starting them with the build and having them wait for its
+artifact works on Depot CI (a job can download an artifact that a still-running job uploaded). It was tried on
+2026-10-07 (Depot run `tdzf0g0cqn` vs `main`'s `ps_ghllxhtgmq`): measuring began 2-3 s after the build instead of
+20 s (vscode) and 50 s (`measure-wide`) after it. But build start to merge end was 20 min 53 s vs 20 min 56 s,
+because the 64-vCPU job's 13-minute measurement varies by more than that (762 s vs 779 s). And eleven runners, one of
+them 64 vCPU, sat idle through the 7-minute build.
 
 ## Verifying a branch
 
