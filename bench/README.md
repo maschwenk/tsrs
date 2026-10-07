@@ -67,8 +67,8 @@ and three additional popular large projects (typescript-eslint, prisma, nestjs).
 | `next-packages-next` | vercel/next.js @ `fa8dcf3` | `packages/next` | 2,882 | Next.js core package (Bun measured 2,881 files) |
 | `next-root` | vercel/next.js @ `fa8dcf3` | `.` | 3,549 | Next.js repo root monorepo (Bun measured 3,547 files) |
 | `storybook` | storybookjs/storybook @ `48dfcc6` | `scripts` | ~1,039 | Storybook scripts (Bun measured 1,039 files) |
-| `nuxt` | nuxt/nuxt @ `85b8d54` | `.` | ~839 | Nuxt framework monorepo (Bun measured 839 files) |
-| `playwright` | microsoft/playwright @ `d469960` | `.` | ~706 | Playwright testing framework (Bun measured 706 files) |
+| `nuxt` | nuxt/nuxt @ `85b8d54` | `.` | ~3,901 | Nuxt framework monorepo (broader tsconfig than Bun's 839; same commit) |
+| `playwright` | microsoft/playwright @ `d469960` | `.` | ~1,515 | Playwright testing framework (broader tsconfig than Bun's 706; same commit) |
 | `lit-packages-react` | lit/lit @ `01dbc66` | `packages/react` | ~6 | Lit React package (tiny, startup measurement; Bun measured 6 files) |
 | **Large popular projects** | | | | |
 | `typescript-eslint` | typescript-eslint/typescript-eslint @ `7062987` | `.` | ~3,000+ | ESLint plugin for TypeScript (large popular project) |
