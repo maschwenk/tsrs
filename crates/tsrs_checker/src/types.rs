@@ -695,7 +695,17 @@ pub struct SymbolNodeLinks {
 pub struct TypeNodeLinks {
     pub resolved_type: Cell<Option<P<Type>>>, // Resolved type associated with node
     pub outer_type_parameters: Cell<Option<&'static [P<Type>]>>, // Outer type parameters of anonymous object type (Go distinguishes nil = not computed)
+    link_key: Cell<tsrs_core::PKey>, // tsrs: the node this record is filed under (`KeyedLinkStore`), in what was padding
 }
+
+impl crate::links::KeyedLinks for TypeNodeLinks {
+    fn link_key(&self) -> &Cell<tsrs_core::PKey> {
+        &self.link_key
+    }
+}
+
+// The key fills padding with compressed pointers (20 -> 24 bytes); plain pointers: 24 -> 32.
+const _: () = assert!(std::mem::size_of::<TypeNodeLinks>() == if tsrs_core::COMPRESSED_PTRS { 24 } else { 32 });
 
 #[derive(Default)]
 pub struct ComputedNameNodeLinks {
@@ -741,7 +751,17 @@ pub struct SignatureLinks {
     pub resolved_signature: Cell<Option<P<Signature>>>, // Cached signature of signature node or call expression
     pub effects_signature: Cell<Option<P<Signature>>>, // Signature with possible control flow effects
     pub decorator_signature: Cell<Option<P<Signature>>>, // Signature for decorator as if invoked by the runtime
+    link_key: Cell<tsrs_core::PKey>, // tsrs: the node this record is filed under (`KeyedLinkStore`), in what was padding
 }
+
+impl crate::links::KeyedLinks for SignatureLinks {
+    fn link_key(&self) -> &Cell<tsrs_core::PKey> {
+        &self.link_key
+    }
+}
+
+// 12 -> 16 bytes, which a `PSlot` (8-aligned with compressed pointers) took anyway; plain pointers: 24 -> 32.
+const _: () = assert!(std::mem::size_of::<SignatureLinks>() == if tsrs_core::COMPRESSED_PTRS { 16 } else { 32 });
 
 // Note that for types of different kinds, the numeric values of TypeFlags determine the order
 // computed by the CompareTypes function and therefore the order of constituent types in union types.

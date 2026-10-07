@@ -7,6 +7,10 @@ use tsrs_core::{PKey, PSlot};
 /// Keyed by the key's identity like Go's `map[K]*V`. A slot is the key (`P::key`: its handle with compressed pointers,
 /// else its address) and the value's index (8 or 12 bytes, 4-aligned) instead of two pointers, and the values live in fixed-size arena chunks in first-access order (stable
 /// addresses, as before). 5.1M links in 26 stores on the private monorepo single.
+///
+/// Stable addresses: a chunk is never reallocated, freed or recycled, so a `P<V>` handed out stays valid for the
+/// store's lifetime. Callers rely on it: they keep links across accesses that create others, and
+/// `run_without_resolved_signature_caching` keeps them in a vector across a nested check.
 pub struct LinkStore<K: 'static, V: 'static> {
     slots: hashbrown::HashTable<LinkSlot>,
     chunks: Vec<P<PSlot<V>>>, // first slot of each chunk
@@ -105,11 +109,109 @@ impl<K: 'static, V: Default + 'static> LinkStore<K, V> {
     }
 }
 
+/// A link value that holds its own key, for `KeyedLinkStore`.
+pub trait KeyedLinks {
+    /// The key the store filed the value under (`P::key`); 0 until then. Only the store reads or writes it.
+    fn link_key(&self) -> &Cell<PKey>;
+}
+
+/// `LinkStore` for values with room for their key: a bucket holds only the value's index (4 bytes plus hashbrown's
+/// control byte, against 8 + 1), and a probe compares the key the value holds. `signature_links` and `type_node_links`
+/// keep the key in what was padding (`SignatureLinks` 12 -> 16 bytes in a 16-byte slot, `TypeNodeLinks` 20 -> 24 in
+/// 24, compressed pointers), so the values do not grow and the tables shrink by 4/9 (notes/mem-dense-link-tables.md:
+/// 18.0 -> 10.0 MiB each on vscode at one checker). Go's `LinkStore` maps the key's identity the same way.
+///
+/// The key is written before the index is inserted, so a probe never sees a value without its key (and a fresh value's
+/// key 0 is never a handle: the reservation never hands out offset 0). A hit loads the value the caller reads next; a
+/// false positive of hashbrown's 7-bit tag costs one value load; a rehash reads each value's key once.
+///
+/// Stable addresses: as `LinkStore`, the values sit in arena chunks that are never reallocated, freed or recycled, so
+/// a `P<V>` stays valid for the store's lifetime while the table of indexes grows and rehashes around it.
+pub struct KeyedLinkStore<K: 'static, V: 'static> {
+    slots: hashbrown::HashTable<u32>, // the value's position in `chunks`
+    chunks: Vec<P<PSlot<V>>>,         // first slot of each chunk
+    len: u32,
+    key: std::marker::PhantomData<P<K>>,
+}
+
+impl<K: 'static, V: 'static> Default for KeyedLinkStore<K, V> {
+    fn default() -> Self {
+        KeyedLinkStore { slots: hashbrown::HashTable::new(), chunks: Vec::new(), len: 0, key: std::marker::PhantomData }
+    }
+}
+
+/// The value at `index` of a store's chunks (`LinkStore::at`, as a function so that a probe closure can borrow the
+/// chunks while the table is borrowed mutably).
+#[inline]
+fn keyed_at<V>(chunks: &[P<PSlot<V>>], index: u32) -> P<V> {
+    #[expect(clippy::disallowed_methods, reason = "measured with the other link-store lookups (see LinkStore::at)")]
+    // SAFETY: every stored index is below the store's `len`, and `chunks` holds `LINK_CHUNK` values per started chunk.
+    let chunk = unsafe { *chunks.get_unchecked((index >> LINK_CHUNK_SHIFT) as usize) };
+    // SAFETY: `chunk` is the first slot of a `LINK_CHUNK`-slot array, and the offset is below `LINK_CHUNK`.
+    unsafe { PSlot::nth(chunk, index as usize & (LINK_CHUNK - 1)) }
+}
+
+impl<K: 'static, V: KeyedLinks + 'static> KeyedLinkStore<K, V> {
+    #[inline]
+    fn hash(key: PKey) -> u64 {
+        use std::hash::BuildHasher;
+        rustc_hash::FxBuildHasher.hash_one(key)
+    }
+
+    #[inline]
+    pub fn try_get(&self, key: P<K>) -> Option<P<V>> {
+        let key = key.key();
+        let chunks = &self.chunks;
+        self.slots.find(Self::hash(key), |&i| keyed_at(chunks, i).link_key().get() == key).map(|&i| keyed_at(chunks, i))
+    }
+
+    #[inline]
+    pub fn has(&self, key: P<K>) -> bool {
+        self.try_get(key).is_some()
+    }
+
+    /// Heap census: the table of indexes (the values are in the arena).
+    pub fn heap_parts(&self) -> Vec<(&'static str, crate::heapcensus::HeapStat)> {
+        use crate::heapcensus::HeapSize;
+        vec![("index slots", self.slots.heap_stat()), ("chunk list", self.chunks.heap_stat())]
+    }
+}
+
+impl<K: 'static, V: KeyedLinks + Default + 'static> KeyedLinkStore<K, V> {
+    /// Returns the links for `key`, creating them on first use.
+    #[inline]
+    #[cfg_attr(feature = "site-counts", track_caller)]
+    pub fn get(&mut self, key: P<K>) -> P<V> {
+        let key = key.key();
+        let chunks = &self.chunks;
+        match self.slots.entry(
+            Self::hash(key),
+            |&i| keyed_at(chunks, i).link_key().get() == key,
+            |&i| Self::hash(keyed_at(chunks, i).link_key().get()),
+        ) {
+            hashbrown::hash_table::Entry::Occupied(slot) => keyed_at(&self.chunks, *slot.get()),
+            hashbrown::hash_table::Entry::Vacant(slot) => {
+                tsrs_core::sitecount::hit("links", std::any::type_name::<V>());
+                let index = self.len;
+                if index as usize % LINK_CHUNK == 0 {
+                    self.chunks.push(PSlot::first(alloc_vec((0..LINK_CHUNK).map(|_| PSlot(V::default())).collect())));
+                }
+                self.len += 1;
+                let value = keyed_at(&self.chunks, index);
+                value.link_key().set(key);
+                slot.insert(index);
+                value
+            }
+        }
+    }
+}
+
 /// Links keyed by a node/symbol id (Go `PagedLinkStore`-backed stores). Like Go, the id is looked up by indexing,
 /// not hashing: a group of `ID_GROUP` consecutive ids holds 2 bytes per id (the slot's offset from the group's first
 /// slot, 0 = no links), found through a vector indexed by group number (one `Option<P<IdGroup>>` per group of the id
 /// space below the highest id seen). The groups and the values live in the arena (the values in fixed-size chunks,
-/// in first-access order; stable addresses, `P<V>` handed out as before).
+/// in first-access order). Stable addresses: chunks are never reallocated, freed or recycled, so a `P<V>` stays valid
+/// for the store's lifetime (`value_symbol_links` callers keep links across other accesses).
 ///
 /// Node and symbol ids come from process-wide counters in per-thread blocks of 1,024, so with several checkers one
 /// checker's links are dense in its own blocks and spread thinly over the other checkers' (every checker touches
@@ -590,6 +692,47 @@ mod tests {
         for b in 0..3000u64 {
             assert_eq!(store.try_get(b * 1024 + b % 1024).map(|v| v.get()), Some(b as u32 + 1), "block {b}");
             assert_eq!(store.try_get(b * 1024 + (b + 32) % 1024).map(|v| v.get()), None, "block {b}");
+        }
+    }
+
+    #[derive(Default)]
+    struct Keyed {
+        n: Cell<u32>,
+        key: Cell<PKey>,
+    }
+
+    impl KeyedLinks for Keyed {
+        fn link_key(&self) -> &Cell<PKey> {
+            &self.key
+        }
+    }
+
+    // The table holds only indexes and finds a key in the value it points at: through ~15 rehashes (60,000 keys
+    // from an empty table, 59 chunks of values), every key must keep reaching its own value at its first address, a
+    // key never inserted must miss (about one probe in 128 meets a matching 7-bit tag and must be rejected by the key
+    // in the value), and the value must hold its key.
+    #[test]
+    fn keyed_store_finds_each_key_through_rehashes() {
+        let keys: Vec<P<u64>> = (0..60_000u64).map(P::new).collect();
+        let order: Vec<u64> = scrambled((0..keys.len() as u64).collect(), 777);
+        let mut store: KeyedLinkStore<u64, Keyed> = KeyedLinkStore::default();
+        let mut held: Vec<Option<P<Keyed>>> = vec![None; keys.len()];
+        for &i in &order {
+            let value = store.get(keys[i as usize]);
+            assert_eq!(value.n.get(), 0);
+            value.n.set(i as u32 + 1);
+            held[i as usize] = Some(value);
+        }
+        for (i, &key) in keys.iter().enumerate() {
+            let value = store.try_get(key).unwrap();
+            assert!(Some(value) == held[i], "key {i} moved");
+            assert!(store.get(key) == value);
+            assert_eq!(value.n.get(), i as u32 + 1);
+            assert_eq!(value.key.get(), key.key());
+        }
+        for absent in (0..10_000u64).map(P::new) {
+            assert!(store.try_get(absent).is_none());
+            assert!(!store.has(absent));
         }
     }
 
