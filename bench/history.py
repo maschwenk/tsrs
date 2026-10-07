@@ -12,7 +12,8 @@ instruction count and peak RSS from bench/count.py (deterministic to ~0.001% and
 `wall` is the default-mode wall on the fixed 8-vCPU runner (noisy, up to 10-20% between runs of the same code);
 `wide_wall` and `wide_peak` are the 64-vCPU default-mode wall and peak, with `bun check`'s wall beside the wall. A cell
 past the thresholds of bench/regressions.py (instructions or peak up more than 1%, and peak by more than 2 MiB) is
-marked `!`. Use it to find which commit cost what, and whether a commit's gain was worth its cost.
+marked `!`; a wall or wide-peak change next to an instruction change under 0.3% is marked `~`: the code did not
+change, so that is the runner's noise (a median 2%, up to 10%, between publishes of the same code on 2026-10-07). Use it to find which commit cost what, and whether a commit's gain was worth its cost.
 """
 
 import argparse
@@ -84,7 +85,10 @@ def bun_wall(r: dict, project: str):
     return node.get("wall_s") if isinstance(node, dict) else None
 
 
-def cell(metric: str, new, old, bun=None) -> str:
+NOISE_INSTRUCTION_PERCENT = 0.3
+
+
+def cell(metric: str, new, old, bun=None, same_code: bool = False) -> str:
     _, _, _, unit, suffix, decimals, flag_percent, flag_floor = METRICS[metric]
     if new is None:
         return ""
@@ -92,7 +96,10 @@ def cell(metric: str, new, old, bun=None) -> str:
     if old:
         change = (new - old) / old * 100
         flag = flag_percent is not None and change > flag_percent and new - old > flag_floor
-        text += f" ({change:+.1f}%{'!' if flag else ''})"
+        # A wall or peak change while the single-threaded instructions did not move is the runner's noise
+        # (a few percent, up to 10%, between runs of the same code), marked `~`.
+        noise = same_code and metric in ("wall", "wide_wall", "wide_peak")
+        text += f" ({change:+.1f}%{'!' if flag else ''}{'~' if noise else ''})"
     if bun is not None:
         text += f" / bun {bun:.2f}"
     return text
@@ -109,14 +116,21 @@ def table(rows: list[dict], projects: list[str], metric: str, tsv: bool) -> str:
     header = ["commit", "date", "subject"] + projects
     lines = []
     previous = {}
+    previous_instructions = {}
     for r in rows:
         commit = r["tsrs"].get("commit", "")[:12]
         cells = [commit, r.get("date", ""), subject(commit)]
         for p in projects:
             new = value(r, p, metric)
-            cells.append(cell(metric, new, previous.get(p), bun_wall(r, p) if with_bun else None))
+            instructions = value(r, p, "instructions")
+            old_instructions = previous_instructions.get(p)
+            same_code = (instructions is not None and old_instructions
+                         and abs(instructions / old_instructions - 1) * 100 < NOISE_INSTRUCTION_PERCENT)
+            cells.append(cell(metric, new, previous.get(p), bun_wall(r, p) if with_bun else None, same_code))
             if new is not None:
                 previous[p] = new
+            if instructions is not None:
+                previous_instructions[p] = instructions
         lines.append(cells)
     if tsv:
         return "\n".join("\t".join(c) for c in [header] + lines)
