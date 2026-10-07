@@ -46,6 +46,9 @@ fn main() {
     // TSRS_UNION_CACHE_STATS / TSRS_UNION_CACHE=shadow: the union front cache's totals.
     #[cfg(feature = "checker")]
     tsrs_compiler::Checker::union_cache_finish();
+    // TSRS_SHARED_VARIANCE_STATS / TSRS_SHARED_VARIANCE=shadow: the shared variance table's totals.
+    #[cfg(feature = "checker")]
+    tsrs_compiler::Checker::shared_variance_finish();
     // TSRS_DERIVED_VARIANCE=shadow reports each disagreement as it is found and fails the run at the end.
     #[cfg(feature = "checker")]
     if tsrs_compiler::Checker::derived_variance_finish() > 0 {

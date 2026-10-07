@@ -942,6 +942,15 @@ pub struct Checker {
     pub(crate) derived_variance: crate::relater_derived::DerivedVarianceMode,
     /// TSRS_UNION_CACHE (unioncache.rs; on by default, off under Go-compatible history).
     pub(crate) union_front_cache: crate::unioncache::UnionFrontCache,
+    /// TSRS_SHARED_VARIANCE (sharedvariance.rs; on by default, off under Go-compatible history).
+    pub(crate) shared_variance_mode: crate::sharedvariance::SharedVarianceMode,
+    /// Measurements in progress that started from the table (at most 1): a circular measurement restarts from the
+    /// smallest symbol of the cycle with the variance stack emptied, and such a nested measurement must neither wait
+    /// for the table (the checker holds a claim another may be waiting for) nor publish.
+    pub(crate) shared_variance_depth: u32,
+    /// Calls of `add_diagnostic` and `add_suggestion_diagnostic`, duplicates included (wrapping): the shared variance
+    /// table publishes only measurements that added none.
+    pub(crate) diagnostic_adds: u32,
     pub(crate) derived_depth: u32,
     /// Variance of each generic's `this` type (relater_derived.rs); None while being computed.
     pub(crate) derived_this_variances: FxHashMap<P<Type>, Option<VarianceFlags>>,
@@ -1346,6 +1355,9 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         census: crate::workcensus::census_path().map(|_| crate::workcensus::Census::new()),
         derived_variance: crate::relater_derived::derived_variance_mode(),
         union_front_cache: crate::unioncache::UnionFrontCache::new(),
+        shared_variance_mode: crate::sharedvariance::shared_variance_mode(),
+        shared_variance_depth: 0,
+        diagnostic_adds: 0,
         derived_depth: 0,
         derived_this_variances: FxHashMap::default(),
         derived_conditional_params: FxHashMap::default(),

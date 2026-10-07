@@ -1844,6 +1844,21 @@ impl Checker {
         let variances_len = |links: P<VarianceLinks>| links.variances.get().map_or(0, |v| v.len());
         if links.variances.get().is_none() {
             let stack_index = self.get_variance_stack_index(symbol);
+            // tsrs: variances another checker of this program measured (sharedvariance.rs).
+            let mut claim = None;
+            let mut shared = None;
+            if stack_index < 0 && self.variance_stack.is_empty() && self.shared_variance_depth == 0 && self.shared_variance_mode != crate::sharedvariance::SharedVarianceMode::Off {
+                match self.shared_variance_lookup(symbol, type_parameters) {
+                    crate::sharedvariance::SharedVariance::Found(variances) => {
+                        links.variances.set(Some(alloc_vec(variances)));
+                        return links.variances.get().unwrap().to_vec();
+                    }
+                    crate::sharedvariance::SharedVariance::Claimed(c) => claim = Some(c),
+                    crate::sharedvariance::SharedVariance::Measure => {}
+                }
+                shared = Some((self.flow_frame_begin(), self.diagnostic_adds));
+                self.shared_variance_depth += 1;
+            }
             if stack_index < 0 {
                 let save_resolution_start = self.resolution_start;
                 if self.variance_stack.is_empty() {
@@ -1915,6 +1930,19 @@ impl Checker {
                 self.variance_stack.pop();
                 if self.variance_stack.is_empty() {
                     self.resolution_start = save_resolution_start;
+                }
+                if let Some((frame, diagnostic_adds)) = shared {
+                    self.shared_variance_depth -= 1;
+                    let (taint, _) = self.flow_frame_end(frame);
+                    let measured = links.variances.get().unwrap();
+                    if self.shared_variance_mode == crate::sharedvariance::SharedVarianceMode::Shadow {
+                        self.shared_variance_shadow_check(symbol, type_parameters, measured);
+                    }
+                    if let Some(claim) = claim {
+                        if taint.is_pure() && diagnostic_adds == self.diagnostic_adds {
+                            claim.publish(measured);
+                        }
+                    }
                 }
             } else {
                 // We've detected a circularity. Since we may compute different variances depending on where
