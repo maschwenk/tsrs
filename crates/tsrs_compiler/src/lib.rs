@@ -36,7 +36,7 @@ pub use programlike::{get_diagnostics_of_any_program_like, ProgramLike};
 #[cfg(feature = "checker")]
 pub use program_emit::{combine_emit_results, handle_no_emit_options, EmitOptions, EmitResult, SourceMapEmitResult, WriteFile, WriteFileData};
 pub use file_include::FileIncludeReason;
-pub use fileregions::{enable as enable_file_regions, leaf_mode_from_env, stats_report as leaf_stats_report, LeafMode};
+pub use fileregions::{enable as enable_file_regions, leaf_settings_from_env, stats_report as leaf_stats_report, LeafMode, LeafSettings};
 pub use fileloader::{DuplicateSourceFile, LibFile};
 pub use host::{new_cached_fs_compiler_host, new_compiler_host, CompilerHost, TraceFn};
 pub use program::{

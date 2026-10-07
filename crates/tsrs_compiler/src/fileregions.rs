@@ -37,6 +37,20 @@ pub enum LeafMode {
 
 static REGIONS_ON: AtomicBool = AtomicBool::new(false);
 static STATS: AtomicBool = AtomicBool::new(false);
+/// `LeafSettings::every_file`.
+static EVERY_FILE: AtomicBool = AtomicBool::new(false);
+/// The directory predicted paths are matched relative to (`enable`).
+static CURRENT_DIRECTORY: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// Path fragments of the files predicted to be leaves (`predicted_leaf`), matched in the path relative to the current
+/// directory (so that a checkout under a `test` directory does not match every file). Tests, stories and mocks: on the
+/// bench projects nothing imports them and they are nearly all of the leaves' bytes (vscode 99%, t3code-server 97%,
+/// formbricks-web and supabase-studio 95%; notes/mem-free-leaf-files.md). Only a predicted file gets a region; every
+/// other file is parsed into the thread arena as before this change, where large chunks are huge pages on Linux.
+/// Whether a file is a leaf is still decided exactly (`classify`): a predicted file that is not one keeps its region,
+/// a leaf that was not predicted is not freed. A root file that nothing else imports cannot be told at parse time:
+/// the files that import it may not have been parsed yet.
+const PREDICTED_LEAF_PATTERNS: &[&str] = &[".test.", ".spec.", "/test/", "/tests/", "/__tests__/", ".stories.", "/__mocks__/"];
 
 thread_local! {
     /// The host is parsing a root file of the program (`parse_task`).
@@ -55,35 +69,75 @@ static REGION_FILES: AtomicUsize = AtomicUsize::new(0);
 static REGION_BYTES: AtomicUsize = AtomicUsize::new(0);
 static REGION_USED: AtomicUsize = AtomicUsize::new(0);
 static CHECKED_FILES: AtomicUsize = AtomicUsize::new(0);
+static MISSED: AtomicUsize = AtomicUsize::new(0);
+static MISSED_NODES: AtomicUsize = AtomicUsize::new(0);
+static LEAF_NODES: AtomicUsize = AtomicUsize::new(0);
 
-/// The mode `TSRS_FREE_LEAVES` asks for where freeing is allowed, and whether to report (`stats_report`): unset or
-/// `1` frees, `stats` frees and reports, `keep` makes the regions and reports but frees nothing, `0` turns it off.
-/// Off under the debug modes that walk files or checker data after the pass (`TSRS_FILE_TIMES` walks every tree;
-/// `TSRS_ASSIGNMENT_STATS`, the work and heap censuses walk checker tables) or that must see every block alive (the
-/// reachability census, `TSRS_CENSUS=1`).
-pub fn leaf_mode_from_env() -> (LeafMode, bool) {
+/// What `TSRS_FREE_LEAVES` asks for where freeing is allowed (`leaf_settings_from_env`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct LeafSettings {
+    pub mode: LeafMode,
+    /// `stats_report` reports.
+    pub stats: bool,
+    /// Every TypeScript root file gets a region, not only the predicted ones (`PREDICTED_LEAF_PATTERNS`): for
+    /// measurement; it frees the leaves the prediction misses, but moves every tree out of the thread arenas.
+    pub every_file: bool,
+}
+
+/// `TSRS_FREE_LEAVES`, a comma-separated list: unset or `1` frees the predicted leaves, `0` turns file regions off,
+/// `keep` makes the regions but frees nothing, `stats` reports (`stats_report`), `all` gives every TypeScript root file
+/// a region (`LeafSettings::every_file`). Off under the debug modes that walk files or checker data after the pass
+/// (`TSRS_FILE_TIMES` walks every tree; `TSRS_ASSIGNMENT_STATS`, the work and heap censuses walk checker tables) or
+/// that must see every block alive (the reachability census, `TSRS_CENSUS=1`).
+pub fn leaf_settings_from_env() -> LeafSettings {
     let census = std::env::var_os("TSRS_CENSUS").is_some_and(|v| v == "1") || tsrs_core::census_recording();
     #[cfg(feature = "checker")]
     let checker_census = crate::Checker::census_enabled() || crate::Checker::heap_census_enabled();
     #[cfg(not(feature = "checker"))]
     let checker_census = false;
     if census || checker_census || crate::checkerpool::file_times_path().is_some() || crate::checkerpool::assignment_stats_enabled() {
-        return (LeafMode::Off, false);
+        return LeafSettings::default();
     }
-    match std::env::var("TSRS_FREE_LEAVES").as_deref() {
-        Ok("0") => (LeafMode::Off, false),
-        Ok("stats") => (LeafMode::Free, true),
-        Ok("keep") => (LeafMode::Keep, true),
-        _ => (LeafMode::Free, false),
+    let mut settings = LeafSettings { mode: LeafMode::Free, stats: false, every_file: false };
+    for word in std::env::var("TSRS_FREE_LEAVES").unwrap_or_default().split(',') {
+        match word.trim() {
+            "0" | "off" => return LeafSettings::default(),
+            "keep" => settings.mode = LeafMode::Keep,
+            "stats" => settings.stats = true,
+            "all" => settings.every_file = true,
+            _ => {}
+        }
     }
+    settings
 }
 
 /// Turns file regions on for the programs created from here on, process-wide (the CLI, before `new_program`; never
-/// the language server, the API or the test harnesses). `stats`: `stats_report` reports.
-pub fn enable(stats: bool) {
-    // Relaxed (both): set on the main thread before the program, and any worker that reads them, exists.
-    REGIONS_ON.store(true, Ordering::Relaxed);
-    STATS.store(stats, Ordering::Relaxed);
+/// the language server, the API or the test harnesses). Predicted paths are matched relative to `current_directory`.
+pub fn enable(settings: LeafSettings, current_directory: &str) {
+    let _ = CURRENT_DIRECTORY.set(current_directory.trim_end_matches('/').to_string());
+    // Relaxed (all three): set on the main thread before the program, and any worker that reads them, exists.
+    STATS.store(settings.stats, Ordering::Relaxed);
+    EVERY_FILE.store(settings.every_file, Ordering::Relaxed);
+    REGIONS_ON.store(settings.mode != LeafMode::Off, Ordering::Relaxed);
+}
+
+/// Whether `file_name` matches `PREDICTED_LEAF_PATTERNS` (relative to the current directory).
+fn predicted_leaf(file_name: &str) -> bool {
+    let relative = match CURRENT_DIRECTORY.get() {
+        Some(dir) if !dir.is_empty() && file_name.starts_with(dir.as_str()) => &file_name[dir.len()..],
+        _ => file_name,
+    };
+    PREDICTED_LEAF_PATTERNS.iter().any(|pattern| relative.contains(pattern))
+}
+
+/// Whether a file of this name and kind gets a region when it is parsed for a root file: a TypeScript file, not a
+/// declaration file, predicted to be a leaf (every such file with `every_file`).
+fn region_candidate(file_name: &str, script_kind: ScriptKind) -> bool {
+    // Relaxed (both): see `enable`.
+    REGIONS_ON.load(Ordering::Relaxed)
+        && matches!(script_kind, ScriptKind::TS | ScriptKind::TSX)
+        && !tsrs_core::tspath::is_declaration_file_name(file_name)
+        && (EVERY_FILE.load(Ordering::Relaxed) || predicted_leaf(file_name))
 }
 
 #[inline]
@@ -107,14 +161,10 @@ pub(crate) fn parse_task<T>(root: bool, parse: impl FnOnce() -> T) -> T {
     file
 }
 
-/// Whether a file of this name and kind is parsed into a region of its own: only files that can be leaves, TypeScript
-/// files (not declaration files) parsed for a root file of the program (`parse_task`).
+/// Whether a file of this name and kind is parsed into a region of its own: a `region_candidate` parsed for a root file
+/// of the program (`parse_task`).
 pub(crate) fn wants_region(file_name: &str, script_kind: ScriptKind) -> bool {
-    // Relaxed: see `enable`.
-    REGIONS_ON.load(Ordering::Relaxed)
-        && ROOT_PARSE.get()
-        && matches!(script_kind, ScriptKind::TS | ScriptKind::TSX)
-        && !tsrs_core::tspath::is_declaration_file_name(file_name)
+    ROOT_PARSE.get() && region_candidate(file_name, script_kind)
 }
 
 // Text, AST and binder data take about 8 times the text (tsrs_project parsecache.rs measured 7.8x on the private
@@ -142,8 +192,7 @@ pub(crate) fn parse(opts: SourceFileParseOptions, text: String, script_kind: Scr
 /// `tsrs_binder::bind_source_file`, in the file's region if it has one (then trimmed to what parse and bind used, if
 /// this thread carved it last).
 pub(crate) fn bind(file: P<SourceFile>) {
-    // Relaxed: see `enable`.
-    if file.is_bound() || !REGIONS_ON.load(Ordering::Relaxed) {
+    if file.is_bound() || !region_candidate(file.file_name(), file.script_kind.get()) {
         tsrs_binder::bind_source_file(file);
         return;
     }
@@ -179,11 +228,23 @@ pub(crate) fn classify(program: &Program) -> bool {
     let regions = REGIONS.lock().unwrap();
     let referred = referred_files(program);
     let (mut leaves, mut leaf_bytes, mut checked) = (0, 0, 0);
+    // `stats`: leaves the prediction missed (parsed into the thread arena, so not freed), and the nodes of both kinds.
+    let (mut missed, mut missed_nodes, mut leaf_nodes) = (0, 0, 0);
     for &file in files {
         if !program.skip_type_checking(file, false) {
             checked += 1;
         }
-        let Some(region) = regions.get(&file) else { continue };
+        let Some(region) = regions.get(&file) else {
+            if stats()
+                && matches!(file.script_kind.get(), ScriptKind::TS | ScriptKind::TSX)
+                && !referred.contains(&file)
+                && adds_nothing(program, file)
+            {
+                missed += 1;
+                missed_nodes += file.node_count.get();
+            }
+            continue;
+        };
         if referred.contains(&file) || !adds_nothing(program, file) {
             continue;
         }
@@ -191,6 +252,7 @@ pub(crate) fn classify(program: &Program) -> bool {
         leaves += 1;
         if stats() {
             leaf_bytes += region.used_bytes();
+            leaf_nodes += file.node_count.get();
         }
     }
     #[expect(clippy::iter_over_hash_type, reason = "independent per region; no output depends on the order")]
@@ -212,6 +274,9 @@ pub(crate) fn classify(program: &Program) -> bool {
             (&REGION_FILES, regions.len()),
             (&REGION_BYTES, region_bytes),
             (&REGION_USED, region_used),
+            (&MISSED, missed),
+            (&MISSED_NODES, missed_nodes),
+            (&LEAF_NODES, leaf_nodes),
         ] {
             // Relaxed: read on the main thread after the pass's threads joined.
             counter.store(value, Ordering::Relaxed);
@@ -320,9 +385,11 @@ pub fn stats_report() -> Option<String> {
     let reserve = tsrs_core::ptr::reserve_stats().map(|(_, high)| format!("; arena address space used {:.1} MB", mb(high))).unwrap_or_default();
     let (calls, bytes) = tsrs_core::arena::retired_stats();
     Some(format!(
-        "tsrs: leaf files: {} of {} checked files, {:.1} MB of the {:.1} MB used by {} file regions ({:.1} MB reserved); freed {} ({:.1} MB reserved, {:.1} MB of pages given back in {calls} calls){reserve}\n",
+        "tsrs: leaf files: {} of {} checked files ({} more not predicted, {:.1}% of the leaves' nodes), {:.1} MB of the {:.1} MB used by {} file regions ({:.1} MB reserved); freed {} ({:.1} MB reserved, {:.1} MB of pages given back in {calls} calls){reserve}\n",
         load(&LEAVES),
         load(&CHECKED_FILES),
+        load(&MISSED),
+        100.0 * load(&MISSED_NODES) as f64 / (load(&MISSED_NODES) + load(&LEAF_NODES)).max(1) as f64,
         mb(load(&LEAF_BYTES)),
         mb(load(&REGION_USED)),
         load(&REGION_FILES),
