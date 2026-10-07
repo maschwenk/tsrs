@@ -813,8 +813,11 @@ impl filesParser {
 
         struct Collector<'a> {
             loader: &'a mut fileLoader,
-            // By data: the casing a data was first walked under (a map keyed by data hashed once per visit).
-            seen: Vec<Option<std::sync::Arc<str>>>,
+            // By data: the task whose casing the data was first walked under, and the address of that casing (a map
+            // keyed by data hashed once per visit). The address answers the common case, the same shared name, as
+            // `Arc<str>`'s `==` does, without reading the task; it is never dereferenced. Not an `Arc` clone: its
+            // refcount update waited for the walk's earlier stores, which made it a tenth of the walk (notes/perf-serial-collect.md).
+            seen: Vec<Option<(TaskId, *const str)>>,
         }
 
         // An explicit stack replaces Go's recursive collectFiles (the import graph of a large
@@ -839,7 +842,8 @@ impl filesParser {
         // keying by path here would hash each file's path once per import edge (vscode: 110k edges, 10k files).
         let mut reasons_by_data: Vec<Vec<P<FileIncludeReason>>> = Vec::new();
         reasons_by_data.resize_with(loader.files_parser.datas.len(), Vec::new);
-        let mut reasons_order: Vec<(DataId, Path)> = Vec::new();
+        // The task whose path keys the data's reasons; the path is cloned after the walk (see `seen`).
+        let mut reasons_order: Vec<(DataId, TaskId)> = Vec::new();
         let mut c = Collector { loader, seen: vec![None; reasons_by_data.len()] };
         let roots = c.loader.root_tasks.clone();
         let mut stack: Vec<Frame> = vec![Frame::List { owner: None, next: 0 }];
@@ -867,8 +871,6 @@ impl filesParser {
                         continue;
                     }
 
-                    let path = loader.tasks[task].path.clone();
-
                     let diags = loader.tasks[task].take_processing_diagnostics();
                     include_data.processing_diagnostics.extend(diags);
 
@@ -877,17 +879,21 @@ impl filesParser {
                         continue;
                     };
 
+                    // The keys are cloned before the inserts (see `seen`); the metadata is taken, as the resolutions
+                    // are: this is the last read of the task's data.
+                    let path = loader.tasks[task].path.clone();
+                    let (files_key, resolutions_key, type_resolutions_key, metadata_key) = (path.clone(), path.clone(), path.clone(), path.clone());
                     if let Some(lib_file) = loader.tasks[task].lib_file {
                         lib_files.push(file);
                         lib_files_map.insert(path.clone(), lib_file);
                     } else {
                         files.push(file);
                     }
-                    files_by_path.insert(path.clone(), file);
                     let loaded = loader.tasks[task].data();
-                    resolved_modules.insert(path.clone(), std::mem::take(&mut loaded.resolutions_in_file));
-                    type_resolutions_in_file.insert(path.clone(), std::mem::take(&mut loaded.type_resolutions_in_file));
-                    source_file_meta_datas.insert(path.clone(), loaded.metadata.clone());
+                    files_by_path.insert(files_key, file);
+                    resolved_modules.insert(resolutions_key, std::mem::take(&mut loaded.resolutions_in_file));
+                    type_resolutions_in_file.insert(type_resolutions_key, std::mem::take(&mut loaded.type_resolutions_in_file));
+                    source_file_meta_datas.insert(metadata_key, std::mem::take(&mut loaded.metadata));
 
                     if let Some(jsx) = loaded.jsx_runtime_import_specifier {
                         jsx_runtime_import_specifiers.insert(path.clone(), jsx);
@@ -927,16 +933,17 @@ impl filesParser {
                     }
 
                     // ensure we only walk each task once
-                    if let Some(checked_name) = &c.seen[data] {
+                    if let Some((checked_task, checked_ptr)) = c.seen[data] {
+                        let name = &loader.tasks[task].normalized_file_path;
+                        let differs = !std::ptr::eq(checked_ptr, Arc::as_ptr(name)) && *loader.tasks[checked_task].normalized_file_path != **name;
                         if let Some(file) = loader.tasks[task].file {
-                            if *checked_name != loader.tasks[task].normalized_file_path
-                                && recorded_duplicates.entry(data).or_default().insert(loader.tasks[task].normalized_file_path.to_string())
-                            {
+                            if differs && recorded_duplicates.entry(data).or_default().insert(loader.tasks[task].normalized_file_path.to_string()) {
                                 duplicate_source_files.push(duplicate_source_file(file));
                             }
                         }
                         // Identical names normalize identically; only differing ones need the comparison.
-                        if force_consistent_casing && *checked_name != loader.tasks[task].normalized_file_path {
+                        if force_consistent_casing && differs {
+                            let checked_name = &loader.tasks[checked_task].normalized_file_path;
                             // Check if it differs only in drive letters its ok to ignore that error:
                             let checked_absolute_path =
                                 tspath::get_normalized_absolute_path_without_root(checked_name, &loader.compare_paths_options.current_directory);
@@ -956,7 +963,7 @@ impl filesParser {
                         }
                         continue;
                     } else {
-                        c.seen[data] = Some(Arc::clone(&loader.tasks[task].normalized_file_path));
+                        c.seen[data] = Some((task, Arc::as_ptr(&loader.tasks[task].normalized_file_path)));
                     }
 
                     if let Some(seen_ignore_case) = &mut tasks_seen_by_name_ignore_case {
@@ -1027,7 +1034,8 @@ impl filesParser {
         }
 
         let loader = c.loader;
-        for (data, path) in reasons_order {
+        let reason_keys: Vec<Path> = reasons_order.iter().map(|&(_, task)| loader.tasks[task].path.clone()).collect();
+        for ((data, _), path) in reasons_order.into_iter().zip(reason_keys) {
             include_data.file_include_reasons.insert(path, std::mem::take(&mut reasons_by_data[data]));
         }
         loader.sort_libs(&mut lib_files);
@@ -1083,7 +1091,7 @@ fn duplicate_source_file(file: P<SourceFile>) -> DuplicateSourceFile {
 fn add_include_reason(
     loader: &fileLoader,
     reasons_by_data: &mut [Vec<P<FileIncludeReason>>],
-    reasons_order: &mut Vec<(DataId, Path)>,
+    reasons_order: &mut Vec<(DataId, TaskId)>,
     task: TaskId,
     reason: Option<P<FileIncludeReason>>,
 ) {
@@ -1093,7 +1101,7 @@ fn add_include_reason(
         if let Some(reason) = reason {
             let data = task_data(loader, task);
             if reasons_by_data[data].is_empty() {
-                reasons_order.push((data, loader.tasks[task].path.clone()));
+                reasons_order.push((data, task));
             }
             reasons_by_data[data].push(reason);
         }
