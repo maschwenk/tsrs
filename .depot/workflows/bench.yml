@@ -24,11 +24,14 @@ on:
       - "!bench/results/**"
   workflow_dispatch:
 
-# One bench at a time. A running bench is not cancelled (main gets pushes every few minutes; with cancelling, every
-# GitHub-hosted run on 2026-10-01 was cancelled before it finished); a push while one runs queues its bench, and a
-# later push replaces that queued one, so the newest commit is always benchmarked next.
+# One bench per push, never cancelled: the group is the commit, so a push during a run starts its own run (the
+# measuring jobs never share a machine, so overlapping runs do not disturb each other) and only a re-dispatch of the
+# same commit replaces a queued twin. Until 2026-10-07 the group was shared and a push replaced the queued bench, so
+# bursts of merges left most commits without a results file (25 of 48 non-skip commits on 2026-10-06/07) and the
+# regression flag could only name "one of N merges". The results commit and the README table handle overlapping
+# runs: see the "Commit results" step.
 concurrency:
-  group: bench
+  group: bench-${{ github.sha }}
   cancel-in-progress: false
 
 permissions:
@@ -607,7 +610,10 @@ jobs:
         continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: python3 bench/regressions.py --latest ${{ steps.publish.outputs.publish == 'true' && '--comment' || '' }}
+        # This run's result (copied into bench/results by "Merge results"), not the newest file by date: runs of
+        # different commits overlap and finish in any order. regressions.py compares it with the nearest earlier
+        # benchmarked ancestor of its commit.
+        run: python3 bench/regressions.py "bench/results/$(basename /tmp/bench-merged/*.json)" ${{ steps.publish.outputs.publish == 'true' && '--comment' || '' }}
 
       - name: Commit results
         if: steps.publish.outputs.publish == 'true'
@@ -620,7 +626,19 @@ jobs:
             git fetch -q origin main
             git checkout -q -f -B main origin/main
             cp /tmp/bench-merged/* bench/results/
-            if [ -f /tmp/bench-readme.md ]; then python3 bench/run.py --apply-table /tmp/bench-readme.md --readme README.md; fi
+            # README.md keeps the newest commit's table. Runs overlap, so a run of an older commit can finish after
+            # a descendant's run has published: then it adds its results file and leaves the table alone. The
+            # commit a table came from is in its last line ("tsrs commit: `<sha>`", bench/run.py).
+            readme_commit=$(sed -n 's/.*tsrs commit: `\([0-9a-f]\{7,40\}\)`.*/\1/p' README.md | head -1)
+            if [ ! -f /tmp/bench-readme.md ]; then
+              echo "::notice::no 64-vCPU table for ${GITHUB_SHA::12}; README.md keeps its table"
+            elif [ -n "$readme_commit" ] && [ "$readme_commit" != "${GITHUB_SHA::12}" ] \
+                && git cat-file -e "$readme_commit^{commit}" 2>/dev/null \
+                && git merge-base --is-ancestor "$GITHUB_SHA" "$readme_commit"; then
+              echo "::notice::README.md keeps the table of $readme_commit, a descendant of ${GITHUB_SHA::12}; this run's table is bench/results/$(basename /tmp/bench-merged/*.md)"
+            else
+              python3 bench/run.py --apply-table /tmp/bench-readme.md --readme README.md
+            fi
             git add README.md bench/results
             git commit -q -m "bench: results for ${GITHUB_SHA::12} [skip ci]"
             git push -q origin HEAD:main && exit 0

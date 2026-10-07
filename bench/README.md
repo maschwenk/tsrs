@@ -188,8 +188,20 @@ The benchmark is a [Depot CI](https://depot.dev/docs/ci/overview) workflow, `.de
 repository is connected to Depot CI; Depot's runners for GitHub Actions only serve organization-owned repositories, and
 a probe of `depot-ubuntu-*` / `depot-macos-latest` labels from GitHub Actions stayed queued). It runs on every push to
 `main` except pushes that touch only `README.md` / `bench/results/**`, and on `workflow_dispatch`. Nobody waits on it,
-so it is built for unattended runs: one bench at a time, never cancelled (a push during a run queues the newest
-commit), network steps retried, and the results commit rebased onto the latest `main` before pushing.
+so it is built for unattended runs: one run per push (the concurrency group is the commit, so a push during a run
+starts its own run on its own machines and only a re-dispatch of the same commit replaces a queued twin; until
+2026-10-07 one shared group let a later push replace the queued bench, and bursts of merges left most commits without
+a results file), never cancelled, network steps retried, and the results commit re-created on top of the latest
+`main` before pushing. Runs overlap and finish in any order, so `README.md` keeps the newest commit's table: a run
+whose commit is an ancestor of the one the table came from (its last line names it) adds its results file and leaves
+the table alone, and the regression flag compares a run with the nearest earlier benchmarked ancestor of its commit,
+not with the newest file by date.
+
+**History**: `bench/history.py` prints one table per metric over `bench/results/*.json` in `main`'s first-parent
+order, a column per project, each cell with its change against the previous benchmarked commit (with one run per
+push, the previous merge): `--metrics instructions,peak,wall,wide_wall,wide_peak`, `--projects`, `--since <commit>`,
+`--tsv`. Instructions and peak RSS are deterministic, so a `!` cell (past the regression thresholds) is the commit's
+doing; the wall columns are the noisy ones and say whether the cost bought anything.
 
 Four jobs (since 2026-10-07; until then one job did everything in sequence, and the measurement alone took 18-20 min
 once the four application projects were in):

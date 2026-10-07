@@ -46,8 +46,24 @@ def measured(result, project, key="instructions"):
     return node
 
 
+def commits_between(old_commit, new_commit):
+    """Commits on old_commit..new_commit when old_commit is an ancestor of new_commit (0 when they are the same
+    commit), else None. None too outside a checkout that has both commits."""
+    if old_commit == new_commit:
+        return 0
+    ancestor = subprocess.run(["git", "merge-base", "--is-ancestor", old_commit, new_commit], capture_output=True)
+    if ancestor.returncode != 0:
+        return None
+    count = subprocess.run(["git", "rev-list", "--count", f"{old_commit}..{new_commit}"], capture_output=True, text=True)
+    return int(count.stdout) if count.returncode == 0 and count.stdout.strip().isdigit() else None
+
+
 def previous_result(new, path, results_dir):
-    """The newest earlier result from the same machine and build that has instruction counts."""
+    """The result to compare `new` with: from the same machine and build, with instruction counts, of the nearest
+    earlier benchmarked ancestor of its commit (another run of the same commit does not count). Runs of different
+    commits overlap and finish in any order (bench.yml), so the newest file by date can belong to a descendant.
+    Without a checkout that knows the commits (a results directory copied elsewhere), the newest earlier result by
+    date."""
     candidates = []
     for p in Path(results_dir).glob("*.json"):
         if p.resolve() == Path(path).resolve():
@@ -59,9 +75,20 @@ def previous_result(new, path, results_dir):
         same_setup = (r.get("machine", {}).get("label") == new.get("machine", {}).get("label")
                       and r.get(TOOL, {}).get("build") == new.get(TOOL, {}).get("build"))
         has_counts = any(measured(r, name) for name in r.get("projects", {}))
-        if same_setup and has_counts and r.get("date", "") <= new.get("date", ""):
+        if same_setup and has_counts:
             candidates.append(r)
-    return max(candidates, key=lambda r: r["date"]) if candidates else None
+    new_commit = new.get(TOOL, {}).get("commit", "")
+    ancestors = []
+    for r in candidates:
+        old_commit = r.get(TOOL, {}).get("commit", "")
+        if old_commit and old_commit != new_commit:
+            distance = commits_between(old_commit, new_commit)
+            if distance:
+                ancestors.append((distance, r.get("date", ""), r))
+    if ancestors:
+        return min(ancestors, key=lambda a: (a[0], a[1]))[2]
+    earlier = [r for r in candidates if r.get("date", "") <= new.get("date", "")]
+    return max(earlier, key=lambda r: r["date"]) if earlier else None
 
 
 def project_machine(result, project):
@@ -141,7 +168,8 @@ def post(url, body):
 def main(argv):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("result", type=Path, nargs="?")
-    ap.add_argument("--latest", action="store_true", help="judge the newest result in --results-dir (by its date)")
+    ap.add_argument("--latest", action="store_true",
+                    help="judge the newest result in --results-dir by its date (bench.yml passes its own result instead)")
     ap.add_argument("--results-dir", type=Path, default=Path(__file__).parent / "results")
     ap.add_argument("--threshold", type=float, help="override the percent for instructions (default 1)")
     ap.add_argument("--comment", action="store_true", help="comment on the merged pull requests (needs GITHUB_TOKEN)")
