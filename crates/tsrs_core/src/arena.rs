@@ -1212,21 +1212,46 @@ mod retired {
 
     /// Retires `start .. start + len` (nothing uses it any more, and it is never handed out again).
     pub(super) fn retire(start: usize, len: usize) {
-        let pages = {
+        let (pages, calls) = {
             let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             s.pending.push((start, start + len));
             s.pending_bytes += len;
             if s.pending_bytes < BATCH {
                 return;
             }
-            take_pages(&mut s)
+            let pages = take_pages(&mut s);
+            let calls = spans_of(&s, &pages);
+            (pages, calls)
         };
-        give_back(&pages);
+        give_back(&pages, &calls);
     }
 
     pub(super) fn flush() {
-        let pages = take_pages(&mut STATE.lock().unwrap_or_else(|e| e.into_inner()));
-        give_back(&pages);
+        let (pages, calls) = {
+            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            let pages = take_pages(&mut s);
+            let calls = spans_of(&s, &pages);
+            (pages, calls)
+        };
+        give_back(&pages, &calls);
+    }
+
+    /// The whole pages of each span that `pages` (from `take_pages`) lie in: a span's pages are all retired, and the
+    /// ones it absorbed were given back before (they hold no memory, and giving them back again costs nothing), so
+    /// one call per span gives back what `pages` lists. Freed with many checkers, a batch's ranges sit between ranges
+    /// retired earlier, and their pages would take a call for each piece; each call flushes the TLB of every core
+    /// running a thread of the process.
+    fn spans_of(s: &State, pages: &[(usize, usize)]) -> Vec<(usize, usize)> {
+        let page = crate::reserve::page_size();
+        let mut out: Vec<(usize, usize)> = Vec::with_capacity(pages.len());
+        for &(first, _) in pages {
+            let Some((&lo, &hi)) = s.spans.range(..=first).next_back() else { continue };
+            let whole = (lo.next_multiple_of(page), hi & !(page - 1));
+            if out.last() != Some(&whole) {
+                out.push(whole);
+            }
+        }
+        out
     }
 
     pub(super) fn stats() -> (usize, usize) {
@@ -1292,7 +1317,7 @@ mod retired {
 
     #[cfg(test)]
     mod tests {
-        use super::{take_pages, State};
+        use super::{spans_of, take_pages, State};
         use std::collections::BTreeMap;
 
         fn batch(s: &mut State, ranges: &[(usize, usize)]) -> Vec<(usize, usize)> {
@@ -1321,17 +1346,30 @@ mod retired {
             // A chunk not touching them: its own whole pages only.
             assert_eq!(batch(&mut t, &[(20 * p + 1, 23 * p - 1)]), [(21 * p, 22 * p)]);
         }
+
+        /// Ranges retired on both sides of a span given back earlier go back in one call over the whole span.
+        #[test]
+        fn a_batch_gives_back_whole_spans() {
+            let p = crate::reserve::page_size();
+            let mut s = State { spans: BTreeMap::new(), pending: Vec::new(), pending_bytes: 0 };
+            assert_eq!(batch(&mut s, &[(10 * p, 12 * p)]), [(10 * p, 12 * p)]);
+            let pages = batch(&mut s, &[(8 * p, 10 * p), (12 * p, 14 * p), (30 * p, 31 * p)]);
+            assert_eq!(pages, [(8 * p, 10 * p), (12 * p, 14 * p), (30 * p, 31 * p)]);
+            assert_eq!(spans_of(&s, &pages), [(8 * p, 14 * p), (30 * p, 31 * p)]);
+        }
     }
 
-    fn give_back(pages: &[(usize, usize)]) {
-        for &(first, last) in pages {
+    /// Gives back `calls` (whole pages of retired spans, `spans_of`); `pages`, the ones not given back before, are
+    /// what `stats` counts.
+    fn give_back(pages: &[(usize, usize)], calls: &[(usize, usize)]) {
+        for &(first, last) in calls {
             // SAFETY: whole pages inside retired spans: chunks and slabs nothing uses any more, never handed out
             // again; `first` is page aligned (and so is `last - first`).
             unsafe { crate::reserve::discard(std::ptr::with_exposed_provenance_mut::<u8>(first), last - first) };
-            // Relaxed: counters (see `stats`).
-            CALLS.fetch_add(1, Ordering::Relaxed);
-            BYTES.fetch_add(last - first, Ordering::Relaxed);
         }
+        // Relaxed: counters (see `stats`).
+        CALLS.fetch_add(calls.len(), Ordering::Relaxed);
+        BYTES.fetch_add(pages.iter().map(|&(first, last)| last - first).sum(), Ordering::Relaxed);
     }
 }
 

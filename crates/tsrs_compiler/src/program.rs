@@ -1048,7 +1048,7 @@ impl Program {
             None => {
                 // tsrs-only: the CLI's `--noEmit` check frees a leaf's tree and binder output once its diagnostics are
                 // collected (fileregions.rs).
-                let free_leaves = crate::fileregions::classify(self);
+                let free_leaves = tsrs_core::phases::time("Checkers: leaf files", || crate::fileregions::classify(self));
                 let collect = |ctx: &Context, c: &mut Checker, file: P<SourceFile>| {
                     let diagnostics = collect(ctx, c, file);
                     if free_leaves && file.is_check_leaf() {
