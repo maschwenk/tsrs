@@ -53,8 +53,8 @@ builds); the tsserver/LSP/startup scenarios (not `tsc` runs). All six included p
 
 The suite has one application-shaped workload (`mui-docs`), and none of its projects leans on schema-validation
 types. Application projects include four large applications (three Next.js/React apps built on Zod and tested with Vitest, and an
-Effect server), plus Bun's published benchmark set (mikro-orm, next.js root and packages/next, storybook, nuxt, playwright, lit),
-and three additional popular large projects (typescript-eslint, prisma, nestjs). Each is pinned to one commit.
+Effect server), plus Bun's published benchmark set (mikro-orm, next.js root and packages/next, storybook, nuxt, playwright)
+and one more popular library (drizzle-orm). Each is pinned to one commit.
 
 | project | repository @ commit | `-p` | files | workload |
 | --- | --- | --- | ---: | --- |
@@ -69,10 +69,7 @@ and three additional popular large projects (typescript-eslint, prisma, nestjs).
 | `storybook` | storybookjs/storybook @ `48dfcc6` | `scripts` | ~1,039 | Storybook scripts (Bun measured 1,039 files) |
 | `nuxt` | nuxt/nuxt @ `85b8d54` | `.` | ~3,901 | Nuxt framework monorepo (broader tsconfig than Bun's 839; same commit) |
 | `playwright` | microsoft/playwright @ `d469960` | `.` | ~1,515 | Playwright testing framework (broader tsconfig than Bun's 706; same commit) |
-| `lit-packages-react` | lit/lit @ `01dbc66` | `packages/react` | ~6 | Lit React package (tiny, startup measurement; Bun measured 6 files) |
-| **Large popular projects** | | | | |
-| `typescript-eslint` | typescript-eslint/typescript-eslint @ `7062987` | `.` | ~3,000+ | ESLint plugin for TypeScript (large popular project) |
-| `prisma` | prisma/prisma @ `095af7a` | `.` | ~3,000+ | Prisma ORM (large popular project) |
+| **Other popular libraries** | | | | |
 | `drizzle-orm` | drizzle-team/drizzle-orm @ `15454db` | `.` | ~943 | Drizzle ORM (large popular project) |
 
 **Original application projects:** Each install command does what the app's own `typecheck` needs before `tsc` runs, with package scripts off:
@@ -98,9 +95,6 @@ and three additional popular large projects (typescript-eslint, prisma, nestjs).
 - `storybook`: Yarn 4 install (scripts directory).
 - `nuxt`: pnpm install.
 - `playwright`: npm ci.
-- `lit-packages-react`: npm ci of `packages/react` only.
-- `typescript-eslint`: pnpm install.
-- `prisma`: pnpm install (uses tsconfig.base.json).
 - `drizzle-orm`: pnpm install.
 
 **Overlays.** cal.diy and Formbricks still compile with TypeScript 5.9, whose tsconfig options TypeScript 7 removed

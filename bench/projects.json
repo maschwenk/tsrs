@@ -131,27 +131,6 @@
       "install": "npm ci --ignore-scripts --no-audit --no-fund"
     },
     {
-      "name": "lit-packages-react",
-      "repo": "https://github.com/lit/lit.git",
-      "commit": "01dbc6673cdc211543932afd0ca04e223e567366",
-      "project": "packages/react",
-      "install": "npm ci --ignore-scripts --no-audit --no-fund"
-    },
-    {
-      "name": "typescript-eslint",
-      "repo": "https://github.com/typescript-eslint/typescript-eslint.git",
-      "commit": "706298716de5edb95ff58a1ba8806f88f87423e7",
-      "project": ".",
-      "install": "npx --yes pnpm@12.8.0 install --frozen-lockfile --ignore-scripts"
-    },
-    {
-      "name": "prisma",
-      "repo": "https://github.com/prisma/prisma.git",
-      "commit": "095af7a5dbc7196aaf35ede857ab74a001a85f5f",
-      "project": "tsconfig.base.json",
-      "install": "npx --yes pnpm@10.27.0 install --frozen-lockfile --ignore-scripts"
-    },
-    {
       "name": "drizzle-orm",
       "repo": "https://github.com/drizzle-team/drizzle-orm.git",
       "commit": "15454dbe49d827c6081f3d0231e2e7985e517295",

@@ -224,27 +224,6 @@ jobs:
           path: bench/.work/solutions/playwright
           key: bench-playwright-${{ runner.os }}-${{ steps.keys.outputs['playwright'] }}
 
-      - name: Restore lit-packages-react
-        if: steps.keys.outputs['lit-packages-react'] != ''
-        uses: actions/cache/restore@v4
-        with:
-          path: bench/.work/solutions/lit-packages-react
-          key: bench-lit-packages-react-${{ runner.os }}-${{ steps.keys.outputs['lit-packages-react'] }}
-
-      - name: Restore typescript-eslint
-        if: steps.keys.outputs['typescript-eslint'] != ''
-        uses: actions/cache/restore@v4
-        with:
-          path: bench/.work/solutions/typescript-eslint
-          key: bench-typescript-eslint-${{ runner.os }}-${{ steps.keys.outputs['typescript-eslint'] }}
-
-      - name: Restore prisma
-        if: steps.keys.outputs['prisma'] != ''
-        uses: actions/cache/restore@v4
-        with:
-          path: bench/.work/solutions/prisma
-          key: bench-prisma-${{ runner.os }}-${{ steps.keys.outputs['prisma'] }}
-
       - name: Restore drizzle-orm
         if: steps.keys.outputs['drizzle-orm'] != ''
         uses: actions/cache/restore@v4
