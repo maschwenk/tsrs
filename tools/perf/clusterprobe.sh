@@ -4,8 +4,8 @@
 # in this same directory, one after the other (a plain release A/B moves check time 15-60 ms on unrelated diffs,
 # notes/perf-front-end-fixed-costs.md), then runs tools/perf/clusterprobe.py on the projects the workflow set up with
 # PROBE_ARGS appended (for example `--reps 10 --checkers 16,32`). Variants: `main` (the merge base), `branch`, and the
-# branch with parts turned off: `nosticky` (TSRS_STEAL_STICKY=0), `nocluster` (TSRS_MODULE_AFFINITY=off) and `passes3`
-# (TSRS_MODULE_AFFINITY_PASSES=3).
+# branch with parts turned off: `nosticky` (TSRS_STEAL_STICKY=0), `nocluster` (TSRS_MODULE_AFFINITY=off) and `off`
+# (both: what is left is running the assignment while the checkers are created).
 set -euo pipefail
 : "${BENCH_WORK:?}" "${PROBE_OUT:?}"
 mkdir -p "$PROBE_OUT" /tmp/cprobe/base /tmp/cprobe/new
@@ -31,5 +31,5 @@ sha256sum /tmp/cprobe/*/tsrs | tee -a "$PROBE_OUT/commits.txt"
 python3 tools/perf/clusterprobe.py --work "$BENCH_WORK" --out "$PROBE_OUT" --projects "${PROBE_PROJECTS:-vscode}" \
   --bin base=/tmp/cprobe/base/tsrs --bin new=/tmp/cprobe/new/tsrs \
   --variant main:base --variant branch:new --variant nosticky:new:TSRS_STEAL_STICKY=0 \
-  --variant nocluster:new:TSRS_MODULE_AFFINITY=off --variant passes3:new:TSRS_MODULE_AFFINITY_PASSES=3 \
+  --variant nocluster:new:TSRS_MODULE_AFFINITY=off --variant 'off:new:TSRS_MODULE_AFFINITY=off;TSRS_STEAL_STICKY=0' \
   ${PROBE_ARGS:-} 2>&1 | tee "$PROBE_OUT/log.txt"
