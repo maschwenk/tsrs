@@ -34,13 +34,17 @@ LLVM_PROFILE_FILE="$raw/fourslash-%m.profraw" TSRS_FOURSLASH_RESULTS="$work/four
   "$bin/tsrs-fourslash" run > /dev/null && status=0 || status=$?
 check_exit "$status" "tsrs-fourslash run"
 
+# tsrs ends a command-line run with _exit (crates/tsrs_cli/src/main.rs `finish`), which skips the exit handler that
+# writes the profile (the runtime only creates an empty file at startup). MIMALLOC_SHOW_STATS makes it call `exit`
+# instead; mimalloc's statistics go to stderr, kept in <bench work dir>/tsrs-train-stderr.log.
 for p in xstate-main webpack; do
-  (cd "$work/solutions/$p" && LLVM_PROFILE_FILE="$raw/$p-%p.profraw" \
-    "$bin/tsrs" -p . --noEmit --incremental false --pretty false > /dev/null) && status=0 || status=$?
+  (cd "$work/solutions/$p" && LLVM_PROFILE_FILE="$raw/$p-%p.profraw" MIMALLOC_SHOW_STATS=1 \
+    "$bin/tsrs" -p . --noEmit --incremental false --pretty false > /dev/null 2>> "$work/tsrs-train-stderr.log") \
+    && status=0 || status=$?
   check_exit "$status" "tsrs -p $p"
 done
 
 ls -l "$raw"
 for f in suite fourslash xstate-main webpack; do
-  compgen -G "$raw/$f-*.profraw" > /dev/null || { echo "::error::no profile from $f"; exit 1; }
+  [ -n "$(find "$raw" -name "$f-*.profraw" -size +0)" ] || { echo "::error::no profile (or an empty one) from $f"; exit 1; }
 done
