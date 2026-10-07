@@ -133,11 +133,13 @@ fn predicted_leaf(file_name: &str) -> bool {
 /// Whether a file of this name and kind gets a region when it is parsed for a root file: a TypeScript file, not a
 /// declaration file, predicted to be a leaf (every such file with `every_file`).
 fn region_candidate(file_name: &str, script_kind: ScriptKind) -> bool {
-    // Relaxed (both): see `enable`.
+    // Relaxed: see `enable`.
+    let every_file = EVERY_FILE.load(Ordering::Relaxed);
+    // Relaxed: see `enable`.
     REGIONS_ON.load(Ordering::Relaxed)
         && matches!(script_kind, ScriptKind::TS | ScriptKind::TSX)
         && !tsrs_core::tspath::is_declaration_file_name(file_name)
-        && (EVERY_FILE.load(Ordering::Relaxed) || predicted_leaf(file_name))
+        && (every_file || predicted_leaf(file_name))
 }
 
 #[inline]
