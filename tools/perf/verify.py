@@ -153,8 +153,9 @@ def summarize(runs: list[dict]) -> dict:
 # Markdown ----------------------------------------------------------------------------------------------------------
 
 
-def fmt_pct(x: float | None) -> str:
-    return "n/a" if x is None else f"{x:+.1f}%"
+def fmt_pct(x: float | None, digits: int = 1) -> str:
+    """A signed percentage; instruction counts get 3 digits (they repeat to about 0.001%)."""
+    return "n/a" if x is None else f"{round(x, digits) + 0.0:+.{digits}f}%"
 
 
 def fmt_s(x: float | None) -> str:
@@ -202,7 +203,7 @@ def markdown(result: dict) -> str:
         rss = max((c["rss_delta_pct"] for c in tc if c.get("rss_delta_pct") is not None), key=abs, default=None)
         instr = next((c for c in pr["cells"] if c.get("kind") == "instructions"), None)
         lines.append(f"| {name} | {yes(all(c['identical'] for c in pr['cells']))} | "
-                     f"{fmt_pct(median(walls))} | {fmt_pct(rss)} | {fmt_pct(instr and instr.get('instructions_delta_pct'))} |")
+                     f"{fmt_pct(median(walls))} | {fmt_pct(rss)} | {fmt_pct(instr and instr.get('instructions_delta_pct'), 3)} |")
     lines += ["", "<details><summary>Per-project tables</summary>", ""]
     for name, pr in result["projects"].items():
         lines += [f"#### {name}", "",
@@ -221,7 +222,7 @@ def markdown(result: dict) -> str:
             elif c["kind"] == "instructions":
                 bs, ns = c["base"], c["new"]
                 lines.append(f"| 1 thread, instructions | {yes(c['identical'])} | {e} | {fmt_g(bs['instructions'])} | "
-                             f"{fmt_g(ns['instructions'])} | {fmt_pct(c['instructions_delta_pct'])} | "
+                             f"{fmt_g(ns['instructions'])} | {fmt_pct(c['instructions_delta_pct'], 3)} | "
                              f"{rb.fmt_mem(bs['peak_rss_bytes'])} | {rb.fmt_mem(ns['peak_rss_bytes'])} | "
                              f"{fmt_pct(c['rss_delta_pct'])} | | |")
             else:  # poison
@@ -337,7 +338,7 @@ def main() -> None:
                  "instructions_delta_pct": delta(counted["base"]["instructions"], counted["new"]["instructions"]),
                  "rss_delta_pct": delta(counted["base"]["peak_rss_bytes"], counted["new"]["peak_rss_bytes"])}
         rb.log(f"{name} 1 thread: instructions {fmt_g(counted['base']['instructions'])} -> "
-               f"{fmt_g(counted['new']['instructions'])} ({fmt_pct(instr['instructions_delta_pct'])}), identical: "
+               f"{fmt_g(counted['new']['instructions'])} ({fmt_pct(instr['instructions_delta_pct'], 3)}), identical: "
                f"{instr['identical']}")
         cells.append(instr)
 

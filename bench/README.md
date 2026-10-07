@@ -249,6 +249,46 @@ formbricks-web 122 s, cal-diy 91 s, webpack 34 s, xstate-main 15 s, Compiler-Uni
 landed on the same CPU model. Each measuring job adds a runner start-up and cache restore (about 15 s for vscode) to
 the runner minutes.
 
+## Verifying a branch
+
+`.depot/workflows/pr-verify.yml` answers the two questions a performance or refactoring branch has to answer before it
+lands: does it still print exactly what main prints, and what did it do to time and memory? It runs on one
+`depot-ubuntu-24.04-64` machine (64 vCPU) and compares two `cargo build --release` binaries (not the PGO build:
+relative comparisons only): the branch, and its merge base with `base` (default `main`), so commits that landed on
+main after the branch was cut are not counted as the branch's.
+
+`tools/perf/verify.py` does the measuring (it also runs locally: `tools/perf/verify.py --base <tsrs> --new <tsrs>`).
+For every project in `bench/projects.json` and every checker count (default 1, 4, 16, 32), both binaries run
+`-p <project> --noEmit --incremental false --extendedDiagnostics --pretty false --checkers N` three times, interleaved.
+Per project it also counts the instructions of one single-threaded run of each (`bench/count.py`, as in the
+regression flag), and runs the branch once at 16 checkers with `TSRS_ARENA_POISON=1` (freed arena memory is filled
+and never reused, so a use after free crashes or changes the output). The result is a table per project (wall time,
+peak RSS and check time, base vs branch, and the instruction counts), in the job summary and the `pr-verify` artifact
+(`verify-out/verify.{md,json}` plus every run's output).
+
+**What fails it**: any cell where the two binaries' diagnostics differ (every `error TS` line with its continuation
+lines, in order) or their exit codes differ, in any run, including the single-threaded and the poisoned runs; or a run
+that crashes. Timing and memory never fail it: wall time moves 2-4% between identical runs, and the instruction count
+and single-threaded peak RSS are the numbers to quote in a pull request.
+
+How to run it:
+
+```sh
+depot ci run --workflow .depot/workflows/pr-verify.yml      # from any branch or dirty worktree, all defaults
+depot ci dispatch --repo maschwenk/tsrs --workflow pr-verify.yml --ref <pushed branch> \
+  --input projects=vscode,webpack --input checkers=4,32 --input reps=5
+```
+
+or add the `verify` label to a pull request: it then runs on every push to that pull request and keeps one comment
+with the table up to date. `depot ci run` takes no inputs (edit the defaults in your working copy to narrow it), and
+Depot does not serve `actions/cache` to it (not tied to a ref), so it clones and installs every project; a dispatched
+or labelled run restores the caches `bench.yml` saves.
+
+Duration with the defaults (10 projects x 4 checker counts x 3 reps, poison on), Depot run `8fp8bp2jk1`
+(2026-10-07, `depot ci run`, so no caches): 10 min 44 s for the job, of which setup and project clone + install
+2 min 39 s, both release builds (at the same time) 35 s, measurement 7 min 23 s. A pull request with the `verify`
+label restores the project caches instead (see the pull request that added the workflow for its time).
+
 ## Head-to-head on a wide machine
 
 `bench/compare.py` answers a different question from `run.py`: how tsrs, both TypeScript 7 builds and `bun check`
