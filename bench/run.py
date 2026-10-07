@@ -55,7 +55,7 @@ BUN_FLAGS = {"default": [], "single": ["--threads", "1"], "checkers8": ["--threa
 BUN_FILES_RE = re.compile(r"(?:checked|No type errors in) ([\d,]+) files?")
 # Bold in the tables' speedup and memory columns: a notable tsrs win, compared at the printed precision.
 NOTABLE_SPEEDUP = 5.0  # tsgo wall / tsrs wall at least this
-NOTABLE_MEMORY = 0.25  # tsrs peak memory / tsgo peak memory at most this (a quarter)
+NOTABLE_MEMORY = 4.0  # tsgo peak memory / tsrs peak memory at least this (a quarter of the memory)
 # --tsrs-build: how the measured tsrs binary was built, for the table header.
 TSRS_BUILDS = {
     "release": "`cargo build --release`",
@@ -353,6 +353,17 @@ def notable(text: str, value: float | None, better) -> str:
     return f"**{text}**" if value is not None and better(round(value, 2)) else text
 
 
+def speedup_sort_key(project: dict, mode: str) -> tuple[int, float]:
+    """Sort key for a table's rows: the biggest speedup vs tsgo (at the printed precision) first, rows without one (a
+    failed run, or a project that skipped the mode) last. sorted() is stable, so ties keep projects.json order."""
+    cell = project.get(mode)
+    if cell:
+        g, t = cell["tsgo"], cell["tsrs"]
+        if g["ok_runs"] and t["ok_runs"] and g["wall_s"] and t["wall_s"]:
+            return (0, -round(g["wall_s"] / t["wall_s"], 2))
+    return (1, 0.0)
+
+
 def tsrs_default_checkers(machine: dict) -> int:
     """tsrs's default checker count on a machine (checkerpool.rs default_checker_count; the small-program floor does
     not bind on these projects)."""
@@ -416,14 +427,14 @@ def markdown(result: dict, modes: list[str] | None = None) -> str:
         if with_bun:
             header = ("| project | errors, tsgo / tsrs / bun | tsgo wall (s) | tsrs wall (s) | bun check wall (s) | "
                       "speedup vs tsgo | speedup vs bun | tsgo peak memory | tsrs peak memory | bun check peak memory | "
-                      "memory, tsrs / tsgo | memory, tsrs / bun |")
+                      "memory efficiency vs tsgo | memory efficiency vs bun |")
             rule = "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
         else:
             header = ("| project | errors, tsgo / tsrs | tsgo wall (s) | tsrs wall (s) | speedup | tsgo peak memory | "
-                      "tsrs peak memory | memory, tsrs / tsgo |")
+                      "tsrs peak memory | memory efficiency vs tsgo |")
             rule = "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |"
         lines += [f"**{title}**", "", header, rule]
-        for name, pr in result["projects"].items():
+        for name, pr in sorted(result["projects"].items(), key=lambda item: speedup_sort_key(item[1], mode)):
             if mode not in pr:
                 continue
             g, t = pr[mode]["tsgo"], pr[mode]["tsrs"]
@@ -443,9 +454,9 @@ def markdown(result: dict, modes: list[str] | None = None) -> str:
             elif pr[mode]["error_locations_match"] is False:
                 err = f"**{err} (locations differ)**"
             speed = g["wall_s"] / t["wall_s"] if g["wall_s"] and t["wall_s"] else None
-            mem = t["peak_rss_bytes"] / g["peak_rss_bytes"] if g["peak_rss_bytes"] and t["peak_rss_bytes"] else None
+            mem = g["peak_rss_bytes"] / t["peak_rss_bytes"] if g["peak_rss_bytes"] and t["peak_rss_bytes"] else None
             speed_cell = notable(fmt_ratio(speed), speed, lambda x: x >= NOTABLE_SPEEDUP)
-            mem_cell = notable(fmt_ratio(mem), mem, lambda x: x <= NOTABLE_MEMORY)
+            mem_cell = notable(fmt_ratio(mem), mem, lambda x: x >= NOTABLE_MEMORY)
             if not with_bun:
                 lines.append(f"| {name} | {err} | {fmt_num(g['wall_s'])} | {fmt_num(t['wall_s'])} | {speed_cell} | "
                              f"{fmt_mem(g['peak_rss_bytes'])} | {fmt_mem(t['peak_rss_bytes'])} | {mem_cell} |")
@@ -453,7 +464,7 @@ def markdown(result: dict, modes: list[str] | None = None) -> str:
             if b and b["ok_runs"]:
                 be = "/".join(map(str, b["error_counts"]))
                 b_speed = b["wall_s"] / t["wall_s"] if b["wall_s"] and t["wall_s"] else None
-                b_mem = t["peak_rss_bytes"] / b["peak_rss_bytes"] if b["peak_rss_bytes"] and t["peak_rss_bytes"] else None
+                b_mem = b["peak_rss_bytes"] / t["peak_rss_bytes"] if b["peak_rss_bytes"] and t["peak_rss_bytes"] else None
                 b_wall, b_peak = fmt_num(b["wall_s"]), fmt_mem(b["peak_rss_bytes"])
             else:
                 be, b_speed, b_mem, b_wall, b_peak = "n/a", None, None, "n/a", "n/a"
@@ -464,9 +475,9 @@ def markdown(result: dict, modes: list[str] | None = None) -> str:
     lines.append("errors: the number of type errors each compiler reports on the project; tsgo's and tsrs's must be equal "
                  "(a bold errors cell is a disagreement, i.e. a correctness bug). wall: process wall-clock time. speedup: "
                  f"tsgo wall / tsrs wall (above 1 = tsrs faster; bold from {NOTABLE_SPEEDUP:g}x). peak memory: maximum "
-                 "resident set size. memory, tsrs / tsgo: below 1 = tsrs uses less (bold at "
-                 f"{NOTABLE_MEMORY:.2f}x or less, a quarter of tsgo's memory)."
-                 + (" speedup vs bun: bun check wall / tsrs wall; memory, tsrs / bun: below 1 = tsrs uses less. bun check "
+                 "resident set size. memory efficiency vs tsgo: tsgo peak memory / tsrs peak memory (2x = tsrs uses half the "
+                 f"memory; below 1 = tsrs uses more; bold from {NOTABLE_MEMORY:g}x)."
+                 + (" speedup vs bun: bun check wall / tsrs wall; memory efficiency vs bun: bun check peak memory / tsrs peak memory. bun check "
                     "follows TypeScript 7.0, tsrs the 7.1-dev commit it ports, so their error counts can differ where the "
                     "two TypeScript versions do." if any_bun else ""))
     if {"single", "checkers8"} <= set(modes):
