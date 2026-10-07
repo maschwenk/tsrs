@@ -13,7 +13,7 @@ ls /sys/bus/event_source/devices/ >> "$PROBE_OUT/thp.txt" 2>&1 || true
 
 EV_GEN=cycles:u,instructions:u,cache-misses,cache-references,LLC-load-misses,LLC-loads,dTLB-load-misses,dTLB-loads,page-faults,context-switches,cpu-migrations
 EV_AMD=ls_any_fills_from_sys.local_l2,ls_any_fills_from_sys.local_ccx,ls_any_fills_from_sys.near_cache,ls_any_fills_from_sys.far_cache,ls_any_fills_from_sys.dram_io_all,ls_any_fills_from_sys.remote_cache,ls_dmnd_fills_from_sys.far_cache,ls_dmnd_fills_from_sys.near_cache,ls_dmnd_fills_from_sys.dram_io_all
-EV_TLB=ls_l1_d_tlb_miss.all,ls_l1_d_tlb_miss.all_l2_miss,ls_l1_d_tlb_miss.tlb_reload_2m_l2_miss,ls_l1_d_tlb_miss.tlb_reload_4k_l2_miss,l2_cache_req_stat.ic_dc_miss_in_l2,l2_cache_req_stat.ic_dc_hit_in_l2,ls_st_commit_cancel2.st_commit_cancel_wcb_full,de_dis_dispatch_token_stalls1.load_queue_rsrc_stall
+EV_TLB=ls_l1_d_tlb_miss.all,ls_l1_d_tlb_miss.all_l2_miss,ls_l1_d_tlb_miss.tlb_reload_2m_l2_miss,ls_l1_d_tlb_miss.tlb_reload_4k_l2_miss,l2_cache_req_stat.ic_dc_miss_in_l2,l2_cache_req_stat.ic_dc_hit_in_l2,ls_st_commit_cancel2.st_commit_cancel_wcb_full,de_dispatch_stall_cycle_dynamic_tokens_part1.load_queue_rsrc_stall
 
 for name in ${PROBE_PROJECTS//,/ }; do
   read -r cwd proj < <(python3 - "$name" <<'EOF'
@@ -24,7 +24,7 @@ from pathlib import Path
 cfg = json.loads(Path("bench/projects.json").read_text())
 p = next(p for p in cfg["projects"] if p["name"] == sys.argv[1])
 cwd, proj = bench.project_path(cfg, p, Path("bench/.work"))
-print(Path(cwd).resolve(), proj)
+print(Path(cwd).resolve(), Path(proj).resolve())
 EOF
 )
   flags=(-p "$proj" --noEmit --incremental false --pretty false)
