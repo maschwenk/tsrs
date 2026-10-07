@@ -333,10 +333,23 @@ impl Program {
 }
 
 // Parsing and binding recurse deeply on large files; Go's goroutine stacks grow on demand, so the
-// worker threads get large stacks.
+// worker threads get large stacks. The pool has at most PARSE_THREAD_CAP threads: with the heap on 4 KiB pages
+// (mimalloc `no_thp`, notes/mem-no-thp.md) the parallel parse is bound by page-fault contention, not threads (vscode
+// on 64 vCPUs: 0.124 s at 32 threads, 0.131 s at 64), and every allocating thread keeps its own partly filled
+// allocator pages and arena chunk tail (64 -> 32 threads: -0.09 GiB peak). RAYON_NUM_THREADS still sets the count
+// exactly, as before (bench/run.py's single-threaded counter uses 1).
+const PARSE_THREAD_CAP: usize = 32;
+
 pub fn worker_pool() -> &'static rayon::ThreadPool {
     static POOL: OnceLock<rayon::ThreadPool> = OnceLock::new();
-    POOL.get_or_init(|| rayon::ThreadPoolBuilder::new().stack_size(256 << 20).build().unwrap())
+    POOL.get_or_init(|| {
+        let threads = std::env::var("RAYON_NUM_THREADS")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .filter(|&n| n > 0)
+            .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get()).min(PARSE_THREAD_CAP));
+        rayon::ThreadPoolBuilder::new().num_threads(threads).stack_size(256 << 20).build().unwrap()
+    })
 }
 
 // program.go:305

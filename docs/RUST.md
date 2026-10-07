@@ -156,7 +156,7 @@ In place:
 | Generated-code freshness check | `tools/gen-check.sh` (CI job `generated-code`) re-runs the eight generators and fails on a diff; it found two hand edits the generators no longer reproduced | oxc, Ruff, rust-analyzer |
 | Differential parser fuzzing | `tools/fuzz/parser.py` mutates conformance files and compares the AST hashes of the Go and Rust oracles (`tools/oracle/ast`); the Depot `Fuzz` workflow runs 200,000 mutants nightly with a date seed. First 320,000 mutants: no divergence, no crash (inputs kept valid UTF-8; invalid UTF-8 is read lossily on purpose) | Ruff (`cargo fuzz` on its parser) |
 | Frame pointers for profiling | `docs/DEBUGGING.md` "Profiling": a `dist` build with `-C force-frame-pointers=yes` for samply / `perf` on Linux (Apple arm64 always keeps them) | Bun |
-| Transparent huge pages for the arena on Linux: large thread-arena chunks 2 MiB-aligned and advised with `MADV_HUGEPAGE` | `notes/linux-x86-round.md`: 2-6% less wall time, 21-48x fewer page faults; `notes/linux-perf.md`: THP off costs 11-12% | mimalloc (advises its own OS memory) |
+| Transparent huge pages for the arena on Linux: large thread-arena chunks 2 MiB-aligned and advised with `MADV_HUGEPAGE`. The mimalloc heap is not advised (the CLI builds mimalloc with `no_thp`): with the advice every partly filled thread-local mimalloc page was resident as a whole 2 MiB page | `notes/linux-x86-round.md`: 2-6% less wall time, 21-48x fewer page faults; `notes/linux-perf.md`: THP off costs 11-12%; `notes/mem-no-thp.md`: no advice on the heap, -25 to -33% peak RSS at 4-64 checkers on 64 vCPUs for +4-9% wall time against `bun check` on the same runner (parse +30%, check +1-5%) | mimalloc (advises its own OS memory unless built with `no_thp`) |
 
 Measured and rejected (do not retry without new evidence): explicit huge pages on top of mimalloc's, pre-faulting and
 mmap'd arena chunks without advice (`notes/linux-perf.md`; the compressed arena's reservation is not mimalloc memory and
@@ -172,6 +172,8 @@ every name). Build-level options on top of PGO (`notes/perf-build-level.md`, Lin
 `-hugify`; instruction page walks are 1.2-1.5% of cycles and it gains nothing measurable over BOLT alone);
 `panic = "abort"` (it crashed until `notes/fix-arena-recycle-uaf.md`, and it would also need a CLI-only
 binary); mimalloc v2, jemalloc and glibc malloc instead of mimalloc v3 (3-14% slower, 3-7% less peak memory);
+THP off for the whole process (`MIMALLOC_ALLOW_THP=0`, which also drops the arena's huge pages: +4-10% check time at
+4 checkers, `notes/mem-no-thp.md`);
 `opt-level = "s"` for the language-server, API and emit crates (`.text` -6%, speed unchanged); adding vscode at eight
 checkers to the PGO training (-3% instructions, cycles unchanged).
 
