@@ -1203,9 +1203,13 @@ mod retired {
         /// Retired since the last batch, not given back yet.
         pending: Vec<(usize, usize)>,
         pending_bytes: usize,
-        /// Wholly retired pages not given back yet (`min_span`).
+        /// Wholly retired pages not given back yet (`hold_small_spans`), sorted, disjoint.
         held: Vec<(usize, usize)>,
     }
+
+    /// A batch gives back only the spans that hold at least this many bytes not given back yet (`set_hold`); 0 gives
+    /// back every span the batch touched.
+    static HOLD: AtomicUsize = AtomicUsize::new(0);
 
     static STATE: Mutex<State> = Mutex::new(State { spans: BTreeMap::new(), pending: Vec::new(), pending_bytes: 0, held: Vec::new() });
     /// `stats`: calls that gave pages back, and their bytes.
@@ -1218,39 +1222,11 @@ mod retired {
             let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             s.pending.push((start, start + len));
             s.pending_bytes += len;
-            let x = experiment();
-            let batch = if x & X_BATCH64 != 0 { 64 << 20 } else { BATCH };
-            if x & X_DEFER != 0 || s.pending_bytes < batch {
+            if s.pending_bytes < BATCH {
                 return;
             }
             let pages = take_pages(&mut s);
-            let min = min_span();
-            if min == 0 {
-                let calls = spans_of(&s, &pages);
-                (pages, calls)
-            } else {
-                let mut held = std::mem::take(&mut s.held);
-                held.extend(pages);
-                held.sort_unstable();
-                // Held pages by span: a span goes back once its pages not given back yet reach `min`.
-                let mut by_span: Vec<((usize, usize), usize)> = Vec::new();
-                for &(first, last) in &held {
-                    let Some((&lo, &hi)) = s.spans.range(..=first).next_back() else { continue };
-                    match by_span.last_mut() {
-                        Some((span, bytes)) if *span == (lo, hi) => *bytes += last - first,
-                        _ => by_span.push(((lo, hi), last - first)),
-                    }
-                }
-                let page = crate::reserve::page_size();
-                let go: Vec<(usize, usize)> = by_span.iter().filter(|&&(_, b)| b >= min).map(|&((lo, hi), _)| (lo, hi)).collect();
-                let (gone, kept): (Vec<_>, Vec<_>) = held.into_iter().partition(|&(first, _)| {
-                    let i = go.partition_point(|&(lo, _)| lo <= first);
-                    i > 0 && go[i - 1].1 > first
-                });
-                s.held = kept;
-                let calls = go.iter().map(|&(lo, hi)| (lo.next_multiple_of(page), hi & !(page - 1))).collect();
-                (gone, calls)
-            }
+            hold_small_spans(&mut s, pages)
         };
         give_back(&pages, &calls);
     }
@@ -1259,24 +1235,45 @@ mod retired {
         let (pages, calls) = {
             let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
             let mut pages = take_pages(&mut s);
-            if std::env::var_os("TSRS_LEAF_LOG").is_some() {
-                eprintln!("held at flush {} MB, new at flush {} MB", s.held.iter().map(|&(a, b)| b - a).sum::<usize>() >> 20, pages.iter().map(|&(a, b)| b - a).sum::<usize>() >> 20);
-            }
             pages.append(&mut s.held);
             pages.sort_unstable();
             let calls = spans_of(&s, &pages);
             (pages, calls)
         };
-        if std::env::var_os("TSRS_LEAF_LOG").is_some() {
-            eprintln!("flush {} calls", calls.len());
-        }
         give_back(&pages, &calls);
     }
 
-    /// `TSRS_LEAF_MIN_KIB` (throwaway): during the pass a span goes back only once this much of it is held.
-    fn min_span() -> usize {
-        static M: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
-        *M.get_or_init(|| std::env::var("TSRS_LEAF_MIN_KIB").ok().and_then(|v| v.parse::<usize>().ok()).unwrap_or(0) << 10)
+    /// Of `pages` (from `take_pages`) and the pages held from earlier batches, the ones to give back now and the calls
+    /// that do it: one call per span (`spans_of`) whose pages not given back yet come to at least `HOLD` bytes. The
+    /// others stay held until their span grows (neighbours retired later merge into it) or the pass ends (`flush`).
+    fn hold_small_spans(s: &mut State, pages: Vec<(usize, usize)>) -> (Vec<(usize, usize)>, Vec<(usize, usize)>) {
+        // Relaxed: set before the pass that retires (`set_hold`).
+        let hold = HOLD.load(Ordering::Relaxed);
+        if hold == 0 && s.held.is_empty() {
+            let calls = spans_of(s, &pages);
+            return (pages, calls);
+        }
+        let mut held = std::mem::take(&mut s.held);
+        held.extend(pages);
+        held.sort_unstable();
+        // The spans of the held pages (sorted and disjoint, as the pages are), with the held bytes in each.
+        let mut by_span: Vec<((usize, usize), usize)> = Vec::new();
+        for &(first, last) in &held {
+            let Some((&lo, &hi)) = s.spans.range(..=first).next_back() else { continue };
+            match by_span.last_mut() {
+                Some((span, bytes)) if *span == (lo, hi) => *bytes += last - first,
+                _ => by_span.push(((lo, hi), last - first)),
+            }
+        }
+        let go: Vec<(usize, usize)> = by_span.into_iter().filter(|&(_, bytes)| bytes >= hold).map(|(span, _)| span).collect();
+        let (gone, kept): (Vec<_>, Vec<_>) = held.into_iter().partition(|&(first, _)| {
+            let i = go.partition_point(|&(lo, _)| lo <= first);
+            i > 0 && go[i - 1].1 > first
+        });
+        s.held = kept;
+        let page = crate::reserve::page_size();
+        let calls = go.into_iter().map(|(lo, hi)| (lo.next_multiple_of(page), hi & !(page - 1))).collect();
+        (gone, calls)
     }
 
     /// The whole pages of each span that `pages` (from `take_pages`) lie in: a span's pages are all retired, and the
@@ -1360,7 +1357,7 @@ mod retired {
 
     #[cfg(test)]
     mod tests {
-        use super::{spans_of, take_pages, State};
+        use super::{hold_small_spans, spans_of, take_pages, State, HOLD};
         use std::collections::BTreeMap;
 
         fn batch(s: &mut State, ranges: &[(usize, usize)]) -> Vec<(usize, usize)> {
@@ -1390,6 +1387,24 @@ mod retired {
             assert_eq!(batch(&mut t, &[(20 * p + 1, 23 * p - 1)]), [(21 * p, 22 * p)]);
         }
 
+        /// With a hold, a short span waits until neighbours retired later make it long enough (or the pass ends), and
+        /// then goes in one call with the pages held before.
+        #[test]
+        fn short_spans_are_held_until_they_grow() {
+            let p = crate::reserve::page_size();
+            let mut s = State { spans: BTreeMap::new(), pending: Vec::new(), pending_bytes: 0, held: Vec::new() };
+            HOLD.store(4 * p, std::sync::atomic::Ordering::Relaxed);
+            let pages = batch(&mut s, &[(10 * p, 12 * p), (20 * p, 25 * p)]);
+            let (gone, calls) = hold_small_spans(&mut s, pages);
+            assert_eq!((gone, calls), (vec![(20 * p, 25 * p)], vec![(20 * p, 25 * p)]));
+            assert_eq!(s.held, [(10 * p, 12 * p)]);
+            let pages = batch(&mut s, &[(12 * p, 14 * p), (40 * p, 41 * p)]);
+            let (gone, calls) = hold_small_spans(&mut s, pages);
+            assert_eq!((gone, calls), (vec![(10 * p, 12 * p), (12 * p, 14 * p)], vec![(10 * p, 14 * p)]));
+            assert_eq!(s.held, [(40 * p, 41 * p)]);
+            HOLD.store(0, std::sync::atomic::Ordering::Relaxed);
+        }
+
         /// Ranges retired on both sides of a span given back earlier go back in one call over the whole span.
         #[test]
         fn a_batch_gives_back_whole_spans() {
@@ -1405,42 +1420,6 @@ mod retired {
     /// Gives back `calls` (whole pages of retired spans, `spans_of`); `pages`, the ones not given back before, are
     /// what `stats` counts.
     fn give_back(pages: &[(usize, usize)], calls: &[(usize, usize)]) {
-        // Relaxed: counters (see `stats`).
-        BYTES.fetch_add(pages.iter().map(|&(first, last)| last - first).sum(), Ordering::Relaxed);
-        let x = experiment();
-        if x & X_NOGIVE != 0 {
-            return;
-        }
-        let calls: Vec<(usize, usize)> = if x & X_SMALL != 0 {
-            let piece = 32 * crate::reserve::page_size();
-            calls.iter().flat_map(|&(first, last)| (first..last).step_by(piece).map(move |a| (a, (a + piece).min(last)))).collect()
-        } else {
-            calls.to_vec()
-        };
-        if x & X_BG != 0 {
-            static TX: Mutex<Option<std::sync::mpsc::Sender<Vec<(usize, usize)>>>> = Mutex::new(None);
-            let mut tx = TX.lock().unwrap();
-            let tx = tx.get_or_insert_with(|| {
-                let (tx, rx) = std::sync::mpsc::channel::<Vec<(usize, usize)>>();
-                std::thread::spawn(move || {
-                    for calls in rx {
-                        discard_all(&calls);
-                    }
-                });
-                tx
-            });
-            let _ = tx.send(calls);
-            return;
-        }
-        discard_all(&calls);
-    }
-
-    fn discard_all(calls: &[(usize, usize)]) {
-        if std::env::var_os("TSRS_LEAF_LOG").is_some() {
-            for &(first, last) in calls {
-                eprintln!("giveback {}", last - first);
-            }
-        }
         for &(first, last) in calls {
             // SAFETY: whole pages inside retired spans: chunks and slabs nothing uses any more, never handed out
             // again; `first` is page aligned (and so is `last - first`).
@@ -1448,30 +1427,12 @@ mod retired {
         }
         // Relaxed: counters (see `stats`).
         CALLS.fetch_add(calls.len(), Ordering::Relaxed);
+        BYTES.fetch_add(pages.iter().map(|&(first, last)| last - first).sum(), Ordering::Relaxed);
     }
 
-    const X_NOGIVE: u32 = 1;
-    const X_SMALL: u32 = 2;
-    const X_BG: u32 = 4;
-    const X_BATCH64: u32 = 8;
-    const X_DEFER: u32 = 16;
-
-    /// Throwaway switches for the 32-checker probe (`TSRS_LEAF_EXPERIMENT`, comma-separated).
-    fn experiment() -> u32 {
-        static X: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
-        *X.get_or_init(|| {
-            let v = std::env::var("TSRS_LEAF_EXPERIMENT").unwrap_or_default();
-            v.split(',').fold(0, |acc, w| {
-                acc | match w.trim() {
-                    "nogive" => X_NOGIVE,
-                    "small" => X_SMALL,
-                    "bg" => X_BG,
-                    "batch64" => X_BATCH64,
-                    "defer" => X_DEFER,
-                    _ => 0,
-                }
-            })
-        })
+    pub(super) fn set_hold(bytes: usize) {
+        // Relaxed: set on the main thread before the pass's threads retire anything.
+        HOLD.store(bytes, Ordering::Relaxed);
     }
 }
 
@@ -1480,6 +1441,17 @@ mod retired {
 pub fn flush_retired() {
     #[cfg(all(compressed_ptrs, unix))]
     retired::flush();
+}
+
+/// Until the pass ends (`flush_retired`), gives back a run of retired pages only once at least `bytes` of it are not
+/// given back yet: each give-back flushes the TLB of every core running a thread of the process, so its cost grows with
+/// the number of threads, and with many checkers most runs are short (`retired`). 0 (the default) gives back every
+/// run a batch touches.
+pub fn set_retired_hold(bytes: usize) {
+    #[cfg(all(compressed_ptrs, unix))]
+    retired::set_hold(bytes);
+    #[cfg(not(all(compressed_ptrs, unix)))]
+    let _ = bytes;
 }
 
 /// (calls that gave pages of retired regions back to the system, bytes given back), for `TSRS_FREE_LEAVES=stats`.
