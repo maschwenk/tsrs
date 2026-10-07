@@ -2432,8 +2432,7 @@ impl Checker {
         if prop.check_flags.get().intersects(CheckFlags::Instantiated) {
             target = self.value_symbol_links.get(prop).target().unwrap();
         }
-        let links = self.symbol_reference_links.get(target);
-        links.reference_kinds.set(links.reference_kinds.get() | SymbolFlags::All);
+        self.symbol_reference_links.add_reference_kinds(target, SymbolFlags::All);
     }
 }
 
