@@ -132,8 +132,10 @@ tsrs's errors (`(ref N)` in the table).
   to be a native executable printing `Version 7.0.2`), so Node startup is not part of the measurement.
 - tsrs: by default the release build of the checked-out commit (`target/release/tsrs`). CI measures what the npm
   package ships instead: the PGO build of the `dist` profile (fat LTO, one codegen unit), built with the commands of
-  the release workflow and trained with `.github/scripts/pgo-train.sh` (conformance suite + xstate-main + webpack) on
-  a machine of the bench spec (`--tsrs <binary> --tsrs-build pgo-dist`; notes/perf-pgo.md), in the build job; each
+  the release workflow and trained with `.github/scripts/pgo-train.sh` (conformance suite + xstate-main + webpack),
+  then BOLT-optimized like the Linux release binaries (`.github/scripts/bolt.sh`, tsrs trained on xstate-main +
+  webpack) on a machine of the bench spec (`--tsrs <binary> --tsrs-build pgo-dist`; notes/perf-pgo.md,
+  notes/perf-binary-layout.md), in the build job; each
   project is then measured on a fresh machine of that spec where nothing else has run (the `measure` jobs, "CI").
 - Per project: one untimed warm-up run (tsgo), then N reps (default 3); within a rep the two modes and the two
   compilers alternate, and the compiler order flips every rep. Tables report medians.
@@ -190,7 +192,7 @@ commit), network steps retried, and the results commit rebased onto the latest `
 Four jobs (since 2026-10-07; until then one job did everything in sequence, and the measurement alone took 18-20 min
 once the four application projects were in):
 
-1. `build`, on one machine of the fixed spec: the PGO `dist` build of the commit (below). The binary and the
+1. `build`, on one machine of the fixed spec: the PGO + BOLT `dist` build of the commit (below). The binary and the
    `rustc -V` that built it go up as the `tsrs-pgo-dist` artifact.
 2. `measure`, one job per project of `bench/projects.json` (the matrix is `bench/run.py --print-projects`, so a new
    project gets a job without a workflow change), each on its own machine of the fixed spec: it restores the project's
@@ -251,6 +253,10 @@ the PGO pipeline, measured on Depot run `ps_h83310tmld`: TypeScript testdata spa
 of tsrs + tsrs-test 100 s, training run 15 s, profile merge < 1 s, final build 74 s, so ~3 min more per run (job 7 min
 13 s -> 10 min 4 s). The dependencies, the only part rust-cache can reuse, compile in ~3 s; the time is the
 workspace crates with one codegen unit and fat LTO, which change with every commit.
+
+BOLT (2026-10-07, notes/perf-binary-layout.md) adds the LLVM tarball download, instrumenting tsrs, two training runs
+and the rewrite: build job 7 min 21 s -> 7 min 42 s (Depot run `tq2x4vs94n` vs `main` at `0d3b6c08`), build start to
+merge end 24 min 27 s -> 24 min 35 s.
 
 Parallel layout, first run on `main` (2026-10-07, commit `ad65e977b0d7`, all caches warm): 13 min 51 s from the push
 to the results commit, down from 26 min 35 s for the last sequential run (`bd945842ada5`, measurement 18 min 19 s).
