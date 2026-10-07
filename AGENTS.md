@@ -17,6 +17,16 @@ techniques are in place, rejected or untried.
   in the reviewed inventory, and a `Relaxed`/`Acquire`/`Release` ordering needs a comment saying why it is enough.
 - A performance change needs numbers (instructions retired and peak RSS, before and after) and a note in `notes/`.
   Check `docs/RUST.md` "Techniques" first: it lists what was already measured and rejected.
+- A performance change must pay for its complexity. It lands only if it clears one of: 1% of single-threaded
+  instructions on at least one `bench/projects.json` project (`bench/count.py`, deterministic), 2% of wall time on
+  the README's headline table (the 64-vCPU default-mode run, read across two publishes), or 5% of peak memory at the
+  default checker count; and a change that adds a thread, a cache, an overlap between phases or an invariant that
+  later code must keep needs more than a sub-percent gain to justify it, whatever the number. A finding below the
+  bar is still worth keeping: land it as a note in `notes/` (the negative results there are read before every new
+  round) and leave the code alone. Decided 2026-10-07 after a review of the commits since 0.5.0: five changes carried
+  most of the gain, and a tail of 2-4 ms serial-step changes added helper threads and overlaps for about 5% of wall
+  in total, one of which broke the PGO and BOLT training profiles (notes/perf-serial-steps.md,
+  notes/perf-front-end-fixed-costs.md).
 
 ## Keep the README capability table current
 
