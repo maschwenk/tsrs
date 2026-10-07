@@ -88,7 +88,7 @@ vscode). tsrs ports a TypeScript 7.1-dev commit and reports exactly the errors t
 Each matches the TypeScript version it follows, so this is a race between two tools doing the same job on the same
 program.
 
-The defaults differ. tsgo runs 4 checker threads on any machine, tsrs half the cores up to 32 (32 here), `bun check` one
+The defaults differ. tsgo runs 4 checker threads on any machine, tsrs half the cores (every core up to 8) up to 32 (32 here), `bun check` one
 thread per core (64). The table gives every tool the same thread count: `--checkers N` for tsgo and tsrs, `--threads N`
 for `bun check`. vscode, 64-vCPU machine, mean of 20 interleaved runs per cell, wall time then peak memory.
 
@@ -179,9 +179,10 @@ against tsgo built from the same pinned commit.
 ## Options and defaults
 
 `--extendedDiagnostics` prints the usual counters.
-Without `--checkers`, tsrs runs half as many checker threads as the machine has cores, at least tsgo's 4 and at most
-32 (4 on 8 cores, 32 on 64; 4 for small programs and in `-b` build mode; up to 0.4.0 the cap was 8); diagnostics do not
-depend on the count, the `--extendedDiagnostics` counters and peak memory do.
+Without `--checkers`, tsrs runs one checker thread per core up to 8 and half as many as the machine has cores above
+that, at least tsgo's 4 and at most 32 (8 on 8 cores and on 16, 9 on 18, 32 on 64; 4 for small programs and in `-b`
+build mode; up to 0.4.0 the cap was 8, and up to 0.5.0 an 8-core machine got 4); diagnostics do not depend on the
+count, the `--extendedDiagnostics` counters and peak memory do.
 `--checkerCostCache <file>` (opt-in) records per-file check times in `<file>` and balances the checker threads on
 them in the next run (a few percent to ~15% less wall time on repeated runs; it never changes diagnostics).
 By default tsrs also runs with checker changes that are not merged upstream yet; `--noLazyMembers` turns them

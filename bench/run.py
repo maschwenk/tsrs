@@ -356,7 +356,8 @@ def notable(text: str, value: float | None, better) -> str:
 def tsrs_default_checkers(machine: dict) -> int:
     """tsrs's default checker count on a machine (checkerpool.rs default_checker_count; the small-program floor does
     not bind on these projects)."""
-    return max(4, min(32, (machine.get("cpus") or 1) // 2))
+    cpus = machine.get("cpus") or 1
+    return max(4, min(32, max(cpus // 2, min(cpus, 8))))
 
 
 def markdown(result: dict, modes: list[str] | None = None) -> str:
@@ -403,7 +404,7 @@ def markdown(result: dict, modes: list[str] | None = None) -> str:
     for mode in modes:
         mm = mode_machine(mode)
         tsrs_default = tsrs_default_checkers(mm)
-        default_title = (f"no thread flag; tsgo uses 4 checker threads, tsrs half the cores clamped to 4..32 ({tsrs_default} "
+        default_title = (f"no thread flag; tsgo uses 4 checker threads, tsrs half the cores, at least min(cores, 8), at most 32 ({tsrs_default} "
                          f"here; tsrs also resolves members lazily, its default)" + (f", bun all {mm.get('cpus')} cores" if has_bun(mode) else ""))
         titles = {"default": f"Default mode: {default_title}",
                   "single": "`--singleThreaded`: one checker thread in both",

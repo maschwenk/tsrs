@@ -34,7 +34,7 @@ BUN_FILES_RE = re.compile(r"(?:checked|No type errors in) ([\d,]+) files?")
 
 
 def thread_flags(compiler: str, threads: str) -> list[str]:
-    """`default` passes nothing (tsgo: 4 checkers; tsrs: half the cores, clamped to 4..32 checkers; bun: one thread
+    """`default` passes nothing (tsgo: 4 checkers; tsrs: half the cores, at least min(cores, 8), at most 32 checkers; bun: one thread
     per core). A number gives tsgo/tsrs that many checker threads (`--checkers N`; parsing still uses every core) and
     bun that many threads (`--threads N`, its only knob)."""
     if threads == "default":
@@ -136,7 +136,7 @@ def markdown(result: dict) -> str:
         "",
         "Compilers: " + "; ".join(f"{LABELS[c]} = `{v[c]}`" for c in result["compilers"]) + ".",
         "",
-        "Threads: `default` passes no flag (tsgo then uses 4 checker threads, tsrs half the cores clamped to 4..32, bun "
+        "Threads: `default` passes no flag (tsgo then uses 4 checker threads, tsrs half the cores, at least min(cores, 8), at most 32, bun "
         "one thread per core). N passes `--checkers N` to tsgo/tsrs (checker threads; parsing still uses every core) "
         "and `--threads N` to bun (all of its threads, so bun at small N is capped harder than the others).",
         "",
