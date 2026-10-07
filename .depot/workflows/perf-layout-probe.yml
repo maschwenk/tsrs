@@ -160,7 +160,8 @@ jobs:
       - name: Install perf and BOLT
         run: |
           (sudo apt-get update -qq && sudo apt-get install -y -qq linux-tools-common linux-tools-generic >/dev/null 2>&1) || true
-          perf=$(find /usr/lib/linux-tools -name perf -type f 2>/dev/null | head -1)
+          perf=""  # linux-tools-generic's perf is /usr/lib/linux-tools/<version>-generic/perf, a symlink
+          for f in /usr/lib/linux-tools/*/perf /usr/lib/linux-tools-*/perf; do if [ -x "$f" ]; then perf=$f; break; fi; done
           if [ -n "$perf" ]; then
             sudo sysctl -w kernel.perf_event_paranoid=-1 kernel.kptr_restrict=0
             "$perf" stat -e instructions,cycles,iTLB-load-misses,L1-icache-load-misses -- true 2>&1 | tee probe-out/perf-check.txt

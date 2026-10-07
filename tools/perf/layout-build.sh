@@ -71,17 +71,20 @@ ls -l "$out"/raw-base "$out"/raw-extra
 "$profdata" merge -o "$out/B.profdata" "$out"/raw-base/*.profraw "$out"/raw-extra/*.profraw
 for v in A0 A B; do
   echo "== $v.profdata"; "$profdata" show "$out/$v.profdata" | tail -4
-  # Functions with a non-zero entry count, per crate of the workspace (the first tsrs_* path component).
-  "$profdata" show --all-functions "$out/$v.profdata" | python3 -c '
+  # Per workspace crate (the first tsrs_* name in the mangled symbol): functions with any non-zero counter, and the
+  # crate's share of all counts.
+  "$profdata" show --all-functions --counts "$out/$v.profdata" | python3 -c '
 import re, sys, collections
-seen, hot, name = collections.Counter(), collections.Counter(), None
+seen, hit, weight, name = collections.Counter(), collections.Counter(), collections.Counter(), None
 for line in sys.stdin:
-    if line.startswith("  ") and not line.startswith("    ") and line.rstrip().endswith(":"):
-        m = re.search(r"\d(tsrs_[a-z0-9_]+?)(?:\d|$|17h|[A-Z])", line); name = m.group(1) if m else "other"
-    elif line.strip().startswith("Function count:") and name:
-        seen[name] += 1; hot[name] += int(line.split(":")[1]) > 0
-for k in sorted(seen, key=lambda k: -seen[k])[:25]:
-    print(f"  {k:28} {hot[k]:7} / {seen[k]:7} functions executed")'
+    if line.startswith("  ") and not line.startswith("   "):
+        m = re.search(r"\d(tsrs_[a-z0-9_]+?)(?=\d|$)", line.strip()); name = m.group(1) if m else "(other)"
+    elif line.startswith("    Block counts:") and name:
+        counts = [int(x) for x in re.findall(r"\d+", line)]
+        seen[name] += 1; hit[name] += any(counts); weight[name] += sum(counts)
+total = sum(weight.values()) or 1
+for k in sorted(seen, key=lambda k: -weight[k])[:20]:
+    print(f"  {k:28} {hit[k]:7} / {seen[k]:7} functions executed, {weight[k] / total * 100:5.1f}% of counts")'
 done > "$out/profile-coverage.txt"
 cat "$out/profile-coverage.txt"
 
