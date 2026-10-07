@@ -2389,13 +2389,15 @@ bitflags! {
     }
 }
 
-#[derive(Default)]
+/// Go `*ExportCollision` in `ExportCollisionTable`: owned by the table here. The table is local to one
+/// `getExportsOfModuleWorker` visit and nothing keeps a record past it, so an arena record (never freed) would only
+/// leak; owned records and their strings are dropped with the table (notes/mem-export-star-scratch.md).
 pub struct ExportCollision {
-    pub specifier_text: RefCell<String>,
-    pub exports_with_duplicate: RefCell<Vec<P<Node>>>,
+    pub specifier_text: String,
+    pub exports_with_duplicate: Vec<P<Node>>,
 }
 
-pub type ExportCollisionTable = FxHashMap<String, P<ExportCollision>>;
+pub type ExportCollisionTable = FxHashMap<String, ExportCollision>;
 
 /// Go `type CacheHashKey xxh3.Uint128`.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
