@@ -371,6 +371,26 @@ def tsrs_default_checkers(machine: dict) -> int:
     return max(4, min(32, max(cpus // 2, min(cpus, 8))))
 
 
+def mode_reps(result: dict, mode: str) -> tuple[int, int | None]:
+    """(tsrs/bun reps, tsgo reps) of a mode: a merged result records them per mode (`mode_reps`; the wide job runs
+    more than the fixed-spec jobs), a single run's are its top-level `reps` / `tsgo_reps`."""
+    per_mode = (result.get("mode_reps") or {}).get(mode, {})
+    return per_mode.get("reps", result["reps"]), per_mode.get("tsgo_reps", result.get("tsgo_reps"))
+
+
+def reps_text(result: dict, modes: list[str]) -> str:
+    """`median of 10 interleaved runs (3 for tsgo)`, or one such phrase per mode shown when their counts differ."""
+    def one(reps, tsgo_reps):
+        return f"median of {reps} interleaved runs" + (f" ({tsgo_reps} for tsgo)" if tsgo_reps not in (None, reps) else "")
+    groups: dict[tuple, list[str]] = {}
+    for mode in modes:
+        groups.setdefault(mode_reps(result, mode), []).append(MODE_NAMES.get(mode, mode))
+    if len(groups) <= 1:
+        return one(*next(iter(groups), (result["reps"], result.get("tsgo_reps"))))
+    return "; ".join(f"{one(*counts)} in the {', '.join(names[:-1])}{' and ' if len(names) > 1 else ''}{names[-1]} "
+                     f"table{'s' if len(names) > 1 else ''}" for counts, names in groups.items())
+
+
 def markdown(result: dict, modes: list[str] | None = None) -> str:
     """The results table; `modes` restricts it to some of the result's modes (the README shows only the wide machine's
     default-mode table; bench/results/<...>.md has every mode)."""
@@ -408,9 +428,8 @@ def markdown(result: dict, modes: list[str] | None = None) -> str:
         f"tsrs is a Rust port of the TypeScript 7 type checker (the Go compiler, \"tsgo\"). Each row type-checks one "
         f"project from {', or from '.join(sources)}, with tsgo {tv} (npm `typescript@{tv}`), with tsrs "
         f"at commit `{commit}` ({TSRS_BUILDS[result['tsrs'].get('build', 'release')]}){bun_text}: "
-        f"`tsc -p <project> --noEmit`, median of {result['reps']} interleaved runs"
-        + (f" ({result['tsgo_reps']} for tsgo)" if result.get('tsgo_reps') not in (None, result['reps']) else "")
-        + f", {machine_text}. Walls on this shared machine move by a few percent between runs of the same code; "
+        f"`tsc -p <project> --noEmit`, {reps_text(result, modes)}, {machine_text}. "
+        f"Walls on this shared machine move by a few percent between runs of the same code; "
         f"the single-threaded instruction counts are the deterministic measure.",
         "",
     ]
@@ -542,8 +561,9 @@ def merge_results(cfg: dict, paths: list[Path]) -> dict:
     --modes checkers64`, every project on a 64-vCPU machine). Projects in bench/projects.json order, modes in
     MODE_FLAGS order.
 
-    The binary, the compilers, reps and flags must agree, and no (project, mode) may be measured twice. The machines
-    need not: the one that measured the most (project, mode) cells is the run's machine (ties: the first partial's),
+    The binary, the compilers and flags must agree, and no (project, mode) may be measured twice. The rep counts
+    need not (the wide job runs more than the fixed-spec jobs): the merged result keeps the first partial's as its
+    `reps` / `tsgo_reps` and every mode's own in `mode_reps`. The machines need not either: the one that measured the most (project, mode) cells is the run's machine (ties: the first partial's),
     and a cell measured on another records its own `machine` (all 64-checker cells do). bench/regressions.py compares
     a project's single-threaded counts only with runs on the same CPU model and C library."""
     order = {p["name"]: i for i, p in enumerate(cfg["projects"])}
@@ -554,7 +574,7 @@ def merge_results(cfg: dict, paths: list[Path]) -> dict:
                       key=lambda r: (first(r["modes"], mode_order), first(r["projects"], order)))
     base = partials[0]
     fixed = lambda r: {"tsrs": r["tsrs"], "tsgo": r["tsgo"]["version"], "suite": r["suite"],
-                       "reference": r.get("reference"), "reps": r["reps"], "flags": r["flags"]}
+                       "reference": r.get("reference"), "flags": r["flags"]}
     for r in partials[1:]:
         for k, v in fixed(base).items():
             if fixed(r)[k] != v:
@@ -568,7 +588,9 @@ def merge_results(cfg: dict, paths: list[Path]) -> dict:
     machine = json.loads(cells.most_common(1)[0][0])
     modes = sorted({mode for r in partials for mode in r["modes"]}, key=lambda mode: mode_order.get(mode, len(mode_order)))
     result: dict = {"date": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"), "machine": machine,
-                    **{k: base.get(k) for k in ("tsrs", "tsgo", "suite", "reference", "reps")}, "modes": modes,
+                    **{k: base.get(k) for k in ("tsrs", "tsgo", "suite", "reference", "reps", "tsgo_reps")}, "modes": modes,
+                    "mode_reps": {mode: {"reps": r["reps"], "tsgo_reps": r.get("tsgo_reps", r["reps"])}
+                                  for r in partials for mode in r["modes"]},
                     "bun": next((r.get("bun") for r in partials if r.get("bun")), None),
                     "flags": base["flags"], "projects": {}, "raw": [], "partials": [], "duration_s": 0}
     for r in partials:
