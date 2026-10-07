@@ -105,4 +105,6 @@ reference checkout at b85298b6a): 13,458 error baselines, 12,779 `.types`, 12,77
 A `dev` build (debug assertions on) checks t3code-server with output identical to the base. `cargo check
 --workspace` without warnings, `tools/lint/ratchet.py`, `tools/lint/source.py`, `cargo test -p tsrs_checker -p
 tsrs_compiler`. On the runner: diagnostics, `--listFiles` and `--explainFiles` identical (abprobe, t3code-server and
-vscode).
+vscode). `pr-verify` on https://github.com/maschwenk/tsrs/pull/186 (17 projects x 1/4/16/32
+checkers against main 7d7e54a): 102 of 102 cells identical; single-threaded instructions fall on all 17 projects
+(t3code-server -1.003%, mikro-orm -1.087%, xstate-main -1.076%, smallest Compiler-Unions -0.052%).
