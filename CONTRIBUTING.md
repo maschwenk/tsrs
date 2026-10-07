@@ -39,9 +39,14 @@ git -C ts-ref sparse-checkout set tsc/testdata && git -C ts-ref checkout "$commi
 ./target/release/tsrs-test run --suite all                       # summary table; lists in target/test-results/
 ./target/release/tsrs-test run --filter <substring>              # one test or a cluster
 ./target/release/tsrs-test show <suite/name>                     # expected vs actual
-.github/scripts/conformance-gate.sh                              # what CI enforces
+.github/scripts/conformance-gate.sh                              # what CI enforces: errors, .types, .symbols
+tools/regressions.sh                                             # testdata/regressions (CI runs it too)
 cargo test -p tsrs_core -p tsrs_scanner -p tsrs_tsoptions        # unit tests (see .depot/workflows/ci.yml)
 ```
+
+CI runs the gate twice: in tsgo's check history, which the baselines need, and in the default mode
+(`TS_TEST_PROGRAM_SINGLE_THREADED=false TSRS_HISTORY=canonical`, where `conformance/objectLiteralNormalization`'s
+`.types` / `.symbols` differ by design).
 
 A change must not lose passing tests: compare `target/test-results/pass.txt` before and after
 (`comm -23 <(sort before.txt) <(sort target/test-results/pass.txt)` must print nothing). `docs/DEBUGGING.md`
