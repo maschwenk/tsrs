@@ -87,11 +87,13 @@ pub struct LeafSettings {
     pub every_file: bool,
 }
 
-/// The most checkers for which leaf freeing is on by default (`leaf_settings_from_env`). Measured on vscode on the 64-vCPU
-/// runner (notes/mem-free-leaf-files.md): at 16 checkers the wall time is 1.6% over main for 11% less peak memory; at 32
-/// it is 2.5-5% over main (the predicted files' trees in 4 KiB pages, and the TLB shootdowns of giving pages back,
-/// which grow with the number of threads), for 10% less. `TSRS_FREE_LEAVES=1` turns it on at any count.
-pub const MAX_DEFAULT_CHECKERS: usize = 16;
+/// The most checkers for which leaf freeing is on by default: none, so it is opt-in (`TSRS_FREE_LEAVES=1`). It was on
+/// up to 16 checkers (on the 64-vCPU runner, vscode at 16: wall +1.6-2.1% for -11% peak; at 32: +2.5-5% for -10%,
+/// the predicted files' trees in 4 KiB pages and the TLB shootdowns of giving pages back). The README bench on the
+/// 8-vCPU runner (bench/results, 8b3e4f4 against 7262f61) then showed the kernel side of that cost dominating with
+/// few checkers: vscode +21% wall at 1 and 4 checkers (-15% peak), formbricks-web +16-24%, supabase-studio and
+/// t3code-server +7-9%, xstate-main +8-17%; notes/mem-free-leaf-files.md "8-vCPU bench".
+pub const MAX_DEFAULT_CHECKERS: usize = 0;
 
 /// `TSRS_FREE_LEAVES`, a comma-separated list: unset frees the predicted leaves when the program gets at most
 /// `MAX_DEFAULT_CHECKERS` checkers (`checkers`: the most it can get, `checker_count_upper_bound`); `1` frees them at any

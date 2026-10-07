@@ -1498,6 +1498,7 @@ impl Checker {
 
     // checker.go:14221
     pub(crate) fn add_diagnostic(&mut self, diagnostic: P<Diagnostic>) -> P<Diagnostic> {
+        self.diagnostic_adds = self.diagnostic_adds.wrapping_add(1);
         // Discard diagnostics created while at the maximum number of recursive TypeToString invocations.
         if self.serialization_level < maxSerializationLevel {
             return self.diagnostics.add(diagnostic);
@@ -1507,6 +1508,7 @@ impl Checker {
 
     // checker.go:14229
     pub(crate) fn add_suggestion_diagnostic(&mut self, diagnostic: P<Diagnostic>) -> P<Diagnostic> {
+        self.diagnostic_adds = self.diagnostic_adds.wrapping_add(1);
         // Discard diagnostics created while at the maximum number of recursive TypeToString invocations.
         if self.serialization_level < maxSerializationLevel {
             return self.suggestion_diagnostics.add(diagnostic);

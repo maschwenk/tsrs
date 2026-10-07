@@ -42,7 +42,7 @@ byte-identical output. At 32 checkers it costs 2.5-5% wall time, so it is off th
   formed 924 runs; with 16 KiB pages the shared pages were a tenth of the leaves' bytes) and cuts the system calls from
   one per chunk to about one per run. A retired range is never handed out again, so no later object takes the address
   of a freed one that an address-keyed cache may still name.
-- **Default: at most 16 checkers** (`MAX_DEFAULT_CHECKERS`). The CLI turns file regions on only when the program can
+- **Default: off** (`MAX_DEFAULT_CHECKERS` is 0 since the 8-vCPU bench below; it was 16). With a positive value the CLI turns file regions on only when the program can
   get at most 16 checkers (`checker_count_upper_bound`: `--checkers`, one when single-threaded, else the machine's
   default before the file-count cap: half the threads, so machines up to 33 threads). Above that the measured cost was
   2.5-5% wall time on vscode (below). `TSRS_FREE_LEAVES=1` (and `keep`, `all`) turns it on at any count.
@@ -254,3 +254,26 @@ Alloc-profile build, vscode, 4 checkers: arena requested 1,581.0 -> 1,580.6 MB (
   symbols (never read), which it reports. File regions are off under `TSRS_CENSUS=1`; poison runs are the gate.
 - On Linux a stray read of a freed leaf reads zeros (`MADV_DONTNEED`) instead of faulting.
 - The pages a leaf shares with a live neighbouring chunk stay.
+
+## 8-vCPU bench: why the default is off
+
+The README bench (`bench/run.py`, `depot-ubuntu-24.04-8`, PGO `dist` build) measured main 8b3e4f4 (this change, on by
+default up to 16 checkers) against 7262f61 (`bench/results/2026-10-07-*.json`). Wall time and peak RSS of tsrs,
+old -> new:
+
+| project | single-threaded | 4 checkers (default) | 8 checkers |
+| --- | --- | --- | --- |
+| vscode | 10.88 -> 13.24 s (+21.7%), 1.86 -> 1.57 GiB (-15.6%) | 2.87 -> 3.48 s (+21.4%), 2.10 -> 1.80 GiB (-14.4%) | 1.71 -> 1.89 s (+10.3%), -13.2% |
+| formbricks-web | 4.20 -> 5.21 s (+24.2%), -3.7% | 1.44 -> 1.67 s (+15.8%), -2.7% | 1.01 -> 1.09 s (+7.6%), -3.1% |
+| supabase-studio | 4.88 -> 5.24 s (+7.3%), -2.2% | 1.69 -> 1.85 s (+9.2%), -1.6% | 1.15 -> 1.23 s (+6.4%) |
+| t3code-server | 4.72 -> 5.05 s (+7.0%), -7.4% | 2.15 -> 2.15 s (-0.3%), -4.0% | 2.25 -> 2.20 s (-1.8%), -4.3% |
+| xstate-main | 0.62 -> 0.72 s (+16.7%), -3.2% | 0.20 -> 0.21 s (+8.1%) | 0.13 -> 0.14 s (+6.0%) |
+| webpack, mui-docs, Compiler, cal-diy | within -4..+3% | within -6..+2% | within -3..+2% |
+
+User-space instructions (single-threaded, `bench/count.py`) rose 1.8-3.5% on every project, while pr-verify on the
+64-vCPU runner had measured +0.0-0.3% for the same source change (release build): the rest of the wall cost is kernel
+work (page faults for the regions' 4 KiB pages, giving pages back) that is far more expensive on the smaller VM, and
+the user-space difference is probably the PGO profile shifting (the training runs with 4 checkers now exercised the
+region paths). The same commits also carried #143 and #146, which measured within noise. Until the per-page cost is
+gone (reusing a freed region's range instead of returning it, or batching the returns), freeing stays opt-in:
+`TSRS_FREE_LEAVES=1`.

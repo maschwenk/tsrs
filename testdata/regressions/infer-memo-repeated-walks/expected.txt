@@ -1,0 +1,10 @@
+a.ts(85,14): error TS2353: Object literal may only specify known properties, and 'v0' does not exist in type '{ v1: number; s: string; }'.
+a.ts(86,14): error TS2322: Type 'string' is not assignable to type 'number'.
+a.ts(87,33): error TS2322: Type 'number' is not assignable to type 'string'.
+a.ts(88,33): error TS2353: Object literal may only specify known properties, and 'idd' does not exist in type 'Partial<Omit<E4, "data" | "type">>'.
+a.ts(89,6): error TS2345: Argument of type '"zz"' is not assignable to parameter of type '"k0" | "k1" | "k10" | "k11" | "k12" | "k13" | "k14" | "k15" | "k16" | "k17" | "k18" | "k19" | "k2" | "k20" | "k21" | "k22" | "k23" | "k3" | "k4" | "k5" | "k6" | "k7" | "k8" | "k9"'.
+a.ts(91,14): error TS2322: Type 'E6' is not assignable to type 'E5'.
+  Types of property 'type' are incompatible.
+    Type '"k6"' is not assignable to type '"k5"'.
+a.ts(92,41): error TS2353: Object literal may only specify known properties, and 'v8' does not exist in type '{ v7: number; s: string; }'.
+a.ts(97,56): error TS2345: Argument of type '"nope"' is not assignable to parameter of type 'keyof E9'.

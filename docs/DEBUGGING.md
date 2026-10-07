@@ -259,9 +259,28 @@ and the diagnostics must equal a `TSRS_UNION_CACHE=0` run, with no panics (`tsrs
 failure means a stored call was not a function of its inputs: find which branch of `get_union_type_worker_inner` it
 took and either keep it out of the cache (count it in `union_front_cache.impure`) or fix the state it read.
 
+## The inference walk memo and its shadow mode: `TSRS_INFER_MEMO`
+
+`inferTypes` looks up its walk in a per-checker map (`crates/tsrs_checker/src/infermemo.rs`) keyed by the source, the
+target, the priority, the contravariance and what the walk reads from each inference info (type parameter, candidate
+lists, priority, `topLevel`, `isFixed`, implied arity; at most 8 infos). The value is what the walk wrote: each info's
+candidate lists, priority and `topLevel`, and whether it cleared the cached inferred types. A walk is stored only if it
+took at least 16 `inferFromTypes` steps (and an earlier walk to the same target did too), created no type, symbol or signature, instantiated nothing, added no
+diagnostic, took no impure union reduction, read no transient state (the flow memo's taint frame around it), did not
+start inside an instantiation and, if it started with the instantiation count at 0, checked no expression; the
+module comment has the argument. On by default, off under `--checkerAssignment go`. It pays where one generic call is
+inferred many times from the same contextual type (vscode's `mapSessionEvents.test.ts`:
+notes/perf-heavy-files-infer-memo.md).
+
+| variable | values | effect |
+| --- | --- | --- |
+| `TSRS_INFER_MEMO` | unset (on; off under `--checkerAssignment go`), `0`/`off`, `1`/`on` (on in every mode), `shadow` | `shadow` also walks every hit from the same starting state and panics unless the walk again creates nothing but lazy member symbols, has no other effects and ends in the stored outcome (the panic names the type ids and both outcomes) |
+| `TSRS_INFER_MEMO_STATS` | `1` | at exit, one line on stderr: lookups, hits, the `inferFromTypes` steps the hits skipped, stores, and why long walks were not stored (shadow mode prints it too) |
+| `TSRS_INFER_MEMO_MIN_STEPS` | default `16` | the shortest walk (in `inferFromTypes` steps) that is stored; lower stores more walks (more memory, more lookups that pay) |
+
 ## Freeing checked leaf files: `TSRS_FREE_LEAVES`
 
-A CLI `--noEmit` check with at most 16 checkers (`MAX_DEFAULT_CHECKERS`: above that it costs vscode 2.5-5% wall time,
+A CLI `--noEmit` check with `TSRS_FREE_LEAVES=1` (opt-in: `MAX_DEFAULT_CHECKERS` is 0; on by default it cost the 8-vCPU bench 7-24% wall time at 1-4 checkers,
 so it is off unless `TSRS_FREE_LEAVES=1`) parses each TypeScript root file whose path predicts a leaf (tests, specs,
 stories, mocks: `PREDICTED_LEAF_PATTERNS`) into a region of its own and frees the tree and binder output of each leaf
 among them as soon as its diagnostics are collected (`crates/tsrs_compiler/src/fileregions.rs`,
@@ -277,7 +296,7 @@ saved. Asking a program for one freed leaf's diagnostics after the pass panics (
 
 | variable | values | effect |
 | --- | --- | --- |
-| `TSRS_FREE_LEAVES` | a comma list of: unset (free with at most 16 checkers), `1` (free at any count), `0`, `keep`, `stats`, `all` | `0`: no file regions (the layout before). `keep` (any count): file regions and the leaf marks, nothing freed (what the regions alone cost). `all` (any count): every TypeScript root file gets a region, not only the predicted ones (frees every leaf, but moves every tree out of the huge-page thread arenas: +6-9% wall time on vscode at 32 checkers on Linux against +2.5-5% predicted). `stats`: one line on stderr: the leaves freed and the ones the prediction missed (with their share of the leaves' nodes), the bytes their regions used, all file regions' bytes, the pages given back and in how many system calls, and the arena address space the run used. Example: `TSRS_FREE_LEAVES=all,stats` |
+| `TSRS_FREE_LEAVES` | a comma list of: unset (off), `1` (free at any count), `0`, `keep`, `stats`, `all` | `0`: no file regions (the layout before). `keep` (any count): file regions and the leaf marks, nothing freed (what the regions alone cost). `all` (any count): every TypeScript root file gets a region, not only the predicted ones (frees every leaf, but moves every tree out of the huge-page thread arenas: +6-9% wall time on vscode at 32 checkers on Linux against +2.5-5% predicted). `stats`: one line on stderr: the leaves freed and the ones the prediction missed (with their share of the leaves' nodes), the bytes their regions used, all file regions' bytes, the pages given back and in how many system calls, and the arena address space the run used. Example: `TSRS_FREE_LEAVES=all,stats` |
 
 After a change that reads a file after the check pass (a new report, a new whole-program loop in the checker, such as
 `getAlternativeContainingModules`'s), run a corpus with `TSRS_ARENA_POISON=1`: a freed region is then filled with
