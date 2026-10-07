@@ -52,18 +52,30 @@ builds); the tsserver/LSP/startup scenarios (not `tsc` runs). All six included p
 ## Application projects
 
 The suite has one application-shaped workload (`mui-docs`), and none of its projects leans on schema-validation
-types. Four large applications fill that gap: three Next.js/React apps built on Zod and tested with Vitest, and an
-Effect server (Effect Schema, `@effect/vitest`). Each is pinned to one commit and checks the tsconfig its own
-`typecheck` script checks, so test files are part of the program.
+types. Application projects include four large applications (three Next.js/React apps built on Zod and tested with Vitest, and an
+Effect server), plus Bun's published benchmark set (mikro-orm, next.js root and packages/next, storybook, nuxt, playwright, lit),
+and three additional popular large projects (typescript-eslint, prisma, nestjs). Each is pinned to one commit.
 
-| project | repository @ commit | `-p` | files / types (tsgo) | workload |
+| project | repository @ commit | `-p` | files | workload |
 | --- | --- | --- | ---: | --- |
-| `cal-diy` | calcom/cal.diy @ `54343aa685ae` | `apps/web` | 10,166 / 2.48 M | Zod 3, tRPC 11, Prisma-generated Zod types |
-| `formbricks-web` | formbricks/formbricks @ `ec45c28e4d20` | `apps/web/tsconfig.typecheck.json` | 10,451 / 2.85 M | Zod 4, Vitest, Prisma 7 |
-| `supabase-studio` | supabase/supabase @ `12afe3999951` | `apps/studio` | 12,546 / 2.22 M | Zod 3, Vitest, Next.js route types |
-| `t3code-server` | pingdotgg/t3code @ `9bd1d8009a6b` | `apps/server` | 3,007 / 3.18 M | Effect 4, Effect Schema, `@effect/vitest` |
+| `cal-diy` | calcom/cal.diy @ `54343aa685ae` | `apps/web` | 10,166 | Zod 3, tRPC 11, Prisma-generated Zod types |
+| `formbricks-web` | formbricks/formbricks @ `ec45c28e4d20` | `apps/web/tsconfig.typecheck.json` | 10,451 | Zod 4, Vitest, Prisma 7 |
+| `supabase-studio` | supabase/supabase @ `12afe3999951` | `apps/studio` | 12,546 | Zod 3, Vitest, Next.js route types |
+| `t3code-server` | pingdotgg/t3code @ `9bd1d8009a6b` | `apps/server` | 3,007 | Effect 4, Effect Schema, `@effect/vitest` |
+| **Bun benchmark set** | | | | |
+| `mikro-orm` | mikro-orm/mikro-orm @ `97fb231` | `.` | 2,911 | TypeScript 7 monorepo, ORM with schema types |
+| `next-packages-next` | vercel/next.js @ `fa8dcf3` | `packages/next` | 2,882 | Next.js core package (Bun measured 2,881 files) |
+| `next-root` | vercel/next.js @ `fa8dcf3` | `.` | 3,549 | Next.js repo root monorepo (Bun measured 3,547 files) |
+| `storybook` | storybookjs/storybook @ `48dfcc6` | `scripts` | ~1,039 | Storybook scripts (Bun measured 1,039 files) |
+| `nuxt` | nuxt/nuxt @ `85b8d54` | `.` | ~839 | Nuxt framework monorepo (Bun measured 839 files) |
+| `playwright` | microsoft/playwright @ `d469960` | `.` | ~706 | Playwright testing framework (Bun measured 706 files) |
+| `lit-packages-react` | lit/lit @ `01dbc66` | `packages/react` | ~6 | Lit React package (tiny, startup measurement; Bun measured 6 files) |
+| **Large popular projects** | | | | |
+| `typescript-eslint` | typescript-eslint/typescript-eslint @ `7062987` | `.` | ~3,000+ | ESLint plugin for TypeScript (large popular project) |
+| `prisma` | prisma/prisma @ `095af7a` | `.` | ~3,000+ | Prisma ORM (large popular project) |
+| `drizzle-orm` | drizzle-team/drizzle-orm @ `15454db` | `.` | ~943 | Drizzle ORM (large popular project) |
 
-Each install command does what the app's own `typecheck` needs before `tsc` runs, with package scripts off:
+**Original application projects:** Each install command does what the app's own `typecheck` needs before `tsc` runs, with package scripts off:
 
 - `cal-diy`: Yarn 4 install, then `turbo run post-install @calcom/trpc#build` (Prisma client, Zod and Kysely types,
   the platform packages, and the tRPC router declarations `apps/web` imports). `YARN_NM_MODE=classic` keeps a global
@@ -78,6 +90,18 @@ Each install command does what the app's own `typecheck` needs before `tsc` runs
 - `t3code-server`: pnpm install of `t3`, `@t3tools/scripts` (`apps/server`'s tsconfig includes `scripts/lib`) and
   their workspace dependencies. The repository's `prepare` script patches its TypeScript for the Effect language
   service, which neither compiler measured here runs.
+
+**Bun benchmark set and large popular projects:** Minimal installs without build steps (the projects' tsconfigs require only node_modules):
+
+- `mikro-orm`: Yarn 4 install.
+- `next-packages-next` and `next-root`: pnpm install with `--frozen-lockfile`.
+- `storybook`: Yarn 4 install (scripts directory).
+- `nuxt`: pnpm install.
+- `playwright`: npm ci.
+- `lit-packages-react`: npm ci of `packages/react` only.
+- `typescript-eslint`: pnpm install.
+- `prisma`: pnpm install (uses tsconfig.base.json).
+- `drizzle-orm`: pnpm install.
 
 **Overlays.** cal.diy and Formbricks still compile with TypeScript 5.9, whose tsconfig options TypeScript 7 removed
 (`baseUrl`, `moduleResolution: node`, `target: es5`); unmodified, both stop at config errors before checking a
