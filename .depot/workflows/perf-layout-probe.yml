@@ -1,0 +1,215 @@
+# Depot CI workflow: one-off probe of how the Linux x86-64 dist binary is built (notes/perf-binary-layout.md). In one
+# job on the 64-vCPU bench machine it builds main's bench binary (PGO, bench.yml `build`) and variants of it from the
+# same instrumented build (the training runs of tsrs writing their profiles again, a larger PGO training set, BOLT as
+# release.yml does it, a larger BOLT training set, BOLT with -hugify: tools/perf/layout-build.sh), then measures them interleaved on every bench project
+# (tools/perf/layout-measure.py) and profiles the baseline on vscode. Not scheduled; run it from a pushed branch, which
+# restores the bench caches:
+#
+#   depot ci dispatch --repo maschwenk/tsrs --workflow perf-layout-probe.yml --ref <branch> [--input reps=7]
+#
+# Everything worth keeping is the `perf-layout-probe` artifact (probe-out/).
+
+name: Perf layout probe (64 threads)
+
+on:
+  workflow_dispatch:
+    inputs:
+      reps:
+        description: timed rounds per binary, project and checker count
+        default: "7"
+      bins:
+        description: comma-separated binaries of layout-build.sh to measure (the first is the baseline)
+        default: A,R,Rv,Rx,RB,RBH
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  REPS: ${{ inputs.reps || '7' }}
+  BINS: ${{ inputs.bins || 'A,R,Rv,Rx,RB,RBH' }}
+
+jobs:
+  probe:
+    runs-on: depot-ubuntu-24.04-64
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Runner hardware (64 vCPU x86_64)
+        run: |
+          mkdir -p probe-out
+          { nproc; lscpu; free -g; uname -r; cat /sys/kernel/mm/transparent_hugepage/enabled; } | tee probe-out/machine.txt
+          if [ "$(nproc)" != 64 ] || [ "$(uname -m)" != x86_64 ]; then
+            echo "::error::expected 64 vCPU x86_64, got $(nproc) vCPU $(uname -m)"; exit 1
+          fi
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+
+      - name: Read TypeScript reference commit
+        id: ts
+        run: echo "commit=$(node npm/build.mjs --print-typescript-commit)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore TypeScript testdata
+        id: ts-ref
+        uses: actions/cache/restore@v4
+        with:
+          path: ts-ref/tsc/testdata
+          key: ts-ref-testdata-${{ steps.ts.outputs.commit }}
+
+      - name: Check out TypeScript testdata
+        if: steps.ts-ref.outputs.cache-hit != 'true'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: microsoft/TypeScript
+          ref: ${{ steps.ts.outputs.commit }}
+          path: ts-ref
+          fetch-depth: 1
+          sparse-checkout: tsc/testdata
+          persist-credentials: false
+
+      - name: Read the pinned Rust toolchain (rust-toolchain.toml)
+        id: rust
+        shell: bash
+        run: echo "toolchain=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: ${{ steps.rust.outputs.toolchain }}
+          targets: x86_64-unknown-linux-gnu
+          components: llvm-tools
+
+      - name: Cache keys
+        id: keys
+        run: python3 bench/run.py --print-cache-keys | tee -a "$GITHUB_OUTPUT"
+
+      - name: Restore suite and compilers
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            bench/.work/suite
+            bench/.work/tsgo
+          key: bench-shared-${{ runner.os }}-${{ steps.keys.outputs.shared }}
+
+      - name: Restore vscode
+        if: steps.keys.outputs['vscode'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/vscode
+          key: bench-vscode-${{ runner.os }}-${{ steps.keys.outputs['vscode'] }}
+
+      - name: Restore xstate-main
+        if: steps.keys.outputs['xstate-main'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/xstate-main
+          key: bench-xstate-main-${{ runner.os }}-${{ steps.keys.outputs['xstate-main'] }}
+
+      - name: Restore webpack
+        if: steps.keys.outputs['webpack'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/webpack
+          key: bench-webpack-${{ runner.os }}-${{ steps.keys.outputs['webpack'] }}
+
+      - name: Restore mui-docs
+        if: steps.keys.outputs['mui-docs'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/mui-docs
+          key: bench-mui-docs-${{ runner.os }}-${{ steps.keys.outputs['mui-docs'] }}
+
+      - name: Restore cal-diy
+        if: steps.keys.outputs['cal-diy'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/cal-diy
+          key: bench-cal-diy-${{ runner.os }}-${{ steps.keys.outputs['cal-diy'] }}
+
+      - name: Restore formbricks-web
+        if: steps.keys.outputs['formbricks-web'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/formbricks-web
+          key: bench-formbricks-web-${{ runner.os }}-${{ steps.keys.outputs['formbricks-web'] }}
+
+      - name: Restore supabase-studio
+        if: steps.keys.outputs['supabase-studio'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/supabase-studio
+          key: bench-supabase-studio-${{ runner.os }}-${{ steps.keys.outputs['supabase-studio'] }}
+
+      - name: Restore t3code-server
+        if: steps.keys.outputs['t3code-server'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/t3code-server
+          key: bench-t3code-server-${{ runner.os }}-${{ steps.keys.outputs['t3code-server'] }}
+
+      - name: Set up the projects
+        run: python3 bench/run.py --setup-only
+
+      # perf is best-effort (the packaged tools may not match the runner kernel). BOLT as release.yml installs it, plus
+      # the hugify runtime.
+      - name: Install perf and BOLT
+        run: |
+          (sudo apt-get update -qq && sudo apt-get install -y -qq linux-tools-common linux-tools-generic >/dev/null 2>&1) || true
+          perf=""  # linux-tools-generic's perf is /usr/lib/linux-tools/<version>-generic/perf, a symlink
+          for f in /usr/lib/linux-tools/*/perf /usr/lib/linux-tools-*/perf; do if [ -x "$f" ]; then perf=$f; break; fi; done
+          if [ -n "$perf" ]; then
+            sudo sysctl -w kernel.perf_event_paranoid=-1 kernel.kptr_restrict=0
+            "$perf" stat -e instructions,cycles,iTLB-load-misses,L1-icache-load-misses -- true 2>&1 | tee probe-out/perf-check.txt
+            ("$perf" record -o /tmp/lbr.data -j any,u -e cycles:u -- sleep 0.1 && echo "LBR sampling: yes" \
+              || echo "LBR sampling: no") 2>&1 | tee -a probe-out/perf-check.txt
+            echo "PERF=$perf" >> "$GITHUB_ENV"
+          fi
+          llvm=$(rustc -vV | sed -n 's/^LLVM version: //p')
+          name="LLVM-$llvm-Linux-X64"
+          mkdir -p "$RUNNER_TEMP/llvm"
+          curl -fsSL "https://github.com/llvm/llvm-project/releases/download/llvmorg-$llvm/$name.tar.zst" |
+            tar -x --zstd -C "$RUNNER_TEMP/llvm" --strip-components=1 --wildcards \
+              "$name/bin/llvm-bolt" "$name/bin/merge-fdata" "$name/lib/libbolt_rt_instr.a" "$name/lib/libbolt_rt_hugify.a"
+          echo "$RUNNER_TEMP/llvm/bin" >> "$GITHUB_PATH"
+          rustc -vV | tee probe-out/rustc.txt
+
+      - name: Build the variants
+        run: |
+          bash tools/perf/layout-build.sh /tmp/layout bench/.work 2>&1 | tee probe-out/build.txt
+          cp /tmp/layout/times.txt /tmp/layout/profile-coverage.txt /tmp/layout/bolt/*.log probe-out/ || true
+          mkdir -p probe-out/bin && for b in /tmp/layout/bin/*; do cp "$b/tsrs" "probe-out/bin/$(basename "$b")"; done
+
+      # Where the baseline spends its cycles on vscode at the default checker count (flat profile, user + kernel).
+      - name: Profile the baseline
+        if: env.PERF != ''
+        run: |
+          cwd=bench/.work/solutions/vscode
+          (cd "$cwd" && "$PERF" record -F 1999 -o /tmp/a.data -- /tmp/layout/bin/A/tsrs -p src --noEmit --incremental false \
+            --pretty false > /dev/null 2>&1) || true
+          "$PERF" report -i /tmp/a.data --stdio --no-children --sort dso,sym --percent-limit 0.4 2>/dev/null | head -120 \
+            > probe-out/profile-A-vscode.txt || true
+          "$PERF" report -i /tmp/a.data --stdio --no-children --sort dso --percent-limit 0.5 2>/dev/null | head -30 \
+            >> probe-out/profile-A-vscode.txt || true
+          head -80 probe-out/profile-A-vscode.txt
+
+      - name: Measure
+        run: |
+          args=()
+          IFS=, read -ra names <<< "$BINS"
+          for n in "${names[@]}"; do if [ -x "/tmp/layout/bin/$n/tsrs" ]; then args+=(--bin "$n=/tmp/layout/bin/$n/tsrs"); fi; done
+          [ -n "${PERF:-}" ] && args+=(--perf "$PERF")
+          python3 tools/perf/layout-measure.py "${args[@]}" --reps "$REPS" --out probe-out
+          cat probe-out/layout.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload probe output
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: perf-layout-probe
+          path: probe-out
+          if-no-files-found: warn
