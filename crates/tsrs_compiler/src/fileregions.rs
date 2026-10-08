@@ -120,6 +120,7 @@ pub fn lazy_dts_allowed() -> bool {
 pub fn enable_lazy_dts() {
     tsrs_parser::enable_lazy_dts();
     tsrs_binder::enable_lazy_dts();
+    // Relaxed: see `LAZY_DTS`.
     LAZY_DTS.store(true, std::sync::atomic::Ordering::Relaxed);
 }
 
