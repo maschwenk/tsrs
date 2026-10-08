@@ -9,10 +9,11 @@ applied to member lists, with lazy binding of the same lists). It is a front-end
 same number of bytes at every checker count. Output is byte-identical. It does not make parsing faster on Linux: a
 needed list is parsed twice, and the first parse still runs in full (section 6).
 
-Result, Linux 64 vCPUs at the default 32 checkers (9 interleaved runs, medians): formbricks-web -7.8% peak RSS
-against main (2.82 -> 2.60 GiB), cal-diy -2.3%, supabase-studio -2.7%, t3code-server -1.1%, vscode -0.8%, with wall
-times within the runner's noise (formbricks-web 0.653 -> 0.627 s, the others +-1%). At 4 checkers -12.7% / -4.1% /
--4.7% / -3.2% / -0.5%, single-threaded -16.2% / -7.3% / -6.5% / -5.2% / -0.6%. On the Mac with `--noCheck` -25% /
+Result, Linux 64 vCPUs at the default 32 checkers (10 interleaved runs against main e80e776, medians): formbricks-web
+-7.1% peak RSS (2.81 -> 2.62 GiB), cal-diy -1.6%, supabase-studio -1.8%, t3code-server -1.5%, drizzle-orm -1.8%,
+xstate-main -2.2%, vscode and webpack 0, with wall time within +-1% on all eight projects (drizzle-orm +0.3%). At 4
+checkers -12.0% / -4.9% / -4.7% / -3.2% / -3.7% / -3.6% / 0 / 0, single-threaded (earlier run) -16.2% / -7.3% / -6.5%
+/ -5.2% (formbricks-web / cal-diy / supabase-studio / t3code-server). On the Mac with `--noCheck` -25% /
 -15% / -13% / -10% / -1%, and 0.8-4.4% fewer instructions single-threaded.
 
 ## 1. Ceiling (census)
@@ -102,13 +103,26 @@ checked ones) to test forcing.
   some microseconds: most lists take 5-30 µs; formbricks-web forces 9,400 lists in 40-80 ms of thread time), then
   sleep on one of 64 condvars picked by the record's address; the forcing thread's own reads during binding
   (re-entrant) get the list being bound. A first version spun 16K times: on the x86 runner that burned CPU next to
-  the hyperthread sibling (drizzle-orm +15% user time and +9% wall at 32 checkers). Before
-  the checkers are created, the lists that every checker's `initialize_checker` forces at once (interfaces and classes
-  declared in several script files or `declare global` blocks, which `mergeSymbolTable` clones and merges) are forced
-  in parallel on the worker pool (about 1 ms): on cal-diy at 32 checkers the summed waiting went from 100 ms to under
-  20 ms and checker creation back from 7 to 4 ms. Allocation goes to the forcing
+  the hyperthread sibling (drizzle-orm +15% user time and +9% wall at 32 checkers). Allocation goes to the forcing
   thread's own arena (out of any scratch region). Before the file is bound a lazy list reads as empty, which only the
   file's parser (parent pointers, the import scan) and binder can observe.
+- **Shared lists** (`force_shared_lists`, fileregions.rs). Before the checkers of a multi-checker pass are created,
+  two sets of lists are forced in parallel on the worker pool (1-4 ms), because every checker asks for them at the
+  start and would otherwise wait for whichever checker got there first:
+  - the global libraries: every declaration file that enters the program through a default lib, the `lib` option or
+    `/// <reference lib>`, an automatic type directive, the `types` option or `/// <reference types>`, and the files
+    those pull in with `/// <reference path>` (`@types/node`'s `index.d.ts` references the rest of the package).
+    Module-scoped packages that enter only through imports (prisma, react's own files, zod, next, googleapis) stay
+    lazy;
+  - interfaces and classes that merge into the global scope more than once (declared in several script files or
+    `declare global` blocks), which `initialize_checker` clones and merges in every checker.
+  Both are properties of the program, not of a run. On drizzle-orm (16 checkers, Mac) readers waited 2,439 times on
+  1,062 lists for 70 ms in all, 1,871 of the waits on `@types/node` (three versions, each pulled in by
+  `/// <reference types="node" />` from a different package) and 330 on `bun-types`; with the rule 97 waits for 3 ms.
+  The rule costs no measurable memory: those lists are forced early in a multi-checker run anyway (Mac, 4 and 16
+  checkers, formbricks-web / cal-diy / supabase-studio / t3code-server: -10 to +14 MiB, inside the run-to-run spread;
+  Linux at 32 checkers 0-20 MiB, below the 0.01 GiB resolution of the probe on most projects). Single-threaded runs
+  and one-checker runs skip it.
 
 ## 3. Exactness
 
@@ -137,46 +151,42 @@ checked ones) to test forcing.
 
 ## 4. Numbers
 
-Linux, Depot 64 vCPUs (`tools/perf/lazydtsprobe.sh`: main fcb9803 against this branch at 224d7c4, the branch also with
-`TSRS_LAZY_DTS=0`, interleaved, 9 runs per cell, medians). Peak RSS in GiB, wall in s (range of the lazy runs).
+Linux, Depot 64 vCPUs (`tools/perf/lazydtsprobe.sh`: main e80e776, which has #204, against this branch at 7b1a14e,
+interleaved, 10 runs per cell at 32 checkers and 5 at 4, medians; "paired" is the median of the per-run ratios). Peak
+RSS in GiB, wall and user+sys in s.
 
-| project | checkers | peak main / off / on | on vs main | wall main / off / on | user+sys main / on |
+| project | checkers | wall main -> branch | paired | peak main -> branch | user+sys main -> branch |
 | --- | ---: | --- | ---: | --- | --- |
-| formbricks-web | 32 | 2.82 / 2.82 / 2.60 | -7.8% | 0.653 / 0.661 / 0.627 (0.601-0.669) | 12.90 / 12.90 |
-| formbricks-web | 16 | 2.20 / 2.19 / 1.98 | -10.0% | 0.691 / 0.693 / 0.701 (0.688-0.730) | 9.20 / 9.27 |
-| formbricks-web | 4 | 1.66 / 1.67 / 1.45 | -12.7% | 1.424 / 1.459 / 1.464 (1.442-1.520) | 6.59 / 6.66 |
-| formbricks-web | 1 | 1.30 / 1.30 / 1.09 | -16.2% | 4.805 / 4.812 / 4.755 (4.729-5.381) | 4.84 / 4.80 |
-| cal-diy | 32 | 2.57 / 2.57 / 2.51 | -2.3% | 0.594 / 0.591 / 0.590 (0.579-0.624) | 12.52 / 12.71 |
-| cal-diy | 4 | 1.23 / 1.22 / 1.18 | -4.1% | 1.315 / 1.325 / 1.326 (1.296-1.330) | 5.82 / 5.83 |
-| cal-diy | 1 | 0.82 / 0.82 / 0.76 | -7.3% | 3.581 / 3.610 / 3.620 (3.568-4.152) | 3.61 / 3.65 |
-| supabase-studio | 32 | 2.24 / 2.23 / 2.18 | -2.7% | 0.569 / 0.571 / 0.570 (0.566-0.577) | 13.42 / 13.54 |
-| supabase-studio | 4 | 1.27 / 1.27 / 1.21 | -4.7% | 1.578 / 1.582 / 1.604 (1.586-1.621) | 7.21 / 7.30 |
-| supabase-studio | 1 | 0.93 / 0.93 / 0.87 | -6.5% | 5.146 / 5.145 / 5.163 (5.119-5.290) | 5.19 / 5.20 |
-| t3code-server | 32 | 2.71 / 2.72 / 2.68 | -1.1% | 1.450 / 1.436 / 1.458 (1.420-1.469) | 18.94 / 19.00 |
-| t3code-server | 4 | 1.24 / 1.24 / 1.20 | -3.2% | 1.952 / 1.940 / 1.951 (1.930-1.970) | 8.13 / 8.14 |
-| t3code-server | 1 | 0.77 / 0.77 / 0.73 | -5.2% | 4.835 / 4.859 / 4.865 (4.817-4.968) | 4.87 / 4.89 |
-| vscode | 32 | 2.62 / 2.61 / 2.60 | -0.8% | 0.604 / 0.610 / 0.609 (0.597-0.639) | 15.54 / 15.81 |
-| vscode | 4 | 1.84 / 1.83 / 1.83 | -0.5% | 2.709 / 2.707 / 2.710 (2.675-2.805) | 12.57 / 12.57 |
-| vscode | 1 | 1.59 / 1.59 / 1.58 | -0.6% | 11.933 / 11.980 / 11.959 (11.849-12.119) | 12.04 / 12.06 |
+| formbricks-web | 32 | 0.659 -> 0.658 (-0.1%) | +0.5% | 2.81 -> 2.62 (**-7.1%**) | 12.93 -> 13.00 |
+| cal-diy | 32 | 0.593 -> 0.591 (-0.3%) | -0.1% | 2.57 -> 2.53 (-1.6%) | 12.51 -> 12.65 |
+| supabase-studio | 32 | 0.575 -> 0.577 (+0.4%) | +0.9% | 2.23 -> 2.19 (-1.8%) | 13.73 -> 13.67 |
+| t3code-server | 32 | 1.460 -> 1.450 (-0.7%) | -1.1% | 2.72 -> 2.68 (-1.5%) | 19.17 -> 19.16 |
+| drizzle-orm | 32 | 0.180 -> 0.181 (+0.3%) | +1.6% | 1.10 -> 1.08 (-1.8%) | 3.14 -> 3.19 |
+| vscode | 32 | 0.606 -> 0.611 (+0.8%) | +0.8% | 2.61 -> 2.61 (0.0%) | 15.70 -> 15.66 |
+| webpack | 32 | 0.133 -> 0.133 (0.0%) | -0.4% | 0.69 -> 0.69 (0.0%) | 2.67 -> 2.67 |
+| xstate-main | 32 | 0.121 -> 0.120 (-0.8%) | -0.4% | 0.46 -> 0.45 (-2.2%) | 1.78 -> 1.79 |
+| formbricks-web | 4 | 1.424 -> 1.435 (+0.8%) | +0.7% | 1.66 -> 1.46 (-12.0%) | 6.54 -> 6.57 |
+| cal-diy | 4 | 1.326 -> 1.317 (-0.7%) | -0.1% | 1.23 -> 1.17 (-4.9%) | 5.75 -> 5.78 |
+| supabase-studio | 4 | 1.590 -> 1.589 (-0.1%) | -0.1% | 1.27 -> 1.21 (-4.7%) | 7.28 -> 7.27 |
+| t3code-server | 4 | 1.936 -> 1.947 (+0.6%) | +0.4% | 1.24 -> 1.20 (-3.2%) | 8.18 -> 8.15 |
+| drizzle-orm | 4 | 0.350 -> 0.349 (-0.3%) | +0.9% | 0.54 -> 0.52 (-3.7%) | 1.71 -> 1.75 |
+| vscode | 4 | 2.705 -> 2.715 (+0.4%) | +0.6% | 1.83 -> 1.83 (0.0%) | 12.53 -> 12.62 |
+| webpack | 4 | 0.346 -> 0.343 (-0.9%) | -0.9% | 0.42 -> 0.42 (0.0%) | 1.63 -> 1.63 |
+| xstate-main | 4 | 0.210 -> 0.212 (+1.0%) | +1.0% | 0.28 -> 0.27 (-3.6%) | 1.01 -> 1.04 |
 
-Parse time (`Parse time`, which includes binding) on Linux single-threaded is 1-4% longer than with the mode off
-(formbricks-web 0.883 -> 0.905 s, cal-diy 0.530 -> 0.539, t3code-server 0.382 -> 0.390; the walk for disqualifiers
-and the rewinds cost more than the skipped binding saves where the arena has huge pages), and the same at 32 checkers
-(0.100 s on formbricks-web). The runner's instruction counter returns nothing (`instructions:u` reads 58), so
-instructions come from the Mac. An earlier run of the branch before the size limit, the spin and the global-merge
-forcing had cal-diy +2-6% wall at 32 checkers (waiting on forced lists); this run has none.
+An earlier run (main fcb9803, 9 runs, before the shared-list rule) had single-threaded peaks -16.2% / -7.3% / -6.5% /
+-5.2% / -0.6% (formbricks-web / cal-diy / supabase-studio / t3code-server / vscode); the rule does not apply there.
+`Parse time` (which includes binding) on Linux single-threaded is 1-4% longer than with the mode off (formbricks-web
+0.883 -> 0.905 s; the walk for disqualifiers and the rewinds cost more than the skipped binding saves where the arena
+has huge pages), and unchanged at 32 checkers. The runner's instruction counter returns nothing (`instructions:u`
+reads 58), so instructions come from the Mac.
 
-**Where it costs wall time: drizzle-orm** (21 MB of declaration text, 0.18 s at 32 checkers, 10,846 errors). The first
-runs of this branch had +9% wall and +13% user time at 32 checkers (+5% at 16) for -1% to -2% peak. A perf profile on
-the runner put the extra cycles in `DiagnosticsCollection::add` (8.8% of cycles against 3.8%) and in kernel and futex
-lock contention, not in forcing (14 ms of thread time in all): checkers that wait on the same lists at the start of
-checking go on in lockstep, and every `add` cloned the reporting file's `Path`, an `Arc` whose counter all checkers
-then write at once. With the diagnostics collection keyed without that clone (#204, a separate change that also makes
-main 2-4% faster at 32 checkers on drizzle-orm, cal-diy and vscode) the user time is +3.7% and the wall +4.5% at 32
-checkers against main (0.179 -> 0.187 s), +4.4% at 16; against main with #204 the lazy mode alone costs about +8% at
-32 checkers (0.173 -> 0.187 s). That rest is the waiting itself (about 2,200 waits on 1,000 lists, mostly `@types/node`
-interfaces that every checker needs, in three versions). pr-verify's three-run medians also showed mui-docs and
-t3code-server slower at 32 checkers; nine-run interleaved probes did not (mui-docs +0.4%, t3code-server +0.5% paired).
+**The wall cost that the shared-list rule removed: drizzle-orm** (21 MB of declaration text, 0.18 s at 32 checkers,
+10,846 errors). Before the rule it was +9% wall and +13% user time at 32 checkers against main fcb9803, +4.5% after
+#204 (which removed contention on the reporting file's `Path` `Arc` in `DiagnosticsCollection::add`, where checkers
+that had waited on the same lists ran in lockstep), and about +8% against main with #204 (0.173 -> 0.187 s). The rest
+was the waiting itself: 2,439 waits on 1,062 lists, mostly `@types/node` and `bun-types`, all global libraries entered
+through type reference directives. With the rule: +0.3% (0.180 -> 0.181 s, paired +1.6%, the runner's spread is 2-4%).
 
 Mac (M5 Max, 18 cores, 3 interleaved runs, medians; main cdcfc0e against 744c2ad; peak footprint in MiB, instructions
 in billions; a loaded machine, so walls are not compared):
@@ -221,9 +231,10 @@ parsed again, 422 of them while their file was bound (merges and unusual states)
 - Eager JSDoc (`@see` / `@link`, parsed with the file so unused-identifier checks see the references): 4-17 MB per
   project of lists stay eager.
 - Per-member laziness (names eager, types lazy): about 1% of peak more (section 1).
-- Waiting on hot lists: programs whose checkers all need the same small lists at once (drizzle-orm) lose a few
-  percent of wall time at 16-32 checkers. Forcing more lists up front (all lists of global script files) would remove
-  most waits but give back the savings of those files; not done.
+- A waiting reader parsing the list itself and publishing by compare-and-swap (the alternative to the shared-list
+  rule): not built. Parsing can race deterministically, but binding cannot (it fills the owner symbol's tables, which
+  other threads read), so a waiter would still wait for the bind; and the rule already removes 96% of the waits for
+  no measurable memory.
 - Record overhead: 96 bytes per lazy list (formbricks-web 117K lists, 11 MB, 0.4% of peak); the record could shrink
   by about a third.
 - Forcing re-parses: a list that is needed is parsed twice (once to establish it is error-free and plain). A skipping
@@ -242,5 +253,5 @@ cd <project> && TSRS_LAZY_DTS_CENSUS=1 TSRS_LAZY_DTS_CENSUS_TSV=/tmp/files.tsv <
 TSRS_LAZY_DTS=stats tsrs -p <tsconfig> --noEmit ...      # lists made lazy / deferred / parsed again
 TSRS_LAZY_DTS=force tsrs-test run --suite all --baselines types,symbols   # every declaration file lazy; trees must equal main's
 depot ci dispatch --repo maschwenk/tsrs --workflow perf-probe.yml --ref <branch> --input script=tools/perf/lazydtsprobe.sh \
-  --input projects=formbricks-web,cal-diy,supabase-studio,t3code-server,vscode --input probe_args='--reps 7 --checkers 1,4,16,32 --no-strace'
+  --input projects=drizzle-orm,formbricks-web,cal-diy --input probe_args='--reps 10 --checkers 32 --no-strace'
 ```

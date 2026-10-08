@@ -302,8 +302,10 @@ A CLI compile (not `--incremental`, `--build` or watch) in which no declaration 
 or `noCheck`) parses the member list of each interface, class and type literal of a declaration file, and keeps it
 only as a record (position, parser context, binder state) when nothing in it reaches outside the list: the first
 reader of the list's nodes or of the owner symbol's members parses and binds it again (`crates/tsrs_ast/src/lazylist.rs`,
-`parse_member_list_lazily` in the parser, `bind_lazy_member_list` in the binder; notes/mem-lazy-dts-members.md). Output
-is the same; `--extendedDiagnostics` `Symbols` counts only the lists that were bound. Off in the language server, the
+`parse_member_list_lazily` in the parser, `bind_lazy_member_list` in the binder; notes/mem-lazy-dts-members.md). Before the checkers of a multi-checker pass start, the lists of the global libraries (default and `lib` files, type
+reference directives and what they reference) and of interfaces merged into the global scope are forced in parallel,
+so that the checkers do not wait for one another on them (`force_shared_lists`; `TSRS_LAZY_DTS_SHARED=0` skips the
+global libraries). Output is the same; `--extendedDiagnostics` `Symbols` counts only the lists that were bound. Off in the language server, the
 API and the test harnesses, and under `TSRS_CENSUS=1`, `TSRS_LAZY_DTS_CENSUS=1` and `TSRS_CHECK_SHARED=1`.
 
 | variable | values | effect |
