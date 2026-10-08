@@ -1,0 +1,1 @@
+{ "compilerOptions": { "incremental": true, "rootDir": "src", "outDir": "out", "declaration": true, "strict": true }, "include": ["src"] }

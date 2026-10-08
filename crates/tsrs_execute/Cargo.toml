@@ -1,0 +1,34 @@
+[package]
+name = "tsrs_execute"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+# The tsc driver (Go's internal/execute: tsc, tsc -b), as a library: the `tsrs` binary and the WebAssembly build
+# (crates/tsrs_wasm) call it. It links no allocator, language server, API server or file watcher.
+[dependencies]
+tsrs_core.workspace = true
+tsrs_diagnostics.workspace = true
+tsrs_ast.workspace = true
+tsrs_vfs.workspace = true
+tsrs_tsoptions.workspace = true
+tsrs_compiler = { path = "../tsrs_compiler", default-features = false }
+tsrs_incremental.workspace = true
+rustc-hash.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+similar = "3"
+
+[features]
+default = ["checker"]
+checker = ["tsrs_compiler/checker"]
+site-counts = ["tsrs_compiler/site-counts"]
+work-census = ["tsrs_compiler/work-census"]
+alloc-profile = ["tsrs_core/alloc-profile"]
+assignment-stats = ["tsrs_compiler/assignment-stats"]

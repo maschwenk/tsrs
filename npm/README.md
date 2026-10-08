@@ -46,7 +46,7 @@ commit = "b85298b6a81f772d080b0455de0ca9d744cd6fd6"    # and its commit (CI chec
 ```
 
 npm version: `<version>-ts<typescript version>` = `0.1.0-ts7.1.0-dev.20260929`. `tsrs --version` prints the same,
-embedded at build time by `crates/tsrs_cli/build.rs`:
+embedded at build time by `crates/tsrs_execute/build.rs`:
 
 ```
 Version 7.1.0-dev (tsrs 0.1.0-ts7.1.0-dev.20260929, microsoft/TypeScript@b85298b6a81f)

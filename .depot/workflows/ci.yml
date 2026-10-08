@@ -192,6 +192,123 @@ jobs:
             target/test-results-default/*.txt
           if-no-files-found: ignore
 
+  # The WebAssembly build (crates/tsrs_wasm, notes/wasm-build.md): the 32-bit check (a native-only change must not
+  # break it), the module with its path-leak and import checks, the npm package's tests, and tools/wasm/gate.sh, the
+  # differential against native --singleThreaded (regressions, fixtures, the 2,000-case conformance sample on the
+  # node file system and in memory, four bench projects, emit).
+  wasm:
+    runs-on: depot-ubuntu-24.04-8
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Read TypeScript reference commit
+        id: ts
+        run: echo "commit=$(node npm/build.mjs --print-typescript-commit)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore TypeScript testdata
+        id: ts-ref
+        uses: actions/cache/restore@v4
+        with:
+          path: ts-ref/tsc/testdata
+          key: ts-ref-testdata-${{ steps.ts.outputs.commit }}
+
+      - name: Check out TypeScript testdata
+        if: steps.ts-ref.outputs.cache-hit != 'true'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: microsoft/TypeScript
+          ref: ${{ steps.ts.outputs.commit }}
+          path: ts-ref
+          fetch-depth: 1
+          sparse-checkout: tsc/testdata
+          persist-credentials: false
+
+      - name: Read the pinned Rust toolchain (rust-toolchain.toml)
+        id: rust
+        shell: bash
+        run: echo "toolchain=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: ${{ steps.rust.outputs.toolchain }}
+          targets: wasm32-wasip1
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      # Ubuntu's binaryen package is older; the module sizes in notes/wasm-build.md come from version 133.
+      - name: Install binaryen 133
+        run: |
+          curl -sSLf -o /tmp/binaryen.tgz https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-x86_64-linux.tar.gz
+          echo "2dc9c7813f5375db93d96ead4b78222fcc3e2677bbb832297af4797782a37489  /tmp/binaryen.tgz" | sha256sum -c -
+          tar xzf /tmp/binaryen.tgz -C /tmp
+          echo /tmp/binaryen-version_133/bin >> "$GITHUB_PATH"
+
+      - name: cargo check (wasm32-wasip1)
+        run: cargo check -p tsrs_wasm --target wasm32-wasip1 --locked
+        env:
+          RUSTFLAGS: -D warnings
+
+      - name: Build native binaries
+        run: cargo build --release --locked -p tsrs_cli -p tsrs_testrunner
+
+      - name: Build the module
+        run: tools/wasm/build.sh | tee target/wasm-size.txt
+
+      - name: cargo test -p tsrs_wasm
+        run: cargo test --locked -p tsrs_wasm
+
+      - name: npm test (npm/tsrs-wasm)
+        run: npm test --prefix npm/tsrs-wasm
+
+      - name: Bench cache keys
+        id: bench-keys
+        run: python3 bench/run.py --print-cache-keys --projects xstate-main,webpack | tee -a "$GITHUB_OUTPUT"
+
+      - name: Restore the bench compilers
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            bench/.work/suite
+            bench/.work/tsgo
+          key: bench-shared-${{ runner.os }}-${{ steps.bench-keys.outputs.shared }}
+
+      - name: Restore xstate-main
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/xstate-main
+          key: bench-xstate-main-${{ runner.os }}-${{ steps.bench-keys.outputs['xstate-main'] }}
+
+      - name: Restore webpack
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/webpack
+          key: bench-webpack-${{ runner.os }}-${{ steps.bench-keys.outputs['webpack'] }}
+
+      - name: Set up the bench projects
+        run: python3 bench/run.py --setup-only --projects xstate-main,webpack,Compiler,Compiler-Unions
+
+      - name: Differential gate
+        run: tools/wasm/gate.sh
+
+      - name: Upload the gate results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: wasm-gate
+          path: |
+            target/wasm-size.txt
+            target/wasm-diff/**/summary.json
+            target/wasm-diff/*.log
+            target/wasm-diff/*/fail/**
+          if-no-files-found: ignore
+
   # docs/RUST.md: clippy findings per (lint, file) may not grow past tools/lint/baseline.tsv.
   lint-ratchet:
     runs-on: depot-ubuntu-24.04-4

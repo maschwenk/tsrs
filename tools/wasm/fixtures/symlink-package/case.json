@@ -1,0 +1,1 @@
+{ "id": "fixture/symlink-package", "cwd": "app", "args": ["-p", ".", "--pretty", "false"] }

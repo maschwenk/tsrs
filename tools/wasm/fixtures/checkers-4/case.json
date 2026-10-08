@@ -1,0 +1,1 @@
+{ "id": "fixture/checkers-4", "cwd": ".", "nativeFlag": "--checkers 4", "args": ["a.ts", "b.ts", "c.ts", "--noEmit", "--target", "es2022", "--pretty", "false"] }

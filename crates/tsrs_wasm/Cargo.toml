@@ -1,0 +1,29 @@
+[package]
+name = "tsrs_wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+# The WebAssembly build: tsc as a wasm32-wasip1 module over a host file system (notes/wasm-build.md,
+# tools/wasm/build.sh, npm/tsrs-wasm). cdylib only: cargo skips LTO for a crate that is also an rlib, and the wasm
+# profile's fat LTO needs it.
+[lib]
+crate-type = ["cdylib"]
+# The tests run `run()` on native targets against an in-memory host (`host::test_host`).
+test = true
+
+[dependencies]
+tsrs_core.workspace = true
+tsrs_ast.workspace = true
+tsrs_diagnostics.workspace = true
+tsrs_scanner.workspace = true
+tsrs_vfs.workspace = true
+tsrs_compiler.workspace = true
+tsrs_execute = { path = "../tsrs_execute" }
+
+[dev-dependencies]
+# Only the encoder-equality test uses it; dev-dependencies never link into the module.
+tsrs_api.workspace = true

@@ -2655,7 +2655,10 @@ pub(crate) struct LazyMemberTable {
 }
 
 // 80 bytes in release builds (the symbol table is 24; debug builds add a borrow flag to it).
+#[cfg(target_pointer_width = "64")]
 const _: () = assert!(std::mem::size_of::<LazyMemberTable>() == std::mem::size_of::<SymbolTable>() + 56);
+#[cfg(target_pointer_width = "32")]
+const _: () = assert!(std::mem::size_of::<LazyMemberTable>() == std::mem::size_of::<SymbolTable>() + 52);
 
 /// Heap census: what the lazy member and lazy mapped tables own (the `Rc` boxes, their symbol tables, name lists,
 /// ordered property lists and mapped-member maps with their string keys).

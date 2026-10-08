@@ -7,7 +7,7 @@ version = "0.8.0"
 edition = "2021"
 license = "Apache-2.0"
 
-# The microsoft/TypeScript commit this port follows. Read by crates/tsrs_cli/build.rs (`tsrs --version`), by
+# The microsoft/TypeScript commit this port follows. Read by crates/tsrs_execute/build.rs (`tsrs --version`), by
 # npm/build.mjs (npm version = "<workspace version>-ts<version>") and by CI (conformance testdata checkout).
 [workspace.metadata.typescript]
 version = "7.1.0-dev.20260929"
@@ -65,6 +65,17 @@ panic = "unwind"
 inherits = "release"
 lto = "fat"
 codegen-units = 1
+
+# The WebAssembly module (crates/tsrs_wasm, tools/wasm/build.sh; notes/wasm-build.md has the opt-level measurements).
+# panic = "abort": wasm cannot unwind (a panic prints and exits with status 5, as a panicked native driver thread).
+[profile.wasm]
+inherits = "release"
+opt-level = "s"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+debug = false
+strip = "debuginfo"
 
 [workspace.lints.rust]
 dead_code = "allow"

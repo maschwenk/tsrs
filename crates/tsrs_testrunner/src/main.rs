@@ -11,6 +11,8 @@ mod emit_harness;
 mod compiler_runner;
 mod diagnosticwriter;
 mod harnessutil;
+#[cfg(feature = "compiler")]
+mod materialize;
 #[cfg(feature = "tsoptions")]
 mod options;
 mod oracle;
@@ -50,6 +52,9 @@ const USAGE: &str = "usage:
                                       --types/--symbols: the first differing hunk of those baselines (--full: whole diff)
   tsrs-test crashes [--top N] [--examples N] [--json <path>]
   tsrs-test list [--suite ..] [--filter ..] [--list <file>]
+  tsrs-test materialize [--suite ..] [--filter ..] [--list <file>] --out <dir>
+                                      writes each case to disk as a tsc command line (<dir>/<n>_<id>/{root/,case.json});
+                                      the input of the WebAssembly differential (tools/wasm/diff.mjs)
   tsrs-test types-dump -p <tsconfig|dir> --out <dir> [--mode types|symbols|both] [--text all|none|<list file>]
                       [--sample <list file>]
                                       the .types/.symbols walk over every non-node_modules, non-lib file of a project
@@ -392,6 +397,33 @@ fn cmd_list(mut args: Args, spec: &BackendSpec) {
     }
 }
 
+#[cfg(feature = "compiler")]
+fn cmd_materialize(mut args: Args, spec: &BackendSpec) {
+    let sel = Selection::from_args(&mut args);
+    let Some(out) = args.value("--out").map(PathBuf::from) else {
+        eprintln!("{USAGE}");
+        std::process::exit(2);
+    };
+    check_no_extra(&args);
+    let table = option_table(spec);
+    let (mut written, mut skipped, mut with_dropped, mut errors) = (0, 0, 0, 0);
+    let _ = std::fs::remove_dir_all(&out);
+    for (i, item) in sel.select(&table).iter().enumerate() {
+        match materialize::materialize(item, &table, &out.join(materialize::dir_name(i, item))) {
+            Ok(m) if m.skipped => skipped += 1,
+            Ok(m) => {
+                written += 1;
+                with_dropped += usize::from(!m.dropped.is_empty());
+            }
+            Err(e) => {
+                errors += 1;
+                eprintln!("{}: {e}", item.id());
+            }
+        }
+    }
+    println!("materialized {written} cases ({with_dropped} with a dropped option), {skipped} skipped, {errors} errors, in {}", out.display());
+}
+
 fn cmd_show(mut args: Args, spec: BackendSpec) {
     let full = args.flag("--full");
     if args.rest.len() != 1 {
@@ -547,6 +579,8 @@ fn main() {
         "show" => cmd_show(args, spec),
         "crashes" => cmd_crashes(args),
         "list" => cmd_list(args, &spec),
+        #[cfg(feature = "compiler")]
+        "materialize" => cmd_materialize(args, &spec),
         #[cfg(feature = "checker")]
         "types-dump" => cmd_types_dump(args),
         "__worker" => {

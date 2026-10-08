@@ -1,0 +1,9 @@
+{ "id": "fixture/build-graph", "cwd": "app",
+  "steps": [
+    { "args": ["-b", "--pretty", "false"] },
+    { "args": ["-b", "--pretty", "false"] },
+    { "args": ["-b", "--verbose", "--pretty", "false"] },
+    { "args": ["-b", "--verbose", "--pretty", "false"], "write": { "core/index.ts": "export interface Point { x: number; y: number }\nexport function add(a: Point, b: Point): Point { return { x: a.x + b.x, y: a.y + b.y }; }\nexport const zero = 0;\n" } },
+    { "args": ["-b", "--clean", "--pretty", "false"] },
+    { "args": ["-b", "--force", "--verbose", "--pretty", "false"] }
+  ] }

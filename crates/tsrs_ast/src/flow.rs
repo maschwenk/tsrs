@@ -45,7 +45,10 @@ pub struct FlowNode {
     link: OwnedCell<PKey>,
 }
 
+#[cfg(target_pointer_width = "64")]
 const _: () = assert!(std::mem::size_of::<FlowNode>() == if tsrs_core::COMPRESSED_PTRS { 16 } else { 24 });
+#[cfg(target_pointer_width = "32")]
+const _: () = assert!(std::mem::size_of::<FlowNode>() == 16);
 
 /// Census builds: the link word is a plain pointer (`crate::census_layouts`).
 pub(crate) fn census_layout() {}

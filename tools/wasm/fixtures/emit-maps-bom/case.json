@@ -1,0 +1,1 @@
+{ "id": "fixture/emit-maps-bom", "cwd": ".", "args": ["-p", ".", "--pretty", "false"] }

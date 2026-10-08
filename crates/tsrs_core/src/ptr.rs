@@ -240,9 +240,12 @@ impl<T> P<T> {
         #[cfg(compressed_ptrs)]
         // SAFETY: the low bits came from `pack` of a live `P<T>` (this function's contract): its handle, not 0.
         return P(unsafe { std::num::NonZeroU32::new_unchecked(w as u32) }, std::marker::PhantomData);
-        #[cfg(not(compressed_ptrs))]
+        #[cfg(all(not(compressed_ptrs), target_pointer_width = "64"))]
         // SAFETY: the low bits are the address of a live arena object, shifted by `pack` (this function's contract).
         return P(unsafe { &*std::ptr::with_exposed_provenance::<T>(((w & PACK_MASK) << 3) as usize) });
+        #[cfg(target_pointer_width = "32")]
+        // SAFETY: the low bits are the address of a live arena object, unshifted on 32-bit targets (`pack`).
+        return P(unsafe { &*std::ptr::with_exposed_provenance::<T>((w & PACK_MASK) as usize) });
     }
 
     /// `unpack` for an optional pointer (low bits 0 = `None`).
@@ -445,12 +448,15 @@ impl<T: ?Sized> P<T> {
     pub fn pack(self) -> u64 {
         #[cfg(compressed_ptrs)]
         return self.0.get() as u64;
-        #[cfg(not(compressed_ptrs))]
+        #[cfg(all(not(compressed_ptrs), target_pointer_width = "64"))]
         {
             let a = (self.0 as *const T as *const ()).expose_provenance() as u64;
             assert!(a & 7 == 0 && a >> (PACK_BITS + 3) == 0, "address {a:#x} does not pack in 45 bits");
             a >> 3
         }
+        // 32-bit targets: objects may be only 4-aligned, and every address fits in `PACK_BITS` unshifted.
+        #[cfg(target_pointer_width = "32")]
+        return (self.0 as *const T as *const ()).expose_provenance() as u64;
     }
 
     #[inline]
@@ -752,11 +758,33 @@ unsafe impl<T> Sync for StaticSlicePtr<T> {}
 /// `u16::MAX` bytes or more (or one whose address does not fit in 48 bits) is copied into the arena after a `u32`
 /// length, and the length bits hold `u16::MAX`. `as_str` returns the same text (for short strings, the same slice).
 #[derive(Clone, Copy)]
+#[cfg(target_pointer_width = "64")]
 pub struct PackedStr(std::ptr::NonNull<u8>);
 
+/// 32-bit targets (wasm32): a fat `&'static str` is already 8 bytes, so `PackedStr` is the reference itself.
+#[derive(Clone, Copy)]
+#[cfg(target_pointer_width = "32")]
+pub struct PackedStr(&'static str);
+
+#[cfg(target_pointer_width = "32")]
+impl PackedStr {
+    #[inline]
+    pub fn new(s: &'static str) -> PackedStr {
+        PackedStr(s)
+    }
+
+    #[inline]
+    pub fn as_str(self) -> &'static str {
+        self.0
+    }
+}
+
+#[cfg(target_pointer_width = "64")]
 const PACKED_STR_LEN_SHIFT: u32 = 48;
+#[cfg(target_pointer_width = "64")]
 const PACKED_STR_LONG: usize = u16::MAX as usize;
 
+#[cfg(target_pointer_width = "64")]
 impl PackedStr {
     #[inline]
     #[cfg_attr(feature = "alloc-profile", track_caller)]
@@ -817,9 +845,57 @@ impl fmt::Debug for PackedStr {
 /// a data pointer never has it), so `get` returns exactly the slice that was packed (same pointer and length) in
 /// either form. The word is never zero (a slice's data pointer, even an empty one's, is non-null), so
 /// `Option<ThinSlice<T>>` is one word too.
+#[cfg(target_pointer_width = "64")]
 pub struct ThinSlice<T: 'static>(std::ptr::NonNull<()>, std::marker::PhantomData<&'static [T]>);
 
+/// 32-bit targets (wasm32): the data pointer and the length, 8 bytes like a fat `&'static [T]` (and `Option` of it
+/// uses the non-null niche). Every slice fits, so the only long form is `from_ref`'s: the address of the `&'static [T]`
+/// it reads, tagged with bit 0 (`T` is at least 2-aligned, so a data pointer never has it).
+#[cfg(target_pointer_width = "32")]
+pub struct ThinSlice<T: 'static>(std::ptr::NonNull<()>, usize, std::marker::PhantomData<&'static [T]>);
+
+#[cfg(target_pointer_width = "32")]
+impl<T> ThinSlice<T> {
+    const ALIGNED: () = assert!(std::mem::align_of::<T>() >= 2, "ThinSlice needs bit 0 of the data pointer");
+
+    #[inline]
+    pub fn new(s: &'static [T]) -> Self {
+        let () = Self::ALIGNED;
+        ThinSlice(std::ptr::NonNull::from(s).cast::<()>(), s.len(), std::marker::PhantomData)
+    }
+
+    /// A long-form slice that reads `*r` (as on 64-bit targets).
+    pub fn from_ref(r: &'static &'static [T]) -> Self {
+        let () = Self::ALIGNED;
+        ThinSlice(std::ptr::NonNull::from(r).cast::<()>().map_addr(|a| a | THIN_LONG_TAG), 0, std::marker::PhantomData)
+    }
+
+    /// Whether this is the long form (`from_ref`).
+    #[inline]
+    pub fn is_long(self) -> bool {
+        self.0.addr().get() & THIN_LONG_TAG != 0
+    }
+
+    /// The `&'static [T]` a long-form slice reads (`None` for the short form).
+    #[inline]
+    pub fn long_ref(self) -> Option<&'static &'static [T]> {
+        // SAFETY: a long form was built by `from_ref` from a `&'static &'static [T]`.
+        self.is_long().then(|| unsafe { &*(self.0.as_ptr().map_addr(|a| a & !THIN_LONG_TAG) as *const &'static [T]) })
+    }
+
+    #[inline]
+    pub fn get(self) -> &'static [T] {
+        if let Some(r) = self.long_ref() {
+            return *r;
+        }
+        // SAFETY: built by `new` from a `&'static [T]` of this length.
+        unsafe { std::slice::from_raw_parts(self.0.as_ptr() as *const T, self.1) }
+    }
+}
+
+#[cfg(target_pointer_width = "64")]
 const THIN_LEN_SHIFT: u32 = 48;
+#[cfg(target_pointer_width = "64")]
 const THIN_ADDR_MASK: usize = (1 << THIN_LEN_SHIFT) - 1;
 const THIN_LONG_TAG: usize = 1;
 
@@ -831,6 +907,7 @@ impl<T> Clone for ThinSlice<T> {
 }
 impl<T> Copy for ThinSlice<T> {}
 
+#[cfg(target_pointer_width = "64")]
 impl<T> ThinSlice<T> {
     const ALIGNED: () = assert!(std::mem::align_of::<T>() >= 2, "ThinSlice needs bit 0 of the data pointer");
 

@@ -24,31 +24,85 @@ pub enum TypeMapperKind {
 /// mapper is out of line). The rare kinds (functions, deferred mappers, long lists) point
 /// to a `RareTypeMapper`. `data()` decodes a mapper into the `TypeMapperData` view that the code matches on.
 pub struct TypeMapper {
-    first: usize,
+    first: MapperWord,
     // Also holds the escaped bit (`ESCAPED`, notes/mem-recycle.md) in bit 2, which every payload leaves free.
-    second: std::cell::Cell<usize>,
+    second: std::cell::Cell<MapperWord>,
 }
 
+#[cfg(target_pointer_width = "64")]
+type MapperWord = usize;
+/// 32-bit targets (wasm32): the words are `u64` (the mapper stays 16 bytes) and the kind tags and `ESCAPED` live
+/// above the address bits, since arena objects there are only 4-aligned. Addresses are below 2^32, so a list's
+/// address shifted left by one uses bits 0-32, the tags bits 40-43 and the list lengths bits 48-63.
+#[cfg(target_pointer_width = "32")]
+type MapperWord = u64;
+
+#[cfg(target_pointer_width = "64")]
 const _: () = assert!(std::mem::size_of::<TypeMapper>() == 16);
 // The payload pointers leave the tag bits free.
+#[cfg(target_pointer_width = "64")]
 const _: () = assert!(std::mem::align_of::<Type>() >= 8 && std::mem::align_of::<TypeMapper>() >= 8);
+#[cfg(target_pointer_width = "64")]
 const _: () = assert!(std::mem::align_of::<InferenceContext>() >= 8 && std::mem::align_of::<RareTypeMapper>() >= 8);
+#[cfg(target_pointer_width = "32")]
+const _: () = {
+    assert!(std::mem::size_of::<TypeMapper>() == 16);
+    // A 32-bit address shifted left by one, the tags (with `ESCAPED`) and the list length do not overlap.
+    assert!(ADDR_MASK == ((u32::MAX as u64) << 1 | 1));
+    assert!(ADDR_MASK & TAG_MASK == 0 && ESCAPED & TAG_MASK == ESCAPED);
+    assert!(TAG_MASK >> LEN_SHIFT == 0 && (u16::MAX as u64) << LEN_SHIFT >> LEN_SHIFT == u16::MAX as u64);
+    assert!(TAG_RARE & !TAG_MASK == 0 && TAG_RARE & ESCAPED == 0);
+};
 
+#[cfg(target_pointer_width = "64")]
 const TAG_MASK: usize = 0b111;
+#[cfg(target_pointer_width = "64")]
 const TAG_SIMPLE: usize = 0;
+#[cfg(target_pointer_width = "64")]
 const TAG_MERGED: usize = 1;
+#[cfg(target_pointer_width = "64")]
 const TAG_COMPOSITE: usize = 2;
+#[cfg(target_pointer_width = "64")]
 const TAG_INFERENCE: usize = 3;
+#[cfg(target_pointer_width = "64")]
 const TAG_ARRAY: usize = 4;
+#[cfg(target_pointer_width = "64")]
 const TAG_ARRAY_TO_SINGLE: usize = 5;
+#[cfg(target_pointer_width = "64")]
 const TAG_RARE: usize = 6;
 const LEN_SHIFT: u32 = 48;
 /// Set on a mapper that may be used after the call that created it returns: one stored in a type, signature, symbol
 /// link, lazy member table, node builder context or inference context, or reachable from such a mapper (children of
 /// merged / composite mappers, the context of an inference mapper). Mappers without it are dead once their creator
 /// is done with them and may be recycled there.
+#[cfg(target_pointer_width = "64")]
 const ESCAPED: usize = 0b100;
+#[cfg(target_pointer_width = "64")]
 const ADDR_MASK: usize = ((1 << LEN_SHIFT) - 1) & !TAG_MASK;
+
+#[cfg(target_pointer_width = "32")]
+const TAG_SHIFT: u32 = 40;
+/// Includes `ESCAPED`, as the 64-bit mask does, so `untagged` drops it.
+#[cfg(target_pointer_width = "32")]
+const TAG_MASK: u64 = 0b1111 << TAG_SHIFT;
+#[cfg(target_pointer_width = "32")]
+const TAG_SIMPLE: u64 = 0;
+#[cfg(target_pointer_width = "32")]
+const TAG_MERGED: u64 = 1 << TAG_SHIFT;
+#[cfg(target_pointer_width = "32")]
+const TAG_COMPOSITE: u64 = 2 << TAG_SHIFT;
+#[cfg(target_pointer_width = "32")]
+const TAG_INFERENCE: u64 = 3 << TAG_SHIFT;
+#[cfg(target_pointer_width = "32")]
+const TAG_ARRAY: u64 = 4 << TAG_SHIFT;
+#[cfg(target_pointer_width = "32")]
+const TAG_ARRAY_TO_SINGLE: u64 = 5 << TAG_SHIFT;
+#[cfg(target_pointer_width = "32")]
+const TAG_RARE: u64 = 6 << TAG_SHIFT;
+#[cfg(target_pointer_width = "32")]
+const ESCAPED: u64 = 0b1000 << TAG_SHIFT;
+#[cfg(target_pointer_width = "32")]
+const ADDR_MASK: u64 = (1 << 33) - 1;
 
 /// A decoded mapper (the Go mapper data structs).
 #[derive(Clone, Copy)]
@@ -88,6 +142,7 @@ impl TypeMapperData {
 }
 
 /// A list's address shifted left by one with its length in the top 16 bits, or `None` when either does not fit.
+#[cfg(target_pointer_width = "64")]
 #[inline]
 fn pack_slice(s: &'static [P<Type>]) -> Option<usize> {
     let a = s.as_ptr().expose_provenance();
@@ -96,6 +151,7 @@ fn pack_slice(s: &'static [P<Type>]) -> Option<usize> {
 
 /// # Safety
 /// `w` must come from `pack_slice` (tag bits may have been added).
+#[cfg(target_pointer_width = "64")]
 #[inline]
 unsafe fn unpack_slice(w: usize) -> &'static [P<Type>] {
     // SAFETY: `w` came from `pack_slice` of a `&'static [P<Type>]` (this function's contract): the exposed data
@@ -103,6 +159,7 @@ unsafe fn unpack_slice(w: usize) -> &'static [P<Type>] {
     unsafe { std::slice::from_raw_parts(std::ptr::with_exposed_provenance::<P<Type>>((w & ADDR_MASK) >> 1), w >> LEN_SHIFT) }
 }
 
+#[cfg(target_pointer_width = "64")]
 #[inline]
 fn tagged<T>(p: P<T>, tag: usize) -> usize {
     p.to_bits() | tag
@@ -110,10 +167,47 @@ fn tagged<T>(p: P<T>, tag: usize) -> usize {
 
 /// # Safety
 /// `w` must hold a `P<T>`'s bits (plus tag bits).
+#[cfg(target_pointer_width = "64")]
 #[inline]
 unsafe fn untagged<T>(w: usize) -> P<T> {
     // SAFETY: `w` holds a `P<T>`'s bits plus tag bits (this function's contract); the tags are masked off.
     unsafe { P::from_bits(w & !TAG_MASK) }
+}
+
+/// 32-bit twin of `pack_slice`: every 4-aligned address fits (see `MapperWord`).
+#[cfg(target_pointer_width = "32")]
+#[inline]
+fn pack_slice(s: &'static [P<Type>]) -> Option<u64> {
+    let a = s.as_ptr().expose_provenance();
+    (a & 3 == 0 && s.len() <= u16::MAX as usize).then(|| u64::from(a as u32) << 1 | (s.len() as u64) << LEN_SHIFT)
+}
+
+/// # Safety
+/// `w` must come from `pack_slice` (tag bits may have been added).
+#[cfg(target_pointer_width = "32")]
+#[inline]
+unsafe fn unpack_slice(w: u64) -> &'static [P<Type>] {
+    let addr = ((w & ADDR_MASK) >> 1) as usize;
+    let len = (w >> LEN_SHIFT) as usize;
+    // SAFETY: `w` came from `pack_slice` of a `&'static [P<Type>]` (this function's contract): the exposed data
+    // address and the length, which tag bits do not overlap.
+    unsafe { std::slice::from_raw_parts(std::ptr::with_exposed_provenance::<P<Type>>(addr), len) }
+}
+
+#[cfg(target_pointer_width = "32")]
+#[inline]
+fn tagged<T>(p: P<T>, tag: u64) -> u64 {
+    p.to_bits() as u64 | tag
+}
+
+/// # Safety
+/// `w` must hold a `P<T>`'s bits (plus tag bits).
+#[cfg(target_pointer_width = "32")]
+#[inline]
+unsafe fn untagged<T>(w: u64) -> P<T> {
+    // SAFETY: `w` holds a `P<T>`'s bits (a 32-bit address) plus tag bits (this function's contract); the tags are
+    // masked off.
+    unsafe { P::from_bits((w & !TAG_MASK) as usize) }
 }
 
 impl TypeMapper {
@@ -373,7 +467,7 @@ impl Checker {
 #[cfg_attr(feature = "site-counts", track_caller)]
 pub(crate) fn new_inference_type_mapper(n: P<InferenceContext>, fixing: bool) -> P<TypeMapper> {
     tsrs_core::sitecount::hit("mapper", "inference");
-    P::new_recycled(TypeMapper { first: tagged(n, TAG_INFERENCE), second: std::cell::Cell::new(fixing as usize) })
+    P::new_recycled(TypeMapper { first: tagged(n, TAG_INFERENCE), second: std::cell::Cell::new(MapperWord::from(fixing)) })
 }
 
 #[cfg_attr(feature = "site-counts", track_caller)]

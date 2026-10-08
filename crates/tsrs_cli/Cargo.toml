@@ -24,23 +24,21 @@ tsrs_project.workspace = true
 tsrs_incremental.workspace = true
 tsrs_api.workspace = true
 tsrs_api_transport.workspace = true
+tsrs_execute = { path = "../tsrs_execute", default-features = false }
 # no_thp: no MADV_HUGEPAGE on the mimalloc heap (huge-page amplification on Linux; see notes/mem-no-thp.md).
 mimalloc = { version = "0.1.52", features = ["no_thp"] }
 libc = "0.2"
-[dev-dependencies]
-similar = "3"
-
 [features]
 default = ["checker"]
-checker = ["tsrs_compiler/checker"]
+checker = ["tsrs_compiler/checker", "tsrs_execute/checker"]
 # Creation-site counters of checker objects, printed at exit (tsrs_core::sitecount).
-site-counts = ["tsrs_compiler/site-counts"]
+site-counts = ["tsrs_compiler/site-counts", "tsrs_execute/site-counts"]
 # TSRS_WORK_CENSUS=<file>: the work census (docs/DEBUGGING.md).
-work-census = ["tsrs_compiler/work-census"]
+work-census = ["tsrs_compiler/work-census", "tsrs_execute/work-census"]
 # Allocation profile (tsrs_core/alloc-profile); replaces the mimalloc global allocator with the counting one.
-alloc-profile = ["tsrs_core/alloc-profile"]
+alloc-profile = ["tsrs_core/alloc-profile", "tsrs_execute/alloc-profile"]
 # TSRS_ASSIGNMENT_STATS also attributes checker-created types/symbols to files (tsrs_compiler checkerpool_stats.rs).
-assignment-stats = ["tsrs_compiler/assignment-stats"]
+assignment-stats = ["tsrs_compiler/assignment-stats", "tsrs_execute/assignment-stats"]
 
 [[bin]]
 name = "tsrs"

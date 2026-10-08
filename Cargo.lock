@@ -389,7 +389,6 @@ dependencies = [
  "libc",
  "mimalloc",
  "rustc-hash",
- "similar",
  "tsrs_api",
  "tsrs_api_transport",
  "tsrs_ast",
@@ -397,6 +396,7 @@ dependencies = [
  "tsrs_compiler",
  "tsrs_core",
  "tsrs_diagnostics",
+ "tsrs_execute",
  "tsrs_incremental",
  "tsrs_lsp",
  "tsrs_module",
@@ -467,6 +467,22 @@ version = "0.8.0"
 dependencies = [
  "rustc-hash",
  "tsrs_core",
+]
+
+[[package]]
+name = "tsrs_execute"
+version = "0.8.0"
+dependencies = [
+ "libc",
+ "rustc-hash",
+ "similar",
+ "tsrs_ast",
+ "tsrs_compiler",
+ "tsrs_core",
+ "tsrs_diagnostics",
+ "tsrs_incremental",
+ "tsrs_tsoptions",
+ "tsrs_vfs",
 ]
 
 [[package]]
@@ -751,6 +767,20 @@ dependencies = [
  "rayon",
  "rustc-hash",
  "tsrs_core",
+]
+
+[[package]]
+name = "tsrs_wasm"
+version = "0.8.0"
+dependencies = [
+ "tsrs_api",
+ "tsrs_ast",
+ "tsrs_compiler",
+ "tsrs_core",
+ "tsrs_diagnostics",
+ "tsrs_execute",
+ "tsrs_scanner",
+ "tsrs_vfs",
 ]
 
 [[package]]

@@ -12,3 +12,4 @@ bench/.work/
 npm/node_modules/
 npm/tsrs/dist/
 npm/tsrs/tsconfig.tsbuildinfo
+npm/tsrs-wasm/tsrs.wasm

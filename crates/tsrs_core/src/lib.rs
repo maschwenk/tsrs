@@ -4,6 +4,12 @@ pub mod ptr;
 pub mod reserve;
 /// Whether `P<T>` is a 32-bit handle (`cfg(compressed_ptrs)`, see build.rs) rather than a reference.
 pub const COMPRESSED_PTRS: bool = cfg!(compressed_ptrs);
+/// True on targets that cannot start threads (wasm32 without atomics, such as `wasm32-wasip1`, where
+/// `std::thread::spawn` returns `Unsupported`). It gates every place that would spawn even in a single-threaded run:
+/// the rayon worker pool runs on the calling thread, `Program::single_threaded()` is always true, the driver forces
+/// `--singleThreaded` for tsc and `tsc -b`, and `tsc -b` builds and reports on the calling thread. False on native
+/// targets, where the branches it guards fold away.
+pub const NO_THREADS: bool = cfg!(all(target_family = "wasm", not(target_feature = "atomics")));
 #[cfg(feature = "alloc-profile")]
 pub mod alloc_profile;
 pub use ptr::{alloc, alloc_slice, alloc_slice_aligned4, alloc_slice_recycled, alloc_slice_scratch, alloc_str, alloc_str_scratch, alloc_vec, alloc_vec_scratch, alloc_profile_dump, arena_checkpoint, arena_pin, arena_rewindable, census_layout, census_recording, census_reset, census_scrub_none, census_scrub_slack, census_scrub_stack, CensusField, arena_rewind, free_raw, free_slice_ptr, OptionSliceCell, OptionThinSliceCell, PackedStr, PSliceCell, SliceCell, StrCell, SlicePair, StaticSlicePtr, ThinSlice, ThinSliceCell, PKey, PSlot, P, PACK_BITS, SP};

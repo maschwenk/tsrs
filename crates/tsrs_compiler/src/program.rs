@@ -351,9 +351,16 @@ impl Program {
 // exactly, as before (bench/run.py's single-threaded counter uses 1).
 const PARSE_THREAD_CAP: usize = 32;
 
+/// `tsrs_core::NO_THREADS` targets: a one-thread pool on the calling thread (`use_current_thread`), on which
+/// `install`, `par_iter`, `broadcast` and nested scopes run inline. It must be the first rayon use on that thread:
+/// once rayon's global pool has started there, building it fails with "The current thread is already part of
+/// another thread pool", so an embedder calls `worker_pool()` before anything else.
 pub fn worker_pool() -> &'static rayon::ThreadPool {
     static POOL: OnceLock<rayon::ThreadPool> = OnceLock::new();
     POOL.get_or_init(|| {
+        if tsrs_core::NO_THREADS {
+            return rayon::ThreadPoolBuilder::new().num_threads(1).use_current_thread().build().unwrap();
+        }
         let threads = std::env::var("RAYON_NUM_THREADS")
             .ok()
             .and_then(|v| v.parse::<usize>().ok())
@@ -365,7 +372,8 @@ pub fn worker_pool() -> &'static rayon::ThreadPool {
 
 // program.go:305
 pub fn new_program(opts: ProgramOptions) -> &'static Program {
-    let single_threaded = opts.single_threaded.default_if_unknown(opts.config.compiler_options().unwrap().single_threaded).is_true();
+    let single_threaded =
+        tsrs_core::NO_THREADS || opts.single_threaded.default_if_unknown(opts.config.compiler_options().unwrap().single_threaded).is_true();
     let (mut processed, resolution_data, module_resolution_error) = process_all_program_files(&opts, single_threaded);
     let project_reference_file_mapper: &'static projectReferenceFileMapper = processed.project_reference_file_mapper.take().unwrap();
     let processing_diagnostics = std::mem::take(&mut processed.file_include_data.processing_diagnostics);
@@ -801,7 +809,7 @@ impl Program {
 
     // program.go:578
     pub fn single_threaded(&self) -> bool {
-        self.opts.single_threaded.default_if_unknown(self.options().single_threaded).is_true()
+        tsrs_core::NO_THREADS || self.opts.single_threaded.default_if_unknown(self.options().single_threaded).is_true()
     }
 
     // program.go:582

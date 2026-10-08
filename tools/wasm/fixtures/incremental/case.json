@@ -1,0 +1,7 @@
+{ "id": "fixture/incremental", "cwd": ".",
+  "steps": [
+    { "args": ["-p", ".", "--pretty", "false"] },
+    { "args": ["-p", ".", "--pretty", "false"], "write": { "src/a.ts": "export function greet(name: number): string { return \"hello \" + name; }\n" } },
+    { "args": ["-p", ".", "--pretty", "false", "--listFiles"] },
+    { "args": ["-p", ".", "--pretty", "false"], "write": { "src/a.ts": "export function greet(name: string): string { return \"hi \" + name; }\n" } }
+  ] }

@@ -47,7 +47,10 @@ struct SymbolTables {
     lazy: OwnedCell<Option<P<crate::lazylist::LazyNodeList>>>,
 }
 
+#[cfg(target_pointer_width = "64")]
 const _: () = assert!(std::mem::size_of::<Symbol>() == if tsrs_core::COMPRESSED_PTRS { 32 } else { 40 });
+#[cfg(target_pointer_width = "32")]
+const _: () = assert!(std::mem::size_of::<Symbol>() == 32);
 
 /// `parent_or_tables` holds the `SymbolTables` tail.
 const TAG_TABLES: u8 = 1;
@@ -298,7 +301,10 @@ struct SymbolMap {
     extra: ExtraSlot,
 }
 
+#[cfg(target_pointer_width = "64")]
 const _: () = assert!(std::mem::size_of::<SymbolMap>() == 24);
+#[cfg(target_pointer_width = "32")]
+const _: () = assert!(std::mem::size_of::<SymbolMap>() == 16);
 
 /// `Vec<SymbolMapEntry>` with a `u32` length and capacity (16 bytes instead of 24; 3.5M symbol tables on the private monorepo).
 /// Grows like `Vec` (`push` doubles from 4; `reserve_exact` adds exactly).
@@ -540,7 +546,7 @@ impl ExtraSlot {
 
     #[inline]
     fn filter_bits(hash: u32) -> usize {
-        (1usize << (hash & 63)) | (1usize << ((hash >> 6) & 63))
+        (1usize << (hash & (usize::BITS - 1))) | (1usize << ((hash >> 6) & (usize::BITS - 1)))
     }
 
     /// False if no key with this hash is in a table whose slot holds a filter.
@@ -558,6 +564,7 @@ impl ExtraSlot {
     }
 }
 
+#[cfg(target_pointer_width = "64")]
 const _: () = assert!(usize::BITS == 64);
 
 impl Default for ExtraSlot {

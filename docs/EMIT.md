@@ -510,7 +510,7 @@ then-current main:
 - **tsctests (E15).** The Go scenario tables are closures, so `tools/oracle/tsctests/dump.sh` runs the Go tests once
   with a recorder (`runner.patch` + `tsrs_dump.go`) and writes every scenario as JSON: inputs plus the file-system
   ops of every edit, both in the incremental run and replayed from scratch for the non-incremental comparison. The
-  harness (`crates/tsrs_cli/src/tsctests`, a `#[cfg(test)]` module of the binary crate because it drives
+  harness (`crates/tsrs_execute/src/tsctests`, a `#[cfg(test)]` module of the driver crate because it drives
   `execute::command_line_with_testing`) replays them with a fake clock, the FS differ, the readable buildinfo and the
   output sanitizer of `tsctests/sys.go`. Watch and content-mapper scenarios are skipped.
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Dumps the tsc/tsbuild scenarios of Go's execute/tsctests as JSON for the Rust harness
-# (crates/tsrs_cli/src/tsctests, `cargo test --release -p tsrs_cli tsctests`).
+# (crates/tsrs_execute/src/tsctests, `cargo test --release -p tsrs_execute tsctests`).
 #   tools/oracle/tsctests/dump.sh [OUT]   (default OUT: target/tsctests-dump)
 # Applies runner.patch + tsrs_dump.go to ts-ref/tsc/internal/execute/tsctests, runs the Go tests with TSRS_DUMP=OUT,
 # then restores runner.go. Needs Go (GOTOOLCHAIN=auto).

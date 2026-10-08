@@ -285,7 +285,10 @@ struct ValueSymbolLinksTail {
     function_or_constructor_checked: Cell<bool>,
 }
 
+#[cfg(target_pointer_width = "64")]
 const _: () = assert!(std::mem::size_of::<ValueSymbolLinks>() == if tsrs_core::COMPRESSED_PTRS { 16 } else { 24 });
+#[cfg(target_pointer_width = "32")]
+const _: () = assert!(std::mem::size_of::<ValueSymbolLinks>() == 12);
 
 const MODE_MASK: usize = 3;
 const SYNTHETIC: usize = 1;
@@ -701,7 +704,10 @@ impl crate::links::KeyedLinks for TypeNodeLinks {
 }
 
 // The key fills padding with compressed pointers (20 -> 24 bytes); plain pointers: 24 -> 32.
+#[cfg(target_pointer_width = "64")]
 const _: () = assert!(std::mem::size_of::<TypeNodeLinks>() == if tsrs_core::COMPRESSED_PTRS { 24 } else { 32 });
+#[cfg(target_pointer_width = "32")]
+const _: () = assert!(std::mem::size_of::<TypeNodeLinks>() == 16);
 
 #[derive(Default)]
 pub struct ComputedNameNodeLinks {
@@ -757,7 +763,10 @@ impl crate::links::KeyedLinks for SignatureLinks {
 }
 
 // 12 -> 16 bytes, which a `PSlot` (8-aligned with compressed pointers) took anyway; plain pointers: 24 -> 32.
+#[cfg(target_pointer_width = "64")]
 const _: () = assert!(std::mem::size_of::<SignatureLinks>() == if tsrs_core::COMPRESSED_PTRS { 16 } else { 32 });
+#[cfg(target_pointer_width = "32")]
+const _: () = assert!(std::mem::size_of::<SignatureLinks>() == 16);
 
 // Note that for types of different kinds, the numeric values of TypeFlags determine the order
 // computed by the CompareTypes function and therefore the order of constituent types in union types.
@@ -1969,8 +1978,14 @@ struct StructuredMembers {
     count_or_index_infos: CountOrIndexInfos,
 }
 
+#[cfg(target_pointer_width = "64")]
 const _: () = assert!(std::mem::size_of::<StructuredType>() == if tsrs_core::COMPRESSED_PTRS { 4 } else { 8 });
+#[cfg(target_pointer_width = "32")]
+const _: () = assert!(std::mem::size_of::<StructuredType>() == 4);
+#[cfg(target_pointer_width = "64")]
 const _: () = assert!(std::mem::size_of::<StructuredMembers>() == 32);
+#[cfg(target_pointer_width = "32")]
+const _: () = assert!(std::mem::size_of::<StructuredMembers>() == 24);
 
 /// Go's `CallSignatureCount` and `IndexInfos` in one word: `count << 1 | 1` while no non-empty index info list was
 /// set (the list reads empty, `&[]`), else a pointer to an `IndexInfosTail` holding both.
@@ -2485,7 +2500,10 @@ pub struct UnionType {
 }
 embeds!(UnionType, union_or_intersection_type, UnionOrIntersectionType);
 
+#[cfg(target_pointer_width = "64")]
 const _: () = assert!(std::mem::size_of::<UnionType>() == 24);
+#[cfg(target_pointer_width = "32")]
+const _: () = assert!(std::mem::size_of::<UnionType>() == 16);
 
 impl UnionType {
     #[inline]
@@ -2551,7 +2569,10 @@ pub struct IntersectionType {
 }
 embeds!(IntersectionType, union_or_intersection_type, UnionOrIntersectionType);
 
+#[cfg(target_pointer_width = "64")]
 const _: () = assert!(std::mem::size_of::<IntersectionType>() == 24);
+#[cfg(target_pointer_width = "32")]
+const _: () = assert!(std::mem::size_of::<IntersectionType>() == 16);
 
 impl Default for IntersectionType {
     fn default() -> Self {
@@ -2791,7 +2812,10 @@ pub struct Signature {
     rare: SignatureRareWord,
 }
 
+#[cfg(target_pointer_width = "64")]
 const _: () = assert!(std::mem::size_of::<Signature>() == if tsrs_core::COMPRESSED_PTRS { 56 } else { 72 });
+#[cfg(target_pointer_width = "32")]
+const _: () = assert!(std::mem::size_of::<Signature>() == 52);
 
 #[derive(Default)]
 struct SignatureRare {

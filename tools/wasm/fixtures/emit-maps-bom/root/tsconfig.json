@@ -1,0 +1,1 @@
+{ "compilerOptions": { "rootDir": "src", "outDir": "out", "declaration": true, "sourceMap": true, "declarationMap": true, "emitBOM": true, "target": "es2017" }, "include": ["src"] }
