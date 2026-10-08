@@ -53,8 +53,9 @@ builds); the tsserver/LSP/startup scenarios (not `tsc` runs). All six included p
 
 The suite has one application-shaped workload (`mui-docs`), and none of its projects leans on schema-validation
 types. Application projects include four large applications (three Next.js/React apps built on Zod and tested with Vitest, and an
-Effect server), plus Bun's published benchmark set (mikro-orm, next.js root and packages/next, storybook, nuxt, playwright)
-and one more popular library (drizzle-orm). Each is pinned to one commit.
+Effect server), plus Bun's published benchmark set (mikro-orm, next.js root and packages/next, storybook, nuxt, playwright),
+one more popular library (drizzle-orm), and ten projects from the real-world repositories `bun check` was validated on
+([oven-sh/bun#44361](https://github.com/oven-sh/bun/pull/44361), "Real projects"). Each is pinned to one commit.
 
 | project | repository @ commit | `-p` | files | workload |
 | --- | --- | --- | ---: | --- |
@@ -71,6 +72,17 @@ and one more popular library (drizzle-orm). Each is pinned to one commit.
 | `playwright` | microsoft/playwright @ `d469960` | `.` | ~1,515 | Playwright testing framework (broader tsconfig than Bun's 706; same commit) |
 | **Other popular libraries** | | | | |
 | `drizzle-orm` | drizzle-team/drizzle-orm @ `15454db` | `.` | ~943 | Drizzle ORM (large popular project) |
+| **Bun check real-world set** | | | | |
+| `effect` | Effect-TS/effect @ `48ed32f` | `tsconfig.bench.json` | 3,323 | Effect 4: every package's src, tests and type tests in one program |
+| `type-fest` | sindresorhus/type-fest @ `e9f614f` | `tsconfig.json` | 571 | type-level utility library and its type tests (11.5M instantiations in tsgo) |
+| `zod` | colinhacks/zod @ `0b216ef` | `tsconfig.json` | 2,286 | Zod 4 and its tests: schema inference types |
+| `arktype` | arktypeio/arktype @ `36dfe4f` | `tsconfig.json` | 1,024 | template-literal string parsing at the type level |
+| `ai-sdk` | vercel/ai @ `5028fa4` | `packages/ai/tsconfig.bench.json` | 2,266 | Vercel AI SDK core with 12 workspace packages from source; zod / Standard Schema tool types |
+| `nest` | nestjs/nest @ `f4b5ff4` | `tsconfig.spec.json` | 3,380 | NestJS packages and tests: decorators, `emitDecoratorMetadata`; 262 errors |
+| `excalidraw` | excalidraw/excalidraw @ `4c00f31` | `.` | 1,498 | React + DOM application |
+| `vitest` | vitest-dev/vitest @ `3e3624c` | `tsconfig.check.json` | 2,688 | the repository's own type-check config, unmodified |
+| `rxjs` | ReactiveX/rxjs @ `54796b3` | `packages/rxjs/tsconfig.bench.json` | 809 | RxJS 9 beta sources and tests (tests not yet ported to its new `Observable`: 6,158 errors); `pipe` overload generics |
+| `svelte` | sveltejs/svelte @ `707c281` | `packages/svelte` | 3,579 | `allowJs` + `checkJs`: JavaScript with JSDoc types |
 
 **Original application projects:** Each install command does what the app's own `typecheck` needs before `tsc` runs, with package scripts off:
 
@@ -97,6 +109,21 @@ and one more popular library (drizzle-orm). Each is pinned to one commit.
 - `playwright`: npm ci.
 - `drizzle-orm`: pnpm install.
 
+**Bun check real-world set:** chosen from the 72 repositories of the pull request that added `bun check`, for being large
+(thousands of files), heavy at the type level (Effect, type-fest, zod, arktype, the AI SDK, RxJS's `pipe`) or rich in
+errors (nest, rxjs), and for a spread of tsrs's lead: excalidraw is a project where tsrs is slower than `bun check` and
+uses more memory than tsgo, type-fest one where `bun check` uses about half of tsrs's memory. Each install is the
+package manager's frozen install without scripts and nothing is built: where a workspace package's `exports` point
+at a `dist/` that does not exist yet, the overlay maps it to its sources with `paths`.
+
+- `effect`, `arktype`, `ai-sdk`, `vitest`, `rxjs`, `svelte`: pnpm install with `--frozen-lockfile`.
+- `type-fest`: `npm ci` with the overlay's `package-lock.json`: the repository has no lockfile (its `.npmrc` turns
+  lockfiles off), so the overlay pins the devDependencies resolved on 2026-10-08 at the pinned commit.
+- `zod`: pnpm install with the overlay's `pnpm-workspace.yaml` and `pnpm-lock.yaml`: the repository's package
+  manager (`nub`) is not on npm and its lockfile is not one pnpm installs frozen.
+- `nest`: `npm ci --legacy-peer-deps` (plain `npm ci` stops at a peer-dependency conflict).
+- `excalidraw`: `yarn@1.22.22 install --frozen-lockfile`.
+
 **Overlays.** cal.diy and Formbricks still compile with TypeScript 5.9, whose tsconfig options TypeScript 7 removed
 (`baseUrl`, `moduleResolution: node`, `target: es5`); unmodified, both stop at config errors before checking a
 file. `bench/overlays/<name>/` holds the minimal TypeScript 7 replacements, copied over the checkout before the
@@ -104,13 +131,22 @@ install: `baseUrl` becomes a `"*": ["./*"]` path, `node` resolution becomes `bun
 cal.diy's generated tRPC declarations import `@trpc/server/dist/...`, which `bundler` resolution blocks through the
 package's `exports`, so a `paths` entry maps it to the package directory as `node` resolution did (without it,
 tsgo reports 727 errors instead of 136). Formbricks also gets the `next-env.d.ts` Next.js writes on `next dev`
-(image module types). The overlay's content hash is part of the checkout marker and the CI cache key.
+(image module types). Overlays of the Bun check real-world set: `effect/tsconfig.bench.json` checks
+`tsconfig.tests.json` (every package's sources, tests and type tests, workspace packages mapped to their sources by
+`paths`) without `composite` and `references` (`composite` with `--incremental false` is TS6379 and checks nothing);
+`ai-sdk` and `rxjs` add a `tsconfig.bench.json` that maps the workspace packages to their sources (vercel/ai's
+`tsconfig.build.json` otherwise resolves them to `dist/`: 540 TS2307; rxjs: 22,030 errors instead of 6,158);
+`excalidraw/tsconfig.json` is the repository's with `baseUrl` removed (its `paths` are already relative); `zod` and
+`type-fest` carry lockfiles (above). The overlay's content hash is part of the checkout marker and the CI cache key.
 
 **Errors.** The applications are not error-free under TypeScript 7 with these settings (cal.diy: 136, mostly test
 matchers and untyped resolver modules). As with vscode and webpack, the count is a correctness signal between the two
 compilers. On 2026-10-06 (local, macOS arm64), tsgo 7.0.2 and tsrs reported identical errors on cal.diy (136) and
 Formbricks (0); on Supabase Studio (0 vs 9) and t3code (5 vs 6), `typescript@7.1.0-dev.20260930.4` reported exactly
-tsrs's errors (`(ref N)` in the table).
+tsrs's errors (`(ref N)` in the table). On 2026-10-08 (local), the Bun check real-world set: tsgo 7.0.2 and tsrs agree
+on type-fest, zod, arktype, nest, excalidraw, vitest and rxjs, and the reference reports exactly tsrs's errors on
+effect (9 vs 12), ai-sdk (0 vs 1) and svelte (2 vs 5). Two candidates were left out because tsrs's errors differ from the
+reference's at 4 and more checkers (TanStack/router, sequelize): they can be added once that is fixed.
 
 ## What is measured
 
@@ -123,7 +159,9 @@ tsrs's errors (`(ref N)` in the table).
   in `run.py`).
 - `bun check` (`--bun <binary>`, Bun 1.4.3 canary or later) is a third column in every mode it is measured in: `bun check
   -p <project> --no-pretty --all`, with `--threads N` where tsgo and tsrs get `--checkers N` (bun's only thread knob,
-  and it caps every thread). CI measures it on the 64-vCPU machine. Its error count is recorded, not compared: bun check
+  and it caps every thread). bun runs in an empty directory outside the checkout with an absolute `-p`: in a
+  directory whose `package.json` has a `check` script (vercel/ai's, svelte's), `bun check` runs that script instead.
+  CI measures it on the 64-vCPU machine. Its error count is recorded, not compared: bun check
   follows TypeScript 7.0 (on vscode its errors equal tsgo 7.0.2's line for line), tsrs the 7.1-dev commit it ports.
   `--noEmit` instead of the suite's `--outdir` keeps the measurement to type checking; `--pretty
   false` makes the error lines parseable.
@@ -147,7 +185,9 @@ tsrs's errors (`(ref N)` in the table).
 - Bold in the speedup and memory columns marks a notable tsrs win: at least 5x faster, or at least 4x more memory
   efficient (tsgo's peak memory / tsrs's; `NOTABLE_SPEEDUP`, `NOTABLE_MEMORY` in `run.py`; compared at the printed two
   decimals). The memory columns are always `other tool's peak / tsrs's peak`, so above 1x is a tsrs win.
-- Errors: every `error TSxxxx` line is counted, and the (file, line, col, code) lists are compared. A differing count is
+- Errors: every `error TSxxxx` line is counted, and the (file, line, col, code) lists are compared (an error in a
+  default library file counts as `lib/<file>`: tsrs prints its embedded copy as `bundled:///libs/<file>`, tsgo the
+  file in its npm package). A differing count is
   shown as **MISMATCH** in the table and a differing location set as "(locations differ)" — a correctness signal,
   not a performance one.
 - tsrs ports a TypeScript 7.1-dev commit (`b85298b6`, `Cargo.toml`), not 7.0.2, so some differences are TypeScript
