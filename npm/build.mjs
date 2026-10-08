@@ -4,6 +4,7 @@
 //
 //   node npm/build.mjs --binary aarch64-apple-darwin=target/release/tsrs --pack
 //   node npm/build.mjs --artifacts dir/ --pack      # dir/<target triple>/tsrs[.exe], as the release workflow lays out
+//   node npm/build.mjs --wasm npm/tsrs-wasm/tsrs.wasm --pack   # the WebAssembly package (tools/wasm/build.sh)
 //   node npm/build.mjs --print-version          # also --print-typescript-commit, --check-tag <tag>
 //   node npm/build.mjs --sdk-only               # just compile the JS API (npm/tsrs/src -> npm/tsrs/dist)
 //
@@ -12,8 +13,9 @@
 // build-only compiler in npm/package.json (`npm ci --prefix npm` first; `--tsc <path>` to use another TypeScript 7 tsc).
 //
 // The package name comes from npm/tsrs/package.json; platform packages are `<name>-<os>-<cpu>`. The version is
-// `<workspace version>-ts<[workspace.metadata.typescript] version>` from the workspace Cargo.toml. The main package
-// lists exactly the platforms given here, so a release never points at a platform package that was not published.
+// `<workspace version>-ts<[workspace.metadata.typescript] version>` from the workspace Cargo.toml, for every package
+// including `@maschwenk/tsrs-wasm` (npm/tsrs-wasm). The main package lists exactly the platforms given here, so a
+// release never points at a platform package that was not published.
 
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -36,7 +38,7 @@ function usage(message) {
     if (message) console.error(`error: ${message}\n`);
     console.error(
         "usage: node npm/build.mjs [--binary <triple>=<path>]... [--artifacts <dir>] [--out <dir>] [--pack] [--tsc <path>]\n" +
-            "                          [--sdk-only]\n" +
+            "                          [--wasm <tsrs.wasm>] [--sdk-only]\n" +
             "                          [--check-tag <git tag>] [--print-version | --print-typescript-commit]\n" +
             `triples: ${Object.keys(TARGETS).join(", ")}`,
     );
@@ -66,6 +68,9 @@ function parseArgs(argv) {
                 }
                 break;
             }
+            case "--wasm":
+                opts.wasm = path.resolve(value());
+                break;
             case "--out":
                 opts.out = path.resolve(value());
                 break;
@@ -182,6 +187,34 @@ function stripSourceConditions(value) {
     );
 }
 
+// `@maschwenk/tsrs-wasm`: npm/tsrs-wasm's published files, the module tools/wasm/build.sh wrote, LICENSE and NOTICE,
+// at the native packages' version (the module's `--version` prints the same, from crates/tsrs_execute/build.rs).
+function stageWasm(module, out, versions, license, notice) {
+    const srcDir = path.join(npmDir, "tsrs-wasm");
+    const template = JSON.parse(fs.readFileSync(path.join(srcDir, "package.json"), "utf8"));
+    const bytes = fs.readFileSync(module);
+    if (bytes.subarray(0, 4).toString("latin1") !== "\0asm") throw new Error(`not a WebAssembly module: ${module}`);
+    const dir = path.join(out, template.name.split("/").pop());
+    fs.mkdirSync(dir, { recursive: true });
+    for (const entry of ["README.md", ...template.files]) {
+        if (entry === "tsrs.wasm" || entry === "NOTICE.txt") continue;
+        // A missing file throws: the package would install but fail to load.
+        const from = path.join(srcDir, entry);
+        if (fs.statSync(from).isDirectory()) copyDir(from, path.join(dir, entry));
+        else fs.copyFileSync(from, path.join(dir, entry));
+    }
+    for (const bin of Object.values(template.bin ?? {})) fs.chmodSync(path.join(dir, bin), 0o755);
+    fs.writeFileSync(path.join(dir, "tsrs.wasm"), bytes);
+    fs.writeFileSync(path.join(dir, "LICENSE"), license);
+    fs.writeFileSync(path.join(dir, "NOTICE.txt"), notice);
+    writeJson(path.join(dir, "package.json"), {
+        ...template,
+        version: versions.version,
+        tsrs: { typescriptVersion: versions.typescriptVersion, typescriptCommit: versions.typescriptCommit },
+    });
+    return dir;
+}
+
 function npmPack(dir, out) {
     const stdout = execFileSync("npm", ["pack", "--json", "--pack-destination", out], {
         cwd: dir,
@@ -207,13 +240,13 @@ function main() {
         console.log(versions[opts.print]);
         return;
     }
-    if (opts.checkTag !== undefined && opts.binaries.size === 0) return;
+    if (opts.checkTag !== undefined && opts.binaries.size === 0 && !opts.wasm) return;
     if (opts.sdkOnly) {
         buildSdk(opts.tsc);
         return;
     }
-    if (opts.binaries.size === 0) usage("no binaries given (--binary or --artifacts)");
-    buildSdk(opts.tsc);
+    if (opts.binaries.size === 0 && !opts.wasm) usage("no binaries given (--binary, --artifacts or --wasm)");
+    if (opts.binaries.size > 0) buildSdk(opts.tsc);
 
     const template = JSON.parse(fs.readFileSync(path.join(npmDir, "tsrs", "package.json"), "utf8"));
     const name = template.name;
@@ -269,26 +302,30 @@ function main() {
         packageDirs.push(dir);
     }
 
-    const mainDir = path.join(opts.out, baseName);
-    // Only what the package's `files` publishes (plus package.json/README); the .ts sources and tests stay behind.
-    fs.mkdirSync(mainDir, { recursive: true });
-    for (const entry of ["README.md", "UPSTREAM.json", ...template.files]) {
-        const from = path.join(npmDir, "tsrs", entry);
-        if (!fs.existsSync(from)) continue;
-        if (fs.statSync(from).isDirectory()) copyDir(from, path.join(mainDir, entry));
-        else fs.copyFileSync(from, path.join(mainDir, entry));
+    if (opts.binaries.size > 0) {
+        const mainDir = path.join(opts.out, baseName);
+        // Only what the package's `files` publishes (plus package.json/README); the .ts sources and tests stay behind.
+        fs.mkdirSync(mainDir, { recursive: true });
+        for (const entry of ["README.md", "UPSTREAM.json", ...template.files]) {
+            const from = path.join(npmDir, "tsrs", entry);
+            if (!fs.existsSync(from)) continue;
+            if (fs.statSync(from).isDirectory()) copyDir(from, path.join(mainDir, entry));
+            else fs.copyFileSync(from, path.join(mainDir, entry));
+        }
+        fs.chmodSync(path.join(mainDir, "bin", "tsrs"), 0o755);
+        fs.writeFileSync(path.join(mainDir, "LICENSE"), license);
+        fs.writeFileSync(path.join(mainDir, "NOTICE.txt"), notice);
+        writeJson(path.join(mainDir, "package.json"), {
+            ...stripSourceConditions(template),
+            version,
+            tsrs: { typescriptVersion: versions.typescriptVersion, typescriptCommit: versions.typescriptCommit },
+            optionalDependencies,
+        });
+        // Platform packages first: they must be published before the main package that depends on them.
+        packageDirs.push(mainDir);
     }
-    fs.chmodSync(path.join(mainDir, "bin", "tsrs"), 0o755);
-    fs.writeFileSync(path.join(mainDir, "LICENSE"), license);
-    fs.writeFileSync(path.join(mainDir, "NOTICE.txt"), notice);
-    writeJson(path.join(mainDir, "package.json"), {
-        ...stripSourceConditions(template),
-        version,
-        tsrs: { typescriptVersion: versions.typescriptVersion, typescriptCommit: versions.typescriptCommit },
-        optionalDependencies,
-    });
-    // Platform packages first: they must be published before the main package that depends on them.
-    packageDirs.push(mainDir);
+    // The WebAssembly package depends on nothing, so it goes last.
+    if (opts.wasm) packageDirs.push(stageWasm(opts.wasm, opts.out, versions, license, notice));
 
     console.log(`version ${version}`);
     const manifest = [];

@@ -45,7 +45,7 @@ runs ([`bench/results/compare/2026-10-07-ae33f10b1b8b-64t.md`](bench/results/com
 Source for the per-project figures: [`bench/results/2026-10-07-6db7beec77d9.md`](bench/results/2026-10-07-6db7beec77d9.md),
 the table below, whose single-publish medians move by a few percent between runs of the same code (the 20-run mean
 above is the steadier headline; the single-threaded instruction counts in `bench/results/` are the deterministic measure).
-This code is in release 0.7.0 and later (0.6.0 and earlier predate it; 0.8.0 adds two instruction cuts that leave it within noise); to reproduce the numbers from source, build
+This code is in release 0.7.0 and later (0.6.0 and earlier predate it; 0.8.0 adds two instruction cuts that leave it within noise; 0.9.0 uses 2-12% less peak memory at the default checker count at the same speed); to reproduce the numbers from source, build
 `main` with the PGO `dist` profile ([Build from source](#build-from-source)).
 
 The table below is generated: the bench workflow rewrites it on every push to `main`, and `bench/results/` keeps every
@@ -181,7 +181,7 @@ against tsgo built from the same pinned commit.
 | Content mappers, automatic type acquisition, telemetry, pprof requests (language server) | no | not ported |
 | `--api` (the IPC server behind TypeScript 7's Node API: `unstable/sync` MessagePack, `unstable/async` JSON-RPC) | yes, with gaps | pinned upstream client suites against a release build of the integration branch: `test/sync/api.test.ts` 339/339, `test/async/api.test.ts` 348/348, `ast` 111/111, `astnav` 4/4 + 4/4, `api-generators` 43/43; suite passes are not byte-level response parity. Not implemented: CPU/heap profiling requests; `getCurrentLanguageServerSnapshot` returns the standalone-session error (no LSP-attached API session); no Windows named pipes. Per-method status in `docs/NODE_API.md` |
 | Prebuilt binaries | macOS arm64, Linux x64/arm64 (glibc) | no Windows or Intel macOS binary |
-| WebAssembly build (`@maschwenk/tsrs-wasm`: Node, browsers) | yes, single-threaded, not released | byte-identical to native `--singleThreaded` on 1,998 of 1,998 runnable cases of a 2,000-case conformance sample (also 1,993 of 1,993 over in-memory files), 25/25 regressions, 4 bench projects and emit on 2; 2.58 MB gzip; warm runs 1.8-2.3x native single-threaded on the bench projects (notes/wasm-build.md) |
+| WebAssembly build (`@maschwenk/tsrs-wasm`: Node, browsers) | yes, single-threaded, released from 0.9.0 | byte-identical to native `--singleThreaded` on 1,998 of 1,998 runnable cases of a 2,000-case conformance sample (also 1,993 of 1,993 over in-memory files), 25/25 regressions, 4 bench projects and emit on 2; 2.58 MB gzip; warm runs 1.8-2.3x native single-threaded on the bench projects (notes/wasm-build.md) |
 
 ## Options and defaults
 
@@ -255,7 +255,13 @@ design, the test tables and the known gaps.
 
 `crates/tsrs_wasm` builds tsc as a `wasm32-wasip1` module over a host file system, and `npm/tsrs-wasm` runs it in
 Node (a `tsrs-wasm` command on the real file system, or in-memory files with JSON diagnostics) and in browsers
-(a Web Worker over in-memory files). It is single-threaded and not published yet.
+(a Web Worker over in-memory files). It is single-threaded, needs Node 22 or later, and is on npm from 0.9.0:
+
+```sh
+npx -y @maschwenk/tsrs-wasm -p .                            # tsc on the real file system, in WebAssembly
+```
+
+From source:
 
 ```sh
 rustup target add wasm32-wasip1 && brew install binaryen   # wasm-opt

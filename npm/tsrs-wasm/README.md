@@ -3,19 +3,23 @@
 tsrs (a Rust port of the TypeScript 7 compiler) built as a WebAssembly module, with a small host for Node and
 browsers. It runs `tsc` single-threaded; its output is byte-identical to native `tsrs --singleThreaded` on the
 differential gate in the repository (`tools/wasm/diff.mjs`; numbers in
-[notes/wasm-build.md](../../notes/wasm-build.md)).
-
-**Not published yet.** Build it from the repository: `tools/wasm/build.sh` writes `npm/tsrs-wasm/tsrs.wasm`.
+[notes/wasm-build.md](https://github.com/maschwenk/tsrs/blob/main/notes/wasm-build.md)). The package version names the
+TypeScript commit it ports, as `@maschwenk/tsrs`'s does: `0.9.0-ts7.1.0-dev.20260929` is tsrs 0.9.0 following
+TypeScript `7.1.0-dev.20260929`.
 
 ## Command line (Node 22+)
 
 ```
-node bin/tsrs-wasm.js -p tsconfig.json       # or `tsrs-wasm` once installed
+npx -y @maschwenk/tsrs-wasm -p .             # or `npm i -D @maschwenk/tsrs-wasm`, then `tsrs-wasm -p .`
+npx -y @maschwenk/tsrs-wasm --version
 ```
 
 It reads and writes the real file system, prints what `tsc` prints and exits with its status. A crash (a panic, or a
 trap such as a stack overflow or running out of memory) exits with 5 and a message on stderr; tsc's own statuses are
 0-4.
+
+From a checkout of the repository, `tools/wasm/build.sh` writes `npm/tsrs-wasm/tsrs.wasm` and
+`node npm/tsrs-wasm/bin/tsrs-wasm.js -p .` runs it.
 
 ## API
 

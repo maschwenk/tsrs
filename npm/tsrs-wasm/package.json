@@ -1,6 +1,6 @@
 {
     "name": "@maschwenk/tsrs-wasm",
-    "version": "0.8.0",
+    "version": "0.0.0-set-by-npm-build",
     "license": "Apache-2.0",
     "description": "tsrs (a Rust port of the TypeScript 7 compiler) as a WebAssembly module: tsc for Node and browsers, single-threaded",
     "keywords": ["TypeScript", "tsc", "typecheck", "wasm", "webassembly", "rust", "compiler"],
@@ -21,7 +21,7 @@
         },
         "./tsrs.wasm": "./tsrs.wasm"
     },
-    "files": ["bin", "core.js", "core.d.ts", "node.js", "node-run.js", "node-worker.js", "node-fs.js", "browser.js", "index.d.ts", "tsrs.wasm", "README.md"],
+    "files": ["bin", "core.js", "core.d.ts", "node.js", "node-run.js", "node-worker.js", "node-fs.js", "browser.js", "index.d.ts", "tsrs.wasm", "README.md", "NOTICE.txt"],
     "scripts": {
         "test": "node --test test/*.test.mjs"
     }
