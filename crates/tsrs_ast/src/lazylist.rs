@@ -32,6 +32,9 @@ pub const UNBOUND: u8 = 2;
 pub const FORCING: u8 = 3;
 pub const DONE: u8 = 4;
 
+/// `tsrs_parser::ParsingContext::ClassMembers as u8` (checked there).
+pub const CLASS_MEMBERS: u8 = 5;
+
 /// The slice a lazy `NodeList`'s long-form `ThinSlice` reads (`LazyNodeList::head`); its data pointer tells a lazy
 /// list from a long one.
 static LAZY_HEAD_DATA: [P<Node>; 0] = [];
@@ -157,6 +160,13 @@ impl LazyNodeList {
     pub(crate) unsafe fn from_head(head: &'static &'static [P<Node>]) -> &'static LazyNodeList {
         // SAFETY: `head` is the first field of a `repr(C)` `LazyNodeList` (this function's contract).
         unsafe { &*(head as *const &'static [P<Node>] as *const LazyNodeList) }
+    }
+
+    /// Whether binding the list adds to the owner symbol's `exports` (static members of a class) as well as to its
+    /// `members`. `tsrs_parser`'s `ParsingContext::ClassMembers` is 5.
+    #[inline]
+    pub fn fills_exports(&self) -> bool {
+        self.parsing_context == CLASS_MEMBERS
     }
 
     #[inline]

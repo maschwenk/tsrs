@@ -3006,6 +3006,8 @@ fn census_disqualifiers(nodes: &[P<Node>]) -> u8 {
     bits
 }
 
+const _: () = assert!(ParsingContext::ClassMembers as u8 == tsrs_ast::lazylist::CLASS_MEMBERS);
+
 static LAZY_DTS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 /// tsrs-only: parse the member lists of declaration files lazily from now on (the CLI with `skipLibCheck`; tsrs_ast

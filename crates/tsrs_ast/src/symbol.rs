@@ -178,7 +178,9 @@ impl Symbol {
         tsrs_core::lazydts_census::mark_owner(self as *const Symbol as usize, true);
         let t = self.tables()?;
         if let Some(lazy) = t.lazy.get() {
-            lazy.ensure();
+            if lazy.fills_exports() {
+                lazy.ensure();
+            }
         }
         t.exports.get()
     }

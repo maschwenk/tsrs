@@ -2975,14 +2975,16 @@ impl Binder {
     }
 
     pub(crate) fn add_declaration_to_symbol(&mut self, symbol: P<Symbol>, node: P<Node>, symbol_flags: SymbolFlags) {
-        // tsrs-only (`bind_lazy_member_list`): a declaration that fills the symbol's members or exports (its member list,
-        // type parameters, namespace body or enum members) merges into it; a value or function merge fills neither.
+        // tsrs-only (`bind_lazy_member_list`): a declaration that fills a table the deferred list fills merges into the
+        // symbol: an interface or class fills `members` (type parameters, members), a namespace or enum fills
+        // `exports`, which only a class's list fills too (static members). Value and function merges fill neither.
         if let Some(lazy) = symbol.lazy_list() {
             if lazy.state() == lazylist::DEFERRED
-                && matches!(
-                    node.kind(),
-                    Kind::InterfaceDeclaration | Kind::ClassDeclaration | Kind::ClassExpression | Kind::ModuleDeclaration | Kind::EnumDeclaration
-                )
+                && match node.kind() {
+                    Kind::InterfaceDeclaration | Kind::ClassDeclaration | Kind::ClassExpression => true,
+                    Kind::ModuleDeclaration | Kind::EnumDeclaration => lazy.fills_exports(),
+                    _ => false,
+                }
             {
                 self.force_pending_lazy_list(lazy.get());
             }
