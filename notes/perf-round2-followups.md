@@ -102,6 +102,9 @@ pointer compression costs about +4.9% instructions and took back most of the che
 
 ## Measured and rejected (do not redo)
 
+- A type graph shared by the checker threads (frozen seed + forks; notes/spike-shared-graph.md, branch
+  `spike/shared-graph`, PR 213 closed): exact in every run, but on the 16-vCPU Linux runner peak -5..-10% at the
+  default 8 checkers for +6..+18% wall (the serial seed). Revisit only with a seed that costs no wall time.
 - Checking a relation without reporting first and elaborating only on failure, as bun does
   (notes/perf-excalidraw-typefest.md): on excalidraw at 9 checkers, 501 -> 379 MiB after the deferred constraint
   check. Not exact against tsgo: the reporting run spends more of the relation complexity budget, so a
