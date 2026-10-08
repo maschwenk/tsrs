@@ -191,9 +191,8 @@ fn run_work_group(single_threaded: bool, count: usize, task: impl Fn(usize) + Sy
                     .spawn_scoped(s, move || {
                         tsrs_ast::use_id_blocks();
                         task(i);
-                        if tsrs_core::memsplit::slack("handoff") {
-                            tsrs_core::ptr::release_own_arena();
-                        }
+                        // The next pass's thread (or checker) continues in this thread's arena.
+                        tsrs_core::ptr::release_own_arena();
                     })
                     .expect("failed to spawn checker thread")
             })
@@ -572,28 +571,11 @@ impl checkerPool {
                 program.bind_source_files();
                 tsrs_core::ptr::shared_check::freeze_shared_objects();
             }
-            // TSRS_SLACK experiments (notes/mem-linux-residency-32.md): the parse pool gives back its slack.
-            let (trim_arena, collect_heap) = (tsrs_core::memsplit::slack("parse-arena"), tsrs_core::memsplit::slack("parse-heap"));
-            let handoff = tsrs_core::memsplit::slack("handoff");
-            if (trim_arena || collect_heap || handoff) && !self.single_threaded {
-                let trimmed: usize = crate::program::worker_pool()
-                    .broadcast(|_| {
-                        let t = if trim_arena { tsrs_core::arena::trim_own_arena_tail() } else { 0 };
-                        if collect_heap {
-                            tsrs_core::memsplit::heap_collect(true);
-                        }
-                        if handoff {
-                            tsrs_core::ptr::release_own_arena();
-                        }
-                        t
-                    })
-                    .into_iter()
-                    .sum();
-                if tsrs_core::memsplit::enabled() {
-                    eprintln!("tsrs slack: parse pool trimmed {:.1} MiB of arena tails", trimmed as f64 / f64::from(1 << 20));
-                }
-            }
             tsrs_core::memsplit::report("parse end");
+            // The parse workers are done allocating: the checker threads continue in their arenas.
+            if !self.single_threaded {
+                crate::program::worker_pool().broadcast(|_| tsrs_core::ptr::release_own_arena());
+            }
             let create_and_assign = || {
                 let create_start = std::time::Instant::now();
                 #[cfg(feature = "checker")]
@@ -805,20 +787,17 @@ impl checkerPool {
                 *times[checker_idx].lock().unwrap() = (start.elapsed().as_secs_f64(), count);
                 *cpu[checker_idx].lock().unwrap() = thread_cpu_seconds() - cpu_start;
             }
-            drop(guard);
+            // Memory peaks at the end of the type-check pass, while the last checkers still run: one that is done gives
+            // back the resident, never used end of its arena chunk.
             if allow_steal && !single {
-                if tsrs_core::memsplit::slack("check-arena") {
-                    tsrs_core::arena::trim_own_arena_tail();
-                }
-                if tsrs_core::memsplit::slack("check-heap") {
-                    tsrs_core::memsplit::heap_collect(true);
-                }
+                tsrs_core::arena::trim_own_arena_tail();
             }
             if let Some(barrier) = &mem_split {
+                drop(guard);
                 tsrs_core::memsplit::note_own_stack();
                 if barrier.wait().is_leader() {
                     tsrs_core::memsplit::report("check end");
-                    if tsrs_core::memsplit::slack("report-purge") {
+                    if tsrs_core::memsplit::purge_after_check() {
                         tsrs_core::memsplit::heap_collect(true);
                         tsrs_core::memsplit::report("check end, after mi_collect(true)");
                     }

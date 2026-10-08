@@ -1,4 +1,4 @@
-//! `TSRS_MEM_SPLIT=1` (debug stat, any build): splits the resident memory at a few points of a run into the arena's
+//! `TSRS_MEM_SPLIT=1` (debug stat, any build; `purge` also purges the heap after `check end`): splits the resident memory at a few points of a run into the arena's
 //! used bytes, the resident but unused parts of the thread arenas' chunks, the allocator heap's live blocks and the
 //! rest it keeps, thread stacks and file-backed pages, and prints one block per point on stderr
 //! (notes/mem-linux-residency-32.md). The points: `parse end` (the program is parsed and bound, before checker
@@ -10,10 +10,25 @@ use std::sync::{Mutex, OnceLock};
 
 use crate::arena::Arena;
 
-/// Whether `TSRS_MEM_SPLIT=1`. Read once.
+fn mode() -> u8 {
+    static MODE: OnceLock<u8> = OnceLock::new();
+    *MODE.get_or_init(|| match std::env::var("TSRS_MEM_SPLIT").as_deref() {
+        Ok("1") => 1,
+        Ok("purge") => 2,
+        _ => 0,
+    })
+}
+
+/// Whether `TSRS_MEM_SPLIT` is `1` or `purge`. Read once.
 pub fn enabled() -> bool {
-    static ON: OnceLock<bool> = OnceLock::new();
-    *ON.get_or_init(|| std::env::var("TSRS_MEM_SPLIT").is_ok_and(|v| v == "1"))
+    mode() != 0
+}
+
+/// `TSRS_MEM_SPLIT=purge`: after the `check end` report, the allocator purges every arena's freed memory
+/// (`mi_collect(true)`) and the split is printed again, which shows how much of the heap's resident rest is freed
+/// memory not yet given back.
+pub fn purge_after_check() -> bool {
+    mode() == 2
 }
 
 struct ArenaRef {
@@ -64,15 +79,6 @@ pub fn heap_collect(force: bool) {
     if let Some(f) = HEAP_COLLECT.get() {
         f(force);
     }
-}
-
-/// `TSRS_SLACK` (experiments for notes/mem-linux-residency-32.md): a comma-separated list of give-backs to make.
-pub fn slack(what: &str) -> bool {
-    static WORDS: OnceLock<Vec<String>> = OnceLock::new();
-    WORDS
-        .get_or_init(|| std::env::var("TSRS_SLACK").unwrap_or_default().split(',').map(|w| w.trim().to_string()).filter(|w| !w.is_empty()).collect())
-        .iter()
-        .any(|w| w == what)
 }
 
 /// Resident bytes of the stacks of the threads parked at the `check end` point, measured by each thread itself

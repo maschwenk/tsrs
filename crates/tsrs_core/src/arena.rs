@@ -1020,7 +1020,7 @@ impl Drop for RegionScope {
 }
 
 /// Thread arenas given back by threads that are done allocating (`ptr::release_own_arena`), taken by the next thread
-/// that needs one.
+/// that needs one (`ptr::own_arena`).
 struct SpareArena(&'static Arena);
 // SAFETY: a spare arena has no owner: the thread that gave it back reaches it no more (its own-arena slot is cleared
 // and no scope names it), and the pool's mutex orders that thread's last use before the next owner's first.
@@ -1032,7 +1032,8 @@ pub(crate) fn take_spare_arena() -> Option<&'static Arena> {
     SPARE_ARENAS.lock().unwrap().pop().map(|s| s.0)
 }
 
-/// Whether no region, thread-arena or scratch scope is open on this thread (`CURRENT` is then unset).
+/// Whether no region, thread-arena or scratch scope is open on this thread, so that nothing but its own-arena slot
+/// names its arena.
 pub(crate) fn no_scope_open() -> bool {
     SCOPES.with(|s| s.borrow().is_empty()) && SCRATCH.with(|s| s.get().0.is_null())
 }
@@ -1040,6 +1041,28 @@ pub(crate) fn no_scope_open() -> bool {
 pub(crate) fn give_spare_arena(arena: &'static Arena) {
     CURRENT.with(|c| c.set(std::ptr::null()));
     SPARE_ARENAS.lock().unwrap().push(SpareArena(arena));
+}
+
+/// Gives back the resident part of the calling thread's own arena that was never handed out: on Linux, when the
+/// current chunk is a huge-page chunk, the rest of the 2 MiB block the finger is in (the block was faulted in as one
+/// transparent huge page; one `madvise`, which splits that page's mapping). For a thread that is done allocating at
+/// the moment memory peaks (a checker whose type-check queue ran dry while others still check). A later allocation
+/// below the finger faults in fresh zero pages. Elsewhere, and for a 4 KiB-page chunk, the unused part is not
+/// resident and this does nothing.
+pub fn trim_own_arena_tail() {
+    #[cfg(all(compressed_ptrs, target_os = "linux"))]
+    {
+        let a = crate::ptr::own_arena();
+        let (start, end, ptr) = (a.start.get().addr(), a.end.get().addr(), a.ptr.get().addr());
+        let Some(huge) = HUGE_THREAD_CHUNK.filter(|&h| end - start >= h) else {
+            return;
+        };
+        let lo = (ptr & !(huge - 1)).max(start);
+        if ptr & !(PAGE - 1) > lo {
+            // SAFETY: `lo .. ptr` lies in the current chunk below the finger: never handed out, nothing points into it.
+            unsafe { crate::reserve::discard(a.ptr.get().with_addr(lo), ptr - lo) };
+        }
+    }
 }
 
 /// The region that is the current thread's allocation target, if any (`None`: the thread's own arena).
@@ -1051,30 +1074,6 @@ pub fn current_region() -> Option<Region> {
     // SAFETY: a non-null `CURRENT` is the thread arena or the arena of a region kept alive by an entered scope.
     let arena = unsafe { &*p };
     arena.region.as_ref().and_then(|w| w.upgrade()).map(Region)
-}
-
-/// Gives back the resident, never handed out part of the calling thread's own arena below its finger: the rest of
-/// the 2 MiB block the finger is in, when the current chunk is a huge-page chunk (that block was faulted in whole).
-/// Later allocations below the finger fault in fresh zero pages. Returns the bytes given back.
-pub fn trim_own_arena_tail() -> usize {
-    #[cfg(all(compressed_ptrs, target_os = "linux"))]
-    {
-        let a = crate::ptr::own_arena();
-        let (start, end, ptr) = (a.start.get().addr(), a.end.get().addr(), a.ptr.get().addr());
-        let Some(huge) = HUGE_THREAD_CHUNK.filter(|&h| end - start >= h) else {
-            return 0;
-        };
-        let lo = (ptr & !(huge - 1)).max(start);
-        let hi = ptr & !(PAGE - 1);
-        if hi <= lo {
-            return 0;
-        }
-        // SAFETY: `lo .. hi` lies in the current chunk below the finger: never handed out, so nothing points into it.
-        unsafe { crate::reserve::discard(a.ptr.get().with_addr(lo), hi - lo) };
-        hi - lo
-    }
-    #[cfg(not(all(compressed_ptrs, target_os = "linux")))]
-    0
 }
 
 /// Makes the current thread's own (never freed) arena the allocation target until the scope is dropped: for data
