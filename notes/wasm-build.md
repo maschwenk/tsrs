@@ -98,6 +98,32 @@ the 80 MiB shadow stack. Seconds.
 Geomean warm: s 0.65 s, z 0.78 s, ts-rust 2.14 s. ts-rust's webpack output differs from native tsrs and tsgo
 (849 against 840 errors, baseline study), so its webpack time is not an identical-output comparison.
 
+The table's ts-rust column was measured in that interleaved run (its reps: xstate-main 3.47-3.53 s, webpack
+7.47-7.57 s), but it is the fastest of three sessions, and absolute times on this shared Mac move with the load.
+Two more sessions on 2026-10-08: the same command, native and the s module built at 59d1f47 (main merged in), 5
+interleaved runs, median [min-max] of the warm calls in seconds. Session B ran at load 21-25; session C started at 14
+and ended at 7.
+
+| project | session | native | s warm | ts-rust warm | ts-rust cold | ts-rust / s |
+|---|---|---:|---:|---:|---:|---:|
+| xstate-main | A (table above) | 0.46 | 0.92 [0.92-0.94] | 3.50 [3.47-3.53] | 3.86 | 3.79x |
+| | B | 0.53 | 2.32 [1.33-2.71] | 8.67 [5.86-9.02] | 4.82 | 3.74x |
+| | C | 0.58 | 1.18 [1.10-1.22] | 4.54 [4.13-4.81] | 4.92 | 3.84x |
+| webpack | A | 0.82 | 1.84 [1.83-1.86] | 7.50 [7.47-7.57] | 8.10 | 4.07x |
+| | B | 1.22 | 2.18 [2.14-2.38] | 11.53 [10.96-12.96] | 11.68 | 5.28x |
+| | C | 1.10 | 2.23 [2.19-2.42] | 10.25 [10.12-10.67] | 11.06 | 4.60x |
+| Compiler | A | 0.13 | 0.25 [0.24-0.25] | 0.70 [0.69-0.72] | 0.85 | 2.86x |
+| | B | 0.17 | 0.31 [0.29-0.32] | 0.90 [0.79-0.92] | 1.09 | 2.92x |
+| | C | 0.14 | 0.27 [0.27-0.28] | 0.77 [0.76-0.78] | 0.95 | 2.83x |
+| Compiler-Unions | A | 0.24 | 0.42 [0.42-0.43] | 1.13 [1.12-1.14] | 1.30 | 2.66x |
+| | B | 0.35 | 0.49 [0.48-0.49] | 1.33 [1.26-1.52] | 1.86 | 2.71x |
+| | C | 0.28 | 0.48 [0.47-0.48] | 1.33 [1.29-1.46] | 1.57 | 2.78x |
+
+ts-rust's warm time ranges from 3.50 to 8.67 s on xstate-main and from 7.50 to 11.53 s on webpack across the
+sessions, and its warm median can exceed its cold one under load (session B, xstate-main). The ratio to tsrs's
+module is steadier: 3.7-3.8x on xstate-main, 4.1-5.3x on webpack, 2.8-2.9x on Compiler, 2.7-2.8x on
+Compiler-Unions. Quote the ratio, not the absolute ts-rust times.
+
 **Opt-level** (rule fixed before measuring: ship s if its geomean warm time is at least 10% better than z's and its
 gzip size at most 1.35x z's): s is 17% faster (0.65 / 0.78) at 1.12x the gzip size, so the module ships with
 opt-level s and `-C llvm-args=-inlinehint-threshold=150`.
