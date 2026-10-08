@@ -1780,7 +1780,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
     c.empty_generic_type = c.new_anonymous_type(None /*symbol*/, None, &[], &[], &[]);
     c.object_type_instantiations.insert(c.empty_generic_type, PackedMap::default());
     c.any_function_type = c.new_anonymous_type(None /*symbol*/, None, &[], &[], &[]);
-    c.any_function_type.object_flags.set(c.any_function_type.object_flags.get() | ObjectFlags::NonInferrableType);
+    c.any_function_type.object_flags.set(c.any_function_type.object_flags.get_lazy() | ObjectFlags::NonInferrableType);
     c.no_constraint_type = c.new_anonymous_type(None /*symbol*/, None, &[], &[], &[]);
     c.circular_constraint_type = c.new_anonymous_type(None /*symbol*/, None, &[], &[], &[]);
     c.resolving_default_type = c.new_anonymous_type(None /*symbol*/, None, &[], &[], &[]);
@@ -2265,7 +2265,7 @@ impl Checker {
         if !t.flags().intersects(TypeFlags::StructuredOrInstantiable) {
             return false;
         }
-        let object_flags = t.object_flags();
+        let object_flags = t.object_flags_lazy();
         if object_flags.intersects(ObjectFlags::CouldContainTypeVariablesComputed) {
             return object_flags.intersects(ObjectFlags::CouldContainTypeVariables);
         }

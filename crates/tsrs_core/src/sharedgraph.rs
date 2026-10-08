@@ -28,14 +28,40 @@ static FROZEN: [AtomicU64; WORDS] = [const { AtomicU64::new(0) }; WORDS];
 /// Overrides: a fork set a frozen cell that already held a non-default value (counted; the inline value still wins).
 pub static OVERRIDES: AtomicUsize = AtomicUsize::new(0);
 
-/// `TSRS_SHARED_GRAPH_EXACT=1`: an `OvCell` of a frozen object always looks in the overlay (writes that replace a
-/// value the seed set are kept); default: only an unset frozen cell does.
-static EXACT: AtomicBool = AtomicBool::new(false);
+/// The frozen chunks lie in `[FROZEN_LO, FROZEN_LO + FROZEN_SPAN)` (0 and 0 while nothing is frozen).
+static FROZEN_LO: AtomicUsize = AtomicUsize::new(0);
+static FROZEN_SPAN: AtomicUsize = AtomicUsize::new(0);
+/// One bit per 64-byte line of the frozen range: some fork wrote a cell in that line into its overlay. A read of a
+/// frozen cell whose line is clean returns the inline value without touching the overlay (no thread-local, no hash).
+/// Bits are only ever set (a fork whose overlay lacks the cell falls back to the inline value).
+static DIRTY: std::sync::atomic::AtomicPtr<AtomicU64> = std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
+/// Lines marked dirty (stats).
+pub static DIRTY_LINES: AtomicUsize = AtomicUsize::new(0);
 
+/// Whether the cell at `addr` is frozen and its line is dirty: the only case a read must consult the overlay.
 #[inline(always)]
-fn exact() -> bool {
-    // Relaxed: set before the freeze, like ANY_FROZEN.
-    EXACT.load(Ordering::Relaxed)
+pub fn dirty(addr: usize) -> bool {
+    // Relaxed: the range is written before the forks' threads were spawned.
+    let off = addr.wrapping_sub(FROZEN_LO.load(Ordering::Relaxed));
+    if off >= FROZEN_SPAN.load(Ordering::Relaxed) {
+        return false;
+    }
+    let line = off >> 6;
+    // SAFETY: DIRTY covers the whole span (allocated by `freeze` before FROZEN_SPAN became non-zero).
+    let w = unsafe { &*DIRTY.load(Ordering::Relaxed).add(line >> 6) };
+    // Relaxed: a stale clear bit only means this thread never wrote the line (its own writes are program-ordered).
+    w.load(Ordering::Relaxed) & (1 << (line & 63)) != 0
+}
+
+#[inline]
+fn mark_dirty(addr: usize) {
+    let line = (addr - FROZEN_LO.load(Ordering::Relaxed)) >> 6;
+    // SAFETY: as in `dirty`; the caller checked that `addr` is frozen.
+    let w = unsafe { &*DIRTY.load(Ordering::Relaxed).add(line >> 6) };
+    let bit = 1 << (line & 63);
+    if w.load(Ordering::Relaxed) & bit == 0 && w.fetch_or(bit, Ordering::Relaxed) & bit == 0 {
+        DIRTY_LINES.fetch_add(1, Ordering::Relaxed);
+    }
 }
 
 #[inline(always)]
@@ -54,6 +80,10 @@ pub fn is_frozen_addr(addr: usize) -> bool {
 
 #[inline]
 fn is_frozen_addr_slow(addr: usize) -> bool {
+    // Relaxed: as in `dirty`.
+    if addr.wrapping_sub(FROZEN_LO.load(Ordering::Relaxed)) >= FROZEN_SPAN.load(Ordering::Relaxed) {
+        return false;
+    }
     #[cfg(compressed_ptrs)]
     {
         let off = addr.wrapping_sub(crate::reserve::BASE_ADDR);
@@ -94,11 +124,13 @@ pub fn freeze(ranges: &[(usize, usize)]) {
             FROZEN[page >> 6].fetch_or(1 << (page & 63), Ordering::Relaxed);
         }
     }
-    EXACT.store(std::env::var("TSRS_SHARED_GRAPH_EXACT").is_ok_and(|v| v == "1"), Ordering::Relaxed);
     let lo = ranges.iter().map(|r| r.0).min().unwrap_or(0);
     let hi = ranges.iter().map(|r| r.0 + r.1).max().unwrap_or(0);
+    let words = ((hi - lo) >> 6).div_ceil(64) + 1;
+    let dirty: &'static mut [AtomicU64] = Box::leak((0..words).map(|_| AtomicU64::new(0)).collect());
+    DIRTY.store(dirty.as_mut_ptr(), Ordering::Relaxed);
     FROZEN_LO.store(lo, Ordering::Relaxed);
-    FROZEN_HI.store(hi, Ordering::Relaxed);
+    FROZEN_SPAN.store(hi - lo, Ordering::Relaxed);
     ANY_FROZEN.store(true, Ordering::Release);
     #[cfg(unix)]
     if protect_mode() != 0 {
@@ -202,9 +234,6 @@ pub struct Overlay {
     id_words: RefCell<Vec<Option<Box<[u64; ID_PAGE]>>>>,
 }
 
-static FROZEN_LO: AtomicUsize = AtomicUsize::new(0);
-static FROZEN_HI: AtomicUsize = AtomicUsize::new(0);
-
 impl Overlay {
     #[inline]
     fn line(addr: usize) -> usize {
@@ -228,11 +257,12 @@ impl Overlay {
             let mut lines = self.lines.borrow_mut();
             if lines.is_empty() {
                 // Relaxed: as in `line`.
-                let span = FROZEN_HI.load(Ordering::Relaxed) - FROZEN_LO.load(Ordering::Relaxed);
+                let span = FROZEN_SPAN.load(Ordering::Relaxed);
                 lines.resize((span >> 6).div_ceil(64) + 1, 0);
             }
             lines[line >> 6] |= 1 << (line & 63);
         }
+        mark_dirty(addr);
         self.cells.borrow_mut().insert(addr, encode(v));
     }
 
@@ -323,23 +353,15 @@ impl<T: Copy + Default + PartialEq> OvCell<T> {
         OvCell(Cell::new(v))
     }
 
+    /// A set value is returned as is (a fork's write over a value the seed set is an override: counted, not seen);
+    /// an unset one is looked up in the overlay only if its line is dirty.
     #[inline]
     pub fn get(&self) -> T {
         let v = self.0.get();
-        if !any_frozen() || (v != T::default() && !exact()) {
+        if v != T::default() || !dirty(std::ptr::from_ref(self).addr()) {
             return v;
         }
-        self.get_frozen(v)
-    }
-
-    #[cold]
-    #[inline(never)]
-    fn get_frozen(&self, v: T) -> T {
-        let addr = std::ptr::from_ref(self).addr();
-        if !is_frozen_addr_slow(addr) {
-            return v;
-        }
-        try_current_overlay().map_or(v, |o| o.get_cell(addr, v))
+        overlay_get_frozen(std::ptr::from_ref(self).addr(), v)
     }
 
     #[inline]
@@ -476,7 +498,7 @@ impl Overlay {
         (w >> 63 != 0).then_some(w & !(1 << 63))
     }
 
-    pub fn set_id_word(&self, id: u32, value: u64) {
+    fn set_id_word(&self, id: u32, value: u64) {
         let mut pages = self.id_words.borrow_mut();
         let p = id as usize / ID_PAGE;
         if pages.len() <= p {
@@ -484,6 +506,13 @@ impl Overlay {
         }
         pages[p].get_or_insert_with(|| Box::new([0; ID_PAGE]))[id as usize % ID_PAGE] = value | (1 << 63);
     }
+}
+
+/// A frozen type's object flags written by a fork: kept by type id in the fork's overlay; the flags cell's line is
+/// marked dirty so reads look there.
+pub fn set_id_word_frozen(cell_addr: usize, id: u32, value: u64) {
+    mark_dirty(cell_addr);
+    current_overlay().set_id_word(id, value);
 }
 
 impl<T: Copy + Default> Default for OvExact<T> {
@@ -505,7 +534,7 @@ impl<T: Copy> OvExact<T> {
     #[inline]
     pub fn get(&self) -> T {
         let v = self.0.get();
-        if !any_frozen() || !is_frozen_addr_slow(std::ptr::from_ref(self).addr()) {
+        if !dirty(std::ptr::from_ref(self).addr()) {
             return v;
         }
         overlay_get_frozen(std::ptr::from_ref(self).addr(), v)
@@ -523,16 +552,7 @@ impl<T: Copy> OvExact<T> {
     }
 }
 
-/// `v`, or the current overlay's value for the cell at `cell` if it is frozen and the overlay has one.
-#[inline]
-pub fn overlay_get_if_frozen<C, T: Copy>(cell: &C, v: T) -> T {
-    let addr = std::ptr::from_ref(cell).addr();
-    if !is_frozen_addr_slow(addr) {
-        return v;
-    }
-    overlay_get_frozen(addr, v)
-}
-
+#[cold]
 #[inline(never)]
 fn overlay_get_frozen<T: Copy>(addr: usize, v: T) -> T {
     try_current_overlay().map_or(v, |o| o.get_cell(addr, v))
@@ -552,6 +572,41 @@ pub fn overlay_set_if_frozen<C, T: Copy>(cell: &C, v: T) -> bool {
 /// Writes by forks to `OwnedCell`s of frozen symbols and nodes (discovery counter).
 pub static OWNED_WRITES: AtomicUsize = AtomicUsize::new(0);
 
+/// Object-flag bits forks changed on frozen types (stats).
+pub static FLAG_BITS: [AtomicUsize; 32] = [const { AtomicUsize::new(0) }; 32];
+
+pub fn count_flag_bits(changed: u32) {
+    for (i, c) in FLAG_BITS.iter().enumerate() {
+        if changed & (1 << i) != 0 {
+            c.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+}
+
+/// Prints the stack under `TSRS_SHARED_GRAPH_LOG_OWNED=1` (discovery of fork writes to frozen objects).
+#[cold]
+pub fn log_owned_site() {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if !*ON.get_or_init(|| std::env::var("TSRS_SHARED_GRAPH_LOG_OWNED").is_ok_and(|v| v == "1")) {
+        return;
+    }
+    #[cfg(unix)]
+    {
+        extern "C" {
+            fn backtrace(buf: *mut *mut libc::c_void, size: i32) -> i32;
+            fn backtrace_symbols_fd(buf: *const *mut libc::c_void, size: i32, fd: i32);
+        }
+        let mut frames = [std::ptr::null_mut::<libc::c_void>(); 40];
+        let msg = b"tsrs shared graph: owned write\n";
+        // SAFETY: writes a static buffer to stderr; fills and prints a local frame buffer.
+        unsafe {
+            libc::write(2, msg.as_ptr().cast(), msg.len());
+            let n = backtrace(frames.as_mut_ptr(), 40);
+            backtrace_symbols_fd(frames.as_ptr(), n, 2);
+        }
+    }
+}
+
 /// `OwnedCell::set` on a frozen cell: counted and logged (`TSRS_SHARED_GRAPH_LOG_OWNED=1`), kept in the overlay.
 #[cold]
 #[inline(never)]
@@ -561,24 +616,7 @@ pub fn owned_set_if_frozen<C, T: Copy>(cell: &C, v: T) -> bool {
         return false;
     }
     OWNED_WRITES.fetch_add(1, Ordering::Relaxed);
-    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    if *ON.get_or_init(|| std::env::var("TSRS_SHARED_GRAPH_LOG_OWNED").is_ok_and(|v| v == "1")) {
-        #[cfg(unix)]
-        {
-            extern "C" {
-                fn backtrace(buf: *mut *mut libc::c_void, size: i32) -> i32;
-                fn backtrace_symbols_fd(buf: *const *mut libc::c_void, size: i32, fd: i32);
-            }
-            let mut frames = [std::ptr::null_mut::<libc::c_void>(); 40];
-            let msg = b"tsrs shared graph: owned write\n";
-            // SAFETY: writes a static buffer to stderr; fills and prints a local frame buffer.
-            unsafe {
-                libc::write(2, msg.as_ptr().cast(), msg.len());
-                let n = backtrace(frames.as_mut_ptr(), 40);
-                backtrace_symbols_fd(frames.as_ptr(), n, 2);
-            }
-        }
-    }
+    log_owned_site();
     current_overlay().set_cell(addr, v);
     true
 }

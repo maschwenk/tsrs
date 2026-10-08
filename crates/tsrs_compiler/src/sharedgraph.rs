@@ -134,10 +134,20 @@ fn mib(b: f64) -> f64 {
 
 pub(crate) fn report(mode: Mode, seed_count: usize, points: &[Option<Points>]) {
     let mut out = format!(
-        "tsrs shared graph: mode {mode:?}, {seed_count} seed files, overlay overrides {}, owned writes {}\n",
+        "tsrs shared graph: mode {mode:?}, {seed_count} seed files, overlay overrides {}, owned writes {}, dirty lines {}\n",
         tsrs_core::sharedgraph::OVERRIDES.load(std::sync::atomic::Ordering::Relaxed),
-        tsrs_core::sharedgraph::OWNED_WRITES.load(std::sync::atomic::Ordering::Relaxed)
+        tsrs_core::sharedgraph::OWNED_WRITES.load(std::sync::atomic::Ordering::Relaxed),
+        tsrs_core::sharedgraph::DIRTY_LINES.load(std::sync::atomic::Ordering::Relaxed)
     );
+    let bits: Vec<String> = tsrs_core::sharedgraph::FLAG_BITS
+        .iter()
+        .enumerate()
+        .filter_map(|(i, c)| {
+            let n = c.load(std::sync::atomic::Ordering::Relaxed);
+            (n > 0).then(|| format!("{}={n}", flag_name(i)))
+        })
+        .collect();
+    out.push_str(&format!("  frozen object-flag writes by bit: {}\n", bits.join(" ")));
     let mut seed_bytes = Vec::new();
     let mut seed_types = Vec::new();
     let mut seed_cpu = Vec::new();
@@ -274,4 +284,11 @@ pub(crate) fn seed(program: &'static Program, weights: &[i64]) -> Base {
         );
     }
     Base(out.0)
+}
+
+fn flag_name(bit: usize) -> String {
+    #[cfg(feature = "checker")]
+    return format!("{:?}", tsrs_checker::ObjectFlags::from_bits_retain(1 << bit));
+    #[cfg(not(feature = "checker"))]
+    return bit.to_string();
 }

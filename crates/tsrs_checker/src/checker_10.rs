@@ -2108,7 +2108,7 @@ impl Clone for LazyMappedTable {
 impl Checker {
     #[inline]
     pub(crate) fn get_lazy_mapped_table(&mut self, t: P<Type>) -> Option<std::rc::Rc<LazyMappedTable>> {
-        if !self.lazy_members || t.object_flags() & (ObjectFlags::Mapped | ObjectFlags::MembersResolved) != ObjectFlags::Mapped {
+        if !self.lazy_members || t.object_flags_lazy() & (ObjectFlags::Mapped | ObjectFlags::MembersResolved) != ObjectFlags::Mapped {
             return None;
         }
         self.get_lazy_mapped_table_worker(t)
@@ -2134,11 +2134,11 @@ impl Checker {
         let template_type = self.get_template_type_from_mapped_type(mapped_type);
         let modifiers_type_of_mapped = self.get_modifiers_type_from_mapped_type(t);
         let modifiers_type = self.get_apparent_type(modifiers_type_of_mapped);
-        if !modifiers_type.flags().intersects(TypeFlags::Object) || t.object_flags().intersects(ObjectFlags::MembersResolved) {
+        if !modifiers_type.flags().intersects(TypeFlags::Object) || t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) {
             #[cfg(feature = "site-counts")]
             tsrs_core::sitecount::hit(
                 "mapped-table-refused",
-                if t.object_flags().intersects(ObjectFlags::MembersResolved) { "resolved-meanwhile" } else { type_kind_label(modifiers_type.flags(), modifiers_type.object_flags()) },
+                if t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) { "resolved-meanwhile" } else { type_kind_label(modifiers_type.flags(), modifiers_type.object_flags_lazy()) },
             );
             return None;
         }
@@ -2168,7 +2168,7 @@ impl Checker {
         // Recursive lookups see no member, as they would while resolveMappedTypeMembers runs.
         lazy.members.borrow_mut().insert(name.to_string(), None);
         let modifiers_prop = self.get_member_of_structured_type(lazy.modifiers_type, name);
-        if t.object_flags().intersects(ObjectFlags::MembersResolved) {
+        if t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) {
             return Some(t.as_structured_type().members().and_then(|m| m.lookup(name)));
         }
         let mut member = None;
@@ -2217,7 +2217,7 @@ impl Checker {
                 );
             }
             lazy.resolving.set(false);
-            if t.object_flags().intersects(ObjectFlags::MembersResolved) {
+            if t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) {
                 return t.as_structured_type().index_infos();
             }
             self.lazy_member_stats.mapped_index_info_queries += 1;
