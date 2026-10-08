@@ -171,8 +171,8 @@ first runs of this branch had +9% wall and +13% user time at 32 checkers (+5% at
 profile on the runner put the extra cycles in `DiagnosticsCollection::add` (8.8% of cycles against 3.8%) and in
 kernel and futex lock contention, not in forcing (14 ms of thread time in all): checkers that wait on the same lists
 at the start of checking go on in lockstep, and every `add` cloned the reporting file's `Path`, an `Arc` whose counter
-all checkers then write at once. With the diagnostics collection keyed without that clone (a separate change, branch
-`mem/diag-collection-no-arc`) the user time is +3.7% and the wall +4.5% at 32 checkers, +4.4% at 16; the rest is the
+all checkers then write at once. With the diagnostics collection keyed without that clone (#204, a separate change that
+also makes main 2-4% faster at 32 checkers on drizzle-orm, cal-diy and vscode) the user time is +3.7% and the wall +4.5% at 32 checkers, +4.4% at 16; the rest is the
 waiting itself (about 2,200 waits on 1,000 lists, mostly `@types/node` interfaces that every checker needs, in three
 versions). pr-verify's three-run medians also showed mui-docs and t3code-server slower at 32 checkers; nine-run
 interleaved probes did not (mui-docs +0.4%, t3code-server +0.5% paired).
