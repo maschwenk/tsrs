@@ -26,6 +26,13 @@ pub trait System: Sync {
     fn format_time_now(&self) -> String {
         format_local_time_03_04_05_pm(self.now_time())
     }
+
+    /// tsrs-only: where diagnostics go instead of the text reporters (the WebAssembly build's JSON diagnostics).
+    /// When it is set, the reporters pass each diagnostic to it, the error summary prints nothing, and `tsc -b` is
+    /// refused. The CLI and the tsctests harness have none.
+    fn diagnostic_sink(&self) -> Option<&(dyn Fn(P<Diagnostic>) + Sync)> {
+        None
+    }
 }
 
 #[cfg(unix)]

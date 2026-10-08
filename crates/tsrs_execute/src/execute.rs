@@ -423,6 +423,11 @@ fn tsc_build_compilation(
     build_command: P<tsoptions::ParsedBuildCommandLine>,
     testing: Option<&'static dyn tsc::CommandLineTesting>,
 ) -> CommandLineResult {
+    // tsrs-only: build mode has its own reporters (task output buffers, build status), which a sink does not cover.
+    if sys.diagnostic_sink().is_some() {
+        sys.write("error: diagnostics as JSON are not supported with --build\n");
+        return CommandLineResult { status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
+    }
     let report_diagnostic = create_diagnostic_reporter(sys, Some(&build_command.compiler_options));
 
     if !build_command.errors.is_empty() {

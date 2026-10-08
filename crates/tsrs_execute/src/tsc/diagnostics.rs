@@ -30,6 +30,9 @@ pub fn create_diagnostic_reporter_with_writer<'a>(sys: &'a dyn System, w: Writer
     if options.is_some_and(|o| o.quiet.is_true()) {
         return Box::new(|_| {});
     }
+    if let Some(sink) = sys.diagnostic_sink() {
+        return Box::new(sink);
+    }
     let format_opts = get_format_opts_of_sys(sys);
     if should_be_pretty(sys, options) {
         return Box::new(move |diagnostic| {
@@ -107,7 +110,7 @@ fn should_be_pretty(sys: &dyn System, options: Option<&CompilerOptions>) -> bool
 pub type DiagnosticsReporter<'a> = Box<dyn Fn(&[P<Diagnostic>]) + Send + Sync + 'a>;
 
 pub fn create_report_error_summary<'a>(sys: &'a dyn System, options: &CompilerOptions) -> DiagnosticsReporter<'a> {
-    if should_be_pretty(sys, Some(options)) {
+    if sys.diagnostic_sink().is_none() && should_be_pretty(sys, Some(options)) {
         let format_opts = get_format_opts_of_sys(sys);
         return Box::new(move |diagnostics| {
             let mut out = Vec::new();
