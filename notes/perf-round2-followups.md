@@ -16,6 +16,10 @@ pointer compression costs about +4.9% instructions and took back most of the che
   Recommendation: close it and pass `--checkers` where the hardware is known (8 on laptops, 4 or 1 on small boxes).
 - **#36** (persisted front-end design, docs only): close, or merge as the record of why not to build it.
 - **A release.** main is well ahead of 0.3.0; nothing from this round is published.
+- **Checker-count-dependent output on TanStack/router** (notes/open-history-dependence.md): the exact fix (branch
+  `exp/canonical-base-constraints`) costs +1.5% instructions on router, +4.1% on sequelize, +0.4% on type-fest and
+  reports an error tsgo does not on a ten-level indexed-access chain. Options: leave it open (the README now says so),
+  or redesign `getResolvedBaseConstraint` to resolve each type from the top (the note's option 3).
 
 ## Not verified yet
 
@@ -173,6 +177,11 @@ pointer compression costs about +4.9% instructions and took back most of the che
   other: +8% wall). Left: namespace bodies (+43 MB on formbricks-web, needs
   the binder's per-body state at parse time), lists with import types (30-60 MB never asked for on t3code-server and
   cal-diy), eager `@see`/`@link` JSDoc (4-17 MB), per-member laziness (about 1% of peak).
+- Canonical base constraints for TanStack/router's checker-count-dependent TS2536 (notes/open-history-dependence.md):
+  exact by recomputation (+0.4% to +4.1% single-threaded instructions on type-heavy projects, 1.4x-6x the base
+  constraint computations, and an error tsgo does not print on a deep indexed-access chain); with per-result summaries
+  to reuse more (6-12% fewer computations); and not caching cut results below the top (+1.2% to +2.3% on sequelize
+  and cal-diy, still history-dependent).
 
 ## The lint ratchet
 
