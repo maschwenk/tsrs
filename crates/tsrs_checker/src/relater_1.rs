@@ -962,8 +962,9 @@ impl Checker {
     // and no required properties, call/construct signatures or index signatures
     pub(crate) fn is_weak_type(&mut self, t: P<Type>) -> bool {
         if t.flags().intersects(TypeFlags::Object) {
-            return self.signatures_of_structured_type(t, SignatureKind::Call).is_empty()
-                && self.signatures_of_structured_type(t, SignatureKind::Construct).is_empty()
+            // notes/mem-never-read-apps.md D1: counted, so deferred signatures stay uninstantiated.
+            return self.count_signatures_of_structured_type(t, SignatureKind::Call) == 0
+                && self.count_signatures_of_structured_type(t, SignatureKind::Construct) == 0
                 && self.index_infos_of_structured_type(t).is_empty()
                 && self.has_properties_of_structured_type(t)
                 && self.every_property_of_structured_type(t, &mut |_, p| p.flags().intersects(SymbolFlags::Optional));

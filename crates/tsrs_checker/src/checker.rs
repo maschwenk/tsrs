@@ -1094,6 +1094,8 @@ pub struct Checker {
     pub lazy_unmatched: bool,
     /// notes/mem-lazy.md L11: empty-object tests on lazy tables.
     pub lazy_empty: bool,
+    /// notes/mem-never-read-apps.md D1: lazy tables instantiate their signatures on first read.
+    pub lazy_signatures: bool,
     pub lazy_member_stats: tsrs_core::lazymembers::LazyMemberStats,
     /// The member names of `Function`, `CallableFunction`, `NewableFunction` and `Object`, once all four are
     /// resolved (`may_be_augment_member`).
@@ -1484,6 +1486,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         lazy_has_prop: tsrs_core::lazymembers::lazy_has_prop(),
         lazy_unmatched: tsrs_core::lazymembers::lazy_unmatched(),
         lazy_empty: tsrs_core::lazymembers::lazy_empty(),
+        lazy_signatures: tsrs_core::lazymembers::lazy_signatures(),
         lazy_member_stats: Default::default(),
         augment_filter: None,
         #[cfg(feature = "assignment-stats")]

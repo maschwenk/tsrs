@@ -81,6 +81,14 @@ pub fn lazy_inference_mappers() -> bool {
     env_flag(&F, "TSRS_LAZY_INFERENCE_MAPPERS", true)
 }
 
+/// Candidate D1 (notes/mem-never-read-apps.md): a lazy member table instantiates its call and construct signatures
+/// when they are first read, not when it is prepared; `isWeakType` and the empty-object test only count them.
+/// `TSRS_LAZY_SIGNATURES=0|1`.
+pub fn lazy_signatures() -> bool {
+    static F: OnceLock<bool> = OnceLock::new();
+    env_flag(&F, "TSRS_LAZY_SIGNATURES", true)
+}
+
 macro_rules! lazy_member_stats {
     ($($field:ident: $label:literal,)*) => {
         /// Per-checker counts of the lazy paths (only incremented when the flag is on).
@@ -126,4 +134,7 @@ lazy_member_stats! {
     has_prop_uninstantiated: "Existence answers from an uninstantiated member",
     unmatched_lazy_walks: "Lazy property-order lists requested",
     empty_lazy_queries: "Empty-object queries answered by lazy tables",
+    signature_tables_deferred: "Lazy tables with deferred signatures",
+    signature_tables_forced: "Deferred signature lists instantiated",
+    signature_count_queries: "Signature counts answered without instantiating",
 }
