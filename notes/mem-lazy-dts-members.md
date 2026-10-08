@@ -5,8 +5,9 @@ are parsed and bound in full and never type-checked (`skipLibCheck`). The checke
 (notes/lazy-members.md), so of an interface, class or type literal in such a file it only needs the members some
 checker looks up. This change parses those member lists as usual, throws the nodes away when nothing in them reaches
 outside the list, and parses and binds them again the first time anything asks for them (V8-style lazy parsing,
-applied to member lists, with lazy binding of the same lists). It is a front-end change: the saving is the same at
-every checker count, and parse and bind get a little faster. Output is byte-identical.
+applied to member lists, with lazy binding of the same lists). It is a front-end change, so the saving is about the
+same number of bytes at every checker count. Output is byte-identical. It does not make parsing faster on Linux: a
+needed list is parsed twice, and the first parse still runs in full (section 6).
 
 Result, Linux 64 vCPUs at the default 32 checkers (9 interleaved runs, medians): formbricks-web -7.8% peak RSS
 against main (2.82 -> 2.60 GiB), cal-diy -2.3%, supabase-studio -2.7%, t3code-server -1.1%, vscode -0.8%, with wall
@@ -17,8 +18,8 @@ times within the runner's noise (formbricks-web 0.653 -> 0.627 s, the others +-1
 ## 1. Ceiling (census)
 
 Tool (branch `mem/lazy-dts-census`, not merged): the alloc-profile build with `TSRS_LAZY_DTS_CENSUS=1`
-(`tsrs_core::lazydts_census`, `tsrs_compiler` lazydts_census.rs). The parser and the binder record, per member of every interface, class, type literal and module
-block of a declaration file, the arena bytes it took plus the thread's net heap bytes (binder symbol tables keep their
+(`tsrs_core::lazydts_census`, `tsrs_compiler` lazydts_census.rs). The parser and the binder record, per member of
+every interface, class, type literal and module block of a declaration file, the arena bytes it took plus the thread's net heap bytes (binder symbol tables keep their
 entries on the heap); before the first checker is created the compiler registers those lists in the files the program
 will not check, with their owner and member symbols. From then on a read of a registered list's nodes
 (`NodeList::nodes`), of an owner's `members` / `exports`, and a symbol-table hit or declarations read of a member
