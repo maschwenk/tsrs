@@ -39,13 +39,8 @@ function nowNs(realtime) {
     return BigInt(Math.round(ms * 1e6));
 }
 
-/**
- * Runs one tsc invocation in a fresh instance of `module` (a compiled WebAssembly.Module).
- * request: { cwd, args, flags }; host: a HostFileSystem; io: { env, stdout(bytes), stderr(bytes), beforeRun(memory),
- * afterRun(memory) } (the run hooks let a harness inspect linear memory, e.g. the shadow-stack census).
- * Returns { exitCode, reply (Uint8Array), memoryBytes }.
- */
-export function runTsc(module, request, host, io = {}) {
+// The imports for one run, and `start(instance)`, which runs the request in that instance.
+function prepare(module, request, host, io) {
     let instance;
     let memory;
     const view = () => new DataView(memory.buffer);
@@ -195,9 +190,14 @@ export function runTsc(module, request, host, io = {}) {
             imports.wasi_snapshot_preview1[imp.name] = wasi[imp.name] ?? (() => ENOSYS);
         }
     }
-    instance = new WebAssembly.Instance(module, imports);
-    memory = instance.exports.memory;
+    const start = (inst) => {
+        instance = inst;
+        memory = instance.exports.memory;
+        return finish();
+    };
+    return { imports, start };
 
+    function finish() {
     let exitCode;
     let reply = new Uint8Array(0);
     try {
@@ -218,6 +218,24 @@ export function runTsc(module, request, host, io = {}) {
     }
     io.afterRun?.(memory);
     return { exitCode, reply, memoryBytes: memory.buffer.byteLength };
+    }
+}
+
+/**
+ * Runs one tsc invocation in a fresh instance of `module` (a compiled WebAssembly.Module).
+ * request: { cwd, args, flags }; host: a HostFileSystem; io: { env, stdout(bytes), stderr(bytes), beforeRun(memory),
+ * afterRun(memory) } (the run hooks let a harness inspect linear memory, e.g. the shadow-stack census).
+ * Returns { exitCode, reply (Uint8Array), memoryBytes }.
+ */
+export function runTsc(module, request, host, io = {}) {
+    const run = prepare(module, request, host, io);
+    return run.start(new WebAssembly.Instance(module, run.imports));
+}
+
+/** `runTsc` with an asynchronous instantiation (browsers forbid a synchronous one of a large module on the page). */
+export async function runTscAsync(module, request, host, io = {}) {
+    const run = prepare(module, request, host, io);
+    return run.start(await WebAssembly.instantiate(module, run.imports));
 }
 
 /** The tsc argument list plus the request flags, as `runTsc` takes them. */

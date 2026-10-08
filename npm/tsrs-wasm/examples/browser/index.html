@@ -1,0 +1,29 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>tsrs-wasm in the browser</title>
+<style>
+  body { font: 14px/1.4 system-ui, sans-serif; margin: 2rem; max-width: 60rem; }
+  textarea, pre { width: 100%; font: 13px/1.4 ui-monospace, monospace; box-sizing: border-box; }
+  textarea { height: 12rem; }
+  pre { background: #f4f4f4; padding: 0.75rem; min-height: 4rem; white-space: pre-wrap; }
+</style>
+<h1>tsrs-wasm</h1>
+<p>Type-checks <code>/src/main.ts</code> with tsrs compiled to WebAssembly, in a Web Worker, over in-memory files.</p>
+<textarea id="source">const greeting: string = 42;
+function add(a: number, b: number) { return a + b; }
+add("1", 2);
+</textarea>
+<p><button id="check">Check</button> <span id="status"></span></p>
+<pre id="output"></pre>
+<script type="module">
+  const worker = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
+  const $ = (id) => document.getElementById(id);
+  worker.onmessage = ({ data }) => {
+    $("status").textContent = data.error ? "failed" : `exit ${data.exitCode} in ${data.ms.toFixed(0)} ms`;
+    $("output").textContent = data.error ?? data.stdout;
+  };
+  $("check").onclick = () => {
+    $("status").textContent = "checking...";
+    worker.postMessage({ source: $("source").value });
+  };
+</script>
