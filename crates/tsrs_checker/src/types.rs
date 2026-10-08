@@ -2548,7 +2548,7 @@ embeds!(ReverseMappedType, object_type, ObjectType);
 pub struct EvolvingArrayType {
     pub object_type: ObjectType,
     pub element_type: Cell<Option<P<Type>>>,
-    pub final_array_type: Cell<Option<P<Type>>>,
+    pub final_array_type: OvCell<Option<P<Type>>>,
 }
 embeds!(EvolvingArrayType, object_type, ObjectType);
 
