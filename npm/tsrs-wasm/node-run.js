@@ -27,12 +27,13 @@ function sink(mode, fd, chunks) {
     return (chunk) => chunks.push(chunk);
 }
 
-export function run(module, options) {
-    const memory = options.files ? memoryFileSystem(options.files) : null;
+/** hooks: { beforeRun(memory), afterRun(memory) } (see core.js runTsc). */
+export function run(module, options, hooks = {}) {
+    const caseInsensitive = options.caseInsensitive ?? (options.files ? false : isCaseInsensitive());
+    const memory = options.files ? memoryFileSystem(options.files, { caseInsensitive }) : null;
     const host = memory ?? nodeFileSystem();
     const cwd = options.cwd ?? (memory ? "/" : process.cwd());
     const json = options.diagnostics === "json";
-    const caseInsensitive = options.caseInsensitive ?? (memory ? false : isCaseInsensitive());
     const out = [];
     const err = [];
     const request = makeRequest(options.args, { cwd, json, caseInsensitive, tty: !!options.tty });
@@ -40,6 +41,7 @@ export function run(module, options) {
         env: options.env ?? {},
         stdout: sink(options.stdout, 1, out),
         stderr: sink(options.stderr, 2, err),
+        ...hooks,
     });
     const text = (chunks) => Buffer.concat(chunks).toString("utf8");
     return {

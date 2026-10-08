@@ -41,7 +41,8 @@ function nowNs(realtime) {
 
 /**
  * Runs one tsc invocation in a fresh instance of `module` (a compiled WebAssembly.Module).
- * request: { cwd, args, flags }; host: a HostFileSystem; io: { env, stdout(bytes), stderr(bytes) }.
+ * request: { cwd, args, flags }; host: a HostFileSystem; io: { env, stdout(bytes), stderr(bytes), beforeRun(memory),
+ * afterRun(memory) } (the run hooks let a harness inspect linear memory, e.g. the shadow-stack census).
  * Returns { exitCode, reply (Uint8Array), memoryBytes }.
  */
 export function runTsc(module, request, host, io = {}) {
@@ -205,6 +206,7 @@ export function runTsc(module, request, host, io = {}) {
         const req = encoder.encode(fields.join("\0"));
         const ptr = instance.exports.tsrs_input(req.length);
         bytes().set(req, ptr);
+        io.beforeRun?.(memory);
         exitCode = instance.exports.tsrs_run();
         const out = instance.exports.tsrs_output();
         reply = bytes().slice(out, out + instance.exports.tsrs_output_len());
@@ -214,6 +216,7 @@ export function runTsc(module, request, host, io = {}) {
         }
         exitCode = e.code;
     }
+    io.afterRun?.(memory);
     return { exitCode, reply, memoryBytes: memory.buffer.byteLength };
 }
 
@@ -238,17 +241,21 @@ function normalize(path) {
 
 /**
  * An in-memory HostFileSystem over a map of absolute path -> contents (string or Uint8Array). Directories are implied
- * by the paths below them. `written` collects every file the compiler writes (decoded as UTF-8, BOM kept).
+ * by the paths below them. `written` collects every file the compiler writes (decoded as UTF-8, BOM kept). With
+ * `caseInsensitive`, lookups ignore case (as on macOS's default file system) and names keep the case they were
+ * written with.
  */
-export function memoryFileSystem(files = {}) {
-    const map = new Map();
+export function memoryFileSystem(files = {}, { caseInsensitive = false } = {}) {
+    const fold = caseInsensitive ? (p) => p.toLowerCase() : (p) => p;
+    const map = new Map(); // folded path -> { path, data }
+    const put = (p, data) => map.set(fold(p), { path: p, data });
     for (const [path, data] of Object.entries(files)) {
-        map.set(normalize(path), typeof data === "string" ? encoder.encode(data) : data);
+        put(normalize(path), typeof data === "string" ? encoder.encode(data) : data);
     }
     const written = new Map();
-    const isDir = (path) => {
-        if (path === "/") return true;
-        const prefix = path + "/";
+    const isDir = (folded) => {
+        if (folded === "/") return true;
+        const prefix = folded + "/";
         for (const key of map.keys()) {
             if (key.startsWith(prefix)) return true;
         }
@@ -258,25 +265,25 @@ export function memoryFileSystem(files = {}) {
         written,
         files: map,
         readFile(path) {
-            const data = map.get(normalize(path));
-            if (data === undefined) throw new NotFoundError(path);
-            return data;
+            const entry = map.get(fold(normalize(path)));
+            if (entry === undefined) throw new NotFoundError(path);
+            return entry.data;
         },
         stat(path) {
-            const p = normalize(path);
-            const data = map.get(p);
-            if (data !== undefined) return { kind: "f", size: data.length, mtimeNs: 0n };
+            const p = fold(normalize(path));
+            const entry = map.get(p);
+            if (entry !== undefined) return { kind: "f", size: entry.data.length, mtimeNs: 0n };
             if (isDir(p)) return { kind: "d", size: 0, mtimeNs: 0n };
             throw new NotFoundError(path);
         },
         readDir(path) {
-            const p = normalize(path);
+            const p = fold(normalize(path));
             if (!isDir(p)) throw new NotFoundError(path);
             const prefix = p === "/" ? "/" : p + "/";
             const entries = new Map();
-            for (const key of map.keys()) {
+            for (const [key, entry] of map) {
                 if (!key.startsWith(prefix)) continue;
-                const rest = key.slice(prefix.length);
+                const rest = entry.path.slice(prefix.length);
                 const slash = rest.indexOf("/");
                 if (slash < 0) entries.set(rest, "f");
                 else entries.set(rest.slice(0, slash), "d");
@@ -288,19 +295,19 @@ export function memoryFileSystem(files = {}) {
         },
         writeFile(path, data, append) {
             const p = normalize(path);
-            const prev = append ? map.get(p) ?? new Uint8Array(0) : new Uint8Array(0);
+            const prev = append ? map.get(fold(p))?.data ?? new Uint8Array(0) : new Uint8Array(0);
             const next = new Uint8Array(prev.length + data.length);
             next.set(prev);
             next.set(data, prev.length);
-            map.set(p, next);
-            written.set(p, decoder.decode(next));
+            put(map.get(fold(p))?.path ?? p, next);
+            written.set(map.get(fold(p)).path, decoder.decode(next));
         },
         remove(path) {
-            const p = normalize(path);
-            for (const key of [...map.keys()]) {
+            const p = fold(normalize(path));
+            for (const [key, entry] of [...map]) {
                 if (key === p || key.startsWith(p + "/")) {
                     map.delete(key);
-                    written.delete(key);
+                    written.delete(entry.path);
                 }
             }
         },
