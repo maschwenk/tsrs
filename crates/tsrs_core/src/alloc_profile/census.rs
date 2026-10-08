@@ -5,9 +5,10 @@
 //! size, raw stack) is kept; arena chunks themselves are not blocks. `run` freezes the tables and does a
 //! conservative mark from the roots the caller passes plus the current thread's stack and the main image's
 //! `__DATA*` segments (all statics, including `OnceLock` / `LazyLock` contents). Every 4-byte-aligned word of a
-//! reachable block (except blocks of pointer-free arena types) is a candidate pointer, decoded two ways: the low 48
-//! bits (plain pointers, low-bit tags, `PackedStr` and mapper slices with a length in the top 16 bits) and the low 45
-//! bits times 8 (node parents, symbol table entries). Interior pointers count. A candidate that does not point
+//! reachable block (except blocks of pointer-free arena types) is a candidate pointer, decoded three ways: the low 48
+//! bits (plain pointers, low-bit tags, `PackedStr` and `ThinSlice` words with a length in the top 16 bits), the low
+//! 45 bits times 8 (node parents, symbol table entries) and, for a word with a length in the top 16 bits, the low 48
+//! bits without the tag bits shifted right by one (mapper type lists). Interior pointers count. A candidate that does not point
 //! into a recorded block is ignored. Conservative: words that only look like pointers keep blocks alive, so the
 //! unreachable numbers are lower bounds (freed memory is cleared while recording, see `zero_on_free`, so stale
 //! words in reused memory do not add to that). Not scanned: other threads' stacks (idle pool threads), thread-locals
@@ -279,6 +280,13 @@ impl Table {
         let c2 = (w & MASK45) << 3;
         if c2 != c1 {
             if let Some(i) = self.lookup(c2) {
+                self.mark(i, work);
+            }
+        }
+        // A mapper's type list: the address shifted left by one, a length in the top 16 bits and tag bits in the
+        // low three (`pack_slice` in tsrs_checker's mapper.rs).
+        if w >> 48 != 0 {
+            if let Some(i) = self.lookup((w & MASK48 & !7) >> 1) {
                 self.mark(i, work);
             }
         }
@@ -680,10 +688,12 @@ fn run_frozen(roots: &[usize]) {
             .collect()
     };
 
+    // `TSRS_CENSUS_FRAMES=<n>`: frames in the "<- caller(s)" tables (default 2 for heap blocks, 3 for arena blocks).
+    let depth: Option<usize> = std::env::var("TSRS_CENSUS_FRAMES").ok().and_then(|s| s.parse().ok());
     let mut by_fn: FxHashMap<String, Agg> = FxHashMap::default();
     let mut by_fn_caller: FxHashMap<String, Agg> = FxHashMap::default();
     for &(stack, a) in &heap_aggs {
-        let f = frames(stack, &boring, 2);
+        let f = frames(stack, &boring, depth.unwrap_or(2));
         let site = f.first().cloned().unwrap_or_else(|| "?".into());
         by_fn.entry(site.clone()).or_default().add(&a);
         by_fn_caller.entry(f.join("  <-  ")).or_default().add(&a);
@@ -696,7 +706,7 @@ fn run_frozen(roots: &[usize]) {
     for (&(class, stack), a) in &sampled {
         let Class::Arena { ty, .. } = classes[class as usize] else { continue };
         let ty = short_type(ty);
-        let f = frames(stack, &arena_wrapper, 3);
+        let f = frames(stack, &arena_wrapper, depth.unwrap_or(3));
         let site = f.first().cloned().unwrap_or_else(|| "?".into());
         arena_fn.entry(format!("{ty}  {site}")).or_default().add(a);
         arena_fn_caller.entry(format!("{ty}  {}", f.join("  <-  "))).or_default().add(a);
@@ -913,12 +923,12 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
                         flagged = true;
                     }
                 }
-                (
-                    class_is(rb.class, "TypeMapper"),
-                    class_is(rb.class, "TypeMapper") || class_is(rb.class, "InferenceContext"),
-                    Some(rb.seq),
-                    is_heap(rb.class),
-                )
+                let packed = class_is(rb.class, "TypeMapper");
+                if packed && w >> 48 != 0 {
+                    // An array mapper's list word: the address shifted left by one (`pack_slice` in mapper.rs).
+                    c = (w & MASK48 & !7) >> 1;
+                }
+                (packed, packed || class_is(rb.class, "InferenceContext"), Some(rb.seq), is_heap(rb.class))
             }
             None => (false, false, None, false),
         };

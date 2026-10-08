@@ -145,6 +145,10 @@ pointer compression costs about +4.9% instructions and took back most of the che
   instructions and 0.2-1.9 GiB less memory at 8-16 workers, but no faster than threads, static or with stealing; worse
   on small programs. Children's private state is mostly their own caches and copied hash-table pages.
 - Sharing types across checkers: cannot be exact (notes/mem-shared-base.md).
+- Per-checker garbage, free-list high-water and hash-table slack (notes/mem-checker-scratch.md). Garbage is 3.3-5.5
+  MB per extra checker, spread over about ten causes. The one exact fix of size (`export *` tables as values) is -1.9%
+  peak at 32 checkers on Linux (formbricks-web, cal-diy). The free lists peak at 6 KB per checker. hashbrown tables
+  are already minimal; a non-power-of-two table would save 1.7-2.2% of peak at 32.
 - Directory listings instead of existence probes, `openat`, a typed tsbuildinfo decode, skip-if-identical
   tsbuildinfo writes (notes/perf-dev-loop.md, perf-dev-loop2.md).
 - Pointer compression below +2% instructions on arm64; `PSlice`/`PStr` for memory (slices are already one word)

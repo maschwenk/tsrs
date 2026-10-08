@@ -438,6 +438,8 @@ type Shared = Arc<Mutex<ThreadData>>;
 
 static THREADS: Mutex<Vec<Shared>> = Mutex::new(Vec::new());
 static ARENAS: Mutex<Vec<usize>> = Mutex::new(Vec::new());
+/// The name of the thread that made each arena of `ARENAS` (same order).
+static ARENA_THREADS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
 thread_local! {
     // Census bookkeeping: made with tracking suspended, like the rest of it.
@@ -472,7 +474,65 @@ impl Drop for ArenaScope {
 }
 
 pub(crate) fn register_arena(arena: &'static crate::arena::Arena) {
-    ARENAS.lock().unwrap().push(arena as *const crate::arena::Arena as usize);
+    let name = census::with_guard(|| std::thread::current().name().unwrap_or("?").to_string());
+    let mut arenas = ARENAS.lock().unwrap();
+    arenas.push(arena as *const crate::arena::Arena as usize);
+    census::with_guard(|| ARENA_THREADS.lock().unwrap().push(name));
+}
+
+/// Free lists per arena (`free_stats`): bytes on the lists at exit and at their peak, the sum of the per-class peaks,
+/// bytes handed out again and bytes the recycling sites bumped because the list was empty; then the bytes at exit by
+/// size class, summed over the checker threads' arenas.
+fn dump_free_lists() {
+    let arenas = ARENAS.lock().unwrap();
+    let names = ARENA_THREADS.lock().unwrap();
+    let mut rows: Vec<(String, u64, [u64; 5])> = Vec::new();
+    let mut by_class: Vec<[u64; 3]> = vec![[0; 3]; crate::arena::MAX_FREE_SIZE / 8 + 1];
+    for (i, &a) in arenas.iter().enumerate() {
+        // SAFETY: arenas are leaked; their statistics are read after every thread is done.
+        let a = unsafe { &*(a as *const crate::arena::Arena) };
+        let s = &a.free_stats;
+        let mut v = [s.bytes.get(), s.peak_bytes.get(), 0, 0, 0];
+        for c in 1..s.blocks.len() {
+            let size = c as u64 * 8;
+            v[2] += s.peak_blocks[c].get() * size;
+            v[3] += s.reissued[c].get() * size;
+            v[4] += s.misses[c].get() * size;
+        }
+        if v.iter().all(|&x| x == 0) {
+            continue;
+        }
+        let name = names.get(i).cloned().unwrap_or_default();
+        if name.starts_with("checker") || name == "tsrs" {
+            for (c, row) in by_class.iter_mut().enumerate().skip(1) {
+                row[0] += s.blocks[c].get() * c as u64 * 8;
+                row[1] += s.peak_blocks[c].get() * c as u64 * 8;
+                row[2] += s.misses[c].get() * c as u64 * 8;
+            }
+        }
+        let used: u64 = a.used_ranges().iter().map(|&(_, len)| len as u64).sum();
+        rows.push((name, used, v));
+    }
+    rows.sort_by(|a, b| a.0.cmp(&b.0));
+    let kb = |b: u64| format!("{:.1}", b as f64 / 1024.0);
+    eprintln!("\n-- arena free lists: thread, arena used MB, on lists at exit KB, peak on lists KB, sum of class peaks KB, reissued MB, bumped by recycling sites MB --");
+    let mut tot = [0u64; 6];
+    for (name, used, v) in &rows {
+        eprintln!("{name:<14} {:>9} {:>9} {:>9} {:>9} {:>10} {:>10}", mb(*used), kb(v[0]), kb(v[1]), kb(v[2]), mb(v[3]), mb(v[4]));
+        if name.starts_with("checker") || name == "tsrs" {
+            tot[0] += used;
+            for k in 0..5 {
+                tot[k + 1] += v[k];
+            }
+        }
+    }
+    eprintln!("{:<14} {:>9} {:>9} {:>9} {:>9} {:>10} {:>10}", "checkers", mb(tot[0]), kb(tot[1]), kb(tot[2]), kb(tot[3]), mb(tot[4]), mb(tot[5]));
+    let mut classes: Vec<(usize, [u64; 3])> = by_class.into_iter().enumerate().filter(|r| r.1[1] > 0).collect();
+    classes.sort_by(|a, b| b.1[0].cmp(&a.1[0]));
+    eprintln!("-- checker free lists by size class: size, on lists at exit KB, sum of per-arena class peaks KB, bumped MB --");
+    for (c, r) in classes.iter().take(16) {
+        eprintln!("{:>5} B {:>9} {:>9} {:>9}", c * 8, kb(r[0]), kb(r[1]), mb(r[2]));
+    }
 }
 
 /// Census only: the number of arena blocks this thread has recorded (an arena checkpoint keeps it).
@@ -657,6 +717,8 @@ pub fn dump() {
             ty
         );
     }
+
+    dump_free_lists();
 
     heap_sample::dump(std::env::var("TSRS_HEAP_PROFILE_TOP").ok().and_then(|s| s.parse().ok()).unwrap_or(25));
 
