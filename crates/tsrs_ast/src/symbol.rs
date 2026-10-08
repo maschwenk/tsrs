@@ -42,6 +42,9 @@ struct SymbolTables {
     exports: OwnedCell<Option<P<SymbolTable>>>,
     export_symbol: OwnedCell<Option<P<Symbol>>>,
     value_declaration: OwnedCell<Option<P<Node>>>, // when it is not the first declaration
+    // tsrs-only: a member list of one of the symbol's declarations that is parsed and bound on first use
+    // (`lazylist`); `members` and `exports` force it first. Written by the binder of the file only.
+    lazy: OwnedCell<Option<P<crate::lazylist::LazyNodeList>>>,
 }
 
 const _: () = assert!(std::mem::size_of::<Symbol>() == if tsrs_core::COMPRESSED_PTRS { 32 } else { 40 });
@@ -81,6 +84,7 @@ impl Symbol {
     }
     #[inline]
     pub fn declarations(&self) -> &'static [P<Node>] {
+        tsrs_core::lazydts_census::mark_member(self as *const Symbol as usize);
         self.declarations.get()
     }
     /// Go `symbol.Declarations = slices.Clone(declarations)`-like: stores a copy.
@@ -113,6 +117,7 @@ impl Symbol {
     #[inline]
     #[expect(clippy::disallowed_methods, reason = "indexing with a bounds check: +0.7% instructions, one checker (notes/mem-small.md)")]
     pub fn value_declaration(&self) -> Option<P<Node>> {
+        tsrs_core::lazydts_census::mark_member(self as *const Symbol as usize);
         if self.name.tags() & TAG_VALUE_FIRST != 0 {
             let declarations = self.declarations.get();
             debug_assert!(!declarations.is_empty());
@@ -155,7 +160,12 @@ impl Symbol {
     }
     #[inline]
     pub fn members(&self) -> Option<P<SymbolTable>> {
-        self.tables().and_then(|t| t.members.get())
+        tsrs_core::lazydts_census::mark_owner(self as *const Symbol as usize, false);
+        let t = self.tables()?;
+        if let Some(lazy) = t.lazy.get() {
+            lazy.ensure();
+        }
+        t.members.get()
     }
     #[inline]
     pub fn set_members(&self, members: Option<P<SymbolTable>>) {
@@ -165,7 +175,25 @@ impl Symbol {
     }
     #[inline]
     pub fn exports(&self) -> Option<P<SymbolTable>> {
-        self.tables().and_then(|t| t.exports.get())
+        tsrs_core::lazydts_census::mark_owner(self as *const Symbol as usize, true);
+        let t = self.tables()?;
+        if let Some(lazy) = t.lazy.get() {
+            lazy.ensure();
+        }
+        t.exports.get()
+    }
+
+    /// The pending lazy member list of one of this symbol's declarations (`lazylist`), if any (forced or not).
+    #[inline]
+    pub fn lazy_list(&self) -> Option<P<crate::lazylist::LazyNodeList>> {
+        self.tables().and_then(|t| t.lazy.get())
+    }
+
+    /// Binder: `list` (a member list of a declaration of this symbol) is bound on first use.
+    pub fn set_lazy_list(&self, list: Option<P<crate::lazylist::LazyNodeList>>) {
+        if list.is_some() || self.tables().is_some() {
+            self.tables_for_write().lazy.set(list);
+        }
     }
     #[inline]
     pub fn set_exports(&self, exports: Option<P<SymbolTable>>) {
@@ -766,12 +794,21 @@ impl NameFilter {
     }
 }
 
+/// The lazy declaration-file census (profile builds): a symbol-table hit touches the symbol.
+#[inline(always)]
+fn census_hit(symbol: P<Symbol>) -> P<Symbol> {
+    if tsrs_core::lazydts_census::enabled() {
+        tsrs_core::lazydts_census::mark_member(&*symbol as *const Symbol as usize);
+    }
+    symbol
+}
+
 impl SymbolTable {
     /// `lookup` of a name hashed beforehand.
     #[inline]
     pub fn lookup_hashed(&self, key: HashedName<'_>) -> Option<P<Symbol>> {
         let m = self.0.borrow();
-        m.position_hashed(key.name, key.hash).map(|i| m.entries[i].symbol())
+        m.position_hashed(key.name, key.hash).map(|i| census_hit(m.entries[i].symbol()))
     }
 
     /// Go `make(ast.SymbolTable)`.
@@ -799,14 +836,14 @@ impl SymbolTable {
     #[inline]
     pub fn lookup(&self, name: &str) -> Option<P<Symbol>> {
         let m = self.0.borrow();
-        m.position(name).map(|i| m.entries[i].symbol())
+        m.position(name).map(|i| census_hit(m.entries[i].symbol()))
     }
 
     /// `lookup` that also returns the stored key.
     #[inline]
     pub fn lookup_entry(&self, name: &str) -> Option<(&'static str, P<Symbol>)> {
         let m = self.0.borrow();
-        m.position(name).map(|i| (m.key(i), m.entries[i].symbol()))
+        m.position(name).map(|i| (m.key(i), census_hit(m.entries[i].symbol())))
     }
 
     #[inline]

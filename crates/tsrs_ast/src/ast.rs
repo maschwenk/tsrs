@@ -284,6 +284,11 @@ impl NodeFactory {
     pub fn new_node_list_from_static(&self, nodes: &'static [P<Node>]) -> P<NodeList> {
         P::new_in(self.scratch, NodeList::new(undefined_text_range(), nodes))
     }
+
+    /// A member list parsed on first use (`lazylist`).
+    pub fn new_lazy_node_list(&self, loc: TextRange, record: &'static crate::lazylist::LazyNodeList) -> P<NodeList> {
+        P::new_in(self.scratch, NodeList::new_lazy(loc, record))
+    }
 }
 
 impl NodeList {
@@ -294,7 +299,34 @@ impl NodeList {
     }
     #[inline]
     pub fn nodes(&self) -> &'static [P<Node>] {
+        tsrs_core::lazydts_census::mark_list(self as *const NodeList as usize);
+        if self.nodes.is_long() {
+            return self.nodes_long();
+        }
         self.nodes.get()
+    }
+
+    /// A list of 2^16 nodes or more, or a lazily parsed member list (`lazylist`).
+    #[cold]
+    #[inline(never)]
+    fn nodes_long(&self) -> &'static [P<Node>] {
+        match self.lazy_record() {
+            Some(record) => record.force_nodes(),
+            None => self.nodes.get(),
+        }
+    }
+
+    /// A list whose members are parsed on first use (`lazylist`), with its loc.
+    pub fn new_lazy(loc: TextRange, record: &'static crate::lazylist::LazyNodeList) -> NodeList {
+        NodeList { loc: OwnedCell::new(loc), nodes: ThinSlice::from_ref(record.head_ref()) }
+    }
+
+    /// The lazy-list record of a list made by `new_lazy` (forced or not).
+    #[inline]
+    pub fn lazy_record(&self) -> Option<&'static crate::lazylist::LazyNodeList> {
+        let head = self.nodes.long_ref()?;
+        // SAFETY: a long-form slice whose data is the lazy head was made by `new_lazy` from a record's `head`.
+        crate::lazylist::is_lazy_head(*head).then(|| unsafe { crate::lazylist::LazyNodeList::from_head(head) })
     }
     #[inline]
     pub fn loc(&self) -> TextRange {
@@ -1683,6 +1715,8 @@ pub struct SourceFile {
     // ast.go:2517 nameTableOnce/nameTable (Go map, random order; insertion order here)
     name_table: OnceLock<tsrs_core::collections::OrderedMap<&'static str, i32>>,
     pub reparsed_clones: OwnedCell<&'static [P<Node>]>,
+    // tsrs-only: the member lists of this declaration file that are parsed and bound on first use (`lazylist`).
+    pub lazy_lists: OwnedCell<&'static [P<crate::lazylist::LazyNodeList>]>,
     pub pragmas: OwnedCell<&'static [Pragma]>,
     pub referenced_files: OwnedCell<&'static [P<FileReference>]>,
     pub type_reference_directives: OwnedCell<&'static [P<FileReference>]>,
@@ -1762,6 +1796,7 @@ impl NodeFactory {
             identifiers: OnceLock::new(),
             name_table: OnceLock::new(),
             reparsed_clones: OwnedCell::new(&[]),
+            lazy_lists: OwnedCell::new(&[]),
             pragmas: OwnedCell::new(&[]),
             referenced_files: OwnedCell::new(&[]),
             type_reference_directives: OwnedCell::new(&[]),

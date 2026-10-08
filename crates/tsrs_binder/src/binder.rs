@@ -6,6 +6,7 @@ use tsrs_ast::{
     Diagnostic, DiagnosticExt, FlowFlags, FlowList, FlowNode, Kind, ModifierFlags, Node, NodeFlags, NodeList, SourceFile, Symbol,
     SymbolFlags, SymbolTable,
 };
+use tsrs_ast::lazylist::{self, LazyBindContext, LazyNodeList};
 use tsrs_core::{alloc_str, tspath, OwnedCell, P};
 use tsrs_diagnostics as diagnostics;
 use tsrs_diagnostics::Message;
@@ -103,12 +104,36 @@ pub fn bind_source_file(file: P<SourceFile>) {
 
 fn bind_source_file_worker(file: P<SourceFile>) {
     file.bind_once(|| {
+        let census_before = (tsrs_core::lazydts_census::enabled() && file.is_declaration_file()).then(tsrs_core::lazydts_census::bytes_now);
         let mut b = Binder::new(file);
         b.bind(file.as_node());
         b.bind_deferred_expando_assignments();
         file.set_bind_diagnostics(&b.bind_diagnostics);
         file.symbol_count.set(b.symbol_count);
+        for &lazy in file.lazy_lists.get() {
+            lazy.mark_unbound();
+        }
+        if let Some(before) = census_before {
+            let bytes = tsrs_core::lazydts_census::bytes_now().saturating_sub(before);
+            tsrs_core::lazydts_census::note_bind_file(&*file as *const SourceFile as usize, bytes);
+        }
     });
+}
+
+/// tsrs-only: bind lazily parsed member lists of declaration files on first use (tsrs_ast `lazylist`); with
+/// `tsrs_parser::enable_lazy_dts`.
+pub fn enable_lazy_dts() {
+    lazylist::set_bind_hook(bind_lazy_list);
+}
+
+/// The first reader of a deferred lazy list (any thread, after the file was bound): binds its members with the
+/// binder state recorded at the list. Its bind diagnostics and symbol count are dropped: the CLI does not report bind
+/// diagnostics of files it does not check (only lists of such files are lazy), and `--extendedDiagnostics` counts the
+/// symbols of the lists that were bound before the report.
+fn bind_lazy_list(record: &LazyNodeList, file: P<SourceFile>, nodes: &'static [P<Node>]) {
+    let ctx = *record.bind_context().expect("a deferred list's binder state");
+    let mut b = Binder::new_for_lazy_list(file, ctx.unreachable_flow);
+    b.bind_lazy_members(ctx, nodes);
 }
 
 fn new_flow_node_value(flags: FlowFlags, node: Option<P<Node>>, antecedent: Option<P<FlowNode>>, text_index: u32) -> P<FlowNode> {
@@ -116,10 +141,21 @@ fn new_flow_node_value(flags: FlowFlags, node: Option<P<Node>>, antecedent: Opti
 }
 
 impl Binder {
+    fn new_for_lazy_list(file: P<SourceFile>, unreachable_flow: P<FlowNode>) -> Binder {
+        let mut b = Binder::new_with(file, unreachable_flow, Vec::new());
+        b.symbol_count = 0;
+        b
+    }
+
     fn new(file: P<SourceFile>) -> Binder {
+        let unreachable_flow = new_flow_node_value(FlowFlags::Unreachable, None, None, file.text_index.get());
+        Binder::new_with(file, unreachable_flow, file.bind_diagnostics().to_vec())
+    }
+
+    fn new_with(file: P<SourceFile>, unreachable_flow: P<FlowNode>, bind_diagnostics: Vec<P<Diagnostic>>) -> Binder {
         Binder {
             file,
-            unreachable_flow: new_flow_node_value(FlowFlags::Unreachable, None, None, file.text_index.get()),
+            unreachable_flow,
             container: None,
             this_container: None,
             block_scope_container: None,
@@ -142,7 +178,7 @@ impl Binder {
             symbol_count: 0,
             not_const_enum_only_modules: FxHashSet::default(),
             expando_assignments: Vec::new(),
-            bind_diagnostics: file.bind_diagnostics().to_vec(),
+            bind_diagnostics,
         }
     }
 
@@ -705,6 +741,22 @@ impl Binder {
         let Some(node) = node.into() else {
             return false;
         };
+        if tsrs_core::lazydts_census::enabled()
+            && self.file.is_declaration_file()
+            && node.parent().is_some_and(|p| {
+                matches!(p.kind(), Kind::InterfaceDeclaration | Kind::ClassDeclaration | Kind::ClassExpression | Kind::TypeLiteral | Kind::ModuleBlock)
+            })
+        {
+            let before = tsrs_core::lazydts_census::bytes_now();
+            let result = self.bind_node(node);
+            let bytes = tsrs_core::lazydts_census::bytes_now().saturating_sub(before);
+            tsrs_core::lazydts_census::note_bind_member(&*node as *const Node as usize, bytes);
+            return result;
+        }
+        self.bind_node(node)
+    }
+
+    fn bind_node(&mut self, node: P<Node>) -> bool {
         // Even though in the AST the jsdoc @typedef node belongs to the current node,
         // its symbol might be in the same scope with the current node's symbol. Consider:
         //
@@ -1893,6 +1945,7 @@ impl Binder {
                 node.set_flags(node.flags() | NodeFlags::Unreachable);
             }
             self.bind_each_child(node);
+            self.bind_lazy_member_list(node);
             self.in_assignment_pattern = save_in_assignment_pattern;
             return;
         }
@@ -1951,9 +2004,133 @@ impl Binder {
                 self.in_assignment_pattern = save_in_assignment_pattern;
                 self.bind_each_child(node);
             }
+            Kind::InterfaceDeclaration | Kind::ClassDeclaration | Kind::ClassExpression | Kind::TypeLiteral => {
+                self.bind_each_child(node);
+                self.bind_lazy_member_list(node);
+            }
             _ => self.bind_each_child(node),
         }
         self.in_assignment_pattern = save_in_assignment_pattern;
+    }
+
+    /// tsrs-only (tsrs_ast `lazylist`, notes/mem-lazy-dts-members.md): `node`'s member list, if the parser made it
+    /// lazy, was just skipped by `bind_each_child` (an unparsed lazy list has no members yet), at the point where the
+    /// members would have been bound. In the usual state (no flow targets or labels, reachable, an owner symbol) the
+    /// binder state is recorded on the list and the owner symbol, and the first reader binds the members with it;
+    /// otherwise the list is parsed now and bound here, as if it had never been lazy.
+    fn bind_lazy_member_list(&mut self, node: P<Node>) {
+        if !matches!(node.kind(), Kind::InterfaceDeclaration | Kind::ClassDeclaration | Kind::ClassExpression | Kind::TypeLiteral) {
+            return;
+        }
+        let Some(record) = node.member_list().and_then(|l| l.lazy_record()) else {
+            return;
+        };
+        if record.state() != lazylist::PENDING {
+            return;
+        }
+        let symbol = node.symbol();
+        let plain = symbol.is_some()
+            && self.current_flow != Some(self.unreachable_flow)
+            && self.current_break_target.is_none()
+            && self.current_continue_target.is_none()
+            && self.current_return_target.is_none()
+            && self.current_true_target.is_none()
+            && self.current_false_target.is_none()
+            && self.current_exception_target.is_none()
+            && self.pre_switch_case_flow.is_none()
+            && self.active_label_list.is_empty()
+            && !self.in_assignment_pattern;
+        if !plain {
+            let nodes = record.parse_now(self.file);
+            self.bind_each(nodes);
+            return;
+        }
+        let ctx = P::new(LazyBindContext {
+            container: self.container,
+            this_container: self.this_container,
+            block_scope_container: self.block_scope_container,
+            last_container: self.last_container,
+            current_flow: self.current_flow,
+            unreachable_flow: self.unreachable_flow,
+        });
+        record.defer(ctx);
+        symbol.unwrap().set_lazy_list(Some(P::from_static(record)));
+    }
+
+    /// A declaration is about to merge into a symbol whose earlier declaration has a deferred member list: bind that
+    /// list first, so the symbol's tables get their entries in source order (as if it had never been lazy).
+    fn force_pending_lazy_list(&mut self, record: &'static LazyNodeList) {
+        let file = self.file;
+        record.force_inline(file, &mut |nodes| {
+            let ctx = record.bind_context().expect("a deferred list's binder state");
+            self.bind_lazy_members(*ctx, nodes);
+        });
+    }
+
+    /// Binds the members of a deferred lazy list with the binder state recorded at the list, then puts this binder's
+    /// state back. Containers the members add to the container chain are linked in where the list is, before the
+    /// containers bound after it.
+    pub(crate) fn bind_lazy_members(&mut self, ctx: LazyBindContext, nodes: &'static [P<Node>]) {
+        let saved = (
+            self.container,
+            self.this_container,
+            self.block_scope_container,
+            self.last_container,
+            self.current_flow,
+            self.unreachable_flow,
+            self.current_break_target,
+            self.current_continue_target,
+            self.current_return_target,
+            self.current_true_target,
+            self.current_false_target,
+            self.current_exception_target,
+            self.pre_switch_case_flow,
+        );
+        let saved_labels = std::mem::take(&mut self.active_label_list);
+        let saved_in_assignment_pattern = self.in_assignment_pattern;
+        self.container = ctx.container;
+        self.this_container = ctx.this_container;
+        self.block_scope_container = ctx.block_scope_container;
+        self.last_container = ctx.last_container;
+        self.current_flow = ctx.current_flow;
+        self.unreachable_flow = ctx.unreachable_flow;
+        self.current_break_target = None;
+        self.current_continue_target = None;
+        self.current_return_target = None;
+        self.current_true_target = None;
+        self.current_false_target = None;
+        self.current_exception_target = None;
+        self.pre_switch_case_flow = None;
+        self.in_assignment_pattern = false;
+        let next = ctx.last_container.and_then(|c| c.locals_container_data().unwrap().next_container.get());
+        self.bind_each(nodes);
+        let last = self.last_container;
+        if last != ctx.last_container {
+            if let Some(last) = last {
+                last.locals_container_data().unwrap().next_container.set(next);
+            }
+        }
+        (
+            self.container,
+            self.this_container,
+            self.block_scope_container,
+            self.last_container,
+            self.current_flow,
+            self.unreachable_flow,
+            self.current_break_target,
+            self.current_continue_target,
+            self.current_return_target,
+            self.current_true_target,
+            self.current_false_target,
+            self.current_exception_target,
+            self.pre_switch_case_flow,
+        ) = saved;
+        self.active_label_list = saved_labels;
+        self.in_assignment_pattern = saved_in_assignment_pattern;
+        // The list was the end of the chain so far: what it added is the end now.
+        if saved.3 == ctx.last_container && next.is_none() {
+            self.last_container = last;
+        }
     }
 
     pub(crate) fn bind_each_child(&mut self, node: P<Node>) {
@@ -2798,6 +2975,18 @@ impl Binder {
     }
 
     pub(crate) fn add_declaration_to_symbol(&mut self, symbol: P<Symbol>, node: P<Node>, symbol_flags: SymbolFlags) {
+        // tsrs-only (`bind_lazy_member_list`): a declaration that fills the symbol's members or exports (its member list,
+        // type parameters, namespace body or enum members) merges into it; a value or function merge fills neither.
+        if let Some(lazy) = symbol.lazy_list() {
+            if lazy.state() == lazylist::DEFERRED
+                && matches!(
+                    node.kind(),
+                    Kind::InterfaceDeclaration | Kind::ClassDeclaration | Kind::ClassExpression | Kind::ModuleDeclaration | Kind::EnumDeclaration
+                )
+            {
+                self.force_pending_lazy_list(lazy.get());
+            }
+        }
         symbol.flags.set(symbol.flags.get() | symbol_flags);
         node.declaration_data().unwrap().symbol.set(Some(symbol));
         if !symbol.declarations().contains(&node) {

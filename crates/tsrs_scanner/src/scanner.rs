@@ -445,6 +445,19 @@ impl Scanner {
         self.text
     }
 
+    /// A number cache entry outlives a rolled-back parse (notes/mem-recycle.md): pin the arena unless both strings are
+    /// slices of the source text (or empty), which no rewind can discard. Lazily parsed declaration-file member lists
+    /// are discarded by a rewind too (notes/mem-lazy-dts-members.md), and most numbers are source slices.
+    fn pin_unless_source(&self, key: &str, value: &str) {
+        let in_text = |s: &str| {
+            let (p, t) = (s.as_ptr() as usize, self.text.as_ptr() as usize);
+            s.is_empty() || (p >= t && p + s.len() <= t + self.text.len())
+        };
+        if !in_text(key) || !in_text(value) {
+            tsrs_core::arena_pin();
+        }
+    }
+
     pub fn token(&self) -> Kind {
         self.state.token
     }
@@ -963,7 +976,7 @@ impl Scanner {
                                 } else {
                                     self.state.token_value = alloc_str(&format!("0x{digits}"));
                                 }
-                                tsrs_core::arena_pin(); // the cache outlives a rolled-back parse (notes/mem-recycle.md)
+                                self.pin_unless_source(digits, self.state.token_value);
                                 self.hex_number_cache.insert(digits, self.state.token_value);
                             }
                             self.state.token_flags |= TokenFlags::HexSpecifier;
@@ -2484,7 +2497,7 @@ impl Scanner {
                 Cow::Borrowed(s) => s,
                 Cow::Owned(s) => alloc_str(&s),
             };
-            tsrs_core::arena_pin(); // the cache outlives a rolled-back parse (notes/mem-recycle.md)
+            self.pin_unless_source(original, digits);
             self.hex_digit_cache.insert(original, digits);
             digits
         }
@@ -2537,7 +2550,7 @@ impl Scanner {
             self.state.token_value = cached;
         } else {
             let token_value = self.canonical_number(self.state.token_value);
-            tsrs_core::arena_pin(); // the cache outlives a rolled-back parse (notes/mem-recycle.md)
+            self.pin_unless_source(self.state.token_value, token_value);
             self.number_cache.insert(self.state.token_value, token_value);
             self.state.token_value = token_value;
         }

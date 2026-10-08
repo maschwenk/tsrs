@@ -297,6 +297,12 @@ fn perform_compilation(
     if leaf_settings.mode != tsrs_compiler::LeafMode::Off {
         tsrs_compiler::enable_file_regions(leaf_settings, sys.get_current_directory());
     }
+    // tsrs-only (notes/mem-lazy-dts-members.md): when no declaration file is type-checked, the member lists of
+    // interfaces, classes and type literals in declaration files are parsed and bound on first use.
+    if testing.is_none() && (options.skip_lib_check.is_true() || options.no_check.is_true()) && tsrs_compiler::lazy_dts_allowed() {
+        tsrs_parser::enable_lazy_dts();
+        tsrs_binder::enable_lazy_dts();
+    }
     let mut program_options = ProgramOptions::new(config, host);
     program_options.leaf_files = leaf_settings.mode;
 
@@ -318,6 +324,12 @@ fn perform_compilation(
     });
     if let Some(line) = tsrs_compiler::leaf_stats_report() {
         eprint!("{line}");
+    }
+    if let Some(report) = tsrs_compiler::lazy_dts_census_report() {
+        eprint!("{report}");
+    }
+    if std::env::var_os("TSRS_LAZY_DTS").is_some_and(|v| v == "stats") {
+        eprint!("{}", tsrs_ast::lazylist::stats_line());
     }
     #[cfg(feature = "alloc-profile")]
     crate::census::run(program, &[config.addr(), result.diagnostics.as_ptr() as usize]);
