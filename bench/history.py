@@ -7,10 +7,11 @@
 Orders bench/results/*.json by the first-parent history of `--branch` (oldest first; a result whose commit is not on
 that branch is left out unless --all, which appends such results by date) and prints one table per metric: a row per
 result, a column per project, each cell the value and its change against the row above, which with one bench per push
-(.depot/workflows/bench.yml) is the previous merge. Metrics: `instructions` and `peak` are the single-threaded
+(.depot/workflows/bench.yml) is the previous merge. Hardware or compiler-build changes start a new baseline
+instead of reporting a percentage against an incompatible result. Metrics: `instructions` and `peak` are the single-threaded
 instruction count and peak RSS from bench/count.py (deterministic to ~0.001% and ~0.4%: a change is the code's);
 `wall` is the default-mode wall on the fixed 8-vCPU runner (noisy, up to 10-20% between runs of the same code);
-`wide_wall` and `wide_peak` are the 64-vCPU default-mode wall and peak, with `bun check`'s wall beside the wall. A cell
+`wide_wall` and `wide_peak` are the wider runner's default-mode wall and peak, with `bun check`'s wall beside the wall. A cell
 past the thresholds of bench/regressions.py (instructions or peak up more than 1%, and peak by more than 2 MiB) is
 marked `!`; a wall or wide-peak change next to an instruction change under 0.3% is marked `~`: the code did not
 change, so that is the runner's noise (a median 2%, up to 10%, between publishes of the same code on 2026-10-07). Use it to find which commit cost what, and whether a commit's gain was worth its cost.
@@ -80,6 +81,13 @@ def value(r: dict, project: str, metric: str):
     return node.get(field) if isinstance(node, dict) else None
 
 
+def setup(r: dict, project: str, metric: str) -> tuple:
+    mode = METRICS[metric][0]
+    machine = r["projects"].get(project, {}).get(mode, {}).get("machine", r.get("machine", {}))
+    return tuple(machine.get(k) for k in ("label", "cpus", "cpu", "libc")) + (
+        r.get("tsrs", {}).get("build"), r.get("tsrs", {}).get("rustc"))
+
+
 def bun_wall(r: dict, project: str):
     node = r["projects"].get(project, {}).get("wide", {}).get("bun", {})
     return node.get("wall_s") if isinstance(node, dict) else None
@@ -117,18 +125,25 @@ def table(rows: list[dict], projects: list[str], metric: str, tsv: bool) -> str:
     lines = []
     previous = {}
     previous_instructions = {}
+    previous_setup = {}
     for r in rows:
         commit = r["tsrs"].get("commit", "")[:12]
         cells = [commit, r.get("date", ""), subject(commit)]
         for p in projects:
             new = value(r, p, metric)
             instructions = value(r, p, "instructions")
-            old_instructions = previous_instructions.get(p)
+            current_setup = setup(r, p, metric)
+            same_setup = previous_setup.get(p) == current_setup
+            old_instructions = previous_instructions.get(p) if same_setup else None
             same_code = (instructions is not None and old_instructions
                          and abs(instructions / old_instructions - 1) * 100 < NOISE_INSTRUCTION_PERCENT)
-            cells.append(cell(metric, new, previous.get(p), bun_wall(r, p) if with_bun else None, same_code))
+            cells.append(cell(metric, new, previous.get(p) if same_setup else None,
+                              bun_wall(r, p) if with_bun else None, same_code))
+            if new is not None and p in previous_setup and not same_setup:
+                cells[-1] += " (new baseline)"
             if new is not None:
                 previous[p] = new
+                previous_setup[p] = current_setup
             if instructions is not None:
                 previous_instructions[p] = instructions
         lines.append(cells)

@@ -19,7 +19,7 @@ techniques are in place, rejected or untried.
   Check `docs/RUST.md` "Techniques" first: it lists what was already measured and rejected.
 - A performance change must pay for its complexity. It lands only if it clears one of: 1% of single-threaded
   instructions on at least one `bench/projects.json` project (`bench/count.py`, deterministic), 2% of wall time on
-  the README's headline table (the 64-vCPU default-mode run, read across two publishes), or 5% of peak memory at the
+  the README's headline table (the default-mode run, read across two publishes on the same hardware), or 5% of peak memory at the
   default checker count; and a change that adds a thread, a cache, an overlap between phases or an invariant that
   later code must keep needs more than a sub-percent gain to justify it, whatever the number. A finding below the
   bar is still worth keeping: land it as a note in `notes/` (the negative results there are read before every new

@@ -405,6 +405,9 @@ jobs:
           go-version-file: ts-ref/tsc/go.mod
           cache-dependency-path: ts-ref/tsc/go.sum
 
+      - name: Benchmark reporting tests
+        run: python3 -m unittest discover -s bench -p test_reporting.py
+
       - name: Generated code is up to date
         run: tools/gen-check.sh
 
