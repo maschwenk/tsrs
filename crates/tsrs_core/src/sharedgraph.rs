@@ -544,7 +544,7 @@ impl<T: Copy> OvExact<T> {
         if any_frozen() {
             let addr = std::ptr::from_ref(self).addr();
             if is_frozen_addr_slow(addr) {
-                current_overlay().set_cell(addr, v);
+                        current_overlay().set_cell(addr, v);
                 return;
             }
         }
@@ -635,3 +635,4 @@ pub fn set_seed_thread(on: bool) {
 pub fn on_seed_thread() -> bool {
     SEED_THREAD.with(Cell::get)
 }
+

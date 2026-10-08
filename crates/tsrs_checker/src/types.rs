@@ -1034,8 +1034,8 @@ bitflags! {
 
 #[derive(Default)]
 pub struct TypeAlias {
-    pub symbol: OvCell<Option<P<Symbol>>>,
-    pub type_arguments: OvThinSliceCell<P<Type>>,
+    pub symbol: Cell<Option<P<Symbol>>>,
+    pub type_arguments: ThinSliceCell<P<Type>>,
 }
 
 impl TypeAlias {
@@ -1066,13 +1066,13 @@ pub enum AliasArg<'a> {
 pub struct PendingTypeAlias {
     pub(crate) symbol: Option<P<Symbol>>,
     pub(crate) type_arguments: Vec<P<Type>>,
-    alias: OvCell<Option<P<TypeAlias>>>,
+    alias: Cell<Option<P<TypeAlias>>>,
 }
 
 impl PendingTypeAlias {
     #[inline]
     pub fn new(symbol: Option<P<Symbol>>, type_arguments: Vec<P<Type>>) -> PendingTypeAlias {
-        PendingTypeAlias { symbol, type_arguments, alias: tsrs_core::sharedgraph::OvCell::new(None) }
+        PendingTypeAlias { symbol, type_arguments, alias: Cell::new(None) }
     }
 }
 
@@ -1106,7 +1106,7 @@ impl<'a> AliasArg<'a> {
             AliasArg::None => None,
             AliasArg::Some(a) => Some(a),
             AliasArg::Pending(p) => Some(p.alias.get().unwrap_or_else(|| {
-                let a = P::new(TypeAlias { symbol: tsrs_core::sharedgraph::OvCell::new(p.symbol), type_arguments: tsrs_core::sharedgraph::OvThinSliceCell::new(alloc_slice(&p.type_arguments)) });
+                let a = P::new(TypeAlias { symbol: Cell::new(p.symbol), type_arguments: ThinSliceCell::new(alloc_slice(&p.type_arguments)) });
                 p.alias.set(Some(a));
                 a
             })),
@@ -1144,7 +1144,7 @@ pub struct Type {
     pub object_flags: ObjectFlagsCell,
     pub id: TypeId,
     data_tag: TypeDataTag,
-    symbol_or_alias: OvCell<TypeSymbolWord>,
+    symbol_or_alias: Cell<TypeSymbolWord>,
 }
 
 /// `Type.object_flags`. Shared-graph prototype: a frozen type's flags written by a fork go to the fork's overlay,
@@ -1202,8 +1202,8 @@ const _: () = assert!(std::mem::size_of::<Type>() == 24);
 
 #[derive(Default)]
 struct TypeSymbolAlias {
-    symbol: OvCell<Option<P<Symbol>>>,
-    alias: OvCell<Option<P<TypeAlias>>>,
+    symbol: Cell<Option<P<Symbol>>>,
+    alias: Cell<Option<P<TypeAlias>>>,
 }
 
 /// `Type.symbol`, or a `TypeSymbolAlias` record once the type has an alias: `P::pack` in the low 45 bits, bit 63 set
@@ -1484,7 +1484,7 @@ impl Type {
     /// Allocates a type whose data struct is `data` (only `Checker::new_type` and the checker's placeholder type).
     #[inline]
     pub(crate) fn alloc<T: TypePayload>(flags: TypeFlags, object_flags: ObjectFlags, id: TypeId, data: T) -> P<Type> {
-        let header = Type { flags: Cell::new(flags), object_flags: ObjectFlagsCell::new(object_flags), id, data_tag: T::TAG, symbol_or_alias: tsrs_core::sharedgraph::OvCell::new(TypeSymbolWord(0)) };
+        let header = Type { flags: Cell::new(flags), object_flags: ObjectFlagsCell::new(object_flags), id, data_tag: T::TAG, symbol_or_alias: Cell::new(TypeSymbolWord(0)) };
         // SAFETY: `TypeAlloc` is `repr(C)` with the header first; arena values are never moved or freed.
         unsafe { P::new(TypeAlloc { header, data }).cast::<Type>() }
     }
@@ -1807,7 +1807,7 @@ impl Type {
         match word.record() {
             Some(r) => r.alias.set(alias),
             None if alias.is_some() => {
-                let r = P::new(TypeSymbolAlias { symbol: tsrs_core::sharedgraph::OvCell::new(word.symbol()), alias: tsrs_core::sharedgraph::OvCell::new(alias) });
+                let r = P::new(TypeSymbolAlias { symbol: Cell::new(word.symbol()), alias: Cell::new(alias) });
                 self.symbol_or_alias.set(TypeSymbolWord(r.pack() | TypeSymbolWord::RECORD));
             }
             None => {}
@@ -2030,7 +2030,7 @@ macro_rules! embeds {
 
 #[derive(Default)]
 pub struct IntrinsicType {
-    pub intrinsic_name: OvCell<&'static str>,
+    pub intrinsic_name: Cell<&'static str>,
 }
 
 impl IntrinsicType {
@@ -2056,7 +2056,7 @@ pub enum LiteralValue {
 pub struct LiteralType {
     pub value: Cell<Option<LiteralValue>>, // string | jsnum.Number | bool | PseudoBigInt | nil (computed enum)
     pub fresh_type: OvCell<Option<P<Type>>>, // Fresh version of type
-    pub regular_type: OvCell<Option<P<Type>>>, // Regular version of type
+    pub regular_type: Cell<Option<P<Type>>>, // Regular version of type
 }
 
 impl LiteralType {
@@ -2078,7 +2078,7 @@ impl LiteralType {
 
 #[derive(Default)]
 pub struct UniqueESSymbolType {
-    pub name: OvCell<&'static str>,
+    pub name: Cell<&'static str>,
 }
 
 // ConstrainedType (type with computed base constraint)
@@ -2108,10 +2108,10 @@ pub struct StructuredType {
 
 #[derive(Default)]
 struct StructuredMembers {
-    members: OvCell<Option<P<SymbolTable>>>,
+    members: Cell<Option<P<SymbolTable>>>,
     // `ThinSliceCell`s are one word each (`tsrs_core::ThinSlice`).
-    properties: OvThinSliceCell<P<Symbol>>,
-    signatures: OvThinSliceCell<P<Signature>>, // Signatures (call + construct)
+    properties: ThinSliceCell<P<Symbol>>,
+    signatures: ThinSliceCell<P<Signature>>, // Signatures (call + construct)
     // Count of call signatures, and index infos (2% of the resolved types on the private monorepo have any).
     count_or_index_infos: CountOrIndexInfos,
 }
@@ -2127,17 +2127,17 @@ const _: () = assert!(std::mem::size_of::<StructuredMembers>() == 24);
 
 /// Go's `CallSignatureCount` and `IndexInfos` in one word: `count << 1 | 1` while no non-empty index info list was
 /// set (the list reads empty, `&[]`), else a pointer to an `IndexInfosTail` holding both.
-struct CountOrIndexInfos(OvExact<RawWord>);
+struct CountOrIndexInfos(Cell<RawWord>);
 
 struct IndexInfosTail {
-    index_infos: OvThinSliceCell<P<IndexInfo>>,
-    call_signature_count: OvCell<i32>,
+    index_infos: ThinSliceCell<P<IndexInfo>>,
+    call_signature_count: Cell<i32>,
 }
 
 impl Default for CountOrIndexInfos {
     #[inline]
     fn default() -> Self {
-        CountOrIndexInfos(OvExact::new(RawWord(1)))
+        CountOrIndexInfos(Cell::new(RawWord(1)))
     }
 }
 
@@ -2172,7 +2172,7 @@ impl CountOrIndexInfos {
             t.index_infos.set(index_infos);
         } else if !index_infos.is_empty() {
             let count = self.call_signature_count();
-            let t = P::new(IndexInfosTail { index_infos: tsrs_core::sharedgraph::OvThinSliceCell::new(index_infos), call_signature_count: tsrs_core::sharedgraph::OvCell::new(count) });
+            let t = P::new(IndexInfosTail { index_infos: ThinSliceCell::new(index_infos), call_signature_count: Cell::new(count) });
             self.0.set(RawWord::from_ptr(std::ptr::from_ref::<IndexInfosTail>(t.get())));
         }
     }
@@ -2278,7 +2278,7 @@ impl StructuredType {
 #[derive(Default)]
 pub struct ObjectType {
     pub structured_type: StructuredType,
-    pub target: OvCell<Option<P<Type>>>, // Target of instantiated type
+    pub target: Cell<Option<P<Type>>>, // Target of instantiated type
     pub mapper: MapperCell, // Type mapper for instantiated type
     // Go's `instantiations` map is used only by the targets of instantiations: generic interfaces and tuples keep
     // it in `InterfaceType`, other object types (declared anonymous and mapped types, deferred type references) in
@@ -2292,7 +2292,7 @@ embeds!(ObjectType, structured_type, StructuredType);
 #[derive(Default)]
 pub struct TypeReference {
     pub object_type: ObjectType,
-    pub node: OvCell<Option<P<Node>>>, // TypeReferenceNode | ArrayTypeNode | TupleTypeNode when deferred, else nil
+    pub node: Cell<Option<P<Node>>>, // TypeReferenceNode | ArrayTypeNode | TupleTypeNode when deferred, else nil
     pub resolved_type_arguments: OvOptionThinSliceCell<P<Type>>, // nil = not computed (Go tests against nil)
 }
 embeds!(TypeReference, object_type, ObjectType);
@@ -2368,9 +2368,9 @@ impl ReferenceInstantiations {
 pub struct InterfaceType {
     pub type_reference: TypeReference,
     pub instantiations: ReferenceInstantiations, // Map of type instantiations (Go: in ObjectType)
-    pub all_type_parameters: OvCell<&'static [P<Type>]>, // Type parameters (outer + local + thisType)
-    pub outer_type_parameter_count: OvCell<i32>, // Count of outer type parameters
-    pub this_type: OvCell<Option<P<Type>>>, // The "this" type (nil if none)
+    pub all_type_parameters: Cell<&'static [P<Type>]>, // Type parameters (outer + local + thisType)
+    pub outer_type_parameter_count: Cell<i32>, // Count of outer type parameters
+    pub this_type: Cell<Option<P<Type>>>, // The "this" type (nil if none)
     pub base_types_resolved: OvCell<bool>,
     pub declared_members_resolved: OvCell<bool>,
     pub resolved_base_constructor_type: OvCell<Option<P<Type>>>,
@@ -2453,11 +2453,11 @@ impl TupleElementInfo {
 #[derive(Default)]
 pub struct TupleType {
     pub interface_type: InterfaceType,
-    pub element_infos: OvCell<&'static [TupleElementInfo]>,
-    pub min_length: OvCell<i32>, // Number of required or variadic elements
-    pub fixed_length: OvCell<i32>, // Number of initial required or optional elements
-    pub combined_flags: OvCell<ElementFlags>,
-    pub readonly: OvCell<bool>,
+    pub element_infos: Cell<&'static [TupleElementInfo]>,
+    pub min_length: Cell<i32>, // Number of required or variadic elements
+    pub fixed_length: Cell<i32>, // Number of initial required or optional elements
+    pub combined_flags: Cell<ElementFlags>,
+    pub readonly: Cell<bool>,
 }
 embeds!(TupleType, interface_type, InterfaceType);
 
@@ -2485,7 +2485,7 @@ impl TupleType {
 #[derive(Default)]
 pub struct InstantiationExpressionType {
     pub object_type: ObjectType,
-    pub node: OvCell<Option<P<Node>>>,
+    pub node: Cell<Option<P<Node>>>,
 }
 embeds!(InstantiationExpressionType, object_type, ObjectType);
 
@@ -2494,14 +2494,14 @@ embeds!(InstantiationExpressionType, object_type, ObjectType);
 #[derive(Default)]
 pub struct MappedType {
     pub object_type: ObjectType,
-    pub declaration: OvCell<Option<P<Node>>>, // MappedTypeNode
-    pub type_parameter: OvCell<Option<P<Type>>>,
+    pub declaration: Cell<Option<P<Node>>>, // MappedTypeNode
+    pub type_parameter: Cell<Option<P<Type>>>,
     pub constraint_type: OvCell<Option<P<Type>>>,
     pub name_type: OvCell<Option<P<Type>>>,
     pub template_type: OvCell<Option<P<Type>>>,
     pub modifiers_type: OvCell<Option<P<Type>>>,
     pub resolved_apparent_type: OvCell<Option<P<Type>>>,
-    pub contains_error: OvCell<bool>,
+    pub contains_error: Cell<bool>,
 }
 embeds!(MappedType, object_type, ObjectType);
 
@@ -2536,9 +2536,9 @@ impl MappedType {
 #[derive(Default)]
 pub struct ReverseMappedType {
     pub object_type: ObjectType,
-    pub source: OvCell<Option<P<Type>>>,
-    pub mapped_type: OvCell<Option<P<Type>>>,
-    pub constraint_type: OvCell<Option<P<Type>>>,
+    pub source: Cell<Option<P<Type>>>,
+    pub mapped_type: Cell<Option<P<Type>>>,
+    pub constraint_type: Cell<Option<P<Type>>>,
 }
 embeds!(ReverseMappedType, object_type, ObjectType);
 
@@ -2547,8 +2547,8 @@ embeds!(ReverseMappedType, object_type, ObjectType);
 #[derive(Default)]
 pub struct EvolvingArrayType {
     pub object_type: ObjectType,
-    pub element_type: OvCell<Option<P<Type>>>,
-    pub final_array_type: OvCell<Option<P<Type>>>,
+    pub element_type: Cell<Option<P<Type>>>,
+    pub final_array_type: Cell<Option<P<Type>>>,
 }
 embeds!(EvolvingArrayType, object_type, ObjectType);
 
@@ -2564,7 +2564,7 @@ embeds!(EvolvingArrayType, object_type, ObjectType);
 #[derive(Default)]
 pub struct UnionOrIntersectionType {
     pub structured_type: StructuredType,
-    pub types: OvThinSliceCell<P<Type>>,
+    pub types: ThinSliceCell<P<Type>>,
     rare: UnionOrIntersectionRareWord,
 }
 embeds!(UnionOrIntersectionType, structured_type, StructuredType);
@@ -2583,7 +2583,7 @@ struct UnionRare {
     shared: UnionOrIntersectionRare,
     resolved_reduced_type: OvCell<Option<P<Type>>>,
     regular_type: OvCell<Option<P<Type>>>,
-    origin: OvCell<Option<P<Type>>>, // Denormalized union, intersection, or index type in which union originates
+    origin: Cell<Option<P<Type>>>, // Denormalized union, intersection, or index type in which union originates
     key_property_name: OvCell<&'static str>,    // Property with unique unit type that exists in every object/intersection in union type
     constituent_map: GoMap<P<Type>, P<Type>>, // Constituents keyed by unit type discriminants
 }
@@ -2803,10 +2803,10 @@ impl IntersectionType {
 pub struct TypeParameter {
     pub constrained_type: ConstrainedType,
     pub constraint: OvCell<Option<P<Type>>>,
-    pub target: OvCell<Option<P<Type>>>,
+    pub target: Cell<Option<P<Type>>>,
     pub mapper: MapperCell,
-    pub is_this_type: OvCell<bool>,
-    pub is_distributed: OvCell<bool>,
+    pub is_this_type: Cell<bool>,
+    pub is_distributed: Cell<bool>,
     pub resolved_default_type: OvCell<Option<P<Type>>>,
     pub distributed_type: OvCell<Option<P<Type>>>,
 }
@@ -2836,8 +2836,8 @@ bitflags! {
 #[derive(Default)]
 pub struct IndexType {
     pub constrained_type: ConstrainedType,
-    pub target: OvCell<Option<P<Type>>>,
-    pub index_flags: OvCell<IndexFlags>,
+    pub target: Cell<Option<P<Type>>>,
+    pub index_flags: Cell<IndexFlags>,
 }
 embeds!(IndexType, constrained_type, ConstrainedType);
 
@@ -2853,9 +2853,9 @@ impl IndexType {
 #[derive(Default)]
 pub struct IndexedAccessType {
     pub constrained_type: ConstrainedType,
-    pub object_type: OvCell<Option<P<Type>>>,
-    pub index_type: OvCell<Option<P<Type>>>,
-    pub access_flags: OvCell<AccessFlags>, // Only includes AccessFlags.Persistent
+    pub object_type: Cell<Option<P<Type>>>,
+    pub index_type: Cell<Option<P<Type>>>,
+    pub access_flags: Cell<AccessFlags>, // Only includes AccessFlags.Persistent
 }
 embeds!(IndexedAccessType, constrained_type, ConstrainedType);
 
@@ -2873,8 +2873,8 @@ impl IndexedAccessType {
 #[derive(Default)]
 pub struct TemplateLiteralType {
     pub constrained_type: ConstrainedType,
-    pub texts: OvCell<&'static [&'static str]>, // Always one element longer than types
-    pub types: OvCell<&'static [P<Type>]>, // Always at least one element
+    pub texts: Cell<&'static [&'static str]>, // Always one element longer than types
+    pub types: Cell<&'static [P<Type>]>, // Always at least one element
 }
 embeds!(TemplateLiteralType, constrained_type, ConstrainedType);
 
@@ -2892,7 +2892,7 @@ impl TemplateLiteralType {
 #[derive(Default)]
 pub struct StringMappingType {
     pub constrained_type: ConstrainedType,
-    pub target: OvCell<Option<P<Type>>>,
+    pub target: Cell<Option<P<Type>>>,
 }
 embeds!(StringMappingType, constrained_type, ConstrainedType);
 
@@ -2906,8 +2906,8 @@ impl StringMappingType {
 #[derive(Default)]
 pub struct SubstitutionType {
     pub constrained_type: ConstrainedType,
-    pub base_type: OvCell<Option<P<Type>>>, // Target type
-    pub constraint: OvCell<Option<P<Type>>>, // Constraint that target type is known to satisfy
+    pub base_type: Cell<Option<P<Type>>>, // Target type
+    pub constraint: Cell<Option<P<Type>>>, // Constraint that target type is known to satisfy
 }
 embeds!(SubstitutionType, constrained_type, ConstrainedType);
 
@@ -2924,22 +2924,22 @@ impl SubstitutionType {
 
 #[derive(Default)]
 pub struct ConditionalRoot {
-    pub node: OvCell<Option<P<Node>>>, // ConditionalTypeNode
-    pub check_type: OvCell<Option<P<Type>>>,
-    pub extends_type: OvCell<Option<P<Type>>>,
-    pub is_distributive: OvCell<bool>,
-    pub infer_type_parameters: OvCell<&'static [P<Type>]>,
-    pub outer_type_parameters: OvCell<&'static [P<Type>]>,
+    pub node: Cell<Option<P<Node>>>, // ConditionalTypeNode
+    pub check_type: Cell<Option<P<Type>>>,
+    pub extends_type: Cell<Option<P<Type>>>,
+    pub is_distributive: Cell<bool>,
+    pub infer_type_parameters: Cell<&'static [P<Type>]>,
+    pub outer_type_parameters: Cell<&'static [P<Type>]>,
     pub instantiations: GoPackedMap<CacheHashKey, P<Type>>,
-    pub alias: OvCell<Option<P<TypeAlias>>>,
+    pub alias: Cell<Option<P<TypeAlias>>>,
 }
 
 #[derive(Default)]
 pub struct ConditionalType {
     pub constrained_type: ConstrainedType,
-    pub root: OvCell<Option<P<ConditionalRoot>>>,
-    pub check_type: OvCell<Option<P<Type>>>,
-    pub extends_type: OvCell<Option<P<Type>>>,
+    pub root: Cell<Option<P<ConditionalRoot>>>,
+    pub check_type: Cell<Option<P<Type>>>,
+    pub extends_type: Cell<Option<P<Type>>>,
     pub resolved_true_type: OvCell<Option<P<Type>>>,
     pub resolved_false_type: OvCell<Option<P<Type>>>,
     pub resolved_inferred_true_type: OvCell<Option<P<Type>>>, // The `trueType` instantiated with the `combinedMapper`, if present
@@ -2990,15 +2990,15 @@ bitflags! {
 
 #[derive(Default)]
 pub struct Signature {
-    pub id: OvCell<SignatureId>,
-    pub flags: OvCell<SignatureFlags>,
-    pub min_argument_count: OvCell<i32>,
+    pub id: Cell<SignatureId>,
+    pub flags: Cell<SignatureFlags>,
+    pub min_argument_count: Cell<i32>,
     pub resolved_min_argument_count: OvExact<i32>,
-    pub declaration: OvCell<Option<P<Node>>>,
-    pub type_parameters: OvThinSliceCell<P<Type>>, // one word each (`tsrs_core::ThinSlice`)
-    pub parameters: OvThinSliceCell<P<Symbol>>,
+    pub declaration: Cell<Option<P<Node>>>,
+    pub type_parameters: ThinSliceCell<P<Type>>, // one word each (`tsrs_core::ThinSlice`)
+    pub parameters: ThinSliceCell<P<Symbol>>,
     pub resolved_return_type: OvCell<Option<P<Type>>>,
-    pub target: OvCell<Option<P<Signature>>>,
+    pub target: Cell<Option<P<Signature>>>,
     pub mapper: MapperCell,
     // `thisParameter`, `isolatedSignatureType`, `composite` and a resolved type predicate other than the checker's
     // `noTypePredicate` (few signatures have any) live in a tail allocated on the first non-nil write;
@@ -3014,9 +3014,9 @@ const _: () = assert!(std::mem::size_of::<Signature>() == 52);
 
 #[derive(Default)]
 struct SignatureRare {
-    this_parameter: OvCell<Option<P<Symbol>>>,
+    this_parameter: Cell<Option<P<Symbol>>>,
     isolated_signature_type: OvCell<Option<P<Type>>>,
-    composite: OvCell<Option<P<CompositeSignature>>>,
+    composite: Cell<Option<P<CompositeSignature>>>,
     resolved_type_predicate: OvCell<Option<P<TypePredicate>>>, // never the checker's `noTypePredicate` (that is the bit)
 }
 
@@ -3151,8 +3151,8 @@ impl Signature {
 
 #[derive(Default)]
 pub struct CompositeSignature {
-    pub is_union: OvCell<bool>, // True for union, false for intersection
-    pub signatures: OvCell<&'static [P<Signature>]>, // Individual signatures
+    pub is_union: Cell<bool>, // True for union, false for intersection
+    pub signatures: Cell<&'static [P<Signature>]>, // Individual signatures
 }
 
 #[repr(i32)]
@@ -3167,10 +3167,10 @@ pub enum TypePredicateKind {
 
 #[derive(Default)]
 pub struct TypePredicate {
-    pub kind: OvCell<TypePredicateKind>,
-    pub parameter_index: OvCell<i32>,
-    pub parameter_name: OvCell<&'static str>,
-    pub t: OvCell<Option<P<Type>>>,
+    pub kind: Cell<TypePredicateKind>,
+    pub parameter_index: Cell<i32>,
+    pub parameter_name: Cell<&'static str>,
+    pub t: Cell<Option<P<Type>>>,
 }
 
 impl TypePredicate {
@@ -3196,12 +3196,12 @@ impl TypePredicate {
 
 #[derive(Default)]
 pub struct IndexInfo {
-    pub key_type: OvCell<Option<P<Type>>>,
-    pub value_type: OvCell<Option<P<Type>>>,
-    pub is_readonly: OvCell<bool>,
-    pub declaration: OvCell<Option<P<Node>>>, // IndexSignatureDeclaration
-    pub index_symbol: OvCell<Option<P<Symbol>>>, // Synthetic property symbol for this index signature
-    pub components: OvCell<&'static [P<Node>]>, // ElementWithComputedPropertyName
+    pub key_type: Cell<Option<P<Type>>>,
+    pub value_type: Cell<Option<P<Type>>>,
+    pub is_readonly: Cell<bool>,
+    pub declaration: Cell<Option<P<Node>>>, // IndexSignatureDeclaration
+    pub index_symbol: Cell<Option<P<Symbol>>>, // Synthetic property symbol for this index signature
+    pub components: Cell<&'static [P<Node>]>, // ElementWithComputedPropertyName
 }
 
 impl IndexInfo {

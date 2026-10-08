@@ -120,7 +120,7 @@ impl Checker {
         let type_arguments = node.type_arguments();
         if symbol.check_flags.get().intersects(CheckFlags::Unresolved) {
             let alias_type_arguments: Vec<P<Type>> = type_arguments.iter().map(|&n| self.get_type_from_type_node(n)).collect();
-            let alias = P::new(TypeAlias { symbol: tsrs_core::sharedgraph::OvCell::new(Some(symbol)), type_arguments: tsrs_core::sharedgraph::OvThinSliceCell::new(alloc_vec(alias_type_arguments)) });
+            let alias = P::new(TypeAlias { symbol: Cell::new(Some(symbol)), type_arguments: ThinSliceCell::new(alloc_vec(alias_type_arguments)) });
             let key = get_alias_key(Some(alias).into());
             let mut error_type = self.error_types.get(&key);
             if error_type.is_none() {
@@ -174,7 +174,7 @@ impl Checker {
             }
             let mut new_alias = None;
             if new_alias_symbol.is_some() {
-                new_alias = Some(P::new(TypeAlias { symbol: tsrs_core::sharedgraph::OvCell::new(new_alias_symbol), type_arguments: tsrs_core::sharedgraph::OvThinSliceCell::new(alloc_vec(alias_type_arguments)) }));
+                new_alias = Some(P::new(TypeAlias { symbol: Cell::new(new_alias_symbol), type_arguments: ThinSliceCell::new(alloc_vec(alias_type_arguments)) }));
             }
             let type_arguments_from_node = self.get_type_arguments_from_node(node);
             return self.get_type_alias_instantiation(symbol, &type_arguments_from_node, new_alias);
@@ -275,7 +275,7 @@ impl Checker {
         let symbol = self.get_alias_symbol_for_type_node(node);
         if symbol.is_some() {
             let type_arguments = self.get_type_arguments_for_alias_symbol(symbol);
-            return Some(P::new(TypeAlias { symbol: tsrs_core::sharedgraph::OvCell::new(symbol), type_arguments: tsrs_core::sharedgraph::OvThinSliceCell::new(alloc_vec(type_arguments)) }));
+            return Some(P::new(TypeAlias { symbol: Cell::new(symbol), type_arguments: ThinSliceCell::new(alloc_vec(type_arguments)) }));
         }
         None
     }
@@ -514,7 +514,7 @@ impl Checker {
                 }
             }
             let enum_type = if !member_type_list.is_empty() {
-                let alias = P::new(TypeAlias { symbol: tsrs_core::sharedgraph::OvCell::new(Some(symbol)), ..Default::default() });
+                let alias = P::new(TypeAlias { symbol: Cell::new(Some(symbol)), ..Default::default() });
                 self.get_union_type_ex(&member_type_list, UnionReduction::Literal, Some(alias).into(), None /*origin*/)
             } else {
                 self.create_computed_enum_type(symbol)
@@ -974,14 +974,14 @@ impl Checker {
             let infer_type_parameters = self.get_infer_type_parameters(node);
             let outer_type_parameters = alloc_vec(outer_type_parameters);
             let root = P::new(ConditionalRoot {
-                node: tsrs_core::sharedgraph::OvCell::new(Some(node)),
-                check_type: tsrs_core::sharedgraph::OvCell::new(Some(check_type)),
-                extends_type: tsrs_core::sharedgraph::OvCell::new(Some(extends_type)),
-                is_distributive: tsrs_core::sharedgraph::OvCell::new(check_type.flags().intersects(TypeFlags::TypeParameter)),
-                infer_type_parameters: tsrs_core::sharedgraph::OvCell::new(alloc_vec(infer_type_parameters)),
-                outer_type_parameters: tsrs_core::sharedgraph::OvCell::new(outer_type_parameters),
+                node: Cell::new(Some(node)),
+                check_type: Cell::new(Some(check_type)),
+                extends_type: Cell::new(Some(extends_type)),
+                is_distributive: Cell::new(check_type.flags().intersects(TypeFlags::TypeParameter)),
+                infer_type_parameters: Cell::new(alloc_vec(infer_type_parameters)),
+                outer_type_parameters: Cell::new(outer_type_parameters),
                 instantiations: GoPackedMap::default(),
-                alias: tsrs_core::sharedgraph::OvCell::new(alias),
+                alias: Cell::new(alias),
             });
             links.resolved_type.set(Some(self.get_conditional_type(root, None /*mapper*/, false /*forConstraint*/, None)));
             if !outer_type_parameters.is_empty() {

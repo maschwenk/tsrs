@@ -2074,7 +2074,7 @@ impl Checker {
     // checker.go:10492
     pub(crate) fn create_union_signature(&mut self, sig: P<Signature>, union_signatures: &[P<Signature>]) -> P<Signature> {
         let result = self.clone_signature(sig);
-        result.set_composite(Some(P::new(CompositeSignature { is_union: tsrs_core::sharedgraph::OvCell::new(true), signatures: tsrs_core::sharedgraph::OvCell::new(alloc_slice(union_signatures)) })));
+        result.set_composite(Some(P::new(CompositeSignature { is_union: Cell::new(true), signatures: Cell::new(alloc_slice(union_signatures)) })));
         result.target.set(None);
         result.mapper.set(None);
         result

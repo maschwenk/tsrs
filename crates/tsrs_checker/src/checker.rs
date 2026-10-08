@@ -1792,25 +1792,25 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
     c.marker_sub_type_for_check = c.new_type_parameter(None);
     c.marker_sub_type_for_check.as_type_parameter().constraint.set(Some(c.marker_super_type_for_check));
     c.no_type_predicate = P::new(TypePredicate {
-        kind: tsrs_core::sharedgraph::OvCell::new(TypePredicateKind::Identifier),
-        parameter_index: tsrs_core::sharedgraph::OvCell::new(0),
-        parameter_name: tsrs_core::sharedgraph::OvCell::new("<<unresolved>>"),
-        t: tsrs_core::sharedgraph::OvCell::new(Some(c.any_type)),
+        kind: Cell::new(TypePredicateKind::Identifier),
+        parameter_index: Cell::new(0),
+        parameter_name: Cell::new("<<unresolved>>"),
+        t: Cell::new(Some(c.any_type)),
     });
     c.any_signature = c.new_signature(SignatureFlags::None, None, &[], None, &[], Some(c.any_type), None, 0);
     c.unknown_signature = c.new_signature(SignatureFlags::None, None, &[], None, &[], Some(c.error_type), None, 0);
     c.resolving_signature = c.new_signature(SignatureFlags::None, None, &[], None, &[], Some(c.any_type), None, 0);
     c.silent_never_signature = c.new_signature(SignatureFlags::None, None, &[], None, &[], Some(c.silent_never_type), None, 0);
     c.enum_number_index_info = P::new(IndexInfo {
-        key_type: tsrs_core::sharedgraph::OvCell::new(Some(c.number_type)),
-        value_type: tsrs_core::sharedgraph::OvCell::new(Some(c.string_type)),
-        is_readonly: tsrs_core::sharedgraph::OvCell::new(true),
+        key_type: Cell::new(Some(c.number_type)),
+        value_type: Cell::new(Some(c.string_type)),
+        is_readonly: Cell::new(true),
         ..Default::default()
     });
     c.any_base_type_index_info = P::new(IndexInfo {
-        key_type: tsrs_core::sharedgraph::OvCell::new(Some(c.string_type)),
-        value_type: tsrs_core::sharedgraph::OvCell::new(Some(c.any_type)),
-        is_readonly: tsrs_core::sharedgraph::OvCell::new(false),
+        key_type: Cell::new(Some(c.string_type)),
+        value_type: Cell::new(Some(c.any_type)),
+        is_readonly: Cell::new(false),
         ..Default::default()
     });
     c.empty_string_type = c.get_string_literal_type("");
