@@ -971,6 +971,9 @@ pub struct Checker {
     /// tsrs-only: a file whose statements this checker and others already checked in pieces
     /// (`check_source_file_piece`); the next `check_source_file` of it runs only the file-level steps.
     pub(crate) statements_checked_in_pieces: Option<P<SourceFile>>,
+    /// tsrs-only: the type parameter and property name of element `i` of every tuple target
+    /// (`create_tuple_target_type`).
+    pub(crate) tuple_elements: Vec<(P<Type>, &'static str)>,
     /// tsrs-only: type references whose type-argument constraint check was reached while this checker computed a type
     /// in a file it had not started checking (`defer_type_argument_constraints`), by file. Run when this checker checks
     /// the file; dropped with the checker otherwise.
@@ -1382,6 +1385,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         current_node: None,
         checking_file: None,
         statements_checked_in_pieces: None,
+        tuple_elements: Vec::new(),
         deferred_type_argument_checks: FxHashMap::default(),
         variance_type_parameter: None,
         language_version: compiler_options.get_emit_script_target(),

@@ -83,11 +83,11 @@ pointer compression costs about +4.9% instructions and took back most of the che
    its floor (program construction 0.6 s, of which `open()` is ~0.3 s).
 8. **Parallel `affectedfileshandler` / `emitfileshandler`** (notes/perf-incremental-parallel.md): still sequential in
    the port; costs nothing under `--noEmit`. Worth doing with an emit-on incremental benchmark.
-9. **type-fest's tuple targets** (notes/perf-excalidraw-typefest.md): each tuple target makes a type parameter and
-   a property symbol per element (4.58M elements, ~480 MB of a 768 MB arena at one checker). Bun shares the element
-   type parameters across all targets. Sharing them per checker could take type-fest from 983 to ~550 MiB at one
-   checker; it needs an audit of every reader of a target's own type parameters. The same note ranks lazy
-   formatting of relation error arguments (excalidraw's remaining ~120 MiB) after it.
+9. **type-fest's tuple targets** (notes/perf-excalidraw-typefest.md): the element type parameters and index names
+   are now shared by all targets of a checker (notes/perf-shared-tuple-elements.md: type-fest -29% peak at one
+   checker, -31% at 8). The element symbols cannot be shared exactly (`create_union_or_intersection_property`
+   compares target symbols) and are most of what is left against bun. The same note ranks lazy formatting of
+   relation error arguments (excalidraw's remaining ~120 MiB) next.
 
 ## Round 3, union and inference work (#100, draft; notes/perf-union-inference.md)
 
