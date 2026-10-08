@@ -168,6 +168,17 @@ Probe mt2fbzqgr3 (cd57aa0 = #199 plus the stat, against b5d5d87), 10 reps at 32 
 | supabase-studio | 2.284 -> 2.240 (-1.9%) | 0.580 -> 0.579 (+0.1%) | -1.3% | -0.9% | -0.5% | -0.6% |
 | vscode | 2.650 -> 2.612 (-1.4%) | 0.599 -> 0.598 (+0.3%) | -0.8% | -1.3% | -0.3% | -1.1% |
 
+4 checkers with 10 reps (probe vvqn96hhtr): wall paired t3code-server +0.5%, cal-diy +0.5%, vscode -0.7%,
+drizzle-orm +1.1% (0.356 -> 0.358 s), mikro-orm -0.4%; user+sys CPU equal; peak -0.4% to -1.1%.
+
+pr-verify on #199 (main 6e07a55 against the PR, 3 reps, 17 projects): diagnostics identical in 102 of 102 cells
+(poisoned runs at 16 checkers included), single-threaded instructions within 0.001%. Peak at 32 checkers: drizzle-orm
+-6.8%, cal-diy -2.7%, t3code-server -2.1%, formbricks-web -1.8%, supabase-studio -1.5%, mikro-orm -1.5%, vscode -1.1%;
+the saving is a fixed ~60 MiB, so the small programs show more: Compiler-Unions -15.6%, Compiler -14.3%, xstate-main
+-12.3%, nuxt -9.2%, next-root -8.0%, playwright -7.9%, webpack -7.8%, storybook -7.1%, next-packages-next -5.1%. Its
+3-rep wall cells are noise (-13.7% for mikro-orm single-threaded, where nothing changes; +12.6% for t3code-server at 4,
+which the 10-rep run above does not show).
+
 Against `bun check` at its default (README table of 2026-10-07): drizzle-orm 1.15 vs 1.01 GiB becomes about 1.08.
 
 Caveat of the trim: `MADV_DONTNEED` on part of a huge page splits its mapping. RSS (and `ru_maxrss`, the scoreboard's
@@ -215,4 +226,4 @@ depot ci dispatch --repo maschwenk/tsrs --workflow perf-probe.yml --ref <branch>
 ```
 
 Probes: cfszpm2rks (the split at 4, 16, 32), g8z8xklqhb and ztsnkhbqll (the prototypes, on branch
-mem/linux-residency-32 at b5d5d87 and bb7ed2a), mt2fbzqgr3 (#199 against its base).
+mem/linux-residency-32 at b5d5d87 and bb7ed2a), mt2fbzqgr3 and vvqn96hhtr (#199 against its base).
