@@ -854,6 +854,27 @@ impl<T> ThinSlice<T> {
         ThinSlice(p.map_addr(|a| a | THIN_LONG_TAG), std::marker::PhantomData)
     }
 
+    /// A long-form slice that reads `*r` (a `&'static [T]` at a stable address that the owner may give a special
+    /// meaning, such as `tsrs_ast`'s lazily parsed node lists, which check `is_long` before `get`).
+    pub fn from_ref(r: &'static &'static [T]) -> Self {
+        let p = std::ptr::NonNull::from(r).cast::<()>();
+        assert!(p.addr().get() >> THIN_LEN_SHIFT == 0, "arena address above 2^48");
+        ThinSlice(p.map_addr(|a| a | THIN_LONG_TAG), std::marker::PhantomData)
+    }
+
+    /// Whether this is the long form (`new_long`, `from_ref`).
+    #[inline]
+    pub fn is_long(self) -> bool {
+        self.0.addr().get() & THIN_LONG_TAG != 0
+    }
+
+    /// The `&'static [T]` a long-form slice reads (`None` for the short form).
+    #[inline]
+    pub fn long_ref(self) -> Option<&'static &'static [T]> {
+        // SAFETY: a long form was built by `new_long` or `from_ref` from a `&'static &'static [T]`.
+        self.is_long().then(|| unsafe { &*(self.0.as_ptr().map_addr(|a| a & !THIN_LONG_TAG) as *const &'static [T]) })
+    }
+
     #[inline]
     pub fn get(self) -> &'static [T] {
         let w = self.0.addr().get();
@@ -1386,6 +1407,12 @@ pub fn arena_checkpoint() -> Checkpoint {
 #[inline]
 pub fn arena_rewind(cp: Checkpoint) {
     with_arena(|a| arena::rewind(a, cp));
+}
+
+/// Whether `arena_rewind(cp)` would discard what was allocated since `cp` (same chunk, no free or pin since).
+#[inline]
+pub fn arena_rewindable(cp: &Checkpoint) -> bool {
+    with_arena(|a| a.rewindable_now(cp))
 }
 
 /// Declares that data allocated since the innermost open checkpoint may now be referenced from a structure that

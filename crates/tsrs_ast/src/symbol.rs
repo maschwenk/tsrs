@@ -42,6 +42,9 @@ struct SymbolTables {
     exports: OwnedCell<Option<P<SymbolTable>>>,
     export_symbol: OwnedCell<Option<P<Symbol>>>,
     value_declaration: OwnedCell<Option<P<Node>>>, // when it is not the first declaration
+    // tsrs-only: a member list of one of the symbol's declarations that is parsed and bound on first use
+    // (`lazylist`); `members` and `exports` force it first. Written by the binder of the file only.
+    lazy: OwnedCell<Option<P<crate::lazylist::LazyNodeList>>>,
 }
 
 const _: () = assert!(std::mem::size_of::<Symbol>() == if tsrs_core::COMPRESSED_PTRS { 32 } else { 40 });
@@ -155,7 +158,11 @@ impl Symbol {
     }
     #[inline]
     pub fn members(&self) -> Option<P<SymbolTable>> {
-        self.tables().and_then(|t| t.members.get())
+        let t = self.tables()?;
+        if let Some(lazy) = t.lazy.get() {
+            lazy.ensure();
+        }
+        t.members.get()
     }
     #[inline]
     pub fn set_members(&self, members: Option<P<SymbolTable>>) {
@@ -165,7 +172,26 @@ impl Symbol {
     }
     #[inline]
     pub fn exports(&self) -> Option<P<SymbolTable>> {
-        self.tables().and_then(|t| t.exports.get())
+        let t = self.tables()?;
+        if let Some(lazy) = t.lazy.get() {
+            if lazy.fills_exports() {
+                lazy.ensure();
+            }
+        }
+        t.exports.get()
+    }
+
+    /// The pending lazy member list of one of this symbol's declarations (`lazylist`), if any (forced or not).
+    #[inline]
+    pub fn lazy_list(&self) -> Option<P<crate::lazylist::LazyNodeList>> {
+        self.tables().and_then(|t| t.lazy.get())
+    }
+
+    /// Binder: `list` (a member list of a declaration of this symbol) is bound on first use.
+    pub fn set_lazy_list(&self, list: Option<P<crate::lazylist::LazyNodeList>>) {
+        if list.is_some() || self.tables().is_some() {
+            self.tables_for_write().lazy.set(list);
+        }
     }
     #[inline]
     pub fn set_exports(&self, exports: Option<P<SymbolTable>>) {

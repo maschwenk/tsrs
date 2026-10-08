@@ -296,6 +296,28 @@ After a change that reads a file after the check pass (a new report, a new whole
 (testdata/regressions/leaf-alternative-containers) and a structurally identical instantiation after a freed leaf
 (leaf-structural-instantiation).
 
+## Declaration-file member lists parsed on first use: `TSRS_LAZY_DTS`
+
+A CLI compile (not `--incremental`, `--build` or watch) in which no declaration file is type-checked (`skipLibCheck`
+or `noCheck`) parses the member list of each interface, class and type literal of a declaration file, and keeps it
+only as a record (position, parser context, binder state) when nothing in it reaches outside the list: the first
+reader of the list's nodes or of the owner symbol's members parses and binds it again (`crates/tsrs_ast/src/lazylist.rs`,
+`parse_member_list_lazily` in the parser, `bind_lazy_member_list` in the binder; notes/mem-lazy-dts-members.md). Before the checkers of a multi-checker pass start, the lists of the global libraries (default and `lib` files, type
+reference directives and what they reference) and of interfaces merged into the global scope are forced in parallel,
+so that the checkers do not wait for one another on them (`force_shared_lists`; `TSRS_LAZY_DTS_SHARED=0` skips the
+global libraries). Output is the same; `--extendedDiagnostics` `Symbols` counts only the lists that were bound. Off in the language server, the
+API and the test harnesses, and under `TSRS_CENSUS=1`, `TSRS_LAZY_DTS_CENSUS=1` and `TSRS_CHECK_SHARED=1`.
+
+| variable | values | effect |
+| --- | --- | --- |
+| `TSRS_LAZY_DTS` | unset (on when it applies), `0`/`off`, `stats`, `force` (`tsrs-test` only) | `stats`: one line on stderr: lists made lazy, deferred by the binder, never reached by it, parsed again (and how many while their file was bound). `force` in `tsrs-test`: every declaration file's lists are lazy, checked files included, so the checker and the `.types` / `.symbols` walks force them all: the result trees must equal a run without it (`TSRS_LAZY_DTS_STATS_FILE=<file>` collects the workers' counts) |
+| `TSRS_LAZY_DTS_CENSUS` | `1` (alloc-profile build) | the ceiling census: bytes of every member list of unchecked declaration files, and which lists and member symbols any reader asked for, by phase; `TSRS_LAZY_DTS_CENSUS_TSV=<file>` adds a per-file table |
+
+After a change to what the binder does for members of interfaces, classes or type literals, or to what a member list
+can contain, run the suite with `TSRS_LAZY_DTS=force` (also with `TS_TEST_PROGRAM_SINGLE_THREADED=false`) and a corpus
+with `TSRS_ARENA_POISON=1` (rewound first parses are filled with `0xA5` and never reused); both must equal main.
+testdata/regressions/lazy-dts-members holds the cases where a lazy list could differ.
+
 ## Checking a heavy declaration file on several checkers: `TSRS_SPLIT_FILES`
 
 In the type-check pass with stealing (the default mode with more than one checker), a checked declaration file that

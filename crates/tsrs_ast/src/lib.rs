@@ -8,6 +8,7 @@ pub mod generated;
 pub mod identifier;
 pub mod ids;
 pub mod kind;
+pub mod lazylist;
 pub mod modifierflags;
 pub mod nodeflags;
 pub mod parseoptions;

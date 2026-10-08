@@ -192,6 +192,11 @@ count, the `--extendedDiagnostics` counters and peak memory do.
 In a `--noEmit` check, tsrs frees the syntax tree and binder output of a test, spec, story or mock file once it is
 checked, when the program gets at most 16 checkers (vscode: -13 to -16% peak memory; `TSRS_FREE_LEAVES=0` turns it
 off; notes/mem-free-leaf-files.md).
+In a CLI run that type-checks no declaration file (`skipLibCheck` or `noCheck`), the member lists of interfaces,
+classes and type literals in declaration files are parsed and bound the first time something reads them, and
+the lists of the global libraries (default libs, `types`, `/// <reference types>`) are forced in parallel before
+the checkers start (formbricks-web: -7% peak memory at 32 checkers, -12% at 4; `TSRS_LAZY_DTS=0` turns it off;
+notes/mem-lazy-dts-members.md).
 `--checkerCostCache <file>` (opt-in) records per-file check times in `<file>` and balances the checker threads on
 them in the next run (a few percent to ~15% less wall time on repeated runs; it never changes diagnostics).
 By default tsrs also runs with checker changes that are not merged upstream yet; `--noLazyMembers` turns them

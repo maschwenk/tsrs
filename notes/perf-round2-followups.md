@@ -166,6 +166,13 @@ pointer compression costs about +4.9% instructions and took back most of the che
   same by reuse), `mi_collect` on the parse workers or on finished checkers (0-1%: mimalloc's 4.7-8.2% of retained
   memory is free blocks in pages that still hold live blocks; a forced purge at the peak finds 4-5 MiB), smaller
   stacks (4-11 MiB resident in all), switching a running checker into a finished checker's arena.
+- Lazily parsed and bound member lists of unchecked declaration files (notes/mem-lazy-dts-members.md): exact, landed
+  as a draft (`TSRS_LAZY_DTS=0` turns it off): -7.1% peak on formbricks-web at 32 checkers on Linux, -1.5% to -2.2% on
+  cal-diy, supabase-studio, t3code-server, drizzle-orm and xstate-main, wall within +-1% on eight projects once the
+  global libraries' lists are forced before the checkers start (without that, drizzle-orm's checkers waited on each
+  other: +8% wall). Left: namespace bodies (+43 MB on formbricks-web, needs
+  the binder's per-body state at parse time), lists with import types (30-60 MB never asked for on t3code-server and
+  cal-diy), eager `@see`/`@link` JSDoc (4-17 MB), per-member laziness (about 1% of peak).
 
 ## The lint ratchet
 
