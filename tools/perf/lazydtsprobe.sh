@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Probe for lazily parsed declaration-file member lists (notes/mem-lazy-dts-members.md), for
 # .depot/workflows/perf-probe.yml with `--input script=tools/perf/lazydtsprobe.sh`: builds origin/main next to the
-# branch build, then runs tools/perf/leafprobe.py on the projects the workflow set up with three interleaved variants:
-# main's binary, this binary with TSRS_LAZY_DTS=0, and this binary as it ships. PROBE_ARGS is appended (for example
-# `--reps 7 --checkers 1,4,16,32 --no-strace`).
+# branch build, then runs tools/perf/leafprobe.py on the projects the workflow set up with two interleaved variants:
+# main's binary and this binary as it ships. PROBE_ARGS is appended (for example `--reps 10 --checkers 32 --no-strace`;
+# `--variant off:TSRS_LAZY_DTS=0` adds this binary with the mode off).
 set -euo pipefail
 : "${TSRS_BIN:?}" "${BENCH_WORK:?}" "${PROBE_OUT:?}"
 target="$(dirname "$(dirname "$TSRS_BIN")")"
@@ -17,5 +17,5 @@ cp /tmp/tsrs-branch "$TSRS_BIN"
 # shellcheck disable=SC2086 # PROBE_ARGS is a list of arguments
 python3 tools/perf/leafprobe.py --tsrs "$TSRS_BIN" --work "$BENCH_WORK" --out "$PROBE_OUT" \
   --projects "${PROBE_PROJECTS:-formbricks-web}" \
-  --variant main:BIN=/tmp/tsrs-main-bin --variant off:TSRS_LAZY_DTS=0 --variant on:TSRS_LAZY_DTS=1 \
+  --variant main:BIN=/tmp/tsrs-main-bin --variant on:TSRS_LAZY_DTS=1 \
   ${PROBE_ARGS:-} 2>&1 | tee "$PROBE_OUT/log.txt"
