@@ -302,20 +302,39 @@ object flags).
 The Mac scripts (sgrun.py: one run with a timeout and a load wait; measure.py: interleaved matrix; analyze.py:
 tables) were in the session's scratch directory. The commands, interleaved, used `/usr/bin/time -l`.
 
-**Linux probe, not run (the owner decides on the Depot spend).** `tools/perf/sharedprobe.sh` builds the prototype
-next to the workflow's default build and runs `tools/perf/leafprobe.py` with off / on / on20 interleaved:
+**Linux probe, not run (the owner decides on the Depot spend).** The branch was rebased onto main 6df09dbe on
+2026-10-08: the wasm build (#203), #212 (a fork now carries the seed's deferred type-argument checks, a5d2a57) and
+#209 (right-sized runners). The commit ids in sections 4-5 are from before the rebase; the measured code is the
+same. After the rebase:
+- the switch-off identity holds (xstate-main and webpack at 1 and 4 checkers, byte-identical to a main build of
+  6df09dbe);
+- with the switch on at 16 checkers, xstate-main and t3code-server match main;
+- mikro-orm matches main at 8 and 16 checkers (Mac peak -10% and -15%, one run each).
+
+The README scoreboard is now the 16-vCPU machine's default mode (bench.yml `measure-wide` on
+`depot-ubuntu-24.04-16`). There tsrs runs 8 checkers (half the cores, at least 8), and the bench adds a
+`--checkers 16` table. bun check uses less memory there on t3code-server (0.63x), mikro-orm (0.87x),
+supabase-studio (0.88x), cal-diy (0.91x), formbricks-web (0.96x) and vscode (0.97x)
+(bench/results/2026-10-08-4a3c1877fa21.md).
+
+`tools/perf/sharedprobe.sh` keeps a copy of the workflow's default build (the prototype compiled out) and builds
+the prototype in the same target directory. It then runs `tools/perf/leafprobe.py` with off and on interleaved, at
+8 checkers (the default on 16 cores) and 16. One dispatch covers the six projects:
 
 ```sh
 depot ci dispatch --repo maschwenk/tsrs --workflow perf-probe.yml --ref spike/shared-graph \
-  --input projects=t3code-server,formbricks-web,cal-diy --input script=tools/perf/sharedprobe.sh \
-  --input probe_args='--checkers 4,16,32 --reps 5 --no-strace --no-perf-stat'
-depot ci dispatch --repo maschwenk/tsrs --workflow perf-probe.yml --ref spike/shared-graph \
-  --input projects=supabase-studio,drizzle-orm,vscode,webpack,xstate-main --input script=tools/perf/sharedprobe.sh \
-  --input probe_args='--checkers 4,16,32 --reps 5 --no-strace --no-perf-stat'
+  --input runner=depot-ubuntu-24.04-16 \
+  --input projects=t3code-server,formbricks-web,cal-diy,supabase-studio,mikro-orm,vscode \
+  --input script=tools/perf/sharedprobe.sh --input probe_args='--checkers 8,16 --reps 5 --no-strace --no-perf-stat'
 ```
 
-Estimated cost on `depot-ubuntu-24.04-64`, per dispatch:
-- two release builds, about 8 minutes;
-- project setup, 1-3 minutes (cal-diy and drizzle-orm are cloned);
-- 135-225 timed runs of 0.2-2.5 s, about 5 minutes.
-That is about 15 runner-minutes per dispatch on the 64-vCPU machine, about 30 for both.
+Estimated cost on `depot-ubuntu-24.04-16`:
+- runner setup and cache restores, about 5 minutes;
+- cal-diy and mikro-orm cloned and installed, about 5 minutes;
+- the default build, about 8 minutes (rust-cache is cold for this runner's key);
+- the prototype build, about 6 minutes (the dependencies are reused);
+- 132 timed runs of 0.4-2 s, about 3 minutes.
+
+That is about 25-30 runner-minutes on the 16-vCPU machine. Two dispatches, split by project, would build twice and
+cost about 40 minutes in total. The 32-vCPU runner is not needed: neither the scoreboard nor the bench runs more
+than 16 checkers now, and 8 -> 16 gives the per-checker slope.
