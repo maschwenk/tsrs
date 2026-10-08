@@ -19,6 +19,7 @@ pub mod goslices;
 pub mod jsnum;
 pub mod json;
 pub mod lazymembers;
+pub mod memsplit;
 pub mod phases;
 pub mod festats;
 pub mod semver;

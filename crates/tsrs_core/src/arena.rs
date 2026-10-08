@@ -81,6 +81,14 @@ pub struct Arena {
     large_slabs: bool,
 }
 
+pub(crate) struct Residency {
+    pub(crate) capacity: usize,
+    pub(crate) used: usize,
+    pub(crate) current_unused: Option<(usize, usize)>,
+    pub(crate) retired_unused: Vec<(usize, usize)>,
+    pub(crate) current_huge: bool,
+}
+
 struct DropEntry {
     ptr: *mut u8,
     len: usize,
@@ -330,6 +338,21 @@ impl Arena {
             self.end.get().addr() - self.ptr.get().addr()
         } else {
             self.ptr.get().addr() - self.start.get().addr()
+        }
+    }
+
+    /// A thread arena's chunks for `TSRS_MEM_SPLIT` (`memsplit`): capacity, used bytes, the unused range of the
+    /// current chunk and of each retired chunk (start, len), and whether the current chunk is a huge-page chunk.
+    pub(crate) fn residency(&self) -> Residency {
+        debug_assert!(!self.up);
+        let (start, end, ptr) = (self.start.get().addr(), self.end.get().addr(), self.ptr.get().addr());
+        let retired = self.retired.borrow();
+        Residency {
+            capacity: self.capacity.get(),
+            used: (end - ptr) + retired.iter().map(|&(_, e, f)| e - f).sum::<usize>(),
+            current_unused: (ptr > start).then_some((start, ptr - start)),
+            retired_unused: retired.iter().filter(|&&(s, _, f)| f > s).map(|&(s, _, f)| (s, f - s)).collect(),
+            current_huge: HUGE_THREAD_CHUNK.is_some_and(|h| end - start >= h),
         }
     }
 

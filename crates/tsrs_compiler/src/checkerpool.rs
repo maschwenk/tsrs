@@ -569,6 +569,7 @@ impl checkerPool {
                 program.bind_source_files();
                 tsrs_core::ptr::shared_check::freeze_shared_objects();
             }
+            tsrs_core::memsplit::report("parse end");
             let create_and_assign = || {
                 let create_start = std::time::Instant::now();
                 #[cfg(feature = "checker")]
@@ -719,6 +720,11 @@ impl checkerPool {
             positions.iter_mut().for_each(|p| heavy_files_first(p, threshold, weight));
         }
         let queues: Vec<FileQueue> = positions.into_iter().map(|p| FileQueue::new(p, weight)).collect();
+        // TSRS_MEM_SPLIT: the type-check pass reports once every checker is done and before any thread exits.
+        let mem_split = (allow_steal && tsrs_core::memsplit::enabled()).then(|| {
+            tsrs_core::memsplit::mark_check_pass();
+            std::sync::Barrier::new(if single { 1 } else { active.len() })
+        });
         let run = |checker_idx: usize| {
             let start = stats.then(std::time::Instant::now);
             let cpu_start = if stats { thread_cpu_seconds() } else { 0.0 };
@@ -774,6 +780,14 @@ impl checkerPool {
             if let Some(start) = start {
                 *times[checker_idx].lock().unwrap() = (start.elapsed().as_secs_f64(), count);
                 *cpu[checker_idx].lock().unwrap() = thread_cpu_seconds() - cpu_start;
+            }
+            drop(guard);
+            if let Some(barrier) = &mem_split {
+                tsrs_core::memsplit::note_own_stack();
+                if barrier.wait().is_leader() {
+                    tsrs_core::memsplit::report("check end");
+                }
+                barrier.wait();
             }
         };
         run_work_group(single, active.len(), |k| run(active[k]));

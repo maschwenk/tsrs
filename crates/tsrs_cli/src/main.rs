@@ -14,8 +14,47 @@ mod tsc;
 #[cfg(test)]
 mod tsctests;
 
+// TSRS_MEM_SPLIT (tsrs_core::memsplit): mimalloc's view of its heap, every page of every thread.
+#[cfg(not(feature = "alloc-profile"))]
+fn mimalloc_heap_stats() -> tsrs_core::memsplit::HeapStats {
+    #[repr(C)]
+    struct HeapArea {
+        blocks: *mut std::ffi::c_void,
+        reserved: usize,
+        committed: usize,
+        used: usize,
+        block_size: usize,
+        full_block_size: usize,
+        reserved1: *mut std::ffi::c_void,
+    }
+    extern "C" {
+        fn mi_heap_visit_blocks(
+            heap: *mut std::ffi::c_void,
+            visit_blocks: bool,
+            visitor: extern "C" fn(*const std::ffi::c_void, *const HeapArea, *mut std::ffi::c_void, usize, *mut std::ffi::c_void) -> bool,
+            arg: *mut std::ffi::c_void,
+        ) -> bool;
+    }
+    extern "C" fn visit(_heap: *const std::ffi::c_void, area: *const HeapArea, _block: *mut std::ffi::c_void, _size: usize, arg: *mut std::ffi::c_void) -> bool {
+        // SAFETY: mimalloc passes a valid area and our `arg`, a `HeapStats`.
+        let (area, stats) = unsafe { (&*area, &mut *arg.cast::<tsrs_core::memsplit::HeapStats>()) };
+        stats.pages += 1;
+        stats.capacity += area.committed;
+        stats.used += area.used * area.full_block_size;
+        true
+    }
+    let mut stats = tsrs_core::memsplit::HeapStats::default();
+    // SAFETY: a null heap is the main heap; the visitor only reads the areas. The callers' other threads are parked.
+    unsafe { mi_heap_visit_blocks(std::ptr::null_mut(), false, visit, (&raw mut stats).cast()) };
+    stats
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    #[cfg(not(feature = "alloc-profile"))]
+    if tsrs_core::memsplit::enabled() {
+        tsrs_core::memsplit::set_heap_stats(mimalloc_heap_stats);
+    }
     // main.go:21: `--lsp` runs the language server (its threads have their own stacks); `--api` runs the
     // native API server (docs/NODE_API.md).
     if args.first().map(String::as_str) == Some("--lsp") {
@@ -49,6 +88,7 @@ fn main() {
     // TSRS_INFER_MEMO_STATS / TSRS_INFER_MEMO=shadow: the inference memo's totals.
     #[cfg(feature = "checker")]
     tsrs_compiler::Checker::infer_memo_finish();
+    tsrs_core::memsplit::report("exit");
     let _ = std::io::Write::flush(&mut std::io::stdout());
     let _ = std::io::Write::flush(&mut std::io::stderr());
     std::process::exit(status as i32)
