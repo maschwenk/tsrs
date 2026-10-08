@@ -1863,6 +1863,8 @@ impl Checker {
             current_node: None,
             checking_file: None,
             statements_checked_in_pieces: None,
+            // The seed's history: its checks deferred to files it did not check run in the fork that checks them.
+            deferred_type_argument_checks: base.deferred_type_argument_checks.clone(),
             variance_type_parameter: None,
             language_version: base.language_version.clone(),
             module_kind: base.module_kind.clone(),
