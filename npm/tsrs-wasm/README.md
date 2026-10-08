@@ -13,7 +13,9 @@ differential gate in the repository (`tools/wasm/diff.mjs`; numbers in
 node bin/tsrs-wasm.js -p tsconfig.json       # or `tsrs-wasm` once installed
 ```
 
-It reads and writes the real file system, prints what `tsc` prints and exits with its status.
+It reads and writes the real file system, prints what `tsc` prints and exits with its status. A crash (a panic, or a
+trap such as a stack overflow or running out of memory) exits with 5 and a message on stderr; tsc's own statuses are
+0-4.
 
 ## API
 

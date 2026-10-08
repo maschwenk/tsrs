@@ -8,7 +8,7 @@
 //   tsrs_output_len() -> len
 // Request: NUL-separated UTF-8, `cwd \0 flags` then `\0 arg` per tsc argument; flags is the decimal of the
 // REQUEST_* bits. A panic prints Rust's message on stderr and exits with status 5 (native tsrs's status for a panicked
-// driver thread).
+// driver thread). A trap (shadow-stack overflow, allocation failure) never returns here; the JS host maps it to 5 too.
 
 mod host;
 mod json;

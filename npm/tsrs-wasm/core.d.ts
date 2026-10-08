@@ -4,6 +4,8 @@ export declare const REQUEST_JSON_DIAGNOSTICS: 1;
 export declare const REQUEST_CASE_INSENSITIVE: 2;
 /** Request flag: stdout is a terminal (the default for `--pretty`). */
 export declare const REQUEST_TTY: 4;
+/** Exit status of a crashed run (a panic, or a trap such as a stack overflow or running out of memory); tsc's own are 0-4. */
+export declare const EXIT_CRASHED: 5;
 
 /** A compiled `WebAssembly.Module`, typed structurally so that these declarations need neither lib dom nor @types/node. */
 export type WasmModule = object;
@@ -60,7 +62,7 @@ export interface RunResult {
     memoryBytes: number;
 }
 
-/** Runs one tsc invocation in a fresh instance of `module`. */
+/** Runs one tsc invocation in a fresh instance of `module`. A trap gives exitCode `EXIT_CRASHED` and a message on stderr. */
 export declare function runTsc(module: WasmModule, request: Request, host: HostFileSystem, io?: RunIO): RunResult;
 
 /** `runTsc` with an asynchronous instantiation (browsers forbid a synchronous one of a large module on the page). */

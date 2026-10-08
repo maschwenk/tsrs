@@ -5,6 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 import { Worker } from "node:worker_threads";
+import { EXIT_CRASHED, memoryFileSystem, runTsc } from "../core.js";
 import { loadModule, tsc } from "../node.js";
 import { bin, pkg, project, rm, runBin, runNative, tree } from "./helpers.mjs";
 
@@ -178,4 +179,35 @@ test("browser.js runs in a worker with memoryFileSystem", async () => {
     });
     assert.equal(r.stdout, "a.ts(1,7): error TS2322: Type 'number' is not assignable to type 'string'.\n");
     assert.equal(r.exitCode, 2);
+});
+
+// Regression: a trap (shadow-stack overflow, out of memory, `unreachable`) rejects the run, so the bin dies with
+// status 1, which a script cannot tell from tsc's "errors, outputs skipped". The real module needs a 150k-term
+// expression and ~50 s to overflow its 80 MiB shadow stack, so a 5-function module whose tsrs_run is `unreachable`
+// stands in for it.
+test("a trap exits with EXIT_CRASHED and a message", () => {
+    const str = (s) => [s.length, ...Buffer.from(s)];
+    const section = (id, ...items) => [id, items.flat().length + 1, items.length, ...items.flat()];
+    const exports = [["memory", 2, 0], ["tsrs_input", 0, 0], ["tsrs_run", 0, 1], ["tsrs_output", 0, 2], ["tsrs_output_len", 0, 2]];
+    const bytes = [
+        ...[0x00, 0x61, 0x73, 0x6d, 1, 0, 0, 0],
+        ...section(1, [0x60, 1, 0x7f, 1, 0x7f], [0x60, 0, 1, 0x7f]), // (i32) -> i32, () -> i32
+        ...section(3, [0], [1], [1]),
+        ...section(5, [0, 1]), // one page
+        ...section(7, ...exports.map(([name, kind, index]) => [...str(name), kind, index])),
+        ...section(10, [4, 0, 0x41, 0, 0x0b], [3, 0, 0x00, 0x0b], [4, 0, 0x41, 0, 0x0b]), // i32.const 0; unreachable
+    ];
+    const err = [];
+    const r = runTsc(new WebAssembly.Module(new Uint8Array(bytes)), { cwd: "/", args: [], flags: 0 }, memoryFileSystem(), { stderr: (c) => err.push(c) });
+    assert.equal(r.exitCode, EXIT_CRASHED);
+    assert.match(Buffer.concat(err).toString(), /^error: tsrs\.wasm trapped \(RuntimeError: unreachable/);
+});
+
+// Regression: the engine's own stack running out (a RangeError, not a RuntimeError) also rejects instead of exiting
+// with EXIT_CRASHED; a 1 MB worker stack overflows on a 5,000-term expression that the default 256 MB checks.
+test("the engine's stack running out exits with EXIT_CRASHED", async () => {
+    const files = { "/p/a.ts": `export const s: string = ${"1 + ".repeat(5000)}1;\n` };
+    const r = await tsc(["/p/a.ts", "--noEmit"], { cwd: "/p", files, stackSizeMb: 1 });
+    assert.equal(r.exitCode, EXIT_CRASHED);
+    assert.match(r.stderr, /^error: tsrs\.wasm trapped \(RangeError: Maximum call stack size exceeded\)/);
 });

@@ -6,6 +6,12 @@ export const REQUEST_JSON_DIAGNOSTICS = 1;
 export const REQUEST_CASE_INSENSITIVE = 2;
 export const REQUEST_TTY = 4;
 
+/**
+ * The exit status of a run that crashed: a Rust panic (the module exits with it, as native tsrs does for a panicked
+ * driver thread) or a trap (`runTsc` maps it). tsc's own statuses are 0-4.
+ */
+export const EXIT_CRASHED = 5;
+
 const OP_READ = 0;
 const OP_STAT = 1;
 const OP_READ_DIR = 2;
@@ -211,21 +217,32 @@ function prepare(module, request, host, io) {
         const out = instance.exports.tsrs_output();
         reply = bytes().slice(out, out + instance.exports.tsrs_output_len());
     } catch (e) {
-        if (!(e instanceof WasiExit)) {
+        if (e instanceof WasiExit) {
+            exitCode = e.code;
+        } else if (isTrap(e)) {
+            stderr(encoder.encode(`error: tsrs.wasm trapped (${e.name}: ${e.message}); a stack overflow on deeply nested code or running out of memory are the usual causes\n`));
+            exitCode = EXIT_CRASHED;
+        } else {
             throw e;
         }
-        exitCode = e.code;
     }
     io.afterRun?.(memory);
     return { exitCode, reply, memoryBytes: memory.buffer.byteLength };
     }
 }
 
+// A trap ends the run without proc_exit: a shadow-stack overflow (the stack is first in memory, so it faults as an
+// out-of-bounds access), an allocation failure (Rust aborts with `unreachable`), or the engine's own stack running
+// out (V8 throws a RangeError there).
+function isTrap(e) {
+    return e instanceof WebAssembly.RuntimeError || (e instanceof RangeError && /call stack/i.test(e.message));
+}
+
 /**
  * Runs one tsc invocation in a fresh instance of `module` (a compiled WebAssembly.Module).
  * request: { cwd, args, flags }; host: a HostFileSystem; io: { env, stdout(bytes), stderr(bytes), beforeRun(memory),
  * afterRun(memory) } (the run hooks let a harness inspect linear memory, e.g. the shadow-stack census).
- * Returns { exitCode, reply (Uint8Array), memoryBytes }.
+ * Returns { exitCode, reply (Uint8Array), memoryBytes }. A trap returns exitCode EXIT_CRASHED with a message on stderr.
  */
 export function runTsc(module, request, host, io = {}) {
     const run = prepare(module, request, host, io);

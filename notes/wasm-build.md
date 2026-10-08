@@ -24,7 +24,10 @@ Exports: `tsrs_input(len) -> ptr`, `tsrs_run() -> status`, `tsrs_output() -> ptr
 Request: NUL-separated UTF-8, `cwd \0 flags` then `\0 arg` per argument; flags 1 = JSON diagnostics (reply = the
 API's `DiagnosticResponse` array, UTF-16 positions), 2 = case-insensitive host fs, 4 = stdout is a tty. tsc's text
 goes to WASI fd 1. A panic prints Rust's message on stderr and exits with 5, native's status for a panicked driver
-thread.
+thread. A trap (a shadow-stack overflow faults as an out-of-bounds access, an allocation failure aborts with
+`unreachable`, and V8 throws a `RangeError` when its own stack runs out) ends the run without `proc_exit`; `core.js`
+catches it, prints `error: tsrs.wasm trapped (...)` on stderr and returns 5 (`EXIT_CRASHED`), so a crash never looks
+like tsc's 1 (errors, outputs skipped).
 
 `fs(op, ptr, len) -> i32`: ops 0 Read, 1 Stat (`<f|d|o> <size> <mtime ns>`), 2 ReadDir (`<f|d|l|o><name>\0`...),
 3 Realpath, 4 Write (`path\0data`; the host creates parent dirs), 5 Append, 6 Remove (recursive, missing is ok),
@@ -55,7 +58,8 @@ Shadow-stack high water, `tools/wasm/diff.mjs --stack-census` (0xA5 fill before 
 Rule (decided before measuring): shadow = max(32 MiB, 2 x the largest high water, rounded up to 8 MiB) = **80 MiB**.
 Worker stack: every fixture matches native at 128 MB and the 50k-term one fails at 64 MB, so the smallest of
 {64, 128, 256, 512} that passes at half its size is **256 MB** (ts-rust uses 256 too). At 80 MiB / 256 MB the module
-handles a 100k-term expression (80.0 MB of shadow stack); 150k overflows the shadow stack, which native handles.
+handles a 100k-term expression (80.0 MB of shadow stack); 150k overflows the shadow stack (exit 5 with the trap
+message), which native handles (exit 2).
 
 ## Size
 
