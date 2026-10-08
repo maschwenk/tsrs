@@ -889,6 +889,7 @@ impl Parser {
         let after = self.lazy_watch();
         if !clean_start
             || list.nodes().is_empty()
+            || list.end() - list.pos() > LAZY_LIST_MAX_TEXT
             || (after.0, after.1, after.2, after.3, after.5) != (before.0, before.1, before.2, before.3, before.5)
             || self.has_parse_error
             || !tsrs_core::arena_rewindable(&cp)
@@ -2957,6 +2958,12 @@ impl Parser {
 }
 
 const _: () = assert!(ParsingContext::ClassMembers as u8 == tsrs_ast::lazylist::CLASS_MEMBERS);
+
+/// A member list longer than this (in text) stays eager: parsing and binding it again takes a millisecond or more,
+/// while every checker that needs it waits (the generated OpenAPI `operations` / `components` interfaces of
+/// supabase-studio, 65-437 KB each, are needed by most checkers). Keeping them eager costs at most 0.5% of peak on the
+/// bench projects (notes/mem-lazy-dts-members.md).
+const LAZY_LIST_MAX_TEXT: i32 = 64 << 10;
 
 static LAZY_DTS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 

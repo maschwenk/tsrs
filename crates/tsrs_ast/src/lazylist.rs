@@ -101,6 +101,9 @@ pub fn set_bind_hook(hook: BindHook) {
 }
 
 static WAIT: (Mutex<()>, Condvar) = (Mutex::new(()), Condvar::new());
+/// A reader spins this many times (tens of microseconds) before it sleeps on `WAIT` for another thread's force: most
+/// lists are parsed and bound again in a few microseconds (formbricks-web: 9,400 lists in 40-80 ms of thread time).
+const SPINS: u32 = 1 << 14;
 
 /// `TSRS_LAZY_DTS=stats`: lists made lazy, deferred by the binder, parsed again (all, and while their file was
 /// bound), never reached by the binder.
@@ -237,6 +240,13 @@ impl LazyNodeList {
                         return self.nodes.get();
                     }
                     let t = std::time::Instant::now();
+                    // Most lists take microseconds to parse and bind: spin before sleeping on the condvar.
+                    let mut spins = 0;
+                    // Acquire: as above.
+                    while self.state.load(Ordering::Acquire) == FORCING && spins < SPINS {
+                        std::hint::spin_loop();
+                        spins += 1;
+                    }
                     let (lock, cv) = &WAIT;
                     let mut g = lock.lock().unwrap();
                     // Acquire: as above.
