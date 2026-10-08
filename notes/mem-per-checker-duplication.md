@@ -113,6 +113,10 @@ and pointers are 8 bytes, so bytes are larger than in 2a; read the shares. Per e
 | t3code-server | 125.5 MiB | 78.2 (62%) | 37.5 (30%) | 9.9 (8%) |
 | formbricks-web | 55.9 MiB | 38.7 (69%) | 9.4 (17%) | 7.8 (14%) |
 
+(Later correction: this census read type lists held only by array mappers as unreachable. With them decoded, the
+garbage per extra checker is 5.5 MB on t3code and 4.4 MB on formbricks after #135, at origin/main 4f43c94;
+notes/mem-checker-scratch.md.)
+
 Reachable growth on t3code by row (MiB per extra checker): `Symbol` 11.5, value-symbol link slots 7.9, `TypeReference`
 7.6, `[P<Type>]` 7.0, `LazyMemberTable` 5.6, `Signature` 5.2, `TypeMapper` 3.8, `[P<Symbol>]` 3.1, `TypeParameter` 2.7,
 `MappedType` 2.4, `ObjectType` 2.0, `StructuredMembers` 2.0. The inference rows are 95-97% unreachable and most of that
