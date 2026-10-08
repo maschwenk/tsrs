@@ -1,0 +1,4 @@
+{
+  "compilerOptions": { "strict": true, "noEmit": true },
+  "files": ["a.ts", "b.ts"]
+}

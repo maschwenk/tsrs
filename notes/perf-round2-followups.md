@@ -79,6 +79,11 @@ pointer compression costs about +4.9% instructions and took back most of the che
    its floor (program construction 0.6 s, of which `open()` is ~0.3 s).
 8. **Parallel `affectedfileshandler` / `emitfileshandler`** (notes/perf-incremental-parallel.md): still sequential in
    the port; costs nothing under `--noEmit`. Worth doing with an emit-on incremental benchmark.
+9. **type-fest's tuple targets** (notes/perf-excalidraw-typefest.md): each tuple target makes a type parameter and
+   a property symbol per element (4.58M elements, ~480 MB of a 768 MB arena at one checker). Bun shares the element
+   type parameters across all targets. Sharing them per checker could take type-fest from 983 to ~550 MiB at one
+   checker; it needs an audit of every reader of a target's own type parameters. The same note ranks lazy
+   formatting of relation error arguments (excalidraw's remaining ~120 MiB) after it.
 
 ## Round 3, union and inference work (#100, draft; notes/perf-union-inference.md)
 
@@ -93,6 +98,11 @@ pointer compression costs about +4.9% instructions and took back most of the che
 
 ## Measured and rejected (do not redo)
 
+- Checking a relation without reporting first and elaborating only on failure, as bun does
+  (notes/perf-excalidraw-typefest.md): on excalidraw at 9 checkers, 501 -> 379 MiB after the deferred constraint
+  check. Not exact against tsgo: the reporting run spends more of the relation complexity budget, so a
+  non-reporting first pass can succeed where tsgo reports TS2859. The exact form is lazy formatting of error
+  arguments.
 - A1, deciding `getConditionalType`'s definitely-false test for discriminated unions without the relater (draft #88,
   notes/perf-checker-algorithms.md): exact (it replays the relater's side effects; cross-checked on the suite and five
   corpora), but -0.5% instructions on one corpus at four checkers and neutral elsewhere, not worth a second
