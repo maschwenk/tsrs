@@ -257,6 +257,10 @@ pub(crate) fn seed(program: &'static Program, weights: &[i64]) -> Base {
                 }
                 c.assert_freezable();
                 c.seed_mode = false;
+                if stats_enabled() && tsrs_checker::Checker::heap_census_enabled() {
+                    // What every fork clones (its maps start as copies of the seed's): the seed's heap containers.
+                    eprint!("{}", c.heap_census().report("seed (cloned into every fork)", tsrs_checker::Checker::heap_census_min_bytes()));
+                }
                 drop(scope);
                 let chunks = region.chunks();
                 let bytes = region.used_bytes();
