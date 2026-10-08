@@ -240,9 +240,12 @@ impl<T> P<T> {
         #[cfg(compressed_ptrs)]
         // SAFETY: the low bits came from `pack` of a live `P<T>` (this function's contract): its handle, not 0.
         return P(unsafe { std::num::NonZeroU32::new_unchecked(w as u32) }, std::marker::PhantomData);
-        #[cfg(not(compressed_ptrs))]
+        #[cfg(all(not(compressed_ptrs), target_pointer_width = "64"))]
         // SAFETY: the low bits are the address of a live arena object, shifted by `pack` (this function's contract).
         return P(unsafe { &*std::ptr::with_exposed_provenance::<T>(((w & PACK_MASK) << 3) as usize) });
+        #[cfg(target_pointer_width = "32")]
+        // SAFETY: the low bits are the address of a live arena object, unshifted on 32-bit targets (`pack`).
+        return P(unsafe { &*std::ptr::with_exposed_provenance::<T>((w & PACK_MASK) as usize) });
     }
 
     /// `unpack` for an optional pointer (low bits 0 = `None`).
@@ -445,12 +448,15 @@ impl<T: ?Sized> P<T> {
     pub fn pack(self) -> u64 {
         #[cfg(compressed_ptrs)]
         return self.0.get() as u64;
-        #[cfg(not(compressed_ptrs))]
+        #[cfg(all(not(compressed_ptrs), target_pointer_width = "64"))]
         {
             let a = (self.0 as *const T as *const ()).expose_provenance() as u64;
             assert!(a & 7 == 0 && a >> (PACK_BITS + 3) == 0, "address {a:#x} does not pack in 45 bits");
             a >> 3
         }
+        // 32-bit targets: objects may be only 4-aligned, and every address fits in `PACK_BITS` unshifted.
+        #[cfg(target_pointer_width = "32")]
+        return (self.0 as *const T as *const ()).expose_provenance() as u64;
     }
 
     #[inline]
