@@ -19,9 +19,9 @@ on:
   workflow_dispatch:
     inputs:
       cpus:
-        description: Depot vCPU count (64 is opt-in)
+        description: Depot vCPU count (checker counts may exceed this)
         type: choice
-        options: ["32", "64"]
+        options: ["16", "32", "64"]
         default: "32"
       base:
         description: branch to compare against (the baseline is the merge base of this commit and origin/<base>)
@@ -88,7 +88,7 @@ jobs:
           if [ "$(nproc)" != "$RUNNER_CPUS" ] || [ "$(uname -m)" != x86_64 ]; then
             echo "::error::expected $RUNNER_CPUS vCPU x86_64, got $(nproc) vCPU $(uname -m)"; exit 1
           fi
-          python3 -c 'import os; assert all(0 < int(n) <= int(os.environ["RUNNER_CPUS"]) for n in os.environ["CHECKERS"].split(",")), "checker counts must fit the runner; use --input cpus=64 for wider checks"'
+          python3 -c 'import os; assert all(int(n) > 0 for n in os.environ["CHECKERS"].split(",")), "checker counts must be positive"'
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:

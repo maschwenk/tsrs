@@ -209,6 +209,9 @@ the deterministic measure (repeats to 0.001%). The `measure` jobs run 5 reps and
 headline is the 20-run mean of `bench-compare.yml`, not one publish's median.
 
 The Bun comparison uses 16 vCPU by default; 32 and 64 vCPU remain explicit choices in `bench-compare.yml`.
+Runner vCPUs and checker threads are separate: `cpus=16` with `threads=64` runs 64 software workers on
+16 vCPUs. This oversubscription is supported for experiments, including PR verification (`cpus=16`,
+`checkers=1,16,32,64`), but does not provide 64 cores of compute.
 The 8-vCPU instruction regression jobs retain their existing hardware. Historical 64-vCPU results keep their original
 labels; history starts a new baseline when a cell's hardware or build setup changes. Backfills of commits whose
 `run.py` predates `checkers16` measure only `wide` on the 16-vCPU runner.
