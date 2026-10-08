@@ -31,6 +31,7 @@ fn new_thread_arena() -> &'static Arena {
     shared_check::register(arena);
     #[cfg(feature = "alloc-profile")]
     crate::alloc_profile::register_arena(arena);
+    crate::memsplit::register_arena(arena);
     arena
 }
 
