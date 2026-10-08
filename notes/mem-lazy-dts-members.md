@@ -98,9 +98,11 @@ checked ones) to test forcing.
   `Symbol::exports` check the tail's lazy field. The first reader parses the list again from `pos` with the recorded
   context (a fresh parser on the file's text, nested lists eager), sets the members' parent to the owner, binds them
   with a fresh binder seeded with the recorded state (containers the members add to the container chain are spliced
-  in where the list was), publishes the slice (Release) and wakes waiters. Other threads spin for a few tens of
-  microseconds (most lists take a few microseconds: formbricks-web forces 9,400 lists in 40-80 ms of thread time),
-  then wait on a condvar; the forcing thread's own reads during binding (re-entrant) get the list being bound. Before
+  in where the list was), publishes the slice (Release) and wakes waiters. Other threads spin briefly (256 `spin_loop`s,
+  some microseconds: most lists take 5-30 µs; formbricks-web forces 9,400 lists in 40-80 ms of thread time), then
+  sleep on one of 64 condvars picked by the record's address; the forcing thread's own reads during binding
+  (re-entrant) get the list being bound. A first version spun 16K times: on the x86 runner that burned CPU next to
+  the hyperthread sibling (drizzle-orm +15% user time and +9% wall at 32 checkers). Before
   the checkers are created, the lists that every checker's `initialize_checker` forces at once (interfaces and classes
   declared in several script files or `declare global` blocks, which `mergeSymbolTable` clones and merges) are forced
   in parallel on the worker pool (about 1 ms): on cal-diy at 32 checkers the summed waiting went from 100 ms to under
