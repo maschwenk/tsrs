@@ -15,7 +15,7 @@ is written from scratch for tsrs.
 | Emit, `--build` | Yes; `-b` builds sequentially; JSON diagnostics with `-b` are refused | Emit is the native code once the host can write. |
 | Threads | `tsrs_core::NO_THREADS` (false on native) | One-thread rayon pool on the calling thread, `Program::single_threaded()` always true, `--singleThreaded` forced on the parsed options, `-b` builds then reports on the calling thread. tsrs output does not depend on the checker count, so one checker is exact. |
 | Crates | `tsrs_execute` (the tsc driver, moved out of `tsrs_cli`), `tsrs_wasm` (cdylib only) | The driver could not stay in the binary crate (it would pull mimalloc, the LSP, the API server and the file watcher into the module); cargo skips LTO for a crate that is also an rlib. |
-| 32-bit | cfg twins | `ThinSlice`, `PackedStr` are the plain references on 32-bit; `TypeMapper` keeps 16 bytes with `u64` words and its tags at bits 40-43; `P::pack` keeps 4-aligned addresses unshifted; the symbol bloom filter uses `usize::BITS`; thread-arena chunks stop doubling at 64 MiB. Every layout assert has a 32-bit twin. 64-bit code and layout are unchanged. |
+| 32-bit | cfg twins | `PackedStr` is the plain reference on 32-bit and `ThinSlice` a pointer and a length (its only long form is a lazy member list's, `lazylist`); `TypeMapper` keeps 16 bytes with `u64` words and its tags at bits 40-43; `P::pack` keeps 4-aligned addresses unshifted; the symbol bloom filter uses `usize::BITS`; thread-arena chunks stop doubling at 64 MiB. Every layout assert has a 32-bit twin. 64-bit code and layout are unchanged. |
 | Libraries | The 113 embedded `lib.*.d.ts` stay as they are (3.79 MB raw) | Packing them (ts-rust: LZMA, 0.31 MB) adds a decoder and a lazy path that differs from native; it is the first size follow-up. |
 
 ## ABI and file-system protocol
@@ -135,7 +135,7 @@ Native `--singleThreaded` against the module at the same absolute paths: exit co
 
 | set | result |
 |---|---|
-| testdata/regressions | 24/24 same (native equals each `expected.txt`) |
+| testdata/regressions | 25/25 same (native equals each `expected.txt`) |
 | 2,000-case conformance sample (`tools/wasm/sample-2000.txt`, `tsrs-test materialize`), node fs | 1,998/1,998 same, 2 skipped (runExternalCode) |
 | the same, in-memory fs | 1,993/1,993 same, 7 skipped (the 2, plus 5 cases with symlinks) |
 | xstate-main (0 errors), webpack (840), Compiler (43), Compiler-Unions (41), 3 repeats | 4/4 same each time; checkouts unmodified |

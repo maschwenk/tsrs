@@ -848,21 +848,48 @@ impl fmt::Debug for PackedStr {
 #[cfg(target_pointer_width = "64")]
 pub struct ThinSlice<T: 'static>(std::ptr::NonNull<()>, std::marker::PhantomData<&'static [T]>);
 
-/// 32-bit targets (wasm32): a fat `&'static [T]` is already one 8-byte pair (and `Option` of it uses the non-null
-/// niche), so `ThinSlice` is the reference itself.
+/// 32-bit targets (wasm32): the data pointer and the length, 8 bytes like a fat `&'static [T]` (and `Option` of it
+/// uses the non-null niche). Every slice fits, so the only long form is `from_ref`'s: the address of the `&'static [T]`
+/// it reads, tagged with bit 0 (`T` is at least 2-aligned, so a data pointer never has it).
 #[cfg(target_pointer_width = "32")]
-pub struct ThinSlice<T: 'static>(&'static [T]);
+pub struct ThinSlice<T: 'static>(std::ptr::NonNull<()>, usize, std::marker::PhantomData<&'static [T]>);
 
 #[cfg(target_pointer_width = "32")]
 impl<T> ThinSlice<T> {
+    const ALIGNED: () = assert!(std::mem::align_of::<T>() >= 2, "ThinSlice needs bit 0 of the data pointer");
+
     #[inline]
     pub fn new(s: &'static [T]) -> Self {
-        ThinSlice(s)
+        let () = Self::ALIGNED;
+        ThinSlice(std::ptr::NonNull::from(s).cast::<()>(), s.len(), std::marker::PhantomData)
+    }
+
+    /// A long-form slice that reads `*r` (as on 64-bit targets).
+    pub fn from_ref(r: &'static &'static [T]) -> Self {
+        let () = Self::ALIGNED;
+        ThinSlice(std::ptr::NonNull::from(r).cast::<()>().map_addr(|a| a | THIN_LONG_TAG), 0, std::marker::PhantomData)
+    }
+
+    /// Whether this is the long form (`from_ref`).
+    #[inline]
+    pub fn is_long(self) -> bool {
+        self.0.addr().get() & THIN_LONG_TAG != 0
+    }
+
+    /// The `&'static [T]` a long-form slice reads (`None` for the short form).
+    #[inline]
+    pub fn long_ref(self) -> Option<&'static &'static [T]> {
+        // SAFETY: a long form was built by `from_ref` from a `&'static &'static [T]`.
+        self.is_long().then(|| unsafe { &*(self.0.as_ptr().map_addr(|a| a & !THIN_LONG_TAG) as *const &'static [T]) })
     }
 
     #[inline]
     pub fn get(self) -> &'static [T] {
-        self.0
+        if let Some(r) = self.long_ref() {
+            return *r;
+        }
+        // SAFETY: built by `new` from a `&'static [T]` of this length.
+        unsafe { std::slice::from_raw_parts(self.0.as_ptr() as *const T, self.1) }
     }
 }
 
@@ -870,7 +897,6 @@ impl<T> ThinSlice<T> {
 const THIN_LEN_SHIFT: u32 = 48;
 #[cfg(target_pointer_width = "64")]
 const THIN_ADDR_MASK: usize = (1 << THIN_LEN_SHIFT) - 1;
-#[cfg(target_pointer_width = "64")]
 const THIN_LONG_TAG: usize = 1;
 
 impl<T> Clone for ThinSlice<T> {

@@ -181,7 +181,7 @@ against tsgo built from the same pinned commit.
 | Content mappers, automatic type acquisition, telemetry, pprof requests (language server) | no | not ported |
 | `--api` (the IPC server behind TypeScript 7's Node API: `unstable/sync` MessagePack, `unstable/async` JSON-RPC) | yes, with gaps | pinned upstream client suites against a release build of the integration branch: `test/sync/api.test.ts` 339/339, `test/async/api.test.ts` 348/348, `ast` 111/111, `astnav` 4/4 + 4/4, `api-generators` 43/43; suite passes are not byte-level response parity. Not implemented: CPU/heap profiling requests; `getCurrentLanguageServerSnapshot` returns the standalone-session error (no LSP-attached API session); no Windows named pipes. Per-method status in `docs/NODE_API.md` |
 | Prebuilt binaries | macOS arm64, Linux x64/arm64 (glibc) | no Windows or Intel macOS binary |
-| WebAssembly build (`@maschwenk/tsrs-wasm`: Node, browsers) | yes, single-threaded, not released | byte-identical to native `--singleThreaded` on 1,998 of 1,998 runnable cases of a 2,000-case conformance sample (also 1,993 of 1,993 over in-memory files), 24/24 regressions, 4 bench projects and emit on 2; 2.56 MB gzip; warm runs 1.8-2.3x native single-threaded on the bench projects (notes/wasm-build.md) |
+| WebAssembly build (`@maschwenk/tsrs-wasm`: Node, browsers) | yes, single-threaded, not released | byte-identical to native `--singleThreaded` on 1,998 of 1,998 runnable cases of a 2,000-case conformance sample (also 1,993 of 1,993 over in-memory files), 25/25 regressions, 4 bench projects and emit on 2; 2.58 MB gzip; warm runs 1.8-2.3x native single-threaded on the bench projects (notes/wasm-build.md) |
 
 ## Options and defaults
 
@@ -269,7 +269,7 @@ const { exitCode, diagnostics } = await tsc(["-p", "."], { files: { "/tsconfig.j
 ```
 
 Its output is byte-identical to native `tsrs --singleThreaded` on the differential gate (`tools/wasm/gate.sh`, run in
-CI). Warm runs take 1.8-2.3x native single-threaded time on the bench projects; the module is 9.1 MB, 2.56 MB gzip.
+CI). Warm runs take 1.8-2.3x native single-threaded time on the bench projects; the module is 9.1 MB, 2.58 MB gzip.
 Not supported: `--watch`, `--lsp`, `--api`, JSON diagnostics with `--build`, more than one checker, programs over
 4 GiB. [`notes/wasm-build.md`](notes/wasm-build.md) has the design, the stack sizes, the sizes and timings, and the
 gate counts; [`npm/tsrs-wasm/README.md`](npm/tsrs-wasm/README.md) the API.
