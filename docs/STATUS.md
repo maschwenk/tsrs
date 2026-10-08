@@ -1,5 +1,59 @@
 # Status
 
+## 2026-10-08: 0.9.0 release
+
+The WebAssembly build, published as a new package, and less peak memory at the default checker count; the
+TypeScript source pin remains `b85298b6a81f772d080b0455de0ca9d744cd6fd6` (7.1.0-dev.20260929). The published package
+set gains `@maschwenk/tsrs-wasm`, at the same version as `@maschwenk/tsrs` (`0.9.0-ts7.1.0-dev.20260929`). Diagnostics
+are unchanged: pr-verify found identical diagnostics in 102 of 102 cells (every bench project, single-threaded and at
+4, 16 and 32 checkers) for each of #190, #194, #199, #202, #203 and #204, and every bench project reports the same
+error count as 0.8.0. The `--extendedDiagnostics` `Symbols` counter drops where declaration-file member lists are
+never bound (#202).
+
+WebAssembly (#203, notes/wasm-build.md): `crates/tsrs_wasm` builds tsc as a `wasm32-wasip1` module over a host file
+system, and `@maschwenk/tsrs-wasm` runs it in Node 22 or later (`npx -y @maschwenk/tsrs-wasm -p .` on the real file
+system, or `tsc(args, { files })` over in-memory files with JSON diagnostics) and in browsers (a Web Worker over
+in-memory files). The module is 9.15 MB, 2.58 MB gzip, 1.74 MB brotli. It is single-threaded: `--checkers` is
+accepted and everything runs on one thread. Its output is byte-identical to native `tsrs --singleThreaded` on the
+differential gate CI runs on every pull request (1,998 of 1,998 runnable cases of a 2,000-case conformance sample,
+1,993 of 1,993 over in-memory files, the regressions, four bench projects, emit on two, twelve fixtures); warm runs
+take 1.8-2.3x native single-threaded wall on the bench projects. Not supported: `--watch`, `--lsp`, `--api`, JSON
+diagnostics with `--build`, `--checkerCostCache`, programs over 4 GiB. The release workflow builds the module, runs
+the package's tests against a native build, and installs and runs the packed tarball before it publishes it.
+
+Memory, the 64-vCPU bench at each tool's default (tsrs 32 checkers), 0.8.0 (`787b39483021`) -> 0.9.0
+(`6e82c526ff8e`, `bench/results/`): formbricks-web 2.87 -> 2.61 GiB (-9.0%), drizzle-orm 1.13 -> 1.06 (-6.3%), cal-diy
+2.59 -> 2.46 (-5.1%), supabase-studio 2.29 -> 2.19 (-4.4%), t3code-server 2.81 -> 2.69 (-4.1%), vscode 2.66 -> 2.60
+(-2.1%), mikro-orm -2.0%, the smaller programs -4 to -12%; wall within the runner's run-to-run spread. Three changes:
+a finished thread hands its arena to the next one (97 thread arenas at 32 checkers become 33) and a checker whose
+queue ran dry gives back the never-used end of its last 2 MiB huge-page block (#199: drizzle-orm -6.4% at 32
+checkers, the application projects -1.4 to -2.1%); when no declaration file is checked (`skipLibCheck`, `noCheck`),
+the parser keeps a record of each interface, class and type literal member list of a declaration file instead of its
+nodes, and the first reader parses and binds the list again, with the global libraries' lists forced in parallel
+before the checkers start (#202, `TSRS_LAZY_DTS=0` turns it off: formbricks-web -7.1% at 32 checkers and -12% at 4,
+wall within 1%, single-threaded peak -16%; there 116,800 lists stay unparsed until asked for and about 11,500 are
+asked for); `DiagnosticsCollection` keys a diagnostic by its file instead of cloning the file's path, an `Arc` whose
+count every checker wrote (#204: drizzle-orm -4% wall at 32 checkers). Single-threaded instructions against 0.8.0:
+formbricks-web -1.0%, playwright +1.9% and nuxt +0.9% (#202: a list the program needs is parsed twice), the rest
+-0.5% to +0.9%.
+
+Against `bun check` at its default (64 threads) on the same bench, peak memory tsrs / bun: supabase-studio 2.19 /
+2.18 GiB, drizzle-orm 1.06 / 1.03, formbricks-web 2.61 / 2.28, cal-diy 2.46 / 2.12, t3code-server 2.69 / 1.60,
+vscode 2.60 / 2.92 (mikro-orm 2.57 / 2.92); tsrs uses more memory on five projects (on two by under 3%) and less on
+twelve, and is faster on all seventeen. The remaining gap is what each extra checker rebuilds, and the checker count
+is the lever (notes/mem-round4.md: at 16 checkers tsrs beats bun's default on both axes on formbricks-web and cal-diy).
+
+Correctness and cleanup: CI gates on determinism (#193: `tools/ci/determinism.sh` runs xstate-main, webpack, nuxt,
+drizzle-orm and the regression cases single-threaded, at 2 and 4 checkers with stealing and under
+`--checkerAssignment random:1..6`, 504 runs whose output must be byte-identical; a 0.4.0 build fails it). The
+derived-variance shortcut, off by default and saving nothing with the guards the fuzzer forced on it, is removed
+(#194, 1,609 lines). Changes below the complexity bar added to AGENTS.md (#189) are reverted: the three threading
+overlaps around checker creation (#190, about 10 ms on vscode at 32 checkers), the binder's flow compaction (5.4 MB on
+vscode) and the `_exit` exit path (#191). Notes: flat symbol tables, not landed (#195); per-checker garbage, free
+lists and hash-table slack (#197); never-read checker objects (#198); the resident slack of a 32-checker run on Linux
+(#201); the memory round's summary (#205). Bench: 10 tsrs and bun reps on the wide machine and the README headline
+from a 20-run mean (#192, #196).
+
 ## 2026-10-07: 0.8.0 release
 
 Two checker instruction cuts on top of 0.7.0; the TypeScript source pin remains `b85298b6a81f772d080b0455de0ca9d744cd6fd6`
