@@ -138,7 +138,10 @@ grep -E "census verify \(recycling\)|strongly reachable freed blocks|violation c
 Both numbers must be 0: the precise walk (`census verify (recycling): ... 0 to freed or rewound blocks`) and the
 strong mark (`strongly reachable freed blocks (violations): 0`). Also run `--checkers 4` and `TSRS_LAZY_MEMBERS=0`.
 A run takes 2-3 minutes and ~15 GB (more with 4 checkers): run one at a time. `TSRS_CENSUS_ASSERT=1` exits with
-status 3 on a violation; `TSRS_CENSUS_CHAINS=N` prints N referrer chains (default 20).
+status 3 on a violation; `TSRS_CENSUS_CHAINS=N` prints N referrer chains (default 20); `TSRS_CENSUS_FRAMES=N` sets the
+frames of the "<- caller" tables (default 2 for heap blocks, 3 for arena blocks). Without the census, the
+alloc-profile build prints the free lists of each arena ("arena free lists": bytes on them at exit and at their peak,
+reissued, and bumped by recycling sites that found their list empty).
 
 Each `violation class` line names the freed block's site and the referrer's type and field offset. Look the offset
 up in the referrer's current layout (`offset_of!`) before believing it: the strong mark reads every 4-byte step as a
