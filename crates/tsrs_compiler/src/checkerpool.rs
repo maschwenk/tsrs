@@ -190,7 +190,9 @@ fn run_work_group(single_threaded: bool, count: usize, task: impl Fn(usize) + Sy
                     .stack_size(CHECKER_STACK_SIZE)
                     .spawn_scoped(s, move || {
                         tsrs_ast::use_id_blocks();
-                        task(i)
+                        task(i);
+                        // The next pass's thread (or checker) continues in this thread's arena.
+                        tsrs_core::ptr::release_own_arena();
                     })
                     .expect("failed to spawn checker thread")
             })
@@ -570,6 +572,11 @@ impl checkerPool {
                 program.bind_source_files();
                 tsrs_core::ptr::shared_check::freeze_shared_objects();
             }
+            tsrs_core::memsplit::report("parse end");
+            // The parse workers are done allocating: the checker threads continue in their arenas.
+            if !self.single_threaded {
+                crate::program::worker_pool().broadcast(|_| tsrs_core::ptr::release_own_arena());
+            }
             let create_and_assign = || {
                 let create_start = std::time::Instant::now();
                 #[cfg(feature = "checker")]
@@ -720,6 +727,8 @@ impl checkerPool {
             positions.iter_mut().for_each(|p| heavy_files_first(p, threshold, weight));
         }
         let queues: Vec<FileQueue> = positions.into_iter().map(|p| FileQueue::new(p, weight)).collect();
+        // TSRS_MEM_SPLIT: the type-check pass reports once every checker is done and before any thread exits.
+        let mem_split = (allow_steal && tsrs_core::memsplit::enabled()).then(|| std::sync::Barrier::new(if single { 1 } else { active.len() }));
         let run = |checker_idx: usize| {
             let start = stats.then(std::time::Instant::now);
             let cpu_start = if stats { thread_cpu_seconds() } else { 0.0 };
@@ -775,6 +784,23 @@ impl checkerPool {
             if let Some(start) = start {
                 *times[checker_idx].lock().unwrap() = (start.elapsed().as_secs_f64(), count);
                 *cpu[checker_idx].lock().unwrap() = thread_cpu_seconds() - cpu_start;
+            }
+            // Memory peaks at the end of the type-check pass, while the last checkers still run: one that is done gives
+            // back the resident, never used end of its arena chunk.
+            if allow_steal && !single {
+                tsrs_core::arena::trim_own_arena_tail();
+            }
+            if let Some(barrier) = &mem_split {
+                drop(guard);
+                tsrs_core::memsplit::note_own_stack();
+                if barrier.wait().is_leader() {
+                    tsrs_core::memsplit::report("check end");
+                    if tsrs_core::memsplit::purge_after_check() {
+                        tsrs_core::memsplit::heap_collect(true);
+                        tsrs_core::memsplit::report("check end, after mi_collect(true)");
+                    }
+                }
+                barrier.wait();
             }
         };
         run_work_group(single, active.len(), |k| run(active[k]));

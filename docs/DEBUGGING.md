@@ -169,6 +169,19 @@ TSRS_HEAP_PROFILE=1 TSRS_HEAP_PROFILE_RATE=65536 TSRS_HEAP_PROFILE_TSV=/tmp/heap
 The TSV has one row per sampled stack and thread group (`main`, `checker-N`, `other`) with live, at-peak and
 cumulative bytes. Symbols come from `atos` on macOS and `addr2line` on Linux.
 
+## What the resident memory is: the memory split
+
+`TSRS_MEM_SPLIT=1` (any build) prints on stderr, at `parse end`, at `check end` (every checker of the type-check pass
+is done and its thread still alive, the moment memory peaks with many checkers) and at `exit`: the thread arenas'
+capacity, used bytes and the resident bytes below each arena's finger that were never handed out (`mincore`); the
+mimalloc heap's live blocks and the resident bytes of its pages (`mi_heap_visit_blocks`); the checker threads' resident
+stacks; and on Linux `/proc/self/status` and `/proc/self/smaps` summed into the arena reservation, thread stacks, the
+heap and other anonymous memory, and file-backed pages, with a one-line split `arena used + arena unused resident |
+heap live + heap retained (in pages, outside pages) | stacks | file` (`crates/tsrs_core/src/memsplit.rs`,
+notes/mem-linux-residency-32.md). `TSRS_MEM_SPLIT=purge` also has mimalloc purge its freed memory after `check end`
+(`mi_collect(true)`) and prints the split again. `tools/perf/slackprobe.sh` runs it on the 64-vCPU Depot runner
+(`.depot/workflows/perf-probe.yml`) with interleaved timed reps.
+
 ## Where checker time goes by source pattern: the work census
 
 A function profile cannot tell which type alias or call site the time belongs to. The work census

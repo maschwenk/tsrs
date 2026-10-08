@@ -129,6 +129,14 @@ impl FreeStats {
     }
 }
 
+pub(crate) struct Residency {
+    pub(crate) capacity: usize,
+    pub(crate) used: usize,
+    pub(crate) current_unused: Option<(usize, usize)>,
+    pub(crate) retired_unused: Vec<(usize, usize)>,
+    pub(crate) current_huge: bool,
+}
+
 struct DropEntry {
     ptr: *mut u8,
     len: usize,
@@ -380,6 +388,21 @@ impl Arena {
             self.end.get().addr() - self.ptr.get().addr()
         } else {
             self.ptr.get().addr() - self.start.get().addr()
+        }
+    }
+
+    /// A thread arena's chunks for `TSRS_MEM_SPLIT` (`memsplit`): capacity, used bytes, the unused range of the
+    /// current chunk and of each retired chunk (start, len), and whether the current chunk is a huge-page chunk.
+    pub(crate) fn residency(&self) -> Residency {
+        debug_assert!(!self.up);
+        let (start, end, ptr) = (self.start.get().addr(), self.end.get().addr(), self.ptr.get().addr());
+        let retired = self.retired.borrow();
+        Residency {
+            capacity: self.capacity.get(),
+            used: (end - ptr) + retired.iter().map(|&(_, e, f)| e - f).sum::<usize>(),
+            current_unused: (ptr > start).then_some((start, ptr - start)),
+            retired_unused: retired.iter().filter(|&&(s, _, f)| f > s).map(|&(s, _, f)| (s, f - s)).collect(),
+            current_huge: HUGE_THREAD_CHUNK.is_some_and(|h| end - start >= h),
         }
     }
 
@@ -1052,6 +1075,52 @@ impl Drop for RegionScope {
         });
         if let Some(region) = &self.region {
             region.0.lock.unlock();
+        }
+    }
+}
+
+/// Thread arenas given back by threads that are done allocating (`ptr::release_own_arena`), taken by the next thread
+/// that needs one (`ptr::own_arena`).
+struct SpareArena(&'static Arena);
+// SAFETY: a spare arena has no owner: the thread that gave it back reaches it no more (its own-arena slot is cleared
+// and no scope names it), and the pool's mutex orders that thread's last use before the next owner's first.
+unsafe impl Send for SpareArena {}
+
+static SPARE_ARENAS: Mutex<Vec<SpareArena>> = Mutex::new(Vec::new());
+
+pub(crate) fn take_spare_arena() -> Option<&'static Arena> {
+    SPARE_ARENAS.lock().unwrap().pop().map(|s| s.0)
+}
+
+/// Whether no region, thread-arena or scratch scope is open on this thread, so that nothing but its own-arena slot
+/// names its arena.
+pub(crate) fn no_scope_open() -> bool {
+    SCOPES.with(|s| s.borrow().is_empty()) && SCRATCH.with(|s| s.get().0.is_null())
+}
+
+pub(crate) fn give_spare_arena(arena: &'static Arena) {
+    CURRENT.with(|c| c.set(std::ptr::null()));
+    SPARE_ARENAS.lock().unwrap().push(SpareArena(arena));
+}
+
+/// Gives back the resident part of the calling thread's own arena that was never handed out: on Linux, when the
+/// current chunk is a huge-page chunk, the rest of the 2 MiB block the finger is in (the block was faulted in as one
+/// transparent huge page; one `madvise`, which splits that page's mapping). For a thread that is done allocating at
+/// the moment memory peaks (a checker whose type-check queue ran dry while others still check). A later allocation
+/// below the finger faults in fresh zero pages. Elsewhere, and for a 4 KiB-page chunk, the unused part is not
+/// resident and this does nothing.
+pub fn trim_own_arena_tail() {
+    #[cfg(all(compressed_ptrs, target_os = "linux"))]
+    {
+        let a = crate::ptr::own_arena();
+        let (start, end, ptr) = (a.start.get().addr(), a.end.get().addr(), a.ptr.get().addr());
+        let Some(huge) = HUGE_THREAD_CHUNK.filter(|&h| end - start >= h) else {
+            return;
+        };
+        let lo = (ptr & !(huge - 1)).max(start);
+        if ptr & !(PAGE - 1) > lo {
+            // SAFETY: `lo .. ptr` lies in the current chunk below the finger: never handed out, nothing points into it.
+            unsafe { crate::reserve::discard(a.ptr.get().with_addr(lo), ptr - lo) };
         }
     }
 }

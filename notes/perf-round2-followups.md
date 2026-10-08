@@ -159,6 +159,13 @@ pointer compression costs about +4.9% instructions and took back most of the che
   checker's allocation is never read, nearly all symbols, links and signatures (types are read), in many small pools.
   The one pool above 2% (t3code: lazy tables instantiating signatures only for `isWeakType`) was deferred exactly
   (D1, code in 8be2e48): -1.1% peak at 32 checkers on Linux, nothing elsewhere.
+- Residency slack at 32 checkers on the 64-vCPU runner (notes/mem-linux-residency-32.md): the unused part of each
+  thread arena's huge-page block was 57-71 MiB at the peak (2.1-2.7%, 5.8% on drizzle-orm) and is gone with #199 (a
+  finished thread hands its arena to the next one, a finished checker trims its block: -1.4% to -2.1% peak on five
+  projects, -6.4% on drizzle-orm, no wall change). Rejected: trimming the parse workers' blocks (the handoff saves the
+  same by reuse), `mi_collect` on the parse workers or on finished checkers (0-1%: mimalloc's 4.7-8.2% of retained
+  memory is free blocks in pages that still hold live blocks; a forced purge at the peak finds 4-5 MiB), smaller
+  stacks (4-11 MiB resident in all), switching a running checker into a finished checker's arena.
 
 ## The lint ratchet
 

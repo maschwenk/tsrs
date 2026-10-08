@@ -21,14 +21,18 @@ use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 
 thread_local! {
-    static ARENA: &'static Arena = {
-        let arena: &'static Arena = Box::leak(Box::new(Arena::new()));
-        #[cfg(any(debug_assertions, feature = "checked-cells"))]
-        shared_check::register(arena);
-        #[cfg(feature = "alloc-profile")]
-        crate::alloc_profile::register_arena(arena);
-        arena
-    };
+    /// The thread's own arena, set on first use (`own_arena`) and cleared by `release_own_arena`.
+    static ARENA: std::cell::Cell<Option<&'static Arena>> = const { std::cell::Cell::new(None) };
+}
+
+fn new_thread_arena() -> &'static Arena {
+    let arena: &'static Arena = Box::leak(Box::new(Arena::new()));
+    #[cfg(any(debug_assertions, feature = "checked-cells"))]
+    shared_check::register(arena);
+    #[cfg(feature = "alloc-profile")]
+    crate::alloc_profile::register_arena(arena);
+    crate::memsplit::register_arena(arena);
+    arena
 }
 
 macro_rules! profile {
@@ -38,9 +42,35 @@ macro_rules! profile {
     };
 }
 
-/// The current thread's own arena (never freed).
+/// The current thread's own arena (never freed): on first use, an arena that a thread done allocating gave back
+/// (`release_own_arena`), else a new one.
 pub(crate) fn own_arena() -> &'static Arena {
-    ARENA.with(|a| *a)
+    ARENA.with(|c| match c.get() {
+        Some(a) => a,
+        None => {
+            let a = arena::take_spare_arena().unwrap_or_else(new_thread_arena);
+            c.set(Some(a));
+            a
+        }
+    })
+}
+
+/// Hands the calling thread's own arena to the next thread that needs one, for a thread that is done allocating (a
+/// checker thread at the end of its task, a parse worker once the program is loaded). That thread continues in the
+/// arena's current chunk, whose unused end is resident when the chunk has transparent huge pages (the partly used
+/// 2 MiB block under the finger), instead of starting a chunk of its own (notes/mem-linux-residency-32.md). The
+/// arena's objects stay where they are; the next owner only allocates below the finger and reuses its free lists,
+/// whose blocks are dead. An allocation on this thread afterwards takes another arena. Does nothing while a region,
+/// thread-arena or scratch scope is open (the scope stack names the arena).
+pub fn release_own_arena() {
+    let Some(a) = ARENA.with(std::cell::Cell::get) else {
+        return;
+    };
+    if !arena::no_scope_open() {
+        return;
+    }
+    ARENA.with(|c| c.set(None));
+    arena::give_spare_arena(a);
 }
 
 #[cold]
