@@ -17,6 +17,7 @@ import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const median = (v) => [...v].sort((a, b) => a - b)[Math.floor(v.length / 2)];
+const range = (v) => `${(Math.min(...v) / 1000).toFixed(2)}-${(Math.max(...v) / 1000).toFixed(2)}`;
 
 if (process.argv[2] === "--child") {
     // --child <package dir> <module> <case json> <calls>
@@ -102,15 +103,15 @@ process.stderr.write("\n");
 if (tsRustPkg) fs.rmSync(tsRustPkg, { recursive: true, force: true });
 
 const s = (ms) => (ms / 1000).toFixed(2);
-console.log(`load ${os.loadavg().map((x) => x.toFixed(1)).join(" ")}; ${o.runs} interleaved runs; times in seconds (median)`);
+console.log(`load ${os.loadavg().map((x) => x.toFixed(1)).join(" ")}; ${o.runs} interleaved runs; times in seconds, median [min-max]`);
 for (const c of projects) {
     const r = results[c.name];
     const nwall = median(r.native.map((x) => x.wall));
-    const line = [`${c.name.padEnd(16)} native ${s(nwall)} (rss ${(median(r.native.map((x) => x.rss)) / 2 ** 20).toFixed(0)} MiB, ${(median(r.native.map((x) => x.instructions)) / 1e9).toFixed(2)}e9 instr)`];
+    const line = [`${c.name.padEnd(16)} native ${s(nwall)} [${range(r.native.map((x) => x.wall))}] (rss ${(median(r.native.map((x) => x.rss)) / 2 ** 20).toFixed(0)} MiB, ${(median(r.native.map((x) => x.instructions)) / 1e9).toFixed(2)}e9 instr)`];
     for (const e of engines) {
         const x = r.engines[e.name];
         const warm = median(x.warm);
-        line.push(`${e.name}: cold ${s(median(x.cold))} warm ${s(warm)} (${(warm / nwall).toFixed(2)}x) linear ${(x.memoryBytes / 2 ** 20).toFixed(0)} MiB maxRSS ${(x.maxRssKiB / 1024).toFixed(0)} MiB exit ${x.exitCode}`);
+        line.push(`${e.name}: cold ${s(median(x.cold))} [${range(x.cold)}] warm ${s(warm)} [${range(x.warm)}] (${(warm / nwall).toFixed(2)}x) linear ${(x.memoryBytes / 2 ** 20).toFixed(0)} MiB maxRSS ${(x.maxRssKiB / 1024).toFixed(0)} MiB exit ${x.exitCode}`);
     }
     console.log(line.join("\n    "));
     r.summary = { nativeWallMs: nwall, engines: Object.fromEntries(engines.map((e) => [e.name, { coldMs: median(r.engines[e.name].cold), warmMs: median(r.engines[e.name].warm) }])) };
