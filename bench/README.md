@@ -210,10 +210,11 @@ headline is the 20-run mean of `bench-compare.yml`, not one publish's median.
 
 **History**: `bench/history.py` prints one table per metric over `bench/results/*.json` in `main`'s first-parent
 order, a column per project, each cell with its change against the previous benchmarked commit (with one run per
-push, the previous merge): `--metrics instructions,peak,wall,wide_wall,wide_peak,wasm_warm`, `--projects`, `--since <commit>`,
-`--tsv`. Instructions and peak RSS are deterministic, so a `!` cell (past the regression thresholds) is the commit's
-doing; the wall columns are the noisy ones and say whether the cost bought anything, and a `~` marks a wall or
-wide-peak change next to an instruction change under 0.3%: the code did not change, that is the runner.
+push, the previous merge): `--metrics instructions,peak,wall,wide_wall,wide_peak,wasm_warm` (the last one
+tsrs.wasm's warm run, from the WebAssembly results below), `--projects`, `--since <commit>`, `--tsv`. Instructions and peak RSS are
+deterministic, so a `!` cell (past the regression thresholds) is the commit's doing; the wall columns are the noisy
+ones and say whether the cost bought anything, and a `~` marks a wall or wide-peak change next to an instruction
+change under 0.3%: the code did not change, that is the runner.
 
 Four jobs (since 2026-10-07; until then one job did everything in sequence, and the measurement alone took 18-20 min
 once the four application projects were in):
@@ -231,7 +232,6 @@ once the four application projects were in):
    oversubscribe the fixed-spec machine. The job runs while the `measure` jobs do; it is the run's only 64-vCPU job. It
    restores the caches the `measure` jobs save (a project added to `projects.json` needs a restore step in it too). If
    it fails, the results file is published without the 64-vCPU sections and the README table is left as it was.
-   `build-wasm` and `measure-wasm` make the WebAssembly table (see "WebAssembly" below).
 4. `merge`: `bench/run.py --merge <results...>` joins them into one result, projects in `bench/projects.json` order
    and modes in `MODE_FLAGS` order, after checking that the binary, the compilers and flags agree (the rep counts may differ, as the
    `measure` jobs' 5 and `measure-wide`'s 10 do; the result records every mode's in `mode_reps`) and that no
@@ -353,17 +353,25 @@ python3 bench/wasm.py --local --projects xstate-main,Compiler
   applications and mikro-orm (3.1-10.4 s native single-threaded, 0.75-1.6 GiB), and next-root (the same repository
   as next-packages-next).
 
-**CI.** Two jobs of `bench.yml`. `build-wasm` (8 vCPU) runs alongside `build`: it builds tsrs.wasm and, on a cache
-miss, ts-rust's module (cached on the pinned commit and the toolchain), and uploads both as `bench-wasm-modules`.
-`measure-wasm` (`depot-ubuntu-24.04-8`, the fixed spec: every run is single-threaded, so a 64-vCPU machine would cost
-more and buy nothing, and on this spec the native column is comparable with the `single` table) starts with the
-`measure` jobs, runs `bench/wasm.py` with the build job's PGO binary as the native engine, and uploads
-`bench-wasm-result`. `merge` passes it to `bench/run.py --merge --wasm <result>`: the result's JSON gets it under
-`wasm`, its `.md` gets the table and the module sizes after the other tables, and `--readme-wasm-table` writes the
-README's `bench-wasm` block (medians only), applied under the same newest-commit rule as the main table. If
-`measure-wasm` fails, the results file has no WebAssembly section and the README block stays as it was. A local
-`bench/wasm.py` run writes `bench/results/<date>-<commit>[-local]-wasm.{json,md}`; `history.py` and
-`regressions.py` skip such files (`"kind": "wasm"`).
+**CI.** `.depot/workflows/bench-wasm.yml`, run by hand
+(`depot ci dispatch --repo maschwenk/tsrs --workflow bench-wasm.yml --ref main`), not on every push: `bench.yml` is
+the per-push regression gate, and this table moves only when the module, the checker or ts-rust's pin does.
+
+- `measure` runs on one `depot-ubuntu-24.04-4` (4 vCPU, 16 GB). Every measured run is single-threaded and the largest
+  process peaks at 1.4 GiB (ts-rust's module on drizzle-orm), so more cores would only shorten the builds. It builds
+  native tsrs with `cargo build --release` (the module gets no PGO, so its comparison gets none either), tsrs.wasm,
+  and, on a cache miss, ts-rust's module (cached on the pinned commit, the toolchain and binaryen); restores the
+  project caches `bench.yml` saves; runs `bench/wasm.py`; and uploads `bench-wasm-result` (the table is also the job
+  summary). It runs the projects' install scripts and ts-rust's build, so it has no write token.
+- `publish` (`depot-ubuntu-24.04`) commits `bench/results/<date>-<commit>-wasm.{json,md}` and rewrites README.md's
+  `bench-wasm` block (`bench/wasm.py --apply`, medians only) when the measured commit is a clean commit on `main`,
+  and leaves the block alone when it already shows a descendant of that commit. A dispatch on a branch ends with the
+  artifact.
+- Cost, estimated until the first run: about 30 min of the 4-vCPU machine, 35 on a run that builds ts-rust's
+  module, plus a minute of the 2-vCPU one. The builds take under 2 min on 8 vCPU in ci.yml's `wasm` job (warm
+  dependency cache); the measurement took 17 min on an Apple M5 Max shared with other work (2026-10-08).
+
+`history.py --metrics wasm_warm` reads the `-wasm.json` files; `regressions.py --latest` skips them (`"kind": "wasm"`).
 
 ## Verifying a branch
 

@@ -7,9 +7,7 @@
 # bench/projects.json, each on its own machine of the fixed spec, so the projects are measured at the same time
 # without ever sharing a CPU (one job measuring them one after the other took 18-20 min; the longest project, vscode,
 # takes about 5); `measure-wide` measures every project with `--checkers 64` on one 64-vCPU machine; `merge` joins
-# the partial results into one result file (bench/run.py --merge), flags regressions and commits. Two more make the
-# WebAssembly table (bench/wasm.py): `build-wasm` builds tsrs.wasm and ts-rust's module while `build` runs, and
-# `measure-wasm` measures them against the build job's binary; `merge` adds the table to the result.
+# the partial results into one result file (bench/run.py --merge), flags regressions and commits.
 #
 # Loop guards: the results commit only touches README.md and bench/results/** (excluded by `paths`), and carries
 # [skip ci], which the build job's `if` also checks (the commit is pushed by Depot's GitHub app, which may trigger
@@ -561,230 +559,13 @@ jobs:
           path: bench/.work/logs
           if-no-files-found: ignore
 
-  # The WebAssembly table (bench/wasm.py, bench/README.md "WebAssembly"), part 1: tsrs.wasm (tools/wasm/build.sh) and
-  # ts-rust's module (bench/wasm.py --build-ts-rust, at its pinned commit, cached), built while `build` makes the native
-  # binary, so `measure-wasm` starts with the other measuring jobs.
-  build-wasm:
-    if: github.repository == 'maschwenk/tsrs' && !contains(github.event.head_commit.message, '[skip ci]')
-    runs-on: depot-ubuntu-24.04-8
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          ref: ${{ inputs.commit || github.sha }} # the measured commit (workflow_dispatch may name one)
-          persist-credentials: false
-
-      - name: Read the pinned Rust toolchain (rust-toolchain.toml)
-        id: rust
-        shell: bash
-        run: echo "toolchain=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
-
-      # ts-rust has no rust-toolchain.toml; its checkout under bench/.work picks up this repository's, so both modules
-      # are built with the pinned rustc.
-      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
-        with:
-          toolchain: ${{ steps.rust.outputs.toolchain }}
-          targets: wasm32-wasip1
-
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          key: bench-wasm
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: 24
-
-      # As in ci.yml's `wasm` job: Ubuntu's binaryen is older, and both build scripts run wasm-opt.
-      - name: Install binaryen 133
-        run: |
-          curl -sSLf -o /tmp/binaryen.tgz https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-x86_64-linux.tar.gz
-          echo "2dc9c7813f5375db93d96ead4b78222fcc3e2677bbb832297af4797782a37489  /tmp/binaryen.tgz" | sha256sum -c -
-          tar xzf /tmp/binaryen.tgz -C /tmp
-          echo /tmp/binaryen-version_133/bin >> "$GITHUB_PATH"
-
-      - name: ts-rust commit
-        id: ts-rust
-        run: echo "commit=$(python3 bench/wasm.py --print-ts-rust-commit)" >> "$GITHUB_OUTPUT"
-
-      # ts-rust's module changes only with its pinned commit (bench/wasm.py TS_RUST), the toolchain or binaryen.
-      - name: Restore ts-rust's module
-        id: cache-ts-rust
-        uses: actions/cache/restore@v4
-        with:
-          path: bench/.work/ts-rust-wasm
-          key: bench-ts-rust-wasm-${{ steps.ts-rust.outputs.commit }}-${{ steps.rust.outputs.toolchain }}-binaryen133
-
-      - name: Build ts-rust's module (a no-op when restored)
-        run: python3 bench/wasm.py --build-ts-rust
-
-      - name: Save ts-rust's module
-        if: steps.cache-ts-rust.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: bench/.work/ts-rust-wasm
-          key: ${{ steps.cache-ts-rust.outputs.cache-primary-key }}
-
-      - name: Build tsrs.wasm
-        run: tools/wasm/build.sh
-
-      - name: Package the modules
-        run: |
-          mkdir -p /tmp/bench-wasm-modules
-          cp npm/tsrs-wasm/tsrs.wasm /tmp/bench-wasm-modules/
-          cp -r bench/.work/ts-rust-wasm /tmp/bench-wasm-modules/ts-rust-wasm
-          sha256sum /tmp/bench-wasm-modules/tsrs.wasm /tmp/bench-wasm-modules/ts-rust-wasm/ts_rust.wasm
-          cat /tmp/bench-wasm-modules/ts-rust-wasm/build.json
-
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: bench-wasm-modules
-          path: /tmp/bench-wasm-modules
-          if-no-files-found: error
-          retention-days: 3
-
-  # Part 2: the measurement, on a fixed-spec 8-vCPU machine. Every run in it is single-threaded (native tsrs with
-  # --singleThreaded and RAYON_NUM_THREADS=1, the modules on one worker thread), so a 64-vCPU machine would buy nothing,
-  # and on this spec the native column is comparable with the `single` table. Native tsrs is the build job's binary.
-  measure-wasm:
-    needs: [build, build-wasm]
-    runs-on: depot-ubuntu-24.04-8
-    timeout-minutes: 45
-    env:
-      BENCH_RUNNER: Depot CI `depot-ubuntu-24.04-8`
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          ref: ${{ inputs.commit || github.sha }} # the measured commit (workflow_dispatch may name one)
-          persist-credentials: false
-
-      - name: Runner hardware (must match the fixed spec)
-        run: |
-          nproc; free -g; df -h / | tail -1
-          lscpu | grep -E 'Model name|^CPU\(s\)' || true
-          mem_gb=$(awk '/MemTotal/ {printf "%d", $2 / 1048576}' /proc/meminfo)
-          if [ "$(nproc)" != 8 ] || [ "$mem_gb" -lt 28 ] || [ "$(uname -m)" != x86_64 ]; then
-            echo "::error::expected 8 vCPU / 32 GB / x86_64, got $(nproc) vCPU / ${mem_gb} GB / $(uname -m)"; exit 1
-          fi
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: 24
-
-      - name: Cache keys
-        id: keys
-        run: python3 bench/run.py --print-cache-keys --projects "$(python3 bench/wasm.py --print-projects)" | tee -a "$GITHUB_OUTPUT"
-
-      # Restore only: the `measure` jobs save these. A project added to bench/wasm.py PROJECTS needs a step here too.
-      - name: Restore suite and compilers
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            bench/.work/suite
-            bench/.work/tsgo
-          key: bench-shared-${{ runner.os }}-${{ steps.keys.outputs.shared }}
-
-      - name: Restore xstate-main
-        if: steps.keys.outputs['xstate-main'] != ''
-        uses: actions/cache/restore@v4
-        with:
-          path: bench/.work/solutions/xstate-main
-          key: bench-xstate-main-${{ runner.os }}-${{ steps.keys.outputs['xstate-main'] }}
-
-      - name: Restore webpack
-        if: steps.keys.outputs['webpack'] != ''
-        uses: actions/cache/restore@v4
-        with:
-          path: bench/.work/solutions/webpack
-          key: bench-webpack-${{ runner.os }}-${{ steps.keys.outputs['webpack'] }}
-
-      - name: Restore next-packages-next
-        if: steps.keys.outputs['next-packages-next'] != ''
-        uses: actions/cache/restore@v4
-        with:
-          path: bench/.work/solutions/next-packages-next
-          key: bench-next-packages-next-${{ runner.os }}-${{ steps.keys.outputs['next-packages-next'] }}
-
-      - name: Restore storybook
-        if: steps.keys.outputs['storybook'] != ''
-        uses: actions/cache/restore@v4
-        with:
-          path: bench/.work/solutions/storybook
-          key: bench-storybook-${{ runner.os }}-${{ steps.keys.outputs['storybook'] }}
-
-      - name: Restore playwright
-        if: steps.keys.outputs['playwright'] != ''
-        uses: actions/cache/restore@v4
-        with:
-          path: bench/.work/solutions/playwright
-          key: bench-playwright-${{ runner.os }}-${{ steps.keys.outputs['playwright'] }}
-
-      - name: Restore nuxt
-        if: steps.keys.outputs['nuxt'] != ''
-        uses: actions/cache/restore@v4
-        with:
-          path: bench/.work/solutions/nuxt
-          key: bench-nuxt-${{ runner.os }}-${{ steps.keys.outputs['nuxt'] }}
-
-      - name: Restore drizzle-orm
-        if: steps.keys.outputs['drizzle-orm'] != ''
-        uses: actions/cache/restore@v4
-        with:
-          path: bench/.work/solutions/drizzle-orm
-          key: bench-drizzle-orm-${{ runner.os }}-${{ steps.keys.outputs['drizzle-orm'] }}
-
-      - name: Set up the projects
-        run: python3 bench/wasm.py --setup-only
-
-      - name: Download tsrs (PGO, dist profile)
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: tsrs-pgo-dist
-          path: /tmp/tsrs-pgo/dist
-
-      - name: Download the modules
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: bench-wasm-modules
-          path: /tmp/bench-wasm-modules
-
-      - name: Check the binary and the modules
-        run: |
-          chmod +x /tmp/tsrs-pgo/dist/tsrs
-          sha256sum /tmp/tsrs-pgo/dist/tsrs /tmp/bench-wasm-modules/tsrs.wasm /tmp/bench-wasm-modules/ts-rust-wasm/ts_rust.wasm
-          /tmp/tsrs-pgo/dist/tsrs --version
-          cat /tmp/tsrs-pgo/dist/rustc.txt
-
-      - name: Benchmark (native --singleThreaded, tsrs.wasm, ts-rust's module)
-        run: >-
-          python3 bench/wasm.py --tsrs /tmp/tsrs-pgo/dist/tsrs --tsrs-build pgo-dist
-          --rustc "$(cat /tmp/tsrs-pgo/dist/rustc.txt)" --tsrs-wasm /tmp/bench-wasm-modules/tsrs.wasm
-          --ts-rust-pkg /tmp/bench-wasm-modules/ts-rust-wasm --out-dir /tmp/bench-wasm
-
-      - name: Upload the result
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: bench-wasm-result
-          path: /tmp/bench-wasm
-          if-no-files-found: error
-          retention-days: 3
-
-      - name: Upload logs
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: bench-logs-wasm
-          path: bench/.work/logs
-          if-no-files-found: ignore
-
   # Joins the per-project results into bench/results/<date>-<commit>.{json,md} and the README table, flags
   # regressions, and commits. Runs only when every fixed-spec measuring job succeeded: the regression flag reads them.
   # README.md shows one table, the 64-vCPU machine's default mode (`wide`, with bun check); bench/results/<...>.md has
   # every mode. If the wide job failed or was cancelled, the results file has no 64-vCPU sections and the README table
   # is left as it was.
-  # The WebAssembly table (measure-wasm) goes into the same results file and its own README block; without it (a failed
-  # or cancelled measure-wasm) the results file has no WebAssembly section and the README block is left as it was.
   merge:
-    needs: [build, measure, measure-wide, measure-wasm]
+    needs: [build, measure, measure-wide]
     if: ${{ !cancelled() && needs.build.result == 'success' && needs.measure.result == 'success' }}
     runs-on: depot-ubuntu-24.04
     timeout-minutes: 15
@@ -802,21 +583,11 @@ jobs:
           pattern: bench-partial-*
           path: /tmp/bench-partials
 
-      - name: Download the WebAssembly result
-        if: needs['measure-wasm'].result == 'success'
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: bench-wasm-result
-          path: /tmp/bench-wasm
-
       - name: Merge results
         run: |
           echo "ref=$GITHUB_REF event=$GITHUB_EVENT_NAME sha=$GITHUB_SHA"
           ls -R /tmp/bench-partials
-          wasm=$(find /tmp/bench-wasm -name '*.json' 2>/dev/null | head -1)
-          if [ -z "$wasm" ]; then echo "::warning::no WebAssembly result; README.md keeps its WebAssembly block"; fi
-          python3 bench/run.py --merge /tmp/bench-partials/*/*.json --out-dir /tmp/bench-merged --readme-modes wide --readme-table /tmp/bench-readme.md \
-            ${wasm:+--wasm "$wasm" --readme-wasm-table /tmp/bench-readme-wasm.md}
+          python3 bench/run.py --merge /tmp/bench-partials/*/*.json --out-dir /tmp/bench-merged --readme-modes wide --readme-table /tmp/bench-readme.md
           cp /tmp/bench-merged/* bench/results/
           # The README table needs the wide job's cells; without them --readme-table holds an empty table.
           if ! grep -q '^| ' /tmp/bench-readme.md; then echo "::warning::no 64-vCPU results; README.md keeps its table"; rm /tmp/bench-readme.md; fi
@@ -870,21 +641,15 @@ jobs:
             # README.md keeps the newest commit's table. Runs overlap, so a run of an older commit can finish after
             # a descendant's run has published: then it adds its results file and leaves the table alone. The
             # commit a table came from is in its last line ("tsrs commit: `<sha>`", bench/run.py).
-            # The WebAssembly block follows the same rule.
             readme_commit=$(sed -n 's/.*tsrs commit: `\([0-9a-f]\{7,40\}\)`.*/\1/p' README.md | head -1)
-            if [ -n "$readme_commit" ] && [ "$readme_commit" != "${measured::12}" ] \
+            if [ ! -f /tmp/bench-readme.md ]; then
+              echo "::notice::no 64-vCPU table for ${measured::12}; README.md keeps its table"
+            elif [ -n "$readme_commit" ] && [ "$readme_commit" != "${measured::12}" ] \
                 && git cat-file -e "$readme_commit^{commit}" 2>/dev/null \
                 && git merge-base --is-ancestor "$measured" "$readme_commit"; then
-              echo "::notice::README.md keeps the tables of $readme_commit, a descendant of ${measured::12}; this run's tables are bench/results/$(basename /tmp/bench-merged/*.md)"
+              echo "::notice::README.md keeps the table of $readme_commit, a descendant of ${measured::12}; this run's table is bench/results/$(basename /tmp/bench-merged/*.md)"
             else
-              if [ -f /tmp/bench-readme.md ]; then
-                python3 bench/run.py --apply-table /tmp/bench-readme.md --readme README.md
-              else
-                echo "::notice::no 64-vCPU table for ${measured::12}; README.md keeps its table"
-              fi
-              if [ -f /tmp/bench-readme-wasm.md ]; then
-                python3 bench/run.py --apply-wasm-table /tmp/bench-readme-wasm.md --readme README.md
-              fi
+              python3 bench/run.py --apply-table /tmp/bench-readme.md --readme README.md
             fi
             git add README.md bench/results
             git commit -q -m "bench: results for ${measured::12} [skip ci]"

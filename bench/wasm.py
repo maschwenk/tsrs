@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """The WebAssembly table: native tsrs `--singleThreaded` vs tsrs.wasm (npm/tsrs-wasm) vs ts-rust's wasm module.
 
-See bench/README.md, "WebAssembly". Typical use:
+See bench/README.md, "WebAssembly". Typical use (CI: .depot/workflows/bench-wasm.yml, dispatched by hand):
 
     tools/wasm/build.sh                                   # npm/tsrs-wasm/tsrs.wasm
     python3 bench/wasm.py --build-ts-rust                 # ts-rust's module at TS_RUST's pinned commit (cached)
     python3 bench/wasm.py --local --projects xstate-main,Compiler
-    python3 bench/run.py --merge <partials> --wasm <wasm result.json>   # CI: one results file with every table
+    python3 bench/wasm.py --apply <result.json> --readme README.md   # README's WebAssembly block from a result
 
 Per project, in three rounds whose order rotates: one native run (bench/run.py's `single` mode, with
 RAYON_NUM_THREADS=1 so that parsing is on one thread too, like the module), and one new Node process per module
@@ -325,11 +325,11 @@ def main() -> None:
     ap.add_argument("--cold", type=int, default=3, help="rounds: new processes per module, and native runs (default 3)")
     ap.add_argument("--timeout", type=float, default=900, help="per process, seconds")
     ap.add_argument("--setup-only", action="store_true", help="clone and install the projects only")
-    ap.add_argument("--out-dir", type=Path, default=BENCH / "results",
-                    help="writes <date>-<commit>[-local]-wasm.{json,md} (CI: bench/run.py --merge --wasm folds it into "
-                         "the run's results file)")
+    ap.add_argument("--out-dir", type=Path, default=BENCH / "results", help="writes <date>-<commit>[-local]-wasm.{json,md}")
     ap.add_argument("--readme", type=Path, help="rewrite the WebAssembly block of this README")
     ap.add_argument("--render", type=Path, metavar="RESULT", help="only print the table of a wasm result .json")
+    ap.add_argument("--apply", type=Path, metavar="RESULT", help="only rewrite --readme's WebAssembly block from a wasm "
+                                                                 "result .json")
     args = ap.parse_args()
     if args.print_ts_rust_commit:
         print(TS_RUST["commit"])
@@ -339,6 +339,11 @@ def main() -> None:
         return
     if args.render:
         print(markdown(json.loads(args.render.read_text())), end="")
+        return
+    if args.apply:
+        if not args.readme:
+            ap.error("--apply needs --readme")
+        update_readme(args.readme, markdown(json.loads(args.apply.read_text()), compact=True))
         return
     work = args.work_dir.resolve()
     args.ts_rust_pkg = (args.ts_rust_pkg or work / "ts-rust-wasm").resolve()

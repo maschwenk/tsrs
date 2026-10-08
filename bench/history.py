@@ -10,11 +10,11 @@ result, a column per project, each cell the value and its change against the row
 (.depot/workflows/bench.yml) is the previous merge. Metrics: `instructions` and `peak` are the single-threaded
 instruction count and peak RSS from bench/count.py (deterministic to ~0.001% and ~0.4%: a change is the code's);
 `wall` is the default-mode wall on the fixed 8-vCPU runner (noisy, up to 10-20% between runs of the same code);
-`wide_wall` and `wide_peak` are the 64-vCPU default-mode wall and peak, with `bun check`'s wall beside the wall. `wasm_warm` is
-tsrs.wasm's warm run (bench/wasm.py, noisy like the walls). A cell
-past the thresholds of bench/regressions.py (instructions or peak up more than 1%, and peak by more than 2 MiB) is
-marked `!`; a wall or wide-peak change next to an instruction change under 0.3% is marked `~`: the code did not
-change, so that is the runner's noise (a median 2%, up to 10%, between publishes of the same code on 2026-10-07). Use it to find which commit cost what, and whether a commit's gain was worth its cost.
+`wide_wall` and `wide_peak` are the 64-vCPU default-mode wall and peak, with `bun check`'s wall beside the wall;
+`wasm_warm` is tsrs.wasm's warm run from the WebAssembly table (bench/wasm.py's own `*-wasm.json` files, one per
+dispatch of .depot/workflows/bench-wasm.yml; noisy like the walls). A cell past the thresholds of bench/regressions.py
+(instructions or peak up more than 1%, and peak by more than 2 MiB) is marked `!`; a wall or wide-peak change next
+to an instruction change under 0.3% is marked `~`: the code did not change, so that is the runner's noise (a median 2%, up to 10%, between publishes of the same code on 2026-10-07). Use it to find which commit cost what, and whether a commit's gain was worth its cost.
 """
 
 import argparse
@@ -30,7 +30,7 @@ METRICS = {
     "wall": ("default", "tsrs", "wall_s", 1, "s", 2, None, 0),
     "wide_wall": ("wide", "tsrs", "wall_s", 1, "s", 2, None, 0),
     "wide_peak": ("wide", "tsrs", "peak_rss_bytes", 2**20, "MiB", 0, None, 0),
-    # bench/wasm.py's table (the result's `wasm`): tsrs.wasm's warm run, one thread, on the fixed 8-vCPU runner.
+    # bench/wasm.py's results (`"kind": "wasm"` files): tsrs.wasm's warm run, one thread.
     "wasm_warm": ("wasm", "tsrs-wasm", "warm_s", 1, "s", 2, None, 0),
 }
 DEFAULT_METRICS = "instructions,peak,wide_wall"
@@ -48,7 +48,7 @@ def load(results_dir: Path) -> list[dict]:
             r = json.loads(p.read_text())
         except ValueError:
             continue
-        if "tsrs" in r and "projects" in r and r.get("kind") != "wasm":
+        if "tsrs" in r and "projects" in r:
             r["_file"] = p.name
             results.append(r)
     return results
@@ -80,7 +80,7 @@ def order(results: list[dict], branch: str, include_all: bool) -> list[dict]:
 def value(r: dict, project: str, metric: str):
     mode, compiler, field, *_ = METRICS[metric]
     if mode == "wasm":
-        node = (r.get("wasm") or {}).get("projects", {}).get(project, {}).get(compiler, {}).get(field)
+        node = r["projects"].get(project, {}).get(compiler, {}).get(field)
         return node.get("median") if isinstance(node, dict) else None
     node = r["projects"].get(project, {}).get(mode, {}).get(compiler, {})
     return node.get(field) if isinstance(node, dict) else None
@@ -104,7 +104,7 @@ def cell(metric: str, new, old, bun=None, same_code: bool = False) -> str:
         flag = flag_percent is not None and change > flag_percent and new - old > flag_floor
         # A wall or peak change while the single-threaded instructions did not move is the runner's noise
         # (a few percent, up to 10%, between runs of the same code), marked `~`.
-        noise = same_code and metric in ("wall", "wide_wall", "wide_peak", "wasm_warm")
+        noise = same_code and metric in ("wall", "wide_wall", "wide_peak")
         text += f" ({change:+.1f}%{'!' if flag else ''}{'~' if noise else ''})"
     if bun is not None:
         text += f" / bun {bun:.2f}"
@@ -168,13 +168,18 @@ def main(argv):
         rows = rows[start:]
     if not rows:
         sys.exit("history: no results")
-    if args.projects:
-        projects = [p.strip() for p in args.projects.split(",") if p.strip()]
-    else:
-        projects = []
-        for r in rows:
-            projects += [p for p in r["projects"] if p not in projects]
-    print("\n\n".join(table(rows, projects, m, args.tsv) for m in metrics))
+    tables = []
+    for m in metrics:
+        # The wasm metric's rows are bench/wasm.py's results; every other metric's are bench/run.py's.
+        mrows = [r for r in rows if (r.get("kind") == "wasm") == (METRICS[m][0] == "wasm")]
+        if args.projects:
+            projects = [p.strip() for p in args.projects.split(",") if p.strip()]
+        else:
+            projects = []
+            for r in mrows:
+                projects += [p for p in r["projects"] if p not in projects]
+        tables.append(table(mrows, projects, m, args.tsv))
+    print("\n\n".join(tables))
 
 
 if __name__ == "__main__":
