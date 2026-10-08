@@ -32,10 +32,11 @@ import run as bench  # noqa: E402  (bench/run.py: project setup, machine info, t
 
 REPO, BENCH = bench.REPO, bench.BENCH
 START, END = "<!-- bench-wasm:start -->", "<!-- bench-wasm:end -->"
-# The projects that fit the module's 4 GiB of linear memory and take under ~10 s warm in ts-rust's module. Left out:
-# vscode, mui-docs and the four applications (cal-diy, formbricks-web, supabase-studio, t3code-server), whose native
-# single-threaded runs take 3.4-10 s and 0.7-1.6 GiB (two module runs of 3 processes each would be 5-10 min per
-# project), mikro-orm (7 s native, 43,651 errors) and next-root (the same repository as next-packages-next).
+# The projects whose native single-threaded check takes under 2 s on the fixed-spec runner (0.2-1.7 s), so that the
+# modules' runs fit the 4 GiB of linear memory and ts-rust's take under ~30 s each. Left out: vscode, mui-docs, the
+# four applications (cal-diy, formbricks-web, supabase-studio, t3code-server) and mikro-orm, at 3.1-10.4 s and
+# 0.75-1.6 GiB native (8 runs per module at 3-8x that would be 5-15 min per project), and next-root (the same
+# repository as next-packages-next).
 PROJECTS = "xstate-main,webpack,Compiler,Compiler-Unions,next-packages-next,storybook,playwright,nuxt,drizzle-orm"
 FLAGS = ["--noEmit", "--incremental", "false", "--extendedDiagnostics", "--pretty", "false"]
 # ts-rust (pingdotgg/ts-rust, a Rust port of TypeScript 7 by other authors) publishes no wasm package (npm
@@ -199,8 +200,7 @@ def measure(args: argparse.Namespace, cfg: dict, projects: list[dict], work: Pat
                 else:
                     log(f"{name} {engine} round {rnd}: FAILED: {r['failure']}")
         n = bench.summarize(native)
-        n["wall_range_s"] = [min((r["wall_s"] for r in native if r["ok"]), default=None),
-                             max((r["wall_s"] for r in native if r["ok"]), default=None)]
+        n["wall"] = stats([r["wall_s"] for r in native if r["ok"]])
         pr: dict = {"commit": p.get("commit") or cfg["suite"]["commit"], "project": p["project"], "native": n}
         for e in ENGINES:
             pr[e] = summarize_engine(procs[e])
@@ -259,16 +259,14 @@ def markdown(result: dict, compact: bool = False) -> str:
         err = " / ".join(errs)
         if pr.get("errors_match") is False:
             err = f"**MISMATCH {err}**"
-        cells = [name, err, med({"median": n.get("wall_s"), "min": (n.get("wall_range_s") or [None])[0],
-                                 "max": (n.get("wall_range_s") or [None, None])[1], "n": n.get("ok_runs", 0)})]
-        for s, other in ((w, n.get("wall_s")), (t, None)):
+        cells = [name, err, med(n.get("wall"))]
+        # Each module's warm time against the column before it: tsrs-wasm against native, ts-rust against tsrs-wasm.
+        for engine, s, base in (("tsrs-wasm", w, n.get("wall_s")), ("ts-rust", t, w["warm_s"]["median"] if w["ok"] else None)):
             if s["ok"]:
-                cells += [med(s["cold_s"]), med(s["warm_s"])]
-                cells.append(ratio(s["warm_s"]["median"], other) if other is not None
-                             else ratio(s["warm_s"]["median"], w["warm_s"]["median"] if w["ok"] else None))
+                cells += [med(s["cold_s"]), med(s["warm_s"]), ratio(s["warm_s"]["median"], base)]
             else:
                 cells += ["**FAILED**", "n/a", "n/a"]
-                failed.append(f"{name} ({'tsrs-wasm' if s is w else 'ts-rust'}: {s.get('failure', '')[:160]})")
+                failed.append(f"{name} ({engine}: {s.get('failure', '')[:160]})")
         cells += [bench.fmt_mem(n.get("peak_rss_bytes"))] + [bench.fmt_mem(s.get("peak_rss_bytes")) if s["ok"] else "n/a"
                                                              for s in (w, t)]
         lines.append("| " + " | ".join(cells) + " |")

@@ -652,6 +652,8 @@ def write_results(result: dict, args: argparse.Namespace, note: str = "") -> Non
         args.readme_table.write_text(readme_table)
     if args.readme:
         update_readme(args.readme, readme_table)
+        if result.get("wasm"):
+            wasm.update_readme(args.readme, wasm.markdown(result["wasm"], compact=True))
     print(table)
     log(f"wrote {args.out_dir / stem}.json/.md in {result['duration_s']} s" + (f"; {note}" if note else ""))
     bad = [n for n, pr in result["projects"].items() for m in result["modes"] if m in pr

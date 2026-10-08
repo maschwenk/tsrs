@@ -579,7 +579,8 @@ jobs:
         shell: bash
         run: echo "toolchain=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
 
-      # The default toolchain too, so ts-rust (no rust-toolchain.toml) is built with the same rustc.
+      # ts-rust has no rust-toolchain.toml; its checkout under bench/.work picks up this repository's, so both modules
+      # are built with the pinned rustc.
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:
           toolchain: ${{ steps.rust.outputs.toolchain }}
@@ -605,13 +606,13 @@ jobs:
         id: ts-rust
         run: echo "commit=$(python3 bench/wasm.py --print-ts-rust-commit)" >> "$GITHUB_OUTPUT"
 
-      # ts-rust's module changes only with its pinned commit (bench/wasm.py TS_RUST) or the toolchain.
+      # ts-rust's module changes only with its pinned commit (bench/wasm.py TS_RUST), the toolchain or binaryen.
       - name: Restore ts-rust's module
         id: cache-ts-rust
         uses: actions/cache/restore@v4
         with:
           path: bench/.work/ts-rust-wasm
-          key: bench-ts-rust-wasm-${{ steps.ts-rust.outputs.commit }}-${{ steps.rust.outputs.toolchain }}
+          key: bench-ts-rust-wasm-${{ steps.ts-rust.outputs.commit }}-${{ steps.rust.outputs.toolchain }}-binaryen133
 
       - name: Build ts-rust's module (a no-op when restored)
         run: python3 bench/wasm.py --build-ts-rust
@@ -802,7 +803,7 @@ jobs:
           path: /tmp/bench-partials
 
       - name: Download the WebAssembly result
-        if: needs.measure-wasm.result == 'success'
+        if: needs['measure-wasm'].result == 'success'
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: bench-wasm-result
@@ -812,7 +813,7 @@ jobs:
         run: |
           echo "ref=$GITHUB_REF event=$GITHUB_EVENT_NAME sha=$GITHUB_SHA"
           ls -R /tmp/bench-partials
-          wasm=$(ls /tmp/bench-wasm/*.json 2>/dev/null | head -1)
+          wasm=$(find /tmp/bench-wasm -name '*.json' 2>/dev/null | head -1)
           if [ -z "$wasm" ]; then echo "::warning::no WebAssembly result; README.md keeps its WebAssembly block"; fi
           python3 bench/run.py --merge /tmp/bench-partials/*/*.json --out-dir /tmp/bench-merged --readme-modes wide --readme-table /tmp/bench-readme.md \
             ${wasm:+--wasm "$wasm" --readme-wasm-table /tmp/bench-readme-wasm.md}
@@ -869,7 +870,7 @@ jobs:
             # README.md keeps the newest commit's table. Runs overlap, so a run of an older commit can finish after
             # a descendant's run has published: then it adds its results file and leaves the table alone. The
             # commit a table came from is in its last line ("tsrs commit: `<sha>`", bench/run.py).
-            # The WebAssembly block follows the main table's rule.
+            # The WebAssembly block follows the same rule.
             readme_commit=$(sed -n 's/.*tsrs commit: `\([0-9a-f]\{7,40\}\)`.*/\1/p' README.md | head -1)
             if [ -n "$readme_commit" ] && [ "$readme_commit" != "${measured::12}" ] \
                 && git cat-file -e "$readme_commit^{commit}" 2>/dev/null \
