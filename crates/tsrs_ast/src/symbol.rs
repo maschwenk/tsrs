@@ -786,7 +786,12 @@ impl SymbolTable {
 
     /// Go `maps.Clone(table)` for a non-nil table.
     pub fn clone_table(&self) -> P<SymbolTable> {
-        P::new(SymbolTable(FrozenCell::new(self.0.borrow().clone())))
+        P::new(self.clone_value())
+    }
+
+    /// `clone_table` as a value: a scratch copy whose entries are freed when it is dropped.
+    pub fn clone_value(&self) -> SymbolTable {
+        SymbolTable(FrozenCell::new(self.0.borrow().clone()))
     }
 
     /// Go `table[name]`. On a `P<SymbolTable>` receiver `table.get(name)` resolves to `P::get`, so use

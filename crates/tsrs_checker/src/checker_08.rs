@@ -1313,7 +1313,9 @@ impl Checker {
         }
         // The ES6 spec permits export * declarations in a module to circularly reference the module itself. For example,
         // module 'a' can 'export * from "b"' and 'b' can 'export * from "a"' without error.
-        fn visit(c: &mut Checker, st: &mut VisitState, symbol: Option<P<Symbol>>, export_star: Option<P<Node>>, is_type_only: bool) -> Option<P<SymbolTable>> {
+        // The tables are values: a nested module's table is merged into its importer's and then dropped (Go's GC frees
+        // them); only the outermost result is kept (moved into the arena below).
+        fn visit(c: &mut Checker, st: &mut VisitState, symbol: Option<P<Symbol>>, export_star: Option<P<Node>>, is_type_only: bool) -> Option<SymbolTable> {
             if !is_type_only {
                 if let Some(symbol) = symbol {
                     // Add non-type-only names before checking if we've visited this module,
@@ -1332,18 +1334,18 @@ impl Checker {
                 return None;
             }
             st.visited_symbols.push(symbol);
-            let symbols = symbol_exports.clone_table();
+            let symbols = symbol_exports.clone_value();
             // All export * declarations are collected in an __export symbol by the binder
             let export_stars = symbol_exports.lookup(InternalSymbolNameExportStar);
             if let Some(export_stars) = export_stars {
-                let nested_symbols = SymbolTable::new();
+                let nested_symbols = SymbolTable::default();
                 let mut lookup_table: ExportCollisionTable = FxHashMap::default();
                 let declarations = export_stars.declarations();
                 for &node in declarations {
                     let import_attributes_type = c.get_type_from_import_attributes(ast::get_import_attributes(node));
                     let resolved_module = c.resolve_external_module_name(node, node.module_specifier().unwrap(), false /*ignoreErrors*/, import_attributes_type);
                     let exported_symbols = visit(c, st, resolved_module, Some(node), is_type_only || node.is_type_only());
-                    c.extend_export_symbols(nested_symbols, exported_symbols, Some(&mut lookup_table), Some(node));
+                    c.extend_export_symbols(&nested_symbols, exported_symbols.as_ref(), Some(&mut lookup_table), Some(node));
                 }
                 #[expect(
                     clippy::iter_over_hash_type,
@@ -1358,7 +1360,7 @@ impl Checker {
                         c.add_diagnostic(create_diagnostic_for_node(Some(node), &diagnostics::Module_0_has_already_exported_a_member_named_1_Consider_explicitly_re_exporting_to_resolve_the_ambiguity, &[&s.specifier_text, id]));
                     }
                 }
-                c.extend_export_symbols(symbols, Some(nested_symbols), None, None);
+                c.extend_export_symbols(&symbols, Some(&nested_symbols), None, None);
             }
             if let Some(export_star) = export_star {
                 if export_star.is_type_only() {
@@ -1385,7 +1387,7 @@ impl Checker {
         }
         // A module defined by an 'export=' consists of one export that needs to be resolved
         let module_symbol = module_symbol.map(|m| self.resolve_external_module_symbol(m, false /*dontResolveAlias*/));
-        let exports = visit(self, &mut st, module_symbol, None, false).unwrap_or_else(SymbolTable::new);
+        let exports = visit(self, &mut st, module_symbol, None, false).map_or_else(SymbolTable::new, P::new);
         // A CommonJS module defined by an 'export=' might also export typedefs, stored on the original module
         if let Some(original_module) = original_module {
             let original_exports = original_module.exports().unwrap();
@@ -1414,7 +1416,7 @@ impl Checker {
      * Not passing `lookupTable` and `exportNode` disables this collection, and just extends the tables
      */
     // checker.go:16558
-    pub(crate) fn extend_export_symbols(&mut self, target: P<SymbolTable>, source: Option<P<SymbolTable>>, lookup_table: Option<&mut ExportCollisionTable>, export_node: Option<P<Node>>) {
+    pub(crate) fn extend_export_symbols(&mut self, target: &SymbolTable, source: Option<&SymbolTable>, lookup_table: Option<&mut ExportCollisionTable>, export_node: Option<P<Node>>) {
         let Some(source) = source else { return };
         let mut lookup_table = lookup_table;
         for (id, source_symbol) in source.entries() {
