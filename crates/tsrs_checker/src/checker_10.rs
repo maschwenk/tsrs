@@ -1953,7 +1953,8 @@ impl Checker {
         // The 'T' in 'keyof T'
         let template_modifiers = get_mapped_type_modifiers(t);
         let include = TypeFlags::StringOrNumberLiteralOrUnique;
-        let lazy = self.lazy_mapped_tables.remove(&t);
+        let from_seed = self.lazy_mapped_tables.base_get(&t).map(|frozen| Rc::new((**frozen).clone()));
+        let lazy = self.lazy_mapped_tables.remove(&t).or(from_seed);
         if lazy.is_some() {
             self.lazy_member_stats.mapped_tables_resolved_in_full += 1;
         }
@@ -2116,8 +2117,14 @@ impl Checker {
 
     #[inline(never)]
     fn get_lazy_mapped_table_worker(&mut self, t: P<Type>) -> Option<std::rc::Rc<LazyMappedTable>> {
-        if let Some(lazy) = self.lazy_mapped_tables.get(&t) {
+        if let Some(lazy) = self.lazy_mapped_tables.own.get(&t) {
             return Some(Rc::clone(lazy));
+        }
+        if let Some(frozen) = self.lazy_mapped_tables.base_get(&t) {
+            // Shared-graph prototype: the seed's table is filled lazily, so the fork takes its own copy.
+            let copy = Rc::new((**frozen).clone());
+            self.lazy_mapped_tables.insert(t, Rc::clone(&copy));
+            return Some(copy);
         }
         if !self.is_mapped_type_with_keyof_constraint_declaration(t) {
             return None;

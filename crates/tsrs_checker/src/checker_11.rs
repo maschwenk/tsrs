@@ -1314,11 +1314,14 @@ impl Checker {
         // (the target is a declared anonymous or mapped type or a deferred reference, never an interface or tuple).
         assert!(target.try_as_interface_type().is_none(), "object type instantiation of an interface target");
         let key = get_type_instantiation_key(&type_arguments, new_alias, t.object_flags().intersects(ObjectFlags::SingleSignatureType));
-        let instantiations = self.object_type_instantiations.entry(target).or_insert_with(|| {
+        // Shared-graph prototype: a fork's table for a frozen target holds only what the fork added; the seed's
+        // entries are read through.
+        let from_seed = self.object_type_instantiations.base_get(&target).and_then(|m| m.get(&key));
+        let instantiations = self.object_type_instantiations.own.entry(target).or_insert_with(|| {
             let initial_key = get_type_instantiation_key(type_parameters, target.alias().into(), false);
             PackedMap::from_one(initial_key, target)
         });
-        let mut result = instantiations.get(&key);
+        let mut result = instantiations.get(&key).or(from_seed);
         if result.is_none() {
             let new_alias = new_alias.alias();
             let mut new_mapper = new_type_mapper(type_parameters, alloc_slice(&type_arguments));
@@ -1332,7 +1335,7 @@ impl Checker {
             } else {
                 self.instantiate_anonymous_type(target, new_mapper, new_alias)
             };
-            self.object_type_instantiations.get_mut(&target).unwrap().insert(key, r);
+            self.object_type_instantiations.own.get_mut(&target).unwrap().insert(key, r);
             if r.flags().intersects(TypeFlags::ObjectFlagsType) && !r.object_flags_lazy().intersects(ObjectFlags::CouldContainTypeVariablesComputed) {
                 // if `result` is one of the object types we tried to make (it may not be, due to how `instantiateMappedType` works), we can carry forward the type variable containment check from the input type arguments
                 let result_could_contain_object_flags = type_arguments.iter().any(|&a| self.could_contain_type_variables(a));

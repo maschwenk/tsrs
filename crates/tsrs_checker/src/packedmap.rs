@@ -183,6 +183,8 @@ impl<K: PackedKey + 'static, V: Copy + 'static> GoPackedMap<K, V> {
 #[derive(Default, Clone)]
 pub struct StringLiteralTypes {
     table: hashbrown::HashTable<P<Type>>,
+    /// Shared-graph prototype: the frozen seed's table, read through.
+    base: Option<&'static StringLiteralTypes>,
 }
 
 impl StringLiteralTypes {
@@ -202,7 +204,16 @@ impl StringLiteralTypes {
 
     #[inline]
     pub fn get(&self, value: &str) -> Option<P<Type>> {
-        self.table.find(Self::hash(value), |&t| Self::value_of(t) == value).copied()
+        let h = Self::hash(value);
+        match self.table.find(h, |&t| Self::value_of(t) == value) {
+            Some(&t) => Some(t),
+            None => self.base.and_then(|b| b.table.find(h, |&t| Self::value_of(t) == value).copied()),
+        }
+    }
+
+    /// Shared-graph prototype: an empty table that reads through to `self` (frozen).
+    pub fn fork(&'static self) -> Self {
+        StringLiteralTypes { table: hashbrown::HashTable::new(), base: Some(self) }
     }
 
     /// Adds a string literal type whose value is not in the table yet.
