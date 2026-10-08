@@ -50,7 +50,11 @@ pub fn command_line_with_testing(
         match first.to_lowercase().as_str() {
             "-b" | "--b" | "-build" | "--build" => {
                 let host: &'static sysParseConfigHost = Box::leak(Box::new(sysParseConfigHost { sys, fs: sys.fs() }));
-                return tsc_build_compilation(sys, P::new(tsoptions::parse_build_command_line(&command_line_args, host)), testing);
+                let mut command = tsoptions::parse_build_command_line(&command_line_args, host);
+                if tsrs_core::NO_THREADS {
+                    command.compiler_options.single_threaded = tsrs_core::Tristate::True;
+                }
+                return tsc_build_compilation(sys, P::new(command), testing);
             }
             _ => {}
         }
@@ -81,11 +85,29 @@ pub fn command_line_with_testing(
             sys.write("error: --checkerCostCache expects a file path.\n");
             return CommandLineResult { status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
         };
+        if tsrs_core::NO_THREADS {
+            sys.write("error: --checkerCostCache is not supported by the WebAssembly build.\n");
+            return CommandLineResult { status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
+        }
         tsrs_compiler::set_checker_cost_cache_from_cli(&path);
         args.drain(pos..pos + 2);
     }
     let host: &'static sysParseConfigHost = Box::leak(Box::new(sysParseConfigHost { sys, fs: sys.fs() }));
-    tsc_compilation(sys, host, P::new(tsoptions::parse_command_line(&args, host)), testing)
+    let mut command = tsoptions::parse_command_line(&args, host);
+    if tsrs_core::NO_THREADS {
+        force_single_threaded(&mut command);
+    }
+    tsc_compilation(sys, host, P::new(command), testing)
+}
+
+/// `tsrs_core::NO_THREADS`: `--singleThreaded`, set on the parsed options so every reader agrees (a config file
+/// cannot turn it off: command-line options win over it).
+fn force_single_threaded(command: &mut ParsedCommandLine) {
+    if let Some(options) = command.parsed_config.compiler_options {
+        let mut options = (*options).clone();
+        options.single_threaded = tsrs_core::Tristate::True;
+        command.parsed_config.compiler_options = Some(P::new(options));
+    }
 }
 
 fn tsc_compilation(

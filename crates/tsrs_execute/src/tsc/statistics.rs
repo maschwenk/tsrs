@@ -89,7 +89,13 @@ fn memory_used_bytes() -> u64 {
     info.pti_resident_size / 1024 * 1024
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+/// WebAssembly: the size of linear memory, which never shrinks, so it is the peak.
+#[cfg(target_family = "wasm")]
+fn memory_used_bytes() -> u64 {
+    core::arch::wasm32::memory_size(0) as u64 * 65536
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_family = "wasm")))]
 fn memory_used_bytes() -> u64 {
     let pid = std::process::id().to_string();
     std::process::Command::new("ps")

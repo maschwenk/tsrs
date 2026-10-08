@@ -478,6 +478,20 @@ impl Orchestrator {
                 let task = self.get_task(&path);
                 task.report(self, &path, &mut build_result);
             }
+        } else if tsrs_core::NO_THREADS && self.errors.lock().unwrap().is_empty() {
+            // No threads (wasm32-wasip1): the API branch's order, without its region: build every project on the
+            // calling thread, then report in Order().
+            build_result.statistics.projects = order.len();
+            for config in order {
+                let path = self.to_path(config);
+                let task = self.get_task(&path);
+                self.build_or_clean_project(task, &path);
+            }
+            for config in order {
+                let path = self.to_path(config);
+                let task = self.get_task(&path);
+                task.report(self, &path, &mut build_result);
+            }
         } else if self.errors.lock().unwrap().is_empty() {
             build_result.statistics.projects = order.len();
             // Builders pick up projects in scheduleOrder; results are reported in Order(), waiting for each project to finish
