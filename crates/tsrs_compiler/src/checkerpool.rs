@@ -190,7 +190,9 @@ fn run_work_group(single_threaded: bool, count: usize, task: impl Fn(usize) + Sy
                     .stack_size(CHECKER_STACK_SIZE)
                     .spawn_scoped(s, move || {
                         tsrs_ast::use_id_blocks();
-                        task(i)
+                        task(i);
+                        // The next pass's thread (or checker) continues in this thread's arena.
+                        tsrs_core::ptr::release_own_arena();
                     })
                     .expect("failed to spawn checker thread")
             })
@@ -569,6 +571,10 @@ impl checkerPool {
                 program.bind_source_files();
                 tsrs_core::ptr::shared_check::freeze_shared_objects();
             }
+            // The parse workers are done allocating: the checker threads continue in their arenas.
+            if !self.single_threaded {
+                crate::program::worker_pool().broadcast(|_| tsrs_core::ptr::release_own_arena());
+            }
             let create_and_assign = || {
                 let create_start = std::time::Instant::now();
                 #[cfg(feature = "checker")]
@@ -774,6 +780,11 @@ impl checkerPool {
             if let Some(start) = start {
                 *times[checker_idx].lock().unwrap() = (start.elapsed().as_secs_f64(), count);
                 *cpu[checker_idx].lock().unwrap() = thread_cpu_seconds() - cpu_start;
+            }
+            // Memory peaks at the end of the type-check pass, while the last checkers still run: one that is done gives
+            // back the resident, never used end of its arena chunk.
+            if allow_steal && !single {
+                tsrs_core::arena::trim_own_arena_tail();
             }
         };
         run_work_group(single, active.len(), |k| run(active[k]));
