@@ -405,9 +405,16 @@ impl DiagnosticsCollection {
         self.count += 1;
 
         if let Some(file) = diagnostic.file() {
-            let path = file.path().clone();
-            self.file_diagnostics.entry(path.clone()).or_default().push(diagnostic);
-            self.file_diagnostics_sorted.remove(&path);
+            // Look up before cloning: a clone of the file's `Path` (an `Arc`) is an atomic increment on a counter that
+            // every checker adding a diagnostic of that file writes.
+            let path = file.path();
+            match self.file_diagnostics.get_mut(path) {
+                Some(diagnostics) => diagnostics.push(diagnostic),
+                None => {
+                    self.file_diagnostics.insert(path.clone(), vec![diagnostic]);
+                }
+            }
+            self.file_diagnostics_sorted.remove(path);
         } else {
             self.non_file_diagnostics.push(diagnostic);
             self.non_file_diagnostics_sorted = false;
@@ -470,19 +477,34 @@ impl DiagnosticsCollection {
     }
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+/// Keyed by the file's path as Go keys by file name; it holds the file and compares and hashes its path, so that
+/// building a key does not clone the path's `Arc` (a contended atomic when many checkers report diagnostics of one
+/// file: drizzle-orm's 10,846 errors at 32 checkers).
+#[derive(Clone)]
 struct DiagnosticLocationKey {
-    path: Option<Path>,
+    file: Option<P<SourceFile>>,
     loc: TextRange,
     code: i32,
 }
 
-fn get_diagnostic_location_key(diagnostic: P<Diagnostic>) -> DiagnosticLocationKey {
-    DiagnosticLocationKey {
-        path: diagnostic.file().map(|file| file.path().clone()),
-        loc: diagnostic.loc(),
-        code: diagnostic.code(),
+impl PartialEq for DiagnosticLocationKey {
+    fn eq(&self, other: &Self) -> bool {
+        self.loc == other.loc && self.code == other.code && self.file.map(|f| f.get().path()) == other.file.map(|f| f.get().path())
     }
+}
+
+impl Eq for DiagnosticLocationKey {}
+
+impl std::hash::Hash for DiagnosticLocationKey {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.file.map(|f| f.get().path()).hash(state);
+        self.loc.hash(state);
+        self.code.hash(state);
+    }
+}
+
+fn get_diagnostic_location_key(diagnostic: P<Diagnostic>) -> DiagnosticLocationKey {
+    DiagnosticLocationKey { file: diagnostic.file(), loc: diagnostic.loc(), code: diagnostic.code() }
 }
 
 fn get_diagnostic_path(d: P<Diagnostic>) -> &'static str {
