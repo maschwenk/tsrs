@@ -7,6 +7,11 @@ could print different text for the same program. The same dependence rules out d
 checker would depend on timing. This note finds the cause, fixes it, makes the old behaviour available for byte-identity
 with tsgo, and checks the result with random assignments.
 
+**Open (2026-10-08):** three programs outside these corpora still print assignment-dependent output, all through
+typescript-go's own history dependence: TanStack/router (a base constraint cut short by the depth guard and cached),
+sequelize (a circular property type entered through variance computations) and rxjs (which elaboration the relater
+prints). None is fixed; notes/open-history-dependence.md has the evidence and the fixes measured.
+
 ## The diffs
 
 Six thread-mode runs (N = 1, 2, 4, 8, 12, 16) and `random:<seed>` runs on the 40k-error corpus. Every difference is
@@ -94,8 +99,15 @@ Before the fix the 40k-error corpus gave four distinct outputs over the same con
   vscode, two module symbols for `@types/ws/index`, merged at checker creation in program order. Not
   history-dependent.
 - **Circularity errors** (TS2456, TS7022/7023/7024, TS2502...): the error lands on the declaration whose resolution is
-  re-entered, so a cycle entered from different files can report on a different declaration. This can occur. None of
-  the error-rich corpora changed under 300+ random assignments.
+  re-entered, so a cycle entered from different files can report on a different declaration. None of the error-rich
+  corpora changed under 300+ random assignments. Seen since on sequelize, where whether a property's type cycle is met
+  at all, and which reader gets its `any`, depend on what the checker resolved first (open,
+  notes/open-history-dependence.md).
+- **Base constraints cut by the depth guard** (`getResolvedBaseConstraint`): a type first reached ten levels down in
+  another type's constraint is cut short, and the cut result is cached for every later caller. Seen on TanStack/router
+  (open, notes/open-history-dependence.md).
+- **Relation cache and elaboration:** which elaboration path the relater reports depends on what the relation cache
+  holds. Seen on rxjs (PR #212; open, notes/open-history-dependence.md).
 - **TS2589 / TS2859 budgets** (instantiation depth and count, relation complexity): they count work that is not
   cached yet, so what is already cached can decide whether they fire. This can occur. Not observed under random
   assignments.
@@ -105,13 +117,14 @@ Before the fix the 40k-error corpus gave four distinct outputs over the same con
 - **Alias names of printed types:** unions, intersections and instantiations are interned with their alias in the key,
   so an alias is attached per request, not first-come. No history found.
 
-So the assignment-dependent output observed on these corpora is gone. The remaining channels are theoretical here, and
-each would show up under `random:<seed>`.
+So the assignment-dependent output observed on these corpora is gone. The remaining channels were theoretical here;
+three of them have since shown up on other programs and are open (above).
 
 ## What stays deterministic, what does not
 
 - Diagnostics and emitted files: a function of the program alone in the default mode, for any `--checkers` and
-  assignment (as tested above). In Go mode they depend on the assignment exactly as tsgo's do.
+  assignment (as tested above), except in the open cases of notes/open-history-dependence.md. In Go mode they depend
+  on the assignment exactly as tsgo's do.
 - `--extendedDiagnostics` Types / Symbols / Instantiations: per checker, so they still depend on the count and the
   assignment.
 - Within a checker, files are still visited in program order. That is no longer load-bearing for output (random visit
