@@ -569,6 +569,23 @@ impl checkerPool {
                 program.bind_source_files();
                 tsrs_core::ptr::shared_check::freeze_shared_objects();
             }
+            // TSRS_SLACK experiments (notes/mem-linux-residency-32.md): the parse pool gives back its slack.
+            let (trim_arena, collect_heap) = (tsrs_core::memsplit::slack("parse-arena"), tsrs_core::memsplit::slack("parse-heap"));
+            if (trim_arena || collect_heap) && !self.single_threaded {
+                let trimmed: usize = crate::program::worker_pool()
+                    .broadcast(|_| {
+                        let t = if trim_arena { tsrs_core::arena::trim_own_arena_tail() } else { 0 };
+                        if collect_heap {
+                            tsrs_core::memsplit::heap_collect(true);
+                        }
+                        t
+                    })
+                    .into_iter()
+                    .sum();
+                if tsrs_core::memsplit::enabled() {
+                    eprintln!("tsrs slack: parse pool trimmed {:.1} MiB of arena tails", trimmed as f64 / f64::from(1 << 20));
+                }
+            }
             tsrs_core::memsplit::report("parse end");
             let create_and_assign = || {
                 let create_start = std::time::Instant::now();
@@ -782,10 +799,22 @@ impl checkerPool {
                 *cpu[checker_idx].lock().unwrap() = thread_cpu_seconds() - cpu_start;
             }
             drop(guard);
+            if allow_steal && !single {
+                if tsrs_core::memsplit::slack("check-arena") {
+                    tsrs_core::arena::trim_own_arena_tail();
+                }
+                if tsrs_core::memsplit::slack("check-heap") {
+                    tsrs_core::memsplit::heap_collect(true);
+                }
+            }
             if let Some(barrier) = &mem_split {
                 tsrs_core::memsplit::note_own_stack();
                 if barrier.wait().is_leader() {
                     tsrs_core::memsplit::report("check end");
+                    if tsrs_core::memsplit::slack("report-purge") {
+                        tsrs_core::memsplit::heap_collect(true);
+                        tsrs_core::memsplit::report("check end, after mi_collect(true)");
+                    }
                 }
                 barrier.wait();
             }

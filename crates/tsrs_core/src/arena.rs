@@ -1030,6 +1030,30 @@ pub fn current_region() -> Option<Region> {
     arena.region.as_ref().and_then(|w| w.upgrade()).map(Region)
 }
 
+/// Gives back the resident, never handed out part of the calling thread's own arena below its finger: the rest of
+/// the 2 MiB block the finger is in, when the current chunk is a huge-page chunk (that block was faulted in whole).
+/// Later allocations below the finger fault in fresh zero pages. Returns the bytes given back.
+pub fn trim_own_arena_tail() -> usize {
+    #[cfg(all(compressed_ptrs, target_os = "linux"))]
+    {
+        let a = crate::ptr::own_arena();
+        let (start, end, ptr) = (a.start.get().addr(), a.end.get().addr(), a.ptr.get().addr());
+        let Some(huge) = HUGE_THREAD_CHUNK.filter(|&h| end - start >= h) else {
+            return 0;
+        };
+        let lo = (ptr & !(huge - 1)).max(start);
+        let hi = ptr & !(PAGE - 1);
+        if hi <= lo {
+            return 0;
+        }
+        // SAFETY: `lo .. hi` lies in the current chunk below the finger: never handed out, so nothing points into it.
+        unsafe { crate::reserve::discard(a.ptr.get().with_addr(lo), hi - lo) };
+        hi - lo
+    }
+    #[cfg(not(all(compressed_ptrs, target_os = "linux")))]
+    0
+}
+
 /// Makes the current thread's own (never freed) arena the allocation target until the scope is dropped: for data
 /// that outlives any region, such as process-wide lazily initialized statics.
 pub fn enter_thread_arena() -> RegionScope {

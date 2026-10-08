@@ -41,6 +41,9 @@ fn mimalloc_heap_stats() -> tsrs_core::memsplit::HeapStats {
         stats.pages += 1;
         stats.capacity += area.committed;
         stats.used += area.used * area.full_block_size;
+        // The page's header lies in front of its blocks, inside the same 4 KiB page.
+        let start = area.blocks.addr() & !4095;
+        stats.resident += tsrs_core::memsplit::resident(start, area.blocks.addr() + area.reserved - start);
         true
     }
     let mut stats = tsrs_core::memsplit::HeapStats::default();
@@ -49,12 +52,19 @@ fn mimalloc_heap_stats() -> tsrs_core::memsplit::HeapStats {
     stats
 }
 
+#[cfg(not(feature = "alloc-profile"))]
+fn mimalloc_collect(force: bool) {
+    extern "C" {
+        fn mi_collect(force: bool);
+    }
+    // SAFETY: collects the calling thread's heap; no arguments to get wrong.
+    unsafe { mi_collect(force) };
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     #[cfg(not(feature = "alloc-profile"))]
-    if tsrs_core::memsplit::enabled() {
-        tsrs_core::memsplit::set_heap_stats(mimalloc_heap_stats);
-    }
+    tsrs_core::memsplit::set_heap_hooks(mimalloc_heap_stats, mimalloc_collect);
     // main.go:21: `--lsp` runs the language server (its threads have their own stacks); `--api` runs the
     // native API server (docs/NODE_API.md).
     if args.first().map(String::as_str) == Some("--lsp") {

@@ -45,13 +45,34 @@ pub struct HeapStats {
     pub pages: usize,
     pub capacity: usize,
     pub used: usize,
+    /// Resident bytes of the pages' areas (`mincore`), header and partly initialized tail included.
+    pub resident: usize,
 }
 
 static HEAP_STATS: OnceLock<fn() -> HeapStats> = OnceLock::new();
+static HEAP_COLLECT: OnceLock<fn(bool)> = OnceLock::new();
 
-/// Installs the heap walker (the binary that owns the global allocator).
-pub fn set_heap_stats(f: fn() -> HeapStats) {
-    let _ = HEAP_STATS.set(f);
+/// Installs the heap walker and the allocator's collect (`mi_collect`), from the binary that owns the global
+/// allocator.
+pub fn set_heap_hooks(stats: fn() -> HeapStats, collect: fn(bool)) {
+    let _ = HEAP_STATS.set(stats);
+    let _ = HEAP_COLLECT.set(collect);
+}
+
+/// The allocator's collect on the calling thread (`force` also purges every arena's freed memory), if installed.
+pub fn heap_collect(force: bool) {
+    if let Some(f) = HEAP_COLLECT.get() {
+        f(force);
+    }
+}
+
+/// `TSRS_SLACK` (experiments for notes/mem-linux-residency-32.md): a comma-separated list of give-backs to make.
+pub fn slack(what: &str) -> bool {
+    static WORDS: OnceLock<Vec<String>> = OnceLock::new();
+    WORDS
+        .get_or_init(|| std::env::var("TSRS_SLACK").unwrap_or_default().split(',').map(|w| w.trim().to_string()).filter(|w| !w.is_empty()).collect())
+        .iter()
+        .any(|w| w == what)
 }
 
 /// Resident bytes of the stacks of the threads parked at the `check end` point, measured by each thread itself
@@ -92,8 +113,9 @@ fn own_stack_resident() -> Option<usize> {
 
 /// Resident bytes of the whole pages inside `start .. start + len` (`mincore`).
 #[cfg(unix)]
-fn resident(start: usize, len: usize) -> usize {
-    let page = 4096;
+pub fn resident(start: usize, len: usize) -> usize {
+    // SAFETY: sysconf reads a system constant.
+    let page = usize::try_from(unsafe { libc::sysconf(libc::_SC_PAGESIZE) }).unwrap_or(4096);
     let s = start.next_multiple_of(page);
     let e = (start + len) & !(page - 1);
     if e <= s {
@@ -109,7 +131,7 @@ fn resident(start: usize, len: usize) -> usize {
 }
 
 #[cfg(not(unix))]
-fn resident(_start: usize, _len: usize) -> usize {
+pub fn resident(_start: usize, _len: usize) -> usize {
     0
 }
 
@@ -180,7 +202,13 @@ pub fn report(what: &str) {
     out.push_str(&format!("  reservation: {} MiB in chunks\n", mib(crate::reserve::reserved_in_use())));
     let heap = HEAP_STATS.get().map(|f| f());
     if let Some(h) = heap {
-        out.push_str(&format!("  heap (allocator walk): {} pages, {} MiB initialized blocks, {} MiB live blocks\n", h.pages, mib(h.capacity), mib(h.used)));
+        out.push_str(&format!(
+            "  heap (allocator walk): {} pages, {} MiB initialized blocks, {} MiB live blocks, {} MiB resident in the pages' areas\n",
+            h.pages,
+            mib(h.capacity),
+            mib(h.used),
+            mib(h.resident)
+        ));
     }
     let stacks = CHECKER_STACKS.swap(0, Ordering::Relaxed);
     let stack_threads = CHECKER_STACK_THREADS.swap(0, Ordering::Relaxed);
@@ -288,12 +316,14 @@ mod linux {
         let arena_slack = arenas.tail_resident + arenas.retired_resident;
         let arena_other = buckets[0].rss as f64 - (arenas.used + arena_slack) as f64;
         out.push_str(&format!(
-            "  split MiB: arena used {} + arena unused resident {} + arena other (regions, untouched used) {} | heap live {} + heap retained {} | stacks {} | file {} | = {}\n",
+            "  split MiB: arena used {} + arena unused resident {} + arena other (regions, untouched used) {} | heap live {} + heap retained {} (in pages {}, outside pages {}) | stacks {} | file {} | = {}\n",
             mib(arenas.used),
             mib(arena_slack),
             format!("{:.1}", arena_other / super::MIB),
             heap.map_or("?".into(), |h| mib(h.used)),
             heap.map_or("?".into(), |h| mib(buckets[2].rss.saturating_sub(h.used))),
+            heap.map_or("?".into(), |h| mib(h.resident.saturating_sub(h.used))),
+            heap.map_or("?".into(), |h| mib(buckets[2].rss.saturating_sub(h.resident))),
             mib(buckets[1].rss),
             mib(buckets[3].rss),
             mib(rss_total)
