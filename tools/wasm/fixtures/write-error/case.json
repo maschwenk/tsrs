@@ -1,0 +1,5 @@
+{ "id": "fixture/write-error", "cwd": ".", "steps": [
+  { "chmod": { "locked": "555" }, "args": ["a.ts", "--outDir", "locked/out", "--pretty", "false"] },
+  { "args": ["a.ts", "--outFile", "a.ts/x.js", "--module", "none", "--pretty", "false"] },
+  { "args": ["a.ts", "--outDir", "a.ts/sub", "--pretty", "false"] }
+] }

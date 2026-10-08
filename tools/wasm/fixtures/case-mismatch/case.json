@@ -1,0 +1,1 @@
+{ "id": "fixture/case-mismatch", "cwd": ".", "args": ["main.ts", "--noEmit", "--pretty", "false", "--forceConsistentCasingInFileNames", "false"] }

@@ -1,0 +1,1 @@
+{ "compilerOptions": { "composite": true, "rootDir": ".", "outDir": "out", "declaration": true }, "files": ["index.ts"], "references": [{ "path": "../core" }] }

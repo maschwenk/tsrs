@@ -2,7 +2,7 @@
 // Differential gate for the WebAssembly build: runs native tsrs (`--singleThreaded`) and tsrs.wasm (through
 // npm/tsrs-wasm's runner, in a worker with a large stack) on the same inputs at the same absolute paths, and compares
 // exit codes, stdout bytes and the files each side wrote (sha256; symlinks as `-> target`). stderr is compared when
-// both exit 0. Normalised: only `[hh:mm:ss AM]` build-status prefixes.
+// both exit 0. Normalised: only the build-status time prefixes.
 //
 //   node tools/wasm/diff.mjs --native <tsrs> --module <tsrs.wasm> --out <dir>
 //        (--cases <materialized dir> | --regressions <testdata/regressions> | --fixtures <tools/wasm/fixtures>
@@ -10,8 +10,8 @@
 //        [--fs node|memory] [--jobs 6] [--timeout 120] [--repeat N] [--stack-census] [--worker-stack MB]
 //
 // Cases (`tsrs-test materialize`, fixtures) are `<case>/{root/, case.json}`; case.json has cwd (relative to root),
-// args, or steps [{args, write: {path: text}, remove: [path]}], and optionally nativeFlag (default
-// "--singleThreaded"). `${ROOT}` in an argument is the slot's absolute path. Each case is copied fresh into a work
+// args, or steps [{args, write: {path: text}, remove: [path], chmod: {path: mode}}], optionally generate (see
+// `generate`) and nativeFlag (default "--singleThreaded"). `${ROOT}` in an argument is the slot's absolute path. Each case is copied fresh into a work
 // slot under target/wasm-diff/slots (no symlink in that path, so both sides print the same paths) before each side.
 // Projects run in place and must not write: the harness checks `git status --short` before and after.
 // Exit 1 on any differ, module-crash or timeout. <out>/summary.json has the counts; <out>/fail/<id>/ the evidence.
@@ -137,17 +137,29 @@ function changes(before, after) {
 
 function restore(src, slot) {
     fs.mkdirSync(slot, { recursive: true });
+    spawnSync("chmod", ["-R", "u+w", slot]);
     const r = spawnSync("rsync", ["-a", "--delete", src + "/", slot + "/"]);
     if (r.status !== 0) throw new Error(`rsync failed: ${r.stderr}`);
 }
 
-const normalize = (s) => s.replace(/\[\d\d:\d\d:\d\d [AP]M\]/g, "[TIME]");
+// Build status times: `[hh:mm:ss AM]` (pretty) or `hh:mm:ss AM - ` at a line start (not pretty).
+const normalize = (s) => s.replace(/\[\d\d:\d\d:\d\d [AP]M\]/g, "[TIME]").replace(/^\d\d:\d\d:\d\d [AP]M - /gm, "TIME - ");
 
 function steps(spec) {
     return spec.steps ?? [{ args: spec.args }];
 }
 
+// case.json `generate`: { path: { prefix, repeat, count, suffix, close } } writes prefix + repeat x count + suffix +
+// close x count (deep-recursion inputs too large to keep in the repository).
+function generate(slot, spec) {
+    for (const [rel, g] of Object.entries(spec.generate ?? {})) {
+        const close = g.close ?? "";
+        fs.writeFileSync(path.join(slot, rel), g.prefix + g.repeat.repeat(g.count) + g.suffix + close.repeat(g.count) + (close ? ";\n" : ""));
+    }
+}
+
 function applyEdits(slot, step) {
+    for (const [rel, mode] of Object.entries(step.chmod ?? {})) fs.chmodSync(path.join(slot, rel), parseInt(mode, 8));
     for (const [rel, text] of Object.entries(step.write ?? {})) {
         fs.mkdirSync(path.dirname(path.join(slot, rel)), { recursive: true });
         fs.writeFileSync(path.join(slot, rel), text);
@@ -218,7 +230,10 @@ async function runCase(o, moduleObj, spInit, c, slotIndex) {
     const sides = {};
     for (const side of ["native", "module"]) {
         const base = c.project ?? slot;
-        if (!c.project) restore(c.root, slot);
+        if (!c.project) {
+            restore(c.root, slot);
+            generate(slot, c.spec);
+        }
         const before = c.project ? null : walk(slot);
         const results = [];
         for (const step of steps(c.spec)) {
@@ -267,7 +282,7 @@ async function runCase(o, moduleObj, spInit, c, slotIndex) {
         }
     }
     const stack = m.map((r) => r.stackBytes ?? 0).reduce((a, b) => Math.max(a, b), 0);
-    const result = { id: c.id, status, detail, stackBytes: stack, memoryBytes: last(m)?.memoryBytes ?? 0 };
+    const result = { id: c.id, status, detail, stackBytes: stack, memoryBytes: last(m)?.memoryBytes ?? 0, written: sides.native.written.length };
     if (status !== "same" && status !== "both-crash") {
         const dir = path.join(o.out, "fail", c.id.replace(/[^A-Za-z0-9._-]/g, "_"));
         fs.mkdirSync(dir, { recursive: true });
@@ -283,6 +298,7 @@ async function runCase(o, moduleObj, spInit, c, slotIndex) {
 }
 
 function cleanSlot(slot) {
+    spawnSync("chmod", ["-R", "u+w", slot]);
     fs.rmSync(slot, { recursive: true, force: true });
 }
 
@@ -329,6 +345,8 @@ async function main() {
         stackPointerInit: spInit,
         stack: stacks.length ? { max: stacks[stacks.length - 1], p999: stacks[Math.min(stacks.length - 1, Math.floor(stacks.length * 0.999))], median: stacks[Math.floor(stacks.length / 2)] } : undefined,
         maxMemoryBytes: Math.max(0, ...results.map((r) => r.memoryBytes ?? 0)),
+        writtenFiles: results.reduce((n, r) => n + (r.written ?? 0), 0),
+        casesWithWrites: results.filter((r) => r.written > 0).length,
         projects: Object.fromEntries([...statusBefore].map(([dir, before]) => [dir, { gitStatusBefore: before, gitStatusAfter: gitStatus(dir) }])),
         failures: results.filter((r) => !["same", "skipped", "both-crash"].includes(r.status)).map((r) => ({ id: r.id, status: r.status, detail: (r.detail ?? "").slice(0, 300) })),
     };
