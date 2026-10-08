@@ -104,7 +104,7 @@ static WAIT: (Mutex<()>, Condvar) = (Mutex::new(()), Condvar::new());
 
 /// `TSRS_LAZY_DTS=stats`: lists made lazy, deferred by the binder, parsed again (all, and while their file was
 /// bound), never reached by the binder.
-pub static STATS: [AtomicU64; 5] = [const { AtomicU64::new(0) }; 5];
+pub static STATS: [AtomicU64; 7] = [const { AtomicU64::new(0) }; 7];
 
 pub fn note(i: usize) {
     // Relaxed: a statistics counter, read once at exit.
@@ -116,8 +116,8 @@ pub fn stats_line() -> String {
     // Relaxed: statistics counters, read at exit.
     let v: Vec<u64> = STATS.iter().map(|c| c.load(Ordering::Relaxed)).collect();
     format!(
-        "lazy-dts: {} lists lazy, {} deferred by the binder, {} never reached by it, {} parsed again ({} while their file was bound)\n",
-        v[0], v[1], v[4], v[2], v[3]
+        "lazy-dts: {} lists lazy, {} deferred by the binder, {} never reached by it, {} parsed again ({} while their file was bound); readers spent {:.1} ms parsing and binding, {:.1} ms waiting\n",
+        v[0], v[1], v[4], v[2], v[3], v[5] as f64 / 1e6, v[6] as f64 / 1e6
     )
 }
 
@@ -236,12 +236,15 @@ impl LazyNodeList {
                     if self.forcer.load(Ordering::Relaxed) == thread_token() {
                         return self.nodes.get();
                     }
+                    let t = std::time::Instant::now();
                     let (lock, cv) = &WAIT;
                     let mut g = lock.lock().unwrap();
                     // Acquire: as above.
                     while self.state.load(Ordering::Acquire) == FORCING {
                         g = cv.wait(g).unwrap();
                     }
+                    // Relaxed: a statistics counter, read at exit.
+                    STATS[6].fetch_add(t.elapsed().as_nanos() as u64, Ordering::Relaxed);
                 }
             }
         }
@@ -249,6 +252,7 @@ impl LazyNodeList {
 
     fn force(&self, bind: bool) -> &'static [P<Node>] {
         note(2);
+        let t = std::time::Instant::now();
         let file = crate::utilities_1::get_source_file_of_node(Some(self.owner())).expect("a lazy list's file");
         // The reader may be inside a scratch region or another allocation scope: the tree is shared and permanent.
         let _escape = tsrs_core::arena::escape_scratch();
@@ -261,6 +265,8 @@ impl LazyNodeList {
         }
         // Release: publishes `nodes` and everything the parser and binder wrote to readers that load `DONE`.
         self.state.store(DONE, Ordering::Release);
+        // Relaxed: a statistics counter, read at exit.
+        STATS[5].fetch_add(t.elapsed().as_nanos() as u64, Ordering::Relaxed);
         let (lock, cv) = &WAIT;
         drop(lock.lock().unwrap());
         cv.notify_all();

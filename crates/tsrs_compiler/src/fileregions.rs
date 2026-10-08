@@ -120,6 +120,48 @@ pub fn lazy_dts_allowed() -> bool {
 pub fn enable_lazy_dts() {
     tsrs_parser::enable_lazy_dts();
     tsrs_binder::enable_lazy_dts();
+    LAZY_DTS.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+// Relaxed (stores and loads): set by the CLI before the program is created.
+static LAZY_DTS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Before the checkers are created: parses and binds, in parallel on the worker pool, the lazy member lists that every
+/// checker's `initialize_checker` asks for at once, so that its checkers do not wait for one another on them. Those are
+/// the lists of interfaces and classes that merge into the global scope more than once (declared in several script
+/// files or `declare global` blocks): merging a second declaration clones the first symbol's tables and merges the
+/// second's into them (notes/mem-lazy-dts-members.md). Forcing a list early changes nothing else.
+pub(crate) fn force_global_merges(program: &crate::program::Program) {
+    // Relaxed: see `LAZY_DTS`.
+    if !LAZY_DTS.load(std::sync::atomic::Ordering::Relaxed) {
+        return;
+    }
+    let mut by_name: rustc_hash::FxHashMap<&'static str, Vec<P<tsrs_ast::Symbol>>> = rustc_hash::FxHashMap::default();
+    let mut add = |table: Option<P<tsrs_ast::SymbolTable>>| {
+        if let Some(table) = table {
+            table.for_each(|name, symbol| by_name.entry(name).or_default().push(symbol));
+        }
+    };
+    for &file in program.files.iter() {
+        if !ast::is_external_or_common_js_module(file) {
+            add(file.locals());
+        }
+        for &augmentation in file.module_augmentations() {
+            let declaration = augmentation.parent().unwrap();
+            if ast::is_global_scope_augmentation(declaration) {
+                add(declaration.symbol().and_then(|s| s.exports()));
+            }
+        }
+    }
+    let lists: Vec<P<tsrs_ast::lazylist::LazyNodeList>> = by_name
+        .values()
+        .filter(|symbols| symbols.len() > 1)
+        .flatten()
+        .filter_map(|s| s.lazy_list())
+        .filter(|l| l.state() == tsrs_ast::lazylist::DEFERRED)
+        .collect();
+    use rayon::prelude::*;
+    tsrs_core::phases::time("Lazy lists: global merges", || crate::program::worker_pool().install(|| lists.par_iter().for_each(|l| l.ensure())));
 }
 
 pub fn leaf_settings_from_env(checkers: usize) -> LeafSettings {
