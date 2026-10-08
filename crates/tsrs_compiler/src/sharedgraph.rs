@@ -28,7 +28,11 @@ pub(crate) fn mode() -> Mode {
     static MODE: OnceLock<Mode> = OnceLock::new();
     *MODE.get_or_init(|| match std::env::var("TSRS_SHARED_GRAPH").as_deref() {
         Ok("emulate") => Mode::Emulate,
-        Ok("1" | "on") => Mode::On,
+        Ok("1" | "on") if tsrs_core::sharedgraph::COMPILED_IN => Mode::On,
+        Ok("1" | "on") => {
+            eprintln!("tsrs: TSRS_SHARED_GRAPH=1 needs a build with --features shared-graph; running without it");
+            Mode::Off
+        }
         _ => Mode::Off,
     })
 }

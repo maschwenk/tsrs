@@ -207,7 +207,7 @@ impl StringLiteralTypes {
         let h = Self::hash(value);
         match self.table.find(h, |&t| Self::value_of(t) == value) {
             Some(&t) => Some(t),
-            None => self.base.and_then(|b| b.table.find(h, |&t| Self::value_of(t) == value).copied()),
+            None => self.base.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|b| b.table.find(h, |&t| Self::value_of(t) == value).copied()),
         }
     }
 

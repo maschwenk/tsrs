@@ -16,6 +16,10 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 
 use rustc_hash::FxHashMap;
 
+/// Whether the prototype is compiled in (`--features shared-graph`). Without it every frozen-object test below is a
+/// constant false, so the switch-off build runs main's code paths.
+pub const COMPILED_IN: bool = cfg!(feature = "shared-graph");
+
 /// Set once, by `freeze`, before any fork exists (the forks are created on threads spawned after it).
 static ANY_FROZEN: AtomicBool = AtomicBool::new(false);
 
@@ -41,6 +45,9 @@ pub static DIRTY_LINES: AtomicUsize = AtomicUsize::new(0);
 /// Whether the cell at `addr` is frozen and its line is dirty: the only case a read must consult the overlay.
 #[inline(always)]
 pub fn dirty(addr: usize) -> bool {
+    if !COMPILED_IN {
+        return false;
+    }
     // Relaxed: the range is written before the forks' threads were spawned.
     let off = addr.wrapping_sub(FROZEN_LO.load(Ordering::Relaxed));
     if off >= FROZEN_SPAN.load(Ordering::Relaxed) {
@@ -67,7 +74,7 @@ fn mark_dirty(addr: usize) {
 #[inline(always)]
 pub fn any_frozen() -> bool {
     // Relaxed: written before the threads that read it were spawned.
-    ANY_FROZEN.load(Ordering::Relaxed)
+    COMPILED_IN && ANY_FROZEN.load(Ordering::Relaxed)
 }
 
 #[inline]
@@ -80,6 +87,9 @@ pub fn is_frozen_addr(addr: usize) -> bool {
 
 #[inline]
 fn is_frozen_addr_slow(addr: usize) -> bool {
+    if !COMPILED_IN {
+        return false;
+    }
     // Relaxed: as in `dirty`.
     if addr.wrapping_sub(FROZEN_LO.load(Ordering::Relaxed)) >= FROZEN_SPAN.load(Ordering::Relaxed) {
         return false;
@@ -633,6 +643,6 @@ pub fn set_seed_thread(on: bool) {
 
 #[inline]
 pub fn on_seed_thread() -> bool {
-    SEED_THREAD.with(Cell::get)
+    COMPILED_IN && SEED_THREAD.with(Cell::get)
 }
 

@@ -80,13 +80,13 @@ impl<K: 'static, V: 'static> LinkStore<K, V> {
     pub fn try_get(&self, key: P<K>) -> Option<P<V>> {
         match self.index(key) {
             Some(index) => Some(self.at(index)),
-            None => self.parent.and_then(|p| p.try_get(key)),
+            None => self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|p| p.try_get(key)),
         }
     }
 
     #[inline]
     pub fn has(&self, key: P<K>) -> bool {
-        self.index(key).is_some() || self.parent.is_some_and(|p| p.has(key))
+        self.index(key).is_some() || self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).is_some_and(|p| p.has(key))
     }
 
     /// Shared-graph prototype: an empty store that reads through to `self` (frozen).
@@ -119,7 +119,7 @@ impl<K: 'static, V: Default + LinkCopy + 'static> LinkStore<K, V> {
                     self.chunks.push(PSlot::first(alloc_vec((0..LINK_CHUNK).map(|_| PSlot(V::default())).collect())));
                 }
                 self.len += 1;
-                if let Some(frozen) = self.parent.and_then(|p| p.index_by_pkey(key).map(|i| p.at(i))) {
+                if let Some(frozen) = self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|p| p.index_by_pkey(key).map(|i| p.at(i))) {
                     self.at(index).copy_link_from(&frozen);
                 }
                 index
@@ -223,7 +223,7 @@ impl<K: 'static, V: KeyedLinks + 'static> KeyedLinkStore<K, V> {
         let chunks = &self.chunks;
         match self.slots.find(Self::hash(key), |&i| keyed_at(chunks, i).link_key().get() == key).map(|&i| keyed_at(chunks, i)) {
             Some(v) => Some(v),
-            None => self.parent.and_then(|p| p.try_get_pkey(key)),
+            None => self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|p| p.try_get_pkey(key)),
         }
     }
 
@@ -265,7 +265,7 @@ impl<K: 'static, V: KeyedLinks + Default + LinkCopy + 'static> KeyedLinkStore<K,
                 }
                 self.len += 1;
                 let value = keyed_at(&self.chunks, index);
-                if let Some(frozen) = self.parent.and_then(|p| p.try_get_pkey(key)) {
+                if let Some(frozen) = self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|p| p.try_get_pkey(key)) {
                     value.copy_link_from(&frozen);
                 }
                 value.link_key().set(key);
@@ -445,13 +445,13 @@ impl<V: 'static> IdLinkStore<V> {
     pub fn try_get(&self, id: u64) -> Option<P<V>> {
         match self.slot(id) {
             Some(slot) => Some(self.at(slot)),
-            None => self.parent.and_then(|p| p.try_get(id)),
+            None => self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|p| p.try_get(id)),
         }
     }
 
     #[inline]
     pub fn has(&self, id: u64) -> bool {
-        self.slot(id).is_some() || self.parent.is_some_and(|p| p.has(id))
+        self.slot(id).is_some() || self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).is_some_and(|p| p.has(id))
     }
 
     /// Shared-graph prototype: an empty store that reads through to `self` (frozen).
@@ -544,7 +544,7 @@ impl<V: Default + LinkCopy + 'static> IdLinkStore<V> {
         } else {
             self.wide_slots.insert(id, slot);
         }
-        if let Some(frozen) = self.parent.and_then(|p| p.try_get(id)) {
+        if let Some(frozen) = self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|p| p.try_get(id)) {
             self.at(slot).copy_link_from(&frozen);
         }
         self.at(slot)
@@ -605,7 +605,7 @@ impl<V: 'static> InlineIdStore<V> {
         };
         match own {
             Some(v) => Some(v),
-            None => self.parent.and_then(|p| p.try_get(id)),
+            None => self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|p| p.try_get(id)),
         }
     }
 
@@ -672,7 +672,7 @@ impl<V: Default + LinkCopy + 'static> InlineIdStore<V> {
                 .entry(id)
                 .or_insert_with(|| {
                     let v = P::new(V::default());
-                    if let Some(frozen) = parent.and_then(|p| p.wide_get(id)) {
+                    if let Some(frozen) = parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|p| p.wide_get(id)) {
                         v.copy_link_from(frozen);
                     }
                     v
@@ -695,7 +695,7 @@ impl<V: Default + LinkCopy + 'static> InlineIdStore<V> {
             Some(group) => group,
             None => {
                 let group: P<InlineGroup<V>> = P::new(std::array::from_fn(|_| V::default()));
-                if let Some(p) = self.parent {
+                if let Some(p) = self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN) {
                     let first = id & !(INLINE_GROUP as u32 - 1);
                     if let Some(frozen) = p.narrow(first) {
                         let frozen_group: &'static [V] = std::slice::from_ref(frozen);
@@ -761,7 +761,7 @@ impl<V: 'static> NodeLinkStore<V> {
         let id = ast::get_assigned_node_id(node)?;
         match self.store.narrow(id) {
             Some(v) => Some(v),
-            None => self.store.parent.and_then(|p| p.narrow(id)),
+            None => self.store.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|p| p.narrow(id)),
         }
     }
 }
@@ -812,7 +812,7 @@ impl<V: 'static> SymbolArenaLinkStore<V> {
         let id = ast::get_assigned_symbol_id(symbol)?;
         match self.store.narrow_slot(id) {
             Some(slot) => Some(self.store.at(slot)),
-            None => self.store.parent.and_then(|p| p.try_get(id as u64)),
+            None => self.store.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|p| p.try_get(id as u64)),
         }
     }
 

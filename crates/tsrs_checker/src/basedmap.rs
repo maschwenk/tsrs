@@ -47,7 +47,7 @@ impl<K: PackedKey, V: Copy> Based<PackedMap<K, V>> {
     pub fn get(&self, key: &K) -> Option<V> {
         match self.own.get(key) {
             Some(v) => Some(v),
-            None => self.base.and_then(|b| b.get(key)),
+            None => self.base.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|b| b.get(key)),
         }
     }
 
@@ -78,7 +78,7 @@ impl<K: Hash + Eq + Clone, V> Based<FxHashMap<K, V>, K> {
     /// The base's entry for `key`, unless the fork removed it.
     #[inline]
     pub fn base_get(&self, key: &K) -> Option<&'static V> {
-        let b = self.base?;
+        let b = self.base.filter(|_| tsrs_core::sharedgraph::COMPILED_IN)?;
         if !self.removed.is_empty() && self.removed.contains(key) {
             return None;
         }
@@ -99,7 +99,7 @@ impl<K: Hash + Eq + Clone, V> Based<FxHashMap<K, V>, K> {
     }
 
     pub fn remove(&mut self, key: &K) -> Option<V> {
-        if self.base.is_some_and(|b| b.contains_key(key)) {
+        if self.base.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).is_some_and(|b| b.contains_key(key)) {
             self.removed.insert(key.clone());
         }
         self.own.remove(key)
