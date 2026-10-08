@@ -971,6 +971,10 @@ pub struct Checker {
     /// tsrs-only: a file whose statements this checker and others already checked in pieces
     /// (`check_source_file_piece`); the next `check_source_file` of it runs only the file-level steps.
     pub(crate) statements_checked_in_pieces: Option<P<SourceFile>>,
+    /// tsrs-only: type references whose type-argument constraint check was reached while this checker computed a type
+    /// in a file it had not started checking (`defer_type_argument_constraints`), by file. Run when this checker checks
+    /// the file; dropped with the checker otherwise.
+    pub(crate) deferred_type_argument_checks: FxHashMap<P<SourceFile>, Vec<P<Node>>>,
     pub variance_type_parameter: Option<P<Type>>,
     pub language_version: ScriptTarget,
     pub module_kind: ModuleKind,
@@ -1378,6 +1382,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         current_node: None,
         checking_file: None,
         statements_checked_in_pieces: None,
+        deferred_type_argument_checks: FxHashMap::default(),
         variance_type_parameter: None,
         language_version: compiler_options.get_emit_script_target(),
         module_kind: compiler_options.get_emit_module_kind(),

@@ -1,0 +1,1 @@
+b.ts(2,22): error TS2344: Type 'number' does not satisfy the constraint 'string'.

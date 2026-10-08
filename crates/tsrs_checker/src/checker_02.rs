@@ -103,6 +103,7 @@ impl Checker {
         self.ctx = Some(ctx.clone());
         let links = self.source_file_links.get(source_file);
         if !links.type_checked.get() {
+            self.run_deferred_type_argument_checks(source_file);
             // Grammar checking
             self.check_grammar_source_file(source_file);
             self.renamed_binding_elements_in_types = Vec::new();
@@ -1007,7 +1008,7 @@ impl Checker {
     pub(crate) fn check_type_reference_or_import(&mut self, node: P<Node>) {
         let t = self.get_type_from_type_node(node);
         if !self.is_error_type(t) {
-            if !node.type_arguments().is_empty() {
+            if !node.type_arguments().is_empty() && !self.defer_type_argument_constraints(node) {
                 let type_parameters = self.get_type_parameters_for_type_reference_or_import(node);
                 if !type_parameters.is_empty() {
                     self.check_type_argument_constraints(node, &type_parameters);
@@ -1021,6 +1022,45 @@ impl Checker {
                     self.add_deprecated_suggestion(suggestion_node, &declarations, symbol.name());
                 }
             }
+        }
+    }
+
+    /// tsrs-only: whether to leave the type-argument constraint check of `node` to the check of its file. A checker
+    /// reaches the check while computing a type in a file it has not started checking (a function expression's
+    /// signature is checked when its type is first needed, from any file that uses it). The check only reports
+    /// diagnostics, and a checker's diagnostics in a file it does not check are never read, so every checker but the
+    /// one that checks the file repeated it for nothing: in excalidraw one such check costs each of 9 checkers 0.3 s
+    /// and 120 MiB of discarded error elaboration (notes/perf-excalidraw-typefest.md). TypeScript defers the same
+    /// check (`addLazyDiagnostic` in `checkTypeReferenceOrImport`); typescript-go runs it at once, as Go-compatible
+    /// history mode still does.
+    fn defer_type_argument_constraints(&mut self, node: P<Node>) -> bool {
+        if tsrs_core::compat::go_compatible_history() {
+            return false;
+        }
+        let Some(file) = ast::get_source_file_of_node(Some(node)) else {
+            return false;
+        };
+        if self.checking_file == Some(file) || self.source_file_links.try_get(file).is_some_and(|links| links.type_checked.get()) {
+            return false;
+        }
+        self.deferred_type_argument_checks.entry(file).or_default().push(node);
+        true
+    }
+
+    /// tsrs-only: the checks `defer_type_argument_constraints` left to the check of `source_file`, each as checking the
+    /// type reference itself would run it.
+    fn run_deferred_type_argument_checks(&mut self, source_file: P<SourceFile>) {
+        let Some(nodes) = self.deferred_type_argument_checks.remove(&source_file) else {
+            return;
+        };
+        for node in nodes {
+            let save_current_node = self.current_node.replace(node);
+            self.instantiation_count = 0;
+            let type_parameters = self.get_type_parameters_for_type_reference_or_import(node);
+            if !type_parameters.is_empty() {
+                self.check_type_argument_constraints(node, &type_parameters);
+            }
+            self.current_node = save_current_node;
         }
     }
 
