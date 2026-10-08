@@ -9,6 +9,7 @@ See bench/README.md. Typical use:
     python3 bench/run.py --projects vscode --out-dir /tmp/p/vscode   # one project of a parallel run (CI)
     python3 bench/run.py --modes checkers64 --out-dir /tmp/p/wide    # the 64-checker table (CI: 64 vCPU)
     python3 bench/run.py --merge /tmp/p/*/*.json --readme README.md  # join such results into one
+    python3 bench/run.py --merge /tmp/p/*/*.json --wasm /tmp/w/*.json  # ... with bench/wasm.py's table
 """
 
 from __future__ import annotations
@@ -555,7 +556,7 @@ def update_readme(readme: Path, table: str) -> None:
     readme.write_text(text)
 
 
-def merge_results(cfg: dict, paths: list[Path]) -> dict:
+def merge_results(cfg: dict, paths: list[Path], wasm_path: Path | None = None) -> dict:
     """One result from the partial results of a parallel run (.depot/workflows/bench.yml): one job per project on the
     fixed-spec machine (`run.py --projects <name> --out-dir <dir>`, the default modes) and the wide job (`run.py
     --modes checkers64`, every project on a 64-vCPU machine). Projects in bench/projects.json order, modes in
@@ -620,6 +621,13 @@ def merge_results(cfg: dict, paths: list[Path]) -> dict:
         log(f"WARNING: no result for {', '.join(missing)}")
     if missing := [f"{name} {mode}" for name, pr in result["projects"].items() for mode in modes if mode not in pr]:
         log(f"WARNING: no result for {', '.join(missing)}")
+    if wasm_path:
+        # bench/wasm.py's result (the `measure-wasm` job), kept whole under `wasm`: its own machine, rounds and engines.
+        w = json.loads(wasm_path.read_text())
+        if w.get("kind") != "wasm" or w["tsrs"]["commit"] != result["tsrs"]["commit"]:
+            sys.exit(f"--wasm {wasm_path}: not a bench/wasm.py result of tsrs commit {result['tsrs']['commit'][:12]}")
+        result["wasm"] = w
+        result["duration_s"] += w.get("duration_s") or 0
     return result
 
 
@@ -628,6 +636,13 @@ def write_results(result: dict, args: argparse.Namespace, note: str = "") -> Non
     table = markdown(result)
     readme_modes = args.readme_modes.split(",") if args.readme_modes else None
     readme_table = markdown(result, readme_modes) if readme_modes else table
+    if result.get("wasm"):
+        import wasm  # bench/wasm.py, which imports this file: only here, after both are loaded
+
+        table += "\n" + wasm.markdown(result["wasm"])
+        if args.readme_wasm_table:
+            args.readme_wasm_table.parent.mkdir(parents=True, exist_ok=True)
+            args.readme_wasm_table.write_text(wasm.markdown(result["wasm"], compact=True))
     args.out_dir.mkdir(parents=True, exist_ok=True)
     stem = f"{result['date'][:10]}-{result['tsrs']['commit'][:12]}" + ("-local" if args.local else "")
     (args.out_dir / f"{stem}.json").write_text(json.dumps(result, indent=1) + "\n")
@@ -675,18 +690,29 @@ def main() -> None:
                                     "measuring jobs have no Rust)")
     ap.add_argument("--merge", type=Path, nargs="+", metavar="RESULT",
                     help="only join these per-project results of one run into one result file (no benchmarking)")
+    ap.add_argument("--wasm", type=Path, metavar="RESULT", help="with --merge: bench/wasm.py's result of the same commit "
+                                                                "(the WebAssembly table, under `wasm`)")
     ap.add_argument("--out-dir", type=Path, default=BENCH / "results")
     ap.add_argument("--readme", type=Path, help="rewrite the bench block of this README")
     ap.add_argument("--readme-modes", help="comma-separated modes the README block (and --readme-table) shows; default: "
                                            "all of the result's modes. CI: `wide`, the 64-vCPU machine's default-mode table")
     ap.add_argument("--readme-table", type=Path, help="also write the README variant of the table to this file")
+    ap.add_argument("--readme-wasm-table", type=Path, help="with --wasm: also write the README's WebAssembly block to "
+                                                           "this file")
     ap.add_argument("--apply-table", type=Path,
                     help="only rewrite --readme's bench block from this results .md (no benchmarking)")
+    ap.add_argument("--apply-wasm-table", type=Path,
+                    help="only rewrite --readme's WebAssembly block from this file (--readme-wasm-table's output)")
     args = ap.parse_args()
-    if args.apply_table:
+    if args.apply_table or args.apply_wasm_table:
         if not args.readme:
-            ap.error("--apply-table needs --readme")
-        update_readme(args.readme, args.apply_table.read_text())
+            ap.error("--apply-table and --apply-wasm-table need --readme")
+        if args.apply_table:
+            update_readme(args.readme, args.apply_table.read_text())
+        if args.apply_wasm_table:
+            import wasm
+
+            wasm.update_readme(args.readme, args.apply_wasm_table.read_text())
         return
 
     cfg = json.loads((BENCH / "projects.json").read_text())
@@ -701,7 +727,7 @@ def main() -> None:
         print(json.dumps([p["name"] for p in projects]))
         return
     if args.merge:
-        write_results(merge_results(cfg, args.merge), args)
+        write_results(merge_results(cfg, args.merge, args.wasm), args)
         return
     modes = args.modes.split(",")
     if unknown_modes := set(modes) - set(MODE_FLAGS):

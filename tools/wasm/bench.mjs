@@ -20,19 +20,30 @@ const median = (v) => [...v].sort((a, b) => a - b)[Math.floor(v.length / 2)];
 const range = (v) => `${(Math.min(...v) / 1000).toFixed(2)}-${(Math.max(...v) / 1000).toFixed(2)}`;
 
 if (process.argv[2] === "--child") {
-    // --child <package dir> <module> <case json> <calls>
+    // --child <package dir> <module> <case json> <calls>; also bench/wasm.py's runner. Per call: wall ms, exit code
+    // (null: the call threw, as ts-rust's host does on a trap) and the number of `error TS` lines on stdout.
     const [pkg, module, caseJson, calls] = process.argv.slice(3);
     process.env.TSRS_WASM = module;
     const { tsc } = await import(path.join(pkg, "node.js"));
     const c = JSON.parse(caseJson);
-    const times = [];
+    const errorLine = /^(?:\S.*\(\d+,\d+\): )?error TS\d+:/; // bench/run.py ERROR_RE
+    const text = (s) => (typeof s === "string" ? s : Buffer.from(s ?? []).toString());
+    const times = [], exitCodes = [], errors = [];
     let r;
     for (let i = 0; i < Number(calls); i++) {
         const start = performance.now();
-        r = await tsc(c.args, { cwd: c.cwd });
+        try {
+            r = await tsc(c.args, { cwd: c.cwd });
+        } catch (e) {
+            r = { exitCode: null, stdout: "", stderr: `${e?.message ?? e}\n${text(e?.stderr)}` };
+        }
         times.push(performance.now() - start);
+        exitCodes.push(r.exitCode);
+        errors.push(text(r.stdout).split("\n").filter((l) => errorLine.test(l)).length);
+        if (r.exitCode === null) break;
     }
-    process.stdout.write(JSON.stringify({ times, exitCode: r.exitCode, memoryBytes: r.memoryBytes ?? 0, maxRssKiB: process.resourceUsage().maxRSS }));
+    process.stdout.write(JSON.stringify({ times, exitCodes, errors, exitCode: r.exitCode, memoryBytes: r.memoryBytes ?? 0,
+        maxRssKiB: process.resourceUsage().maxRSS, stderr: text(r.stderr).slice(-2000) }));
     process.exit(0);
 }
 

@@ -176,7 +176,8 @@ def main(argv):
     ap.add_argument("--repo", default=os.environ.get("GITHUB_REPOSITORY"))
     args = ap.parse_args(argv)
     if args.latest:
-        dated = [(json.loads(p.read_text()).get("date", ""), p) for p in args.results_dir.glob("*.json")]
+        loaded = [(json.loads(p.read_text()), p) for p in args.results_dir.glob("*.json")]
+        dated = [(r.get("date", ""), p) for r, p in loaded if r.get("kind") != "wasm"]  # bench/wasm.py's own files
         args.result = max(dated)[1] if dated else None
     if args.result is None:
         ap.error("give a result file or --latest")
