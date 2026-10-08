@@ -2219,7 +2219,7 @@ impl ReferenceInstantiations {
     }
 
     fn arguments_of(reference: P<Type>) -> &'static [P<Type>] {
-        reference.as_type_reference().resolved_type_arguments.get().unwrap()
+        reference.as_type_reference().resolved_type_arguments.peek().unwrap() // cache key, not a use (use census)
     }
 
     /// Go `m = make(map[CacheHashKey]*Type)`.

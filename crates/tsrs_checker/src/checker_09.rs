@@ -2772,6 +2772,7 @@ impl Checker {
         if lm.ready.get().is_none() || t.object_flags().intersects(ObjectFlags::MembersResolved) {
             return None;
         }
+        tsrs_core::usebits::mark_ptr(lm.get()); // use census: the caller consults the table (fields are not cells)
         Some(lm)
     }
 

@@ -888,7 +888,15 @@ fn run_frozen(roots: &[usize]) {
             let mut fr_names: FxHashMap<usize, String> = FxHashMap::default();
             atos(&fr_ips, &mut fr_names);
             let mut by: FxHashMap<String, u64> = FxHashMap::default();
-            for &(addr, stack) in &first {
+            // Per type: the readers of the lowest-sampled granule of each block (the block's first reader, as far as
+            // the 1/16 sample sees it).
+            let mut block_first: FxHashMap<usize, (u64, u32)> = FxHashMap::default();
+            for (k, &(addr, _)) in first.iter().enumerate() {
+                let Some(i) = table.lookup(addr) else { continue };
+                block_first.entry(i).or_insert((addr, k as u32));
+            }
+            let mut by_type: FxHashMap<&'static str, (u64, FxHashMap<String, u64>)> = FxHashMap::default();
+            for (k, &(addr, stack)) in first.iter().enumerate() {
                 let Some(i) = table.lookup(addr) else { continue };
                 let b = table.blocks[i];
                 if u.is_front(i) {
@@ -903,6 +911,11 @@ fn run_frozen(roots: &[usize]) {
                     .take(5)
                     .cloned()
                     .collect();
+                if block_first.get(&i).is_some_and(|&(_, k0)| k0 as usize == k) {
+                    let e = by_type.entry(ty).or_default();
+                    e.0 += FIRST_READ_SAMPLE as u64;
+                    *e.1.entry(f.iter().take(4).cloned().collect::<Vec<_>>().join("  <-  ")).or_default() += FIRST_READ_SAMPLE as u64;
+                }
                 *by.entry(format!("{}  +{}  {}", short_type(ty), addr - b.start, f.join("  <-  "))).or_default() += FIRST_READ_SAMPLE as u64;
             }
             let mut rows: Vec<(String, u64)> = by.into_iter().collect();
@@ -910,6 +923,17 @@ fn run_frozen(roots: &[usize]) {
             eprintln!("\n-- use census: first reads of checker-phase blocks by type, offset and reader (sampled 1/{FIRST_READ_SAMPLE}, scaled; top {top}) --");
             for (name, n) in rows.iter().take(top) {
                 eprintln!("{n:>11}  {name}");
+            }
+            let mut types: Vec<(&'static str, (u64, FxHashMap<String, u64>))> = by_type.into_iter().collect();
+            types.sort_by(|a, b| b.1 .0.cmp(&a.1 .0).then(a.0.cmp(b.0)));
+            eprintln!("\n-- use census: first reader of each block, by type (sampled 1/{FIRST_READ_SAMPLE}, scaled; top {top} types, 8 readers each) --");
+            for (ty, (n, readers)) in types.iter().take(top) {
+                eprintln!("{n:>11}  {}", short_type(ty));
+                let mut readers: Vec<(&String, &u64)> = readers.iter().collect();
+                readers.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
+                for (r, m) in readers.iter().take(8) {
+                    eprintln!("{m:>11}      {r}");
+                }
             }
         }
     }
@@ -1552,7 +1576,9 @@ impl UseCensus {
             return None;
         }
         let slots = std::mem::take(&mut *SLOTS.lock().unwrap());
-        let slot_types: FxHashSet<String> = slots.iter().map(|s| format!("[{}]", s.2)).collect();
+        // Link-store chunks are `[V]` or `[PSlot<V>]` arrays.
+        let slot_types: FxHashSet<String> =
+            slots.iter().flat_map(|s| [format!("[{}]", s.2), format!("[{}<{}>]", std::any::type_name::<crate::PSlot<()>>().trim_end_matches("<()>"), s.2)]).collect();
         let chunk_class: Vec<bool> = classes
             .iter()
             .map(|c| matches!(c, Class::Arena { ty, .. } if slot_types.contains(*ty)))
