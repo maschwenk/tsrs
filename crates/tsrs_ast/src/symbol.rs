@@ -84,7 +84,7 @@ impl Symbol {
     }
     #[inline]
     pub fn declarations(&self) -> &'static [P<Node>] {
-        tsrs_core::lazydts_census::mark_member(self as *const Symbol as usize);
+        tsrs_core::lazydts_census::mark_member(tsrs_core::lazydts_census::addr_of(self));
         self.declarations.get()
     }
     /// Go `symbol.Declarations = slices.Clone(declarations)`-like: stores a copy.
@@ -117,7 +117,7 @@ impl Symbol {
     #[inline]
     #[expect(clippy::disallowed_methods, reason = "indexing with a bounds check: +0.7% instructions, one checker (notes/mem-small.md)")]
     pub fn value_declaration(&self) -> Option<P<Node>> {
-        tsrs_core::lazydts_census::mark_member(self as *const Symbol as usize);
+        tsrs_core::lazydts_census::mark_member(tsrs_core::lazydts_census::addr_of(self));
         if self.name.tags() & TAG_VALUE_FIRST != 0 {
             let declarations = self.declarations.get();
             debug_assert!(!declarations.is_empty());
@@ -160,7 +160,7 @@ impl Symbol {
     }
     #[inline]
     pub fn members(&self) -> Option<P<SymbolTable>> {
-        tsrs_core::lazydts_census::mark_owner(self as *const Symbol as usize, false);
+        tsrs_core::lazydts_census::mark_owner(tsrs_core::lazydts_census::addr_of(self), false);
         let t = self.tables()?;
         if let Some(lazy) = t.lazy.get() {
             lazy.ensure();
@@ -175,7 +175,7 @@ impl Symbol {
     }
     #[inline]
     pub fn exports(&self) -> Option<P<SymbolTable>> {
-        tsrs_core::lazydts_census::mark_owner(self as *const Symbol as usize, true);
+        tsrs_core::lazydts_census::mark_owner(tsrs_core::lazydts_census::addr_of(self), true);
         let t = self.tables()?;
         if let Some(lazy) = t.lazy.get() {
             if lazy.fills_exports() {
@@ -797,10 +797,10 @@ impl NameFilter {
 }
 
 /// The lazy declaration-file census (profile builds): a symbol-table hit touches the symbol.
-#[inline(always)]
+#[inline]
 fn census_hit(symbol: P<Symbol>) -> P<Symbol> {
     if tsrs_core::lazydts_census::enabled() {
-        tsrs_core::lazydts_census::mark_member(&*symbol as *const Symbol as usize);
+        tsrs_core::lazydts_census::mark_member(tsrs_core::lazydts_census::addr_of(symbol.get()));
     }
     symbol
 }

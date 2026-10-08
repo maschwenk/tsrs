@@ -61,7 +61,7 @@ struct State {
 static STATE: Mutex<Option<State>> = Mutex::new(None);
 
 fn addr<T>(p: P<T>) -> usize {
-    &*p as *const T as usize
+    census::addr_of(p.get())
 }
 
 pub(crate) fn register(program: &Program) {
@@ -226,6 +226,7 @@ pub fn report() -> Option<String> {
         .iter()
         .enumerate()
         .map(|(i, l)| {
+            // Relaxed (this and the loads below): the checker threads that set the bits are joined.
             let mut bits = reg.list_bits[i].load(Ordering::Relaxed);
             if let Some(o) = l.owner {
                 let ob = reg.owner_bits[o as usize].load(Ordering::Relaxed);
@@ -423,6 +424,7 @@ pub fn report() -> Option<String> {
             live_members += 1;
             let Some(s) = m.symbol else { continue };
             untouched.3 += 1;
+            // Relaxed: as above.
             if reg.member_bits[s as usize].load(Ordering::Relaxed) == 0 {
                 untouched.0 += 1;
                 untouched.1 += m.parse;

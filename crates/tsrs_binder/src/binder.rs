@@ -115,7 +115,7 @@ fn bind_source_file_worker(file: P<SourceFile>) {
         }
         if let Some(before) = census_before {
             let bytes = tsrs_core::lazydts_census::bytes_now().saturating_sub(before);
-            tsrs_core::lazydts_census::note_bind_file(&*file as *const SourceFile as usize, bytes);
+            tsrs_core::lazydts_census::note_bind_file(tsrs_core::lazydts_census::addr_of(file.get()), bytes);
         }
     });
 }
@@ -750,7 +750,7 @@ impl Binder {
             let before = tsrs_core::lazydts_census::bytes_now();
             let result = self.bind_node(node);
             let bytes = tsrs_core::lazydts_census::bytes_now().saturating_sub(before);
-            tsrs_core::lazydts_census::note_bind_member(&*node as *const Node as usize, bytes);
+            tsrs_core::lazydts_census::note_bind_member(tsrs_core::lazydts_census::addr_of(node.get()), bytes);
             return result;
         }
         self.bind_node(node)

@@ -12,6 +12,12 @@
 //!
 //! In other builds every function here is an empty inline function and `enabled()` is `false`.
 
+/// The address the census keys an arena object by.
+#[inline]
+pub fn addr_of<T>(r: &T) -> usize {
+    std::ptr::from_ref(r).addr()
+}
+
 /// Per-thread records of the parser and binder (profile builds).
 #[derive(Default)]
 pub struct Records {
@@ -152,6 +158,7 @@ mod imp {
     fn phase() -> u8 {
         if IN_INIT.with(|c| c.get()) {
             2
+        // Relaxed: census bookkeeping; a late view only tags a read with an earlier phase.
         } else if CREATED.load(Ordering::Relaxed) {
             4
         } else {
@@ -165,12 +172,14 @@ mod imp {
         }
         IN_INIT.with(|c| c.set(on));
         if on {
+            // Relaxed: as in `phase`.
             CREATED.store(true, Ordering::Relaxed);
         }
     }
 
     #[inline]
     pub fn mark_list(addr: usize) {
+        // Relaxed: set (SeqCst) before the checker threads start; the registry is a OnceLock.
         if !MARKING.load(Ordering::Relaxed) {
             return;
         }
@@ -180,12 +189,14 @@ mod imp {
     fn mark_list_slow(addr: usize) {
         let r = REGISTRY.get().unwrap();
         if let Some(&i) = r.lists.get(&addr) {
+            // Relaxed: independent bits, read after the threads are joined.
             r.list_bits[i as usize].fetch_or(phase(), Ordering::Relaxed);
         }
     }
 
     #[inline]
     pub fn mark_owner(addr: usize, exports: bool) {
+        // Relaxed: as in `mark_list`.
         if !MARKING.load(Ordering::Relaxed) {
             return;
         }
@@ -196,12 +207,14 @@ mod imp {
         let r = REGISTRY.get().unwrap();
         if let Some(&i) = r.owners.get(&addr) {
             let bit = if exports { phase() << 4 } else { phase() };
+            // Relaxed: as in `mark_list_slow`.
             r.owner_bits[i as usize].fetch_or(bit, Ordering::Relaxed);
         }
     }
 
     #[inline]
     pub fn mark_member(addr: usize) {
+        // Relaxed: as in `mark_list`.
         if !MARKING.load(Ordering::Relaxed) {
             return;
         }
@@ -211,6 +224,7 @@ mod imp {
     fn mark_member_slow(addr: usize) {
         let r = REGISTRY.get().unwrap();
         if let Some(&i) = r.members.get(&addr) {
+            // Relaxed: as in `mark_list_slow`.
             r.member_bits[i as usize].fetch_or(phase(), Ordering::Relaxed);
         }
     }
@@ -231,35 +245,35 @@ mod imp {
     pub fn registry() -> Option<&'static Registry> {
         None
     }
-    #[inline(always)]
+    #[inline]
     pub const fn enabled() -> bool {
         false
     }
-    #[inline(always)]
+    #[inline]
     pub fn bytes_now() -> u64 {
         0
     }
-    #[inline(always)]
+    #[inline]
     pub fn flush() {}
-    #[inline(always)]
+    #[inline]
     pub fn note_parse_list(_list: usize, _bytes: u64, _disq: u8) {}
-    #[inline(always)]
+    #[inline]
     pub fn note_parse_member(_member: usize, _bytes: u64) {}
-    #[inline(always)]
+    #[inline]
     pub fn note_bind_member(_member: usize, _bytes: u64) {}
-    #[inline(always)]
+    #[inline]
     pub fn note_parse_file(_file: usize, _bytes: u64) {}
-    #[inline(always)]
+    #[inline]
     pub fn note_bind_file(_file: usize, _bytes: u64) {}
-    #[inline(always)]
+    #[inline]
     pub fn set_in_checker_init(_on: bool) {}
-    #[inline(always)]
+    #[inline]
     pub fn mark_list(_addr: usize) {}
-    #[inline(always)]
+    #[inline]
     pub fn mark_owner(_addr: usize, _exports: bool) {}
-    #[inline(always)]
+    #[inline]
     pub fn mark_member(_addr: usize) {}
-    #[inline(always)]
+    #[inline]
     pub fn stop() {}
 }
 

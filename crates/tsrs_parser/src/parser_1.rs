@@ -632,6 +632,7 @@ impl Parser {
         let census_before = (tsrs_core::lazydts_census::enabled() && is_declaration_file).then(tsrs_core::lazydts_census::bytes_now);
         if is_declaration_file {
             self.context_flags |= NodeFlags::Ambient;
+            // Relaxed: set once by the CLI before any program is created.
             self.lazy_dts = LAZY_DTS.load(std::sync::atomic::Ordering::Relaxed);
         }
         let pos = self.node_pos();
@@ -667,6 +668,7 @@ impl Parser {
         }
         if !self.lazy_lists.is_empty() {
             result.lazy_lists.set(alloc_slice(&self.lazy_lists));
+            // Relaxed: a statistics counter, read at exit.
             tsrs_ast::lazylist::STATS[0].fetch_add(self.lazy_lists.len() as u64, std::sync::atomic::Ordering::Relaxed);
         }
         collect_external_module_references(result);
@@ -675,7 +677,7 @@ impl Parser {
         }
         if let Some(before) = census_before {
             let bytes = tsrs_core::lazydts_census::bytes_now().saturating_sub(before);
-            tsrs_core::lazydts_census::note_parse_file(&*result as *const SourceFile as usize, bytes);
+            tsrs_core::lazydts_census::note_parse_file(tsrs_core::lazydts_census::addr_of(result.get()), bytes);
         }
         result
     }
@@ -872,7 +874,7 @@ impl Parser {
     /// the lazy declaration-file census on (`tsrs_core::lazydts_census`) record the bytes of the list and of each
     /// member in a declaration file.
     pub(crate) fn parse_member_list(&mut self, kind: ParsingContext, parse_element: fn(&mut Parser) -> P<Node>) -> P<NodeList> {
-        if self.lazy_dts && kind != ParsingContext::BlockStatements && !self.context_flags.intersects(NodeFlags::JSDoc) && lazy_debug_filter(&self.opts.file_name, kind, self.node_pos()) {
+        if self.lazy_dts && kind != ParsingContext::BlockStatements && !self.context_flags.intersects(NodeFlags::JSDoc) {
             return self.parse_member_list_lazily(kind, parse_element);
         }
         if !tsrs_core::lazydts_census::enabled() || !tspath::is_declaration_file_name(&self.opts.file_name) {
@@ -885,7 +887,7 @@ impl Parser {
         let list = self.parse_list(kind, |p| {
             let b = census::bytes_now();
             let n = parse_element(p);
-            census::note_parse_member(&*n as *const Node as usize, census::bytes_now().saturating_sub(b));
+            census::note_parse_member(census::addr_of(n.get()), census::bytes_now().saturating_sub(b));
             n
         });
         // Disqualifiers of a lazy list (notes/mem-lazy-dts-members.md): 1 `this`, 2 import type / call / meta,
@@ -897,7 +899,7 @@ impl Parser {
         if !tsrs_core::arena_rewindable(&cp) {
             disq |= 64;
         }
-        census::note_parse_list(&*list as *const NodeList as usize, census::bytes_now().saturating_sub(before), disq);
+        census::note_parse_list(census::addr_of(list.get()), census::bytes_now().saturating_sub(before), disq);
         list
     }
 
@@ -927,7 +929,7 @@ impl Parser {
         debug_assert_eq!(loc.pos(), pos);
         self.lazy_lists.truncate(before.4);
         tsrs_core::arena_rewind(cp);
-        let record = P::new(tsrs_ast::lazylist::LazyNodeList::new(pos, loc.pos(), loc.end(), kind as u8, context_flags, parsing_contexts as u32));
+        let record = P::new(tsrs_ast::lazylist::LazyNodeList::new(loc.pos(), loc.end(), kind as u8, context_flags, parsing_contexts as u32));
         self.lazy_lists.push(record);
         self.factory.new_lazy_node_list(loc, record.get())
     }
@@ -3014,6 +3016,7 @@ static LAZY_DTS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::
 /// `lazylist`, notes/mem-lazy-dts-members.md). Process-wide; the binder must be enabled too (`tsrs_binder`).
 pub fn enable_lazy_dts() {
     tsrs_ast::lazylist::set_parse_hook(reparse_lazy_list);
+    // Relaxed: the CLI enables it before creating the program; parser threads start after that.
     LAZY_DTS.store(true, std::sync::atomic::Ordering::Relaxed);
 }
 
@@ -3024,7 +3027,7 @@ fn reparse_lazy_list(record: &tsrs_ast::lazylist::LazyNodeList, file: P<SourceFi
     let mut p = new_parser();
     p.initialize_state_static(file.parse_options().clone(), file.text(), file.script_kind());
     p.source_text_index = file.text_index.get();
-    p.scanner.reset_token_state(record.open_end);
+    p.scanner.reset_token_state(record.pos);
     p.next_token();
     p.context_flags = record.context_flags;
     p.parsing_contexts = record.parsing_contexts as ParsingContexts;
@@ -3104,30 +3107,4 @@ fn lazy_list_blocked(nodes: &[P<Node>]) -> bool {
         hit || n.for_each_child(&mut |c| blocked(c))
     }
     nodes.iter().any(|&n| blocked(n))
-}
-
-// TEMP debug: TSRS_LAZY_DTS_DEBUG="<mod>:<rem>:<kinds>" restricts lazy lists to files whose name hash % mod == rem and
-// to kinds t (type members) / c (class members).
-fn lazy_debug_filter(name: &str, kind: ParsingContext, pos: i32) -> bool {
-    static F: std::sync::OnceLock<Option<(u64, u64, String, i32, i32)>> = std::sync::OnceLock::new();
-    let f = F.get_or_init(|| {
-        let v = std::env::var("TSRS_LAZY_DTS_DEBUG").ok()?;
-        let mut it = v.split(':');
-        Some((
-            it.next()?.parse().ok()?,
-            it.next()?.parse().ok()?,
-            it.next().unwrap_or("tc").to_string(),
-            it.next().and_then(|x| x.parse().ok()).unwrap_or(0),
-            it.next().and_then(|x| x.parse().ok()).unwrap_or(i32::MAX),
-        ))
-    });
-    let Some((m, r, kinds, lo, hi)) = f else { return true };
-    if pos < *lo || pos >= *hi {
-        return false;
-    }
-    let mut h: u64 = 1469598103934665603;
-    for b in name.bytes() {
-        h = (h ^ b as u64).wrapping_mul(1099511628211);
-    }
-    h % m == *r && kinds.contains(if kind == ParsingContext::ClassMembers { 'c' } else { 't' })
 }
