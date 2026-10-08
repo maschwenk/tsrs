@@ -2075,6 +2075,7 @@ impl Checker {
 
 // Mapped types { [P in keyof T]: X } where T is an object type get a lazy table that creates
 // members and index infos as they are asked for, the way resolveMappedTypeMembers would.
+#[derive(Clone)]
 pub(crate) struct LazyMappedTable {
     pub(crate) type_parameter: P<Type>,
     pub(crate) template_type: P<Type>,
@@ -2556,7 +2557,7 @@ impl Checker {
             vec![left]
         };
         left_signatures.push(right);
-        result.set_composite(Some(P::new(CompositeSignature { is_union: Cell::new(is_union), signatures: Cell::new(alloc_vec(left_signatures)) })));
+        result.set_composite(Some(P::new(CompositeSignature { is_union: tsrs_core::sharedgraph::OvCell::new(is_union), signatures: tsrs_core::sharedgraph::OvCell::new(alloc_vec(left_signatures)) })));
         if let Some(param_mapper) = param_mapper {
             if left.composite().is_some_and(|c| c.is_union.get() == is_union) && left.mapper.get().is_some() {
                 result.mapper.set(Some(self.combine_type_mappers(left.mapper.get(), param_mapper)));

@@ -1850,7 +1850,7 @@ impl Checker {
     pub(crate) fn instantiate_type_alias(&mut self, alias: Option<P<TypeAlias>>, m: Option<P<TypeMapper>>) -> Option<P<TypeAlias>> {
         let alias = alias?;
         let type_arguments = self.instantiate_types(alias.type_arguments(), m);
-        Some(P::new(TypeAlias { symbol: Cell::new(alias.symbol()), type_arguments: ThinSliceCell::new(alloc_vec(type_arguments)) }))
+        Some(P::new(TypeAlias { symbol: tsrs_core::sharedgraph::OvCell::new(alias.symbol()), type_arguments: tsrs_core::sharedgraph::OvThinSliceCell::new(alloc_vec(type_arguments)) }))
     }
 
     /// `instantiate_type_alias` for the alias argument of a cached type constructor (`AliasArg::Pending`): the type

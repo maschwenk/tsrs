@@ -44,6 +44,12 @@ pub struct PackedMap<K, V> {
     table: hashbrown::HashTable<PackedSlot<K, V>>,
 }
 
+impl<K: Copy, V: Copy> Clone for PackedMap<K, V> {
+    fn clone(&self) -> Self {
+        PackedMap { table: self.table.clone() }
+    }
+}
+
 impl<K, V> Default for PackedMap<K, V> {
     fn default() -> Self {
         PackedMap { table: hashbrown::HashTable::new() }
@@ -117,11 +123,11 @@ impl<K: PackedKey, V: Copy> PackedMap<K, V> {
 
 /// `GoMap` (a nil-able shared map in the arena) over a `PackedMap`, for the `CacheHashKey`-keyed instantiation maps
 /// of arena objects (conditional roots, type aliases). Same `make` / `get` / `set` behavior as `GoMap`.
-pub struct GoPackedMap<K: 'static, V: 'static>(Cell<Option<P<RefCell<PackedMap<K, V>>>>>);
+pub struct GoPackedMap<K: 'static, V: 'static>(tsrs_core::sharedgraph::OvExact<Option<P<RefCell<PackedMap<K, V>>>>>);
 
 impl<K: 'static, V: 'static> Default for GoPackedMap<K, V> {
     fn default() -> Self {
-        GoPackedMap(Cell::new(None))
+        GoPackedMap(tsrs_core::sharedgraph::OvExact::new(None))
     }
 }
 
@@ -140,12 +146,18 @@ impl<K: PackedKey + 'static, V: Copy + 'static> GoPackedMap<K, V> {
     /// Go `v, ok := m[k]` (reading a nil map is allowed).
     #[inline]
     pub fn get(&self, key: &K) -> Option<V> {
-        self.0.get().and_then(|m| m.borrow().get(key))
+        self.0.get().and_then(|m| tsrs_core::sharedgraph::with_ref(&m, |m| m.get(key)))
     }
 
     /// Go `m[k] = v`. Creates the map if it is nil, as `GoMap::set` does.
     pub fn set(&self, key: K, value: V) {
         let m = match self.0.get() {
+            Some(m) if tsrs_core::sharedgraph::frozen(m.get()) => {
+                // Shared-graph prototype: this checker's copy of a frozen table.
+                let copy = P::new(RefCell::new(tsrs_core::sharedgraph::with_ref(&m, Clone::clone)));
+                self.0.set(Some(copy));
+                copy
+            }
             Some(m) => m,
             None => {
                 self.make();
@@ -156,7 +168,7 @@ impl<K: PackedKey + 'static, V: Copy + 'static> GoPackedMap<K, V> {
     }
 
     pub fn len(&self) -> usize {
-        self.0.get().map_or(0, |m| m.borrow().len())
+        self.0.get().map_or(0, |m| tsrs_core::sharedgraph::with_ref(&m, |m| m.len()))
     }
 
     #[cfg(feature = "assignment-stats")]
@@ -168,7 +180,7 @@ impl<K: PackedKey + 'static, V: Copy + 'static> GoPackedMap<K, V> {
 /// Go `c.stringLiteralTypes` (`map[string]*Type`): the literal types by their value. The key was a heap `String`
 /// copy of the text the literal type already holds in the arena; the table now stores only the type and compares
 /// its value (one 4-byte slot instead of a 32-byte `(String, P<Type>)` slot plus the copied text).
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct StringLiteralTypes {
     table: hashbrown::HashTable<P<Type>>,
 }

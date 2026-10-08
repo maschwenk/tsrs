@@ -2555,6 +2555,7 @@ impl Checker {
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn resolve_type_reference_members(&mut self, t: P<Type>) {
         if let Some(lm) = self.lazy_member_tables.get(&t).filter(|lm| lm.ready.get().is_some()).copied() {
+            let lm = self.own_lazy_member_table(t, lm);
             self.resolve_lazy_members(t, lm);
             return;
         }
@@ -2718,6 +2719,7 @@ pub(crate) fn lazy_member_tables_heap(c: &Checker) -> Vec<(String, crate::heapce
     ]
 }
 
+#[derive(Clone)]
 pub(crate) struct LazyMembers {
     pub(crate) unaffected: ThinSlice<&'static str>, // sorted names of declared members that instantiate to themselves
     pub(crate) call_signatures: ThinSlice<P<Signature>>,
@@ -2769,7 +2771,7 @@ impl Checker {
             return None;
         }
         let lm = match self.lazy_member_tables.get(&t) {
-            Some(&lm) => lm,
+            Some(&lm) => self.own_lazy_member_table(t, lm),
             None => self.create_lazy_member_table(t, source.unwrap())?,
         };
         if lm.ready.get().is_none() || t.object_flags().intersects(ObjectFlags::MembersResolved) {
@@ -2865,6 +2867,25 @@ impl Checker {
             // t was resolved while preparing; resolveObjectTypeMembers would now replace its members.
             self.resolve_lazy_members(t, lm);
         }
+    }
+
+    /// Shared-graph prototype: `lm`, or this checker's copy of it if it belongs to the frozen seed (forks fill tables).
+    #[inline]
+    pub(crate) fn own_lazy_member_table(&mut self, t: P<Type>, lm: P<LazyMemberTable>) -> P<LazyMemberTable> {
+        if !tsrs_core::sharedgraph::frozen(lm.get()) {
+            return lm;
+        }
+        let ready = std::cell::OnceCell::new();
+        if let Some(r) = lm.ready.get() {
+            let _ = ready.set(r.clone());
+        }
+        let ordered_properties = std::cell::OnceCell::new();
+        if let Some(&o) = lm.ordered_properties.get() {
+            let _ = ordered_properties.set(o);
+        }
+        let copy = P::new(LazyMemberTable { mapper: lm.mapper, ready, declared: lm.declared.clone_value(), ordered_properties });
+        self.lazy_member_tables.insert(t, copy);
+        copy
     }
 
     pub(crate) fn resolve_lazy_members(&mut self, t: P<Type>, lm: P<LazyMemberTable>) {

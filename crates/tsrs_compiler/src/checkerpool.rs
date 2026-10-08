@@ -85,6 +85,7 @@ enum checkerHandleKind {
 
 impl CheckerHandle {
     fn locked(guard: MutexGuard<'static, Box<Checker>>) -> CheckerHandle {
+        crate::sharedgraph::enter_checker(&guard);
         CheckerHandle { kind: checkerHandleKind::Locked(guard) }
     }
 
@@ -580,12 +581,22 @@ impl checkerPool {
                 }
                 crate::program::worker_pool().broadcast(|_| tsrs_core::ptr::release_own_arena());
             }
+            let shared = crate::sharedgraph::mode() == crate::sharedgraph::Mode::On && !program.single_threaded();
             let create_and_assign = || {
                 let create_start = std::time::Instant::now();
                 #[cfg(feature = "checker")]
                 tsrs_checker::links::set_multiple_checkers(self.checker_count > 1);
                 let slots: Vec<Mutex<Option<CheckerSlot>>> = (0..self.checker_count).map(|_| Mutex::new(None)).collect();
+                // Shared-graph prototype (sharedgraph.rs): one seed checker checks the seed files, its graph is
+                // frozen, and every checker is a fork of it.
+                #[cfg(feature = "checker")]
+                let base = shared.then(|| crate::sharedgraph::seed(program, &checked_file_weights(program)));
                 run_work_group(self.single_threaded, self.checker_count, |i| {
+                    #[cfg(feature = "checker")]
+                    if let Some(base) = base {
+                        *slots[i].lock().unwrap() = Some(CheckerSlot(Mutex::new(Checker::fork(base.0))));
+                        return;
+                    }
                     *slots[i].lock().unwrap() = Some(CheckerSlot(Mutex::new(new_checker(program))));
                 });
                 let checkers: &'static [CheckerSlot] =
@@ -596,7 +607,13 @@ impl checkerPool {
             };
             // tsrs-only: the CLI's leaf classification reads only the loaded program; it runs meanwhile
             // (fileregions.rs `prepare`).
-            let (checkers, associations) = if program.leaf_files != crate::fileregions::LeafMode::Off && !self.single_threaded {
+            let (checkers, associations) = if shared {
+                // The seed must not check a leaf file (its region is freed), so the classification comes first.
+                if program.leaf_files != crate::fileregions::LeafMode::Off && !self.single_threaded {
+                    crate::fileregions::prepare(program);
+                }
+                create_and_assign()
+            } else if program.leaf_files != crate::fileregions::LeafMode::Off && !self.single_threaded {
                 std::thread::scope(|s| {
                     let prepare = s.spawn(|| crate::fileregions::prepare(program));
                     let created = create_and_assign();
@@ -644,6 +661,7 @@ impl checkerPool {
         let state = self.create_checkers();
         let run = |idx: usize| {
             let mut guard = state.checkers[idx].0.lock().unwrap();
+            crate::sharedgraph::enter_checker(&guard);
             cb(idx, &mut guard);
         };
         run_work_group(self.single_threaded, state.checkers.len(), run);
@@ -752,6 +770,7 @@ impl checkerPool {
             let mut count = 0;
             let mut file_cpu: Vec<(P<SourceFile>, f64)> = Vec::new();
             let mut guard = state.checkers[checker_idx].0.lock().unwrap();
+            crate::sharedgraph::enter_checker(&guard);
             let sg_start = sg_stats.then(|| crate::sharedgraph::Point::take(&guard));
             for &i in &seed {
                 cb(&mut guard, i as usize, files[i as usize]);

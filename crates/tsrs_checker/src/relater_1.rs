@@ -2782,10 +2782,10 @@ impl Checker {
     // relater.go:2141
     pub(crate) fn new_type_predicate(&mut self, kind: TypePredicateKind, parameter_name: &str, parameter_index: i32, t: Option<P<Type>>) -> P<TypePredicate> {
         P::new(TypePredicate {
-            kind: Cell::new(kind),
-            parameter_index: Cell::new(parameter_index),
-            parameter_name: Cell::new(alloc_str(parameter_name)),
-            t: Cell::new(t),
+            kind: tsrs_core::sharedgraph::OvCell::new(kind),
+            parameter_index: tsrs_core::sharedgraph::OvCell::new(parameter_index),
+            parameter_name: tsrs_core::sharedgraph::OvCell::new(alloc_str(parameter_name)),
+            t: tsrs_core::sharedgraph::OvCell::new(t),
         })
     }
 

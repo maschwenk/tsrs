@@ -133,7 +133,10 @@ fn mib(b: f64) -> f64 {
 }
 
 pub(crate) fn report(mode: Mode, seed_count: usize, points: &[Option<Points>]) {
-    let mut out = format!("tsrs shared graph: mode {mode:?}, {seed_count} seed files\n");
+    let mut out = format!(
+        "tsrs shared graph: mode {mode:?}, {seed_count} seed files, overlay overrides {}\n",
+        tsrs_core::sharedgraph::OVERRIDES.load(std::sync::atomic::Ordering::Relaxed)
+    );
     let mut seed_bytes = Vec::new();
     let mut seed_types = Vec::new();
     let mut seed_cpu = Vec::new();
@@ -188,4 +191,86 @@ pub(crate) fn report(mode: Mode, seed_count: usize, points: &[Option<Points>]) {
         }
     }
     eprint!("{out}");
+}
+
+/// Makes the checker's overlay the current thread's (`tsrs_core::sharedgraph::enter_overlay`), with the switch on.
+#[inline]
+pub(crate) fn enter_checker(c: &crate::checkerpool::Checker) {
+    #[cfg(feature = "checker")]
+    if mode() == Mode::On {
+        tsrs_core::sharedgraph::enter_overlay(&c.overlay);
+    }
+    #[cfg(not(feature = "checker"))]
+    let _ = c;
+}
+
+/// The frozen seed checker.
+#[cfg(feature = "checker")]
+#[derive(Clone, Copy)]
+pub(crate) struct Base(pub &'static tsrs_checker::Checker);
+
+// SAFETY: the base is frozen: no thread writes it after `seed` returns, and forks only read it.
+#[cfg(feature = "checker")]
+unsafe impl Send for Base {}
+// SAFETY: as for `Send`.
+#[cfg(feature = "checker")]
+unsafe impl Sync for Base {}
+
+/// Checks the seed files on a fresh thread with a fresh arena, freezes that arena and returns the checker, leaked.
+#[cfg(feature = "checker")]
+pub(crate) fn seed(program: &'static Program, weights: &[i64]) -> Base {
+    let files = &program.files;
+    let positions = seed_positions(program, files, &|i: u32| weights.get(i as usize).copied().unwrap_or(0).max(0) as u64);
+    let start = std::time::Instant::now();
+    struct Out(&'static tsrs_checker::Checker, Vec<(usize, usize)>, usize);
+    // SAFETY: the checker is handed from the seed thread, which ends, to the caller; nothing else refers to it.
+    unsafe impl Send for Out {}
+    let out = std::thread::scope(|s| {
+        std::thread::Builder::new()
+            .name("checker-seed".into())
+            .stack_size(crate::checkerpool::CHECKER_STACK_SIZE)
+            .spawn_scoped(s, || {
+                tsrs_ast::use_id_blocks();
+                tsrs_core::sharedgraph::set_seed_thread(true);
+                // Everything the seed checker allocates goes to this region, which is frozen afterwards; what
+                // escapes to the thread's own arena (lazily parsed declaration lists, process-wide tables) is
+                // shared AST data that is already safe to share.
+                let region = tsrs_core::arena::Region::new_scratch(32 << 20);
+                let scope = region.enter();
+                let mut c = tsrs_checker::new_checker(program);
+                c.seed_mode = true;
+                tsrs_core::sharedgraph::enter_overlay(&c.overlay);
+                let ctx = tsrs_checker::Context::background();
+                for &i in &positions {
+                    let _ = c.get_diagnostics_exported(&ctx, files[i as usize]);
+                }
+                c.assert_freezable();
+                c.seed_mode = false;
+                drop(scope);
+                let chunks = region.chunks();
+                let bytes = region.used_bytes();
+                // Never freed: the forks read it for the rest of the process.
+                std::mem::forget(region);
+                Out(Box::leak(c), chunks, bytes)
+            })
+            .expect("failed to spawn the seed checker thread")
+            .join()
+            .unwrap_or_else(|e| std::panic::resume_unwind(e))
+    });
+    tsrs_core::sharedgraph::freeze(&out.1);
+    tsrs_core::phases::record("Checkers: seed", start.elapsed());
+    if stats_enabled() {
+        eprintln!(
+            "tsrs shared graph: seed {} files, K_t {} K_s {} symbols {}, arena {:.1} MiB used in {} chunks ({:.1} MiB), {:.2} s",
+            positions.len(),
+            out.0.type_count,
+            out.0.signature_count,
+            out.0.symbol_count,
+            mib(out.2 as f64),
+            out.1.len(),
+            mib(out.1.iter().map(|c| c.1).sum::<usize>() as f64),
+            start.elapsed().as_secs_f64()
+        );
+    }
+    Base(out.0)
 }
