@@ -2320,11 +2320,11 @@ impl Checker {
         }
         if let Some(lm) = self.get_ready_lazy_member_table(t) {
             self.lazy_member_stats.member_signature_queries += 1;
-            let (call_signatures, construct_signatures) = self.lazy_table_signatures(t, lm);
+            let ready = lm.ready.get().unwrap();
             if kind == SignatureKind::Call {
-                return call_signatures;
+                return ready.call_signatures.get();
             }
-            return construct_signatures;
+            return ready.construct_signatures.get();
         }
         if self.lazy_members && t.object_flags().intersects(ObjectFlags::Mapped) {
             if !t.object_flags().intersects(ObjectFlags::MembersResolved) {
@@ -2630,10 +2630,6 @@ impl Checker {
         call_signatures.extend(sigs);
         let sigs = self.get_signatures_of_type(base_type, SignatureKind::Construct);
         construct_signatures.extend(sigs);
-        self.append_inherited_index_infos(index_infos, base_type);
-    }
-
-    pub(crate) fn append_inherited_index_infos(&mut self, index_infos: &mut Vec<P<IndexInfo>>, base_type: P<Type>) {
         let inherited_index_infos: Vec<P<IndexInfo>> =
             if base_type != self.any_type { self.get_index_infos_of_type(base_type).to_vec() } else { vec![self.any_base_type_index_info] };
         let filtered: Vec<P<IndexInfo>> = inherited_index_infos.into_iter().filter(|info| find_index_info(index_infos, info.key_type()).is_none()).collect();
@@ -2651,10 +2647,6 @@ impl Checker {
 /// 168, rounded up to 192 by mimalloc).
 pub(crate) struct LazyMemberTable {
     pub(crate) mapper: P<TypeMapper>,
-    // notes/mem-never-read-apps.md D1: non-zero while the call and construct signatures are not instantiated yet
-    // (`SIGNATURES_PENDING` plus, in the low bits, the snapshot `lazy_signature_snapshot` took). In the padding after
-    // the 4-byte mapper handle.
-    pub(crate) signatures_pending: Cell<u32>,
     // Go `ready` plus the fields prepareLazyMembers fills in before it sets `ready`.
     pub(crate) ready: std::cell::OnceCell<LazyMembers>,
     pub(crate) declared: SymbolTable, // keyed by the declared members' names
@@ -2662,11 +2654,8 @@ pub(crate) struct LazyMemberTable {
     pub(crate) ordered_properties: std::cell::OnceCell<ThinSlice<P<Symbol>>>,
 }
 
-// 80 bytes in release builds (the symbol table is 24; debug builds add a borrow flag to it); 88 with plain pointers.
-const _: () = assert!(std::mem::size_of::<LazyMemberTable>() == std::mem::size_of::<SymbolTable>() + if tsrs_core::COMPRESSED_PTRS { 56 } else { 64 });
-
-/// `LazyMemberTable::signatures_pending`: the signatures are deferred. The other 31 bits are the snapshot.
-const SIGNATURES_PENDING: u32 = 1 << 31;
+// 80 bytes in release builds (the symbol table is 24; debug builds add a borrow flag to it).
+const _: () = assert!(std::mem::size_of::<LazyMemberTable>() == std::mem::size_of::<SymbolTable>() + 56);
 
 /// Heap census: what the lazy member and lazy mapped tables own (the `Rc` boxes, their symbol tables, name lists,
 /// ordered property lists and mapped-member maps with their string keys).
@@ -2728,9 +2717,8 @@ pub(crate) fn lazy_member_tables_heap(c: &Checker) -> Vec<(String, crate::heapce
 
 pub(crate) struct LazyMembers {
     pub(crate) unaffected: ThinSlice<&'static str>, // sorted names of declared members that instantiate to themselves
-    // Empty while `LazyMemberTable::signatures_pending` is set: read them through `lazy_table_signatures`.
-    pub(crate) call_signatures: Cell<ThinSlice<P<Signature>>>,
-    pub(crate) construct_signatures: Cell<ThinSlice<P<Signature>>>,
+    pub(crate) call_signatures: ThinSlice<P<Signature>>,
+    pub(crate) construct_signatures: ThinSlice<P<Signature>>,
     pub(crate) index_infos: ThinSlice<P<IndexInfo>>,
     pub(crate) base_types: ThinSlice<P<Type>>,
 }
@@ -2816,7 +2804,6 @@ impl Checker {
                 escape_mapper(m); // kept by the table
                 m
             },
-            signatures_pending: Cell::new(0),
             ready: std::cell::OnceCell::new(),
             declared: SymbolTable::default(),
             ordered_properties: std::cell::OnceCell::new(),
@@ -2847,16 +2834,8 @@ impl Checker {
             }
         }
         unaffected.sort_unstable();
-        // notes/mem-never-read-apps.md D1: the snapshot replaces the instantiation; it is taken where the
-        // instantiation would have run, so it reads the same state.
-        let snapshot = if self.lazy_signatures { self.lazy_signature_snapshot(resolved, lm.mapper) } else { None };
-        let (mut call_signatures, mut construct_signatures) = match snapshot {
-            Some(_) => (Vec::new(), Vec::new()),
-            None => (
-                self.instantiate_signatures(resolved.declared_call_signatures.get(), lm.mapper),
-                self.instantiate_signatures(resolved.declared_construct_signatures.get(), lm.mapper),
-            ),
-        };
+        let mut call_signatures = self.instantiate_signatures(resolved.declared_call_signatures.get(), lm.mapper);
+        let mut construct_signatures = self.instantiate_signatures(resolved.declared_construct_signatures.get(), lm.mapper);
         let mut index_infos = self.instantiate_index_infos(resolved.declared_index_infos.get(), lm.mapper);
         let mut base_types: Vec<P<Type>> = Vec::new();
         for &base_type in self.get_base_types(source) {
@@ -2870,24 +2849,12 @@ impl Checker {
             if !reduced.flags().intersects(TypeFlags::Intersection) && self.get_ready_lazy_member_table(reduced).is_none() {
                 self.get_properties_of_type(instantiated_base_type);
             }
-            if snapshot.is_some() && self.lazy_signatures_pending(instantiated_base_type) {
-                // The base's signatures are deferred too; reading them here would instantiate them.
-                self.append_inherited_index_infos(&mut index_infos, instantiated_base_type);
-            } else {
-                self.append_inherited_signatures_and_index_infos(&mut call_signatures, &mut construct_signatures, &mut index_infos, instantiated_base_type);
-            }
-        }
-        if let Some(bits) = snapshot {
-            // Rebuilt from the declared signatures, the snapshot and the base types when first read.
-            call_signatures.clear();
-            construct_signatures.clear();
-            lm.signatures_pending.set(SIGNATURES_PENDING | bits);
-            self.lazy_member_stats.signature_tables_deferred += 1;
+            self.append_inherited_signatures_and_index_infos(&mut call_signatures, &mut construct_signatures, &mut index_infos, instantiated_base_type);
         }
         let _ = lm.ready.set(LazyMembers {
             unaffected: ThinSlice::new(alloc_vec(unaffected)),
-            call_signatures: Cell::new(ThinSlice::new(alloc_vec(call_signatures))),
-            construct_signatures: Cell::new(ThinSlice::new(alloc_vec(construct_signatures))),
+            call_signatures: ThinSlice::new(alloc_vec(call_signatures)),
+            construct_signatures: ThinSlice::new(alloc_vec(construct_signatures)),
             index_infos: ThinSlice::new(alloc_vec(index_infos)),
             base_types: ThinSlice::new(alloc_vec(base_types)),
         });
@@ -2919,126 +2886,8 @@ impl Checker {
             let base_properties = self.get_properties_of_type(base_type);
             members = self.add_inherited_members(members, &base_properties);
         }
-        let (call_signatures, construct_signatures) = self.lazy_table_signatures(t, lm);
-        self.set_structured_type_members(t, members, call_signatures, construct_signatures, ready.index_infos.get());
+        self.set_structured_type_members(t, members, ready.call_signatures.get(), ready.construct_signatures.get(), ready.index_infos.get());
         self.lazy_member_tables.remove(&t);
-    }
-
-    /// notes/mem-never-read-apps.md D1: instead of instantiating the declared call and construct signatures of the
-    /// table's target, `prepare_lazy_members` records, for each this-parameter and parameter in instantiation order,
-    /// whether `instantiateSymbol` would return it unchanged (`isSymbolUnaffectedByInstantiation`, which depends on
-    /// what is resolved at that moment). `None` (instantiate now, as Go does) when there are no declared signatures,
-    /// when one has type parameters (instantiating it creates fresh type parameters, whose ids order unions) or when
-    /// there are more than 31 parameters to record. Instantiating a signature without type parameters creates no types.
-    fn lazy_signature_snapshot(&mut self, resolved: &'static InterfaceType, m: P<TypeMapper>) -> Option<u32> {
-        let call = resolved.declared_call_signatures.get();
-        let construct = resolved.declared_construct_signatures.get();
-        if call.is_empty() && construct.is_empty() {
-            return None;
-        }
-        let mut slots = 0usize;
-        for sig in call.iter().chain(construct) {
-            if !sig.type_parameters.get().is_empty() {
-                return None;
-            }
-            slots += usize::from(sig.this_parameter().is_some()) + sig.parameters.get().len();
-        }
-        if slots > 31 {
-            return None;
-        }
-        let mut bits = 0u32;
-        let mut i = 0u32;
-        for sig in call.iter().chain(construct) {
-            for s in sig.this_parameter().into_iter().chain(sig.parameters.get().iter().copied()) {
-                if self.is_symbol_unaffected_by_instantiation(s, Some(m)) {
-                    bits |= 1 << i;
-                }
-                i += 1;
-            }
-        }
-        Some(bits)
-    }
-
-    /// Whether `t`'s signatures, read through `get_signatures_of_type`, are deferred in its lazy member table.
-    fn lazy_signatures_pending(&mut self, t: P<Type>) -> bool {
-        let reduced = self.get_reduced_apparent_type(t);
-        self.get_ready_lazy_member_table(reduced).is_some_and(|lm| lm.signatures_pending.get() != 0)
-    }
-
-    /// The table's call and construct signatures, instantiated now if they were deferred (D1): the declared
-    /// signatures instantiated as `instantiateSignature` would have done when the table was prepared (the snapshot
-    /// answers `isSymbolUnaffectedByInstantiation`), then each base type's signatures, in the order
-    /// `appendInheritedSignaturesAndIndexInfos` appended them.
-    pub(crate) fn lazy_table_signatures(&mut self, t: P<Type>, lm: P<LazyMemberTable>) -> (&'static [P<Signature>], &'static [P<Signature>]) {
-        let ready = lm.ready.get().unwrap();
-        let pending = lm.signatures_pending.get();
-        if pending != 0 {
-            self.lazy_member_stats.signature_tables_forced += 1;
-            let resolved = self.resolve_declared_members(t.target().unwrap()).unwrap();
-            let mut bits = pending & !SIGNATURES_PENDING;
-            let mut call_signatures: Vec<P<Signature>> = Vec::new();
-            for &sig in resolved.declared_call_signatures.get() {
-                call_signatures.push(self.instantiate_signature_from_snapshot(sig, lm.mapper, &mut bits));
-            }
-            let mut construct_signatures: Vec<P<Signature>> = Vec::new();
-            for &sig in resolved.declared_construct_signatures.get() {
-                construct_signatures.push(self.instantiate_signature_from_snapshot(sig, lm.mapper, &mut bits));
-            }
-            for &base_type in ready.base_types.get() {
-                call_signatures.extend(self.get_signatures_of_type(base_type, SignatureKind::Call));
-                construct_signatures.extend(self.get_signatures_of_type(base_type, SignatureKind::Construct));
-            }
-            ready.call_signatures.set(ThinSlice::new(alloc_vec(call_signatures)));
-            ready.construct_signatures.set(ThinSlice::new(alloc_vec(construct_signatures)));
-            lm.signatures_pending.set(0);
-        }
-        (ready.call_signatures.get().get(), ready.construct_signatures.get().get())
-    }
-
-    /// `instantiateSignature(sig, m)` for a signature without type parameters, with `bits` (consumed from the low
-    /// end) answering `isSymbolUnaffectedByInstantiation` for its this-parameter and parameters.
-    fn instantiate_signature_from_snapshot(&mut self, sig: P<Signature>, m: P<TypeMapper>, bits: &mut u32) -> P<Signature> {
-        debug_assert!(sig.type_parameters.get().is_empty());
-        let mut next = |c: &mut Checker, s: P<Symbol>| {
-            let unaffected = *bits & 1 != 0;
-            *bits >>= 1;
-            if unaffected { s } else { c.new_instantiated_symbol(s, Some(m)) }
-        };
-        let this_parameter = sig.this_parameter().map(|s| next(self, s));
-        let parameters = self.instantiate_list(sig.parameters.get(), Some(m), |c, s, _| next(c, s));
-        let result = self.new_signature(
-            sig.flags.get() & SignatureFlags::PropagatingFlags,
-            sig.declaration.get(),
-            &[],
-            this_parameter,
-            &parameters,
-            None, /*resolvedReturnType*/
-            None, /*resolvedTypePredicate*/
-            sig.min_argument_count.get(),
-        );
-        result.target.set(Some(sig));
-        result.mapper.set(Some(m));
-        result
-    }
-
-    /// The number of `kind` signatures `t` has, without instantiating deferred ones (D1).
-    pub(crate) fn count_signatures_of_structured_type(&mut self, t: P<Type>, kind: SignatureKind) -> usize {
-        if let Some(lm) = self.get_ready_lazy_member_table(t) {
-            if lm.signatures_pending.get() != 0 {
-                self.lazy_member_stats.signature_count_queries += 1;
-                let resolved = self.resolve_declared_members(t.target().unwrap()).unwrap();
-                let mut n = match kind {
-                    SignatureKind::Call => resolved.declared_call_signatures.get().len(),
-                    SignatureKind::Construct => resolved.declared_construct_signatures.get().len(),
-                };
-                for &base_type in lm.ready.get().unwrap().base_types.get() {
-                    let reduced = self.get_reduced_apparent_type(base_type);
-                    n += self.count_signatures_of_structured_type(reduced, kind);
-                }
-                return n;
-            }
-        }
-        self.signatures_of_structured_type(t, kind).len()
     }
 
     #[cfg_attr(feature = "site-counts", track_caller)]
