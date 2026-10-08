@@ -10,7 +10,7 @@ On the TypeScript conformance suite it matches the reference on 13,458 of 13,462
 `.types` and `.symbols` baselines, in Go-compatible mode ([evidence](#what-tsrs-is)).
 
 [Quick start](#quick-start) · [How fast](#how-fast) · [vs bun check](#tsrs-against-bun-check-thread-for-thread) ·
-[What it does and doesn't do](#what-it-does-and-doesnt-do) · [Language server](#language-server) · [Docs](#docs)
+[What it does and doesn't do](#what-it-does-and-doesnt-do) · [Language server](#language-server) · [WebAssembly](#webassembly) · [Docs](#docs)
 
 ## Quick start
 
@@ -181,6 +181,7 @@ against tsgo built from the same pinned commit.
 | Content mappers, automatic type acquisition, telemetry, pprof requests (language server) | no | not ported |
 | `--api` (the IPC server behind TypeScript 7's Node API: `unstable/sync` MessagePack, `unstable/async` JSON-RPC) | yes, with gaps | pinned upstream client suites against a release build of the integration branch: `test/sync/api.test.ts` 339/339, `test/async/api.test.ts` 348/348, `ast` 111/111, `astnav` 4/4 + 4/4, `api-generators` 43/43; suite passes are not byte-level response parity. Not implemented: CPU/heap profiling requests; `getCurrentLanguageServerSnapshot` returns the standalone-session error (no LSP-attached API session); no Windows named pipes. Per-method status in `docs/NODE_API.md` |
 | Prebuilt binaries | macOS arm64, Linux x64/arm64 (glibc) | no Windows or Intel macOS binary |
+| WebAssembly build (`@maschwenk/tsrs-wasm`: Node, browsers) | yes, single-threaded, not released | byte-identical to native `--singleThreaded` on 1,998 of 1,998 runnable cases of a 2,000-case conformance sample (also 1,993 of 1,993 over in-memory files), 24/24 regressions, 4 bench projects and emit on 2; 2.56 MB gzip; warm runs 1.8-2.3x native single-threaded on the bench projects (notes/wasm-build.md) |
 
 ## Options and defaults
 
@@ -245,6 +246,29 @@ VS Code: the TypeScript 7 extension starts whatever executable named `tsgo` it f
 that setting at a directory holding a `tsgo` symlink to the tsrs binary. [`docs/LSP.md`](docs/LSP.md) has both setups in full, the
 design, the test tables and the known gaps.
 
+## WebAssembly
+
+`crates/tsrs_wasm` builds tsc as a `wasm32-wasip1` module over a host file system, and `npm/tsrs-wasm` runs it in
+Node (a `tsrs-wasm` command on the real file system, or in-memory files with JSON diagnostics) and in browsers
+(a Web Worker over in-memory files). It is single-threaded and not published yet.
+
+```sh
+rustup target add wasm32-wasip1 && brew install binaryen   # wasm-opt
+tools/wasm/build.sh                                         # writes npm/tsrs-wasm/tsrs.wasm, prints its sizes
+node npm/tsrs-wasm/bin/tsrs-wasm.js -p path/to/project
+```
+
+```js
+import { tsc } from "@maschwenk/tsrs-wasm";
+const { exitCode, diagnostics } = await tsc(["-p", "."], { files: { "/tsconfig.json": "{}", "/a.ts": "let x: string = 1;" }, diagnostics: "json" });
+```
+
+Its output is byte-identical to native `tsrs --singleThreaded` on the differential gate (`tools/wasm/gate.sh`, run in
+CI). Warm runs take 1.8-2.3x native single-threaded time on the bench projects; the module is 9.1 MB, 2.56 MB gzip.
+Not supported: `--watch`, `--lsp`, `--api`, JSON diagnostics with `--build`, more than one checker, programs over
+4 GiB. [`notes/wasm-build.md`](notes/wasm-build.md) has the design, the stack sizes, the sizes and timings, and the
+gate counts; [`npm/tsrs-wasm/README.md`](npm/tsrs-wasm/README.md) the API.
+
 ## Build from source
 
 ```sh
@@ -267,6 +291,7 @@ measured and how to rerun it.
 - [`docs/EMIT.md`](docs/EMIT.md): the JavaScript, declaration and source map emit port.
 - [`docs/LSP.md`](docs/LSP.md): the language server, editor setups, test tables and known gaps.
 - [`docs/NODE_API.md`](docs/NODE_API.md): the Node API, method by method.
+- [`notes/wasm-build.md`](notes/wasm-build.md): the WebAssembly build, its gate and its numbers.
 - [`docs/DEBUGGING.md`](docs/DEBUGGING.md): how to find and fix a difference from tsgo, and the Go oracle programs.
 - [`bench/README.md`](bench/README.md): how the benchmarks are measured, and how to rerun them.
 - `notes/`: one note per performance change or experiment, with the numbers.
