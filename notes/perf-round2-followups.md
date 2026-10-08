@@ -151,6 +151,10 @@ pointer compression costs about +4.9% instructions and took back most of the che
   (notes/mem-pointer-compression.md).
 - A per-file `type_to_string` builder, lazy `ErrorSymbolName`, dropping source maps from `EmitResult`
   (notes/mem-emit-regions.md).
+- Deferring never-read checker objects on the app projects (notes/mem-never-read-apps.md): 11-14% of each extra
+  checker's allocation is never read, nearly all symbols, links and signatures (types are read), in many small pools.
+  The one pool above 2% (t3code: lazy tables instantiating signatures only for `isWeakType`) was deferred exactly
+  (D1, code in 8be2e48): -1.1% peak at 32 checkers on Linux, nothing elsewhere.
 
 ## The lint ratchet
 
