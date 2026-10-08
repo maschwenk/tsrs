@@ -129,6 +129,41 @@ Compiler-Unions. Quote the ratio, not the absolute ts-rust times.
 gzip size at most 1.35x z's): s is 17% faster (0.65 / 0.78) at 1.12x the gzip size, so the module ships with
 opt-level s and `-C llvm-args=-inlinehint-threshold=150`.
 
+### Nine projects, 2026-10-08
+
+One run by hand, not in CI, on this Mac (Apple M5 Max, macOS, Node 24) at `2b4fe704`, with `bench/wasm.py` from the
+draft branch `bench/wasm` (PR 210, not merged). Three rounds per project, rotating the engine order each round. Each
+round is one native run (`--singleThreaded`, `RAYON_NUM_THREADS=1`) and one new Node process per module. Cold is the
+first call in a process, including compiling the module. Warm is the median of 5 more calls in the first round's
+process. Cells are medians (min-max). Peak memory is the maximum resident set size of a process making one call.
+ts-rust is `pingdotgg/ts-rust` at `272f79b03881` built with its own `scripts/wasm/build.sh` default (opt-level z,
+rustc 1.99.0). Other agents shared the machine (1-minute load 13 to 109); next-packages-next, storybook and nuxt ran
+through a spike above 70, so their ranges are wide and the absolute seconds are higher than in the sessions above.
+
+| project | errors, native / tsrs-wasm / ts-rust | native | tsrs-wasm cold | tsrs-wasm warm | tsrs-wasm warm / native | ts-rust cold | ts-rust warm | ts-rust warm / tsrs-wasm warm | native peak memory | tsrs-wasm peak memory | ts-rust peak memory |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| xstate-main | 0 / 0 / 0 | 1.01 (0.84-1.20) | 1.61 (1.52-1.83) | 1.54 (1.50-1.73) | 1.53x | 7.27 (7.00-7.86) | 4.36 (4.12-4.96) | 2.82x | 184 MiB | 317 MiB | 627 MiB |
+| webpack | 840 / 840 / 849 | 1.27 (1.12-1.28) | 3.00 (2.33-4.73) | 2.35 (2.10-2.94) | 1.86x | 14.87 (11.00-16.35) | 16.33 (13.73-18.44) | 6.94x | 317 MiB | 448 MiB | 988 MiB |
+| Compiler | 43 / 43 / 43 | 0.18 (0.18-0.20) | 0.46 (0.45-0.51) | 0.34 (0.33-0.36) | 1.85x | 1.16 (1.16-1.29) | 1.04 (1.02-1.10) | 3.04x | 57 MiB | 219 MiB | 253 MiB |
+| Compiler-Unions | 41 / 41 / 41 | 0.34 (0.31-0.37) | 0.68 (0.67-0.76) | 0.59 (0.53-0.64) | 1.73x | 1.85 (1.83-1.94) | 1.58 (1.54-1.85) | 2.67x | 60 MiB | 212 MiB | 254 MiB |
+| next-packages-next | 5 / 5 / 5 | 1.97 (1.83-2.43) | 4.00 (3.99-4.49) | 3.87 (3.59-4.50) | 1.97x | 19.71 (18.37-26.86) | 18.78 (14.92-32.77) | 4.86x | 454 MiB | 560 MiB | 1.27 GiB |
+| storybook | 93 / 93 / 93 | 1.72 (1.48-2.10) | 3.45 (2.15-3.50) | 2.52 (1.92-2.63) | 1.47x | 18.20 (17.64-20.04) | 10.40 (9.35-13.33) | 4.12x | 290 MiB | 415 MiB | 1006 MiB |
+| nuxt | 4 / 4 / 4 | 1.22 (1.04-1.86) | 2.35 (2.17-2.62) | 2.01 (1.93-2.48) | 1.65x | 12.72 (8.87-16.89) | 14.02 (9.34-16.11) | 6.97x | 292 MiB | 405 MiB | 952 MiB |
+| playwright | 13 / 13 / 13 | 0.87 (0.67-0.94) | 2.27 (1.56-2.50) | 1.56 (1.47-1.96) | 1.79x | 7.31 (7.28-7.67) | 6.87 (6.62-7.73) | 4.41x | 247 MiB | 374 MiB | 834 MiB |
+| drizzle-orm | 10846 / 10846 / 10846 | 2.18 (1.57-3.20) | 3.28 (3.04-5.70) | 3.87 (3.10-5.10) | 1.78x | 26.22 (18.52-34.03) | 20.72 (17.86-23.94) | 5.35x | 399 MiB | 537 MiB | 1.38 GiB |
+
+
+| module | raw | gzip -9 | brotli -q 11 | build |
+| --- | ---: | ---: | ---: | --- |
+| tsrs.wasm | 9,149,197 | 2,579,905 | 1,745,007 | `tools/wasm/build.sh` (opt-level s, inline threshold 150, `wasm-opt -Os`) |
+| ts_rust.wasm | 4,767,461 | 2,081,270 | 1,685,004 | `scripts/wasm/build.sh` (its default: opt-level z, `wasm-opt --flatten --rereloop -Oz -Oz`, function reordering) |
+
+tsrs-wasm warm is 1.5-2.0x native single-threaded; ts-rust's module warm is 2.7-7.0x slower than tsrs-wasm warm with
+1.2-2.6x its peak memory. The ratios differ from the sessions above (xstate-main 2.8x against 3.7-3.8x, webpack 6.9x
+against 4.1-5.3x): a different ts-rust commit and a heavier, uneven load. No project failed or neared the 4 GiB limit.
+Not measured (3-10 s native single-threaded each, too slow for a one-off module run): vscode, mui-docs, cal-diy,
+formbricks-web, supabase-studio, t3code-server, mikro-orm.
+
 ## The differential gate (`tools/wasm/gate.sh`, CI job `wasm`)
 
 Native `--singleThreaded` against the module at the same absolute paths: exit code, stdout bytes, every written file

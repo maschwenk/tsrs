@@ -41,6 +41,9 @@ runs ([`bench/results/compare/2026-10-07-ae33f10b1b8b-64t.md`](bench/results/com
 - **Across the seventeen projects:** 3.90x (Compiler) to 20.25x (vscode) faster than tsgo, and faster than
   `bun check` on all seventeen, 1.47x (xstate-main) to 3.04x (nuxt) on sixteen (the mui-docs row has a caveat, in
   [More numbers](#more-numbers)).
+- **In WebAssembly, against ts-rust's wasm build:** 2.7x (Compiler-Unions) to 7.0x (nuxt) faster and 1.2x to 2.6x less
+  memory on nine projects, both single-threaded ([details](#against-ts-rusts-webassembly-build); measured by hand on a
+  Mac, not in CI).
 
 Source for the per-project figures: [`bench/results/2026-10-07-6db7beec77d9.md`](bench/results/2026-10-07-6db7beec77d9.md),
 the table below, whose single-publish medians move by a few percent between runs of the same code (the 20-run mean
@@ -279,6 +282,32 @@ CI). Warm runs take 1.8-2.3x native single-threaded time on the bench projects; 
 Not supported: `--watch`, `--lsp`, `--api`, JSON diagnostics with `--build`, more than one checker, programs over
 4 GiB. [`notes/wasm-build.md`](notes/wasm-build.md) has the design, the stack sizes, the sizes and timings, and the
 gate counts; [`npm/tsrs-wasm/README.md`](npm/tsrs-wasm/README.md) the API.
+
+### Against ts-rust's WebAssembly build
+
+[ts-rust](https://github.com/pingdotgg/ts-rust) is another Rust port of the TypeScript 7 compiler with a wasm build. On
+nine bench projects, tsrs's module is **2.7x to 7.0x faster** warm and peaks at **1.2x to 2.6x less memory**. Error
+counts match on eight; on webpack ts-rust reports 849 errors against 840 (it follows a different TypeScript commit).
+
+| project | native tsrs, one thread | tsrs-wasm | ts-rust wasm | tsrs-wasm faster | peak memory, tsrs-wasm | peak memory, ts-rust wasm | tsrs-wasm less memory |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| xstate-main | 1.01 s | 1.54 s | 4.36 s | **2.82x** | 317 MiB | 627 MiB | **1.98x** |
+| webpack | 1.27 s | 2.35 s | 16.33 s | **6.94x** | 448 MiB | 988 MiB | **2.21x** |
+| Compiler | 0.18 s | 0.34 s | 1.04 s | **3.04x** | 219 MiB | 253 MiB | **1.16x** |
+| Compiler-Unions | 0.34 s | 0.59 s | 1.58 s | **2.67x** | 212 MiB | 254 MiB | **1.20x** |
+| next-packages-next | 1.97 s | 3.87 s | 18.78 s | **4.86x** | 560 MiB | 1.27 GiB | **2.32x** |
+| storybook | 1.72 s | 2.52 s | 10.40 s | **4.12x** | 415 MiB | 1006 MiB | **2.42x** |
+| nuxt | 1.22 s | 2.01 s | 14.02 s | **6.97x** | 405 MiB | 952 MiB | **2.35x** |
+| playwright | 0.87 s | 1.56 s | 6.87 s | **4.41x** | 374 MiB | 834 MiB | **2.23x** |
+| drizzle-orm | 2.18 s | 3.87 s | 20.72 s | **5.35x** | 537 MiB | 1.38 GiB | **2.63x** |
+
+**Not benchmarked in CI.** Unlike the tables above, which CI re-measures on every push to `main`, this is one run by
+hand on an Apple M5 Max (macOS, Node 24) on 2026-10-08 at `2b4fe704`, and nothing re-runs it. Other jobs shared the
+machine, so the seconds are inflated and noisy: read the ratios, and expect them to move between runs too (earlier
+runs in the note had xstate-main at 3.7-3.8x and webpack at 4.1-5.3x). ts-rust is `pingdotgg/ts-rust` at
+`272f79b03881` built with its default `scripts/wasm/build.sh` (opt-level z; its docs list an opt-level s build that
+checks 13-18% faster, not tried here), and its module is smaller: 2.08 MB gzip against 2.58 MB. Method, cold times
+and ranges: [`notes/wasm-build.md`](notes/wasm-build.md#nine-projects-2026-10-08).
 
 ## Build from source
 
