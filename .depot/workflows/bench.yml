@@ -508,6 +508,76 @@ jobs:
           path: bench/.work/solutions/drizzle-orm
           key: bench-drizzle-orm-${{ runner.os }}-${{ steps.keys.outputs['drizzle-orm'] }}
 
+      - name: Restore effect
+        if: steps.keys.outputs['effect'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/effect
+          key: bench-effect-${{ runner.os }}-${{ steps.keys.outputs['effect'] }}
+
+      - name: Restore type-fest
+        if: steps.keys.outputs['type-fest'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/type-fest
+          key: bench-type-fest-${{ runner.os }}-${{ steps.keys.outputs['type-fest'] }}
+
+      - name: Restore zod
+        if: steps.keys.outputs['zod'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/zod
+          key: bench-zod-${{ runner.os }}-${{ steps.keys.outputs['zod'] }}
+
+      - name: Restore arktype
+        if: steps.keys.outputs['arktype'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/arktype
+          key: bench-arktype-${{ runner.os }}-${{ steps.keys.outputs['arktype'] }}
+
+      - name: Restore ai-sdk
+        if: steps.keys.outputs['ai-sdk'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/ai-sdk
+          key: bench-ai-sdk-${{ runner.os }}-${{ steps.keys.outputs['ai-sdk'] }}
+
+      - name: Restore nest
+        if: steps.keys.outputs['nest'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/nest
+          key: bench-nest-${{ runner.os }}-${{ steps.keys.outputs['nest'] }}
+
+      - name: Restore excalidraw
+        if: steps.keys.outputs['excalidraw'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/excalidraw
+          key: bench-excalidraw-${{ runner.os }}-${{ steps.keys.outputs['excalidraw'] }}
+
+      - name: Restore vitest
+        if: steps.keys.outputs['vitest'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/vitest
+          key: bench-vitest-${{ runner.os }}-${{ steps.keys.outputs['vitest'] }}
+
+      - name: Restore rxjs
+        if: steps.keys.outputs['rxjs'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/rxjs
+          key: bench-rxjs-${{ runner.os }}-${{ steps.keys.outputs['rxjs'] }}
+
+      - name: Restore svelte
+        if: steps.keys.outputs['svelte'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/svelte
+          key: bench-svelte-${{ runner.os }}-${{ steps.keys.outputs['svelte'] }}
+
       - name: Set up the projects
         run: python3 bench/run.py --setup-only --projects "$PROJECTS"
 

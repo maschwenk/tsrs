@@ -24,6 +24,7 @@ import shutil
 import statistics
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from collections import Counter
@@ -67,6 +68,23 @@ TIME_RE = re.compile(r"^(Config|Parse|Bind|Check|Total) time:\s+([\d.]+)s\s*$")
 MEMORY_RE = re.compile(r"^Memory used:\s+(\d+)K\s*$")
 # `--pretty false`: "path(line,col): error TS1234: message" or "error TS5023: message"; continuation lines are indented.
 ERROR_RE = re.compile(r"^((?:\S.*\(\d+,\d+\): )?error TS\d+):")
+# An error in a default library file: tsrs prints its embedded copy as `bundled:///libs/<file>`, tsgo the file in its
+# npm package (`.../@typescript/typescript-<os>-<arch>/lib/<file>`). Error keys name both `lib/<file>`.
+LIB_PATH_RE = re.compile(r"^(?:bundled:///libs/|\S*/@typescript/typescript-[^/]+/lib/)(lib\.[^/]*\.d\.ts\()")
+
+
+def error_key(key: str) -> str:
+    """An ERROR_RE match with a default library file's path made the same for every compiler."""
+    return LIB_PATH_RE.sub(r"lib/\1", key)
+
+
+def bun_cwd() -> Path:
+    """The directory `bun check` runs in: an empty one outside every checkout. bun runs the cwd package.json's `check`
+    script instead of the type checker when there is one (vercel/ai's root, svelte's root), so bun gets this cwd and an
+    absolute `-p`."""
+    d = Path(tempfile.gettempdir()).resolve() / "tsrs-bench-bun-cwd"
+    d.mkdir(exist_ok=True)
+    return d
 
 
 def log(msg: str) -> None:
@@ -203,7 +221,8 @@ def ensure_tsgo(pkgcfg: dict, work: Path) -> Path:
 def run_once(exe: Path, cwd: Path, proj: Path, mode: str, log_path: Path, timeout: float, compiler: str = "tsgo") -> dict:
     if compiler == "bun":
         # --all: no grouping of repeated errors (bun groups above 50), so every error line is counted.
-        argv = [str(exe), "check", "-p", str(proj), "--no-pretty", "--all", *BUN_FLAGS[mode]]
+        argv = [str(exe), "check", "-p", str(proj.resolve()), "--no-pretty", "--all", *BUN_FLAGS[mode]]
+        cwd = bun_cwd()
     else:
         argv = [str(exe), "-p", str(proj), "--noEmit", "--incremental", "false", "--extendedDiagnostics", "--pretty", "false"]
         argv += MODE_FLAGS[mode]
@@ -223,7 +242,7 @@ def run_once(exe: Path, cwd: Path, proj: Path, mode: str, log_path: Path, timeou
     keys = []
     for line in log_path.read_text(errors="replace").splitlines():
         if m := ERROR_RE.match(line):
-            keys.append(m.group(1))
+            keys.append(error_key(m.group(1)))
         elif m := COUNTER_RE.match(line):
             r[m.group(1).lower()] = int(m.group(2))
         elif m := TIME_RE.match(line):

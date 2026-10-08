@@ -1,0 +1,26 @@
+{
+  "extends": "./tsconfig.build.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "paths": {
+      "@ai-sdk/provider-utils/test": [
+        "../provider-utils/src/test/index.ts"
+      ],
+      "@ai-sdk/provider-utils/experimental-decision": [
+        "../provider-utils/src/experimental-decision/index.ts"
+      ],
+      "@ai-sdk/provider-utils/experimental-evaluation": [
+        "../provider-utils/src/experimental-evaluation/index.ts"
+      ],
+      "@ai-sdk/anthropic/internal": [
+        "../anthropic/src/internal/index.ts"
+      ],
+      "@ai-sdk/test-server/with-vitest": [
+        "../test-server/src/with-vitest.ts"
+      ],
+      "@ai-sdk/*": [
+        "../*/src/index.ts"
+      ]
+    }
+  }
+}

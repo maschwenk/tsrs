@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@rxjs/observable-polyfill": ["../observable-polyfill/src/index.ts"],
+      "@rxjs/test": ["../test/src/index.ts"],
+      "rxjs": ["./src/index.ts"],
+      "rxjs/*": ["./src/*.ts"]
+    }
+  }
+}

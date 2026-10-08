@@ -1,0 +1,7 @@
+{
+  // tsrs bench: the tests program (all packages' test/typetest/benchmark files, every workspace package mapped to
+  // its src by `paths`) as one non-composite program, so it checks with --incremental false and needs no build.
+  "extends": "./tsconfig.tests.json",
+  "references": [],
+  "compilerOptions": { "composite": false, "incremental": false, "declarationMap": false }
+}

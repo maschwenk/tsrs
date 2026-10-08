@@ -136,6 +136,82 @@
       "commit": "15454dbe49d827c6081f3d0231e2e7985e517295",
       "project": ".",
       "install": "npx --yes pnpm@10.6.3 install --frozen-lockfile --ignore-scripts"
+    },
+    {
+      "name": "effect",
+      "repo": "https://github.com/Effect-TS/effect.git",
+      "commit": "48ed32f846c11ab702b22c84ed103c767d0dd21c",
+      "project": "tsconfig.bench.json",
+      "install": "npx --yes pnpm@11.20.0 install --frozen-lockfile --ignore-scripts",
+      "overlay": "bench/overlays/effect"
+    },
+    {
+      "name": "type-fest",
+      "repo": "https://github.com/sindresorhus/type-fest.git",
+      "commit": "e9f614f191aa039e4aefa2d41d62c2a3fd070cfd",
+      "project": "tsconfig.json",
+      "install": "npm ci --ignore-scripts --no-audit --no-fund",
+      "overlay": "bench/overlays/type-fest"
+    },
+    {
+      "name": "zod",
+      "repo": "https://github.com/colinhacks/zod.git",
+      "commit": "0b216ef674e297ebe41d8bf902262e56f8755822",
+      "project": "tsconfig.json",
+      "install": "npx --yes pnpm@10.19.0 install --frozen-lockfile --ignore-scripts --config.package-manager-strict=false --config.strict-store-pkg-content-check=false",
+      "overlay": "bench/overlays/zod"
+    },
+    {
+      "name": "arktype",
+      "repo": "https://github.com/arktypeio/arktype.git",
+      "commit": "36dfe4f82637d72bc5b4074c9996a9e85f1f6c20",
+      "project": "tsconfig.json",
+      "install": "npx --yes pnpm@10.19.0 install --frozen-lockfile --ignore-scripts"
+    },
+    {
+      "name": "ai-sdk",
+      "repo": "https://github.com/vercel/ai.git",
+      "commit": "5028fa46b4b4e695bf0d80e968db43268e9ec5ef",
+      "project": "packages/ai/tsconfig.bench.json",
+      "install": "npx --yes pnpm@11.23.0 install --frozen-lockfile --ignore-scripts",
+      "overlay": "bench/overlays/ai-sdk"
+    },
+    {
+      "name": "nest",
+      "repo": "https://github.com/nestjs/nest.git",
+      "commit": "f4b5ff48bccd6e593acb11dfdd55007ad4a5f4f8",
+      "project": "tsconfig.spec.json",
+      "install": "npm ci --ignore-scripts --no-audit --no-fund --legacy-peer-deps"
+    },
+    {
+      "name": "excalidraw",
+      "repo": "https://github.com/excalidraw/excalidraw.git",
+      "commit": "4c00f31ddcc20086bac1020428819fe0b9a30bce",
+      "project": ".",
+      "install": "npx --yes yarn@1.22.22 install --frozen-lockfile --ignore-scripts --ignore-engines",
+      "overlay": "bench/overlays/excalidraw"
+    },
+    {
+      "name": "vitest",
+      "repo": "https://github.com/vitest-dev/vitest.git",
+      "commit": "3e3624c5e5ecf77b20065da1aeb60f1182db0ccd",
+      "project": "tsconfig.check.json",
+      "install": "npx --yes pnpm@11.28.4 install --frozen-lockfile --ignore-scripts"
+    },
+    {
+      "name": "rxjs",
+      "repo": "https://github.com/ReactiveX/rxjs.git",
+      "commit": "54796b38a57e6309f9861e174737479bb3f63f61",
+      "project": "packages/rxjs/tsconfig.bench.json",
+      "install": "npx --yes pnpm@10.34.5 install --frozen-lockfile --ignore-scripts",
+      "overlay": "bench/overlays/rxjs"
+    },
+    {
+      "name": "svelte",
+      "repo": "https://github.com/sveltejs/svelte.git",
+      "commit": "707c28146b0f0a6d5404a1bd4769874c3c24851a",
+      "project": "packages/svelte",
+      "install": "npx --yes pnpm@10.33.4 install --frozen-lockfile --ignore-scripts"
     }
   ]
 }

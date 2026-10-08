@@ -45,18 +45,19 @@ def thread_flags(compiler: str, threads: str) -> list[str]:
 def argv_for(compiler: str, exe: Path, proj: Path, threads: str) -> list[str]:
     if compiler == "bun":
         # --all: no grouping of repeated errors (bun groups above 50), so every error line is counted.
-        return [str(exe), "check", "-p", str(proj), "--no-pretty", "--all", *thread_flags(compiler, threads)]
+        return [str(exe), "check", "-p", str(proj.resolve()), "--no-pretty", "--all", *thread_flags(compiler, threads)]
     return [str(exe), "-p", str(proj), "--noEmit", "--incremental", "false", "--extendedDiagnostics", "--pretty",
             "false", *thread_flags(compiler, threads)]
 
 
-def normalize_key(key: str, cwd: Path, proj_dir: Path) -> str:
-    """'path(l,c): error TSn' with the path relative to cwd, whichever directory the compiler printed it against."""
+def normalize_key(key: str, cwd: Path, proj_dir: Path, run_cwd: Path) -> str:
+    """'path(l,c): error TSn' with the path relative to cwd, whichever directory the compiler printed it against
+    (`run_cwd`, the directory it ran in, or the project's)."""
     m = re.match(r"^(.*)\((\d+,\d+)\): (error TS\d+)$", key)
     if not m:
         return key
     path = Path(m.group(1))
-    for base in (cwd, proj_dir):
+    for base in (run_cwd, proj_dir):
         cand = path if path.is_absolute() else base / path
         if cand.exists():
             try:
@@ -68,10 +69,11 @@ def normalize_key(key: str, cwd: Path, proj_dir: Path) -> str:
 
 def run_once(compiler: str, exe: Path, cwd: Path, proj: Path, threads: str, log_path: Path, timeout: float) -> dict:
     argv = argv_for(compiler, exe, proj, threads)
+    run_cwd = rb.bun_cwd() if compiler == "bun" else cwd  # bun_cwd: bun runs a `check` package script if cwd has one
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with open(log_path, "wb") as out:
         t0 = time.perf_counter()
-        p = subprocess.Popen(argv, cwd=cwd, stdout=out, stderr=subprocess.STDOUT)
+        p = subprocess.Popen(argv, cwd=run_cwd, stdout=out, stderr=subprocess.STDOUT)
         timer = threading.Timer(timeout, p.kill)
         timer.start()
         _, status, ru = os.wait4(p.pid, 0)
@@ -84,7 +86,7 @@ def run_once(compiler: str, exe: Path, cwd: Path, proj: Path, threads: str, log_
     proj_dir = proj if proj.is_dir() else proj.parent
     for line in log_path.read_text(errors="replace").splitlines():
         if m := rb.ERROR_RE.match(line):
-            keys.append(normalize_key(m.group(1), cwd, proj_dir))
+            keys.append(normalize_key(rb.error_key(m.group(1)), cwd, proj_dir, run_cwd))
         elif m := rb.COUNTER_RE.match(line):
             r[m.group(1).lower()] = int(m.group(2))
         elif m := rb.TIME_RE.match(line):
