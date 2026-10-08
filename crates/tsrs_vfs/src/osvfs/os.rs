@@ -18,6 +18,20 @@ fn count(c: &std::sync::atomic::AtomicU64) {
     c.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 }
 
+/// Counts a call that another file system over the OS made (the WebAssembly build's host file system), in the same
+/// rows.
+pub fn count_stat_call() {
+    count(&STAT_CALLS);
+}
+
+pub fn count_read_file_call() {
+    count(&READ_FILE_CALLS);
+}
+
+pub fn count_read_dir_call() {
+    count(&READ_DIR_CALLS);
+}
+
 /// Adds the calls counted since the last call to the phase rows.
 pub fn record_call_counts() {
     use std::sync::atomic::Ordering::Relaxed;

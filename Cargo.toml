@@ -66,6 +66,17 @@ inherits = "release"
 lto = "fat"
 codegen-units = 1
 
+# The WebAssembly module (crates/tsrs_wasm, tools/wasm/build.sh; notes/wasm-build.md has the opt-level measurements).
+# panic = "abort": wasm cannot unwind (a panic prints and exits with status 5, as a panicked native driver thread).
+[profile.wasm]
+inherits = "release"
+opt-level = "s"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+debug = false
+strip = "debuginfo"
+
 [workspace.lints.rust]
 dead_code = "allow"
 unused_variables = "allow"

@@ -770,6 +770,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "tsrs_wasm"
+version = "0.8.0"
+dependencies = [
+ "tsrs_api",
+ "tsrs_ast",
+ "tsrs_compiler",
+ "tsrs_core",
+ "tsrs_diagnostics",
+ "tsrs_execute",
+ "tsrs_scanner",
+ "tsrs_vfs",
+]
+
+[[package]]
 name = "unicode-ident"
 version = "1.0.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"

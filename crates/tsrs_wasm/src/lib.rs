@@ -1,0 +1,111 @@
+// tsc as a WebAssembly module (wasm32-wasip1) over a host file system: notes/wasm-build.md has the design and the
+// numbers, npm/tsrs-wasm the JS host.
+//
+// ABI (one request per module instance; the host compiles the module once and instantiates it per run):
+//   tsrs_input(len) -> ptr    a buffer of `len` bytes for the request
+//   tsrs_run() -> status      runs it; tsc's text goes to stdout (WASI fd 1); returns the exit status
+//   tsrs_output() -> ptr      the reply (empty, or the JSON diagnostics with REQUEST_JSON_DIAGNOSTICS)
+//   tsrs_output_len() -> len
+// Request: NUL-separated UTF-8, `cwd \0 flags` then `\0 arg` per tsc argument; flags is the decimal of the
+// REQUEST_* bits. A panic prints Rust's message on stderr and exits with status 5 (native tsrs's status for a panicked
+// driver thread).
+
+mod host;
+mod json;
+mod sys;
+
+use std::io::Write;
+use std::sync::{Arc, Mutex};
+
+use tsrs_execute::tsc::{ExitStatus, System};
+
+/// Reply with the diagnostics as a JSON array of `DiagnosticResponse` (UTF-16 positions) instead of printing them.
+pub const REQUEST_JSON_DIAGNOSTICS: u32 = 1;
+/// The host file system is case-insensitive.
+pub const REQUEST_CASE_INSENSITIVE: u32 = 2;
+/// stdout is a terminal (the default for `--pretty`).
+pub const REQUEST_TTY: u32 = 4;
+
+struct Request {
+    cwd: String,
+    flags: u32,
+    args: Vec<String>,
+}
+
+fn parse_request(request: &[u8]) -> Request {
+    let mut fields = request.split(|&b| b == 0).map(|f| String::from_utf8_lossy(f).into_owned());
+    let cwd = fields.next().unwrap_or_default();
+    let flags = fields.next().and_then(|f| f.parse::<u32>().ok()).unwrap_or(0);
+    Request { cwd, flags, args: fields.collect() }
+}
+
+/// Runs one request: (exit status, reply bytes). Target-independent, so native tests drive it over `host::test_host`.
+pub fn run(request: &[u8]) -> (i32, Vec<u8>) {
+    run_with_output(request, Box::new(std::io::BufWriter::new(std::io::stdout())))
+}
+
+fn run_with_output(request: &[u8], out: Box<dyn Write + Send>) -> (i32, Vec<u8>) {
+    // The one-thread rayon pool must exist before any other rayon use (tsrs_compiler::worker_pool).
+    tsrs_compiler::worker_pool();
+    let request = parse_request(request);
+    let diagnostics = (request.flags & REQUEST_JSON_DIAGNOSTICS != 0).then(|| Arc::new(Mutex::new(Vec::new())));
+    let sys: &'static sys::WasmSys = Box::leak(Box::new(sys::WasmSys::new(
+        &request.cwd,
+        request.flags & REQUEST_CASE_INSENSITIVE == 0,
+        request.flags & REQUEST_TTY != 0,
+        diagnostics.clone(),
+        out,
+    )));
+    let result = tsrs_execute::execute::command_line(sys, request.args);
+    sys.flush();
+    let reply = match diagnostics {
+        Some(list) => json::encode(&list.lock().unwrap()),
+        None => Vec::new(),
+    };
+    (result.status as i32, reply)
+}
+
+#[cfg(target_family = "wasm")]
+mod abi {
+    use std::cell::RefCell;
+
+    thread_local! {
+        static INPUT: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
+        static OUTPUT: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
+    }
+
+    #[no_mangle]
+    pub extern "C" fn tsrs_input(len: usize) -> *mut u8 {
+        INPUT.with_borrow_mut(|input| {
+            input.clear();
+            input.resize(len, 0);
+            input.as_mut_ptr()
+        })
+    }
+
+    #[no_mangle]
+    pub extern "C" fn tsrs_run() -> i32 {
+        let default_hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            default_hook(info);
+            std::process::exit(super::ExitStatus::NotImplemented as i32);
+        }));
+        let request = INPUT.with_borrow_mut(std::mem::take);
+        let (status, reply) = super::run(&request);
+        OUTPUT.with_borrow_mut(|output| *output = reply);
+        status
+    }
+
+    #[no_mangle]
+    pub extern "C" fn tsrs_output() -> *const u8 {
+        OUTPUT.with_borrow(|output| output.as_ptr())
+    }
+
+    #[no_mangle]
+    pub extern "C" fn tsrs_output_len() -> usize {
+        OUTPUT.with_borrow(Vec::len)
+    }
+}
+
+#[cfg(test)]
+mod tests;
