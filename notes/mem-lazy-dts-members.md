@@ -173,7 +173,8 @@ lock contention, not in forcing (14 ms of thread time in all): checkers that wai
 checking go on in lockstep, and every `add` cloned the reporting file's `Path`, an `Arc` whose counter all checkers
 then write at once. With the diagnostics collection keyed without that clone (#204, a separate change that also makes
 main 2-4% faster at 32 checkers on drizzle-orm, cal-diy and vscode) the user time is +3.7% and the wall +4.5% at 32
-checkers, +4.4% at 16; the rest is the waiting itself (about 2,200 waits on 1,000 lists, mostly `@types/node`
+checkers against main (0.179 -> 0.187 s), +4.4% at 16; against main with #204 the lazy mode alone costs about +8% at
+32 checkers (0.173 -> 0.187 s). That rest is the waiting itself (about 2,200 waits on 1,000 lists, mostly `@types/node`
 interfaces that every checker needs, in three versions). pr-verify's three-run medians also showed mui-docs and
 t3code-server slower at 32 checkers; nine-run interleaved probes did not (mui-docs +0.4%, t3code-server +0.5% paired).
 
