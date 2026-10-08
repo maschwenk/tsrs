@@ -22,6 +22,7 @@ fn new_checker(program: &'static Program) -> Box<Checker> {
 pub struct Checker {
     pub type_count: u32,
     pub symbol_count: u32,
+    pub signature_count: u32,
     pub total_instantiation_count: u32,
     pub lazy_member_stats: tsrs_core::lazymembers::LazyMemberStats,
 }
@@ -50,7 +51,7 @@ impl Checker {
 
 #[cfg(not(feature = "checker"))]
 fn new_checker(_program: &'static Program) -> Box<Checker> {
-    Box::new(Checker { type_count: 0, symbol_count: 0, total_instantiation_count: 0, lazy_member_stats: Default::default() })
+    Box::new(Checker { type_count: 0, symbol_count: 0, signature_count: 0, total_instantiation_count: 0, lazy_member_stats: Default::default() })
 }
 
 // checkerpool.go:24
@@ -704,6 +705,20 @@ impl checkerPool {
                 positions[owner].push(i as u32);
             }
         }
+        // tsrs-only research prototype (sharedgraph.rs): the seed files leave every queue; in `emulate` mode every
+        // checker checks them first.
+        let sg_mode = if allow_steal && !single_threaded && !self.single_threaded { crate::sharedgraph::mode() } else { crate::sharedgraph::Mode::Off };
+        let sg_stats = allow_steal && crate::sharedgraph::stats_enabled();
+        let seed: Vec<u32> = if sg_mode == crate::sharedgraph::Mode::Emulate {
+            let w = |i: u32| index_of[i as usize].map_or(0, |fi| state.weights.get(fi).copied().unwrap_or(0).max(0) as u64);
+            let seed = crate::sharedgraph::seed_positions(self.program, files, &w);
+            let is_seed: rustc_hash::FxHashSet<u32> = seed.iter().copied().collect();
+            positions.iter_mut().for_each(|p| p.retain(|i| !is_seed.contains(i)));
+            seed
+        } else {
+            Vec::new()
+        };
+        let sg_points: Vec<Mutex<Option<crate::sharedgraph::Points>>> = if sg_stats { (0..n).map(|_| Mutex::new(None)).collect() } else { Vec::new() };
         // Go queues one goroutine per checker group (cheap); here each group is an OS thread, so spawn threads only for
         // the checkers that own at least one of `files`. A one-file call (incremental emit of one affected file) then
         // runs on the calling thread instead of creating `checkers.len()` threads per file.
@@ -737,6 +752,11 @@ impl checkerPool {
             let mut count = 0;
             let mut file_cpu: Vec<(P<SourceFile>, f64)> = Vec::new();
             let mut guard = state.checkers[checker_idx].0.lock().unwrap();
+            let sg_start = sg_stats.then(|| crate::sharedgraph::Point::take(&guard));
+            for &i in &seed {
+                cb(&mut guard, i as usize, files[i as usize]);
+            }
+            let sg_seed = sg_stats.then(|| crate::sharedgraph::Point::take(&guard));
             let mut last_victim = usize::MAX;
             while let Some((i, from_other)) = queues_next(&queues, checker_idx, steal, sticky.then_some(&mut last_victim)) {
                 if let Some(&(s, k, _)) = i.checked_sub(files.len()).map(|p| &split.piece_items[p]) {
@@ -783,6 +803,9 @@ impl checkerPool {
             if cost_cache {
                 state.file_cpu.lock().unwrap().extend(file_cpu);
             }
+            if let (Some(s), Some(w)) = (sg_start, sg_seed) {
+                *sg_points[checker_idx].lock().unwrap() = Some([s, w, crate::sharedgraph::Point::take(&guard)]);
+            }
             if let Some(start) = start {
                 *times[checker_idx].lock().unwrap() = (start.elapsed().as_secs_f64(), count);
                 *cpu[checker_idx].lock().unwrap() = thread_cpu_seconds() - cpu_start;
@@ -807,6 +830,10 @@ impl checkerPool {
         };
         run_work_group(single, active.len(), |k| run(active[k]));
         splitcheck::SplitFile::report_stats(&split.files);
+        if sg_stats {
+            let points: Vec<_> = sg_points.into_iter().map(|p| p.into_inner().unwrap()).collect();
+            crate::sharedgraph::report(sg_mode, seed.len(), &points);
+        }
         if stats {
             state.group_runs.lock().unwrap().push(times.into_iter().map(|t| t.into_inner().unwrap()).collect());
             state.group_cpu.lock().unwrap().push(cpu.into_iter().map(|t| t.into_inner().unwrap()).collect());

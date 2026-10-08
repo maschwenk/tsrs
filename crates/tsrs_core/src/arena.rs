@@ -1128,6 +1128,13 @@ pub fn trim_own_arena_tail() {
     }
 }
 
+/// Bytes in use in the calling thread's own arena (not regions or scratch scopes), for the shared-graph experiment's
+/// per-checker counters (`TSRS_SHARED_GRAPH_STATS`). Arenas move between threads (`release_own_arena`), so callers
+/// take differences.
+pub fn own_arena_used_bytes() -> usize {
+    crate::ptr::own_arena().residency().used
+}
+
 /// The region that is the current thread's allocation target, if any (`None`: the thread's own arena).
 pub fn current_region() -> Option<Region> {
     let p = CURRENT.with(|c| c.get());
