@@ -174,6 +174,11 @@ RSS in GiB, wall and user+sys in s.
 | webpack | 4 | 0.346 -> 0.343 (-0.9%) | -0.9% | 0.42 -> 0.42 (0.0%) | 1.63 -> 1.63 |
 | xstate-main | 4 | 0.210 -> 0.212 (+1.0%) | +1.0% | 0.28 -> 0.27 (-3.6%) | 1.01 -> 1.04 |
 
+Second runs at 32 checkers (branch f65dc87 against main e80e776 + bench results): 20 interleaved runs: cal-diy 0.0%,
+formbricks-web +0.5% (paired +0.1%, peak -7.1%), drizzle-orm +1.9% (paired +2.5%, IQR -0.6..+3.8), nuxt +1.5%; 10
+runs: t3code-server -1.0%, playwright +0.8%. So drizzle-orm sits at +0.3% to +1.9% across two probes. Its remaining
+2-4 ms are 1 ms of shared-list forcing before the checkers start and the second parse of lists the checkers need.
+
 An earlier run (main fcb9803, 9 runs, before the shared-list rule) had single-threaded peaks -16.2% / -7.3% / -6.5% /
 -5.2% / -0.6% (formbricks-web / cal-diy / supabase-studio / t3code-server / vscode); the rule does not apply there.
 `Parse time` (which includes binding) on Linux single-threaded is 1-4% longer than with the mode off (formbricks-web
