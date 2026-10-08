@@ -2,8 +2,8 @@ use std::fmt;
 use std::hash::Hash;
 
 use bitflags::bitflags;
-use tsrs_core::{OptionThinSliceCell, StrCell, ThinSliceCell};
-use tsrs_core::sharedgraph::{OvCell, OvExact, OvOptionThinSliceCell, OvThinSliceCell, RawWord};
+use tsrs_core::ThinSliceCell;
+use tsrs_core::sharedgraph::{OvCell, OvExact, OvOptionThinSliceCell, RawWord};
 
 use crate::*;
 
@@ -1158,6 +1158,7 @@ impl ObjectFlagsCell {
         ObjectFlagsCell(Cell::new(f))
     }
     #[inline]
+    #[expect(clippy::cast_ptr_alignment, reason = "the field's address minus its offset is its Type, which is 8-aligned")]
     fn owner(&self) -> &Type {
         // SAFETY: an `ObjectFlagsCell` exists only as the `object_flags` field of a `Type`.
         unsafe { &*std::ptr::from_ref(self).cast::<u8>().sub(std::mem::offset_of!(Type, object_flags)).cast::<Type>() }
@@ -3417,8 +3418,8 @@ impl crate::links::LinkCopy for ContainingSymbolLinks {
     fn copy_link_from(&self, frozen: &Self) {
         // SAFETY: the frozen record is read-only; no borrow of it is live (frozen objects are never borrowed mutably).
         unsafe {
-            *self.extended_containers_by_file.borrow_mut() = frozen.extended_containers_by_file.try_borrow_unguarded().unwrap().clone();
-            *self.accessible_chain_cache.borrow_mut() = frozen.accessible_chain_cache.try_borrow_unguarded().unwrap().clone();
+            self.extended_containers_by_file.borrow_mut().clone_from(frozen.extended_containers_by_file.try_borrow_unguarded().unwrap());
+            self.accessible_chain_cache.borrow_mut().clone_from(frozen.accessible_chain_cache.try_borrow_unguarded().unwrap());
         }
         self.extended_containers.set(frozen.extended_containers.get());
     }
@@ -3432,8 +3433,8 @@ impl crate::links::LinkCopy for SourceFileLinks {
         self.requested_external_emit_helpers.set(frozen.requested_external_emit_helpers.get());
         // SAFETY: as for ContainingSymbolLinks.
         unsafe {
-            *self.deferred_nodes.borrow_mut() = frozen.deferred_nodes.try_borrow_unguarded().unwrap().clone();
-            *self.identifier_check_nodes.borrow_mut() = frozen.identifier_check_nodes.try_borrow_unguarded().unwrap().clone();
+            self.deferred_nodes.borrow_mut().clone_from(frozen.deferred_nodes.try_borrow_unguarded().unwrap());
+            self.identifier_check_nodes.borrow_mut().clone_from(frozen.identifier_check_nodes.try_borrow_unguarded().unwrap());
         }
         self.local_jsx_namespace.set(frozen.local_jsx_namespace.get());
         self.local_jsx_fragment_namespace.set(frozen.local_jsx_fragment_namespace.get());

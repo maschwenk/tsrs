@@ -44,6 +44,7 @@ pub static DIRTY_LINES: AtomicUsize = AtomicUsize::new(0);
 
 /// Whether the cell at `addr` is frozen and its line is dirty: the only case a read must consult the overlay.
 #[inline(always)]
+#[expect(clippy::inline_always, reason = "on every read of a lazy field; without the feature it must fold to `false`")]
 pub fn dirty(addr: usize) -> bool {
     if !COMPILED_IN {
         return false;
@@ -62,16 +63,19 @@ pub fn dirty(addr: usize) -> bool {
 
 #[inline]
 fn mark_dirty(addr: usize) {
+    // Relaxed: the range was written before the forks' threads were spawned.
     let line = (addr - FROZEN_LO.load(Ordering::Relaxed)) >> 6;
     // SAFETY: as in `dirty`; the caller checked that `addr` is frozen.
     let w = unsafe { &*DIRTY.load(Ordering::Relaxed).add(line >> 6) };
     let bit = 1 << (line & 63);
     if w.load(Ordering::Relaxed) & bit == 0 && w.fetch_or(bit, Ordering::Relaxed) & bit == 0 {
+        // Relaxed: a statistics counter.
         DIRTY_LINES.fetch_add(1, Ordering::Relaxed);
     }
 }
 
 #[inline(always)]
+#[expect(clippy::inline_always, reason = "on every write of a lazy field; without the feature it must fold to `false`")]
 pub fn any_frozen() -> bool {
     // Relaxed: written before the threads that read it were spawned.
     COMPILED_IN && ANY_FROZEN.load(Ordering::Relaxed)
@@ -138,9 +142,11 @@ pub fn freeze(ranges: &[(usize, usize)]) {
     let hi = ranges.iter().map(|r| r.0 + r.1).max().unwrap_or(0);
     let words = ((hi - lo) >> 6).div_ceil(64) + 1;
     let dirty: &'static mut [AtomicU64] = Box::leak((0..words).map(|_| AtomicU64::new(0)).collect());
+    // Relaxed: these three are published to the forks by spawning their threads after the freeze (and ANY_FROZEN's Release).
     DIRTY.store(dirty.as_mut_ptr(), Ordering::Relaxed);
     FROZEN_LO.store(lo, Ordering::Relaxed);
     FROZEN_SPAN.store(hi - lo, Ordering::Relaxed);
+    // Release: orders the range and bitmap stores above before it (readers are spawned later anyway).
     ANY_FROZEN.store(true, Ordering::Release);
     #[cfg(unix)]
     if protect_mode() != 0 {
@@ -395,6 +401,7 @@ impl<T: Copy + Default + PartialEq> OvCell<T> {
             return false;
         }
         if self.0.get() != T::default() && self.0.get() != v {
+            // Relaxed: a statistics counter.
             OVERRIDES.fetch_add(1, Ordering::Relaxed);
             log_site(b"tsrs shared graph: override\n");
         }
@@ -592,6 +599,7 @@ pub static FLAG_BITS: [AtomicUsize; 32] = [const { AtomicUsize::new(0) }; 32];
 pub fn count_flag_bits(changed: u32) {
     for (i, c) in FLAG_BITS.iter().enumerate() {
         if changed & (1 << i) != 0 {
+            // Relaxed: a statistics counter.
             c.fetch_add(1, Ordering::Relaxed);
         }
     }
@@ -629,6 +637,7 @@ pub fn owned_set_if_frozen<C, T: Copy>(cell: &C, v: T) -> bool {
     if !is_frozen_addr_slow(addr) {
         return false;
     }
+    // Relaxed: a statistics counter.
     OWNED_WRITES.fetch_add(1, Ordering::Relaxed);
     log_owned_site();
     current_overlay().set_cell(addr, v);

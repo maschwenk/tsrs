@@ -112,7 +112,6 @@ pub(crate) fn seed_positions(program: &Program, files: &[P<SourceFile>], weight:
 pub(crate) struct Point {
     pub types: u32,
     pub sigs: u32,
-    pub symbols: u32,
     pub arena: usize,
     pub cpu: f64,
     /// Overlay entries (cells, object-flag word pages) of the checker (switch on).
@@ -124,7 +123,6 @@ impl Point {
         Point {
             types: c.type_count,
             sigs: c.signature_count,
-            symbols: c.symbol_count,
             arena: tsrs_core::arena::own_arena_used_bytes(),
             cpu: crate::checkerpool::thread_cpu_seconds(),
             #[cfg(feature = "checker")]
@@ -143,8 +141,10 @@ fn mib(b: f64) -> f64 {
 }
 
 pub(crate) fn report(mode: Mode, seed_count: usize, points: &[Option<Points>]) {
+    use std::fmt::Write;
     let mut out = format!(
         "tsrs shared graph: mode {mode:?}, {seed_count} seed files, overlay overrides {}, owned writes {}, dirty lines {}\n",
+        // Relaxed: statistics counters, read after the pass joined its threads.
         tsrs_core::sharedgraph::OVERRIDES.load(std::sync::atomic::Ordering::Relaxed),
         tsrs_core::sharedgraph::OWNED_WRITES.load(std::sync::atomic::Ordering::Relaxed),
         tsrs_core::sharedgraph::DIRTY_LINES.load(std::sync::atomic::Ordering::Relaxed)
@@ -153,11 +153,12 @@ pub(crate) fn report(mode: Mode, seed_count: usize, points: &[Option<Points>]) {
         .iter()
         .enumerate()
         .filter_map(|(i, c)| {
+            // Relaxed: as above.
             let n = c.load(std::sync::atomic::Ordering::Relaxed);
             (n > 0).then(|| format!("{}={n}", flag_name(i)))
         })
         .collect();
-    out.push_str(&format!("  frozen object-flag writes by bit: {}\n", bits.join(" ")));
+    let _ = write!(out, "  frozen object-flag writes by bit: {}\n", bits.join(" "));
     let mut seed_bytes = Vec::new();
     let mut seed_types = Vec::new();
     let mut seed_cpu = Vec::new();
@@ -166,7 +167,7 @@ pub(crate) fn report(mode: Mode, seed_count: usize, points: &[Option<Points>]) {
         let Some([s, w, e]) = p else { continue };
         let seed_b = w.arena.saturating_sub(s.arena) as f64;
         let after_b = e.arena.saturating_sub(w.arena) as f64;
-        out.push_str(&format!(
+        let _ = write!(out, 
             "  checker {c:>3}: seed {:>8.1} MiB {:>8} types {:>7} sigs {:>6.2} s cpu | after {:>8.1} MiB {:>8} types | total {:>8.1} MiB {:>8} types {:>6.2} s cpu | overlay {} cells {} flag pages\n",
             mib(seed_b),
             w.types - s.types,
@@ -179,7 +180,7 @@ pub(crate) fn report(mode: Mode, seed_count: usize, points: &[Option<Points>]) {
             e.cpu - s.cpu,
             e.overlay.0,
             e.overlay.1
-        ));
+        );
         seed_bytes.push(seed_b);
         seed_types.push(w.types - s.types);
         seed_cpu.push(w.cpu - s.cpu);
@@ -195,22 +196,22 @@ pub(crate) fn report(mode: Mode, seed_count: usize, points: &[Option<Points>]) {
         let min_t = seed_types.iter().copied().min().unwrap_or(0);
         let max_t = seed_types.iter().copied().max().unwrap_or(0);
         let tw = seed_cpu.iter().copied().fold(0.0, f64::max);
-        out.push_str(&format!(
+        let _ = write!(out, 
             "  summary: checkers {n}, K_t {min_t}..{max_t}, B_W {:.1}..{:.1} MiB, T_w {tw:.2} s, sum after seed {:.1} MiB / {types_after} types, sum total {:.1} MiB / {types_all} types\n",
             mib(min_b),
             mib(max_b),
             mib(total_after),
             mib(total_all)
-        ));
+        );
         if mode == Mode::Emulate && n > 1 {
             // Sharing the seed would hold it once instead of n times.
-            out.push_str(&format!(
+            let _ = write!(out, 
                 "  emulated sharing: arena {:.1} MiB -> {:.1} MiB ({:.1} MiB saved, {:.1} MiB per extra checker)\n",
                 mib(total_all),
                 mib(total_all - (n as f64 - 1.0) * max_b),
                 mib((n as f64 - 1.0) * max_b),
                 mib(max_b)
-            ));
+            );
         }
     }
     eprint!("{out}");
@@ -265,6 +266,7 @@ static FRESH_TYPES: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32:
 
 #[cfg(feature = "checker")]
 pub(crate) fn note_fresh_checker(c: &crate::checkerpool::Checker) {
+    // Relaxed: written before the pass's threads are spawned.
     FRESH_TYPES.store(c.type_count, std::sync::atomic::Ordering::Relaxed);
 }
 
@@ -302,6 +304,7 @@ pub(crate) fn start_seed(program: &'static Program, weights: Vec<i64>) {
             let chunks = region.chunks();
             let bytes = region.used_bytes();
             // Never freed: the forks read it for the rest of the process.
+            #[expect(clippy::mem_forget, reason = "the frozen seed region must outlive every fork, to the end of the process")]
             std::mem::forget(region);
             SeedOut(Box::leak(c), chunks, bytes, positions.len(), start)
         })
@@ -337,6 +340,7 @@ fn wait_base() -> Base {
 /// In the type-check pass: replaces an unused plain pool checker by a fork of the frozen seed (waiting for it).
 #[cfg(feature = "checker")]
 pub(crate) fn fork_into(slot: &mut Box<crate::checkerpool::Checker>) {
+    // Relaxed: written by create_checkers before the pass's threads were spawned.
     if slot.is_fork || slot.type_count != FRESH_TYPES.load(std::sync::atomic::Ordering::Relaxed) {
         return;
     }

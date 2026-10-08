@@ -1836,9 +1836,11 @@ impl Checker {
     /// Shared-graph prototype (`tsrs_core::sharedgraph`): a checker whose history is the frozen seed `base`'s, then
     /// its own. Interning and identity maps are cloned (their keys and values point into the frozen graph), pure memos
     /// start empty, link stores read through to the base's and copy a record on first access, stacks start empty.
+    #[expect(clippy::clone_on_copy, reason = "a field-by-field list: `clone` for every field, whatever its type")]
     pub fn fork(base: &'static Checker) -> Box<Checker> {
         base.assert_freezable();
         let mut c = Box::new(Checker {
+            // Relaxed: the counter only hands out distinct ids (as in new_checker).
             id: nextCheckerID.fetch_add(1, Ordering::Relaxed) + 1,
             program: base.program,
             compiler_options: base.compiler_options.clone(),
