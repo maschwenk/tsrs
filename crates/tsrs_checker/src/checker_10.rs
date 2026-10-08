@@ -2075,7 +2075,6 @@ impl Checker {
 
 // Mapped types { [P in keyof T]: X } where T is an object type get a lazy table that creates
 // members and index infos as they are asked for, the way resolveMappedTypeMembers would.
-#[derive(Clone)]
 pub(crate) struct LazyMappedTable {
     pub(crate) type_parameter: P<Type>,
     pub(crate) template_type: P<Type>,
@@ -2086,6 +2085,24 @@ pub(crate) struct LazyMappedTable {
     pub(crate) index_infos: Cell<&'static [P<IndexInfo>]>,
     pub(crate) index_infos_ready: Cell<bool>,
     pub(crate) resolving: Cell<bool>,
+}
+
+/// Shared-graph prototype: forks copy the seed's tables in parallel, so the copy must not touch the borrow flag.
+impl Clone for LazyMappedTable {
+    fn clone(&self) -> Self {
+        LazyMappedTable {
+            type_parameter: self.type_parameter,
+            template_type: self.template_type,
+            modifiers_type: self.modifiers_type,
+            template_modifiers: self.template_modifiers,
+            should_link_prop_declarations: self.should_link_prop_declarations,
+            // SAFETY: the seed checker is frozen: nothing borrows its tables mutably any more.
+            members: RefCell::new(unsafe { self.members.try_borrow_unguarded() }.unwrap().clone()),
+            index_infos: Cell::new(self.index_infos.get()),
+            index_infos_ready: Cell::new(self.index_infos_ready.get()),
+            resolving: Cell::new(self.resolving.get()),
+        }
+    }
 }
 
 impl Checker {

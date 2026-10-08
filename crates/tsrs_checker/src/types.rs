@@ -1135,17 +1135,14 @@ impl ObjectFlagsCell {
     #[inline]
     pub fn get(&self) -> ObjectFlags {
         let v = self.0.get();
-        if !tsrs_core::sharedgraph::any_frozen() {
+        if !tsrs_core::sharedgraph::frozen(self) {
             return v;
         }
         self.get_frozen(v)
     }
     #[inline(never)]
     fn get_frozen(&self, v: ObjectFlags) -> ObjectFlags {
-        if !tsrs_core::sharedgraph::frozen(self) {
-            return v;
-        }
-        match tsrs_core::sharedgraph::current_overlay().id_word(self.owner().id.0) {
+        match tsrs_core::sharedgraph::try_current_overlay().and_then(|o| o.id_word(self.owner().id.0)) {
             Some(w) => ObjectFlags::from_bits_retain(w as u32),
             None => v,
         }

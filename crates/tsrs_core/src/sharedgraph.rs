@@ -95,6 +95,10 @@ pub fn freeze(ranges: &[(usize, usize)]) {
         }
     }
     EXACT.store(std::env::var("TSRS_SHARED_GRAPH_EXACT").is_ok_and(|v| v == "1"), Ordering::Relaxed);
+    let lo = ranges.iter().map(|r| r.0).min().unwrap_or(0);
+    let hi = ranges.iter().map(|r| r.0 + r.1).max().unwrap_or(0);
+    FROZEN_LO.store(lo, Ordering::Relaxed);
+    FROZEN_HI.store(hi, Ordering::Relaxed);
     ANY_FROZEN.store(true, Ordering::Release);
     #[cfg(unix)]
     if protect_mode() != 0 {
@@ -192,11 +196,46 @@ extern "C" fn fault_handler(sig: i32, info: *mut libc::siginfo_t, _ctx: *mut lib
 #[derive(Default)]
 pub struct Overlay {
     cells: RefCell<FxHashMap<usize, [u64; 2]>>,
+    /// One bit per 64 bytes of the frozen range: some cell in that line has an overlay value (skips the hash lookup).
+    lines: RefCell<Vec<u64>>,
     tables: RefCell<FxHashMap<usize, Box<dyn Any>>>,
     id_words: RefCell<Vec<Option<Box<[u64; ID_PAGE]>>>>,
 }
 
+static FROZEN_LO: AtomicUsize = AtomicUsize::new(0);
+static FROZEN_HI: AtomicUsize = AtomicUsize::new(0);
+
 impl Overlay {
+    #[inline]
+    fn line(addr: usize) -> usize {
+        // Relaxed: set before the forks' threads were spawned.
+        (addr - FROZEN_LO.load(Ordering::Relaxed)) >> 6
+    }
+
+    #[inline]
+    pub fn get_cell<T: Copy>(&self, addr: usize, v: T) -> T {
+        let line = Self::line(addr);
+        let has = self.lines.borrow().get(line >> 6).is_some_and(|w| w & (1 << (line & 63)) != 0);
+        if !has {
+            return v;
+        }
+        self.cells.borrow().get(&addr).map_or(v, |&b| decode(b))
+    }
+
+    pub fn set_cell<T: Copy>(&self, addr: usize, v: T) {
+        let line = Self::line(addr);
+        {
+            let mut lines = self.lines.borrow_mut();
+            if lines.is_empty() {
+                // Relaxed: as in `line`.
+                let span = FROZEN_HI.load(Ordering::Relaxed) - FROZEN_LO.load(Ordering::Relaxed);
+                lines.resize((span >> 6).div_ceil(64) + 1, 0);
+            }
+            lines[line >> 6] |= 1 << (line & 63);
+        }
+        self.cells.borrow_mut().insert(addr, encode(v));
+    }
+
     pub fn cell_count(&self) -> usize {
         self.cells.borrow().len()
     }
@@ -229,6 +268,15 @@ thread_local! {
 /// Makes `overlay` the one `OvCell`s on this thread use. The pool calls it wherever it locks a checker.
 pub fn enter_overlay(overlay: &Overlay) {
     CURRENT.with(|c| c.set(std::ptr::from_ref(overlay)));
+}
+
+/// The overlay of the checker this thread runs, if any. Without one (the main thread sorting diagnostics after the
+/// pass), frozen objects read as the seed left them.
+#[inline]
+pub fn try_current_overlay() -> Option<&'static Overlay> {
+    let p = CURRENT.with(Cell::get);
+    // SAFETY: set by `enter_overlay` from a checker that outlives its use on this thread.
+    (!p.is_null()).then(|| unsafe { &*p })
 }
 
 pub fn current_overlay() -> &'static Overlay {
@@ -291,7 +339,7 @@ impl<T: Copy + Default + PartialEq> OvCell<T> {
         if !is_frozen_addr_slow(addr) {
             return v;
         }
-        current_overlay().cells.borrow().get(&addr).map_or(v, |&b| decode(b))
+        try_current_overlay().map_or(v, |o| o.get_cell(addr, v))
     }
 
     #[inline]
@@ -314,7 +362,7 @@ impl<T: Copy + Default + PartialEq> OvCell<T> {
             OVERRIDES.fetch_add(1, Ordering::Relaxed);
             log_site(b"tsrs shared graph: override\n");
         }
-        current_overlay().cells.borrow_mut().insert(addr, encode(v));
+        current_overlay().set_cell(addr, v);
         true
     }
 
@@ -457,25 +505,17 @@ impl<T: Copy> OvExact<T> {
     #[inline]
     pub fn get(&self) -> T {
         let v = self.0.get();
-        if !any_frozen() {
+        if !any_frozen() || !is_frozen_addr_slow(std::ptr::from_ref(self).addr()) {
             return v;
         }
-        self.get_frozen(v)
-    }
-    #[inline(never)]
-    fn get_frozen(&self, v: T) -> T {
-        let addr = std::ptr::from_ref(self).addr();
-        if !is_frozen_addr_slow(addr) {
-            return v;
-        }
-        current_overlay().cells.borrow().get(&addr).map_or(v, |&b| decode(b))
+        overlay_get_frozen(std::ptr::from_ref(self).addr(), v)
     }
     #[inline]
     pub fn set(&self, v: T) {
         if any_frozen() {
             let addr = std::ptr::from_ref(self).addr();
             if is_frozen_addr_slow(addr) {
-                current_overlay().cells.borrow_mut().insert(addr, encode(v));
+                current_overlay().set_cell(addr, v);
                 return;
             }
         }
@@ -484,23 +524,28 @@ impl<T: Copy> OvExact<T> {
 }
 
 /// `v`, or the current overlay's value for the cell at `cell` if it is frozen and the overlay has one.
-#[inline(never)]
+#[inline]
 pub fn overlay_get_if_frozen<C, T: Copy>(cell: &C, v: T) -> T {
     let addr = std::ptr::from_ref(cell).addr();
     if !is_frozen_addr_slow(addr) {
         return v;
     }
-    current_overlay().cells.borrow().get(&addr).map_or(v, |&b| decode(b))
+    overlay_get_frozen(addr, v)
+}
+
+#[inline(never)]
+fn overlay_get_frozen<T: Copy>(addr: usize, v: T) -> T {
+    try_current_overlay().map_or(v, |o| o.get_cell(addr, v))
 }
 
 /// Writes `v` to the current overlay if the cell at `cell` is frozen (returns true).
-#[inline(never)]
+#[inline]
 pub fn overlay_set_if_frozen<C, T: Copy>(cell: &C, v: T) -> bool {
     let addr = std::ptr::from_ref(cell).addr();
     if !is_frozen_addr_slow(addr) {
         return false;
     }
-    current_overlay().cells.borrow_mut().insert(addr, encode(v));
+    current_overlay().set_cell(addr, v);
     true
 }
 
