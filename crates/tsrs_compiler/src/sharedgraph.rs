@@ -134,8 +134,9 @@ fn mib(b: f64) -> f64 {
 
 pub(crate) fn report(mode: Mode, seed_count: usize, points: &[Option<Points>]) {
     let mut out = format!(
-        "tsrs shared graph: mode {mode:?}, {seed_count} seed files, overlay overrides {}\n",
-        tsrs_core::sharedgraph::OVERRIDES.load(std::sync::atomic::Ordering::Relaxed)
+        "tsrs shared graph: mode {mode:?}, {seed_count} seed files, overlay overrides {}, owned writes {}\n",
+        tsrs_core::sharedgraph::OVERRIDES.load(std::sync::atomic::Ordering::Relaxed),
+        tsrs_core::sharedgraph::OWNED_WRITES.load(std::sync::atomic::Ordering::Relaxed)
     );
     let mut seed_bytes = Vec::new();
     let mut seed_types = Vec::new();

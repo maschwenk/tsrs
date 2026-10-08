@@ -549,6 +549,40 @@ pub fn overlay_set_if_frozen<C, T: Copy>(cell: &C, v: T) -> bool {
     true
 }
 
+/// Writes by forks to `OwnedCell`s of frozen symbols and nodes (discovery counter).
+pub static OWNED_WRITES: AtomicUsize = AtomicUsize::new(0);
+
+/// `OwnedCell::set` on a frozen cell: counted and logged (`TSRS_SHARED_GRAPH_LOG_OWNED=1`), kept in the overlay.
+#[cold]
+#[inline(never)]
+pub fn owned_set_if_frozen<C, T: Copy>(cell: &C, v: T) -> bool {
+    let addr = std::ptr::from_ref(cell).addr();
+    if !is_frozen_addr_slow(addr) {
+        return false;
+    }
+    OWNED_WRITES.fetch_add(1, Ordering::Relaxed);
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if *ON.get_or_init(|| std::env::var("TSRS_SHARED_GRAPH_LOG_OWNED").is_ok_and(|v| v == "1")) {
+        #[cfg(unix)]
+        {
+            extern "C" {
+                fn backtrace(buf: *mut *mut libc::c_void, size: i32) -> i32;
+                fn backtrace_symbols_fd(buf: *const *mut libc::c_void, size: i32, fd: i32);
+            }
+            let mut frames = [std::ptr::null_mut::<libc::c_void>(); 40];
+            let msg = b"tsrs shared graph: owned write\n";
+            // SAFETY: writes a static buffer to stderr; fills and prints a local frame buffer.
+            unsafe {
+                libc::write(2, msg.as_ptr().cast(), msg.len());
+                let n = backtrace(frames.as_mut_ptr(), 40);
+                backtrace_symbols_fd(frames.as_ptr(), n, 2);
+            }
+        }
+    }
+    current_overlay().set_cell(addr, v);
+    true
+}
+
 thread_local! {
     static SEED_THREAD: Cell<bool> = const { Cell::new(false) };
 }

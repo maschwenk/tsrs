@@ -199,7 +199,7 @@ impl<T: Copy> OwnedCell<T> {
     #[inline]
     pub fn set(&self, value: T) {
         crate::ptr::shared_check::assert_not_shared(self, "OwnedCell");
-        if crate::sharedgraph::any_frozen() && crate::sharedgraph::overlay_set_if_frozen(self, value) {
+        if crate::sharedgraph::any_frozen() && crate::sharedgraph::owned_set_if_frozen(self, value) {
             return;
         }
         self.0.set(value)
@@ -214,11 +214,7 @@ impl<T: Copy> OwnedCell<T> {
 
     #[inline]
     pub fn get(&self) -> T {
-        let v = self.0.get();
-        if !crate::sharedgraph::any_frozen() {
-            return v;
-        }
-        crate::sharedgraph::overlay_get_if_frozen(self, v)
+        self.0.get()
     }
 }
 
