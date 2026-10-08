@@ -5,8 +5,8 @@
 open-source applications (see "Application projects") with tsrs, with tsgo 7.0.2 (npm `typescript@7.0.2`) and, where a
 Bun binary is given, with `bun check`, and reports wall time, peak memory and the error count of each.
 The Depot CI workflow `.depot/workflows/bench.yml` runs it on every push to `main`. It measures every project on the
-fixed-spec 8-vCPU machine in three modes and on a 64-vCPU machine in two (with bun check); `bench/results/<date>-<commit>.md`
-has every table, and the table at the top of `README.md` is the 64-vCPU machine's default-mode one: each compiler at
+fixed-spec 8-vCPU machine in three modes and on a 16-vCPU machine in two (with bun check); `bench/results/<date>-<commit>.md`
+has every table, and the table at the top of `README.md` is the 16-vCPU machine's default-mode one: each compiler at
 its own thread count, tsgo, tsrs and bun check side by side (`run.py --readme-modes wide`).
 
 ```sh
@@ -117,13 +117,13 @@ tsrs's errors (`(ref N)` in the table).
 - Invocation, identical for both: `-p <project> --noEmit --incremental false --extendedDiagnostics --pretty false`,
   in the default mode (both 4 checker threads; tsrs additionally resolves members lazily, its default), with
   `--singleThreaded`, with `--checkers 8` (the `checkers8` mode: how each compiler scales when given twice the
-  default checkers), and on a 64-vCPU machine (see "CI") in the default mode again (the `wide` mode: the same flags as
-  `default`, kept apart so that one result can hold both machines) and with `--checkers 64` (the `checkers64` mode: how
+  default checkers), and on a 16-vCPU machine (see "CI") in the default mode again (the `wide` mode: the same flags as
+  `default`, kept apart so that one result can hold both machines) and with `--checkers 16` (the `checkers16` mode: how
   each scales on a wide machine). Select modes with `--modes` (default `default,single,checkers8`; flags in `MODE_FLAGS`
   in `run.py`).
 - `bun check` (`--bun <binary>`, Bun 1.4.3 canary or later) is a third column in every mode it is measured in: `bun check
   -p <project> --no-pretty --all`, with `--threads N` where tsgo and tsrs get `--checkers N` (bun's only thread knob,
-  and it caps every thread). CI measures it on the 64-vCPU machine. Its error count is recorded, not compared: bun check
+  and it caps every thread). CI measures it on the 16-vCPU machine. Its error count is recorded, not compared: bun check
   follows TypeScript 7.0 (on vscode its errors equal tsgo 7.0.2's line for line), tsrs the 7.1-dev commit it ports.
   `--noEmit` instead of the suite's `--outdir` keeps the measurement to type checking; `--pretty
   false` makes the error lines parseable.
@@ -202,11 +202,19 @@ whose bench was skipped or cancelled (before 2026-10-07, most commits of a burst
 commit=<sha>`: the build and measuring jobs check out that commit, the merge job runs the current scripts, the results
 file is committed, and the README table is applied only when no newer commit's table is there.
 
-**Noise**: the fixed-spec and 64-vCPU machines are shared cloud VMs; between publishes of the same code vscode's
+**Noise**: the benchmark machines are shared cloud VMs. Historically, between publishes of the same code vscode's
 64-vCPU wall moved by a median 2% and up to 10% on 2026-10-07 (median of 3). The single-threaded instruction count is
 the deterministic measure (repeats to 0.001%). The `measure` jobs run 5 reps and `measure-wide` 10 for tsrs and
 `bun check`, both with 3 for tsgo (`--reps N --tsgo-reps M`: tsgo takes 10-20x longer per run), and the README's
 headline is the 20-run mean of `bench-compare.yml`, not one publish's median.
+
+The Bun comparison uses 16 vCPU by default; 32 and 64 vCPU remain explicit choices in `bench-compare.yml`.
+Runner vCPUs and checker threads are separate: `cpus=16` with `threads=64` runs 64 software workers on
+16 vCPUs. This oversubscription is supported for experiments, including PR verification (`cpus=16`,
+`checkers=1,16,32,64`), but does not provide 64 cores of compute.
+The 8-vCPU instruction regression jobs retain their existing hardware. Historical 64-vCPU results keep their original
+labels; history starts a new baseline when a cell's hardware or build setup changes. Backfills of commits whose
+`run.py` predates `checkers16` measure only `wide` on the 16-vCPU runner.
 
 **History**: `bench/history.py` prints one table per metric over `bench/results/*.json` in `main`'s first-parent
 order, a column per project, each cell with its change against the previous benchmarked commit (with one run per
@@ -225,17 +233,17 @@ once the four application projects were in):
    cache, downloads the binary and runs `bench/run.py --projects <name> --out-dir <dir>`. The result is the
    `bench-partial-<name>` artifact, the compiler output `bench-logs-<name>`. The jobs run at the same time but never
    share a machine, so a measurement is what it was in the sequential run: one project on an idle 8-vCPU machine.
-3. `measure-wide`, one job on `depot-ubuntu-24.04-64` (64 vCPU): every project in the default mode (`wide`: each
-   compiler at its own thread count, tsrs 32 checkers there) and in `--checkers 64` mode (`bench/run.py --modes
-   wide,checkers64`), each with `bun check` from Bun canary as a third column (`--bun`). 64 checker threads would
-   oversubscribe the fixed-spec machine. The job runs while the `measure` jobs do; it is the run's only 64-vCPU job. It
+3. `measure-wide`, one job on `depot-ubuntu-24.04-16` (16 vCPU): every project in the default mode (`wide`: each
+   compiler at its own thread count, tsrs 8 checkers there) and in `--checkers 16` mode (`bench/run.py --modes
+   wide,checkers16`), each with `bun check` from Bun canary as a third column (`--bun`). 16 checker threads would
+   oversubscribe the fixed-spec machine. The job runs while the `measure` jobs do; it is the run's only 16-vCPU job. It
    restores the caches the `measure` jobs save (a project added to `projects.json` needs a restore step in it too). If
-   it fails, the results file is published without the 64-vCPU sections and the README table is left as it was.
+   it fails, the results file is published without the 16-vCPU sections and the README table is left as it was.
 4. `merge`: `bench/run.py --merge <results...>` joins them into one result, projects in `bench/projects.json` order
    and modes in `MODE_FLAGS` order, after checking that the binary, the compilers and flags agree (the rep counts may differ, as the
    `measure` jobs' 5 and `measure-wide`'s 10 do; the result records every mode's in `mode_reps`) and that no
    (project, mode) is measured twice; then the regression flag and the results commit, as before. The machine that
-   measured the most cells is the run's; a cell measured on another records its own `machine`. All `--checkers 64`
+   measured the most cells is the run's; a cell measured on another records its own `machine`. All `--checkers 16`
    cells do, and the table names their machine. A fixed-spec project measured on a different CPU model or C library
    (so far every `depot-ubuntu-24.04-8` has been the same model) is noted under the table, and the regression flag
    compares that project only with runs on the same model. A run started from a branch
@@ -243,7 +251,7 @@ once the four application projects were in):
    or commented.
 
 **Fixed machine spec**: `depot-ubuntu-24.04-8`, 8 vCPU, 32 GB RAM, Linux x86_64, for every run, so numbers are
-comparable over time (the `--checkers 64` section: `depot-ubuntu-24.04-64`, 64 vCPU, checked by its own job). Sizing: the largest peak measured is tsgo's default mode on vscode and mui-docs (7.5 GiB on an
+comparable over time (the `--checkers 16` section: `depot-ubuntu-24.04-16`, 16 vCPU, checked by its own job). Sizing: the largest peak measured is tsgo's default mode on vscode and mui-docs (7.5 GiB on an
 18-core Mac, 6.9 GiB on Linux); 32 GB leaves 4x headroom, and 8 vCPUs cover the 4 checker threads plus parallel
 parsing. The first step fails the job if `nproc`/`MemTotal`/arch differ; there is no fallback runner. (On GitHub's
 standard 2 vCPU / 7 GB runner tsgo swapped on vscode: 146 s wall for a 50 s check.)
@@ -315,7 +323,7 @@ them 64 vCPU, sat idle through the 7-minute build.
 
 `.depot/workflows/pr-verify.yml` answers the two questions a performance or refactoring branch has to answer before it
 lands: does it still print exactly what main prints, and what did it do to time and memory? It runs on one
-`depot-ubuntu-24.04-64` machine (64 vCPU) and compares two `cargo build --release` binaries (not the PGO build:
+`depot-ubuntu-24.04-32` machine (32 vCPU; `--input cpus=64` opts into 64) and compares two `cargo build --release` binaries (not the PGO build:
 relative comparisons only): the branch, and its merge base with `base` (default `main`), so commits that landed on
 main after the branch was cut are not counted as the branch's.
 
@@ -346,7 +354,7 @@ with the table up to date. `depot ci run` takes no inputs (edit the defaults in 
 Depot does not serve `actions/cache` to it (not tied to a ref), so it clones and installs every project; a dispatched
 or labelled run restores the caches `bench.yml` saves.
 
-Duration with the defaults (10 projects x 4 checker counts x 3 reps, poison on), Depot run `8fp8bp2jk1`
+Historical duration on 64 vCPU (10 projects x 4 checker counts x 3 reps, poison on), Depot run `8fp8bp2jk1`
 (2026-10-07, `depot ci run`, so no caches): 10 min 44 s for the job, of which setup and project clone + install
 2 min 39 s, both release builds (at the same time) 35 s, measurement 7 min 23 s. With the caches (a pull request
 with the `verify` label, run `8hc5870p99`): 8 min 42 s, of which cache restores 34 s, builds 35 s, measurement
@@ -381,8 +389,8 @@ python3 bench/compare.py --tsrs target/release/tsrs --bun ~/.bun/bin/bun --proje
 python3 bench/compare.py --tsrs ... --bun ... --projects Compiler --threads default,4 --reps 2   # smoke test
 ```
 
-The Depot CI workflow `.depot/workflows/bench-compare.yml` (manual dispatch only) runs it on `depot-ubuntu-24.04-64`
-(64 vCPU) with the PGO `dist` build of the commit (built and trained as in `bench.yml`) and Bun canary, and uploads
+The Depot CI workflow `.depot/workflows/bench-compare.yml` (manual dispatch only) defaults to `depot-ubuntu-24.04-16`
+(16 vCPU; pass `--input cpus=32` or `--input cpus=64` for explicit scaling experiments) with the PGO `dist` build of the commit (built and trained as in `bench.yml`) and Bun canary, and uploads
 `bench/results/compare/<date>-<commit>-<threads>t.{json,md}` plus the logs as the `bench-compare` artifact.
 
 First run, 2026-10-06 (Depot run `rnfhvvd79g`, vscode, 20 reps, `bench/results/compare/2026-10-06-2420b7ed410b-64t.md`):

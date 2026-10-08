@@ -1,15 +1,16 @@
-# Depot CI workflow: head-to-head type-check benchmark on a 64-thread machine (bench/compare.py, bench/README.md
-# "Head-to-head on a wide machine"): tsgo 7.0.2, the TypeScript 7.1-dev nightly tsrs ports, tsrs (PGO dist build of
-# this commit, built like bench.yml) and `bun check` (Bun canary), at default threads and 4/8/16/64 threads, 20 reps.
-# Mirrors Bun's `bun check` announcement setup (vscode, Linux x64, 64 threads, mean of 20 runs). Manual only: the
-# 64-vCPU machine is expensive and the fixed-spec regression bench (bench.yml) stays on 8 vCPU. Results are the
-# `bench-compare` artifact and the job summary; nothing is committed.
+# Manual head-to-head comparison on a selected Depot runner. Use 16 or 32 vCPU for everyday comparisons;
+# 64 vCPU is opt-in for server scaling experiments. Results record the actual hardware.
 
-name: Bench (64-thread head-to-head)
+name: Bench (head-to-head)
 
 on:
   workflow_dispatch:
     inputs:
+      cpus:
+        description: Depot vCPU count (64 is for explicit server scaling experiments)
+        type: choice
+        options: ["16", "32", "64"]
+        default: "16"
       projects:
         description: comma-separated bench/projects.json names
         default: vscode
@@ -32,11 +33,12 @@ env:
   PROJECTS: ${{ inputs.projects || 'vscode' }}
   REPS: ${{ inputs.reps || '20' }}
   THREADS: ${{ inputs.threads || 'default,4,8,16,all' }}
+  RUNNER_CPUS: ${{ inputs.cpus || '16' }}
   BUN_VERSION: ${{ inputs.bun_version || 'canary' }}
 
 jobs:
   compare:
-    runs-on: depot-ubuntu-24.04-64
+    runs-on: ${{ format('depot-ubuntu-24.04-{0}', inputs.cpus || '16') }}
     timeout-minutes: 150
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -47,8 +49,8 @@ jobs:
         run: |
           nproc; free -g; df -h / | tail -1
           lscpu | grep -E 'Model name|^CPU\(s\)|Thread|Socket' || true
-          if [ "$(nproc)" -lt 64 ] || [ "$(uname -m)" != x86_64 ]; then
-            echo "::error::expected 64 vCPU x86_64, got $(nproc) vCPU $(uname -m)"; exit 1
+          if [ "$(nproc)" != "$RUNNER_CPUS" ] || [ "$(uname -m)" != x86_64 ]; then
+            echo "::error::expected $RUNNER_CPUS vCPU x86_64, got $(nproc) vCPU $(uname -m)"; exit 1
           fi
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -204,7 +206,7 @@ jobs:
 
       - name: Benchmark
         env:
-          BENCH_RUNNER: Depot CI `depot-ubuntu-24.04-64`
+          BENCH_RUNNER: Depot CI `depot-ubuntu-24.04-${{ inputs.cpus || '16' }}`
         run: >-
           python3 bench/compare.py --tsrs /tmp/tsrs-pgo/target/x86_64-unknown-linux-gnu/dist/tsrs
           --bun /tmp/bun/bun-linux-x64/bun --projects "$PROJECTS" --reps "$REPS" --threads "$THREADS"

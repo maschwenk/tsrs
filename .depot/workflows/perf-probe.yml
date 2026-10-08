@@ -1,4 +1,4 @@
-# Depot CI workflow: one-off performance probe on a 64-thread machine (or the `runner` input's, such as the 8-vCPU
+# Depot CI workflow: one-off performance probe on a 32-vCPU machine (or the `runner` input's, such as the 8-vCPU
 # `depot-ubuntu-24.04-8` of the README bench), for hill-climbing experiments that need more cores than a laptop, or
 # Linux (notes/perf-*.md). Not scheduled and not triggered by pushes: run it from a branch or a dirty
 # worktree with
@@ -16,7 +16,8 @@
 #   depot ci dispatch --repo maschwenk/tsrs --workflow perf-probe.yml --ref <branch> --input runner=depot-ubuntu-24.04-8 \
 #     --input projects=vscode,formbricks-web --input script=tools/perf/leafprobe.sh --input probe_args='--reps 5'
 #
-# restores the projects from bench.yml's caches. `script` picks the probe (it gets `probe_args` as PROBE_ARGS).
+# For an explicit 64-vCPU scaling experiment, pass --input runner=depot-ubuntu-24.04-64.
+# This restores the projects from bench.yml's caches. `script` picks the probe (it gets `probe_args` as PROBE_ARGS).
 
 name: Perf probe
 
@@ -28,7 +29,7 @@ on:
         default: vscode
       runner:
         description: Depot runner label
-        default: depot-ubuntu-24.04-64
+        default: depot-ubuntu-24.04-32
       script:
         description: probe script to run with bash
         default: tools/perf/probe.sh
@@ -46,7 +47,7 @@ env:
 
 jobs:
   probe:
-    runs-on: ${{ inputs.runner || 'depot-ubuntu-24.04-64' }}
+    runs-on: ${{ inputs.runner || 'depot-ubuntu-24.04-32' }}
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -140,7 +141,7 @@ jobs:
       # ~/.cargo and the dependencies in target/ (a build takes ~4 min on 64 cores, far longer on 8).
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          key: perf-probe-${{ inputs.runner || 'depot-ubuntu-24.04-64' }}
+          key: perf-probe-${{ inputs.runner || 'depot-ubuntu-24.04-32' }}
 
       - name: Build tsrs (release)
         run: cargo build --release --locked -p tsrs_cli

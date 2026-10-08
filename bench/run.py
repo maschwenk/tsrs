@@ -7,7 +7,7 @@ See bench/README.md. Typical use:
     python3 bench/run.py --local --projects webpack,Compiler --reps 1
     python3 bench/run.py --setup-only                  # clone + install only (CI cache warm-up)
     python3 bench/run.py --projects vscode --out-dir /tmp/p/vscode   # one project of a parallel run (CI)
-    python3 bench/run.py --modes checkers64 --out-dir /tmp/p/wide    # the 64-checker table (CI: 64 vCPU)
+    python3 bench/run.py --modes wide,checkers16 --out-dir /tmp/p/wide  # the 16-vCPU tables
     python3 bench/run.py --merge /tmp/p/*/*.json --readme README.md  # join such results into one
 """
 
@@ -35,21 +35,22 @@ MARKER = ".tsrs-bench.json"
 START, END = "<!-- bench:start -->", "<!-- bench:end -->"
 # --modes: extra compiler flags per mode. "default" passes none (each compiler picks its own checker count), "single"
 # is one checker thread, "checkers8" gives both compilers 8 checker threads (the scaling comparison). "wide" and
-# "checkers64" are the 64-vCPU machine's modes (.depot/workflows/bench.yml `measure-wide`): "wide" passes no flag
-# either (the same measurement as "default", kept apart so that --merge can hold both machines' results), "checkers64"
-# gives both compilers 64 checker threads.
+# "checkers16" are the 16-vCPU machine's modes (.depot/workflows/bench.yml `measure-wide`): "wide" passes no flag
+# either (the same measurement as "default", kept apart so --merge can hold both machines' results).
+# Keep "checkers64" for historical results and explicit server scaling experiments.
 MODE_FLAGS = {
     "default": [],
     "single": ["--singleThreaded"],
     "checkers8": ["--checkers", "8"],
+    "checkers16": ["--checkers", "16"],
     "wide": [],
     "checkers64": ["--checkers", "64"],
 }
 MODE_NAMES = {"default": "default mode", "single": "`--singleThreaded`", "checkers8": "`--checkers 8`",
-              "wide": "default mode on the 64-vCPU machine", "checkers64": "`--checkers 64`"}
+              "checkers16": "`--checkers 16`", "wide": "default mode on the wider machine", "checkers64": "`--checkers 64`"}
 # `bun check` (Bun 1.4.3 canary or later), the third column when --bun is given. Its only thread knob caps every
 # thread, where --checkers caps the checker threads only; "default" and "wide" pass nothing (one thread per core).
-BUN_FLAGS = {"default": [], "single": ["--threads", "1"], "checkers8": ["--threads", "8"], "wide": [],
+BUN_FLAGS = {"default": [], "single": ["--threads", "1"], "checkers8": ["--threads", "8"], "checkers16": ["--threads", "16"], "wide": [],
              "checkers64": ["--threads", "64"]}
 # bun's summary line: "checked N files" with errors, "No type errors in N files" without.
 BUN_FILES_RE = re.compile(r"(?:checked|No type errors in) ([\d,]+) files?")
@@ -442,6 +443,8 @@ def markdown(result: dict, modes: list[str] | None = None) -> str:
         titles = {"default": f"Default mode: {default_title}",
                   "single": "`--singleThreaded`: one checker thread in both",
                   "checkers8": "`--checkers 8`: 8 checker threads in both (how each compiler scales with more checkers)",
+                  "checkers16": "`--checkers 16`: 16 checker threads in both"
+                                + (", bun `--threads 16`" if has_bun(mode) else ""),
                   "wide": f"Default mode on a {mm.get('cpus')}-vCPU machine: {default_title}",
                   "checkers64": "`--checkers 64`: 64 checker threads in both (how each compiler scales on a wide machine)"
                                 + (", bun `--threads 64`" if has_bun(mode) else "")}
@@ -558,13 +561,13 @@ def update_readme(readme: Path, table: str) -> None:
 def merge_results(cfg: dict, paths: list[Path]) -> dict:
     """One result from the partial results of a parallel run (.depot/workflows/bench.yml): one job per project on the
     fixed-spec machine (`run.py --projects <name> --out-dir <dir>`, the default modes) and the wide job (`run.py
-    --modes checkers64`, every project on a 64-vCPU machine). Projects in bench/projects.json order, modes in
+    --modes wide,checkers16`, every project on a 16-vCPU machine). Projects in bench/projects.json order, modes in
     MODE_FLAGS order.
 
     The binary, the compilers and flags must agree, and no (project, mode) may be measured twice. The rep counts
     need not (the wide job runs more than the fixed-spec jobs): the merged result keeps the first partial's as its
     `reps` / `tsgo_reps` and every mode's own in `mode_reps`. The machines need not either: the one that measured the most (project, mode) cells is the run's machine (ties: the first partial's),
-    and a cell measured on another records its own `machine` (all 64-checker cells do). bench/regressions.py compares
+    and a cell measured on another records its own `machine` (all wide cells do). bench/regressions.py compares
     a project's single-threaded counts only with runs on the same CPU model and C library."""
     order = {p["name"]: i for i, p in enumerate(cfg["projects"])}
     mode_order = {mode: i for i, mode in enumerate(MODE_FLAGS)}
@@ -678,7 +681,7 @@ def main() -> None:
     ap.add_argument("--out-dir", type=Path, default=BENCH / "results")
     ap.add_argument("--readme", type=Path, help="rewrite the bench block of this README")
     ap.add_argument("--readme-modes", help="comma-separated modes the README block (and --readme-table) shows; default: "
-                                           "all of the result's modes. CI: `wide`, the 64-vCPU machine's default-mode table")
+                                           "all of the result's modes. CI: `wide`, the 16-vCPU machine's default-mode table")
     ap.add_argument("--readme-table", type=Path, help="also write the README variant of the table to this file")
     ap.add_argument("--apply-table", type=Path,
                     help="only rewrite --readme's bench block from this results .md (no benchmarking)")

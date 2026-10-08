@@ -6,7 +6,7 @@
 # Four jobs (bench/README.md "CI"): `build` makes the PGO dist binary once; `measure` is one job per project of
 # bench/projects.json, each on its own machine of the fixed spec, so the projects are measured at the same time
 # without ever sharing a CPU (one job measuring them one after the other took 18-20 min; the longest project, vscode,
-# takes about 5); `measure-wide` measures every project with `--checkers 64` on one 64-vCPU machine; `merge` joins
+# takes about 5); `measure-wide` measures every project with `--checkers 16` on one 16-vCPU machine; `merge` joins
 # the partial results into one result file (bench/run.py --merge), flags regressions and commits.
 #
 # Loop guards: the results commit only touches README.md and bench/results/** (excluded by `paths`), and carries
@@ -44,7 +44,7 @@ permissions:
   contents: read
 
 # Fixed machine spec so runs are comparable: Depot depot-ubuntu-24.04-8 = 8 vCPU / 32 GB / x86_64 (bench/README.md
-# "CI"), for the build (PGO training) and for every measuring job except `measure-wide` (depot-ubuntu-24.04-64, 64
+# "CI"), for the build (PGO training) and for every measuring job except `measure-wide` (depot-ubuntu-24.04-16, 16
 # vCPU). The hardware steps fail the job on any other machine; there is no fallback runner.
 
 env:
@@ -358,17 +358,17 @@ jobs:
           path: bench/.work/logs
           if-no-files-found: ignore
 
-  # The 64-vCPU machine's tables: every project in one job, in default mode (`wide`: each compiler at its own thread
-  # count, which is the README table) and at `--checkers 64` (64 checker threads would oversubscribe the fixed-spec
+  # The 16-vCPU machine's tables: every project in one job, in default mode (`wide`: each compiler at its own thread
+  # count, which is the README table) and at `--checkers 16` (16 checker threads would oversubscribe the fixed-spec
   # machine), each with `bun check` from Bun canary as a third column. It runs while the fixed-spec jobs do; it is the
-  # run's only 64-vCPU job. Its cells record their machine (bench/run.py --merge). The regression flag never reads them:
+  # run's only 16-vCPU job. Its cells record their machine (bench/run.py --merge). The regression flag never reads them:
   # it compares the single-threaded counts of the fixed-spec jobs.
   measure-wide:
     needs: build
-    runs-on: depot-ubuntu-24.04-64
+    runs-on: depot-ubuntu-24.04-16
     timeout-minutes: 60
     env:
-      BENCH_RUNNER: Depot CI `depot-ubuntu-24.04-64`
+      BENCH_RUNNER: Depot CI `depot-ubuntu-24.04-16`
       PROJECTS: ${{ join(fromJSON(needs.build.outputs.projects), ',') }}
       BUN_VERSION: canary
     steps:
@@ -377,12 +377,12 @@ jobs:
           ref: ${{ inputs.commit || github.sha }} # the measured commit (workflow_dispatch may name one)
           persist-credentials: false
 
-      - name: Runner hardware (64 vCPU x86_64)
+      - name: Runner hardware (16 vCPU x86_64)
         run: |
           nproc; free -g; df -h / | tail -1
           lscpu | grep -E 'Model name|^CPU\(s\)' || true
-          if [ "$(nproc)" != 64 ] || [ "$(uname -m)" != x86_64 ]; then
-            echo "::error::expected 64 vCPU x86_64, got $(nproc) vCPU $(uname -m)"; exit 1
+          if [ "$(nproc)" != 16 ] || [ "$(uname -m)" != x86_64 ]; then
+            echo "::error::expected 16 vCPU x86_64, got $(nproc) vCPU $(uname -m)"; exit 1
           fi
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -537,11 +537,13 @@ jobs:
           /tmp/tsrs-pgo/dist/tsrs --version
           cat /tmp/tsrs-pgo/dist/rustc.txt
 
-      - name: Benchmark (default mode and --checkers 64, with bun check)
-        run: >-
-          python3 bench/run.py --projects "$PROJECTS" --modes wide,checkers64 --tsrs /tmp/tsrs-pgo/dist/tsrs
-          --tsrs-build pgo-dist --rustc "$(cat /tmp/tsrs-pgo/dist/rustc.txt)" --bun /tmp/bun/bun-linux-x64/bun
-          --out-dir /tmp/bench-partial/wide --reps 10 --tsgo-reps 3
+      - name: Benchmark (default mode and --checkers 16, with bun check)
+        run: |
+          # Old backfilled commits lack checkers16; measure their default mode on the actual 16-vCPU runner.
+          modes=$(python3 -c 'import sys; sys.path.insert(0, "bench"); import run; print("wide,checkers16" if "checkers16" in run.MODE_FLAGS else "wide")')
+          python3 bench/run.py --projects "$PROJECTS" --modes "$modes" --tsrs /tmp/tsrs-pgo/dist/tsrs \
+            --tsrs-build pgo-dist --rustc "$(cat /tmp/tsrs-pgo/dist/rustc.txt)" --bun /tmp/bun/bun-linux-x64/bun \
+            --out-dir /tmp/bench-partial/wide --reps 10 --tsgo-reps 3
 
       - name: Upload the result
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -561,8 +563,8 @@ jobs:
 
   # Joins the per-project results into bench/results/<date>-<commit>.{json,md} and the README table, flags
   # regressions, and commits. Runs only when every fixed-spec measuring job succeeded: the regression flag reads them.
-  # README.md shows one table, the 64-vCPU machine's default mode (`wide`, with bun check); bench/results/<...>.md has
-  # every mode. If the wide job failed or was cancelled, the results file has no 64-vCPU sections and the README table
+  # README.md shows one table, the 16-vCPU machine's default mode (`wide`, with bun check); bench/results/<...>.md has
+  # every mode. If the wide job failed or was cancelled, the results file has no 16-vCPU sections and the README table
   # is left as it was.
   merge:
     needs: [build, measure, measure-wide]
@@ -590,7 +592,7 @@ jobs:
           python3 bench/run.py --merge /tmp/bench-partials/*/*.json --out-dir /tmp/bench-merged --readme-modes wide --readme-table /tmp/bench-readme.md
           cp /tmp/bench-merged/* bench/results/
           # The README table needs the wide job's cells; without them --readme-table holds an empty table.
-          if ! grep -q '^| ' /tmp/bench-readme.md; then echo "::warning::no 64-vCPU results; README.md keeps its table"; rm /tmp/bench-readme.md; fi
+          if ! grep -q '^| ' /tmp/bench-readme.md; then echo "::warning::no 16-vCPU results; README.md keeps its table"; rm /tmp/bench-readme.md; fi
 
       - name: Upload the merged result
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -643,7 +645,7 @@ jobs:
             # commit a table came from is in its last line ("tsrs commit: `<sha>`", bench/run.py).
             readme_commit=$(sed -n 's/.*tsrs commit: `\([0-9a-f]\{7,40\}\)`.*/\1/p' README.md | head -1)
             if [ ! -f /tmp/bench-readme.md ]; then
-              echo "::notice::no 64-vCPU table for ${measured::12}; README.md keeps its table"
+              echo "::notice::no 16-vCPU table for ${measured::12}; README.md keeps its table"
             elif [ -n "$readme_commit" ] && [ "$readme_commit" != "${measured::12}" ] \
                 && git cat-file -e "$readme_commit^{commit}" 2>/dev/null \
                 && git merge-base --is-ancestor "$measured" "$readme_commit"; then

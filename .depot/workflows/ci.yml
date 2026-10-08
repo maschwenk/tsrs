@@ -311,7 +311,7 @@ jobs:
 
   # docs/RUST.md: clippy findings per (lint, file) may not grow past tools/lint/baseline.tsv.
   lint-ratchet:
-    runs-on: depot-ubuntu-24.04-4
+    runs-on: depot-ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -344,7 +344,7 @@ jobs:
   # main without CI and without a bench run (bench/README.md "CI"). Notes-only pull requests carry it on purpose.
   skip-marker:
     if: github.event_name == 'pull_request'
-    runs-on: depot-ubuntu-24.04-4
+    runs-on: depot-ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -369,7 +369,7 @@ jobs:
   # tools/gen-check.sh: re-runs the code generators and fails if a generated file differs from its generator's output
   # (docs/RUST.md, "Generated-code freshness check").
   generated-code:
-    runs-on: depot-ubuntu-24.04-4
+    runs-on: depot-ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -404,6 +404,9 @@ jobs:
         with:
           go-version-file: ts-ref/tsc/go.mod
           cache-dependency-path: ts-ref/tsc/go.sum
+
+      - name: Benchmark reporting tests
+        run: python3 -m unittest discover -s bench -p test_reporting.py
 
       - name: Generated code is up to date
         run: tools/gen-check.sh

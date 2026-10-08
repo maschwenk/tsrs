@@ -1,5 +1,5 @@
 # Depot CI workflow: one-off probe of how the Linux x86-64 dist binary is built (notes/perf-binary-layout.md). In one
-# job on the 64-vCPU bench machine it builds main's bench binary (PGO, bench.yml `build`) and variants of it from the
+# job on the 32-vCPU bench machine it builds main's bench binary (PGO, bench.yml `build`) and variants of it from the
 # same instrumented build (the training runs of tsrs writing their profiles again, a larger PGO training set, BOLT as
 # release.yml does it, a larger BOLT training set, BOLT with -hugify: tools/perf/layout-build.sh), then measures them interleaved on every bench project
 # (tools/perf/layout-measure.py) and profiles the baseline on vscode. Not scheduled; run it from a pushed branch, which
@@ -9,7 +9,7 @@
 #
 # Everything worth keeping is the `perf-layout-probe` artifact (probe-out/).
 
-name: Perf layout probe (64 threads)
+name: Perf layout probe (32 threads)
 
 on:
   workflow_dispatch:
@@ -32,19 +32,19 @@ env:
 
 jobs:
   probe:
-    runs-on: depot-ubuntu-24.04-64
+    runs-on: depot-ubuntu-24.04-32
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
 
-      - name: Runner hardware (64 vCPU x86_64)
+      - name: Runner hardware (32 vCPU x86_64)
         run: |
           mkdir -p probe-out
           { nproc; lscpu; free -g; uname -r; cat /sys/kernel/mm/transparent_hugepage/enabled; } | tee probe-out/machine.txt
-          if [ "$(nproc)" != 64 ] || [ "$(uname -m)" != x86_64 ]; then
-            echo "::error::expected 64 vCPU x86_64, got $(nproc) vCPU $(uname -m)"; exit 1
+          if [ "$(nproc)" != 32 ] || [ "$(uname -m)" != x86_64 ]; then
+            echo "::error::expected 32 vCPU x86_64, got $(nproc) vCPU $(uname -m)"; exit 1
           fi
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
