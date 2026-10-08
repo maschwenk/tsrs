@@ -300,8 +300,7 @@ fn perform_compilation(
     // tsrs-only (notes/mem-lazy-dts-members.md): when no declaration file is type-checked, the member lists of
     // interfaces, classes and type literals in declaration files are parsed and bound on first use.
     if testing.is_none() && (options.skip_lib_check.is_true() || options.no_check.is_true()) && tsrs_compiler::lazy_dts_allowed() {
-        tsrs_parser::enable_lazy_dts();
-        tsrs_binder::enable_lazy_dts();
+        tsrs_compiler::enable_lazy_dts();
     }
     let mut program_options = ProgramOptions::new(config, host);
     program_options.leaf_files = leaf_settings.mode;

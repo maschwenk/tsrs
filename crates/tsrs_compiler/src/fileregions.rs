@@ -114,6 +114,14 @@ pub fn lazy_dts_allowed() -> bool {
     !census && !tsrs_core::lazydts_census::enabled() && !tsrs_core::ptr::shared_check::enabled()
 }
 
+/// Parses and binds declaration-file member lists lazily in every program created from here on, process-wide (the CLI
+/// before `new_program` when no declaration file is type-checked; `TSRS_LAZY_DTS=force` in the test runner, to check
+/// that forcing every list gives the same baselines). Never in the language server or the API.
+pub fn enable_lazy_dts() {
+    tsrs_parser::enable_lazy_dts();
+    tsrs_binder::enable_lazy_dts();
+}
+
 pub fn leaf_settings_from_env(checkers: usize) -> LeafSettings {
     let census = std::env::var_os("TSRS_CENSUS").is_some_and(|v| v == "1") || tsrs_core::census_recording();
     #[cfg(feature = "checker")]
