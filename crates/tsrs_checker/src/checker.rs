@@ -1338,6 +1338,8 @@ pub struct Checker {
     pub overlay: Box<tsrs_core::sharedgraph::Overlay>,
     /// Shared-graph prototype: this checker is the seed whose graph will be frozen (symbol ids are assigned eagerly).
     pub seed_mode: bool,
+    /// Shared-graph prototype: made by `fork` from the frozen seed.
+    pub is_fork: bool,
 }
 
 // checker.go:911
@@ -1714,6 +1716,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         emit_resolver: None,
         overlay: Box::default(),
         seed_mode: false,
+        is_fork: false,
     });
     c.undefined_symbol = c.new_symbol(SymbolFlags::Property, "undefined");
     c.arguments_symbol = c.new_symbol(SymbolFlags::Property, "arguments");
@@ -2186,6 +2189,7 @@ impl Checker {
             emit_resolver: None,
             overlay: Box::default(),
             seed_mode: false,
+            is_fork: true,
         });
         c.name_resolver = c.create_name_resolver();
         c.name_resolver_for_suggestion = c.create_name_resolver_for_suggestion();

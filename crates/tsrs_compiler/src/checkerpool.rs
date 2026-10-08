@@ -232,6 +232,8 @@ impl Drop for poolState {
 }
 
 pub(crate) struct poolState {
+    /// Shared-graph prototype: the seed was started; the type-check pass turns its checkers into forks.
+    shared_graph: bool,
     // Leaked like the program that owns the pool, so a handle can hold a checker's lock without borrowing the pool.
     checkers: &'static [CheckerSlot],
     // Program file index of each file.
@@ -587,17 +589,19 @@ impl checkerPool {
                 #[cfg(feature = "checker")]
                 tsrs_checker::links::set_multiple_checkers(self.checker_count > 1);
                 let slots: Vec<Mutex<Option<CheckerSlot>>> = (0..self.checker_count).map(|_| Mutex::new(None)).collect();
-                // Shared-graph prototype (sharedgraph.rs): one seed checker checks the seed files, its graph is
-                // frozen, and every checker is a fork of it.
+                // Shared-graph prototype (sharedgraph.rs): one seed checker checks the seed files in the background;
+                // in the type-check pass the pool's checkers (plain until then) become forks of its frozen graph.
                 #[cfg(feature = "checker")]
-                let base = shared.then(|| crate::sharedgraph::seed(program, &checked_file_weights(program)));
+                if shared {
+                    crate::sharedgraph::start_seed(program, checked_file_weights(program));
+                }
                 run_work_group(self.single_threaded, self.checker_count, |i| {
+                    let c = new_checker(program);
                     #[cfg(feature = "checker")]
-                    if let Some(base) = base {
-                        *slots[i].lock().unwrap() = Some(CheckerSlot(Mutex::new(Checker::fork(base.0))));
-                        return;
+                    if shared && i == 0 {
+                        crate::sharedgraph::note_fresh_checker(&c);
                     }
-                    *slots[i].lock().unwrap() = Some(CheckerSlot(Mutex::new(new_checker(program))));
+                    *slots[i].lock().unwrap() = Some(CheckerSlot(Mutex::new(c)));
                 });
                 let checkers: &'static [CheckerSlot] =
                     Box::leak(slots.into_iter().map(|s| s.into_inner().unwrap().unwrap()).collect::<Vec<_>>().into_boxed_slice());
@@ -629,6 +633,7 @@ impl checkerPool {
             let owners = associations.iter().map(|&c| std::sync::atomic::AtomicU32::new(c as u32)).collect();
             let weights = if self.checker_count > 1 { checked_file_weights(program) } else { Vec::new() };
             poolState {
+                shared_graph: shared,
                 checkers,
                 file_indices,
                 owners,
@@ -770,6 +775,10 @@ impl checkerPool {
             let mut count = 0;
             let mut file_cpu: Vec<(P<SourceFile>, f64)> = Vec::new();
             let mut guard = state.checkers[checker_idx].0.lock().unwrap();
+            #[cfg(feature = "checker")]
+            if allow_steal && state.shared_graph && checker_idx >= crate::sharedgraph::overlap() {
+                crate::sharedgraph::fork_into(&mut guard);
+            }
             crate::sharedgraph::enter_checker(&guard);
             let sg_start = sg_stats.then(|| crate::sharedgraph::Point::take(&guard));
             for &i in &seed {
