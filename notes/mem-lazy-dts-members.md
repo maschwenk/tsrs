@@ -166,6 +166,17 @@ and the rewinds cost more than the skipped binding saves where the arena has hug
 instructions come from the Mac. An earlier run of the branch before the size limit, the spin and the global-merge
 forcing had cal-diy +2-6% wall at 32 checkers (waiting on forced lists); this run has none.
 
+**Where it costs wall time: drizzle-orm** (21 MB of declaration text, 0.18 s at 32 checkers, 10,846 errors). The
+first runs of this branch had +9% wall and +13% user time at 32 checkers (+5% at 16) for -1% to -2% peak. A perf
+profile on the runner put the extra cycles in `DiagnosticsCollection::add` (8.8% of cycles against 3.8%) and in
+kernel and futex lock contention, not in forcing (14 ms of thread time in all): checkers that wait on the same lists
+at the start of checking go on in lockstep, and every `add` cloned the reporting file's `Path`, an `Arc` whose counter
+all checkers then write at once. With the diagnostics collection keyed without that clone (a separate change, branch
+`mem/diag-collection-no-arc`) the user time is +3.7% and the wall +4.5% at 32 checkers, +4.4% at 16; the rest is the
+waiting itself (about 2,200 waits on 1,000 lists, mostly `@types/node` interfaces that every checker needs, in three
+versions). pr-verify's three-run medians also showed mui-docs and t3code-server slower at 32 checkers; nine-run
+interleaved probes did not (mui-docs +0.4%, t3code-server +0.5% paired).
+
 Mac (M5 Max, 18 cores, 3 interleaved runs, medians; main cdcfc0e against 744c2ad; peak footprint in MiB, instructions
 in billions; a loaded machine, so walls are not compared):
 
@@ -209,6 +220,9 @@ parsed again, 422 of them while their file was bound (merges and unusual states)
 - Eager JSDoc (`@see` / `@link`, parsed with the file so unused-identifier checks see the references): 4-17 MB per
   project of lists stay eager.
 - Per-member laziness (names eager, types lazy): about 1% of peak more (section 1).
+- Waiting on hot lists: programs whose checkers all need the same small lists at once (drizzle-orm) lose a few
+  percent of wall time at 16-32 checkers. Forcing more lists up front (all lists of global script files) would remove
+  most waits but give back the savings of those files; not done.
 - Record overhead: 96 bytes per lazy list (formbricks-web 117K lists, 11 MB, 0.4% of peak); the record could shrink
   by about a third.
 - Forcing re-parses: a list that is needed is parsed twice (once to establish it is error-free and plain). A skipping
