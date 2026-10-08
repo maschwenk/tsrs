@@ -10,8 +10,10 @@ args=${PROBE_ARGS:-}
 if [[ "$args" == --base-ref* ]]; then
   ref=$(awk '{print $2}' <<<"$args")
   args=$(cut -d' ' -f3- <<<"$args")
-  git fetch -q origin "$ref" 2>/dev/null || git fetch -q --unshallow origin 2>/dev/null || true
-  git worktree add -f /tmp/base-src FETCH_HEAD 2>/dev/null || git worktree add -f /tmp/base-src "origin/$ref"
+  # A branch name or a commit of this repository (the checkout is shallow: fetch the history to find a commit).
+  git fetch -q origin "+refs/heads/*:refs/remotes/origin/*" --unshallow 2>/dev/null || git fetch -q origin "+refs/heads/*:refs/remotes/origin/*"
+  sha=$(git rev-parse --verify -q "origin/$ref^{commit}" || git rev-parse --verify "$ref^{commit}")
+  git worktree add -f --detach /tmp/base-src "$sha"
   (cd /tmp/base-src && CARGO_TARGET_DIR="$PWD/../base-target" cargo build --release --locked -p tsrs_cli 2>&1 | tail -3)
   export BASE_BIN=/tmp/base-target/release/tsrs
   echo "base: $ref $(git -C /tmp/base-src rev-parse HEAD)" | tee "$PROBE_OUT/base.txt"
