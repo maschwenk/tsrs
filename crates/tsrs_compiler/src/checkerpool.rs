@@ -574,7 +574,9 @@ impl checkerPool {
             tsrs_core::memsplit::report("parse end");
             // The parse workers are done allocating: the checker threads continue in their arenas.
             if !self.single_threaded {
-                crate::fileregions::force_global_merges(program);
+                if self.checker_count > 1 {
+                    crate::fileregions::force_shared_lists(program);
+                }
                 crate::program::worker_pool().broadcast(|_| tsrs_core::ptr::release_own_arena());
             }
             let create_and_assign = || {

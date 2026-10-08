@@ -127,17 +127,31 @@ pub fn enable_lazy_dts() {
 // Relaxed (stores and loads): set by the CLI before the program is created.
 static LAZY_DTS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-/// Before the checkers are created: parses and binds, in parallel on the worker pool, the lazy member lists that every
-/// checker's `initialize_checker` asks for at once, so that its checkers do not wait for one another on them. Those are
-/// the lists of interfaces and classes that merge into the global scope more than once (declared in several script
-/// files or `declare global` blocks): merging a second declaration clones the first symbol's tables and merges the
-/// second's into them (notes/mem-lazy-dts-members.md). Forcing a list early changes nothing else.
-pub(crate) fn force_global_merges(program: &crate::program::Program) {
+/// Before the checkers of a multi-checker pass are created: parses and binds, in parallel on the worker pool, the lazy
+/// member lists that every checker asks for at the start, so that the checkers do not wait for one another on them
+/// (notes/mem-lazy-dts-members.md, "Shared lists"). Two sets, each a property of the program, not of a run:
+///
+/// - the global libraries: every declaration file that enters the program through a default lib, a `lib` option or
+///   `/// <reference lib>`, an automatic type directive, the `types` option or a `/// <reference types>` directive, and
+///   the files those pull in with `/// <reference path>` (`@types/node`'s `index.d.ts` references the rest of the
+///   package). Their globals and ambient modules are what every checker resolves first; module-scoped packages that
+///   enter only through imports stay lazy;
+/// - the interfaces and classes that merge into the global scope more than once (declared in several script files or
+///   `declare global` blocks): `initialize_checker` clones the first symbol's tables and merges the others into them.
+///
+/// Forcing a list early changes nothing observable (`lazylist`). `TSRS_LAZY_DTS_SHARED=0` forces only the merges.
+pub(crate) fn force_shared_lists(program: &crate::program::Program) {
     // Relaxed: see `LAZY_DTS`.
     if !LAZY_DTS.load(std::sync::atomic::Ordering::Relaxed) {
         return;
     }
-    let mut by_name: rustc_hash::FxHashMap<&'static str, Vec<P<tsrs_ast::Symbol>>> = rustc_hash::FxHashMap::default();
+    let mut lists: Vec<P<tsrs_ast::lazylist::LazyNodeList>> = Vec::new();
+    if !std::env::var_os("TSRS_LAZY_DTS_SHARED").is_some_and(|v| v == "0") {
+        for file in global_library_files(program) {
+            lists.extend(file.lazy_lists.get().iter().copied().filter(|l| l.state() == tsrs_ast::lazylist::DEFERRED));
+        }
+    }
+    let mut by_name: FxHashMap<&'static str, Vec<P<tsrs_ast::Symbol>>> = FxHashMap::default();
     let mut add = |table: Option<P<tsrs_ast::SymbolTable>>| {
         if let Some(table) = table {
             table.for_each(|name, symbol| by_name.entry(name).or_default().push(symbol));
@@ -154,15 +168,46 @@ pub(crate) fn force_global_merges(program: &crate::program::Program) {
             }
         }
     }
-    let lists: Vec<P<tsrs_ast::lazylist::LazyNodeList>> = by_name
-        .values()
-        .filter(|symbols| symbols.len() > 1)
-        .flatten()
-        .filter_map(|s| s.lazy_list())
-        .filter(|l| l.state() == tsrs_ast::lazylist::DEFERRED)
-        .collect();
+    #[expect(clippy::iter_over_hash_type, reason = "collects lists to force; forcing order cannot be seen")]
+    for symbols in by_name.values() {
+        if symbols.len() > 1 {
+            lists.extend(symbols.iter().filter_map(|s| s.lazy_list()).filter(|l| l.state() == tsrs_ast::lazylist::DEFERRED));
+        }
+    }
     use rayon::prelude::*;
-    tsrs_core::phases::time("Lazy lists: global merges", || crate::program::worker_pool().install(|| lists.par_iter().for_each(|l| l.ensure())));
+    tsrs_core::phases::time("Lazy lists: shared", || crate::program::worker_pool().install(|| lists.par_iter().for_each(|l| l.ensure())));
+}
+
+/// The declaration files of the global libraries (`force_shared_lists`), in program order.
+fn global_library_files(program: &crate::program::Program) -> Vec<P<SourceFile>> {
+    use crate::file_include::fileIncludeKind as K;
+    let reasons = &program.file_include_data.file_include_reasons;
+    let mut global: FxHashSet<&str> = FxHashSet::default();
+    let mut by_reference: Vec<(&str, &str)> = Vec::new(); // (referencing file's path, referenced file's path)
+    #[expect(clippy::iter_over_hash_type, reason = "builds a set and an edge list that is closed over below")]
+    for (path, rs) in reasons {
+        for r in rs {
+            match r.kind {
+                K::LibFile | K::LibReferenceDirective | K::AutomaticTypeDirectiveFile | K::TypeReferenceDirective => {
+                    global.insert(path);
+                }
+                K::ReferenceFile => by_reference.push((r.as_referenced_file_data().file, path)),
+                _ => {}
+            }
+        }
+    }
+    loop {
+        let before = global.len();
+        for &(from, to) in &by_reference {
+            if global.contains(from) {
+                global.insert(to);
+            }
+        }
+        if global.len() == before {
+            break;
+        }
+    }
+    program.files.iter().copied().filter(|f| f.is_declaration_file() && global.contains(&*f.path().0)).collect()
 }
 
 pub fn leaf_settings_from_env(checkers: usize) -> LeafSettings {
