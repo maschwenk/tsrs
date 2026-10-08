@@ -315,7 +315,7 @@ them 64 vCPU, sat idle through the 7-minute build.
 
 `.depot/workflows/pr-verify.yml` answers the two questions a performance or refactoring branch has to answer before it
 lands: does it still print exactly what main prints, and what did it do to time and memory? It runs on one
-`depot-ubuntu-24.04-64` machine (64 vCPU) and compares two `cargo build --release` binaries (not the PGO build:
+`depot-ubuntu-24.04-32` machine (32 vCPU; `--input cpus=64` opts into 64) and compares two `cargo build --release` binaries (not the PGO build:
 relative comparisons only): the branch, and its merge base with `base` (default `main`), so commits that landed on
 main after the branch was cut are not counted as the branch's.
 
@@ -346,7 +346,7 @@ with the table up to date. `depot ci run` takes no inputs (edit the defaults in 
 Depot does not serve `actions/cache` to it (not tied to a ref), so it clones and installs every project; a dispatched
 or labelled run restores the caches `bench.yml` saves.
 
-Duration with the defaults (10 projects x 4 checker counts x 3 reps, poison on), Depot run `8fp8bp2jk1`
+Historical duration on 64 vCPU (10 projects x 4 checker counts x 3 reps, poison on), Depot run `8fp8bp2jk1`
 (2026-10-07, `depot ci run`, so no caches): 10 min 44 s for the job, of which setup and project clone + install
 2 min 39 s, both release builds (at the same time) 35 s, measurement 7 min 23 s. With the caches (a pull request
 with the `verify` label, run `8hc5870p99`): 8 min 42 s, of which cache restores 34 s, builds 35 s, measurement

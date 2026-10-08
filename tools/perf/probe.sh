@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Default probe for .depot/workflows/perf-probe.yml: the checker-count scaling curve of tsrs on vscode with per-checker
-# CPU times, plus bun check's load/check split, on the 64-thread runner. Experiments replace or extend this script in
+# CPU times, plus bun check's load/check split, on the selected runner. Experiments replace or extend this script in
 # their branch; keep everything worth keeping under $PROBE_OUT.
 #
 # Environment (set by the workflow; set them yourself to run locally):
@@ -17,7 +17,10 @@ flags=(-p src --noEmit --incremental false --extendedDiagnostics --pretty false)
 echo "== tsrs: $("$TSRS_BIN" --version)" | tee "$PROBE_OUT/summary.txt"
 "$TSRS_BIN" "${flags[@]}" > /dev/null 2>&1 || true   # warm the page cache
 
+cpus=$(nproc)
+echo "== runner: $cpus vCPU" | tee -a "$PROBE_OUT/summary.txt"
 for k in 4 8 16 32 64; do
+  [ "$k" -le "$cpus" ] || continue
   for rep in 1 2 3; do
     out="$PROBE_OUT/tsrs-checkers$k-rep$rep.txt"
     /usr/bin/time -f "wall %e s, maxrss %M KiB" -o "$out.time" \
@@ -29,7 +32,8 @@ done
 
 if [ -n "${BUN_BIN:-}" ]; then
   echo "== bun: $("$BUN_BIN" --revision)" | tee -a "$PROBE_OUT/summary.txt"
-  for t in 16 64; do
+  for t in 4 8 16 32 64; do
+    [ "$t" -le "$cpus" ] || continue
     for rep in 1 2 3; do
       out="$PROBE_OUT/bun-threads$t-rep$rep.txt"
       /usr/bin/time -f "wall %e s, maxrss %M KiB" -o "$out.time" \
