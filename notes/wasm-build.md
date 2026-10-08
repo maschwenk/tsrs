@@ -1,9 +1,10 @@
 # wasm-build: tsrs as a WebAssembly module (crates/tsrs_wasm, npm/tsrs-wasm)
 
 tsc as a `wasm32-wasip1` module over a host file system, with a Node host (bin `tsrs-wasm`, an in-memory `files`
-API with JSON diagnostics) and a browser example. Single-threaded. Not released: `@maschwenk/tsrs-wasm` is not
-published. The design follows ts-rust's wasm build (pingdotgg/ts-rust, `crates/ts_wasm`, `npm/wasm`); the code here
-is written from scratch for tsrs.
+API with JSON diagnostics) and a browser example. Single-threaded. Released as `@maschwenk/tsrs-wasm` from 0.9.0:
+`.github/workflows/release.yml`'s `wasm` job builds the module, runs `npm test`, packs the package with
+`npm/build.mjs --wasm` (same version as `@maschwenk/tsrs`), installs the tarball and runs it. The design follows
+ts-rust's wasm build (pingdotgg/ts-rust, `crates/ts_wasm`, `npm/wasm`); the code here is written from scratch for tsrs.
 
 ## What was built, and why
 
@@ -179,5 +180,5 @@ node npm/tsrs-wasm/examples/browser/serve.mjs   # the browser example
 
 LZMA-packed libraries (ts-rust: 3.79 MB to 0.31 MB raw); function reordering for compression (ts-rust: -96 KB
 gzip); `dyn` trims after a twiggy census; a `wasm32-wasip1-threads` build with real checker threads
-(SharedArrayBuffer, a thread-spawn host, `NO_THREADS = false`); npm release wiring (owner); running the module in
-tsrs's own conformance runner; WASI `std::fs` as a second host for wasmtime users.
+(SharedArrayBuffer, a thread-spawn host, `NO_THREADS = false`); running the module in tsrs's own conformance runner;
+WASI `std::fs` as a second host for wasmtime users.

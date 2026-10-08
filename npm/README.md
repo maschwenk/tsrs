@@ -6,6 +6,7 @@ tsrs ships on npm the way TypeScript 7 ships its native compiler (`typescript@7`
 | --- | --- |
 | `@maschwenk/tsrs` | `bin/tsrs` (Node launcher), `lib/` (binary lookup, `version.cjs`), `dist/` + `vendor/` (the `unstable/*` JS API, see below), `optionalDependencies` on every platform package |
 | `@maschwenk/tsrs-<os>-<arch>` | the `tsrs` binary for one platform, with `os`/`cpu` (and `libc: glibc` on Linux) so package managers install only the matching one |
+| `@maschwenk/tsrs-wasm` | the WebAssembly module (`npm/tsrs-wasm`, notes/wasm-build.md): a `tsrs-wasm` command and a `tsc()` API for Node 22+ and browsers, single-threaded; no platform packages |
 
 Platforms: `darwin-arm64`, `linux-x64` and `linux-arm64` (glibc; `darwin-x64` was published up to 0.2.1). `npm/build.mjs` and the launcher
 also know `win32-x64` (see TODO).
@@ -45,8 +46,9 @@ version = "7.1.0-dev.20260929"                         # the TypeScript version 
 commit = "b85298b6a81f772d080b0455de0ca9d744cd6fd6"    # and its commit (CI checks out its tsc/testdata)
 ```
 
-npm version: `<version>-ts<typescript version>` = `0.1.0-ts7.1.0-dev.20260929`. `tsrs --version` prints the same,
-embedded at build time by `crates/tsrs_execute/build.rs`:
+npm version: `<version>-ts<typescript version>` = `0.1.0-ts7.1.0-dev.20260929`, for every package including
+`@maschwenk/tsrs-wasm` (`npm/tsrs-wasm/package.json` holds a placeholder that `npm/build.mjs` replaces). `tsrs --version`
+and `tsrs-wasm --version` print the same, embedded at build time by `crates/tsrs_execute/build.rs`:
 
 ```
 Version 7.1.0-dev (tsrs 0.1.0-ts7.1.0-dev.20260929, microsoft/TypeScript@b85298b6a81f)
@@ -135,11 +137,15 @@ Wire contract the server has to speak (from the pinned `tsc/cmd/tsc/api.go`, `ts
 1. checks the tag against `Cargo.toml`, and runs `cargo check --workspace`;
 2. builds release binaries for macOS arm64 and Linux x64 and arm64
    (`ubuntu-22.04`), and smoke-runs the native ones (`--version`, exit code 2 on a type error);
-3. assembles and packs with `npm/build.mjs`, uploads the tarballs as the `npm-packages` artifact, and publishes the
-   platform packages, then the main package, with `--access public --tag latest` (skipping any already on the
-   registry, so a failed run can be re-run).
+3. builds the WebAssembly module (`tools/wasm/build.sh`, binaryen 133), runs `npm test` in `npm/tsrs-wasm`, packs
+   `@maschwenk/tsrs-wasm` with `npm/build.mjs --wasm`, installs that tarball and runs it (`--version` must name the
+   release version, exit code 2 on a type error), and uploads it as the `npm-wasm` artifact;
+4. assembles and packs the native packages with `npm/build.mjs`, uploads the tarballs as the `npm-packages` artifact,
+   and publishes the platform packages, then the main package, then `@maschwenk/tsrs-wasm`, with
+   `--access public --tag latest` (skipping any already on the registry, so a failed run can be re-run).
 
-The conformance suite does not gate releases; it runs in `ci.yml`.
+The conformance suite and the WebAssembly differential gate (`tools/wasm/gate.sh`) do not gate releases; they run in
+`ci.yml`.
 
 `workflow_dispatch` runs the same with `npm publish --dry-run` by default.
 
