@@ -962,6 +962,8 @@ pub struct Checker {
     pub(crate) expression_checks: u32,
     pub instantiation_stack: Vec<P<Type>>,
     pub conditional_constraint_depth: u32,
+    /// tsrs-only: keeps resolved base constraints independent of the computation that reached them first.
+    pub(crate) base_constraint_history: crate::checker_13::BaseConstraintHistory,
     pub inline_level: i32,
     pub serialization_level: i32,
     pub current_node: Option<P<Node>>,
@@ -1373,6 +1375,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         expression_checks: 0,
         instantiation_stack: Vec::new(),
         conditional_constraint_depth: 0,
+        base_constraint_history: Default::default(),
         inline_level: 0,
         serialization_level: 0,
         current_node: None,

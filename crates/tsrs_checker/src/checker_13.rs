@@ -2114,12 +2114,25 @@ impl Checker {
         if t.try_as_constrained_type().is_none() && t.try_as_structured_type().is_none() {
             return t;
         }
+        let depth = stack.len();
         if let Some(resolved) = self.resolved_base_constraint_of(t) {
-            return resolved;
+            if depth == 0 || tsrs_core::compat::go_compatible_history() {
+                return resolved;
+            }
+            if let Some(resolved) = self.base_constraint_history.reuse(t, resolved, depth) {
+                return resolved;
+            }
+        }
+        let canonical = !tsrs_core::compat::go_compatible_history();
+        if canonical && depth > 0 {
+            if let Some(resolved) = self.base_constraint_history.reuse_cut(t, depth) {
+                return resolved;
+            }
         }
         if !self.push_type_resolution(TypeSystemEntity::Type(t), TypeSystemPropertyName::ResolvedBaseConstraint) {
             return self.circular_constraint_type;
         }
+        let saved = canonical.then(|| self.base_constraint_history.enter(depth));
         let mut constraint: Option<P<Type>> = None;
         // We always explore at least 10 levels of nested constraints. Thereafter, we continue to explore
         // up to 50 levels of nested constraints provided there are no "deeply nested" types on the stack
@@ -2128,11 +2141,13 @@ impl Checker {
         // yet triggered the deeply nested limiter. We have no test cases that actually get to 50 levels of
         // nesting, so it is effectively just a safety stop.
         let identity = get_recursion_identity(self, t);
-        if stack.len() < 10 || stack.len() < 50 && !stack.contains(&identity) {
+        if stack.len() < BaseConstraintHistory::FREE_DEPTH || stack.len() < 50 && !stack.contains(&identity) {
             let simplified = self.get_simplified_type(t, false /*writing*/);
             let mut new_stack = stack.to_vec();
             new_stack.push(identity);
             constraint = self.compute_base_constraint(simplified, &new_stack);
+        } else {
+            self.base_constraint_history.cuts += 1;
         }
         if !self.pop_type_resolution() {
             if t.flags().intersects(TypeFlags::TypeParameter) {
@@ -2150,7 +2165,13 @@ impl Checker {
             constraint = Some(self.circular_constraint_type);
         }
         let constraint = constraint.unwrap_or(self.no_constraint_type);
-        if self.resolved_base_constraint_of(t).is_none() {
+        let cached = self.resolved_base_constraint_of(t).is_some();
+        if let Some(saved) = saved {
+            if !self.base_constraint_history.leave(t, constraint, depth, saved, cached) {
+                return constraint;
+            }
+        }
+        if !cached {
             match t.try_as_constrained_type() {
                 Some(constrained) => constrained.resolved_base_constraint.set(Some(constraint)),
                 None => {
@@ -2251,6 +2272,7 @@ impl Checker {
             return self.get_next_base_constraint(indexed, stack);
         } else if flags.intersects(TypeFlags::Conditional) {
             if self.conditional_constraint_depth >= 100 {
+                self.base_constraint_history.conditional_cuts += 1;
                 return None;
             }
             self.conditional_constraint_depth += 1;
@@ -2488,5 +2510,104 @@ impl Checker {
             return t.object_flags().intersects(ObjectFlags::IsUniformEnum);
         }
         false
+    }
+}
+
+/// tsrs-only (default mode; `go_compatible_history()` keeps Go's cache): makes the base constraints that
+/// `get_resolved_base_constraint` returns independent of which computation reached a type first
+/// (notes/fix-history-dependent-diagnostics.md).
+///
+/// Go caches the first base constraint it computes for a type. The computation explores ten levels of nested
+/// constraints, then stops at a repeated recursion identity, and it counts the levels of whichever computation asked:
+/// a type first reached nine levels down in another type's constraint is cut one level below itself, where a direct
+/// request explores ten. The cut result (often `noConstraintType`, even for a plain type parameter) is then what every
+/// later caller gets, so a checker that resolved some file's types first reports errors another checker does not.
+///
+/// Here a result is cached for every caller only where no caller could compute another one: a result computed at the
+/// top of a frame (an empty stack; a frame is a computation started there) is reused at the top, and a result in which
+/// nothing was cut is reused wherever its `height` nested levels stay within the ten that are always explored. Other
+/// requests compute the constraint again. A cut result below the top of a frame is kept per (frame, type, depth) until
+/// the outermost frame ends, where Go would reuse it too, and it counts as a cut for the computations that use it.
+#[derive(Default)]
+pub(crate) struct BaseConstraintHistory {
+    /// The deepest stack length the computation in progress reached, the heights of the results it reused included.
+    max_depth: usize,
+    /// Cuts by the depth guard and uses of `scratch` results since the current frame started.
+    cuts: u32,
+    /// Cuts by `conditional_constraint_depth`, which counts across frames: such a result is not kept at all.
+    conditional_cuts: u32,
+    /// Cached results that have nested levels or a cut: their height, or `CUT`.
+    heights: FxHashMap<P<Type>, u8>,
+    /// Cut results computed below the top of a frame, by (frame, type, depth).
+    scratch: FxHashMap<(u32, P<Type>, u8), P<Type>>,
+    frame: u32,
+    open_frames: u32,
+    frame_count: u32,
+}
+
+pub(crate) struct BaseConstraintFrame {
+    max_depth: usize,
+    cuts: u32,
+    conditional_cuts: u32,
+    frame: u32,
+}
+
+impl BaseConstraintHistory {
+    const CUT: u8 = 0x80;
+    /// Levels the guard in `get_resolved_base_constraint` always explores.
+    const FREE_DEPTH: usize = 10;
+
+    /// The cached result of `t` for a request `depth` levels down, if a computation there could not cut it.
+    fn reuse(&mut self, t: P<Type>, resolved: P<Type>, depth: usize) -> Option<P<Type>> {
+        let height = self.heights.get(&t).copied().unwrap_or(0);
+        if height & Self::CUT != 0 || depth + height as usize >= Self::FREE_DEPTH {
+            return None;
+        }
+        self.max_depth = self.max_depth.max(depth + height as usize);
+        Some(resolved)
+    }
+
+    fn reuse_cut(&mut self, t: P<Type>, depth: usize) -> Option<P<Type>> {
+        let resolved = *self.scratch.get(&(self.frame, t, depth as u8))?;
+        self.cuts += 1;
+        Some(resolved)
+    }
+
+    fn enter(&mut self, depth: usize) -> BaseConstraintFrame {
+        let saved = BaseConstraintFrame { max_depth: self.max_depth, cuts: self.cuts, conditional_cuts: self.conditional_cuts, frame: self.frame };
+        if depth == 0 {
+            self.open_frames += 1;
+            self.frame_count += 1;
+            self.frame = self.frame_count;
+        }
+        self.max_depth = depth;
+        saved
+    }
+
+    /// Ends the computation of `t` started by `enter`; whether `constraint` may be cached for every caller.
+    fn leave(&mut self, t: P<Type>, constraint: P<Type>, depth: usize, saved: BaseConstraintFrame, cached: bool) -> bool {
+        let height = self.max_depth - depth;
+        let cut = self.cuts != saved.cuts;
+        let conditional_cut = self.conditional_cuts != saved.conditional_cuts;
+        if depth == 0 {
+            // A frame's levels and cuts are its own: the caller's computation continues as if it had reused a result.
+            (self.max_depth, self.cuts, self.frame) = (saved.max_depth, saved.cuts, saved.frame);
+            self.open_frames -= 1;
+            if self.open_frames == 0 && !self.scratch.is_empty() {
+                self.scratch.clear();
+            }
+        } else {
+            self.max_depth = self.max_depth.max(saved.max_depth);
+        }
+        if conditional_cut || (cut && depth > 0) {
+            if depth > 0 && !conditional_cut {
+                self.scratch.insert((self.frame, t, depth as u8), constraint);
+            }
+            return false;
+        }
+        if (height > 0 || cut) && !cached {
+            self.heights.insert(t, if cut { Self::CUT } else { height.min(Self::FREE_DEPTH) as u8 });
+        }
+        true
     }
 }
