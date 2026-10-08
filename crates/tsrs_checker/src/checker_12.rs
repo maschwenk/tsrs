@@ -1617,16 +1617,27 @@ impl Checker {
         let members = SymbolTable::new();
         let mut combined_flags = ElementFlags::None;
         if arity != 0 {
-            type_parameters = Vec::with_capacity(arity);
-            for i in 0..arity {
+            // tsrs-only: Go makes new element type parameters for every target. Only the mappers of the target's
+            // references observe them, each through the target's own list (notes/perf-shared-tuple-elements.md), so
+            // all targets share one per index, and the index names with them: type-fest made 4.6M parameters and
+            // 3.8M names at one checker. The element symbols stay per target: a union or intersection property
+            // treats symbols with one target symbol as instantiations of one declaration
+            // (`create_union_or_intersection_property`).
+            while self.tuple_elements.len() < arity {
                 let type_parameter = self.new_type_parameter(None);
+                let name = alloc_str(&self.tuple_elements.len().to_string());
+                self.tuple_elements.push((type_parameter, name));
+            }
+            type_parameters = Vec::with_capacity(arity + 1);
+            for i in 0..arity {
+                let (type_parameter, name) = self.tuple_elements[i];
                 type_parameters.push(type_parameter);
                 let flags = element_infos[i].flags;
                 combined_flags |= flags;
                 if !combined_flags.intersects(ElementFlags::Variable) {
                     let property = self.new_symbol_ex(
                         SymbolFlags::Property | if flags.intersects(ElementFlags::Optional) { SymbolFlags::Optional } else { SymbolFlags::None },
-                        alloc_str(&i.to_string()),
+                        name,
                         if readonly { CheckFlags::Readonly } else { CheckFlags::None },
                     );
                     self.value_symbol_links.get(property).resolved_type.set(Some(type_parameter));
