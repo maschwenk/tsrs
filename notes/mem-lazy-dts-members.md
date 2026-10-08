@@ -19,15 +19,15 @@ times within the runner's noise (formbricks-web 0.653 -> 0.627 s, the others +-1
 
 Tool (branch `mem/lazy-dts-census`, not merged): the alloc-profile build with `TSRS_LAZY_DTS_CENSUS=1`
 (`tsrs_core::lazydts_census`, `tsrs_compiler` lazydts_census.rs). The parser and the binder record, per member of
-every interface, class, type literal and module block of a declaration file, the arena bytes it took plus the thread's net heap bytes (binder symbol tables keep their
-entries on the heap); before the first checker is created the compiler registers those lists in the files the program
-will not check, with their owner and member symbols. From then on a read of a registered list's nodes
-(`NodeList::nodes`), of an owner's `members` / `exports`, and a symbol-table hit or declarations read of a member
-symbol set a bit, tagged with the phase (before checker creation, inside `new_checker`, while checking). A list
-counts as asked for if its nodes were read or its owner's table was (members for interfaces and type literals,
-members or exports for classes, exports for module blocks): exactly what forces a list in the design below. "Never
-asked for" counts the outermost such lists (all enclosing candidate lists asked for). One run per project at 16
-checkers on the Mac (main 6e07a55 + tool).
+every interface, class, type literal and module block of a declaration file, the arena bytes it took plus the thread's
+net heap bytes (binder symbol tables keep their entries on the heap); before the first checker is created the compiler
+registers those lists in the files the program will not check, with their owner and member symbols. From then on a
+read of a registered list's nodes (`NodeList::nodes`), of an owner's `members` / `exports`, and a symbol-table hit or
+declarations read of a member symbol set a bit, tagged with the phase (before checker creation, inside `new_checker`,
+while checking). A list counts as asked for if its nodes were read or its owner's table was (members for interfaces
+and type literals, members or exports for classes, exports for module blocks): exactly what forces a list in the
+design below. "Never asked for" counts the outermost such lists (all enclosing candidate lists asked for). One run per
+project at 16 checkers on the Mac (main 6e07a55 + tool).
 
 | project | unchecked .d.ts parse+bind MB | in member lists | never asked, all kinds | with module blocks eager | design scope¹ | Mac peak 16 (MiB) | share | Linux peak 32 (MiB) | share |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -166,16 +166,16 @@ and the rewinds cost more than the skipped binding saves where the arena has hug
 instructions come from the Mac. An earlier run of the branch before the size limit, the spin and the global-merge
 forcing had cal-diy +2-6% wall at 32 checkers (waiting on forced lists); this run has none.
 
-**Where it costs wall time: drizzle-orm** (21 MB of declaration text, 0.18 s at 32 checkers, 10,846 errors). The
-first runs of this branch had +9% wall and +13% user time at 32 checkers (+5% at 16) for -1% to -2% peak. A perf
-profile on the runner put the extra cycles in `DiagnosticsCollection::add` (8.8% of cycles against 3.8%) and in
-kernel and futex lock contention, not in forcing (14 ms of thread time in all): checkers that wait on the same lists
-at the start of checking go on in lockstep, and every `add` cloned the reporting file's `Path`, an `Arc` whose counter
-all checkers then write at once. With the diagnostics collection keyed without that clone (#204, a separate change that
-also makes main 2-4% faster at 32 checkers on drizzle-orm, cal-diy and vscode) the user time is +3.7% and the wall +4.5% at 32 checkers, +4.4% at 16; the rest is the
-waiting itself (about 2,200 waits on 1,000 lists, mostly `@types/node` interfaces that every checker needs, in three
-versions). pr-verify's three-run medians also showed mui-docs and t3code-server slower at 32 checkers; nine-run
-interleaved probes did not (mui-docs +0.4%, t3code-server +0.5% paired).
+**Where it costs wall time: drizzle-orm** (21 MB of declaration text, 0.18 s at 32 checkers, 10,846 errors). The first
+runs of this branch had +9% wall and +13% user time at 32 checkers (+5% at 16) for -1% to -2% peak. A perf profile on
+the runner put the extra cycles in `DiagnosticsCollection::add` (8.8% of cycles against 3.8%) and in kernel and futex
+lock contention, not in forcing (14 ms of thread time in all): checkers that wait on the same lists at the start of
+checking go on in lockstep, and every `add` cloned the reporting file's `Path`, an `Arc` whose counter all checkers
+then write at once. With the diagnostics collection keyed without that clone (#204, a separate change that also makes
+main 2-4% faster at 32 checkers on drizzle-orm, cal-diy and vscode) the user time is +3.7% and the wall +4.5% at 32
+checkers, +4.4% at 16; the rest is the waiting itself (about 2,200 waits on 1,000 lists, mostly `@types/node`
+interfaces that every checker needs, in three versions). pr-verify's three-run medians also showed mui-docs and
+t3code-server slower at 32 checkers; nine-run interleaved probes did not (mui-docs +0.4%, t3code-server +0.5% paired).
 
 Mac (M5 Max, 18 cores, 3 interleaved runs, medians; main cdcfc0e against 744c2ad; peak footprint in MiB, instructions
 in billions; a loaded machine, so walls are not compared):
