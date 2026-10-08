@@ -79,6 +79,54 @@ pub struct Arena {
     registered: bool,
     /// Regions only: chunks are carved from the thread's large slabs (`Region::new_scratch_in_large_slabs`).
     large_slabs: bool,
+    #[cfg(feature = "alloc-profile")]
+    pub(crate) free_stats: FreeStats,
+}
+
+/// Alloc-profile builds: what this arena's free lists hold, per size class (blocks on the list now and at the class's
+/// peak, blocks handed out again, recycling allocations that found the list empty and bumped instead), and the bytes
+/// on all lists now and at their peak.
+#[cfg(feature = "alloc-profile")]
+pub(crate) struct FreeStats {
+    pub(crate) blocks: [Cell<u64>; CLASSES],
+    pub(crate) peak_blocks: [Cell<u64>; CLASSES],
+    pub(crate) reissued: [Cell<u64>; CLASSES],
+    pub(crate) misses: [Cell<u64>; CLASSES],
+    pub(crate) bytes: Cell<u64>,
+    pub(crate) peak_bytes: Cell<u64>,
+}
+
+#[cfg(feature = "alloc-profile")]
+impl FreeStats {
+    const fn new() -> FreeStats {
+        FreeStats {
+            blocks: [const { Cell::new(0) }; CLASSES],
+            peak_blocks: [const { Cell::new(0) }; CLASSES],
+            reissued: [const { Cell::new(0) }; CLASSES],
+            misses: [const { Cell::new(0) }; CLASSES],
+            bytes: Cell::new(0),
+            peak_bytes: Cell::new(0),
+        }
+    }
+
+    fn pushed(&self, class: usize) {
+        let n = self.blocks[class].get() + 1;
+        self.blocks[class].set(n);
+        self.peak_blocks[class].set(self.peak_blocks[class].get().max(n));
+        let b = self.bytes.get() + class as u64 * 8;
+        self.bytes.set(b);
+        self.peak_bytes.set(self.peak_bytes.get().max(b));
+    }
+
+    fn popped(&self, class: usize, hit: bool) {
+        if hit {
+            self.blocks[class].set(self.blocks[class].get() - 1);
+            self.bytes.set(self.bytes.get() - class as u64 * 8);
+            self.reissued[class].set(self.reissued[class].get() + 1);
+        } else {
+            self.misses[class].set(self.misses[class].get() + 1);
+        }
+    }
 }
 
 struct DropEntry {
@@ -125,6 +173,8 @@ impl Arena {
             slabs: RefCell::new(Vec::new()),
             registered,
             large_slabs,
+            #[cfg(feature = "alloc-profile")]
+            free_stats: FreeStats::new(),
         };
         a.new_chunk(first_chunk);
         a
@@ -348,6 +398,8 @@ impl Arena {
     #[inline]
     pub(crate) fn pop_free(&self, class: usize) -> Option<NonNull<u8>> {
         let head = self.free[class].get();
+        #[cfg(feature = "alloc-profile")]
+        self.free_stats.popped(class, !head.is_null());
         if head.is_null() {
             return None;
         }
@@ -377,6 +429,8 @@ impl Arena {
         // SAFETY: the block is dead and at least 8 bytes, so its first word holds the free-list link.
         unsafe { *next = self.free[class].get() };
         self.free[class].set(p);
+        #[cfg(feature = "alloc-profile")]
+        self.free_stats.pushed(class);
     }
 
     #[inline]
