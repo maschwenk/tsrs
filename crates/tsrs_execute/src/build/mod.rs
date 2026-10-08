@@ -1,5 +1,5 @@
 // Port of Go's execute/build package (`tsc -b`), without watch mode. Go keeps it in its own package; here it is a
-// module of tsrs_cli because it depends on the `tsc` module of this binary crate (Go's execute/tsc).
+// module of tsrs_execute because it depends on the `tsc` module of this crate (Go's execute/tsc).
 
 mod buildtask;
 mod compilerhost;

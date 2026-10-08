@@ -320,7 +320,9 @@ fn perform_compilation(
         eprint!("{line}");
     }
     #[cfg(feature = "alloc-profile")]
-    crate::census::run(program, &[config.addr(), result.diagnostics.as_ptr() as usize]);
+    if let Some(census) = crate::CENSUS_HOOK.get() {
+        census(program, &[config.addr(), result.diagnostics.as_ptr() as usize]);
+    }
 
     CommandLineResult { status: result.status }
 }

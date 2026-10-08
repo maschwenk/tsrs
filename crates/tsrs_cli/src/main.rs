@@ -6,13 +6,9 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 #[cfg(feature = "alloc-profile")]
 mod census;
 mod api;
-mod build;
-mod execute;
 mod lsp;
-mod sys;
-mod tsc;
-#[cfg(test)]
-mod tsctests;
+
+use tsrs_execute::{build, execute, sys, tsc};
 
 // TSRS_MEM_SPLIT (tsrs_core::memsplit): mimalloc's view of its heap, every page of every thread.
 #[cfg(not(feature = "alloc-profile"))]
@@ -65,6 +61,8 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     #[cfg(not(feature = "alloc-profile"))]
     tsrs_core::memsplit::set_heap_hooks(mimalloc_heap_stats, mimalloc_collect);
+    #[cfg(feature = "alloc-profile")]
+    tsrs_execute::set_census_hook(census::run);
     // main.go:21: `--lsp` runs the language server (its threads have their own stacks); `--api` runs the
     // native API server (docs/NODE_API.md).
     if args.first().map(String::as_str) == Some("--lsp") {

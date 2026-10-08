@@ -28,6 +28,7 @@ pub trait System: Sync {
     }
 }
 
+#[cfg(unix)]
 pub fn format_local_time_03_04_05_pm(t: std::time::SystemTime) -> String {
     let secs = t.duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as libc::time_t).unwrap_or(0);
     // SAFETY: `libc::tm` is C integers (and, on some platforms, a nullable `char *`), for which all zeros is valid.
@@ -39,6 +40,18 @@ pub fn format_local_time_03_04_05_pm(t: std::time::SystemTime) -> String {
         h => h,
     };
     format!("{:02}:{:02}:{:02} {}", hour12, tm.tm_min, tm.tm_sec, if tm.tm_hour < 12 { "AM" } else { "PM" })
+}
+
+/// Targets without `localtime_r` (WASI has no time zone): UTC, as Go's js/wasm reports it.
+#[cfg(not(unix))]
+pub fn format_local_time_03_04_05_pm(t: std::time::SystemTime) -> String {
+    let secs = t.duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0) % 86_400;
+    let (hour, min, sec) = (secs / 3600, secs / 60 % 60, secs % 60);
+    let hour12 = match hour % 12 {
+        0 => 12,
+        h => h,
+    };
+    format!("{:02}:{:02}:{:02} {}", hour12, min, sec, if hour < 12 { "AM" } else { "PM" })
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

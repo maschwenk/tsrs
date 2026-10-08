@@ -114,13 +114,13 @@ impl Orchestrator {
         tspath::to_path(file_name, &self.compare_paths_options.current_directory, self.compare_paths_options.use_case_sensitive_file_names)
     }
 
-    #[expect(dead_code, reason = "only Go tests call it (graph_test.go), and those are not ported")]
+    // Only Go tests call it (graph_test.go), and those are not ported.
     pub fn order(&self) -> Vec<String> {
         self.order.lock().unwrap().clone()
     }
 
     // ScheduleOrder is the order in which builders pick up projects: Order() stably sorted by dependency depth.
-    #[expect(dead_code, reason = "only Go tests call it (graph_test.go), and those are not ported")]
+    // Only Go tests call it (graph_test.go), and those are not ported.
     pub fn schedule_order(&self) -> Vec<String> {
         self.schedule_order.lock().unwrap().clone()
     }
@@ -144,7 +144,7 @@ impl Orchestrator {
     }
 
     // orchestrator.go:155
-    #[expect(dead_code, reason = "only Go tests call it (graph_test.go), and those are not ported")]
+    // Only Go tests call it (graph_test.go), and those are not ported.
     pub fn upstream(&self, config_name: &str) -> Vec<String> {
         let task = self.get_task(&self.to_path(config_name));
         let upstream = task.up_stream.lock().unwrap();

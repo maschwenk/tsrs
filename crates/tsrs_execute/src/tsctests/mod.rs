@@ -6,7 +6,7 @@
 // ts-ref/tsc/testdata/baselines/reference/<tsc|tsbuild>/<scenario>/<name>.js.
 //
 //   tools/oracle/tsctests/dump.sh                      # once (needs Go), writes target/tsctests-dump
-//   cargo test --release -p tsrs_cli tsctests -- --nocapture
+//   cargo test --release -p tsrs_execute tsctests -- --nocapture
 //   TSCTESTS_FILTER=<substring> ...                    # only matching baselines
 //
 // Results: target/tsctests-results/{pass,fail,crash}.txt and the actual baselines of failures under

@@ -7,7 +7,7 @@ version = "0.8.0"
 edition = "2021"
 license = "Apache-2.0"
 
-# The microsoft/TypeScript commit this port follows. Read by crates/tsrs_cli/build.rs (`tsrs --version`), by
+# The microsoft/TypeScript commit this port follows. Read by crates/tsrs_execute/build.rs (`tsrs --version`), by
 # npm/build.mjs (npm version = "<workspace version>-ts<version>") and by CI (conformance testdata checkout).
 [workspace.metadata.typescript]
 version = "7.1.0-dev.20260929"

@@ -1,6 +1,6 @@
 # Weakened atomic orderings without a comment, per file (tools/lint/source.py). Counts only go down.
 1	crates/tsrs_checker/src/checker.rs
-1	crates/tsrs_cli/src/tsctests/mod.rs
+1	crates/tsrs_execute/src/tsctests/mod.rs
 1	crates/tsrs_fswatch/src/kqueue.rs
 1	crates/tsrs_fswatch/src/watcher.rs
 1	crates/tsrs_incremental/src/referencemap.rs
