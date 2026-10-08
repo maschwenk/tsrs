@@ -190,7 +190,10 @@ fn run_work_group(single_threaded: bool, count: usize, task: impl Fn(usize) + Sy
                     .stack_size(CHECKER_STACK_SIZE)
                     .spawn_scoped(s, move || {
                         tsrs_ast::use_id_blocks();
-                        task(i)
+                        task(i);
+                        if tsrs_core::memsplit::slack("handoff") {
+                            tsrs_core::ptr::release_own_arena();
+                        }
                     })
                     .expect("failed to spawn checker thread")
             })
@@ -571,12 +574,16 @@ impl checkerPool {
             }
             // TSRS_SLACK experiments (notes/mem-linux-residency-32.md): the parse pool gives back its slack.
             let (trim_arena, collect_heap) = (tsrs_core::memsplit::slack("parse-arena"), tsrs_core::memsplit::slack("parse-heap"));
-            if (trim_arena || collect_heap) && !self.single_threaded {
+            let handoff = tsrs_core::memsplit::slack("handoff");
+            if (trim_arena || collect_heap || handoff) && !self.single_threaded {
                 let trimmed: usize = crate::program::worker_pool()
                     .broadcast(|_| {
                         let t = if trim_arena { tsrs_core::arena::trim_own_arena_tail() } else { 0 };
                         if collect_heap {
                             tsrs_core::memsplit::heap_collect(true);
+                        }
+                        if handoff {
+                            tsrs_core::ptr::release_own_arena();
                         }
                         t
                     })

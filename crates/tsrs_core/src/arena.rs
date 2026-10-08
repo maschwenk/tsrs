@@ -1019,6 +1019,29 @@ impl Drop for RegionScope {
     }
 }
 
+/// Thread arenas given back by threads that are done allocating (`ptr::release_own_arena`), taken by the next thread
+/// that needs one.
+struct SpareArena(&'static Arena);
+// SAFETY: a spare arena has no owner: the thread that gave it back reaches it no more (its own-arena slot is cleared
+// and no scope names it), and the pool's mutex orders that thread's last use before the next owner's first.
+unsafe impl Send for SpareArena {}
+
+static SPARE_ARENAS: Mutex<Vec<SpareArena>> = Mutex::new(Vec::new());
+
+pub(crate) fn take_spare_arena() -> Option<&'static Arena> {
+    SPARE_ARENAS.lock().unwrap().pop().map(|s| s.0)
+}
+
+/// Whether no region, thread-arena or scratch scope is open on this thread (`CURRENT` is then unset).
+pub(crate) fn no_scope_open() -> bool {
+    SCOPES.with(|s| s.borrow().is_empty()) && SCRATCH.with(|s| s.get().0.is_null())
+}
+
+pub(crate) fn give_spare_arena(arena: &'static Arena) {
+    CURRENT.with(|c| c.set(std::ptr::null()));
+    SPARE_ARENAS.lock().unwrap().push(SpareArena(arena));
+}
+
 /// The region that is the current thread's allocation target, if any (`None`: the thread's own arena).
 pub fn current_region() -> Option<Region> {
     let p = CURRENT.with(|c| c.get());

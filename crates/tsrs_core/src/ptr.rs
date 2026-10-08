@@ -21,15 +21,18 @@ use std::hash::{Hash, Hasher};
 use std::ops::Deref;
 
 thread_local! {
-    static ARENA: &'static Arena = {
-        let arena: &'static Arena = Box::leak(Box::new(Arena::new()));
-        #[cfg(any(debug_assertions, feature = "checked-cells"))]
-        shared_check::register(arena);
-        #[cfg(feature = "alloc-profile")]
-        crate::alloc_profile::register_arena(arena);
-        crate::memsplit::register_arena(arena);
-        arena
-    };
+    /// The thread's own arena, set on first use (`own_arena`).
+    static ARENA: std::cell::Cell<Option<&'static Arena>> = const { std::cell::Cell::new(None) };
+}
+
+fn new_thread_arena() -> &'static Arena {
+    let arena: &'static Arena = Box::leak(Box::new(Arena::new()));
+    #[cfg(any(debug_assertions, feature = "checked-cells"))]
+    shared_check::register(arena);
+    #[cfg(feature = "alloc-profile")]
+    crate::alloc_profile::register_arena(arena);
+    crate::memsplit::register_arena(arena);
+    arena
 }
 
 macro_rules! profile {
@@ -39,9 +42,33 @@ macro_rules! profile {
     };
 }
 
-/// The current thread's own arena (never freed).
+/// The current thread's own arena (never freed): on first use, an arena a finished thread gave back
+/// (`release_own_arena`), else a new one.
 pub(crate) fn own_arena() -> &'static Arena {
-    ARENA.with(|a| *a)
+    ARENA.with(|c| match c.get() {
+        Some(a) => a,
+        None => {
+            let a = arena::take_spare_arena().unwrap_or_else(new_thread_arena);
+            c.set(Some(a));
+            a
+        }
+    })
+}
+
+/// Hands the calling thread's own arena to the next thread that needs one, for a thread that is done allocating (a
+/// checker thread at the end of its task, a parse worker after the parse): that thread continues in the arena's
+/// current chunk, so its unused but resident end (with transparent huge pages a partly used 2 MiB block) is filled
+/// instead of starting a fresh one. Allocation on this thread afterwards takes another arena. Does nothing while a
+/// region or scratch scope is open (the scope stack still names the arena).
+pub fn release_own_arena() {
+    let Some(a) = ARENA.with(std::cell::Cell::get) else {
+        return;
+    };
+    if !arena::no_scope_open() {
+        return;
+    }
+    ARENA.with(|c| c.set(None));
+    arena::give_spare_arena(a);
 }
 
 #[cold]
