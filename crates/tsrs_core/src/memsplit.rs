@@ -1,10 +1,13 @@
-//! `TSRS_MEM_SPLIT=1` (debug stat, any build; `purge` also purges the heap after `check end`): splits the resident memory at a few points of a run into the arena's
-//! used bytes, the resident but unused parts of the thread arenas' chunks, the allocator heap's live blocks and the
-//! rest it keeps, thread stacks and file-backed pages, and prints one block per point on stderr
+//! `TSRS_MEM_SPLIT=1` (debug stat, any build): splits the resident memory at three points of a run into the thread
+//! arenas' used bytes, the resident but never used parts of their chunks, the allocator heap's live blocks and the
+//! rest it keeps resident, thread stacks and file-backed pages, and prints one block per point on stderr
 //! (notes/mem-linux-residency-32.md). The points: `parse end` (the program is parsed and bound, before checker
-//! creation), `check end` (every checker of the type-check pass has finished its files and its thread is still alive),
-//! and `exit`. Linux reads `/proc/self/smaps` and `/proc/self/status`; elsewhere only the arena and heap lines print.
+//! creation), `check end` (every checker of the type-check pass has finished its files and its thread is still
+//! alive: the moment memory peaks) and `exit`. `TSRS_MEM_SPLIT=purge` also makes the allocator purge its freed memory
+//! after `check end` and prints the split again. Linux reads `/proc/self/smaps` and `/proc/self/status`; elsewhere only
+//! the arena and heap lines print.
 
+use std::fmt::Write;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
@@ -31,26 +34,18 @@ pub fn purge_after_check() -> bool {
     mode() == 2
 }
 
-struct ArenaRef {
-    arena: &'static Arena,
-    thread: String,
-    seq: usize,
-}
-// SAFETY: the arena is only read by `report`, while its owning thread is parked (a barrier, a joined work group or an
-// idle pool thread), which orders the reads after the owner's writes.
+struct ArenaRef(&'static Arena);
+// SAFETY: `report` reads an arena only while the threads that allocate are parked (the barrier at `check end`, a
+// joined work group, an idle pool), which orders the reads after the owner's writes.
 unsafe impl Send for ArenaRef {}
 
 static ARENAS: Mutex<Vec<ArenaRef>> = Mutex::new(Vec::new());
 
-/// Records a thread's own arena (`ptr::ARENA`), with the thread's name, when the stat is on.
+/// Records a new thread arena when the stat is on.
 pub(crate) fn register_arena(arena: &'static Arena) {
-    if !enabled() {
-        return;
+    if enabled() {
+        ARENAS.lock().unwrap().push(ArenaRef(arena));
     }
-    let thread = std::thread::current().name().unwrap_or("-").to_string();
-    let mut arenas = ARENAS.lock().unwrap();
-    let seq = arenas.len();
-    arenas.push(ArenaRef { arena, thread, seq });
 }
 
 /// The allocator heap's own view (`mi_heap_visit_blocks` in the CLI): pages, bytes of their initialized blocks, bytes
@@ -148,7 +143,7 @@ fn mib(b: usize) -> String {
 }
 
 #[derive(Default)]
-struct ArenaGroup {
+struct ArenaTotals {
     count: usize,
     capacity: usize,
     used: usize,
@@ -166,85 +161,58 @@ pub fn report(what: &str) {
         return;
     }
     let mut out = format!("tsrs mem split: {what}\n");
-    // Thread arenas, grouped by thread name class and registration order.
-    let check_start = CHECK_PASS_FIRST_ARENA.load(Ordering::Relaxed);
-    let mut groups: std::collections::BTreeMap<String, ArenaGroup> = std::collections::BTreeMap::new();
-    let mut total = ArenaGroup::default();
+    let mut arenas = ArenaTotals::default();
     for a in ARENAS.lock().unwrap().iter() {
-        let class = if a.thread.starts_with("checker-") {
-            if a.seq >= check_start { "checker threads (this pass)" } else { "checker threads (earlier)" }
-        } else if a.thread == "tsrs" || a.thread == "main" {
-            "main"
-        } else if a.thread == "-" {
-            "unnamed (parse/bind pool)"
-        } else {
-            "other named"
-        };
-        let r = a.arena.residency();
-        let tail = r.current_unused.map_or(0, |(s, l)| resident(s, l));
-        let retired: usize = r.retired_unused.iter().map(|&(s, l)| resident(s, l)).sum();
-        for g in [groups.entry(class.to_string()).or_default(), &mut total] {
-            g.count += 1;
-            g.capacity += r.capacity;
-            g.used += r.used;
-            g.tail_resident += tail;
-            g.retired_resident += retired;
-            g.huge_current += usize::from(r.current_huge);
-        }
+        let r = a.0.residency();
+        arenas.count += 1;
+        arenas.capacity += r.capacity;
+        arenas.used += r.used;
+        arenas.tail_resident += r.current_unused.map_or(0, |(s, l)| resident(s, l));
+        arenas.retired_resident += r.retired_unused.iter().map(|&(s, l)| resident(s, l)).sum::<usize>();
+        arenas.huge_current += usize::from(r.current_huge);
     }
-    out.push_str("  thread arenas: group, arenas, capacity MiB, used MiB, unused resident MiB (current chunk / retired chunks), huge current chunks\n");
-    for (name, g) in groups.iter().chain(std::iter::once((&"all".to_string(), &total))) {
-        out.push_str(&format!(
-            "    {name}: {} arenas, {}, {}, {} / {}, {}\n",
-            g.count,
-            mib(g.capacity),
-            mib(g.used),
-            mib(g.tail_resident),
-            mib(g.retired_resident),
-            g.huge_current
-        ));
-    }
+    let _ = writeln!(
+        out,
+        "  thread arenas: {} arenas, {} MiB capacity, {} MiB used, unused resident {} MiB in current chunks + {} MiB in retired chunks, {} huge current chunks",
+        arenas.count,
+        mib(arenas.capacity),
+        mib(arenas.used),
+        mib(arenas.tail_resident),
+        mib(arenas.retired_resident),
+        arenas.huge_current
+    );
     #[cfg(compressed_ptrs)]
-    out.push_str(&format!("  reservation: {} MiB in chunks\n", mib(crate::reserve::reserved_in_use())));
+    let _ = writeln!(out, "  reservation: {} MiB in chunks", mib(crate::reserve::reserved_in_use()));
     let heap = HEAP_STATS.get().map(|f| f());
     if let Some(h) = heap {
-        out.push_str(&format!(
-            "  heap (allocator walk): {} pages, {} MiB initialized blocks, {} MiB live blocks, {} MiB resident in the pages' areas\n",
+        let _ = writeln!(
+            out,
+            "  heap (allocator walk): {} pages, {} MiB initialized blocks, {} MiB live blocks, {} MiB resident in the pages' areas",
             h.pages,
             mib(h.capacity),
             mib(h.used),
             mib(h.resident)
-        ));
+        );
     }
+    // Relaxed (both): the checker threads added to them before the barrier this report runs behind.
     let stacks = CHECKER_STACKS.swap(0, Ordering::Relaxed);
     let stack_threads = CHECKER_STACK_THREADS.swap(0, Ordering::Relaxed);
     if stack_threads > 0 {
-        out.push_str(&format!("  checker stacks (own mincore): {stack_threads} threads, {} MiB resident\n", mib(stacks)));
+        let _ = writeln!(out, "  checker stacks (own mincore): {stack_threads} threads, {} MiB resident", mib(stacks));
     }
     #[cfg(target_os = "linux")]
-    linux::append(&mut out, &total, heap);
+    linux::append(&mut out, &arenas, heap);
     eprint!("{out}");
-}
-
-/// Registration index of the first arena made after the type-check pass started (`mark_check_pass`).
-static CHECK_PASS_FIRST_ARENA: AtomicUsize = AtomicUsize::new(usize::MAX);
-
-/// Marks the start of the type-check pass: arenas registered from now on belong to its threads.
-pub fn mark_check_pass() {
-    if enabled() {
-        // Relaxed: read by `report` after the pass's threads joined a barrier.
-        CHECK_PASS_FIRST_ARENA.store(ARENAS.lock().unwrap().len(), Ordering::Relaxed);
-    }
 }
 
 #[cfg(target_os = "linux")]
 mod linux {
-    use super::{mib, ArenaGroup, HeapStats};
+    use super::{mib, ArenaTotals, HeapStats};
+    use std::fmt::Write;
 
     #[derive(Default)]
     struct Bucket {
         vmas: usize,
-        size: usize,
         rss: usize,
         huge: usize,
     }
@@ -253,17 +221,18 @@ mod linux {
         line.split_whitespace().nth(1).and_then(|v| v.parse::<usize>().ok()).unwrap_or(0) << 10
     }
 
-    pub(super) fn append(out: &mut String, arenas: &ArenaGroup, heap: Option<HeapStats>) {
+    pub(super) fn append(out: &mut String, arenas: &ArenaTotals, heap: Option<HeapStats>) {
         let status = std::fs::read_to_string("/proc/self/status").unwrap_or_default();
         let field = |name: &str| status.lines().find(|l| l.starts_with(name)).map_or(0, kb);
         let threads = status.lines().find(|l| l.starts_with("Threads:")).and_then(|l| l.split_whitespace().nth(1)).unwrap_or("?");
-        out.push_str(&format!(
-            "  status: VmRSS {} MiB, VmHWM {} MiB, RssAnon {} MiB, RssFile {} MiB, threads {threads}\n",
+        let _ = writeln!(
+            out,
+            "  status: VmRSS {} MiB, VmHWM {} MiB, RssAnon {} MiB, RssFile {} MiB, threads {threads}",
             mib(field("VmRSS:")),
             mib(field("VmHWM:")),
             mib(field("RssAnon:")),
             mib(field("RssFile:"))
-        ));
+        );
         let smaps = std::fs::read_to_string("/proc/self/smaps").unwrap_or_default();
         #[cfg(compressed_ptrs)]
         let arena_range = (crate::reserve::BASE_ADDR, crate::reserve::BASE_ADDR + crate::reserve::RESERVE);
@@ -283,6 +252,8 @@ mod linux {
                 let perms = words.next().unwrap_or("");
                 let path = words.nth(3).unwrap_or("");
                 let size = end - start;
+                // Thread stacks by size: the checker threads' and the CLI thread's 512 MiB, the parse workers' 256 MiB
+                // (nothing else maps anonymous memory of that size).
                 let class = if start >= arena_range.0 && end <= arena_range.1 {
                     0
                 } else if path == "[stack]" || (path.is_empty() && perms.starts_with("rw") && (200 << 20..=600 << 20).contains(&size)) {
@@ -293,7 +264,6 @@ mod linux {
                     2
                 };
                 buckets[class].vmas += 1;
-                buckets[class].size += size;
                 cur = Some((class, size));
             } else if let Some((class, size)) = cur {
                 if first == "Rss:" {
@@ -309,23 +279,24 @@ mod linux {
                 }
             }
         }
-        out.push_str("  smaps: bucket, mappings, Rss MiB, of which AnonHugePages MiB\n");
+        let _ = writeln!(out, "  smaps: bucket, mappings, Rss MiB, of which AnonHugePages MiB");
         let mut rss_total = 0;
         for (name, b) in names.iter().zip(&buckets) {
             rss_total += b.rss;
-            out.push_str(&format!("    {name}: {}, {}, {}\n", b.vmas, mib(b.rss), mib(b.huge)));
+            let _ = writeln!(out, "    {name}: {}, {}, {}", b.vmas, mib(b.rss), mib(b.huge));
         }
-        out.push_str(&format!("    total: {} MiB\n", mib(rss_total)));
+        let _ = writeln!(out, "    total: {} MiB", mib(rss_total));
         for (size, (n, rss)) in &stacks_by_size {
-            out.push_str(&format!("    stacks of {size} MiB: {n}, {} MiB resident\n", mib(*rss)));
+            let _ = writeln!(out, "    stacks of {size} MiB: {n}, {} MiB resident", mib(*rss));
         }
         let arena_slack = arenas.tail_resident + arenas.retired_resident;
         let arena_other = buckets[0].rss as f64 - (arenas.used + arena_slack) as f64;
-        out.push_str(&format!(
-            "  split MiB: arena used {} + arena unused resident {} + arena other (regions, untouched used) {} | heap live {} + heap retained {} (in pages {}, outside pages {}) | stacks {} | file {} | = {}\n",
+        let _ = writeln!(
+            out,
+            "  split MiB: arena used {} + arena unused resident {} + arena other (regions, untouched used) {:.1} | heap live {} + heap retained {} (in pages {}, outside pages {}) | stacks {} | file {} | = {}",
             mib(arenas.used),
             mib(arena_slack),
-            format!("{:.1}", arena_other / super::MIB),
+            arena_other / super::MIB,
             heap.map_or("?".into(), |h| mib(h.used)),
             heap.map_or("?".into(), |h| mib(buckets[2].rss.saturating_sub(h.used))),
             heap.map_or("?".into(), |h| mib(h.resident.saturating_sub(h.used))),
@@ -333,6 +304,6 @@ mod linux {
             mib(buckets[1].rss),
             mib(buckets[3].rss),
             mib(rss_total)
-        ));
+        );
     }
 }

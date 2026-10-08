@@ -727,10 +727,7 @@ impl checkerPool {
         }
         let queues: Vec<FileQueue> = positions.into_iter().map(|p| FileQueue::new(p, weight)).collect();
         // TSRS_MEM_SPLIT: the type-check pass reports once every checker is done and before any thread exits.
-        let mem_split = (allow_steal && tsrs_core::memsplit::enabled()).then(|| {
-            tsrs_core::memsplit::mark_check_pass();
-            std::sync::Barrier::new(if single { 1 } else { active.len() })
-        });
+        let mem_split = (allow_steal && tsrs_core::memsplit::enabled()).then(|| std::sync::Barrier::new(if single { 1 } else { active.len() }));
         let run = |checker_idx: usize| {
             let start = stats.then(std::time::Instant::now);
             let cpu_start = if stats { thread_cpu_seconds() } else { 0.0 };
