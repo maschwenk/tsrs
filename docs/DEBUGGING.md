@@ -85,6 +85,28 @@ files included) a group shares with each checker, then moves groups while that l
 From 16 checkers on, a thief also keeps stealing from the checker it stole from last while that checker has at least
 half the busiest one's work left; `TSRS_STEAL_STICKY=0` picks the busiest checker for every file.
 
+## Why a TS2590 comes and goes: `TSRS_TRACE_UNION_REDUCTION`
+
+TS2590 ("Expression produces a union type that is too complex to represent") from `removeSubtypes` is decided after
+100,000 comparisons: the number of comparisons per constituent so far, times the union's length, must stay at most
+1,000,000. So only a union of more than 1,000 types can get it. `TSRS_TRACE_UNION_REDUCTION=1` prints one line on
+stderr for every subtype reduction of such a union (crates/tsrs_checker/src/uniontrace.rs):
+
+```
+tsrs union reduction: at b.ts(4,19) while checking b.ts | 1101 -> 1101 types, too complex (TS2590) | 100000 comparisons, at 100000: 91 sources begun, estimate 1208898 | set 6892ac797ab8407b order 487efeec6bfd0404 removed d1fba762150c532c | first [...] last [...]
+```
+
+`at` is the node the error is reported at and `while checking` the file the checker was checking; when they differ,
+the error is filed against a file whose diagnostics this checker may already have handed over, and then it is lost.
+`-> n types` is what was kept (or left when it gave up), `from the cache` an answer reused from an earlier reduction of
+the same list on that checker. The three fingerprints are built from the
+types' symbols, declaration positions, type arguments and literal values, not from type ids, so they are comparable
+between runs and checker counts: if two runs disagree on a TS2590, a different `set` means the union itself differed, a
+different `order` with the same `set` means its constituents were ordered differently, and the same `set` and `order`
+with a different `removed` (or a different count at the 100,000 checkpoint) means some comparisons answered
+differently. Tracing reads only what the types already hold and resolves nothing. notes/open-history-dependence.md
+section 4 has what is known.
+
 ## `.types` / `.symbols` equivalence on the private monorepo against the cached reference
 
 Running the Go oracle (`tools/oracle/project-types`) takes hours per side. Cache its equivalent instead (not

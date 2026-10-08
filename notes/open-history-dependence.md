@@ -1,4 +1,4 @@
-# open-history-dependence: three programs whose output still depends on the checker assignment (not fixed)
+# open-history-dependence: four cases whose output still depends on the checker assignment (not fixed)
 
 notes/perf-order-independence.md made diagnostics a function of the program on the corpora it tested, and the README
 says output does not depend on the checker count. Three bench candidates show that this does not hold in general:
@@ -7,7 +7,8 @@ three are typescript-go's own history dependence: tsgo-ref also prints different
 tsrs prints the same output under `--checkerAssignment go` when the files are visited in the same order. None of them is
 fixed. For the router case a fix that makes the output canonical exists, but it costs up to 4% of single-threaded
 instructions and adds an error that tsgo does not print to another program (below); the cheaper variant leaves part of
-the dependence. This note is the evidence and the measurements.
+the dependence. A fourth case, a TS2590 reported on a private monorepo (issue #218), is in section 4: not reproduced,
+with a trace switch for the reporter. This note is the evidence and the measurements.
 
 ## Summary
 
@@ -190,3 +191,58 @@ tsrs -p tsconfig.bench.json --noEmit --incremental false --pretty false --checke
 # rxjs: overlay from bench PR #206
 tsrs -p packages/rxjs/tsconfig.bench.json --noEmit --incremental false --pretty false --checkers 2 --checkerAssignment random:1
 ```
+
+## 4. TS2590 from `removeSubtypes` (issue #218, not reproduced)
+
+Reported on a private monorepo (Linux x64, 0.7.0 and 0.9.0): at 8 checkers in the default mode a TS2590 ("Expression
+produces a union type that is too complex to represent") is printed in some runs and not in others on the same tree;
+on another commit the default mode never prints a TS2590 that tsgo prints at 4 and 8 checkers but not at 1, and tsrs
+under `--checkerAssignment go` at 4 checkers prints exactly tsgo's output. `TSRS_LAZY_MEMBERS=0`, `TSRS_UNION_CACHE=0`
+and `TSRS_INFER_MEMO=0` change nothing. The error is reported at a call whose object literal argument holds a
+context-sensitive arrow (`pointer => recordMap.getModel(pointer)`, returning `TableToModel[T] | undefined` over a
+generated map of about 250 classes) contextually typed by a generic callable interface with extra members; the arrow
+fails with TS2739. The printed union has about 244 members.
+
+What decides it (`remove_subtypes`, checker_13.rs; Go `removeSubtypes`, checker.go): the constituents are taken from
+the end of the list, each compared with the others until one is a strict supertype. After exactly 100,000 comparisons
+the work is extrapolated, `(comparisons / sources begun) * length`, and above 1,000,000 the reduction gives up with
+TS2590 at `current_node` (the failure is not cached, so every later request reports again). That bound is at most
+`(length - 1) * length`, so the union being reduced had at least 1,001 constituents, about four in five of them removed.
+
+What it is not:
+
+- **Not the order of the constituents.** The issue guessed that the checker that sees what first changes the order
+  the estimate starts with. tsgo 7 (and tsrs) keep union constituents in `compareTypes` order (`insert_type`,
+  `add_types_to_union`: flags, then names, symbols by declaration position, type arguments, literal values; type ids
+  only break ties between types none of those tell apart), not in creation order. The regression case
+  `testdata/regressions/union-too-complex-canonical-order` creates the same 1,101 classes in two opposite orders in two
+  files: TS2590 at every checker count and under random assignments, in tsrs and tsgo-ref alike.
+- **Not a relation overflow.** A comparison that runs out of its complexity budget is cached as failed, which would
+  lengthen the scan, but it also reports TS2859 ("Excessive complexity comparing types"), which the report does not
+  show.
+
+What is left, three candidates:
+
+- **The error is filed against another file.** `current_node` is the expression being checked, and resolving a
+  declaration's type from another file checks that declaration's initializer there. The trace shows this on webpack
+  (one run, 4 checkers): the TS2590 is reported `at test/fixtures/acorn-corpus.json(3,9) while checking
+  tooling/compare-js-tools.js`. A checker hands over a file's diagnostics right after checking it, so an error filed
+  against a file that this checker has already handed over is lost, and one filed before is kept
+  (notes/perf-order-independence.md, "Diagnostics located in another file"). If the call in the report is checked as
+  part of resolving a declaration from another file, whether its TS2590 survives depends on which of the two files
+  that checker checked first: that fits an error that comes and goes from run to run with work stealing.
+- **The comparisons answer differently** (the same pairs, so a different number of comparisons in the first 100,000 or
+  different constituents removed), through what the checker resolved before as in sections 1 and 2:
+  `isDeeplyNestedType` counts a recursion identity only at increasing type ids, base constraints cut by the depth guard
+  are cached (section 1), and variances computed inside a cycle differ with where the cycle is entered (section 2).
+- **A different union reaches `removeSubtypes`**, for the same reasons.
+
+Which one it is cannot be told without the program.
+
+`TSRS_TRACE_UNION_REDUCTION=1` (docs/DEBUGGING.md) prints one line per subtype reduction of a union of more than 1,000
+types: where the error would be filed and which file the checker was checking, and fingerprints of the union, its order
+and the constituents removed, built without type ids so that two runs can be compared. The next step is that trace from
+a run that prints the TS2590 and one that does not: a line `too complex` in both, filed against a file other than the
+one being checked, points at the first candidate; the same location with different fingerprints at the second or third. Until then, a named
+assignment and a fixed checker count (`--checkerAssignment locality --checkers 8`) make the output the same in every
+run (it turns work stealing off), though not the same at every checker count.

@@ -108,9 +108,11 @@ Before the fix the 40k-error corpus gave four distinct outputs over the same con
   (open, notes/open-history-dependence.md).
 - **Relation cache and elaboration:** which elaboration path the relater reports depends on what the relation cache
   holds. Seen on rxjs (PR #212; open, notes/open-history-dependence.md).
-- **TS2589 / TS2859 budgets** (instantiation depth and count, relation complexity): they count work that is not
-  cached yet, so what is already cached can decide whether they fire. This can occur. Not observed under random
-  assignments.
+- **Budget errors** (TS2589 instantiation depth and count, TS2859 relation complexity, TS2590 for a union whose
+  subtype reduction is estimated to take more than 1,000,000 comparisons): they count work, and how much work a
+  comparison takes depends on what the checker already resolved, so what is cached can decide whether they fire. Not
+  observed under random assignments on these corpora; TS2590 was reported on a private monorepo (issue #218: open,
+  notes/open-history-dependence.md section 4).
 - **Diagnostics located in another file:** a checker returns a file's diagnostics right after checking it, so an
   error that checking file B reports inside file A is kept or lost depending on whether A was collected first. This
   can occur (Go behaves the same). Not observed.
@@ -118,7 +120,7 @@ Before the fix the 40k-error corpus gave four distinct outputs over the same con
   so an alias is attached per request, not first-come. No history found.
 
 So the assignment-dependent output observed on these corpora is gone. The remaining channels were theoretical here;
-three of them have since shown up on other programs and are open (above).
+four of them have since shown up on other programs and are open (above).
 
 ## What stays deterministic, what does not
 

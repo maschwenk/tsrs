@@ -358,10 +358,18 @@ impl Checker {
             return Some(types.to_vec());
         }
         let key = get_type_list_key(types);
+        // tsrs-only: TSRS_TRACE_UNION_REDUCTION (uniontrace.rs). Only a union of more than 1,000 types can reach the
+        // TS2590 limit below.
+        let trace = types.len() > 1000 && crate::uniontrace::enabled();
         if let Some(cached) = self.subtype_reduction_cache.get(&key).copied() {
+            if trace {
+                crate::uniontrace::report(self, types, cached, "reduced", None, None);
+            }
             return Some(cached.to_vec());
         }
+        let input = types;
         let mut types = types.to_vec();
+        let mut checkpoint = None;
         // We assume that redundant primitive types have already been removed from the types array and that there
         // are no any and unknown types in the array. Thus, the only possible supertypes for primitive types are empty
         // object types, and if none of those are present we can exclude primitive types from the subtype check.
@@ -416,7 +424,13 @@ impl Checker {
                             // greater than 1M we deem the union type too complex to represent. This for example
                             // caps union types at 1000 unique object types.
                             let estimated_count = (count / (length - i as i64)) * length;
+                            if trace {
+                                checkpoint = Some(crate::uniontrace::Checkpoint { sources: length - i as i64, estimate: estimated_count });
+                            }
                             if estimated_count > 1000000 {
+                                if trace {
+                                    crate::uniontrace::report(self, input, &types, "too complex (TS2590)", Some(count), checkpoint);
+                                }
                                 self.error(self.current_node, &diagnostics::Expression_produces_a_union_type_that_is_too_complex_to_represent, &[]);
                                 return None;
                             }
@@ -447,6 +461,9 @@ impl Checker {
                     }
                 }
             }
+        }
+        if trace {
+            crate::uniontrace::report(self, input, &types, "reduced", Some(count), checkpoint);
         }
         self.subtype_reduction_cache.insert(key, alloc_slice(&types));
         Some(types)
