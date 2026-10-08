@@ -534,6 +534,12 @@ fn cmd_types_dump(mut args: Args) {
 fn main() {
     // The baselines are tsgo's output (one checker in program order): keep Go's check history (tsrs_core::compat).
     tsrs_core::compat::use_go_history_for_tsgo_baselines();
+    // tsrs-only (notes/mem-lazy-dts-members.md): `TSRS_LAZY_DTS=force` parses every declaration-file member list
+    // lazily, checked files included, to test that forcing gives the same output. Off by default.
+    #[cfg(feature = "compiler")]
+    if std::env::var_os("TSRS_LAZY_DTS").is_some_and(|v| v == "force") {
+        tsrs_compiler::enable_lazy_dts();
+    }
     let mut argv: Vec<String> = std::env::args().skip(1).collect();
     if argv.is_empty() {
         eprintln!("{USAGE}");
@@ -563,7 +569,13 @@ fn main() {
     }
     EXTRA_BASELINES.store(extra, std::sync::atomic::Ordering::Relaxed);
     match cmd.as_str() {
-        "run" => cmd_run(args, &spec),
+        "run" => {
+            cmd_run(args, &spec);
+            #[cfg(feature = "compiler")]
+            if std::env::var_os("TSRS_LAZY_DTS").is_some_and(|v| v == "force") {
+                eprint!("{}", tsrs_ast::lazylist::stats_line());
+            }
+        }
         "show" => cmd_show(args, spec),
         "crashes" => cmd_crashes(args),
         "list" => cmd_list(args, &spec),
@@ -571,7 +583,16 @@ fn main() {
         "materialize" => cmd_materialize(args, &spec),
         #[cfg(feature = "checker")]
         "types-dump" => cmd_types_dump(args),
-        "__worker" => worker::worker_main(spec),
+        "__worker" => {
+            worker::worker_main(spec);
+            #[cfg(feature = "compiler")]
+            if let Some(path) = std::env::var_os("TSRS_LAZY_DTS_STATS_FILE") {
+                use std::io::Write as _;
+                if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+                    let _ = f.write_all(tsrs_ast::lazylist::stats_line().as_bytes());
+                }
+            }
+        }
         "-h" | "--help" | "help" => println!("{USAGE}"),
         _ => {
             eprintln!("unknown command {cmd}\n{USAGE}");

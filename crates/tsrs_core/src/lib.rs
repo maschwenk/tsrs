@@ -12,7 +12,7 @@ pub const COMPRESSED_PTRS: bool = cfg!(compressed_ptrs);
 pub const NO_THREADS: bool = cfg!(all(target_family = "wasm", not(target_feature = "atomics")));
 #[cfg(feature = "alloc-profile")]
 pub mod alloc_profile;
-pub use ptr::{alloc, alloc_slice, alloc_slice_aligned4, alloc_slice_recycled, alloc_slice_scratch, alloc_str, alloc_str_scratch, alloc_vec, alloc_vec_scratch, alloc_profile_dump, arena_checkpoint, arena_pin, census_layout, census_recording, census_reset, census_scrub_none, census_scrub_slack, census_scrub_stack, CensusField, arena_rewind, free_raw, free_slice_ptr, OptionSliceCell, OptionThinSliceCell, PackedStr, PSliceCell, SliceCell, StrCell, SlicePair, StaticSlicePtr, ThinSlice, ThinSliceCell, PKey, PSlot, P, PACK_BITS, SP};
+pub use ptr::{alloc, alloc_slice, alloc_slice_aligned4, alloc_slice_recycled, alloc_slice_scratch, alloc_str, alloc_str_scratch, alloc_vec, alloc_vec_scratch, alloc_profile_dump, arena_checkpoint, arena_pin, arena_rewindable, census_layout, census_recording, census_reset, census_scrub_none, census_scrub_slack, census_scrub_stack, CensusField, arena_rewind, free_raw, free_slice_ptr, OptionSliceCell, OptionThinSliceCell, PackedStr, PSliceCell, SliceCell, StrCell, SlicePair, StaticSlicePtr, ThinSlice, ThinSliceCell, PKey, PSlot, P, PACK_BITS, SP};
 
 mod frozen;
 pub use frozen::{FrozenCell, FrozenRef, FrozenRefMut, OwnedCell, OwnedPSliceCell, OwnedSliceCell, OwnedStrCell, OwnedTaggedStrCell};

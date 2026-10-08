@@ -1,0 +1,16 @@
+import { AllModels, Merged, Widget, Config, Outer, Fluent, WithImport, Computed } from "./lib";
+const f: number = null as any as AllModels<{ a: { $all: string; other: string } }, "a">;
+const m: Merged<number, string> = {};
+const w: typeof Widget = { prototype: null as any };
+const c: Config = Config.defaults;
+const cs: string = Config.create().level;
+declare const o: Outer;
+const leaf: number = o.inner.deep.leaf;
+o.fn({ x: 1 });
+declare const fl: Fluent;
+const n: string = fl.self().self().count;
+declare const wi: WithImport;
+const v: string = wi.mod.value;
+declare const cp: Computed;
+const it: string = cp[Symbol.iterator]().next().value;
+const g: GlobalThing = {};

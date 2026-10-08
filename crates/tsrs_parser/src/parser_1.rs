@@ -129,6 +129,11 @@ pub struct Parser {
     pub(crate) current_parent: Option<P<Node>>,
     pub(crate) reparsed_clones: Vec<P<Node>>,
 
+    // tsrs-only: member lists of this declaration file are parsed lazily (`enable_lazy_dts`, tsrs_ast `lazylist`),
+    // and the records of the lazy lists so far.
+    pub(crate) lazy_dts: bool,
+    pub(crate) lazy_lists: Vec<P<tsrs_ast::lazylist::LazyNodeList>>,
+
     // Go builds node lists in `make([]*ast.Node, 0, 16)` slices that escape analysis keeps on the goroutine stack,
     // and clones the finished list into the node slice arena. The port builds every list on this one stack
     // instead (a nested list pushes above its parent's elements and pops them before returning), so building a
@@ -166,6 +171,8 @@ pub(crate) fn new_parser() -> Parser {
         reparse_list: Vec::new(),
         current_parent: None,
         reparsed_clones: Vec::new(),
+        lazy_dts: false,
+        lazy_lists: Vec::new(),
         node_stack: Vec::new(),
     }
 }
@@ -511,6 +518,7 @@ pub struct ParserState {
     pub(crate) js_diagnostics_len: usize,
     pub(crate) jsdoc_infos_len: usize,
     pub(crate) reparsed_clones_len: usize,
+    pub(crate) lazy_lists_len: usize,
     pub(crate) statement_has_await_identifier: bool,
     pub(crate) has_parse_error: bool,
     // Rolling back a parse also discards the arena memory it allocated (notes/mem-recycle.md). Parser data that
@@ -529,6 +537,7 @@ impl Parser {
             js_diagnostics_len: self.js_diagnostics.len(),
             jsdoc_infos_len: self.jsdoc_infos.len(),
             reparsed_clones_len: self.reparsed_clones.len(),
+            lazy_lists_len: self.lazy_lists.len(),
             statement_has_await_identifier: self.statement_has_await_identifier,
             has_parse_error: self.has_parse_error,
         }
@@ -549,6 +558,7 @@ impl Parser {
         self.js_diagnostics.truncate(state.js_diagnostics_len);
         self.jsdoc_infos.truncate(state.jsdoc_infos_len);
         self.reparsed_clones.truncate(state.reparsed_clones_len);
+        self.lazy_lists.truncate(state.lazy_lists_len);
         self.statement_has_await_identifier = state.statement_has_await_identifier;
         self.has_parse_error = state.has_parse_error;
     }
@@ -621,6 +631,8 @@ impl Parser {
         let is_declaration_file = tspath::is_declaration_file_name(&self.opts.file_name);
         if is_declaration_file {
             self.context_flags |= NodeFlags::Ambient;
+            // Relaxed: set once by the CLI before any program is created.
+            self.lazy_dts = LAZY_DTS.load(std::sync::atomic::Ordering::Relaxed);
         }
         let pos = self.node_pos();
         let mut statements = self.parse_list_index(ParsingContext::SourceElements, Parser::parse_toplevel_statement);
@@ -652,6 +664,11 @@ impl Parser {
                 result = reparse.as_source_file_p();
                 self.finish_source_file(result, is_declaration_file);
             }
+        }
+        if !self.lazy_lists.is_empty() {
+            result.lazy_lists.set(alloc_slice(&self.lazy_lists));
+            // Relaxed: a statistics counter, read at exit.
+            tsrs_ast::lazylist::STATS[0].fetch_add(self.lazy_lists.len() as u64, std::sync::atomic::Ordering::Relaxed);
         }
         collect_external_module_references(result);
         if ast::is_in_js_file(Some(node)) {
@@ -846,6 +863,68 @@ impl Parser {
         self.reparse_list = outer_reparse_list;
         self.parsing_contexts = save_parsing_contexts;
         start
+    }
+
+    /// `parse_list` for the member list of an interface, class or type literal: lazy in a declaration file the program
+    /// will not check (`parse_member_list_lazily`).
+    pub(crate) fn parse_member_list(&mut self, kind: ParsingContext, parse_element: fn(&mut Parser) -> P<Node>) -> P<NodeList> {
+        if self.lazy_dts && !self.context_flags.intersects(NodeFlags::JSDoc) {
+            return self.parse_member_list_lazily(kind, parse_element);
+        }
+        self.parse_list(kind, parse_element)
+    }
+
+    /// tsrs-only (notes/mem-lazy-dts-members.md): parses the member list of an interface, class or type literal of a
+    /// declaration file, and if it is plain (`lazy_list_blocked`: no diagnostic, no eager JSDoc, no comment directive,
+    /// nothing whose binding reaches outside the list, and the arena can discard it), discards its nodes and returns a
+    /// lazy list (tsrs_ast `lazylist`) that `reparse_lazy_list` parses again from the same position on first use.
+    fn parse_member_list_lazily(&mut self, kind: ParsingContext, parse_element: fn(&mut Parser) -> P<Node>) -> P<NodeList> {
+        let pos = self.node_pos();
+        let context_flags = self.context_flags;
+        let parsing_contexts = self.parsing_contexts;
+        let clean_start = !self.has_parse_error;
+        let cp = tsrs_core::arena_checkpoint();
+        let before = self.lazy_watch();
+        let list = self.parse_list(kind, parse_element);
+        let after = self.lazy_watch();
+        if !clean_start
+            || list.nodes().is_empty()
+            || list.end() - list.pos() > LAZY_LIST_MAX_TEXT
+            || (after.0, after.1, after.2, after.3, after.5) != (before.0, before.1, before.2, before.3, before.5)
+            || self.has_parse_error
+            || !tsrs_core::arena_rewindable(&cp)
+            || lazy_list_blocked(list.nodes())
+        {
+            return list;
+        }
+        let loc = list.loc();
+        debug_assert_eq!(loc.pos(), pos);
+        self.lazy_lists.truncate(before.4);
+        tsrs_core::arena_rewind(cp);
+        let record = P::new(tsrs_ast::lazylist::LazyNodeList::new(loc.pos(), loc.end(), kind as u8, context_flags, parsing_contexts as u32));
+        self.lazy_lists.push(record);
+        self.factory.new_lazy_node_list(loc, record.get())
+    }
+
+    /// What a lazy list must not change (`parse_member_list_lazily`): diagnostics, eager JSDoc, reparsed clones,
+    /// comment directives (each reallocates an arena slice the parser or scanner keeps), and the lazy records so far
+    /// (index 4: nested records are dropped with the list).
+    fn lazy_watch(&self) -> (usize, usize, usize, usize, usize, usize) {
+        (
+            self.diagnostics.len() + self.js_diagnostics.len() + self.jsdoc_diagnostics.len(),
+            self.jsdoc_infos.len(),
+            self.reparsed_clones.len(),
+            self.scanner.comment_directives().len(),
+            self.lazy_lists.len(),
+            self.source_flags.bits() as usize,
+        )
+    }
+
+    /// The owner node of a member list that may be lazy, right after it is created.
+    pub(crate) fn set_lazy_owner(&self, members: P<NodeList>, owner: P<Node>) {
+        if let Some(record) = members.lazy_record() {
+            record.set_owner(owner);
+        }
     }
 
     pub(crate) fn parse_list(&mut self, kind: ParsingContext, mut parse_element: impl FnMut(&mut Parser) -> P<Node>) -> P<NodeList> {
@@ -2115,7 +2194,7 @@ impl Parser {
         if self.parse_expected(Kind::OpenBraceToken) {
             // ClassTail[Yield,Await] : (Modified) See 14.5
             //      ClassHeritage[?Yield,?Await]opt { ClassBody[?Yield,?Await]opt }
-            members = self.parse_list(ParsingContext::ClassMembers, Parser::parse_class_element);
+            members = self.parse_member_list(ParsingContext::ClassMembers, Parser::parse_class_element);
             self.parse_expected(Kind::CloseBraceToken);
         } else {
             members = self.create_missing_list();
@@ -2129,6 +2208,7 @@ impl Parser {
         } else {
             self.factory.new_class_expression(modifiers, name, type_parameters, heritage_clauses, members)
         };
+        self.set_lazy_owner(members, result);
         self.finish_node(result, pos);
         self.with_jsdoc(result, jsdoc);
         if result.flags().intersects(NodeFlags::JavaScriptFile) {
@@ -2545,6 +2625,7 @@ impl Parser {
         let heritage_clauses = self.parse_heritage_clauses(true /*isInterface*/);
         let members = self.parse_object_type_members();
         let result = self.factory.new_interface_declaration(modifiers, name, type_parameters, heritage_clauses, members);
+        self.set_lazy_owner(members, result);
         let result = self.finish_node(result, pos);
         self.with_jsdoc(result, jsdoc);
         self.check_js_syntax(result);
@@ -2874,4 +2955,111 @@ impl Parser {
         self.statement_has_await_identifier = save_has_await_identifier;
         result
     }
+}
+
+const _: () = assert!(ParsingContext::ClassMembers as u8 == tsrs_ast::lazylist::CLASS_MEMBERS);
+
+/// A member list longer than this (in text) stays eager: parsing and binding it again takes a millisecond or more,
+/// while every checker that needs it waits (the generated OpenAPI `operations` / `components` interfaces of
+/// supabase-studio, 65-437 KB each, are needed by most checkers). Keeping them eager costs at most 0.5% of peak on the
+/// bench projects (notes/mem-lazy-dts-members.md).
+const LAZY_LIST_MAX_TEXT: i32 = 64 << 10;
+
+static LAZY_DTS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// tsrs-only: parse the member lists of declaration files lazily from now on (the CLI with `skipLibCheck`; tsrs_ast
+/// `lazylist`, notes/mem-lazy-dts-members.md). Process-wide; the binder must be enabled too (`tsrs_binder`).
+pub fn enable_lazy_dts() {
+    tsrs_ast::lazylist::set_parse_hook(reparse_lazy_list);
+    // Relaxed: the CLI enables it before creating the program; parser threads start after that.
+    LAZY_DTS.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Parses a lazy member list again from its recorded position and context (`parse_member_list_lazily`): the same
+/// parser code from the same scanner position, so the same nodes; their parent is set to the owner.
+fn reparse_lazy_list(record: &tsrs_ast::lazylist::LazyNodeList, file: P<SourceFile>) -> &'static [P<Node>] {
+    crate::jsdoc::init();
+    let mut p = new_parser();
+    p.initialize_state_static(file.parse_options().clone(), file.text(), file.script_kind());
+    p.source_text_index = file.text_index.get();
+    p.scanner.reset_token_state(record.pos);
+    p.next_token();
+    p.context_flags = record.context_flags;
+    p.parsing_contexts = record.parsing_contexts as ParsingContexts;
+    let list = if record.parsing_context == ParsingContext::ClassMembers as u8 {
+        p.parse_list(ParsingContext::ClassMembers, Parser::parse_class_element)
+    } else {
+        debug_assert_eq!(record.parsing_context, ParsingContext::TypeMembers as u8);
+        p.parse_list(ParsingContext::TypeMembers, Parser::parse_type_member)
+    };
+    assert!(
+        p.diagnostics.is_empty() && list.pos() == record.pos && list.end() == record.end && p.token == Kind::CloseBraceToken,
+        "lazy member list of {} at {} parsed differently",
+        file.file_name(),
+        record.pos
+    );
+    let owner = record.owner();
+    let nodes = list.nodes();
+    for &m in nodes {
+        m.set_parent(Some(owner));
+    }
+    nodes
+}
+
+/// Whether binding a member list could reach outside it, which a lazy list must not (the binder binds it later with
+/// the state it had at the list, tsrs_binder `bind_lazy_list`): `this` (sets `ContainsThis` on the enclosing
+/// containers), `infer` (declares its type parameter in the enclosing conditional type), bodies, initializers,
+/// decorators, `async`, and expressions that make flow nodes or flow effects; import types and calls (the file's
+/// imports are collected from the tree when the file is parsed).
+fn lazy_list_blocked(nodes: &[P<Node>]) -> bool {
+    fn blocked(n: P<Node>) -> bool {
+        let hit = match n.kind() {
+            Kind::ThisKeyword
+            | Kind::ThisType
+            | Kind::SuperKeyword
+            | Kind::ImportType
+            | Kind::ImportKeyword
+            | Kind::MetaProperty
+            | Kind::InferType
+            | Kind::Block
+            | Kind::Decorator
+            | Kind::AsyncKeyword
+            | Kind::CallExpression
+            | Kind::NewExpression
+            | Kind::BinaryExpression
+            | Kind::ConditionalExpression
+            | Kind::ElementAccessExpression
+            | Kind::PostfixUnaryExpression
+            | Kind::ArrowFunction
+            | Kind::FunctionExpression
+            | Kind::ClassExpression
+            | Kind::ObjectLiteralExpression
+            | Kind::ArrayLiteralExpression
+            | Kind::TaggedTemplateExpression
+            | Kind::TemplateExpression
+            | Kind::ParenthesizedExpression
+            | Kind::AwaitExpression
+            | Kind::YieldExpression
+            | Kind::DeleteExpression
+            | Kind::TypeOfExpression
+            | Kind::VoidExpression
+            | Kind::NonNullExpression
+            | Kind::AsExpression
+            | Kind::SatisfiesExpression
+            | Kind::TypeAssertionExpression
+            | Kind::SpreadElement => true,
+            Kind::PrefixUnaryExpression => {
+                let u = n.as_prefix_unary_expression();
+                !matches!(u.operator, Kind::MinusToken | Kind::PlusToken)
+                    || !matches!(u.operand.kind(), Kind::NumericLiteral | Kind::BigIntLiteral)
+            }
+            Kind::PropertyAccessExpression => n.flags().intersects(NodeFlags::OptionalChain),
+            Kind::PropertyDeclaration | Kind::PropertySignature | Kind::Parameter | Kind::VariableDeclaration | Kind::BindingElement => {
+                n.initializer().is_some()
+            }
+            _ => false,
+        };
+        hit || n.for_each_child(&mut |c| blocked(c))
+    }
+    nodes.iter().any(|&n| blocked(n))
 }

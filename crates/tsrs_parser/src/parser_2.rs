@@ -1505,12 +1505,13 @@ impl Parser {
         let pos = self.node_pos();
         let members = self.parse_object_type_members();
         let node = self.factory.new_type_literal_node(members);
+        self.set_lazy_owner(members, node);
         self.finish_node(node, pos)
     }
 
     pub(crate) fn parse_object_type_members(&mut self) -> P<NodeList> {
         if self.parse_expected(Kind::OpenBraceToken) {
-            let members = self.parse_list(ParsingContext::TypeMembers, Parser::parse_type_member);
+            let members = self.parse_member_list(ParsingContext::TypeMembers, Parser::parse_type_member);
             self.parse_expected(Kind::CloseBraceToken);
             return members;
         }

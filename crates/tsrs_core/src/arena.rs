@@ -476,6 +476,12 @@ impl Arena {
         }
     }
 
+    /// Whether the range allocated since `cp` can be discarded (`rewindable`).
+    #[inline]
+    pub(crate) fn rewindable_now(&self, cp: &Checkpoint) -> bool {
+        self.rewindable(cp).is_some()
+    }
+
     /// The range allocated since `cp` (lowest address, length) when it can be discarded: same chunk and no free or
     /// pin since.
     #[inline]
