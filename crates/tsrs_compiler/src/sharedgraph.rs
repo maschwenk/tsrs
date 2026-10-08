@@ -115,6 +115,8 @@ pub(crate) struct Point {
     pub symbols: u32,
     pub arena: usize,
     pub cpu: f64,
+    /// Overlay entries (cells, object-flag word pages) of the checker (switch on).
+    pub overlay: (usize, usize),
 }
 
 impl Point {
@@ -125,6 +127,10 @@ impl Point {
             symbols: c.symbol_count,
             arena: tsrs_core::arena::own_arena_used_bytes(),
             cpu: crate::checkerpool::thread_cpu_seconds(),
+            #[cfg(feature = "checker")]
+            overlay: (c.overlay.cell_count(), c.overlay.id_word_pages()),
+            #[cfg(not(feature = "checker"))]
+            overlay: (0, 0),
         }
     }
 }
@@ -161,7 +167,7 @@ pub(crate) fn report(mode: Mode, seed_count: usize, points: &[Option<Points>]) {
         let seed_b = w.arena.saturating_sub(s.arena) as f64;
         let after_b = e.arena.saturating_sub(w.arena) as f64;
         out.push_str(&format!(
-            "  checker {c:>3}: seed {:>8.1} MiB {:>8} types {:>7} sigs {:>6.2} s cpu | after {:>8.1} MiB {:>8} types | total {:>8.1} MiB {:>8} types {:>6.2} s cpu\n",
+            "  checker {c:>3}: seed {:>8.1} MiB {:>8} types {:>7} sigs {:>6.2} s cpu | after {:>8.1} MiB {:>8} types | total {:>8.1} MiB {:>8} types {:>6.2} s cpu | overlay {} cells {} flag pages\n",
             mib(seed_b),
             w.types - s.types,
             w.sigs - s.sigs,
@@ -170,7 +176,9 @@ pub(crate) fn report(mode: Mode, seed_count: usize, points: &[Option<Points>]) {
             e.types - w.types,
             mib(seed_b + after_b),
             e.types - s.types,
-            e.cpu - s.cpu
+            e.cpu - s.cpu,
+            e.overlay.0,
+            e.overlay.1
         ));
         seed_bytes.push(seed_b);
         seed_types.push(w.types - s.types);

@@ -279,6 +279,10 @@ impl Overlay {
     pub fn cell_count(&self) -> usize {
         self.cells.borrow().len()
     }
+    /// Pages of object-flag words (256 per page).
+    pub fn id_word_pages(&self) -> usize {
+        self.id_words.borrow().iter().filter(|p| p.is_some()).count()
+    }
     pub fn table_count(&self) -> usize {
         self.tables.borrow().len()
     }
