@@ -324,9 +324,6 @@ fn perform_compilation(
     if let Some(line) = tsrs_compiler::leaf_stats_report() {
         eprint!("{line}");
     }
-    if let Some(report) = tsrs_compiler::lazy_dts_census_report() {
-        eprint!("{report}");
-    }
     if std::env::var_os("TSRS_LAZY_DTS").is_some_and(|v| v == "stats") {
         eprint!("{}", tsrs_ast::lazylist::stats_line());
     }

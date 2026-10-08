@@ -29,20 +29,11 @@ fn grow(n: usize) {
     HEAP_PEAK.fetch_max(now, Ordering::Relaxed);
 }
 
-/// The lazy declaration-file census's per-thread net heap bytes (arena growth excluded).
-#[inline]
-fn thread_heap(n: i64) {
-    if !heap_sample::IN_ARENA.try_with(|c| c.get()).unwrap_or(true) {
-        crate::lazydts_census::heap_delta(n);
-    }
-}
-
 unsafe impl GlobalAlloc for Counting {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         let p = System.alloc(layout);
         if !p.is_null() {
             grow(layout.size());
-            thread_heap(layout.size() as i64);
             HEAP_ALLOCS.fetch_add(1, Ordering::Relaxed);
             heap_sample::on_alloc(p, layout.size());
             census::on_alloc(p, layout.size());
@@ -53,7 +44,6 @@ unsafe impl GlobalAlloc for Counting {
         let p = System.alloc_zeroed(layout);
         if !p.is_null() {
             grow(layout.size());
-            thread_heap(layout.size() as i64);
             HEAP_ALLOCS.fetch_add(1, Ordering::Relaxed);
             heap_sample::on_alloc(p, layout.size());
             census::on_alloc(p, layout.size());
@@ -68,7 +58,6 @@ unsafe impl GlobalAlloc for Counting {
         }
         System.dealloc(p, layout);
         HEAP_CURRENT.fetch_sub(layout.size(), Ordering::Relaxed);
-        thread_heap(-(layout.size() as i64));
     }
     unsafe fn realloc(&self, p: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
         heap_sample::on_free(p);
@@ -86,7 +75,6 @@ unsafe impl GlobalAlloc for Counting {
             System.realloc(p, layout, new_size)
         };
         if !q.is_null() {
-            thread_heap(new_size as i64 - layout.size() as i64);
             if new_size >= layout.size() {
                 grow(new_size - layout.size());
             } else {

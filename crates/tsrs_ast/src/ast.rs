@@ -299,7 +299,6 @@ impl NodeList {
     }
     #[inline]
     pub fn nodes(&self) -> &'static [P<Node>] {
-        tsrs_core::lazydts_census::mark_list(tsrs_core::lazydts_census::addr_of(self));
         if self.nodes.is_long() {
             return self.nodes_long();
         }

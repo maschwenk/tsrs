@@ -19,7 +19,6 @@ pub mod goslices;
 pub mod jsnum;
 pub mod json;
 pub mod lazymembers;
-pub mod lazydts_census;
 pub mod memsplit;
 pub mod phases;
 pub mod festats;

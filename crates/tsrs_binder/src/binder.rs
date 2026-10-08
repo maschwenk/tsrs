@@ -104,7 +104,6 @@ pub fn bind_source_file(file: P<SourceFile>) {
 
 fn bind_source_file_worker(file: P<SourceFile>) {
     file.bind_once(|| {
-        let census_before = (tsrs_core::lazydts_census::enabled() && file.is_declaration_file()).then(tsrs_core::lazydts_census::bytes_now);
         let mut b = Binder::new(file);
         b.bind(file.as_node());
         b.bind_deferred_expando_assignments();
@@ -112,10 +111,6 @@ fn bind_source_file_worker(file: P<SourceFile>) {
         file.symbol_count.set(b.symbol_count);
         for &lazy in file.lazy_lists.get() {
             lazy.mark_unbound();
-        }
-        if let Some(before) = census_before {
-            let bytes = tsrs_core::lazydts_census::bytes_now().saturating_sub(before);
-            tsrs_core::lazydts_census::note_bind_file(tsrs_core::lazydts_census::addr_of(file.get()), bytes);
         }
     });
 }
@@ -741,22 +736,6 @@ impl Binder {
         let Some(node) = node.into() else {
             return false;
         };
-        if tsrs_core::lazydts_census::enabled()
-            && self.file.is_declaration_file()
-            && node.parent().is_some_and(|p| {
-                matches!(p.kind(), Kind::InterfaceDeclaration | Kind::ClassDeclaration | Kind::ClassExpression | Kind::TypeLiteral | Kind::ModuleBlock)
-            })
-        {
-            let before = tsrs_core::lazydts_census::bytes_now();
-            let result = self.bind_node(node);
-            let bytes = tsrs_core::lazydts_census::bytes_now().saturating_sub(before);
-            tsrs_core::lazydts_census::note_bind_member(tsrs_core::lazydts_census::addr_of(node.get()), bytes);
-            return result;
-        }
-        self.bind_node(node)
-    }
-
-    fn bind_node(&mut self, node: P<Node>) -> bool {
         // Even though in the AST the jsdoc @typedef node belongs to the current node,
         // its symbol might be in the same scope with the current node's symbol. Consider:
         //

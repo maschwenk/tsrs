@@ -629,7 +629,6 @@ impl Parser {
 
     pub(crate) fn parse_source_file_worker(&mut self) -> P<SourceFile> {
         let is_declaration_file = tspath::is_declaration_file_name(&self.opts.file_name);
-        let census_before = (tsrs_core::lazydts_census::enabled() && is_declaration_file).then(tsrs_core::lazydts_census::bytes_now);
         if is_declaration_file {
             self.context_flags |= NodeFlags::Ambient;
             // Relaxed: set once by the CLI before any program is created.
@@ -674,10 +673,6 @@ impl Parser {
         collect_external_module_references(result);
         if ast::is_in_js_file(Some(node)) {
             result.set_js_diagnostics(&attach_file_to_diagnostics(&self.js_diagnostics, result));
-        }
-        if let Some(before) = census_before {
-            let bytes = tsrs_core::lazydts_census::bytes_now().saturating_sub(before);
-            tsrs_core::lazydts_census::note_parse_file(tsrs_core::lazydts_census::addr_of(result.get()), bytes);
         }
         result
     }
@@ -870,37 +865,13 @@ impl Parser {
         start
     }
 
-    /// `parse_list` for the member list of an interface, class, type literal or module block. Profile builds with
-    /// the lazy declaration-file census on (`tsrs_core::lazydts_census`) record the bytes of the list and of each
-    /// member in a declaration file.
+    /// `parse_list` for the member list of an interface, class or type literal: lazy in a declaration file the program
+    /// will not check (`parse_member_list_lazily`).
     pub(crate) fn parse_member_list(&mut self, kind: ParsingContext, parse_element: fn(&mut Parser) -> P<Node>) -> P<NodeList> {
-        if self.lazy_dts && kind != ParsingContext::BlockStatements && !self.context_flags.intersects(NodeFlags::JSDoc) {
+        if self.lazy_dts && !self.context_flags.intersects(NodeFlags::JSDoc) {
             return self.parse_member_list_lazily(kind, parse_element);
         }
-        if !tsrs_core::lazydts_census::enabled() || !tspath::is_declaration_file_name(&self.opts.file_name) {
-            return self.parse_list(kind, parse_element);
-        }
-        use tsrs_core::lazydts_census as census;
-        let before = census::bytes_now();
-        let cp = tsrs_core::arena_checkpoint();
-        let diags = (self.diagnostics.len(), self.js_diagnostics.len(), self.jsdoc_diagnostics.len(), self.jsdoc_infos.len());
-        let list = self.parse_list(kind, |p| {
-            let b = census::bytes_now();
-            let n = parse_element(p);
-            census::note_parse_member(census::addr_of(n.get()), census::bytes_now().saturating_sub(b));
-            n
-        });
-        // Disqualifiers of a lazy list (notes/mem-lazy-dts-members.md): 1 `this`, 2 import type / call / meta,
-        // 4 body / decorator / async, 8 initializer, 16 a diagnostic, 32 eager JSDoc, 64 not rewindable.
-        let mut disq = census_disqualifiers(list.nodes());
-        if diags != (self.diagnostics.len(), self.js_diagnostics.len(), self.jsdoc_diagnostics.len(), self.jsdoc_infos.len()) {
-            disq |= if diags.3 != self.jsdoc_infos.len() { 32 } else { 16 };
-        }
-        if !tsrs_core::arena_rewindable(&cp) {
-            disq |= 64;
-        }
-        census::note_parse_list(census::addr_of(list.get()), census::bytes_now().saturating_sub(before), disq);
-        list
+        self.parse_list(kind, parse_element)
     }
 
     /// tsrs-only (notes/mem-lazy-dts-members.md): parses the member list of an interface, class or type literal of a
@@ -2771,7 +2742,7 @@ impl Parser {
         let pos = self.node_pos();
         let statements: P<NodeList>;
         if self.parse_expected(Kind::OpenBraceToken) {
-            statements = self.parse_member_list(ParsingContext::BlockStatements, Parser::parse_statement);
+            statements = self.parse_list(ParsingContext::BlockStatements, Parser::parse_statement);
             self.parse_expected(Kind::CloseBraceToken);
         } else {
             statements = self.create_missing_list();
@@ -2983,29 +2954,6 @@ impl Parser {
         self.statement_has_await_identifier = save_has_await_identifier;
         result
     }
-}
-
-/// Lazy declaration-file census: what in a parsed member list would keep it from being parsed lazily.
-fn census_disqualifiers(nodes: &[P<Node>]) -> u8 {
-    fn walk(n: P<Node>, bits: &mut u8) {
-        match n.kind() {
-            Kind::ThisKeyword | Kind::ThisType => *bits |= 1,
-            Kind::ImportType | Kind::MetaProperty => *bits |= 2,
-            Kind::CallExpression if n.as_call_expression().expression.kind() == Kind::ImportKeyword => *bits |= 2,
-            Kind::Block | Kind::Decorator | Kind::AsyncKeyword => *bits |= 4,
-            Kind::PropertyDeclaration | Kind::Parameter | Kind::VariableDeclaration | Kind::BindingElement if n.initializer().is_some() => *bits |= 8,
-            _ => {}
-        }
-        n.for_each_child(&mut |c| {
-            walk(c, bits);
-            false
-        });
-    }
-    let mut bits = 0;
-    for &n in nodes {
-        walk(n, &mut bits);
-    }
-    bits
 }
 
 const _: () = assert!(ParsingContext::ClassMembers as u8 == tsrs_ast::lazylist::CLASS_MEMBERS);

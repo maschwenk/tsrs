@@ -84,7 +84,6 @@ impl Symbol {
     }
     #[inline]
     pub fn declarations(&self) -> &'static [P<Node>] {
-        tsrs_core::lazydts_census::mark_member(tsrs_core::lazydts_census::addr_of(self));
         self.declarations.get()
     }
     /// Go `symbol.Declarations = slices.Clone(declarations)`-like: stores a copy.
@@ -117,7 +116,6 @@ impl Symbol {
     #[inline]
     #[expect(clippy::disallowed_methods, reason = "indexing with a bounds check: +0.7% instructions, one checker (notes/mem-small.md)")]
     pub fn value_declaration(&self) -> Option<P<Node>> {
-        tsrs_core::lazydts_census::mark_member(tsrs_core::lazydts_census::addr_of(self));
         if self.name.tags() & TAG_VALUE_FIRST != 0 {
             let declarations = self.declarations.get();
             debug_assert!(!declarations.is_empty());
@@ -160,7 +158,6 @@ impl Symbol {
     }
     #[inline]
     pub fn members(&self) -> Option<P<SymbolTable>> {
-        tsrs_core::lazydts_census::mark_owner(tsrs_core::lazydts_census::addr_of(self), false);
         let t = self.tables()?;
         if let Some(lazy) = t.lazy.get() {
             lazy.ensure();
@@ -175,7 +172,6 @@ impl Symbol {
     }
     #[inline]
     pub fn exports(&self) -> Option<P<SymbolTable>> {
-        tsrs_core::lazydts_census::mark_owner(tsrs_core::lazydts_census::addr_of(self), true);
         let t = self.tables()?;
         if let Some(lazy) = t.lazy.get() {
             if lazy.fills_exports() {
@@ -796,21 +792,12 @@ impl NameFilter {
     }
 }
 
-/// The lazy declaration-file census (profile builds): a symbol-table hit touches the symbol.
-#[inline]
-fn census_hit(symbol: P<Symbol>) -> P<Symbol> {
-    if tsrs_core::lazydts_census::enabled() {
-        tsrs_core::lazydts_census::mark_member(tsrs_core::lazydts_census::addr_of(symbol.get()));
-    }
-    symbol
-}
-
 impl SymbolTable {
     /// `lookup` of a name hashed beforehand.
     #[inline]
     pub fn lookup_hashed(&self, key: HashedName<'_>) -> Option<P<Symbol>> {
         let m = self.0.borrow();
-        m.position_hashed(key.name, key.hash).map(|i| census_hit(m.entries[i].symbol()))
+        m.position_hashed(key.name, key.hash).map(|i| m.entries[i].symbol())
     }
 
     /// Go `make(ast.SymbolTable)`.
@@ -838,14 +825,14 @@ impl SymbolTable {
     #[inline]
     pub fn lookup(&self, name: &str) -> Option<P<Symbol>> {
         let m = self.0.borrow();
-        m.position(name).map(|i| census_hit(m.entries[i].symbol()))
+        m.position(name).map(|i| m.entries[i].symbol())
     }
 
     /// `lookup` that also returns the stored key.
     #[inline]
     pub fn lookup_entry(&self, name: &str) -> Option<(&'static str, P<Symbol>)> {
         let m = self.0.borrow();
-        m.position(name).map(|i| (m.key(i), census_hit(m.entries[i].symbol())))
+        m.position(name).map(|i| (m.key(i), m.entries[i].symbol()))
     }
 
     #[inline]
