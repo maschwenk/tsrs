@@ -100,10 +100,18 @@ pub fn set_bind_hook(hook: BindHook) {
     let _ = BIND_HOOK.set(hook);
 }
 
-static WAIT: (Mutex<()>, Condvar) = (Mutex::new(()), Condvar::new());
-/// A reader spins this many times (tens of microseconds) before it sleeps on `WAIT` for another thread's force: most
-/// lists are parsed and bound again in a few microseconds (formbricks-web: 9,400 lists in 40-80 ms of thread time).
-const SPINS: u32 = 1 << 14;
+/// Readers that wait for another thread's force sleep on one of these, picked by the record's address, so that a
+/// finished force wakes only the readers of its stripe (one shared condvar woke every sleeping reader at every force:
+/// drizzle-orm at 32 checkers waited 166 ms in all for 14 ms of forcing).
+static WAIT: [(Mutex<()>, Condvar); 64] = [const { (Mutex::new(()), Condvar::new()) }; 64];
+/// A reader spins this many times (a few microseconds) before it sleeps: most lists are parsed and bound again in a few
+/// microseconds (formbricks-web: 9,400 lists in 40-80 ms of thread time). Longer spins burned CPU on x86, where a
+/// `pause` takes about a hundred cycles.
+const SPINS: u32 = 256;
+
+fn wait_stripe(record: &LazyNodeList) -> &'static (Mutex<()>, Condvar) {
+    &WAIT[(std::ptr::from_ref(record).addr() >> 6) % WAIT.len()]
+}
 
 /// `TSRS_LAZY_DTS=stats`: lists made lazy, deferred by the binder, parsed again (all, and while their file was
 /// bound), never reached by the binder.
@@ -247,7 +255,7 @@ impl LazyNodeList {
                         std::hint::spin_loop();
                         spins += 1;
                     }
-                    let (lock, cv) = &WAIT;
+                    let (lock, cv) = wait_stripe(self);
                     let mut g = lock.lock().unwrap();
                     // Acquire: as above.
                     while self.state.load(Ordering::Acquire) == FORCING {
@@ -277,7 +285,7 @@ impl LazyNodeList {
         self.state.store(DONE, Ordering::Release);
         // Relaxed: a statistics counter, read at exit.
         STATS[5].fetch_add(t.elapsed().as_nanos() as u64, Ordering::Relaxed);
-        let (lock, cv) = &WAIT;
+        let (lock, cv) = wait_stripe(self);
         drop(lock.lock().unwrap());
         cv.notify_all();
         nodes
