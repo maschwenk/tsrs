@@ -1106,7 +1106,10 @@ pub(crate) struct emitNode {
     rare: Option<Box<emitNodeRare>>,
 }
 
+#[cfg(target_pointer_width = "64")]
 const _: () = assert!(std::mem::size_of::<emitNode>() == 32);
+#[cfg(target_pointer_width = "32")]
+const _: () = assert!(std::mem::size_of::<emitNode>() == 28);
 
 #[derive(Clone, Default)]
 struct emitNodeRare {

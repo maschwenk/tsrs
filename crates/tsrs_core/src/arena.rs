@@ -44,8 +44,11 @@ const HUGE_THREAD_CHUNK: Option<usize> = None;
 /// Largest chunk a thread arena grows to in compressed mode (larger single allocations still get their own size).
 #[cfg(compressed_ptrs)]
 const MAX_CHUNK: usize = 64 << 20;
-#[cfg(not(compressed_ptrs))]
+#[cfg(all(not(compressed_ptrs), target_pointer_width = "64"))]
 const MAX_CHUNK: usize = usize::MAX;
+/// 32-bit targets (wasm32) cap the doubling too: a doubled 1 GiB chunk would waste half of a 4 GiB address space.
+#[cfg(all(not(compressed_ptrs), target_pointer_width = "32"))]
+const MAX_CHUNK: usize = 64 << 20;
 
 /// Largest block size kept on a free list; classes are `size / 8`.
 pub const MAX_FREE_SIZE: usize = 512;
@@ -248,7 +251,7 @@ impl Arena {
         // of the fixed reservation, touched or not.
         let next = if self.is_region() {
             (self.capacity.get() / 4).max(PAGE)
-        } else if cfg!(compressed_ptrs) {
+        } else if cfg!(any(compressed_ptrs, target_pointer_width = "32")) {
             (prev * 2).min(MAX_CHUNK)
         } else {
             prev * 2

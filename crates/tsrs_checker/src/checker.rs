@@ -328,7 +328,10 @@ pub struct InferenceContext {
 
 const RARE_ESCAPED: usize = 1;
 
+#[cfg(target_pointer_width = "64")]
 const _: () = assert!(std::mem::size_of::<InferenceContext>() == if tsrs_core::COMPRESSED_PTRS { 48 } else { 64 });
+#[cfg(target_pointer_width = "32")]
+const _: () = assert!(std::mem::size_of::<InferenceContext>() == 36);
 
 #[derive(Default)]
 pub(crate) struct InferenceContextRare {
@@ -608,7 +611,10 @@ pub struct InferenceInfo {
     pub implied_arity: Cell<i32>, // Implied arity (or -1)
 }
 
+#[cfg(target_pointer_width = "64")]
 const _: () = assert!(std::mem::size_of::<InferenceInfo>() == if tsrs_core::COMPRESSED_PTRS { 28 } else { 48 });
+#[cfg(target_pointer_width = "32")]
+const _: () = assert!(std::mem::size_of::<InferenceInfo>() == 28);
 
 bitflags! {
     #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]

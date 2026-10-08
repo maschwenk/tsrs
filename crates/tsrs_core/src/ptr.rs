@@ -752,11 +752,33 @@ unsafe impl<T> Sync for StaticSlicePtr<T> {}
 /// `u16::MAX` bytes or more (or one whose address does not fit in 48 bits) is copied into the arena after a `u32`
 /// length, and the length bits hold `u16::MAX`. `as_str` returns the same text (for short strings, the same slice).
 #[derive(Clone, Copy)]
+#[cfg(target_pointer_width = "64")]
 pub struct PackedStr(std::ptr::NonNull<u8>);
 
+/// 32-bit targets (wasm32): a fat `&'static str` is already 8 bytes, so `PackedStr` is the reference itself.
+#[derive(Clone, Copy)]
+#[cfg(target_pointer_width = "32")]
+pub struct PackedStr(&'static str);
+
+#[cfg(target_pointer_width = "32")]
+impl PackedStr {
+    #[inline]
+    pub fn new(s: &'static str) -> PackedStr {
+        PackedStr(s)
+    }
+
+    #[inline]
+    pub fn as_str(self) -> &'static str {
+        self.0
+    }
+}
+
+#[cfg(target_pointer_width = "64")]
 const PACKED_STR_LEN_SHIFT: u32 = 48;
+#[cfg(target_pointer_width = "64")]
 const PACKED_STR_LONG: usize = u16::MAX as usize;
 
+#[cfg(target_pointer_width = "64")]
 impl PackedStr {
     #[inline]
     #[cfg_attr(feature = "alloc-profile", track_caller)]
@@ -817,10 +839,32 @@ impl fmt::Debug for PackedStr {
 /// a data pointer never has it), so `get` returns exactly the slice that was packed (same pointer and length) in
 /// either form. The word is never zero (a slice's data pointer, even an empty one's, is non-null), so
 /// `Option<ThinSlice<T>>` is one word too.
+#[cfg(target_pointer_width = "64")]
 pub struct ThinSlice<T: 'static>(std::ptr::NonNull<()>, std::marker::PhantomData<&'static [T]>);
 
+/// 32-bit targets (wasm32): a fat `&'static [T]` is already one 8-byte pair (and `Option` of it uses the non-null
+/// niche), so `ThinSlice` is the reference itself.
+#[cfg(target_pointer_width = "32")]
+pub struct ThinSlice<T: 'static>(&'static [T]);
+
+#[cfg(target_pointer_width = "32")]
+impl<T> ThinSlice<T> {
+    #[inline]
+    pub fn new(s: &'static [T]) -> Self {
+        ThinSlice(s)
+    }
+
+    #[inline]
+    pub fn get(self) -> &'static [T] {
+        self.0
+    }
+}
+
+#[cfg(target_pointer_width = "64")]
 const THIN_LEN_SHIFT: u32 = 48;
+#[cfg(target_pointer_width = "64")]
 const THIN_ADDR_MASK: usize = (1 << THIN_LEN_SHIFT) - 1;
+#[cfg(target_pointer_width = "64")]
 const THIN_LONG_TAG: usize = 1;
 
 impl<T> Clone for ThinSlice<T> {
@@ -831,6 +875,7 @@ impl<T> Clone for ThinSlice<T> {
 }
 impl<T> Copy for ThinSlice<T> {}
 
+#[cfg(target_pointer_width = "64")]
 impl<T> ThinSlice<T> {
     const ALIGNED: () = assert!(std::mem::align_of::<T>() >= 2, "ThinSlice needs bit 0 of the data pointer");
 

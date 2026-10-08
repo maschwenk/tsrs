@@ -35,7 +35,10 @@ struct PackedSlot<K, V> {
     value: V,
 }
 
+#[cfg(target_pointer_width = "64")]
 const _: () = assert!(std::mem::size_of::<PackedSlot<CacheHashKey, P<Type>>>() == if tsrs_core::COMPRESSED_PTRS { 20 } else { 24 });
+#[cfg(target_pointer_width = "32")]
+const _: () = assert!(std::mem::size_of::<PackedSlot<CacheHashKey, P<Type>>>() == 20);
 
 pub struct PackedMap<K, V> {
     table: hashbrown::HashTable<PackedSlot<K, V>>,

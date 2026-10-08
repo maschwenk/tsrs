@@ -25,7 +25,10 @@ struct LinkSlot {
     index: u32, // the value's position in `chunks`
 }
 
+#[cfg(target_pointer_width = "64")]
 const _: () = assert!(std::mem::size_of::<LinkSlot>() == if tsrs_core::COMPRESSED_PTRS { 8 } else { 12 });
+#[cfg(target_pointer_width = "32")]
+const _: () = assert!(std::mem::size_of::<LinkSlot>() == 8);
 
 const LINK_CHUNK_SHIFT: u32 = 10;
 const LINK_CHUNK: usize = 1 << LINK_CHUNK_SHIFT;
@@ -224,7 +227,10 @@ struct ReferenceKindsSlot {
     kinds: SymbolFlags,
 }
 
+#[cfg(target_pointer_width = "64")]
 const _: () = assert!(std::mem::size_of::<ReferenceKindsSlot>() == if tsrs_core::COMPRESSED_PTRS { 8 } else { 16 });
+#[cfg(target_pointer_width = "32")]
+const _: () = assert!(std::mem::size_of::<ReferenceKindsSlot>() == 8);
 
 impl SymbolReferenceLinkStore {
     #[inline]
@@ -293,7 +299,10 @@ struct IdGroup {
     slots: [Cell<u16>; ID_GROUP],
 }
 
+#[cfg(target_pointer_width = "64")]
 const _: () = assert!(std::mem::size_of::<IdGroup>() == if tsrs_core::COMPRESSED_PTRS { 264 } else { 272 });
+#[cfg(target_pointer_width = "32")]
+const _: () = assert!(std::mem::size_of::<IdGroup>() == 264);
 
 /// Kept for embedders (tsrslint) and the pool, which chose sparse id pages for multi-checker runs: the groups above
 /// made the sparse form unnecessary, so these are inert and `TSRS_SPARSE_ID_PAGES` is ignored.
