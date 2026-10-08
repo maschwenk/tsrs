@@ -17,7 +17,7 @@ mod sys;
 use std::io::Write;
 use std::sync::{Arc, Mutex};
 
-use tsrs_execute::tsc::{ExitStatus, System};
+use tsrs_execute::tsc::System;
 
 /// Reply with the diagnostics as a JSON array of `DiagnosticResponse` (UTF-16 positions) instead of printing them.
 pub const REQUEST_JSON_DIAGNOSTICS: u32 = 1;
@@ -88,7 +88,7 @@ mod abi {
         let default_hook = std::panic::take_hook();
         std::panic::set_hook(Box::new(move |info| {
             default_hook(info);
-            std::process::exit(super::ExitStatus::NotImplemented as i32);
+            std::process::exit(tsrs_execute::tsc::ExitStatus::NotImplemented as i32);
         }));
         let request = INPUT.with_borrow_mut(std::mem::take);
         let (status, reply) = super::run(&request);
