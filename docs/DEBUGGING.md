@@ -78,8 +78,7 @@ checker's share, heaviest first, then the rest in program order (notes/perf-chec
 notes/perf-heavy-first-threshold.md). `TSRS_ASSIGNMENT_STATS=times` prints per-checker wall and CPU seconds.
 From 16 checkers on, the locality placement also counts the modules (files and their imports, library declaration
 files included) a group shares with each checker, then moves groups while that lowers the modules held per checker
-(notes/perf-clustered-assignment.md); `TSRS_MODULE_AFFINITY=off` restores the placement by import edges alone, and
-`TSRS_MODULE_AFFINITY=<mu>`, `TSRS_MODULE_AFFINITY_GAMMA=<g>` and `TSRS_MODULE_AFFINITY_PASSES=<n>` are for experiments.
+(notes/perf-clustered-assignment.md); `TSRS_MODULE_AFFINITY=off` restores the placement by import edges alone.
 From 16 checkers on, a thief also keeps stealing from the checker it stole from last while that checker has at least
 half the busiest one's work left; `TSRS_STEAL_STICKY=0` picks the busiest checker for every file.
 
@@ -285,7 +284,6 @@ output. Environment switches, read once per process:
   found / blocked (by an active loop analysis, the instantiation counters, another `flowTypeCache`, transient
   `sharedFlows` values) / used, height misses (answers not used near the depth limit), stores, frames not stored and
   why, walks redone after the depth limit (`aborts`), shadow checks.
-- `TSRS_FLOW_MEMO_BITS=<8..24>`: log2 of the table's slots (default 12, 32 bytes each).
 
 testdata/flow-memo holds the hazard cases (each with tsgo's output); `cargo test -p tsrs_cli --test flow_memo` runs
 them with the memo on, off and in shadow mode.
@@ -305,7 +303,6 @@ same either way.
 | --- | --- | --- |
 | `TSRS_UNION_CACHE` | unset (on; off under `--checkerAssignment go`), `0`/`off`, `1`/`on` (on in every mode), `shadow` | `shadow` also computes the uncached answer at every hit and panics if it is a different type (the panic names the input type ids, the reduction and both answers) |
 | `TSRS_UNION_CACHE_STATS` | `1` | at exit, one line on stderr: lookups, hits, stores, why misses were not stored, calls that bypass the cache (shadow mode prints it too) |
-| `TSRS_UNION_CACHE_BITS` | default `10` | log2 of the table size. Larger tables hit slightly more often (2^12: 0.03% fewer instructions) but cost up to 2 MiB of RSS per checker (an allocation above mimalloc's medium size) |
 
 To audit a change near union construction, run the suite and a corpus with `TSRS_UNION_CACHE=shadow`: the result trees
 and the diagnostics must equal a `TSRS_UNION_CACHE=0` run, with no panics (`tsrs-test run --panic-summary`). A shadow
@@ -329,7 +326,6 @@ notes/perf-heavy-files-infer-memo.md).
 | --- | --- | --- |
 | `TSRS_INFER_MEMO` | unset (on; off under `--checkerAssignment go`), `0`/`off`, `1`/`on` (on in every mode), `shadow` | `shadow` also walks every hit from the same starting state and panics unless the walk again creates nothing but lazy member symbols, has no other effects and ends in the stored outcome (the panic names the type ids and both outcomes) |
 | `TSRS_INFER_MEMO_STATS` | `1` | at exit, one line on stderr: lookups, hits, the `inferFromTypes` steps the hits skipped, stores, and why long walks were not stored (shadow mode prints it too) |
-| `TSRS_INFER_MEMO_MIN_STEPS` | default `16` | the shortest walk (in `inferFromTypes` steps) that is stored; lower stores more walks (more memory, more lookups that pay) |
 
 ## Freeing checked leaf files: `TSRS_FREE_LEAVES`
 
@@ -349,7 +345,7 @@ saved. Asking a program for one freed leaf's diagnostics after the pass panics (
 
 | variable | values | effect |
 | --- | --- | --- |
-| `TSRS_FREE_LEAVES` | a comma list of: unset (free with at most 16 checkers), `1` (free at any count), `0`, `keep`, `stats`, `all` | `0`: no file regions (the layout before). `keep` (any count): file regions and the leaf marks, nothing freed (what the regions alone cost). `all` (any count): every TypeScript root file gets a region, not only the predicted ones (frees every leaf, but moves every tree out of the huge-page thread arenas: +6-9% wall time on vscode at 32 checkers on Linux against +2.5-5% predicted). `stats`: one line on stderr: the leaves freed and the ones the prediction missed (with their share of the leaves' nodes), the bytes their regions used, all file regions' bytes, the pages given back and in how many system calls, and the arena address space the run used. Example: `TSRS_FREE_LEAVES=all,stats` |
+| `TSRS_FREE_LEAVES` | a comma list of: unset (free with at most 16 checkers), `1` (free at any count), `0`, `keep`, `stats` | `0`: no file regions (the layout before). `keep` (any count): file regions and the leaf marks, nothing freed (what the regions alone cost). `stats`: one line on stderr: the leaves freed and the ones the prediction missed (with their share of the leaves' nodes), the bytes their regions used, all file regions' bytes, the pages given back and in how many system calls, and the arena address space the run used. Example: `TSRS_FREE_LEAVES=1,stats` |
 
 After a change that reads a file after the check pass (a new report, a new whole-program loop in the checker, such as
 `getAlternativeContainingModules`'s), run a corpus with `TSRS_ARENA_POISON=1`: a freed region is then filled with
@@ -366,8 +362,7 @@ only as a record (position, parser context, binder state) when nothing in it rea
 reader of the list's nodes or of the owner symbol's members parses and binds it again (`crates/tsrs_ast/src/lazylist.rs`,
 `parse_member_list_lazily` in the parser, `bind_lazy_member_list` in the binder; notes/mem-lazy-dts-members.md). Before the checkers of a multi-checker pass start, the lists of the global libraries (default and `lib` files, type
 reference directives and what they reference) and of interfaces merged into the global scope are forced in parallel,
-so that the checkers do not wait for one another on them (`force_shared_lists`; `TSRS_LAZY_DTS_SHARED=0` skips the
-global libraries). Output is the same; `--extendedDiagnostics` `Symbols` counts only the lists that were bound. Off in the language server, the
+so that the checkers do not wait for one another on them (`force_shared_lists`). Output is the same; `--extendedDiagnostics` `Symbols` counts only the lists that were bound. Off in the language server, the
 API and the test harnesses, and under `TSRS_CENSUS=1`, `TSRS_LAZY_DTS_CENSUS=1` and `TSRS_CHECK_SHARED=1`.
 
 | variable | values | effect |
@@ -396,8 +391,6 @@ server).
 | variable | values | effect |
 | --- | --- | --- |
 | `TSRS_SPLIT_FILES` | a comma list of: unset (on), `0`/`off`, `shadow`, `force:<k>`, `stats`, `stats:<file>` | `shadow`: the owner also checks the other checkers' ranges itself, reports the file as one checker finds it, and panics if the split would have reported anything else (a diagnostic another checker found that it did not, or one it found in another checker's range that no other checker did). `force:<k>`: split every checked declaration file with at least two statements into up to k ranges, whatever its weight (the test mode). `stats`: one line per pass on stderr (files split, ranges, ranges run by another checker); `stats:<file>` appends it to a file (the test harnesses keep stderr) |
-| `TSRS_SPLIT_MIN_SHARE` | percent, default `40` | which files are split (weight relative to an average checker's share) |
-| `TSRS_SPLIT_PIECE_DIVISOR` | default `8` | range size: 1/n of an average checker's share |
 
 After a change to what checking a declaration statement reads or writes outside the statement, run the conformance
 suite in the default checker mode with forced splits and compare its lists with an unsplit run:

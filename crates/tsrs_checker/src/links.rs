@@ -304,13 +304,6 @@ const _: () = assert!(std::mem::size_of::<IdGroup>() == if tsrs_core::COMPRESSED
 #[cfg(target_pointer_width = "32")]
 const _: () = assert!(std::mem::size_of::<IdGroup>() == 264);
 
-/// Kept for embedders (tsrslint) and the pool, which chose sparse id pages for multi-checker runs: the groups above
-/// made the sparse form unnecessary, so these are inert and `TSRS_SPARSE_ID_PAGES` is ignored.
-pub fn set_multiple_checkers(_multiple: bool) {}
-
-/// See `set_multiple_checkers`.
-pub fn set_sparse_id_pages(_on: bool) {}
-
 const ID_LINK_CHUNK_SHIFT: u32 = 12;
 const ID_LINK_CHUNK: usize = 1 << ID_LINK_CHUNK_SHIFT;
 const ID_GROUP_SHIFT: u32 = 7;

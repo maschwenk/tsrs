@@ -30,8 +30,7 @@
 //! `TSRS_UNION_CACHE=shadow` computes the uncached answer at every hit as well and panics if it is a different object.
 //! `TSRS_UNION_CACHE=0` turns the cache off, `=1` forces it on under Go-compatible history too.
 //! `TSRS_UNION_CACHE_STATS=1` prints the totals (lookups, hits, stores, why misses were not stored, calls that bypass
-//! the cache) on stderr at exit; `TSRS_UNION_CACHE_BITS=<n>` sets the table size (default 10; larger tables cost RSS,
-//! notes/perf-union-inference.md).
+//! the cache) on stderr at exit.
 
 use crate::*;
 use tsrs_core::ptr::PKey;
@@ -78,10 +77,9 @@ static SKIP_INSTANTIATED: AtomicU64 = AtomicU64::new(0);
 static SKIP_IMPURE: AtomicU64 = AtomicU64::new(0);
 static SKIP_ERROR: AtomicU64 = AtomicU64::new(0);
 
-fn bits() -> u32 {
-    static BITS: OnceLock<u32> = OnceLock::new();
-    *BITS.get_or_init(|| std::env::var("TSRS_UNION_CACHE_BITS").ok().and_then(|v| v.parse().ok()).filter(|b| (4..=24).contains(b)).unwrap_or(10))
-}
+/// log2 of the table size: 2^12 slots hit 0.03% more often for up to 2 MiB of RSS per checker
+/// (notes/perf-union-inference.md).
+const BITS: u32 = 10;
 /// Key words: the inputs, then for an alias its symbol and type arguments.
 pub(crate) const MAX_WORDS: usize = 8;
 
@@ -108,7 +106,7 @@ pub(crate) struct UnionFrontCache {
 impl UnionFrontCache {
     pub(crate) fn new() -> Self {
         let mode = union_cache_mode();
-        UnionFrontCache { mode, impure: 0, slots: Vec::new(), shift: 64 - bits(), stats: mode != UnionCacheMode::Off && (stats_on() || mode == UnionCacheMode::Shadow) }
+        UnionFrontCache { mode, impure: 0, slots: Vec::new(), shift: 64 - BITS, stats: mode != UnionCacheMode::Off && (stats_on() || mode == UnionCacheMode::Shadow) }
     }
 }
 

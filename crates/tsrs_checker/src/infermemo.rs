@@ -48,7 +48,6 @@
 //! `TSRS_INFER_MEMO=shadow` also walks every hit (from the same starting state) and panics unless that walk creates
 //! nothing but such member symbols, has no other effects and ends in the stored outcome. `TSRS_INFER_MEMO=0` turns the memo off, `=1` forces it on under
 //! Go-compatible history too. `TSRS_INFER_MEMO_STATS=1` prints the totals on stderr at exit.
-//! `TSRS_INFER_MEMO_MIN_STEPS=<n>` sets the shortest walk that is stored (default `MIN_STEPS`).
 
 use crate::*;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -87,13 +86,9 @@ fn stats_on() -> bool {
 
 /// Calls with more inference infos than this are not memoized.
 const MAX_INFOS: usize = 8;
-/// Walks with fewer `inferFromTypes` steps are not stored (`TSRS_INFER_MEMO_MIN_STEPS` overrides it); 16 measured best
-/// of 16, 32 and 64 on every bench project (notes/perf-heavy-files-infer-memo.md).
+/// Walks with fewer `inferFromTypes` steps are not stored; 16 measured best of 16, 32 and 64 on every bench project
+/// (notes/perf-heavy-files-infer-memo.md).
 const MIN_STEPS: u32 = 16;
-fn min_steps() -> u32 {
-    static V: OnceLock<u32> = OnceLock::new();
-    *V.get_or_init(|| std::env::var("TSRS_INFER_MEMO_MIN_STEPS").ok().and_then(|v| v.parse().ok()).unwrap_or(MIN_STEPS))
-}
 
 static LOOKUPS: AtomicU64 = AtomicU64::new(0);
 static HITS: AtomicU64 = AtomicU64::new(0);
@@ -125,7 +120,7 @@ struct Entry {
 pub(crate) struct InferMemo {
     pub(crate) mode: InferMemoMode,
     entries: FxHashMap<Box<[u32]>, Entry>,
-    /// Targets of walks that took at least `min_steps()` steps: only walks to these are keyed, looked up and measured.
+    /// Targets of walks that took at least `MIN_STEPS` steps: only walks to these are keyed, looked up and measured.
     long_targets: FxHashSet<P<Type>>,
     /// Key buffers, one per nesting level of memoized walks.
     key_pool: Vec<Vec<u32>>,
@@ -208,7 +203,7 @@ impl Checker {
             // would cost more than the memo saves.
             let steps_before = self.infer_memo.steps;
             self.infer_from_types(n, source, target);
-            if self.infer_memo.steps.wrapping_sub(steps_before) >= min_steps() {
+            if self.infer_memo.steps.wrapping_sub(steps_before) >= MIN_STEPS {
                 self.infer_memo.long_targets.insert(target);
             }
             return;
@@ -269,11 +264,11 @@ impl Checker {
         let hidden_reset = count_zero && self.expression_checks != expression_checks;
         let effects = in_instantiation || hidden_reset || after != before || flags & (crate::flowmemo::FLAG_EFFECTS | crate::flowmemo::FLAG_TYPE_CACHE) != 0;
         let tainted = !taint.is_pure() || self.skip_direct_inference_nodes.len() != 0;
-        if steps < min_steps() || effects || tainted {
-            count(stats && steps >= min_steps() && after.created != before.created, &NOT_STORED_CREATED, 1);
-            count(stats && steps >= min_steps() && after.total_instantiation_count != before.total_instantiation_count, &NOT_STORED_INSTANTIATED, 1);
-            count(stats && steps >= min_steps() && effects, &NOT_STORED_EFFECTS, 1);
-            count(stats && steps >= min_steps() && tainted, &NOT_STORED_TAINT, 1);
+        if steps < MIN_STEPS || effects || tainted {
+            count(stats && steps >= MIN_STEPS && after.created != before.created, &NOT_STORED_CREATED, 1);
+            count(stats && steps >= MIN_STEPS && after.total_instantiation_count != before.total_instantiation_count, &NOT_STORED_INSTANTIATED, 1);
+            count(stats && steps >= MIN_STEPS && effects, &NOT_STORED_EFFECTS, 1);
+            count(stats && steps >= MIN_STEPS && tainted, &NOT_STORED_TAINT, 1);
             self.infer_memo.key_pool.push(key);
             return;
         }
@@ -366,7 +361,7 @@ impl Checker {
             if lookups == 0 { 0.0 } else { 100.0 * hits as f64 / lookups as f64 },
             total(&SKIPPED_STEPS),
             total(&STORES),
-            min_steps(),
+            MIN_STEPS,
             total(&NOT_STORED_EFFECTS),
             total(&NOT_STORED_CREATED),
             total(&NOT_STORED_INSTANTIATED),

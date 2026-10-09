@@ -63,10 +63,7 @@ fn stats_from_env() -> bool {
 }
 
 /// log2 of the slot count (32 bytes each).
-fn table_bits() -> u32 {
-    static BITS: OnceLock<u32> = OnceLock::new();
-    *BITS.get_or_init(|| std::env::var("TSRS_FLOW_MEMO_BITS").ok().and_then(|v| v.parse().ok()).filter(|b| (8..=24).contains(b)).unwrap_or(12))
-}
+const TABLE_BITS: u32 = 12;
 
 #[derive(Clone, Copy, Default)]
 struct Slot {
@@ -339,10 +336,10 @@ impl FlowMemo {
 
     pub(crate) fn store(&mut self, flow: P<FlowNode>, key: u128, t: P<Type>, height: u16, epoch: u32, count_reset: bool) {
         if self.slots.is_empty() {
-            self.slots = vec![Slot::default(); 1 << table_bits()];
+            self.slots = vec![Slot::default(); 1 << TABLE_BITS];
             if self.mode == FlowMemoMode::Shadow {
-                self.shadow_keys = vec![None; 1 << table_bits()];
-                self.shadow_origin = vec![(None, 0); 1 << table_bits()];
+                self.shadow_keys = vec![None; 1 << TABLE_BITS];
+                self.shadow_origin = vec![(None, 0); 1 << TABLE_BITS];
             }
         }
         let i = self.slot_index(flow, key);

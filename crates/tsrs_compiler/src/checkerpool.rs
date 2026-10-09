@@ -579,8 +579,6 @@ impl checkerPool {
             }
             let create_and_assign = || {
                 let create_start = std::time::Instant::now();
-                #[cfg(feature = "checker")]
-                tsrs_checker::links::set_multiple_checkers(self.checker_count > 1);
                 let slots: Vec<Mutex<Option<CheckerSlot>>> = (0..self.checker_count).map(|_| Mutex::new(None)).collect();
                 run_work_group(self.single_threaded, self.checker_count, |i| {
                     *slots[i].lock().unwrap() = Some(CheckerSlot(Mutex::new(new_checker(program))));
@@ -721,7 +719,7 @@ impl checkerPool {
         if steal {
             // Each owner starts with the files that could be the pass's tail (heavy_files_first).
             let total: u64 = positions.iter().flatten().map(|&i| weight(i)).sum();
-            let threshold = total / (active.len() as u64 * heavy_share_divisor());
+            let threshold = total / (active.len() as u64 * HEAVY_SHARE_DIVISOR);
             positions.iter_mut().for_each(|p| heavy_files_first(p, threshold, weight));
         }
         let queues: Vec<FileQueue> = positions.into_iter().map(|p| FileQueue::new(p, weight)).collect();
@@ -836,15 +834,8 @@ fn stealing_enabled() -> bool {
 // early was luck: the check phase took 0.67 s at 16 checkers and 0.92 s at 17 on an 18-core Mac. At 1/200 it is heavy
 // from 11 checkers; the heavy set is 1.3% of vscode's files at 8 checkers and 6% at 16, so the rest keeps the locality
 // of program order (notes/perf-heavy-first-threshold.md: CPU per instruction unchanged, where a divisor of 300 or more
-// costs 1-3%). TSRS_HEAVY_SHARE_DIVISOR=<n> overrides it for experiments.
+// costs 1-3%).
 const HEAVY_SHARE_DIVISOR: u64 = 200;
-
-fn heavy_share_divisor() -> u64 {
-    static VALUE: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
-    *VALUE.get_or_init(|| {
-        std::env::var("TSRS_HEAVY_SHARE_DIVISOR").ok().and_then(|v| v.parse().ok()).filter(|&d| d > 0).unwrap_or(HEAVY_SHARE_DIVISOR)
-    })
-}
 
 // tsrs-only (notes/perf-checker-64.md): moves the heavy files (weight above `threshold`) of one checker's queue to its
 // front, heaviest first; the other files keep their order. Stealing cannot split a file, so with many checkers the pass
@@ -897,7 +888,7 @@ fn plan_splits(program: &Program, files: &[P<SourceFile>], positions: &mut [Vec<
     }
     let total: u64 = positions.iter().flatten().map(|&i| weight(i)).sum();
     let share = total / active.len() as u64;
-    let piece_size = (share / config.divisor).max(1);
+    let piece_size = (share / splitcheck::PIECE_DIVISOR).max(1);
     let mut owners: Vec<usize> = Vec::new();
     for &owner in active {
         for &i in &positions[owner] {
@@ -908,7 +899,7 @@ fn plan_splits(program: &Program, files: &[P<SourceFile>], positions: &mut [Vec<
             // splitting it cost 3-4% of wall time (pieces re-touch the library types); at 32 checkers on webpack and
             // next-packages-next it is about a whole share, and not splitting it made it the tail (README bench
             // 92c3149 against afb54cb: +13% and +21% wall).
-            let min_share = if program.is_source_file_default_library(file.path()) { config.min_share_percent.max(splitcheck::LIB_MIN_SHARE_PERCENT) } else { config.min_share_percent };
+            let min_share = if program.is_source_file_default_library(file.path()) { splitcheck::LIB_MIN_SHARE_PERCENT } else { splitcheck::MIN_SHARE_PERCENT };
             if !file.is_declaration_file() || w == 0 || (config.force.is_none() && w * 100 < share * min_share) {
                 continue;
             }
@@ -937,7 +928,7 @@ fn plan_splits(program: &Program, files: &[P<SourceFile>], positions: &mut [Vec<
     if plan.files.is_empty() {
         return plan;
     }
-    let threshold = total / (active.len() as u64 * heavy_share_divisor());
+    let threshold = total / (active.len() as u64 * HEAVY_SHARE_DIVISOR);
     let item_weight = |i: u32| plan.split_of.get(&i).map_or_else(|| weight(i), |&s| plan.owner_weights[s]);
     let mut load: Vec<u64> = positions.iter().map(|p| p.iter().map(|&i| item_weight(i)).filter(|&w| w > threshold).sum()).collect();
     let mut order: Vec<usize> = (0..plan.piece_items.len()).collect();
@@ -1124,12 +1115,6 @@ fn compute_associations(program: &Program, checker_count: usize) -> Vec<usize> {
             let mut state = seed;
             (0..program.files.len()).map(|_| (splitmix64(&mut state) % checker_count as u64) as usize).collect()
         }
-        CheckerAssignment::File(path) => {
-            let text = std::fs::read_to_string(path).expect("TSRS_CHECKER_ASSIGNMENT file");
-            let associations: Vec<usize> = text.lines().map(|l| l.trim().parse::<usize>().unwrap().min(checker_count - 1)).collect();
-            assert_eq!(associations.len(), program.files.len(), "TSRS_CHECKER_ASSIGNMENT file length");
-            associations
-        }
     };
     if let Ok(path) = std::env::var("TSRS_ASSIGNMENT_DUMP") {
         dump_assignment_inputs(program, &associations, &path);
@@ -1142,13 +1127,11 @@ fn compute_associations(program: &Program, checker_count: usize) -> Vec<usize> {
 // which checker computes them (and so how much checker state is duplicated across checkers).
 //   locality (default): directory-subtree groups packed onto checkers with Go's FENNEL (below)
 //   go:                 Go's createCheckers association (FENNEL over single files in program order)
-//   file:<path>:        one checker index per line by program file index (experiments)
 //   random:<seed>:      a random checker per file and a random visit order in each checker, drawn from the seed
 //                       (debug: output must not depend on the assignment)
 pub enum CheckerAssignment {
     Locality,
     Go,
-    File(String),
     Random(u64),
 }
 
@@ -1169,10 +1152,7 @@ fn parse_checker_assignment(name: &str) -> Option<CheckerAssignment> {
     match name {
         "" | "locality" => Some(CheckerAssignment::Locality),
         "go" => Some(CheckerAssignment::Go),
-        _ => match name.strip_prefix("random:") {
-            Some(seed) => seed.parse::<u64>().ok().map(CheckerAssignment::Random),
-            None => name.strip_prefix("file:").map(|p| CheckerAssignment::File(p.to_string())),
-        },
+        _ => name.strip_prefix("random:").and_then(|seed| seed.parse::<u64>().ok()).map(CheckerAssignment::Random),
     }
 }
 
@@ -1181,7 +1161,7 @@ fn checker_assignment() -> CheckerAssignment {
         Some(name) => name.clone(),
         None => std::env::var("TSRS_CHECKER_ASSIGNMENT").unwrap_or_default(),
     };
-    parse_checker_assignment(&name).unwrap_or_else(|| panic!("unknown checker assignment {name:?} (locality, go, file:<path>, random:<seed>)"))
+    parse_checker_assignment(&name).unwrap_or_else(|| panic!("unknown checker assignment {name:?} (locality, go, random:<seed>)"))
 }
 
 // A directory subtree whose checked weight is at most 1/LOCALITY_GROUP_FRACTION of an average checker load is
