@@ -12,7 +12,7 @@ default = ["compressed-ptrs"]
 # Atomic borrow checking for FrozenCell in release builds (always on with debug_assertions).
 checked-cells = []
 # Per-call-site arena allocation profile and a counting global allocator (src/alloc_profile.rs).
-alloc-profile = ["dep:mimalloc"]
+alloc-profile = ["dep:mimalloc-safe"]
 # Creation-site counters for checker objects (src/sitecount.rs).
 site-counts = []
 # `P<T>` as a 32-bit handle into one reserved address range (src/reserve.rs, notes/mem-pointer-compression.md), on
@@ -27,7 +27,7 @@ hashbrown.workspace = true
 indexmap.workspace = true
 bitflags.workspace = true
 memchr.workspace = true
-mimalloc = { version = "0.1.52", optional = true }
+mimalloc-safe = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

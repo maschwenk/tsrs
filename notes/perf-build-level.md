@@ -150,8 +150,8 @@ unknown but cannot be large: PGO already moves landing pads out of the hot path.
 
 ## 4. Allocator
 
-The current allocator is mimalloc **v3** (3.3.2: `libmimalloc-sys` 0.1.49 builds v3 unless its `v2` feature is
-on), default options (no `secure`, no `extended`; its own `MADV_HUGEPAGE` advice). Variants built from one patched
+The allocator at this measurement was mimalloc **v3** (3.3.2: `libmimalloc-sys` 0.1.49 builds v3 unless its `v2`
+feature is on), default options (no `secure`, no `extended`; its own `MADV_HUGEPAGE` advice). Variants built from one patched
 tree (a `tikv-jemallocator` dependency in tsrs_cli, the global allocator picked by `--cfg`, mimalloc v2 by
 `CARGO_FEATURE_V2=1` so no crate's metadata hash changes) with the base PGO profile (tsrs_cli's own functions lose
 their profile in all four, the same for each).

@@ -102,6 +102,11 @@ pointer compression costs about +4.9% instructions and took back most of the che
 
 ## Measured and rejected (do not redo)
 
+- `mimalloc-safe 0.1.67` without its `v3` feature (notes/perf-mimalloc-safe.md): the crate defaults to mimalloc
+  v2.5.2, unlike the old crate's v3.3.2 default. On macOS arm64 it adds about 4% peak RSS at the default checker
+  count on both Compiler workloads; the prior large Linux measurement found v2 3-14% slower. The migration enables
+  `v3` (v3.5.2): on pinned vscode it is within +0.03-0.15% instructions and -0.69% to +0.46% peak RSS of the old
+  build; the smaller Compiler workloads agree.
 - A type graph shared by the checker threads (frozen seed + forks; notes/spike-shared-graph.md, branch
   `spike/shared-graph`, PR 213 closed): exact in every run, but on the 16-vCPU Linux runner peak -5..-10% at the
   default 8 checkers for +6..+18% wall (the serial seed). Revisit only with a seed that costs no wall time.

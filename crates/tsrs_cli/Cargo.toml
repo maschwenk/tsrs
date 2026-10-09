@@ -26,7 +26,7 @@ tsrs_api.workspace = true
 tsrs_api_transport.workspace = true
 tsrs_execute = { path = "../tsrs_execute", default-features = false }
 # no_thp: no MADV_HUGEPAGE on the mimalloc heap (huge-page amplification on Linux; see notes/mem-no-thp.md).
-mimalloc = { version = "0.1.52", features = ["no_thp"] }
+mimalloc-safe = { workspace = true, features = ["no_thp"] }
 libc = "0.2"
 [features]
 default = ["checker"]
