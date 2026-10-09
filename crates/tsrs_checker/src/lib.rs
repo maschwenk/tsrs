@@ -82,6 +82,7 @@ mod relater_2;
 mod unioncache;
 mod uniontrace;
 mod infermemo;
+mod printmemo;
 mod flow;
 pub(crate) use flow::*;
 pub mod flowmemo;

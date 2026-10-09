@@ -66,6 +66,13 @@ impl Checker {
 
     // printer.go:59
     pub fn type_to_string_ex(&mut self, t: P<Type>, enclosing_declaration: Option<P<Node>>, flags: TypeFormatFlags, vc: Option<P<VerbosityContext>>) -> String {
+        if vc.is_none() && self.serialization_level == 0 && self.resolving_members == 0 && self.type_print_memo.enabled() {
+            return self.type_to_string_memoized(t, enclosing_declaration, flags);
+        }
+        self.type_to_string_worker(t, enclosing_declaration, flags, vc)
+    }
+
+    pub(crate) fn type_to_string_worker(&mut self, t: P<Type>, enclosing_declaration: Option<P<Node>>, flags: TypeFormatFlags, vc: Option<P<VerbosityContext>>) -> String {
         // Serialization of types can lead to (lazy) resolution of members, which can cause diagnostics that again require
         // serialization of types. This can potentially result in infinite recursion and stack overflows. To prevent that,
         // after a certain number of recursive invocations the function simply returns "?".

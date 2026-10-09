@@ -955,6 +955,13 @@ pub struct Checker {
     pub(crate) union_front_cache: crate::unioncache::UnionFrontCache,
     /// TSRS_INFER_MEMO (infermemo.rs; on by default, off under Go-compatible history).
     pub(crate) infer_memo: crate::infermemo::InferMemo,
+    /// TSRS_TYPE_PRINT_MEMO (printmemo.rs; on by default, off under Go-compatible history).
+    pub(crate) type_print_memo: crate::printmemo::TypePrintMemo,
+    /// What a print must not have done to be repeated from the memo (printmemo.rs): diagnostics added, resolution
+    /// cycles found, nodes deferred or diagnostics deferred (wrapping).
+    pub(crate) print_events: u32,
+    /// Member resolutions in progress (printmemo.rs): a type may print as `{}` until its members are resolved.
+    pub(crate) resolving_members: u32,
     /// Calls of `add_diagnostic` and `add_suggestion_diagnostic`, duplicates included (wrapping): the inference memo
     /// stores only walks that added none.
     pub(crate) diagnostic_adds: u32,
@@ -1384,6 +1391,9 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         census: crate::workcensus::census_path().map(|_| crate::workcensus::Census::new()),
         union_front_cache: crate::unioncache::UnionFrontCache::new(),
         infer_memo: crate::infermemo::InferMemo::new(),
+        type_print_memo: crate::printmemo::TypePrintMemo::new(),
+        print_events: 0,
+        resolving_members: 0,
         diagnostic_adds: 0,
         too_complex_reports: 0,
         too_complex_nodes: Vec::new(),

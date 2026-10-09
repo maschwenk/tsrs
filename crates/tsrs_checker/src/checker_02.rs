@@ -397,6 +397,7 @@ impl Checker {
     // Delaying the type check of the body ensures foo has been assigned a type.
     // checker.go:2525
     pub(crate) fn check_node_deferred(&mut self, node: P<Node>) {
+        self.print_events = self.print_events.wrapping_add(1);
         let enclosing_file = ast::get_source_file_of_node(node).unwrap();
         let links = self.source_file_links.get(enclosing_file);
         if !links.type_checked.get() {

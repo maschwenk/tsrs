@@ -1089,6 +1089,8 @@ impl Checker {
                 early_symbols = Some(self.get_exports_of_module_worker(Some(symbol)).0);
             }
             links[kind].set(early_symbols);
+            // Until late binding completes, the members lack the late-bound ones (printmemo.rs).
+            self.resolving_members += 1;
             // fill in any as-yet-unresolved late-bound members.
             let mut late_symbols: Option<P<SymbolTable>> = None;
             let declarations = symbol.declarations();
@@ -1118,6 +1120,7 @@ impl Checker {
             }
             let combined = self.combine_symbol_tables(early_symbols, late_symbols);
             links[kind].set(combined);
+            self.resolving_members -= 1;
         }
         links[kind].get()
     }

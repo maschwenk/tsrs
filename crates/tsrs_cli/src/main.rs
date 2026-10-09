@@ -96,6 +96,9 @@ fn main() {
     // TSRS_INFER_MEMO_STATS / TSRS_INFER_MEMO=shadow: the inference memo's totals.
     #[cfg(feature = "checker")]
     tsrs_compiler::Checker::infer_memo_finish();
+    // TSRS_TYPE_PRINT_MEMO_STATS / TSRS_TYPE_PRINT_MEMO=shadow: the type print memo's totals.
+    #[cfg(feature = "checker")]
+    tsrs_compiler::Checker::type_print_memo_finish();
     tsrs_core::memsplit::report("exit");
     let _ = std::io::Write::flush(&mut std::io::stdout());
     let _ = std::io::Write::flush(&mut std::io::stderr());

@@ -2024,6 +2024,7 @@ impl Checker {
         let resolution_cycle_start_index = self.find_resolution_cycle_start_index(target, property_name);
         if resolution_cycle_start_index >= 0 {
             // A cycle was found
+            self.print_events = self.print_events.wrapping_add(1);
             for i in resolution_cycle_start_index as usize..self.type_resolutions.len() {
                 self.type_resolutions[i].result = false;
             }
@@ -2521,6 +2522,8 @@ impl Checker {
     #[inline(never)]
     fn resolve_structured_type_members_worker(&mut self, t: P<Type>) -> Option<&'static StructuredType> {
         if !t.object_flags().intersects(ObjectFlags::MembersResolved) {
+            // Some resolutions set empty members before computing the real ones (printmemo.rs).
+            self.resolving_members += 1;
             if t.flags().intersects(TypeFlags::Object) {
                 if t.object_flags().intersects(ObjectFlags::Reference) {
                     self.resolve_type_reference_members(t);
@@ -2542,6 +2545,7 @@ impl Checker {
             } else {
                 panic!("Unhandled case in resolveStructuredTypeMembers");
             }
+            self.resolving_members -= 1;
         }
         Some(t.as_structured_type())
     }

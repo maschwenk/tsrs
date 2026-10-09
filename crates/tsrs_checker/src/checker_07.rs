@@ -1482,6 +1482,7 @@ impl Checker {
     // the callback is stored in `deferred_diagnostic_callbacks: Vec<Box<dyn FnOnce(&mut Checker)>>`, so it must be
     // `FnOnce + 'static`.
     pub(crate) fn add_deferred_diagnostic(&mut self, callback: impl FnOnce(&mut Checker) + 'static) {
+        self.print_events = self.print_events.wrapping_add(1);
         self.deferred_diagnostic_callbacks.push(Box::new(callback));
     }
 
@@ -1499,6 +1500,7 @@ impl Checker {
     // checker.go:14221
     pub(crate) fn add_diagnostic(&mut self, diagnostic: P<Diagnostic>) -> P<Diagnostic> {
         self.diagnostic_adds = self.diagnostic_adds.wrapping_add(1);
+        self.print_events = self.print_events.wrapping_add(1);
         // Discard diagnostics created while at the maximum number of recursive TypeToString invocations.
         if self.serialization_level < maxSerializationLevel {
             return self.diagnostics.add(diagnostic);
@@ -1509,6 +1511,7 @@ impl Checker {
     // checker.go:14229
     pub(crate) fn add_suggestion_diagnostic(&mut self, diagnostic: P<Diagnostic>) -> P<Diagnostic> {
         self.diagnostic_adds = self.diagnostic_adds.wrapping_add(1);
+        self.print_events = self.print_events.wrapping_add(1);
         // Discard diagnostics created while at the maximum number of recursive TypeToString invocations.
         if self.serialization_level < maxSerializationLevel {
             return self.suggestion_diagnostics.add(diagnostic);
