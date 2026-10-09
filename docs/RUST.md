@@ -113,8 +113,7 @@ leave it off too), the cast lints (the port has about 1,000 `as usize`), `print_
    one checker and the default: `/usr/bin/time -l` on macOS, `perf stat` on Linux. Wall time on a shared machine is
    noise. Write the result in `notes/`. (Bun: "Performance claims need numbers ... must not regress ANY measured case".)
 2. **Build settings are measurements, not defaults.** `[profile.dist]` (fat LTO, one codegen unit, PGO:
-   `notes/perf-pgo.md`), mimalloc, transparent huge pages for the arena on Linux (`notes/linux-perf.md`,
-   `notes/linux-x86-round.md`), 32-bit handles (`notes/mem-pointer-compression.md`). Change one only with a
+   `notes/perf-pgo.md`), mimalloc, and the arena allocator (`notes/oxc-allocator-migration.md`). Change one only with a
    measurement. (Bun: "Never change optimization levels,
    LTO modes, or tuning knobs assuming higher is better — existing settings encode prior measurements.")
 3. **Arena struct sizes are pinned.** A type with one instance per node, symbol, type, signature or link has
@@ -146,8 +145,8 @@ In place:
 | Fat LTO, one codegen unit, PGO for release binaries | `notes/perf-pgo.md`: -13.5% instructions with PGO; fat LTO alone about -2% | oxc, Rolldown, swc (fat); Ruff (fat, PGO); Turborepo, rust-analyzer (thin) |
 | BOLT on top of PGO for the Linux release binaries (`.github/scripts/bolt.sh`, gates run on the BOLT-optimized binaries) | `notes/perf-build-level.md`: -2.7% / -3.2% / -1.0% wall at 1 / 4 / 8 checkers on the 38k-file codebase, -3.4 to -4.0% on vscode; instruction-cache misses -20% | rustc (its Linux toolchain builds), CPython (`--enable-bolt`) |
 | mimalloc as the global allocator | `notes/fix-perf-memory.md` | oxc, Rolldown, Turborepo, Bun |
-| Leak arenas, one per thread; exact frees of provably dead objects | PORTING.md "Memory model", `notes/mem-recycle.md` | oxc and Bun (arenas with no `Drop`) |
-| 32-bit handles with a niche (`Option<P<T>>` is 4 bytes) | `notes/mem-pointer-compression.md`: -14 to -15% peak memory, +6.5% instructions | oxc and Ruff (`NonMax`/`NonZero` u32 ids), Bun (`StoreRef`) |
+| Oxc arenas for fixed no-`Drop` data, one per allocation owner; resource-owning values in owner-paired heap sidecars that drop before the Oxc chunks | PORTING.md "Memory model", `notes/oxc-allocator-migration.md` | oxc (arena) |
+| Native identity pointers (`Option<P<T>>` is pointer-sized) | `notes/oxc-allocator-migration.md` | oxc AST references |
 | Packed layouts with size assertions | `notes/mem-layout.md`, `mem-layout3.md`, `mem-round2.md`, `mem-round3.md`, `mem-small.md` | oxc, ty, rust-analyzer, Bun |
 | Fx hashing everywhere | `notes/perf-checker-cpu2.md` | oxc, Rolldown, Ruff, rust-analyzer |
 | Lazy members, line maps and rare-field tails | `notes/lazy-members.md`, `notes/mem-lazy.md` | |
@@ -156,13 +155,15 @@ In place:
 | Generated-code freshness check | `tools/gen-check.sh` (CI job `generated-code`) re-runs the eight generators and fails on a diff; it found two hand edits the generators no longer reproduced | oxc, Ruff, rust-analyzer |
 | Differential parser fuzzing | `tools/fuzz/parser.py` mutates conformance files and compares the AST hashes of the Go and Rust oracles (`tools/oracle/ast`); the Depot `Fuzz` workflow runs 200,000 mutants nightly with a date seed. First 320,000 mutants: no divergence, no crash (inputs kept valid UTF-8; invalid UTF-8 is read lossily on purpose) | Ruff (`cargo fuzz` on its parser) |
 | Frame pointers for profiling | `docs/DEBUGGING.md` "Profiling": a `dist` build with `-C force-frame-pointers=yes` for samply / `perf` on Linux (Apple arm64 always keeps them) | Bun |
-| Transparent huge pages for the arena on Linux: large thread-arena chunks 2 MiB-aligned and advised with `MADV_HUGEPAGE`. The mimalloc heap is not advised (the CLI builds mimalloc with `no_thp`): with the advice every partly filled thread-local mimalloc page was resident as a whole 2 MiB page | `notes/linux-x86-round.md`: 2-6% less wall time, 21-48x fewer page faults; `notes/linux-perf.md`: THP off costs 11-12%; `notes/mem-no-thp.md`: no advice on the heap, -25 to -33% peak RSS at 4-64 checkers on 64 vCPUs for +4-9% wall time against `bun check` on the same runner (parse +30%, check +1-5%) | mimalloc (advises its own OS memory unless built with `no_thp`) |
 | Checking a heavy declaration file in statement ranges on several checkers (`crates/tsrs_compiler/src/splitcheck.rs`): stealing moves whole files, so a file costing more than a checker's share is the pass's tail; the type-check pass splits a checked declaration file of at least 40% of a share whose top-level statements are all declarations, and the owner merges the ranges' diagnostics | `notes/perf-next-heavy-files.md`: next-packages-next check phase 0.40 -> 0.12 s at 32 checkers, 0.40 -> 0.17 s at 16, 0.40 -> 0.29 s at 8 on 64 vCPUs, output byte-identical; +1.4-4.5% instructions on otherwise idle checkers, none single-threaded | |
-| Freeing the tree and binder output of each checked leaf file in CLI `--noEmit` checks with at most 16 checkers: files whose path predicts a leaf (tests, specs, stories, mocks) are parsed into per-file regions carved from 16 MiB per-thread slabs, everything else into the thread arenas as before; a leaf's region is retired once its diagnostics are collected, its pages given back in coalesced batches (one call per retired span) and its range never reused | `notes/mem-free-leaf-files.md`, `notes/mem-leaf-regions-cost.md`: byte-identical output; vscode -13 to -16% peak RSS at 1-8 checkers on the 8-vCPU runner for 0-1.5% wall time, -11% at 16 checkers on 64 vCPUs for under 1%, -12 to -14% footprint on macOS; other projects -1 to -5%. At 32 checkers +2.4-3.9% wall time (each give-back flushes the TLB of every core running a checker), so off there by default; regions for every file cost 6-9%. Huge-page region slabs (half the memory win) and pre-faulted slabs measured and rejected; at 32 checkers, giving back from another thread, single-page-flush-sized calls, larger batches and holding short spans until the pass ends measured and rejected too (`notes/mem-leaf-regions-32.md`: the cost is the flush interrupts on every checker core, and freeing without any give-back already costs 0.3-2% there, against 0.9-3.8% with them) | Bun (`free_tree`) |
+
+The Oxc migration removed the custom 32 GiB reservation, compressed handles, per-block free lists, partial rewind,
+explicit huge-page arena chunks and never-reused leaf retirement. `TSRS_FREE_LEAVES` is disabled until every
+external address-keyed entry can be removed before an owner is released. See `notes/oxc-allocator-migration.md`.
 
 Measured and rejected (do not retry without new evidence): explicit huge pages on top of mimalloc's, pre-faulting and
-mmap'd arena chunks without advice (`notes/linux-perf.md`; the compressed arena's reservation is not mimalloc memory and
-needs the advice: `notes/linux-x86-round.md`); global identifier interning (`notes/mem-round2.md`: parse +9% time); rolling back whole
+mmap'd arena chunks without advice (`notes/linux-perf.md`; the former compressed arena reservation was not mimalloc
+memory and needed the advice: `notes/linux-x86-round.md`); global identifier interning (`notes/mem-round2.md`: parse +9% time); rolling back whole
 regions of speculative work (`notes/mem-overload-rollback.md`); bump regions per inference scope
 (`notes/mem-scoped-arenas.md`: 25 to 50% of scopes keep something reachable). Restructuring generic
 callbacks to cut monomorphization (`notes/monomorphization-audit.md`: closures are 3.6% of the checker's LLVM IR, the
@@ -174,7 +175,7 @@ every name). Build-level options on top of PGO (`notes/perf-build-level.md`, Lin
 `-hugify`; instruction page walks are 1.2-1.5% of cycles and it gains nothing measurable over BOLT alone);
 `panic = "abort"` (it crashed until `notes/fix-arena-recycle-uaf.md`, and it would also need a CLI-only
 binary); mimalloc v2, jemalloc and glibc malloc instead of mimalloc v3 (3-14% slower, 3-7% less peak memory);
-THP off for the whole process (`MIMALLOC_ALLOW_THP=0`, which also drops the arena's huge pages: +4-10% check time at
+THP off for the whole process (`MIMALLOC_ALLOW_THP=0`, which also dropped the custom arena's huge pages: +4-10% check time at
 4 checkers, `notes/mem-no-thp.md`); releasing memory before the exit to shorten the kernel's teardown (an arena
 `munmap` cost 3 ms and moved the ~15 ms teardown within noise, `madvise` from 16 threads was slower than one
 `munmap`; `notes/perf-front-end-fixed-costs.md`);
@@ -186,7 +187,7 @@ Not tried. Each needs a measurement and a note before it is adopted; none is app
 | Candidate | Who does it | What it would give | What it needs |
 | --- | --- | --- | --- |
 | Allocation-count snapshot gate | oxc `tasks/track_memory_allocations` (`cargo allocs`, then `git diff --exit-code` in CI), Rolldown | A stray heap allocation on a hot path becomes a diff in a checked-in snapshot. Counts are exact on one thread. | A fixed corpus, one checker, the counting allocator behind `alloc-profile`. |
-| Miri on all of `tsrs_core` | oxc (strict provenance, allocator and AST crates), rust-analyzer (`intern`), Bun (tree borrows, 17 crates) | Soundness of the handle and region code, where a third of the `unsafe` is. The arena free-list tests already run under Miri in CI (`arena-safety`, `notes/fix-arena-recycle-uaf.md`). | Nightly and `--features plain-ptrs` (Miri does not support the compressed handles' `PROT_NONE` reservation). |
+| Miri on all of `tsrs_core` | oxc (strict provenance, allocator and AST crates), rust-analyzer (`intern`), Bun (tree borrows, 17 crates) | Soundness of the native handles, owner registry and resource sidecars, where much of the `unsafe` is. | Nightly and an Oxc-compatible Miri configuration. |
 | Conformance with `debug-assertions` and `overflow-checks` in an optimized profile | oxc `[profile.coverage]` | Overflow and failed debug assertions that release builds skip. | A profile and a second conformance run. |
 | A symbol order file at link time | Bun (order file from a function-entry trace) | Part of BOLT's gain without a post-link step, on every platform. | A function-entry trace and `-Wl,--symbol-ordering-file` / `-order_file`. |
 | Arena-backed temporaries | oxc (arena `Vec` and `HashMap`), Bun (hashbrown on its arenas through `allocator-api2`, the stable stand-in for the nightly `Allocator` API) | Scratch vectors and maps skip malloc and free. | A scratch allocator whose reset point is provable; scope regions were rejected (above), so per-call scratch is the experiment. |
@@ -199,6 +200,6 @@ Not pursued: a binary-size check (Bun fails a pull request that grows the binary
 goal here (owner decision, 2026-10-05).
 
 Does not transfer: nightly-only flags (Bun's `-Zbuild-std`, `-Zlocation-detail=none`, `-Zshare-generics`; the release
-toolchain is stable), lifetime-carrying arenas such as bumpalo's `&'a T` (PORTING.md: no lifetime parameters), oxc's
-compile-time ban on `Drop` types in the arena (arena objects here own `Vec`s and maps on purpose), thin LTO (fat LTO
-already covers it).
+toolchain is stable), lifetime-carrying arenas such as bumpalo's `&'a T` (PORTING.md: no lifetime parameters), thin
+LTO (fat LTO already covers it). Oxc's no-`Drop` constraint now applies to fixed arena data; resource-owning values
+are sidecars paired with the same owner (`notes/oxc-allocator-migration.md`).

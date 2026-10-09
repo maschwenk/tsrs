@@ -4,8 +4,8 @@ use tsrs_core::{PKey, PSlot};
 /// All Go link stores (`core.LinkStore`, `nodeLinkStore`, `symbolArenaLinkStore`) map to this one type.
 /// Values live in the arena, so `get` hands out a `Copy` pointer whose `Cell` fields are mutated in place.
 ///
-/// Keyed by the key's identity like Go's `map[K]*V`. A slot is the key (`P::key`: its handle with compressed pointers,
-/// else its address) and the value's index (8 or 12 bytes, 4-aligned) instead of two pointers, and the values live in fixed-size arena chunks in first-access order (stable
+/// Keyed by the key's identity like Go's `map[K]*V`. A slot is the key (`P::key`: its address) and the value's index
+/// (12 bytes, 4-aligned) instead of two pointers, and the values live in fixed-size arena chunks in first-access order (stable
 /// addresses, as before). 5.1M links in 26 stores on the private monorepo single.
 ///
 /// Stable addresses: a chunk is never reallocated, freed or recycled, so a `P<V>` handed out stays valid for the
@@ -26,7 +26,7 @@ struct LinkSlot {
 }
 
 #[cfg(target_pointer_width = "64")]
-const _: () = assert!(std::mem::size_of::<LinkSlot>() == if tsrs_core::COMPRESSED_PTRS { 8 } else { 12 });
+const _: () = assert!(std::mem::size_of::<LinkSlot>() == 12);
 #[cfg(target_pointer_width = "32")]
 const _: () = assert!(std::mem::size_of::<LinkSlot>() == 8);
 
@@ -228,7 +228,7 @@ struct ReferenceKindsSlot {
 }
 
 #[cfg(target_pointer_width = "64")]
-const _: () = assert!(std::mem::size_of::<ReferenceKindsSlot>() == if tsrs_core::COMPRESSED_PTRS { 8 } else { 16 });
+const _: () = assert!(std::mem::size_of::<ReferenceKindsSlot>() == 16);
 #[cfg(target_pointer_width = "32")]
 const _: () = assert!(std::mem::size_of::<ReferenceKindsSlot>() == 8);
 
@@ -300,7 +300,7 @@ struct IdGroup {
 }
 
 #[cfg(target_pointer_width = "64")]
-const _: () = assert!(std::mem::size_of::<IdGroup>() == if tsrs_core::COMPRESSED_PTRS { 264 } else { 272 });
+const _: () = assert!(std::mem::size_of::<IdGroup>() == 272);
 #[cfg(target_pointer_width = "32")]
 const _: () = assert!(std::mem::size_of::<IdGroup>() == 264);
 

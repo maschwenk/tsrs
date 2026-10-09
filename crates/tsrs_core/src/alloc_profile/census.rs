@@ -16,7 +16,7 @@
 
 use super::heap_sample::IN_ARENA;
 use super::{short_type, THREADS};
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 use std::cell::{Cell, RefCell};
 use std::ffi::c_void;
 use std::panic::Location;
@@ -69,11 +69,6 @@ fn enabled() -> bool {
     match MODE.load(Ordering::Relaxed) {
         0 => {
             let on = std::env::var_os("TSRS_CENSUS").is_some_and(|v| v == "1");
-            if on && crate::COMPRESSED_PTRS {
-                // The census decodes 48-bit words as pointers; compressed handles are 32-bit offsets.
-                eprintln!("tsrs: TSRS_CENSUS=1 needs a build with tsrs_core/plain-ptrs (compressed pointers are on)");
-                std::process::exit(2);
-            }
             MODE.store(if on { 2 } else { 1 }, Ordering::Relaxed);
             on
         }

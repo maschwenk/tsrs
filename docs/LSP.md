@@ -88,10 +88,9 @@ for directories that do not exist yet, synthetic creates on promotion, 75 ms bat
 
 ## Memory plan for a long-lived server
 
-The batch compiler never frees arena memory (PORTING.md "Memory model"): `P<T>` points into per-thread leak arenas,
-and destructors of arena values never run. A server that rebuilds programs on every edit cannot live with that.
-Phase 4 (notes/lsp-mem.md) frees what Go's GC frees after an edit, with **regions**: arenas that are freed as a
-whole. The CLI never creates one and allocates exactly as before.
+The batch compiler keeps its per-thread Oxc arena owners for the process lifetime (PORTING.md "Memory model"). A
+server that rebuilds programs on every edit cannot live with that. Phase 4 (notes/lsp-mem.md) frees what Go's GC
+frees after an edit with **regions**: Oxc arena owners plus resource sidecars that are released as a whole.
 
 | object | Go lifetime | tsrs (phase 4) |
 | --- | --- | --- |
@@ -105,17 +104,16 @@ whole. The CLI never creates one and allocates exactly as before.
 
 Mechanism (`tsrs_core::arena`): `Region::enter` makes a region the thread's allocation target until the returned
 scope is dropped (scopes nest; `with_arena` reads one thread-local pointer, as before). A region is an `Arena` of its
-own, so its free lists and checkpoints are its own (a recycling site frees into the arena that allocated the block;
-debug builds assert it). It keeps a drop list of the values allocated in it whose type needs drop, and freeing it
-runs those drops, so heap memory owned by links and tables goes too. Lazily filled data of a shared object is routed
+own. Fixed no-`Drop` data lives in its Oxc allocator; values needing destruction use sidecars paired with that
+owner, dropped in reverse allocation order before Oxc releases its chunks. Individual recycling and partial
+checkpoints are compatibility no-ops. Lazily filled data of a shared object is routed
 to the object's own region (`arena::enter_owner(addr)`: `SourceFile`'s JSDoc cache, line and position maps, name
 table, identifier set, token cache, declaration map; the program's symlink cache goes to the full build's region);
 process-wide statics allocate in the thread arena (`arena::enter_thread_arena`). Entries of a table that later
 versions copy and any thread may fill (the resolution data's package.json cache) use `arena::enter_table_owner`:
 the current target if the table lives in it, else the thread arena, without waiting for a region another thread has
-entered (parse workers fill the cache while the building thread holds the full build's region). Regions bump upwards and their
-chunks are carved from per-thread slabs, and a file region is trimmed after binding: tens of thousands of file
-regions would otherwise each cost a partly used page.
+entered (parse workers fill the cache while the building thread holds the full build's region). Oxc owns the region
+chunks; the old per-thread slab carving and tail trimming no longer apply.
 
 Two corrections to the original plan:
 

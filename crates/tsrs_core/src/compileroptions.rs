@@ -169,19 +169,9 @@ pub struct CompilerOptions {
 
 pub static EMPTY_COMPILER_OPTIONS: LazyLock<CompilerOptions> = LazyLock::new(CompilerOptions::default);
 
-/// `EMPTY_COMPILER_OPTIONS` as an arena pointer (one per process; a compressed `P` cannot point to a static, so
-/// compressed builds keep a copy in the arena of the thread that first asks).
+/// `EMPTY_COMPILER_OPTIONS` as an arena-compatible native pointer.
 pub fn empty_compiler_options() -> crate::P<CompilerOptions> {
-    #[cfg(not(compressed_ptrs))]
-    return crate::P::from_static(&*EMPTY_COMPILER_OPTIONS);
-    #[cfg(compressed_ptrs)]
-    {
-        static EMPTY: std::sync::OnceLock<crate::P<CompilerOptions>> = std::sync::OnceLock::new();
-        *EMPTY.get_or_init(|| {
-            let _scope = crate::arena::enter_thread_arena();
-            crate::P::new(CompilerOptions::default())
-        })
-    }
+    crate::P::from_static(&*EMPTY_COMPILER_OPTIONS)
 }
 
 impl CompilerOptions {

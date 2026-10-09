@@ -286,7 +286,7 @@ struct ValueSymbolLinksTail {
 }
 
 #[cfg(target_pointer_width = "64")]
-const _: () = assert!(std::mem::size_of::<ValueSymbolLinks>() == if tsrs_core::COMPRESSED_PTRS { 16 } else { 24 });
+const _: () = assert!(std::mem::size_of::<ValueSymbolLinks>() == 24);
 #[cfg(target_pointer_width = "32")]
 const _: () = assert!(std::mem::size_of::<ValueSymbolLinks>() == 12);
 
@@ -703,9 +703,9 @@ impl crate::links::KeyedLinks for TypeNodeLinks {
     }
 }
 
-// The key fills padding with compressed pointers (20 -> 24 bytes); plain pointers: 24 -> 32.
+// The native-pointer key makes this 32 bytes.
 #[cfg(target_pointer_width = "64")]
-const _: () = assert!(std::mem::size_of::<TypeNodeLinks>() == if tsrs_core::COMPRESSED_PTRS { 24 } else { 32 });
+const _: () = assert!(std::mem::size_of::<TypeNodeLinks>() == 32);
 #[cfg(target_pointer_width = "32")]
 const _: () = assert!(std::mem::size_of::<TypeNodeLinks>() == 16);
 
@@ -762,9 +762,9 @@ impl crate::links::KeyedLinks for SignatureLinks {
     }
 }
 
-// 12 -> 16 bytes, which a `PSlot` (8-aligned with compressed pointers) took anyway; plain pointers: 24 -> 32.
+// Native pointers make this 32 bytes.
 #[cfg(target_pointer_width = "64")]
-const _: () = assert!(std::mem::size_of::<SignatureLinks>() == if tsrs_core::COMPRESSED_PTRS { 16 } else { 32 });
+const _: () = assert!(std::mem::size_of::<SignatureLinks>() == 32);
 #[cfg(target_pointer_width = "32")]
 const _: () = assert!(std::mem::size_of::<SignatureLinks>() == 16);
 
@@ -1979,7 +1979,7 @@ struct StructuredMembers {
 }
 
 #[cfg(target_pointer_width = "64")]
-const _: () = assert!(std::mem::size_of::<StructuredType>() == if tsrs_core::COMPRESSED_PTRS { 4 } else { 8 });
+const _: () = assert!(std::mem::size_of::<StructuredType>() == 8);
 #[cfg(target_pointer_width = "32")]
 const _: () = assert!(std::mem::size_of::<StructuredType>() == 4);
 #[cfg(target_pointer_width = "64")]
@@ -2813,7 +2813,7 @@ pub struct Signature {
 }
 
 #[cfg(target_pointer_width = "64")]
-const _: () = assert!(std::mem::size_of::<Signature>() == if tsrs_core::COMPRESSED_PTRS { 56 } else { 72 });
+const _: () = assert!(std::mem::size_of::<Signature>() == 72);
 #[cfg(target_pointer_width = "32")]
 const _: () = assert!(std::mem::size_of::<Signature>() == 52);
 

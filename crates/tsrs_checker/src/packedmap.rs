@@ -36,7 +36,7 @@ struct PackedSlot<K, V> {
 }
 
 #[cfg(target_pointer_width = "64")]
-const _: () = assert!(std::mem::size_of::<PackedSlot<CacheHashKey, P<Type>>>() == if tsrs_core::COMPRESSED_PTRS { 20 } else { 24 });
+const _: () = assert!(std::mem::size_of::<PackedSlot<CacheHashKey, P<Type>>>() == 24);
 #[cfg(target_pointer_width = "32")]
 const _: () = assert!(std::mem::size_of::<PackedSlot<CacheHashKey, P<Type>>>() == 20);
 

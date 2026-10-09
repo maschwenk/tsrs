@@ -182,30 +182,25 @@ anything that writes (mutation testing, scripts that create files) uses the disp
 `$TSRS_WORK/project-clone`. Before you finish, run `git -C <pristine root> status --short`
 (read-only) and confirm it prints nothing.
 
-## The census free-gate (run it after any memory or layout change)
+## The reachability census (run it after any memory or layout change)
 
-tsrs gives some arena memory back (free lists for dead mappers, inference contexts, type lists, flow labels;
-parser rewinds; language-server regions; notes/mem-recycle.md, notes/lsp-mem.md). A freed block that something
-still points to is a use-after-free. The alloc-profile build checks that at exit: frees are recorded, never reused,
-and every freed block must be unreachable.
-
-The census decodes 48-bit words as pointers, so it needs plain pointers (compressed handles are 32-bit offsets,
-notes/mem-pointer-compression.md); a compressed build refuses `TSRS_CENSUS=1`.
+The alloc-profile build records Oxc arena allocations and live heap blocks, then walks the compiler graph at exit.
+It reports retained and unreachable storage by type and allocation site. The old custom allocator also used this as
+an individual-free/rewind gate; those operations are compatibility no-ops after the Oxc migration, so the
+"freed or rewound" totals remain zero.
 
 ```sh
-CARGO_TARGET_DIR=$PWD/target/prof cargo build --release -p tsrs_cli --features alloc-profile,tsrs_core/plain-ptrs
+CARGO_TARGET_DIR=$PWD/target/prof cargo build --release -p tsrs_cli --features alloc-profile
 cd $PWD/target && TSRS_CENSUS=1 TSRS_CENSUS_VERIFY=1 TSRS_CENSUS_TOP=5 \
   ./prof/release/tsrs -p $PRIVATE_PROJECT/tsconfig.json --noEmit --checkers 1 2> census.err
 grep -E "census verify \(recycling\)|strongly reachable freed blocks|violation class" census.err
 ```
 
-Both numbers must be 0: the precise walk (`census verify (recycling): ... 0 to freed or rewound blocks`) and the
-strong mark (`strongly reachable freed blocks (violations): 0`). Also run `--checkers 4` and `TSRS_LAZY_MEMBERS=0`.
+The legacy recycling lines must stay at zero. Also run `--checkers 4` and `TSRS_LAZY_MEMBERS=0`.
 A run takes 2-3 minutes and ~15 GB (more with 4 checkers): run one at a time. `TSRS_CENSUS_ASSERT=1` exits with
 status 3 on a violation; `TSRS_CENSUS_CHAINS=N` prints N referrer chains (default 20); `TSRS_CENSUS_FRAMES=N` sets the
-frames of the "<- caller" tables (default 2 for heap blocks, 3 for arena blocks). Without the census, the
-alloc-profile build prints the free lists of each arena ("arena free lists": bytes on them at exit and at their peak,
-reissued, and bumped by recycling sites that found their list empty).
+frames of the "<- caller" tables (default 2 for heap blocks, 3 for arena blocks). Legacy free-list counters remain in
+the profile format for comparison with older results, but Oxc does not populate a per-block free list.
 
 Each `violation class` line names the freed block's site and the referrer's type and field offset. Look the offset
 up in the referrer's current layout (`offset_of!`) before believing it: the strong mark reads every 4-byte step as a
@@ -239,8 +234,8 @@ cumulative bytes. Symbols come from `atos` on macOS and `addr2line` on Linux.
 is done and its thread still alive, the moment memory peaks with many checkers) and at `exit`: the thread arenas'
 capacity, used bytes and the resident bytes below each arena's finger that were never handed out (`mincore`); the
 mimalloc heap's live blocks and the resident bytes of its pages (`mi_heap_visit_blocks`); the checker threads' resident
-stacks; and on Linux `/proc/self/status` and `/proc/self/smaps` summed into the arena reservation, thread stacks, the
-heap and other anonymous memory, and file-backed pages, with a one-line split `arena used + arena unused resident |
+stacks; and on Linux `/proc/self/status` and `/proc/self/smaps` split into thread stacks, heap and other anonymous
+memory, and file-backed pages, with a one-line split `arena used + arena unused resident |
 heap live + heap retained (in pages, outside pages) | stacks | file` (`crates/tsrs_core/src/memsplit.rs`,
 notes/mem-linux-residency-32.md). `TSRS_MEM_SPLIT=purge` also has mimalloc purge its freed memory after `check end`
 (`mi_collect(true)`) and prints the split again. `tools/perf/slackprobe.sh` runs it on the selected Depot runner
@@ -335,32 +330,16 @@ notes/perf-heavy-files-infer-memo.md).
 
 ## Freeing checked leaf files: `TSRS_FREE_LEAVES`
 
-A CLI `--noEmit` check with at most 16 checkers (`MAX_DEFAULT_CHECKERS`: above that it costs vscode 2.4-3.9% wall time,
-so it is off unless `TSRS_FREE_LEAVES=1`; notes/mem-leaf-regions-cost.md) parses each TypeScript root file whose path predicts a leaf (tests, specs,
-stories, mocks: `PREDICTED_LEAF_PATTERNS`) into a region of its own and frees the tree and binder output of each leaf
-among them as soon as its diagnostics are collected (`crates/tsrs_compiler/src/fileregions.rs`,
-notes/mem-free-leaf-files.md). A leaf is a checked TypeScript module that no other file refers to and that exports
-only its own declarations; on vscode 2,289 of the 2,337 leaves are predicted (99.2% of the leaves' nodes). Other files
-are parsed into the thread arenas as before. The text, the `SourceFile` and the diagnostics are kept, so the report is
-the same. It is off with declaration emit (`declaration`, `composite`), `--explainFiles`, `--incremental`, `--build`,
-`--checkerAssignment go`, in the language server, the API and the test harnesses, under the debug modes that walk
-files or checker tables after the check (`TSRS_FILE_TIMES`, `TSRS_ASSIGNMENT_STATS`, the work and heap censuses,
-`TSRS_CENSUS=1`), and in builds without compressed pointers (`plain-ptrs`, non-unix): there a freed region's memory
-stays mapped and the heap its values owned is reused, so a stale read would see a live object, and nothing would be
-saved. Asking a program for one freed leaf's diagnostics after the pass panics (the tree is gone); the CLI never does.
-
-| variable | values | effect |
-| --- | --- | --- |
-| `TSRS_FREE_LEAVES` | a comma list of: unset (free with at most 16 checkers), `1` (free at any count), `0`, `keep`, `stats`, `all` | `0`: no file regions (the layout before). `keep` (any count): file regions and the leaf marks, nothing freed (what the regions alone cost). `all` (any count): every TypeScript root file gets a region, not only the predicted ones (frees every leaf, but moves every tree out of the huge-page thread arenas: +6-9% wall time on vscode at 32 checkers on Linux against +2.5-5% predicted). `stats`: one line on stderr: the leaves freed and the ones the prediction missed (with their share of the leaves' nodes), the bytes their regions used, all file regions' bytes, the pages given back and in how many system calls, and the arena address space the run used. Example: `TSRS_FREE_LEAVES=all,stats` |
-
-After a change that reads a file after the check pass (a new report, a new whole-program loop in the checker, such as
-`getAlternativeContainingModules`'s), run a corpus with `TSRS_ARENA_POISON=1`: a freed region is then filled with
-`0xA5` and kept, so a read of a freed leaf crashes. The output must equal a `TSRS_FREE_LEAVES=0` run. `cargo test
--p tsrs_cli --test free_leaf_files` covers the checker's loop over every module
-(testdata/regressions/leaf-alternative-containers) and a structurally identical instantiation after a freed leaf
-(leaf-structural-instantiation).
+`TSRS_FREE_LEAVES` is currently ignored. The Oxc migration removed the custom allocator's never-reused address
+range; Oxc/system allocation may reuse an address after a region owner is dropped, while compiler side tables can
+still retain native-address keys. Leaf retirement can return only after those keys are removed before teardown.
+The previous behavior and measurements remain in `notes/mem-free-leaf-files.md` and
+`notes/mem-leaf-regions-cost.md`; the migration decision is in `notes/oxc-allocator-migration.md`.
 
 ## Declaration-file member lists parsed on first use: `TSRS_LAZY_DTS`
+
+This optimization is currently dormant: it requires a successful arena rewind, and Oxc does not expose a stable
+partial-rewind operation. The parser therefore keeps the first parse and creates no lazy-list record.
 
 A CLI compile (not `--incremental`, `--build` or watch) in which no declaration file is type-checked (`skipLibCheck`
 or `noCheck`) parses the member list of each interface, class and type literal of a declaration file, and keeps it
@@ -377,9 +356,9 @@ API and the test harnesses, and under `TSRS_CENSUS=1`, `TSRS_LAZY_DTS_CENSUS=1` 
 | `TSRS_LAZY_DTS` | unset (on when it applies), `0`/`off`, `stats`, `force` (`tsrs-test` only) | `stats`: one line on stderr: lists made lazy, deferred by the binder, never reached by it, parsed again (and how many while their file was bound). `force` in `tsrs-test`: every declaration file's lists are lazy, checked files included, so the checker and the `.types` / `.symbols` walks force them all: the result trees must equal a run without it (`TSRS_LAZY_DTS_STATS_FILE=<file>` collects the workers' counts) |
 | `TSRS_LAZY_DTS_CENSUS` | `1` (alloc-profile build) | the ceiling census: bytes of every member list of unchecked declaration files, and which lists and member symbols any reader asked for, by phase; `TSRS_LAZY_DTS_CENSUS_TSV=<file>` adds a per-file table |
 
-After a change to what the binder does for members of interfaces, classes or type literals, or to what a member list
-can contain, run the suite with `TSRS_LAZY_DTS=force` (also with `TS_TEST_PROGRAM_SINGLE_THREADED=false`) and a corpus
-with `TSRS_ARENA_POISON=1` (rewound first parses are filled with `0xA5` and never reused); both must equal main.
+After partial rewind is reintroduced with an owner-safe design, changes to what the binder does for members of
+interfaces, classes or type literals must again run the suite with `TSRS_LAZY_DTS=force` (also with
+`TS_TEST_PROGRAM_SINGLE_THREADED=false`).
 testdata/regressions/lazy-dts-members holds the cases where a lazy list could differ.
 
 ## Checking a heavy declaration file on several checkers: `TSRS_SPLIT_FILES`

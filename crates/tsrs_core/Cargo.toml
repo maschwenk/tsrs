@@ -8,17 +8,16 @@ license.workspace = true
 workspace = true
 
 [features]
-default = ["compressed-ptrs"]
+default = []
 # Atomic borrow checking for FrozenCell in release builds (always on with debug_assertions).
 checked-cells = []
 # Per-call-site arena allocation profile and a counting global allocator (src/alloc_profile.rs).
 alloc-profile = ["dep:mimalloc-safe"]
 # Creation-site counters for checker objects (src/sitecount.rs).
 site-counts = []
-# `P<T>` as a 32-bit handle into one reserved address range (src/reserve.rs, notes/mem-pointer-compression.md), on
-# unix targets (build.rs).
+# Compatibility feature retained for old build commands. The Oxc allocator always uses native pointers.
 compressed-ptrs = []
-# Keeps `P<T>` a plain reference even when `compressed-ptrs` is on (for comparisons: `--features tsrs_core/plain-ptrs`).
+# Compatibility feature retained for old build commands. Native pointers are now the only representation.
 plain-ptrs = []
 
 [dependencies]

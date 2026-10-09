@@ -59,9 +59,8 @@ fn mimalloc_collect(force: bool) {
 
 // mimalloc-safe builds the `no_thp` feature as mimalloc's `allow_thp = 0`, and with that mimalloc turns transparent
 // huge pages off for the whole process when it starts (`prctl(PR_SET_THP_DISABLE)` in `_mi_prim_mem_init`, run from a
-// constructor before `main`), the arena's `MADV_HUGEPAGE` chunks included (`tsrs_core::reserve`). `no_thp` is only
-// meant to keep mimalloc from advising its own heap, which `allow_thp = 0` still does; this turns THP back on for the
-// rest (notes/mem-no-thp.md). An explicit MIMALLOC_ALLOW_THP keeps mimalloc's choice.
+// constructor before `main`). `no_thp` is only meant to keep mimalloc from advising its own heap; this restores the
+// process default for other mappings. An explicit MIMALLOC_ALLOW_THP keeps mimalloc's choice.
 #[cfg(target_os = "linux")]
 fn allow_transparent_huge_pages() {
     if std::env::var_os("MIMALLOC_ALLOW_THP").is_some() {

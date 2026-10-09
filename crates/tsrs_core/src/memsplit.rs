@@ -181,8 +181,6 @@ pub fn report(what: &str) {
         mib(arenas.retired_resident),
         arenas.huge_current
     );
-    #[cfg(compressed_ptrs)]
-    let _ = writeln!(out, "  reservation: {} MiB in chunks", mib(crate::reserve::reserved_in_use()));
     let heap = HEAP_STATS.get().map(|f| f());
     if let Some(h) = heap {
         let _ = writeln!(
@@ -234,9 +232,6 @@ mod linux {
             mib(field("RssFile:"))
         );
         let smaps = std::fs::read_to_string("/proc/self/smaps").unwrap_or_default();
-        #[cfg(compressed_ptrs)]
-        let arena_range = (crate::reserve::BASE_ADDR, crate::reserve::BASE_ADDR + crate::reserve::RESERVE);
-        #[cfg(not(compressed_ptrs))]
         let arena_range = (0usize, 0usize);
         let names = ["arena reservation", "thread stacks", "heap and other anonymous", "file-backed"];
         let mut buckets: [Bucket; 4] = Default::default();

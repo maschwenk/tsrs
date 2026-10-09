@@ -34,7 +34,7 @@ bitflags! {
 /// Go's `Antecedent` (all but labels; set at creation) and `Antecedents` (labels; Go's binder creates labels without
 /// an antecedent and gives antecedents only to labels) are never both set, so they share one field (`link`, the
 /// `P::key` of either): a node whose flags have `Label` holds the antecedents, any other node the antecedent. Label
-/// bits never change after creation (only `Referenced` / `Shared` are added). 24 bytes, 16 with compressed pointers;
+/// bits never change after creation (only `Referenced` / `Shared` are added). 24 bytes;
 /// 1.9M flow nodes on the private monorepo.
 pub struct FlowNode {
     pub flags: OwnedCell<FlowFlags>,
@@ -46,7 +46,7 @@ pub struct FlowNode {
 }
 
 #[cfg(target_pointer_width = "64")]
-const _: () = assert!(std::mem::size_of::<FlowNode>() == if tsrs_core::COMPRESSED_PTRS { 16 } else { 24 });
+const _: () = assert!(std::mem::size_of::<FlowNode>() == 24);
 #[cfg(target_pointer_width = "32")]
 const _: () = assert!(std::mem::size_of::<FlowNode>() == 16);
 

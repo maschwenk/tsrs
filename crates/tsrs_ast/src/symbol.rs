@@ -23,7 +23,7 @@ use crate::*;
 // kept in the tail (`value_declaration()` / `set_value_declaration()`; a declarations write that replaces the
 // first declaration moves it to the tail first). Both bits (`TAG_TABLES`, `TAG_VALUE_FIRST`) are the tag bits of
 // the name word (`OwnedTaggedStrCell`: pointer, length and tags in one word). `declarations` is an
-// `OwnedPSliceCell`: 40 bytes, 32 with compressed pointers (handle-sized parent, 8-byte declarations).
+// `OwnedPSliceCell`: 40 bytes.
 
 #[derive(Default)]
 pub struct Symbol {
@@ -48,7 +48,7 @@ struct SymbolTables {
 }
 
 #[cfg(target_pointer_width = "64")]
-const _: () = assert!(std::mem::size_of::<Symbol>() == if tsrs_core::COMPRESSED_PTRS { 32 } else { 40 });
+const _: () = assert!(std::mem::size_of::<Symbol>() == 40);
 #[cfg(target_pointer_width = "32")]
 const _: () = assert!(std::mem::size_of::<Symbol>() == 32);
 

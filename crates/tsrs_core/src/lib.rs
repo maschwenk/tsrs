@@ -1,10 +1,7 @@
 pub mod arena;
 pub mod arena_owner;
 pub mod ptr;
-#[cfg(compressed_ptrs)]
-pub mod reserve;
-/// Whether `P<T>` is a 32-bit handle (`cfg(compressed_ptrs)`, see build.rs) rather than a reference.
-pub const COMPRESSED_PTRS: bool = cfg!(compressed_ptrs);
+
 /// True on targets that cannot start threads (wasm32 without atomics, such as `wasm32-wasip1`, where
 /// `std::thread::spawn` returns `Unsupported`). It gates every place that would spawn even in a single-threaded run:
 /// the rayon worker pool runs on the calling thread, `Program::single_threaded()` is always true, the driver forces

@@ -309,7 +309,7 @@ bitflags! {
 // 1.43M contexts on the private monorepo single, so the four fields that fewer than 4% of them set (return mappers, inferred type
 // parameters, intra-expression sites) live in a tail allocated on the first non-default write (`InferenceContextRare`,
 // read through accessors that return the zero value when it is absent), and `inferences` packs with `flags`:
-// 64 bytes instead of 128 (48 with compressed pointers, where `inferences` is a one-word `ThinSliceCell`).
+// 64 bytes instead of 128.
 
 #[derive(Default)]
 pub struct InferenceContext {
@@ -329,7 +329,7 @@ pub struct InferenceContext {
 const RARE_ESCAPED: usize = 1;
 
 #[cfg(target_pointer_width = "64")]
-const _: () = assert!(std::mem::size_of::<InferenceContext>() == if tsrs_core::COMPRESSED_PTRS { 48 } else { 64 });
+const _: () = assert!(std::mem::size_of::<InferenceContext>() == 64);
 #[cfg(target_pointer_width = "32")]
 const _: () = assert!(std::mem::size_of::<InferenceContext>() == 36);
 
@@ -612,7 +612,7 @@ pub struct InferenceInfo {
 }
 
 #[cfg(target_pointer_width = "64")]
-const _: () = assert!(std::mem::size_of::<InferenceInfo>() == if tsrs_core::COMPRESSED_PTRS { 28 } else { 48 });
+const _: () = assert!(std::mem::size_of::<InferenceInfo>() == 48);
 #[cfg(target_pointer_width = "32")]
 const _: () = assert!(std::mem::size_of::<InferenceInfo>() == 28);
 

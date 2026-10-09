@@ -23,6 +23,11 @@ pointer compression costs about +4.9% instructions and took back most of the che
 
 ## Not verified yet
 
+- **The allocator constraint changed.** `oxc_allocator` now owns fixed no-`Drop` data, while resource-owning values
+  use sidecars paired with the same owner. This resolves the old objection that Oxc could not hold arena values with
+  destructors. The custom reservation, compressed handles, recycling and partial rewind were removed; see
+  `notes/oxc-allocator-migration.md`. This migration was intentionally not measured at the owner's request.
+
 - **The 32 GiB reservation outside macOS and GitHub runners: verified.** main ran in a Linux x86-64 dev sandbox
   (gVisor-style microVM, `ulimit -v` unlimited, overcommit 1): check, emit and incremental all work. It still needs
   a 47-bit address space and no `ulimit -v` below 32 GiB.

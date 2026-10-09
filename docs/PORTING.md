@@ -58,25 +58,26 @@ contributing `impl` blocks to the same type.
 
 Go objects that are referenced by pointer, live long, reference each other cyclically and
 are compared by identity — AST nodes, symbols, types, signatures, links, flow nodes,
-mappers, inference contexts … — are allocated in a process-lifetime leak arena and
+mappers, inference contexts … — are allocated through an Oxc-backed owner and
 referenced through `tsrs_core::P<T>`:
 
 - `P<T>`: `Copy`, `Deref<Target = T>`, equality/hash/order **by identity** (like Go pointers).
-  Create with `P::new(value)`. `p.get()` returns `&'static T`. It is a 32-bit handle (an offset in 8-byte units into
-  one reserved address range; `tsrs_core::reserve`, notes/mem-pointer-compression.md), or a plain reference with
-  `--features tsrs_core/plain-ptrs`. So: `P::from_static(r)` only for references to arena objects (an object made
-  with `P::new` / `alloc`, or a view that starts 8-aligned inside one); a Go package-level `*T` variable that is a
-  Rust `static` is an `SP<T>`. Packed words store `p.to_bits()` / `p.key()`, never addresses.
+  Create with `P::new(value)`. `p.get()` returns `&'static T`. It is a native non-null pointer; `Option<P<T>>` uses
+  the null niche and is pointer-sized. `P::from_static(r)` accepts a true static; `P::from_arena(r)` is the unsafe
+  constructor for a value kept alive by an arena owner or sidecar. Packed words store `p.to_bits()` / `p.key()`.
 - Go `*T` that can be nil -> `Option<P<T>>`. Go `*T` that is never nil -> `P<T>`.
   Decide from the Go code (nil checks, `return nil`). When unsure, use `Option`.
 - There are **no lifetime parameters** anywhere in this codebase. Arena data is `'static`.
-- Nothing is ever freed. That is intentional (batch compiler). The exceptions are a few recycling sites that
-  prove an object dead (rolled-back parses, dropped flow labels, scratch mappers and inference contexts whose escape
-  bit is clear; `tsrs_core::arena`, notes/mem-recycle.md). A struct field that keeps a mapper must be a `MapperCell`.
-  Emit runs each file in a scratch region that is freed after the file is written (notes/mem-emit-regions.md): code
-  that emit calls and that stores what it allocates beyond the file (the checker, program caches, diagnostics)
-  escapes it (`arena::escape_scratch`; `CheckerSlot::with` does it for the checker), and a checker cache keyed by a
-  node must not keep a key from that region past the file (`Checker::forget_scratch_keyed_caches`).
+- Fixed data with no destructor lives in `oxc_allocator::Allocator`. Values that need `Drop` live in heap sidecars
+  owned by the same arena; sidecars are dropped in reverse allocation order before the Oxc chunks. Thread arenas
+  remain process-lived. Explicit `Region` owners release all of their fixed data and sidecars together.
+- Oxc does not expose the old allocator's individual recycling or stable partial rewind. `free!`, `free_slice!`,
+  `new_recycled`, and parser checkpoint functions remain compatibility APIs, but individual frees/rewinds are
+  no-ops and `arena_rewindable` is always false. Do not write new code that depends on block reuse or rewind.
+- Emit still selects a scratch owner per file (notes/mem-emit-regions.md). Code that stores what it allocates beyond
+  the file (the checker, program caches, diagnostics) escapes it (`arena::escape_scratch`; `CheckerSlot::with` does
+  it for the checker), and a checker cache keyed by a node must not retain a key past owner teardown
+  (`Checker::forget_scratch_keyed_caches`).
 - Fields that are assigned after construction use interior mutability:
   `Cell<T>` for `Copy` data (flags, numbers, `Option<P<T>>`, `&'static [T]`, `&'static str`),
   `RefCell<T>` for growable collections (`Vec`, maps). Fields that are set at construction and
@@ -100,7 +101,7 @@ clamped to 4..32 and to one checker per 32 checked files, and 4 in build mode: `
 its own OS thread with a 512 MB stack (`tsrs_compiler::checkerpool`). Files are assigned to checkers by directory
 locality; in the type-check pass a checker that runs out steals unstarted files from the busiest one
 (notes/perf-checker-stealing.md), which is safe because output does not depend on which checker checks a file
-(notes/perf-order-independence.md; `--checkerAssignment go` keeps Go's assignment and history). Each thread allocates in its own leak arena;
+(notes/perf-order-independence.md; `--checkerAssignment go` keeps Go's assignment and history). Each thread allocates in its own Oxc-backed arena;
 `P<T>` is `Send + Sync` by decree, so the compiler does not police sharing. The rules:
 
 - **Shared, frozen after binding**: AST nodes and node lists, `SourceFile`, binder symbols and symbol tables,

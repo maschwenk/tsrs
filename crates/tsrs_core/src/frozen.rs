@@ -365,13 +365,8 @@ impl Default for OwnedTaggedStrCell {
     }
 }
 
-/// `OwnedCell<&'static [T]>` for slices of handles in arena objects: a `SliceCell` (12 bytes, 4-aligned), or with
-/// compressed pointers, where a struct of handles packs tighter, a `ThinSliceCell` (8 bytes). `get` returns exactly
-/// the slice last `set`.
-pub struct OwnedPSliceCell<T: 'static>(
-    #[cfg(not(compressed_ptrs))] crate::ptr::SliceCell<T>,
-    #[cfg(compressed_ptrs)] crate::ptr::ThinSliceCell<T>,
-);
+/// `OwnedCell<&'static [T]>` for slices of handles in arena objects. `get` returns exactly the slice last `set`.
+pub struct OwnedPSliceCell<T: 'static>(crate::ptr::SliceCell<T>);
 
 impl<T> Default for OwnedPSliceCell<T> {
     fn default() -> Self {
@@ -383,10 +378,7 @@ impl<T> OwnedPSliceCell<T> {
     #[inline]
     #[cfg_attr(feature = "alloc-profile", track_caller)]
     pub fn new(value: &'static [T]) -> OwnedPSliceCell<T> {
-        #[cfg(not(compressed_ptrs))]
-        return OwnedPSliceCell(crate::ptr::SliceCell::new(value));
-        #[cfg(compressed_ptrs)]
-        return OwnedPSliceCell(crate::ptr::ThinSliceCell::new(value));
+        OwnedPSliceCell(crate::ptr::SliceCell::new(value))
     }
 
     #[inline]

@@ -1,20 +1,9 @@
-//! tsrs-only: per-file regions in the CLI's `--noEmit` check, and freeing the tree and binder output of a checked
-//! "leaf" file as soon as its checker is done with it (notes/mem-free-leaf-files.md, after Bun's `free_tree`).
+//! tsrs-only: per-file region plumbing for the CLI's `--noEmit` check.
 //!
-//! When the CLI turns file regions on (`enable`, before it creates the program), the host parses each TypeScript
-//! source file (`.ts`, `.tsx`, `.mts`, `.cts`; not declaration files) that is loaded as a root file of the program and
-//! whose path predicts a leaf (`PREDICTED_LEAF_PATTERNS`: tests, specs, stories, mocks) into a scratch region of its
-//! own, and the file is bound in that region too (`bind`). Every other file is parsed into the thread arena as before,
-//! where the large chunks are huge pages on Linux. The text, the `SourceFile` itself and the diagnostics stay outside
-//! the region (the parser and the diagnostics escape the scratch region), so a freed file still has what the report
-//! reads: name, text, line map, counters, and its diagnostics, collected before the free.
-//!
-//! A program created with `ProgramOptions::leaf_files` set marks its leaves right before its type-check pass
-//! (`classify`, `SourceFile::is_check_leaf`): type-checked TypeScript modules that no other file refers to and that
-//! declare nothing another file can reach. Only a file with a region can be one: a predicted file that is not a leaf
-//! keeps its region, a leaf that was not predicted is not freed. After a leaf's semantic diagnostics are collected (the
-//! pass's callback), `free` drops its region with `Region::retire_on_free`: its pages go back to the system and its
-//! address range is never reused. Every other region lives for the rest of the process, as the thread arenas did.
+//! The custom allocator gave retired leaf regions a never-reused address range. Oxc/system allocation can reuse an
+//! address after an owner is dropped, while some compiler tables still key entries by native address. Therefore
+//! [`leaf_settings_from_env`] currently always returns `Off`; the historical classification and region plumbing stay
+//! here until those external keys can be removed safely before owner teardown.
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{LazyLock, Mutex};
@@ -32,7 +21,7 @@ pub enum LeafMode {
     /// Nothing (the default; `TSRS_FREE_LEAVES=0`, and everywhere but the CLI's `--noEmit` check).
     #[default]
     Off,
-    /// Leaves are freed once checked (the CLI's default where allowed).
+    /// Leaves are freed once checked (currently disabled by `leaf_settings_from_env`).
     Free,
     /// Leaves are counted, nothing is freed (`TSRS_FREE_LEAVES=keep`: measures what the regions cost).
     Keep,
@@ -49,7 +38,8 @@ static CURRENT_DIRECTORY: std::sync::OnceLock<String> = std::sync::OnceLock::new
 /// directory (so that a checkout under a `test` directory does not match every file). Tests, stories and mocks: on the
 /// bench projects nothing imports them and they are nearly all of the leaves' bytes (vscode 99%, t3code-server 97%,
 /// formbricks-web and supabase-studio 95%; notes/mem-free-leaf-files.md). Only a predicted file gets a region; every
-/// other file is parsed into the thread arena as before this change, where large chunks are huge pages on Linux.
+/// other file would be parsed into the thread's Oxc arena. Region selection is currently disabled; see the module
+/// comment.
 /// Whether a file is a leaf is still decided exactly (`classify`): a predicted file that is not one keeps its region,
 /// a leaf that was not predicted is not freed. A root file that nothing else imports cannot be told at parse time:
 /// the files that import it may not have been parsed yet.
@@ -76,7 +66,7 @@ static MISSED: AtomicUsize = AtomicUsize::new(0);
 static MISSED_NODES: AtomicUsize = AtomicUsize::new(0);
 static LEAF_NODES: AtomicUsize = AtomicUsize::new(0);
 
-/// What `TSRS_FREE_LEAVES` asks for where freeing is allowed (`leaf_settings_from_env`).
+/// File-region settings. Environment requests are currently ignored by `leaf_settings_from_env`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct LeafSettings {
     pub mode: LeafMode,
@@ -87,22 +77,8 @@ pub struct LeafSettings {
     pub every_file: bool,
 }
 
-/// The most checkers for which leaf freeing is on by default (`leaf_settings_from_env`). Measured with one binary,
-/// freeing on against off, 20 interleaved runs (notes/mem-leaf-regions-cost.md): on the 8-vCPU runner within 2% wall
-/// time at 1, 4 and 8 checkers for 13-16% less peak memory on vscode; on the 64-vCPU runner within 1% at 16 checkers
-/// for 11% less, and +2.4-3.9% at 32 for 10% less (each give-back flushes the TLB of every core running a checker,
-/// and more checkers free leaves in a more scattered order). The README bench's +21% on the 8-vCPU runner was a
-/// slower runner and a PGO build without its training profiles (#153), not freeing. `TSRS_FREE_LEAVES=1` turns it on
-/// at any count.
-pub const MAX_DEFAULT_CHECKERS: usize = 16;
-
-/// `TSRS_FREE_LEAVES`, a comma-separated list: unset frees the predicted leaves when the program gets at most
-/// `MAX_DEFAULT_CHECKERS` checkers (`checkers`: the most it can get, `checker_count_upper_bound`); `1` frees them at any
-/// count; `0` turns file regions off; `keep` makes the regions (at any count) but frees nothing; `stats` reports
-/// (`stats_report`); `all` gives every TypeScript root file a region (`LeafSettings::every_file`), at any count. Off
-/// under the debug modes that walk files or checker data after the pass (`TSRS_FILE_TIMES` walks every tree;
-/// `TSRS_ASSIGNMENT_STATS`, the work and heap censuses walk checker tables) or that must see every block alive (the
-/// reachability census, `TSRS_CENSUS=1`).
+/// Returns the file-region settings requested by the environment. The Oxc migration keeps this off regardless of
+/// `TSRS_FREE_LEAVES`; see the module-level safety note.
 /// Whether the CLI may parse declaration-file member lists lazily (notes/mem-lazy-dts-members.md): `TSRS_LAZY_DTS=0`
 /// turns it off, and so do the debug modes that walk or freeze the whole program (the reachability census, the
 /// shared-object check).
@@ -210,44 +186,10 @@ fn global_library_files(program: &crate::program::Program) -> Vec<P<SourceFile>>
     program.files.iter().copied().filter(|f| f.is_declaration_file() && global.contains(&*f.path().0)).collect()
 }
 
-pub fn leaf_settings_from_env(checkers: usize) -> LeafSettings {
-    let census = std::env::var_os("TSRS_CENSUS").is_some_and(|v| v == "1") || tsrs_core::census_recording();
-    #[cfg(feature = "checker")]
-    let checker_census = crate::Checker::census_enabled() || crate::Checker::heap_census_enabled();
-    #[cfg(not(feature = "checker"))]
-    let checker_census = false;
-    if census || checker_census || crate::checkerpool::file_times_path().is_some() || crate::checkerpool::assignment_stats_enabled() {
-        return LeafSettings::default();
-    }
-    // Only where a freed region's pages go back to the system and its range is never reused (`Region::retire_on_free`
-    // gives back pages only with compressed pointers on unix): elsewhere a freed region's memory stays mapped with its
-    // old contents while the heap buffers its values owned are freed and reused, so a stale read would see a live
-    // object, and nothing would be saved.
-    if !(tsrs_core::COMPRESSED_PTRS && cfg!(unix)) {
-        return LeafSettings::default();
-    }
-    let mut settings = LeafSettings { mode: LeafMode::Free, stats: false, every_file: false };
-    let mut forced = false;
-    for word in std::env::var("TSRS_FREE_LEAVES").unwrap_or_default().split(',') {
-        match word.trim() {
-            "0" | "off" => return LeafSettings::default(),
-            "1" | "on" => forced = true,
-            "keep" => {
-                settings.mode = LeafMode::Keep;
-                forced = true;
-            }
-            "stats" => settings.stats = true,
-            "all" => {
-                settings.every_file = true;
-                forced = true;
-            }
-            _ => {}
-        }
-    }
-    if !forced && checkers > MAX_DEFAULT_CHECKERS {
-        return LeafSettings::default();
-    }
-    settings
+pub fn leaf_settings_from_env(_checkers: usize) -> LeafSettings {
+    // The Oxc migration removed the never-reused reserved address range. Leaf retirement cannot be enabled until
+    // every external address-keyed table forgets the retired tree, because the system allocator may reuse its address.
+    LeafSettings::default()
 }
 
 /// Turns file regions on for the programs created from here on, process-wide (the CLI, before `new_program`; never

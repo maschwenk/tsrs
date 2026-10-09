@@ -10,12 +10,10 @@
 2	crates/tsrs_compiler/src/program_emit.rs
 2	crates/tsrs_core/src/context.rs
 2	crates/tsrs_core/src/lazymembers.rs
-2	crates/tsrs_core/src/reserve.rs
 2	crates/tsrs_incremental/src/emitfileshandler.rs
 2	crates/tsrs_ls/src/autoimport/extract.rs
 2	crates/tsrs_vfs/src/osvfs/os.rs
 3	crates/tsrs_compiler/src/program.rs
-3	crates/tsrs_core/src/arena.rs
 4	crates/tsrs_core/src/alloc_profile/census.rs
 4	crates/tsrs_ls/src/autoimport/registry.rs
 4	crates/tsrs_testrunner/src/main.rs
