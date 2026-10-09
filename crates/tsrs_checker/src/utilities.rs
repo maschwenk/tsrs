@@ -813,6 +813,10 @@ pub(crate) fn compare_type_names(c: &mut Checker, t1: P<Type>, t2: P<Type>) -> i
     let s1 = get_type_name_symbol(t1);
     let s2 = get_type_name_symbol(t2);
     if s1 == s2 {
+        // The same alias (or none) has the same arguments (can1357's a3f430da0).
+        if t1.alias() == t2.alias() {
+            return 0;
+        }
         return compare_type_lists(c, t1.alias().type_arguments(), t2.alias().type_arguments());
     }
     let Some(s1) = s1 else {
