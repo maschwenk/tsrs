@@ -1,4 +1,4 @@
-# open-history-dependence: three programs whose output still depends on the checker assignment (not fixed)
+# open-history-dependence: four cases whose output still depends on the checker assignment (not fixed)
 
 notes/perf-order-independence.md made diagnostics a function of the program on the corpora it tested, and the README
 says output does not depend on the checker count. Three bench candidates show that this does not hold in general:
@@ -7,7 +7,8 @@ three are typescript-go's own history dependence: tsgo-ref also prints different
 tsrs prints the same output under `--checkerAssignment go` when the files are visited in the same order. None of them is
 fixed. For the router case a fix that makes the output canonical exists, but it costs up to 4% of single-threaded
 instructions and adds an error that tsgo does not print to another program (below); the cheaper variant leaves part of
-the dependence. This note is the evidence and the measurements.
+the dependence. A fourth case, a TS2590 reported on a private monorepo (issue #218), is in section 4: not reproduced,
+with a trace switch for the reporter. This note is the evidence and the measurements.
 
 ## Summary
 
@@ -190,3 +191,70 @@ tsrs -p tsconfig.bench.json --noEmit --incremental false --pretty false --checke
 # rxjs: overlay from bench PR #206
 tsrs -p packages/rxjs/tsconfig.bench.json --noEmit --incremental false --pretty false --checkers 2 --checkerAssignment random:1
 ```
+
+## 4. TS2590 from `removeSubtypes` (issue #218, not reproduced)
+
+Reported on a private monorepo (Linux x64, 0.7.0 and 0.9.0): at 8 checkers in the default mode a TS2590 ("Expression
+produces a union type that is too complex to represent") is printed in some runs and not in others on the same tree;
+on another commit the default mode never prints a TS2590 that tsgo prints at 4 and 8 checkers but not at 1, and tsrs
+under `--checkerAssignment go` at 4 checkers prints exactly tsgo's output. `TSRS_LAZY_MEMBERS=0`, `TSRS_UNION_CACHE=0`
+and `TSRS_INFER_MEMO=0` change nothing. The error is reported at a call whose object literal argument holds a
+context-sensitive arrow (`pointer => recordMap.getModel(pointer)`, returning `TableToModel[T] | undefined` over a
+generated map of about 250 classes) contextually typed by a generic callable interface with extra members; the arrow
+fails with TS2739. The printed union has about 244 members.
+
+What decides it (`remove_subtypes`, checker_13.rs; Go `removeSubtypes`, checker.go): the constituents are taken from
+the end of the list, each compared with the others until one is a strict supertype. After exactly 100,000 comparisons
+the work is extrapolated, `(comparisons / sources begun) * length`, and above 1,000,000 the reduction gives up with
+TS2590 at `current_node`. `removeSubtypes` does not cache the failure, so another request for the same list reports
+again (a union of two unions caches the resulting error type in `unionOfUnionTypes`, so a repeat of that request is
+silent). The estimate is at most `(length - 1) * length`, so the union being reduced had at least 1,001 constituents.
+The 244-member union in the report is not its result: on TS2590 the reduction returns the error type.
+
+What it is not:
+
+- **Not the creation order of named or literal constituents.** The issue guessed that the checker that sees what
+  first changes the order the estimate starts with. `removeSubtypes` has one caller, right after `addTypesToUnion`
+  sorts the list with `compareTypes` (Go checker.go:26276, 26155; tsrs checker_13.rs:221, 77): flags, names, symbols by
+  declaration position, type arguments, literal values. Only types none of those tell apart are ordered by type id (or,
+  for symbols with no declaration and the same name, by symbol id; `compareTypeMappers` treats mappers other than
+  simple, array and merged ones as equal). So named classes such as `TableToModel[T]`'s are ordered the same on every
+  checker; whether the union reduced in #218 has members that tie is not known. The regression case
+  `testdata/regressions/union-too-complex-canonical-order` creates the same 1,101 classes in opposite orders in two
+  files: tsrs prints the same TS2590 single-threaded, at 2, 3, 4 and 8 checkers and under `random:1..8` at 2 and 4, and
+  tsgo-ref single-threaded and at 2, 3, 4 and 8 checkers. TypeScript 5.9.3, which keeps union members in creation
+  order, prints it only when a.ts is checked first.
+- **Unlikely a relation overflow.** A comparison that runs out of its complexity budget is cached as failed, which
+  lengthens the scan, but it also reports TS2859 ("Excessive complexity comparing types"), which the report does not
+  show. (A TS2859 can be lost through the same channel as below, and an overflow found later in the cache reports
+  nothing, so this is not ruled out.)
+
+What is left, three candidates:
+
+- **The error is filed against another file.** `current_node` is the expression being checked, and resolving a
+  declaration's type from another file checks that declaration's initializer there. A file's diagnostics come only
+  from the checker that checks it, right after checking it (program.rs:1009). So an error that checker A files
+  against file X while checking file Y is kept only if A checks X later; if A checked X before, or another checker
+  checks X, A's copy is lost and X's own checker decides by what it computes itself. If the call in the report is
+  checked as part of resolving a declaration from another file, whether its TS2590 survives depends on which files
+  share a checker and in what order: that fits an error that comes and goes from run to run with work stealing. The
+  trace shows the routing on webpack: a TS2590 filed `at test/fixtures/acorn-corpus.json(3,9) while checking
+  tooling/compare-js-tools.js` in every one of 28 runs (single-threaded, 2, 4 and 8 checkers, `random:1..8`, `go`,
+  `locality`), never printed in any, because JSON files are not type-checked and their diagnostics are never
+  collected (Go program.go:856-880; tsrs program.rs:1120-1142). tsgo-ref does not print it either. So it shows the
+  channel, not a flip.
+- **The comparisons answer differently** (the same pairs, so a different number of comparisons in the first 100,000 or
+  different constituents removed), through what the checker resolved before as in sections 1 and 2:
+  `isDeeplyNestedType` counts a recursion identity only at increasing type ids, base constraints cut by the depth guard
+  are cached (section 1), and variances computed inside a cycle differ with where the cycle is entered (section 2).
+- **A different union reaches `removeSubtypes`**, for the same reasons.
+
+Which one it is cannot be told without the program.
+
+`TSRS_TRACE_UNION_REDUCTION=1` (docs/DEBUGGING.md) prints one line per subtype reduction of a union of more than 1,000
+types: where the error would be filed and which file the checker was checking, and fingerprints of the union, its order
+and the constituents removed, built without type ids so that two runs can be compared. The next step is that trace from
+a run that prints the TS2590 and one that does not: a line `too complex` in both, filed against a file other than the
+one being checked, points at the first candidate; the same location with different fingerprints at the second or third. Until then, a named
+assignment and a fixed checker count (`--checkerAssignment locality --checkers 8`) make the output the same in every
+run (it turns work stealing off), though not the same at every checker count.
