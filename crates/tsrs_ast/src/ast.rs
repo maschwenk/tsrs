@@ -279,7 +279,8 @@ const _: () = assert!(std::mem::size_of::<NodeList>() == 16);
 
 // Deep-cloned synthetic lists used `-2` on their last node to retain a trailing comma while
 // `-1` marked an ordinary synthetic range. A real range may not have a synthetic end, so this
-// shape preserves that distinction without reserving another TextPos value.
+// list range preserves that distinction without reserving another TextPos value or giving a
+// node a source-looking position.
 #[inline]
 pub(crate) const fn synthetic_trailing_comma_range() -> TextRange {
     TextRange::new(0, SYNTHETIC_POSITION)
@@ -355,10 +356,13 @@ impl NodeList {
     }
 
     pub fn has_trailing_comma(&self) -> bool {
+        if self.loc() == synthetic_trailing_comma_range() {
+            return true;
+        }
         let Some(last) = self.nodes().last() else {
             return false;
         };
-        last.loc() == synthetic_trailing_comma_range() || position_cmp(last.end(), self.end()).is_lt()
+        position_cmp(last.end(), self.end()).is_lt()
     }
 
     pub fn clone_list(&self, f: &NodeFactory) -> P<NodeList> {

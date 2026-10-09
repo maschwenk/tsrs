@@ -208,7 +208,7 @@ impl Printer {
             self.increase_indent();
         }
 
-        let parent_end = greatest_end(0, &[&parent_node]);
+        let parent_end = greatest_end(SYNTHETIC_POSITION, &[&parent_node]);
 
         // Emit each child.
         let mut previous_sibling: Option<P<Node>> = None;

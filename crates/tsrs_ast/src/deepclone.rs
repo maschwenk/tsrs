@@ -30,7 +30,7 @@ fn get_deep_clone_visitor(f: NodeFactory, synthetic_location: bool) -> NodeVisit
         if synthetic_location {
             new_list.loc.set(undefined_text_range());
             if nodes.has_trailing_comma() {
-                new_list.nodes()[new_list.nodes().len() - 1].set_loc(synthetic_trailing_comma_range());
+                new_list.loc.set(synthetic_trailing_comma_range());
             }
         }
         Some(new_list)
@@ -42,8 +42,7 @@ fn get_deep_clone_visitor(f: NodeFactory, synthetic_location: bool) -> NodeVisit
         if synthetic_location {
             new_list.list.loc.set(undefined_text_range());
             if nodes.has_trailing_comma() {
-                let new_nodes = new_list.nodes();
-                new_nodes[new_nodes.len() - 1].set_loc(synthetic_trailing_comma_range());
+                new_list.list.loc.set(synthetic_trailing_comma_range());
             }
         }
         Some(new_list)
@@ -122,6 +121,7 @@ mod tests {
         let synthetic = f.deep_clone_node(Some(pattern)).unwrap();
         let synthetic_elements = synthetic.as_binding_pattern().elements();
         assert!(synthetic_elements.has_trailing_comma());
-        assert_eq!(synthetic_elements.nodes()[0].loc(), synthetic_trailing_comma_range());
+        assert_eq!(synthetic_elements.loc(), synthetic_trailing_comma_range());
+        assert_eq!(synthetic_elements.nodes()[0].loc(), undefined_text_range());
     }
 }
