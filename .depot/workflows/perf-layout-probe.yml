@@ -73,16 +73,14 @@ jobs:
           sparse-checkout: tsc/testdata
           persist-credentials: false
 
-      - name: Read the pinned Rust toolchain (rust-toolchain.toml)
-        id: rust
-        shell: bash
-        run: echo "toolchain=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
-
-      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
         with:
-          toolchain: ${{ steps.rust.outputs.toolchain }}
-          targets: x86_64-unknown-linux-gnu
           components: llvm-tools
+          restore-cache: false
+          save-cache: false
+
+      - name: Install x86_64-unknown-linux-gnu target
+        run: rustup target add x86_64-unknown-linux-gnu
 
       - name: Cache keys
         id: keys

@@ -114,24 +114,18 @@ jobs:
           path: ts-ref/tsc/testdata
           key: ${{ steps.ts-ref.outputs.cache-primary-key }}
 
-      - name: Read the pinned Rust toolchain (rust-toolchain.toml)
-        id: rust
-        shell: bash
-        run: echo "toolchain=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
-
-      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
         with:
-          toolchain: ${{ steps.rust.outputs.toolchain }}
-          targets: x86_64-unknown-linux-gnu
           components: llvm-tools
+          save-cache: true
+          cache-key: bench-pgo
+
+      - name: Install x86_64-unknown-linux-gnu target
+        run: rustup target add x86_64-unknown-linux-gnu
 
       # Caches ~/.cargo and the dependency part of target/, which holds only the instrumented build below: its
       # RUSTFLAGS are the same in every run, so its dependencies are reused. The final build's RUSTFLAGS contain the
       # profile's hash, which changes every run, so it is built outside target/ and not cached.
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          key: bench-pgo
-
       # On Depot runners every cache action below is served by Depot Cache (no workflow changes needed). One cache for
       # the suite checkout + the npm compilers, and one per cloned project (checkout + node_modules) keyed on its pinned
       # commit and install command. This job needs the two training projects; each measuring job restores its own.
