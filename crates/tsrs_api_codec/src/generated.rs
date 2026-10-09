@@ -5,7 +5,7 @@
 #![allow(clippy::all, unused_parens, unused_variables, unused_mut, non_snake_case)]
 
 use tsrs_ast::*;
-use tsrs_core::{alloc_slice, alloc_vec, P};
+use tsrs_core::{alloc_slice, P};
 
 use crate::decoder::*;
 use crate::encoder::*;

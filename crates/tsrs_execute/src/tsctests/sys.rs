@@ -8,7 +8,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_core::tspath::{self, ComparePathsOptions, Path};
 use tsrs_core::P;
 use tsrs_vfs::iovfs::IoVFS;
-use tsrs_vfs::vfstest::{self, MapFS};
+use tsrs_vfs::vfstest::MapFS;
 use tsrs_vfs::{Entries, FileInfo, FileMode, FS};
 
 use super::readablebuildinfo::to_readable_build_info;

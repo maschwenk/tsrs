@@ -2,7 +2,6 @@ use tsrs_core::tspath;
 
 use super::os_test::{mklink, temp_dir};
 use super::*;
-use crate::FS;
 
 fn setup_symlinks() -> (String, String) {
     let tmp = temp_dir();

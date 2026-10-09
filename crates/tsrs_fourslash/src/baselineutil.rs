@@ -8,7 +8,6 @@ use regex::Regex;
 use rustc_hash::FxHashMap;
 use tsrs_core::collections::{group_by, MultiMap, OrderedMap};
 use tsrs_core::stringutil;
-use tsrs_core::TextPos;
 use tsrs_ls::lsconv::{self, LSPLineMap, Script};
 use tsrs_ls::spanmap::SpanMap;
 use tsrs_lsproto as lsproto;

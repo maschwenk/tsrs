@@ -3,7 +3,6 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use tsrs_core::tspath;
 
 use super::*;
-use crate::FS;
 
 // A fresh directory under the system temp dir (t.TempDir()).
 pub(super) fn temp_dir() -> String {
