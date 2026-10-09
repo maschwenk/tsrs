@@ -1,5 +1,72 @@
 # Status
 
+## 2026-10-09: 0.9.2 release
+
+A determinism fix for TS2590 and faster union construction, with build and dependency changes from the same day; the
+TypeScript source pin remains `b85298b6a81f772d080b0455de0ca9d744cd6fd6` (7.1.0-dev.20260929) and the published package
+set is unchanged (`@maschwenk/tsrs` and `@maschwenk/tsrs-wasm` at `0.9.2-ts7.1.0-dev.20260929`).
+
+TS2590 (#231, for #218): "Expression produces a union type that is too complex to represent" was reported only the first
+time a checker evaluated the type. The two sites that report it do not cache their failure, but Go caches what it builds
+from the error type they return (the enclosing intersection, a union of two unions, alias, object and conditional
+instantiations, the relation cache), so under work stealing the error came and went between identical runs: 15 of 30
+runs at 2 checkers reported it on the reporter's generated 1,600-file project. In the default mode a result computed
+while a TS2590 was reported is no longer cached, and each file reports a too-complex type once, at the first site in it
+that evaluated the type: tsgo's own rule, with a per-file lifetime. The generated project now reports it in 30 of 30
+runs. `testdata/regressions/union-too-complex-cross-product` (the reproduction's three files) gives the same output
+single-threaded, at 1-4 checkers and under `--checkerAssignment random:1..8`, where tsgo prints nothing at 1 and 2
+checkers and the error at 3; `--checkerAssignment go` is unchanged. pr-verify found identical diagnostics in 102 of 102
+cells, vscode single-threaded instructions +0.02%; a program that hits the limit recomputes the type at every site that
+reaches it (about 4 ms per site for a 1,101-member union). Still open: a use that reaches the type through a
+declaration's cached type reports only if its checker has not resolved that declaration before
+(notes/open-history-dependence.md section 4). `TSRS_TRACE_UNION_REDUCTION=1` now also traces the cross-product site and
+prints the order in which each checker takes its files (#229, docs/DEBUGGING.md).
+
+Unions (#250): a union is built by merging the sorted runs of its inputs instead of sorting the whole flattened list, a
+generalization of two commits in Can Bölük's tsgo branch (#252). On mikro-orm, sorting for its 29k union constructions
+with 9 or more inputs had been about 10% of single-threaded check time. Merging the runs gives the list the stable sort
+gave: pr-verify found identical diagnostics in 102 of 102 cells, and a build that made every union both ways found no
+difference in about 9.3M union constructions on 15 projects. Single-threaded instructions in pr-verify: mikro-orm
+-9.91%, Compiler-Unions -1.64%, next-packages-next -1.33%, Compiler -0.83%, the other 13 projects -0.79% to +0.16%;
+wall: mikro-orm -5.0% (median over 1, 4, 16 and 32 checkers), the others within noise.
+
+Build and dependencies: the workspace moves to Rust 2024 and Cargo's resolver 3 (#247), the workspace no longer allows
+unused variables, `mut` and imports (#239, #242, #246), the scanner classifies identifier characters by the Unicode
+`ID_Start` and `ID_Continue` properties that JavaScript specifies (`unicode-id-start`) instead of `XID_Start` and
+`XID_Continue` (#236), CI installs Rust with setup-rust (#235), and dev and test builds have no debug info (#238);
+pr-verify found identical diagnostics in 102 of 102 cells for each of #236, #239, #242, #246 and #247. The release
+binaries are built without debug line tables and with their symbols stripped, on Linux after BOLT (#245). The allocator
+is mimalloc 3.5.2 through `mimalloc-safe` 0.1.67 instead of mimalloc 3.3.2 through `mimalloc` 0.1.52 (#248; pr-verify:
+identical diagnostics, single-threaded instructions +0.06% to +0.40%).
+
+Two of those changes, merged the same morning, had slowed the Linux release build; both were fixed before this release.
+#245 set `strip = "symbols"` in the profile the release builds inherit, and on Linux the final build turned it off for
+BOLT while the PGO-instrumented build kept it. Cargo hashes the profile settings into every symbol name and the PGO
+profile stores its counts by symbol name, so the profile applied to almost no function of the final binary: the README
+bench measured 10.6% to 18.0% more single-threaded instructions on all 17 projects (the bench comment on #245). The
+instrumented build now uses the final build's setting (#253); the macOS builds used `symbols` in both and were not
+affected. With `mimalloc-safe`, the `no_thp` feature sets mimalloc's `allow_thp` to 0, and mimalloc then turns
+transparent huge pages off for the whole process when it starts, the arena's huge-page chunks included: pr-verify on
+#248 found the Linux wall up 4.4% to 16.6% on every project (median over checker counts) and peak memory down. `tsrs`
+now turns them back on at the start of `main` on Linux unless `MIMALLOC_ALLOW_THP` is set (#254, notes/mem-no-thp.md),
+the setup before #248, and mimalloc still does not ask for huge pages on its own heap; a pr-verify of #254 against the
+commit before #248 found the wall within -0.1% to +1.2% on the five projects it ran. The bench of `24441a304400` (both
+fixes) against `0f136be0bd44` (before #245): single-threaded instructions within 0.3% on the nine projects #250 leaves
+alone and lower on the eight it speeds up (mikro-orm -10.67%, Compiler-Unions -2.04%, next-packages-next -1.72%,
+Compiler -0.93%, the others -0.40% to -0.76%), and peak memory medians within 0.2%
+(`bench/results/2026-10-09-0f136be0bd44.json`, `2026-10-09-24441a304400.json`).
+
+CI: a `labeled` event no longer cancels a running pr-verify job, so a pull request opened with a label gets its
+verification (#230); Dependabot updates are off.
+
+Notes: an immutable type layer shared by the checker threads, with tsgo-identical output and no wall cost: no design
+meets both, so it is not built (#232); experiment R1, that layer's read path with nothing shared, costs about 2.6%
+single-threaded instructions against a 1% kill threshold, which closes the direction (#241); a more compact syntax tree,
+everything measured together, would save 1.7-3.6% of peak memory on the application projects and 5.7% on vscode, under
+the 5% bar (#234, notes/mem-compact-ast-sizing.md); Can Bölük's tsgo checker branch, measured on the Mac, takes 14-37%
+less wall time than tsgo main at 4 checkers, tsrs is 2.6-4.4x faster than it at each tool's default and 1.6-2.2x
+single-threaded, and the idea that carries over is #250 (#252, notes/perf-tsgo-can1357-speedups.md).
+
 ## 2026-10-09: 0.9.1 release
 
 A bug-fix release for the language server, with two peak-memory cuts and a diagnostic trace from the days in between;
