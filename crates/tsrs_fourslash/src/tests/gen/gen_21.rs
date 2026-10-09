@@ -12,7 +12,7 @@ pub fn test_member_list_in_with_block3(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"var x = { a: 0 };
 with(x./*1*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("a".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -55,7 +55,7 @@ pub fn test_member_list_inside_object_literals(t: &T) {
         /*4*/y1
     };
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::StringSlice(vec!["1".to_string(), "3".to_string(), "4".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "x1".to_string(), detail: Some("(property) MyPoint.x1: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "y1".to_string(), detail: Some("(property) MyPoint.y1: number".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
@@ -84,7 +84,7 @@ pub fn test_member_list_of_class(t: &T) {
 }
 var f = new C1();
 f./**/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "pubMeth".to_string(), detail: Some("(method) C1.pubMeth(): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "pubProp".to_string(), detail: Some("(property) C1.pubProp: number".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
@@ -110,7 +110,7 @@ var topic = Topic.One;
 // @Filename: memberListOfEnumFromExternalModule_file1.ts
 import t = require('./memberListOfEnumFromExternalModule_file0');
 var topic = t.Topic./*1*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("One".to_string()), Any::String("Two".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -137,7 +137,7 @@ pub fn test_member_list_of_enum_in_module(t: &T) {
     }
     var f: Foo = Foo./**/;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("bar".to_string()), Any::String("baz".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -166,7 +166,7 @@ pub fn test_member_list_of_exported_class(t: &T) {
 var c = new M.C();
 
 c./**/ // test on c."#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "pub".to_string(), detail: Some("(property) M.C.pub: number".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
@@ -198,7 +198,7 @@ pub fn test_member_list_of_module(t: &T) {
 }
 
 var x: Foo./**/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("Bar".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -223,7 +223,7 @@ pub fn test_member_list_of_module_after_invalid_charater(t: &T) {
 }
 @
 testModule./**/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "foo".to_string(), detail: Some("var testModule.foo: number".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
@@ -256,7 +256,7 @@ TypeModule1./*dottedExpression*/
 namespace TypeModule3 {
     export class Test3 {}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::MarkerSlice(f.markers()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("C1".to_string()), Any::String("C2".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -288,7 +288,7 @@ each(categories, category => {
     });
 });
 function each<T>(items: T[], handler: (item: T) => void) { }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_quick_info_at(t, "1", "(property) a1: string", "");
@@ -312,7 +312,7 @@ pub fn test_member_list_on_constructor_type(t: &T) {
         let content: &str = r#"// @lib: es5
 var f: new () => void;
 f./*1*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::COMPLETION_FUNCTION_MEMBERS_WITH_PROTOTYPE.clone()), ..Default::default() }), ..Default::default() }));
@@ -337,7 +337,7 @@ pub fn test_member_list_on_contextual_this(t: &T) {
 }
 declare function ctx(callback: (this: A) => string): string;
 ctx(function () { return th/*1*/is./*2*/a });"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_quick_info_at(t, "1", "this: A", "");
@@ -369,7 +369,7 @@ class C1 implements Restricted {
 }
 function f(this: void) {this./*3*/}
 function g(this: Restricted) {this./*4*/}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "f".to_string(), detail: Some("(method) C1.f(this: this): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "g".to_string(), detail: Some("(method) C1.g(this: Restricted): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "m".to_string(), detail: Some("(property) C1.m: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "n".to_string(), detail: Some("(property) C1.n: number".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
@@ -395,7 +395,7 @@ pub fn test_member_list_on_function_parameter(t: &T) {
     var x: string[] = [];
     x.forEach(function (y) { y./**/} );
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("charAt".to_string())], excludes: vec!["toFixed".to_string()], ..Default::default() }), ..Default::default() }));
@@ -421,7 +421,7 @@ pub fn test_member_list_on_this_in_class_with_privates(t: &T) {
    public pubProp = 0;
    private privProp = 0;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "privMeth".to_string(), detail: Some("(method) C1.privMeth(): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "privProp".to_string(), detail: Some("(property) C1.privProp: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "pubMeth".to_string(), detail: Some("(method) C1.pubMeth(): void".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "pubProp".to_string(), detail: Some("(property) C1.pubProp: number".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
@@ -452,7 +452,7 @@ pub fn test_member_overload_edits(t: &T) {
     }
     export class B extends A { /*1*/ }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_no_errors(t);
@@ -477,7 +477,7 @@ pub fn test_memberlist_on_d_dot(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"var q = '';
 q/**/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -507,7 +507,7 @@ pub fn test_missing_method_after_edit_after_import(t: &T) {
 import f = /*foo*/foo;
 
 /*delete*/var x;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_quick_info_at(t, "foo", "namespace foo", "");
@@ -539,7 +539,7 @@ enum A {
 namespace A {
     var p;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -564,7 +564,7 @@ pub fn test_module_members_of_generic_type(t: &T) {
     export var x = <T>(x: T) => x;
 }
 var r = M./**/;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "x".to_string(), detail: Some("var M.x: <T>(x: T) => T".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
@@ -594,7 +594,7 @@ export declare function autorun(): void;
 autorun/**/
 // @Filename: /utils.ts
 import "./mobx.js";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -627,7 +627,7 @@ export declare function autorun(): void;
 autorun/**/
 // @Filename: /utils.ts
 import "./mobx.cjs";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -660,7 +660,7 @@ export declare function autorun(): void;
 autorun/**/
 // @Filename: /utils.ts
 import "./mobx.mjs";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -694,7 +694,7 @@ declare global {
 }
 // @Filename: /index.ts
 let v = new /*1*/THREE.Vector3();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_quick_info_at(t, "1", r#"const THREE: typeof import("three")"#, "");
@@ -733,7 +733,7 @@ namespace C {
 
 var c = new C/*1*/(C./*2*/x);
 c./*3*/foo = C./*4*/foo;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("C".to_string())], ..Default::default() }), ..Default::default() }));
@@ -769,7 +769,7 @@ namespace C {
 var /*2*/r = C(/*1*/
 var /*4*/r2 = new C(/*3*/ // using void returning function as constructor
 var r3 = C./*5*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("C".to_string())], ..Default::default() }), ..Default::default() }));
@@ -805,7 +805,7 @@ pub fn test_multiline_comment_before_open_brace(t: &T) {
 }
 function a() {
     /* %^ */ }/*3*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -869,7 +869,7 @@ namespace Shapes {
 // Local variables
 var p: IPoint = new Shapes.Point(3, 4);
 var dist = p.getDist();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -891,7 +891,7 @@ pub fn test_navbar_const(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = "const c = 0;";
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -938,7 +938,7 @@ class ABC {
 namespace ABC {
     export var x = 3;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -966,7 +966,7 @@ export default class C { }
 export default function { }
 // @Filename: d.ts
 export default function Func { }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_file(t, "a.ts");
@@ -994,7 +994,7 @@ pub fn test_navbar_let(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = "let c = 0;";
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -1017,7 +1017,7 @@ pub fn test_navbar_nested_common_js_exports(t: &T) {
         let content: &str = r#"// @allowJs: true
 // @Filename: /a.js
 exports.a = exports.b = exports.c = 0;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -1042,7 +1042,7 @@ let [|c|] = 10;
 function foo() {
     let [|d|] = 10;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_workspace_symbol(t, &[fourslash::VerifyWorkspaceSymbolCase { pattern: "c".to_string(), preferences: None, exact: Some(vec![lsproto::SymbolInformation { name: "c".to_string(), kind: lsproto::SymbolKind::Variable, location: f.ranges()[0].ls_location(), ..Default::default() }]), ..Default::default() }, fourslash::VerifyWorkspaceSymbolCase { pattern: "d".to_string(), preferences: None, exact: Some(vec![lsproto::SymbolInformation { name: "d".to_string(), kind: lsproto::SymbolKind::Variable, location: f.ranges()[1].ls_location(), container_name: Some("foo".to_string()), ..Default::default() }]), ..Default::default() }]);
@@ -1068,7 +1068,7 @@ export function [|foo|]() {}
 export function [|bar|]() {}
 // @Filename: user.ts
 import {foo, bar as [|baz|]} from './library';"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_workspace_symbol(t, &[fourslash::VerifyWorkspaceSymbolCase { pattern: "foo".to_string(), preferences: None, exact: Some(vec![lsproto::SymbolInformation { name: "foo".to_string(), kind: lsproto::SymbolKind::Function, location: f.ranges()[0].ls_location(), ..Default::default() }]), ..Default::default() }, fourslash::VerifyWorkspaceSymbolCase { pattern: "bar".to_string(), preferences: None, exact: Some(vec![lsproto::SymbolInformation { name: "bar".to_string(), kind: lsproto::SymbolKind::Function, location: f.ranges()[1].ls_location(), ..Default::default() }]), ..Default::default() }, fourslash::VerifyWorkspaceSymbolCase { pattern: "baz".to_string(), preferences: None, exact: Some(vec![lsproto::SymbolInformation { name: "baz".to_string(), kind: lsproto::SymbolKind::Variable, location: f.ranges()[2].ls_location(), ..Default::default() }]), ..Default::default() }]);
@@ -1092,7 +1092,7 @@ pub fn test_navigate_to_symbol_iterator(t: &T) {
 class C {
     [|[Symbol.iterator]|]() {}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_workspace_symbol(t, &[fourslash::VerifyWorkspaceSymbolCase { pattern: "iterator".to_string(), preferences: None, exact: Some(vec![lsproto::SymbolInformation { name: "iterator".to_string(), kind: lsproto::SymbolKind::Method, location: f.ranges()[0].ls_location(), container_name: Some("C".to_string()), ..Default::default() }]), ..Default::default() }]);
@@ -1139,7 +1139,7 @@ pub fn test_navigation_bar_anonymous_class_and_function_expressions(t: &T) {
     console.log(class cls3 {});
     (class { });
 })"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -1161,7 +1161,7 @@ pub fn test_navigation_bar_anonymous_class_and_function_expressions2(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"console.log(console.log(class Y {}, class X {}), console.log(class B {}, class A {}));
 console.log(class Cls { meth() {} });"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -1190,7 +1190,7 @@ const b = 2;
 describe('foo', () => {
     test(`a ${a} b {b}`, () => {})
 })"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -1216,7 +1216,7 @@ const a = {
     c,
     d: 0
 };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -1241,7 +1241,7 @@ pub fn test_navigation_bar_class_static_block(t: &T) {
     let x;
   }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -1267,7 +1267,7 @@ pub fn test_navigation_bar_computed_property_name(t: &T) {
         "prop": true
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -1299,7 +1299,7 @@ b = {
         var d;
     }
 };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -1327,7 +1327,7 @@ pub fn test_navigation_bar_function_like_property_assignments(t: &T) {
     e: y(),
     f() { }
 };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -1363,7 +1363,7 @@ Object.defineProperty(f.prototype, 'name', {
     get: function(){
     } 
 }); "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -1388,7 +1388,7 @@ pub fn test_navigation_bar_function_prototype2(t: &T) {
 A.prototype.a = function() { };
 A.prototype.b = function() { };
 function A() {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -1413,7 +1413,7 @@ pub fn test_navigation_bar_function_prototype3(t: &T) {
 var A; 
 A.prototype.a = function() { };
 A.b = function() { };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -1446,7 +1446,7 @@ B["prototype"] = { };
 B["prototype"] = { m() {} };
 B["prototype"]["a"] = function() { };
 B["b"] = function() { };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -1473,7 +1473,7 @@ A. // Started typing something here
 A.prototype.a = function() { };
 G. // Started typing something here
 A.prototype.a = function() { };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -1504,7 +1504,7 @@ b = 2
 A.prototype.c = function() { }
 var b = 2
 A.prototype.d = function() { }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -1534,7 +1534,7 @@ Object.defineProperty(A.B.prototype, "x", {
 })
 A.prototype.D = function () {  } 
 A.prototype.D.prototype.d = function () {  } "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -1561,7 +1561,7 @@ pub fn test_navigation_bar_getter_and_setter(t: &T) {
         function f() {}
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -1584,7 +1584,7 @@ pub fn test_navigation_bar_imports(t: &T) {
         let content: &str = r#"import a, {b} from "m";
 import c = require("m");
 import * as d from "m";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -1608,7 +1608,7 @@ pub fn test_navigation_bar_initializer_spans(t: &T) {
 const [|[|x|] = () => { var [|a|]; }|];
 const [|[|f|] = function f() { var [|b|]; }|];
 const [|[|y|] = { [|[|z|]: function z() { var [|c|]; }|] }|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -1635,7 +1635,7 @@ let foo1, {a, b}
 const bar1, [c, d]
 var {e, x: [f, g]} = {a:1, x:[]};
 var { h: i = function j() {} } = obj;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -1665,7 +1665,7 @@ class B {
     constructor( {a} = { a: 1 }) {
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -1687,7 +1687,7 @@ pub fn test_navigation_bar_items_class1(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"function Foo() {}
 class Foo {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -1709,7 +1709,7 @@ pub fn test_navigation_bar_items_class2(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"class Foo {}
 function Foo() {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -1733,7 +1733,7 @@ pub fn test_navigation_bar_items_class3(t: &T) {
 // @filename: /foo.js
 function Foo() {}
 class Foo {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -1757,7 +1757,7 @@ pub fn test_navigation_bar_items_class4(t: &T) {
 // @filename: /foo.js
 class Foo {}
 function Foo() {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -1779,7 +1779,7 @@ pub fn test_navigation_bar_items_class5(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"class Foo {}
 let Foo = 1;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -1804,7 +1804,7 @@ pub fn test_navigation_bar_items_class6(t: &T) {
 Z.foo = 42
 
 class Z { }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -1846,7 +1846,7 @@ class C {
         return 1;
     },
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -1870,7 +1870,7 @@ pub fn test_navigation_bar_items_empty_constructors(t: &T) {
     constructor() {
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -1897,7 +1897,7 @@ export { b as B } from "a"
 export import e = require("a");
 
 export * from "a"; // no bindings here"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -1922,7 +1922,7 @@ var A;
 A/*1*/
 .a = function() { };
 })();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -1958,7 +1958,7 @@ pub fn test_navigation_bar_items_functions(t: &T) {
 function baz() {
     var v = 10;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -1981,7 +1981,7 @@ pub fn test_navigation_bar_items_functions_broken(t: &T) {
         let content: &str = r#"function f() {
     function;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -2005,7 +2005,7 @@ pub fn test_navigation_bar_items_functions_broken2(t: &T) {
 function f() {
     function;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -2036,7 +2036,7 @@ import d2, { c, d as D } from "a"
 import e = require("a");
 
 import * as ns from "a";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -2073,7 +2073,7 @@ pub fn test_navigation_bar_items_inside_methods_and_constructors(t: &T) {
 
     emptyMethod() { } // Non child functions method should not be duplicated
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -2131,7 +2131,7 @@ namespace Shapes {
 // Local variables
 var p: IPoint = new Shapes.Point(3, 4);
 var dist = p.getDist();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -2152,7 +2152,7 @@ pub fn test_navigation_bar_items_items2(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = "/**/";
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -2178,7 +2178,7 @@ pub fn test_navigation_bar_items_items_external_modules(t: &T) {
         let content: &str = r#"export class Bar {
     public s: string;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -2203,7 +2203,7 @@ export class Bar {
     public s: string;
 }
 export var x: number;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -2228,7 +2228,7 @@ export class Bar {
     public s: string;
 }
 export var x: number;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -2263,7 +2263,7 @@ namespace Module1.SubModule {
 namespace Module1 {
     export var z = 0;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "file1");
@@ -2290,7 +2290,7 @@ pub fn test_navigation_bar_items_missing_name1(t: &T) {
 class C {
     foo() {}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -2316,7 +2316,7 @@ pub fn test_navigation_bar_items_missing_name2(t: &T) {
 class /* But it has no name! */ {
     foo() {}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -2361,7 +2361,7 @@ namespace A {
         }
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -2386,7 +2386,7 @@ pub fn test_navigation_bar_items_modules2(t: &T) {
 namespace Test.B {
     class Foo { }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -2434,7 +2434,7 @@ class Bar implements Foo {
         return this;
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -2467,7 +2467,7 @@ class c1 {
 f(() => { }, `unterminated backtick 1
 unterminated backtick 2
 unterminated backtick 3"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -2494,7 +2494,7 @@ MoreThanOneHundredAndFiftyCharacters\
 MoreThanOneHundredAndFiftyCharacters\
 MoreThanOneHundredAndFiftyCharacters\
 MoreThanOneHundredAndFiftyCharacters' { }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -2518,7 +2518,7 @@ pub fn test_navigation_bar_items_named_arrow_functions(t: &T) {
 export const func = () => 2;
 export const func2 = function() { };
 export function exportedFunction() { }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -2543,7 +2543,7 @@ pub fn test_navigation_bar_items_properties_defined_in_constructors(t: &T) {
         var local = 0;
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -2567,7 +2567,7 @@ pub fn test_navigation_bar_items_static_and_non_static_no_merge(t: &T) {
     static x;
     x;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -2592,7 +2592,7 @@ pub fn test_navigation_bar_items_symbols1(t: &T) {
     [Symbol.iterator]() { }
     get [Symbol.isConcatSpreadable]() { }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -2616,7 +2616,7 @@ pub fn test_navigation_bar_items_symbols2(t: &T) {
     [Symbol.isRegExp]: string;
     [Symbol.iterator](): string;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -2640,7 +2640,7 @@ pub fn test_navigation_bar_items_symbols3(t: &T) {
     // No nav bar entry for this
     [Symbol.isRegExp] = 0
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -2678,7 +2678,7 @@ class MyClass {
         const x = this[_sym];
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -2699,7 +2699,7 @@ pub fn test_navigation_bar_items_type_alias(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = "type T = number | string;";
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -2724,7 +2724,7 @@ pub fn test_navigation_bar_js_doc(t: &T) {
 /** @typedef {(number|string)} NumberLike */
 /** @typedef {(string|number)} */
 const x = 0;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -2746,7 +2746,7 @@ pub fn test_navigation_bar_js_doc_comment_with_no_tags(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"/** Test */
 export const Test = {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -2793,7 +2793,7 @@ namespace a {
 // @Filename: file4.ts
 namespace A { export var x; }
 namespace A.B { export var y; }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -2828,7 +2828,7 @@ const o = {
         m() {},
     },
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -2849,7 +2849,7 @@ pub fn test_navigation_bar_namespace_import_with_no_name(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = "import *{} from 'foo';";
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -2882,7 +2882,7 @@ pub fn test_navigation_bar_nested_object_literals(t: &T) {
         },
     },
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -2912,7 +2912,7 @@ pub fn test_navigation_bar_private_name(t: &T) {
     }
   }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -2942,7 +2942,7 @@ pub fn test_navigation_bar_private_name_method(t: &T) {
     }
   }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -2994,7 +2994,7 @@ pub fn test_navigation_bar_property_declarations(t: &T) {
 
     public [1 + 1] = 1;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -3021,7 +3021,7 @@ const z = 2;
 var {a} = 0;
 let {a: b} = 0;
 const [c] = 0;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -3045,7 +3045,7 @@ pub fn test_navigation_bar_well_known_symbol_expando(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"function f() {}
 f[Symbol.iterator] = function() {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -3069,7 +3069,7 @@ pub fn test_navigation_bar_with_local_variables(t: &T) {
 	const x = Object()
 	x.foo = ""
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -3105,7 +3105,7 @@ var [|point|] = new Shapes.Point();
 function [|distance2|](distanceParam1): void {
     var [|distanceLocal1|];
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_workspace_symbol(t, &[fourslash::VerifyWorkspaceSymbolCase { pattern: "point".to_string(), preferences: None, exact: Some(vec![lsproto::SymbolInformation { name: "Point".to_string(), kind: lsproto::SymbolKind::Class, location: f.ranges()[0].ls_location(), container_name: Some("Shapes".to_string()), ..Default::default() }, lsproto::SymbolInformation { name: "point".to_string(), kind: lsproto::SymbolKind::Variable, location: f.ranges()[5].ls_location(), ..Default::default() }]), ..Default::default() }, fourslash::VerifyWorkspaceSymbolCase { pattern: "distance".to_string(), preferences: None, exact: Some(vec![lsproto::SymbolInformation { name: "distance1".to_string(), kind: lsproto::SymbolKind::Property, location: f.ranges()[3].ls_location(), container_name: Some("Point".to_string()), ..Default::default() }, lsproto::SymbolInformation { name: "distance2".to_string(), kind: lsproto::SymbolKind::Function, location: f.ranges()[6].ls_location(), ..Default::default() }, lsproto::SymbolInformation { name: "distanceFromA".to_string(), kind: lsproto::SymbolKind::Property, location: f.ranges()[2].ls_location(), container_name: Some("Point".to_string()), ..Default::default() }, lsproto::SymbolInformation { name: "distanceLocal".to_string(), kind: lsproto::SymbolKind::Variable, location: f.ranges()[4].ls_location(), container_name: Some("distance1".to_string()), ..Default::default() }, lsproto::SymbolInformation { name: "distanceLocal1".to_string(), kind: lsproto::SymbolKind::Variable, location: f.ranges()[7].ls_location(), container_name: Some("distance2".to_string()), ..Default::default() }]), ..Default::default() }, fourslash::VerifyWorkspaceSymbolCase { pattern: "origin".to_string(), preferences: None, exact: Some(vec![lsproto::SymbolInformation { name: "_origin".to_string(), kind: lsproto::SymbolKind::Property, location: f.ranges()[1].ls_location(), container_name: Some("Point".to_string()), ..Default::default() }]), ..Default::default() }, fourslash::VerifyWorkspaceSymbolCase { pattern: "square".to_string(), preferences: None, exact: Some(vec![]), ..Default::default() }]);
@@ -3156,7 +3156,7 @@ export default {
 
 function foo(props: { x: number; y: number }) {}
 export default foo({ x: 1, y: 1 });"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -3205,7 +3205,7 @@ export default (class {
 export default (class Cls {
   prop = 42;
 });"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -3256,7 +3256,7 @@ export = {
 
 function foo(props: { x: number; y: number }) {}
 export = foo({ x: 1, y: 1 });"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -3305,7 +3305,7 @@ export = (class {
 export = (class Cls {
   prop = 42;
 });"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_symbol(t);
@@ -3331,7 +3331,7 @@ class Test {
     constructor(public [|search2|]: boolean, readonly [|search3|]: string, search4: string) {
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_workspace_symbol(t, &[fourslash::VerifyWorkspaceSymbolCase { pattern: "search".to_string(), preferences: None, exact: Some(vec![lsproto::SymbolInformation { name: "search1".to_string(), kind: lsproto::SymbolKind::Property, location: f.ranges()[0].ls_location(), container_name: Some("Test".to_string()), ..Default::default() }, lsproto::SymbolInformation { name: "search2".to_string(), kind: lsproto::SymbolKind::Property, location: f.ranges()[1].ls_location(), container_name: Some("Test".to_string()), ..Default::default() }, lsproto::SymbolInformation { name: "search3".to_string(), kind: lsproto::SymbolKind::Property, location: f.ranges()[2].ls_location(), container_name: Some("Test".to_string()), ..Default::default() }]), ..Default::default() }]);
@@ -3371,7 +3371,7 @@ interface [|OriginI|] {
     [|origin1|];
     public [|_distance|](distanceParam): void;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_workspace_symbol(t, &[fourslash::VerifyWorkspaceSymbolCase { pattern: "origin".to_string(), preferences: None, exact: Some(vec![lsproto::SymbolInformation { name: "origin1".to_string(), kind: lsproto::SymbolKind::Property, location: f.ranges()[5].ls_location(), container_name: Some("OriginI".to_string()), ..Default::default() }, lsproto::SymbolInformation { name: "originality".to_string(), kind: lsproto::SymbolKind::Property, location: f.ranges()[0].ls_location(), container_name: Some("Point".to_string()), ..Default::default() }, lsproto::SymbolInformation { name: "OriginI".to_string(), kind: lsproto::SymbolKind::Interface, location: f.ranges()[4].ls_location(), ..Default::default() }]), ..Default::default() }, fourslash::VerifyWorkspaceSymbolCase { pattern: "distance".to_string(), preferences: None, exact: Some(vec![lsproto::SymbolInformation { name: "distanceFarFarAway".to_string(), kind: lsproto::SymbolKind::Property, location: f.ranges()[2].ls_location(), container_name: Some("Point".to_string()), ..Default::default() }, lsproto::SymbolInformation { name: "distanceFarFarAwayLocal".to_string(), kind: lsproto::SymbolKind::Variable, location: f.ranges()[3].ls_location(), container_name: Some("distanceFarFarAway".to_string()), ..Default::default() }, lsproto::SymbolInformation { name: "distanceFromOrig".to_string(), kind: lsproto::SymbolKind::Property, location: f.ranges()[1].ls_location(), container_name: Some("Point".to_string()), ..Default::default() }, lsproto::SymbolInformation { name: "_distance".to_string(), kind: lsproto::SymbolKind::Method, location: f.ranges()[6].ls_location(), container_name: Some("OriginI".to_string()), ..Default::default() }]), ..Default::default() }, fourslash::VerifyWorkspaceSymbolCase { pattern: "mPointThatIJustInitiated wrongKeyWord".to_string(), preferences: None, exact: Some(vec![]), ..Default::default() }]);
@@ -3402,7 +3402,7 @@ function Cls() {
 Cls.[|staticMethod|] = function() {};
 Cls.[|staticProperty|] = 0;
 Cls.prototype.[|instanceMethod|] = function() {};"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_workspace_symbol(t, &[fourslash::VerifyWorkspaceSymbolCase { pattern: "x".to_string(), preferences: None, exact: Some(vec![lsproto::SymbolInformation { name: "x".to_string(), kind: lsproto::SymbolKind::Variable, location: f.ranges()[0].ls_location(), ..Default::default() }]), ..Default::default() }, fourslash::VerifyWorkspaceSymbolCase { pattern: "z".to_string(), preferences: None, exact: Some(vec![lsproto::SymbolInformation { name: "z".to_string(), kind: lsproto::SymbolKind::Variable, location: f.ranges()[1].ls_location(), ..Default::default() }]), ..Default::default() }, fourslash::VerifyWorkspaceSymbolCase { pattern: "instanceProp".to_string(), preferences: None, exact: Some(vec![lsproto::SymbolInformation { name: "instanceProp".to_string(), kind: lsproto::SymbolKind::Property, location: f.ranges()[2].ls_location(), container_name: Some("Cls".to_string()), ..Default::default() }]), ..Default::default() }, fourslash::VerifyWorkspaceSymbolCase { pattern: "staticMethod".to_string(), preferences: None, exact: Some(vec![lsproto::SymbolInformation { name: "staticMethod".to_string(), kind: lsproto::SymbolKind::Property, location: f.ranges()[3].ls_location(), ..Default::default() }]), ..Default::default() }, fourslash::VerifyWorkspaceSymbolCase { pattern: "staticProperty".to_string(), preferences: None, exact: Some(vec![lsproto::SymbolInformation { name: "staticProperty".to_string(), kind: lsproto::SymbolKind::Property, location: f.ranges()[4].ls_location(), ..Default::default() }]), ..Default::default() }, fourslash::VerifyWorkspaceSymbolCase { pattern: "instanceMethod".to_string(), preferences: None, exact: Some(vec![lsproto::SymbolInformation { name: "instanceMethod".to_string(), kind: lsproto::SymbolKind::Property, location: f.ranges()[5].ls_location(), ..Default::default() }]), ..Default::default() }]);
@@ -3425,7 +3425,7 @@ pub fn test_navto_empty_pattern(t: &T) {
         let content: &str = r#"// @filename: foo.ts
 const [|x|]: number = 1;
 function [|y|](x: string): string { return x; }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_workspace_symbol(t, &[fourslash::VerifyWorkspaceSymbolCase { pattern: "".to_string(), preferences: None, exact: Some(vec![lsproto::SymbolInformation { name: "x".to_string(), kind: lsproto::SymbolKind::Variable, location: f.ranges()[0].ls_location(), ..Default::default() }, lsproto::SymbolInformation { name: "y".to_string(), kind: lsproto::SymbolKind::Function, location: f.ranges()[1].ls_location(), ..Default::default() }]), ..Default::default() }]);
@@ -3454,7 +3454,7 @@ const [|weirdName|]: number = 1;
 export const [|weirdName|];
 // @filename: /node_modules/bar/package.json
 {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_workspace_symbol(t, &[fourslash::VerifyWorkspaceSymbolCase { pattern: "weirdName".to_string(), preferences: Some(lsutil::UserPreferences { exclude_library_symbols_in_nav_to: Tristate::False, ..Default::default() }), exact: Some(vec![lsproto::SymbolInformation { name: "weirdName".to_string(), kind: lsproto::SymbolKind::Variable, location: f.ranges()[0].ls_location(), ..Default::default() }, lsproto::SymbolInformation { name: "weirdName".to_string(), kind: lsproto::SymbolKind::Variable, location: f.ranges()[1].ls_location(), ..Default::default() }]), ..Default::default() }]);
@@ -3483,7 +3483,7 @@ import { someName as [|weirdName|] } from "bar";
 export const someName: number;
 // @filename: /node_modules/bar/package.json
 {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_workspace_symbol(t, &[fourslash::VerifyWorkspaceSymbolCase { pattern: "weirdName".to_string(), preferences: Some(lsutil::UserPreferences { exclude_library_symbols_in_nav_to: Tristate::False, ..Default::default() }), exact: Some(vec![lsproto::SymbolInformation { name: "weirdName".to_string(), kind: lsproto::SymbolKind::Variable, location: f.ranges()[0].ls_location(), ..Default::default() }]), ..Default::default() }]);
@@ -3506,7 +3506,7 @@ pub fn test_navto_exclude_lib3(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"// @filename: /index.ts
 function [|parseInt|](s: string): number {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_workspace_symbol(t, &[fourslash::VerifyWorkspaceSymbolCase { pattern: "parseInt".to_string(), preferences: None, exact: Some(vec![lsproto::SymbolInformation { name: "parseInt".to_string(), kind: lsproto::SymbolKind::Function, location: f.ranges()[0].ls_location(), ..Default::default() }]), ..Default::default() }]);
@@ -3540,7 +3540,7 @@ pub fn test_ng_proxy1(t: &T) {
 let x = [1, 2];
 x/**/
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -3576,7 +3576,7 @@ pub fn test_ng_proxy2(t: &T) {
 let x = [1, 2];
 x/**/
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -3612,7 +3612,7 @@ pub fn test_ng_proxy3(t: &T) {
 let x = [1, 2];
 x/**/
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -3648,7 +3648,7 @@ pub fn test_ng_proxy4(t: &T) {
 let x = [1, 2];
 x/**/
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -3680,7 +3680,7 @@ pub fn test_no_completion_list_on_comments_inside_object_literals(t: &T) {
 		/* /*1*/ Comment /*2*/ */
 	};
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::MarkerSlice(f.markers()), None);
@@ -3709,7 +3709,7 @@ function f3(a) {
 const f5 = (a, b = (c = /*7*/, e) => { }, d = b) => { }
 
 type A1<K = /*T1*/, L> = K"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::StringSlice(vec!["1".to_string(), "2".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { excludes: vec!["a".to_string(), "b".to_string()], ..Default::default() }), ..Default::default() }));
@@ -3739,7 +3739,7 @@ pub fn test_no_errors_after_completions_request_within_generic_function1(t: &T) 
 
 declare function func<T extends { foo: 1 }>(arg: T): void;
 func({ foo: 1, bar/*1*/: 1 });"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -3767,7 +3767,7 @@ pub fn test_no_errors_after_completions_request_within_generic_function2(t: &T) 
 
 declare function func<T extends { foo: 1 }>(arg: T): void;
 func({ foo: 1, bar/*1*/: 1 });"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -3834,7 +3834,7 @@ const Category = object({
 });
 
 export const output = Category.output;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_quick_info_at(t, "1", r#"(accessor) parent: ZodOptional<ZodObject<{
@@ -3861,7 +3861,7 @@ pub fn test_no_quick_info_for_label(t: &T) {
         let content: &str = r#"/*1*/label : while(true){
     break /*2*/label;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -3893,7 +3893,7 @@ pub fn test_no_quick_info_in_whitespace(t: &T) {
         }
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -3921,7 +3921,7 @@ pub fn test_no_signature_help_on_new_keyword(t: &T) {
         let content: &str = r#"class Foo { }
 new/*1*/ Foo
 new /*2*/Foo(/*3*/)"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_no_signature_help_for_markers(t, &["1", "2"]);
@@ -3947,7 +3947,7 @@ pub fn test_no_type_parameter_in_lhs(t: &T) {
 class C<T> {}
 var /*1*/i: I<any>;
 var /*2*/c: C<I>;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_quick_info_at(t, "1", "var i: I<any>", "");
@@ -3977,7 +3977,7 @@ export const x = 1;
 // @Filename: /index.ts
 import * as mod from "#foo";
 /**/"##;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -4032,7 +4032,7 @@ const m = import("./src//*6*/");
 import {} from "./src//*7*/";
 import mod = require("./src//*8*/");
 const m = import("./src//*9*/");"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::StringSlice(vec!["1".to_string(), "3".to_string(), "6".to_string(), "9".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { unsorted: Some(vec![Any::String("decl.cjs".to_string()), Any::String("decl.mjs".to_string()), Any::String("decl.js".to_string()), Any::String("js.cjs".to_string()), Any::String("js.js".to_string()), Any::String("js.mjs".to_string()), Any::String("module.cjs".to_string()), Any::String("module.js".to_string()), Any::String("module.mjs".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -4081,7 +4081,7 @@ helloWorld()
 export function helloWorld() {
     console.log('Hello, world!')
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -4108,7 +4108,7 @@ namespace m {
     import foo = module(_foo);
     var n: num/*1*/
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::completion_global_types_plus(&[Any::String("foo".to_string())])), ..Default::default() }), ..Default::default() }));
@@ -4129,7 +4129,7 @@ pub fn test_numeric_property_names(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = r#"var /**/t2 = { 0: 1, 1: "" };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_quick_info_at(t, "", r#"var t2: {
@@ -4167,7 +4167,7 @@ let x: Foo = {
     set prop({ /*4*/ }) {
     }
 };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::MarkerSlice(f.markers()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("x1".to_string()), Any::String("x2".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -4197,7 +4197,7 @@ foo: [|switch|] (10) {
         continue;
         continue foo;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -4222,7 +4222,7 @@ pub fn test_occurrences02(t: &T) {
 function [|f|](x: typeof [|f|]) {
     [|f|]([|f|]);
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -4247,7 +4247,7 @@ pub fn test_optional_property_formatting(t: &T) {
     message: string;
     data? = {};
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -4286,7 +4286,7 @@ import {
 
 console.log(a, B, b, c, C, d, D);
 console.log(e, f, F, g, G, H, h);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_organize_imports_with_request_kind(t, r#"import {
@@ -4349,7 +4349,7 @@ export function fun() { /* ... */ }
 // @Filename: /declaration.ts
  type ZodType = {};
  export type { ZodType }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_organize_imports(t, r#"import type { ZodType } from './declaration';
@@ -4403,7 +4403,7 @@ export class MyClass {
  export type TypeA = string;
  export class TypeB { }
  export type TypeC = () => string;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_organize_imports(t, r#"import { TypeA, TypeB, TypeC } from './my-types';
@@ -4453,7 +4453,7 @@ pub fn test_organize_imports12(t: &T) {
 declare export default class A {}
 declare export { a, b };
 declare export * from "foo";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_organize_imports(t, r#"declare export default class A {}
@@ -4498,7 +4498,7 @@ pub fn test_organize_imports13(t: &T) {
 } from "foo";
 interface Use extends Type1, Type2, Type3, Type4, Type5, Type6, Type7, Type8, Type9 {}
 console.log(func1, func2, func3, func4, func5, func6, func7, func8, func9);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_organize_imports(t, r#"import {
@@ -4577,7 +4577,7 @@ export const foo = 1;
 import { foo } from "./a";
 import { foo } from "./a";
 import { foo } from "./a";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_file(t, "/b.ts");
@@ -4622,7 +4622,7 @@ export const foo = 1;
 // comment 2
 
 import { foo } from "./a";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_file(t, "/b.ts");
@@ -4656,7 +4656,7 @@ pub fn test_organize_imports16(t: &T) {
         let content: &str = r#"import { a, A, b } from "foo";
 interface Use extends A {}
 console.log(a, b);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_organize_imports(t, r#"import { a, A, b } from "foo";
@@ -4692,7 +4692,7 @@ pub fn test_organize_imports17(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"import { Both } from "module-specifiers-unsorted";
 import { aa, CaseInsensitively, sorted } from "aardvark";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_organize_imports(t, r#"import { aa, CaseInsensitively, sorted } from "aardvark";
@@ -4731,7 +4731,7 @@ export { A } from "./A";
 export { bFuncC } from "./C";
 export { bFuncB } from "./B";
 export { bFuncA } from "./A";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_file(t, "/test.ts");
@@ -4767,7 +4767,7 @@ export { b };
 
 const c = 1;
 export { c };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_organize_imports(t, r#"const a = 1;
@@ -4801,7 +4801,7 @@ pub fn test_organize_imports2(t: &T) {
 } from "foo"
 
 console.log(Foo, Bar);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_organize_imports(t, r#"import {

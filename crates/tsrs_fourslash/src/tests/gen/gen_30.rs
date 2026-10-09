@@ -28,7 +28,7 @@ export interface ChainedArray<T> extends ChainedObject<Array<T>> {
     groupBy(): ChainedDictionary<any[]>;
     groupBy(propertyName): ChainedDictionary<any[]>;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_position(t, 0);
@@ -75,7 +75,7 @@ export class TransparentCrypto implements ISecretStorageCrypto {
         return data;
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_number_of_errors_in_current_file(t, 0);
@@ -107,7 +107,7 @@ throw new Error();
 	
 (() => {})();
 	"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_non_suggestion_diagnostics(t);
@@ -132,7 +132,7 @@ pub fn test_unreachable_statement_node_reuse(t: &T) {
 	return;
 }
 function abc() { }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_number_of_errors_in_current_file(t, 1);
@@ -160,7 +160,7 @@ pub fn test_unused_class_in_namespace1(t: &T) {
   class class1 {
   }
 } |]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, r#"namespace greeter {
@@ -196,7 +196,7 @@ pub fn test_unused_class_in_namespace3(t: &T) {
 
     }
 } |]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, r#"namespace Validation {
@@ -238,7 +238,7 @@ pub fn test_unused_class_in_namespace4(t: &T) {
         public x: c1;
     }
 } |]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, r#"namespace Validation {
@@ -272,7 +272,7 @@ pub fn test_unused_class_in_namespace_with_trivia1(t: &T) {
   class /* comment2 */ class1 {
   }
 } |]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, r#"namespace greeter {
@@ -303,7 +303,7 @@ pub fn test_unused_class_in_namespace_with_trivia2(t: &T) {
   class /* comment2 */ class1 {
   }
 } |]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, r#"namespace greeter {
@@ -329,7 +329,7 @@ pub fn test_unused_constant_in_function1(t: &T) {
 [| function f1 () {
     const x: string = "x";
 } |]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, r#"function f1 () {
@@ -354,7 +354,7 @@ pub fn test_unused_enum_in_function1(t: &T) {
 [| function f1 () {
     enum Directions { Up, Down}
 } |]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, r#"function f1 () {
@@ -382,7 +382,7 @@ pub fn test_unused_enum_in_namespace1(t: &T) {
       Monday
   }
 } |]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, r#"namespace greeter {
@@ -409,7 +409,7 @@ pub fn test_unused_function_in_namespace1(t: &T) {
   function function1() {
   }/*1*/
 } |]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, r#"namespace greeter {
@@ -438,7 +438,7 @@ pub fn test_unused_function_in_namespace2(t: &T) {
     function function1() {
     }
 } |]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, r#"namespace greeter {
@@ -467,7 +467,7 @@ pub fn test_unused_function_in_namespace3(t: &T) {
     function function1() {
     }
 } |]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, r#"namespace Validation {
@@ -494,7 +494,7 @@ pub fn test_unused_function_in_namespace4(t: &T) {
     var function1 = function() {
     }
 } |]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, r#"namespace Validation {
@@ -535,7 +535,7 @@ namespace Validation {
 
     export let a = function3; |]
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, r#"function function3() {
@@ -568,7 +568,7 @@ pub fn test_unused_function_in_namespace_with_trivia(t: &T) {
   function function1() {
   }/*1*/
 } |]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, r#"namespace greeter {
@@ -600,7 +600,7 @@ namespace A {
 namespace B {
     [|import a = A;|]
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, "", false, 0, 0);
@@ -629,7 +629,7 @@ export var v1;
 export function f1(n: number){}
 export function f2(s: string){};
 export default f1;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, r#"import * as s from "./file1";"#, false, 0, 0);
@@ -657,7 +657,7 @@ f1(42);
 export function f1(n: number){}
 export function f2(s: string){};
 export default f1;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, r#"import f1 from "./file1";"#, false, 0, 0);
@@ -684,7 +684,7 @@ console.log(A);
 // @Filename: file1.ts
 export default 10;
 export var x = 10;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, "import A from './a';", false, 0, 0);
@@ -711,7 +711,7 @@ console.log(A);
 // @Filename: file1.ts
 export default 10;
 export var x = 10;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, "import /* 1 */ A /* 2 */ /* 6 */ from './a';", false, 0, 0);
@@ -738,7 +738,7 @@ pub fn test_unused_imports1_fs(t: &T) {
    export class Calculator {
 
    }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, "", false, 0, 0);
@@ -773,7 +773,7 @@ pub fn test_unused_imports3_fs(t: &T) {
  export function test2() {
 
  }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, r#"import {/*some comments*/ test, test2} from "./file1""#, false, 0, 0);
@@ -812,7 +812,7 @@ export function test() {
 export function test2() {
 
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, r#"import {Calculator, test2} from "./file1""#, false, 0, 0);
@@ -851,7 +851,7 @@ export function test() {
 export function test2() {
 
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, r#"import {Calculator, test} from "./file1""#, false, 0, 0);
@@ -884,7 +884,7 @@ export function test() {
 export default function test2() {
 
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, "", false, 0, 0);
@@ -915,7 +915,7 @@ export function test() {
 }
 export default function test2() {
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, "", false, 0, 0);
@@ -952,7 +952,7 @@ export function test() {
 export function test2() {
 
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, r#"import {Calculator as calc, test as t1} from "./file1""#, false, 0, 0);
@@ -987,7 +987,7 @@ export function test() {
 export function test2() {
 
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, "", false, 0, 0);
@@ -1013,7 +1013,7 @@ myLabel: while (true) {
         /*marker*/break myLabel;
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_number_of_errors_in_current_file(t, 0);
@@ -1045,7 +1045,7 @@ pub fn test_unused_locals_in_function1(t: &T) {
  [| function greeter() {
     var x = 0;
 } |]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, r#"
@@ -1073,7 +1073,7 @@ function greeter() {
     x+1;
     z+1;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, "var x,z = 1;", false, 6133, 0);
@@ -1100,7 +1100,7 @@ class greeter {
         var unused = 20;
     } |]
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, r#"constructor() {
@@ -1130,7 +1130,7 @@ class greeter {
         used = used + "second part";
     }|]
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, r#"
@@ -1161,7 +1161,7 @@ declare class greeter {
     #private;
     private name;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_no_errors(t);
@@ -1186,7 +1186,7 @@ pub fn test_update_source_file_jsdoc_signature(t: &T) {
  * @return {/**/}
  */
 let x;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -1223,7 +1223,7 @@ pub fn test_update_to_class_statics(t: &T) {
 namespace TypeScript {
     var x : TypeScript.SymbolAndDiagnostics;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -1252,7 +1252,7 @@ export class Z {
 // @Filename: verifySingleFileEmitOutput1_file1.ts
 import f = require("./verifySingleFileEmitOutput1_file0");
 var /**/b = new f.A();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_quick_info_at(t, "", "var b: f.A", "");
@@ -1273,7 +1273,7 @@ pub fn test_white_space_before_return_type_formatting(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = "var x: () =>     string/**/";
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -1298,7 +1298,7 @@ pub fn test_white_space_trimming(t: &T) {
         let content: &str = r#"if (true) {     
   //    
    /*err*/}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "err");
@@ -1328,7 +1328,7 @@ pub fn test_white_space_trimming2(t: &T) {
 let templateHead = `/*    /*2*/${1 + 2}`;
 let templateMiddle = `/*    ${1 + 2    /*3*/}`;
 let templateTail = `/*    ${1 + 2}    /*4*/`;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -1370,7 +1370,7 @@ pub fn test_white_space_trimming3(t: &T) {
         let content: &str = r#"let t = "foo \
 bar     \   
 "/*1*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -1395,7 +1395,7 @@ pub fn test_white_space_trimming4(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = r#"var re = /\w+   /*1*//;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -1432,11 +1432,11 @@ export function [|fromA|]() {}
 // @Filename: /home/projects/b/index.ts
 export function [|fromB|]() {}
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_file(t, "/home/projects/a/index.ts");
-            let mut all_open_projects = lsutil::new_default_user_preferences();
+            let all_open_projects = lsutil::new_default_user_preferences();
             let mut current_project = lsutil::new_default_user_preferences();
             current_project.workspace_symbols_scope = lsutil::WorkspaceSymbolsScope::CurrentProject;
             f.verify_workspace_symbol(t, &[fourslash::VerifyWorkspaceSymbolCase { pattern: "from".to_string(), preferences: Some(all_open_projects.clone()), exact: Some(vec![lsproto::SymbolInformation { name: "fromA".to_string(), kind: lsproto::SymbolKind::Function, location: f.ranges()[0].ls_location(), ..Default::default() }, lsproto::SymbolInformation { name: "fromB".to_string(), kind: lsproto::SymbolKind::Function, location: f.ranges()[1].ls_location(), ..Default::default() }]), ..Default::default() }, fourslash::VerifyWorkspaceSymbolCase { pattern: "from".to_string(), preferences: Some(current_project.clone()), exact: Some(vec![lsproto::SymbolInformation { name: "fromA".to_string(), kind: lsproto::SymbolKind::Function, location: f.ranges()[0].ls_location(), ..Default::default() }]), ..Default::default() }]);
@@ -1475,7 +1475,7 @@ export const [|myValueA|]: number = 1;
 // @Filename: /home/src/projects/project-b/index.ts
 export const [|myValueB|]: string = "hello";
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_workspace_symbol(t, &[fourslash::VerifyWorkspaceSymbolCase { pattern: "myValue".to_string(), includes: Some(vec![lsproto::SymbolInformation { name: "myValueA".to_string(), kind: lsproto::SymbolKind::Variable, location: f.ranges()[0].ls_location(), ..Default::default() }, lsproto::SymbolInformation { name: "myValueB".to_string(), kind: lsproto::SymbolKind::Variable, location: f.ranges()[1].ls_location(), ..Default::default() }]), ..Default::default() }]);

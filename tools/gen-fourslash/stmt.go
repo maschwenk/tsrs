@@ -114,7 +114,7 @@ func (g *gen) stmt(s ast.Stmt) {
 						val = "Default::default()"
 					}
 					g.declare(obj, name)
-					g.line("let mut %s: %s = %s;", name, g.localType(obj.Type()), val)
+					g.line("let %s: %s = %s;", g.binding(name, obj), g.localType(obj.Type()), val)
 				}
 			}
 		case token.TYPE:
@@ -213,7 +213,7 @@ func (g *gen) assign(s *ast.AssignStmt) {
 				if obj == nil {
 					fail(":= redeclaring an existing variable")
 				}
-				names = append(names, "mut "+ident(id.Name))
+				names = append(names, g.binding(ident(id.Name), obj))
 				objs = append(objs, obj)
 			}
 			g.line("let (%s) = %s;", strings.Join(names, ", "), g.expr(s.Rhs[0], nil, mOwned))
@@ -258,7 +258,7 @@ func (g *gen) assign(s *ast.AssignStmt) {
 				code := g.funcLit(fl, takesF, false)
 				vi := g.declare(obj, name)
 				vi.takesF = takesF
-				g.line("let mut %s = %s;", name, code)
+				g.line("let %s = %s;", g.binding(name, obj), code)
 				continue
 			}
 			name := ident(id.Name)
@@ -266,7 +266,7 @@ func (g *gen) assign(s *ast.AssignStmt) {
 				if c, k := g.naturalIfPlace(s.Rhs[i]); k == kDeref {
 					vi := g.declare(obj, name)
 					vi.kind = kDeref
-					g.line("let mut %s = %s.clone();", name, parenIfNeeded(c))
+					g.line("let %s = %s.clone();", g.binding(name, obj), parenIfNeeded(c))
 					continue
 				}
 			}
@@ -276,7 +276,7 @@ func (g *gen) assign(s *ast.AssignStmt) {
 				vi.fclosure = true
 				vi.fOwner = g.curF
 			}
-			g.line("let mut %s = %s;", name, val)
+			g.line("let %s = %s;", g.binding(name, obj), val)
 			if isFourslashTestPtr(obj.Type()) {
 				g.line("let %s = &mut %s;", name, name)
 				g.curF = name

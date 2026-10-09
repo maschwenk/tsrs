@@ -579,6 +579,13 @@ func (g *gen) objectUsed(obj types.Object) bool {
 	return g.used[obj]
 }
 
+func (g *gen) binding(name string, obj types.Object) string {
+	if g.assigned[obj] || isFourslashTestPtr(obj.Type()) || isNamed(derefType(obj.Type()), "strings", "Builder") {
+		return "mut " + name
+	}
+	return name
+}
+
 func isSliceT(t types.Type) bool { _, ok := isSlice(t); return ok }
 
 func (g *gen) results(sig *types.Signature) string {
@@ -612,22 +619,37 @@ func (g *gen) collectAssigned(n ast.Node) {
 		case *ast.AssignStmt:
 			if n.Tok != token.DEFINE {
 				for _, l := range n.Lhs {
-					if id, ok := l.(*ast.Ident); ok {
-						if o := g.info.Uses[id]; o != nil {
-							g.assigned[o] = true
-						}
+					if o := g.assignedObject(l); o != nil {
+						g.assigned[o] = true
 					}
 				}
 			}
 		case *ast.IncDecStmt:
-			if id, ok := n.X.(*ast.Ident); ok {
-				if o := g.info.Uses[id]; o != nil {
-					g.assigned[o] = true
-				}
+			if o := g.assignedObject(n.X); o != nil {
+				g.assigned[o] = true
 			}
 		}
 		return true
 	})
+}
+
+func (g *gen) assignedObject(e ast.Expr) types.Object {
+	for {
+		switch x := e.(type) {
+		case *ast.Ident:
+			return g.info.Uses[x]
+		case *ast.SelectorExpr:
+			e = x.X
+		case *ast.IndexExpr:
+			e = x.X
+		case *ast.StarExpr:
+			e = x.X
+		case *ast.ParenExpr:
+			e = x.X
+		default:
+			return nil
+		}
+	}
 }
 
 func constString(v interface{ ExactString() string }) string {

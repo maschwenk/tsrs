@@ -72,7 +72,7 @@ fn test_errors_are_buffered_in_report_order() {
 #[test]
 fn test_is_jsdoc_type_expression_or_child() {
     use tsrs_ast::{NodeFactory, NodeFlags};
-    let mut f = NodeFactory::default();
+    let f = NodeFactory::default();
     let with = |n: tsrs_core::P<tsrs_ast::Node>, flags: NodeFlags, parent: Option<tsrs_core::P<tsrs_ast::Node>>| {
         n.set_flags(flags);
         n.set_parent(parent);
@@ -114,7 +114,7 @@ fn test_is_jsdoc_type_expression_or_child() {
 fn test_get_text_of_node_from_jsdoc_type_preserves_asterisk_type() {
     use tsrs_ast::{NodeFactory, NodeFlags};
     let source_text = ["", " * *"].join("\n");
-    let mut f = NodeFactory::default();
+    let f = NodeFactory::default();
     let node = f.new_jsdoc_all_type();
     node.set_flags(NodeFlags::JSDoc);
     node.set_loc(tsrs_core::TextRange::new(0, source_text.len() as i32));

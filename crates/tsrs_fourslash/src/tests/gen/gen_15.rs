@@ -17,7 +17,7 @@ function /*functionOverloadDefinition*/functionOverload() {}
 [|/*functionOverloadReference1*/functionOverload|](123);
 [|/*functionOverloadReference2*/functionOverload|]("123");
 [|/*brokenOverload*/functionOverload|]({});"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["functionOverloadReference1", "functionOverloadReference2", "brokenOverload", "functionOverload1"]);
@@ -47,7 +47,7 @@ pub fn test_go_to_definition_function_overloads_in_class(t: &T) {
 
     constructor() { }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["staticFunctionOverload", "functionOverload"]);
@@ -78,7 +78,7 @@ class C {
         this./*propReference*/prop();
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, false, &["constReference", "cbReference", "propReference"]);
@@ -113,7 +113,7 @@ import { TextDocuments } from "./type";
 declare const documents: TextDocuments | undefined;
 
 documents!./*usage*/onDidChangeContent()"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, false, &["usage"]);
@@ -136,7 +136,7 @@ pub fn test_go_to_definition_implicit_constructor(t: &T) {
         let content: &str = r#"class /*constructorDefinition*/ImplicitConstructor {
 }
 var implicitConstructor = new /*constructorReference*/ImplicitConstructor();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, false, &["constructorReference"]);
@@ -160,7 +160,7 @@ pub fn test_go_to_definition_import1(t: &T) {
 /*2*/export const foo = 1;
 // @Filename: /a.ts
 import { foo } from      [|"./b/*1*/"|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -184,7 +184,7 @@ pub fn test_go_to_definition_import2(t: &T) {
 /*2*/export const foo = 1;
 // @Filename: /a.ts
 import { foo } [|from/*1*/|]       "./b";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -208,7 +208,7 @@ pub fn test_go_to_definition_import3(t: &T) {
 /*2*/export const foo = 1;
 // @Filename: /a.ts
 import { foo } [|from     /*1*/|] "./b";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -235,7 +235,7 @@ import.me/*reference*/ta;
 //@Filename: bar.d.ts
 interface ImportMeta {
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["reference"]);
@@ -267,7 +267,7 @@ export class /*classDefinition*/Class {
 export interface Interface {
     x;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["classAliasDefinition"]);
@@ -296,7 +296,7 @@ pub fn test_go_to_definition_imported_names10(t: &T) {
 // @Filename: b.js
 const { Class } = require("./a");
  [|/*classAliasDefinition*/Class|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["classAliasDefinition"]);
@@ -325,7 +325,7 @@ pub fn test_go_to_definition_imported_names11(t: &T) {
 // @Filename: b.js
 const { Class } = require("./a");
  [|/*classAliasDefinition*/Class|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["classAliasDefinition"]);
@@ -356,7 +356,7 @@ export class /*classDefinition*/Class {
 export interface Interface {
     x;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["classAliasDefinition"]);
@@ -394,7 +394,7 @@ export class /*classDefinition*/Class {
 export interface Interface {
     x;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["classReference", "classAliasDefinition"]);
@@ -425,7 +425,7 @@ export class /*classDefinition*/Class {
 export interface Interface {
     x;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["classAliasDefinition"]);
@@ -456,7 +456,7 @@ export class /*classDefinition*/Class {
 export interface Interface {
     x;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["classAliasDefinition"]);
@@ -487,7 +487,7 @@ export class Class {
 export interface Interface {
     x;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["moduleAliasDefinition"]);
@@ -514,7 +514,7 @@ class /*classDefinition*/Class {
     private f;
 }
 export default Class;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["classAliasDefinition"]);
@@ -542,7 +542,7 @@ class /*classDefinition*/Class {
     private f;
 }
  export { Class };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["classAliasDefinition"]);
@@ -571,7 +571,7 @@ class /*classDefinition*/Class {
 // @Filename: b.js
 const { Class } = require("./a");
  [|/*classAliasDefinition*/Class|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["classAliasDefinition"]);
@@ -605,7 +605,7 @@ import b = require("./b");
 [|/*xUse*/x|];
 [|/*aUse*/a|];
 [|/*bUse*/b|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["aUse", "fUse", "xUse", "bUse"]);
@@ -643,7 +643,7 @@ class /*selfDefinition*/Bar {
     constructor(public _inConstructor: [|IFo/*interfaceReferenceInConstructor*/o|]) {
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["interfaceReference", "interfaceReferenceInList", "interfaceReferenceInConstructor", "classReference", "classReferenceInInitializer", "enumReference", "enumReferenceInInitializer", "selfReference"]);
@@ -668,7 +668,7 @@ pub fn test_go_to_definition_in_type_argument(t: &T) {
 class /*barDefinition*/Bar { }
 
 var x = new Fo/*fooReference*/o<Ba/*barReference*/r>();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, false, &["barReference", "fooReference"]);
@@ -706,7 +706,7 @@ declare const k: K;
 k.[|/*usea*/a|];
 k.[|/*useb*/b|];
 k.[|/*useab*/ab|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["useI", "useIJ", "usea", "useb", "useab"]);
@@ -730,7 +730,7 @@ pub fn test_go_to_definition_index_signature2(t: &T) {
 // @Filename: /a.js
 const o = {};
 o.[|/*use*/foo|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["use"]);
@@ -755,7 +755,7 @@ class /*end*/ C {
 }
 declare var obj: any;
 obj [|/*start*/instanceof|] C;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["start"]);
@@ -782,7 +782,7 @@ class C {
 }
 declare var obj: any;
 obj [|/*start*/instanceof|] C;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["start"]);
@@ -812,7 +812,7 @@ class iClass implements /*interfaceReference*/sInt {
     public sFn() {
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, false, &["interfaceReference"]);
@@ -840,7 +840,7 @@ pub fn test_go_to_definition_js_doc_import_tag1(t: &T) {
 /**
  * @import { A } from      [|"./b/*1*/"|]
  */"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -868,7 +868,7 @@ pub fn test_go_to_definition_js_doc_import_tag2(t: &T) {
 /**
  * @import { A } [|from/*1*/|]       "./b"
  */"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -896,7 +896,7 @@ pub fn test_go_to_definition_js_doc_import_tag3(t: &T) {
 /**
  * @import { A } [|from     /*1*/|] "./b";
  */"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -924,7 +924,7 @@ export interface /*2*/A { }
 /**
  * @import { [|A/*1*/|] } from "./b";
  */"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -957,7 +957,7 @@ export interface /*2*/A { }
  * @param { [|A/*1*/|] } a
  */
 function f(a) {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -983,7 +983,7 @@ x./*def*/test = () => { }
 x.[|/*ref*/test|]();
 x./*defFn*/test3 = function () { }
 x.[|/*refFn*/test3|]();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["ref", "refFn"]);
@@ -1008,7 +1008,7 @@ pub fn test_go_to_definition_js_module_name(t: &T) {
 /*2*/module.exports = {};
 // @Filename: bar.js
 var x = require([|/*1*/"./foo"|]);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -1041,7 +1041,7 @@ new [|/*importUsage*/BlahModule|].Blah()
 // @Filename: /barTs.ts
 import [|/*importDefTs*/BlahModule|] = require("./foo.js");
 new [|/*importUsageTs*/BlahModule|].Blah()"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["importDef", "importUsage", "importDefTs", "importUsageTs"]);
@@ -1068,7 +1068,7 @@ interface FC<P = {}> {
 
 const Thing: FC = (props) => <div></div>;
 const HelloWorld = () => <[|/**/Thing|] />;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &[""]);
@@ -1097,7 +1097,7 @@ export default Foo;
 // @Filename: /bar.jsx
 import Foo from './foo';
 const a = <[|/*use*/Foo|] />"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["use"]);
@@ -1127,7 +1127,7 @@ export function Component() {
 export function App() {
     return <Component/*use*/ />
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["use"]);
@@ -1155,7 +1155,7 @@ pub fn test_go_to_definition_labels(t: &T) {
         continue /*4*/unknownLabel;
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1", "2", "3", "4"]);
@@ -1178,7 +1178,7 @@ pub fn test_go_to_definition_mapped_type(t: &T) {
         let content: &str = r#"interface I { /*def*/m(): void; };
 declare const i: { [K in "m"]: I[K] };
 i.[|/*ref*/m|]();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["ref"]);
@@ -1202,7 +1202,7 @@ pub fn test_go_to_definition_member(t: &T) {
 class A {
     private z/*z*/: string;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["z"]);
@@ -1228,7 +1228,7 @@ function /*functionDefinition*/f() { n/*3*/ew.[|t/*4*/arget|]; }
 // @Filename: /b.ts
 im/*5*/port.m;
 class /*classDefinition*/c { constructor() { n/*6*/ew.[|t/*7*/arget|]; } }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1", "2", "3", "4", "5", "6", "7"]);
@@ -1263,7 +1263,7 @@ MethodOverload.[|/*staticMethodReference2*/method|]("123");
 var methodOverload = new MethodOverload();
 methodOverload.[|/*instanceMethodReference1*/method|]();
 methodOverload.[|/*instanceMethodReference2*/method|]("456");"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["staticMethodReference1", "staticMethodReference2", "instanceMethodReference1", "instanceMethodReference2", "staticMethodOverload1", "instanceMethodOverload1"]);
@@ -1298,7 +1298,7 @@ pub fn test_go_to_definition_modifiers(t: &T) {
 }
 
 exp/*exportFunction*/ort function foo/*foo*/() { }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["export", "A", "private", "z", "readonly", "x", "async", "a", "override", "b", "public1", "public2", "multipleModifiers", "c", "exportFunction", "foo"]);
@@ -1342,7 +1342,7 @@ module /*moduleDefinition2*/Module {
 }
 // @Filename: e.ts
 [|Modul/*moduleReference*/e|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["interfaceReference", "moduleReference"]);
@@ -1371,7 +1371,7 @@ new [|/*invokeExpression1*/I|]();
 let /*symbolDeclaration*/I2: {
 };
 new [|/*invokeExpression2*/I2|]();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["invokeExpression1", "invokeExpression2"]);
@@ -1398,7 +1398,7 @@ pub fn test_go_to_definition_object_binding_element_property_name01(t: &T) {
 
 var foo: I;
 var { [|/*use*/property1|]: prop1 } = foo;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["use"]);
@@ -1434,7 +1434,7 @@ let { /*2*/targetProperty }: SomeType = { /*3*/targetProperty: 42 };
 let { /*5*/targetProperty: /*6*/alias_1 }: SomeType = { targetProperty: 42 };
 
 let { x: { /*7*/targetProperty: /*8*/{} } }: { x: SomeType } = { x: { targetProperty: 42 } };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &go::strs(&f.marker_names()));
@@ -1455,7 +1455,7 @@ interface SomeType {
 }
 
 let { .../*1*/rest }: SomeType = { targetProperty: 42 };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &go::strs(&f.marker_names()));
@@ -1488,7 +1488,7 @@ o./*getterReference*/getter;
 o./*setterReference*/setter;
 o./*methodReference*/method;
 o./*es6StyleMethodReference*/es6StyleMethod;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, false, &["valueReference", "getterReference", "setterReference", "methodReference", "es6StyleMethodReference"]);
@@ -1519,7 +1519,7 @@ function bar(firstarg: boolean, secondarg: PropsBag) {}
 bar(true, {
    [|pr/*p2*/opx|]: 10
 })"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["p1", "p2"]);
@@ -1558,7 +1558,7 @@ const result = fn({
 
 // this one shouldn't go to the constraint type
 result.foo/*5*/;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1", "2", "3", "4", "5"]);
@@ -1598,7 +1598,7 @@ function test2<T extends A>(arg: T | B) {}
 test2({
   foo/*2*/: 2,
 });"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1", "2"]);
@@ -1624,7 +1624,7 @@ let a1: A1;
 let a2: A2;
 let a12 = { ...a1, ...a2 };
 a12.[|a/*3*/|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["3"]);
@@ -1645,7 +1645,7 @@ pub fn test_go_to_definition_on_invalid_parameter_decorator(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = "function f(@/*1*/f) {}";
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -1673,7 +1673,7 @@ pub fn test_go_to_definition_overloads_in_multiple_property_accesses(t: &T) {
     }
 }
 A.B.[|/*2*/f|]("");"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["2"]);
@@ -1700,7 +1700,7 @@ class Foo {
 class Bar extends Foo {
 	[|/*1*/override|] p = '';
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -1730,7 +1730,7 @@ class Bar extends Foo {
     /** [|@override{|"name": "1"|} |]*/
     m() {}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -1762,7 +1762,7 @@ class Bar extends Foo {
     /** @[|over{|"name": "1"|}ride|][| se{|"name": "2"|}e {@li{|"name": "3"|}nk https://test.c{|"name": "4"|}om} {|"name": "5"|}description |]*/
     m() {}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1", "2", "3", "4", "5"]);
@@ -1789,7 +1789,7 @@ class Foo {
 class Bar extends Foo {
 	static [|/*1*/override|] p = '';
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -1816,7 +1816,7 @@ class Foo {
 class Bar extends Foo {
 	static [|/*1*/override|] m() {}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -1844,7 +1844,7 @@ class B extends A {}
 class C extends B {
     [|/*1*/override|] m() {}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -1872,7 +1872,7 @@ class B extends A {}
 class C extends B {
     static [|/*1*/override|] m() {}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -1904,7 +1904,7 @@ export class C extends CompletelyUndefined {
         return {}
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -1936,7 +1936,7 @@ abstract class MySqlColumn {
 export class MySqlVarBinary extends MySqlColumn {
   static [|/*1*/override|] readonly [entityKind]: string = "MySqlVarBinary";
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -1968,7 +1968,7 @@ abstract class MySqlColumn {
 export class MySqlVarBinary extends MySqlColumn {
   [|/*1*/override|] readonly [entityKind]: string = "MySqlVarBinary";
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -2000,7 +2000,7 @@ abstract class A {
 export class B extends A {
   static [|/*1*/override|] readonly [prop] = "B";
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -2028,7 +2028,7 @@ class Foo {
 class Bar extends Foo {
 	[|/*1*/override|] m() {}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -2060,7 +2060,7 @@ abstract class A {
 export class B extends A {
   [|/*1*/override|] readonly [prop] = "B";
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -2090,7 +2090,7 @@ abstract class A {}
 export class B extends A {
   static [|/*1*/override|] readonly [prop] = "B";
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -2120,7 +2120,7 @@ abstract class A {}
 export class B extends A {
   [|/*1*/override|] readonly [prop] = "B";
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -2152,7 +2152,7 @@ abstract class A {
 export class B extends A {
   static [|/*1*/override|] [prop]() {}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -2184,7 +2184,7 @@ abstract class A {
 export class B extends A {
   [|/*1*/override|] [prop]() {}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -2214,7 +2214,7 @@ abstract class A {}
 export class B extends A {
   static [|/*1*/override|] [prop]() {}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -2244,7 +2244,7 @@ abstract class A {}
 export class B extends A {
   [|/*1*/override|] [prop]() {}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -2272,7 +2272,7 @@ abstract class Foo {
 export class Bar extends Foo {
 	[|/*1*/override|] m() {}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -2301,7 +2301,7 @@ function f () {
         [|/*1*/override|] m() {}
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -2327,7 +2327,7 @@ class Foo extends (class {
 }) {
     [|/*1*/override|] m() {}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -2354,7 +2354,7 @@ class Foo {
 class Bar extends Foo {
     [|/*1*/override|] m1() {}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -2378,7 +2378,7 @@ pub fn test_go_to_definition_overridden_member7(t: &T) {
 class Foo {
     [|/*1*/override|] m() {}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -2408,7 +2408,7 @@ import { A } from "./a";
 class B extends A {
     [|/*1*/override|] m() {}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -2438,7 +2438,7 @@ class A {
 class B extends A implements I {
    [|/*1*/override|] m() {}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -2472,7 +2472,7 @@ namespace A {
 
     var x: [|/*Part2Use*/IA|];
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["Part2Use"]);
@@ -2499,7 +2499,7 @@ export declare const /*dtsTarget*/a: string;
 // @Filename: /home/src/workspaces/project/index.ts
 import { a } from "./a";
 a/*start*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, false, &["start"]);
@@ -2529,7 +2529,7 @@ exports.makeConfig = () => ({ enabled: true });
 // @Filename: /home/src/workspaces/project/index.ts
 import type { Config } from "pkg";
 let value: /*start*/Config;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.configure(t, lsutil::UserPreferences { prefer_go_to_source_definition: true, ..Default::default() });
@@ -2551,7 +2551,7 @@ pub fn test_go_to_definition_primitives(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = "var x: st/*primitive*/ring;";
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["primitive"]);
@@ -2582,7 +2582,7 @@ pub fn test_go_to_definition_private_name(t: &T) {
         this.[|/*pnPropUse*/#prop|]
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["pnFieldUse", "pnMethodUse", "pnPropUse"]);
@@ -2608,7 +2608,7 @@ Component./*PropertyResult*/displayName = 'Component'
 [|/*FunctionClick*/Component|]
 
 Component.[|/*PropertyClick*/displayName|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["FunctionClick", "PropertyClick"]);
@@ -2636,7 +2636,7 @@ pub fn test_go_to_definition_rest(t: &T) {
 let t: Gen;
 var { x, ...rest } = t;
 rest.[|/*2*/parent|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["2"]);
@@ -2659,7 +2659,7 @@ pub fn test_go_to_definition_return1(t: &T) {
         let content: &str = r#"function /*end*/foo() {
     [|/*start*/return|] 10;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["start"]);
@@ -2684,7 +2684,7 @@ pub fn test_go_to_definition_return2(t: &T) {
         [|/*start*/return|] 10;
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["start"]);
@@ -2709,7 +2709,7 @@ pub fn test_go_to_definition_return3(t: &T) {
         [|/*start*/return|] 1;
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["start"]);
@@ -2730,7 +2730,7 @@ pub fn test_go_to_definition_return4(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = "[|/*start*/return|];";
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["start"]);
@@ -2755,7 +2755,7 @@ pub fn test_go_to_definition_return5(t: &T) {
         static { [|/*start*/return|]; }
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["start"]);
@@ -2780,7 +2780,7 @@ pub fn test_go_to_definition_return6(t: &T) {
         [|/*start*/return|] 10;
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["start"]);
@@ -2805,7 +2805,7 @@ function foo(a: number, b: number): number;
 function /*end*/foo(a: any, b: any): any {
     [|/*start*/return|] a + b;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["start"]);
@@ -2837,7 +2837,7 @@ module /*localModuleDefinition*/localModule{ export var foo = 1;}
 var foo = new /*localClassReference*/localClass();
 class fooCls implements /*localInterfaceReference*/localInterface { }
 var fooVar = /*localModuleReference*/localModule.foo;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, false, &["localVariableReference", "localFunctionReference", "localClassReference", "localInterfaceReference", "localModuleReference"]);
@@ -2863,7 +2863,7 @@ pub fn test_go_to_definition_satisfies_expression1(t: &T) {
 
 //somewhere in app
 STRINGS.[|/*usage*/title|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["definition", "usage"]);
@@ -2892,7 +2892,7 @@ pub fn test_go_to_definition_script_import(t: &T) {
 // @filename: moduleThing.ts
 import [|/*1*/"./scriptThing"|];
 import [|/*2*/"./stylez.css"|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1", "2"]);
@@ -2923,7 +2923,7 @@ pub fn test_go_to_definition_script_import_server(t: &T) {
 import [|/*1*/"./scriptThing"|];
 import [|/*2*/"./stylez.css"|];
 import [|/*3*/"./foo.txt"|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -2949,7 +2949,7 @@ function shadowVariableTestModule() {
     var /*shadowVariableDefinition*/shadowVariable;
     /*shadowVariableReference*/shadowVariable = 1;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, false, &["shadowVariableReference"]);
@@ -2973,7 +2973,7 @@ pub fn test_go_to_definition_shadow_variable_inside_module(t: &T) {
     var /*shadowVariableDefinition*/shdVar;
     /*shadowVariableReference*/shdVar = 1;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, false, &["shadowVariableReference"]);
@@ -3000,7 +3000,7 @@ pub fn test_go_to_definition_shorthand_object_literal_with_interface(t: &T) {
 function makeSomething([|foo|]: string): Something {
     return { [|f/*1*/oo|] };
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -3027,7 +3027,7 @@ declare var /*valueDeclaration3*/id;
 var obj = {[|/*valueDefinition1*/name|], [|/*valueDefinition2*/id|]};
 obj.[|/*valueReference1*/name|];
 obj.[|/*valueReference2*/id|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["valueDefinition1", "valueDefinition2", "valueReference1", "valueReference2"]);
@@ -3050,7 +3050,7 @@ pub fn test_go_to_definition_shorthand_property02(t: &T) {
         let content: &str = r#"let x = {
     [|f/*1*/oo|]
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -3076,7 +3076,7 @@ pub fn test_go_to_definition_shorthand_property03(t: &T) {
 let /*letDef*/y = {
     [|/*letProp*/y|]
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["varProp", "letProp"]);
@@ -3103,7 +3103,7 @@ pub fn test_go_to_definition_shorthand_property04(t: &T) {
 let x: Foo = {
     [|f/*1*/oo|]
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -3130,7 +3130,7 @@ const /*2*/foo = 1;
 let x: Foo = {
     [|f/*1*/oo|]
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -3157,7 +3157,7 @@ const foo = 1;
 let x: Foo = {
     [|f/*1*/oo|]()
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -3210,7 +3210,7 @@ new [|/*newMyComponent2*/MyComponent2|]();
 declare const /*MyComponent3*/MyComponent3: ComponentClass2;
 <[|/*jsxMyComponent3*/MyComponent3|] />;
 new [|/*newMyComponent3*/MyComponent3|]();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_no_errors(t);
@@ -3240,7 +3240,7 @@ const f = require("./a");
 // @Filename: /bar.ts
 import f = require("./a");
 [|/*useTs*/f|]();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["use", "useTs"]);
@@ -3265,7 +3265,7 @@ class /*2*/c { }
 // @Filename: Consumption.ts
  var n = new [|/*1*/c|]();
  var n = new [|c/*3*/|]();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1", "3"]);
@@ -3299,7 +3299,7 @@ pub fn test_go_to_definition_source_unit(t: &T) {
 
 // @Filename: b.ts
 /*fileB*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["unknownFile", "knownFile"]);
@@ -3337,7 +3337,7 @@ class D {
         /*superBroken*/super();
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["super", "superExpression", "superBroken"]);
@@ -3360,7 +3360,7 @@ pub fn test_go_to_definition_switch_case1(t: &T) {
         let content: &str = r#"switch (null ) {
   [|/*start*/case|] null: break;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["start"]);
@@ -3383,7 +3383,7 @@ pub fn test_go_to_definition_switch_case2(t: &T) {
         let content: &str = r#"switch (null) {
   [|/*start*/default|]: break;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["start"]);
@@ -3410,7 +3410,7 @@ pub fn test_go_to_definition_switch_case3(t: &T) {
     }
   };
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["start1", "start2"]);
@@ -3437,7 +3437,7 @@ pub fn test_go_to_definition_switch_case4(t: &T) {
      switch (null) {
         [|/*start*/case|] null: break;
      }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["start"]);
@@ -3458,7 +3458,7 @@ pub fn test_go_to_definition_switch_case5(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = "export [|/*start*/default|] {}";
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["start"]);
@@ -3481,7 +3481,7 @@ pub fn test_go_to_definition_switch_case6(t: &T) {
         let content: &str = r#"export default { [|/*a*/case|] };
 [|/*b*/default|];
 [|/*c*/case|] 42;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["a", "b", "c"]);
@@ -3504,7 +3504,7 @@ pub fn test_go_to_definition_switch_case7(t: &T) {
         let content: &str = r#"switch (null) {
   case null:
     export [|/*start*/default|] 123;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["start"]);
@@ -3530,7 +3530,7 @@ function f(strs: TemplateStringsArray, x: number | boolean) {}
 
 [|/*useFNumber*/f|]`${0}`;
 [|/*useFBool*/f|]`${false}`;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["useFNumber", "useFBool"]);
@@ -3557,7 +3557,7 @@ class /*cls*/C {
     constructor() { return [|/*clsUse*/this|]; }
     get self(/*getterDecl*/this: number) { return [|/*getterUse*/this|]; }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["fnUse", "clsUse", "getterUse"]);
@@ -3585,7 +3585,7 @@ export type { SyntaxKind }
 // @Filename: /c.ts
 import type { SyntaxKind } from './b';
 let kind: [|/*2*/SyntaxKind|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["2"]);
@@ -3609,7 +3609,7 @@ pub fn test_go_to_definition_type_predicate(t: &T) {
 function f(/*parameterDeclaration*/parameter: any): [|/*parameterName*/parameter|] is [|/*typeReference*/A|] {
     return typeof parameter === "string";
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["parameterName", "typeReference"]);
@@ -3635,7 +3635,7 @@ pub fn test_go_to_definition_type_reference_directive(t: &T) {
 // @Filename: src/app.ts
  /// <reference types="[|lib/*1*/|]"/>
  $.x;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -3662,7 +3662,7 @@ class /*cls*/C {
     constructor() { type X = typeof [|/*clsUse*/this|]; }
     get self(/*getterDecl*/this: number) { type X = typeof [|/*getterUse*/this|]; }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["fnUse", "clsUse", "getterUse"]);
@@ -3686,7 +3686,7 @@ pub fn test_go_to_definition_undefined_symbols(t: &T) {
 var a: some/*undefinedType*/Type;
 var x = {}; x.some/*undefinedProperty*/Property;
 var a: any; a.some/*unkownProperty*/Property;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &go::strs(&f.marker_names()));
@@ -3720,7 +3720,7 @@ var x : One | Two;
 
 x.[|/*propertyReference*/commonProperty|];
 x./*3*/commonFunction;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["propertyReference"]);
@@ -3756,7 +3756,7 @@ interface Two {
 var x : One | Two;
 
 x.common.[|/*propertyReference*/a|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["propertyReference"]);
@@ -3784,7 +3784,7 @@ var strings: string[];
 var numbers: number[];
 
 var x = (strings || numbers).[|/*usage*/specialPop|]()"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["usage"]);
@@ -3821,7 +3821,7 @@ var magnitude: Magnitude;
 var snapcrackle: SnapCrackle;
 
 var x = (snapcrackle || magnitude || art).[|/*usage*/pop|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["usage"]);
@@ -3861,7 +3861,7 @@ const u2: U = {
   [|/*kindBogus*/kind|]: "bogus",
   [|/*propBogus*/prop|]: 0,
 };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["kind", "prop", "kindBogus", "propBogus"]);
@@ -3886,7 +3886,7 @@ not read
 // @Filename: /a.ts
 import { /*def*/f } from "foo";
 [|/*use*/f|]();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["use"]);
@@ -3913,7 +3913,7 @@ const Bar;
 const Foo = /*def*/Bar = function () {}
 Foo.prototype.bar = function() {}
 new [|Foo/*ref*/|]();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_file(t, "foo.js");
@@ -3940,7 +3940,7 @@ pub fn test_go_to_definition_variable_assignment1(t: &T) {
 const Foo = module./*def*/exports = function () {}
 Foo.prototype.bar = function() {}
 new [|Foo/*ref*/|]();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_file(t, "foo.js");
@@ -3966,7 +3966,7 @@ const Bar;
 const Foo = /*def*/Bar = function () {}
 Foo.prototype.bar = function() {}
 new [|Foo/*ref*/|]();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_file(t, "foo.ts");
@@ -3991,7 +3991,7 @@ pub fn test_go_to_definition_variable_assignment3(t: &T) {
 const Foo = module./*def*/exports = function () {}
 Foo.prototype.bar = function() {}
 new [|Foo/*ref*/|]();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_file(t, "foo.ts");
@@ -4019,7 +4019,7 @@ pub fn test_go_to_definition_yield1(t: &T) {
 const /*end2*/genFunction = function*() {
     [|/*start2*/yield|] 0;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["start1", "start2"]);
@@ -4045,7 +4045,7 @@ pub fn test_go_to_definition_yield2(t: &T) {
     }
     return gen
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["start"]);
@@ -4074,7 +4074,7 @@ pub fn test_go_to_definition_yield3(t: &T) {
       [|/*start2*/yield|] 0;
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["start1", "start2"]);
@@ -4097,7 +4097,7 @@ pub fn test_go_to_definition_yield4(t: &T) {
         let content: &str = r#"function* gen() {
     class C { [/*start*/yield 10]() {} }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["start"]);
@@ -4122,7 +4122,7 @@ pub fn test_go_to_implementation_class_method_00(t: &T) {
 }
 
 new Bar().hel/*reference*/lo;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["reference"]);
@@ -4153,7 +4153,7 @@ class Bar extends AbstractBar{
 function whatever(x: AbstractBar) {
     x.he/*reference*/llo();
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["reference", "declaration"]);
@@ -4179,7 +4179,7 @@ pub fn test_go_to_implementation_enum_00(t: &T) {
 }
 
 Foo.Fo/*reference*/o1;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["reference"]);
@@ -4205,7 +4205,7 @@ pub fn test_go_to_implementation_enum_01(t: &T) {
 }
 
 Fo/*reference*/o;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["reference"]);
@@ -4240,7 +4240,7 @@ class [|B|] implements Foo {
 export interface /**/Foo {
     func();
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -4280,7 +4280,7 @@ class Bar {
 
     constructor(public f: Foo = [|{ hello() {/**3*/} }|] ) {}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["interface_definition"]);
@@ -4320,7 +4320,7 @@ class [|NotAbstractBar|] extends AbstractBar {
 var x = new SuperBar();
 var y: SuperBar = new SuperBar();
 var z: AbstractBar = new NotAbstractBar();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["interface_definition"]);
