@@ -39,13 +39,22 @@ jobs:
         run: echo "commit=$(node npm/build.mjs --print-typescript-commit)" >> "$GITHUB_OUTPUT"
 
       # The conformance tests and the tsoptions unit tests read the reference baselines from ts-ref/tsc/testdata.
-      # The testdata checkout (~5 s) is cached per TypeScript commit; the sparse checkout below runs only on a miss.
-      - name: Restore TypeScript testdata
-        id: ts-ref
-        uses: actions/cache/restore@v4
-        with:
-          path: ts-ref/tsc/testdata
-          key: ts-ref-testdata-${{ steps.ts.outputs.commit }}
+      # The testdata checkout (~5 s) is cached per TypeScript commit. Restore it alongside the Rust toolchain; the
+      # sparse checkout below runs only on a miss.
+      - parallel:
+          - name: Restore TypeScript testdata
+            id: ts-ref
+            uses: actions/cache/restore@v4
+            with:
+              path: ts-ref/tsc/testdata
+              key: ts-ref-testdata-${{ steps.ts.outputs.commit }}
+
+          # This job warms one cache on main; the other Rust jobs and pull requests only restore it.
+          - name: Set up Rust
+            uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
+            with:
+              save-cache: ${{ github.ref_name == 'main' }}
+              cache-key: warm
 
       - name: Check out TypeScript testdata
         if: steps.ts-ref.outputs.cache-hit != 'true'
@@ -64,12 +73,6 @@ jobs:
         with:
           path: ts-ref/tsc/testdata
           key: ${{ steps.ts-ref.outputs.cache-primary-key }}
-
-      # This job warms one cache on main; the other Rust jobs and pull requests only restore it.
-      - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
-        with:
-          save-cache: ${{ github.ref_name == 'main' }}
-          cache-key: warm
 
       - name: cargo check
         run: cargo check --workspace --locked
@@ -137,37 +140,38 @@ jobs:
         id: determinism-keys
         run: python3 bench/run.py --print-cache-keys --projects xstate-main,webpack,nuxt,drizzle-orm | tee -a "$GITHUB_OUTPUT"
 
-      - name: Restore the bench compilers
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            bench/.work/suite
-            bench/.work/tsgo
-          key: bench-shared-${{ runner.os }}-${{ steps.determinism-keys.outputs.shared }}
+      - parallel:
+          - name: Restore the bench compilers
+            uses: actions/cache/restore@v4
+            with:
+              path: |
+                bench/.work/suite
+                bench/.work/tsgo
+              key: bench-shared-${{ runner.os }}-${{ steps.determinism-keys.outputs.shared }}
 
-      - name: Restore xstate-main
-        uses: actions/cache/restore@v4
-        with:
-          path: bench/.work/solutions/xstate-main
-          key: bench-xstate-main-${{ runner.os }}-${{ steps.determinism-keys.outputs['xstate-main'] }}
+          - name: Restore xstate-main
+            uses: actions/cache/restore@v4
+            with:
+              path: bench/.work/solutions/xstate-main
+              key: bench-xstate-main-${{ runner.os }}-${{ steps.determinism-keys.outputs['xstate-main'] }}
 
-      - name: Restore webpack
-        uses: actions/cache/restore@v4
-        with:
-          path: bench/.work/solutions/webpack
-          key: bench-webpack-${{ runner.os }}-${{ steps.determinism-keys.outputs['webpack'] }}
+          - name: Restore webpack
+            uses: actions/cache/restore@v4
+            with:
+              path: bench/.work/solutions/webpack
+              key: bench-webpack-${{ runner.os }}-${{ steps.determinism-keys.outputs['webpack'] }}
 
-      - name: Restore nuxt
-        uses: actions/cache/restore@v4
-        with:
-          path: bench/.work/solutions/nuxt
-          key: bench-nuxt-${{ runner.os }}-${{ steps.determinism-keys.outputs['nuxt'] }}
+          - name: Restore nuxt
+            uses: actions/cache/restore@v4
+            with:
+              path: bench/.work/solutions/nuxt
+              key: bench-nuxt-${{ runner.os }}-${{ steps.determinism-keys.outputs['nuxt'] }}
 
-      - name: Restore drizzle-orm
-        uses: actions/cache/restore@v4
-        with:
-          path: bench/.work/solutions/drizzle-orm
-          key: bench-drizzle-orm-${{ runner.os }}-${{ steps.determinism-keys.outputs['drizzle-orm'] }}
+          - name: Restore drizzle-orm
+            uses: actions/cache/restore@v4
+            with:
+              path: bench/.work/solutions/drizzle-orm
+              key: bench-drizzle-orm-${{ runner.os }}-${{ steps.determinism-keys.outputs['drizzle-orm'] }}
 
       # A no-op for everything restored above; clones and installs the rest (the bench workflow saves these caches on
       # every push to main, so a miss means a changed pin or an evicted cache).
@@ -221,25 +225,26 @@ jobs:
           sparse-checkout: tsc/testdata
           persist-credentials: false
 
-      - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
-        with:
-          save-cache: false
-          cache-key: warm
+      - parallel:
+          - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
+            with:
+              save-cache: false
+              cache-key: warm
+
+          - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+            with:
+              node-version: 24
+
+          # Ubuntu's binaryen package is older; the module sizes in notes/wasm-build.md come from version 133.
+          - name: Install binaryen 133
+            run: |
+              curl -sSLf -o /tmp/binaryen.tgz https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-x86_64-linux.tar.gz
+              echo "2dc9c7813f5375db93d96ead4b78222fcc3e2677bbb832297af4797782a37489  /tmp/binaryen.tgz" | sha256sum -c -
+              tar xzf /tmp/binaryen.tgz -C /tmp
+              echo /tmp/binaryen-version_133/bin >> "$GITHUB_PATH"
 
       - name: Install wasm32-wasip1 target
         run: rustup target add wasm32-wasip1
-
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24
-
-      # Ubuntu's binaryen package is older; the module sizes in notes/wasm-build.md come from version 133.
-      - name: Install binaryen 133
-        run: |
-          curl -sSLf -o /tmp/binaryen.tgz https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-x86_64-linux.tar.gz
-          echo "2dc9c7813f5375db93d96ead4b78222fcc3e2677bbb832297af4797782a37489  /tmp/binaryen.tgz" | sha256sum -c -
-          tar xzf /tmp/binaryen.tgz -C /tmp
-          echo /tmp/binaryen-version_133/bin >> "$GITHUB_PATH"
 
       - name: cargo check (wasm32-wasip1)
         run: cargo check -p tsrs_wasm --target wasm32-wasip1 --locked
@@ -262,25 +267,26 @@ jobs:
         id: bench-keys
         run: python3 bench/run.py --print-cache-keys --projects xstate-main,webpack | tee -a "$GITHUB_OUTPUT"
 
-      - name: Restore the bench compilers
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            bench/.work/suite
-            bench/.work/tsgo
-          key: bench-shared-${{ runner.os }}-${{ steps.bench-keys.outputs.shared }}
+      - parallel:
+          - name: Restore the bench compilers
+            uses: actions/cache/restore@v4
+            with:
+              path: |
+                bench/.work/suite
+                bench/.work/tsgo
+              key: bench-shared-${{ runner.os }}-${{ steps.bench-keys.outputs.shared }}
 
-      - name: Restore xstate-main
-        uses: actions/cache/restore@v4
-        with:
-          path: bench/.work/solutions/xstate-main
-          key: bench-xstate-main-${{ runner.os }}-${{ steps.bench-keys.outputs['xstate-main'] }}
+          - name: Restore xstate-main
+            uses: actions/cache/restore@v4
+            with:
+              path: bench/.work/solutions/xstate-main
+              key: bench-xstate-main-${{ runner.os }}-${{ steps.bench-keys.outputs['xstate-main'] }}
 
-      - name: Restore webpack
-        uses: actions/cache/restore@v4
-        with:
-          path: bench/.work/solutions/webpack
-          key: bench-webpack-${{ runner.os }}-${{ steps.bench-keys.outputs['webpack'] }}
+          - name: Restore webpack
+            uses: actions/cache/restore@v4
+            with:
+              path: bench/.work/solutions/webpack
+              key: bench-webpack-${{ runner.os }}-${{ steps.bench-keys.outputs['webpack'] }}
 
       - name: Set up the bench projects
         run: python3 bench/run.py --setup-only --projects xstate-main,webpack,Compiler,Compiler-Unions
@@ -314,12 +320,13 @@ jobs:
           save-cache: false
           cache-key: warm
 
-      - name: Lint ratchet
-        run: python3 tools/lint/ratchet.py --self-test && python3 tools/lint/ratchet.py
+      - parallel:
+          - name: Lint ratchet
+            run: python3 tools/lint/ratchet.py --self-test && python3 tools/lint/ratchet.py
 
-      # Unsafe Send/Sync inventory and comments on weakened atomic orderings (docs/RUST.md, "Source checks").
-      - name: Source checks
-        run: python3 tools/lint/source.py --self-test && python3 tools/lint/source.py
+          # Unsafe Send/Sync inventory and comments on weakened atomic orderings (docs/RUST.md, "Source checks").
+          - name: Source checks
+            run: python3 tools/lint/source.py --self-test && python3 tools/lint/source.py
 
   # tools/ci/skip_marker.py: a pull request that changes code must not carry a CI-skip marker in its title, body or
   # commit subjects, because `gh pr merge --squash` copies them into the commit message and the commit then lands on
@@ -382,13 +389,14 @@ jobs:
             !/tsc/testdata/
           persist-credentials: false
 
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: ts-ref/tsc/go.mod
-          cache-dependency-path: ts-ref/tsc/go.sum
+      - parallel:
+          - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+            with:
+              go-version-file: ts-ref/tsc/go.mod
+              cache-dependency-path: ts-ref/tsc/go.sum
 
-      - name: Benchmark reporting tests
-        run: python3 -m unittest discover -s bench -p test_reporting.py
+          - name: Benchmark reporting tests
+            run: python3 -m unittest discover -s bench -p test_reporting.py
 
       - name: Generated code is up to date
         run: tools/gen-check.sh

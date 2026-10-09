@@ -60,30 +60,61 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version: 24
-
       - name: Read the pinned Rust toolchain (rust-toolchain.toml)
         id: rust
         shell: bash
         run: echo "toolchain=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
 
-      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
-        with:
-          toolchain: ${{ steps.rust.outputs.toolchain }}
+      - parallel:
+          - name: Set up Node
+            uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+            with:
+              node-version: 24
+
+          - name: Set up Rust
+            uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+            with:
+              toolchain: ${{ steps.rust.outputs.toolchain }}
+
+      # This install writes only npm/node_modules, so it can overlap the Rust cache restore and binary build.
+      - name: Install npm packaging dependencies
+        id: npm-dependencies
+        run: npm ci --prefix npm --no-audit --no-fund
+        background: true
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           key: node-api-${{ matrix.target }}
 
+      # Keep diagnostics for a slow or stuck native build in a separate log, then stop the monitor explicitly.
+      - name: Monitor build resources
+        id: resource-monitor
+        run: |
+          while true; do
+            date -u
+            vm_stat
+            top -l 1 -n 10 -o cpu -stats pid,cpu,mem,command
+            sleep 60
+          done
+        background: true
+
       - name: Build tsrs
+        id: build
         run: cargo build --release --locked -p tsrs_cli
+        background: true
+
+      - name: Wait for the Rust build
+        wait: build
+
+      - name: Stop build resource monitor
+        cancel: resource-monitor
+
+      # `wait-all` always runs, so npm failures are reported even if the foreground Rust build failed first.
+      - name: Wait for background setup
+        wait-all:
 
       - name: Pack (no publish)
-        run: |
-          npm ci --prefix npm --no-audit --no-fund
-          node npm/build.mjs --binary ${{ matrix.target }}=target/release/tsrs --out "$RUNNER_TEMP/pack" --pack
+        run: node npm/build.mjs --binary ${{ matrix.target }}=target/release/tsrs --out "$RUNNER_TEMP/pack" --pack
 
       - name: Installed-package smoke (CLI, sync, async, declarations)
         run: node tools/node-api/consumer.mjs --dist "$RUNNER_TEMP/pack"
