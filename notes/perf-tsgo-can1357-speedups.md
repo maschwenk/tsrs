@@ -7,7 +7,8 @@ branch against the tsgo it starts from, the tsgo tsrs is pinned to and tsrs; che
 commit; and says what transfers to tsrs.
 
 All numbers are from one Mac: Apple M5 Max, 6 performance + 12 efficiency cores, 128 GB, macOS 26.6, load average
-6-11 (a browser kept ~1 core busy). Depot was skipped at the owner's request, so **there are no Linux numbers**. The
+6-11 (a browser kept ~1 core busy). Depot was skipped at the owner's request, so **there are no Linux numbers** apart from
+the automatic pr-verify run on the port's pull request. The
 Linux scoreboard may differ: three of his changes act mainly or only on Linux (huge pages for the Go heap,
 prefaulting, and the zero-page faults his GC commit describes).
 
@@ -309,8 +310,13 @@ the type id: distinct types never compare equal, so every correct sort of a list
 types (the only ties) end up adjacent for the existing dedup pass. Where `compare_symbols` is not a total order (the
 auto-import alias resolver, `Program::source_files_complete`), the old stable sort runs unchanged. Gates on the branch:
 `tools/regressions.sh` 28/28; conformance 13,458 / 12,779 / 12,779 in Go history and 13,458 / 12,778 / 12,778 in the
-default mode (main's numbers); `tools/ci/determinism.sh` on xstate-main, webpack, drizzle-orm and the regression cases: 558 runs, all identical to the single-threaded output. Default-mode wall and peak did not move beyond noise: at 9 checkers
-mikro-orm's sorting is spread over the checkers and is not on the critical path.
+default mode (main's numbers); `tools/ci/determinism.sh` on xstate-main, webpack, drizzle-orm and the regression cases: 558 runs, all identical to the single-threaded output. Default-mode wall and peak did not move beyond noise on the Mac: at 9 checkers
+mikro-orm's sorting is spread over the checkers and is not on the critical path. pr-verify on the pull request (Linux,
+Depot 32 vCPU, release builds) agrees: identical diagnostics in 102 of 102 cells; single-threaded instructions
+mikro-orm −9.91%, Compiler-Unions −1.64%, next-packages-next −1.33%, Compiler −0.83%, storybook −0.79%, mui-docs
+−0.69%, nuxt −0.57%, cal-diy −0.50%, the other nine −0.32% to +0.16% (supabase-studio +0.16%, xstate-main +0.05%: one
+comparison per input where nothing needs sorting); mikro-orm wall −5.0% (median over 1/4/16/32 checkers, −9.6% at one
+checker).
 
 **2. Member order.** In Go this trio is his largest checker gain (5-9% of instructions), because Go's sort calls a
 closure that walks to each declaration's source file and hashes it in a Go map on every comparison, and because every
