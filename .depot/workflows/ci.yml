@@ -65,16 +65,11 @@ jobs:
           path: ts-ref/tsc/testdata
           key: ${{ steps.ts-ref.outputs.cache-primary-key }}
 
-      - name: Read the pinned Rust toolchain (rust-toolchain.toml)
-        id: rust
-        shell: bash
-        run: echo "toolchain=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
-
-      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      # Main warms one cache shared by the Rust jobs; pull requests restore it through the base branch.
+      - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
         with:
-          toolchain: ${{ steps.rust.outputs.toolchain }}
-
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+          save-cache: ${{ github.ref_name == 'main' }}
+          cache-key: warm
 
       - name: cargo check
         run: cargo check --workspace --locked
@@ -226,17 +221,13 @@ jobs:
           sparse-checkout: tsc/testdata
           persist-credentials: false
 
-      - name: Read the pinned Rust toolchain (rust-toolchain.toml)
-        id: rust
-        shell: bash
-        run: echo "toolchain=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
-
-      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
         with:
-          toolchain: ${{ steps.rust.outputs.toolchain }}
-          targets: wasm32-wasip1
+          save-cache: ${{ github.ref_name == 'main' }}
+          cache-key: warm
 
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - name: Install wasm32-wasip1 target
+        run: rustup target add wasm32-wasip1
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -318,19 +309,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Read the pinned Rust toolchain (rust-toolchain.toml)
-        id: rust
-        shell: bash
-        run: echo "toolchain=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
-
-      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
         with:
-          toolchain: ${{ steps.rust.outputs.toolchain }}
-          components: clippy
-
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          shared-key: lint-ratchet
+          save-cache: ${{ github.ref_name == 'main' }}
+          cache-key: warm
 
       - name: Lint ratchet
         run: python3 tools/lint/ratchet.py --self-test && python3 tools/lint/ratchet.py
@@ -454,24 +436,16 @@ jobs:
           path: ts-ref/tsc/testdata
           key: ${{ steps.ts-ref.outputs.cache-primary-key }}
 
-      - name: Read the pinned Rust toolchain (rust-toolchain.toml)
-        id: rust
-        shell: bash
-        run: echo "toolchain=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
-
-      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
         with:
-          toolchain: ${{ steps.rust.outputs.toolchain }}
+          save-cache: ${{ github.ref_name == 'main' }}
+          cache-key: warm
 
       # Miri needs a nightly; pinned so that a Miri change cannot turn main red on its own.
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:
           toolchain: nightly-2026-10-04
           components: miri, rust-src
-
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          shared-key: arena-safety
 
       # plain-ptrs: the compressed handles' 32 GiB PROT_NONE reservation is not supported by Miri.
       - name: Miri on the arena free-list tests
@@ -492,6 +466,6 @@ jobs:
           CARGO_PROFILE_RELEASE_PANIC: abort
           CARGO_TARGET_DIR: target/abort
         run: |
-          cargo +${{ steps.rust.outputs.toolchain }} build --release --locked -p tsrs_testrunner
+          cargo build --release --locked -p tsrs_testrunner
           TSRS_TEST=target/abort/release/tsrs-test TSRS_TEST_RESULTS="$PWD/target/abort/test-results" \
             .github/scripts/conformance-gate.sh
