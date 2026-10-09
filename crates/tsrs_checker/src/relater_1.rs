@@ -427,24 +427,28 @@ impl Checker {
     }
 
     // relater.go:339
+    #[track_caller]
     pub(crate) fn check_type_assignable_to(&mut self, source: P<Type>, target: P<Type>, error_node: Option<P<Node>>, head_message: Option<&'static Message>) -> bool {
         let relation = self.assignable_relation;
         self.check_type_related_to_ex(source, target, relation, error_node, head_message, None)
     }
 
     // relater.go:343
+    #[track_caller]
     pub(crate) fn check_type_assignable_to_ex(&mut self, source: P<Type>, target: P<Type>, error_node: Option<P<Node>>, head_message: Option<&'static Message>, diagnostic_output: &mut Vec<P<Diagnostic>>) -> bool {
         let relation = self.assignable_relation;
         self.check_type_related_to_ex(source, target, relation, error_node, head_message, Some(diagnostic_output))
     }
 
     // relater.go:347
+    #[track_caller]
     pub(crate) fn check_type_comparable_to(&mut self, source: P<Type>, target: P<Type>, error_node: P<Node>, head_message: Option<&'static Message>) -> bool {
         let relation = self.comparable_relation;
         self.check_type_related_to_ex(source, target, relation, Some(error_node), head_message, None)
     }
 
     // relater.go:351
+    #[track_caller]
     pub(crate) fn check_type_related_to(&mut self, source: P<Type>, target: P<Type>, relation: P<Relation>, error_node: Option<P<Node>>) -> bool {
         self.check_type_related_to_ex(source, target, relation, error_node, None, None)
     }
@@ -453,7 +457,18 @@ impl Checker {
     // Check that source is related to target according to the given relation. When errorNode is non-nil, errors are
     // reported to the checker's diagnostic collection or through diagnosticOutput when non-nil. Callers can assume that
     // this function only reports zero or one error to diagnosticOutput (unlike checkTypeRelatedToAndOptionallyElaborate).
+    #[track_caller]
     pub(crate) fn check_type_related_to_ex(&mut self, source: P<Type>, target: P<Type>, relation: P<Relation>, error_node: Option<P<Node>>, head_message: Option<&'static Message>, diagnostic_output: Option<&mut Vec<P<Diagnostic>>>) -> bool {
+        if crate::elab::on() && error_node.is_some() {
+            let w = self.elab_win_open(std::panic::Location::caller());
+            let r = self.check_type_related_to_ex_impl(source, target, relation, error_node, head_message, diagnostic_output);
+            self.elab_win_close(w);
+            return r;
+        }
+        self.check_type_related_to_ex_impl(source, target, relation, error_node, head_message, diagnostic_output)
+    }
+
+    pub(crate) fn check_type_related_to_ex_impl(&mut self, source: P<Type>, target: P<Type>, relation: P<Relation>, error_node: Option<P<Node>>, head_message: Option<&'static Message>, diagnostic_output: Option<&mut Vec<P<Diagnostic>>>) -> bool {
         let mut error_node = error_node;
         let r = self.get_relater();
         r.relation.set(Some(relation));
@@ -536,6 +551,9 @@ impl Checker {
     // relater.go:414
     pub(crate) fn report_diagnostic(&mut self, diagnostic: Option<P<Diagnostic>>, diagnostic_output: Option<&mut Vec<P<Diagnostic>>>) {
         if let Some(diagnostic) = diagnostic {
+            if crate::elab::on() {
+                self.elab_note_diag(diagnostic);
+            }
             if let Some(diagnostic_output) = diagnostic_output {
                 diagnostic_output.push(diagnostic);
             } else {
@@ -545,13 +563,25 @@ impl Checker {
     }
 
     // relater.go:424
+    #[track_caller]
     pub(crate) fn check_type_assignable_to_and_optionally_elaborate(&mut self, source: P<Type>, target: P<Type>, error_node: Option<P<Node>>, expr: Option<P<Node>>, head_message: Option<&'static Message>, diagnostic_output: Option<&mut Vec<P<Diagnostic>>>) -> bool {
         let relation = self.assignable_relation;
         self.check_type_related_to_and_optionally_elaborate(source, target, relation, error_node, expr, head_message, diagnostic_output)
     }
 
     // relater.go:428
+    #[track_caller]
     pub(crate) fn check_type_related_to_and_optionally_elaborate(&mut self, source: P<Type>, target: P<Type>, relation: P<Relation>, error_node: Option<P<Node>>, expr: Option<P<Node>>, head_message: Option<&'static Message>, diagnostic_output: Option<&mut Vec<P<Diagnostic>>>) -> bool {
+        if crate::elab::on() && error_node.is_some() {
+            let w = self.elab_win_open(std::panic::Location::caller());
+            let r = self.check_type_related_to_and_optionally_elaborate_impl(source, target, relation, error_node, expr, head_message, diagnostic_output);
+            self.elab_win_close(w);
+            return r;
+        }
+        self.check_type_related_to_and_optionally_elaborate_impl(source, target, relation, error_node, expr, head_message, diagnostic_output)
+    }
+
+    pub(crate) fn check_type_related_to_and_optionally_elaborate_impl(&mut self, source: P<Type>, target: P<Type>, relation: P<Relation>, error_node: Option<P<Node>>, expr: Option<P<Node>>, head_message: Option<&'static Message>, diagnostic_output: Option<&mut Vec<P<Diagnostic>>>) -> bool {
         let mut diagnostic_output = diagnostic_output;
         if self.is_type_related_to(source, target, relation) {
             return true;

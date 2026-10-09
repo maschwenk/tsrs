@@ -181,6 +181,7 @@ pub trait Discriminator {
 pub struct errorState {
     pub error_chain: Option<P<ErrorChain>>,
     pub related_info: Vec<P<Diagnostic>>,
+    pub print_mark: u32,
 }
 
 pub struct ErrorChain {

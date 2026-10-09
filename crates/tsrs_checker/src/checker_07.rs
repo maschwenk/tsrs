@@ -1467,7 +1467,11 @@ impl Checker {
         if suggestions {
             self.suggestion_diagnostics.get_diagnostics_for_file(source_file)
         } else {
-            self.diagnostics.get_diagnostics_for_file(source_file)
+            let d = self.diagnostics.get_diagnostics_for_file(source_file);
+            if crate::elab::on() {
+                Checker::elab_keep(&d);
+            }
+            d
         }
     }
 
@@ -1475,7 +1479,11 @@ impl Checker {
     pub fn get_global_diagnostics(&mut self) -> Vec<P<Diagnostic>> {
         self.check_not_canceled();
         self.produce_deferred_diagnostics();
-        self.diagnostics.get_global_diagnostics()
+        let d = self.diagnostics.get_global_diagnostics();
+        if crate::elab::on() {
+            Checker::elab_keep(&d);
+        }
+        d
     }
 
     // checker.go:14210
@@ -1498,10 +1506,17 @@ impl Checker {
 
     // checker.go:14221
     pub(crate) fn add_diagnostic(&mut self, diagnostic: P<Diagnostic>) -> P<Diagnostic> {
+        if crate::elab::on() {
+            self.elab_note_diag(diagnostic);
+        }
         self.diagnostic_adds = self.diagnostic_adds.wrapping_add(1);
         // Discard diagnostics created while at the maximum number of recursive TypeToString invocations.
         if self.serialization_level < maxSerializationLevel {
-            return self.diagnostics.add(diagnostic);
+            let kept = self.diagnostics.add(diagnostic);
+            if crate::elab::on() {
+                Checker::elab_note_alias(diagnostic, kept);
+            }
+            return kept;
         }
         diagnostic
     }

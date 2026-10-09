@@ -30,6 +30,7 @@ pub mod phases;
 pub mod festats;
 pub mod semver;
 pub mod sitecount;
+pub mod elabheap;
 pub mod stringutil;
 pub mod tspath;
 

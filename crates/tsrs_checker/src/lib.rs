@@ -80,6 +80,7 @@ mod relater_1;
 pub(crate) use relater_1::*;
 mod relater_2;
 mod unioncache;
+pub mod elab;
 mod infermemo;
 mod flow;
 pub(crate) use flow::*;

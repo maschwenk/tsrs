@@ -1,7 +1,39 @@
 // The alloc-profile build installs tsrs_core's counting allocator (over mimalloc) instead.
-#[cfg(not(feature = "alloc-profile"))]
+#[cfg(all(not(feature = "alloc-profile"), not(feature = "elab-heap")))]
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
+// exp/discarded-elaboration: mimalloc with per-thread byte counters (tsrs_core::elabheap).
+#[cfg(all(not(feature = "alloc-profile"), feature = "elab-heap"))]
+struct ElabHeap;
+#[cfg(all(not(feature = "alloc-profile"), feature = "elab-heap"))]
+// SAFETY: forwards to mimalloc.
+unsafe impl std::alloc::GlobalAlloc for ElabHeap {
+    unsafe fn alloc(&self, l: std::alloc::Layout) -> *mut u8 {
+        tsrs_core::elabheap::note_alloc(l.size());
+        // SAFETY: forwarded.
+        unsafe { <mimalloc::MiMalloc as std::alloc::GlobalAlloc>::alloc(&mimalloc::MiMalloc, l) }
+    }
+    unsafe fn dealloc(&self, p: *mut u8, l: std::alloc::Layout) {
+        tsrs_core::elabheap::note_free(l.size());
+        // SAFETY: forwarded.
+        unsafe { <mimalloc::MiMalloc as std::alloc::GlobalAlloc>::dealloc(&mimalloc::MiMalloc, p, l) }
+    }
+    unsafe fn alloc_zeroed(&self, l: std::alloc::Layout) -> *mut u8 {
+        tsrs_core::elabheap::note_alloc(l.size());
+        // SAFETY: forwarded.
+        unsafe { <mimalloc::MiMalloc as std::alloc::GlobalAlloc>::alloc_zeroed(&mimalloc::MiMalloc, l) }
+    }
+    unsafe fn realloc(&self, p: *mut u8, l: std::alloc::Layout, n: usize) -> *mut u8 {
+        tsrs_core::elabheap::note_free(l.size());
+        tsrs_core::elabheap::note_alloc(n);
+        // SAFETY: forwarded.
+        unsafe { <mimalloc::MiMalloc as std::alloc::GlobalAlloc>::realloc(&mimalloc::MiMalloc, p, l, n) }
+    }
+}
+#[cfg(all(not(feature = "alloc-profile"), feature = "elab-heap"))]
+#[global_allocator]
+static GLOBAL: ElabHeap = ElabHeap;
 
 #[cfg(feature = "alloc-profile")]
 mod census;
@@ -96,6 +128,8 @@ fn main() {
     // TSRS_INFER_MEMO_STATS / TSRS_INFER_MEMO=shadow: the inference memo's totals.
     #[cfg(feature = "checker")]
     tsrs_compiler::Checker::infer_memo_finish();
+    #[cfg(feature = "checker")]
+    tsrs_compiler::Checker::elab_finish();
     tsrs_core::memsplit::report("exit");
     let _ = std::io::Write::flush(&mut std::io::stdout());
     let _ = std::io::Write::flush(&mut std::io::stderr());

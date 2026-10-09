@@ -1552,6 +1552,11 @@ pub fn arena_used_bytes() -> usize {
     with_arena(|a| a.used_ranges().iter().map(|&(_, len)| len).sum())
 }
 
+/// Bytes bumped in the current allocation target, O(1) (exp/discarded-elaboration).
+pub fn arena_used_fast() -> usize {
+    with_arena(|a| a.used_fast())
+}
+
 /// Compressed pointers: (bytes of the reserved range handed out as chunks now, how far into it chunks were ever
 /// carved). `None` with plain pointers.
 pub fn reserve_stats() -> Option<(usize, usize)> {

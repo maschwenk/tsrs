@@ -17,6 +17,9 @@ impl NodeBuilder {
 
     // nodebuilder.go:33
     pub(crate) fn enter_context(&self, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: Option<&'static dyn SymbolTracker>) {
+        if crate::elab::on() {
+            crate::elab::note_enter_context();
+        }
         let mut verbosity_level = -1;
         let mut max_truncation_length = 0;
         if let Some(verbosity) = self.verbosity.get() {

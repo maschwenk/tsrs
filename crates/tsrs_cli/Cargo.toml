@@ -37,6 +37,8 @@ site-counts = ["tsrs_compiler/site-counts", "tsrs_execute/site-counts"]
 work-census = ["tsrs_compiler/work-census", "tsrs_execute/work-census"]
 # Allocation profile (tsrs_core/alloc-profile); replaces the mimalloc global allocator with the counting one.
 alloc-profile = ["tsrs_core/alloc-profile", "tsrs_execute/alloc-profile"]
+# exp/discarded-elaboration: per-thread heap counters for TSRS_ELAB=record.
+elab-heap = []
 # TSRS_ASSIGNMENT_STATS also attributes checker-created types/symbols to files (tsrs_compiler checkerpool_stats.rs).
 assignment-stats = ["tsrs_compiler/assignment-stats", "tsrs_execute/assignment-stats"]
 

@@ -68,6 +68,8 @@ pub struct Arena {
     end: Cell<*mut u8>,
     /// Older chunks: (start, end, finger when the chunk was retired).
     retired: RefCell<Vec<(usize, usize, usize)>>,
+    /// exp/discarded-elaboration: bytes used in the retired chunks (kept incrementally for `used_fast`).
+    retired_used: Cell<usize>,
     capacity: Cell<usize>,
     /// Bumped by every free and every `pin`; a rewind is skipped when it changed since the checkpoint.
     epoch: Cell<u64>,
@@ -176,6 +178,7 @@ impl Arena {
             start: Cell::new(std::ptr::null_mut()),
             end: Cell::new(std::ptr::null_mut()),
             retired: RefCell::new(Vec::new()),
+            retired_used: Cell::new(0),
             capacity: Cell::new(0),
             epoch: Cell::new(0),
             free: [const { Cell::new(std::ptr::null_mut()) }; CLASSES],
@@ -288,6 +291,7 @@ impl Arena {
         let _ = base.expose_provenance();
         if !self.start.get().is_null() {
             self.retired.borrow_mut().push((self.start.get().addr(), self.end.get().addr(), self.ptr.get().addr()));
+            self.retired_used.set(self.retired_used.get() + self.current_used());
         }
         self.start.set(base);
         // SAFETY: one past the end of the allocation.
@@ -407,6 +411,16 @@ impl Arena {
             retired_unused: retired.iter().filter(|&&(s, _, f)| f > s).map(|&(s, _, f)| (s, f - s)).collect(),
             current_huge: HUGE_THREAD_CHUNK.is_some_and(|h| end - start >= h),
         }
+    }
+
+    fn current_used(&self) -> usize {
+        if self.up { self.ptr.get().addr() - self.start.get().addr() } else { self.end.get().addr() - self.ptr.get().addr() }
+    }
+
+    /// Bytes bumped so far (retired chunks plus the current one), in O(1).
+    pub fn used_fast(&self) -> usize {
+        if self.start.get().is_null() { return self.retired_used.get(); }
+        self.retired_used.get() + self.current_used()
     }
 
     /// The used part of every chunk, (start, len).

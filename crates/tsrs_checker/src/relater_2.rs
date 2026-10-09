@@ -883,11 +883,26 @@ impl Relater {
 
     // relater.go:3212
     pub(crate) fn get_error_state(&self, _c: &mut Checker) -> errorState {
-        errorState { error_chain: self.error_chain.get(), related_info: self.related_info.borrow().clone() }
+        let print_mark = if crate::elab::on() { _c.elab_mark() } else { 0 };
+        errorState { error_chain: self.error_chain.get(), related_info: self.related_info.borrow().clone(), print_mark }
     }
 
     // relater.go:3219
+    /// exp/discarded-elaboration: a restore after which the dropped chain may be put back (`original_error_chain`).
+    #[track_caller]
+    pub(crate) fn restore_error_state_resurrectable(&self, _c: &mut Checker, e: errorState) {
+        if crate::elab::on() {
+            _c.elab_restore_soft(e.print_mark, std::panic::Location::caller());
+        }
+        self.error_chain.set(e.error_chain);
+        *self.related_info.borrow_mut() = e.related_info;
+    }
+
+    #[track_caller]
     pub(crate) fn restore_error_state(&self, _c: &mut Checker, e: errorState) {
+        if crate::elab::on() {
+            _c.elab_restore(e.print_mark, std::panic::Location::caller());
+        }
         self.error_chain.set(e.error_chain);
         *self.related_info.borrow_mut() = e.related_info;
     }
@@ -1034,7 +1049,7 @@ impl Relater {
             // comparison unexpectedly succeeds. This can happen when the structural comparison result
             // is a Ternary.Maybe for example caused by the recursion depth limiter.
             *original_error_chain = self.error_chain.get();
-            self.restore_error_state(c, save_error_state.clone());
+            self.restore_error_state_resurrectable(c, save_error_state.clone());
         }
         (Ternary::False, false)
     }
@@ -1231,7 +1246,7 @@ impl Relater {
                     if let Some(constraint) = constraint {
                         if report_errors && original_error_chain.is_some() {
                             // create a new chain for the constraint error
-                            self.restore_error_state(c, save_error_state.clone());
+                            self.restore_error_state_resurrectable(c, save_error_state.clone());
                         }
                         result = self.is_related_to_ex(c, source, constraint, RecursionFlags::Target, report_errors, None /*headMessage*/, intersection_state);
                         if result != Ternary::False {
@@ -1441,7 +1456,7 @@ impl Relater {
                         }
                     }
                     original_error_chain = self.error_chain.get();
-                    self.restore_error_state(c, save_error_state.clone());
+                    self.restore_error_state_resurrectable(c, save_error_state.clone());
                 }
             }
         }
