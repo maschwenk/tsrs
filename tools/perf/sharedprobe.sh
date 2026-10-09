@@ -13,6 +13,7 @@
 #   on<p>  the prototype with a <p> permille seed
 #   F      on, plus strategy F: throwaway checkers check light files while the seed is built (TSRS_SHARED_GRAPH_THROWAWAY)
 #   F<p>   F with a <p> permille seed
+#   FA     Ffree plus strategy A: the seed starts before the leaf prepare (TSRS_SHARED_GRAPH_EARLY=1)
 #   Ffree  F with the throwaways in scratch regions, freed when they become forks (TSRS_SHARED_GRAPH_THROWAWAY_FREE=1)
 # Every variant runs with TSRS_TIMELINE=1 (spike/shared-graph-seed): each run's output in runs/ ends with the
 # timeline of the front end, the seed, the forks and each checker's start and end.
@@ -37,6 +38,7 @@ for v in "${names[@]}"; do
     off) variants+=(--variant "off:BIN=$OFF;TSRS_SHARED_GRAPH=0;TSRS_TIMELINE=1") ;;
     foff) variants+=(--variant "foff:BIN=$ON;TSRS_SHARED_GRAPH=0;TSRS_TIMELINE=1") ;;
     on) variants+=(--variant "on:BIN=$ON;TSRS_SHARED_GRAPH=1;TSRS_TIMELINE=1") ;;
+    FA) variants+=(--variant "FA:BIN=$ON;TSRS_SHARED_GRAPH=1;TSRS_SHARED_GRAPH_THROWAWAY=1;TSRS_SHARED_GRAPH_THROWAWAY_FREE=1;TSRS_SHARED_GRAPH_EARLY=1;TSRS_TIMELINE=1") ;;
     Ffree) variants+=(--variant "Ffree:BIN=$ON;TSRS_SHARED_GRAPH=1;TSRS_SHARED_GRAPH_THROWAWAY=1;TSRS_SHARED_GRAPH_THROWAWAY_FREE=1;TSRS_TIMELINE=1") ;;
     F) variants+=(--variant "F:BIN=$ON;TSRS_SHARED_GRAPH=1;TSRS_SHARED_GRAPH_THROWAWAY=1;TSRS_TIMELINE=1") ;;
     F*) variants+=(--variant "$v:BIN=$ON;TSRS_SHARED_GRAPH=1;TSRS_SHARED_GRAPH_THROWAWAY=1;TSRS_TIMELINE=1;TSRS_SHARED_GRAPH_SEED=spread:${v#F}") ;;

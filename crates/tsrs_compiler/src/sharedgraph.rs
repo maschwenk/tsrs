@@ -280,7 +280,8 @@ pub(crate) fn start_seed(program: &'static Program, weights: Vec<i64>) {
         .spawn(move || {
             tsrs_core::timeline::mark("seed:thread", -1, crate::checkerpool::thread_cpu_seconds());
             let files = &program.files;
-            let positions = seed_positions(program, files, &|i: u32| weights.get(i as usize).copied().unwrap_or(0).max(0) as u64);
+            let early = seed_prepares();
+            let mut positions = if early { Vec::new() } else { seed_positions(program, files, &|i: u32| weights.get(i as usize).copied().unwrap_or(0).max(0) as u64) };
             tsrs_ast::use_id_blocks();
             tsrs_core::sharedgraph::set_seed_thread(true);
             // Everything the seed checker allocates goes to this region, which is frozen afterwards; what escapes to
@@ -290,6 +291,18 @@ pub(crate) fn start_seed(program: &'static Program, weights: Vec<i64>) {
             let scope = region.enter();
             let mut c = tsrs_checker::new_checker(program);
             tsrs_core::timeline::mark("seed:checker", -1, crate::checkerpool::thread_cpu_seconds());
+            if early {
+                // Strategy A: the pool runs the leaf `prepare` beside this checker's creation; the seed's file choice
+                // needs it (will_be_leaf) and waits for it here (a OnceLock).
+                {
+                    let _outside = tsrs_core::arena::enter_thread_arena();
+                    if program.leaf_files != crate::fileregions::LeafMode::Off {
+                        crate::fileregions::prepare(program);
+                    }
+                }
+                tsrs_core::timeline::mark("seed:prepared", -1, crate::checkerpool::thread_cpu_seconds());
+                positions = seed_positions(program, files, &|i: u32| weights.get(i as usize).copied().unwrap_or(0).max(0) as u64);
+            }
             c.seed_mode = true;
             tsrs_core::sharedgraph::enter_overlay(&c.overlay);
             let ctx = tsrs_checker::Context::background();
@@ -317,6 +330,13 @@ pub(crate) fn start_seed(program: &'static Program, weights: Vec<i64>) {
         })
         .expect("failed to spawn the seed checker thread");
     *SEED_THREAD.lock().unwrap() = Some(handle);
+}
+
+/// `TSRS_SHARED_GRAPH_EARLY=1` (strategy A): the seed starts before the leaf `prepare`, which runs beside the pool's
+/// checker creation as with the switch off; the seed waits for it only before it picks its files.
+pub(crate) fn seed_prepares() -> bool {
+    static ON: OnceLock<bool> = OnceLock::new();
+    *ON.get_or_init(|| std::env::var("TSRS_SHARED_GRAPH_EARLY").is_ok_and(|v| !v.is_empty() && v != "0"))
 }
 
 /// The frozen seed: the first caller joins the seed thread and freezes its arena; the others wait for it.

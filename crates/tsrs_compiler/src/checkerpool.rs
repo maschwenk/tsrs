@@ -616,7 +616,7 @@ impl checkerPool {
             };
             // tsrs-only: the CLI's leaf classification reads only the loaded program; it runs meanwhile
             // (fileregions.rs `prepare`).
-            let (checkers, associations) = if shared {
+            let (checkers, associations) = if shared && !crate::sharedgraph::seed_prepares() {
                 // The seed must not check a leaf file (its region is freed), so the classification comes first.
                 if program.leaf_files != crate::fileregions::LeafMode::Off && !self.single_threaded {
                     tsrs_core::timeline::mark("prepare:start", -1, 0.0);
