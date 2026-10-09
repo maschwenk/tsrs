@@ -74,3 +74,33 @@ the other parser-set fields); span maps are arena objects (`P<SpanMap>`), origin
 - A real out-of-process mapper: `testdata/contentmapper/` runs a small Node mapper through the production spawner.
 - The usual gates: `cargo check --workspace --locked` (CI uses `-D warnings`), `tools/lint/ratchet.py`,
   `tools/lint/source.py`, `tools/gen-check.sh`, the conformance and fourslash suites unchanged, `pr-verify`.
+
+## Status
+
+Wave 1 (foundations) is done. What later waves build on:
+
+- `tsrs_spanmap` (all of `spanmap.go`; `spanmap_test.go`, 31 tests). Methods take `&SpanMap`. Rust cannot give an
+  inherent method and an associated function the same name, so each method Go calls on a possibly-nil receiver also
+  exists as a free function of that name taking `Option<&SpanMap>`, with Go's nil branch:
+  `tsrs_spanmap::virtual_to_original_span(file.span_map().as_deref(), loc)`. `new` and `unmarshal` return
+  `P<SpanMap>`. `Kind` is a newtype over `i32`, like `ModuleKind`, because a decoded map can carry any kind (which
+  `validate` reports). `alias_for_virtual_span` returns `Option<Segment>`. `virtual_to_original_position_exact`
+  returns `(TextPos, bool)` because Go also returns the mapped position with `false`. `tsrs_ls::spanmap` re-exports
+  the crate.
+- `tsrs_ast`: `SourceFile::set_content_mapper_info` (panics if already set) and the accessors (`span_map()` is
+  `Option<P<SpanMap>>`). `ContentMapperSourceFileInfo` holds `&'static` strings and slices, so build them with
+  `alloc_str` / `alloc_slice`. Also `MappedDiagnosticDirective` / `MappedDiagnosticDirectivePolicy`, and the alias
+  substitution in `Diagnostic::display_message_args`.
+- `tsrs_tsoptions::contentmappers`:
+  - `is_supported_virtual_extension`, `Mapper::{diagnostic_name, identity, transform_identity,
+    marshal_declared_options}`, `OptionPathSegment` and `resolve_content_mapper_manifest`.
+  - `transform_identity` returns a `u128` (Go `xxh3.Uint128`). Go's `fmt.Sprintf("%x", id.Bytes())` is
+    `format!("{id:032x}")`.
+  - Go `json.Value` is the raw JSON text in a `String` (`Definition::options`, the values of
+    `marshal_declared_options`). `gojson::compiler_option_to_go_json` marshals one `CompilerOptions` field by json tag.
+  - `tsoptions::get_content_mapper_option_diagnostic_location` finds the mapper in `content_mappers()` by address
+    (Go compares `*Mapper`), so pass a reference into that list.
+  - `ErrProjectUnavailable` (`contentmapper.go:26`) is left for the host crate, which owns the error type.
+- Already ported with the definitions, so the host and incremental waves should not port them again:
+  `TestMapperDiagnosticName` (`host_test.go`) and `TestStaticContentMapperTransformIdentity`
+  (`execute/incremental/buildinfo_contentmapper_test.go`), in `tsrs_tsoptions/src/contentmappers_test.rs`.

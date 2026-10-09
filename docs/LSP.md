@@ -352,8 +352,9 @@ checkers and old file versions are freed).
   changes nothing on Linux (watching disabled without client support, as in Go).
 - Fourslash `@tsc` command lines (8 tests) need `tsc -b` with emit (`tsctests.GetFileMapWithBuild`); emit is not
   ported.
-- `tsrs_ls::spanmap` is a PLACEHOLDER for Go `internal/spanmap`: value types only; `SpanMap` is uninhabited (no
-  content mapper ever builds one), so content-mapped branches are kept but statically unreachable.
+- `tsrs_ls::spanmap` re-exports `tsrs_spanmap` (Go `internal/spanmap`), but the language server never loads a
+  content-mapped file (content mappers in the language server are phase 2 of notes/contentmappers.md): its scripts
+  report no span map, so the content-mapped branches are kept but never taken.
 - Nested checker acquisition (decided 2026-10-02): Go's call hierarchy (and a few other ls paths) acquires a second
   checker while holding one. The project pool (what the server uses) hands out a different query checker, as in Go.
   The compiler's built-in pool (CLI, compiler-level tests) locks each checker, where Go's non-exclusive getter returns
