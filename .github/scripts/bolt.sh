@@ -84,6 +84,9 @@ for p in xstate-main webpack; do
   done
 done
 
+# BOLT needs symbols in its input, but the staged release binary does not. Strip only after instrumentation,
+# optimization and the correctness comparisons above have finished.
+strip --strip-all "$work/tsrs.bolt"
 mv "$dist/tsrs" "$dist/tsrs.prebolt"
 cp "$work/tsrs.bolt" "$dist/tsrs"
 ls -l "$dist/tsrs" "$dist/tsrs.prebolt"
