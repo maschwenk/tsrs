@@ -16,7 +16,7 @@
 
 use super::heap_sample::IN_ARENA;
 use super::{short_type, THREADS};
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 use std::cell::{Cell, RefCell};
 use std::ffi::c_void;
 use std::panic::Location;

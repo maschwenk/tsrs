@@ -71,16 +71,20 @@ jobs:
           save-cache: ${{ github.ref_name == 'main' }}
           cache-key: warm
 
+      # Every target (tests, examples) and every feature, so test code and feature-gated code stay warning-free too.
       - name: cargo check
-        run: cargo check --workspace --locked
+        run: cargo check --workspace --all-targets --all-features --locked
         env:
           RUSTFLAGS: -D warnings
 
-      - name: cargo test (fast crates)
-        run: >-
-          cargo test --locked --no-fail-fast
-          -p tsrs_core -p tsrs_ast -p tsrs_scanner -p tsrs_diagnostics -p tsrs_vfs -p tsrs_module
-          -p tsrs_tsoptions -p tsrs_printer -p tsrs_modulespecifiers -p tsrs_compiler -p tsrs_testrunner -p tsrs_cli
+      # Every crate's unit and integration tests, except the generated fourslash suite (fourslash-gate.sh runs it from the
+      # release binary), tsrs_wasm (the wasm job) and tsrs_api_transport's node round trip, which needs a
+      # packages/typescript checkout this job does not have (crates/tsrs_api_transport/tests/node_roundtrip.rs), so that
+      # crate runs by target. The tsrs_ls and tsrs_lsp tests read ts-ref/tsc/testdata.
+      - name: cargo test
+        run: |
+          cargo test --workspace --locked --no-fail-fast --exclude tsrs_fourslash --exclude tsrs_wasm --exclude tsrs_api_transport
+          cargo test --locked --no-fail-fast -p tsrs_api_transport --lib --test conn --test go_frames --test reentrancy --test strictjson_oracle
 
       - name: Build release binaries
         run: cargo build --release --locked -p tsrs_cli -p tsrs_testrunner -p tsrs_fourslash
@@ -313,6 +317,7 @@ jobs:
         with:
           save-cache: false
           cache-key: warm
+          tools: cargo-deny@0.20.2,cargo-shear@1.14.0
 
       - name: Lint ratchet
         run: python3 tools/lint/ratchet.py --self-test && python3 tools/lint/ratchet.py
@@ -320,6 +325,14 @@ jobs:
       # Unsafe Send/Sync inventory and comments on weakened atomic orderings (docs/RUST.md, "Source checks").
       - name: Source checks
         run: python3 tools/lint/source.py --self-test && python3 tools/lint/source.py
+
+      # deny.toml: advisories, licenses, duplicate versions, registry sources.
+      - name: cargo deny
+        run: cargo deny --locked check
+
+      # A dependency no workspace member uses is deleted, not kept (fat-LTO builds pay for every crate linked).
+      - name: cargo shear
+        run: cargo shear --deny-warnings
 
   # tools/ci/skip_marker.py: a pull request that changes code must not carry a CI-skip marker in its title, body or
   # commit subjects, because `gh pr merge --squash` copies them into the commit message and the commit then lands on

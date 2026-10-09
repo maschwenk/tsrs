@@ -8,11 +8,14 @@
 // on the native stack.
 
 // Same allocator as the tsrs binary, so `bench` measures what tsrs does; `bench` also reports the number of heap
-// allocations (arena chunks included).
+// allocations (arena chunks included). Not under `--features alloc-profile`: tsrs_core then installs its own.
+#[cfg(not(feature = "alloc-profile"))]
 struct CountingAlloc;
 
+// Stays at 0 under `--features alloc-profile`, where the counting allocator above is not installed.
 static HEAP_ALLOCS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+#[cfg(not(feature = "alloc-profile"))]
 unsafe impl std::alloc::GlobalAlloc for CountingAlloc {
     unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
         HEAP_ALLOCS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -30,6 +33,7 @@ unsafe impl std::alloc::GlobalAlloc for CountingAlloc {
     }
 }
 
+#[cfg(not(feature = "alloc-profile"))]
 #[global_allocator]
 static GLOBAL: CountingAlloc = CountingAlloc;
 
