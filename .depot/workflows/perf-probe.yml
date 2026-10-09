@@ -79,8 +79,8 @@ jobs:
       - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
         with:
           components: llvm-tools
-          save-cache: ${{ github.ref_name == 'main' }}
-          cache-key: warm
+          save-cache: true
+          cache-key: perf-probe-${{ inputs.runner || 'depot-ubuntu-24.04-32' }}
 
       - name: Install x86_64-unknown-linux-gnu target
         run: rustup target add x86_64-unknown-linux-gnu
