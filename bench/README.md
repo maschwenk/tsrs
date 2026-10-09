@@ -349,10 +349,11 @@ depot ci dispatch --repo maschwenk/tsrs --workflow pr-verify.yml --ref <pushed b
   --input projects=vscode,webpack --input checkers=4,32 --input reps=5
 ```
 
-or add the `verify` label to a pull request: it then runs on every push to that pull request and keeps one comment
-with the table up to date. `depot ci run` takes no inputs (edit the defaults in your working copy to narrow it), and
-Depot does not serve `actions/cache` to it (not tied to a ref), so it clones and installs every project; a dispatched
-or labelled run restores the caches `bench.yml` saves.
+or open a pull request into main that changes `crates/`: it then runs on every push to that pull request and keeps one
+comment with the table up to date. A pull request that changes nothing under `crates/` (a `Cargo.lock` bump, the bench
+harness) runs it only with the `verify` label. `depot ci run` takes no inputs (edit the defaults in your working copy
+to narrow it), and Depot does not serve `actions/cache` to it (not tied to a ref), so it clones and installs every
+project; a dispatched or pull request run restores the caches `bench.yml` saves.
 
 Historical duration on 64 vCPU (10 projects x 4 checker counts x 3 reps, poison on), Depot run `8fp8bp2jk1`
 (2026-10-07, `depot ci run`, so no caches): 10 min 44 s for the job, of which setup and project clone + install
