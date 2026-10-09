@@ -343,6 +343,9 @@ fn perform_compilation(
         testing,
         testing_m_times_cache: None,
     });
+    if let Some(report) = tsrs_compiler::lazy_dts_census_report() {
+        eprint!("{report}");
+    }
     if let Some(line) = tsrs_compiler::leaf_stats_report() {
         eprint!("{line}");
     }

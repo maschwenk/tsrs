@@ -1344,6 +1344,7 @@ pub struct Checker {
 pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
     program.bind_source_files();
     crate::types::census_layouts();
+    tsrs_core::lazydts_census::set_in_checker_init(true);
 
     // Placeholders for pointer fields Go leaves nil until they are assigned below.
     let compiler_options = program.options();
@@ -1822,6 +1823,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
     c.initialize_iteration_resolvers();
     c.initialize_checker();
     c.alias_cache_blockers -= 1;
+    tsrs_core::lazydts_census::set_in_checker_init(false);
     c
 }
 

@@ -634,6 +634,7 @@ impl Parser {
             // Relaxed: set once by the CLI before any program is created.
             self.lazy_dts = LAZY_DTS.load(std::sync::atomic::Ordering::Relaxed);
         }
+        let census_before = (tsrs_core::lazydts_census::enabled() && is_declaration_file).then(tsrs_core::lazydts_census::bytes_now);
         let pos = self.node_pos();
         let mut statements = self.parse_list_index(ParsingContext::SourceElements, Parser::parse_toplevel_statement);
         let end = self.node_pos();
@@ -673,6 +674,10 @@ impl Parser {
         collect_external_module_references(result);
         if ast::is_in_js_file(Some(node)) {
             result.set_js_diagnostics(&attach_file_to_diagnostics(&self.js_diagnostics, result));
+        }
+        if let Some(before) = census_before {
+            let bytes = tsrs_core::lazydts_census::bytes_now().saturating_sub(before);
+            tsrs_core::lazydts_census::note_parse_file(tsrs_core::lazydts_census::addr_of(result.get()), bytes);
         }
         result
     }
@@ -871,7 +876,50 @@ impl Parser {
         if self.lazy_dts && !self.context_flags.intersects(NodeFlags::JSDoc) {
             return self.parse_member_list_lazily(kind, parse_element);
         }
+        if tsrs_core::lazydts_census::enabled() && !self.context_flags.intersects(NodeFlags::JSDoc) && tspath::is_declaration_file_name(&self.opts.file_name) {
+            return self.parse_list_census(kind, parse_element);
+        }
         self.parse_list(kind, parse_element)
+    }
+
+    /// Lazy declaration-file census (profile builds, `TSRS_LAZY_DTS_CENSUS=1`, tsrs_core `lazydts_census`): parses a
+    /// member list or module block of a declaration file eagerly, recording the bytes of the list and of each member,
+    /// and what would keep the list from being lazy (`census_disqualifiers`).
+    pub(crate) fn parse_list_census(&mut self, kind: ParsingContext, parse_element: fn(&mut Parser) -> P<Node>) -> P<NodeList> {
+        use tsrs_core::lazydts_census as census;
+        let before_bytes = census::bytes_now();
+        let clean_start = !self.has_parse_error;
+        let cp = tsrs_core::arena_checkpoint();
+        let before = self.lazy_watch();
+        let list = self.parse_list(kind, |p| {
+            let b = census::bytes_now();
+            let n = parse_element(p);
+            census::note_parse_member(census::addr_of(n.get()), census::bytes_now().saturating_sub(b));
+            n
+        });
+        let after = self.lazy_watch();
+        let mut disq = census_disqualifiers(list.nodes(), kind == ParsingContext::BlockStatements);
+        if !clean_start || self.has_parse_error || after.0 != before.0 {
+            disq |= CENSUS_DIAG;
+        }
+        if after.1 != before.1 {
+            disq |= CENSUS_JSDOC;
+        }
+        if after.2 != before.2 || after.3 != before.3 {
+            disq |= CENSUS_OTHER;
+        }
+        if after.5 != before.5 {
+            let import_flags = (NodeFlags::PossiblyContainsDynamicImport | NodeFlags::PossiblyContainsImportMeta).bits() as usize;
+            disq |= if (after.5 & !before.5) & !import_flags == 0 { CENSUS_IMPORT } else { CENSUS_OTHER };
+        }
+        if !tsrs_core::arena_rewindable(&cp) {
+            disq |= CENSUS_REWIND;
+        }
+        if list.end() - list.pos() > LAZY_LIST_MAX_TEXT {
+            disq |= CENSUS_SIZE;
+        }
+        census::note_parse_list(census::addr_of(list.get()), census::bytes_now().saturating_sub(before_bytes), disq);
+        list
     }
 
     /// tsrs-only (notes/mem-lazy-dts-members.md): parses the member list of an interface, class or type literal of a
@@ -2743,7 +2791,11 @@ impl Parser {
         let pos = self.node_pos();
         let statements: P<NodeList>;
         if self.parse_expected(Kind::OpenBraceToken) {
-            statements = self.parse_list(ParsingContext::BlockStatements, Parser::parse_statement);
+            statements = if tsrs_core::lazydts_census::enabled() && tspath::is_declaration_file_name(&self.opts.file_name) {
+                self.parse_list_census(ParsingContext::BlockStatements, Parser::parse_statement)
+            } else {
+                self.parse_list(ParsingContext::BlockStatements, Parser::parse_statement)
+            };
             self.parse_expected(Kind::CloseBraceToken);
         } else {
             statements = self.create_missing_list();
@@ -3004,6 +3056,101 @@ fn reparse_lazy_list(record: &tsrs_ast::lazylist::LazyNodeList, file: P<SourceFi
         m.set_parent(Some(owner));
     }
     nodes
+}
+
+// Lazy declaration-file census: what would keep a list from being lazy (`parse_list_census`).
+const CENSUS_THIS: u16 = 1; // `this`, `this` types, `super`
+const CENSUS_IMPORT: u16 = 2; // import types, import calls, `import.meta`
+const CENSUS_INFER: u16 = 4; // `infer`
+const CENSUS_FLOW: u16 = 8; // bodies, decorators, `async`, initializers, expressions that make flow nodes
+const CENSUS_DIAG: u16 = 16; // a diagnostic, or a pending error at the start
+const CENSUS_JSDOC: u16 = 32; // eager JSDoc (`@see`, `@link`)
+const CENSUS_REWIND: u16 = 64; // the arena cannot discard the list
+const CENSUS_OTHER: u16 = 128; // reparsed clones, comment directives, source flags other than the import ones
+const CENSUS_SIZE: u16 = 256; // longer than `LAZY_LIST_MAX_TEXT`
+const CENSUS_MODREF: u16 = 512; // module blocks: imports, re-exports, nested ambient modules or augmentations
+const CENSUS_EXPORT_LOCAL: u16 = 1024; // module blocks: `export { x }` (the binder's instance state looks outside)
+
+/// The `lazy_list_blocked` walk, by reason (`CENSUS_*`); module blocks also report `CENSUS_MODREF`.
+fn census_disqualifiers(nodes: &[P<Node>], module_block: bool) -> u16 {
+    fn walk(n: P<Node>, module_block: bool, bits: &mut u16) {
+        *bits |= match n.kind() {
+            Kind::ThisKeyword | Kind::ThisType | Kind::SuperKeyword => CENSUS_THIS,
+            Kind::ImportType | Kind::ImportKeyword | Kind::MetaProperty => CENSUS_IMPORT,
+            Kind::InferType => CENSUS_INFER,
+            Kind::Block
+            | Kind::Decorator
+            | Kind::AsyncKeyword
+            | Kind::CallExpression
+            | Kind::NewExpression
+            | Kind::BinaryExpression
+            | Kind::ConditionalExpression
+            | Kind::ElementAccessExpression
+            | Kind::PostfixUnaryExpression
+            | Kind::ArrowFunction
+            | Kind::FunctionExpression
+            | Kind::ClassExpression
+            | Kind::ObjectLiteralExpression
+            | Kind::ArrayLiteralExpression
+            | Kind::TaggedTemplateExpression
+            | Kind::TemplateExpression
+            | Kind::ParenthesizedExpression
+            | Kind::AwaitExpression
+            | Kind::YieldExpression
+            | Kind::DeleteExpression
+            | Kind::TypeOfExpression
+            | Kind::VoidExpression
+            | Kind::NonNullExpression
+            | Kind::AsExpression
+            | Kind::SatisfiesExpression
+            | Kind::TypeAssertionExpression
+            | Kind::SpreadElement => CENSUS_FLOW,
+            Kind::PrefixUnaryExpression => {
+                let u = n.as_prefix_unary_expression();
+                if !matches!(u.operator, Kind::MinusToken | Kind::PlusToken) || !matches!(u.operand.kind(), Kind::NumericLiteral | Kind::BigIntLiteral) {
+                    CENSUS_FLOW
+                } else {
+                    0
+                }
+            }
+            Kind::PropertyAccessExpression if n.flags().intersects(NodeFlags::OptionalChain) => CENSUS_FLOW,
+            Kind::PropertyDeclaration | Kind::PropertySignature | Kind::Parameter | Kind::VariableDeclaration | Kind::BindingElement
+                if n.initializer().is_some() =>
+            {
+                CENSUS_FLOW
+            }
+            Kind::ImportDeclaration if module_block => CENSUS_MODREF,
+            Kind::ImportEqualsDeclaration if module_block && n.as_import_equals_declaration().module_reference.kind() == Kind::ExternalModuleReference => {
+                CENSUS_MODREF
+            }
+            Kind::ExportDeclaration if module_block => {
+                let e = n.as_export_declaration();
+                if e.module_specifier.is_some() {
+                    CENSUS_MODREF
+                } else if e.export_clause.is_some_and(|c| c.kind() != Kind::NamedExports || !c.as_named_exports().elements.nodes().is_empty()) {
+                    CENSUS_EXPORT_LOCAL
+                } else {
+                    0
+                }
+            }
+            Kind::ModuleDeclaration
+                if module_block
+                    && (n.as_module_declaration().keyword == Kind::GlobalKeyword || n.as_module_declaration().name().kind() == Kind::StringLiteral) =>
+            {
+                CENSUS_MODREF
+            }
+            _ => 0,
+        };
+        n.for_each_child(&mut |c| {
+            walk(c, module_block, bits);
+            false
+        });
+    }
+    let mut bits = 0;
+    for &n in nodes {
+        walk(n, module_block, &mut bits);
+    }
+    bits
 }
 
 /// Whether binding a member list could reach outside it, which a lazy list must not (the binder binds it later with

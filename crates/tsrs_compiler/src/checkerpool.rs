@@ -565,6 +565,7 @@ impl checkerPool {
     fn create_checkers(&self) -> &poolState {
         let program = self.program;
         self.state.get_or_init(|| {
+            crate::lazydts_census::register(program);
             if tsrs_core::ptr::shared_check::enabled() {
                 // Debug aid: bind up front so every parser/binder allocation is recorded as shared.
                 tsrs_core::ptr::shared_check::thaw();

@@ -13,6 +13,8 @@ mod fileregions;
 mod filesparser;
 mod host;
 mod includeprocessor;
+mod lazydts_census;
+pub use lazydts_census::report as lazy_dts_census_report;
 mod affinity;
 mod outputpaths;
 mod processing_diagnostic;

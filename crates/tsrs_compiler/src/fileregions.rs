@@ -111,7 +111,7 @@ pub fn lazy_dts_allowed() -> bool {
         return false;
     }
     let census = std::env::var_os("TSRS_CENSUS").is_some_and(|v| v == "1") || tsrs_core::census_recording();
-    !census && !tsrs_core::ptr::shared_check::enabled()
+    !census && !tsrs_core::ptr::shared_check::enabled() && !tsrs_core::lazydts_census::enabled()
 }
 
 /// Parses and binds declaration-file member lists lazily in every program created from here on, process-wide (the CLI
@@ -179,7 +179,7 @@ pub(crate) fn force_shared_lists(program: &crate::program::Program) {
 }
 
 /// The declaration files of the global libraries (`force_shared_lists`), in program order.
-fn global_library_files(program: &crate::program::Program) -> Vec<P<SourceFile>> {
+pub(crate) fn global_library_files(program: &crate::program::Program) -> Vec<P<SourceFile>> {
     use crate::file_include::fileIncludeKind as K;
     let reasons = &program.file_include_data.file_include_reasons;
     let mut global: FxHashSet<&str> = FxHashSet::default();
@@ -216,7 +216,7 @@ pub fn leaf_settings_from_env(checkers: usize) -> LeafSettings {
     let checker_census = crate::Checker::census_enabled() || crate::Checker::heap_census_enabled();
     #[cfg(not(feature = "checker"))]
     let checker_census = false;
-    if census || checker_census || crate::checkerpool::file_times_path().is_some() || crate::checkerpool::assignment_stats_enabled() {
+    if census || checker_census || tsrs_core::lazydts_census::enabled() || crate::checkerpool::file_times_path().is_some() || crate::checkerpool::assignment_stats_enabled() {
         return LeafSettings::default();
     }
     // Only where a freed region's pages go back to the system and its range is never reused (`Region::retire_on_free`

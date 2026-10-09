@@ -161,6 +161,7 @@ impl Symbol {
     }
     #[inline]
     pub fn members(&self) -> Option<P<SymbolTable>> {
+        tsrs_core::lazydts_census::mark_owner(tsrs_core::lazydts_census::addr_of(self), false);
         let t = self.tables()?;
         if let Some(lazy) = t.lazy.get() {
             lazy.ensure();
@@ -175,6 +176,7 @@ impl Symbol {
     }
     #[inline]
     pub fn exports(&self) -> Option<P<SymbolTable>> {
+        tsrs_core::lazydts_census::mark_owner(tsrs_core::lazydts_census::addr_of(self), true);
         let t = self.tables()?;
         if let Some(lazy) = t.lazy.get() {
             if lazy.fills_exports() {
