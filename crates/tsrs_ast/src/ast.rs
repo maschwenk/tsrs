@@ -7,8 +7,8 @@ use rustc_hash::FxHashMap;
 use tsrs_core::collections::Set;
 use tsrs_core::tspath::Path;
 use tsrs_core::{
-    alloc_slice, alloc_str, alloc_vec, compute_ecma_line_starts, undefined_text_range, LanguageVariant, ResolutionMode,
-    FrozenCell, OwnedCell, ScriptKind, TextPos, TextRange, ThinSlice, Tristate, P,
+    alloc_slice, alloc_str, alloc_vec, compute_ecma_line_starts, position_cmp, undefined_text_range, LanguageVariant,
+    ResolutionMode, FrozenCell, OwnedCell, ScriptKind, TextPos, TextRange, ThinSlice, Tristate, P, SYNTHETIC_POSITION,
 };
 use tsrs_diagnostics as diagnostics;
 
@@ -277,6 +277,14 @@ pub struct NodeList {
 
 const _: () = assert!(std::mem::size_of::<NodeList>() == 16);
 
+// Deep-cloned synthetic lists used `-2` on their last node to retain a trailing comma while
+// `-1` marked an ordinary synthetic range. A real range may not have a synthetic end, so this
+// shape preserves that distinction without reserving another TextPos value.
+#[inline]
+pub(crate) const fn synthetic_trailing_comma_range() -> TextRange {
+    TextRange::new(0, SYNTHETIC_POSITION)
+}
+
 impl NodeFactory {
     pub fn new_node_list(&self, nodes: Vec<P<Node>>) -> P<NodeList> {
         self.new_node_list_from_static(self.alloc_nodes_vec(nodes))
@@ -350,7 +358,7 @@ impl NodeList {
         let Some(last) = self.nodes().last() else {
             return false;
         };
-        last.end() < self.end()
+        last.loc() == synthetic_trailing_comma_range() || position_cmp(last.end(), self.end()).is_lt()
     }
 
     pub fn clone_list(&self, f: &NodeFactory) -> P<NodeList> {

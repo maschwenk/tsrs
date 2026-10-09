@@ -2150,7 +2150,11 @@ impl FourslashTest {
         tsrs_core::goslices::sort_func(&mut edits, |a, b| {
             let a_start = self.converters.line_and_character_to_position(script.clone(), a.range.start);
             let b_start = self.converters.line_and_character_to_position(script.clone(), b.range.start);
-            a_start as i32 - b_start as i32
+            match a_start.cmp(&b_start) {
+                std::cmp::Ordering::Less => -1,
+                std::cmp::Ordering::Equal => 0,
+                std::cmp::Ordering::Greater => 1,
+            }
         });
         let mut content = content.to_string();
         for edit in edits.iter().rev() {

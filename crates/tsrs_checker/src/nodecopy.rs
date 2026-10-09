@@ -248,8 +248,8 @@ impl NodeBuilderImpl {
             return None;
         }
         let ctx = self.ctx();
-        let existing_length = i32::try_from(existing.end() - existing.pos()).expect("reused node length exceeds i32");
-        ctx.approximate_length.set(ctx.approximate_length.get() + existing_length);
+        let existing_length = i32::try_from(existing.end() - existing.pos()).unwrap_or(i32::MAX);
+        ctx.approximate_length.set(ctx.approximate_length.get().saturating_add(existing_length));
         transformed
     }
 

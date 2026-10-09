@@ -30,7 +30,7 @@ fn get_deep_clone_visitor(f: NodeFactory, synthetic_location: bool) -> NodeVisit
         if synthetic_location {
             new_list.loc.set(undefined_text_range());
             if nodes.has_trailing_comma() {
-                new_list.nodes()[new_list.nodes().len() - 1].set_loc(undefined_text_range());
+                new_list.nodes()[new_list.nodes().len() - 1].set_loc(synthetic_trailing_comma_range());
             }
         }
         Some(new_list)
@@ -43,7 +43,7 @@ fn get_deep_clone_visitor(f: NodeFactory, synthetic_location: bool) -> NodeVisit
             new_list.list.loc.set(undefined_text_range());
             if nodes.has_trailing_comma() {
                 let new_nodes = new_list.nodes();
-                new_nodes[new_nodes.len() - 1].set_loc(undefined_text_range());
+                new_nodes[new_nodes.len() - 1].set_loc(synthetic_trailing_comma_range());
             }
         }
         Some(new_list)
@@ -106,5 +106,22 @@ mod tests {
         let synthetic = f.deep_clone_node(Some(name)).unwrap();
         assert_eq!(synthetic.loc(), undefined_text_range());
         assert_eq!(synthetic.as_qualified_name().right.loc(), undefined_text_range());
+    }
+
+    #[test]
+    fn deep_clone_preserves_a_trailing_comma_on_a_synthetic_list() {
+        let f = NodeFactory::default();
+        let name = f.new_identifier("a");
+        let element = f.new_binding_element(None, None, Some(name), None);
+        let elements = f.new_node_list(vec![element]);
+        elements.loc.set(new_text_range(1, 3));
+        assert!(elements.has_trailing_comma());
+
+        let pattern = f.new_binding_pattern(Kind::ObjectBindingPattern, elements);
+        pattern.set_loc(new_text_range(0, 4));
+        let synthetic = f.deep_clone_node(Some(pattern)).unwrap();
+        let synthetic_elements = synthetic.as_binding_pattern().elements();
+        assert!(synthetic_elements.has_trailing_comma());
+        assert_eq!(synthetic_elements.nodes()[0].loc(), synthetic_trailing_comma_range());
     }
 }
