@@ -135,3 +135,29 @@ instructions on every project between those two publishes while a release-build 
 measured -0.2%. `finish` now calls `exit` when `LLVM_PROFILE_FILE` is set (only the training sets it), and
 pgo-train.sh fails on an empty profile.
 
+
+## 2026-10-09: a strip setting that differed between the two builds dropped the profile
+
+PR #245 set `strip = "symbols"` in `[profile.release]`, which `dist` inherits, and `CARGO_PROFILE_DIST_STRIP=none`
+for the final build on Linux in release.yml and bench.yml, because BOLT needs the symbols. The instrumented build kept
+`symbols`. Cargo hashes the profile, `strip` included, into each crate's `-C metadata`, which is part of every symbol
+name, and the final build looks a function's counts up by its symbol name. So on Linux it found counts for no
+function, without a warning, and the README bench measured +10.6% to +18.0% single-threaded instructions on every
+project between 0f136be0 and 20261d4d. macOS builds were not affected: they use `symbols` in both builds. Both
+workflows now give the instrumented build the final build's value.
+
+Reproduced on macOS arm64 with the workflows' commands (instrumented build, pgo-train.sh, `llvm-profdata merge`,
+final build with `-Cllvm-args=-pgo-warn-missing-function`), on main at cab0f26e unless noted. "Same metadata": of
+the 56 crates both builds compile, those whose `-C metadata` is the same in both. Instructions: `/usr/bin/time -l`
+with `--singleThreaded` and `RAYON_NUM_THREADS=1`, minimum [median] of 5 interleaved runs; macOS counts include
+kernel work, so they spread by up to a few percent where bench/count.py's Linux counts repeat to 0.001%.
+
+| build | same metadata | functions without profile data | vscode G | drizzle-orm G |
+| --- | ---: | ---: | ---: | ---: |
+| final `none`, instrumented `symbols` (Linux before the fix) | 0 | 24,738 | 97.68 [97.73] | 14.73 [15.00] |
+| `symbols` in both (macOS) | 56 | 1,599 | 84.29 [84.86] | 12.84 [13.03] |
+| `none` in both (Linux with the fix) | 56 | 1,599 | 83.83 [84.99] | 12.86 [12.98] |
+| 0f136be0 (before #245), its own steps | 56 | 1,599 | 84.73 [84.78] | 12.82 [13.23] |
+
+Diagnostics and exit codes were the same in every run. The mismatched build is +15.3% / +14.9% over 0f136be0, the
+bench's +15.8% / +16.2%.
