@@ -10,7 +10,7 @@ workspace = true
 [features]
 default = ["compiler", "checker"]
 # The Rust compiler backend (program creation, parse/bind, syntactic diagnostics).
-compiler = ["tsoptions", "dep:tsrs_compiler", "dep:tsrs_sourcemap", "dep:tsrs_scanner"]
+compiler = ["tsoptions", "dep:tsrs_compiler", "dep:tsrs_contentmapper", "dep:tsrs_sourcemap", "dep:tsrs_scanner"]
 # Semantic diagnostics through tsrs_checker. Without it every run is --syntax-only.
 checker = ["compiler", "tsrs_compiler/checker", "dep:tsrs_checker", "dep:tsrs_scanner", "dep:tsrs_incremental"]
 # Option declarations from tsrs_tsoptions (instead of the oracle's options.json).
@@ -27,6 +27,7 @@ tsrs_parser = { workspace = true, optional = true }
 tsrs_vfs = { workspace = true, optional = true }
 tsrs_tsoptions = { workspace = true, optional = true }
 tsrs_compiler = { path = "../tsrs_compiler", default-features = false, optional = true }
+tsrs_contentmapper = { workspace = true, optional = true }
 tsrs_checker = { workspace = true, optional = true }
 tsrs_incremental = { workspace = true, optional = true }
 tsrs_scanner = { workspace = true, optional = true }

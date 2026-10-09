@@ -1,7 +1,7 @@
-// Port of execute/build/buildtask.go (the non-watch parts; content mappers are not supported by tsrs).
+// Port of execute/build/buildtask.go (the non-watch parts).
 
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::SystemTime;
 
 use tsrs_ast::{new_compiler_diagnostic, Diagnostic};
@@ -117,6 +117,10 @@ pub struct BuildTask {
     is_initial_cycle: AtomicBool,
     // Go `dirty`: the config changed since the task was created (API rebuilds; watch mode is not ported).
     pub(crate) dirty: AtomicBool,
+
+    // Go's contentMapperProjectOnce and the contentMapperProject it sets.
+    content_mapper_project: OnceLock<Option<Arc<dyn tsrs_contentmapper::Project>>>,
+    content_mapper_project_err: Mutex<Option<tsrs_contentmapper::Error>>,
 }
 
 fn diag(message: &'static Message, args: &[&dyn std::fmt::Display]) -> P<Diagnostic> {
@@ -139,6 +143,46 @@ impl BuildTask {
             pending: AtomicBool::new(false),
             is_initial_cycle: AtomicBool::new(is_initial_cycle),
             dirty: AtomicBool::new(false),
+            content_mapper_project: OnceLock::new(),
+            content_mapper_project_err: Mutex::new(None),
+        }
+    }
+
+    // buildtask.go:82
+    fn get_content_mapper_project(
+        &self,
+        orchestrator: &Orchestrator,
+    ) -> (Option<Arc<dyn tsrs_contentmapper::Project>>, Option<tsrs_contentmapper::Error>) {
+        let project = self
+            .content_mapper_project
+            .get_or_init(|| {
+                let content_mapper_host = orchestrator.content_mapper_host.lock().unwrap().clone()?;
+                let resolved: &'static ParsedCommandLine = self.resolved_opt()?.get();
+                if resolved.content_mappers().is_empty() {
+                    return None;
+                }
+                content_mapper_host.project(tsrs_contentmapper::ProjectSpec {
+                    config_file_name: resolved.config_name().to_string(),
+                    mappers: resolved.content_mappers().iter().collect(),
+                    compiler_options: resolved.compiler_options(),
+                })
+            })
+            .clone();
+        (project, self.content_mapper_project_err.lock().unwrap().clone())
+    }
+
+    // buildtask.go:96
+    #[expect(dead_code, reason = "its only Go caller, the build orchestrator's watch update (orchestrator.go:580), is not ported")]
+    fn refresh_content_mapper_project(&self, _orchestrator: &Orchestrator) {
+        if let Some(Some(project)) = self.content_mapper_project.get() {
+            *self.content_mapper_project_err.lock().unwrap() = project.refresh().err();
+        }
+    }
+
+    // Go `existing.contentMapperProject.Close()` (orchestrator.go:186, 280), when the task's project was created.
+    pub(crate) fn close_content_mapper_project(&self) {
+        if let Some(Some(project)) = self.content_mapper_project.get() {
+            let _ = project.close();
         }
     }
 
@@ -305,11 +349,19 @@ impl BuildTask {
         compile_times.config_time = host.config_times.lock().unwrap().get(path).copied().unwrap_or_default();
         let sys = orchestrator.opts.sys;
         let build_info_read_start = sys.now();
+        let (content_mapper_project, err) = self.get_content_mapper_project(orchestrator);
+        if let Some(err) = err {
+            self.report_diagnostic(tsrs_compiler::content_mapper_project_diagnostic(&err));
+            self.set_status(upToDateStatus::new(upToDateStatusType::BuildErrors));
+            self.set_exit_status(ExitStatus::DiagnosticsPresent_OutputsSkipped);
+            return;
+        }
         let builder = Arc::clone(&self.result.lock().unwrap().as_ref().unwrap().builder);
         let trace_builder = Arc::clone(&builder);
         let compiler_host: Arc<dyn tsrs_compiler::CompilerHost> = Arc::new(compilerHost {
             host,
             trace: tsc::get_trace_with_writer_from_sys(Arc::new(move |t: &str| trace_builder.lock().unwrap().push_str(t)), false, orchestrator.opts.testing),
+            content_mapper_project,
         });
         let mut old_program = None;
         if !build_options.force.is_true() {
@@ -494,9 +546,16 @@ impl BuildTask {
         }
 
         // If a configured content mapper's identity has changed, files it produced may be stale.
-        match tsrs_incremental::content_mapper_identities() {
-            Ok(identities) if build_info.content_mapper_identities_match(identities.as_deref()) => {}
-            _ => return upToDateStatus::with(upToDateStatusType::OutOfDateOptions, statusData::String(build_info_path)),
+        let (content_mapper_project, err) = self.get_content_mapper_project(orchestrator);
+        let (content_mapper_identities, identity_err) = match tsrs_incremental::content_mapper_identities(content_mapper_project.as_deref()) {
+            Ok(identities) => (identities, None),
+            Err(identity_err) => (None, Some(identity_err)),
+        };
+        if let Some(identity_err) = &identity_err {
+            *self.content_mapper_project_err.lock().unwrap() = Some(identity_err.clone());
+        }
+        if err.is_some() || identity_err.is_some() || !build_info.content_mapper_identities_match(content_mapper_identities.as_deref()) {
+            return upToDateStatus::with(upToDateStatusType::OutOfDateOptions, statusData::String(build_info_path));
         }
 
         let options = resolved.compiler_options().unwrap();
@@ -610,7 +669,11 @@ impl BuildTask {
                 if seen_roots.has(&input_path) || resolved_roots.has(&input_path) {
                     continue;
                 }
-                // Content-mapper supplemental files: content mappers are not supported by tsrs.
+                if is_content_mapper_supplemental_build_info_path(&input_path, get_build_info_root_info_reader().roots())
+                    && !tsrs_compiler::CompilerHost::fs(host).file_exists(&input_file)
+                {
+                    continue;
+                }
                 let input_time = host.get_m_time(&input_file);
                 if input_time.is_none() {
                     // Input file that was part of the program is missing (eg: dependency was removed)
@@ -1016,5 +1079,49 @@ impl BuildTask {
             }
         }
         err
+    }
+}
+
+// buildtask.go:621
+pub(crate) fn is_content_mapper_supplemental_build_info_path<'a>(input_path: &Path, roots: impl IntoIterator<Item = &'a Path>) -> bool {
+    for root in roots {
+        let Some(suffix) = input_path.as_str().strip_prefix(root.as_str()).and_then(|rest| rest.strip_prefix('.')) else {
+            continue;
+        };
+        let Some((index, extension)) = suffix.split_once('.') else {
+            continue;
+        };
+        if extension.is_empty() {
+            continue;
+        }
+        // Go `strconv.Atoi`: an optional sign and decimal digits.
+        let digits = index.strip_prefix(['+', '-']).unwrap_or(index);
+        let is_int = !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()) && index.parse::<i64>().is_ok();
+        if is_int && tsrs_contentmapper::is_supported_virtual_extension(&format!(".{extension}")) {
+            return true;
+        }
+    }
+    false
+}
+
+#[cfg(test)]
+mod buildtask_contentmapper_test {
+    use tsrs_core::tspath::Path;
+
+    use super::is_content_mapper_supplemental_build_info_path;
+
+    // buildtask_contentmapper_test.go:11. A build info file entry that names a supplemental output of a root file
+    // (`<root>.<n>.<ext>`) is skipped when the file is gone, instead of making the build out of date; anything else
+    // must still be checked.
+    #[test]
+    fn test_is_content_mapper_supplemental_build_info_path() {
+        let roots = [Path::new("/src/app.vue"), Path::new("/src/index.ts")];
+        let path = Path::new;
+
+        assert!(is_content_mapper_supplemental_build_info_path(&path("/src/app.vue.0.ts"), &roots));
+        assert!(is_content_mapper_supplemental_build_info_path(&path("/src/app.vue.12.mts"), &roots));
+        assert!(!is_content_mapper_supplemental_build_info_path(&path("/src/app.vue.ts"), &roots));
+        assert!(!is_content_mapper_supplemental_build_info_path(&path("/src/app.vue.0.txt"), &roots));
+        assert!(!is_content_mapper_supplemental_build_info_path(&path("/src/other.vue.0.ts"), &roots));
     }
 }

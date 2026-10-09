@@ -11,3 +11,5 @@ pub use diagnostics::*;
 pub use emit::*;
 pub use extendedconfigcache::*;
 pub use statistics::*;
+// The stream `System::spawn` returns (Go `io.ReadWriteCloser`).
+pub use tsrs_ipc::ReadWriteCloser;

@@ -165,6 +165,15 @@ impl System for ApiBuildSystem {
     fn since_start(&self) -> Duration {
         self.start.elapsed()
     }
+    // session.go:1919
+    fn spawn(
+        &self,
+        _command: &[String],
+        _dir: &str,
+        _stderr: Option<Box<dyn std::io::Write + Send>>,
+    ) -> Result<tsrs_execute::tsc::ReadWriteCloser, String> {
+        Err("spawning processes is not supported by the API build orchestrator".to_string())
+    }
 }
 
 impl ParseConfigHost for ApiBuildSystem {

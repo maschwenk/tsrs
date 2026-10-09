@@ -288,8 +288,7 @@ impl Program {
         let build_info = match tsrs_core::phases::time("BuildInfo: from snapshot", || snapshot_to_build_info(&self.snapshot, program, &build_info_file_name)) {
             Ok(build_info) => build_info,
             Err(err) => {
-                // Go: compiler.ContentMapperProjectDiagnostic(err); content mappers are not supported, so this never fails.
-                return Some(EmitResult { emit_skipped: true, diagnostics: vec![new_compiler_diagnostic(&diagnostics::Could_not_write_file_0_Colon_1, &[&build_info_file_name, &err])], ..Default::default() });
+                return Some(EmitResult { emit_skipped: true, diagnostics: vec![tsrs_compiler::content_mapper_project_diagnostic(&err)], ..Default::default() });
             }
         };
         let text = tsrs_core::phases::time("BuildInfo: marshal", || build_info.marshal());

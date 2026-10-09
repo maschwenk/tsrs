@@ -124,6 +124,20 @@ impl CompilerHost for host {
         self.host.get_source_file(opts)
     }
 
+    // host.go:62
+    fn get_content_mapped_source_files(
+        &self,
+        _parse_options: SourceFileParseOptions,
+        _mapper: &tsrs_contentmapper::Mapper,
+    ) -> Result<tsrs_contentmapper::SourceFiles, tsrs_contentmapper::Error> {
+        Err(tsrs_contentmapper::Error::ProjectUnavailable)
+    }
+
+    // host.go:66
+    fn content_mapper_project(&self) -> Option<Arc<dyn tsrs_contentmapper::Project>> {
+        panic!("build.Orchestrator.host does not support content mapper project; use an individual project's compiler host instead");
+    }
+
     // host.go:71
     fn get_resolved_project_reference(&self, file_name: &str, path: Path) -> Option<P<ParsedCommandLine>> {
         self.resolved_references.load_or_store(

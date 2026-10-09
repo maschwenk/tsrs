@@ -18,6 +18,7 @@ tsrs_module.workspace = true
 tsrs_tsoptions.workspace = true
 tsrs_checker.workspace = true
 tsrs_compiler.workspace = true
+tsrs_contentmapper.workspace = true
 tsrs_lsproto.workspace = true
 tsrs_ls.workspace = true
 tsrs_projectutil.workspace = true

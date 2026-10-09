@@ -17,6 +17,7 @@ tsrs_module.workspace = true
 tsrs_tsoptions.workspace = true
 tsrs_checker.workspace = true
 tsrs_compiler.workspace = true
+tsrs_contentmapper.workspace = true
 rustc-hash.workspace = true
 rayon.workspace = true
 bitflags.workspace = true

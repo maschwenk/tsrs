@@ -125,6 +125,14 @@ fn emit_through_the_host_matches_native() {
         fn since_start(&self) -> std::time::Duration {
             self.start.elapsed()
         }
+        fn spawn(
+            &self,
+            command: &[String],
+            dir: &str,
+            stderr: Option<Box<dyn std::io::Write + Send>>,
+        ) -> Result<tsrs_execute::tsc::ReadWriteCloser, String> {
+            tsrs_contentmapper::spawn_process(command, dir, stderr)
+        }
     }
     let _guard = setup(&[(&format!("{root}/tsconfig.json"), config), (&format!("{root}/src/a.ts"), a), (&format!("{root}/src/b.ts"), b)]);
     let native: &'static OsSys = Box::leak(Box::new(OsSys { fs: Arc::new(tsrs_vfs::bundled::wrap_fs(tsrs_vfs::osvfs::fs())), cwd: root.clone(), start: std::time::Instant::now() }));

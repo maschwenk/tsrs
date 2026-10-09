@@ -17,6 +17,8 @@ tsrs_vfs.workspace = true
 tsrs_tsoptions.workspace = true
 tsrs_compiler = { path = "../tsrs_compiler", default-features = false }
 tsrs_incremental.workspace = true
+tsrs_contentmapper.workspace = true
+tsrs_ipc.workspace = true
 rustc-hash.workspace = true
 
 [target.'cfg(unix)'.dependencies]
@@ -24,6 +26,7 @@ libc = "0.2"
 
 [dev-dependencies]
 similar = "3"
+tsrs_contentmappertest.workspace = true
 
 [features]
 default = ["checker"]

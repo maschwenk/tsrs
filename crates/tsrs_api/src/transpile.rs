@@ -176,7 +176,7 @@ fn transpile_in_current_region(input: &str, base: Option<&CompilerOptions>, file
         files.insert(tspath::combine_paths(LIB_DIRECTORY, &[lib]), BAREBONES_LIB_CONTENT.to_string());
     }
     let fs = Arc::new(TranspileFS { files, unexpected: Mutex::new(None) });
-    let host = tsrs_compiler::new_compiler_host(INPUT_DIRECTORY, Arc::<TranspileFS>::clone(&fs), LIB_DIRECTORY, None, None);
+    let host = tsrs_compiler::new_compiler_host(INPUT_DIRECTORY, Arc::<TranspileFS>::clone(&fs), LIB_DIRECTORY, None, None, None);
     let config = tsrs_tsoptions::new_parsed_command_line(P::new(opts), vec![input_file_name.clone()], Vec::new(), tspath::ComparePathsOptions::default());
     let mut program_options = ProgramOptions::new(P::new(config), host);
     program_options.skip_module_resolution = true;

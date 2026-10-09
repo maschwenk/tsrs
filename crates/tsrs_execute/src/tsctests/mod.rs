@@ -344,7 +344,7 @@ fn tsctests() {
     let scenarios: Vec<scenario> = files
         .iter()
         .map(|f| load_scenario(f))
-        .filter(|s| !s.baseline.contains("contentMapper") && s.baseline.contains(&filter))
+        .filter(|s| s.baseline.contains(&filter))
         .collect();
     let results_dir = root.join("target/tsctests-results");
     let _ = std::fs::remove_dir_all(&results_dir);
@@ -407,5 +407,5 @@ fn tsctests() {
             summary += &format!("{suite:9}{class:6} {n:4} / {total}\n");
         }
     }
-    eprintln!("tsctests (non-watch, no content mappers):\n{summary}results in {}", results_dir.display());
+    eprintln!("tsctests (non-watch):\n{summary}results in {}", results_dir.display());
 }

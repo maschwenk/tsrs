@@ -830,9 +830,13 @@ impl BuildInfo {
 }
 
 // ContentMapperIdentities returns the project's sorted mapper transform identities. A nil project means
-// the compiler host has no configured content mappers. Content mappers are not supported by tsrs.
-pub fn content_mapper_identities() -> Result<Option<Vec<String>>, String> {
-    Ok(None)
+// the compiler host has no configured content mappers.
+// buildInfo.go:501 (`None` is Go's nil slice.)
+pub fn content_mapper_identities(project: Option<&dyn tsrs_contentmapper::Project>) -> Result<Option<Vec<String>>, tsrs_contentmapper::Error> {
+    let Some(project) = project else {
+        return Ok(None);
+    };
+    project.identities().map(Some)
 }
 
 // buildInfo.go:523

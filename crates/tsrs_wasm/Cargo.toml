@@ -23,6 +23,7 @@ tsrs_scanner.workspace = true
 tsrs_vfs.workspace = true
 tsrs_compiler.workspace = true
 tsrs_execute = { path = "../tsrs_execute" }
+tsrs_contentmapper = { path = "../tsrs_contentmapper" }
 
 [dev-dependencies]
 # Only the encoder-equality test uses it; dev-dependencies never link into the module.

@@ -53,6 +53,11 @@ impl System for osSys {
     fn get_environment_variable(&self, name: &str) -> Option<String> {
         std::env::var(name).ok()
     }
+
+    // sys.go:68
+    fn spawn(&self, command: &[String], dir: &str, stderr: Option<Box<dyn Write + Send>>) -> Result<crate::tsc::ReadWriteCloser, String> {
+        tsrs_contentmapper::spawn_process(command, dir, stderr)
+    }
 }
 
 pub fn new_system() -> osSys {

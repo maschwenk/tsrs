@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use rayon::prelude::*;
 use rustc_hash::{FxHashMap, FxHashSet};
-use tsrs_ast::{Node, SourceFile, SourceFileMetaData};
+use tsrs_ast::{self as ast, Node, SourceFile, SourceFileMetaData};
 use tsrs_core::tspath::{self, Path};
 use tsrs_core::{ModuleKind, Tristate, P};
 use tsrs_diagnostics as diagnostics;
@@ -30,6 +30,7 @@ pub(crate) struct parseTask {
     pub(crate) loaded: bool,
     pub(crate) started_sub_tasks: bool,
     pub(crate) is_for_automatic_type_directive: bool,
+    pub(crate) is_content_mapper_supplemental: bool,
     pub(crate) failed_lookup: bool,
     // Set when the metadata was computed ahead of time for a parallel parse.
     pub(crate) metadata_loaded: bool,
@@ -84,6 +85,7 @@ impl parseTask {
             loaded: false,
             started_sub_tasks: false,
             is_for_automatic_type_directive: false,
+            is_content_mapper_supplemental: false,
             failed_lookup: false,
             metadata_loaded: false,
             increase_depth: false,
@@ -173,7 +175,7 @@ fn load(t: TaskId, loader: &mut fileLoader) {
 
     // A prefetched file passed these checks in task_needs_parse (the same conditions); only an unparsed task repeats
     // them here, where a failure becomes the task's diagnostic.
-    if loader.tasks[t].file.is_none() && tspath::has_extension(&loader.tasks[t].normalized_file_path) {
+    if !loader.tasks[t].is_content_mapper_supplemental && loader.tasks[t].file.is_none() && tspath::has_extension(&loader.tasks[t].normalized_file_path) {
         let compiler_options = loader.opts.config.compiler_options().unwrap();
         let allow_non_ts_extensions = compiler_options.allow_non_ts_extensions.is_true();
         if !allow_non_ts_extensions {
@@ -215,6 +217,7 @@ fn load(t: TaskId, loader: &mut fileLoader) {
     };
 
     loader.tasks[t].file = Some(file);
+    apply_virtual_file_name(&mut loader.tasks[t].data().metadata, file);
     loader.tasks[t].sub_tasks =
         Vec::with_capacity(file.referenced_files.get().len() + file.imports().len() + file.module_augmentations.get().len());
     // The prefetch's include reasons name the task by this string; every reason of the task shares it.
@@ -267,6 +270,27 @@ fn load(t: TaskId, loader: &mut fileLoader) {
     }
 
     loader.resolve_imports_and_module_augmentations(t);
+    // filesparser.go:172
+    for &supplemental in file.supplemental_source_files() {
+        let mut sub_task = parseTask::new(supplemental.file_name());
+        sub_task.file = Some(supplemental);
+        sub_task.is_content_mapper_supplemental = true;
+        let mut include_reason = FileIncludeReason::new(fileIncludeKind::ContentMapperSupplemental);
+        include_reason.canonical_source_file = Some(P::new(loader.tasks[t].path.clone()));
+        sub_task.include_reason = Some(P::new(include_reason));
+        loader.tasks.push(sub_task);
+        let id = loader.tasks.len() - 1;
+        loader.tasks[t].sub_tasks.push(id);
+    }
+}
+
+// filesparser.go:126: a content-mapped file's module format follows its virtual file name. The parse ahead
+// (`prefetch`) applies it before resolving the file's imports, as Go's load does; applying it again is a no-op.
+fn apply_virtual_file_name(metadata: &mut SourceFileMetaData, file: P<SourceFile>) {
+    let virtual_file_name = file.virtual_file_name();
+    if !virtual_file_name.is_empty() {
+        metadata.implied_node_format = ast::get_implied_node_format_for_file(virtual_file_name, &metadata.package_json_type);
+    }
 }
 
 fn load_metadata(t: TaskId, loader: &mut fileLoader) {
@@ -449,6 +473,11 @@ impl<'a> speculation<'a> {
         if !ctx.project_references.get_parse_file_redirect(file_name, path).is_empty() {
             return false;
         }
+        // A content-mapped file is transformed by an external mapper, and a failed transform counts towards the
+        // mapper's failure budget: it is parsed only by the round that loads it, never ahead of it.
+        if tspath::file_extension_is_one_of(file_name, &crate::fileloader::str_slice(ctx.content_mapper_extensions)) {
+            return false;
+        }
         if tspath::has_extension(file_name) && !ctx.opts.config.compiler_options().unwrap().allow_non_ts_extensions.is_true() {
             let canonical_file_name = tspath::get_canonical_file_name(file_name, ctx.host.fs().use_case_sensitive_file_names());
             if !crate::fileloader::is_supported_extension(ctx.supported_extensions_with_json, &canonical_file_name) {
@@ -471,7 +500,7 @@ impl<'a> speculation<'a> {
         use tsrs_core::festats::{self, Cat};
         let job_start = festats::enabled().then(std::time::Instant::now);
         let metadata = festats::timed(Cat::Meta, || source_file_meta_data(ctx.opts, ctx.resolver, ctx.project_references, &file_name));
-        let file = ctx.host.get_source_file(parse_options_for(ctx.host, ctx.project_references, &file_name, &path, &metadata));
+        let file = ctx.source_file_parser().parse_source_file(parse_options_for(ctx.host, ctx.project_references, &file_name, &path, &metadata));
         festats::timed(Cat::Bind, || file.map(crate::fileregions::bind));
         let resolutions = festats::timed(Cat::Resolve, || file.map(|file| Box::new(prefetch_resolutions(ctx, file, &metadata))));
         if let (Some(file), Some(resolutions)) = (file, &resolutions) {
@@ -505,6 +534,16 @@ impl filesParser {
         loader.files_parser.task_data_by_path.reserve(tasks.len());
         loader.files_parser.datas.reserve(tasks.len());
         Self::start(loader, tasks, 0);
+        // Go's single-threaded work group runs the queued closures last-queued first (core/workgroup.go), a depth-first
+        // order that the rounds below do not keep. The program's files do not depend on it, but which files a failing
+        // content mapper reports before the failure budget disables it does (fileloader.go:681, the tsc
+        // contentMapperFailures scenarios): with content mappers, a single-threaded load runs Go's order.
+        if loader.files_parser.single_threaded && !loader.content_mapper_extensions.is_empty() {
+            while let Some(item) = loader.files_parser.queue.pop() {
+                Self::run_queued(loader, item);
+            }
+            return;
+        }
         loop {
             let round = std::mem::take(&mut loader.files_parser.queue);
             if round.is_empty() {
@@ -684,6 +723,7 @@ impl filesParser {
         let ctx = loader.prefetch_context();
         let spec = speculation { ctx: &ctx, claimed: tsrs_core::collections::SyncSet::default(), results: std::sync::Mutex::new(Vec::new()) };
         let (opts, host, resolver, project_references) = (ctx.opts, ctx.host, ctx.resolver, ctx.project_references);
+        let file_parser = ctx.source_file_parser();
         let parse_start = std::time::Instant::now();
         let stats = tsrs_core::festats::enabled();
         let cpu_before: Vec<f64> = if stats { crate::program::worker_pool().broadcast(|_| crate::checkerpool::thread_cpu_seconds()) } else { Vec::new() };
@@ -696,17 +736,20 @@ impl filesParser {
                             use tsrs_core::festats::{self, Cat};
                             let job_start = festats::enabled().then(std::time::Instant::now);
                             let file_name: &str = &file_name;
-                            let metadata = if is_lib {
+                            let mut metadata = if is_lib {
                                 SourceFileMetaData { implied_node_format: ModuleKind::CommonJS, ..Default::default() }
                             } else {
                                 festats::timed(Cat::Meta, || source_file_meta_data(opts, resolver, project_references, file_name))
                             };
                             let file = crate::fileregions::parse_task(is_root, || {
-                                host.get_source_file(parse_options_for(host, project_references, file_name, &path, &metadata))
+                                file_parser.parse_source_file(parse_options_for(host, project_references, file_name, &path, &metadata))
                             });
                             // Bind here too: the round is bound by file system calls, and the checkers would bind every
                             // file on the same pool later (binding depends only on the file).
                             festats::timed(Cat::Bind, || file.map(crate::fileregions::bind));
+                            if let Some(file) = file {
+                                apply_virtual_file_name(&mut metadata, file);
+                            }
                             let resolutions = festats::timed(Cat::Resolve, || match file {
                                 Some(file) if resolve_ahead => Some(Box::new(prefetch_resolutions(&ctx, file, &metadata))),
                                 _ => None,
@@ -1090,12 +1133,21 @@ impl filesParser {
             output_file_to_project_reference_source,
             redirect_targets_map,
             redirect_files_by_path,
+            content_mapper_diagnostics: std::mem::take(&mut loader.content_mapper_mu.lock().unwrap().content_mapper_diagnostics),
         }
     }
 }
 
+// filesparser.go:408, 454
 fn duplicate_source_file(file: P<SourceFile>) -> DuplicateSourceFile {
-    DuplicateSourceFile { parse_options: file.parse_options().clone(), hash: file.hash.get(), script_kind: file.script_kind.get() }
+    DuplicateSourceFile {
+        parse_options: file.parse_options().clone(),
+        content_mapper_parse_options: file.content_mapper_parse_options(),
+        hash: file.hash.get(),
+        script_kind: file.script_kind.get(),
+        content_mapper: file.content_mapper(),
+        is_content_mapper_failure_stub: file.is_content_mapper_failure_stub(),
+    }
 }
 
 fn add_include_reason(

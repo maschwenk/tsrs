@@ -60,6 +60,16 @@ impl CompilerHost for CachedCompilerHost {
         SOURCE_FILE_CACHE.with(|c| c.borrow_mut().insert(key, source_file));
         Some(source_file)
     }
+    fn get_content_mapped_source_files(
+        &self,
+        parse_options: SourceFileParseOptions,
+        mapper: &tsrs_contentmapper::Mapper,
+    ) -> Result<tsrs_contentmapper::SourceFiles, tsrs_contentmapper::Error> {
+        self.inner.get_content_mapped_source_files(parse_options, mapper)
+    }
+    fn content_mapper_project(&self) -> Option<Arc<dyn tsrs_contentmapper::Project>> {
+        self.inner.content_mapper_project()
+    }
     fn get_resolved_project_reference(&self, file_name: &str, path: Path) -> Option<P<ParsedCommandLine>> {
         self.inner.get_resolved_project_reference(file_name, path)
     }
@@ -243,7 +253,7 @@ fn compile_files_ex(
     config.errors = errors;
     let config = P::new(config);
 
-    let inner = compiler::new_compiler_host(current_directory, fs, &bundled::lib_path(), None, None);
+    let inner = compiler::new_compiler_host(current_directory, fs, &bundled::lib_path(), None, None, None);
     let host: Arc<dyn CompilerHost> = Arc::new(CachedCompilerHost { inner });
     #[cfg(feature = "checker")]
     if let Some(recorder) = recorder {

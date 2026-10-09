@@ -1,9 +1,14 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
-use rustc_hash::FxHashMap;
-use tsrs_ast::{self as ast, FileReference, Kind, Node, NodeFactory, NodeFlags, SourceFile, SourceFileMetaData, SourceFileParseOptions, TokenFlags};
+use rustc_hash::{FxHashMap, FxHashSet};
+use tsrs_ast::{
+    self as ast, new_compiler_diagnostic, new_diagnostic, ContentMapperSourceFileInfo, Diagnostic, DiagnosticExt, FileReference, Kind, Node,
+    NodeFactory, NodeFlags, SourceFile, SourceFileMetaData, SourceFileParseOptions, TokenFlags,
+};
+use tsrs_contentmapper::{self as contentmapper, DiagnosticDirectiveErrorKind, InitializeErrorKind, Mapper, ProjectErrorKind, TransformErrorKind};
 use tsrs_core::tspath::{self, ComparePathsOptions, Path};
-use tsrs_core::{alloc_str, CompilerOptions, ModuleKind, ModuleResolutionKind, ResolutionMode, ScriptKind, P};
+use tsrs_core::{alloc_str, CompilerOptions, ModuleKind, ModuleResolutionKind, ResolutionMode, ScriptKind, TextRange, P};
+use tsrs_spanmap::MappingErrorKind;
 use tsrs_diagnostics::{self as diagnostics, Message};
 use tsrs_module::{self as module, DiagAndArgs, ModeAwareCache, ModeAwareCacheKey, ResolvedModule, ResolvedTypeReferenceDirective, Resolver};
 use tsrs_tsoptions::{self as tsoptions};
@@ -16,6 +21,11 @@ use crate::program::{ProgramConfig, ProgramOptions};
 use crate::projectreferencefilemapper::{projectReferenceFileMapper, projectReferenceFileMapperBuilder, resolution_host_for};
 use crate::projectreferenceparser::projectReferenceParser;
 use crate::includeprocessor::fileIncludeData;
+
+// maxContentMapperFailures is the number of transform failures a single content mapper may accumulate
+// before it is disabled for the rest of the program.
+// fileloader.go:34
+const MAX_CONTENT_MAPPER_FAILURES: i32 = 5;
 
 pub(crate) struct libResolution {
     pub(crate) library_name: String,
@@ -42,6 +52,7 @@ pub(crate) struct fileLoader {
     pub(crate) compare_paths_options: ComparePathsOptions,
     pub(crate) supported_extensions: Vec<Vec<String>>,
     pub(crate) supported_extensions_with_json_if_resolve_json_module: Vec<Vec<String>>,
+    pub(crate) content_mapper_extensions: Vec<String>,
 
     pub(crate) files_parser: filesParser,
     pub(crate) root_tasks: Vec<TaskId>,
@@ -57,7 +68,23 @@ pub(crate) struct fileLoader {
     pub(crate) path_for_lib_file_cache: FxHashMap<String, P<LibFile>>,
     pub(crate) path_for_lib_file_resolutions: FxHashMap<Path, libResolution>,
 
+    // contentMapperMu guards the content-mapper bookkeeping below, which is written concurrently as
+    // content-mapped files are parsed across worker goroutines.
+    pub(crate) content_mapper_mu: Mutex<contentMapperBookkeeping>,
     pub(crate) module_resolution_error: Option<String>,
+}
+
+// fileloader.go:65-68, the fields `contentMapperMu` guards. Go keys by `*contentmapper.Mapper`; the keys here are the
+// mappers' addresses (references into the command line's `content_mappers()`).
+#[derive(Default)]
+pub(crate) struct contentMapperBookkeeping {
+    content_mapper_failures: FxHashMap<usize, i32>,
+    content_mapper_init_failed: FxHashSet<usize>,
+    pub(crate) content_mapper_diagnostics: Vec<P<Diagnostic>>,
+}
+
+fn mapper_key(mapper: &Mapper) -> usize {
+    std::ptr::from_ref(mapper) as usize
 }
 
 pub(crate) struct redirectsFile {
@@ -68,12 +95,20 @@ pub(crate) struct redirectsFile {
     pub(crate) target: Path,
 }
 
-// fileloader.go:90 (content mappers are not ported: no content-mapper fields)
+// fileloader.go:90
 #[derive(Clone, Debug)]
 pub struct DuplicateSourceFile {
     pub parse_options: SourceFileParseOptions,
+    // ContentMapperParseOptions are the acquire-time options for a content-mapped parse-cache entry.
+    pub content_mapper_parse_options: SourceFileParseOptions,
     pub hash: u128,
     pub script_kind: ScriptKind,
+    // ContentMapper is the identity of the content mapper that produced this file,
+    // or "" if the file is not content-mapped.
+    pub content_mapper: &'static str,
+    // IsContentMapperFailureStub reports whether the file is an empty placeholder
+    // from a failed transform.
+    pub is_content_mapper_failure_stub: bool,
 }
 
 #[derive(Default)]
@@ -104,6 +139,8 @@ pub struct processedFiles {
     pub(crate) redirect_targets_map: FxHashMap<Path, Vec<String>>,
     // filesByPath for redirect files
     pub(crate) redirect_files_by_path: FxHashMap<Path, redirectsFile>,
+    // Program-level diagnostics reported when a content mapper fails fatally (reported once per mapper).
+    pub(crate) content_mapper_diagnostics: Vec<P<Diagnostic>>,
     pub(crate) finished_processing: bool,
 }
 
@@ -133,7 +170,8 @@ fn add_project_reference_tasks(opts: &ProgramConfig, host: &Arc<dyn CompilerHost
 pub(crate) fn process_all_program_files(opts: &ProgramOptions, single_threaded: bool) -> (processedFiles, P<module::ResolutionData>, Option<String>) {
     let compiler_options = opts.config.compiler_options().unwrap();
     let root_files = opts.config.file_names();
-    let supported_extensions = tsoptions::get_supported_extensions(Some(&compiler_options), &[]);
+    let content_mapper_extensions = opts.config.content_mapper_extensions();
+    let supported_extensions = tsoptions::get_supported_extensions(Some(&compiler_options), &content_mapper_extensions);
     let supported_extensions_with_json_if_resolve_json_module =
         tsoptions::get_supported_extensions_with_json_if_resolve_json_module(Some(&compiler_options), &supported_extensions);
     // Go `int`. It is only compared with node_modules depths (small non-negative counts), so saturating to i32 keeps
@@ -161,7 +199,7 @@ pub(crate) fn process_all_program_files(opts: &ProgramOptions, single_threaded: 
         compiler_options,
         typings_location: opts.typings_location.clone(),
         project_name: opts.project_name.clone(),
-        extra_extensions: Vec::new(),
+        extra_extensions: content_mapper_extensions.clone(),
         package_json_cache: None,
     };
     let resolver: Box<dyn Resolver> = match &opts.create_module_resolver {
@@ -188,6 +226,8 @@ pub(crate) fn process_all_program_files(opts: &ProgramOptions, single_threaded: 
         path_for_lib_file_resolutions: FxHashMap::default(),
         supported_extensions,
         supported_extensions_with_json_if_resolve_json_module,
+        content_mapper_extensions,
+        content_mapper_mu: Mutex::new(contentMapperBookkeeping::default()),
         module_resolution_error: None,
     };
     let roots_start = std::time::Instant::now();
@@ -407,9 +447,396 @@ impl fileLoader {
         parse_options_for(&*self.host, &self.project_references, &task.normalized_file_path, &task.path, &task.metadata())
     }
 
+    // fileloader.go:415
     pub(crate) fn parse_source_file(&self, t: TaskId) -> Option<P<SourceFile>> {
         let is_root = self.tasks[t].include_reason.is_some_and(|r| r.is_root_file());
-        crate::fileregions::parse_task(is_root, || self.host.get_source_file(self.parse_options_for_task(t)))
+        crate::fileregions::parse_task(is_root, || self.source_file_parser().parse_source_file(self.parse_options_for_task(t)))
+    }
+
+    pub(crate) fn source_file_parser(&self) -> sourceFileParser<'_> {
+        sourceFileParser {
+            opts: &self.opts,
+            host: &*self.host,
+            content_mapper_extensions: &self.content_mapper_extensions,
+            content_mapper_mu: &self.content_mapper_mu,
+        }
+    }
+}
+
+// The parts of the file loader that parsing a file reads and writes (Go's `fileLoader` receiver of parseSourceFile
+// and the content-mapper methods), shared by the sequential load and the parallel parse ahead of it
+// (filesparser.rs `prefetch`), which Go's work group runs concurrently too.
+#[derive(Clone, Copy)]
+pub(crate) struct sourceFileParser<'a> {
+    pub(crate) opts: &'a ProgramConfig,
+    pub(crate) host: &'a dyn CompilerHost,
+    pub(crate) content_mapper_extensions: &'a [String],
+    pub(crate) content_mapper_mu: &'a Mutex<contentMapperBookkeeping>,
+}
+
+impl sourceFileParser<'_> {
+    // fileloader.go:415, from where the parse options are known.
+    pub(crate) fn parse_source_file(&self, parse_options: SourceFileParseOptions) -> Option<P<SourceFile>> {
+        if tspath::file_extension_is_one_of(&parse_options.file_name, &str_slice(self.content_mapper_extensions)) {
+            return self.parse_content_mapped_file(parse_options);
+        }
+        self.host.get_source_file(parse_options)
+    }
+
+    // parseContentMappedFile produces a content-mapped virtual source file via the host's content
+    // mapper, preserving the original file name and retaining the untransformed text on the
+    // source file. Content mapper extensions only reach the parser when content mappers are configured.
+    //
+    // When initialization fails, one program diagnostic is reported and the mapper is not attempted for
+    // subsequent files. Other failures produce per-file diagnostics and count toward a failure budget; after
+    // maxContentMapperFailures, one program diagnostic reports that the mapper was disabled and subsequent
+    // files are silently substituted with empty files. It returns nil only if the file cannot be read.
+    // fileloader.go:443
+    fn parse_content_mapped_file(&self, opts: SourceFileParseOptions) -> Option<P<SourceFile>> {
+        // A reference into the command line's `content_mappers()`, which the host and the bookkeeping key by address.
+        let mapper: &'static Mapper = self.opts.config.get().get_content_mapper_for_file_name(&opts.file_name).unwrap();
+        let label = mapper.diagnostic_name();
+        let transform_identity = self.get_content_mapper_transform_identity(mapper);
+        if self.content_mapper_unavailable(Some(mapper)) {
+            // The mapper failed initialization or exceeded its failure budget; add the file empty without re-reporting.
+            return Some(self.empty_content_mapped_file(opts, &mapper.identity(), &transform_identity));
+        }
+        match self.host.get_content_mapped_source_files(opts.clone(), mapper) {
+            Err(err) => {
+                let source_file = self.empty_content_mapped_file(opts, &mapper.identity(), &transform_identity);
+                // Go passes `transformError`, which is `err` itself: only a TransformError wraps another error.
+                if err.as_transform_error().is_some_and(|transform_error| transform_error.kind == TransformErrorKind::Initialize) {
+                    self.record_content_mapper_initialization_failure(mapper, label, &err);
+                    return Some(source_file);
+                }
+                if self.record_content_mapper_failure(mapper, label) {
+                    let diagnostic = match err.as_mapping_error() {
+                        Some(problem) => content_mapper_mapping_diagnostic(source_file, label, problem),
+                        None => content_mapper_transform_diagnostic(source_file, label, &err),
+                    };
+                    let mut diagnostics = source_file.diagnostics().to_vec();
+                    diagnostics.push(diagnostic);
+                    source_file.set_diagnostics(&diagnostics);
+                }
+                Some(source_file)
+            }
+            Ok(files) => files.canonical,
+        }
+    }
+}
+
+// fileloader.go:478
+fn content_mapper_transform_diagnostic(file: P<SourceFile>, label: &str, err: &contentmapper::Error) -> P<Diagnostic> {
+    if let Some(collision) = err.as_supplemental_file_collision_error() {
+        return content_mapper_transform_diagnostic_chain(
+            file,
+            label,
+            &diagnostics::Content_mapper_supplemental_output_file_0_conflicts_with_an_existing_file,
+            &[&collision.file_name],
+        );
+    }
+    // Only a TransformError wraps another error, so the errors.AsType calls on `transformError` below look through
+    // the same chain as these on `err`.
+    if let Some(transform_error) = err.as_transform_error() {
+        match transform_error.kind {
+            TransformErrorKind::Initialize => {
+                if let Some(initialize_error) = err.as_initialize_error() {
+                    match initialize_error.kind {
+                        InitializeErrorKind::PositionEncoding => {
+                            return content_mapper_transform_diagnostic_chain(
+                                file,
+                                label,
+                                &diagnostics::The_content_mapper_selected_unsupported_position_encoding_0,
+                                &[&initialize_error.position_encoding.0],
+                            );
+                        }
+                        InitializeErrorKind::EmptyDiagnosticSource => {
+                            return content_mapper_transform_diagnostic_chain(file, label, &diagnostics::The_content_mapper_diagnostic_source_must_not_be_empty, &[]);
+                        }
+                        InitializeErrorKind::ReservedDiagnosticSource => {
+                            return content_mapper_transform_diagnostic_chain(
+                                file,
+                                label,
+                                &diagnostics::The_content_mapper_diagnostic_source_0_is_reserved_by_TypeScript,
+                                &[&initialize_error.diagnostic_source],
+                            );
+                        }
+                        _ => {}
+                    }
+                }
+                return content_mapper_transform_diagnostic_chain(file, label, &diagnostics::The_content_mapper_process_could_not_be_started_or_initialized, &[]);
+            }
+            TransformErrorKind::Project => {
+                return content_mapper_transform_diagnostic_chain(file, label, content_mapper_project_error_diagnostic(err), &[]);
+            }
+            TransformErrorKind::Request => {
+                return content_mapper_transform_diagnostic_chain(
+                    file,
+                    label,
+                    &diagnostics::The_content_mapper_process_failed_while_handling_the_transform_request,
+                    &[],
+                );
+            }
+            TransformErrorKind::Response => {
+                if let Some(extension_error) = err.as_invalid_virtual_extension_error() {
+                    return content_mapper_transform_diagnostic_chain(
+                        file,
+                        label,
+                        &diagnostics::The_content_mapper_returned_an_output_with_unsupported_virtual_extension_0,
+                        &[&extension_error.extension],
+                    );
+                }
+                if let Some(directive_error) = err.as_diagnostic_directive_error() {
+                    let mut detail = match directive_error.kind {
+                        DiagnosticDirectiveErrorKind::InvalidRange => new_compiler_diagnostic(
+                            &diagnostics::Diagnostic_directive_0_returned_by_the_content_mapper_has_an_invalid_range,
+                            &[&directive_error.index],
+                        ),
+                        DiagnosticDirectiveErrorKind::InvalidPolicy => new_compiler_diagnostic(
+                            &diagnostics::The_content_mapper_returned_a_diagnostic_directive_with_invalid_policy_0,
+                            &[&directive_error.policy],
+                        ),
+                        DiagnosticDirectiveErrorKind::ExpectMissingUnusedDiagnostic => new_compiler_diagnostic(
+                            &diagnostics::Diagnostic_directive_0_returned_by_the_content_mapper_must_specify_unusedExpectDirectiveIndex_when_there_is_not_exactly_one_unusedExpectDirectiveDiagnostics_entry,
+                            &[&directive_error.index],
+                        ),
+                        DiagnosticDirectiveErrorKind::InvalidUnusedDiagnosticIndex => new_compiler_diagnostic(
+                            &diagnostics::Diagnostic_directive_0_returned_by_the_content_mapper_has_an_invalid_unusedExpectDirectiveIndex,
+                            &[&directive_error.index],
+                        ),
+                        DiagnosticDirectiveErrorKind::Overlap => new_compiler_diagnostic(
+                            &diagnostics::The_content_mapper_returned_diagnostic_directives_with_overlapping_virtual_ranges,
+                            &[],
+                        ),
+                    };
+                    if directive_error.supplemental_index >= 0 {
+                        detail = ast::new_diagnostic_chain(
+                            detail,
+                            &diagnostics::The_invalid_diagnostic_directive_is_in_supplemental_output_0_returned_by_the_content_mapper,
+                            &[&directive_error.supplemental_index],
+                        );
+                    }
+                    return content_mapper_transform_diagnostic_with_detail(file, label, detail);
+                }
+                return content_mapper_transform_diagnostic_chain(file, label, &diagnostics::The_content_mapper_returned_an_invalid_transform_response, &[]);
+            }
+            TransformErrorKind::Mappings => {
+                return new_diagnostic(
+                    Some(file),
+                    TextRange::new(0, 0),
+                    &diagnostics::The_content_mapper_0_did_not_provide_the_required_position_mappings,
+                    &[&label],
+                );
+            }
+            TransformErrorKind::Unknown => {}
+        }
+    }
+    new_diagnostic(Some(file), TextRange::new(0, 0), &diagnostics::The_content_mapper_0_failed_to_transform_this_file, &[&label])
+}
+
+// ContentMapperProjectErrorDiagnostic returns the localized diagnostic message for a project setup error.
+// fileloader.go:536
+pub fn content_mapper_project_error_diagnostic(err: &contentmapper::Error) -> &'static Message {
+    if let Some(project_error) = err.as_project_error() {
+        match project_error.kind {
+            ProjectErrorKind::MalformedResponse => {
+                return &diagnostics::The_content_mapper_returned_a_project_response_that_could_not_be_decoded;
+            }
+            ProjectErrorKind::MissingConfigIdentity => {
+                return &diagnostics::The_content_mapper_did_not_return_configIdentity_which_is_required_when_the_content_mapper_has_dynamicConfig_Colon_true_in_its_package_json;
+            }
+            ProjectErrorKind::NonAbsoluteWatchedFile => {
+                return &diagnostics::The_content_mapper_returned_a_non_absolute_path_in_watchedFiles;
+            }
+            ProjectErrorKind::UnexpectedConfigIdentity => {
+                return &diagnostics::The_content_mapper_returned_configIdentity_which_is_only_allowed_when_it_declares_dynamicConfig_Colon_true_in_its_package_json;
+            }
+            ProjectErrorKind::UnexpectedWatchedFiles => {
+                return &diagnostics::The_content_mapper_returned_watchedFiles_which_is_only_allowed_when_it_declares_dynamicConfig_Colon_true_in_its_package_json;
+            }
+        }
+    }
+    &diagnostics::The_content_mapper_process_failed_while_handling_the_project_request
+}
+
+// fileloader.go:554
+fn content_mapper_transform_diagnostic_chain(file: P<SourceFile>, label: &str, message: &'static Message, args: &[&dyn std::fmt::Display]) -> P<Diagnostic> {
+    content_mapper_transform_diagnostic_with_detail(file, label, new_compiler_diagnostic(message, args))
+}
+
+// fileloader.go:558
+fn content_mapper_transform_diagnostic_with_detail(file: P<SourceFile>, label: &str, detail: P<Diagnostic>) -> P<Diagnostic> {
+    new_diagnostic(Some(file), TextRange::new(0, 0), &diagnostics::The_content_mapper_0_failed_to_transform_this_file, &[&label]).add_message_chain(detail)
+}
+
+// contentMapperMappingDiagnostic builds the diagnostic reported against a mapper that produced an
+// invalid span map, including the offsets involved so the mapper's author can locate the problem.
+// fileloader.go:569
+fn content_mapper_mapping_diagnostic(file: P<SourceFile>, label: &str, problem: &tsrs_spanmap::MappingError) -> P<Diagnostic> {
+    let loc = TextRange::new(0, 0);
+    match problem.kind {
+        MappingErrorKind::Overlap => new_diagnostic(
+            Some(file),
+            loc,
+            &diagnostics::The_content_mapper_0_produced_overlapping_or_out_of_order_position_mappings_near_virtual_offset_1,
+            &[&label, &problem.virtual_pos],
+        ),
+        MappingErrorKind::OutOfBounds => new_diagnostic(
+            Some(file),
+            loc,
+            &diagnostics::The_content_mapper_0_produced_a_position_mapping_that_points_outside_the_original_content_original_offset_1,
+            &[&label, &problem.original_pos],
+        ),
+        MappingErrorKind::VerbatimMismatch => new_diagnostic(
+            Some(file),
+            loc,
+            &diagnostics::The_content_mapper_0_produced_a_verbatim_mapping_that_does_not_match_the_original_content_virtual_offset_1_original_offset_2,
+            &[&label, &problem.virtual_pos, &problem.original_pos],
+        ),
+        MappingErrorKind::Kind => new_diagnostic(
+            Some(file),
+            loc,
+            &diagnostics::The_content_mapper_0_produced_a_position_mapping_with_an_invalid_kind_near_virtual_offset_1,
+            &[&label, &problem.virtual_pos],
+        ),
+        MappingErrorKind::Feature => new_diagnostic(
+            Some(file),
+            loc,
+            &diagnostics::The_content_mapper_0_produced_invalid_mapping_features_near_original_offset_1,
+            &[&label, &problem.original_pos],
+        ),
+    }
+}
+
+impl sourceFileParser<'_> {
+    // emptyContentMappedFile produces an empty TypeScript source file for a content-mapped file whose
+    // transform could not be used, retaining the original content for diagnostics. Importers see it as an
+    // empty module rather than triggering a "cannot find module" error. It is still marked as content-mapped
+    // so it is excluded from emit like a successfully mapped file.
+    // fileloader.go:590
+    fn get_content_mapper_transform_identity(&self, mapper: &Mapper) -> String {
+        if let Some(project) = self.host.content_mapper_project() {
+            if let Ok(identity) = project.identity(mapper) {
+                return identity;
+            }
+        }
+        format!("{:032x}", mapper.transform_identity(self.opts.config.compiler_options().as_deref()))
+    }
+
+    // fileloader.go:599
+    fn empty_content_mapped_file(&self, opts: SourceFileParseOptions, mapper_identity: &str, transform_identity: &str) -> P<SourceFile> {
+        let content = self.host.fs().read_file(&opts.file_name).unwrap_or_default();
+        let virtual_file_name = alloc_str(&format!("{}{}", opts.file_name, tspath::EXTENSION_TS));
+        let source_file = tsrs_parser::parse_source_file(opts.clone(), "", ScriptKind::TS);
+        source_file.set_content_mapper_info(ContentMapperSourceFileInfo {
+            content_mapper: alloc_str(mapper_identity),
+            transform_identity: alloc_str(transform_identity),
+            parse_options: opts,
+            virtual_file_name,
+            original_text: alloc_str(&content),
+            ..Default::default()
+        });
+        source_file
+    }
+}
+
+// ContentMapperInitializationDiagnostic returns a fileless diagnostic for a mapper initialization failure.
+// fileloader.go:613
+pub fn content_mapper_initialization_diagnostic(label: &str, err: &contentmapper::Error) -> P<Diagnostic> {
+    let mut label = label;
+    if let Some(initialize_error) = err.as_initialize_error() {
+        if label.is_empty() {
+            label = &initialize_error.mapper_name;
+        }
+    }
+    let diagnostic = new_compiler_diagnostic(&diagnostics::The_content_mapper_0_could_not_be_initialized, &[&label]);
+    if let Some(initialize_error) = err.as_initialize_error() {
+        let detail = match initialize_error.kind {
+            InitializeErrorKind::ProcessStart => new_compiler_diagnostic(
+                &diagnostics::The_content_mapper_command_0_could_not_be_started_Colon_1,
+                &[&initialize_error.command, &initialize_error.detail],
+            ),
+            InitializeErrorKind::ProcessExit => new_compiler_diagnostic(
+                &diagnostics::The_content_mapper_process_exited_before_responding_to_the_initialize_request_exit_code_0,
+                &[&initialize_error.exit_code],
+            ),
+            InitializeErrorKind::NoResponse => new_compiler_diagnostic(
+                &diagnostics::The_content_mapper_did_not_respond_to_the_initialize_request_within_0_seconds,
+                &[&initialize_error.timeout_seconds],
+            ),
+            InitializeErrorKind::InvalidResponse => new_compiler_diagnostic(
+                &diagnostics::The_content_mapper_returned_an_initialize_response_that_could_not_be_decoded_Colon_0,
+                &[&initialize_error.detail],
+            ),
+            InitializeErrorKind::Request => {
+                new_compiler_diagnostic(&diagnostics::The_content_mapper_s_initialize_request_failed_Colon_0, &[&initialize_error.detail])
+            }
+            InitializeErrorKind::PositionEncoding => new_compiler_diagnostic(
+                &diagnostics::The_content_mapper_selected_unsupported_position_encoding_0,
+                &[&initialize_error.position_encoding.0],
+            ),
+            InitializeErrorKind::EmptyDiagnosticSource => {
+                new_compiler_diagnostic(&diagnostics::The_content_mapper_diagnostic_source_must_not_be_empty, &[])
+            }
+            InitializeErrorKind::ReservedDiagnosticSource => new_compiler_diagnostic(
+                &diagnostics::The_content_mapper_diagnostic_source_0_is_reserved_by_TypeScript,
+                &[&initialize_error.diagnostic_source],
+            ),
+        };
+        return diagnostic.add_message_chain(detail);
+    }
+    diagnostic.add_message_chain(new_compiler_diagnostic(&diagnostics::The_content_mapper_process_could_not_be_started_or_initialized, &[]))
+}
+
+// ContentMapperProjectDiagnostic returns a fileless diagnostic for project setup or mapper initialization.
+// fileloader.go:642
+pub fn content_mapper_project_diagnostic(err: &contentmapper::Error) -> P<Diagnostic> {
+    if err.as_initialize_error().is_some() {
+        return content_mapper_initialization_diagnostic("", err);
+    }
+    new_compiler_diagnostic(content_mapper_project_error_diagnostic(err), &[])
+}
+
+impl sourceFileParser<'_> {
+    // contentMapperUnavailable reports whether mapper failed initialization or exceeded its failure budget.
+    // fileloader.go:650
+    fn content_mapper_unavailable(&self, mapper: Option<&Mapper>) -> bool {
+        let Some(mapper) = mapper else {
+            return false;
+        };
+        let state = self.content_mapper_mu.lock().unwrap();
+        state.content_mapper_init_failed.contains(&mapper_key(mapper))
+            || state.content_mapper_failures.get(&mapper_key(mapper)).copied().unwrap_or(0) >= MAX_CONTENT_MAPPER_FAILURES
+    }
+
+    // fileloader.go:659
+    fn record_content_mapper_initialization_failure(&self, mapper: &Mapper, label: &str, err: &contentmapper::Error) {
+        let mut state = self.content_mapper_mu.lock().unwrap();
+        if state.content_mapper_init_failed.contains(&mapper_key(mapper)) {
+            return;
+        }
+        state.content_mapper_init_failed.insert(mapper_key(mapper));
+        state.content_mapper_diagnostics.push(content_mapper_initialization_diagnostic(label, err));
+    }
+
+    // recordContentMapperFailure counts a transform failure for mapper. It returns whether the failure
+    // should be reported for this file (false once the mapper is already disabled). On the failure that
+    // reaches maxContentMapperFailures it appends a single program diagnostic disabling the mapper.
+    // fileloader.go:673
+    fn record_content_mapper_failure(&self, mapper: &Mapper, label: &str) -> bool {
+        let mut state = self.content_mapper_mu.lock().unwrap();
+        let failures = state.content_mapper_failures.entry(mapper_key(mapper)).or_insert(0);
+        if *failures >= MAX_CONTENT_MAPPER_FAILURES {
+            return false;
+        }
+        *failures += 1;
+        if *failures >= MAX_CONTENT_MAPPER_FAILURES {
+            state.content_mapper_diagnostics.push(new_compiler_diagnostic(
+                &diagnostics::The_content_mapper_0_failed_1_times_and_will_not_be_used,
+                &[&label, &MAX_CONTENT_MAPPER_FAILURES],
+            ));
+        }
+        true
     }
 }
 
@@ -530,6 +957,8 @@ pub(crate) struct prefetchContext<'a> {
     pub(crate) project_references: &'a projectReferenceFileMapperBuilder,
     pub(crate) supported_extensions: &'a [Vec<String>],
     pub(crate) supported_extensions_with_json: &'a [Vec<String>],
+    pub(crate) content_mapper_extensions: &'a [String],
+    pub(crate) content_mapper_mu: &'a Mutex<contentMapperBookkeeping>,
     // The tasks that exist when the round starts (read-only until its sequential load).
     pub(crate) task_data_by_path: &'a FxHashMap<Path, crate::filesparser::DataId>,
     pub(crate) datas: &'a [crate::filesparser::parseTaskData],
@@ -544,8 +973,21 @@ impl fileLoader {
             project_references: &self.project_references,
             supported_extensions: &self.supported_extensions,
             supported_extensions_with_json: &self.supported_extensions_with_json_if_resolve_json_module,
+            content_mapper_extensions: &self.content_mapper_extensions,
+            content_mapper_mu: &self.content_mapper_mu,
             task_data_by_path: &self.files_parser.task_data_by_path,
             datas: &self.files_parser.datas,
+        }
+    }
+}
+
+impl prefetchContext<'_> {
+    pub(crate) fn source_file_parser(&self) -> sourceFileParser<'_> {
+        sourceFileParser {
+            opts: self.opts,
+            host: self.host,
+            content_mapper_extensions: self.content_mapper_extensions,
+            content_mapper_mu: self.content_mapper_mu,
         }
     }
 }

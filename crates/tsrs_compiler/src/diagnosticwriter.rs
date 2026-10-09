@@ -1,12 +1,157 @@
-// Port of Go's `diagnosticwriter` package for ast diagnostics (the LSP diagnostic abstraction and
-// content-mapper rendering are not ported).
+// Port of Go's `diagnosticwriter` package for ast diagnostics. Go's `Diagnostic` interface also covers LSP
+// diagnostics; tsc only formats `ASTDiagnostic`s, so the functions here take a `P<Diagnostic>` and read it through
+// `ASTDiagnostic`'s methods (`diagnostic_file`, `diagnostic_pos`, `diagnostic_message_chain`, ...), which map a
+// diagnostic on a content-mapped file back to its original text.
 
 use std::io::{self, Write};
 
-use tsrs_ast::{Diagnostic, SourceFile};
+use tsrs_ast::{new_compiler_diagnostic, Diagnostic, SourceFile, SourceFileLike};
 use tsrs_core::tspath::{self, ComparePathsOptions};
-use tsrs_core::P;
+use tsrs_core::{TextPos, TextRange, P};
 use tsrs_diagnostics::{self as diagnostics, Category};
+
+// Go `FileLike`: the file a diagnostic renders against. Go's ASTDiagnostic.File returns the source file itself, or
+// a fresh `renamedFile` / `originalTextFile` on every call; `key` keeps that identity (getErrorSummary groups by it).
+// diagnosticwriter.go:21
+pub enum FileLike {
+    // The diagnostic's source file.
+    SourceFile(P<SourceFile>),
+    // diagnosticwriter.go:135 renamedFile
+    Renamed { file: P<SourceFile>, file_name: &'static str },
+    // diagnosticwriter.go:116 originalTextFile
+    OriginalText(originalTextFile),
+}
+
+impl FileLike {
+    pub fn file_name(&self) -> &str {
+        match self {
+            FileLike::SourceFile(file) => file.get().file_name(),
+            FileLike::Renamed { file_name, .. } => file_name,
+            FileLike::OriginalText(file) => file.file_name,
+        }
+    }
+
+    // The map key Go's interface value is: the file for the file itself, nothing (a new key) for a wrapper.
+    fn key(&self) -> Option<P<SourceFile>> {
+        match self {
+            FileLike::SourceFile(file) => Some(*file),
+            _ => None,
+        }
+    }
+}
+
+impl SourceFileLike for FileLike {
+    fn text(&self) -> &str {
+        match self {
+            FileLike::SourceFile(file) | FileLike::Renamed { file, .. } => file.get().text(),
+            FileLike::OriginalText(file) => file.text,
+        }
+    }
+
+    fn ecma_line_map(&self) -> &[TextPos] {
+        match self {
+            FileLike::SourceFile(file) | FileLike::Renamed { file, .. } => file.get().ecma_line_map(),
+            FileLike::OriginalText(file) => &file.line_map,
+        }
+    }
+}
+
+// diagnosticwriter.go:58 (ASTDiagnostic).File
+pub fn diagnostic_file(d: P<Diagnostic>) -> Option<FileLike> {
+    let file = d.file()?;
+    let mut file_name = file.get().file_name();
+    if let Some(canonical) = file.canonical_source_file() {
+        file_name = canonical.get().file_name();
+    }
+    if resolve(d).use_original {
+        // The mapper's own diagnostics (Source != "") already carry original ranges; compiler
+        // diagnostics have their transformed ranges mapped back. Both render against the original,
+        // untransformed text. Diagnostics in synthesized code (see resolve) keep the virtual text.
+        return Some(FileLike::OriginalText(new_original_text_file(file, file_name)));
+    }
+    if file_name != file.file_name() {
+        return Some(FileLike::Renamed { file, file_name });
+    }
+    Some(FileLike::SourceFile(file))
+}
+
+// diagnosticwriter.go:83
+pub fn diagnostic_pos(d: P<Diagnostic>) -> i32 {
+    resolve(d).loc.pos()
+}
+
+// diagnosticwriter.go:84
+pub fn diagnostic_end(d: P<Diagnostic>) -> i32 {
+    resolve(d).loc.end()
+}
+
+// diagnosticwriter.go:85
+pub fn diagnostic_len(d: P<Diagnostic>) -> i32 {
+    resolve(d).loc.len()
+}
+
+// resolvedLocation describes how a diagnostic on a content-mapped file should be reported.
+// diagnosticwriter.go:88
+struct resolvedLocation {
+    loc: TextRange,
+    use_original: bool, // render against the file's original, untransformed text
+    synthesized: bool,  // the range is in virtual code with no corresponding original location
+}
+
+// resolve determines where and against which text a diagnostic should be reported. A content mapper's
+// own diagnostics already carry original ranges. A compiler diagnostic on a content-mapped file has its
+// virtual range mapped back to the original; if it falls entirely within synthesized code, there is no
+// original location, so it is shown against the virtual text and flagged as synthesized.
+// diagnosticwriter.go:98
+fn resolve(d: P<Diagnostic>) -> resolvedLocation {
+    let loc = d.loc();
+    let Some(file) = d.file() else {
+        return resolvedLocation { loc, use_original: false, synthesized: false };
+    };
+    if !d.source().is_empty() {
+        return resolvedLocation { loc, use_original: true, synthesized: false };
+    }
+    if let Some(span_map) = file.span_map() {
+        let (mapped, fidelity) = span_map.virtual_to_original_span(loc);
+        if fidelity == tsrs_spanmap::Fidelity::None {
+            return resolvedLocation { loc, use_original: false, synthesized: true };
+        }
+        return resolvedLocation { loc: mapped, use_original: true, synthesized: false };
+    }
+    resolvedLocation { loc, use_original: false, synthesized: false }
+}
+
+// originalTextFile presents a source file's original (untransformed) text as a FileLike, so that
+// diagnostics whose ranges point into that text render at the correct locations.
+// diagnosticwriter.go:116
+pub struct originalTextFile {
+    file_name: &'static str,
+    text: &'static str,
+    line_map: Vec<TextPos>,
+}
+
+// diagnosticwriter.go:122
+fn new_original_text_file(file: P<SourceFile>, file_name: &'static str) -> originalTextFile {
+    let text = file.original_text();
+    originalTextFile { file_name, text, line_map: tsrs_core::compute_ecma_line_starts(text) }
+}
+
+// diagnosticwriter.go:144 (ASTDiagnostic).MessageChain
+pub fn diagnostic_message_chain(d: P<Diagnostic>) -> Vec<P<Diagnostic>> {
+    let chain = d.message_chain();
+    let mut result = Vec::with_capacity(chain.len() + 1);
+    result.extend_from_slice(chain);
+    if resolve(d).synthesized {
+        // The diagnostic points into synthesized virtual code; make clear the shown location is not in the
+        // original file, and which content mapper produced it.
+        let note = new_compiler_diagnostic(
+            &diagnostics::This_location_is_in_virtual_code_produced_by_the_content_mapper_0_and_has_no_corresponding_location_in_the_original_file,
+            &[&d.file().unwrap().content_mapper()],
+        );
+        result.push(note);
+    }
+    result
+}
 
 pub struct FormattingOptions {
     pub compare_paths_options: ComparePathsOptions,
@@ -44,9 +189,9 @@ pub fn format_diagnostics_with_color_and_context(output: &mut dyn Write, diags: 
 }
 
 pub fn format_diagnostic_with_color_and_context(output: &mut dyn Write, diagnostic: P<Diagnostic>, format_opts: &FormattingOptions) {
-    if let Some(file) = diagnostic.file() {
-        let pos = diagnostic.pos();
-        write_location(output, file, pos, Some(format_opts), &write_with_style_and_reset);
+    if let Some(file) = diagnostic_file(diagnostic) {
+        let pos = diagnostic_pos(diagnostic);
+        write_location(output, &file, pos, Some(format_opts), &write_with_style_and_reset);
         w!(output, " - ");
     }
 
@@ -54,10 +199,18 @@ pub fn format_diagnostic_with_color_and_context(output: &mut dyn Write, diagnost
     w!(output, "{} {}{}: {}", FOREGROUND_COLOR_ESCAPE_GREY, diagnostic_prefix(diagnostic), diagnostic.code(), RESET_ESCAPE_SEQUENCE);
     write_flattened_diagnostic_message(output, diagnostic, &format_opts.new_line);
 
-    if let Some(file) = diagnostic.file() {
+    if let Some(file) = diagnostic_file(diagnostic) {
         if diagnostic.code() != diagnostics::File_appears_to_be_binary.code() {
             w!(output, "{}", format_opts.new_line);
-            write_code_snippet(output, file, diagnostic.pos(), diagnostic.len(), get_category_format(diagnostic.category()), "", format_opts);
+            write_code_snippet(
+                output,
+                &file,
+                diagnostic_pos(diagnostic),
+                diagnostic_len(diagnostic),
+                get_category_format(diagnostic.category()),
+                "",
+                format_opts,
+            );
             w!(output, "{}", format_opts.new_line);
         }
     }
@@ -65,14 +218,14 @@ pub fn format_diagnostic_with_color_and_context(output: &mut dyn Write, diagnost
     let related = diagnostic.related_information();
     if !related.is_empty() {
         for &related_information in related {
-            if let Some(file) = related_information.file() {
+            if let Some(file) = diagnostic_file(related_information) {
                 w!(output, "{}", format_opts.new_line);
                 w!(output, "  ");
-                let pos = related_information.pos();
-                write_location(output, file, pos, Some(format_opts), &write_with_style_and_reset);
+                let pos = diagnostic_pos(related_information);
+                write_location(output, &file, pos, Some(format_opts), &write_with_style_and_reset);
                 w!(output, " - ");
                 write_flattened_diagnostic_message(output, related_information, &format_opts.new_line);
-                write_code_snippet(output, file, pos, related_information.len(), FOREGROUND_COLOR_ESCAPE_CYAN, "    ", format_opts);
+                write_code_snippet(output, &file, pos, diagnostic_len(related_information), FOREGROUND_COLOR_ESCAPE_CYAN, "    ", format_opts);
             }
             w!(output, "{}", format_opts.new_line);
         }
@@ -90,21 +243,21 @@ fn utf16_len(s: &str) -> usize {
 
 fn write_code_snippet(
     writer: &mut dyn Write,
-    source_file: P<SourceFile>,
+    source_file: &FileLike,
     start: i32,
     length: i32,
     squiggle_color: &str,
     indent: &str,
     format_opts: &FormattingOptions,
 ) {
-    let (first_line, first_line_char) = tsrs_scanner::get_ecma_line_and_utf16_character_of_position(&*source_file, start);
-    let (last_line, mut last_line_char) = tsrs_scanner::get_ecma_line_and_utf16_character_of_position(&*source_file, start + length);
+    let (first_line, first_line_char) = tsrs_scanner::get_ecma_line_and_utf16_character_of_position(source_file, start);
+    let (last_line, mut last_line_char) = tsrs_scanner::get_ecma_line_and_utf16_character_of_position(source_file, start + length);
     if length == 0 {
         last_line_char += 1; // When length is zero, squiggle the character right after the start position.
     }
 
     let text = source_file.text();
-    let last_line_of_file = tsrs_scanner::get_ecma_line_of_position(&*source_file, text.len() as i32);
+    let last_line_of_file = tsrs_scanner::get_ecma_line_of_position(source_file, text.len() as i32);
 
     let has_more_than_five_lines = last_line - first_line >= 4;
     let mut gutter_width = (last_line + 1).to_string().len();
@@ -128,9 +281,9 @@ fn write_code_snippet(
             i = last_line - 1;
         }
 
-        let line_start = tsrs_scanner::get_ecma_position_of_line_and_byte_offset(&*source_file, i, 0) as usize;
+        let line_start = tsrs_scanner::get_ecma_position_of_line_and_byte_offset(source_file, i, 0) as usize;
         let line_end = if i < last_line_of_file {
-            tsrs_scanner::get_ecma_position_of_line_and_byte_offset(&*source_file, i + 1, 0) as usize
+            tsrs_scanner::get_ecma_position_of_line_and_byte_offset(source_file, i + 1, 0) as usize
         } else {
             text.len()
         };
@@ -193,7 +346,7 @@ pub fn flatten_diagnostic_message(d: P<Diagnostic>, new_line: &str) -> String {
 pub fn write_flattened_diagnostic_message(writer: &mut dyn Write, diagnostic: P<Diagnostic>, newline: &str) {
     w!(writer, "{}", diagnostic.localize());
 
-    for &chain in diagnostic.message_chain() {
+    for chain in diagnostic_message_chain(diagnostic) {
         flatten_diagnostic_message_chain(writer, chain, newline, 1 /*level*/);
     }
 }
@@ -205,7 +358,7 @@ fn flatten_diagnostic_message_chain(writer: &mut dyn Write, chain: P<Diagnostic>
     }
 
     w!(writer, "{}", chain.localize());
-    for &child in chain.message_chain() {
+    for child in diagnostic_message_chain(chain) {
         flatten_diagnostic_message_chain(writer, child, new_line, level + 1);
     }
 }
@@ -239,12 +392,12 @@ fn write_with_style_and_reset(output: &mut dyn Write, text: &str, format_style: 
 
 pub fn write_location(
     output: &mut dyn Write,
-    file: P<SourceFile>,
+    file: &FileLike,
     pos: i32,
     format_opts: Option<&FormattingOptions>,
     write_with_style_and_reset: &FormattedWriter,
 ) {
-    let (first_line, first_char) = tsrs_scanner::get_ecma_line_and_utf16_character_of_position(&*file, pos);
+    let (first_line, first_char) = tsrs_scanner::get_ecma_line_and_utf16_character_of_position(file, pos);
     let relative_file_name = match format_opts {
         Some(opts) => tspath::convert_to_relative_path(file.file_name(), &opts.compare_paths_options),
         None => file.file_name().to_string(),
@@ -262,7 +415,8 @@ pub fn write_location(
 struct ErrorSummary {
     total_error_count: usize,
     global_errors: Vec<P<Diagnostic>>,
-    errors_by_file: Vec<(P<SourceFile>, Vec<P<Diagnostic>>)>,
+    // Go's ErrorsByFile in SortedFiles order.
+    errors_by_file: Vec<(FileLike, Vec<P<Diagnostic>>)>,
 }
 
 pub fn write_error_summary_text(output: &mut dyn Write, all_diagnostics: &[P<Diagnostic>], format_opts: &FormattingOptions) {
@@ -276,7 +430,7 @@ pub fn write_error_summary_text(output: &mut dyn Write, all_diagnostics: &[P<Dia
 
     let first_file = error_summary.errors_by_file.first();
     let first_file_name = match first_file {
-        Some((file, errors)) => pretty_path_for_file_error(Some(*file), errors, format_opts),
+        Some((file, errors)) => pretty_path_for_file_error(Some(file), errors, format_opts),
         None => String::new(),
     };
     let num_erroring_files = error_summary.errors_by_file.len();
@@ -311,7 +465,7 @@ pub fn write_error_summary_text(output: &mut dyn Write, all_diagnostics: &[P<Dia
 fn get_error_summary(diags: &[P<Diagnostic>]) -> ErrorSummary {
     let mut total_error_count = 0;
     let mut global_errors = Vec::new();
-    let mut errors_by_file: Vec<(P<SourceFile>, Vec<P<Diagnostic>>)> = Vec::new();
+    let mut errors_by_file: Vec<(FileLike, Vec<P<Diagnostic>>)> = Vec::new();
     let mut index_by_file: rustc_hash::FxHashMap<P<SourceFile>, usize> = rustc_hash::FxHashMap::default();
 
     for &diagnostic in diags {
@@ -320,13 +474,20 @@ fn get_error_summary(diags: &[P<Diagnostic>]) -> ErrorSummary {
         }
 
         total_error_count += 1;
-        match diagnostic.file() {
+        match diagnostic_file(diagnostic) {
             None => global_errors.push(diagnostic),
             Some(file) => {
-                let idx = *index_by_file.entry(file).or_insert_with(|| {
-                    errors_by_file.push((file, Vec::new()));
-                    errors_by_file.len() - 1
-                });
+                // A wrapper (`FileLike::key` is None) is a new map key each time, as in Go.
+                let idx = match file.key() {
+                    Some(key) => *index_by_file.entry(key).or_insert_with(|| {
+                        errors_by_file.push((file, Vec::new()));
+                        errors_by_file.len() - 1
+                    }),
+                    None => {
+                        errors_by_file.push((file, Vec::new()));
+                        errors_by_file.len() - 1
+                    }
+                };
                 errors_by_file[idx].1.push(diagnostic);
             }
         }
@@ -359,19 +520,19 @@ fn write_tabular_errors_display(output: &mut dyn Write, error_summary: &ErrorSum
         let error_count = file_errors.len();
 
         w!(output, "{:>width$}  ", error_count, width = left_padding_goal);
-        w!(output, "{}", pretty_path_for_file_error(Some(*file), file_errors, format_opts));
+        w!(output, "{}", pretty_path_for_file_error(Some(file), file_errors, format_opts));
         w!(output, "{}", format_opts.new_line);
     }
 }
 
-fn pretty_path_for_file_error(file: Option<P<SourceFile>>, file_errors: &[P<Diagnostic>], format_opts: &FormattingOptions) -> String {
+fn pretty_path_for_file_error(file: Option<&FileLike>, file_errors: &[P<Diagnostic>], format_opts: &FormattingOptions) -> String {
     let Some(file) = file else {
         return String::new();
     };
     if file_errors.is_empty() {
         return String::new();
     }
-    let line = tsrs_scanner::get_ecma_line_of_position(&*file, file_errors[0].pos());
+    let line = tsrs_scanner::get_ecma_line_of_position(file, diagnostic_pos(file_errors[0]));
     let mut file_name = file.file_name().to_string();
     if tspath::path_is_absolute(&file_name) && tspath::path_is_absolute(&format_opts.compare_paths_options.current_directory) {
         file_name = tspath::convert_to_relative_path(file.file_name(), &format_opts.compare_paths_options);
@@ -386,8 +547,8 @@ pub fn write_format_diagnostics(output: &mut dyn Write, diagnostics: &[P<Diagnos
 }
 
 pub fn write_format_diagnostic(output: &mut dyn Write, diagnostic: P<Diagnostic>, format_opts: &FormattingOptions) {
-    if let Some(file) = diagnostic.file() {
-        let (line, character) = tsrs_scanner::get_ecma_line_and_utf16_character_of_position(&*file, diagnostic.pos());
+    if let Some(file) = diagnostic_file(diagnostic) {
+        let (line, character) = tsrs_scanner::get_ecma_line_and_utf16_character_of_position(&file, diagnostic_pos(diagnostic));
         let file_name = file.file_name();
         let relative_file_name = tspath::convert_to_relative_path(file_name, &format_opts.compare_paths_options);
         w!(output, "{}({},{}): ", relative_file_name, line + 1, character + 1);

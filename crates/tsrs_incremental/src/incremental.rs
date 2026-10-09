@@ -53,7 +53,7 @@ pub fn read_build_info_program(config: P<ParsedCommandLine>, reader: &dyn BuildI
     }
     // If any configured content mapper's identity has changed, files it produced may be stale, so the
     // old program cannot be reused.
-    match content_mapper_identities() {
+    match content_mapper_identities(host.content_mapper_project().as_deref()) {
         Ok(identities) if build_info.content_mapper_identities_match(identities.as_deref()) => {}
         _ => return None,
     }

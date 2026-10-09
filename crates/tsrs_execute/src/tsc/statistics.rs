@@ -123,7 +123,7 @@ pub fn statistics_from_program(input: &EmitInput, times: &CompileTimes) -> Stati
         instantiations: program.instantiation_count(),
         memory_used: memory_used_bytes(),
         memory_allocs: 0,
-        compile_times: *times,
+        compile_times: times.clone(),
         lazy_member_stats: tsrs_core::lazymembers::enabled().then(|| program.lazy_member_stats()),
     }
 }
@@ -175,6 +175,7 @@ impl Statistics {
         if !self.compile_times.changes_compute_time.is_zero() {
             table.add_duration(&format!("{prefix}Changes compute time"), self.compile_times.changes_compute_time);
         }
+        self.add_content_mapper_statistics(&mut table, prefix);
         table.add_duration(&format!("{prefix}Total time"), self.compile_times.total_time);
         table.print(w);
         if self.is_aggregate {
@@ -196,6 +197,32 @@ impl Statistics {
                 table.add(name, &value);
             }
             table.print(w);
+        }
+    }
+
+    // statistics.go:136
+    fn add_content_mapper_statistics(&self, table: &mut table, prefix: &str) {
+        let timings = &self.compile_times.content_mapper_times;
+        if !timings.request_wait.is_zero() {
+            table.add_duration(&format!("{prefix}Content mapper request wait time"), timings.request_wait);
+        }
+        let mut identities: Vec<&String> = timings.mappers.keys().collect();
+        identities.sort();
+        for identity in identities {
+            let mapper = &timings.mappers[identity];
+            let initialization_count = mapper.spawn.count;
+            if initialization_count != 0 {
+                table.add_duration(&format!("{prefix}{identity} initialization time"), mapper.spawn.duration + mapper.initialize.duration);
+            }
+            if mapper.transform.count != 0 {
+                table.add_duration(&format!("{prefix}{identity} transform time"), mapper.transform.duration);
+            }
+            if mapper.open_project.count != 0 {
+                table.add_duration(&format!("{prefix}{identity} openProject time"), mapper.open_project.duration);
+            }
+            if mapper.close_project.count != 0 {
+                table.add_duration(&format!("{prefix}{identity} closeProject time"), mapper.close_project.duration);
+            }
         }
     }
 

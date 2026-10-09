@@ -89,7 +89,7 @@ pub fn emit_files_and_report_errors(input: &EmitInput) -> CompileAndEmitResult {
     if let Some(incremental) = input.incremental {
         return emit_files_and_report_errors_incremental(input, incremental);
     }
-    let mut times = input.compile_times;
+    let mut times = input.compile_times.clone();
     let bind_time = Cell::new(times.bind_time);
     let check_time = Cell::new(times.check_time);
     let program = input.program;
@@ -186,7 +186,7 @@ fn list_files_worker(input: &EmitInput, emit_result: &tsrs_compiler::EmitResult)
 fn emit_files_and_report_errors_incremental(input: &EmitInput, program_like: P<tsrs_incremental::Program>) -> CompileAndEmitResult {
     let program_like: &'static tsrs_incremental::Program = program_like.get();
     use tsrs_incremental::emit::{get_diagnostics_of_any_program as get_diagnostics_of_any_program_like, EmitOptions, EmitResult, ProgramLike};
-    let mut times = input.compile_times;
+    let mut times = input.compile_times.clone();
     let bind_time = Cell::new(times.bind_time);
     let check_time = Cell::new(times.check_time);
     let emit_time = Cell::new(times.emit_time);
