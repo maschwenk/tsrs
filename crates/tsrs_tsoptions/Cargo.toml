@@ -16,5 +16,3 @@ tsrs_parser.workspace = true
 tsrs_vfs.workspace = true
 tsrs_module.workspace = true
 rustc-hash.workspace = true
-indexmap.workspace = true
-bitflags.workspace = true
