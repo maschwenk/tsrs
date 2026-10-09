@@ -16,7 +16,14 @@ techniques are in place, rejected or untried.
 - Run `tools/lint/source.py` too: a new `unsafe impl Send`/`Sync` needs a SAFETY comment and an `--update` that puts it
   in the reviewed inventory, and a `Relaxed`/`Acquire`/`Release` ordering needs a comment saying why it is enough.
 - A performance change needs numbers (instructions retired and peak RSS, before and after) and a note in `notes/`.
-  Check `docs/RUST.md` "Techniques" first: it lists what was already measured and rejected.
+- Before you start a performance or memory idea, find what was already tried. Most ideas have been: search
+  `notes/` for it (`rg -il '<a few keywords>' notes/ docs/RUST.md`), read the "Measured and rejected (do not redo)"
+  list in `notes/perf-round2-followups.md` and `docs/RUST.md` "Techniques", and read the newest round's summary
+  (`notes/mem-round4.md` section 7 for memory against bun check). For example, sharing the type graph between
+  checkers was measured four times (notes/mem-shared-base.md, notes/perf-checker-processes.md,
+  notes/perf-shared-checker.md, notes/spike-shared-graph.md). If a note rejected the idea, start only if something is
+  different, and say what in the brief or the pull request: new evidence, a changed constraint, or the condition the
+  note gave for revisiting it. Whatever the outcome, add it to that list.
 - A performance change must pay for its complexity. It lands only if it clears one of: 1% of single-threaded
   instructions on at least one `bench/projects.json` project (`bench/count.py`, deterministic), 2% of wall time on
   the README's headline table (the default-mode run, read across two publishes on the same hardware), or 5% of peak memory at the
