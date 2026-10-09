@@ -286,18 +286,22 @@ jobs:
           echo "base: $base (merge base with origin/$BASE)"; echo "new: $new (local changes: $dirty)"
           git log --oneline "$base..HEAD" | head -20
           git worktree add -q --detach /tmp/verify/base-src "$base"
+          mkdir -p /tmp/verify/new /tmp/verify/base
 
       # Both release builds at once (separate target dirs; one build does not use 64 cores for most of its time).
-      - name: Build tsrs, branch and base (release)
+      - parallel:
+          - name: Build tsrs at the base commit (release)
+            working-directory: /tmp/verify/base-src
+            env:
+              CARGO_TARGET_DIR: /tmp/verify/base-target
+            run: cargo build --release --locked -p tsrs_cli
+
+          - name: Build tsrs on the branch (release)
+            run: cargo build --release --locked -p tsrs_cli
+
+      - name: Stage and check both binaries
         run: |
-          mkdir -p /tmp/verify/new /tmp/verify/base
-          (cd /tmp/verify/base-src && CARGO_TARGET_DIR=/tmp/verify/base-target \
-            cargo build --release --locked -p tsrs_cli > /tmp/verify/base-build.log 2>&1) &
-          base_pid=$!
-          cargo build --release --locked -p tsrs_cli
           cp target/release/tsrs /tmp/verify/new/tsrs
-          if ! wait "$base_pid"; then tail -50 /tmp/verify/base-build.log; echo "::error::base build failed"; exit 1; fi
-          tail -3 /tmp/verify/base-build.log
           cp /tmp/verify/base-target/release/tsrs /tmp/verify/base/tsrs
           sha256sum /tmp/verify/*/tsrs
           /tmp/verify/new/tsrs --version; /tmp/verify/base/tsrs --version
