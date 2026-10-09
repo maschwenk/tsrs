@@ -530,6 +530,8 @@ dependencies = [
  "bitflags",
  "rayon",
  "rustc-hash",
+ "serde",
+ "serde_json",
  "tsrs_ast",
  "tsrs_binder",
  "tsrs_checker",

@@ -3,6 +3,7 @@
 // ES6 number formatting) and a strict RFC 8259 parser.
 
 use crate::collections::OrderedMap;
+use rustc_hash::FxHashSet;
 use std::fmt::Write;
 
 #[derive(Clone, Debug, PartialEq, Default)]
@@ -236,6 +237,19 @@ pub fn unmarshal(input: &str) -> Result<Value, String> {
     Ok(v)
 }
 
+/// Checks one JSON document without retaining its value tree. This has the same syntax and duplicate-member
+/// handling as [`unmarshal`], but its peak memory is bounded by the nesting depth and the keys of open objects.
+pub fn validate(input: &str) -> Result<(), String> {
+    let mut p = JsonParser { s: input.as_bytes(), pos: 0 };
+    p.skip_ws();
+    p.discard_value()?;
+    p.skip_ws();
+    if p.pos != p.s.len() {
+        return Err(format!("jsontext: invalid character after top-level value at offset {}", p.pos));
+    }
+    Ok(())
+}
+
 struct JsonParser<'a> {
     s: &'a [u8],
     pos: usize,
@@ -320,6 +334,120 @@ impl JsonParser<'_> {
             Some(b'-' | b'0'..=b'9') => self.parse_number(),
             Some(_) => self.err("invalid character at start of value"),
         }
+    }
+
+    fn discard_value(&mut self) -> Result<(), String> {
+        match self.s.get(self.pos) {
+            None => self.err("unexpected EOF"),
+            Some(b'n') => self.literal("null", Value::Null).map(drop),
+            Some(b't') => self.literal("true", Value::Bool(true)).map(drop),
+            Some(b'f') => self.literal("false", Value::Bool(false)).map(drop),
+            Some(b'"') => self.parse_string().map(drop),
+            Some(b'[') => {
+                self.pos += 1;
+                self.skip_ws();
+                if self.s.get(self.pos) == Some(&b']') {
+                    self.pos += 1;
+                    return Ok(());
+                }
+                loop {
+                    self.skip_ws();
+                    self.discard_value()?;
+                    self.skip_ws();
+                    match self.s.get(self.pos) {
+                        Some(b',') => self.pos += 1,
+                        Some(b']') => {
+                            self.pos += 1;
+                            return Ok(());
+                        }
+                        _ => return self.err("invalid character in array"),
+                    }
+                }
+            }
+            Some(b'{') => {
+                self.pos += 1;
+                let mut keys = FxHashSet::default();
+                self.skip_ws();
+                if self.s.get(self.pos) == Some(&b'}') {
+                    self.pos += 1;
+                    return Ok(());
+                }
+                loop {
+                    self.skip_ws();
+                    if self.s.get(self.pos) != Some(&b'"') {
+                        return self.err("invalid character in object key");
+                    }
+                    let key = self.parse_string()?;
+                    self.skip_ws();
+                    if self.s.get(self.pos) != Some(&b':') {
+                        return self.err("missing colon after object key");
+                    }
+                    self.pos += 1;
+                    self.skip_ws();
+                    self.discard_value()?;
+                    if keys.contains(&key) {
+                        return self.err(&format!("duplicate object member name {}", marshal_string(&key)));
+                    }
+                    keys.insert(key);
+                    self.skip_ws();
+                    match self.s.get(self.pos) {
+                        Some(b',') => self.pos += 1,
+                        Some(b'}') => {
+                            self.pos += 1;
+                            return Ok(());
+                        }
+                        _ => return self.err("invalid character in object"),
+                    }
+                }
+            }
+            Some(b'-' | b'0'..=b'9') => self.discard_number(),
+            Some(_) => self.err("invalid character at start of value"),
+        }
+    }
+
+    fn discard_number(&mut self) -> Result<(), String> {
+        let start = self.pos;
+        if self.s[self.pos] == b'-' {
+            self.pos += 1;
+        }
+        let digits = |p: &mut Self| {
+            let start = p.pos;
+            while p.pos < p.s.len() && p.s[p.pos].is_ascii_digit() {
+                p.pos += 1;
+            }
+            p.pos - start
+        };
+        match self.s.get(self.pos) {
+            Some(b'0') => self.pos += 1,
+            Some(b'1'..=b'9') => {
+                digits(self);
+            }
+            _ => return self.err("invalid number"),
+        }
+        if self.s.get(self.pos) == Some(&b'.') {
+            self.pos += 1;
+            if digits(self) == 0 {
+                return self.err("invalid number");
+            }
+        }
+        if matches!(self.s.get(self.pos), Some(b'e' | b'E')) {
+            self.pos += 1;
+            if matches!(self.s.get(self.pos), Some(b'+' | b'-')) {
+                self.pos += 1;
+            }
+            if digits(self) == 0 {
+                return self.err("invalid number");
+            }
+        }
+        let text = std::str::from_utf8(&self.s[start..self.pos]).unwrap();
+        let digits = text.strip_prefix('-').unwrap_or(text);
+        if digits.len() <= 15 && digits.bytes().all(|b| b.is_ascii_digit()) {
+            return Ok(());
+        }
+        if !text.parse::<f64>().is_ok_and(f64::is_finite) {
+            return self.err("number out of range");
+        }
+        Ok(())
     }
 
     fn literal(&mut self, lit: &str, v: Value) -> Result<Value, String> {
@@ -468,6 +596,10 @@ mod tests {
         assert_eq!(marshal_string("plain/ascii run é \"q\" \\ tab\t end"), "\"plain/ascii run é \\\"q\\\" \\\\ tab\\t end\"");
         assert!(marshal_f64(f64::NAN).is_err());
         assert!(unmarshal("{\"a\":1,\"a\":2}").is_err());
+        assert!(validate("{\"a\":1,\"a\":2}").is_err());
+        assert!(validate("{\"ignored\":{\"a\":1,\"a\":2}}").is_err());
+        assert!(validate("{\"ignored\":1e400}").is_err());
+        validate(r#"{"a": 1, "b": "two", "c": { "d": [4.5, true, null] }}"#).unwrap();
         assert!(unmarshal("[1,]").is_err());
         // The integer fast path agrees with the general parse, including the sign of zero.
         for text in ["0", "-0", "7", "-42", "123456789012345", "-999999999999999", "1234567890123456", "1.5", "2e3"] {

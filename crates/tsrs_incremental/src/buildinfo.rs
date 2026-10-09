@@ -82,9 +82,9 @@ pub struct buildInfoFileInfoWithSignature {
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct BuildInfoFileInfo {
-    signature: String,
-    no_signature: Option<buildInfoFileInfoNoSignature>,
-    file_info: Option<buildInfoFileInfoWithSignature>,
+    pub(crate) signature: String,
+    pub(crate) no_signature: Option<buildInfoFileInfoNoSignature>,
+    pub(crate) file_info: Option<buildInfoFileInfoWithSignature>,
 }
 
 // buildInfo.go:98
@@ -702,7 +702,7 @@ impl BuildInfo {
     }
 
     pub fn unmarshal(text: &str) -> Result<BuildInfo, String> {
-        BuildInfo::unmarshal_json(&tsrs_core::json::unmarshal(text)?)
+        crate::buildinfo_decode::unmarshal(text)
     }
 
     // buildInfo.go:500
@@ -1184,6 +1184,47 @@ mod tests {
         for build_info in [full, empty, bare] {
             let expected = tsrs_core::json::marshal(&build_info.marshal_json()).unwrap();
             assert_eq!(build_info.marshal(), expected);
+            let decoded = BuildInfo::unmarshal_json(&tsrs_core::json::unmarshal(&expected).unwrap()).unwrap();
+            assert_eq!(BuildInfo::unmarshal(&expected).unwrap(), decoded);
         }
+    }
+
+    #[test]
+    fn typed_unmarshal_matches_value_decoder_for_all_wire_shapes() {
+        let text = r#"{
+            "version":"7.1.0","errors":null,"unknown":{"nested":[1,true,"x"]},
+            "root":[1,[2,3,99],"root.ts"],
+            "fileInfos":["same",{"version":"v","noSignature":true,"signature":99},{"version":"v","signature":"s"}],
+            "fileIdsList":[null,[1,2]],"options":{"strict":true,"lib":["es2022"],"nested":{"n":1}},
+            "referencedMap":[[1,2,99]],
+            "semanticDiagnosticsPerFile":[1,[2,null],[3,[{"code":1,"messageText":"m","repopulateInfo":{"kind":2}}]]],
+            "emitDiagnosticsPerFile":[[1,null]],"changeFileSet":[1,2],
+            "affectedFilesPendingEmit":[1,[2],[3,4]],
+            "emitSignatures":[1,[2,"s"],[3,[]],[4,["s"]]],"resolvedRoot":[[2,1,99]]
+        }"#;
+        let expected = BuildInfo::unmarshal_json(&tsrs_core::json::unmarshal(text).unwrap()).unwrap();
+        assert_eq!(BuildInfo::unmarshal(text).unwrap(), expected);
+    }
+
+    #[test]
+    fn typed_unmarshal_rejects_malformed_and_out_of_range_values() {
+        for text in [
+            r#"{"version":"x","ignored":{"duplicate":1,"duplicate":2}}"#,
+            r#"{"version":"x","changeFileSet":[1.5]}"#,
+            r#"{"version":"x","changeFileSet":[2147483648]}"#,
+            r#"{"version":"x","affectedFilesPendingEmit":[[]]}"#,
+            r#"{"version":"x","emitSignatures":[[1,["a","b"]]]}"#,
+            r#"{"version":"x","semanticDiagnosticsPerFile":[[1,2]]}"#,
+        ] {
+            assert!(BuildInfo::unmarshal(text).is_err(), "accepted {text}");
+        }
+    }
+
+    #[test]
+    fn typed_unmarshal_has_no_new_nesting_limit() {
+        let nested = format!("{}null{}", "[".repeat(256), "]".repeat(256));
+        let text = format!(r#"{{"version":"x","ignored":{nested}}}"#);
+        let expected = BuildInfo::unmarshal_json(&tsrs_core::json::unmarshal(&text).unwrap()).unwrap();
+        assert_eq!(BuildInfo::unmarshal(&text).unwrap(), expected);
     }
 }
