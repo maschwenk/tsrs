@@ -52,7 +52,14 @@ tsrs_api_codec = { path = "crates/tsrs_api_codec" }
 
 [profile.dev]
 opt-level = 1
-debug = "line-tables-only"
+# Disabling debug info speeds up local and CI builds,
+# and we don't rely on it for debugging that much.
+debug = false
+
+[profile.test]
+# Disabling debug info speeds up local and CI builds,
+# and we don't rely on it for debugging that much.
+debug = false
 
 [profile.release]
 opt-level = 3
