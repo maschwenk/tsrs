@@ -7,6 +7,11 @@ license.workspace = true
 [lints]
 workspace = true
 
+[features]
+# `cargo check --all-features` enables tsrs_core/alloc-profile, whose counting global allocator would collide with
+# the one in examples/ast_oracle; the example steps aside when this feature is on.
+alloc-profile = ["tsrs_core/alloc-profile"]
+
 [dependencies]
 tsrs_core.workspace = true
 tsrs_diagnostics.workspace = true

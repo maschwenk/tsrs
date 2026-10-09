@@ -24,6 +24,8 @@ cargo check --workspace                           # must be 0 errors, 0 warnings
 cargo check -p tsrs_wasm --target wasm32-wasip1   # the WebAssembly build still compiles (notes/wasm-build.md)
 tools/lint/ratchet.py                             # no new clippy findings (docs/RUST.md)
 tools/lint/source.py                              # unsafe Send/Sync inventory, comments on weakened atomic orderings
+cargo deny check                                  # advisories, licenses, duplicate versions, sources (deny.toml)
+cargo shear                                       # no dependency that nothing uses
 tools/gen-check.sh                                # generated code matches its generator (change the generator, then --write)
 ```
 
@@ -42,12 +44,16 @@ git -C ts-ref sparse-checkout set tsc/testdata && git -C ts-ref checkout "$commi
 ./target/release/tsrs-test show <suite/name>                     # expected vs actual
 .github/scripts/conformance-gate.sh                              # what CI enforces: errors, .types, .symbols
 tools/regressions.sh                                             # testdata/regressions (CI runs it too)
-cargo test -p tsrs_core -p tsrs_scanner -p tsrs_cli              # unit and CLI tests (see .depot/workflows/ci.yml)
+cargo test --workspace --exclude tsrs_fourslash --exclude tsrs_api_transport   # unit tests (CI: .depot/workflows/ci.yml)
 ```
 
 CI runs the gate twice: in tsgo's check history, which the baselines need, and in the default mode
 (`TS_TEST_PROGRAM_SINGLE_THREADED=false TSRS_HISTORY=canonical`, where `conformance/objectLiteralNormalization`'s
 `.types` / `.symbols` differ by design).
+
+`tsrs_api_transport`'s node round trip (`crates/tsrs_api_transport/tests/node_roundtrip.rs`) also needs Node and a
+`packages/typescript` checkout; the file says how. Its other targets run with
+`cargo test -p tsrs_api_transport --lib --test conn --test go_frames --test reentrancy --test strictjson_oracle`.
 
 A change must not lose passing tests: compare `target/test-results/pass.txt` before and after
 (`comm -23 <(sort before.txt) <(sort target/test-results/pass.txt)` must print nothing). `docs/DEBUGGING.md`

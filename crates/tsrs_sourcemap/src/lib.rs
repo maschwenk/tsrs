@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 mod decoder;
 mod generator;
 mod lineinfo;

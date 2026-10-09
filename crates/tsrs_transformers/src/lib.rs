@@ -12,6 +12,8 @@
 //! Transformers that are not ported yet are gate stubs: their constructor and the `SubtreeFacts` early return of
 //! `visit` are ported, the rest of `visit` is `unimplemented!("emit: <file>.go not ported")`.
 
+#![forbid(unsafe_code)]
+
 pub(crate) use std::cell::{Cell, OnceCell, RefCell};
 pub(crate) use std::rc::Rc;
 

@@ -191,7 +191,7 @@ mod imp {
     }
 }
 
-pub(crate) use imp::{data_segments, image_base, stack_high, symbolize};
+pub(crate) use imp::{data_segments, stack_high, symbolize};
 
 /// Resolves every address of `ips` that `names` does not have yet, through `symbolize`, cleaned by `clean`.
 pub(crate) fn resolve_into(ips: &[usize], names: &mut FxHashMap<usize, String>, clean: impl Fn(&str) -> String) {

@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 mod commandlineoption;
 mod commandlineparser;
 mod contentmappers;

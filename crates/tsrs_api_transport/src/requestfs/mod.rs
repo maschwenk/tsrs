@@ -19,7 +19,9 @@ use tsrs_lsproto::DocumentUri;
 use tsrs_project::{new_cached_file_handle, FileChangeExpander, FileChangeSummary, FileHandle, FileHandleSource, FsRef, LayeredFileSystem, OverlayMap};
 use tsrs_vfs::{Entries, FileInfo, FileMode, FsError, FS};
 
-use pathtree::{ancestors, compose, equal_names, merge_entries, node_entries, path_contains, Entry, Fallback, Node, ReqDirectory, ReqFile, ReqSymlink};
+#[cfg(test)]
+use pathtree::ancestors;
+use pathtree::{compose, equal_names, merge_entries, node_entries, path_contains, Entry, Fallback, Node, ReqDirectory, ReqFile, ReqSymlink};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {

@@ -21,7 +21,6 @@ bitflags = "2"
 rayon = "1"
 memchr = "2"
 mimalloc-safe = { version = "0.1.67", features = ["v3"] }
-unicode-id-start = "1"
 tsrs_core = { path = "crates/tsrs_core" }
 tsrs_diagnostics = { path = "crates/tsrs_diagnostics" }
 tsrs_ast = { path = "crates/tsrs_ast" }
@@ -45,7 +44,6 @@ tsrs_ls = { path = "crates/tsrs_ls" }
 tsrs_project = { path = "crates/tsrs_project" }
 tsrs_projectutil = { path = "crates/tsrs_projectutil" }
 tsrs_lsp = { path = "crates/tsrs_lsp" }
-tsrs_fourslash = { path = "crates/tsrs_fourslash" }
 tsrs_incremental = { path = "crates/tsrs_incremental" }
 tsrs_api = { path = "crates/tsrs_api" }
 tsrs_api_transport = { path = "crates/tsrs_api_transport" }
@@ -53,6 +51,10 @@ tsrs_api_codec = { path = "crates/tsrs_api_codec" }
 
 [profile.dev]
 opt-level = 1
+# At opt-level 1 cargo defaults to thin-local LTO; off, a clean `cargo build -p tsrs_cli` (CARGO_INCREMENTAL=0, M-series,
+# back-to-back runs) took 26.65 s instead of 38.35 s, and 21.33 s instead of 26.96 s with line tables on. Test and dev
+# builds only; `release`, `dist` and `wasm` are unchanged.
+lto = "off"
 # Disabling debug info speeds up local and CI builds,
 # and we don't rely on it for debugging that much.
 debug = false

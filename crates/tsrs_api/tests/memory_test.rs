@@ -1,5 +1,8 @@
 // Memory ownership tests. RSS is process-wide, so these tests serialize on MEMORY and live in their own test
 // binary (other test files are separate processes).
+// glibc `malloc_trim` and /proc/self/status: these tests exist on Linux only (CI runs them there).
+#![cfg(target_os = "linux")]
+
 mod common;
 use common::*;
 use std::sync::Mutex;
