@@ -26,7 +26,7 @@ const ELLIPSIS: &str = "...";
 
 // Go writes through an io.Writer and ignores write errors; so do we.
 macro_rules! w {
-    ($out:expr, $($arg:tt)*) => {{
+    ($out:expr_2021, $($arg:tt)*) => {{
         let _ = write!($out, $($arg)*);
     }};
 }

@@ -457,7 +457,7 @@ impl Checker {
     // jsx.go:376
     // Go returns a lazy iter.Seq; the port returns the equivalent pull function (`None` = exhausted) so that
     // element creation interleaves with the consumer's work exactly as in Go.
-    pub(crate) fn generate_jsx_children(&mut self, node: P<Node>, get_invalid_text_diagnostic: InvalidTextDiagnosticFn) -> impl FnMut(&mut Checker) -> Option<JsxElaborationElement> + 'static {
+    pub(crate) fn generate_jsx_children(&mut self, node: P<Node>, get_invalid_text_diagnostic: InvalidTextDiagnosticFn) -> impl FnMut(&mut Checker) -> Option<JsxElaborationElement> + 'static + use<> {
         let children = node.children().nodes();
         let mut i = 0usize;
         let mut member_offset = 0usize;

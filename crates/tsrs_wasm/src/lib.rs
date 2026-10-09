@@ -74,7 +74,7 @@ mod abi {
         static OUTPUT: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
     }
 
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn tsrs_input(len: usize) -> *mut u8 {
         INPUT.with_borrow_mut(|input| {
             input.clear();
@@ -83,7 +83,7 @@ mod abi {
         })
     }
 
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn tsrs_run() -> i32 {
         let default_hook = std::panic::take_hook();
         std::panic::set_hook(Box::new(move |info| {
@@ -96,12 +96,12 @@ mod abi {
         status
     }
 
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn tsrs_output() -> *const u8 {
         OUTPUT.with_borrow(|output| output.as_ptr())
     }
 
-    #[no_mangle]
+    #[unsafe(no_mangle)]
     pub extern "C" fn tsrs_output_len() -> usize {
         OUTPUT.with_borrow(Vec::len)
     }

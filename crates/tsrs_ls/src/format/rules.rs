@@ -4,7 +4,7 @@ use super::*;
 use crate::lsutil::SemicolonPreference;
 
 macro_rules! preds {
-    ($($e:expr),* $(,)?) => {
+    ($($e:expr_2021),* $(,)?) => {
         vec![$($e as ContextPredicate),*]
     };
 }

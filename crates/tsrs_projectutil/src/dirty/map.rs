@@ -191,10 +191,13 @@ impl<K: Hash + Eq + Clone, T: Cloneable + Clone> Map<K, T> {
 
     // map.go:98
     pub fn change(&self, key: &K, apply: impl FnOnce(&mut T)) {
-        if let Some(entry) = self.get(key) {
-            entry.change(apply);
-        } else {
-            panic!("tried to change a non-existent entry");
+        match self.get(key) {
+            Some(entry) => {
+                entry.change(apply);
+            }
+            _ => {
+                panic!("tried to change a non-existent entry");
+            }
         }
     }
 

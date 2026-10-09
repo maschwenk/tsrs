@@ -284,16 +284,19 @@ impl snapshotFSBuilder {
                 break; // reached root
             }
             let base_name = tspath::get_base_file_name(&child);
-            if let Some(dir_entry) = self.cache_directories.get(&parent_path) {
-                let cp = child_path;
-                dir_entry.change(|dir| {
-                    dir.insert(cp, base_name);
-                });
-                break;
-            } else {
-                let mut dir = CloneableMap::default();
-                dir.insert(child_path.clone(), base_name);
-                self.cache_directories.add(parent_path.clone(), Shared::new(dir));
+            match self.cache_directories.get(&parent_path) {
+                Some(dir_entry) => {
+                    let cp = child_path;
+                    dir_entry.change(|dir| {
+                        dir.insert(cp, base_name);
+                    });
+                    break;
+                }
+                _ => {
+                    let mut dir = CloneableMap::default();
+                    dir.insert(child_path.clone(), base_name);
+                    self.cache_directories.add(parent_path.clone(), Shared::new(dir));
+                }
             }
             child_path = parent_path;
             child = parent;

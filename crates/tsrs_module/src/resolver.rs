@@ -85,7 +85,7 @@ fn get_traces(t: Option<Tracer>) -> Vec<DiagAndArgs> {
 
 // `if r.tracer != nil { r.tracer.write(msg, args...) }`; arguments are only evaluated when tracing.
 macro_rules! trace {
-    ($tracer:expr, $msg:expr $(, $arg:expr)* $(,)?) => {
+    ($tracer:expr_2021, $msg:expr_2021 $(, $arg:expr_2021)* $(,)?) => {
         if let Some(t) = ($tracer).as_mut() {
             t.write(&$msg, &[$(&$arg as &dyn ::std::fmt::Display),*]);
         }

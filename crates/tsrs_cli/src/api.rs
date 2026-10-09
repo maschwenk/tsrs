@@ -424,7 +424,7 @@ mod memory_tests {
     use tsrs_api::{Handler, Response};
     use tsrs_core::json::{self, Value};
 
-    extern "C" {
+    unsafe extern "C" {
         fn malloc_trim(pad: usize) -> i32;
     }
 

@@ -31,59 +31,72 @@ fn grow(n: usize) {
 
 unsafe impl GlobalAlloc for Counting {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        let p = System.alloc(layout);
-        if !p.is_null() {
-            grow(layout.size());
-            HEAP_ALLOCS.fetch_add(1, Ordering::Relaxed);
-            heap_sample::on_alloc(p, layout.size());
-            census::on_alloc(p, layout.size());
+        // SAFETY: the `GlobalAlloc` caller guarantees that `layout` is valid; it is passed through unchanged.
+        unsafe {
+            let p = System.alloc(layout);
+            if !p.is_null() {
+                grow(layout.size());
+                HEAP_ALLOCS.fetch_add(1, Ordering::Relaxed);
+                heap_sample::on_alloc(p, layout.size());
+                census::on_alloc(p, layout.size());
+            }
+            p
         }
-        p
     }
     unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
-        let p = System.alloc_zeroed(layout);
-        if !p.is_null() {
-            grow(layout.size());
-            HEAP_ALLOCS.fetch_add(1, Ordering::Relaxed);
-            heap_sample::on_alloc(p, layout.size());
-            census::on_alloc(p, layout.size());
+        // SAFETY: the `GlobalAlloc` caller guarantees that `layout` is valid; it is passed through unchanged.
+        unsafe {
+            let p = System.alloc_zeroed(layout);
+            if !p.is_null() {
+                grow(layout.size());
+                HEAP_ALLOCS.fetch_add(1, Ordering::Relaxed);
+                heap_sample::on_alloc(p, layout.size());
+                census::on_alloc(p, layout.size());
+            }
+            p
         }
-        p
     }
     unsafe fn dealloc(&self, p: *mut u8, layout: Layout) {
-        heap_sample::on_free(p);
-        census::on_free(p);
-        if census::zero_on_free() {
-            std::ptr::write_bytes(p, 0, layout.size());
+        // SAFETY: the `GlobalAlloc` caller guarantees that `p` and `layout` describe a live allocation from this allocator.
+        unsafe {
+            heap_sample::on_free(p);
+            census::on_free(p);
+            if census::zero_on_free() {
+                std::ptr::write_bytes(p, 0, layout.size());
+            }
+            System.dealloc(p, layout);
+            HEAP_CURRENT.fetch_sub(layout.size(), Ordering::Relaxed);
         }
-        System.dealloc(p, layout);
-        HEAP_CURRENT.fetch_sub(layout.size(), Ordering::Relaxed);
     }
     unsafe fn realloc(&self, p: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
-        heap_sample::on_free(p);
-        census::on_free(p);
-        let q = if census::zero_on_free() {
-            // Move by hand so the old block can be cleared before it is freed (see `census::zero_on_free`).
-            let q = System.alloc(Layout::from_size_align_unchecked(new_size, layout.align()));
+        // SAFETY: the `GlobalAlloc` caller guarantees that `p` and `layout` describe a live allocation from this
+        // allocator; `layout.align()` remains valid for the replacement allocation.
+        unsafe {
+            heap_sample::on_free(p);
+            census::on_free(p);
+            let q = if census::zero_on_free() {
+                // Move by hand so the old block can be cleared before it is freed (see `census::zero_on_free`).
+                let q = System.alloc(Layout::from_size_align_unchecked(new_size, layout.align()));
+                if !q.is_null() {
+                    std::ptr::copy_nonoverlapping(p, q, layout.size().min(new_size));
+                    std::ptr::write_bytes(p, 0, layout.size());
+                    System.dealloc(p, layout);
+                }
+                q
+            } else {
+                System.realloc(p, layout, new_size)
+            };
             if !q.is_null() {
-                std::ptr::copy_nonoverlapping(p, q, layout.size().min(new_size));
-                std::ptr::write_bytes(p, 0, layout.size());
-                System.dealloc(p, layout);
+                if new_size >= layout.size() {
+                    grow(new_size - layout.size());
+                } else {
+                    HEAP_CURRENT.fetch_sub(layout.size() - new_size, Ordering::Relaxed);
+                }
+                heap_sample::on_alloc(q, new_size);
+                census::on_alloc(q, new_size);
             }
             q
-        } else {
-            System.realloc(p, layout, new_size)
-        };
-        if !q.is_null() {
-            if new_size >= layout.size() {
-                grow(new_size - layout.size());
-            } else {
-                HEAP_CURRENT.fetch_sub(layout.size() - new_size, Ordering::Relaxed);
-            }
-            heap_sample::on_alloc(q, new_size);
-            census::on_alloc(q, new_size);
         }
-        q
     }
 }
 
@@ -103,7 +116,7 @@ mod heap_sample {
     const DEPTH: usize = 20;
     pub(super) type Stack = [usize; DEPTH];
 
-    extern "C" {
+    unsafe extern "C" {
         fn backtrace(buf: *mut *mut c_void, size: i32) -> i32;
     }
 

@@ -27,13 +27,13 @@ impl Host for TestHost {
 
 #[test]
 fn decoder_reads_what_the_generator_writes() {
-    let mut gen = new_generator("main.js", "", "/", ComparePathsOptions::default());
-    let s = gen.add_source("/main.ts");
-    let n = gen.add_name("foo");
-    gen.add_source_mapping(0, 4, s, 1, 2).unwrap();
-    gen.add_named_source_mapping(0, 40, s, 0, 0, n).unwrap();
-    gen.add_generated_mapping(2, 1).unwrap();
-    let raw = gen.raw_source_map();
+    let mut r#gen = new_generator("main.js", "", "/", ComparePathsOptions::default());
+    let s = r#gen.add_source("/main.ts");
+    let n = r#gen.add_name("foo");
+    r#gen.add_source_mapping(0, 4, s, 1, 2).unwrap();
+    r#gen.add_named_source_mapping(0, 40, s, 0, 0, n).unwrap();
+    r#gen.add_generated_mapping(2, 1).unwrap();
+    let raw = r#gen.raw_source_map();
 
     let mut decoder = decode_mappings(&raw.mappings);
     let mappings: Vec<Mapping> = decoder.values().collect();
@@ -104,13 +104,13 @@ fn test_host(map_comment: &str, map_file: Option<&str>) -> TestHost {
 }
 
 fn generate_map() -> Generator {
-    let mut gen = new_generator("main.js", "", "/out", ComparePathsOptions { use_case_sensitive_file_names: true, current_directory: "/".to_string() });
-    let s = gen.add_source("/src/main.ts");
-    gen.add_source_mapping(0, 0, s, 0, 0).unwrap();
-    gen.add_source_mapping(0, 4, s, 0, 4).unwrap();
-    gen.add_source_mapping(1, 0, s, 1, 0).unwrap();
-    gen.add_source_mapping(1, 8, s, 1, 8).unwrap();
-    gen
+    let mut r#gen = new_generator("main.js", "", "/out", ComparePathsOptions { use_case_sensitive_file_names: true, current_directory: "/".to_string() });
+    let s = r#gen.add_source("/src/main.ts");
+    r#gen.add_source_mapping(0, 0, s, 0, 0).unwrap();
+    r#gen.add_source_mapping(0, 4, s, 0, 4).unwrap();
+    r#gen.add_source_mapping(1, 0, s, 1, 0).unwrap();
+    r#gen.add_source_mapping(1, 8, s, 1, 8).unwrap();
+    r#gen
 }
 
 #[test]
@@ -142,8 +142,8 @@ fn document_position_mapper_from_data_url() {
 
 #[test]
 fn document_position_mapper_rejects_inlined_sources() {
-    let mut gen = generate_map();
-    gen.set_source_content(0, "let x: number = 1;\n").unwrap();
-    let host = test_host("", Some(&gen.string()));
+    let mut r#gen = generate_map();
+    r#gen.set_source_content(0, "let x: number = 1;\n").unwrap();
+    let host = test_host("", Some(&r#gen.string()));
     assert!(get_document_position_mapper(&host, "/out/main.js").is_none());
 }

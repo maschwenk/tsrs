@@ -104,8 +104,8 @@ impl debounce {
     // debounce.go:97
     fn coalesce_wait(&self) {
         let l = self.latch_mu.lock().unwrap();
-        let gen = l.trigger_gen;
-        let (l, timeout) = self.latch_cv.wait_timeout_while(l, minWaitTime, |l| l.trigger_gen == gen).unwrap();
+        let r#gen = l.trigger_gen;
+        let (l, timeout) = self.latch_cv.wait_timeout_while(l, minWaitTime, |l| l.trigger_gen == r#gen).unwrap();
         drop(l);
         if timeout.timed_out() {
             self.fire_callbacks();

@@ -31,7 +31,7 @@ mod imp {
         vmsize: u64,
     }
 
-    extern "C" {
+    unsafe extern "C" {
         fn _dyld_get_image_header(index: u32) -> *const c_void;
         fn _dyld_get_image_vmaddr_slide(index: u32) -> isize;
         fn pthread_self() -> *mut c_void;
@@ -136,7 +136,7 @@ mod imp {
     #[repr(C, align(8))]
     struct PthreadAttr([u8; 64]);
 
-    extern "C" {
+    unsafe extern "C" {
         fn pthread_self() -> usize;
         fn pthread_getattr_np(thread: usize, attr: *mut PthreadAttr) -> i32;
         fn pthread_attr_getstack(attr: *const PthreadAttr, addr: *mut *mut c_void, size: *mut usize) -> i32;

@@ -131,7 +131,7 @@ pub fn heap_census_min_bytes() -> u64 {
 }
 
 macro_rules! rows {
-    ($census:expr, $c:expr, $($field:ident),* $(,)?) => {
+    ($census:expr_2021, $c:expr_2021, $($field:ident),* $(,)?) => {
         $( $census.row(stringify!($field), $c.$field.heap_stat()); )*
     };
 }

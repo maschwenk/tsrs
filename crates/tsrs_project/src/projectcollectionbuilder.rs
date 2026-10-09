@@ -281,15 +281,18 @@ impl ProjectCollectionBuilder {
             #[expect(clippy::iter_over_hash_type, reason = "Go ranges the set too; the order only decides which error is returned when several projects are missing")]
             for config_file_name in open_projects.keys() {
                 let config_path = (self.to_path)(config_file_name);
-                if let Some(entry) = self.find_or_create_project(config_file_name, &config_path, projectLoadKind::Create, logger) {
-                    *self.api_state.borrow_mut().open_projects.entry(config_path.clone()).or_insert(0) += 1;
-                    // A project re-opened in the same request shouldn't be closed.
-                    if let Some(p) = &mut projects_to_close {
-                        p.remove(&config_path);
+                match self.find_or_create_project(config_file_name, &config_path, projectLoadKind::Create, logger) {
+                    Some(entry) => {
+                        *self.api_state.borrow_mut().open_projects.entry(config_path.clone()).or_insert(0) += 1;
+                        // A project re-opened in the same request shouldn't be closed.
+                        if let Some(p) = &mut projects_to_close {
+                            p.remove(&config_path);
+                        }
+                        self.update_program(&projectEntry::Configured(entry), logger);
                     }
-                    self.update_program(&projectEntry::Configured(entry), logger);
-                } else {
-                    return Err(lsproto::Error::new(format!("project not found for open: {config_file_name}")));
+                    _ => {
+                        return Err(lsproto::Error::new(format!("project not found for open: {config_file_name}")));
+                    }
                 }
             }
         }
@@ -602,10 +605,13 @@ impl ProjectCollectionBuilder {
         for overlay in self.overlays.values() {
             let open_file = overlay.base.file_name.clone();
             let open_file_path = (self.to_path)(&open_file);
-            if let Some(p) = self.find_default_configured_project(&open_file, &open_file_path) {
-                retain_default_configured_project(&open_file_path, &p.value().unwrap());
-            } else {
-                inferred_project_files.push(open_file);
+            match self.find_default_configured_project(&open_file, &open_file_path) {
+                Some(p) => {
+                    retain_default_configured_project(&open_file_path, &p.value().unwrap());
+                }
+                _ => {
+                    inferred_project_files.push(open_file);
+                }
             }
         }
         // Treat API-opened files like open files: retain their configured project (so
@@ -615,10 +621,13 @@ impl ProjectCollectionBuilder {
             if self.is_open_file(path) {
                 continue;
             }
-            if let Some(p) = self.find_default_configured_project(&file.file_name, path) {
-                retain_default_configured_project(path, &p.value().unwrap());
-            } else {
-                inferred_project_files.push(file.file_name.clone());
+            match self.find_default_configured_project(&file.file_name, path) {
+                Some(p) => {
+                    retain_default_configured_project(path, &p.value().unwrap());
+                }
+                _ => {
+                    inferred_project_files.push(file.file_name.clone());
+                }
             }
         }
 

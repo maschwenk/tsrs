@@ -37,7 +37,7 @@ pub enum HostError {
 
 #[cfg(target_family = "wasm")]
 #[link(wasm_import_module = "tsrs_host")]
-extern "C" {
+unsafe extern "C" {
     fn fs(op: u32, ptr: *const u8, len: usize) -> i32;
     fn fs_take(ptr: *mut u8);
 }

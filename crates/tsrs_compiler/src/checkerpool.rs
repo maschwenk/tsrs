@@ -276,7 +276,7 @@ pub(crate) fn write_file_times(program: &'static Program) {
         let mut counts = vec![0u32; tsrs_ast::Kind::Count as usize + 1];
         count_kinds(file.as_node(), &mut counts);
         let _ = write!(out, "{checker}\t{seconds:.6}\t{cpu:.6}\t{}\t{}\t{}\t{}\t", file.node_count.get(), file.text().len(), file.imports().len(), file.file_name());
-        for (kind, &count) in counts.iter().enumerate().filter(|(_, &c)| c > 0) {
+        for (kind, &count) in counts.iter().enumerate().filter(|&(_, &c)| c > 0) {
             let _ = write!(out, "{:?}={count} ", tsrs_ast::Kind::from_i16(kind as i16));
         }
         out.push('\n');
@@ -293,7 +293,7 @@ pub(crate) fn thread_cpu_seconds() -> f64 {
         tv_sec: i64,
         tv_nsec: i64,
     }
-    extern "C" {
+    unsafe extern "C" {
         fn clock_gettime(clock_id: i32, tp: *mut Timespec) -> i32;
     }
     #[cfg(target_os = "macos")]

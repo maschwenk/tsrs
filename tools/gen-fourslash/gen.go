@@ -186,7 +186,7 @@ func generate(l *Loaded, out string, perFile int) error {
 		for _, f := range files[start:end] {
 			f.code = modRefRe.ReplaceAllStringFunc(f.code, func(m string) string {
 				mod := modRefRe.FindStringSubmatch(m)[1]
-				return "crate::tests::gen::" + moduleChunk[mod] + "::" + mod + "::"
+				return "crate::tests::r#gen::" + moduleChunk[mod] + "::" + mod + "::"
 			})
 			fmt.Fprintf(&b, "pub mod %s {\nuse crate::tests::prelude::*;\n\n%s}\n\n", f.module, f.code)
 			for _, te := range f.tests {

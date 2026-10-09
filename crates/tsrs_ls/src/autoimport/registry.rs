@@ -801,22 +801,25 @@ impl registryBuilder<'_> {
         let update_directory = |b: &mut registryBuilder, dir_path: &Path, dir_name: &str, package_json_changed: bool| {
             let package_json_file_name = tspath::combine_paths(dir_name, &["package.json"]);
             let has_node_modules = host.fs().directory_exists(&tspath::combine_paths(dir_name, &["node_modules"]));
-            if let Some(entry) = b.directories.get(dir_path) {
-                // (Go reads the package.json inside the apply function; it is read first here so that the entry is
-                // allocated in this update's package.json region.)
-                if entry.value().is_some_and(|dir| package_json_changed || dir.has_node_modules != has_node_modules) {
-                    let package_json = b.get_directory_package_json(&package_json_file_name);
-                    entry.change_if(
-                        |dir| package_json_changed || dir.has_node_modules != has_node_modules,
-                        |dir| {
-                            dir.package_json = package_json;
-                            dir.has_node_modules = has_node_modules;
-                        },
-                    );
+            match b.directories.get(dir_path) {
+                Some(entry) => {
+                    // (Go reads the package.json inside the apply function; it is read first here so that the entry is
+                    // allocated in this update's package.json region.)
+                    if entry.value().is_some_and(|dir| package_json_changed || dir.has_node_modules != has_node_modules) {
+                        let package_json = b.get_directory_package_json(&package_json_file_name);
+                        entry.change_if(
+                            |dir| package_json_changed || dir.has_node_modules != has_node_modules,
+                            |dir| {
+                                dir.package_json = package_json;
+                                dir.has_node_modules = has_node_modules;
+                            },
+                        );
+                    }
                 }
-            } else {
-                let package_json = b.get_directory_package_json(&package_json_file_name);
-                b.directories.add(dir_path.clone(), Shared::new(directory { name: dir_name.to_string(), package_json, has_node_modules }));
+                _ => {
+                    let package_json = b.get_directory_package_json(&package_json_file_name);
+                    b.directories.add(dir_path.clone(), Shared::new(directory { name: dir_name.to_string(), package_json, has_node_modules }));
+                }
             }
 
             if has_node_modules {

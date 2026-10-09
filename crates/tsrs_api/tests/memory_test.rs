@@ -24,7 +24,7 @@ fn create_program(s: &tsrs_api::Session, roots: &[String], options: &str) -> (u6
     (snapshot, str_of(get(&r, "operation.createdPrograms.0")).to_string())
 }
 
-extern "C" {
+unsafe extern "C" {
     fn malloc_trim(pad: usize) -> i32;
 }
 

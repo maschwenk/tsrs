@@ -34,7 +34,7 @@ struct FSEventStreamContext {
 type FSEventStreamCallback = extern "C" fn(stream: FSEventStreamRef, info: *mut c_void, num_events: usize, event_paths: *mut c_void, event_flags: *const u32, event_ids: *const u64);
 
 #[link(name = "CoreFoundation", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     fn CFRelease(cf: CFTypeRef);
     fn CFStringCreateWithCString(alloc: CFTypeRef, c_str: *const c_char, encoding: u32) -> CFTypeRef;
     fn CFArrayCreate(alloc: CFTypeRef, values: *const CFTypeRef, num_values: CFIndex, callbacks: *const c_void) -> CFTypeRef;
@@ -48,7 +48,7 @@ extern "C" {
 }
 
 #[link(name = "CoreServices", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     fn FSEventStreamCreate(
         allocator: CFTypeRef,
         callback: FSEventStreamCallback,
@@ -68,7 +68,7 @@ extern "C" {
 }
 
 // libSystem (always linked).
-extern "C" {
+unsafe extern "C" {
     fn dispatch_queue_create(label: *const c_char, attr: *const c_void) -> dispatch_queue_t;
     fn dispatch_release(object: *mut c_void);
     fn dispatch_sync_f(queue: dispatch_queue_t, context: *mut c_void, work: extern "C" fn(*mut c_void));
