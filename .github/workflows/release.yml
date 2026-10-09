@@ -113,6 +113,9 @@ jobs:
           RUSTFLAGS: -Cprofile-generate=${{ runner.temp }}/pgo/raw
           CFLAGS: ${{ runner.os == 'macOS' && '-fno-profile-generate' || '' }}
           CARGO_TARGET_DIR: ${{ runner.temp }}/pgo/target
+          # The same as the final build's: profile settings are part of every symbol name, and the profile only
+          # applies to functions whose names match (notes/perf-pgo.md, 2026-10-09).
+          CARGO_PROFILE_DIST_STRIP: ${{ runner.os == 'Linux' && 'none' || 'symbols' }}
         run: cargo build --profile dist --locked -p tsrs_cli -p tsrs_testrunner -p tsrs_fourslash --target ${{ matrix.target }}
       - name: Training run
         shell: bash
@@ -137,6 +140,7 @@ jobs:
           RUSTFLAGS: -Cprofile-use=${{ steps.profile.outputs.path }}${{ runner.os == 'Linux' && ' -Clink-arg=-Wl,--emit-relocs' || '' }}
           CFLAGS: ${{ runner.os == 'macOS' && '-fno-profile-use' || '' }}
           # BOLT needs the Linux binaries' symbols; bolt.sh strips the optimized tsrs after its correctness gates.
+          # The instrumented build sets the same value.
           CARGO_PROFILE_DIST_STRIP: ${{ runner.os == 'Linux' && 'none' || 'symbols' }}
         run: |
           pkgs=(-p tsrs_cli)
