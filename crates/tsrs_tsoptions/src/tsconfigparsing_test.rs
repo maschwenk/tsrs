@@ -2,17 +2,19 @@ use tsrs_ast::{Diagnostic, SourceFileParseOptions};
 use tsrs_core::collections::OrderedMap;
 use tsrs_core::json;
 use tsrs_core::tspath::{self, ComparePathsOptions, Path};
-use tsrs_core::{CompilerOptions, ModuleKind, ModuleResolutionKind, ScriptKind, ScriptTarget, P};
+use tsrs_core::{CompilerOptions, ModuleKind, ModuleResolutionKind, ScriptKind, ScriptTarget, Tristate, P};
 use tsrs_diagnostics as diagnostics;
 use tsrs_vfs::{walk_dir, FS};
 
 use crate::commandlineoption::CompilerOptionsValue;
 use crate::commandlineparser::parse_command_line;
 use crate::commandlineparser_test::{check_baseline, repo_root};
+use crate::contentmappers::OptionPathSegment;
 use crate::parsedcommandline::ParsedCommandLine;
 use crate::testutil::{compiler_options_to_json, format_diagnostics_with_color_and_context, option_value_to_json, type_acquisition_to_json};
 use crate::tsconfigparsing::{
-    get_parsed_command_line_of_config_file, new_tsconfig_source_file_from_file_path, parse_config_file_text_to_json,
+    get_content_mapper_option_diagnostic_location, get_parsed_command_line_of_config_file, new_tsconfig_source_file_from_file_path,
+    parse_config_file_text_to_json,
     parse_extended_config, parse_json_config_file_content, parse_json_source_file_config_file_content, ExtendedConfigCache,
     ExtendedConfigCacheEntry, ParseConfigHost, TsConfigSourceFile,
 };
@@ -1188,6 +1190,318 @@ fn test_parse_null_enum_compiler_options() {
         let host = new_vfs_parse_config_host(&all_file_lists, config.base_path, true /*useCaseSensitiveFileNames*/);
         let parsed_config_file_content = get_parsed(&config, host, config.base_path);
         assert_eq!(parsed_config_file_content.errors.len(), 0);
+    }
+}
+
+// tsconfigparsing_test.go:1136
+#[test]
+fn test_content_mappers() {
+    let config = TestConfig {
+        json_text: r#"{
+			"contentMappers": [
+				{ "package": "vue-mapper", "extensions": [".vue"], "options": { "strictTemplates": true } }
+			],
+			"include": ["src"]
+		}"#,
+        config_file_name: "tsconfig.json",
+        base_path: "/",
+        all_file_list: &[
+            ("/src/app.ts", "export {}"),
+            ("/src/Component.vue", "<template></template>"),
+            (
+                "/node_modules/vue-mapper/package.json",
+                r#"{ "name": "vue-mapper", "version": "1.2.3", "typescript": { "contentMapper": { "exec": ["node", "./mapper.js"], "dynamicConfig": true } } }"#,
+            ),
+        ],
+        existing_options: Some(CompilerOptions { run_external_code: Tristate::True, ..Default::default() }),
+    };
+    for (name, get_parsed) in [("json api", get_parsed_with_json_api as GetParsed), ("jsonSourceFile api", get_parsed_with_json_source_file_api)] {
+        let mut all_file_lists: Vec<(&str, &str)> = config.all_file_list.to_vec();
+        all_file_lists.push(("/tsconfig.json", config.json_text));
+        let host = new_vfs_parse_config_host(&all_file_lists, config.base_path, true /*useCaseSensitiveFileNames*/);
+        let parsed = get_parsed(&config, host, config.base_path);
+
+        assert_eq!(parsed.errors.len(), 0, "{name}: {:?}", parsed.errors);
+
+        let mappers = parsed.content_mappers();
+        assert_eq!(mappers.len(), 1, "{name}");
+        assert_eq!(mappers[0].definition.package, "vue-mapper", "{name}");
+        assert_eq!(mappers[0].definition.extensions, [".vue"], "{name}");
+        assert_eq!(mappers[0].definition.options, r#"{"strictTemplates":true}"#, "{name}");
+        assert_eq!(parsed.content_mapper_extensions(), [".vue"], "{name}");
+
+        // The package.json is resolved during parsing, populating name, version, and exec.
+        assert_eq!(mappers[0].manifest.name, "vue-mapper", "{name}");
+        assert_eq!(mappers[0].manifest.version, "1.2.3", "{name}");
+        assert_eq!(mappers[0].manifest.exec, ["node", "./mapper.js"], "{name}");
+        assert!(mappers[0].manifest.dynamic_config, "{name}");
+        assert_eq!(mappers[0].package_directory, "/node_modules/vue-mapper", "{name}");
+
+        // The .vue file is picked up by the include glob because its extension is registered.
+        assert!(parsed.file_names().iter().any(|f| f == "/src/Component.vue"), "{name}: expected /src/Component.vue in {:?}", parsed.file_names());
+        assert!(parsed.file_names().iter().any(|f| f == "/src/app.ts"), "{name}: expected /src/app.ts in {:?}", parsed.file_names());
+    }
+}
+
+// tsconfigparsing_test.go:1191
+#[test]
+fn test_content_mapper_option_diagnostic_location() {
+    let config = TestConfig {
+        json_text: r#"{
+			"contentMappers": [{
+				"package": "mapper",
+				"extensions": [".vue"],
+				"options": { "plugins": [{ "name": 1 }] }
+			}]
+		}"#,
+        config_file_name: "tsconfig.json",
+        base_path: "/",
+        all_file_list: &[
+            ("/index.ts", "export {};"),
+            (
+                "/node_modules/mapper/package.json",
+                r#"{ "name": "mapper", "version": "1.0.0", "typescript": { "contentMapper": { "exec": ["mapper"] } } }"#,
+            ),
+        ],
+        existing_options: Some(CompilerOptions { run_external_code: Tristate::True, ..Default::default() }),
+    };
+    let host = new_vfs_parse_config_host(config.all_file_list, config.base_path, true /*useCaseSensitiveFileNames*/);
+    let parsed = get_parsed_with_json_source_file_api(&config, host, config.base_path);
+    let (file, loc) = get_content_mapper_option_diagnostic_location(
+        Some(&parsed),
+        &parsed.content_mappers()[0],
+        &[
+            OptionPathSegment { property: "plugins".to_string(), ..Default::default() },
+            OptionPathSegment { index: 0, is_index: true, ..Default::default() },
+            OptionPathSegment { property: "name".to_string(), ..Default::default() },
+        ],
+    );
+    assert_eq!(&file.unwrap().text()[loc.pos() as usize..loc.end() as usize], "1");
+}
+
+// tsconfigparsing_test.go:1219
+#[test]
+fn test_content_mappers_are_inherited_from_extended_config() {
+    let config = TestConfig {
+        json_text: r#"{ "extends": "./base.json" }"#,
+        config_file_name: "tsconfig.json",
+        base_path: "/project",
+        all_file_list: &[
+            ("/project/base.json", r#"{ "contentMappers": [{ "package": "vue-mapper", "extensions": [".vue"] }], "include": ["src"] }"#),
+            ("/project/src/index.ts", "export {};"),
+            ("/project/src/component.vue", "<template></template>"),
+            (
+                "/project/node_modules/vue-mapper/package.json",
+                r#"{ "name": "vue-mapper", "version": "1.2.3", "typescript": { "contentMapper": { "exec": ["node", "./mapper.js"] } } }"#,
+            ),
+        ],
+        existing_options: Some(CompilerOptions { run_external_code: Tristate::True, ..Default::default() }),
+    };
+    for (name, get_parsed) in [("json api", get_parsed_with_json_api as GetParsed), ("jsonSourceFile api", get_parsed_with_json_source_file_api)] {
+        let host = new_vfs_parse_config_host(config.all_file_list, config.base_path, true /*useCaseSensitiveFileNames*/);
+        let parsed = get_parsed(&config, host, config.base_path);
+        assert_eq!(parsed.errors.len(), 0, "{name}: {:?}", parsed.errors);
+        assert_eq!(parsed.content_mappers().len(), 1, "{name}");
+        assert_eq!(parsed.content_mappers()[0].definition.package, "vue-mapper", "{name}");
+        assert_eq!(parsed.content_mapper_extensions(), [".vue"], "{name}");
+        assert!(parsed.file_names().iter().any(|f| f == "/project/src/component.vue"), "{name}");
+    }
+}
+
+// tsconfigparsing_test.go:1250
+#[test]
+fn test_content_mappers_require_flag() {
+    let config = TestConfig {
+        json_text: r#"{ "contentMappers": [{ "package": "vue-mapper", "extensions": [".vue"] }] }"#,
+        config_file_name: "tsconfig.json",
+        base_path: "/",
+        all_file_list: &[("/app.ts", "export {}")],
+        // existingOptions omitted: --runExternalCode is not set.
+        ..Default::default()
+    };
+    let expected_code = diagnostics::Content_mappers_require_the_runExternalCode_command_line_flag_to_be_enabled.code();
+    for (name, get_parsed) in [("json api", get_parsed_with_json_api as GetParsed), ("jsonSourceFile api", get_parsed_with_json_source_file_api)] {
+        let mut all_file_lists: Vec<(&str, &str)> = vec![("/tsconfig.json", config.json_text)];
+        all_file_lists.extend_from_slice(config.all_file_list);
+        let host = new_vfs_parse_config_host(&all_file_lists, config.base_path, true /*useCaseSensitiveFileNames*/);
+        let parsed = get_parsed(&config, host, config.base_path);
+        let found = parsed.errors.iter().any(|d| d.code() == expected_code);
+        assert!(found, "{name}: expected diagnostic {expected_code}, got errors: {:?}", parsed.errors);
+    }
+}
+
+// tsconfigparsing_test.go:1279
+#[test]
+fn test_unresolved_content_mapper_does_not_register_extensions() {
+    let config = TestConfig {
+        json_text: r#"{ "contentMappers": [{ "package": "missing-mapper", "extensions": [".vue"] }], "include": ["src"] }"#,
+        config_file_name: "tsconfig.json",
+        base_path: "/",
+        all_file_list: &[("/src/app.ts", "export {}"), ("/src/Component.vue", "<template />")],
+        existing_options: Some(CompilerOptions { run_external_code: Tristate::True, ..Default::default() }),
+    };
+    for (name, get_parsed) in [("json api", get_parsed_with_json_api as GetParsed), ("jsonSourceFile api", get_parsed_with_json_source_file_api)] {
+        let host = new_vfs_parse_config_host(config.all_file_list, config.base_path, true);
+        let parsed = get_parsed(&config, host, config.base_path);
+
+        assert_eq!(parsed.content_mappers().len(), 0, "{name}");
+        assert_eq!(parsed.content_mapper_extensions().len(), 0, "{name}");
+        assert!(!parsed.file_names().iter().any(|f| f == "/src/Component.vue"), "{name}");
+        assert!(parsed.file_names().iter().any(|f| f == "/src/app.ts"), "{name}");
+    }
+}
+
+// tsconfigparsing_test.go:1306
+#[test]
+fn test_content_mappers_validation() {
+    let tests: &[(&str, &str, i32)] = &[
+        (
+            "extension without leading dot",
+            r#"[{ "package": "vue-mapper", "extensions": ["vue"] }]"#,
+            diagnostics::Content_mapper_file_extension_0_must_begin_with_a.code(),
+        ),
+        (
+            "built-in extension",
+            r#"[{ "package": "x", "extensions": [".ts"] }]"#,
+            diagnostics::Content_mapper_file_extension_0_is_a_built_in_extension_and_cannot_be_registered_by_a_content_mapper.code(),
+        ),
+        ("missing extensions", r#"[{ "package": "x" }]"#, diagnostics::Compiler_option_0_requires_a_value_of_type_1.code()),
+        (
+            "duplicate extension across mappers",
+            r#"[{ "package": "a", "extensions": [".vue"] }, { "package": "b", "extensions": [".vue"] }]"#,
+            diagnostics::Content_mapper_file_extension_0_is_registered_by_more_than_one_content_mapper.code(),
+        ),
+        (
+            "extensions is not an array",
+            r#"[{ "package": "x", "extensions": ".vue" }]"#,
+            diagnostics::Compiler_option_0_requires_a_value_of_type_1.code(),
+        ),
+        (
+            "extensions contains a non-string",
+            r#"[{ "package": "x", "extensions": [".vue", 1] }]"#,
+            diagnostics::Compiler_option_0_requires_a_value_of_type_1.code(),
+        ),
+        (
+            "package is not a string",
+            r#"[{ "package": ["x"], "extensions": [".vue"] }]"#,
+            diagnostics::Compiler_option_0_requires_a_value_of_type_1.code(),
+        ),
+        ("missing package", r#"[{ "extensions": [".vue"] }]"#, diagnostics::Compiler_option_0_requires_a_value_of_type_1.code()),
+        (
+            "options is not an object",
+            r#"[{ "package": "x", "extensions": [".vue"], "options": ["strict"] }]"#,
+            diagnostics::Compiler_option_0_requires_a_value_of_type_1.code(),
+        ),
+    ];
+
+    for &(test_name, content_mappers, expected_code) in tests {
+        let mut all_file_list = vec![("/app.ts", "export {}")];
+        if test_name == "duplicate extension across mappers" {
+            all_file_list.push(("/node_modules/a/package.json", r#"{ "name": "a", "version": "1.0.0", "typescript": { "contentMapper": { "exec": ["a"] } } }"#));
+            all_file_list.push(("/node_modules/b/package.json", r#"{ "name": "b", "version": "1.0.0", "typescript": { "contentMapper": { "exec": ["b"] } } }"#));
+        }
+        let config = TestConfig {
+            json_text: format!(r#"{{ "contentMappers": {content_mappers} }}"#).leak(),
+            config_file_name: "tsconfig.json",
+            base_path: "/",
+            all_file_list: all_file_list.leak(),
+            existing_options: Some(CompilerOptions { run_external_code: Tristate::True, ..Default::default() }),
+        };
+        for (api_name, get_parsed) in [("json api", get_parsed_with_json_api as GetParsed), ("jsonSourceFile api", get_parsed_with_json_source_file_api)] {
+            let mut all_file_lists: Vec<(&str, &str)> = vec![("/tsconfig.json", config.json_text)];
+            all_file_lists.extend_from_slice(config.all_file_list);
+            let host = new_vfs_parse_config_host(&all_file_lists, config.base_path, true /*useCaseSensitiveFileNames*/);
+            let parsed = get_parsed(&config, host, config.base_path);
+            let diagnostic = parsed.errors.iter().find(|d| d.code() == expected_code);
+            let Some(diagnostic) = diagnostic else {
+                panic!("{test_name} ({api_name}): expected diagnostic {expected_code}, got errors: {:?}", parsed.errors);
+            };
+            match test_name {
+                "built-in extension" => {
+                    assert_eq!(parsed.content_mappers().len(), 0, "{test_name} ({api_name})");
+                    assert_eq!(parsed.content_mapper_extensions().len(), 0, "{test_name} ({api_name})");
+                }
+                "duplicate extension across mappers" => {
+                    assert_eq!(parsed.content_mappers().len(), 2, "{test_name} ({api_name})");
+                    assert_eq!(parsed.content_mappers()[0].definition.extensions, [".vue"], "{test_name} ({api_name})");
+                    assert_eq!(parsed.content_mappers()[1].definition.extensions.len(), 0, "{test_name} ({api_name})");
+                    assert_eq!(parsed.content_mapper_extensions(), [".vue"], "{test_name} ({api_name})");
+                }
+                "missing extensions"
+                | "extensions is not an array"
+                | "extensions contains a non-string"
+                | "package is not a string"
+                | "missing package"
+                | "options is not an object" => {
+                    assert_eq!(parsed.content_mappers().len(), 0, "{test_name} ({api_name})");
+                }
+                _ => {}
+            }
+
+            // With the jsonSourceFile API the diagnostic is located at the offending tsconfig syntax.
+            if api_name == "jsonSourceFile api" {
+                assert!(diagnostic.file().is_some(), "{test_name}: expected diagnostic {expected_code} to have a source file");
+                assert!(diagnostic.len() > 0, "{test_name}: expected diagnostic {expected_code} to have a non-empty location");
+            }
+        }
+    }
+}
+
+// tsconfigparsing_test.go:1413
+#[test]
+fn test_content_mapper_extension_validation_uses_host_case_sensitivity() {
+    let tests: &[(&str, bool, &str, i32)] = &[
+        (
+            "built-in extension on case-insensitive host",
+            false,
+            r#"[{ "package": "mapper", "extensions": [".TS"] }]"#,
+            diagnostics::Content_mapper_file_extension_0_is_a_built_in_extension_and_cannot_be_registered_by_a_content_mapper.code(),
+        ),
+        (
+            "duplicate extension on case-insensitive host",
+            false,
+            r#"[{ "package": "a", "extensions": [".vue"] }, { "package": "b", "extensions": [".VUE"] }]"#,
+            diagnostics::Content_mapper_file_extension_0_is_registered_by_more_than_one_content_mapper.code(),
+        ),
+        (
+            "built-in extension on case-sensitive host",
+            true,
+            r#"[{ "package": "mapper", "extensions": [".TS"] }]"#,
+            diagnostics::Content_mapper_file_extension_0_is_a_built_in_extension_and_cannot_be_registered_by_a_content_mapper.code(),
+        ),
+        (
+            "mapper extension casing is distinct on case-sensitive host",
+            true,
+            r#"[{ "package": "a", "extensions": [".vue"] }, { "package": "b", "extensions": [".VUE"] }]"#,
+            0,
+        ),
+    ];
+
+    for &(test_name, use_case_sensitive_file_names, content_mappers, expected_code) in tests {
+        let tsconfig: &'static str = format!(r#"{{ "contentMappers": {content_mappers} }}"#).leak();
+        let files: &'static [(&'static str, &'static str)] = vec![
+            ("/tsconfig.json", tsconfig),
+            ("/app.ts", "export {};"),
+            ("/node_modules/mapper/package.json", r#"{ "name": "mapper", "version": "1.0.0", "typescript": { "contentMapper": { "exec": ["mapper"] } } }"#),
+            ("/node_modules/a/package.json", r#"{ "name": "a", "version": "1.0.0", "typescript": { "contentMapper": { "exec": ["a"] } } }"#),
+            ("/node_modules/b/package.json", r#"{ "name": "b", "version": "1.0.0", "typescript": { "contentMapper": { "exec": ["b"] } } }"#),
+        ]
+        .leak();
+        let host = new_vfs_parse_config_host(files, "/", use_case_sensitive_file_names);
+        let config = TestConfig {
+            json_text: tsconfig,
+            config_file_name: "tsconfig.json",
+            base_path: "/",
+            all_file_list: files,
+            existing_options: Some(CompilerOptions { run_external_code: Tristate::True, ..Default::default() }),
+        };
+        let parsed = get_parsed_with_json_source_file_api(&config, host, config.base_path);
+        if expected_code == 0 {
+            assert_eq!(parsed.errors.len(), 0, "{test_name}: unexpected errors: {:?}", parsed.errors);
+        } else {
+            let found = parsed.errors.iter().any(|diagnostic| diagnostic.code() == expected_code);
+            assert!(found, "{test_name}: expected diagnostic {expected_code}, got errors: {:?}", parsed.errors);
+        }
     }
 }
 

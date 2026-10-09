@@ -778,6 +778,7 @@ dependencies = [
  "tsrs_parser",
  "tsrs_scanner",
  "tsrs_vfs",
+ "xxhash-rust",
 ]
 
 [[package]]

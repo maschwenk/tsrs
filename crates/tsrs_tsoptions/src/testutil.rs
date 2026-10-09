@@ -4,148 +4,26 @@
 use std::fmt::Write;
 
 use tsrs_ast::{Diagnostic, SourceFile};
-use tsrs_core::collections::OrderedMap;
 use tsrs_core::json::{self, Value};
 use tsrs_core::tspath::{self, ComparePathsOptions};
-use tsrs_core::{
-    BuildOptions, CompilerOptions, JsxEmit, ModuleDetectionKind, ModuleKind, ModuleResolutionKind, NewLineKind, PluginImport,
-    ScriptTarget, Tristate, TypeAcquisition, P,
-};
+use tsrs_core::{BuildOptions, CompilerOptions, TypeAcquisition, P};
 use tsrs_diagnostics::Category;
 
 use crate::commandlineoption::CompilerOptionsValue;
-use crate::parsinghelpers::for_each_compiler_options_field;
+use crate::gojson;
 
-pub(crate) trait ToJson {
-    // None when the value is the Go zero value (omitzero).
-    fn to_json(&self) -> Option<Value>;
-}
-
-impl ToJson for Tristate {
-    fn to_json(&self) -> Option<Value> {
-        match self {
-            Tristate::Unknown => None,
-            Tristate::False => Some(Value::Bool(false)),
-            Tristate::True => Some(Value::Bool(true)),
-        }
-    }
-}
-
-impl ToJson for String {
-    fn to_json(&self) -> Option<Value> {
-        if self.is_empty() {
-            None
-        } else {
-            Some(Value::String(self.clone()))
-        }
-    }
-}
-
-impl ToJson for Option<Vec<String>> {
-    fn to_json(&self) -> Option<Value> {
-        self.as_ref().map(|v| Value::Array(v.iter().map(|s| Value::String(s.clone())).collect()))
-    }
-}
-
-impl ToJson for Option<i64> {
-    fn to_json(&self) -> Option<Value> {
-        self.map(|v| Value::Number(v as f64))
-    }
-}
-
-impl ToJson for Option<i32> {
-    fn to_json(&self) -> Option<Value> {
-        self.map(|v| Value::Number(v as f64))
-    }
-}
-
-impl ToJson for Option<OrderedMap<String, Vec<String>>> {
-    fn to_json(&self) -> Option<Value> {
-        self.as_ref().map(|m| {
-            let mut o = OrderedMap::default();
-            for (k, v) in m.iter() {
-                o.insert(k.clone(), Value::Array(v.iter().map(|s| Value::String(s.clone())).collect()));
-            }
-            Value::Object(o)
-        })
-    }
-}
-
-impl ToJson for Option<Vec<PluginImport>> {
-    fn to_json(&self) -> Option<Value> {
-        self.as_ref().map(|v| {
-            Value::Array(
-                v.iter()
-                    .map(|p| {
-                        let mut o = OrderedMap::default();
-                        o.insert("name".to_string(), Value::String(p.name.clone()));
-                        Value::Object(o)
-                    })
-                    .collect(),
-            )
-        })
-    }
-}
-
-macro_rules! enum_to_json {
-    ($($ty:ty),*) => {
-        $(impl ToJson for $ty {
-            fn to_json(&self) -> Option<Value> {
-                if *self == <$ty>::default() {
-                    None
-                } else {
-                    Some(Value::Number(self.value() as f64))
-                }
-            }
-        })*
-    };
-}
-
-enum_to_json!(JsxEmit, ModuleKind, ModuleResolutionKind, ModuleDetectionKind, NewLineKind, ScriptTarget);
-
+// Go json.Marshal of core.CompilerOptions, core.BuildOptions and core.TypeAcquisition: the gojson module's
+// encoding, which contentmapper.MarshalDeclaredOptions also uses.
 pub(crate) fn compiler_options_to_json(options: &CompilerOptions) -> Value {
-    let mut o = OrderedMap::default();
-    macro_rules! fields {
-        ($($field:ident: $json:literal,)*) => {
-            $(
-                if let Some(v) = options.$field.to_json() {
-                    o.insert($json.to_string(), v);
-                }
-            )*
-        };
-    }
-    for_each_compiler_options_field!(fields);
-    Value::Object(o)
+    gojson::compiler_options_to_go_json(options)
 }
 
 pub(crate) fn build_options_to_json(options: &BuildOptions) -> Value {
-    let mut o = OrderedMap::default();
-    let mut add = |k: &str, v: Option<Value>| {
-        if let Some(v) = v {
-            o.insert(k.to_string(), v);
-        }
-    };
-    add("dry", options.dry.to_json());
-    add("force", options.force.to_json());
-    add("verbose", options.verbose.to_json());
-    add("builders", options.builders.to_json());
-    add("stopBuildOnErrors", options.stop_build_on_errors.to_json());
-    add("clean", options.clean.to_json());
-    Value::Object(o)
+    gojson::build_options_to_go_json(options)
 }
 
 pub(crate) fn type_acquisition_to_json(options: &TypeAcquisition) -> Value {
-    let mut o = OrderedMap::default();
-    let mut add = |k: &str, v: Option<Value>| {
-        if let Some(v) = v {
-            o.insert(k.to_string(), v);
-        }
-    };
-    add("enable", options.enable.to_json());
-    add("include", options.include.to_json());
-    add("exclude", options.exclude.to_json());
-    add("disableFilenameBasedTypeAcquisition", options.disable_filename_based_type_acquisition.to_json());
-    Value::Object(o)
+    gojson::type_acquisition_to_go_json(options)
 }
 
 pub(crate) fn option_value_to_json(value: &CompilerOptionsValue) -> Value {
