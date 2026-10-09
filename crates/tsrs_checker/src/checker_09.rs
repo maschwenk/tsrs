@@ -2200,7 +2200,7 @@ impl Checker {
         let t = self.get_reduced_apparent_type(t);
         if t.flags().intersects(TypeFlags::Object) {
             let key = HashedName::new(name);
-            let symbol = if t.object_flags().intersects(ObjectFlags::MembersResolved) {
+            let symbol = if t.object_flags_lazy(ObjectFlags::MembersResolved).intersects(ObjectFlags::MembersResolved) {
                 t.as_structured_type().members().and_then(|m| m.lookup_hashed(key))
             } else {
                 self.get_member_of_unresolved_structured_type(t, name, instantiate)
@@ -2224,7 +2224,7 @@ impl Checker {
             }
             // A name that no member of `Function`, `CallableFunction`, `NewableFunction` or `Object` has is not found
             // below; with `t` resolved, the signature tests below have no side effects to keep.
-            if t.object_flags().intersects(ObjectFlags::MembersResolved) && !self.may_be_augment_member(key) {
+            if t.object_flags_lazy(ObjectFlags::MembersResolved).intersects(ObjectFlags::MembersResolved) && !self.may_be_augment_member(key) {
                 return None;
             }
             let function_type = if t == self.any_function_type {
@@ -2278,7 +2278,7 @@ impl Checker {
             if !t.flags().intersects(TypeFlags::Object) {
                 continue; // get_property_of_object_type finds nothing in it
             }
-            if !t.object_flags().intersects(ObjectFlags::MembersResolved) {
+            if !t.object_flags_lazy(ObjectFlags::MembersResolved).intersects(ObjectFlags::MembersResolved) {
                 return true;
             }
             if let Some(members) = self.resolve_structured_type_members(t).unwrap().members() {
@@ -2327,7 +2327,7 @@ impl Checker {
             return ready.construct_signatures.get();
         }
         if self.lazy_members && t.object_flags().intersects(ObjectFlags::Mapped) {
-            if !t.object_flags().intersects(ObjectFlags::MembersResolved) {
+            if !t.object_flags_lazy(ObjectFlags::MembersResolved).intersects(ObjectFlags::MembersResolved) {
                 self.lazy_member_stats.mapped_signature_early_returns += 1;
             }
             // Mapped types have no signatures.
@@ -2464,7 +2464,7 @@ impl Checker {
     #[inline]
     pub(crate) fn resolve_structured_type_members(&mut self, t: P<Type>) -> Option<&'static StructuredType> {
         #[cfg(feature = "site-counts")]
-        if !t.object_flags().intersects(ObjectFlags::MembersResolved) {
+        if !t.object_flags_lazy(ObjectFlags::MembersResolved).intersects(ObjectFlags::MembersResolved) {
             // Exclusive symbol/signature counts created by this resolution, attributed to the code that asked for it.
             thread_local! { static NESTED: std::cell::RefCell<Vec<u64>> = const { std::cell::RefCell::new(Vec::new()) }; }
             let label = if t.object_flags().intersects(ObjectFlags::Reference) && t.target().is_some_and(|s| s.object_flags().intersects(ObjectFlags::Tuple)) {
@@ -2511,7 +2511,7 @@ impl Checker {
             }
             return r;
         }
-        if t.object_flags().intersects(ObjectFlags::MembersResolved) {
+        if t.object_flags_lazy(ObjectFlags::MembersResolved).intersects(ObjectFlags::MembersResolved) {
             return Some(t.as_structured_type());
         }
         self.resolve_structured_type_members_worker(t)
@@ -2520,7 +2520,7 @@ impl Checker {
     #[cfg_attr(feature = "site-counts", track_caller)]
     #[inline(never)]
     fn resolve_structured_type_members_worker(&mut self, t: P<Type>) -> Option<&'static StructuredType> {
-        if !t.object_flags().intersects(ObjectFlags::MembersResolved) {
+        if !t.object_flags_lazy(ObjectFlags::MembersResolved).intersects(ObjectFlags::MembersResolved) {
             if t.flags().intersects(TypeFlags::Object) {
                 if t.object_flags().intersects(ObjectFlags::Reference) {
                     self.resolve_type_reference_members(t);
@@ -2727,7 +2727,7 @@ pub(crate) struct LazyMembers {
 }
 
 pub(crate) fn may_have_lazy_members(t: P<Type>) -> bool {
-    t.object_flags() & (ObjectFlags::MembersResolved | ObjectFlags::Reference) == ObjectFlags::Reference
+    t.object_flags_lazy(ObjectFlags::MembersResolved) & (ObjectFlags::MembersResolved | ObjectFlags::Reference) == ObjectFlags::Reference
 }
 
 impl Checker {
@@ -2745,7 +2745,7 @@ impl Checker {
     /// `resolveStructuredTypeMembers` on instantiated references, which leaves the flag unset). Read-only;
     /// never resolves anything. Used by the Node API to report Go's objectFlags.
     pub fn members_resolved_like_go(&self, t: P<Type>) -> bool {
-        t.object_flags().intersects(ObjectFlags::MembersResolved) || self.lazy_member_tables.contains_key(&t)
+        t.object_flags_lazy(ObjectFlags::MembersResolved).intersects(ObjectFlags::MembersResolved) || self.lazy_member_tables.contains_key(&t)
     }
 
     // Returns nil if t has no lazy member table or it is still being prepared.
@@ -2772,7 +2772,7 @@ impl Checker {
             Some(&lm) => lm,
             None => self.create_lazy_member_table(t, source.unwrap())?,
         };
-        if lm.ready.get().is_none() || t.object_flags().intersects(ObjectFlags::MembersResolved) {
+        if lm.ready.get().is_none() || t.object_flags_lazy(ObjectFlags::MembersResolved).intersects(ObjectFlags::MembersResolved) {
             return None;
         }
         Some(lm)
@@ -2861,7 +2861,7 @@ impl Checker {
             index_infos: ThinSlice::new(alloc_vec(index_infos)),
             base_types: ThinSlice::new(alloc_vec(base_types)),
         });
-        if t.object_flags().intersects(ObjectFlags::MembersResolved) {
+        if t.object_flags_lazy(ObjectFlags::MembersResolved).intersects(ObjectFlags::MembersResolved) {
             // t was resolved while preparing; resolveObjectTypeMembers would now replace its members.
             self.resolve_lazy_members(t, lm);
         }
@@ -2915,7 +2915,7 @@ impl Checker {
 
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn get_member_of_structured_type_ex(&mut self, t: P<Type>, name: &str, instantiate: bool) -> Option<P<Symbol>> {
-        if t.object_flags().intersects(ObjectFlags::MembersResolved) {
+        if t.object_flags_lazy(ObjectFlags::MembersResolved).intersects(ObjectFlags::MembersResolved) {
             return t.as_structured_type().members().and_then(|m| m.lookup(name));
         }
         self.get_member_of_unresolved_structured_type(t, name, instantiate)

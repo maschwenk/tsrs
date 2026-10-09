@@ -3,6 +3,7 @@ use std::hash::Hash;
 
 use bitflags::bitflags;
 use tsrs_core::{OptionThinSliceCell, StrCell, ThinSliceCell};
+use tsrs_core::shcell::{ShCell, ShCountCell, ShOptionThinSliceCell, ShStrCell, ShTaggedPtrCell};
 
 use crate::*;
 
@@ -1103,10 +1104,45 @@ impl TypeAliasOptExt for Option<P<TypeAlias>> {
 
 pub struct Type {
     pub flags: Cell<TypeFlags>,
-    pub object_flags: Cell<ObjectFlags>,
+    pub object_flags: ObjectFlagsCell,
     pub id: TypeId,
     data_tag: TypeDataTag,
     symbol_or_alias: Cell<TypeSymbolWord>,
+}
+
+/// `Type.object_flags`. spike/r1-read-path: a write takes the window test (a fork's bits for a shared type would go to
+/// its side table); a read is plain, except a reader of a lazily computed family that reads lazy state (members
+/// resolved, identical base type, unknown-like union, never intersection), which tests the window while the family's
+/// bit is unset (`get_lazy`).
+#[repr(transparent)]
+pub struct ObjectFlagsCell(Cell<ObjectFlags>);
+
+impl ObjectFlagsCell {
+    #[inline]
+    pub const fn new(f: ObjectFlags) -> Self {
+        ObjectFlagsCell(Cell::new(f))
+    }
+    #[inline]
+    pub fn get(&self) -> ObjectFlags {
+        self.0.get()
+    }
+    /// The flags for a reader of the family whose bit is `bit`: while it is unset on a shared type, this checker's own
+    /// bits come from its side table.
+    #[inline]
+    pub fn get_lazy(&self, bit: ObjectFlags) -> ObjectFlags {
+        let v = self.0.get();
+        if v.intersects(bit) || !tsrs_core::shwindow::shared_ref(self) {
+            return v;
+        }
+        tsrs_core::shcell::side_get(std::ptr::from_ref(self).addr(), v)
+    }
+    #[inline]
+    pub fn set(&self, f: ObjectFlags) {
+        if tsrs_core::shwindow::shared_ref(self) {
+            return tsrs_core::shcell::side_set(std::ptr::from_ref(self).addr(), f);
+        }
+        self.0.set(f)
+    }
 }
 
 const _: () = assert!(std::mem::size_of::<Type>() == 24);
@@ -1394,7 +1430,7 @@ impl TypePayload for ConditionalType {
 impl Type {
     /// Allocates a type whose data struct is `data` (only `Checker::new_type` and the checker's placeholder type).
     pub(crate) fn alloc<T: TypePayload>(flags: TypeFlags, object_flags: ObjectFlags, id: TypeId, data: T) -> P<Type> {
-        let header = Type { flags: Cell::new(flags), object_flags: Cell::new(object_flags), id, data_tag: T::TAG, symbol_or_alias: Cell::new(TypeSymbolWord(0)) };
+        let header = Type { flags: Cell::new(flags), object_flags: ObjectFlagsCell::new(object_flags), id, data_tag: T::TAG, symbol_or_alias: Cell::new(TypeSymbolWord(0)) };
         // SAFETY: `TypeAlloc` is `repr(C)` with the header first; arena values are never moved or freed.
         unsafe { P::new(TypeAlloc { header, data }).cast::<Type>() }
     }
@@ -1452,6 +1488,12 @@ impl Type {
 
     pub fn object_flags(&self) -> ObjectFlags {
         self.object_flags.get()
+    }
+
+    /// `object_flags` for a reader of the lazily computed family whose bit is `bit` (`ObjectFlagsCell::get_lazy`).
+    #[inline]
+    pub fn object_flags_lazy(&self, bit: ObjectFlags) -> ObjectFlags {
+        self.object_flags.get_lazy(bit)
     }
 
     // Casts for concrete struct types
@@ -1920,7 +1962,7 @@ pub enum LiteralValue {
 #[derive(Default)]
 pub struct LiteralType {
     pub value: Cell<Option<LiteralValue>>, // string | jsnum.Number | bool | PseudoBigInt | nil (computed enum)
-    pub fresh_type: Cell<Option<P<Type>>>, // Fresh version of type
+    pub fresh_type: ShCell<Option<P<Type>>>, // Fresh version of type
     pub regular_type: Cell<Option<P<Type>>>, // Regular version of type
 }
 
@@ -1947,7 +1989,7 @@ pub struct UniqueESSymbolType {
 
 #[derive(Default)]
 pub struct ConstrainedType {
-    pub resolved_base_constraint: Cell<Option<P<Type>>>,
+    pub resolved_base_constraint: ShCell<Option<P<Type>>>,
 }
 
 // StructuredType (base of all types with members)
@@ -1964,7 +2006,7 @@ pub struct ConstrainedType {
 // list reads as `&[]` until a non-empty one is set, see `CountOrIndexInfos`).
 #[derive(Default)]
 pub struct StructuredType {
-    resolved: Cell<Option<P<StructuredMembers>>>,
+    resolved: ShCell<Option<P<StructuredMembers>>>,
     // Go's objectTypeWithoutAbstractConstructSignatures is `Checker::object_types_without_abstract_construct_signatures`.
 }
 
@@ -2151,7 +2193,7 @@ embeds!(ObjectType, structured_type, StructuredType);
 pub struct TypeReference {
     pub object_type: ObjectType,
     pub node: Cell<Option<P<Node>>>, // TypeReferenceNode | ArrayTypeNode | TupleTypeNode when deferred, else nil
-    pub resolved_type_arguments: OptionThinSliceCell<P<Type>>, // nil = not computed (Go tests against nil)
+    pub resolved_type_arguments: ShOptionThinSliceCell<P<Type>>, // nil = not computed (Go tests against nil)
 }
 embeds!(TypeReference, object_type, ObjectType);
 
@@ -2221,14 +2263,14 @@ pub struct InterfaceType {
     pub all_type_parameters: Cell<&'static [P<Type>]>, // Type parameters (outer + local + thisType)
     pub outer_type_parameter_count: Cell<i32>, // Count of outer type parameters
     pub this_type: Cell<Option<P<Type>>>, // The "this" type (nil if none)
-    pub base_types_resolved: Cell<bool>,
-    pub declared_members_resolved: Cell<bool>,
-    pub resolved_base_constructor_type: Cell<Option<P<Type>>>,
-    pub resolved_base_types: Cell<&'static [P<Type>]>,
-    pub declared_members: Cell<Option<P<SymbolTable>>>, // Declared members
-    pub declared_call_signatures: Cell<&'static [P<Signature>]>, // Declared call signatures
-    pub declared_construct_signatures: Cell<&'static [P<Signature>]>, // Declared construct signatures
-    pub declared_index_infos: Cell<&'static [P<IndexInfo>]>, // Declared index signatures
+    pub base_types_resolved: ShCell<bool>,
+    pub declared_members_resolved: ShCell<bool>,
+    pub resolved_base_constructor_type: ShCell<Option<P<Type>>>,
+    pub resolved_base_types: ShCell<&'static [P<Type>]>,
+    pub declared_members: ShCell<Option<P<SymbolTable>>>, // Declared members
+    pub declared_call_signatures: ShCell<&'static [P<Signature>]>, // Declared call signatures
+    pub declared_construct_signatures: ShCell<&'static [P<Signature>]>, // Declared construct signatures
+    pub declared_index_infos: ShCell<&'static [P<IndexInfo>]>, // Declared index signatures
 }
 embeds!(InterfaceType, type_reference, TypeReference);
 
@@ -2336,11 +2378,11 @@ pub struct MappedType {
     pub object_type: ObjectType,
     pub declaration: Cell<Option<P<Node>>>, // MappedTypeNode
     pub type_parameter: Cell<Option<P<Type>>>,
-    pub constraint_type: Cell<Option<P<Type>>>,
-    pub name_type: Cell<Option<P<Type>>>,
-    pub template_type: Cell<Option<P<Type>>>,
-    pub modifiers_type: Cell<Option<P<Type>>>,
-    pub resolved_apparent_type: Cell<Option<P<Type>>>,
+    pub constraint_type: ShCell<Option<P<Type>>>,
+    pub name_type: ShCell<Option<P<Type>>>,
+    pub template_type: ShCell<Option<P<Type>>>,
+    pub modifiers_type: ShCell<Option<P<Type>>>,
+    pub resolved_apparent_type: ShCell<Option<P<Type>>>,
     pub contains_error: Cell<bool>,
 }
 embeds!(MappedType, object_type, ObjectType);
@@ -2383,7 +2425,7 @@ embeds!(ReverseMappedType, object_type, ObjectType);
 pub struct EvolvingArrayType {
     pub object_type: ObjectType,
     pub element_type: Cell<Option<P<Type>>>,
-    pub final_array_type: Cell<Option<P<Type>>>,
+    pub final_array_type: ShCell<Option<P<Type>>>,
 }
 embeds!(EvolvingArrayType, object_type, ObjectType);
 
@@ -2407,19 +2449,19 @@ embeds!(UnionOrIntersectionType, structured_type, StructuredType);
 #[derive(Default)]
 #[repr(C)]
 struct UnionOrIntersectionRare {
-    resolved_properties: OptionThinSliceCell<P<Symbol>>, // nil = not computed (Go tests against nil)
-    property_cache: Cell<Option<P<SymbolTable>>>,
-    property_cache_without_function_property_augment: Cell<Option<P<SymbolTable>>>,
+    resolved_properties: ShOptionThinSliceCell<P<Symbol>>, // nil = not computed (Go tests against nil)
+    property_cache: ShCell<Option<P<SymbolTable>>>,
+    property_cache_without_function_property_augment: ShCell<Option<P<SymbolTable>>>,
 }
 
 #[derive(Default)]
 #[repr(C)]
 struct UnionRare {
     shared: UnionOrIntersectionRare,
-    resolved_reduced_type: Cell<Option<P<Type>>>,
-    regular_type: Cell<Option<P<Type>>>,
+    resolved_reduced_type: ShCell<Option<P<Type>>>,
+    regular_type: ShCell<Option<P<Type>>>,
     origin: Cell<Option<P<Type>>>, // Denormalized union, intersection, or index type in which union originates
-    key_property_name: StrCell,    // Property with unique unit type that exists in every object/intersection in union type
+    key_property_name: ShStrCell,    // Property with unique unit type that exists in every object/intersection in union type
     constituent_map: GoMap<P<Type>, P<Type>>, // Constituents keyed by unit type discriminants
 }
 
@@ -2427,18 +2469,18 @@ struct UnionRare {
 #[repr(C)]
 struct IntersectionRare {
     shared: UnionOrIntersectionRare,
-    resolved_apparent_type: Cell<Option<P<Type>>>,
-    unique_literal_filled_instantiation: Cell<Option<P<Type>>>, // Instantiation with type parameters mapped to never type
+    resolved_apparent_type: ShCell<Option<P<Type>>>,
+    unique_literal_filled_instantiation: ShCell<Option<P<Type>>>, // Instantiation with type parameters mapped to never type
 }
 
 /// The tail pointer (8-aligned, null while absent) with bit 0 set for an intersection.
-struct UnionOrIntersectionRareWord(Cell<*const UnionOrIntersectionRare>);
+struct UnionOrIntersectionRareWord(ShTaggedPtrCell<UnionOrIntersectionRare>);
 
 const RARE_INTERSECTION: usize = 1;
 
 impl Default for UnionOrIntersectionRareWord {
     fn default() -> Self {
-        UnionOrIntersectionRareWord(Cell::new(std::ptr::null()))
+        UnionOrIntersectionRareWord(ShTaggedPtrCell::new(std::ptr::null()))
     }
 }
 
@@ -2488,7 +2530,13 @@ impl UnionOrIntersectionType {
     pub fn property_cache_for_write(&self, skip_object_function_property_augment: bool) -> P<SymbolTable> {
         let r = self.rare_for_write();
         let cell = if skip_object_function_property_augment { &r.property_cache_without_function_property_augment } else { &r.property_cache };
-        ast::get_symbol_table(cell)
+        // Go `getSymbolTable(&cache)` on a `ShCell`.
+        if let Some(table) = cell.get() {
+            return table;
+        }
+        let table = P::new(SymbolTable::default());
+        cell.set(Some(table));
+        table
     }
 }
 
@@ -2618,13 +2666,13 @@ impl IntersectionType {
 #[derive(Default)]
 pub struct TypeParameter {
     pub constrained_type: ConstrainedType,
-    pub constraint: Cell<Option<P<Type>>>,
+    pub constraint: ShCell<Option<P<Type>>>,
     pub target: Cell<Option<P<Type>>>,
     pub mapper: MapperCell,
     pub is_this_type: Cell<bool>,
     pub is_distributed: Cell<bool>,
-    pub resolved_default_type: Cell<Option<P<Type>>>,
-    pub distributed_type: Cell<Option<P<Type>>>,
+    pub resolved_default_type: ShCell<Option<P<Type>>>,
+    pub distributed_type: ShCell<Option<P<Type>>>,
 }
 embeds!(TypeParameter, constrained_type, ConstrainedType);
 
@@ -2747,11 +2795,11 @@ pub struct ConditionalType {
     pub root: Cell<Option<P<ConditionalRoot>>>,
     pub check_type: Cell<Option<P<Type>>>,
     pub extends_type: Cell<Option<P<Type>>>,
-    pub resolved_true_type: Cell<Option<P<Type>>>,
-    pub resolved_false_type: Cell<Option<P<Type>>>,
-    pub resolved_inferred_true_type: Cell<Option<P<Type>>>, // The `trueType` instantiated with the `combinedMapper`, if present
-    pub resolved_default_constraint: Cell<Option<P<Type>>>,
-    pub resolved_constraint_of_distributive: Cell<Option<P<Type>>>,
+    pub resolved_true_type: ShCell<Option<P<Type>>>,
+    pub resolved_false_type: ShCell<Option<P<Type>>>,
+    pub resolved_inferred_true_type: ShCell<Option<P<Type>>>, // The `trueType` instantiated with the `combinedMapper`, if present
+    pub resolved_default_constraint: ShCell<Option<P<Type>>>,
+    pub resolved_constraint_of_distributive: ShCell<Option<P<Type>>>,
     pub mapper: MapperCell,
     pub combined_mapper: MapperCell,
 }
@@ -2798,11 +2846,11 @@ pub struct Signature {
     pub id: Cell<SignatureId>,
     pub flags: Cell<SignatureFlags>,
     pub min_argument_count: Cell<i32>,
-    pub resolved_min_argument_count: Cell<i32>,
+    pub resolved_min_argument_count: ShCountCell,
     pub declaration: Cell<Option<P<Node>>>,
     pub type_parameters: ThinSliceCell<P<Type>>, // one word each (`tsrs_core::ThinSlice`)
     pub parameters: ThinSliceCell<P<Symbol>>,
-    pub resolved_return_type: Cell<Option<P<Type>>>,
+    pub resolved_return_type: ShCell<Option<P<Type>>>,
     pub target: Cell<Option<P<Signature>>>,
     pub mapper: MapperCell,
     // `thisParameter`, `isolatedSignatureType`, `composite` and a resolved type predicate other than the checker's
@@ -2820,19 +2868,19 @@ const _: () = assert!(std::mem::size_of::<Signature>() == 52);
 #[derive(Default)]
 struct SignatureRare {
     this_parameter: Cell<Option<P<Symbol>>>,
-    isolated_signature_type: Cell<Option<P<Type>>>,
+    isolated_signature_type: ShCell<Option<P<Type>>>,
     composite: Cell<Option<P<CompositeSignature>>>,
-    resolved_type_predicate: Cell<Option<P<TypePredicate>>>, // never the checker's `noTypePredicate` (that is the bit)
+    resolved_type_predicate: ShCell<Option<P<TypePredicate>>>, // never the checker's `noTypePredicate` (that is the bit)
 }
 
 /// `Signature`'s tail pointer (8-aligned, null when absent) with the "no type predicate" bit in bit 0.
-struct SignatureRareWord(Cell<*const SignatureRare>);
+struct SignatureRareWord(ShTaggedPtrCell<SignatureRare>);
 
 const SIGNATURE_NO_TYPE_PREDICATE: usize = 1;
 
 impl Default for SignatureRareWord {
     fn default() -> Self {
-        SignatureRareWord(Cell::new(std::ptr::null()))
+        SignatureRareWord(ShTaggedPtrCell::new(std::ptr::null()))
     }
 }
 

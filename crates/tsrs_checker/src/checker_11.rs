@@ -504,13 +504,13 @@ impl Checker {
                 return reduced_type;
             }
         } else if t.flags().intersects(TypeFlags::Intersection) {
-            if !t.object_flags().intersects(ObjectFlags::IsNeverIntersectionComputed) {
+            if !t.object_flags_lazy(ObjectFlags::IsNeverIntersectionComputed).intersects(ObjectFlags::IsNeverIntersectionComputed) {
                 t.object_flags.set(t.object_flags() | ObjectFlags::IsNeverIntersectionComputed);
                 if !self.is_mapping_of_same_object_type(t.types()) && self.some_property_reduces_to_never(t) {
                     t.object_flags.set(t.object_flags() | ObjectFlags::IsNeverIntersection);
                 }
             }
-            if t.object_flags().intersects(ObjectFlags::IsNeverIntersection) {
+            if t.object_flags_lazy(ObjectFlags::IsNeverIntersectionComputed).intersects(ObjectFlags::IsNeverIntersection) {
                 return self.never_type;
             }
         }
@@ -541,7 +541,7 @@ impl Checker {
         let types = t.types();
         let skipped = if self.lazy_members {
             types.iter().position(|&t| {
-                t.object_flags() & (ObjectFlags::Mapped | ObjectFlags::MembersResolved) == ObjectFlags::Mapped
+                t.object_flags_lazy(ObjectFlags::MembersResolved) & (ObjectFlags::Mapped | ObjectFlags::MembersResolved) == ObjectFlags::Mapped
                     || may_have_lazy_members(t) && t.flags().intersects(TypeFlags::Object)
             })
         } else {

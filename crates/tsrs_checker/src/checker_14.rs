@@ -310,7 +310,7 @@ impl Checker {
             return None;
         }
         let key = CachedTypeKey { kind: CachedTypeKind::EquivalentBaseType, type_id: t.id };
-        if t.object_flags().intersects(ObjectFlags::IdenticalBaseTypeCalculated) {
+        if t.object_flags_lazy(ObjectFlags::IdenticalBaseTypeCalculated).intersects(ObjectFlags::IdenticalBaseTypeCalculated) {
             return self.cached_types.get(&key).copied();
         }
         t.object_flags.set(t.object_flags() | ObjectFlags::IdenticalBaseTypeCalculated);

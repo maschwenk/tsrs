@@ -953,7 +953,7 @@ impl Checker {
         if !t.object_flags().intersects(ObjectFlags::Anonymous) {
             return false;
         }
-        if t.object_flags().intersects(ObjectFlags::MembersResolved) && self.is_empty_resolved_type(t.as_structured_type()) {
+        if t.object_flags_lazy(ObjectFlags::MembersResolved).intersects(ObjectFlags::MembersResolved) && self.is_empty_resolved_type(t.as_structured_type()) {
             return true;
         }
         match t.symbol() {
@@ -2476,7 +2476,7 @@ impl Checker {
     // checker.go:28273
     pub(crate) fn is_unknown_like_union_type(&mut self, t: P<Type>) -> bool {
         if self.strict_null_checks && t.flags().intersects(TypeFlags::Union) {
-            if !t.object_flags().intersects(ObjectFlags::IsUnknownLikeUnionComputed) {
+            if !t.object_flags_lazy(ObjectFlags::IsUnknownLikeUnionComputed).intersects(ObjectFlags::IsUnknownLikeUnionComputed) {
                 t.object_flags.set(t.object_flags() | ObjectFlags::IsUnknownLikeUnionComputed);
                 let types = t.types();
                 if types.len() >= 3
@@ -2487,7 +2487,7 @@ impl Checker {
                     t.object_flags.set(t.object_flags() | ObjectFlags::IsUnknownLikeUnion);
                 }
             }
-            return t.object_flags().intersects(ObjectFlags::IsUnknownLikeUnion);
+            return t.object_flags_lazy(ObjectFlags::IsUnknownLikeUnionComputed).intersects(ObjectFlags::IsUnknownLikeUnion);
         }
         false
     }
