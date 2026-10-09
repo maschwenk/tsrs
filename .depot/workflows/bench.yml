@@ -504,6 +504,20 @@ jobs:
           path: bench/.work/solutions/drizzle-orm
           key: bench-drizzle-orm-${{ runner.os }}-${{ steps.keys.outputs['drizzle-orm'] }}
 
+      - name: Restore sentry
+        if: steps.keys.outputs['sentry'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/sentry
+          key: bench-sentry-${{ runner.os }}-${{ steps.keys.outputs['sentry'] }}
+
+      - name: Restore kibana
+        if: steps.keys.outputs['kibana'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/kibana
+          key: bench-kibana-${{ runner.os }}-${{ steps.keys.outputs['kibana'] }}
+
       - name: Set up the projects
         run: python3 bench/run.py --setup-only --projects "$PROJECTS"
 

@@ -136,6 +136,22 @@
       "commit": "15454dbe49d827c6081f3d0231e2e7985e517295",
       "project": ".",
       "install": "npx --yes pnpm@10.6.3 install --frozen-lockfile --ignore-scripts"
+    },
+    {
+      "name": "sentry",
+      "repo": "https://github.com/getsentry/sentry.git",
+      "commit": "8f35e20ab49b11860cce295267947013c3bca24e",
+      "project": "tsconfig.bench.json",
+      "install": "npx --yes pnpm@12.10.1 install --frozen-lockfile --ignore-scripts",
+      "overlay": "bench/overlays/sentry"
+    },
+    {
+      "name": "kibana",
+      "repo": "https://github.com/elastic/kibana.git",
+      "commit": "56bc5b04b53068fc1cc0b0826a88c63f82913a68",
+      "project": "tsconfig.bench.json",
+      "install": "npx --yes pnpm@12.4.2 install --frozen-lockfile --ignore-scripts",
+      "overlay": "bench/overlays/kibana"
     }
   ]
 }
