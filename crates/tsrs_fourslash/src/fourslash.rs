@@ -5924,7 +5924,7 @@ fn format_call_hierarchy_item_spans(f: &FourslashTest, file: Option<&ScriptInfo>
 
 impl FourslashTest {
     // fourslash.go:5086
-    fn get_path_updater(&self, old_path: &str, new_path: &str) -> impl Fn(&str) -> Option<String> {
+    fn get_path_updater(&self, old_path: &str, new_path: &str) -> impl Fn(&str) -> Option<String> + use<> {
         let use_case_sensitive_file_names = self.vfs.use_case_sensitive_file_names();
         let (old_path, new_path) = (old_path.to_string(), new_path.to_string());
         move |path: &str| {

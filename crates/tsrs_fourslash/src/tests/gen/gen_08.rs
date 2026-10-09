@@ -3393,7 +3393,7 @@ use crate::tests::prelude::*;
 pub fn test_content_mapper_auto_imports(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /ProfileCard.vue
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /ProfileCard.vue
 <component name="ProfileCard">
 <script lang="ts">
 export const profileTitle = "Profile";
@@ -3417,7 +3417,7 @@ profileTi/**/
 pub fn test_content_mapper_anonymous_default_auto_import_name(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /Component.vue
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /Component.vue
 <script lang="ts">
 export default {};
 </script>
@@ -3443,7 +3443,7 @@ Comp
 pub fn test_content_mapper_auto_imports_into_mapped_file(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /dep.ts
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /dep.ts
 export const existing = 1;
 export const helper = 2;
 
@@ -3469,7 +3469,7 @@ export const profileTitle = help/**/;
 pub fn test_content_mapper_auto_imports_after_synthesized_header(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /dep.ts
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /dep.ts
 export const helper = 1;
 
 // @Filename: /app.box
@@ -3493,7 +3493,7 @@ const value = help;
 pub fn test_content_mapper_supplemental_auto_imports(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /dep.ts
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /dep.ts
 export const helper = 1;
 
 // @Filename: /app.astro
@@ -3513,7 +3513,7 @@ const value = help/**/;
 pub fn test_content_mapper_supplemental_files_are_not_auto_import_targets(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /lib.astro
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /lib.astro
 export const supplementalOnly = 1;
 
 // @Filename: /main.ts
@@ -3533,7 +3533,7 @@ supplementalOn/**/
 pub fn test_content_mapper_node_modules_auto_imports(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /package.json
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /package.json
 { "dependencies": { "profile-package": "1.0.0" } }
 
 // @Filename: /node_modules/profile-package/package.json
@@ -3572,7 +3572,7 @@ profileTi/**/
 pub fn test_content_mapper_auto_import_at_hoisted_import_boundary(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /aaa.ts
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /aaa.ts
 export const helper = 1;
 
 // @Filename: /dep.ts
@@ -3609,7 +3609,7 @@ use crate::tests::prelude::*;
 pub fn test_content_mapper_diagnostic_code_does_not_select_type_script_fix(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /app.box
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /app.box
 export function f/*query*/oo() { return 1; }
 "#, contentmappertest::DIAGNOSTIC_CODE_COLLISION_MAPPER, &[".box"]);
         let f = &mut f;
@@ -3632,7 +3632,7 @@ use crate::tests::prelude::*;
 pub fn test_content_mapper_completions(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /settings.ts
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /settings.ts
 export const settings = { color: "blue", size: 2 };
 
 // @Filename: /ProfileCard.vue
@@ -3674,7 +3674,7 @@ card.se/*incoming*/ttings;
 pub fn test_content_mapper_completion_at_mapped_boundary(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /settings.ts
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /settings.ts
 export const settings = { color: "blue", size: 2 };
 
 // @Filename: /ProfileCard.vue
@@ -3697,7 +3697,7 @@ settings./*boundary*/</script>
 pub fn test_content_mapper_completion_edit_range(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /app.box
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /app.box
 export const foo = 1;
 [|foo|]/*completion*/
 "#, contentmappertest::TRANSFORMING_MAPPER, &[".box"]);
@@ -3823,7 +3823,7 @@ use crate::tests::prelude::*;
 pub fn test_content_mapper_definition(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /format.ts
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /format.ts
 export function [|format|](value: string): string { return value.toUpperCase(); }
 
 // @Filename: /ProfileCard.vue
@@ -3864,7 +3864,7 @@ use crate::tests::prelude::*;
 pub fn test_content_mapper_diagnostics(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /ProfileCard.vue
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /ProfileCard.vue
 <component name="ProfileCard">
 <template>
   <h1>{{ [|missingTitle|] }}</h1>
@@ -3891,7 +3891,7 @@ function takesNumber(value: number) { return value; }
 pub fn test_content_mapper_synthesized_diagnostics(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /ProfileCard.vue
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /ProfileCard.vue
 <template><h1>Profile</h1></template>
 "#, contentmappertest::SYNTHESIZING_MAPPER, &[".vue"]);
         let f = &mut f;
@@ -3908,7 +3908,7 @@ pub fn test_content_mapper_synthesized_diagnostics(t: &T) {
 pub fn test_content_mapper_transform_failure_diagnostics(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /app.vue
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /app.vue
 [||]<template>hi</template>
 "#, contentmappertest::FAILING_MAPPER, &[".vue"]);
         let f = &mut f;
@@ -3932,7 +3932,7 @@ use crate::tests::prelude::*;
 pub fn test_content_mapper_document_highlights(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /ProfileCard.vue
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /ProfileCard.vue
 <component name="ProfileCard">
 <template>
   <h1>{{ [|ti/*template*/tle|] }}</h1>
@@ -3962,7 +3962,7 @@ use crate::tests::prelude::*;
 pub fn test_content_mapper_synthesized_document_symbols(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /app.vue
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /app.vue
 component source with no direct TypeScript span/**/
 "#, contentmappertest::SYNTHESIZING_MAPPER, &[".vue"]);
         let f = &mut f;
@@ -3980,7 +3980,7 @@ component source with no direct TypeScript span/**/
 pub fn test_content_mapper_supplemental_document_symbols(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /app.astro
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /app.astro
 export function supplementalSymbol() {}
 "#, contentmappertest::SUPPLEMENTAL_MAPPER, &[".astro"]);
         let f = &mut f;
@@ -4003,7 +4003,7 @@ use crate::tests::prelude::*;
 pub fn test_content_mapper_duplicate_mappings(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /value.dup
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /value.dup
 [|val/*query*/ue|]
 "#, contentmappertest::DUPLICATE_MAPPER, &[".dup"]);
         let f = &mut f;
@@ -4024,7 +4024,7 @@ pub fn test_content_mapper_duplicate_mappings(t: &T) {
 pub fn test_content_mapper_disabled_features(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /disabled.dup
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /disabled.dup
 val/*query*/ue
 "#, contentmappertest::DUPLICATE_MAPPER, &[".dup"]);
         let f = &mut f;
@@ -4044,7 +4044,7 @@ val/*query*/ue
 pub fn test_content_mapper_disabled_navigation_targets(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /disabled.dup
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /disabled.dup
 value
 
 // @Filename: /main.ts
@@ -4067,7 +4067,7 @@ export const result = val/*query*/ue;
 pub fn test_content_mapper_conflicting_duplicate_rename_mappings(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /rename-conflict.dup
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /rename-conflict.dup
 val/*query*/ue
 "#, contentmappertest::DUPLICATE_MAPPER, &[".dup"]);
         let f = &mut f;
@@ -4093,7 +4093,7 @@ use crate::tests::prelude::*;
 pub fn test_content_mapper_file_rename_across_duplicate_projections(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /dep.ts
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /dep.ts
 export const helper = 1;
 
 // @Filename: /app.astro
@@ -4121,7 +4121,7 @@ use crate::tests::prelude::*;
 pub fn test_content_mapper_auto_import_after_synthesized_supplemental_prefix(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /dep.ts
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /dep.ts
 export const helper = 1;
 
 // @Filename: /app.astro
@@ -4145,7 +4145,7 @@ const value = help;
 pub fn test_content_mapper_drops_unmapped_folding_ranges(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /app.fold
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /app.fold
 host markup
 "#, contentmappertest::UNMAPPED_FOLDING_MAPPER, &[".fold"]);
         let f = &mut f;
@@ -4163,7 +4163,7 @@ host markup
 pub fn test_content_mapper_supplemental_folding_ranges(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /app.astro
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /app.astro
 function outer() {
     const value = 1;
 }
@@ -4183,7 +4183,7 @@ function outer() {
 pub fn test_content_mapper_disabled_supplemental_folding_ranges(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /folding-disabled.astro
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /folding-disabled.astro
 function outer() {
     const value = 1;
 }
@@ -4203,7 +4203,7 @@ function outer() {
 pub fn test_content_mapper_deduplicates_projected_folding_ranges(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /folding-duplicate.astro
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /folding-duplicate.astro
 function outer() {
     const value = 1;
 }
@@ -4223,7 +4223,7 @@ function outer() {
 pub fn test_content_mapper_supplemental_code_lens(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /codelens-supplemental.astro
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /codelens-supplemental.astro
 function outer() {}
 outer();
 "#, contentmappertest::PREFIXED_SUPPLEMENTAL_MAPPER, &[".astro"]);
@@ -4241,7 +4241,7 @@ outer();
 pub fn test_content_mapper_disabled_supplemental_code_lens(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /codelens-disabled.astro
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /codelens-disabled.astro
 function outer() {}
 outer();
 "#, contentmappertest::PREFIXED_SUPPLEMENTAL_MAPPER, &[".astro"]);
@@ -4259,7 +4259,7 @@ outer();
 pub fn test_content_mapper_deduplicates_projected_code_lens(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /codelens-duplicate.astro
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /codelens-duplicate.astro
 function outer() {}
 outer();
 "#, contentmappertest::PREFIXED_SUPPLEMENTAL_MAPPER, &[".astro"]);
@@ -4277,7 +4277,7 @@ outer();
 pub fn test_content_mapper_supplemental_implementation_code_lens(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /codelens-implementation.astro
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /codelens-implementation.astro
 interface Service { run(): void }
 class Impl implements Service { run() {} }
 "#, contentmappertest::PREFIXED_SUPPLEMENTAL_MAPPER, &[".astro"]);
@@ -4295,7 +4295,7 @@ class Impl implements Service { run() {} }
 pub fn test_content_mapper_formats_supplemental_verbatim_range(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /formatting.astro
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /formatting.astro
 function outer(){
 const value={a:1};
 }
@@ -4323,7 +4323,7 @@ pub fn test_content_mapper_skips_formatting_disabled_verbatim_range(t: &T) {
 const value={a:1};
 }
 "#;
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /formatting-disabled.astro
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /formatting-disabled.astro
 function outer(){
 const value={a:1};
 }
@@ -4344,7 +4344,7 @@ const value={a:1};
 pub fn test_content_mapper_formats_each_supplemental_verbatim_range(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /formatting-split.astro
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /formatting-split.astro
 function first(){return 1;}
 function second(){return 2;}
 "#, contentmappertest::PREFIXED_SUPPLEMENTAL_MAPPER, &[".astro"]);
@@ -4366,7 +4366,7 @@ function second() { return 2; }
 pub fn test_content_mapper_formats_only_first_overlapping_projection(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /formatting-overlap.astro
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /formatting-overlap.astro
 function first(){return 1;}
 function second(){return 2;}
 function third(){return 3;}
@@ -4390,7 +4390,7 @@ function second() { return 2; }
 pub fn test_content_mapper_formats_supplemental_original_selection(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /formatting-selection.astro
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /formatting-selection.astro
 function first(){return 1;}
 /*start*/function second(){return 2;}/*end*/
 "#, contentmappertest::PREFIXED_SUPPLEMENTAL_MAPPER, &[".astro"]);
@@ -4417,7 +4417,7 @@ use crate::tests::prelude::*;
 pub fn test_content_mapper_hover(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /format.ts
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /format.ts
 export function format(value: string): string { return value.toUpperCase(); }
 
 // @Filename: /ProfileCard.vue
@@ -4455,7 +4455,7 @@ export const pageTitle = ti/*incoming*/tle;
 pub fn test_content_mapper_supplemental_hover_jsdoc_link(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /globals.astro
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /globals.astro
 const target = 1;
 /** See {@link target}. */
 const val/*hover*/ue = target;
@@ -4474,7 +4474,7 @@ const val/*hover*/ue = target;
 pub fn test_content_mapper_hover_tries_later_projection(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /hover-fallback.dup
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /hover-fallback.dup
 val/*hover*/ue
 "#, contentmappertest::DUPLICATE_MAPPER, &[".dup"]);
         let f = &mut f;
@@ -4491,7 +4491,7 @@ val/*hover*/ue
 pub fn test_content_mapper_hover_concatenates_projections(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /hover-concat.dup
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /hover-concat.dup
 val/*hover*/ue
 "#, contentmappertest::DUPLICATE_MAPPER, &[".dup"]);
         let f = &mut f;
@@ -4513,7 +4513,7 @@ use crate::tests::prelude::*;
 pub fn test_content_mapper_implementation(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /models.ts
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /models.ts
 export class ExternalShape { area = 2 }
 
 // @Filename: /ProfileCard.vue
@@ -4554,7 +4554,7 @@ use crate::tests::prelude::*;
 pub fn test_content_mapper_inlay_hints_release_each_range(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /app.vue
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /app.vue
 <script>
 const value = () => 1;
 </script>
@@ -4583,7 +4583,7 @@ use crate::tests::prelude::*;
 pub fn test_content_mapper_range_features_include_script_inside_markup(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /app.vue
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /app.vue
 <template>before</template>
 <script lang="ts">
 const message = "world";
@@ -4610,7 +4610,7 @@ use crate::tests::prelude::*;
 pub fn test_content_mapper_references(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /format.ts
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /format.ts
 export function [|format|](value: string): string { return value; }
 
 // @Filename: /ProfileCard.vue

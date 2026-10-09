@@ -215,7 +215,7 @@ impl Parser {
         let mut link_end = start;
         let mut margin: i32 = -1;
         macro_rules! push_comment {
-            ($text:expr) => {{
+            ($text:expr_2021) => {{
                 let text: &'static str = $text;
                 if margin == -1 {
                     margin = indent;
@@ -562,7 +562,7 @@ impl Parser {
         }
         let mut margin: i32 = -1;
         macro_rules! push_comment {
-            ($text:expr) => {{
+            ($text:expr_2021) => {{
                 let text: &'static str = $text;
                 if margin == -1 {
                     margin = indent;

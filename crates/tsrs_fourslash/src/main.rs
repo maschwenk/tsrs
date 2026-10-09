@@ -6,7 +6,7 @@
 use std::process::ExitCode;
 
 use tsrs_fourslash::runner::{self, RunOptions};
-use tsrs_fourslash::tests::gen::REGISTRY;
+use tsrs_fourslash::tests::r#gen::REGISTRY;
 
 fn usage() -> ExitCode {
     eprintln!("usage: tsrs-fourslash run [--filter <substr|regex>] [--include-skipped] [-j N] [-v]");

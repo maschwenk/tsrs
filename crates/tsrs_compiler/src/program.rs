@@ -1166,7 +1166,7 @@ impl Program {
         let mut diags: Vec<P<Diagnostic>> = Vec::new();
 
         macro_rules! create_option_diagnostic_in_object_literal_syntax {
-            ($object_literal:expr, $on_key:expr, $key1:expr, $key2:expr, $message:expr, $args:expr) => {{
+            ($object_literal:expr_2021, $on_key:expr_2021, $key1:expr_2021, $key2:expr_2021, $message:expr_2021, $args:expr_2021) => {{
                 let key2: &str = $key2;
                 let keys2: Option<&str> = if key2.is_empty() { None } else { Some(key2) };
                 let diag = tsoptions::for_each_property_assignment(
@@ -1200,7 +1200,7 @@ impl Program {
         };
 
         macro_rules! create_diagnostic_for_option {
-            ($on_key:expr, $option1:expr, $option2:expr, $message:expr, $args:expr) => {{
+            ($on_key:expr_2021, $option1:expr_2021, $option2:expr_2021, $message:expr_2021, $args:expr_2021) => {{
                 let diag = create_option_diagnostic_in_object_literal_syntax!(
                     compiler_options_object_literal_syntax,
                     $on_key,
@@ -1217,12 +1217,12 @@ impl Program {
         }
 
         macro_rules! create_diagnostic_for_option_name {
-            ($message:expr, $option1:expr, $option2:expr) => {{
+            ($message:expr_2021, $option1:expr_2021, $option2:expr_2021) => {{
                 let o1: &str = $option1;
                 let o2: &str = $option2;
                 create_diagnostic_for_option!(true, o1, o2, $message, &[&o1, &o2]);
             }};
-            ($message:expr, $option1:expr, $option2:expr, $($arg:expr),+) => {{
+            ($message:expr_2021, $option1:expr_2021, $option2:expr_2021, $($arg:expr_2021),+) => {{
                 let o1: &str = $option1;
                 let o2: &str = $option2;
                 create_diagnostic_for_option!(true, o1, o2, $message, &[&o1, &o2, $(&$arg),+]);
@@ -1230,13 +1230,13 @@ impl Program {
         }
 
         macro_rules! create_option_value_diagnostic {
-            ($option1:expr, $message:expr, $args:expr) => {{
+            ($option1:expr_2021, $message:expr_2021, $args:expr_2021) => {{
                 create_diagnostic_for_option!(false, $option1, "", $message, $args);
             }};
         }
 
         macro_rules! create_removed_option_diagnostic {
-            ($name:expr, $value:expr, $use_instead:expr) => {{
+            ($name:expr_2021, $value:expr_2021, $use_instead:expr_2021) => {{
                 let name: &str = $name;
                 let value: &str = $value;
                 let use_instead: String = $use_instead;

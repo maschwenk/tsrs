@@ -16,14 +16,17 @@ static HEAP_ALLOCS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64:
 unsafe impl std::alloc::GlobalAlloc for CountingAlloc {
     unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
         HEAP_ALLOCS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        mimalloc::MiMalloc.alloc(layout)
+        // SAFETY: the caller's `GlobalAlloc` contract for `layout` is passed through unchanged.
+        unsafe { mimalloc::MiMalloc.alloc(layout) }
     }
     unsafe fn dealloc(&self, p: *mut u8, layout: std::alloc::Layout) {
-        mimalloc::MiMalloc.dealloc(p, layout)
+        // SAFETY: the caller's `GlobalAlloc` contract for `p` and `layout` is passed through unchanged.
+        unsafe { mimalloc::MiMalloc.dealloc(p, layout) }
     }
     unsafe fn realloc(&self, p: *mut u8, layout: std::alloc::Layout, new_size: usize) -> *mut u8 {
         HEAP_ALLOCS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        mimalloc::MiMalloc.realloc(p, layout, new_size)
+        // SAFETY: the caller's `GlobalAlloc` contract for all arguments is passed through unchanged.
+        unsafe { mimalloc::MiMalloc.realloc(p, layout, new_size) }
     }
 }
 
@@ -386,7 +389,7 @@ fn run() {
 /// elsewhere).
 #[cfg(target_os = "macos")]
 fn process_counters() -> (u64, u64) {
-    extern "C" {
+    unsafe extern "C" {
         fn proc_pid_rusage(pid: i32, flavor: i32, buffer: *mut u64) -> i32;
     }
     // struct rusage_info_v4 is 41 u64 words after the 16-byte uuid; ri_instructions and ri_cycles are words 31, 32.

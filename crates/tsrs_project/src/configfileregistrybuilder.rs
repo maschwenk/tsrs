@@ -519,31 +519,36 @@ impl configFileRegistryBuilder {
         // Handle changes to stored config files and their content mapper package manifests.
         logger.log("Checking if any changed files are configuration files");
         for path in &created_or_changed_or_deleted_files {
-            if let Some(entry) = self.configs.load(path) {
-                if has_excessive_changes {
-                    return self.invalidate_cache(logger);
-                }
+            match self.configs.load(path) {
+                Some(entry) => {
+                    if has_excessive_changes {
+                        return self.invalidate_cache(logger);
+                    }
 
-                affected_projects = copy_set_into(affected_projects, self.handle_config_change(&entry, logger).as_ref());
-                let retaining_configs: Vec<Path> = entry.value().and_then(|v| v.retaining_configs.clone()).map(|r| r.into_iter().collect()).unwrap_or_default();
-                for extending_config_path in retaining_configs {
-                    if let Some(extending_config_entry) = self.configs.load(&extending_config_path) {
-                        affected_projects = copy_set_into(affected_projects, self.handle_config_change(&extending_config_entry, logger).as_ref());
+                    affected_projects = copy_set_into(affected_projects, self.handle_config_change(&entry, logger).as_ref());
+                    let retaining_configs: Vec<Path> = entry.value().and_then(|v| v.retaining_configs.clone()).map(|r| r.into_iter().collect()).unwrap_or_default();
+                    for extending_config_path in retaining_configs {
+                        if let Some(extending_config_entry) = self.configs.load(&extending_config_path) {
+                            affected_projects = copy_set_into(affected_projects, self.handle_config_change(&extending_config_entry, logger).as_ref());
+                        }
                     }
+                    // This was a config file, so assume it's not also a root file
+                    created_files.remove(path);
                 }
-                // This was a config file, so assume it's not also a root file
-                created_files.remove(path);
-            } else if tspath::get_base_file_name(path) == "package.json" {
-                let mut manifest_changed = false;
-                self.configs.range(|entry| {
-                    if content_mapper_manifest_path(entry.value().and_then(|v| v.command_line), |f| self.to_path(f), path) {
-                        affected_projects = copy_set_into(affected_projects.take(), self.handle_config_change(entry, logger).as_ref());
-                        manifest_changed = true;
+                _ => {
+                    if tspath::get_base_file_name(path) == "package.json" {
+                        let mut manifest_changed = false;
+                        self.configs.range(|entry| {
+                            if content_mapper_manifest_path(entry.value().and_then(|v| v.command_line), |f| self.to_path(f), path) {
+                                affected_projects = copy_set_into(affected_projects.take(), self.handle_config_change(entry, logger).as_ref());
+                                manifest_changed = true;
+                            }
+                            true
+                        });
+                        if manifest_changed {
+                            self.invalidate_content_mappers();
+                        }
                     }
-                    true
-                });
-                if manifest_changed {
-                    self.invalidate_content_mappers();
                 }
             }
         }

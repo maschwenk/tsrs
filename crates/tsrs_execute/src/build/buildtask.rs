@@ -1001,13 +1001,18 @@ impl BuildTask {
         let host = orchestrator.host();
         let err = tsrs_compiler::CompilerHost::fs(host).write_file(file_name, text);
         if err.is_ok() {
-            if let Some(build_info) = data.build_info.clone() {
-                let build_info = build_info.downcast::<BuildInfo>().unwrap();
-                let has_changed_dts_file = self.result.lock().unwrap().as_ref().unwrap().program.unwrap().has_changed_dts_file();
-                self.on_build_info_emit(orchestrator, file_name, build_info, has_changed_dts_file);
-            } else if self.store_output_time_stamp(orchestrator) {
-                // Store time stamps
-                host.store_m_time(file_name, orchestrator.opts.sys.now_time());
+            match data.build_info.clone() {
+                Some(build_info) => {
+                    let build_info = build_info.downcast::<BuildInfo>().unwrap();
+                    let has_changed_dts_file = self.result.lock().unwrap().as_ref().unwrap().program.unwrap().has_changed_dts_file();
+                    self.on_build_info_emit(orchestrator, file_name, build_info, has_changed_dts_file);
+                }
+                _ => {
+                    if self.store_output_time_stamp(orchestrator) {
+                        // Store time stamps
+                        host.store_m_time(file_name, orchestrator.opts.sys.now_time());
+                    }
+                }
             }
         }
         err

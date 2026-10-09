@@ -504,7 +504,7 @@ impl Arena {
 #[cfg(feature = "alloc-profile")]
 fn census_chunk(size: usize) -> *mut u8 {
     use std::sync::atomic::AtomicUsize;
-    extern "C" {
+    unsafe extern "C" {
         fn mmap(addr: *mut std::ffi::c_void, len: usize, prot: i32, flags: i32, fd: i32, offset: i64) -> *mut std::ffi::c_void;
     }
     const PROT_READ: i32 = 1;

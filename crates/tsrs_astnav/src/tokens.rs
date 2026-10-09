@@ -368,10 +368,13 @@ pub fn visit_each_child_and_jsdoc(
 ) {
     let mut visitor = get_node_visitor(visit_node, visit_nodes);
     for &jsdoc in node.jsdoc(Some(source_file.get())) {
-        if let Some(hook) = visitor.hooks.visit_node.clone() {
-            hook(Some(jsdoc), &mut visitor);
-        } else {
-            visitor.visit_node(Some(jsdoc));
+        match visitor.hooks.visit_node.clone() {
+            Some(hook) => {
+                hook(Some(jsdoc), &mut visitor);
+            }
+            _ => {
+                visitor.visit_node(Some(jsdoc));
+            }
         }
     }
     node.visit_each_child(&mut visitor);

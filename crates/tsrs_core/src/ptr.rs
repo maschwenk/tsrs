@@ -36,7 +36,7 @@ fn new_thread_arena() -> &'static Arena {
 }
 
 macro_rules! profile {
-    ($ty:ty, $bytes:expr, $addr:expr) => {
+    ($ty:ty, $bytes:expr_2021, $addr:expr_2021) => {
         #[cfg(feature = "alloc-profile")]
         crate::alloc_profile::record(std::panic::Location::caller(), std::any::type_name::<$ty>(), $bytes, $addr);
     };
@@ -324,7 +324,8 @@ impl<T> P<T> {
         #[cfg(compressed_ptrs)]
         return P(self.0, std::marker::PhantomData);
         #[cfg(not(compressed_ptrs))]
-        P(&*(self.0 as *const T).cast::<U>())
+        // SAFETY: the caller guarantees that a `U` lives at this address.
+        P(unsafe { &*(self.0 as *const T).cast::<U>() })
     }
 
     /// A pointer to an arena object (`P::get` of a live `P`, an object made with `alloc`, or a view of one that
@@ -1312,7 +1313,7 @@ pub fn layout_of_p<T>(_: P<T>) -> (usize, usize, bool) {
 /// `free!(p)`: gives the arena object `p: P<T>` back (`free_raw`). Unsafe: see `free_raw`.
 #[macro_export]
 macro_rules! free {
-    ($p:expr) => {{
+    ($p:expr_2021) => {{
         let p = $p;
         let (size, align, needs_drop) = $crate::ptr::layout_of_p(p);
         $crate::ptr::free_raw(p.addr(), size, align, needs_drop)
@@ -1323,7 +1324,7 @@ macro_rules! free {
 /// or a sub-slice). Unsafe: see `free_raw`.
 #[macro_export]
 macro_rules! free_slice {
-    ($s:expr) => {{
+    ($s:expr_2021) => {{
         let s = $s;
         if !s.is_empty() {
             let (size, align, needs_drop) = $crate::ptr::layout_of_pointee(s);

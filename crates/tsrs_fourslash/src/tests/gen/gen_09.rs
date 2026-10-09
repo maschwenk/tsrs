@@ -10,7 +10,7 @@ use crate::tests::prelude::*;
 pub fn test_content_mapper_rename(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /ProfileCard.vue
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /ProfileCard.vue
 <component name="ProfileCard">
 <template><h1>{{ title }}</h1></template>
 <script lang="ts">
@@ -44,7 +44,7 @@ export const pageTitle = newTitle;
 pub fn test_content_mapper_rename_rejects_atom_and_unmapped_origins(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /ProfileCard.vue
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /ProfileCard.vue
 <component name="ProfileCard">
 <template>
   <h1>{{ ti/*atom*/tle }}</h1>
@@ -71,7 +71,7 @@ export const title = "Profile";
 pub fn test_content_mapper_rename_outgoing(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /format.ts
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /format.ts
 export function format(value: string): string { return value; }
 
 // @Filename: /ProfileCard.vue
@@ -110,7 +110,7 @@ use crate::tests::prelude::*;
 pub fn test_content_mapper_signature_help(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /format.ts
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /format.ts
 export function format(value: string, uppercase?: boolean): string { return value; }
 
 // @Filename: /ProfileCard.vue
@@ -151,7 +151,7 @@ greet("hello", /*incomingCall*/2);
 pub fn test_content_mapper_supplemental_signature_help_jsdoc_link(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /globals.astro
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /globals.astro
 const target = 1;
 /** See {@link target}. */
 function use(value: number) { return value; }
@@ -172,7 +172,7 @@ use(/*call*/target);
 pub fn test_content_mapper_signature_help_tries_later_projection(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /signature-fallback.dup
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /signature-fallback.dup
 use(/*call*/)
 "#, contentmappertest::DUPLICATE_MAPPER, &[".dup"]);
         let f = &mut f;
@@ -195,7 +195,7 @@ use crate::tests::prelude::*;
 pub fn test_content_mapper_supplemental_definition(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /globals.astro
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /globals.astro
 const [|supplementalValue|] = 1;
 [|supplemental/*use*/Value|];
 supplementalV/*completion*/;
@@ -237,7 +237,7 @@ use crate::tests::prelude::*;
 pub fn test_content_mapper_type_definition(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let (mut f, done) = crate::tests::gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /models.ts
+        let (mut f, done) = crate::tests::r#gen::gen_08::content_mapper::new_content_mapper_fourslash(t, r#"// @Filename: /models.ts
 export interface [|ExternalShape|] { area: number }
 
 // @Filename: /ProfileCard.vue

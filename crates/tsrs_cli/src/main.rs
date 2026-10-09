@@ -23,7 +23,7 @@ fn mimalloc_heap_stats() -> tsrs_core::memsplit::HeapStats {
         full_block_size: usize,
         reserved1: *mut std::ffi::c_void,
     }
-    extern "C" {
+    unsafe extern "C" {
         fn mi_heap_visit_blocks(
             heap: *mut std::ffi::c_void,
             visit_blocks: bool,
@@ -50,7 +50,7 @@ fn mimalloc_heap_stats() -> tsrs_core::memsplit::HeapStats {
 
 #[cfg(not(feature = "alloc-profile"))]
 fn mimalloc_collect(force: bool) {
-    extern "C" {
+    unsafe extern "C" {
         fn mi_collect(force: bool);
     }
     // SAFETY: collects the calling thread's heap; no arguments to get wrong.

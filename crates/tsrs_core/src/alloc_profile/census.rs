@@ -88,7 +88,7 @@ pub(crate) fn recording() -> bool {
     }
 }
 
-extern "C" {
+unsafe extern "C" {
     fn backtrace(buf: *mut *mut c_void, size: i32) -> i32;
 }
 
