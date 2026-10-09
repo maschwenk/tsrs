@@ -431,7 +431,7 @@ impl Checker {
                                 if trace {
                                     crate::uniontrace::report(self, input, &types, "too complex (TS2590)", Some(count), checkpoint);
                                 }
-                                self.error(self.current_node, &diagnostics::Expression_produces_a_union_type_that_is_too_complex_to_represent, &[]);
+                                self.report_too_complex();
                                 return None;
                             }
                         }
@@ -605,6 +605,7 @@ impl Checker {
         let key = get_intersection_key(&type_set, flags, alias);
         let mut result = self.intersection_types.get(&key);
         if result.is_none() {
+            let too_complex_before = self.too_complex_reports;
             let r;
             if includes.intersects(TypeFlags::Union) {
                 let (ts, reduced) = self.intersect_unions_of_primitive_types(&mut type_set);
@@ -658,7 +659,11 @@ impl Checker {
                 r = self.new_intersection_type(object_flags | propagated, &type_set);
                 r.set_alias(alias.alias());
             }
-            self.intersection_types.insert(key, r);
+            // tsrs-only: not cached when a TS2590 was reported below (a split, a restart or an inner intersection
+            // returned the error type; `too_complex_since`).
+            if !self.too_complex_since(too_complex_before) {
+                self.intersection_types.insert(key, r);
+            }
             result = Some(r);
         }
         result.unwrap()
@@ -1175,10 +1180,28 @@ impl Checker {
     pub(crate) fn check_cross_product_union(&mut self, types: &[P<Type>]) -> bool {
         let size = self.get_cross_product_union_size(types);
         if size >= 100_000 {
-            self.error(self.current_node, &diagnostics::Expression_produces_a_union_type_that_is_too_complex_to_represent, &[]);
+            self.report_too_complex();
             return false;
         }
         true
+    }
+
+    /// TS2590 at `current_node`, counted for `too_complex_since`.
+    pub(crate) fn report_too_complex(&mut self) {
+        self.too_complex_reports = self.too_complex_reports.wrapping_add(1);
+        self.error(self.current_node, &diagnostics::Expression_produces_a_union_type_that_is_too_complex_to_represent, &[]);
+    }
+
+    /// tsrs-only: whether a computation that began when `too_complex_reports` was `before` reported TS2590, so that
+    /// its result stays out of the caches. Neither TS2590 site caches its own failure, but Go caches what is built
+    /// from the error type it returns: an intersection split in halves or restarted, a union of two unions, an
+    /// instantiation, a relation compared through it. A later request on the same checker then gets that result
+    /// without the error, so whether a file reports the TS2590 depends on what its checker evaluated before it, and
+    /// under work stealing on timing (issue #218, notes/open-history-dependence.md section 4). By default such
+    /// results are not cached: every evaluation computes them again and reports at its own site.
+    /// `go_compatible_history()` keeps Go's caches.
+    pub(crate) fn too_complex_since(&self, before: u32) -> bool {
+        self.too_complex_reports != before && !tsrs_core::compat::go_compatible_history()
     }
 
     // checker.go:27130

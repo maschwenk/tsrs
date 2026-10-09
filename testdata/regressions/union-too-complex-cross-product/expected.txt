@@ -1,0 +1,1 @@
+x/zz.ts(5,14): error TS2590: Expression produces a union type that is too complex to represent.

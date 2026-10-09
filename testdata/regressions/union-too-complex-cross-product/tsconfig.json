@@ -1,0 +1,1 @@
+{"compilerOptions":{"strict":true,"noEmit":true,"target":"es2022","module":"esnext","moduleResolution":"bundler","types":[],"skipDefaultLibCheck":true},"files":["map.ts","x/a.ts","x/zz.ts"]}
