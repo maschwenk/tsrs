@@ -3186,3 +3186,84 @@ mod tests {
     }
 }
 
+
+
+// spike/r1-read-path: how a fork would copy the frozen seed's link records (links.rs `LinkCopy`).
+crate::bitwise_link_copy!(
+    NodeLinks,
+    SymbolNodeLinks,
+    TypeNodeLinks,
+    SignatureLinks,
+    ComputedNameNodeLinks,
+    EnumMemberLinks,
+    AssertionLinks,
+    SwitchStatementLinks,
+    ArrayLiteralLinks,
+    MappedSymbolLinks,
+    DeferredSymbolLinks,
+    AliasSymbolLinks,
+    // `type_only_export_star_map` / `instantiations` point to frozen tables, which GoMap / GoPackedMap read through.
+    ModuleSymbolLinks,
+    TypeAliasLinks,
+    ReverseMappedSymbolLinks,
+    LateBoundLinks,
+    ExportTypeLinks,
+    MembersAndExportsLinks,
+    DeclaredTypeLinks,
+    SpreadLinks,
+    VarianceLinks,
+    MarkedAssignmentSymbolLinks,
+    crate::jsx_types::JsxElementLinks,
+);
+
+impl crate::links::LinkCopy for ValueSymbolLinks {
+    fn copy_link_from(&self, frozen: &Self) {
+        self.resolved_type.set(frozen.resolved_type.get());
+        self.first.set(frozen.first.get());
+        self.second.set(frozen.second.get());
+        if frozen.mode() == LinksMode::Tail {
+            // The tail is a side object of the frozen record: this record gets its own.
+            let src = frozen.tail();
+            let tail = P::new(ValueSymbolLinksTail::default());
+            tail.target.set(src.target.get());
+            tail.mapper.set(src.mapper.get());
+            tail.write_type.set(src.write_type.get());
+            tail.name_type.set(src.name_type.get());
+            tail.containing_type.set(src.containing_type.get());
+            tail.function_or_constructor_checked.set(src.function_or_constructor_checked.get());
+            self.first.set(erase(Some(tail)));
+        }
+    }
+}
+
+impl crate::links::LinkCopy for ContainingSymbolLinks {
+    #[inline]
+    fn copy_link_from(&self, frozen: &Self) {
+        // SAFETY: the frozen record is read-only; no borrow of it is live (frozen objects are never borrowed mutably).
+        unsafe {
+            self.extended_containers_by_file.borrow_mut().clone_from(frozen.extended_containers_by_file.try_borrow_unguarded().unwrap());
+            self.accessible_chain_cache.borrow_mut().clone_from(frozen.accessible_chain_cache.try_borrow_unguarded().unwrap());
+        }
+        self.extended_containers.set(frozen.extended_containers.get());
+    }
+}
+
+impl crate::links::LinkCopy for SourceFileLinks {
+    fn copy_link_from(&self, frozen: &Self) {
+        self.type_checked.set(frozen.type_checked.get());
+        self.unused_checked.set(frozen.unused_checked.get());
+        self.external_helpers_module.set(frozen.external_helpers_module.get());
+        self.requested_external_emit_helpers.set(frozen.requested_external_emit_helpers.get());
+        // SAFETY: as for ContainingSymbolLinks.
+        unsafe {
+            self.deferred_nodes.borrow_mut().clone_from(frozen.deferred_nodes.try_borrow_unguarded().unwrap());
+            self.identifier_check_nodes.borrow_mut().clone_from(frozen.identifier_check_nodes.try_borrow_unguarded().unwrap());
+        }
+        self.local_jsx_namespace.set(frozen.local_jsx_namespace.get());
+        self.local_jsx_fragment_namespace.set(frozen.local_jsx_fragment_namespace.get());
+        self.local_jsx_factory.set(frozen.local_jsx_factory.get());
+        self.local_jsx_fragment_factory.set(frozen.local_jsx_fragment_factory.get());
+        self.jsx_fragment_type.set(frozen.jsx_fragment_type.get());
+    }
+}
+
