@@ -104,6 +104,10 @@ impl Checker {
         self.ctx = Some(ctx.clone());
         let links = self.source_file_links.get(source_file);
         if !links.type_checked.get() {
+            // tsrs-only: TSRS_TRACE_UNION_REDUCTION (uniontrace.rs) prints each checker's file order.
+            if crate::uniontrace::enabled() {
+                crate::uniontrace::report_check_file(self, source_file, None);
+            }
             self.run_deferred_type_argument_checks(source_file);
             // Grammar checking
             self.check_grammar_source_file(source_file);
@@ -158,6 +162,9 @@ impl Checker {
         let before: rustc_hash::FxHashSet<P<Diagnostic>> = self.diagnostics.get_diagnostics_for_file(source_file).into_iter().collect();
         let suggestions_before: rustc_hash::FxHashSet<P<Diagnostic>> = self.suggestion_diagnostics.get_diagnostics_for_file(source_file).into_iter().collect();
         if !self.source_file_links.get(source_file).type_checked.get() {
+            if crate::uniontrace::enabled() {
+                crate::uniontrace::report_check_file(self, source_file, Some(&statements));
+            }
             self.check_source_elements(&source_file.statements.nodes()[statements]);
             self.check_deferred_nodes(source_file);
             self.produce_deferred_diagnostics();
