@@ -102,6 +102,10 @@ pointer compression costs about +4.9% instructions and took back most of the che
 
 ## Measured and rejected (do not redo)
 
+- Sharing names, declarations, parents and tables between a source symbol and its instantiated symbols, as in
+  TypeScript #64691 (notes/mem-shared-symbol-data.md): Rust symbols were already 32 bytes; 16-byte instantiated
+  headers saved only 0.15-0.62% peak RSS at the default checker count and added 1.76-2.31% single-threaded
+  instructions. Revisit only if the headers reach 5% of peak or ordinary reads can avoid the branch and indirection.
 - `mimalloc-safe 0.1.67` without its `v3` feature (notes/perf-mimalloc-safe.md): the crate defaults to mimalloc
   v2.5.2, unlike the old crate's v3.3.2 default. On macOS arm64 it adds about 4% peak RSS at the default checker
   count on both Compiler workloads; the prior large Linux measurement found v2 3-14% slower. The migration enables

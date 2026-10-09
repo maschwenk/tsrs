@@ -164,7 +164,9 @@ Measured and rejected (do not retry without new evidence): explicit huge pages o
 mmap'd arena chunks without advice (`notes/linux-perf.md`; the compressed arena's reservation is not mimalloc memory and
 needs the advice: `notes/linux-x86-round.md`); global identifier interning (`notes/mem-round2.md`: parse +9% time); rolling back whole
 regions of speculative work (`notes/mem-overload-rollback.md`); bump regions per inference scope
-(`notes/mem-scoped-arenas.md`: 25 to 50% of scopes keep something reachable). Restructuring generic
+(`notes/mem-scoped-arenas.md`: 25 to 50% of scopes keep something reachable). Sharing symbol data with instantiated
+symbols as in TypeScript #64691 (`notes/mem-shared-symbol-data.md`: -0.15% to -0.62% default-checker peak RSS,
++1.76% to +2.31% single-threaded instructions). Restructuring generic
 callbacks to cut monomorphization (`notes/monomorphization-audit.md`: closures are 3.6% of the checker's LLVM IR, the
 largest tsrs generic `filter_type` 1.1%, on a hot path). A target CPU above the x86-64 baseline
 (`notes/linux-x86-round.md`: `x86-64-v3` takes 1-2% more cycles, `v2` changes nothing). PGO hot/cold text grouping
