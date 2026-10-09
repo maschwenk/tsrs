@@ -960,6 +960,9 @@ pub struct Checker {
     pub(crate) diagnostic_adds: u32,
     /// tsrs-only: TS2590 reports so far (wrapping; `Checker::too_complex_since`).
     pub(crate) too_complex_reports: u32,
+    /// tsrs-only: the TS2590 sites of the file being checked, reported when the file is done
+    /// (`Checker::flush_too_complex_reports`).
+    pub(crate) too_complex_nodes: Vec<P<Node>>,
     /// Calls of `check_expression_ex`, each of which resets `instantiation_count` (wrapping; the inference memo).
     pub(crate) expression_checks: u32,
     pub instantiation_stack: Vec<P<Type>>,
@@ -1380,6 +1383,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         infer_memo: crate::infermemo::InferMemo::new(),
         diagnostic_adds: 0,
         too_complex_reports: 0,
+        too_complex_nodes: Vec::new(),
         expression_checks: 0,
         instantiation_stack: Vec::new(),
         conditional_constraint_depth: 0,

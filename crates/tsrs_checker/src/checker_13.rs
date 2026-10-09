@@ -1189,7 +1189,47 @@ impl Checker {
     /// TS2590 at `current_node`, counted for `too_complex_since`.
     pub(crate) fn report_too_complex(&mut self) {
         self.too_complex_reports = self.too_complex_reports.wrapping_add(1);
-        self.error(self.current_node, &diagnostics::Expression_produces_a_union_type_that_is_too_complex_to_represent, &[]);
+        match self.current_node {
+            // tsrs-only: while a file is being checked, the report waits for the end of the file, where nested sites
+            // collapse to the innermost one (`flush_too_complex_reports`). Go reports at once, and so does a report
+            // made outside a file check (the language server asking for a type).
+            Some(node) if self.checking_file.is_some() && !tsrs_core::compat::go_compatible_history() => {
+                if !self.too_complex_nodes.contains(&node) {
+                    self.too_complex_nodes.push(node);
+                }
+            }
+            location => {
+                self.error(location, &diagnostics::Expression_produces_a_union_type_that_is_too_complex_to_represent, &[]);
+            }
+        }
+    }
+
+    /// tsrs-only: reports the TS2590 sites recorded since the last flush, at the innermost of nested sites only. Since
+    /// `too_complex_since` keeps such results out of the caches, every expression that evaluates the type hits the
+    /// limit again: the expression whose evaluation first produced the too-complex type and every expression enclosing
+    /// it. Go, whose caches hide the later evaluations, reports the innermost one; so does this. Called at the end of
+    /// `check_source_file` and `check_source_file_piece`, so every file reports its own sites.
+    pub(crate) fn flush_too_complex_reports(&mut self) {
+        if self.too_complex_nodes.is_empty() {
+            return;
+        }
+        let nodes = std::mem::take(&mut self.too_complex_nodes);
+        let sites: rustc_hash::FxHashSet<P<Node>> = nodes.iter().copied().collect();
+        let mut enclosing = rustc_hash::FxHashSet::default();
+        for &node in &nodes {
+            let mut ancestor = node.parent();
+            while let Some(a) = ancestor {
+                if sites.contains(&a) {
+                    enclosing.insert(a);
+                }
+                ancestor = a.parent();
+            }
+        }
+        for node in nodes {
+            if !enclosing.contains(&node) {
+                self.error(Some(node), &diagnostics::Expression_produces_a_union_type_that_is_too_complex_to_represent, &[]);
+            }
+        }
     }
 
     /// tsrs-only: whether a computation that began when `too_complex_reports` was `before` reported TS2590, so that
@@ -1198,8 +1238,8 @@ impl Checker {
     /// instantiation, a relation compared through it. A later request on the same checker then gets that result
     /// without the error, so whether a file reports the TS2590 depends on what its checker evaluated before it, and
     /// under work stealing on timing (issue #218, notes/open-history-dependence.md section 4). By default such
-    /// results are not cached: every evaluation computes them again and reports at its own site.
-    /// `go_compatible_history()` keeps Go's caches.
+    /// results are not cached: every evaluation computes them again, and each file reports at the innermost of its
+    /// sites (`report_too_complex`, `flush_too_complex_reports`). `go_compatible_history()` keeps Go's caches.
     pub(crate) fn too_complex_since(&self, before: u32) -> bool {
         self.too_complex_reports != before && !tsrs_core::compat::go_compatible_history()
     }

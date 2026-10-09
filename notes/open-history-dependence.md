@@ -232,7 +232,12 @@ tsgo-ref does not print it either).
 The fix: `Checker::too_complex_reports` counts TS2590 reports, and `too_complex_since(mark)` says whether a computation
 that began at `mark` reported one. In the default mode such a result is not cached: `get_intersection_type_ex`,
 `union_of_union_types`, the three instantiation caches and the relation cache skip their insert, so every evaluation
-computes the type again and reports at its own site. The output no longer depends on the assignment: `x/zz.ts(5,14)`
+computes the type again. The reports of a file are collected while it is checked and emitted when it is done, at
+the innermost of nested sites only (`report_too_complex`, `flush_too_complex_reports`): the expression whose
+evaluation first produced the too-complex type reports, the expressions enclosing it that evaluated the type again
+do not, which is what Go's caches give within one file (`compiler/normalizedIntersectionTooComplex` reports once,
+at the arrow parameter, not also at the call and its argument). The output no longer depends on the assignment:
+`x/zz.ts(5,14)`
 single-threaded, at 1-4 checkers and under `random:1..8` (crates/tsrs_cli/tests/union_too_complex_cross_product.rs;
 `tools/ci/determinism.sh` sweeps the case too), and 30 of 30 identical runs on the generated project. It differs from
 tsgo where tsgo's own output depends on the checker count: tsgo prints the error at a site only when that site's

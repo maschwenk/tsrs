@@ -4,9 +4,9 @@
 // `// @ts-ignore`; x/zz.ts evaluates it again without one. Go reports TS2590 only the first time a checker evaluates
 // the type, because the error type it returns is cached one level up (the intersection split, the relation), so
 // tsgo-ref reports x/zz.ts at 3 checkers and nothing at 1 or 2, and tsrs with work stealing reported it in about half
-// of the runs. By default tsrs no longer caches a result computed while a TS2590 was reported, so every site that
-// hits the limit reports it, whatever the assignment; `--checkerAssignment go` keeps Go's behaviour
-// (notes/open-history-dependence.md section 4).
+// of the runs. By default tsrs no longer caches a result computed while a TS2590 was reported, so every file that
+// evaluates the type reports it, at the innermost of its nested sites, whatever the assignment; `--checkerAssignment
+// go` keeps Go's behaviour (notes/open-history-dependence.md section 4).
 
 use std::path::Path;
 use std::process::Command;
