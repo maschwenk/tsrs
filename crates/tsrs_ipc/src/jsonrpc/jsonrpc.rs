@@ -149,7 +149,7 @@ impl fmt::Display for ResponseError {
 
 impl std::error::Error for ResponseError {}
 
-// jsonrpc.go:119
+// jsonrpc.go:120
 // Standard JSON-RPC error codes.
 pub const CODE_PARSE_ERROR: i32 = -32700;
 pub const CODE_INVALID_REQUEST: i32 = -32600;
@@ -157,7 +157,7 @@ pub const CODE_METHOD_NOT_FOUND: i32 = -32601;
 pub const CODE_INVALID_PARAMS: i32 = -32602;
 pub const CODE_INTERNAL_ERROR: i32 = -32603;
 
-// jsonrpc.go:137
+// jsonrpc.go:139
 // Message represents a raw JSON-RPC message that can be a request, notification, or response.
 // Unlike lsproto.Message, this keeps params/result as raw JSON for generic handling.
 // `params` / `result` are None when the member is absent (Go: an empty json.Value, which `omitzero` drops and
@@ -172,19 +172,19 @@ pub struct Message {
 }
 
 impl Message {
-    // jsonrpc.go:159
+    // jsonrpc.go:160
     // IsRequest returns true if this message is a request (has ID and method).
     pub fn is_request(&self) -> bool {
         self.id.is_some() && !self.method.is_empty()
     }
 
-    // jsonrpc.go:164
+    // jsonrpc.go:165
     // IsNotification returns true if this message is a notification (has method but no ID).
     pub fn is_notification(&self) -> bool {
         self.id.is_none() && !self.method.is_empty()
     }
 
-    // jsonrpc.go:169
+    // jsonrpc.go:170
     // IsResponse returns true if this message is a response (has ID but no method).
     pub fn is_response(&self) -> bool {
         self.id.is_some() && self.method.is_empty()
@@ -242,7 +242,7 @@ impl Message {
     }
 }
 
-// jsonrpc.go:174
+// jsonrpc.go:175
 // RequestMessage is a convenience type for creating request/notification messages.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct RequestMessage {
@@ -258,7 +258,7 @@ impl RequestMessage {
     }
 }
 
-// jsonrpc.go:182
+// jsonrpc.go:183
 // ResponseMessage is a convenience type for creating response messages.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ResponseMessage {

@@ -6,7 +6,7 @@ use tsrs_core::json::Value;
 use crate::jsonrpc::{self, ResponseError, ID};
 use crate::{lock, Error, Message, Protocol};
 
-// protocol_jsonrpc.go:10
+// protocol_jsonrpc.go:12
 // JSONRPCProtocol implements the Protocol interface using JSON-RPC 2.0
 // with the LSP base protocol framing (Content-Length headers).
 // The reader is only used by the connection's read loop and the writer by one writer at a time; each has its own
@@ -16,7 +16,7 @@ pub struct JSONRPCProtocol<R: Read, W: Write> {
     writer: Mutex<jsonrpc::Writer<W>>,
 }
 
-// protocol_jsonrpc.go:19
+// protocol_jsonrpc.go:20
 // NewJSONRPCProtocol creates a new JSON-RPC protocol handler.
 // Go reads and writes one io.ReadWriter; here the two halves of a ReadWriteCloser.
 pub fn new_jsonrpc_protocol<R: Read, W: Write>(r: R, w: W) -> JSONRPCProtocol<R, W> {

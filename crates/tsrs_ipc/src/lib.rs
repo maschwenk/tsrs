@@ -21,7 +21,6 @@ pub use stream::*;
 #[cfg(test)]
 mod conn_async_test;
 
-
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 // Go's sync.Mutex has no poisoning: a goroutine that panics with the lock held (and is recovered, as a request

@@ -2,7 +2,7 @@ use std::io::{Read, Write};
 use std::sync::Arc;
 
 // Go io.ReadWriteCloser, the stream a connection runs over. A content mapper's comes from its Spawner
-// (hostimpl.go:346, cmd/tsc/sys.go spawnProcess): Read is the child's stdout, Write its stdin, and Close tears the
+// (hostimpl.go:349, cmd/tsc/sys.go spawnProcess): Read is the child's stdout, Write its stdin, and Close tears the
 // process down. Go hands the one value to both the protocol and the connection; Rust ownership needs the parts
 // apart: the protocol takes the reader (read only by the connection's read loop) and the writer (written under the
 // connection's write lock), and the closer is shared by the connection, the thread that runs it, and the host.

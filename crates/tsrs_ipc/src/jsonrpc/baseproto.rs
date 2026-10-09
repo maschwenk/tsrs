@@ -7,7 +7,7 @@ use crate::Error;
 // Base protocol for JSON-RPC with Content-Length headers (as used by LSP).
 // https://microsoft.github.io/language-server-protocol/specifications/base/0.9/specification/
 
-// baseproto.go:15
+// baseproto.go:16
 pub const ERR_INVALID_HEADER: &str = "jsonrpc: invalid header";
 pub const ERR_INVALID_CONTENT_LENGTH: &str = "jsonrpc: invalid content length";
 pub const ERR_NO_CONTENT_LENGTH: &str = "jsonrpc: no content length";

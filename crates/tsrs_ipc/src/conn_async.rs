@@ -13,13 +13,13 @@ use tsrs_core::json::Value;
 use crate::jsonrpc::{self, ResponseError, CODE_INTERNAL_ERROR, ID};
 use crate::{lock, new_jsonrpc_protocol, Closer, Conn, Error, ErrorTag, Handler, Message, Protocol, ReadWriteCloser, ERR_CONN_CLOSED};
 
-// timing.go:10
+// timing.go:11
 // Method names for the generic connection-level timing feature, handled by the connection itself rather
 // than the handler.
 pub const METHOD_GET_SERVER_TIMING: &str = "getServerTiming";
 pub const METHOD_RESET_SERVER_TIMING: &str = "resetServerTiming";
 
-// conn_async.go:17
+// conn_async.go:20
 // AsyncConn manages bidirectional JSON-RPC communication with async request handling.
 // Each incoming request is handled in its own goroutine, allowing concurrent processing.
 // This is the standard implementation for LSP-style JSON-RPC protocols.
@@ -44,7 +44,7 @@ struct pendingCalls {
     has_cause: bool,
 }
 
-// conn_async.go:39
+// conn_async.go:41
 // NewAsyncConn creates a new async connection with the given transport and handler.
 // It uses JSONRPCProtocol (LSP-style Content-Length framing) by default.
 pub fn new_async_conn(rwc: ReadWriteCloser, handler: Arc<dyn Handler>) -> Arc<AsyncConn> {
@@ -52,7 +52,7 @@ pub fn new_async_conn(rwc: ReadWriteCloser, handler: Arc<dyn Handler>) -> Arc<As
     new_async_conn_with_protocol(Some(closer), Box::new(new_jsonrpc_protocol(reader, writer)), handler)
 }
 
-// conn_async.go:45
+// conn_async.go:46
 // NewAsyncConnWithProtocol creates a new async connection with a custom protocol.
 // The connection only closes its transport (when it fails to write a response, so that the read loop stops), so it
 // takes the transport's closer; None is Go's nil transport.
@@ -72,7 +72,7 @@ pub fn new_async_conn_with_protocol(
 }
 
 impl Conn for AsyncConn {
-    // conn_async.go:66
+    // conn_async.go:68
     // Run starts processing messages on the connection.
     // It blocks until an error occurs (or, in Go, the context is cancelled; the port has no context).
     fn run(&self) -> Result<(), Error> {
@@ -134,7 +134,7 @@ impl Conn for AsyncConn {
         }
     }
 
-    // conn_async.go:255
+    // conn_async.go:256
     // Call sends a request to the client and waits for a response.
     fn call(&self, method: &str, params: Option<&Value>) -> Result<Option<Value>, Error> {
         self.call_until(method, params, None)
@@ -144,7 +144,7 @@ impl Conn for AsyncConn {
         self.call_until(method, params, Instant::now().checked_add(timeout))
     }
 
-    // conn_async.go:306
+    // conn_async.go:307
     // Notify sends a notification to the client (no response expected).
     fn notify(&self, method: &str, params: Option<&Value>) -> Result<(), Error> {
         {
@@ -168,7 +168,7 @@ fn handler_thread_error(err: &std::io::Error) -> Error {
 }
 
 impl AsyncConn {
-    // conn_async.go:115
+    // conn_async.go:116
     // closePendingCalls records that the read loop has exited and unblocks requests waiting for a response.
     fn close_pending_calls(&self, run_err: Option<&Error>) {
         let mut p = lock(&self.pending_mu);
@@ -187,7 +187,7 @@ impl AsyncConn {
         true
     }
 
-    // conn_async.go:157
+    // conn_async.go:158
     // handleResponse matches a response to a pending request.
     fn handle_response(&self, msg: Message) {
         let ch = {
@@ -204,7 +204,7 @@ impl AsyncConn {
         }
     }
 
-    // conn_async.go:172
+    // conn_async.go:173
     // handleRequest processes an incoming request.
     fn handle_request(&self, msg: &Message) -> Result<(), Error> {
         let id = msg.id.as_ref().expect("a request has an id");
@@ -242,11 +242,11 @@ impl AsyncConn {
             };
             write_err.map_err(|err| Error::wrap("ipc: failed to write response: ", err))
         }));
-        let r = match handled {
+        let payload = match handled {
             Ok(ret) => return ret,
             Err(payload) => payload,
         };
-        let r = panic_value(r.as_ref());
+        let r = panic_value(payload.as_ref());
         let write_err = {
             let _write = lock(&self.write_mu);
             self.protocol.write_error(id, &internal_error(format!("panic: {r}")))
@@ -256,13 +256,13 @@ impl AsyncConn {
         })
     }
 
-    // conn_async.go:250
+    // conn_async.go:251
     // handleNotification processes an incoming notification.
     fn handle_notification(&self, msg: &Message) {
         let _ = self.handler.handle_notification(&msg.method, msg.params.as_ref());
     }
 
-    // conn_async.go:255, for a context whose deadline is `deadline` (None: no deadline).
+    // conn_async.go:256, Call with a context whose deadline is `deadline` (None: no deadline).
     fn call_until(&self, method: &str, params: Option<&Value>, deadline: Option<Instant>) -> Result<Option<Value>, Error> {
         // Create unique request ID
         let id = jsonrpc::new_id_string(&format!("api{}", self.seq.fetch_add(1, Ordering::SeqCst) + 1));
@@ -284,7 +284,7 @@ impl AsyncConn {
         result
     }
 
-    // conn_async.go:280
+    // conn_async.go:280, the rest of Call: send the request and wait for its response.
     fn send_and_wait(
         &self,
         id: &ID,
