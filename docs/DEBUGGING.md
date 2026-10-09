@@ -375,7 +375,7 @@ API and the test harnesses, and under `TSRS_CENSUS=1`, `TSRS_LAZY_DTS_CENSUS=1` 
 | variable | values | effect |
 | --- | --- | --- |
 | `TSRS_LAZY_DTS` | unset (on when it applies), `0`/`off`, `stats`, `force` (`tsrs-test` only) | `stats`: one line on stderr: lists made lazy, deferred by the binder, never reached by it, parsed again (and how many while their file was bound). `force` in `tsrs-test`: every declaration file's lists are lazy, checked files included, so the checker and the `.types` / `.symbols` walks force them all: the result trees must equal a run without it (`TSRS_LAZY_DTS_STATS_FILE=<file>` collects the workers' counts) |
-| `TSRS_LAZY_DTS_CENSUS` | `1` (alloc-profile build) | the ceiling census: bytes of every member list of unchecked declaration files, and which lists and member symbols any reader asked for, by phase; `TSRS_LAZY_DTS_CENSUS_TSV=<file>` adds a per-file table |
+| `TSRS_LAZY_DTS_CENSUS` | `1` (alloc-profile build of branch `mem/lazy-dts-census-2`, not on main) | the ceiling census: bytes of every member list and module block of unchecked declaration files, why each could not be lazy, which ones any reader asked for, and the bytes that #202's design and its extensions would save (notes/mem-lazy-dts-members.md sections 1 and 7); `TSRS_LAZY_DTS_CENSUS_TSV=<file>` adds a per-file table |
 
 After a change to what the binder does for members of interfaces, classes or type literals, or to what a member list
 can contain, run the suite with `TSRS_LAZY_DTS=force` (also with `TS_TEST_PROGRAM_SINGLE_THREADED=false`) and a corpus
