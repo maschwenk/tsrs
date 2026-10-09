@@ -232,14 +232,19 @@ tsgo-ref does not print it either).
 The fix: `Checker::too_complex_reports` counts TS2590 reports, and `too_complex_since(mark)` says whether a computation
 that began at `mark` reported one. In the default mode such a result is not cached: `get_intersection_type_ex`,
 `union_of_union_types`, the three instantiation caches and the relation cache skip their insert, so every evaluation
-computes the type again. The reports of a file are collected while it is checked and emitted when it is done, one per
-too-complex type (the ids of the types it combined, `too_complex_key`) at the first site that evaluated it
-(`report_too_complex`, `flush_too_complex_reports`). That is the site Go's caches give within one file, since Go
-reports the first evaluation per checker: `compiler/normalizedIntersectionTooComplex` reports once, at the arrow
-parameter, not also at the call and its argument; a call whose parameter type is resolved before its argument reports
-at the call, as tsgo does; two different too-complex types in one expression both report. (An earlier revision kept
-the innermost of nested sites instead; the adversarial review of the fix showed it dropping the second type and
-moving the first case's location.) The output no longer depends on the assignment:
+computes the type again. The reports are collected while a file is checked and emitted when it is done, and a checker
+remembers which (file, evaluation) pairs it has reported (`too_complex_reported`), so each file reports a too-complex
+type once, at the first site in it that evaluated the type, whichever file's check that evaluation happened in
+(`report_too_complex`, `flush_too_complex_reports`). The evaluation's identity (`too_complex_key`) is the caller's
+cache key where it has one, the alias-qualified intersection key, so that an aliased and an alias-free evaluation of
+the same intersection report separately, as Go's alias-qualified cache makes them; for a union reduction it is the
+union's constituents. That is the site Go's caches give within one file, since Go reports the first evaluation per
+checker: `compiler/normalizedIntersectionTooComplex` reports once, at the arrow parameter, not also at the call and
+its argument; a call whose parameter type is resolved before its argument reports at the call, as tsgo does; two
+different too-complex types in one expression both report. (Two earlier revisions, the innermost of nested sites and
+a first-site memory emptied at each flush, were refuted by the adversarial review of the fix: the first dropped a
+second type and moved the call case, the second reported a file's second site when its first had been reached from
+another file's check.) The output no longer depends on the assignment:
 `x/zz.ts(5,14)`
 single-threaded, at 1-4 checkers and under `random:1..8` (crates/tsrs_cli/tests/union_too_complex_cross_product.rs;
 `tools/ci/determinism.sh` sweeps the case too), and 30 of 30 identical runs on the generated project. It differs from

@@ -2547,7 +2547,7 @@ impl Checker {
                         .enumerate()
                         .map(|(i, &t)| if i < element_infos.len() && element_infos[i].flags.intersects(ElementFlags::Variadic) { t } else { self.unknown_type })
                         .collect();
-                    if self.check_cross_product_union(&check_types) {
+                    if self.check_cross_product_union(&check_types, Self::too_complex_key(&check_types)) {
                         return self
                             .map_type(e, |c, t| Some(c.create_normalized_tuple_type_ex(target, &replace_element(element_types, i, t), object_flags)))
                             .unwrap();

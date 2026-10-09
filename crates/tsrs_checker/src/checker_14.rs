@@ -1450,7 +1450,7 @@ impl Checker {
     pub(crate) fn get_template_literal_type(&mut self, texts: &[&str], types: &[P<Type>]) -> P<Type> {
         let union_index = find_index(types, |t| t.flags().intersects(TypeFlags::Never | TypeFlags::Union));
         if union_index >= 0 {
-            if !self.check_cross_product_union(types) {
+            if !self.check_cross_product_union(types, Self::too_complex_key(types)) {
                 return self.error_type;
             }
             let union_index = union_index as usize;
