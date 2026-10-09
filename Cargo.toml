@@ -63,7 +63,10 @@ debug = false
 
 [profile.release]
 opt-level = 3
-debug = "line-tables-only"
+lto = "fat"
+codegen-units = 1
+strip = "symbols" # set to `false` for debug information
+debug = false # set to `true` for debug information
 panic = "unwind"
 
 # Release binaries (.github/workflows/release.yml) build with this profile twice, for PGO: -Cprofile-generate,
