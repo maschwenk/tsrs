@@ -26,7 +26,7 @@ prefaulting, and the zero-page faults his GC commit describes).
 - **His comparison** is against Theo's tsc-rs (pingdotgg/ts-rust, npm `tsc-rs` 0.1.0 at the time), not tsrs.
   **Verdict: partly reproduced.** The speedup over stock tsgo is real and output-identical. "Beats tsc-rs" holds on the
   Mac for excalidraw (+30-33%, mostly his type-printing memo) and typeorm (+4-8%) but not for trpc, playwright, sentry
-  or vscode, where tsc-rs 0.1.0 is 7-28% faster at 4 and 8 checkers. His Linux table shows wins on all six; the gap is
+  or vscode, where tsc-rs 0.1.0 is 10-28% faster at 4 and 8 checkers. His Linux table shows wins on all six; the gap is
   plausibly his Linux-only runtime work, which could not be measured here, and his project setups (commits, TypeScript 7
   config fixes) are unpublished. All four compilers print identical diagnostics on all six of his projects. tsrs is
   1.6-2.6x faster than both at 4 and 8 checkers.
@@ -106,7 +106,7 @@ Peak RSS (GiB) and instructions (G, all threads) in the default mode:
 | t3code-server | 4.99 | 3.53 | 3.40 | 1.80 | 416.7 | 225.8 | 260.6 | 134.2 |
 | vscode | 6.54 | 6.47 | 5.73 | 1.93 | 340.3 | 224.9 | 293.9 | 108.6 |
 
-- His runtime commits trade memory back: without them his branch is 9-22% below main's peak (fewer allocations),
+- His runtime commits trade memory back: without them his branch is 9-32% below main's peak (fewer allocations),
   with them it is back within -29% / +6% of main.
 - Upstream main against the pin is within -6% / +2% except formbricks-web (+12%) and t3code-server (+15%), both only
   with 4 checkers (t3code: 366 G -> 417 G instructions at 4 checkers, unchanged single-threaded), so a partition
@@ -136,7 +136,7 @@ moduleResolution: bundler`, and excalidraw's `baseUrl` becomes a `"*": ["./*"]` 
 changes; his are not published. sentry reports 12,513 errors (8,365 TS2339 and 3,749 TS6305 from unbuilt project
 references) with every compiler; the others 0-658.
 
-Median of 3 interleaved runs, ms (peak GiB in brackets), "ours w/o GC/THP" = `728ae2e5`:
+Median of 3 interleaved runs, ms; "ours w/o GC/THP" = `728ae2e5`:
 
 | app | mode | stock (main) | ours (can) | rust (tsc-rs 0.1.0) | vs rust (Mac) | vs rust (his table) | ours w/o GC/THP | tsrs |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -175,7 +175,7 @@ Each tool at its own default (tsgo 4 checkers, tsc-rs 4, tsrs 9) and single-thre
   typeorm (a small run where the collector is a large share).
 - **Verdict: partly.** Legit: his tsgo is much faster than stock tsgo on every project, prints the same diagnostics,
   and does beat tsc-rs 0.1.0 on excalidraw and typeorm. Not reproduced on the Mac: the wins on trpc, playwright,
-  sentry and vscode, where tsc-rs is 7-28% faster at c4 and c8 (and 0-12% single-threaded). Whether they hold on his
+  sentry and vscode, where tsc-rs is 10-28% faster at c4 and c8 (and 0-12% single-threaded). Whether they hold on his
   8-core Linux machine depends on the Linux-only runtime changes and on his unpublished project setups; this note
   cannot settle that without Linux runs. The claim does not concern tsrs, which is 1.6-2.6x faster than both at c4 and
   c8 and 1.4-1.7x single-threaded on these six projects.
@@ -249,7 +249,7 @@ probe's own timer calls, so they are upper bounds; shares are of the run's Check
 "Runtime" = Go process or memory-management work with no tsrs counterpart (tsrs has no collector: leak arenas, exact
 frees). "Scheduling" = which checker checks which file. "Checker" = the type checker's own algorithm or data
 structures. "In tsrs" cites where tsrs already does the same or an equivalent. Estimates are tsrs single-threaded, from
-the probe below; "port" means a draft PR exists.
+the probe above; "Ported and measured" below has the measured ones.
 
 | commit | what | class | output | in tsrs / verdict |
 | --- | --- | --- | --- | --- |
@@ -264,7 +264,7 @@ the probe below; "port" means a draft PR exists.
 | 5d631e193 | one property cache with both lookup modes; `getApparentType` fast path for plain objects; fewer `getReducedType` calls | checker | same | tsrs: lazy property cache (notes/mem-lazy.md L6, checker_11.rs `get_union_or_intersection_property_lazy_cache`). Apparent-type fast path: a few flag tests in Rust. No. |
 | 97c6ea0d0, 771aa8a03 | template literal spans in stack buffers; probe the template cache before normalizing | checker (allocation) | same | Go allocation costs; template-heavy code only. No. |
 | 6d557d0e3 | instantiations of generic classes/interfaces reuse the target's (or first instantiation's) sorted property order, validated in O(n) | checker | same | Not in tsrs. Measured as part of the member-order candidate below. |
-| 15c911a9b | memoize outermost `typeToString` per checker (guards: diagnostics, resolution cycles, member resolution in progress, instantiation budget and depth) | checker (memo) | same (his 3 new tests) | Not in tsrs. Upper bound from the probe (time in 3rd and later repeats): <= 0.7% of check on every bench project (drizzle-orm 5.3 of 725 ms; mikro-orm 15 of 5,606). A port with tsrs's exactness rules (no objects created, shadow mode) exists on `perf/type-print-memo`, unpublished. Note only; worth it where printing dominates (excalidraw: his 170,602 prints of 245 inputs; notes/perf-excalidraw-typefest.md). |
+| 15c911a9b | memoize outermost `typeToString` per checker (guards: diagnostics, resolution cycles, member resolution in progress, instantiation budget and depth) | checker (memo) | same (his 3 new tests) | Not in tsrs. Upper bound from the probe (time in 3rd and later repeats): <= 0.7% of check on every bench project (drizzle-orm 5.3 of 725 ms; mikro-orm 15 of 5,606). Ported with tsrs's exactness rules (no objects created, shadow mode) on `perf/type-print-memo` and measured below. Note only; worth it where printing dominates (excalidraw: his 170,602 prints of 245 inputs; notes/perf-excalidraw-typefest.md). |
 | 7dd635e6f | `TypeReference` and `LiteralType` from checker arenas; inherited tables cloned at final size | runtime (allocation) | same | tsrs allocates every type in thread arenas already (PORTING.md "Memory model"). No. |
 | 628f51ceb | merge two sorted unions linearly; preallocate; pointer scan before binary search in small `containsType` | checker | same | Not in tsrs. Ported, generalized (merge of k runs). |
 | ddc71b880 | pooled relater/inference state reset field by field; `isSimpleTypeRelatedTo` reordering; `getNormalizedType` early exit; lazy active-mapper caches | checker | same | Mostly Go write-barrier and map-clear costs. tsrs already builds no key for a fresh mapper (checker_11.rs `instantiate_type_with_alias_worker`). No. |
