@@ -1,4 +1,4 @@
-# design-shared-type-layer: an immutable type layer shared by the checker threads, tsgo-identical and wall-neutral (design, no code, 2026-10-08)
+# design-shared-type-layer: an immutable type layer shared by the checker threads, tsgo-identical and wall-neutral (design, no code, 2026-10-09)
 
 The owner asked for a design, without code, for an immutable type layer that every checker thread reads, under two hard
 constraints that the earlier prototypes relaxed:
@@ -16,8 +16,8 @@ are labelled as such.
 - **Exactness is reachable, at main's level and no higher.** The layer is off in Go mode, so Go-mode output is
   exact by construction. In the default mode every fork is a sequential continuation of one pool checker's prefix, so
   each checker's history is one that main could also have had (section 2). Its output then equals main's wherever
-  main's own output does not depend on the assignment. No design can be stronger, because type ids and
-  first-filled fields reach the output in two places.
+  main's own output does not depend on the assignment. No design can be stronger, because type ids reach the output
+  in two places and fields filled by whoever asks first in several more.
 - **Speed is the obstacle.** The spike measured two costs, and both stand:
   - The read paths alone, compiled in and switched off, cost +2.3..+4.8% wall at 8 checkers and +1.5..+4.3%
     single-threaded instructions (spike sections 10.1 and 4.2). The read path proposed here makes one comparison
@@ -29,7 +29,8 @@ are labelled as such.
     is +2%, or 21-49 ms.
 - **What memory is left under both constraints at the default: none that can be shown.** If the read path cost
   nothing, the layer would keep -5.7..-14.4% peak at 8 checkers on formbricks-web, supabase-studio, mikro-orm and
-  vscode. It would cost cal-diy and t3code-server 3-11% wall. No rule can pick the projects before the check starts.
+  vscode. It would cost cal-diy and t3code-server an estimated 3-11% wall. No rule can pick the projects before the
+  check starts.
 
 ## 1. What was tried before, and what is different
 
@@ -50,17 +51,17 @@ asks what memory is left. It adds four things the spike did not have:
 2. A read path whose cost on a private object is one comparison against a constant, with no load. The spike's tests
    loaded two globals.
 3. The seed is folded into a pool checker, so no ninth thread runs. This combines the spike's strategies B and F;
-   neither was built in that form.
+   the combination was not built, and B not at all.
 4. A stated exactness contract, measured against tsgo's checker pool (section 2).
 
 ## 2. What "identical to tsgo's output" can mean
 
 tsgo numbers types per checker: `c.TypeCount++; t.id = TypeId(c.TypeCount)` (checker.go:25473-25485). tsrs does the
-same at checker_12.rs:1904-1916. tsgo's `createCheckers` (compiler/checkerpool.go:367-422) assigns every file to a
-checker by FENNEL over the import graph, for the given N. `forEachCheckerGroupDo` (476-494) has every checker walk
-the files in program order and check its own. So tsgo's output is the union of N sequential histories that
-(program, N) fixes. That output itself changes with N: on sequelize tsgo prints 42 / 41 / 41 / 42 errors at
-1 / 4 / 8 / 16 checkers (open-history-dependence.md).
+same at checker_12.rs:1904-1916. #94's id blocks cover node and symbol ids only (tsrs_ast utilities_1.rs:24-50).
+tsgo's `createCheckers` (compiler/checkerpool.go:367-420) assigns every file to a checker by FENNEL over the import
+graph, for the given N. `forEachCheckerGroupDo` (476-493) has every checker walk the files in program order and check
+its own. So tsgo's output is the union of N sequential histories that (program, N) fixes. That output itself changes
+with N: on sequelize tsgo prints 42 / 41 / 41 / 42 errors at 1 / 4 / 8 / 16 checkers (open-history-dependence.md).
 
 tsrs keeps three levels of identity today:
 
@@ -68,11 +69,13 @@ tsrs keeps three levels of identity today:
   (checkerpool.rs:838-841), files are assigned by FENNEL (`go_associations`, 1087), and Go's history-dependent caches
   are kept through `compat::go_compatible_history()` (compat.rs:20-31).
 - **E-default.** The default mode prints the same bytes at every checker count and assignment, equal to the
-  single-threaded output (perf-order-independence.md). `tools/ci/determinism.sh` gates it with 504 runs. Three
-  programs are exceptions: TanStack/router, sequelize and rxjs, where main's own output depends on the assignment
-  (open-history-dependence.md).
-- **E-tsgo-1.** The single-threaded default output equals tsgo's at one checker, except for the documented canonical
-  differences: 1 conformance test, and 8 of 2,460 declaration files in the monorepo emit oracle.
+  single-threaded output (perf-order-independence.md). `tools/ci/determinism.sh` gates it with 504 runs. The open
+  cases of open-history-dependence.md are exceptions, where main's own output depends on the assignment:
+  TanStack/router, sequelize and rxjs, and on main since #219 a TS2590 reported on a private monorepo (issue #218,
+  not reproduced).
+- **E-tsgo-1.** The single-threaded default output equals tsgo's at one checker, except for the canonical
+  differences listed in perf-order-independence.md: 1 conformance test, 8 of 2,460 declaration files in the monorepo
+  emit oracle, 8 of vscode's 9,399 and 1 of mui-docs' 26,505, and 5 diagnostic lines on the 40k-error corpus.
 
 Internal state was never part of the contract. Since #217, tsrs creates 0.52M types instead of 5.1M on type-fest at
 one checker, in Go mode too (perf-shared-tuple-elements.md). That change was accepted on an audit build and
@@ -84,7 +87,7 @@ main's own output does not depend on the assignment.
 **Why nothing stronger exists.** A shared object is created outside each reader's id sequence, and its lazy fields
 are filled during one history. Ids reach output in two places:
 
-- the last line of `compare_types` (utilities.rs:768-769; 41 call sites), which orders union constituents;
+- the last line of `compare_types` (utilities.rs:768-769; 40 call sites), which orders union constituents;
 - the increasing-id rule of `is_deeply_nested_type` (relater_1.rs:1083-1091). It is called at depth 2 in inference
   (inference.rs:363-366, 1208-1214) and at depths 3 and 10 in the relater (relater_2.rs:820-826, 1308, 1516).
 
@@ -109,15 +112,17 @@ The base is the spike's frozen seed plus forks (spike section 2), changed in fou
    - It then freezes its arena region and continues its own queue as a fork of its own frozen state.
    - Checkers 1-7 start their queues at once, as plain checkers inside scratch regions (`Region::new_scratch`,
      arena.rs:925). Diagnostics already escape scratch regions.
-   - At the freeze, each of checkers 1-7 finishes its current file and copies out what must survive: its
-     diagnostics and its deferred type-argument checks (checker.rs:977-980). It then retires the region and becomes
-     a fork.
+   - At the freeze, each of checkers 1-7 finishes its current file, retires the region and becomes a fork. The
+     diagnostics of the files it finished and its global diagnostics survive. What it filed against files it had not
+     checked, and its deferred type-argument checks (checker.rs:977-980), are dropped, as main drops them when
+     another checker checks the file: whichever checker checks that file reaches them through its own history, the
+     seed's included. The spike's F did the same (`keep_throwaway_globals`, `retire_into_fork`).
 
    The sample files leave the other queues, so the total work is unchanged and stealing rebalances it. A checker that
    is inside a heavy file at the freeze switches when that file ends; nobody waits. This is the spike's F
    (throwaways in freed regions, 6f0dfcd9) plus B (the seed checker keeps going: predicted to save 11-16 ms, never
    built). It drops the ninth thread, which made the seed 10-30 ms slower (t3code `T_w` went from 246 to 274 ms
-   beside 8 busy throwaways).
+   beside 8 busy throwaways; notes/spike-shared-graph-seed.md on the spike branch).
 2. **Ids.** A fork's `type_count` starts at checker 0's count at the freeze (the spike also numbered fork objects
    from `K_t` up). So a fork's ids follow the creation order of one sequential history: checker 0's prefix, then the
    fork's own work. Symbol ids of seed objects are assigned before the freeze, as in spike round 1.
@@ -146,9 +151,10 @@ frozen region would have to outlive edits, which is weeks of work.
 
 ### 3.3 The fields
 
-`types.rs` has 208 interior-mutable fields (my count over struct bodies). About 80 are in link records, which are
-per checker by construction because they live in the link stores. About 130 are on arena objects: types,
-signatures, index infos, predicates, aliases, conditional roots and rare tails. The spike's discovery build
+`types.rs` has about 205 interior-mutable fields (`Cell`, `RefCell`, the slice, string and mapper cells and the
+lazily allocated maps, counted over the struct bodies at 8a955411). About 72 are in link records, which are per
+checker by construction because they live in the link stores. About 133 are on arena objects: types, signatures,
+index infos, predicates, aliases, conditional roots and rare tails. The spike's discovery build
 `mprotect`ed the frozen chunks and named the field of every fault. It split the arena fields into 47 that a fork
 writes on a frozen object and 79 that it never writes (spike section 3). Both lists must be derived again on current
 main, because #212 and #217 changed deferred-check and tuple state.
@@ -186,19 +192,20 @@ A fork keeps four side tables:
    held 1.9-2.8 K cells per fork at 32 checkers (5.1 K at most), about 0.3 MiB with its 2 KiB pages of object-flag
    words (spike section 6). With the families that read no lazy field computed at the freeze, the remaining flag bits
    fit in cells, leaving about 0.03-0.05 MiB per fork (estimate, 16 B per cell). Computing those families for `K_t`
-   types at the freeze is work on checker 0's thread: at 10-50 ns per type, 1-17 ms (estimate), which stealing
-   spreads over the other checkers.
+   types at the freeze is work on checker 0's thread: at 10-50 ns per type, 0.6-17 ms for the 57-345 K types of the
+   app projects' and vscode's seeds (estimate), which stealing spreads over the other checkers.
 2. **Instantiations with any private argument under frozen targets.**
 3. **Link records copied on first `get`.**
 4. **The fork's own interning maps.**
 
-A per-fork dirty bitmap over the frozen range (one bit per 64 bytes: 30-70 KiB per fork for a 15-36 MiB seed)
-replaces the spike's process-wide one. The process-wide bitmap took atomic writes into cache lines that every fork
-shared.
+A per-fork dirty bitmap over the frozen range (one bit per 64 bytes: 23-71 KiB per fork for the 11-36 MiB seeds of
+spike section 4.4's app projects and vscode) replaces the spike's process-wide one. The process-wide bitmap took
+atomic writes into cache lines that every fork shared.
 
 Ids stay unique within each fork's view: frozen ids are at most `K_t`, private ids are above it, and all of them
 stay below the 2^28 that `RelationKey` packs (relater_types.rs:139-146); t3code-server makes 1.44 M types at one
-checker.
+checker (mem-per-checker-duplication.md section 3). Node and symbol ids keep #94's per-thread blocks from the
+process-wide counters, so they stay unique in every view, as on main.
 
 `object_type_instantiations` (checker.rs:1091) holds Go's `ObjectType.instantiations` for anonymous, mapped and
 deferred targets. Its split:
@@ -220,15 +227,15 @@ way. The cost is the second probe for all-frozen keys that the seed lacked; sect
 | 1 | union constituent order | the last line of `compare_types` (utilities.rs:768-769). Ties that main's audit found: fresh/regular literals, object-literal variants, references whose arguments tie that way, symbol-less type parameters (perf-order-independence.md) | printed unions; which property an error names first | a fork's ids follow one history's creation order (section 3.1, item 2), the same class of history that stealing produces. Go mode: off |
 | 2 | recursion cutoffs | `is_deeply_nested_type` counts only `t.id >= last_type_id` (relater_1.rs:1083-1091); recursion identities are pointers (1166-1204) | relation and inference results, TS2589-like errors | as 1 |
 | 3 | circularity reports | `push_type_resolution` / `find_resolution_cycle_start_index` read the asker's stack (checker_09.rs:2023-2061); `type_resolution_has_property` (2066-2089) reads link records and lazy fields | which declaration gets TS2456/TS7022/TS2502; which reader gets `any` | a fork reads the seed's finished resolutions, as a checker that had checked the seed's files first would; the seed's cycle entries are those of a pool checker's own prefix. Admitted: a sequelize-like program can print another of main's variants |
-| 4 | error types from failed resolution | `report_circularity_error` returns `errorType` (checker_09.rs:2092-2119), cached as the symbol's type; unresolved names in `error_types` (checker.rs:1034) | `any` in printed types; errors that go missing downstream | inherited with the seed's caches, as 3 |
+| 4 | error types from failed resolution | `report_circularity_error` returns `error_type` for an annotated declaration, else `any_type` (checker_09.rs:2092-2121), cached as the symbol's type; unresolved names in `error_types` (checker.rs:1034) | `any` in printed types; errors that go missing downstream | inherited with the seed's caches, as 3 |
 | 5 | library symbols whose declaration involves inference or a checked file | global and module augmentations, merged per checker by `initialize_checker`; JS libraries under `maxNodeModuleJsDepth` | members and types of augmented library interfaces | the seed is a pool checker that runs after the global merge, so its values are the full program's. This rules out any build on a partial program, such as a seed built during the parse (spike section 10.5) |
 | 6 | diagnostics in declaration files under `skipLibCheck: false` | filed while declarations are resolved; the split check runs pieces of one `.d.ts` on several checkers (checkerpool.rs:903) | errors in `.d.ts` files | the seed's collection is carried into every fork, so the checker that checks a `.d.ts` reports what the seed found while resolving it; deduplicated per file |
-| 7 | diagnostics a checker files in files it does not check; deferred type-argument checks | checker.rs:977-980; checker_02.rs:1028-1050 | errors in other files | carried from the seed (spike a5d2a57); under late freeze also copied out of each scratch region before it is retired |
+| 7 | diagnostics a checker files in files it does not check; deferred type-argument checks | checker.rs:977-980; checker_02.rs:1028-1050 | errors in other files | carried from the seed into every fork (spike a5d2a57), so the checker of the file reports them as one sequential checker would; a retired scratch checker's are dropped (section 3.1), as main drops a checker's copy when another checker checks the file (tsrs_compiler program.rs:1009-1010) |
 | 8 | budgets (TS2589, TS2859) | instantiation depth 100 and count 5M per expression count calls, so cached work decides whether they fire | whether the error fires | a fork sees the seed's cached instantiations and members. Same class as main's cache dependence: the audit in perf-order-independence.md says it can occur and was not observed |
 | 9 | base constraints cut by the depth guard | `get_resolved_base_constraint`; checker.rs:1089, types.rs:1950 | TS2536/TS2339 on TanStack/router | inherited from the seed if the seed cut one. Admitted: on router main already prints 5 or 7 errors depending on the assignment |
 | 10 | relation cache and elaboration | per-checker relations (checker.rs:1246-1250) | elaboration text (rxjs) | forks start with empty relation caches, as in the spike. Admitted, same class |
 | 11 | tsrs-only memos | union front cache (unioncache.rs:10-24, 210-216: stores only calls that created no type other than the result, judged by `type_count`); inference and flow memos (infermemo.rs:191, flowmemo.rs:460) | none, if their rules hold | their rules are stated per checker in terms of `type_count`, and a fork's count continues the seed's. Re-verify with `TSRS_UNION_CACHE=shadow` |
-| 12 | symbol and node ids | assigned process-wide by CAS (tsrs_ast utilities_1.rs:33-107); last resort of `compare_symbols_worker` (utilities.rs:457-459) | order of same-named symbols without declarations | the seed assigns ids before the freeze. Already timing-dependent in main: one hit on vscode, not history-dependent (perf-order-independence.md) |
+| 12 | symbol and node ids | taken from process-wide counters, in per-thread blocks of 1,024 inside a checker group since #94, and stored by CAS (tsrs_ast utilities_1.rs:24-107); last resort of `compare_symbols_worker` (utilities.rs:457-459) | order of same-named symbols without declarations | the seed assigns ids before the freeze. Already timing-dependent in main: one hit on vscode, not history-dependent (perf-order-independence.md) |
 | 13 | identity relation key | swap by id (checker_09.rs:679) | none (a cache key) | ids stay unique in each fork's view (section 3.4) |
 | 14 | `--extendedDiagnostics` counters | per checker | the Types, Symbols and Instantiations lines | they change, as they do with stealing; not part of the contract; unchanged in Go mode |
 | 15 | `--checkerAssignment go` | compat.rs:20-31 | all of the above | the layer is off, so Go mode runs main's code path |
@@ -247,14 +254,9 @@ Measured:
 
 - `foff` (the prototype compiled in, switch off, no fork): +2.3..+4.8% wall, paired, at 8 checkers on Linux
   (section 10.1).
-- Single-threaded instructions on the Mac (section 4.2):
-
-  | project | main | `foff` |
-  | --- | ---: | ---: |
-  | t3code-server | 48.21 G | 50.28 G (+4.3%) |
-  | formbricks-web | 51.75 G | 53.36 G (+3.1%) |
-  | xstate-main | 7.63 G | 7.74 G (+1.5%) |
-
+- Single-threaded instructions on the Mac, main against the feature build with the switch off (section 4.2):
+  t3code-server 48.21 G -> 50.28 G (+4.3%), formbricks-web 51.75 -> 53.36 G (+3.1%), xstate-main 7.63 -> 7.74 G
+  (+1.5%).
 - `on0` (forks of an empty seed): +4.3..+8.0% wall. After the spike's strategy E1 (cheaper fork map reads), `on0`
   cost t3code-server +4.65% and formbricks-web +3.10% in instructions.
 
@@ -298,7 +300,7 @@ With the window, each spike mechanism changes as follows:
 | 1, `OvCell` | one comparison on unset reads and one on writes of the 47 fields; no load |
 | 4, `object_flags_lazy()` | gone: the families that read no lazy field are computed at the freeze, so their reads stay plain; the others take the same one comparison as the 47 fields, and only when their "computed" bit is unset |
 | 5, `with_ref()` | gone: the tables hung off types become `FrozenCell`, which has no borrow counter in release builds (frozen.rs:15-16, 47-63); this also drops the counter writes `RefCell` does today |
-| 3, two-level maps | `keyBuilder` ANDs the handles it writes (`write_type`, checker_09.rs:448; 31 sites), and a lookup probes the frozen map only when all of them are frozen |
+| 3, two-level maps | the key builder writes type ids (`write_type`, checker_09.rs:447-449; 24 call sites with `write_types` and `write_type_reference`); it also ANDs the handles of those types, and a lookup probes the frozen map only when the result lies in the window |
 | 2, link stores | still a null test of the seed's store on every miss and every record creation. Same in kind as the spike; this is the part the experiment has to price |
 
 ### 5.3 The falsifying experiment (R1)
@@ -314,7 +316,7 @@ allocated so that every object is private:
 5. the seed-store null test on link-store misses;
 6. `FrozenCell` for the tables hung off types.
 
-Go mode is not touched. This is 2-3 days of work, most of it ported from the spike branch.
+Go mode is not touched. This is 2-3 days of work (estimate), most of it ported from the spike branch.
 
 **The measurement.** `depot ci dispatch --repo maschwenk/tsrs --workflow pr-verify.yml --ref <branch> --input cpus=16
 --input projects=t3code-server,formbricks-web,cal-diy,supabase-studio,mikro-orm,vscode,xstate-main --input
@@ -328,9 +330,9 @@ checkers=1,8 --input reps=10 --input poison=false`. This gives:
 **The kill threshold.**
 
 - Kill if single-threaded instructions rise more than 1% on any project (the AGENTS.md bar).
-- Kill if the 8-checker paired wall median rises more than 1% on two or more of the six losing projects. That is
-  half the 2% budget; the build needs the other half.
-- A pass needs at most +0.5% instructions everywhere.
+- Kill if the 8-checker wall (paired over the ten interleaved runs) rises more than 1% on two or more of the six
+  losing projects. That is half the 2% budget; the build needs the other half.
+- A pass needs at most +0.5% instructions on all seven projects.
 
 pr-verify builds plain release binaries. A PGO build could move the result in either direction, so a pass should be
 repeated with `bench.yml`'s PGO build before stage 1.
@@ -343,7 +345,7 @@ repeated with `bench.yml`'s PGO build before stage 1.
   t3code-server 49 (spike section 10.5).
 - At 10 permille the seed's serial time `T_w` was 0.01-0.21 s on the Mac (section 4.4) and 139-274 ms with FA on
   Linux (section 10.2).
-- -5% peak needs `T_w` of about 90-150 ms on Linux (about 300 ms on vscode).
+- -5% peak needs `T_w` of about 90-150 ms on Linux (about 300 ms on vscode; section 10.5).
 - Each ms of `T_w` saved 0.3-0.95 MiB of peak, with no knee (section 10.3).
 
 ### 6.2 Options
@@ -353,16 +355,17 @@ the sample with their own checker, then merge equal records and number them by (
 
 - Critical path, estimated: at least L + (T_w - L)/8 + merge time, where L is the library core that a cold checker
   builds before its files' own work. From throwaway productivity p = 0.24-0.49, L is about (1 - p) T_w, which gives
-  0.57-0.79 T_w: 80-215 ms at 10 permille. The merge would rewrite every handle of up to 8 x 70-345 K types; it was
+  0.57-0.79 T_w: 80-215 ms at 10 permille. The merge would rewrite every handle of up to 8 x 57-345 K types; it was
   not measured.
 - Memory: as the seed.
 - Exact only for deterministic fields: two builders fill asker-dependent fields differently, and the merge would
-  have to pick one.
+  have to pick one. Its (task, index) numbering is not one history's creation order either (section 4, items 1-2).
 - **Fails on wall.**
 
 **(b) Dependency-ordered start.** Threads begin on files whose library needs are already seeded.
 
-- Critical path, measured with F: the exposed part (1 - p) T_w is 100-175 ms on the app projects.
+- Critical path, computed from F's measured p and `T_w`: the exposed part (1 - p) T_w is 100-175 ms on the app
+  projects (notes/spike-shared-graph-seed.md on the spike branch).
 - Memory: as the seed.
 - Exact under the history argument.
 - **Fails on wall.**
@@ -382,8 +385,9 @@ the sample with their own checker, then merge equal records and number them by (
 
 **(d) Persisting the layer between runs.**
 
-- Critical path: about 1-5 ms to map a 15-36 MiB image on a warm run (design-persisted-frontend.md section 5: 0.57 µs
-  per 16 KiB page). A cold run has nothing to map and gains nothing.
+- Critical path, estimated: 0.4-1.3 ms to page in an 11-36 MiB image on a warm run, at the 0.57 µs per 16 KiB page
+  measured on the Mac (design-persisted-frontend.md section 5; Linux was not measured). A cold run has nothing to
+  map and gains nothing.
 - Memory: the seed's whole saving, with no `T_w` and no rebuild.
 - Exact if every input is hashed. It needs a persisted front end too, because the image refers to AST nodes and
   binder symbols by handle.
@@ -392,18 +396,21 @@ the sample with their own checker, then merge equal records and number them by (
 **(e) Global libraries only** (`lib.*.d.ts`, `@types`, reference directives) instead of the whole declaration-file
 closure.
 
-- Critical path: could be built in parallel before the pass, as #202 forces the global lazy lists in 1 ms.
+- Critical path: not measured. #202 forces the global lazy lists in parallel in 1 ms (mem-round4.md section 1), but
+  that is parsing; building the layer is checking, serial in one builder or merged as in (a).
 - Memory: about 0.5-5% peak at 8 checkers (estimate, section 7.1).
-- Exact.
+- Exact as (f) if one checker builds it as the start of its history, though no file has asked for those
+  declarations yet; as (a) if several do.
 - **Fails the 5% bar.**
 
 **(f) Late freeze (this design).**
 
-- Critical path, estimated: the floor plus the rebuild of the freed pre-switch graphs. The estimate is the paired
-  FA - `on0` difference (section 10.1) less what the ninth thread and the discarded seed work cost: 11-16 ms for B
-  plus 10-30 ms of contention (section 10.3), i.e. 21-46 ms, 1-5 points of these walls:
+- Critical path, estimated: the floor plus the rebuild of the freed pre-switch graphs. The estimate is FA's paired
+  wall less `on0`'s (both measured, spike section 10.1), less what late freeze saves over FA: the seed checker going
+  on with its queue (B, predicted 11-16 ms, spike section 10.3) and no ninth thread beside eight throwaways (10-30 ms,
+  notes/spike-shared-graph-seed.md), i.e. 21-46 ms, 1-5 points of these walls:
 
-  | project | FA - `on0`, measured | late freeze, estimated |
+  | project | FA - `on0`, from measured medians | late freeze, estimated |
   | --- | ---: | ---: |
   | formbricks-web | +2.5% | -2..+0.4% |
   | supabase-studio | +2.2% | -2..+0.3% |
@@ -448,7 +455,8 @@ Sources:
 - "FA peak" is measured (spike section 10.1, run 6slgs9vngp). It stands in for this design's seed.
 - "Library-only ceiling" is an estimate: a perfect, free share of the library-only types and symbols. It takes
   mem-per-checker-duplication.md section 4's 16-checker savings, scales them by 7/15 and by 1.0-1.5 for the steeper
-  per-checker slope below 8 checkers (section 1 of that note: 1.2-1.5x), and divides by the Linux 8-checker peak.
+  per-checker slope below 8 checkers (in that note's section 1 table the mean slope over 1-8 checkers is 1.2-1.5x the
+  one over 1-16), and divides by the Linux 8-checker peak (spike section 10.1, `off`).
 - "Global only" multiplies the ceiling by the share of lib and `@types` among declared objects (that note's package
   table): 13 / 28 / 48 / 46 / 40% on t3code / formbricks / supabase / cal-diy / vscode.
 
@@ -461,10 +469,11 @@ Sources:
 | formbricks-web | 1.68 / 1.60 (0.95x) | 5.4-8.1% | 1.5-2.3% | 1.46 (-12.6%) | 1.10x | all, 0.14 below | only with a free read path |
 | vscode | 1.92 / 1.86 (0.97x) | 1.3-2.0% | 0.5-0.8% | 1.81 (-5.7%) | 1.03x | all, 0.05 below | only with a free read path |
 
-The seed beats the library-only ceiling on vscode and mikro-orm because it also holds project hub types from its
-sample files. Under both constraints the answer to "what memory is left" is: nothing on cal-diy and t3code-server,
-and the FA column on the other four only if R1 shows a free read path. A layer that cannot be switched on per
-project costs wall on the first two whenever it is on.
+FA's saving exceeds the library-only ceiling on all five projects where the ceiling is estimated: the seed also
+holds project and workspace types that many files use, and the freed scratch regions take their files' graphs with
+them (spike section 10.3, side finding). Under both constraints the answer to "what memory is left" is: nothing on
+cal-diy and t3code-server, and the FA column on the other four only if R1 shows a free read path. A layer that
+cannot be switched on per project costs wall on the first two whenever it is on.
 
 ### 7.2 What it cannot reach; a v2
 
@@ -507,7 +516,7 @@ The spike plan called this design B: "the only design that can hang".
 | R1 (section 5.3) | 0.5 week |
 | Field classification on current main (discovery build with `mprotect`; the 47/79 lists and the link-record fields again) | 0.5 week |
 | The window in reserve.rs, the frozen region, the per-fork dirty bitmap and side tables (`ShCell`) | 1 week |
-| Late freeze: the sample on checker 0, scratch-region checkers 1-7, the switch (finish the file, copy out diagnostics and deferred checks, retire, fork) | 1 week |
+| Late freeze: the sample on checker 0, scratch-region checkers 1-7, the switch (finish the file, keep its files' diagnostics, retire, fork) | 1 week |
 | Tables: two-level interning maps, the instantiation-table split, link-store read-through, flag families at the freeze, `FrozenCell` swaps | 1 week |
 | A generated `Checker::fork` over the 347 fields of `Checker` (checker.rs:941-1340) instead of the spike's hand-written 345 | 0.5 week |
 | Memos keyed by `type_count`, Go mode off, `TSRS_CENSUS` / heap census and the `plain-ptrs` build made aware of the frozen region | 0.5-1 week |
@@ -520,69 +529,61 @@ runs. **Total: 6-8 weeks to a landable pull request**, if stage 1's kill criteri
 
 **Risks:**
 
-- Fidelity rests on the history argument, which is tested rather than proven, with three programs open.
+- Fidelity rests on the history argument, which is tested rather than proven, with the cases of
+  open-history-dependence.md still open.
 - The invariant burden: every new checker field has to be added to the fork, and every new lazy field has to be
   classified. An unclassified write to a frozen object is a silent race unless `mprotect` is on.
 - Size: the spike was about 2,400 lines over 32 files.
 - The language server and the API are excluded.
 
-**Reusable from `origin/spike/shared-graph-seed`:**
-
-- `basedmap.rs`, with the spike's E1 skip;
-- `links.rs`'s fork, read-through and `LinkCopy`;
-- `sharedgraph.rs`'s freeze, `mprotect` and fault handler, with the discovery logging (`TSRS_SHARED_GRAPH_PROTECT=log`,
-  `TSRS_SHARED_GRAPH_LOG_OWNED`);
-- the 47/79 field lists;
-- F's scratch-region throwaways (6f0dfcd9);
-- `Checker::fork` as a starting list;
-- `TSRS_TIMELINE`;
-- `tools/perf/sharedprobe.sh` with the `perf-probe` workflow.
-
+**Reusable from `origin/spike/shared-graph-seed`:** `basedmap.rs` with the E1 skip; `links.rs`'s fork, read-through
+and `LinkCopy`; `sharedgraph.rs`'s freeze, `mprotect` and fault handler with the discovery logging
+(`TSRS_SHARED_GRAPH_PROTECT=log`, `TSRS_SHARED_GRAPH_LOG_OWNED`); the 47/79 field lists; F's scratch-region throwaways
+(6f0dfcd9); `Checker::fork` as a starting list; `TSRS_TIMELINE`; `tools/perf/sharedprobe.sh` with `perf-probe`.
 Not reusable: `OvCell`'s range test against globals, `object_flags_lazy`, `with_ref`, and the separate seed thread.
 
 **Stages:**
 
 **Stage 0: R1, the read path on main with nothing shared (2-3 days).**
 
-- Gate: single-threaded instructions at most +0.5% on t3code-server, formbricks-web, vscode and xstate-main; paired
-  wall at 8 checkers within ±1% on the six losing projects.
+- Gate: single-threaded instructions at most +0.5% on all seven projects of section 5.3; paired wall at 8 checkers
+  within ±1% on the six losing projects.
 - Kill: more than +1% instructions on any project.
 
-**Stage 1: late freeze and forks on stage 0's read path, Go mode off (2-3 weeks).**
+**Stage 1: late freeze and forks on stage 0's read path, Go mode off (about 3.5 weeks: the classification, the
+window and side tables, late freeze and the tables, with the spike's hand-written fork).**
 
 - Gate (AGENTS.md): at least 5% peak at 8 checkers on two or more of the six; wall within +2% paired (10 reps) at 8
   checkers on all 17 bench projects; single-threaded instructions at most +1%; diagnostics identical to main in
   every cell.
 - Kill: cal-diy or t3code-server above +2% wall. Section 6.2 predicts +3..+6% and +9..+11%.
 
-**Stage 2: landing (2-3 weeks).**
+**Stage 2: landing (2-3.5 weeks: the generated fork, the memos and tooling, the fidelity gates).**
 
 - Gate: every fidelity gate above identical to main.
-- Kill: any output that main does not print, outside the three open programs.
+- Kill: any output that main does not print, outside the open cases of open-history-dependence.md.
 
 **Stage 3: v2.** Not planned.
 
 ## 9. Recommendation
 
-Do not build. The numbers that decide it are already measured:
-
-- Even if the read path cost nothing, which no measurement has shown (the spike's cost +2.3..+4.8%), the best seed
-  strategy measured +7.8% wall on cal-diy and +11.6% on t3code-server above the empty-seed floor at 8 checkers (spike
-  section 10.1).
-- Folding the seed into a pool checker removes an estimated 21-46 ms of that, 1-2 points on t3code-server and 2-4.5
-  on cal-diy, which leaves both over the 2% bar.
-- The layer cannot be switched on per project before the check starts. So it costs wall on the scoreboard.
-- The memory it buys (-5.7..-14.4% at 8 checkers) flips four losses that are already within 3-13% of bun, and leaves
-  t3code-server, the largest gap, at 0.70x.
-
-The 2-3-day read-path experiment (section 5.3) is the cheapest way to close the direction for every use, warm runs
-and 32-checker machines included. It is not a reason to start the build.
+Do not build. The numbers that decide it are already measured. Even if the read path cost nothing, which no
+measurement has shown (the spike's cost +2.3..+4.8% wall), the best seed strategy cost cal-diy 7.8 points and
+t3code-server 11.6 above the empty-seed floor at 8 checkers (FA +13.0% and +16.2% paired, `on0` +5.2% and +4.6%;
+spike section 10.1). Folding the seed into a pool checker removes an estimated 21-46 ms of that, 2-4.5 points on
+cal-diy and 1-2 on t3code-server, which leaves both over the 2% bar, and no rule can switch the layer on per project
+before the check starts, so it costs wall on the scoreboard. What it would buy, -5.7..-14.4% peak at 8 checkers
+(measured with FA), flips four of the six losses to bun (mikro-orm, cal-diy, formbricks-web and vscode, today
+0.88-0.97x), but cal-diy is one of the two projects that cannot afford the wall, supabase-studio stays at 0.98x and
+t3code-server, the largest gap, at 0.70x. The 2-3-day read-path experiment (section 5.3) is the cheapest way to
+close the direction for every use, warm runs and 32-checker machines included; it is not a reason to start the build.
 
 ## 10. Not determined
 
 - The cost of the redesigned read path. Nothing was built, and the spike's +2.3..+4.8% is for a different path.
-- The rebuild cost of late freeze. It is estimated as FA - `on0` less the spike's estimates for its seed thread, and
-  FA - `on0` mixes two variants' noise (paired interquartile ranges of several percent).
+- The rebuild cost of late freeze. It is estimated as FA - `on0` less the spike's estimates for B and for the ninth
+  thread, and FA - `on0` is the difference of two paired medians over runs whose walls range over 3-17% (`off` and
+  FA, spike section 10.1).
 - mikro-orm's per-checker breakdown, which mem-per-checker-duplication.md does not cover; its ceilings are not
   estimated.
 - Linux values of the library-only and global-only ceilings: section 7.1 scales Mac numbers, and the global shares
