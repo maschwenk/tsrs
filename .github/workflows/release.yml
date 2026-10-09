@@ -136,6 +136,8 @@ jobs:
         env:
           RUSTFLAGS: -Cprofile-use=${{ steps.profile.outputs.path }}${{ runner.os == 'Linux' && ' -Clink-arg=-Wl,--emit-relocs' || '' }}
           CFLAGS: ${{ runner.os == 'macOS' && '-fno-profile-use' || '' }}
+          # BOLT needs the Linux binaries' symbols; bolt.sh strips the optimized tsrs after its correctness gates.
+          CARGO_PROFILE_DIST_STRIP: ${{ runner.os == 'Linux' && 'none' || 'symbols' }}
         run: |
           pkgs=(-p tsrs_cli)
           [ "$RUNNER_OS" = Linux ] && pkgs+=(-p tsrs_testrunner -p tsrs_fourslash)
