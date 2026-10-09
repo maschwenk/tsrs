@@ -13,7 +13,8 @@ pub mod modifierflags;
 pub mod nodeflags;
 pub mod parseoptions;
 pub mod positionmap;
-pub mod sizing; // TOOL (branch notes/compact-ast-sizing only): notes/mem-compact-ast-sizing.md
+#[cfg(feature = "ast-sizing")]
+pub mod sizing; // TOOL, opt-in `--features ast-sizing` (notes/mem-compact-ast-sizing.md); not in default builds
 pub mod precedence;
 pub mod subtreefacts;
 pub mod symbol;

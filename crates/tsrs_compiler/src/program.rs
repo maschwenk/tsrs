@@ -1061,7 +1061,8 @@ impl Program {
                 // tsrs-only: the CLI's `--noEmit` check frees a leaf's tree and binder output once its diagnostics are
                 // collected (fileregions.rs).
                 let free_leaves = tsrs_core::phases::time("Checkers: leaf files", || crate::fileregions::classify(self));
-                tsrs_ast::sizing::run("pre", self.files, false); // TOOL (branch notes/compact-ast-sizing only)
+                #[cfg(feature = "ast-sizing")] // TOOL (notes/mem-compact-ast-sizing.md)
+                tsrs_ast::sizing::run("pre", self.files, false);
                 let collect = |ctx: &Context, c: &mut Checker, file: P<SourceFile>| {
                     let diagnostics = collect(ctx, c, file);
                     if free_leaves && file.is_check_leaf() {
@@ -1073,7 +1074,8 @@ impl Program {
                 if free_leaves {
                     crate::fileregions::pass_done();
                 }
-                tsrs_ast::sizing::run("post", self.files, true); // TOOL (branch notes/compact-ast-sizing only)
+                #[cfg(feature = "ast-sizing")] // TOOL (notes/mem-compact-ast-sizing.md)
+                tsrs_ast::sizing::run("post", self.files, true);
                 filter_and_sort_diagnostics(&diagnostics)
             }
             Some(_) => self.collect_checker_diagnostics(ctx, source_file, collect),

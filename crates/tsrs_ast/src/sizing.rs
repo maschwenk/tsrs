@@ -1,5 +1,5 @@
-// TOOL, not for main (branch notes/compact-ast-sizing): counts the syntax tree of the parsed program for
-// notes/mem-compact-ast-sizing.md.
+// TOOL, compiled only with `--features ast-sizing` (tsrs_cli forwards it): counts the syntax tree of the parsed
+// program for notes/mem-compact-ast-sizing.md.
 //
 // `TSRS_AST_SIZING=<file>` makes the type-check pass (`Program::get_semantic_diagnostics(None)`) append TSV rows to
 // <file> at two points: `pre` (after load, bind and the leaf classification, before the checkers start: every file)
@@ -334,6 +334,7 @@ struct KindRow {
     with_id: u64,
     with_rare: u64,
     in_jsdoc: u64,
+    with_flags: u64,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -470,6 +471,7 @@ fn walk(c: &mut ClassCounts, stack: &mut Vec<Frame>, seen: &mut Seen, text: &'st
         row.with_id += u64::from(has_id);
         row.with_rare += u64::from(n.has_rare_tail());
         row.in_jsdoc += u64::from(f.jsdoc);
+        row.with_flags += u64::from(!n.flags.get().is_empty());
         let tr = &mut c.tags[n.data_tag() as usize];
         tr[0] += 1;
         tr[1] += size;
@@ -635,7 +637,7 @@ pub fn run(phase: &str, files: &[P<SourceFile>], skip_freed_leaves: bool) {
         for (k, r) in c.kinds.iter().enumerate() {
             if r.count > 0 {
                 let name = format!("{:?}", Kind::from_i16(k as i16));
-                let _ = writeln!(out, "{phase}\t{cl}\tkind\t{name}\t{}\t{}\t{}\t{}\t{}", r.count, r.bytes, r.with_id, r.with_rare, r.in_jsdoc);
+                let _ = writeln!(out, "{phase}\t{cl}\tkind\t{name}\t{}\t{}\t{}\t{}\t{}\t{}", r.count, r.bytes, r.with_id, r.with_rare, r.in_jsdoc, r.with_flags);
             }
         }
         for (ri, r) in c.idents.iter().enumerate() {
