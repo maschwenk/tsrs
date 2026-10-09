@@ -391,6 +391,14 @@ pub(crate) fn throwaway_divisor() -> Option<u64> {
     *D.get_or_init(|| std::env::var("TSRS_SHARED_GRAPH_THROWAWAY").ok().and_then(|v| v.parse::<u64>().ok()).filter(|&d| d > 1))
 }
 
+/// `TSRS_SHARED_GRAPH_CRITICAL=<permille>` (default 0, off): see checkerpool.rs. On t3code-server the one front item
+/// above 200 permille (339) took 290 ms as a throwaway and was not the pass's tail, which no weight predicts.
+#[cfg(feature = "checker")]
+pub(crate) fn critical_permille() -> u64 {
+    static P: OnceLock<u64> = OnceLock::new();
+    *P.get_or_init(|| std::env::var("TSRS_SHARED_GRAPH_CRITICAL").ok().and_then(|v| v.parse().ok()).unwrap_or(0))
+}
+
 #[cfg(feature = "checker")]
 pub(crate) fn seed_ready() -> bool {
     // Acquire: pairs with the seed thread's store.

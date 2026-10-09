@@ -798,6 +798,20 @@ impl checkerPool {
         } else {
             u64::MAX
         };
+        // Strategy F: a queue's first item is critical when it alone weighs at least TSRS_SHARED_GRAPH_CRITICAL permille
+        // (default off) of a checker's share: it bounds the pass, so its throwaway checks it at once instead of after
+        // the seed.
+        let share = {
+            let total: u64 = positions.iter().flatten().map(|&i| weight(i)).sum::<u64>().max(1);
+            (total / active.len().max(1) as u64).max(1)
+        };
+        if allow_steal && tsrs_core::timeline::enabled() {
+            for (c, p) in positions.iter().enumerate() {
+                for (k, &i) in p.iter().take(2).enumerate() {
+                    tsrs_core::timeline::mark(if k == 0 { "queue:front0" } else { "queue:front1" }, c as i64, (weight(i) * 1000 / share) as f64);
+                }
+            }
+        }
         let queues: Vec<FileQueue> = positions.into_iter().map(|p| FileQueue::new(p, weight)).collect();
         // TSRS_MEM_SPLIT: the type-check pass reports once every checker is done and before any thread exits.
         let mem_split = (allow_steal && tsrs_core::memsplit::enabled()).then(|| std::sync::Barrier::new(if single { 1 } else { active.len() }));
@@ -869,6 +883,14 @@ impl checkerPool {
                         let _scratch = region.as_ref().map(tsrs_core::arena::Region::enter_scratch);
                         crate::sharedgraph::enter_checker(&guard);
                         let mut throwaway_files = 0usize;
+                        let critical = crate::sharedgraph::critical_permille();
+                        if critical > 0 {
+                            if let Some(i) = queues[checker_idx].take_front_if(|i| weight(i) * 1000 / share >= critical) {
+                                tsrs_core::timeline::mark("chk:critical", checker_idx as i64, (weight(i as u32) * 1000 / share) as f64);
+                                process(&mut guard, i, false);
+                                throwaway_files += 1;
+                            }
+                        }
                         while !crate::sharedgraph::seed_ready() {
                             let Some(i) = queues[checker_idx].take_back_if(|i| weight(i) <= throwaway_bound) else { break };
                             process(&mut guard, i, false);
@@ -1130,6 +1152,26 @@ impl FileQueue {
             self.prefix[back] - self.prefix[front]
         } else {
             0
+        }
+    }
+
+    /// The first position, if `ok` accepts it.
+    #[cfg(feature = "checker")]
+    fn take_front_if(&self, ok: impl Fn(u32) -> bool) -> Option<usize> {
+        // As in `take`: the exchange only claims the position.
+        let mut r = self.range.load(std::sync::atomic::Ordering::Relaxed);
+        loop {
+            if (r & QUEUE_LOW) >= (r >> 32) {
+                return None;
+            }
+            let i = self.positions[(r & QUEUE_LOW) as usize];
+            if !ok(i) {
+                return None;
+            }
+            match self.range.compare_exchange_weak(r, r + 1, std::sync::atomic::Ordering::Relaxed, std::sync::atomic::Ordering::Relaxed) {
+                Ok(_) => return Some(i as usize),
+                Err(current) => r = current,
+            }
         }
     }
 
