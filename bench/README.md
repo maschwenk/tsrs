@@ -1,7 +1,7 @@
 # Benchmarks: tsrs vs tsgo
 
 `bench/run.py` type-checks the projects the TypeScript team benchmarks the Go compiler on
-([microsoft/typescript-benchmarking](https://github.com/microsoft/typescript-benchmarking), `cases/`) and four large
+([microsoft/typescript-benchmarking](https://github.com/microsoft/typescript-benchmarking), `cases/`) and large
 open-source applications (see "Application projects") with tsrs, with tsgo 7.0.2 (npm `typescript@7.0.2`) and, where a
 Bun binary is given, with `bun check`, and reports wall time, peak memory and the error count of each.
 The Depot CI workflow `.depot/workflows/bench.yml` runs it on every push to `main`. It measures every project on the
@@ -53,8 +53,8 @@ builds); the tsserver/LSP/startup scenarios (not `tsc` runs). All six included p
 
 The suite has one application-shaped workload (`mui-docs`), and none of its projects leans on schema-validation
 types. Application projects include four large applications (three Next.js/React apps built on Zod and tested with Vitest, and an
-Effect server), plus Bun's published benchmark set (mikro-orm, next.js root and packages/next, storybook, nuxt, playwright)
-and one more popular library (drizzle-orm). Each is pinned to one commit.
+Effect server), plus Bun's published benchmark set (mikro-orm, next.js root and packages/next, storybook, nuxt, playwright),
+one more popular library (drizzle-orm), and the Sentry and Kibana web applications. Each is pinned to one commit.
 
 | project | repository @ commit | `-p` | files | workload |
 | --- | --- | --- | ---: | --- |
@@ -69,6 +69,9 @@ and one more popular library (drizzle-orm). Each is pinned to one commit.
 | `storybook` | storybookjs/storybook @ `48dfcc6` | `scripts` | ~1,039 | Storybook scripts (Bun measured 1,039 files) |
 | `nuxt` | nuxt/nuxt @ `85b8d54` | `.` | ~3,901 | Nuxt framework monorepo (broader tsconfig than Bun's 839; same commit) |
 | `playwright` | microsoft/playwright @ `d469960` | `.` | ~1,515 | Playwright testing framework (broader tsconfig than Bun's 706; same commit) |
+| **Large web applications** | | | | |
+| `sentry` | getsentry/sentry @ `8f35e20ab49b` | `tsconfig.bench.json` | 13,104 | Sentry frontend, tests, and tooling; workspace imports checked from source |
+| `kibana` | elastic/kibana @ `56bc5b04b530` | `tsconfig.bench.json` | measured by the harness | Source-wide Kibana stress workload (`src`, `x-pack`, `packages`, and ambient declarations) |
 | **Other popular libraries** | | | | |
 | `drizzle-orm` | drizzle-team/drizzle-orm @ `15454db` | `.` | ~943 | Drizzle ORM (large popular project) |
 
@@ -96,6 +99,28 @@ and one more popular library (drizzle-orm). Each is pinned to one commit.
 - `nuxt`: pnpm install.
 - `playwright`: npm ci.
 - `drizzle-orm`: pnpm install.
+
+**Sentry and Kibana:** Both use their pinned pnpm version with `--frozen-lockfile --ignore-scripts`.
+The benchmark-only `tsconfig.bench.json` overlays leave the upstream configs untouched:
+
+- Sentry extends its root config and clears project references so workspace imports are checked from source,
+  without prebuilding declarations. It retains the root config's include/exclude lists; the separately configured
+  service worker is not a root of this workload. This is a cold `-p` check, not Sentry's multi-project `--build` command.
+- Kibana's root config includes only its entry-point declaration and package manifest. The benchmark instead
+  extends `tsconfig.base.json` (including upstream `@kbn/*` source paths and ambient types) and explicitly includes
+  TypeScript under `src`, `x-pack`, and `packages`, plus `typings` and `kibana.d.ts`. Dependency, build, and `target`
+  directories are excluded. This intentionally measures one large source program, not Kibana's per-package
+  `kbn_references`/generated-declaration build. No Elasticsearch instance, browser download, or application build
+  is required. Expect diagnostics from combining package-specific environments; they remain a compiler-parity
+  signal, not a claim that upstream Kibana fails its own typecheck.
+
+At the pinned Sentry commit, a local TypeScript 7.0.2 run checked 13,104 files with no errors.
+Kibana's overlay expands to 104,206 root files before resolving dependencies (`--showConfig`); this is not a
+completed-check file count.
+
+Kibana is substantially larger than the other workloads. Its cold dependency setup and full checks can require
+considerably more disk, memory, and time; use the CI runners for representative measurements. Repository-wide
+line counts are not the harness's `Files` counter, which also reflects resolved dependencies and config scope.
 
 **Overlays.** cal.diy and Formbricks still compile with TypeScript 5.9, whose tsconfig options TypeScript 7 removed
 (`baseUrl`, `moduleResolution: node`, `target: es5`); unmodified, both stop at config errors before checking a

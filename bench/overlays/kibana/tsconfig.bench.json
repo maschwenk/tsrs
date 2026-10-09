@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "incremental": false,
+    "composite": false
+  },
+  "include": [
+    "kibana.d.ts",
+    "typings/**/*.d.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "x-pack/**/*.ts",
+    "x-pack/**/*.tsx",
+    "packages/**/*.ts",
+    "packages/**/*.tsx"
+  ],
+  "exclude": ["**/node_modules/**", "**/target/**", "**/build/**"],
+  "references": []
+}
