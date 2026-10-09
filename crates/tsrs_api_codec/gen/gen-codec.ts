@@ -524,7 +524,7 @@ w();
 w("#![allow(clippy::all, unused_parens, unused_variables, unused_mut, non_snake_case)]");
 w();
 w("use tsrs_ast::*;");
-w("use tsrs_core::{alloc_slice, alloc_vec, P};");
+w("use tsrs_core::{alloc_slice, P};");
 w();
 w("use crate::decoder::*;");
 w("use crate::encoder::*;");

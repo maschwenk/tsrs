@@ -9,7 +9,7 @@ use crate::event::{Event, EventKind};
 use crate::pathcompare::pathComparer;
 use crate::pathkey::PathComparer;
 use crate::testutil_test::*;
-use crate::watcher::{all_watchers, default, dirWatch, is_in_directory_or_self, join_path_suffix, physical_dir_for, rebase_path, Error, ErrUnavailable, ErrWatchTerminated, WatchCallback, Watcher};
+use crate::watcher::{all_watchers, default, dirWatch, is_in_directory_or_self, join_path_suffix, physical_dir_for, rebase_path, Error, ErrUnavailable, ErrWatchTerminated, WatchCallback};
 
 const maxWaitTime: Duration = defaultMaxWaitTime;
 

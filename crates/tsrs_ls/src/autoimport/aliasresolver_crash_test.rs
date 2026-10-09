@@ -4,7 +4,7 @@ use tsrs_ast::{SourceFile, SourceFileParseOptions};
 use tsrs_compiler::Program;
 use tsrs_core::context::Context;
 use tsrs_core::tspath::Path;
-use tsrs_core::{ScriptKind, EMPTY_COMPILER_OPTIONS, P};
+use tsrs_core::{ScriptKind, P};
 use tsrs_module::packagejson::InfoCacheEntry;
 use tsrs_module::{ResolutionHost, ResolverOptions};
 use tsrs_vfs::{vfstest, FS};
