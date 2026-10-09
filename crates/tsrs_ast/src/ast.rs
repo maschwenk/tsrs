@@ -50,6 +50,8 @@ pub(crate) fn visit_nodes<V: FnMut(P<Node>) -> bool + ?Sized>(v: &mut V, nodes: 
 #[inline]
 pub(crate) fn visit_node_list<V: FnMut(P<Node>) -> bool + ?Sized>(v: &mut V, node_list: Option<P<NodeList>>) -> bool {
     match node_list {
+        // TOOL (branch notes/compact-ast-sizing only): a sizing walk records the list and does not force lazy ones.
+        Some(list) if crate::sizing::active() => crate::sizing::note_list(&list, false).is_some_and(|nodes| visit_nodes(v, nodes)),
         Some(list) => visit_nodes(v, list.nodes()),
         None => false,
     }
@@ -58,6 +60,8 @@ pub(crate) fn visit_node_list<V: FnMut(P<Node>) -> bool + ?Sized>(v: &mut V, nod
 #[inline]
 pub(crate) fn visit_modifiers<V: FnMut(P<Node>) -> bool + ?Sized>(v: &mut V, modifiers: Option<P<ModifierList>>) -> bool {
     match modifiers {
+        // TOOL (branch notes/compact-ast-sizing only): see visit_node_list.
+        Some(list) if crate::sizing::active() => crate::sizing::note_list(&list.list, true).is_some_and(|nodes| visit_nodes(v, nodes)),
         Some(list) => visit_nodes(v, list.list.nodes()),
         None => false,
     }
@@ -555,6 +559,11 @@ impl Node {
     #[inline]
     pub(crate) fn data_tag(&self) -> NodeDataTag {
         self.header.get().data_tag()
+    }
+
+    /// TOOL (branch notes/compact-ast-sizing only): whether the node was allocated with its rare tail.
+    pub(crate) fn has_rare_tail(&self) -> bool {
+        self.header.get().has_rare_tail()
     }
 
     /// The data struct after this node's header. Callers check `data_tag() == T::TAG` first.

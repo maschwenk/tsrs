@@ -13,6 +13,7 @@ pub mod modifierflags;
 pub mod nodeflags;
 pub mod parseoptions;
 pub mod positionmap;
+pub mod sizing; // TOOL (branch notes/compact-ast-sizing only): notes/mem-compact-ast-sizing.md
 pub mod precedence;
 pub mod subtreefacts;
 pub mod symbol;

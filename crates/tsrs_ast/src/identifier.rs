@@ -122,6 +122,18 @@ impl NodePayload for IdentifierWithText {
 
 const _: () = assert!(std::mem::size_of::<NodeAlloc<Identifier>>() == 32);
 
+/// TOOL (branch notes/compact-ast-sizing only): arena bytes of an identifier node with its text stored.
+pub(crate) const IDENTIFIER_WITH_TEXT_SIZE: usize = std::mem::size_of::<NodeAlloc<IdentifierWithText>>();
+
+/// TOOL (branch notes/compact-ast-sizing only): arena bytes of the identifier node `n`.
+pub(crate) fn identifier_alloc_size(n: &Node) -> usize {
+    if n.payload::<Identifier>().is_source_text() {
+        std::mem::size_of::<NodeAlloc<Identifier>>()
+    } else {
+        IDENTIFIER_WITH_TEXT_SIZE
+    }
+}
+
 /// Census builds: the identifier word holds a flow node's address / 8 in the modes that keep one
 /// (`crate::census_layouts`).
 pub(crate) fn census_layout() {
