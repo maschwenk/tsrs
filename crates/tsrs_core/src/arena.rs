@@ -510,6 +510,9 @@ fn census_chunk(size: usize) -> *mut u8 {
     const PROT_READ: i32 = 1;
     const PROT_WRITE: i32 = 2;
     const MAP_PRIVATE: i32 = 2;
+    #[cfg(target_os = "linux")]
+    const MAP_ANON: i32 = 0x20;
+    #[cfg(not(target_os = "linux"))]
     const MAP_ANON: i32 = 0x1000;
     static NEXT: AtomicUsize = AtomicUsize::new(0x7c00_0000_0000);
     let hint = NEXT.fetch_add(size.next_multiple_of(1 << 20) + (1 << 20), Ordering::Relaxed);
