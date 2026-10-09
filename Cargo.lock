@@ -438,13 +438,17 @@ dependencies = [
  "libc",
  "libmimalloc-sys2",
  "rustc-hash",
+ "serde",
+ "serde_json",
  "tsrs_api",
  "tsrs_api_transport",
  "tsrs_ast",
  "tsrs_compiler",
  "tsrs_core",
  "tsrs_execute",
+ "tsrs_linter",
  "tsrs_lsp",
+ "tsrs_project",
  "tsrs_tsoptions",
  "tsrs_vfs",
 ]
@@ -614,6 +618,22 @@ version = "0.14.0"
 dependencies = [
  "rustc-hash",
  "tsrs_core",
+]
+
+[[package]]
+name = "tsrs_linter"
+version = "0.14.0"
+dependencies = [
+ "rustc-hash",
+ "serde",
+ "serde_json",
+ "tsrs_ast",
+ "tsrs_checker",
+ "tsrs_compiler",
+ "tsrs_core",
+ "tsrs_scanner",
+ "tsrs_tsoptions",
+ "tsrs_vfs",
 ]
 
 [[package]]

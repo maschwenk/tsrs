@@ -16,9 +16,13 @@ tsrs_tsoptions.workspace = true
 tsrs_compiler.workspace = true
 rustc-hash.workspace = true
 tsrs_lsp.workspace = true
+tsrs_project.workspace = true
 tsrs_api.workspace = true
 tsrs_api_transport.workspace = true
 tsrs_execute = { path = "../tsrs_execute" }
+tsrs_linter.workspace = true
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 # mimalloc v3, called directly by the global allocator in main.rs.
 # no_thp avoids huge-page amplification on the heap (notes/mem-no-thp.md). It also disables THP for the
 # whole process; main re-enables it for the arena.

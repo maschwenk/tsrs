@@ -26,6 +26,7 @@ for supported features and known gaps.
 ## Learn more
 
 - [CLI usage and memory tuning](docs/USAGE.md)
+- [Oxlint type-aware linting](docs/LINT.md)
 - [Editor setup](docs/LSP.md#editor-setup)
 - [Node API (unstable)](docs/NODE_API.md)
 - [WebAssembly for Node and browsers](npm/tsrs-wasm/README.md)

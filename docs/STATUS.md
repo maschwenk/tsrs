@@ -1,5 +1,12 @@
 # Status
 
+## Current development
+
+`tsrs headless` implements the tsgolint payload-v2 protocol used by Oxlint and the
+`typescript/no-floating-promises` rule, including rule options, source overlays, compiler diagnostics,
+fix suggestions and timings. `OXLINT_TSGOLINT_PATH=/path/to/tsrs oxlint --type-aware` uses it without changes to
+Oxlint; unsupported type-aware rules are skipped. See `docs/LINT.md`.
+
 ## 2026-10-11: 0.14.0 release
 
 Linux x64/arm64 packages gain explicit `-gnu` and `-musl` suffixes, static musl builds and libc-aware binary selection

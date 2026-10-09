@@ -1,0 +1,20 @@
+[package]
+name = "tsrs_linter"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+rustc-hash.workspace = true
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tsrs_core.workspace = true
+tsrs_ast.workspace = true
+tsrs_scanner.workspace = true
+tsrs_vfs.workspace = true
+tsrs_tsoptions.workspace = true
+tsrs_checker.workspace = true
+tsrs_compiler.workspace = true
