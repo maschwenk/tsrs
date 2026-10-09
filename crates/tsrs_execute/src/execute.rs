@@ -78,20 +78,6 @@ pub fn command_line_with_testing(
         }
         args.drain(pos..(pos + 2).min(args.len()));
     }
-    // tsrs-only, opt-in: `--checkerCostCache <file>` balances the checkers on per-file check times measured by
-    // the previous run that used the same file, and writes this run's times to it (checkerpool.rs).
-    if let Some(pos) = args.iter().position(|a| a.eq_ignore_ascii_case("--checkerCostCache")) {
-        let Some(path) = args.get(pos + 1).cloned().filter(|p| !p.starts_with('-')) else {
-            sys.write("error: --checkerCostCache expects a file path.\n");
-            return CommandLineResult { status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
-        };
-        if tsrs_core::NO_THREADS {
-            sys.write("error: --checkerCostCache is not supported by the WebAssembly build.\n");
-            return CommandLineResult { status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
-        }
-        tsrs_compiler::set_checker_cost_cache_from_cli(&path);
-        args.drain(pos..pos + 2);
-    }
     let host: &'static sysParseConfigHost = Box::leak(Box::new(sysParseConfigHost { sys, fs: sys.fs() }));
     let mut command = tsoptions::parse_command_line(&args, host);
     if tsrs_core::NO_THREADS {

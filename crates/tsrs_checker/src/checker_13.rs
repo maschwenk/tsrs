@@ -970,7 +970,7 @@ impl Checker {
     // isEmptyResolvedType(resolveStructuredTypeMembers(t)); notes/mem-lazy.md L11: a type with a lazy member table
     // (an instantiated reference, never anyFunctionType) is asked without resolving it.
     pub(crate) fn is_empty_structured_type(&mut self, t: P<Type>) -> bool {
-        if self.lazy_empty {
+        if self.lazy_members {
             if let Some(lm) = self.get_ready_lazy_member_table(t) {
                 self.lazy_member_stats.empty_lazy_queries += 1;
                 let ready = lm.ready.get().unwrap();

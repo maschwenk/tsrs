@@ -54,7 +54,7 @@ accepted and everything runs on one thread. Its output is byte-identical to nati
 differential gate CI runs on every pull request (1,998 of 1,998 runnable cases of a 2,000-case conformance sample,
 1,993 of 1,993 over in-memory files, the regressions, four bench projects, emit on two, twelve fixtures); warm runs
 take 1.8-2.3x native single-threaded wall on the bench projects. Not supported: `--watch`, `--lsp`, `--api`, JSON
-diagnostics with `--build`, `--checkerCostCache`, programs over 4 GiB. The release workflow builds the module, runs
+diagnostics with `--build`, programs over 4 GiB. The release workflow builds the module, runs
 the package's tests against a native build, and installs and runs the packed tarball before it publishes it.
 
 Memory, the 64-vCPU bench at each tool's default (tsrs 32 checkers), 0.8.0 (`787b39483021`) -> 0.9.0
@@ -535,7 +535,7 @@ type-id pairs in 8-byte slots (no hashing), a 24-byte AST node header (kind, dat
 type aliases allocated only when a cached constructor creates a type, reference instantiation tables keyed by
 the references' own type arguments, 12-byte pointer-keyed link slots, one read-only link access through
 `try_get`. Track B (lazy creation, Go-portable): inference context mappers created on first use
-(`TSRS_LAZY_INFERENCE_MAPPERS`, default on; -1.13M mappers); deferring two-constituent union/intersection
+(-1.13M mappers; its own switch went with the other candidate switches on 2026-10-09, `TSRS_LAZY_MEMBERS=0` turns it off); deferring two-constituent union/intersection
 property types was rejected (-3.7% types but it changes results). The private monorepo, default mode (medians of 3,
 interleaved, base dc59d8e): single-threaded peak 7.02 -> 6.02 GiB (-14.2%), 4 checkers 9.38 -> 8.07 GiB
 (-14.0%); opt-out 9.47 -> 8.01 / 14.53 -> 12.35 GiB. Details, per-step numbers and rejected candidates:
@@ -583,9 +583,9 @@ declaration is the first declaration", 82% of symbols): -0.09 / -0.11 GiB, instr
 24 bytes (the rare alias shares a word with the symbol): -0.07 / -0.10 GiB. Output, counters and AST oracle
 identical. Details: `notes/mem-small.md`.
 
-## 2026-10-01: checker balance (opt-in cost cache)
+## 2026-10-01: checker balance (opt-in cost cache; removed 2026-10-09)
 
-`--checkerCostCache <file>` balances the 4 checkers on per-file CPU times from the previous run (default unchanged; ordering and static cost models gave nothing): wall -3.7% on the private monorepo (slowest checker 10.4% -> 2.1% above the mean), -12.5% vscode, -15% mui-docs; output identical. Details: `notes/perf-balance.md`.
+Removed on 2026-10-09: it stayed opt-in, nothing measured or shipped used it, and work stealing (notes/perf-checker-stealing.md) balances the checkers at run time. `--checkerCostCache <file>` balanced the 4 checkers on per-file CPU times from the previous run (default unchanged; ordering and static cost models gave nothing): wall -3.7% on the private monorepo (slowest checker 10.4% -> 2.1% above the mean), -12.5% vscode, -15% mui-docs; output identical. Details: `notes/perf-balance.md`.
 
 ## 2026-10-01: first Linux profile (x86_64 cloud VM)
 

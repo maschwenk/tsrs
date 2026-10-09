@@ -1340,7 +1340,7 @@ impl Checker {
     // relater.go:977
     pub(crate) fn get_unmatched_properties_worker(&mut self, source: P<Type>, target: P<Type>, require_optional_properties: bool, match_discriminant_properties: bool, props_out: Option<&mut Vec<P<Symbol>>>) -> Option<P<Symbol>> {
         let mut props_out = props_out;
-        let lazy_properties = if self.lazy_unmatched { self.get_lazy_properties_in_order(target) } else { None };
+        let lazy_properties = if self.lazy_members { self.get_lazy_properties_in_order(target) } else { None };
         let lazy = lazy_properties.is_some();
         let properties: std::borrow::Cow<'static, [P<Symbol>]> = match lazy_properties {
             Some(properties) => properties.into(),
@@ -1355,8 +1355,8 @@ impl Checker {
                 || !target_prop.flags().intersects(SymbolFlags::Optional)
                     && !target_prop.check_flags.get().intersects(CheckFlags::Partial)
             {
-                let source_prop = if (lazy || self.lazy_has_prop) && !match_discriminant_properties {
-                    // notes/mem-lazy.md L9/L10: only whether the source has the property matters below.
+                let source_prop = if lazy && !match_discriminant_properties {
+                    // notes/mem-lazy.md L10: only whether the source has the property matters below.
                     if self.has_property_of_type(source, target_prop.name()) { Some(target_prop) } else { None }
                 } else {
                     self.get_property_of_type(source, target_prop.name())

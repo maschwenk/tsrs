@@ -40,8 +40,6 @@ pub enum LeafMode {
 
 static REGIONS_ON: AtomicBool = AtomicBool::new(false);
 static STATS: AtomicBool = AtomicBool::new(false);
-/// `LeafSettings::every_file`.
-static EVERY_FILE: AtomicBool = AtomicBool::new(false);
 /// The directory predicted paths are matched relative to (`enable`).
 static CURRENT_DIRECTORY: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
@@ -82,9 +80,6 @@ pub struct LeafSettings {
     pub mode: LeafMode,
     /// `stats_report` reports.
     pub stats: bool,
-    /// Every TypeScript root file gets a region, not only the predicted ones (`PREDICTED_LEAF_PATTERNS`): for
-    /// measurement; it frees the leaves the prediction misses, but moves every tree out of the thread arenas.
-    pub every_file: bool,
 }
 
 /// The most checkers for which leaf freeing is on by default (`leaf_settings_from_env`). Measured with one binary,
@@ -99,7 +94,7 @@ pub const MAX_DEFAULT_CHECKERS: usize = 16;
 /// `TSRS_FREE_LEAVES`, a comma-separated list: unset frees the predicted leaves when the program gets at most
 /// `MAX_DEFAULT_CHECKERS` checkers (`checkers`: the most it can get, `checker_count_upper_bound`); `1` frees them at any
 /// count; `0` turns file regions off; `keep` makes the regions (at any count) but frees nothing; `stats` reports
-/// (`stats_report`); `all` gives every TypeScript root file a region (`LeafSettings::every_file`), at any count. Off
+/// (`stats_report`). Off
 /// under the debug modes that walk files or checker data after the pass (`TSRS_FILE_TIMES` walks every tree;
 /// `TSRS_ASSIGNMENT_STATS`, the work and heap censuses walk checker tables) or that must see every block alive (the
 /// reachability census, `TSRS_CENSUS=1`).
@@ -139,17 +134,15 @@ static LAZY_DTS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::
 /// - the interfaces and classes that merge into the global scope more than once (declared in several script files or
 ///   `declare global` blocks): `initialize_checker` clones the first symbol's tables and merges the others into them.
 ///
-/// Forcing a list early changes nothing observable (`lazylist`). `TSRS_LAZY_DTS_SHARED=0` forces only the merges.
+/// Forcing a list early changes nothing observable (`lazylist`).
 pub(crate) fn force_shared_lists(program: &crate::program::Program) {
     // Relaxed: see `LAZY_DTS`.
     if !LAZY_DTS.load(std::sync::atomic::Ordering::Relaxed) {
         return;
     }
     let mut lists: Vec<P<tsrs_ast::lazylist::LazyNodeList>> = Vec::new();
-    if !std::env::var_os("TSRS_LAZY_DTS_SHARED").is_some_and(|v| v == "0") {
-        for file in global_library_files(program) {
-            lists.extend(file.lazy_lists.get().iter().copied().filter(|l| l.state() == tsrs_ast::lazylist::DEFERRED));
-        }
+    for file in global_library_files(program) {
+        lists.extend(file.lazy_lists.get().iter().copied().filter(|l| l.state() == tsrs_ast::lazylist::DEFERRED));
     }
     let mut by_name: FxHashMap<&'static str, Vec<P<tsrs_ast::Symbol>>> = FxHashMap::default();
     let mut add = |table: Option<P<tsrs_ast::SymbolTable>>| {
@@ -226,7 +219,7 @@ pub fn leaf_settings_from_env(checkers: usize) -> LeafSettings {
     if !(tsrs_core::COMPRESSED_PTRS && cfg!(unix)) {
         return LeafSettings::default();
     }
-    let mut settings = LeafSettings { mode: LeafMode::Free, stats: false, every_file: false };
+    let mut settings = LeafSettings { mode: LeafMode::Free, stats: false };
     let mut forced = false;
     for word in std::env::var("TSRS_FREE_LEAVES").unwrap_or_default().split(',') {
         match word.trim() {
@@ -237,10 +230,6 @@ pub fn leaf_settings_from_env(checkers: usize) -> LeafSettings {
                 forced = true;
             }
             "stats" => settings.stats = true,
-            "all" => {
-                settings.every_file = true;
-                forced = true;
-            }
             _ => {}
         }
     }
@@ -254,9 +243,8 @@ pub fn leaf_settings_from_env(checkers: usize) -> LeafSettings {
 /// the language server, the API or the test harnesses). Predicted paths are matched relative to `current_directory`.
 pub fn enable(settings: LeafSettings, current_directory: &str) {
     let _ = CURRENT_DIRECTORY.set(current_directory.trim_end_matches('/').to_string());
-    // Relaxed (all three): set on the main thread before the program, and any worker that reads them, exists.
+    // Relaxed (both): set on the main thread before the program, and any worker that reads them, exists.
     STATS.store(settings.stats, Ordering::Relaxed);
-    EVERY_FILE.store(settings.every_file, Ordering::Relaxed);
     REGIONS_ON.store(settings.mode != LeafMode::Off, Ordering::Relaxed);
 }
 
@@ -270,15 +258,13 @@ fn predicted_leaf(file_name: &str) -> bool {
 }
 
 /// Whether a file of this name and kind gets a region when it is parsed for a root file: a TypeScript file, not a
-/// declaration file, predicted to be a leaf (every such file with `every_file`).
+/// declaration file, predicted to be a leaf.
 fn region_candidate(file_name: &str, script_kind: ScriptKind) -> bool {
-    // Relaxed: see `enable`.
-    let every_file = EVERY_FILE.load(Ordering::Relaxed);
     // Relaxed: see `enable`.
     REGIONS_ON.load(Ordering::Relaxed)
         && matches!(script_kind, ScriptKind::TS | ScriptKind::TSX)
         && !tsrs_core::tspath::is_declaration_file_name(file_name)
-        && (every_file || predicted_leaf(file_name))
+        && predicted_leaf(file_name)
 }
 
 #[inline]

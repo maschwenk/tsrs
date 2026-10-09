@@ -317,7 +317,7 @@ pub struct InferenceContext {
     pub flags: Cell<InferenceFlags>, // Inference flags
     pub signature: Cell<Option<P<Signature>>>, // Generic signature for which inferences are made (if any)
     pub compare_types: Cell<Option<TypeComparer>>, // Type comparer function
-    // Mapper that fixes inferences / that doesn't: created on first use with `TSRS_LAZY_INFERENCE_MAPPERS` (`mapper()`,
+    // Mapper that fixes inferences / that doesn't: created on first use when lazy members are on (`mapper()`,
     // `non_fixing_mapper()`), see notes/mem-round3.md.
     mapper: Cell<Option<P<TypeMapper>>>,
     non_fixing_mapper: Cell<Option<P<TypeMapper>>>,
@@ -1098,23 +1098,12 @@ pub struct Checker {
     // Go `ObjectType.instantiations` of object types that are not interfaces or tuples (see `ObjectType`).
     pub(crate) object_type_instantiations: FxHashMap<P<Type>, PackedMap<CacheHashKey, P<Type>>>,
     pub(crate) lazy_mapped_tables: FxHashMap<P<Type>, std::rc::Rc<LazyMappedTable>>,
-    /// tsrs_core::lazymembers::enabled() (default on; `--noLazyMembers` / `TSRS_LAZY_MEMBERS=0`): no lazy table is created when false.
+    /// tsrs_core::lazymembers::enabled() (default on; `--noLazyMembers` / `TSRS_LAZY_MEMBERS=0`): no lazy table is created when false,
+    /// and the lazy-resolution follow-ups of notes/mem-lazy.md are off with it.
     pub lazy_members: bool,
-    /// notes/mem-lazy.md L1: tuple references get lazy member tables too.
-    pub lazy_tuples: bool,
     /// site-counts profile: creation site of each instantiated symbol until its type is resolved.
     #[cfg(feature = "site-counts")]
     pub inst_symbol_sites: FxHashMap<P<Symbol>, &'static std::panic::Location<'static>>,
-    /// notes/mem-lazy.md L5: conditional type instantiation without the composite mapper.
-    pub lazy_cond_mapper: bool,
-    /// notes/mem-lazy.md L6: union/intersection property caches without the eager copy.
-    pub lazy_prop_cache: bool,
-    /// notes/mem-lazy.md L9: existence-only property queries in getUnmatchedProperties.
-    pub lazy_has_prop: bool,
-    /// notes/mem-lazy.md L10: getUnmatchedProperties walks lazy targets.
-    pub lazy_unmatched: bool,
-    /// notes/mem-lazy.md L11: empty-object tests on lazy tables.
-    pub lazy_empty: bool,
     pub lazy_member_stats: tsrs_core::lazymembers::LazyMemberStats,
     /// The member names of `Function`, `CallableFunction`, `NewableFunction` and `Object`, once all four are
     /// resolved (`may_be_augment_member`).
@@ -1502,14 +1491,8 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         object_type_instantiations: FxHashMap::default(),
         lazy_mapped_tables: FxHashMap::default(),
         lazy_members: tsrs_core::lazymembers::enabled(),
-        lazy_tuples: tsrs_core::lazymembers::lazy_tuples(),
         #[cfg(feature = "site-counts")]
         inst_symbol_sites: FxHashMap::default(),
-        lazy_cond_mapper: tsrs_core::lazymembers::lazy_cond_mapper(),
-        lazy_prop_cache: tsrs_core::lazymembers::lazy_prop_cache(),
-        lazy_has_prop: tsrs_core::lazymembers::lazy_has_prop(),
-        lazy_unmatched: tsrs_core::lazymembers::lazy_unmatched(),
-        lazy_empty: tsrs_core::lazymembers::lazy_empty(),
         lazy_member_stats: Default::default(),
         augment_filter: None,
         #[cfg(feature = "assignment-stats")]

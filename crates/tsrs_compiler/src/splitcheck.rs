@@ -32,9 +32,7 @@
 // it; it panics if the split would have reported something else, see `shadow_compare`) and `force:<k>`
 // (split every checked declaration file with at least two statements into up to k pieces, whatever its weight: the
 // test mode for the conformance suite and corpora) and `stats` (one line per pass on stderr: files split, pieces, pieces
-// another checker ran; `stats:<file>` appends it to the file, for harnesses that keep stderr). `TSRS_SPLIT_MIN_SHARE=<percent>` sets which files
-// are split (weight at least that percentage of an average checker's share, default `MIN_SHARE_PERCENT`) and
-// `TSRS_SPLIT_PIECE_DIVISOR=<n>` the piece size (1/n of a share, default `PIECE_DIVISOR`), for experiments.
+// another checker ran; `stats:<file>` appends it to the file, for harnesses that keep stderr).
 
 use std::ops::Range;
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -55,19 +53,18 @@ use crate::checkerpool::{Checker, Context};
 // 16, the same at 32 and 64; webpack (which splits lib.dom.d.ts) the same check time with 1-4% more instructions.
 // Pieces of 1/8 of a share bring the MCP file's largest piece from 0.17 to 0.085 s at 16 checkers on a Mac (1/16 does
 // not go lower). Measured in the note.
-const MIN_SHARE_PERCENT: u64 = 40;
+pub(crate) const MIN_SHARE_PERCENT: u64 = 40;
 /// The share a default library file must weigh to be split (`plan_splits`): its weight is a fair estimate of its cost,
 /// so splitting pays only when it would be most of a checker's work (webpack and next-packages-next at 32 checkers),
 /// not at half a share (webpack at 16: +3-4% wall when it was split).
 pub(crate) const LIB_MIN_SHARE_PERCENT: u64 = 80;
-const PIECE_DIVISOR: u64 = 8;
+const _: () = assert!(LIB_MIN_SHARE_PERCENT >= MIN_SHARE_PERCENT);
+pub(crate) const PIECE_DIVISOR: u64 = 8;
 
 pub(crate) struct SplitConfig {
     pub(crate) enabled: bool,
     pub(crate) shadow: bool,
     pub(crate) force: Option<usize>,
-    pub(crate) divisor: u64,
-    pub(crate) min_share_percent: u64,
     // `stats`: Some(None) prints to stderr, Some(Some(path)) appends to the file.
     pub(crate) stats: Option<Option<String>>,
 }
@@ -75,7 +72,7 @@ pub(crate) struct SplitConfig {
 pub(crate) fn split_config() -> &'static SplitConfig {
     static CONFIG: OnceLock<SplitConfig> = OnceLock::new();
     CONFIG.get_or_init(|| {
-        let mut config = SplitConfig { enabled: true, shadow: false, force: None, divisor: PIECE_DIVISOR, min_share_percent: MIN_SHARE_PERCENT, stats: None };
+        let mut config = SplitConfig { enabled: true, shadow: false, force: None, stats: None };
         if let Ok(value) = std::env::var("TSRS_SPLIT_FILES") {
             for token in value.split(',').map(str::trim).filter(|t| !t.is_empty()) {
                 match token {
@@ -90,12 +87,6 @@ pub(crate) fn split_config() -> &'static SplitConfig {
                     },
                 }
             }
-        }
-        if let Some(divisor) = std::env::var("TSRS_SPLIT_PIECE_DIVISOR").ok().and_then(|v| v.parse::<u64>().ok()).filter(|&d| d > 0) {
-            config.divisor = divisor;
-        }
-        if let Some(percent) = std::env::var("TSRS_SPLIT_MIN_SHARE").ok().and_then(|v| v.parse::<u64>().ok()) {
-            config.min_share_percent = percent;
         }
         config
     })

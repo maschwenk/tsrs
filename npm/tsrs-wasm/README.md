@@ -60,5 +60,5 @@ any `HostFileSystem`, and `memoryFileSystem(files)`.
 
 ## Not supported
 
-`--watch`, `--lsp`, `--api`, JSON diagnostics with `--build`, `--checkerCostCache`, more than one checker or
+`--watch`, `--lsp`, `--api`, JSON diagnostics with `--build`, more than one checker or
 builder (the flags are accepted; everything runs on one thread), `--locale` (ignored natively too).

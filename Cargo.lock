@@ -301,7 +301,6 @@ dependencies = [
  "tsrs_ls",
  "tsrs_lsproto",
  "tsrs_module",
- "tsrs_parser",
  "tsrs_printer",
  "tsrs_project",
  "tsrs_scanner",
@@ -376,7 +375,6 @@ version = "0.9.1"
 dependencies = [
  "bitflags",
  "hashbrown",
- "indexmap",
  "rustc-hash",
  "tsrs_ast",
  "tsrs_astnav",
@@ -397,23 +395,15 @@ dependencies = [
 name = "tsrs_cli"
 version = "0.9.1"
 dependencies = [
- "libc",
  "mimalloc-safe",
  "rustc-hash",
  "tsrs_api",
  "tsrs_api_transport",
  "tsrs_ast",
- "tsrs_binder",
  "tsrs_compiler",
  "tsrs_core",
- "tsrs_diagnostics",
  "tsrs_execute",
- "tsrs_incremental",
  "tsrs_lsp",
- "tsrs_module",
- "tsrs_parser",
- "tsrs_project",
- "tsrs_scanner",
  "tsrs_tsoptions",
  "tsrs_vfs",
 ]
@@ -422,8 +412,6 @@ dependencies = [
 name = "tsrs_compiler"
 version = "0.9.1"
 dependencies = [
- "bitflags",
- "indexmap",
  "rayon",
  "rustc-hash",
  "tsrs_ast",
@@ -447,7 +435,6 @@ dependencies = [
 name = "tsrs_core"
 version = "0.9.1"
 dependencies = [
- "bitflags",
  "hashbrown",
  "indexmap",
  "libc",
@@ -477,7 +464,6 @@ name = "tsrs_diagnostics"
 version = "0.9.1"
 dependencies = [
  "rustc-hash",
- "tsrs_core",
 ]
 
 [[package]]
@@ -574,7 +560,6 @@ version = "0.9.1"
 dependencies = [
  "indexmap",
  "rustc-hash",
- "tsrs_ast",
  "tsrs_compiler",
  "tsrs_core",
  "tsrs_diagnostics",
@@ -582,7 +567,6 @@ dependencies = [
  "tsrs_ls",
  "tsrs_lsproto",
  "tsrs_project",
- "tsrs_tsoptions",
  "tsrs_vfs",
 ]
 
@@ -590,7 +574,6 @@ dependencies = [
 name = "tsrs_lsproto"
 version = "0.9.1"
 dependencies = [
- "indexmap",
  "rustc-hash",
  "tsrs_core",
  "tsrs_vfs",
@@ -601,7 +584,6 @@ name = "tsrs_module"
 version = "0.9.1"
 dependencies = [
  "bitflags",
- "indexmap",
  "rustc-hash",
  "tsrs_ast",
  "tsrs_core",
@@ -640,7 +622,6 @@ name = "tsrs_printer"
 version = "0.9.1"
 dependencies = [
  "bitflags",
- "indexmap",
  "rustc-hash",
  "tsrs_ast",
  "tsrs_core",
@@ -654,8 +635,6 @@ dependencies = [
 name = "tsrs_project"
 version = "0.9.1"
 dependencies = [
- "bitflags",
- "indexmap",
  "rustc-hash",
  "tsrs_ast",
  "tsrs_binder",
@@ -677,7 +656,6 @@ dependencies = [
 name = "tsrs_projectutil"
 version = "0.9.1"
 dependencies = [
- "indexmap",
  "rustc-hash",
  "tsrs_core",
 ]
@@ -700,7 +678,6 @@ dependencies = [
  "tsrs_ast",
  "tsrs_core",
  "tsrs_diagnostics",
- "unicode-id-start",
 ]
 
 [[package]]
@@ -747,7 +724,6 @@ dependencies = [
  "tsrs_checker",
  "tsrs_compiler",
  "tsrs_core",
- "tsrs_diagnostics",
  "tsrs_printer",
  "tsrs_scanner",
  "tsrs_tsoptions",
@@ -758,8 +734,6 @@ dependencies = [
 name = "tsrs_tsoptions"
 version = "0.9.1"
 dependencies = [
- "bitflags",
- "indexmap",
  "rustc-hash",
  "tsrs_ast",
  "tsrs_core",
@@ -793,12 +767,6 @@ dependencies = [
  "tsrs_scanner",
  "tsrs_vfs",
 ]
-
-[[package]]
-name = "unicode-id-start"
-version = "1.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "81b79ad29b5e19de4260020f8919b443b2ef0277d242ce532ec7b7a2cc8b6007"
 
 [[package]]
 name = "unicode-ident"

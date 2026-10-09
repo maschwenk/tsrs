@@ -34,17 +34,14 @@ fn run(case: &str, free_leaves: &str, poison: bool) -> (String, String) {
 fn freed_leaf_is_skipped_by_the_alternative_container_search() {
     let case = "leaf-alternative-containers";
     let expected = std::fs::read_to_string(case_dir(case).join("expected.txt")).unwrap();
-    let cases = [("1", false), ("0", false), ("keep", false), ("stats", false), ("stats", true), ("all,stats", false), ("all,stats", true)];
+    let cases = [("1", false), ("0", false), ("keep", false), ("stats", false), ("stats", true)];
     for (free_leaves, poison) in cases {
         let (stdout, stderr) = run(case, free_leaves, poison);
         assert_eq!(stdout, expected, "TSRS_FREE_LEAVES={free_leaves} poison={poison}");
         // leaf.test.ts and a.ts are leaves (nothing imports them); q.ts and m.ts are imported. Only leaf.test.ts is
-        // predicted, unless every file gets a region (`all`).
+        // predicted, so only it gets a region and is freed.
         if free_leaves == "stats" {
             assert!(stderr.contains("leaf files: 1 of 4 checked files (1 more not predicted") && stderr.contains("freed 1 "), "{stderr}");
-        }
-        if free_leaves == "all,stats" {
-            assert!(stderr.contains("leaf files: 2 of 4 checked files (0 more not predicted") && stderr.contains("freed 2 "), "{stderr}");
         }
     }
 }

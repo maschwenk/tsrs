@@ -30,9 +30,7 @@
 // runner mui-docs took 5.9% longer and cal-diy 3.8% more CPU, while 16 and 32 checkers were lower or equal on all but
 // one cell (notes/perf-clustered-assignment.md).
 //
-// `TSRS_MODULE_AFFINITY=<mu>` (read once) sets MU, `0`/`off` turns this off (the plain locality assignment);
-// `TSRS_MODULE_AFFINITY_GAMMA=<g>` sets GAMMA and `TSRS_MODULE_AFFINITY_PASSES=<n>` the most refinement passes, for
-// experiments.
+// `TSRS_MODULE_AFFINITY=off` (read once) turns this off (the plain locality assignment).
 
 use std::sync::OnceLock;
 
@@ -44,23 +42,12 @@ const GAMMA: f64 = 0.5;
 const MAX_PASSES: usize = 3;
 pub(crate) const MIN_CHECKERS: usize = 16;
 
-struct Config {
-    mu: f64,
-    gamma: f64,
-    passes: usize,
-}
-
-fn config() -> &'static Config {
-    static CONFIG: OnceLock<Config> = OnceLock::new();
-    CONFIG.get_or_init(|| {
-        let mu = match std::env::var("TSRS_MODULE_AFFINITY").ok().as_deref().map(str::trim) {
-            None | Some("") => MU,
-            Some("0" | "off") => 0.0,
-            Some(v) => v.parse::<f64>().ok().filter(|m| m.is_finite() && *m >= 0.0).unwrap_or_else(|| panic!("TSRS_MODULE_AFFINITY: expected a number >= 0 or off, got {v:?}")),
-        };
-        let gamma = std::env::var("TSRS_MODULE_AFFINITY_GAMMA").ok().and_then(|v| v.parse::<f64>().ok()).filter(|g| g.is_finite()).unwrap_or(GAMMA);
-        let passes = std::env::var("TSRS_MODULE_AFFINITY_PASSES").ok().and_then(|v| v.parse::<usize>().ok()).unwrap_or(MAX_PASSES);
-        Config { mu, gamma, passes }
+fn enabled() -> bool {
+    static ENABLED: OnceLock<bool> = OnceLock::new();
+    *ENABLED.get_or_init(|| match std::env::var("TSRS_MODULE_AFFINITY").ok().as_deref().map(str::trim) {
+        None | Some("" | "1" | "on") => true,
+        Some("0" | "off") => false,
+        Some(v) => panic!("TSRS_MODULE_AFFINITY: expected 0, off, 1 or on, got {v:?}"),
     })
 }
 
@@ -91,11 +78,10 @@ impl ModuleAffinity {
         group_adjacency: &[Vec<usize>],
         checker_count: usize,
     ) -> Option<ModuleAffinity> {
-        let config = config();
-        if config.mu <= 0.0 || checker_count < MIN_CHECKERS {
+        if !enabled() || checker_count < MIN_CHECKERS {
             return None;
         }
-        let worth: Vec<f64> = files.iter().map(|f| (f.node_count.get().max(1) as f64).powf(config.gamma)).collect();
+        let worth: Vec<f64> = files.iter().map(|f| (f.node_count.get().max(1) as f64).powf(GAMMA)).collect();
         let group_count = group_adjacency.len();
         // Group members by counting sort, in file order.
         let mut starts = vec![0usize; group_count + 1];
@@ -132,7 +118,7 @@ impl ModuleAffinity {
             let total: f64 = modules[start..].iter().map(|&m| worth[m as usize]).sum();
             module_starts.push(modules.len());
             totals.push(total);
-            scale.push(if total > 0.0 { config.mu * (group_adjacency[g].len() + 1) as f64 / total } else { 0.0 });
+            scale.push(if total > 0.0 { MU * (group_adjacency[g].len() + 1) as f64 / total } else { 0.0 });
         }
         let words = checker_count.div_ceil(64);
         Some(ModuleAffinity {
@@ -177,8 +163,7 @@ impl ModuleAffinity {
     // Moves groups between checkers while that lowers the worth of the modules held per checker (see above).
     // `group_checkers` is FENNEL's placement of the groups, `group_weights` their loads.
     pub(crate) fn refine(&self, group_checkers: &mut [usize], group_weights: &[i64], checker_count: usize) {
-        let passes = config().passes;
-        if passes == 0 || checker_count < 2 {
+        if checker_count < 2 {
             return;
         }
         let k = checker_count;
@@ -208,7 +193,7 @@ impl ModuleAffinity {
         let mut order: Vec<usize> = (0..group_checkers.len()).collect();
         order.sort_by_key(|&g| (group_weights[g], g));
         let mut held = vec![0.0f64; k];
-        for _ in 0..passes {
+        for _ in 0..MAX_PASSES {
             let mut moved = false;
             for &g in &order {
                 let from = group_checkers[g];

@@ -2762,8 +2762,8 @@ impl Checker {
             || source.is_none()
             || source == Some(t)
             || !source.unwrap().object_flags().intersects(ObjectFlags::ClassOrInterface)
-                && !(self.lazy_tuples && source.unwrap().object_flags().intersects(ObjectFlags::Tuple))
-            || !self.lazy_tuples && source.unwrap().object_flags().intersects(ObjectFlags::Tuple)
+                && !(self.lazy_members && source.unwrap().object_flags().intersects(ObjectFlags::Tuple))
+            || !self.lazy_members && source.unwrap().object_flags().intersects(ObjectFlags::Tuple)
             || t.symbol().is_some_and(|s| s.flags().intersects(SymbolFlags::ValueModule))
         {
             return None;

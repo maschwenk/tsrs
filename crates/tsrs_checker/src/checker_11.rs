@@ -16,7 +16,7 @@ impl Checker {
     // checker.go:21769
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn get_union_or_intersection_property(&mut self, t: P<Type>, name: &str, skip_object_function_property_augment: bool) -> Option<P<Symbol>> {
-        if self.lazy_prop_cache {
+        if self.lazy_members {
             return self.get_union_or_intersection_property_lazy_cache(t, name, skip_object_function_property_augment);
         }
         let cache = t.as_union_or_intersection_type().property_cache_for_write(skip_object_function_property_augment);
@@ -1205,7 +1205,7 @@ impl Checker {
             let target = self.instantiate_type(t.as_string_mapping_type().target().unwrap(), Some(m));
             return self.get_string_mapping_type(t.symbol().unwrap(), target);
         } else if flags.intersects(TypeFlags::Conditional) {
-            if self.lazy_cond_mapper {
+            if self.lazy_members {
                 if t.as_conditional_type().mapper.get().is_some() {
                     self.lazy_member_stats.cond_mappers_avoided += 1;
                 }
