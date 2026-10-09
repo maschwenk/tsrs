@@ -483,7 +483,7 @@ impl DeclarationTransformer {
                 &tspath::ComparePathsOptions { current_directory: self.host.get_current_directory().to_string(), use_case_sensitive_file_names: self.host.use_case_sensitive_file_names() },
             );
 
-            results.push(P::new(FileReference { text_range: tsrs_core::TextRange::new(-1, -1), file_name, resolution_mode: ref_.resolution_mode, preserve: ref_.preserve }));
+            results.push(P::new(FileReference { text_range: tsrs_core::undefined_text_range(), file_name, resolution_mode: ref_.resolution_mode, preserve: ref_.preserve }));
         }
         results
     }
@@ -496,7 +496,7 @@ impl DeclarationTransformer {
             if !ref_.preserve {
                 continue;
             }
-            result.push(P::new(FileReference { text_range: tsrs_core::TextRange::new(-1, -1), file_name: ref_.file_name.clone(), resolution_mode: ref_.resolution_mode, preserve: ref_.preserve }));
+            result.push(P::new(FileReference { text_range: tsrs_core::undefined_text_range(), file_name: ref_.file_name.clone(), resolution_mode: ref_.resolution_mode, preserve: ref_.preserve }));
         }
         result
     }
@@ -509,7 +509,7 @@ impl DeclarationTransformer {
             if !ref_.preserve {
                 continue;
             }
-            result.push(P::new(FileReference { text_range: tsrs_core::TextRange::new(-1, -1), file_name: ref_.file_name.clone(), resolution_mode: ref_.resolution_mode, preserve: ref_.preserve }));
+            result.push(P::new(FileReference { text_range: tsrs_core::undefined_text_range(), file_name: ref_.file_name.clone(), resolution_mode: ref_.resolution_mode, preserve: ref_.preserve }));
         }
         result
     }

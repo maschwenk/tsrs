@@ -2,7 +2,7 @@ use rustc_hash::FxHashMap;
 use tsrs_core::collections::OrderedMap;
 use tsrs_core::json::{self, Value};
 use tsrs_core::tspath::{self, ComparePathsOptions};
-use tsrs_core::UTF16Offset;
+use tsrs_core::{UTF16Offset, SYNTHETIC_POSITION};
 
 // generator.go:14
 pub type SourceIndex = i32;
@@ -11,7 +11,11 @@ pub type NameIndex = i32;
 pub(crate) const SOURCE_INDEX_NOT_SET: SourceIndex = -1;
 pub(crate) const NAME_INDEX_NOT_SET: NameIndex = -1;
 pub(crate) const NOT_SET: i32 = -1;
-pub(crate) const NOT_SET_UTF16: UTF16Offset = -1;
+pub(crate) const NOT_SET_UTF16: UTF16Offset = SYNTHETIC_POSITION;
+
+fn utf16_delta(current: UTF16Offset, previous: UTF16Offset) -> i32 {
+    i32::try_from(i64::from(current) - i64::from(previous)).expect("source-map UTF-16 column delta exceeds i32")
+}
 
 // generator.go:26
 #[derive(Clone, Debug, Default)]
@@ -307,7 +311,7 @@ impl Generator {
         }
 
         // 1. Relative generated character
-        self.append_base64_vlq(self.pending_generated_character.wrapping_sub(self.last_generated_character));
+        self.append_base64_vlq(utf16_delta(self.pending_generated_character, self.last_generated_character));
         self.last_generated_character = self.pending_generated_character;
 
         if self.has_pending_source {
@@ -320,7 +324,7 @@ impl Generator {
             self.last_source_line = self.pending_source_line;
 
             // 4. Relative source character
-            self.append_base64_vlq(self.pending_source_character.wrapping_sub(self.last_source_character));
+            self.append_base64_vlq(utf16_delta(self.pending_source_character, self.last_source_character));
             self.last_source_character = self.pending_source_character;
 
             if self.has_pending_name {
@@ -369,11 +373,11 @@ impl Generator {
     // generator.go:261
     // Adds a mapping without source information
     pub fn add_generated_mapping(&mut self, generated_line: i32, generated_character: UTF16Offset) -> Result<(), String> {
+        if generated_character == SYNTHETIC_POSITION {
+            return Err("generatedCharacter cannot be negative".to_string());
+        }
         if generated_line < self.pending_generated_line {
             return Err("generatedLine cannot backtrack".to_string());
-        }
-        if generated_character < 0 {
-            return Err("generatedCharacter cannot be negative".to_string());
         }
         self.add_mapping(generated_line, generated_character, SOURCE_INDEX_NOT_SET, NOT_SET /*sourceLine*/, NOT_SET_UTF16 /*sourceCharacter*/, NAME_INDEX_NOT_SET);
         self.has_pending_source = false;
@@ -391,11 +395,11 @@ impl Generator {
         source_line: i32,
         source_character: UTF16Offset,
     ) -> Result<(), String> {
+        if generated_character == SYNTHETIC_POSITION {
+            return Err("generatedCharacter cannot be negative".to_string());
+        }
         if generated_line < self.pending_generated_line {
             return Err("generatedLine cannot backtrack".to_string());
-        }
-        if generated_character < 0 {
-            return Err("generatedCharacter cannot be negative".to_string());
         }
         if source_index < 0 || source_index as usize >= self.sources.len() {
             return Err("sourceIndex is out of range".to_string());
@@ -403,7 +407,7 @@ impl Generator {
         if source_line < 0 {
             return Err("sourceLine cannot be negative".to_string());
         }
-        if source_character < 0 {
+        if source_character == SYNTHETIC_POSITION {
             return Err("sourceCharacter cannot be negative".to_string());
         }
         if self.has_pending && !self.is_new_generated_position(generated_line, generated_character) && !self.has_pending_source {
@@ -424,11 +428,11 @@ impl Generator {
         source_character: UTF16Offset,
         name_index: NameIndex,
     ) -> Result<(), String> {
+        if generated_character == SYNTHETIC_POSITION {
+            return Err("generatedCharacter cannot be negative".to_string());
+        }
         if generated_line < self.pending_generated_line {
             return Err("generatedLine cannot backtrack".to_string());
-        }
-        if generated_character < 0 {
-            return Err("generatedCharacter cannot be negative".to_string());
         }
         if source_index < 0 || source_index as usize >= self.sources.len() {
             return Err("sourceIndex is out of range".to_string());
@@ -436,7 +440,7 @@ impl Generator {
         if source_line < 0 {
             return Err("sourceLine cannot be negative".to_string());
         }
-        if source_character < 0 {
+        if source_character == SYNTHETIC_POSITION {
             return Err("sourceCharacter cannot be negative".to_string());
         }
         if name_index < 0 || name_index as usize >= self.names.len() {

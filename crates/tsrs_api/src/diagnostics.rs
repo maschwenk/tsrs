@@ -3,7 +3,7 @@
 
 use tsrs_ast::{Diagnostic, SourceFile};
 use tsrs_core::json::Value;
-use tsrs_core::{TextRange, P};
+use tsrs_core::{TextPos, TextRange, P, MAX_TEXT_POS, SYNTHETIC_POSITION};
 use tsrs_diagnostics::Category;
 
 use crate::handler::{ApiError, ApiResult};
@@ -28,12 +28,16 @@ fn category_number(c: Category) -> f64 {
     }
 }
 
-fn source_lines(file: &SourceFile, first_line: i32, last_line: i32) -> Option<Value> {
+fn text_pos_number(pos: TextPos) -> Value {
+    if pos == SYNTHETIC_POSITION { n(-1) } else { n(pos) }
+}
+
+fn source_lines(file: &SourceFile, first_line: u32, last_line: u32) -> Option<Value> {
     let line_map = file.ecma_line_map();
     if line_map.is_empty() {
         return None;
     }
-    let lines: Vec<i32> = if last_line - first_line >= 4 {
+    let lines: Vec<u32> = if last_line - first_line >= 4 {
         vec![first_line, first_line + 1, last_line - 1, last_line]
     } else {
         (first_line..=last_line).collect()
@@ -54,9 +58,9 @@ pub fn diagnostic_response(d: &Diagnostic) -> Value {
     let mut pos = d.pos();
     let mut end = d.end();
     if let Some(file) = file {
-        let len = file.text().len() as i32;
-        pos = pos.min(len).max(0);
-        end = end.min(len).max(pos);
+        let len = TextPos::try_from(file.text().len()).expect("source length exceeds TextPos");
+        pos = if pos == SYNTHETIC_POSITION { 0 } else { pos.min(len) };
+        end = if end == SYNTHETIC_POSITION { pos } else { end.min(len).max(pos) };
     }
     let mut out_pos = pos;
     let mut out_end = end;
@@ -75,7 +79,10 @@ pub fn diagnostic_response(d: &Diagnostic) -> Value {
             source_lines(&file, start_line, end_line),
         ));
     }
-    let mut o = Obj::new().set_opt("fileName", file_name).set("pos", n(out_pos)).set("end", n(out_end));
+    let mut o = Obj::new()
+        .set_opt("fileName", file_name)
+        .set("pos", text_pos_number(out_pos))
+        .set("end", text_pos_number(out_end));
     if let Some((start, end, lines)) = positions {
         o = o.set("startPosition", start).set("endPosition", end).set_opt("sourceLines", lines);
     }
@@ -118,11 +125,18 @@ pub fn diagnostic_from_response(v: &Value) -> ApiResult<P<Diagnostic>> {
         }
     };
     let category = category_from(num("category")?).ok_or_else(|| ApiError::invalid_request("invalid diagnostic category"))?;
+    let text_pos = |key: &str| -> ApiResult<TextPos> {
+        match num(key)? {
+            -1 | -2 => Ok(SYNTHETIC_POSITION),
+            value if (0..=i64::from(MAX_TEXT_POS)).contains(&value) => Ok(value as TextPos),
+            _ => Err(ApiError::invalid_request(format!("diagnostic {key} is outside the source position range"))),
+        }
+    };
     let chain = p.array("messageChain")?.iter().map(diagnostic_from_response).collect::<ApiResult<Vec<_>>>()?;
     let related = p.array("relatedInformation")?.iter().map(diagnostic_from_response).collect::<ApiResult<Vec<_>>>()?;
     Ok(tsrs_ast::new_diagnostic_from_text(
         None,
-        TextRange::new(num("pos")? as i32, num("end")? as i32),
+        TextRange::new(text_pos("pos")?, text_pos("end")?),
         num("code")? as i32,
         category,
         p.str("text")?,

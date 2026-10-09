@@ -85,7 +85,7 @@ pub(crate) struct sourceMapSpanWriter<'a> {
     ts_code: String,
     ts_line_map: Vec<TextPos>,
     spans_on_single_line: Vec<sourceMapSpanWithDecodeErrors>,
-    prev_written_source_pos: i32,
+    prev_written_source_pos: TextPos,
     next_js_line_to_write: i32,
     span_marker_continues: bool,
     source_map_decoder: sourceMapDecoder,
@@ -175,7 +175,9 @@ impl sourceMapSpanWriter<'_> {
 
     pub(crate) fn record_new_source_file_span(&mut self, source_map_span: Mapping, new_source_file_code: &str) {
         let mut continues_line = false;
-        if !self.spans_on_single_line.is_empty() && self.spans_on_single_line[0].source_map_span.generated_character == source_map_span.generated_line {
+        if !self.spans_on_single_line.is_empty()
+            && u32::try_from(source_map_span.generated_line).ok() == Some(self.spans_on_single_line[0].source_map_span.generated_character)
+        {
             // !!! char == line seems like a bug in Strada?
             self.write_recorded_spans();
             self.spans_on_single_line = Vec::new();
@@ -255,7 +257,7 @@ fn remove_byte_order_mark(text: &[u8]) -> &[u8] {
 
 struct recordedSpanWriter<'w, 'a> {
     marker_ids: Vec<String>,
-    prev_emitted_col: i32,
+    prev_emitted_col: u32,
     w: &'w mut sourceMapSpanWriter<'a>,
 }
 
@@ -286,9 +288,9 @@ impl recordedSpanWriter<'_, '_> {
         }
     }
 
-    fn write_source_map_indent(&mut self, indent_length: i32, indent_prefix: &str) {
+    fn write_source_map_indent(&mut self, indent_length: u32, indent_prefix: &str) {
         self.w.source_map_recorder.write_string(indent_prefix);
-        for _ in 0..indent_length.max(0) {
+        for _ in 0..indent_length {
             self.w.source_map_recorder.write_string(" ");
         }
     }
@@ -297,7 +299,7 @@ impl recordedSpanWriter<'_, '_> {
         self.write_source_map_marker_ex(Some(current_span), index, current_span.source_map_span.generated_character, false /*endContinues*/);
     }
 
-    fn write_source_map_marker_ex(&mut self, _current_span: Option<&sourceMapSpanWithDecodeErrors>, index: usize, end_column: i32, end_continues: bool) {
+    fn write_source_map_marker_ex(&mut self, _current_span: Option<&sourceMapSpanWithDecodeErrors>, index: usize, end_column: u32, end_continues: bool) {
         let marker_id = self.get_marker_id(index);
         self.marker_ids.push(marker_id.clone());
         self.write_source_map_indent(self.prev_emitted_col, &marker_id);
@@ -315,7 +317,7 @@ impl recordedSpanWriter<'_, '_> {
         // Convert UTF-16 character offset from the source map to a byte position.
         let source_pos = tsrs_scanner::compute_position_of_line_and_utf16_character(
             &self.w.ts_line_map,
-            current_span.source_map_span.source_line,
+            u32::try_from(current_span.source_map_span.source_line).expect("source-map line is nonnegative"),
             current_span.source_map_span.source_character,
             &self.w.ts_code,
             true, /*allowEdits*/
@@ -369,11 +371,12 @@ impl recordedSpanWriter<'_, '_> {
             // Emit markers
             self.iterate_spans(Self::write_source_map_marker);
 
-            let js_file_text_len = sourceMapSpanWriter::get_text_of_line(current_js_line + 1, &self.w.js_line_map, &self.w.js_file.content).len() as i32; // TODO: Strada is wrong here, we should be looking at `currentJsLine`, not `currentJsLine+1`
-            if self.prev_emitted_col < js_file_text_len - 1 {
+            let js_file_text_len = u32::try_from(sourceMapSpanWriter::get_text_of_line(current_js_line + 1, &self.w.js_line_map, &self.w.js_file.content).len())
+                .expect("source-map line exceeds u32"); // TODO: Strada is wrong here, we should be looking at `currentJsLine`, not `currentJsLine+1`
+            if let Some(end_column) = js_file_text_len.checked_sub(1).filter(|&end_column| self.prev_emitted_col < end_column) {
                 // There is remaining text on this line that will be part of next source span so write marker that continues
                 let n = self.w.spans_on_single_line.len();
-                self.write_source_map_marker_ex(None /*currentSpan*/, n, js_file_text_len - 1 /*endColumn*/, true /*endContinues*/);
+                self.write_source_map_marker_ex(None /*currentSpan*/, n, end_column, true /*endContinues*/);
             }
 
             // Emit Source text

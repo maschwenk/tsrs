@@ -6,7 +6,7 @@ use tsrs_checker::{Checker, SignatureKind, Type, TypeFlags};
 use tsrs_compiler::Program;
 use tsrs_core::context::Context;
 use tsrs_core::goslices;
-use tsrs_core::{TextRange, P};
+use tsrs_core::{TextPos, TextRange, P};
 use tsrs_lsproto as lsproto;
 use tsrs_lsproto::{SemanticTokenModifier, SemanticTokenType};
 use tsrs_scanner as scanner;
@@ -228,8 +228,8 @@ impl LanguageService {
         c: &mut Checker,
         file: P<SourceFile>,
         program: &Program,
-        span_start: i32,
-        span_end: i32,
+        span_start: TextPos,
+        span_end: TextPos,
     ) -> Vec<SemanticToken> {
         let mut v = SemanticTokensVisitor { ctx, c, file, program, span_start, span_end, tokens: Vec::new(), in_jsx_element: false };
 
@@ -251,8 +251,8 @@ struct SemanticTokensVisitor<'a> {
     c: &'a mut Checker,
     file: P<SourceFile>,
     program: &'a Program,
-    span_start: i32,
-    span_end: i32,
+    span_start: TextPos,
+    span_end: TextPos,
     tokens: Vec<SemanticToken>,
     in_jsx_element: bool,
 }

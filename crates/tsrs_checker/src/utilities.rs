@@ -479,7 +479,11 @@ impl Checker {
             return f1 - f2;
         }
         // In the same file, order by source position
-        n1.pos() - n2.pos()
+        match position_cmp(n1.pos(), n2.pos()) {
+            std::cmp::Ordering::Less => -1,
+            std::cmp::Ordering::Equal => 0,
+            std::cmp::Ordering::Greater => 1,
+        }
     }
 }
 
@@ -1175,7 +1179,7 @@ pub(crate) fn is_valid_big_int_string(s: &str, round_trip_only: bool) -> bool {
     // * it does not contain a numeric separator (the `BigInt` constructor does not accept a numeric separator in its input)
     success
         && result == Kind::BigIntLiteral
-        && scanner.token_end() == s.len() as i32 + 1
+        && scanner.token_end() == text_pos_from_len(s.len()) + 1
         && !flags.intersects(TokenFlags::ContainsSeparator)
         && (!round_trip_only
             || s == pseudo_big_int_to_string(jsnum::new_pseudo_big_int(&jsnum::parse_pseudo_big_int(scanner.token_value()), negative)))
@@ -1573,7 +1577,7 @@ pub(crate) fn min_and_max<T: Copy>(slice: &[T], mut get_value: impl FnMut(T) -> 
 // utilities.go:1609
 pub(crate) fn range_of_type_parameters(source_file: P<SourceFile>, type_parameters: P<NodeList>) -> TextRange {
     let text = source_file.text();
-    TextRange::new(type_parameters.pos() - 1, (text.len() as i32).min(tsrs_scanner::skip_trivia(text, type_parameters.end()) + 1))
+    TextRange::new(type_parameters.pos() - 1, text_pos_from_len(text.len()).min(tsrs_scanner::skip_trivia(text, type_parameters.end()) + 1))
 }
 
 // utilities.go:1613

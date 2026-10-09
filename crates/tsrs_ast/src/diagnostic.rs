@@ -3,7 +3,7 @@ use std::fmt;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_core::tspath::Path;
-use tsrs_core::{alloc_slice, alloc_str, undefined_text_range, OwnedCell, ResolutionMode, TextRange, P};
+use tsrs_core::{alloc_slice, alloc_str, position_cmp, undefined_text_range, OwnedCell, ResolutionMode, TextPos, TextRange, P};
 use tsrs_diagnostics::{self as diagnostics, Category, Key, Message};
 
 use crate::SourceFile;
@@ -89,13 +89,13 @@ impl Diagnostic {
     pub fn file(&self) -> Option<P<SourceFile>> {
         self.file.get()
     }
-    pub fn pos(&self) -> i32 {
+    pub fn pos(&self) -> TextPos {
         self.loc.get().pos()
     }
-    pub fn end(&self) -> i32 {
+    pub fn end(&self) -> TextPos {
         self.loc.get().end()
     }
-    pub fn len(&self) -> i32 {
+    pub fn len(&self) -> u32 {
         self.loc.get().len()
     }
     pub fn loc(&self) -> TextRange {
@@ -629,11 +629,11 @@ pub fn compare_diagnostics(d1: P<Diagnostic>, d2: P<Diagnostic>) -> i32 {
     if c != 0 {
         return c;
     }
-    c = d1.loc().pos() - d2.loc().pos();
+    c = position_cmp(d1.loc().pos(), d2.loc().pos()) as i32;
     if c != 0 {
         return c;
     }
-    c = d1.loc().end() - d2.loc().end();
+    c = position_cmp(d1.loc().end(), d2.loc().end()) as i32;
     if c != 0 {
         return c;
     }

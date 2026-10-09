@@ -1495,7 +1495,7 @@ impl Checker {
             let source_file = get_source_file_of_node(node).unwrap();
             let mut pos = args[max_count as usize].pos();
             let mut end = args[args.len() - 1].end();
-            if end == pos {
+            if end == pos && (end as usize) < source_file.text().len() {
                 end += 1;
             }
             pos = tsrs_scanner::skip_trivia(source_file.text(), pos);

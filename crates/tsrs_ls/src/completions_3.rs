@@ -7,7 +7,7 @@ use tsrs_ast::{self as ast, FindAncestorResult, Kind, ModifierFlags, Node, Sourc
 use tsrs_checker::{self as checker, Checker, ContextFlags, Type, TypeFlags};
 use tsrs_core::context::Context;
 use tsrs_core::stringutil::{self, Comparison};
-use tsrs_core::{LanguageVariant, P};
+use tsrs_core::{LanguageVariant, TextPos, P};
 use tsrs_lsproto as lsproto;
 use tsrs_scanner as scanner;
 
@@ -19,7 +19,7 @@ use crate::signaturehelp::get_immediately_containing_argument_info;
 use crate::utilities::{position_belongs_to_node, quote};
 
 // completions.go:3468
-pub(crate) fn get_contextual_type(previous_token: P<Node>, position: i32, file: P<SourceFile>, type_checker: &mut Checker) -> Option<P<Type>> {
+pub(crate) fn get_contextual_type(previous_token: P<Node>, position: TextPos, file: P<SourceFile>, type_checker: &mut Checker) -> Option<P<Type>> {
     let parent = previous_token.parent().unwrap();
     match previous_token.kind() {
         Kind::Identifier => return crate::utilities::get_contextual_type_from_parent(previous_token, type_checker, ContextFlags::None),
@@ -228,7 +228,7 @@ pub(crate) fn is_deprecated(symbol: P<Symbol>, type_checker: &mut Checker) -> bo
 
 impl LanguageService {
     // completions.go:3674
-    pub(crate) fn get_replacement_range_for_context_token(&self, file: P<SourceFile>, context_token: Option<P<Node>>, position: i32) -> Option<lsproto::Range> {
+    pub(crate) fn get_replacement_range_for_context_token(&self, file: P<SourceFile>, context_token: Option<P<Node>>, position: TextPos) -> Option<lsproto::Range> {
         let context_token = context_token?;
 
         // !!! ensure range is single line
@@ -245,7 +245,7 @@ impl LanguageService {
     }
 
     // completions.go:3692
-    pub(crate) fn create_range_from_string_literal_like_content(&self, file: P<SourceFile>, node: P<Node>, position: i32) -> Option<lsproto::Range> {
+    pub(crate) fn create_range_from_string_literal_like_content(&self, file: P<SourceFile>, node: P<Node>, position: TextPos) -> Option<lsproto::Range> {
         let mut replacement_end = node.end() - 1;
         let node_start = astnav::get_start_of_node(node, file, false /*includeJSDoc*/);
         if ast::is_unterminated_literal(node) {
@@ -590,7 +590,7 @@ pub(crate) fn is_contextual_keyword_in_auto_importable_expression_space(keyword:
 }
 
 // completions.go:4003
-pub(crate) fn get_contextual_keywords(file: P<SourceFile>, context_token: Option<P<Node>>, position: i32) -> Vec<lsproto::CompletionItem> {
+pub(crate) fn get_contextual_keywords(file: P<SourceFile>, context_token: Option<P<Node>>, position: TextPos) -> Vec<lsproto::CompletionItem> {
     let mut entries = Vec::new();
     // An `AssertClause` can come after an import declaration:
     //  import * from "foo" |
@@ -623,7 +623,7 @@ impl LanguageService {
         &self,
         _ctx: &Context,
         file: P<SourceFile>,
-        position: i32,
+        position: TextPos,
         unique_names: &mut FxHashSet<String>,
         mut sorted_entries: Vec<CompletionItem>,
     ) -> Vec<CompletionItem> {
@@ -686,7 +686,7 @@ pub(crate) fn try_get_function_like_body_completion_container(context_token: Opt
 }
 
 // completions.go:4094
-pub(crate) fn compute_commit_characters_and_is_new_identifier(context_token: Option<P<Node>>, file: P<SourceFile>, position: i32) -> (bool, Vec<String>) {
+pub(crate) fn compute_commit_characters_and_is_new_identifier(context_token: Option<P<Node>>, file: P<SourceFile>, position: TextPos) -> (bool, Vec<String>) {
     let Some(context_token) = context_token else {
         return (false, strings(&ALL_COMMIT_CHARACTERS));
     };
@@ -818,7 +818,7 @@ fn keyword_for_node(node: P<Node>) -> Kind {
 // Finds the first node that "embraces" the position, so that one may
 // accurately aggregate locals from the closest containing scope.
 // completions.go:4231
-pub(crate) fn get_scope_node(initial_token: Option<P<Node>>, position: i32, file: P<SourceFile>) -> Option<P<Node>> {
+pub(crate) fn get_scope_node(initial_token: Option<P<Node>>, position: TextPos, file: P<SourceFile>) -> Option<P<Node>> {
     let mut scope = initial_token;
     while let Some(s) = scope {
         if position_belongs_to_node(s, position, file) {
@@ -922,7 +922,7 @@ pub(crate) fn get_constraint_of_type_argument_property(node: Option<P<Node>>, ty
 }
 
 // completions.go:4338
-pub(crate) fn try_get_object_like_completion_container(context_token: Option<P<Node>>, position: i32, file: P<SourceFile>) -> Option<P<Node>> {
+pub(crate) fn try_get_object_like_completion_container(context_token: Option<P<Node>>, position: TextPos, file: P<SourceFile>) -> Option<P<Node>> {
     let context_token = context_token?;
 
     let parent = context_token.parent().unwrap();
@@ -1077,7 +1077,7 @@ pub(crate) fn filter_object_members_list(
     contextual_member_symbols: &[P<Symbol>],
     existing_members: &[P<Node>],
     file: P<SourceFile>,
-    position: i32,
+    position: TextPos,
     type_checker: &mut Checker,
 ) -> (Vec<P<Symbol>>, FxHashSet<String>) {
     if existing_members.is_empty() {
@@ -1136,7 +1136,7 @@ pub(crate) fn filter_object_members_list(
 }
 
 // completions.go:4545
-pub(crate) fn is_currently_editing_node(node: P<Node>, file: P<SourceFile>, position: i32) -> bool {
+pub(crate) fn is_currently_editing_node(node: P<Node>, file: P<SourceFile>, position: TextPos) -> bool {
     let start = astnav::get_start_of_node(node, file, false /*includeJSDoc*/);
     start <= position && position <= node.end()
 }
@@ -1195,7 +1195,7 @@ fn is_constructor_parameter_completion(node: P<Node>) -> bool {
 // Returns the immediate owning class declaration of a context token,
 // on the condition that one exists and that the context implies completion should be given.
 // completions.go:4595
-pub(crate) fn try_get_object_type_declaration_completion_container(file: P<SourceFile>, context_token: Option<P<Node>>, location: P<Node>, position: i32) -> Option<P<Node>> {
+pub(crate) fn try_get_object_type_declaration_completion_container(file: P<SourceFile>, context_token: Option<P<Node>>, location: P<Node>, position: TextPos) -> Option<P<Node>> {
     // class c { method() { } | method2() { } }
     match location.kind() {
         Kind::SyntaxList => {
@@ -1308,7 +1308,7 @@ pub(crate) fn filter_class_members_list(
     existing_members: &[P<Node>],
     class_element_modifier_flags: ModifierFlags,
     file: P<SourceFile>,
-    position: i32,
+    position: TextPos,
 ) -> Vec<P<Symbol>> {
     let mut existing_member_names: FxHashSet<String> = FxHashSet::default();
     for &member in existing_members {
@@ -1434,7 +1434,7 @@ pub(crate) fn filter_jsx_attributes(
     symbols: &[P<Symbol>],
     attributes: &[P<Node>],
     file: P<SourceFile>,
-    position: i32,
+    position: TextPos,
     type_checker: &mut Checker,
 ) -> (Vec<P<Symbol>>, FxHashSet<String>) {
     let mut existing_names: FxHashSet<&'static str> = FxHashSet::default();
@@ -1467,7 +1467,7 @@ impl LanguageService {
     pub(crate) fn set_item_defaults(
         &self,
         ctx: &Context,
-        position: i32,
+        position: TextPos,
         file: P<SourceFile>,
         items: &mut [CompletionItem],
         default_commit_characters: Option<&[String]>,
@@ -1534,7 +1534,7 @@ impl LanguageService {
     pub(crate) fn specific_keyword_completion_info(
         &self,
         ctx: &Context,
-        position: i32,
+        position: TextPos,
         file: P<SourceFile>,
         mut items: Vec<CompletionItem>,
         is_new_identifier_location: bool,
@@ -1546,7 +1546,7 @@ impl LanguageService {
     }
 
     // completions.go:4937
-    pub(crate) fn get_jsx_closing_tag_completion(&self, ctx: &Context, location: P<Node>, file: P<SourceFile>, position: i32) -> Option<CompletionList> {
+    pub(crate) fn get_jsx_closing_tag_completion(&self, ctx: &Context, location: P<Node>, file: P<SourceFile>, position: TextPos) -> Option<CompletionList> {
         // We wanna walk up the tree till we find a JSX closing element.
         let jsx_closing_element = ast::find_ancestor_or_quit(location, |node| match node.kind() {
             Kind::JsxClosingElement => FindAncestorResult::True,
@@ -1619,7 +1619,7 @@ impl LanguageService {
         commit_characters: Option<Vec<String>>,
         label_details: Option<lsproto::CompletionItemLabelDetails>,
         file: P<SourceFile>,
-        position: i32,
+        position: TextPos,
         is_member_completion: bool,
         is_snippet: bool,
         has_action: bool,
@@ -1633,7 +1633,7 @@ impl LanguageService {
         let mut insert_text = insert_text.to_string();
         let mut filter_text = filter_text.to_string();
         let kind = get_completions_symbol_kind(element_kind);
-        let data = lsproto::CompletionItemData {
+        let data = i32::try_from(position).ok().map(|position| lsproto::CompletionItemData {
             file_name: file.original_file_name().to_string(),
             position,
             supplemental_file_index: supplemental_file_index(file),
@@ -1641,7 +1641,7 @@ impl LanguageService {
             name: name.clone(),
             auto_import: auto_import_fix,
             ..Default::default()
-        };
+        });
 
         // Text edit
         let mut text_edit: Option<lsproto::TextEditOrInsertReplaceEdit> = None;
@@ -1656,7 +1656,7 @@ impl LanguageService {
 
         // Ported from vscode ts extension.
         let (word_size, word_start) = get_word_length_and_start(file, position);
-        let dot_accessor = get_dot_accessor(file, position - word_size as i32);
+        let dot_accessor = get_dot_accessor(file, position.checked_sub(TextPos::try_from(word_size).expect("completion word exceeds TextPos")).unwrap_or(0));
         if filter_text.is_empty() {
             filter_text = get_filter_text(file, position, &insert_text, &name, word_start, &dot_accessor);
         }
@@ -1701,7 +1701,7 @@ impl LanguageService {
             text_edit,
             commit_characters,
             additional_text_edits,
-            data: Some(data),
+            data,
             ..Default::default()
         }
     }
@@ -1712,7 +1712,7 @@ impl LanguageService {
         ctx: &Context,
         node: P<Node>,
         file: P<SourceFile>,
-        position: i32,
+        position: TextPos,
         optional_replacement_span: Option<lsproto::Range>,
     ) -> Option<CompletionList> {
         let mut items = self.get_label_statement_completions(ctx, node, file, position);
@@ -1725,7 +1725,7 @@ impl LanguageService {
     }
 
     // completions.go:5146
-    fn get_label_statement_completions(&self, ctx: &Context, node: P<Node>, file: P<SourceFile>, position: i32) -> Vec<CompletionItem> {
+    fn get_label_statement_completions(&self, ctx: &Context, node: P<Node>, file: P<SourceFile>, position: TextPos) -> Vec<CompletionItem> {
         let mut uniques: FxHashSet<&'static str> = FxHashSet::default();
         let mut items: Vec<CompletionItem> = Vec::new();
         let mut current = Some(node);
@@ -1773,7 +1773,7 @@ pub(crate) fn is_completion_list_blocker(
     previous_token: Option<P<Node>>,
     location: P<Node>,
     file: P<SourceFile>,
-    position: i32,
+    position: TextPos,
     type_checker: &mut Checker,
 ) -> bool {
     is_in_string_or_regular_expression_or_template_literal(context_token, position)
@@ -1784,7 +1784,7 @@ pub(crate) fn is_completion_list_blocker(
 }
 
 // completions.go:5210
-fn is_in_string_or_regular_expression_or_template_literal(context_token: P<Node>, position: i32) -> bool {
+fn is_in_string_or_regular_expression_or_template_literal(context_token: P<Node>, position: TextPos) -> bool {
     // To be "in" one of these literals, the position has to be:
     //   1. entirely within the token text.
     //   2. at the end position of an unterminated token.
@@ -1795,7 +1795,7 @@ fn is_in_string_or_regular_expression_or_template_literal(context_token: P<Node>
 
 // true if we are certain that the currently edited location must define a new location; false otherwise.
 // completions.go:5222
-fn is_solely_identifier_definition_location(context_token: P<Node>, previous_token: Option<P<Node>>, file: P<SourceFile>, position: i32, type_checker: &mut Checker) -> bool {
+fn is_solely_identifier_definition_location(context_token: P<Node>, previous_token: Option<P<Node>>, file: P<SourceFile>, position: TextPos, type_checker: &mut Checker) -> bool {
     let parent = context_token.parent().unwrap();
     let containing_node_kind = parent.kind();
     match context_token.kind() {
@@ -1953,7 +1953,7 @@ fn is_function_like_but_not_constructor(kind: Kind) -> bool {
 }
 
 // completions.go:5375
-fn is_previous_property_declaration_terminated(context_token: P<Node>, file: P<SourceFile>, position: i32) -> bool {
+fn is_previous_property_declaration_terminated(context_token: P<Node>, file: P<SourceFile>, position: TextPos) -> bool {
     context_token.kind() != Kind::EqualsToken
         && (context_token.kind() == Kind::SemicolonToken || get_line_of_position(file, context_token.end()) != get_line_of_position(file, position))
 }
@@ -2042,7 +2042,7 @@ pub(crate) struct argumentInfoForCompletions {
 }
 
 // completions.go:5453
-pub(crate) fn get_argument_info_for_completions(node: P<Node>, position: i32, file: P<SourceFile>, type_checker: &mut Checker) -> Option<argumentInfoForCompletions> {
+pub(crate) fn get_argument_info_for_completions(node: P<Node>, position: TextPos, file: P<SourceFile>, type_checker: &mut Checker) -> Option<argumentInfoForCompletions> {
     let info = get_immediately_containing_argument_info(node, position, file, type_checker)?;
     if info.is_type_parameter_list || info.invocation.call_invocation.is_none() {
         return None;

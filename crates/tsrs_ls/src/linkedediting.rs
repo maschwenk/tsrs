@@ -1,6 +1,6 @@
 use tsrs_ast::{self as ast, Kind, NodeFlags};
 use tsrs_core::context::Context;
-use tsrs_core::{TextPos, TextRange};
+use tsrs_core::TextRange;
 use tsrs_lsproto as lsproto;
 use tsrs_scanner as scanner;
 
@@ -22,7 +22,7 @@ impl LanguageService {
         }
         source_file = positions[0].script;
         let position = positions[0].position;
-        let token = astnav::find_preceding_token(source_file, position as i32);
+        let token = astnav::find_preceding_token(source_file, position);
 
         let Some(token) = token.filter(|t| t.parent().unwrap().kind() != Kind::SourceFile) else {
             return Ok(lsproto::LinkedEditingRangeResponse::default());
@@ -36,8 +36,8 @@ impl LanguageService {
                 return Ok(lsproto::LinkedEditingRangeResponse::default());
             }
 
-            let open_pos = (astnav::get_start_of_node(open_fragment, source_file, false) + "<".len() as i32) as TextPos;
-            let close_pos = (astnav::get_start_of_node(close_fragment, source_file, false) + "</".len() as i32) as TextPos;
+            let open_pos = astnav::get_start_of_node(open_fragment, source_file, false).checked_add(1).expect("JSX fragment position exceeds TextPos");
+            let close_pos = astnav::get_start_of_node(close_fragment, source_file, false).checked_add(2).expect("JSX fragment position exceeds TextPos");
 
             // only allows linked editing right after opening bracket: <| ></| >
             if position != open_pos && position != close_pos {
@@ -83,8 +83,7 @@ impl LanguageService {
                 return Ok(lsproto::LinkedEditingRangeResponse::default());
             }
             // only return linked cursors if the cursor is within a tag name
-            let position_int = position as i32;
-            if !(open_tag_name_start <= position_int && position_int <= open_tag_name_end || close_tag_name_start <= position_int && position_int <= close_tag_name_end) {
+            if !(open_tag_name_start <= position && position <= open_tag_name_end || close_tag_name_start <= position && position <= close_tag_name_end) {
                 return Ok(lsproto::LinkedEditingRangeResponse::default());
             }
 

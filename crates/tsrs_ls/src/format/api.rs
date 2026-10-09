@@ -1,6 +1,6 @@
 use tsrs_ast::{Kind, Node, SourceFile};
 use tsrs_core::stringutil::{decode_rune, is_line_break, is_white_space_single_line};
-use tsrs_core::{LanguageVariant, TextChange, TextRange, P};
+use tsrs_core::{LanguageVariant, TextChange, TextPos, TextRange, P};
 use tsrs_scanner as scanner;
 
 use super::*;
@@ -118,7 +118,7 @@ pub fn format_document(ctx: &FormatContext, source_file: P<SourceFile>) -> Vec<T
 }
 
 // api.go:115
-pub fn format_selection(ctx: &FormatContext, source_file: P<SourceFile>, start: i32, end: i32) -> Vec<TextChange> {
+pub fn format_selection(ctx: &FormatContext, source_file: P<SourceFile>, start: TextPos, end: TextPos) -> Vec<TextChange> {
     format_span(
         ctx,
         TextRange::new(get_line_start_position_for_position(start, source_file), end),
@@ -128,7 +128,7 @@ pub fn format_selection(ctx: &FormatContext, source_file: P<SourceFile>, start: 
 }
 
 // api.go:119
-pub fn format_on_opening_curly(ctx: &FormatContext, source_file: P<SourceFile>, position: i32) -> Vec<TextChange> {
+pub fn format_on_opening_curly(ctx: &FormatContext, source_file: P<SourceFile>, position: TextPos) -> Vec<TextChange> {
     let Some(opening_curly) = find_immediately_preceding_token_of_kind(position, Kind::OpenBraceToken, source_file) else {
         return Vec::new();
     };
@@ -154,25 +154,25 @@ pub fn format_on_opening_curly(ctx: &FormatContext, source_file: P<SourceFile>, 
 }
 
 // api.go:142
-pub fn format_on_closing_curly(ctx: &FormatContext, source_file: P<SourceFile>, position: i32) -> Vec<TextChange> {
+pub fn format_on_closing_curly(ctx: &FormatContext, source_file: P<SourceFile>, position: TextPos) -> Vec<TextChange> {
     let preceding_token = find_immediately_preceding_token_of_kind(position, Kind::CloseBraceToken, source_file);
     format_node_lines(ctx, source_file, find_outermost_node_within_list_level(preceding_token), FormatRequestKind::FormatOnClosingCurlyBrace)
 }
 
 // api.go:147
-pub fn format_on_semicolon(ctx: &FormatContext, source_file: P<SourceFile>, position: i32) -> Vec<TextChange> {
+pub fn format_on_semicolon(ctx: &FormatContext, source_file: P<SourceFile>, position: TextPos) -> Vec<TextChange> {
     let semicolon = find_immediately_preceding_token_of_kind(position, Kind::SemicolonToken, source_file);
     format_node_lines(ctx, source_file, find_outermost_node_within_list_level(semicolon), FormatRequestKind::FormatOnSemicolon)
 }
 
 // api.go:152
-pub fn format_on_enter(ctx: &FormatContext, source_file: P<SourceFile>, position: i32) -> Vec<TextChange> {
+pub fn format_on_enter(ctx: &FormatContext, source_file: P<SourceFile>, position: TextPos) -> Vec<TextChange> {
     let line = scanner::get_ecma_line_of_position(source_file.get(), position);
     if line == 0 {
         return Vec::new();
     }
     // get start position for the previous line
-    let start_pos = scanner::get_ecma_line_starts(source_file.get())[(line - 1) as usize] as i32;
+    let start_pos = scanner::get_ecma_line_starts(source_file.get())[(line - 1) as usize];
     // After the enter key, the cursor is now at a new line. The new line may or may not contain non-whitespace characters.
     // If the new line has only whitespaces, we won't want to format this line, because that would remove the indentation as
     // trailing whitespaces. So the end of the formatting span should be the later one between:
@@ -195,13 +195,13 @@ pub fn format_on_enter(ctx: &FormatContext, source_file: P<SourceFile>, position
     // previous character before the end of format span is line break character as well.
     let (ch, _) = decode_rune(&text[end_of_format_span as usize..]);
     if is_line_break(ch) {
-        end_of_format_span -= 1;
+        end_of_format_span = end_of_format_span.checked_sub(1).expect("line break ends at byte zero");
     }
 
     let span = TextRange::new(
         start_pos,
         // end value is exclusive so add 1 to the result
-        end_of_format_span + 1,
+        end_of_format_span.checked_add(1).expect("format span end exceeds u32::MAX"),
     );
 
     format_span(ctx, span, source_file, FormatRequestKind::FormatOnEnter)

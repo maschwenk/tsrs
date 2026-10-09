@@ -690,7 +690,7 @@ impl TextWithContext {
                     self.readable_contents.push('\n');
                     let start = self.position_index(self.pos);
                     let end = self.line_starts.line_starts[(pos_line_index + self.n_lines_context) as usize] as usize;
-                    let text = self.new_content.clone() + &self.slice_of_content(Some(start as i32), Some(end as i32)) + &skipped_string;
+                    let text = self.new_content.clone() + &self.slice_of_content(Some(start as u32), Some(end as u32)) + &skipped_string;
                     self.readable_jsonc_baseline(&text);
 
                     if detail.is_some() {
@@ -705,7 +705,7 @@ impl TextWithContext {
                         let _ = writeln!(self.new_content, "--- (line: {}) skipped ---", location_line_index - self.n_lines_context + 1);
                     }
                     let start = self.line_starts.line_starts[(location_line_index - self.n_lines_context + 1) as usize];
-                    let end = self.position_index(detail.pos) as i32;
+                    let end = self.position_index(detail.pos) as u32;
                     let s = self.slice_of_content(Some(start), Some(end));
                     self.new_content.push_str(&s);
                 }
@@ -713,8 +713,8 @@ impl TextWithContext {
             }
         }
         let s = match detail {
-            None => self.slice_of_content(Some(self.position_index(self.pos) as i32), None),
-            Some(detail) => self.slice_of_content(Some(self.position_index(self.pos) as i32), Some(self.position_index(detail.pos) as i32)),
+            None => self.slice_of_content(Some(self.position_index(self.pos) as u32), None),
+            Some(detail) => self.slice_of_content(Some(self.position_index(self.pos) as u32), Some(self.position_index(detail.pos) as u32)),
         };
         self.new_content.push_str(&s);
     }
@@ -731,13 +731,10 @@ impl TextWithContext {
     }
 
     // baselineutil.go:763
-    pub(crate) fn slice_of_content(&self, start: Option<i32>, end: Option<i32>) -> String {
-        let start = match start {
-            Some(s) if s >= 0 => s as usize,
-            _ => 0,
-        };
+    pub(crate) fn slice_of_content(&self, start: Option<u32>, end: Option<u32>) -> String {
+        let start = start.map_or(0, |s| s as usize);
         let end = match end {
-            Some(e) if (e as usize) <= self.content.len() && e >= 0 => e as usize,
+            Some(e) if (e as usize) <= self.content.len() => e as usize,
             _ => self.content.len(),
         };
 

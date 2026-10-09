@@ -3,7 +3,7 @@ use std::fmt::Display;
 use rustc_hash::FxHashMap;
 use tsrs_ast as ast;
 use tsrs_ast::{DiagnosticExt, Kind, ModifierFlags, ModifierList, Node, NodeFlags, NodeList, OperatorPrecedence, TokenFlags};
-use tsrs_core::{LanguageVariant, TextRange, Tristate, P};
+use tsrs_core::{text_pos_from_len, LanguageVariant, TextPos, TextRange, Tristate, P};
 use tsrs_diagnostics as diagnostics;
 use tsrs_diagnostics::Message;
 use tsrs_scanner as scanner;
@@ -472,7 +472,7 @@ impl Parser {
         false
     }
 
-    pub(crate) fn parse_simple_arrow_function_expression(&mut self, pos: i32, identifier: P<Node>, allow_return_type_in_arrow_function: bool, jsdoc: JsdocScannerInfo, async_modifier: Option<P<ModifierList>>) -> P<Node> {
+    pub(crate) fn parse_simple_arrow_function_expression(&mut self, pos: TextPos, identifier: P<Node>, allow_return_type_in_arrow_function: bool, jsdoc: JsdocScannerInfo, async_modifier: Option<P<ModifierList>>) -> P<Node> {
         assert!(self.token == Kind::EqualsGreaterThanToken, "parseSimpleArrowFunctionExpression should only have been called if we had a =>");
         let node = self.factory.new_parameter_declaration(None /*modifiers*/, None /*dotDotDotToken*/, identifier, None /*questionToken*/, None /*typeNode*/, None /*initializer*/);
         let parameter = self.finish_node(node, identifier.pos());
@@ -485,7 +485,7 @@ impl Parser {
         result
     }
 
-    pub(crate) fn parse_conditional_expression_rest(&mut self, left_operand: P<Node>, pos: i32, allow_return_type_in_arrow_function: bool) -> P<Node> {
+    pub(crate) fn parse_conditional_expression_rest(&mut self, left_operand: P<Node>, pos: TextPos, allow_return_type_in_arrow_function: bool) -> P<Node> {
         // Note: we are passed in an expression which was produced from parseBinaryExpressionOrHigher.
         let Some(question_token) = self.parse_optional_token(Kind::QuestionToken) else {
             return left_operand;
@@ -512,7 +512,7 @@ impl Parser {
         self.parse_binary_expression_rest(precedence, left_operand, pos)
     }
 
-    pub(crate) fn parse_binary_expression_rest(&mut self, precedence: OperatorPrecedence, left_operand: P<Node>, pos: i32) -> P<Node> {
+    pub(crate) fn parse_binary_expression_rest(&mut self, precedence: OperatorPrecedence, left_operand: P<Node>, pos: TextPos) -> P<Node> {
         let mut left_operand = left_operand;
         let mut last_operand = left_operand;
         loop {
@@ -600,7 +600,7 @@ impl Parser {
         self.check_js_syntax(node)
     }
 
-    pub(crate) fn make_binary_expression(&mut self, left: P<Node>, operator_token: P<Node>, right: P<Node>, pos: i32) -> P<Node> {
+    pub(crate) fn make_binary_expression(&mut self, left: P<Node>, operator_token: P<Node>, right: P<Node>, pos: TextPos) -> P<Node> {
         let node = self.factory.new_binary_expression(None /*modifiers*/, left, None /*typeNode*/, operator_token, right);
         self.finish_node(node, pos)
     }
@@ -662,7 +662,7 @@ impl Parser {
             return self.finish_node(node, pos);
         } else if self.language_variant == LanguageVariant::JSX && self.token == Kind::LessThanToken && self.look_ahead(Parser::next_token_is_identifier_or_keyword_or_greater_than) {
             // JSXElement is part of primaryExpression
-            return self.parse_jsx_element_or_self_closing_element_or_fragment(true /*inExpressionContext*/, -1 /*topInvalidNodePosition*/, None /*openingTag*/, false /*mustBeUnary*/);
+            return self.parse_jsx_element_or_self_closing_element_or_fragment(true /*inExpressionContext*/, None, None /*openingTag*/, false /*mustBeUnary*/);
         }
         let expression = self.parse_left_hand_side_expression_or_higher();
         if (self.token == Kind::PlusPlusToken || self.token == Kind::MinusMinusToken) && !self.has_preceding_line_break() {
@@ -674,7 +674,13 @@ impl Parser {
         expression
     }
 
-    pub(crate) fn parse_jsx_element_or_self_closing_element_or_fragment(&mut self, in_expression_context: bool, top_invalid_node_position: i32, opening_tag: Option<P<Node>>, must_be_unary: bool) -> P<Node> {
+    pub(crate) fn parse_jsx_element_or_self_closing_element_or_fragment(
+        &mut self,
+        in_expression_context: bool,
+        top_invalid_node_position: Option<TextPos>,
+        opening_tag: Option<P<Node>>,
+        must_be_unary: bool,
+    ) -> P<Node> {
         let pos = self.node_pos();
         let opening = self.parse_jsx_opening_or_self_closing_element_or_opening_fragment(in_expression_context);
         let mut result: P<Node>;
@@ -749,11 +755,8 @@ impl Parser {
         // If we are in a unary context, we can't do this recovery; the binary expression we return here is not
         // a valid UnaryExpression and will cause problems later.
         if !must_be_unary && in_expression_context && self.token == Kind::LessThanToken {
-            let mut top_bad_pos = top_invalid_node_position;
-            if top_bad_pos < 0 {
-                top_bad_pos = result.pos();
-            }
-            let invalid_element = self.parse_jsx_element_or_self_closing_element_or_fragment(true /*inExpressionContext*/, top_bad_pos, None, false);
+            let top_bad_pos = top_invalid_node_position.unwrap_or_else(|| result.pos());
+            let invalid_element = self.parse_jsx_element_or_self_closing_element_or_fragment(true /*inExpressionContext*/, Some(top_bad_pos), None, false);
             let operator_token = self.factory.new_token(Kind::CommaToken);
             operator_token.set_loc(TextRange::new(invalid_element.pos(), invalid_element.pos()));
             self.parse_error_at(scanner::skip_trivia(self.source_text, top_bad_pos), invalid_element.end(), &diagnostics::JSX_expressions_must_have_one_parent_element, &[]);
@@ -809,7 +812,12 @@ impl Parser {
             Kind::LessThanSlashToken | Kind::ConflictMarkerTrivia => None,
             Kind::JsxText | Kind::JsxTextAllWhiteSpaces => Some(self.parse_jsx_text()),
             Kind::OpenBraceToken => self.parse_jsx_expression(false /*inExpressionContext*/),
-            Kind::LessThanToken => Some(self.parse_jsx_element_or_self_closing_element_or_fragment(false /*inExpressionContext*/, -1 /*topInvalidNodePosition*/, Some(opening_tag), false)),
+            Kind::LessThanToken => Some(self.parse_jsx_element_or_self_closing_element_or_fragment(
+                false, /*inExpressionContext*/
+                None,
+                Some(opening_tag),
+                false,
+            )),
             _ => panic!("Unhandled case in parseJsxChild"),
         }
     }
@@ -1007,7 +1015,12 @@ impl Parser {
             if self.token == Kind::LessThanToken {
                 // An attribute value must be a single JsxAttributeValue, so don't allow the sibling-element
                 // recovery to wrap it in a synthetic binary expression.
-                return Some(self.parse_jsx_element_or_self_closing_element_or_fragment(true /*inExpressionContext*/, -1 /*topInvalidNodePosition*/, None /*openingTag*/, true /*mustBeUnary*/));
+                return Some(self.parse_jsx_element_or_self_closing_element_or_fragment(
+                    true, /*inExpressionContext*/
+                    None,
+                    None, /*openingTag*/
+                    true, /*mustBeUnary*/
+                ));
             }
             self.parse_error_at_current_token(&diagnostics::X_or_JSX_element_expected, &[]);
         }
@@ -1040,7 +1053,12 @@ impl Parser {
                 // Just like in parseUpdateExpression, we need to avoid parsing type assertions when
                 // in JSX and we see an expression like "+ <foo> bar".
                 if self.language_variant == LanguageVariant::JSX {
-                    return self.parse_jsx_element_or_self_closing_element_or_fragment(true /*inExpressionContext*/, -1 /*topInvalidNodePosition*/, None /*openingTag*/, true /*mustBeUnary*/);
+                    return self.parse_jsx_element_or_self_closing_element_or_fragment(
+                        true, /*inExpressionContext*/
+                        None,
+                        None, /*openingTag*/
+                        true, /*mustBeUnary*/
+                    );
                 }
                 // // This is modified UnaryExpression grammar in TypeScript
                 // //  UnaryExpression (modified):
@@ -1325,7 +1343,7 @@ impl Parser {
         self.parse_member_expression_rest(pos, expression, true /*allowOptionalChain*/)
     }
 
-    pub(crate) fn parse_member_expression_rest(&mut self, pos: i32, expression: P<Node>, allow_optional_chain: bool) -> P<Node> {
+    pub(crate) fn parse_member_expression_rest(&mut self, pos: TextPos, expression: P<Node>, allow_optional_chain: bool) -> P<Node> {
         let mut expression = expression;
         loop {
             let mut question_dot_token: Option<P<Node>> = None;
@@ -1384,7 +1402,7 @@ impl Parser {
         token_is_identifier_or_keyword(self.token) || self.token == Kind::OpenBracketToken || self.is_template_start_of_tagged_template()
     }
 
-    pub(crate) fn parse_property_access_expression_rest(&mut self, pos: i32, expression: P<Node>, question_dot_token: Option<P<Node>>) -> P<Node> {
+    pub(crate) fn parse_property_access_expression_rest(&mut self, pos: TextPos, expression: P<Node>, question_dot_token: Option<P<Node>>) -> P<Node> {
         let name = self.parse_right_side_of_dot(true /*allowIdentifierNames*/, true /*allowPrivateIdentifiers*/, true /*allowUnicodeEscapeSequenceInIdentifierName*/);
         let is_optional_chain = question_dot_token.is_some() || self.try_reparse_optional_chain(expression);
         let property_access = self.factory.new_property_access_expression(expression, question_dot_token, name, if is_optional_chain { NodeFlags::OptionalChain } else { NodeFlags::None });
@@ -1429,7 +1447,7 @@ impl Parser {
         false
     }
 
-    pub(crate) fn parse_element_access_expression_rest(&mut self, pos: i32, expression: P<Node>, question_dot_token: Option<P<Node>>) -> P<Node> {
+    pub(crate) fn parse_element_access_expression_rest(&mut self, pos: TextPos, expression: P<Node>, question_dot_token: Option<P<Node>>) -> P<Node> {
         let mut argument_expression = self.create_missing_identifier();
         if self.token == Kind::CloseBracketToken {
             let node_pos = self.node_pos();
@@ -1443,7 +1461,7 @@ impl Parser {
         self.finish_node(node, pos)
     }
 
-    pub(crate) fn parse_call_expression_rest(&mut self, pos: i32, expression: P<Node>) -> P<Node> {
+    pub(crate) fn parse_call_expression_rest(&mut self, pos: TextPos, expression: P<Node>) -> P<Node> {
         let mut expression = expression;
         loop {
             expression = self.parse_member_expression_rest(pos, expression, true /*allowOptionalChain*/);
@@ -1515,7 +1533,7 @@ impl Parser {
         self.finish_node(node, pos)
     }
 
-    pub(crate) fn parse_tagged_template_rest(&mut self, pos: i32, tag: P<Node>, question_dot_token: Option<P<Node>>, type_arguments: Option<P<NodeList>>) -> P<Node> {
+    pub(crate) fn parse_tagged_template_rest(&mut self, pos: TextPos, tag: P<Node>, question_dot_token: Option<P<Node>>, type_arguments: Option<P<NodeList>>) -> P<Node> {
         let template: P<Node>;
         if self.token == Kind::NoSubstitutionTemplateLiteral {
             self.re_scan_template_token(true /*isTaggedTemplate*/);
@@ -1909,12 +1927,12 @@ impl Parser {
         list
     }
 
-    pub(crate) fn finish_node(&mut self, node: P<Node>, pos: i32) -> P<Node> {
+    pub(crate) fn finish_node(&mut self, node: P<Node>, pos: TextPos) -> P<Node> {
         let end = self.node_pos();
         self.finish_node_with_end(node, pos, end)
     }
 
-    pub(crate) fn finish_node_with_end(&mut self, node: P<Node>, pos: i32, end: i32) -> P<Node> {
+    pub(crate) fn finish_node_with_end(&mut self, node: P<Node>, pos: TextPos, end: TextPos) -> P<Node> {
         node.set_loc(TextRange::new(pos, end));
         node.set_flags(node.flags() | self.context_flags);
         if self.has_parse_error {
@@ -2529,7 +2547,7 @@ impl Parser {
         context.lib_reference_directives.set(tsrs_core::alloc_vec(lib_reference_directives));
     }
 
-    pub(crate) fn parse_resolution_mode(&mut self, mode: &str, pos: i32, end: i32) -> tsrs_core::ResolutionMode {
+    pub(crate) fn parse_resolution_mode(&mut self, mode: &str, pos: TextPos, end: TextPos) -> tsrs_core::ResolutionMode {
         let mut resolution_kind = tsrs_core::ResolutionMode::default();
         if mode == "import" {
             resolution_kind = tsrs_core::ModuleKind::ESNext;
@@ -2825,7 +2843,10 @@ fn extract_pragmas(comment_range: ast::CommentRange, text: &str) -> Vec<ast::Pra
                 args.insert(
                     arg_name.clone(),
                     ast::PragmaArgument {
-                        text_range: TextRange::new(comment_range.pos() + pos as i32 + 1, comment_range.pos() + pos as i32 + 1 + value.len() as i32),
+                        text_range: TextRange::new(
+                            comment_range.pos() + text_pos_from_len(pos) + 1,
+                            comment_range.pos() + text_pos_from_len(pos) + 1 + text_pos_from_len(value.len()),
+                        ),
                         name: arg_name.clone(),
                         value: value.to_string(),
                     },
@@ -2848,11 +2869,10 @@ fn extract_pragmas(comment_range: ast::CommentRange, text: &str) -> Vec<ast::Pra
         let mut pos: usize = 2;
         let mut pragmas = Vec::new();
         loop {
-            let found = skip_to(text, pos, "@");
-            if found < 0 {
+            let Some(found) = skip_to(text, pos, "@") else {
                 break;
-            }
-            pos = found as usize;
+            };
+            pos = found;
             // Mirrors the /@(\S+)(\s+(?:\S.*)?)?$/gm pragma regex used by TypeScript: the '@'
             // must be immediately followed by a non-whitespace pragma name, and the remainder
             // of the line is consumed as that pragma's arguments. As a consequence, only the
@@ -2875,7 +2895,10 @@ fn extract_pragmas(comment_range: ast::CommentRange, text: &str) -> Vec<ast::Pra
                     args.insert(
                         "factory".to_string(),
                         ast::PragmaArgument {
-                            text_range: TextRange::new(comment_range.pos() + start as i32, comment_range.pos() + arg_end as i32),
+                            text_range: TextRange::new(
+                                comment_range.pos() + text_pos_from_len(start),
+                                comment_range.pos() + text_pos_from_len(arg_end),
+                            ),
                             name: "factory".to_string(),
                             value: text[start..arg_end].to_string(),
                         },
@@ -2912,15 +2935,15 @@ fn skip_non_blanks(text: &str, pos: usize) -> usize {
     pos
 }
 
-fn skip_to(text: &str, pos: usize, s: &str) -> i32 {
+fn skip_to(text: &str, pos: usize, s: &str) -> Option<usize> {
     if pos >= text.len() {
-        return -1;
+        return None;
     }
     let haystack = &text.as_bytes()[pos..];
     let needle = s.as_bytes();
     match haystack.windows(needle.len()).position(|w| w == needle) {
-        None => -1,
-        Some(i) => (pos + i) as i32,
+        None => None,
+        Some(i) => Some(pos + i),
     }
 }
 

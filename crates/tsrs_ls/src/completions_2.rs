@@ -9,7 +9,7 @@ use rustc_hash::FxHashSet;
 use tsrs_ast::{self as ast, Kind, ModifierFlags, Node, NodeFactory, SourceFile, Symbol, SymbolFlags, SymbolId};
 use tsrs_checker::{self as checker, Checker, ContextFlags, Flags, LiteralValue, MemberOverrideStatus, SignatureKind, Type, TypeFlags, UnionReduction};
 use tsrs_core::context::{locale_from_context, Context};
-use tsrs_core::{json, tspath, CompilerOptions, LanguageVariant, Tristate, P};
+use tsrs_core::{json, tspath, CompilerOptions, LanguageVariant, TextPos, Tristate, P};
 use tsrs_lsproto as lsproto;
 use tsrs_printer::{self as printer, EmitContext, SnippetElement, SnippetKind};
 use tsrs_scanner as scanner;
@@ -42,7 +42,7 @@ impl LanguageService {
         file: P<SourceFile>,
         compiler_options: P<CompilerOptions>,
         data: &mut completionDataData,
-        position: i32,
+        position: TextPos,
         optional_replacement_span: Option<lsproto::Range>,
         include_symbols: bool,
     ) -> Result<Option<CompletionList>, lsproto::Error> {
@@ -145,7 +145,7 @@ impl LanguageService {
         type_checker: &mut Checker,
         data: &completionDataData,
         replacement_token: Option<P<Node>>,
-        position: i32,
+        position: TextPos,
         file: P<SourceFile>,
         compiler_options: P<CompilerOptions>,
         include_symbols: bool,
@@ -366,7 +366,7 @@ impl LanguageService {
         mut sort_text: SortText,
         replacement_token: Option<P<Node>>,
         data: &completionDataData,
-        position: i32,
+        position: TextPos,
         file: P<SourceFile>,
         mut name: String,
         needs_convert_property_access: bool,
@@ -854,7 +854,7 @@ impl LanguageService {
         symbol: P<Symbol>,
         name: &str,
         location: P<Node>,
-        position: i32,
+        position: TextPos,
         context_token: Option<P<Node>>,
         file: P<SourceFile>,
     ) -> Result<Option<memberCompletionEntry>, lsproto::Error> {
@@ -983,7 +983,7 @@ pub(crate) struct presentMemberModifiers {
 
 impl LanguageService {
     // completions.go:2766
-    fn get_present_member_modifiers(&self, context_token: Option<P<Node>>, file: P<SourceFile>, position: i32) -> presentMemberModifiers {
+    fn get_present_member_modifiers(&self, context_token: Option<P<Node>>, file: P<SourceFile>, position: TextPos) -> presentMemberModifiers {
         let Some(context_token) = context_token else {
             return presentMemberModifiers::default();
         };
@@ -1110,7 +1110,7 @@ fn is_word_separator(r: char) -> bool {
 // Finds the length and first rune of the word that ends at the given position.
 // e.g. for "abc def.ghi|jkl", the word length is 3 and the word start is 'g'.
 // completions.go:2883
-pub(crate) fn get_word_length_and_start(source_file: P<SourceFile>, position: i32) -> (usize, char) {
+pub(crate) fn get_word_length_and_start(source_file: P<SourceFile>, position: TextPos) -> (usize, char) {
     // !!! Port other case of vscode's `DEFAULT_WORD_REGEXP` that covers words that start like numbers, e.g. -123.456abcd.
     let text = &source_file.text()[..position as usize];
     let mut total_size = 0;
@@ -1150,7 +1150,7 @@ fn trim_element_access(text: &str) -> String {
 
 // Ported from vscode ts extension: `getFilterText`.
 // completions.go:2919
-pub(crate) fn get_filter_text(_file: P<SourceFile>, _position: i32, insert_text: &str, label: &str, word_start: char, dot_accessor: &str) -> String {
+pub(crate) fn get_filter_text(_file: P<SourceFile>, _position: TextPos, insert_text: &str, label: &str, word_start: char, dot_accessor: &str) -> String {
     // Private field completion, e.g. label `#bar`.
     if let Some(after) = label.strip_prefix('#') {
         if !insert_text.is_empty() {
@@ -1218,7 +1218,7 @@ pub(crate) fn get_filter_text(_file: P<SourceFile>, _position: i32, insert_text:
 
 // Ported from vscode's `provideCompletionItems`.
 // completions.go:2993
-pub(crate) fn get_dot_accessor(file: P<SourceFile>, position: i32) -> String {
+pub(crate) fn get_dot_accessor(file: P<SourceFile>, position: TextPos) -> String {
     let text = &file.text()[..position as usize];
     let mut total_size = 0;
     if text.ends_with("?.") {
@@ -1249,15 +1249,19 @@ pub(crate) fn bool_to_ptr(v: bool) -> Option<bool> {
 }
 
 // completions.go:3028
-pub(crate) fn get_line_of_position(file: P<SourceFile>, pos: i32) -> i32 {
+pub(crate) fn get_line_of_position(file: P<SourceFile>, pos: TextPos) -> u32 {
     scanner::get_ecma_line_of_position(&*file, pos)
 }
 
 // completions.go:3033
-pub(crate) fn get_line_end_of_position(file: P<SourceFile>, pos: i32) -> i32 {
+pub(crate) fn get_line_end_of_position(file: P<SourceFile>, pos: TextPos) -> TextPos {
     let line = get_line_of_position(file, pos);
     let line_starts = scanner::get_ecma_line_starts(&*file);
-    let last_char_pos = if (line + 1) as usize >= line_starts.len() { file.as_node().end() } else { line_starts[(line + 1) as usize] as i32 - 1 };
+    let last_char_pos = if (line + 1) as usize >= line_starts.len() {
+        file.as_node().end()
+    } else {
+        line_starts[(line + 1) as usize].checked_sub(1).expect("line ends at byte zero")
+    };
     let full_text = file.text().as_bytes();
     if last_char_pos > 0 && (last_char_pos as usize) < full_text.len() && full_text[last_char_pos as usize] == b'\n' && full_text[(last_char_pos - 1) as usize] == b'\r' {
         return last_char_pos - 1;
@@ -1500,7 +1504,7 @@ pub(crate) fn get_source_from_origin(origin: Option<&symbolOriginInfo>) -> &'sta
 // In `const x = 1 * o|`, the context token is *, and the previous token is `o`.
 // `contextToken` and `previousToken` can both be nil if we are at the beginning of the file.
 // completions.go:3271
-pub(crate) fn get_relevant_tokens(position: i32, file: P<SourceFile>) -> (Option<P<Node>>, Option<P<Node>>) {
+pub(crate) fn get_relevant_tokens(position: TextPos, file: P<SourceFile>) -> (Option<P<Node>>, Option<P<Node>>) {
     let previous_token = astnav::find_preceding_token(file, position);
     if let Some(previous_token) = previous_token {
         if position <= previous_token.end() && (ast::is_member_name(previous_token) || ast::is_keyword_kind(previous_token.kind())) {
@@ -1516,7 +1520,7 @@ pub(crate) fn get_relevant_tokens(position: i32, file: P<SourceFile>) -> (Option
 pub type CompletionsTriggerCharacter = str;
 
 // completions.go:3283
-pub(crate) fn is_valid_trigger(file: P<SourceFile>, trigger_character: &CompletionsTriggerCharacter, context_token: Option<P<Node>>, position: i32) -> bool {
+pub(crate) fn is_valid_trigger(file: P<SourceFile>, trigger_character: &CompletionsTriggerCharacter, context_token: Option<P<Node>>, position: TextPos) -> bool {
     match trigger_character {
         "." | "@" => true,
         "\"" | "'" | "`" => {
@@ -1698,7 +1702,7 @@ pub(crate) fn is_static_property(symbol: P<Symbol>) -> bool {
 // getContextualTypeForConditionalExpression handles completion within a conditional expression
 // (ternary operator) by using the parent expression to find the contextual type.
 // completions.go:3455
-pub(crate) fn get_contextual_type_for_conditional_expression(conditional_expr: P<Node>, position: i32, file: P<SourceFile>, type_checker: &mut Checker) -> Option<P<Type>> {
+pub(crate) fn get_contextual_type_for_conditional_expression(conditional_expr: P<Node>, position: TextPos, file: P<SourceFile>, type_checker: &mut Checker) -> Option<P<Type>> {
     let arg_info = get_argument_info_for_completions(conditional_expr, position, file, type_checker);
     if let Some(arg_info) = arg_info {
         return type_checker.get_contextual_type_for_argument_at_index_exported(arg_info.invocation, arg_info.argument_index);

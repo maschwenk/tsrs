@@ -1,5 +1,5 @@
 use tsrs_ast::{Kind, Node, NodeList, SourceFile};
-use tsrs_core::{TextRange, P};
+use tsrs_core::{TextPos, TextRange, P};
 use tsrs_scanner as scanner;
 
 use crate::astnav;
@@ -68,10 +68,10 @@ pub(crate) fn get_close_token_for_open_token(kind: Kind) -> Kind {
 }
 
 // util.go:76
-pub fn get_line_start_position_for_position(position: i32, source_file: P<SourceFile>) -> i32 {
+pub fn get_line_start_position_for_position(position: TextPos, source_file: P<SourceFile>) -> TextPos {
     let line_starts = scanner::get_ecma_line_starts(source_file.get());
     let line = scanner::get_ecma_line_of_position(source_file.get(), position);
-    line_starts[line as usize] as i32
+    line_starts[line as usize]
 }
 
 // util.go:86
@@ -79,7 +79,7 @@ pub fn get_line_start_position_for_position(position: i32, source_file: P<Source
  * Validating `expectedTokenKind` ensures the token was typed in the context we expect (eg: not a comment).
  * @param expectedTokenKind The kind of the last token constituting the desired parent node.
  */
-pub(crate) fn find_immediately_preceding_token_of_kind(end: i32, expected_token_kind: Kind, source_file: P<SourceFile>) -> Option<P<Node>> {
+pub(crate) fn find_immediately_preceding_token_of_kind(end: TextPos, expected_token_kind: Kind, source_file: P<SourceFile>) -> Option<P<Node>> {
     let preceding_token = astnav::find_preceding_token(source_file, end)?;
     if preceding_token.kind() != expected_token_kind || preceding_token.end() != end {
         return None;

@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use tsrs_ast::{self as ast, Kind, Node, NodeFactory, NodeList, NodeVisitorHooks, SourceFile};
 use tsrs_core::context::Context;
-use tsrs_core::{alloc_slice, TextRange, P};
+use tsrs_core::{alloc_slice, TextPos, TextRange, P};
 use tsrs_lsproto as lsproto;
 use tsrs_scanner as scanner;
 
@@ -181,7 +181,7 @@ fn create_syntax_list(factory: &NodeFactory, children: &[P<Node>]) -> P<Node> {
 struct SmartSelection<'a> {
     l: &'a LanguageService,
     source_file: P<SourceFile>,
-    pos: i32,
+    pos: TextPos,
     ranges: SelectionRangeBuilder,
     last_range: lsproto::Range,
 }
@@ -207,7 +207,7 @@ impl SmartSelection<'_> {
         false
     }
 
-    fn push_selection_range(&mut self, start: i32, end: i32) {
+    fn push_selection_range(&mut self, start: TextPos, end: TextPos) {
         if start == end {
             return;
         }
@@ -229,7 +229,7 @@ impl SmartSelection<'_> {
         self.ranges.push(lsp_range);
     }
 
-    fn push_selection_comment_range(&mut self, start: i32, end: i32) {
+    fn push_selection_comment_range(&mut self, start: TextPos, end: TextPos) {
         self.push_selection_range(start, end);
 
         let mut comment_pos = start;
@@ -240,7 +240,7 @@ impl SmartSelection<'_> {
         self.push_selection_range(comment_pos, end);
     }
 
-    fn positions_are_on_same_line(&self, pos1: i32, pos2: i32) -> bool {
+    fn positions_are_on_same_line(&self, pos1: TextPos, pos2: TextPos) -> bool {
         if pos1 == pos2 {
             return true;
         }
@@ -314,7 +314,7 @@ fn collect_visited_children(node: P<Node>) -> Vec<VisitedChild> {
 }
 
 // selectionranges.go:186
-fn get_smart_selection_range(l: &LanguageService, source_file: P<SourceFile>, pos: i32) -> Option<lsproto::SelectionRange> {
+fn get_smart_selection_range(l: &LanguageService, source_file: P<SourceFile>, pos: TextPos) -> Option<lsproto::SelectionRange> {
     let factory = NodeFactory::default();
     // Traversal discovers ranges from broadest to most specific, so retain the newest ranges nearest to the cursor
     let mut s = SmartSelection {
@@ -362,12 +362,16 @@ fn get_smart_selection_range(l: &LanguageService, source_file: P<SourceFile>, po
                     let template_span = parent.as_template_span();
                     // Start from just before the '${' and end after the '}'
                     // The '${' is 2 characters before the expression start
-                    let span_start = node.pos() - 2;
+                    let Some(span_start) = node.pos().checked_sub(2) else {
+                        return;
+                    };
                     // The '}' is the first character of the template literal (middle or tail)
-                    let span_end = astnav::get_start_of_node(template_span.literal, source_file, false) + 1;
+                    let Some(span_end) = astnav::get_start_of_node(template_span.literal, source_file, false).checked_add(1) else {
+                        return;
+                    };
                     // Validate the positions are reasonable
                     let text = source_file.text();
-                    if span_start >= 0 && span_end as usize <= text.len() && span_start < span_end {
+                    if span_end as usize <= text.len() && span_start < span_end {
                         s.push_selection_range(span_start, span_end);
                     }
                 }
@@ -402,8 +406,10 @@ fn get_smart_selection_range(l: &LanguageService, source_file: P<SourceFile>, po
                     // String literals should have a stop both inside and outside their quotes.
                     if ast::is_string_literal(node) || node.kind() == Kind::TemplateExpression || node.kind() == Kind::NoSubstitutionTemplateLiteral {
                         // Only add inner content range if there's actually content (handles unterminated literals)
-                        if start + 1 < end - 1 {
-                            s.push_selection_range(start + 1, end - 1);
+                        if let (Some(start), Some(end)) = (start.checked_add(1), end.checked_sub(1)) {
+                            if start < end {
+                                s.push_selection_range(start, end);
+                            }
                         }
                     }
                 }

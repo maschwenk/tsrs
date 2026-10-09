@@ -148,7 +148,11 @@ fn iterate_error_baseline(input_files: &[TestFile], input_diagnostics: &[Diag], 
 
             let this_line_start = line_starts[line_index];
             // On the last line of the file, fake the next line start number so that we handle errors on the last character of the file correctly
-            let next_line_start = if line_index == lines.len() - 1 { content.len() as i32 } else { line_starts[line_index + 1] };
+            let next_line_start = if line_index == lines.len() - 1 {
+                u32::try_from(content.len()).expect("source length exceeds u32")
+            } else {
+                line_starts[line_index + 1]
+            };
             // Emit this line from the original file
             output_lines.push_str(new_line());
             output_lines.push_str("    ");
@@ -156,19 +160,19 @@ fn iterate_error_baseline(input_files: &[TestFile], input_diagnostics: &[Diag], 
             for err_diagnostic in &file_errors {
                 // Does any error start or continue on to this line? Emit squiggles
                 let err_start = err_diagnostic.pos;
-                let end = err_start + err_diagnostic.len();
+                let end = err_start.checked_add(err_diagnostic.len()).expect("diagnostic end exceeds u32");
                 if end >= this_line_start && (err_start < next_line_start || line_index == lines.len() - 1) {
                     // How many characters from the start of this line the error starts at (could be positive or negative)
-                    let relative_offset = err_start - this_line_start;
+                    let relative_offset = i64::from(err_start) - i64::from(this_line_start);
                     // How many characters of the error are on this line (might be longer than this line in reality)
-                    let length = (end - err_start) - 0.max(this_line_start - err_start);
+                    let length = i64::from(end - err_start) - 0.max(i64::from(this_line_start) - i64::from(err_start));
                     // Calculate the start of the squiggle
                     let squiggle_start = 0.max(relative_offset) as usize;
                     output_lines.push_str(new_line());
                     output_lines.push_str("    ");
                     output_lines.push_str(&replace_non_whitespace(&line[..squiggle_start.min(line.len())]));
                     // This was `new Array(count).join("~")`; which maps 0 to "", 1 to "", 2 to "~", 3 to "~~", etc.
-                    let squiggle_end = squiggle_start.max((squiggle_start as i64 + length as i64).min(line.len() as i64).max(0) as usize);
+                    let squiggle_end = squiggle_start.max((squiggle_start as i64 + length).min(line.len() as i64).max(0) as usize);
                     let squiggle_slice = if squiggle_start <= line.len() { &line[squiggle_start..squiggle_end.min(line.len())] } else { &[][..] };
                     output_lines.push_str(&"~".repeat(rune_count(squiggle_slice)));
                     // If the error ended here, or we're at the end of the file, emit its message
@@ -205,7 +209,7 @@ fn replace_non_whitespace(bytes: &[u8]) -> String {
     out
 }
 
-fn format_location(file: &dw::FileLike, pos: i32, format_opts: &FormattingOptions, write_with_style_and_reset: dw::FormattedWriter) -> String {
+fn format_location(file: &dw::FileLike, pos: u32, format_opts: &FormattingOptions, write_with_style_and_reset: dw::FormattedWriter) -> String {
     let mut output = String::new();
     dw::write_location(&mut output, file, pos, Some(format_opts), write_with_style_and_reset);
     output

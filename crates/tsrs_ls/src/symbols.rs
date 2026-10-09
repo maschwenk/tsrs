@@ -11,7 +11,7 @@ use tsrs_core::context::Context;
 use tsrs_core::goslices;
 use tsrs_core::stringutil;
 use tsrs_core::tspath::Path;
-use tsrs_core::{TextRange, P};
+use tsrs_core::{position_cmp, TextPos, TextRange, P};
 use tsrs_lsproto as lsproto;
 use tsrs_printer as printer;
 use tsrs_scanner as scanner;
@@ -347,8 +347,8 @@ impl LanguageService {
         let node_start_pos = scanner::skip_trivia(file.text(), node.pos());
         let name = if name.is_none() { ast::get_name_of_declaration(node) } else { name };
         let mut text: String;
-        let name_start_pos: i32;
-        let name_end_pos: i32;
+        let name_start_pos: TextPos;
+        let name_end_pos: TextPos;
         if ast::is_module_declaration(node) && !ast::is_ambient_module(node) {
             text = get_module_name(node);
             name_start_pos = scanner::skip_trivia(file.text(), name.unwrap().pos());
@@ -760,7 +760,11 @@ fn compare_declaration_infos(d1: &DeclarationInfo, d2: &DeclarationInfo) -> i32 
     if s1 != s2 {
         return go_strings_compare(s1.path().as_str(), s2.path().as_str());
     }
-    d1.declaration.pos() - d2.declaration.pos()
+    match position_cmp(d1.declaration.pos(), d2.declaration.pos()) {
+        std::cmp::Ordering::Less => -1,
+        std::cmp::Ordering::Equal => 0,
+        std::cmp::Ordering::Greater => 1,
+    }
 }
 
 fn go_strings_compare(a: &str, b: &str) -> i32 {

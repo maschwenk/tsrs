@@ -4,7 +4,7 @@ use tsrs_checker::{Checker, Type};
 use tsrs_compiler::Program;
 use tsrs_core::collections::OrderedMap;
 use tsrs_core::context::Context;
-use tsrs_core::{tspath, TextRange, Tristate, P};
+use tsrs_core::{tspath, TextPos, TextRange, Tristate, P};
 use tsrs_diagnostics::{self as diagnostics, Message};
 use tsrs_lsproto as lsproto;
 
@@ -359,10 +359,12 @@ impl LanguageService {
 
         // Span should only be the last component of the path. + 1 to account for the quote character.
         let index_after_last_slash = specifier_text.rfind('/').map_or(0, |i| i + 1);
-        let start = astnav::get_start_of_node(specifier, source_file, false /*includeJSDoc*/) + 1 + index_after_last_slash as i32;
-        let length = (specifier_text.len() - index_after_last_slash) as i32;
+        let start = astnav::get_start_of_node(specifier, source_file, false /*includeJSDoc*/)
+            .checked_add(1)
+            .and_then(|start| start.checked_add(TextPos::try_from(index_after_last_slash).ok()?))?;
+        let length = TextPos::try_from(specifier_text.len() - index_after_last_slash).ok()?;
 
-        let (trigger_span, fidelity) = self.converters.to_lsp_range(&source_file, TextRange::new(start, start + length));
+        let (trigger_span, fidelity) = self.converters.to_lsp_range(&source_file, TextRange::new(start, start.checked_add(length)?));
         if !fidelity.is_exact() {
             return None;
         }

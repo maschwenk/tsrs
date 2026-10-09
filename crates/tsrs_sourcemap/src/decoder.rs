@@ -1,4 +1,4 @@
-use tsrs_core::UTF16Offset;
+use tsrs_core::{UTF16Offset, SYNTHETIC_POSITION};
 
 use super::*;
 
@@ -34,7 +34,7 @@ impl Mapping {
 pub const MISSING_SOURCE: SourceIndex = -1;
 pub const MISSING_NAME: NameIndex = -1;
 pub const MISSING_LINE_OR_COLUMN: i32 = -1;
-pub const MISSING_UTF16_COLUMN: UTF16Offset = -1;
+pub const MISSING_UTF16_COLUMN: UTF16Offset = SYNTHETIC_POSITION;
 
 // decoder.go:41
 // Go allocates the returned mappings in a per-decoder arena (`mappingArena`); Mapping is a small value type here.
@@ -104,13 +104,17 @@ impl MappingsDecoder {
 
             let mut has_source = false;
             let mut has_name = false;
-            self.generated_character = self.generated_character.wrapping_add(self.base64_vlq_format_decode() as UTF16Offset);
+            let generated_character_delta = self.base64_vlq_format_decode();
             if self.has_reported_error() {
                 return self.stop_iterating();
             }
-            if self.generated_character < 0 {
-                return self.set_error_and_stop_iterating("Invalid generatedCharacter found");
-            }
+            self.generated_character = match i64::from(self.generated_character)
+                .checked_add(generated_character_delta)
+                .and_then(|value| UTF16Offset::try_from(value).ok())
+            {
+                Some(value) => value,
+                None => return self.set_error_and_stop_iterating("Invalid generatedCharacter found"),
+            };
 
             if !self.is_source_mapping_segment_end() {
                 has_source = true;
@@ -137,13 +141,17 @@ impl MappingsDecoder {
                     return self.set_error_and_stop_iterating("Unsupported Format: No entries after sourceLine");
                 }
 
-                self.source_character = self.source_character.wrapping_add(self.base64_vlq_format_decode() as UTF16Offset);
+                let source_character_delta = self.base64_vlq_format_decode();
                 if self.has_reported_error() {
                     return self.stop_iterating();
                 }
-                if self.source_character < 0 {
-                    return self.set_error_and_stop_iterating("Invalid sourceCharacter found");
-                }
+                self.source_character = match i64::from(self.source_character)
+                    .checked_add(source_character_delta)
+                    .and_then(|value| UTF16Offset::try_from(value).ok())
+                {
+                    Some(value) => value,
+                    None => return self.set_error_and_stop_iterating("Invalid sourceCharacter found"),
+                };
 
                 if !self.is_source_mapping_segment_end() {
                     has_name = true;

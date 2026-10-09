@@ -1,6 +1,6 @@
 use tsrs_ast::{self as ast, CommentRange, Kind, Node, NodeList, SourceFile};
 use tsrs_core::stringutil::{decode_rune, is_white_space_like, is_white_space_single_line};
-use tsrs_core::{TextRange, P};
+use tsrs_core::{TextPos, TextRange, P};
 use tsrs_scanner as scanner;
 
 use super::*;
@@ -31,7 +31,7 @@ pub fn get_indentation_for_node(
 // indent.go:24
 // GetIndentation computes the expected indentation for a position in a source file.
 // This is the Go port of SmartIndenter.getIndentation from TypeScript.
-pub fn get_indentation(position: i32, source_file: P<SourceFile>, options: &FormatCodeSettings, assume_new_line_before_close_brace: bool) -> i32 {
+pub fn get_indentation(position: TextPos, source_file: P<SourceFile>, options: &FormatCodeSettings, assume_new_line_before_close_brace: bool) -> i32 {
     if position as usize > source_file.text().len() {
         return options.base_indent_size; // past EOF
     }
@@ -125,26 +125,25 @@ pub fn get_indentation(position: i32, source_file: P<SourceFile>, options: &Form
 }
 
 // indent.go:111
-fn get_comment_indent(source_file: P<SourceFile>, position: i32, options: &FormatCodeSettings, enclosing_comment_range: &CommentRange) -> i32 {
-    let previous_line = scanner::get_ecma_line_of_position(source_file.get(), position) - 1;
+fn get_comment_indent(source_file: P<SourceFile>, position: TextPos, options: &FormatCodeSettings, enclosing_comment_range: &CommentRange) -> i32 {
+    let previous_line = scanner::get_ecma_line_of_position(source_file.get(), position).saturating_sub(1);
     let comment_start_line = scanner::get_ecma_line_of_position(source_file.get(), enclosing_comment_range.pos());
-
-    assert!(comment_start_line >= 0, "commentStartLine >= 0");
 
     if previous_line <= comment_start_line {
         let line_starts = scanner::get_ecma_line_starts(source_file.get());
-        return find_first_non_whitespace_column(line_starts[comment_start_line as usize] as i32, position, source_file, options);
+        return find_first_non_whitespace_column(line_starts[comment_start_line as usize], position, source_file, options);
     }
 
     let line_starts = scanner::get_ecma_line_starts(source_file.get());
-    let start_position_of_line = line_starts[previous_line as usize] as i32;
+    let start_position_of_line = line_starts[previous_line as usize];
     let (character, column) = find_first_non_whitespace_character_and_column(start_position_of_line, position, source_file, options);
 
     if column == 0 {
         return column;
     }
 
-    let first_non_whitespace_character_code = source_file.text().as_bytes()[(start_position_of_line + character) as usize];
+    let character_position = start_position_of_line.checked_add(character).expect("comment character position exceeds u32::MAX");
+    let first_non_whitespace_character_code = source_file.text().as_bytes()[character_position as usize];
     if first_non_whitespace_character_code == b'*' {
         return column - 1;
     }
@@ -160,7 +159,7 @@ fn get_leading_comment_ranges_of_node(node: P<Node>, file: P<SourceFile>) -> Opt
 }
 
 // indent.go:144
-fn get_range_of_enclosing_comment(source_file: P<SourceFile>, position: i32, preceding_token: Option<P<Node>>) -> Option<CommentRange> {
+fn get_range_of_enclosing_comment(source_file: P<SourceFile>, position: TextPos, preceding_token: Option<P<Node>>) -> Option<CommentRange> {
     let mut token_at_position = astnav::get_token_at_position(source_file, position);
     let jsdoc = ast::find_ancestor(token_at_position, |n| n.is_jsdoc());
     if let Some(jsdoc) = jsdoc {
@@ -188,7 +187,7 @@ fn get_range_of_enclosing_comment(source_file: P<SourceFile>, position: i32, pre
 }
 
 // indent.go:177
-fn get_block_indent(source_file: P<SourceFile>, position: i32, options: &FormatCodeSettings) -> i32 {
+fn get_block_indent(source_file: P<SourceFile>, position: TextPos, options: &FormatCodeSettings) -> i32 {
     // move backwards until we find a line with a non-whitespace character,
     // then find the first non-whitespace character for that line.
     let mut current = position;
@@ -197,7 +196,7 @@ fn get_block_indent(source_file: P<SourceFile>, position: i32, options: &FormatC
         if !is_white_space_like(ch) {
             break;
         }
-        current -= size as i32;
+        current = current.checked_sub(size as TextPos).expect("whitespace rune starts before byte zero");
     }
 
     let line_start = get_line_start_position_for_position(current, source_file);
@@ -232,7 +231,7 @@ enum NextTokenKind {
 fn next_token_is_curly_brace_on_same_line_as_cursor(
     preceding_token: P<Node>,
     current: P<Node>,
-    line_at_position: i32,
+    line_at_position: u32,
     source_file: P<SourceFile>,
 ) -> NextTokenKind {
     let Some(next_token) = astnav::find_next_token(preceding_token, current, source_file) else {
@@ -257,9 +256,9 @@ fn next_token_is_curly_brace_on_same_line_as_cursor(
 // indent.go:238
 fn get_smart_indent(
     source_file: P<SourceFile>,
-    position: i32,
+    position: TextPos,
     preceding_token: P<Node>,
-    line_at_position: i32,
+    line_at_position: u32,
     assume_new_line_before_close_brace: bool,
     options: &FormatCodeSettings,
 ) -> i32 {
@@ -315,8 +314,8 @@ fn get_smart_indent(
 // indent.go:279
 fn get_indentation_for_node_worker(
     mut current: P<Node>,
-    mut current_start_line: i32,
-    mut current_start_character: i32,
+    mut current_start_line: u32,
+    mut current_start_character: TextPos,
     ignore_actual_indentation_range: Option<TextRange>,
     mut indentation_delta: i32,
     source_file: P<SourceFile>,
@@ -428,8 +427,8 @@ fn get_indentation_for_node_worker(
 fn get_actual_indentation_for_node(
     current: P<Node>,
     parent: P<Node>,
-    cuurent_line: i32,
-    current_char: i32,
+    cuurent_line: u32,
+    current_char: TextPos,
     parent_and_child_share_line: bool,
     source_file: P<SourceFile>,
     options: &FormatCodeSettings,
@@ -451,7 +450,7 @@ fn get_actual_indentation_for_node(
 fn is_argument_and_start_line_overlaps_expression_being_called(
     parent: P<Node>,
     child: P<Node>,
-    child_start_line: i32,
+    child_start_line: u32,
     source_file: P<SourceFile>,
 ) -> bool {
     if !(ast::is_call_expression(parent) && parent.arguments().contains(&child)) {
@@ -526,13 +525,14 @@ fn derive_actual_indentation_from_list(list: P<NodeList>, index: usize, source_f
 }
 
 // indent.go:460
-fn find_column_for_first_non_whitespace_character_in_line(line: i32, char: i32, source_file: P<SourceFile>, options: &FormatCodeSettings) -> i32 {
+fn find_column_for_first_non_whitespace_character_in_line(line: u32, char: TextPos, source_file: P<SourceFile>, options: &FormatCodeSettings) -> i32 {
     let line_start = scanner::get_ecma_position_of_line_and_byte_offset(source_file.get(), line, 0);
-    find_first_non_whitespace_column(line_start, line_start + char, source_file, options)
+    let end = line_start.checked_add(char).expect("line byte offset exceeds u32::MAX");
+    find_first_non_whitespace_column(line_start, end, source_file, options)
 }
 
 // indent.go:465
-pub fn find_first_non_whitespace_column(start_pos: i32, end_pos: i32, source_file: P<SourceFile>, options: &FormatCodeSettings) -> i32 {
+pub fn find_first_non_whitespace_column(start_pos: TextPos, end_pos: TextPos, source_file: P<SourceFile>, options: &FormatCodeSettings) -> i32 {
     let (_, col) = find_first_non_whitespace_character_and_column(start_pos, end_pos, source_file, options);
     col
 }
@@ -546,11 +546,11 @@ pub fn find_first_non_whitespace_column(start_pos: i32, end_pos: i32, source_fil
 * value of 'column' for '$' is 6 (assuming that tab size is 4)
  */
 pub(crate) fn find_first_non_whitespace_character_and_column(
-    start_pos: i32,
-    end_pos: i32,
+    start_pos: TextPos,
+    end_pos: TextPos,
     source_file: P<SourceFile>,
     options: &FormatCodeSettings,
-) -> (i32, i32) {
+) -> (TextPos, i32) {
     let mut column = 0;
     let text = source_file.text().as_bytes();
     let mut pos = start_pos;
@@ -568,7 +568,7 @@ pub(crate) fn find_first_non_whitespace_character_and_column(
             column += 1;
         }
 
-        pos += size as i32;
+        pos = pos.checked_add(size as TextPos).expect("whitespace position exceeds u32::MAX");
     }
     (pos - start_pos, column)
 }
@@ -577,7 +577,7 @@ pub(crate) fn find_first_non_whitespace_character_and_column(
 pub(crate) fn child_starts_on_the_same_line_with_else_in_if_statement(
     parent: P<Node>,
     child: P<Node>,
-    child_start_line: i32,
+    child_start_line: u32,
     source_file: P<SourceFile>,
 ) -> bool {
     if parent.kind() == Kind::IfStatement && parent.as_if_statement().else_statement == Some(child) {
@@ -590,12 +590,12 @@ pub(crate) fn child_starts_on_the_same_line_with_else_in_if_statement(
 }
 
 // indent.go:510
-fn get_start_line_and_character_for_node(n: P<Node>, source_file: P<SourceFile>) -> (i32, i32) {
+fn get_start_line_and_character_for_node(n: P<Node>, source_file: P<SourceFile>) -> (u32, TextPos) {
     scanner::get_ecma_line_and_byte_offset_of_position(source_file.get(), scanner::get_token_pos_of_node(n, source_file, false))
 }
 
 // indent.go:514
-fn get_start_line_for_node(n: P<Node>, source_file: P<SourceFile>) -> i32 {
+fn get_start_line_for_node(n: P<Node>, source_file: P<SourceFile>) -> u32 {
     scanner::get_ecma_line_of_position(source_file.get(), scanner::get_token_pos_of_node(n, source_file, false))
 }
 
@@ -606,13 +606,13 @@ pub fn get_containing_list(node: P<Node>, source_file: P<SourceFile>) -> Option<
 }
 
 // indent.go:525
-fn get_list_by_position(pos: i32, node: Option<P<Node>>, source_file: P<SourceFile>) -> Option<P<NodeList>> {
+fn get_list_by_position(pos: TextPos, node: Option<P<Node>>, source_file: P<SourceFile>) -> Option<P<NodeList>> {
     let node = node?;
     get_list_by_range(pos, pos, node, source_file)
 }
 
 // indent.go:532
-fn get_list_by_range(start: i32, end: i32, node: P<Node>, source_file: P<SourceFile>) -> Option<P<NodeList>> {
+fn get_list_by_range(start: TextPos, end: TextPos, node: P<Node>, source_file: P<SourceFile>) -> Option<P<NodeList>> {
     let r = TextRange::new(start, end);
     match node.kind() {
         Kind::TypeReference => get_list(node.type_argument_list(), r, node, source_file),
@@ -681,7 +681,7 @@ fn get_visual_list_range(_node: P<Node>, list: TextRange, source_file: P<SourceF
 }
 
 // indent.go:613
-fn get_containing_list_or_parent_start(parent: P<Node>, child: P<Node>, source_file: P<SourceFile>) -> (i32, i32) {
+fn get_containing_list_or_parent_start(parent: P<Node>, child: P<Node>, source_file: P<SourceFile>) -> (u32, TextPos) {
     let containing_list = get_containing_list(child, source_file);
     let start_pos = match containing_list {
         Some(containing_list) => containing_list.loc.get().pos(),
@@ -865,7 +865,7 @@ pub fn node_will_indent_child(
 pub(crate) fn child_is_unindented_branch_of_conditional_expression(
     parent: P<Node>,
     child: P<Node>,
-    child_start_line: i32,
+    child_start_line: u32,
     source_file: P<SourceFile>,
 ) -> bool {
     if parent.kind() == Kind::ConditionalExpression
@@ -894,7 +894,7 @@ pub(crate) fn child_is_unindented_branch_of_conditional_expression(
 pub(crate) fn argument_starts_on_same_line_as_previous_argument(
     parent: P<Node>,
     child: P<Node>,
-    child_start_line: i32,
+    child_start_line: u32,
     source_file: P<SourceFile>,
 ) -> bool {
     if ast::is_call_expression(parent) || ast::is_new_expression(parent) {

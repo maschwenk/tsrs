@@ -558,7 +558,7 @@ impl Converters {
         let line_end = if (line as usize) + 1 < line_map.line_starts.len() { line_map.line_starts[line as usize + 1] } else { text_len };
 
         if line_map.ascii_only || self.position_encoding == lsproto::PositionEncodingKind::UTF8 {
-            return start.max(start.wrapping_add(char).min(line_end));
+            return start.saturating_add(char).min(line_end);
         }
 
         // Scan from line start counting UTF-16 code units to find the byte position.
@@ -571,7 +571,7 @@ impl Converters {
         let text = script.text().as_bytes();
         while pos < end {
             let (r, size) = stringutil::decode_rune(&text[pos..]);
-            let u16_len = utf16_rune_len(r);
+            let u16_len = TextPos::try_from(utf16_rune_len(r)).expect("decoded rune has no UTF-16 representation");
             if utf16_char + u16_len > char {
                 break;
             }
@@ -610,7 +610,7 @@ impl Converters {
             let mut s = &script.text().as_bytes()[start as usize..position as usize];
             while !s.is_empty() {
                 let (r, size) = stringutil::decode_rune(s);
-                character += utf16_rune_len(r);
+                character += TextPos::try_from(utf16_rune_len(r)).expect("decoded rune has no UTF-16 representation");
                 s = &s[size..];
             }
         }
@@ -620,7 +620,7 @@ impl Converters {
 }
 
 // Go unicode/utf16 `RuneLen`.
-fn utf16_rune_len(r: stringutil::Rune) -> TextPos {
+fn utf16_rune_len(r: stringutil::Rune) -> i32 {
     if (0..0xd800).contains(&r) || (0xe000..0x10000).contains(&r) {
         1
     } else if (0x10000..=0x10ffff).contains(&r) {

@@ -434,14 +434,8 @@ pub(crate) fn group_by_newline_contiguous(source_file: P<SourceFile>, decls: &[P
 // organizeimports.go:409
 fn is_new_group(source_file: P<SourceFile>, decl: P<Node>, s: &mut scanner::Scanner) -> bool {
     let full_start = decl.pos();
-    if full_start < 0 {
-        return false;
-    }
-
     let text = source_file.text();
-    let text_len = text.len() as i32;
-
-    if full_start >= text_len {
+    if full_start as usize >= text.len() {
         return false;
     }
 

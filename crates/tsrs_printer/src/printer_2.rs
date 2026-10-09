@@ -107,7 +107,7 @@ impl Printer {
         let n = node.as_element_access_expression();
         self.emit_expression(n.expression(), if is_optional_chain(node) { OperatorPrecedence::OptionalChain } else { OperatorPrecedence::Member });
         self.emit_token_node(n.question_dot_token());
-        self.emit_token(Kind::OpenBracketToken, greatest_end(-1, &[&n.expression(), &n.question_dot_token()]), WriteKind::Punctuation, node);
+        self.emit_token(Kind::OpenBracketToken, greatest_end(0, &[&n.expression(), &n.question_dot_token()]), WriteKind::Punctuation, node);
         self.emit_expression(n.argument_expression(), OperatorPrecedence::Comma);
         self.emit_token(Kind::CloseBracketToken, n.argument_expression().end(), WriteKind::Punctuation, node);
         self.exit_node(node, state);
@@ -1008,7 +1008,7 @@ impl Printer {
         self.exit_node(node, state);
     }
 
-    pub(crate) fn emit_while_clause(&mut self, node: P<Node>, expression: P<Node>, start_pos: i32) {
+    pub(crate) fn emit_while_clause(&mut self, node: P<Node>, expression: P<Node>, start_pos: TextPos) {
         let pos = self.emit_token(Kind::WhileKeyword, start_pos, WriteKind::Keyword, node);
         self.write_space();
         self.emit_token(Kind::OpenParenToken, pos, WriteKind::Punctuation, node);
@@ -1963,7 +1963,7 @@ impl Printer {
 //
 
 impl Printer {
-    pub(crate) fn emit_case_or_default_clause_statements(&mut self, node: P<Node>, colon_pos: i32) {
+    pub(crate) fn emit_case_or_default_clause_statements(&mut self, node: P<Node>, colon_pos: TextPos) {
         let statements = node.as_case_or_default_clause().statements();
         let emit_as_single_statement = statements.nodes().len() == 1
             // treat synthesized nodes as located on the same line for emit purposes

@@ -248,7 +248,8 @@ impl NodeBuilderImpl {
             return None;
         }
         let ctx = self.ctx();
-        ctx.approximate_length.set(ctx.approximate_length.get() + (existing.end() - existing.pos()));
+        let existing_length = i32::try_from(existing.end() - existing.pos()).expect("reused node length exceeds i32");
+        ctx.approximate_length.set(ctx.approximate_length.get() + existing_length);
         transformed
     }
 
@@ -335,7 +336,7 @@ pub(crate) fn get_existing_node_tree_visitor(c: &mut Checker, b: P<NodeBuilderIm
                 if let Some(r) = res {
                     // Remove position data from node lists originating in other files
                     let r = if Some(r) == nodes { nodes.unwrap().clone_list(&b.f) } else { r };
-                    r.loc.set(new_text_range(-1, -1));
+                    r.loc.set(undefined_text_range());
                     res = Some(r);
                 }
             }

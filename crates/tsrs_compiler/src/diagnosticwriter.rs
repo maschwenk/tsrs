@@ -5,7 +5,7 @@ use std::io::{self, Write};
 
 use tsrs_ast::{Diagnostic, SourceFile};
 use tsrs_core::tspath::{self, ComparePathsOptions};
-use tsrs_core::P;
+use tsrs_core::{text_pos_from_len, TextPos, P};
 use tsrs_diagnostics::{self as diagnostics, Category};
 
 pub struct FormattingOptions {
@@ -91,20 +91,21 @@ fn utf16_len(s: &str) -> usize {
 fn write_code_snippet(
     writer: &mut dyn Write,
     source_file: P<SourceFile>,
-    start: i32,
-    length: i32,
+    start: TextPos,
+    length: u32,
     squiggle_color: &str,
     indent: &str,
     format_opts: &FormattingOptions,
 ) {
     let (first_line, first_line_char) = tsrs_scanner::get_ecma_line_and_utf16_character_of_position(&*source_file, start);
-    let (last_line, mut last_line_char) = tsrs_scanner::get_ecma_line_and_utf16_character_of_position(&*source_file, start + length);
+    let end = start.checked_add(length).expect("diagnostic range end exceeds u32::MAX");
+    let (last_line, mut last_line_char) = tsrs_scanner::get_ecma_line_and_utf16_character_of_position(&*source_file, end);
     if length == 0 {
         last_line_char += 1; // When length is zero, squiggle the character right after the start position.
     }
 
     let text = source_file.text();
-    let last_line_of_file = tsrs_scanner::get_ecma_line_of_position(&*source_file, text.len() as i32);
+    let last_line_of_file = tsrs_scanner::get_ecma_line_of_position(&*source_file, text_pos_from_len(text.len()));
 
     let has_more_than_five_lines = last_line - first_line >= 4;
     let mut gutter_width = (last_line + 1).to_string().len();
@@ -161,7 +162,7 @@ fn write_code_snippet(
 
             // Fill with spaces until the first character,
             // then squiggle the remainder of the line.
-            w!(writer, "{}", " ".repeat(first_line_char.max(0) as usize));
+            w!(writer, "{}", " ".repeat(first_line_char as usize));
             w!(writer, "{}", "~".repeat(go_repeat_count(last_char_for_line - first_line_char as i64)));
         } else if i == last_line {
             // Squiggle until the final character.
@@ -240,7 +241,7 @@ fn write_with_style_and_reset(output: &mut dyn Write, text: &str, format_style: 
 pub fn write_location(
     output: &mut dyn Write,
     file: P<SourceFile>,
-    pos: i32,
+    pos: TextPos,
     format_opts: Option<&FormattingOptions>,
     write_with_style_and_reset: &FormattedWriter,
 ) {

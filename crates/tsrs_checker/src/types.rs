@@ -2,7 +2,7 @@ use std::fmt;
 use std::hash::Hash;
 
 use bitflags::bitflags;
-use tsrs_core::{OptionThinSliceCell, StrCell, ThinSliceCell};
+use tsrs_core::{OptionThinSliceCell, StrCell, TextPos, ThinSliceCell};
 
 use crate::*;
 
@@ -625,7 +625,7 @@ bitflags! {
 
 #[derive(Default)]
 pub struct MarkedAssignmentSymbolLinks {
-    pub last_assignment_pos: Cell<i32>,
+    pub last_assignment_pos: Cell<TextPos>,
     pub has_definite_assignment: Cell<bool>, // Symbol is definitely assigned somewhere
 }
 

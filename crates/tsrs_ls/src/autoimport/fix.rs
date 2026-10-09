@@ -6,7 +6,7 @@ use tsrs_ast::{self as ast, Kind, Node, NodeFlags, SourceFile, TokenFlags};
 use tsrs_compiler::Program;
 use tsrs_core::context::Context;
 use tsrs_core::tspath;
-use tsrs_core::{alloc_str, CompilerOptions, ModuleDetectionKind, ModuleKind, TextRange, Tristate, P};
+use tsrs_core::{alloc_str, CompilerOptions, ModuleDetectionKind, ModuleKind, TextPos, TextRange, Tristate, P};
 use tsrs_diagnostics as diagnostics;
 use tsrs_lsproto as lsproto;
 use tsrs_modulespecifiers::{self as modulespecifiers, ImportModuleSpecifierPreference, ResultKind};
@@ -1363,7 +1363,7 @@ fn promote_import_clause(
 // fix.go:1293
 // deleteTypeKeyword deletes the 'type' keyword token starting at the given position,
 // including any trailing whitespace.
-fn delete_type_keyword(changes: &mut change::Tracker, source_file: P<SourceFile>, start_pos: i32) {
+fn delete_type_keyword(changes: &mut change::Tracker, source_file: P<SourceFile>, start_pos: TextPos) {
     let scan = scanner::get_scanner_for_source_file(source_file, start_pos);
     if scan.token() != Kind::TypeKeyword {
         return;

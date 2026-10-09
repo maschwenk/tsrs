@@ -885,7 +885,14 @@ impl Checker {
     }
 
     // checker.go:5051
-    pub(crate) fn is_property_initialized_in_static_blocks(&mut self, prop_name: P<Node>, prop_type: P<Type>, static_blocks: &[P<Node>], start_pos: i32, end_pos: i32) -> bool {
+    pub(crate) fn is_property_initialized_in_static_blocks(
+        &mut self,
+        prop_name: P<Node>,
+        prop_type: P<Type>,
+        static_blocks: &[P<Node>],
+        start_pos: TextPos,
+        end_pos: TextPos,
+    ) -> bool {
         for &static_block in static_blocks {
             // static block must be within the provided range as they are evaluated in document order (unlike constructors)
             if static_block.pos() >= start_pos && static_block.pos() <= end_pos {

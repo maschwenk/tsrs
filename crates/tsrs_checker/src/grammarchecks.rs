@@ -6,7 +6,7 @@ use tsrs_diagnostics::Message;
 use rustc_hash::FxHashMap;
 use std::fmt::Display;
 use tsrs_binder as binder;
-use tsrs_core::{stringutil, tspath, TextRange};
+use tsrs_core::{stringutil, text_pos_from_len, tspath, TextPos, TextRange};
 use tsrs_scanner as scanner;
 
 impl Checker {
@@ -22,7 +22,14 @@ impl Checker {
     }
 
     // grammarchecks.go:29
-    pub(crate) fn grammar_error_at_pos(&mut self, node_for_source_file: P<Node>, start: i32, length: i32, message: &'static Message, args: &[&dyn Display]) -> bool {
+    pub(crate) fn grammar_error_at_pos(
+        &mut self,
+        node_for_source_file: P<Node>,
+        start: TextPos,
+        length: u32,
+        message: &'static Message,
+        args: &[&dyn Display],
+    ) -> bool {
         let source_file = ast::get_source_file_of_node(node_for_source_file).unwrap();
         if !self.has_parse_diagnostics(source_file) {
             self.add_diagnostic(ast::new_diagnostic(Some(source_file), TextRange::new(start, start + length), message, args));
@@ -696,7 +703,13 @@ impl Checker {
     pub(crate) fn check_grammar_for_disallowed_trailing_comma(&mut self, list: Option<P<NodeList>>, diag: &'static Message) -> bool {
         if let Some(list) = list {
             if list.has_trailing_comma() {
-                return self.grammar_error_at_pos(list.nodes()[0], list.end() - ",".len() as i32, ",".len() as i32, diag, &[]);
+                return self.grammar_error_at_pos(
+                    list.nodes()[0],
+                    list.end() - text_pos_from_len(",".len()),
+                    text_pos_from_len(",".len()),
+                    diag,
+                    &[],
+                );
             }
         }
         false
@@ -706,8 +719,8 @@ impl Checker {
     pub(crate) fn check_grammar_type_parameter_list(&mut self, type_parameters: Option<P<NodeList>>, file: P<SourceFile>) -> bool {
         if let Some(type_parameters) = type_parameters {
             if type_parameters.nodes().is_empty() {
-                let start = type_parameters.pos() - "<".len() as i32;
-                let end = scanner::skip_trivia(file.text(), type_parameters.end()) + ">".len() as i32;
+                let start = type_parameters.pos() - text_pos_from_len("<".len());
+                let end = scanner::skip_trivia(file.text(), type_parameters.end()) + text_pos_from_len(">".len());
                 return self.grammar_error_at_pos(file.as_node(), start, end - start, &diagnostics::Type_parameter_list_cannot_be_empty, &[]);
             }
         }
@@ -888,8 +901,8 @@ impl Checker {
         if let Some(type_arguments) = type_arguments {
             if type_arguments.nodes().is_empty() {
                 let source_file = ast::get_source_file_of_node(node).unwrap();
-                let start = type_arguments.pos() - "<".len() as i32;
-                let end = scanner::skip_trivia(source_file.text(), type_arguments.end()) + ">".len() as i32;
+                let start = type_arguments.pos() - text_pos_from_len("<".len());
+                let end = scanner::skip_trivia(source_file.text(), type_arguments.end()) + text_pos_from_len(">".len());
                 return self.grammar_error_at_pos(source_file.as_node(), start, end - start, &diagnostics::Type_argument_list_cannot_be_empty, &[]);
             }
         }
@@ -1361,7 +1374,7 @@ impl Checker {
         let parent_kind = accessor.parent().unwrap().kind();
         if !accessor.flags().intersects(NodeFlags::Ambient) && parent_kind != Kind::TypeLiteral && parent_kind != Kind::InterfaceDeclaration {
             if body.is_none() && !ast::has_syntactic_modifier(accessor, ModifierFlags::Abstract) {
-                return self.grammar_error_at_pos(accessor, accessor.end() - 1, ";".len() as i32, &diagnostics::X_0_expected, &[&"{"]);
+                return self.grammar_error_at_pos(accessor, accessor.end() - 1, text_pos_from_len(";".len()), &diagnostics::X_0_expected, &[&"{"]);
             }
         }
         if let Some(body) = body {
@@ -1518,7 +1531,7 @@ impl Checker {
                     return true;
                 }
                 if node.body().is_none() {
-                    return self.grammar_error_at_pos(node, node.end() - 1, ";".len() as i32, &diagnostics::X_0_expected, &[&"{"]);
+                    return self.grammar_error_at_pos(node, node.end() - 1, text_pos_from_len(";".len()), &diagnostics::X_0_expected, &[&"{"]);
                 }
             }
             if self.check_grammar_for_generator(node) {

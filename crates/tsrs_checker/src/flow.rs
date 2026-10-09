@@ -3,6 +3,7 @@ use crate::*;
 use tsrs_ast::*;
 use tsrs_ast as ast;
 use tsrs_diagnostics as diagnostics;
+use tsrs_core::{TextPos, SYNTHETIC_POSITION};
 
 // Non-function declarations of flow.go (FlowType, SharedFlow, FlowState, typeofNEFacts,
 // nonDottedNameCacheKey) are in flow_types.rs.
@@ -131,7 +132,11 @@ impl Checker {
             census_container = ast::get_containing_function(reference);
             let sampled = (census_container.map_or(0, |n| n.to_bits()) as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 60 == 0;
             let key = sampled.then(|| {
-                let text = if reference.pos() >= 0 && ast::get_source_file_of_node(reference).is_some() { tsrs_scanner::get_text_of_node(reference) } else { format!("#{}", reference.to_bits()) };
+                let text = if !tsrs_core::position_is_synthetic(reference.pos()) && ast::get_source_file_of_node(reference).is_some() {
+                    tsrs_scanner::get_text_of_node(reference)
+                } else {
+                    format!("#{}", reference.to_bits())
+                };
                 let mut bytes = text.into_bytes();
                 bytes.extend_from_slice(&declared_type.id.0.to_le_bytes());
                 bytes.extend_from_slice(&initial_type.id.0.to_le_bytes());
@@ -3440,13 +3445,13 @@ impl Checker {
                     if self.is_parameter_or_mutable_local_variable(symbol) {
                         let links = self.marked_assignment_symbol_links.get(symbol);
                         let pos = links.last_assignment_pos.get();
-                        if pos == 0 || pos != i32::MAX {
+                        if pos == 0 || pos != SYNTHETIC_POSITION {
                             let referencing_function = ast::find_ancestor(node, ast::is_function_or_source_file);
                             let declaring_function = ast::find_ancestor(symbol.value_declaration(), ast::is_function_or_source_file);
                             if referencing_function == declaring_function {
                                 links.last_assignment_pos.set(self.extend_assignment_position(Some(node), symbol.value_declaration().unwrap()));
                             } else {
-                                links.last_assignment_pos.set(i32::MAX);
+                                links.last_assignment_pos.set(SYNTHETIC_POSITION);
                             }
                         }
                         if assignment_kind == AssignmentKind::Definite {
@@ -3465,7 +3470,7 @@ impl Checker {
                     if let Some(symbol) = symbol {
                         if self.is_parameter_or_mutable_local_variable(symbol) {
                             let links = self.marked_assignment_symbol_links.get(symbol);
-                            links.last_assignment_pos.set(i32::MAX);
+                            links.last_assignment_pos.set(SYNTHETIC_POSITION);
                         }
                     }
                 }
@@ -3486,7 +3491,7 @@ impl Checker {
     // expression statement, compound statement, or class declaration occurring between the node and the given
     // declaration node.
     // flow.go:2749
-    pub(crate) fn extend_assignment_position(&mut self, node: Option<P<Node>>, declaration: P<Node>) -> i32 {
+    pub(crate) fn extend_assignment_position(&mut self, node: Option<P<Node>>, declaration: P<Node>) -> TextPos {
         let mut node = node;
         let mut pos = node.unwrap().pos();
         while let Some(n) = node {

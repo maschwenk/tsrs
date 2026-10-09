@@ -1,5 +1,5 @@
 use tsrs_ast::{self as ast, Kind, Node, SourceFile};
-use tsrs_core::P;
+use tsrs_core::{TextPos, P};
 use tsrs_scanner as scanner;
 
 use super::*;
@@ -8,7 +8,7 @@ use crate::astnav;
 // completednode.go:12
 // PositionBelongsToNode returns true if the position belongs to the node.
 // Assumes `candidate.Pos() <= position` holds.
-pub fn position_belongs_to_node(candidate: P<Node>, position: i32, file: P<SourceFile>) -> bool {
+pub fn position_belongs_to_node(candidate: P<Node>, position: TextPos, file: P<SourceFile>) -> bool {
     if candidate.pos() > position {
         panic!("Expected candidate.pos <= position");
     }

@@ -2,7 +2,7 @@ use tsrs_ast::{self as ast, CheckFlags, Kind, Node, NodeList, SourceFile, Symbol
 use tsrs_checker::{self as checker, Checker, ContextFlags, ElementFlags, Flags, InternalFlags, Signature, SymbolFormatFlags, Type};
 use tsrs_compiler::Program;
 use tsrs_core::context::Context;
-use tsrs_core::{NewLineKind, TextRange, P};
+use tsrs_core::{NewLineKind, TextPos, TextRange, P, MAX_TEXT_POS};
 use tsrs_lsproto as lsproto;
 use tsrs_printer::{self as printer, EmitTextWriter, Printer, PrinterOptions};
 use tsrs_scanner as scanner;
@@ -67,7 +67,7 @@ impl LanguageService {
             if !projection.fidelity.is_single_segment() {
                 continue;
             }
-            let items = self.get_signature_help_items(ctx, projection.position as i32, program, projection.script, context);
+            let items = self.get_signature_help_items(ctx, projection.position, program, projection.script, context);
             if let Some(items) = items {
                 return Ok(lsproto::SignatureHelpOrNull { signature_help: Some(items) });
             }
@@ -79,7 +79,7 @@ impl LanguageService {
     pub fn get_signature_help_items(
         &self,
         ctx: &Context,
-        position: i32,
+        position: TextPos,
         program: &'static Program,
         source_file: P<SourceFile>,
         context: Option<&lsproto::SignatureHelpContext>,
@@ -904,7 +904,7 @@ fn contains_preceding_token(starting_token: P<Node>, source_file: P<SourceFile>,
 }
 
 // signaturehelp.go:861
-fn get_containing_argument_info(node: P<Node>, source_file: P<SourceFile>, checker: &mut Checker, is_manually_invoked: bool, position: i32) -> Option<argumentListInfo> {
+fn get_containing_argument_info(node: P<Node>, source_file: P<SourceFile>, checker: &mut Checker, is_manually_invoked: bool, position: TextPos) -> Option<argumentListInfo> {
     let mut first_argument_info: Option<argumentListInfo> = None;
     let mut n = node;
     while !ast::is_source_file(n) && (is_manually_invoked || !ast::is_block(n)) {
@@ -950,7 +950,7 @@ fn get_containing_argument_info(node: P<Node>, source_file: P<SourceFile>, check
 }
 
 // signaturehelp.go:904
-fn get_immediately_containing_argument_or_contextual_parameter_info(node: P<Node>, position: i32, source_file: P<SourceFile>, checker: &mut Checker) -> Option<argumentListInfo> {
+fn get_immediately_containing_argument_or_contextual_parameter_info(node: P<Node>, position: TextPos, source_file: P<SourceFile>, checker: &mut Checker) -> Option<argumentListInfo> {
     let result = try_get_parameter_info(node, source_file, checker);
     if result.is_none() {
         return get_immediately_containing_argument_info(node, position, source_file, checker);
@@ -972,7 +972,7 @@ pub(crate) struct argumentListInfo {
 // Returns relevant information for the argument list and the current argument if we are
 // in the argument of an invocation; returns undefined otherwise.
 // signaturehelp.go:923
-pub(crate) fn get_immediately_containing_argument_info(node: P<Node>, position: i32, source_file: P<SourceFile>, c: &mut Checker) -> Option<argumentListInfo> {
+pub(crate) fn get_immediately_containing_argument_info(node: P<Node>, position: TextPos, source_file: P<SourceFile>, c: &mut Checker) -> Option<argumentListInfo> {
     let parent = node.parent().unwrap();
     if ast::is_call_or_new_expression(parent) {
         // There are 3 cases to handle:
@@ -1075,7 +1075,7 @@ pub(crate) fn get_immediately_containing_argument_info(node: P<Node>, position: 
 // spanIndex is either the index for a given template span.
 // This does not give appropriate results for a NoSubstitutionTemplateLiteral
 // signaturehelp.go:1029
-fn get_argument_index_for_template_piece(span_index: i32, node: P<Node>, position: i32, source_file: P<SourceFile>) -> i32 {
+fn get_argument_index_for_template_piece(span_index: i32, node: P<Node>, position: TextPos, source_file: P<SourceFile>) -> i32 {
     // Because the TemplateStringsArray is the first argument, we have to offset each substitution expression by 1.
     // There are three cases we can encounter:
     //      1. We are precisely in the template literal (argIndex = 0).
@@ -1248,9 +1248,9 @@ fn get_applicable_span_for_arguments(argument_list: Option<P<NodeList>>, node: O
 // TextRange.Contains uses a half-open interval, so an empty span would not contain
 // the cursor immediately after typing an opening paren in a call like foo(bar(|)).
 // signaturehelp.go:1204
-fn ensure_minimum_span_size(start: i32, end: i32) -> i32 {
+fn ensure_minimum_span_size(start: TextPos, end: TextPos) -> TextPos {
     if end <= start {
-        return start + 1;
+        return start.checked_add(1).filter(|&end| end <= MAX_TEXT_POS).unwrap_or(start);
     }
     end
 }

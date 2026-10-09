@@ -242,7 +242,6 @@ impl<'h> Setup<'h> {
 
 /// `astnav.GetTouchingPropertyName(file, positionMap.UTF16ToUTF8(position))`.
 pub(crate) fn touching_property_name_at_utf16(source_file: P<SourceFile>, position: u32) -> P<Node> {
-    let position = i32::try_from(position).unwrap_or(i32::MAX);
     let utf8 = source_file.get_position_map().utf16_to_utf8(position);
     tsrs_astnav::get_touching_property_name(source_file, utf8)
 }

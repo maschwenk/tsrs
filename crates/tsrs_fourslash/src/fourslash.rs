@@ -115,9 +115,9 @@ impl TestConverters {
 // fourslash.go:101
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct TextEditSpan {
-    pub(crate) start: i32,
-    pub(crate) end: i32,
-    pub(crate) length: i32,
+    pub(crate) start: TextPos,
+    pub(crate) end: TextPos,
+    pub(crate) length: TextPos,
 }
 
 // fourslash.go:107
@@ -1032,7 +1032,7 @@ impl FourslashTest {
     // fourslash.go:856
     pub fn go_to_position(&mut self, t: &T, position: i32) {
         let script = self.get_script_info(&self.active_filename.clone());
-        let lsp_pos = self.converters.position_to_line_and_character(&script, position);
+        let lsp_pos = self.converters.position_to_line_and_character(&script, TextPos::try_from(position).expect("position is nonnegative"));
         self.go_to_position_impl(t, lsp_pos);
     }
 
@@ -1406,7 +1406,7 @@ impl FourslashTest {
             list = self.get_completions_impl(t, user_preferences);
             item = find_jsdoc_completion_item(list.as_ref());
             let active = self.active_filename.clone();
-            self.edit_script_and_update_markers(t, &active, insert_start, insert_start + 3, "");
+            self.edit_script_and_update_markers(t, &active, insert_start, insert_start.checked_add(3).expect("edit end exceeds TextPos"), "");
             // (Go converts with the script info captured before the edits.)
             self.current_caret_position = self.converters.position_to_line_and_character(&script, insert_start);
         }
@@ -1439,7 +1439,7 @@ impl FourslashTest {
         let list = self.get_completions_impl(t, None /*userPreferences*/);
         let item = find_jsdoc_completion_item(list.as_ref());
         let active = self.active_filename.clone();
-        self.edit_script_and_update_markers(t, &active, insert_start, insert_start + 3, "");
+        self.edit_script_and_update_markers(t, &active, insert_start, insert_start.checked_add(3).expect("edit end exceeds TextPos"), "");
         self.current_caret_position = self.converters.position_to_line_and_character(&script, insert_start);
         if item.is_some() {
             t.fatal(&format!("{}Did not expect JSDoc completion item.", self.get_current_position_prefix()));
@@ -2114,12 +2114,16 @@ impl FourslashTest {
         let mut spans: Vec<textEditSpan> = Vec::with_capacity(edits.len());
         for edit in edits {
             spans.push(textEditSpan {
-                start: self.converters.line_and_character_to_position(script.clone(), edit.range.start) as i32,
-                end: self.converters.line_and_character_to_position(script.clone(), edit.range.end) as i32,
-                length: edit.new_text.len() as i32,
+                start: self.converters.line_and_character_to_position(script.clone(), edit.range.start),
+                end: self.converters.line_and_character_to_position(script.clone(), edit.range.end),
+                length: TextPos::try_from(edit.new_text.len()).expect("edit text exceeds TextPos"),
             });
         }
-        tsrs_core::goslices::sort_func(&mut spans, |a, b| a.start - b.start);
+        tsrs_core::goslices::sort_func(&mut spans, |a, b| match a.start.cmp(&b.start) {
+            std::cmp::Ordering::Less => -1,
+            std::cmp::Ordering::Equal => 0,
+            std::cmp::Ordering::Greater => 1,
+        });
 
         let mut pos = text_range.pos();
         let mut end = text_range.end();
@@ -2128,11 +2132,11 @@ impl FourslashTest {
             pos = update_position_for_text_edit(pos, edit.start, edit.end, edit.length);
             end = update_position_for_text_edit(end, edit.start, edit.end, edit.length);
 
-            let delta = edit.length - (edit.end - edit.start);
+            let delta = i64::from(edit.length) - i64::from(edit.end - edit.start);
             for span in spans.iter_mut().skip(i + 1) {
                 if span.start >= edit.start {
-                    span.start += delta;
-                    span.end += delta;
+                    span.start = apply_position_delta(span.start, delta);
+                    span.end = apply_position_delta(span.end, delta);
                 }
             }
         }
@@ -2404,7 +2408,7 @@ impl FourslashTest {
 
             // Restore original content for next fix
             // (Go's `script` is the shared *scriptInfo, so len(script.content) is the edited length.)
-            let current_len = self.get_script_info(&active).content.len() as i32;
+            let current_len = TextPos::try_from(self.get_script_info(&active).content.len()).expect("source length exceeds TextPos");
             self.edit_script_and_update_markers(t, &active, 0, current_len, &original_content);
             self.current_caret_position = current_caret_position;
         }
@@ -3360,9 +3364,9 @@ impl FourslashTest {
         self.baseline_state(t);
 
         for _ in 0..count {
-            offset -= 1;
+            offset = offset.checked_sub(1).expect("cannot backspace before the start of a file");
             let active = self.active_filename.clone();
-            self.edit_script_and_update_markers(t, &active, offset, offset + 1, "");
+            self.edit_script_and_update_markers(t, &active, offset, offset.checked_add(1).expect("edit end exceeds TextPos"), "");
             // (Go's `script` is the shared *scriptInfo, so it sees the edit.)
             let script = self.get_script_info(&active);
             self.current_caret_position = self.converters.position_to_line_and_character(&script, offset);
@@ -3381,7 +3385,7 @@ impl FourslashTest {
 
         for _ in 0..count {
             let active = self.active_filename.clone();
-            self.edit_script_and_update_markers(t, &active, offset, offset + 1, "");
+            self.edit_script_and_update_markers(t, &active, offset, offset.checked_add(1).expect("edit end exceeds TextPos"), "");
             // Position stays the same after delete (unlike backspace)
         }
     }
@@ -3402,7 +3406,10 @@ impl FourslashTest {
                 text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&active) },
                 range: lsproto::Range {
                     start: self.current_caret_position,
-                    end: self.converters.position_to_line_and_character(&script, start + text.len() as i32),
+                    end: self.converters.position_to_line_and_character(
+                        &script,
+                        start.checked_add(TextPos::try_from(text.len()).expect("pasted text exceeds TextPos")).expect("paste end exceeds TextPos"),
+                    ),
                 },
                 options: self.user_preferences.format_code_settings.to_ls_format_options(),
                 ..Default::default()
@@ -3424,7 +3431,7 @@ impl FourslashTest {
     }
 
     // fourslash.go:4032
-    pub fn replace(&mut self, t: &T, start: i32, length: i32, text: &str) {
+    pub fn replace(&mut self, t: &T, start: TextPos, length: TextPos, text: &str) {
         self.baseline_state(t);
         self.replace_worker(t, start, length, text);
     }
@@ -4312,7 +4319,10 @@ impl FourslashTest {
         let lsp_range = match span {
             None => {
                 let script = self.get_script_info(&file_name);
-                let (r, _) = self.converters.converters.to_lsp_range(&script, TextRange::new(0, script.content.len() as i32));
+                let (r, _) = self.converters.converters.to_lsp_range(
+                    &script,
+                    TextRange::new(0, TextPos::try_from(script.content.len()).expect("source length exceeds TextPos")),
+                );
                 r
             }
             Some(span) => span,
@@ -4688,7 +4698,7 @@ impl FourslashTest {
     // fourslash.go:5952
     pub fn verify_error_exists_after_marker(&mut self, t: &T, marker_name: &str) {
         let file_name: String;
-        let marker_pos: i32;
+        let marker_pos: TextPos;
 
         if marker_name.is_empty() {
             // Use current position
@@ -4719,7 +4729,7 @@ impl FourslashTest {
     // fourslash.go:5983
     pub fn verify_error_exists_before_marker(&mut self, t: &T, marker_name: &str) {
         let file_name: String;
-        let marker_pos: i32;
+        let marker_pos: TextPos;
 
         if marker_name.is_empty() {
             // Use current position
@@ -4958,7 +4968,7 @@ impl FourslashTest {
             a_start.cmp(&b_start)
         });
 
-        let mut total_offset = 0;
+        let mut total_offset = 0i64;
         let mut current_caret_position = self.converters.line_and_character_to_position(script.clone(), self.current_caret_position);
         // Apply edits in reverse order to avoid affecting the positions of earlier edits.
         for edit in edits.iter().rev() {
@@ -4969,11 +4979,11 @@ impl FourslashTest {
             let active = self.active_filename.clone();
             self.edit_script_and_update_markers(t, &active, start, end, &edit.new_text);
 
-            let delta = edit.new_text.len() as i32 - (end - start);
+            let delta = i64::try_from(edit.new_text.len()).expect("edit text length exceeds i64") - i64::from(end - start);
             if start <= current_caret_position {
                 if end <= current_caret_position {
                     // The entirety of the edit span falls before the caret position, shift the caret accordingly
-                    current_caret_position += delta;
+                    current_caret_position = apply_position_delta(current_caret_position, delta);
                 } else {
                     // The span being replaced includes the caret position, place the caret at the beginning of the span
                     current_caret_position = start;
@@ -4983,14 +4993,14 @@ impl FourslashTest {
         }
         let script = self.get_script_info(&self.active_filename.clone());
         self.current_caret_position = self.converters.position_to_line_and_character(&script, current_caret_position);
-        total_offset
+        i32::try_from(total_offset).expect("text-edit delta exceeds i32")
     }
 
     // fourslash.go:4037
-    fn replace_worker(&mut self, t: &T, start: i32, length: i32, text: &str) {
+    fn replace_worker(&mut self, t: &T, start: TextPos, length: TextPos, text: &str) {
         t.helper();
         let active = self.active_filename.clone();
-        self.edit_script_and_update_markers(t, &active, start, start + length, text);
+        self.edit_script_and_update_markers(t, &active, start, start.checked_add(length).expect("edit end exceeds TextPos"), text);
         // f.checkPostEditInvariants() // !!! do we need this?
     }
 
@@ -5014,7 +5024,7 @@ impl FourslashTest {
                 self.edit_script_and_update_markers(t, &active, offset, offset, &text[total_size..total_size + size]);
 
                 total_size += size;
-                offset += size as i32;
+                offset = offset.checked_add(TextPos::try_from(size).expect("typed rune exceeds TextPos")).expect("typed position exceeds TextPos");
                 let script = self.get_script_info(&active);
                 self.current_caret_position = self.converters.position_to_line_and_character(&script, offset);
 
@@ -5028,7 +5038,7 @@ impl FourslashTest {
                     };
                     let result = self.send_request_and_baseline_worker(t, lsproto::TEXT_DOCUMENT_ON_TYPE_FORMATTING_INFO, params, false);
                     if let Some(text_edits) = result.text_edits {
-                        offset += self.apply_text_edits(t, text_edits);
+                        offset = apply_position_delta(offset, i64::from(self.apply_text_edits(t, text_edits)));
                     }
                 }
             }
@@ -5042,7 +5052,7 @@ impl FourslashTest {
     // Edits the script and updates marker and range positions accordingly.
     // This does not update the current caret position.
     // fourslash.go:4087
-    pub(crate) fn edit_script_and_update_markers(&mut self, t: &T, file_name: &str, edit_start: i32, edit_end: i32, new_text: &str) {
+    pub(crate) fn edit_script_and_update_markers(&mut self, t: &T, file_name: &str, edit_start: TextPos, edit_end: TextPos, new_text: &str) {
         self.edit_script_and_update_markers_worker(t, file_name, &[TextChange { text_range: TextRange::new(edit_start, edit_end), new_text: new_text.to_string() }]);
     }
 
@@ -5432,15 +5442,26 @@ fn hover_content_string(hover: Option<&lsproto::Hover>) -> String {
 }
 
 // fourslash.go:4122
-fn update_position(pos: i32, edit_start: i32, edit_end: i32, new_text: &str) -> i32 {
+fn update_position(pos: TextPos, edit_start: TextPos, edit_end: TextPos, new_text: &str) -> TextPos {
     if pos <= edit_start {
         return pos;
     }
     // If inside the edit, return -1 to mark as invalid
     if pos < edit_end {
-        return -1;
+        return tsrs_core::SYNTHETIC_POSITION;
     }
-    pos + new_text.len() as i32 - (edit_end - edit_start)
+    apply_position_delta(pos, i64::try_from(new_text.len()).expect("edit text length exceeds i64") - i64::from(edit_end - edit_start))
+}
+
+fn apply_position_delta(position: TextPos, delta: i64) -> TextPos {
+    if position == tsrs_core::SYNTHETIC_POSITION {
+        return position;
+    }
+    if delta >= 0 {
+        position.checked_add(u32::try_from(delta).expect("position delta exceeds u32")).expect("position exceeds TextPos")
+    } else {
+        position.checked_sub(u32::try_from(-delta).expect("position delta exceeds u32")).expect("position precedes start of file")
+    }
 }
 
 // fourslash.go:5485
@@ -5546,11 +5567,19 @@ fn compare_diagnostics(d1: &FourslashDiagnostic, d2: &FourslashDiagnostic) -> i3
     if c != 0 {
         return c;
     }
-    c = d1.loc.pos() - d2.loc.pos();
+    c = match d1.loc.pos().cmp(&d2.loc.pos()) {
+        std::cmp::Ordering::Less => -1,
+        std::cmp::Ordering::Equal => 0,
+        std::cmp::Ordering::Greater => 1,
+    };
     if c != 0 {
         return c;
     }
-    c = d1.loc.end() - d2.loc.end();
+    c = match d1.loc.end().cmp(&d2.loc.end()) {
+        std::cmp::Ordering::Less => -1,
+        std::cmp::Ordering::Equal => 0,
+        std::cmp::Ordering::Greater => 1,
+    };
     if c != 0 {
         return c;
     }
@@ -6031,9 +6060,9 @@ impl FourslashTest {
 // fourslash.go:101
 #[derive(Clone, Copy)]
 struct textEditSpan {
-    start: i32,
-    end: i32,
-    length: i32,
+    start: TextPos,
+    end: TextPos,
+    length: TextPos,
 }
 
 // fourslash.go:2490
@@ -6070,14 +6099,14 @@ fn extract_module_specifier(text: &str) -> String {
 }
 
 // fourslash.go:6013
-fn update_position_for_text_edit(position: i32, edit_start: i32, edit_end: i32, new_text_length: i32) -> i32 {
+fn update_position_for_text_edit(position: TextPos, edit_start: TextPos, edit_end: TextPos, new_text_length: TextPos) -> TextPos {
     if position <= edit_start {
         return position;
     }
     if position < edit_end {
-        return -1;
+        return tsrs_core::SYNTHETIC_POSITION;
     }
-    position + new_text_length - (edit_end - edit_start)
+    apply_position_delta(position, i64::from(new_text_length) - i64::from(edit_end - edit_start))
 }
 
 // fourslash.go:6023
@@ -6095,7 +6124,7 @@ fn remove_whitespace(text: &str) -> String {
 // fourslash.go:6034
 fn assert_valid_text_range(t: &T, text_range: TextRange, message: &str) {
     t.helper();
-    if text_range.pos() >= 0 && text_range.end() >= 0 {
+    if !tsrs_core::position_is_synthetic(text_range.pos()) && !tsrs_core::position_is_synthetic(text_range.end()) {
         return;
     }
     t.fatal(message);

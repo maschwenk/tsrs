@@ -20,9 +20,9 @@ enum triviaPositionKey {
 // The fields Go's `GetPrintHandlers` closures share with the writer through the `*ChangeTrackerWriter` pointer.
 #[derive(Default)]
 struct changeTrackerPositions {
-    last_non_trivia_position: i32,
-    pos: FxHashMap<triviaPositionKey, i32>,
-    end: FxHashMap<triviaPositionKey, i32>,
+    last_non_trivia_position: TextPos,
+    pos: FxHashMap<triviaPositionKey, TextPos>,
+    end: FxHashMap<triviaPositionKey, TextPos>,
 }
 
 // changetrackerwriter.go:12
@@ -103,7 +103,7 @@ impl ChangeTrackerWriter {
                 }
             }
             last -= (s.len() - pos) as i32;
-            self.positions.borrow_mut().last_non_trivia_position = last;
+            self.positions.borrow_mut().last_non_trivia_position = TextPos::try_from(last).expect("change-tracker output position is negative");
         }
     }
 
@@ -154,12 +154,12 @@ fn set_end(positions: &Rc<RefCell<changeTrackerPositions>>, node: triviaPosition
 }
 
 // changetrackerwriter.go:82
-fn get_pos(positions: &Rc<RefCell<changeTrackerPositions>>, node: triviaPositionKey) -> i32 {
+fn get_pos(positions: &Rc<RefCell<changeTrackerPositions>>, node: triviaPositionKey) -> TextPos {
     positions.borrow().pos.get(&node).copied().unwrap_or(0)
 }
 
 // changetrackerwriter.go:86
-fn get_end(positions: &Rc<RefCell<changeTrackerPositions>>, node: triviaPositionKey) -> i32 {
+fn get_end(positions: &Rc<RefCell<changeTrackerPositions>>, node: triviaPositionKey) -> TextPos {
     positions.borrow().end.get(&node).copied().unwrap_or(0)
 }
 

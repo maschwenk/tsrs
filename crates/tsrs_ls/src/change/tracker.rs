@@ -586,7 +586,10 @@ impl Tracker {
             // insert separator immediately following the 'after' node to preserve comments in trailing trivia
             let separator_token = self.new_token(separator);
             let separator_string = scanner::token_to_string(separator);
-            separator_token.set_loc(TextRange::new(end, end + separator_string.len() as i32));
+            let separator_end = end
+                .checked_add(TextPos::try_from(separator_string.len()).expect("separator length exceeds u32::MAX"))
+                .expect("separator range end exceeds u32::MAX");
+            separator_token.set_loc(TextRange::new(end, separator_end));
             separator_token.set_parent(after.parent());
             let end_pos = end;
             self.replace_range(source_file, TextRange::new(end_pos, end_pos), separator_token, NodeOptions::default());
@@ -865,12 +868,14 @@ impl Tracker {
             let is_single_line = positions_are_on_same_line(open_brace.end(), close_brace.end(), source_file);
 
             if is_empty && is_single_line && open_brace.end() != close_brace.end() - 1 {
-                self.delete_range(source_file, TextRange::new(open_brace.end(), close_brace.end() - 1));
+                let before_close = close_brace.end().checked_sub(1).expect("close brace ends at byte zero");
+                self.delete_range(source_file, TextRange::new(open_brace.end(), before_close));
             }
 
             if is_single_line {
                 let nl = self.new_line.clone();
-                self.insert_text_at(source_file, close_brace.end() - 1, &nl);
+                let before_close = close_brace.end().checked_sub(1).expect("close brace ends at byte zero");
+                self.insert_text_at(source_file, before_close, &nl);
             }
         }
     }
@@ -901,7 +906,7 @@ pub(crate) fn is_separator(node: P<Node>, candidate: Option<P<Node>>) -> bool {
 }
 
 // tracker.go:803
-fn find_indentation_column(text: &str, line_start: i32, member_start: i32, tab_size: i32) -> i32 {
+fn find_indentation_column(text: &str, line_start: TextPos, member_start: TextPos, tab_size: i32) -> i32 {
     let mut column = 0;
 
     let bytes = text.as_bytes();

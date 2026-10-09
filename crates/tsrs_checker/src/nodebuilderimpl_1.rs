@@ -1483,7 +1483,7 @@ impl NodeBuilderImpl {
         {
             let original = range_;
             range_ = range_.clone_node(&self.f); // if `range` is synthesized or originates in another file, copy it so it definitely has synthetic positions
-            range_.set_loc(TextRange::new(-1, -1));
+            range_.set_loc(undefined_text_range());
             let symbol = self.id_to_symbol.borrow().get(&original).copied();
             if let Some(symbol) = symbol {
                 self.id_to_symbol.borrow_mut().insert(range_, symbol);
@@ -1510,7 +1510,7 @@ impl NodeBuilderImpl {
             range_.set_loc(location.loc());
             return Some(range_);
         } else {
-            range_.set_loc(TextRange::new(-1, -1));
+            range_.set_loc(undefined_text_range());
         }
         Some(range_)
     }
