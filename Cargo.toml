@@ -53,6 +53,7 @@ tsrs_api_transport = { path = "crates/tsrs_api_transport" }
 tsrs_api_codec = { path = "crates/tsrs_api_codec" }
 tsrs_ipc = { path = "crates/tsrs_ipc" }
 tsrs_contentmapper = { path = "crates/tsrs_contentmapper" }
+tsrs_contentmappertest = { path = "crates/tsrs_contentmappertest" }
 
 [profile.dev]
 opt-level = 1

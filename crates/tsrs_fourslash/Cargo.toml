@@ -19,6 +19,8 @@ tsrs_tsoptions.workspace = true
 tsrs_vfs.workspace = true
 tsrs_diagnostics.workspace = true
 tsrs_modulespecifiers.workspace = true
+tsrs_contentmapper.workspace = true
+tsrs_contentmappertest.workspace = true
 rustc-hash.workspace = true
 regex = "1"
 

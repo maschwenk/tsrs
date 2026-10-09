@@ -1,0 +1,25 @@
+[package]
+name = "tsrs_contentmappertest"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+# Go's testutil/contentmappertest: the in-process content mappers that the tsc/tsbuild scenario tests and the
+# fourslash harness drive through tsrs_contentmapper (notes/contentmappers.md). The spawner serves them over a Unix
+# socket pair (tsrs_ipc::pipe).
+[dependencies]
+tsrs_core.workspace = true
+tsrs_diagnostics.workspace = true
+tsrs_spanmap.workspace = true
+tsrs_ipc.workspace = true
+tsrs_contentmapper.workspace = true
+rustc-hash.workspace = true
+
+# mapper_test.go's TestMain: the test binary serves the transforming mapper over its stdio when started as the
+# subprocess of its own out-of-process test, so it has its own main.
+[[test]]
+name = "mapper_test"
+harness = false
