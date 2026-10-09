@@ -149,7 +149,9 @@ impl Chunks {
             }
             None => {
                 let start = self.next.next_multiple_of(align);
-                if start + size > RESERVE {
+                // spike/r1-read-path: the top of the reservation is the shared layer's window (`shwindow`), which
+                // nothing is ever allocated in.
+                if start + size > crate::shwindow::WINDOW_OFF {
                     return None;
                 }
                 // No free range ends at `next` (`put` lowers `next` instead), so the gap is a range of its own.
