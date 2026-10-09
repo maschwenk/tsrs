@@ -102,6 +102,15 @@ pointer compression costs about +4.9% instructions and took back most of the che
 
 ## Measured and rejected (do not redo)
 
+- Formatting relation error arguments lazily, everywhere (notes/mem-discarded-elaboration.md, branch
+  `exp/discarded-elaboration`): the elaboration a relation builds and then throws away costs at most 1.34 MiB
+  (0.08% of peak, mikro-orm) and under 2 ms on the six projects where bun check uses less memory, at 1 and 8
+  checkers; 1.1% of peak on webpack (a control). The excalidraw case was an outlier and #212 fixed its site. Not
+  exact for free either (side diagnostics, deduplication by text, restored error chains, shifted type ids).
+- Skipping the reporting of diagnostics filed against a file the checker does not check (generalizing #212;
+  notes/mem-crossfile-diagnostics.md, branch `exp/crossfile-diagnostics`): at most 0.23% of peak (formbricks-web at
+  8 checkers) and 0.8% of instructions on the loss projects. Exact only for report-only checks that the file's own
+  checker reaches; call-resolution errors reached through a cached resolution are not reproduced there.
 - A type graph shared by the checker threads (frozen seed + forks; notes/spike-shared-graph.md, branch
   `spike/shared-graph`, PR 213 closed): exact in every run, but on the 16-vCPU Linux runner peak -5..-10% at the
   default 8 checkers for +6..+18% wall (the serial seed). Revisit only with a seed that costs no wall time.
