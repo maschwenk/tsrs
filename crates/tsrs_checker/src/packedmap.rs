@@ -137,6 +137,19 @@ impl<K: PackedKey + 'static, V: Copy + 'static> GoPackedMap<K, V> {
         self.0.get().is_none()
     }
 
+    /// spike/r1-read-path: whether the table is in the shared layer's window (a fork's copy of a frozen type alias's
+    /// links points to the frozen table).
+    #[inline]
+    pub fn is_shared(&self) -> bool {
+        self.0.get().is_some_and(|m| m.is_shared())
+    }
+
+    /// The table's key (0 while nil), for side tables keyed by it.
+    #[inline]
+    pub fn table_key(&self) -> tsrs_core::PKey {
+        P::key_opt(self.0.get())
+    }
+
     /// Go `v, ok := m[k]` (reading a nil map is allowed).
     #[inline]
     pub fn get(&self, key: &K) -> Option<V> {

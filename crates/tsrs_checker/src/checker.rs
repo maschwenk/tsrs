@@ -1088,7 +1088,10 @@ pub struct Checker {
     // Go `StructuredType.resolvedBaseConstraint` (see `resolved_base_constraint_of`).
     pub(crate) structured_type_base_constraints: FxHashMap<P<Type>, P<Type>>,
     // Go `ObjectType.instantiations` of object types that are not interfaces or tuples (see `ObjectType`).
-    pub(crate) object_type_instantiations: FxHashMap<P<Type>, PackedMap<CacheHashKey, P<Type>>>,
+    pub(crate) object_type_instantiations: crate::twolevel::TwoLevel<FxHashMap<P<Type>, PackedMap<CacheHashKey, P<Type>>>>,
+    /// spike/r1-read-path: a fork's instantiations under shared targets (interfaces, type alias tables, conditional
+    /// roots) that the frozen tables lack, by (target or table, key) (design section 3.4, side table 2). Never filled.
+    pub(crate) shared_instantiations: FxHashMap<(tsrs_core::PKey, CacheHashKey), P<Type>>,
     pub(crate) lazy_mapped_tables: FxHashMap<P<Type>, std::rc::Rc<LazyMappedTable>>,
     /// tsrs_core::lazymembers::enabled() (default on; `--noLazyMembers` / `TSRS_LAZY_MEMBERS=0`): no lazy table is created when false.
     pub lazy_members: bool,
@@ -1488,7 +1491,8 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         lazy_member_tables: FxHashMap::default(),
         object_types_without_abstract_construct_signatures: FxHashMap::default(),
         structured_type_base_constraints: FxHashMap::default(),
-        object_type_instantiations: FxHashMap::default(),
+        object_type_instantiations: Default::default(),
+        shared_instantiations: FxHashMap::default(),
         lazy_mapped_tables: FxHashMap::default(),
         lazy_members: tsrs_core::lazymembers::enabled(),
         lazy_tuples: tsrs_core::lazymembers::lazy_tuples(),

@@ -201,14 +201,22 @@ impl Checker {
         }
         let links = self.type_alias_links.get(symbol);
         let type_parameters = links.type_parameters.get();
-        let key = get_type_alias_instantiation_key(type_arguments, alias);
-        let mut instantiation = links.instantiations.get(&key);
+        let (key, and) = get_type_alias_instantiation_key(type_arguments, alias);
+        let mut instantiation = if links.instantiations.is_shared() {
+            self.shared_instantiation_get(links.instantiations.table_key(), key, and, || links.instantiations.get(&key))
+        } else {
+            links.instantiations.get(&key)
+        };
         if instantiation.is_none() {
             let min_type_argument_count = self.get_min_type_argument_count(type_parameters);
             let filled = self.fill_missing_type_arguments(type_arguments, type_parameters, min_type_argument_count, ast::is_in_js_file(symbol.value_declaration()));
             let mapper = new_type_mapper(type_parameters, alloc_vec(filled));
             let result = self.instantiate_type_with_alias(t, Some(mapper), alias);
-            links.instantiations.set(key, result);
+            if links.instantiations.is_shared() {
+                self.shared_instantiation_set(links.instantiations.table_key(), key, result);
+            } else {
+                links.instantiations.set(key, result);
+            }
             instantiation = Some(result);
         }
         instantiation.unwrap()
@@ -2028,7 +2036,11 @@ impl Checker {
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn create_type_reference_ex(&mut self, target: P<Type>, type_arguments: &[P<Type>], object_flags: ObjectFlags) -> P<Type> {
         let intf = target.as_interface_type();
-        if let Some(t) = intf.instantiations.get(type_arguments) {
+        if target.is_shared() {
+            if let Some(t) = self.shared_reference_get(target, type_arguments) {
+                return t;
+            }
+        } else if let Some(t) = intf.instantiations.get(type_arguments) {
             return t;
         }
         let propagating_flags = self.get_propagating_flags_of_types(type_arguments, TypeFlags::None);
@@ -2036,7 +2048,11 @@ impl Checker {
         let d = t.as_type_reference();
         d.target.set(Some(target));
         d.resolved_type_arguments.set(Some(alloc_slice(type_arguments)));
-        intf.instantiations.add(t);
+        if target.is_shared() {
+            self.shared_reference_add(target, t);
+        } else {
+            intf.instantiations.add(t);
+        }
         t
     }
 

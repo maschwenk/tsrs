@@ -51,3 +51,59 @@ impl<M> TwoLevel<M> {
 fn probe_base<M, R>(base: &'static M, probe: impl FnOnce(&'static M) -> Option<R>) -> Option<R> {
     probe(base)
 }
+
+// Mechanism 4 of R1: the instantiation tables under shared targets (design section 3.4). A lookup under a shared
+// target asks the frozen table only when every handle of the key is shared, then the fork's side table
+// (`Checker::shared_instantiations`); an insert under a shared target goes to the side table. The hot paths test the
+// target (or, for a type alias, its table) once per lookup and insert; these cold paths never run here.
+impl crate::Checker {
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn shared_instantiation_get(
+        &self,
+        target: tsrs_core::PKey,
+        key: crate::CacheHashKey,
+        and: KeyAnd,
+        frozen: impl FnOnce() -> Option<tsrs_core::P<crate::Type>>,
+    ) -> Option<tsrs_core::P<crate::Type>> {
+        if and.all_shared() {
+            if let Some(t) = frozen() {
+                return Some(t);
+            }
+        }
+        self.shared_instantiations.get(&(target, key)).copied()
+    }
+
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn shared_instantiation_set(&mut self, target: tsrs_core::PKey, key: crate::CacheHashKey, t: tsrs_core::P<crate::Type>) {
+        self.shared_instantiations.insert((target, key), t);
+    }
+
+    /// `create_type_reference`'s lookup under a shared interface target.
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn shared_reference_get(&self, target: tsrs_core::P<crate::Type>, type_arguments: &[tsrs_core::P<crate::Type>]) -> Option<tsrs_core::P<crate::Type>> {
+        let mut and = KeyAnd::NONE;
+        for &a in type_arguments {
+            and.add(a);
+        }
+        let key = crate::get_type_list_key(type_arguments);
+        self.shared_instantiation_get(target.key(), key, and, || target.as_interface_type().instantiations.get(type_arguments))
+    }
+
+    /// `create_type_reference`'s insert under a shared interface target.
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn shared_reference_add(&mut self, target: tsrs_core::P<crate::Type>, reference: tsrs_core::P<crate::Type>) {
+        let key = crate::get_type_list_key(reference.as_type_reference().resolved_type_arguments.get().unwrap_or(&[]));
+        self.shared_instantiation_set(target.key(), key, reference);
+    }
+
+    /// `get_object_type_instantiation`'s probe of the frozen map under a shared target.
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn shared_object_instantiation_get(&self, target: tsrs_core::P<crate::Type>, key: crate::CacheHashKey, and: KeyAnd) -> Option<tsrs_core::P<crate::Type>> {
+        self.object_type_instantiations.get_base(and, |b| b.get(&target).and_then(|m| m.get(&key)))
+    }
+}

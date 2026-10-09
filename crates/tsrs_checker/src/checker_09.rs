@@ -623,19 +623,24 @@ pub(crate) fn get_tuple_key(element_infos: &[TupleElementInfo], readonly: bool) 
 }
 
 // checker.go:17906
-pub(crate) fn get_type_alias_instantiation_key(type_arguments: &[P<Type>], alias: Option<P<TypeAlias>>) -> CacheHashKey {
-    get_type_instantiation_key(type_arguments, alias.into(), false)
+pub(crate) fn get_type_alias_instantiation_key(type_arguments: &[P<Type>], alias: Option<P<TypeAlias>>) -> (CacheHashKey, tsrs_core::shwindow::KeyAnd) {
+    get_type_instantiation_key_and(type_arguments, alias.into(), false)
 }
 
 // checker.go:17910
 pub(crate) fn get_type_instantiation_key(type_arguments: &[P<Type>], alias: AliasArg<'_>, single_signature: bool) -> CacheHashKey {
+    get_type_instantiation_key_and(type_arguments, alias, single_signature).0
+}
+
+/// `get_type_instantiation_key` and the AND of its handles (spike/r1-read-path).
+pub(crate) fn get_type_instantiation_key_and(type_arguments: &[P<Type>], alias: AliasArg<'_>, single_signature: bool) -> (CacheHashKey, tsrs_core::shwindow::KeyAnd) {
     let mut b = keyBuilder::default();
     b.write_types(type_arguments);
     b.write_alias_arg(alias);
     if single_signature {
         b.write_byte(b'!');
     }
-    b.hash()
+    (b.hash(), b.handles)
 }
 
 // checker.go:17920
@@ -665,13 +670,18 @@ pub(crate) fn get_template_type_key(texts: &[&str], types: &[P<Type>]) -> (Cache
 
 // checker.go:17943
 pub(crate) fn get_conditional_type_key(type_arguments: &[P<Type>], alias: Option<P<TypeAlias>>, for_constraint: bool) -> CacheHashKey {
+    get_conditional_type_key_and(type_arguments, alias, for_constraint).0
+}
+
+/// `get_conditional_type_key` and the AND of its handles (spike/r1-read-path).
+pub(crate) fn get_conditional_type_key_and(type_arguments: &[P<Type>], alias: Option<P<TypeAlias>>, for_constraint: bool) -> (CacheHashKey, tsrs_core::shwindow::KeyAnd) {
     let mut b = keyBuilder::default();
     b.write_types(type_arguments);
     b.write_alias(alias);
     if for_constraint {
         b.write_byte(b'!');
     }
-    b.hash()
+    (b.hash(), b.handles)
 }
 
 // checker.go:17953
