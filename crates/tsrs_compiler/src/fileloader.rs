@@ -615,7 +615,7 @@ pub(crate) fn prefetch_resolutions(ctx: &prefetchContext, file: P<SourceFile>, m
                 Ok((resolved, _)) => *resolved,
                 Err(_) => P::new(ResolvedModule::default()),
             };
-            resolutions_in_file.insert(ModeAwareCacheKey { name: module_name, mode }, resolved_module);
+            resolutions_in_file.insert(ModeAwareCacheKey { name: alloc_str(module_name), mode }, resolved_module);
             let mut prepared = None;
             if let Ok((resolved, _)) = &resolution {
                 if resolved.is_resolved() {
@@ -862,7 +862,7 @@ impl fileLoader {
                         (P::new(ResolvedModule::default()), Vec::new())
                     }
                 };
-                resolutions_in_file.insert(ModeAwareCacheKey { name: module_name, mode }, resolved_module);
+                resolutions_in_file.insert(ModeAwareCacheKey { name: alloc_str(module_name), mode }, resolved_module);
                 resolutions_trace.extend(trace);
 
                 if !resolved_module.is_resolved() {
