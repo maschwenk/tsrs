@@ -46,10 +46,12 @@ on:
     branches: [main]
     types: [opened, reopened, synchronize, labeled]
 
-# A newer push to a pull request cancels its older run.
+# A newer push to a pull request cancels its older run. A label event does not cancel anything: opening a labelled
+# pull request sends `opened` and `labeled` together, and the `labeled` run, which the gate may decide not to run,
+# must not cancel the `opened` run; it queues behind it instead.
 concurrency:
   group: pr-verify-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'labeled' }}
 
 permissions:
   contents: read
