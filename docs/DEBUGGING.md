@@ -87,6 +87,11 @@ half the busiest one's work left; `TSRS_STEAL_STICKY=0` picks the busiest checke
 
 ## Why a TS2590 comes and goes: `TSRS_TRACE_UNION_REDUCTION`
 
+By default a TS2590 no longer depends on the checker assignment: a result computed while one was reported is not
+cached, so every file that evaluates the type reports it, once per too-complex type at the first site that evaluated
+it (`Checker::too_complex_since`, `flush_too_complex_reports`, notes/open-history-dependence.md section 4). The trace below is for `--checkerAssignment go`, which keeps Go's caches and so Go's first-evaluation-only
+reports, and for finding which union a TS2590 is about.
+
 TS2590 ("Expression produces a union type that is too complex to represent") from `removeSubtypes` is decided after
 100,000 comparisons: the number of comparisons per constituent so far, times the union's length, must stay at most
 1,000,000. So only a union of more than 1,000 types can get it. `TSRS_TRACE_UNION_REDUCTION=1` prints one line on

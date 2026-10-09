@@ -1320,6 +1320,7 @@ impl Checker {
         });
         let mut result = instantiations.get(&key);
         if result.is_none() {
+            let too_complex_before = self.too_complex_reports;
             let new_alias = new_alias.alias();
             let mut new_mapper = new_type_mapper(type_parameters, alloc_slice(&type_arguments));
             if target.object_flags().intersects(ObjectFlags::SingleSignatureType) && m.is_some() {
@@ -1332,7 +1333,10 @@ impl Checker {
             } else {
                 self.instantiate_anonymous_type(target, new_mapper, new_alias)
             };
-            self.object_type_instantiations.get_mut(&target).unwrap().insert(key, r);
+            // tsrs-only: not cached when the instantiation reported TS2590 (`too_complex_since`).
+            if !self.too_complex_since(too_complex_before) {
+                self.object_type_instantiations.get_mut(&target).unwrap().insert(key, r);
+            }
             if r.flags().intersects(TypeFlags::ObjectFlagsType) && !r.object_flags().intersects(ObjectFlags::CouldContainTypeVariablesComputed) {
                 // if `result` is one of the object types we tried to make (it may not be, due to how `instantiateMappedType` works), we can carry forward the type variable containment check from the input type arguments
                 let result_could_contain_object_flags = type_arguments.iter().any(|&a| self.could_contain_type_variables(a));
@@ -1487,6 +1491,7 @@ impl Checker {
             let key = get_conditional_type_key(&type_arguments, alias, for_constraint);
             let mut result = root.instantiations.get(&key);
             if result.is_none() {
+                let too_complex_before = self.too_complex_reports;
                 let census_span = self.census_begin(crate::workcensus::Cat::CondInst, || crate::workcensus::CKey::Root(root));
                 let mut census_fan_out: Option<usize> = None;
                 let mut census_nevers = 0u64;
@@ -1543,7 +1548,10 @@ impl Checker {
                         census.charge_bookkeeping();
                     }
                 }
-                root.instantiations.set(key, r);
+                // tsrs-only: not cached when the instantiation reported TS2590 (`too_complex_since`).
+                if !self.too_complex_since(too_complex_before) {
+                    root.instantiations.set(key, r);
+                }
                 result = Some(r);
                 // The mapper and its type list are garbage unless the result kept the mapper (79%, notes/mem-census.md).
                 // SAFETY: made above; a single-type mapper does not keep the list, an array mapper keeps it only if
@@ -2539,7 +2547,7 @@ impl Checker {
                         .enumerate()
                         .map(|(i, &t)| if i < element_infos.len() && element_infos[i].flags.intersects(ElementFlags::Variadic) { t } else { self.unknown_type })
                         .collect();
-                    if self.check_cross_product_union(&check_types) {
+                    if self.check_cross_product_union(&check_types, Self::too_complex_key(&check_types)) {
                         return self
                             .map_type(e, |c, t| Some(c.create_normalized_tuple_type_ex(target, &replace_element(element_types, i, t), object_flags)))
                             .unwrap();

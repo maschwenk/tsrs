@@ -740,14 +740,14 @@ impl Checker {
         }
         let left = self.try_merge_union_of_object_type_and_empty_object(left, readonly);
         if left.flags().intersects(TypeFlags::Union) {
-            if self.check_cross_product_union(&[left, right]) {
+            if self.check_cross_product_union(&[left, right], Self::too_complex_key(&[left, right])) {
                 return self.map_type(left, |c, t| Some(c.get_spread_type(t, right, symbol, object_flags, readonly))).unwrap();
             }
             return self.error_type;
         }
         let right = self.try_merge_union_of_object_type_and_empty_object(right, readonly);
         if right.flags().intersects(TypeFlags::Union) {
-            if self.check_cross_product_union(&[left, right]) {
+            if self.check_cross_product_union(&[left, right], Self::too_complex_key(&[left, right])) {
                 return self.map_type(right, |c, t| Some(c.get_spread_type(left, t, symbol, object_flags, readonly))).unwrap();
             }
             return self.error_type;

@@ -111,8 +111,16 @@ Before the fix the 40k-error corpus gave four distinct outputs over the same con
 - **Budget errors** (TS2589 instantiation depth and count, TS2859 relation complexity, TS2590 for a union whose
   subtype reduction is estimated to take more than 1,000,000 comparisons): they count work, and how much work a
   comparison takes depends on what the checker already resolved, so what is cached can decide whether they fire. Not
-  observed under random assignments on these corpora; TS2590 was reported on a private monorepo (issue #218: open,
-  notes/open-history-dependence.md section 4).
+  observed under random assignments on these corpora. A second shape was reported on a private monorepo (issue #218)
+  and is closed: Go caches what it builds from the error type a TS2590 returns (an intersection split in halves, a
+  union of two unions, an instantiation, a relation compared through it), so a checker reports the error only the
+  first time it evaluates the type; by default tsrs does not cache a result computed while a TS2590 was reported, and
+  every file that evaluates the type reports it, once per type at its first site, as tsgo does once per checker
+  (`Checker::too_complex_since`, `flush_too_complex_reports`; notes/open-history-dependence.md section 4). A use that
+  reaches the type through a declaration's cached type (a symbol's or node's resolved type, a constraint, a lazily
+  resolved member) is still assignment-dependent: the use evaluates the type, and so reports, only if its checker has
+  not resolved the declaration before; when the declaring file is an unchecked declaration file the report at the
+  declaration is never printed either.
 - **Diagnostics located in another file:** a file's diagnostics come only from the checker that checks it, right
   after checking it, so an error that checking file B files against file A is kept only if the same checker checks A
   afterwards. This can occur (Go behaves the same). Not observed as a difference in output; the routing itself is seen

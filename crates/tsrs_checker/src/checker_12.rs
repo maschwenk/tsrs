@@ -203,11 +203,15 @@ impl Checker {
         let key = get_type_alias_instantiation_key(type_arguments, alias);
         let mut instantiation = links.instantiations.get(&key);
         if instantiation.is_none() {
+            let too_complex_before = self.too_complex_reports;
             let min_type_argument_count = self.get_min_type_argument_count(type_parameters);
             let filled = self.fill_missing_type_arguments(type_arguments, type_parameters, min_type_argument_count, ast::is_in_js_file(symbol.value_declaration()));
             let mapper = new_type_mapper(type_parameters, alloc_vec(filled));
             let result = self.instantiate_type_with_alias(t, Some(mapper), alias);
-            links.instantiations.set(key, result);
+            // tsrs-only: not cached when the instantiation reported TS2590 (`too_complex_since`).
+            if !self.too_complex_since(too_complex_before) {
+                links.instantiations.set(key, result);
+            }
             instantiation = Some(result);
         }
         instantiation.unwrap()
@@ -2667,8 +2671,12 @@ impl Checker {
             let key = UnionOfUnionKey { id1, id2, r: union_reduction, a: get_alias_key(alias) };
             let mut t = self.union_of_union_types.get(&key).copied();
             if t.is_none() {
+                let too_complex_before = self.too_complex_reports;
                 let result = self.get_union_type_worker(types, union_reduction, alias, None /*origin*/);
-                self.union_of_union_types.insert(key, result);
+                // tsrs-only: not cached when the reduction reported TS2590 (`too_complex_since`).
+                if !self.too_complex_since(too_complex_before) {
+                    self.union_of_union_types.insert(key, result);
+                }
                 t = Some(result);
             }
             return t.unwrap();

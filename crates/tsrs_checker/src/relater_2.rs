@@ -829,6 +829,7 @@ impl Relater {
         }
         let save_reliability_flags = c.reliability_flags;
         c.reliability_flags = RelationComparisonResult::None;
+        let too_complex_before = c.too_complex_reports;
         let result = if self.expanding_flags.get() == ExpandingFlags::Both {
             Ternary::Maybe
         } else {
@@ -843,9 +844,12 @@ impl Relater {
             self.target_stack.borrow_mut().pop();
         }
         self.expanding_flags.set(save_expanding_flags);
+        // tsrs-only: a result computed while a TS2590 was reported (a constraint that became the error type) is not
+        // recorded, so that the next comparison evaluates and reports again (`Checker::too_complex_since`).
+        let record = !c.too_complex_since(too_complex_before);
         if result != Ternary::False {
             if result == Ternary::True || (self.source_stack.borrow().is_empty() && self.target_stack.borrow().is_empty()) {
-                if result == Ternary::True || result == Ternary::Maybe {
+                if (result == Ternary::True || result == Ternary::Maybe) && record {
                     // If result is definitely true, record all maybe keys as having succeeded. Also, record Ternary.Maybe
                     // results as having succeeded once we reach depth 0, but never record Ternary.Unknown results.
                     self.reset_maybe_stack(c, maybe_start as i32, propagating_variance_flags, true);
@@ -859,8 +863,10 @@ impl Relater {
         } else {
             // A false result goes straight into global cache (when something is false under
             // assumptions it will also be false without assumptions)
-            Relation::set(&self.rel(), id, RelationComparisonResult::Failed | propagating_variance_flags);
-            self.relation_count.set(self.relation_count.get() - 1);
+            if record {
+                Relation::set(&self.rel(), id, RelationComparisonResult::Failed | propagating_variance_flags);
+                self.relation_count.set(self.relation_count.get() - 1);
+            }
             self.reset_maybe_stack(c, maybe_start as i32, propagating_variance_flags, false);
         }
         result

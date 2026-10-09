@@ -96,6 +96,7 @@ impl Checker {
         } else {
             self.check_source_file_worker(ctx, source_file, check_unused);
         }
+        self.flush_too_complex_reports();
         self.checking_file = saved_checking_file;
     }
 
@@ -165,6 +166,7 @@ impl Checker {
         if self.is_canceled() {
             self.was_canceled = true;
         }
+        self.flush_too_complex_reports();
         self.ctx = None;
         self.checking_file = saved_checking_file;
         let added = |all: Vec<P<Diagnostic>>, before: &rustc_hash::FxHashSet<P<Diagnostic>>| all.into_iter().filter(|d| !before.contains(d)).collect::<Vec<_>>();

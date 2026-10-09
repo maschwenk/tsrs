@@ -431,7 +431,7 @@ impl Checker {
                                 if trace {
                                     crate::uniontrace::report(self, input, &types, "too complex (TS2590)", Some(count), checkpoint);
                                 }
-                                self.error(self.current_node, &diagnostics::Expression_produces_a_union_type_that_is_too_complex_to_represent, &[]);
+                                self.report_too_complex(Self::too_complex_key(input));
                                 return None;
                             }
                         }
@@ -605,6 +605,7 @@ impl Checker {
         let key = get_intersection_key(&type_set, flags, alias);
         let mut result = self.intersection_types.get(&key);
         if result.is_none() {
+            let too_complex_before = self.too_complex_reports;
             let r;
             if includes.intersects(TypeFlags::Union) {
                 let (ts, reduced) = self.intersect_unions_of_primitive_types(&mut type_set);
@@ -640,7 +641,7 @@ impl Checker {
                     // We are attempting to construct a type of the form X & (A | B) & (C | D). Transform this into a type of
                     // the form X & A & C | X & A & D | X & B & C | X & B & D. If the estimated size of the resulting union type
                     // exceeds 100000 constituents, report an error.
-                    if !self.check_cross_product_union(&type_set) {
+                    if !self.check_cross_product_union(&type_set, Self::too_complex_key(&key)) {
                         return self.error_type;
                     }
                     let constituents = self.get_cross_product_intersections(&type_set, flags);
@@ -658,7 +659,11 @@ impl Checker {
                 r = self.new_intersection_type(object_flags | propagated, &type_set);
                 r.set_alias(alias.alias());
             }
-            self.intersection_types.insert(key, r);
+            // tsrs-only: not cached when a TS2590 was reported below (a split, a restart or an inner intersection
+            // returned the error type; `too_complex_since`).
+            if !self.too_complex_since(too_complex_before) {
+                self.intersection_types.insert(key, r);
+            }
             result = Some(r);
         }
         result.unwrap()
@@ -1172,13 +1177,73 @@ impl Checker {
 
 impl Checker {
     // checker.go:27118
-    pub(crate) fn check_cross_product_union(&mut self, types: &[P<Type>]) -> bool {
+    /// `key` identifies the evaluation for `report_too_complex` (tsrs-only): the caller's cache key where it has one,
+    /// so that what Go's cache would have told apart (an aliased and an alias-free intersection) is told apart here.
+    pub(crate) fn check_cross_product_union(&mut self, types: &[P<Type>], key: u64) -> bool {
         let size = self.get_cross_product_union_size(types);
         if size >= 100_000 {
-            self.error(self.current_node, &diagnostics::Expression_produces_a_union_type_that_is_too_complex_to_represent, &[]);
+            self.report_too_complex(key);
             return false;
         }
         true
+    }
+
+    /// TS2590 at `current_node` for the too-complex evaluation `key` (`too_complex_key`), counted for
+    /// `too_complex_since`.
+    pub(crate) fn report_too_complex(&mut self, key: u64) {
+        self.too_complex_reports = self.too_complex_reports.wrapping_add(1);
+        match self.current_node {
+            // tsrs-only: each file reports a too-complex type once, at the first site in it that evaluated the type,
+            // whichever file's check that evaluation happened in (resolving a declaration of file A while checking
+            // file B reports at the site in A; A's later sites are then quiet). While a file is being checked the
+            // report is emitted when the file is done (`flush_too_complex_reports`); outside a file check (the
+            // language server asking for a type) it is emitted at once. Go reports at once, every time.
+            Some(node) if !tsrs_core::compat::go_compatible_history() => {
+                let reported_before = ast::get_source_file_of_node(node).is_some_and(|file| !self.too_complex_reported.insert((file, key)));
+                if reported_before {
+                } else if self.checking_file.is_some() {
+                    self.too_complex_nodes.push(node);
+                } else {
+                    self.error(Some(node), &diagnostics::Expression_produces_a_union_type_that_is_too_complex_to_represent, &[]);
+                }
+            }
+            location => {
+                self.error(location, &diagnostics::Expression_produces_a_union_type_that_is_too_complex_to_represent, &[]);
+            }
+        }
+    }
+
+    /// The identity of a too-complex evaluation within one checker: a hash of the caller's cache key (the alias-qualified
+    /// intersection key) or of the types it combined (the union being reduced; the operands of a cross product that has
+    /// no cache of its own).
+    pub(crate) fn too_complex_key<K: std::hash::Hash + ?Sized>(key: &K) -> u64 {
+        use std::hash::Hasher;
+        let mut h = rustc_hash::FxHasher::default();
+        key.hash(&mut h);
+        h.finish()
+    }
+
+    /// tsrs-only: emits the TS2590 reports recorded since the last flush. Since `too_complex_since` keeps such results
+    /// out of the caches, every expression that evaluates the type hits the limit again, and `report_too_complex`
+    /// keeps the first site per file and type: Go, whose caches hide the later evaluations, reports the first
+    /// evaluation per checker; this reports the first per file. Called at the end of `check_source_file` and
+    /// `check_source_file_piece`.
+    pub(crate) fn flush_too_complex_reports(&mut self) {
+        for node in std::mem::take(&mut self.too_complex_nodes) {
+            self.error(Some(node), &diagnostics::Expression_produces_a_union_type_that_is_too_complex_to_represent, &[]);
+        }
+    }
+
+    /// tsrs-only: whether a computation that began when `too_complex_reports` was `before` reported TS2590, so that
+    /// its result stays out of the caches. Neither TS2590 site caches its own failure, but Go caches what is built
+    /// from the error type it returns: an intersection split in halves or restarted, a union of two unions, an
+    /// instantiation, a relation compared through it. A later request on the same checker then gets that result
+    /// without the error, so whether a file reports the TS2590 depends on what its checker evaluated before it, and
+    /// under work stealing on timing (issue #218, notes/open-history-dependence.md section 4). By default such
+    /// results are not cached: every evaluation computes them again, and each file reports once per type, at the first
+    /// site (`report_too_complex`, `flush_too_complex_reports`). `go_compatible_history()` keeps Go's caches.
+    pub(crate) fn too_complex_since(&self, before: u32) -> bool {
+        self.too_complex_reports != before && !tsrs_core::compat::go_compatible_history()
     }
 
     // checker.go:27130
