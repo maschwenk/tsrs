@@ -415,11 +415,65 @@ pub(crate) fn create_symbol_table(symbols: &[P<Symbol>]) -> Option<P<SymbolTable
     Some(result)
 }
 
+/// A symbol with what `compare_symbols_worker` reads from its first declaration (`sort_symbols`).
+#[derive(Clone, Copy)]
+pub struct SymbolSortKey {
+    symbol: P<Symbol>,
+    declaration: Option<P<Node>>,
+    file: Option<P<SourceFile>>,
+    index: i32,
+}
+
+/// `compare_symbols_worker` (with `compare_nodes`) on precomputed keys: the same result for the same symbols.
+fn compare_symbol_sort_keys(k1: &SymbolSortKey, k2: &SymbolSortKey) -> i32 {
+    let (s1, s2) = (k1.symbol, k2.symbol);
+    if s1 == s2 {
+        return 0;
+    }
+    match (k1.declaration, k2.declaration) {
+        (Some(d1), Some(d2)) => {
+            if d1 != d2 {
+                let r = if k1.file != k2.file { k1.index - k2.index } else { d1.pos() - d2.pos() };
+                if r != 0 {
+                    return r;
+                }
+            }
+        }
+        (Some(_), None) => return -1,
+        (None, Some(_)) => return 1,
+        (None, None) => {}
+    }
+    let r = compare_names(s1.name(), s2.name());
+    if r != 0 {
+        return r;
+    }
+    (ast::get_symbol_id(s1).0 as i64 - ast::get_symbol_id(s2).0 as i64) as i32
+}
+
 impl Checker {
     // utilities.go:361
     pub(crate) fn sort_symbols(&mut self, symbols: &mut [P<Symbol>]) {
         if self.program.source_files_complete() {
-            symbols.sort_by(|&a, &b| self.compare_symbols(Some(a), Some(b)).cmp(&0));
+            if symbols.len() <= 2 {
+                symbols.sort_by(|&a, &b| self.compare_symbols(Some(a), Some(b)).cmp(&0));
+                return;
+            }
+            // tsrs-only (can1357's microsoft/TypeScript perf/checker-speedups-v3, ba343defd): `compare_symbols` finds
+            // each declaration's source file by walking its parents, twice per comparison. Find each once; the
+            // comparison is `compare_symbols_worker` with those lookups done in advance.
+            let mut keys = std::mem::take(&mut self.symbol_sort_keys);
+            keys.extend(symbols.iter().map(|&symbol| {
+                let declaration = symbol.declarations().first().copied();
+                let file = declaration.and_then(|d| ast::get_source_file_of_node(d));
+                let index = file.and_then(|f| self.file_index_map.get(&f).copied()).unwrap_or(0);
+                SymbolSortKey { symbol, declaration, file, index }
+            }));
+            keys.sort_by(|k1, k2| compare_symbol_sort_keys(k1, k2).cmp(&0));
+            for (slot, key) in symbols.iter_mut().zip(&keys) {
+                *slot = key.symbol;
+            }
+            keys.clear();
+            self.symbol_sort_keys = keys;
         } else {
             // Not a total order (see `Program::source_files_complete`): Rust's sort would panic, Go's pdqsort sorts
             // anyway; its port gives Go's order.

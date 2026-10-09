@@ -1631,14 +1631,23 @@ impl Checker {
             self.set_structured_type_members(t, None, &[], &[], &[]);
             let mapper = d.mapper.get().unwrap();
             let target_properties = self.get_properties_of_object_type(target);
-            let members = self.create_instantiated_symbol_table(&target_properties, mapper);
+            // tsrs-only (can1357's microsoft/TypeScript perf/checker-speedups-v3, ba343defd): the members are the
+            // instantiations of the target's named members, which keep their names, flags and declarations, so
+            // `get_named_members` would list them in the target's order. Value members only: `symbol_is_value` of an
+            // alias resolves it, which an instantiation need not repeat the same way.
+            let keep_order = target_properties.iter().all(|p| p.flags().intersects(SymbolFlags::Value));
+            let (members, properties) = self.create_instantiated_symbol_table_and_list(&target_properties, mapper);
             let target_call_signatures = self.get_signatures_of_type(target, SignatureKind::Call);
             let call_signatures = self.instantiate_signatures(&target_call_signatures, mapper);
             let target_construct_signatures = self.get_signatures_of_type(target, SignatureKind::Construct);
             let construct_signatures = self.instantiate_signatures(&target_construct_signatures, mapper);
             let target_index_infos = self.get_index_infos_of_type(target);
             let index_infos = self.instantiate_index_infos(&target_index_infos, mapper);
-            self.set_structured_type_members(t, members, &call_signatures, &construct_signatures, &index_infos);
+            if keep_order && members.map_or(0, |m| m.len()) == properties.len() {
+                self.set_structured_type_members_with_properties(t, members, properties, &call_signatures, &construct_signatures, &index_infos);
+            } else {
+                self.set_structured_type_members(t, members, &call_signatures, &construct_signatures, &index_infos);
+            }
             return;
         }
         let symbol = self.get_merged_symbol(t.symbol().unwrap());
@@ -1723,6 +1732,21 @@ impl Checker {
     }
 
     // checker.go:21070
+    /// `create_instantiated_symbol_table`, and the instantiated symbols in the order of `symbols`.
+    pub(crate) fn create_instantiated_symbol_table_and_list(&mut self, symbols: &[P<Symbol>], m: P<TypeMapper>) -> (Option<P<SymbolTable>>, Vec<P<Symbol>>) {
+        if symbols.is_empty() {
+            return (None, Vec::new());
+        }
+        let result = SymbolTable::with_capacity(symbols.len());
+        let mut list = Vec::with_capacity(symbols.len());
+        for &symbol in symbols {
+            let instantiated = self.instantiate_symbol(symbol, Some(m));
+            result.set(symbol.name(), instantiated);
+            list.push(instantiated);
+        }
+        (Some(result), list)
+    }
+
     pub(crate) fn create_instantiated_symbol_table(&mut self, symbols: &[P<Symbol>], m: P<TypeMapper>) -> Option<P<SymbolTable>> {
         if symbols.is_empty() {
             return None;

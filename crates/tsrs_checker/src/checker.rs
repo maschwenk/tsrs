@@ -944,6 +944,11 @@ pub struct Checker {
     pub compiler_options: P<CompilerOptions>,
     pub files: &'static [P<SourceFile>],
     pub file_index_map: FxHashMap<P<SourceFile>, i32>,
+    /// Scratch for `sort_symbols` (empty between sorts).
+    pub(crate) symbol_sort_keys: Vec<crate::utilities::SymbolSortKey>,
+    /// The property order of the first sorted instantiation of a generic class or interface whose own members are not
+    /// resolved yet (`get_type_reference_properties`).
+    pub(crate) instantiated_property_orders: FxHashMap<P<Type>, &'static [P<Symbol>]>,
     pub type_count: u32,
     pub symbol_count: u32,
     pub signature_count: u32,
@@ -1376,6 +1381,8 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         compiler_options,
         files,
         file_index_map: create_file_index_map(files),
+        symbol_sort_keys: Vec::new(),
+        instantiated_property_orders: FxHashMap::default(),
         type_count: 0,
         symbol_count: 0,
         signature_count: 0,

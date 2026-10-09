@@ -2082,10 +2082,87 @@ impl Checker {
         construct_signatures: &[P<Signature>],
         index_infos: &[P<IndexInfo>],
     ) {
+        // Mark the members resolved and set them before listing them, as Go does: listing can resolve aliases
+        // (`symbol_is_value`), which can come back to this type.
+        t.object_flags.set(t.object_flags() | ObjectFlags::MembersResolved);
+        t.as_structured_type().set_members(members);
+        // Object flags mean other things on unions and intersections, which come here too.
+        let reference_target = if t.flags().intersects(TypeFlags::Object) && t.object_flags().intersects(ObjectFlags::Reference) {
+            t.as_object_type().target.get().filter(|&target| target != t)
+        } else {
+            None
+        };
+        let properties = match reference_target {
+            Some(target) => self.get_type_reference_properties(t, target, members),
+            None => self.get_named_members(members, t.symbol()),
+        };
+        self.set_structured_type_members_with_properties(t, members, properties, call_signatures, construct_signatures, index_infos);
+    }
+
+    /// `get_named_members` for an instantiation of a generic class or interface (can1357's microsoft/TypeScript
+    /// perf/checker-speedups-v3, 6d557d0e3): reuses its target's order, or the order of the target's first sorted
+    /// instantiation while the target's own members are unresolved (resolving them here could recurse), when the
+    /// members validate against it.
+    fn get_type_reference_properties(&mut self, t: P<Type>, target: P<Type>, members: Option<P<SymbolTable>>) -> Vec<P<Symbol>> {
+        if t.symbol() == target.symbol() {
+            let order = if target.object_flags().intersects(ObjectFlags::MembersResolved) {
+                Some(target.as_structured_type().properties())
+            } else {
+                self.instantiated_property_orders.get(&target).copied()
+            };
+            let partition = t.symbol().is_some_and(|s| s.flags().intersects(SymbolFlags::Class | SymbolFlags::Interface));
+            if let Some(result) = order.and_then(|order| self.try_reuse_property_order(members, order, partition)) {
+                return result;
+            }
+        }
+        let result = self.get_named_members(members, t.symbol());
+        if t.symbol() == target.symbol() && !target.object_flags().intersects(ObjectFlags::MembersResolved) {
+            self.instantiated_property_orders.insert(target, alloc_slice(&result));
+        }
+        result
+    }
+
+    /// The members of `members` in the order of `order`, if `get_named_members` would list them so: as many members as
+    /// `order` has, each a named member with the same name, the same first declaration (or none) and, where
+    /// `get_named_members` partitions by declaration, the same value declaration as its counterpart. Those are all
+    /// that `compare_symbols` and the partition read (names are unique in a table, so the id fallback never decides).
+    fn try_reuse_property_order(&self, members: Option<P<SymbolTable>>, order: &[P<Symbol>], partition: bool) -> Option<Vec<P<Symbol>>> {
+        let len = members.map_or(0, |m| m.len());
+        if len != order.len() {
+            return None;
+        }
+        let mut result = Vec::with_capacity(len);
+        for &property in order {
+            let name = property.name();
+            let symbol = members.and_then(|m| m.lookup(name))?;
+            // `is_named_member` without `symbol_is_value`'s alias resolution, which could run checker code in a
+            // different order than `get_named_members`: a member that is not plainly a value takes the slow path.
+            if symbol.name() != name
+                || is_reserved_member_name(name)
+                || !symbol.flags().intersects(SymbolFlags::Value)
+                || symbol.declarations().first() != property.declarations().first()
+                || partition && symbol.value_declaration() != property.value_declaration()
+            {
+                return None;
+            }
+            result.push(symbol);
+        }
+        Some(result)
+    }
+
+    /// `set_structured_type_members` with the named members already in `get_named_members` order.
+    pub(crate) fn set_structured_type_members_with_properties(
+        &mut self,
+        t: P<Type>,
+        members: Option<P<SymbolTable>>,
+        properties: Vec<P<Symbol>>,
+        call_signatures: &[P<Signature>],
+        construct_signatures: &[P<Signature>],
+        index_infos: &[P<IndexInfo>],
+    ) {
         t.object_flags.set(t.object_flags() | ObjectFlags::MembersResolved);
         let data = t.as_structured_type();
         data.set_members(members);
-        let properties = self.get_named_members(members, t.symbol());
         data.set_properties(alloc_vec(properties));
         if !call_signatures.is_empty() {
             if !construct_signatures.is_empty() {
