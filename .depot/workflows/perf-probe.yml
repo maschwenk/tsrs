@@ -76,16 +76,14 @@ jobs:
             && ls /usr/lib/linux-tools/*/perf) || echo "perf not installed"
           sudo sysctl -q -w kernel.perf_event_paranoid=-1 kernel.kptr_restrict=0 || true
 
-      - name: Read the pinned Rust toolchain (rust-toolchain.toml)
-        id: rust
-        shell: bash
-        run: echo "toolchain=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
-
-      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
         with:
-          toolchain: ${{ steps.rust.outputs.toolchain }}
-          targets: x86_64-unknown-linux-gnu
           components: llvm-tools
+          save-cache: ${{ github.ref_name == 'main' }}
+          cache-key: warm
+
+      - name: Install x86_64-unknown-linux-gnu target
+        run: rustup target add x86_64-unknown-linux-gnu
 
       # bench.yml's caches (restore only; dispatched runs of a pushed branch get them, `depot ci run` does not).
       - name: Cache keys
@@ -137,11 +135,6 @@ jobs:
 
       - name: Set up projects and compilers
         run: python3 bench/run.py --setup-only --projects "$PROBE_PROJECTS"
-
-      # ~/.cargo and the dependencies in target/ (a build takes ~4 min on 64 cores, far longer on 8).
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          key: perf-probe-${{ inputs.runner || 'depot-ubuntu-24.04-32' }}
 
       - name: Build tsrs (release)
         run: cargo build --release --locked -p tsrs_cli
