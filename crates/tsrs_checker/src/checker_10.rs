@@ -2098,6 +2098,9 @@ impl Checker {
 
     #[inline(never)]
     fn get_lazy_mapped_table_worker(&mut self, t: P<Type>) -> Option<std::rc::Rc<LazyMappedTable>> {
+        if let Some(lazy) = self.lazy_mapped_tables.get_base_of(t, |b| b.get(&t).cloned()) {
+            return Some(lazy);
+        }
         if let Some(lazy) = self.lazy_mapped_tables.get(&t) {
             return Some(Rc::clone(lazy));
         }

@@ -1081,7 +1081,7 @@ pub struct Checker {
     pub source_file_links: LinkStore<SourceFile, SourceFileLinks>,
     pub reg_exp_scanner: Option<Box<Scanner>>,
     pub pattern_for_type: FxHashMap<P<Type>, P<Node>>,
-    pub(crate) lazy_member_tables: FxHashMap<P<Type>, P<LazyMemberTable>>,
+    pub(crate) lazy_member_tables: crate::twolevel::TwoLevel<FxHashMap<P<Type>, P<LazyMemberTable>>>,
     // Go `StructuredType.objectTypeWithoutAbstractConstructSignatures`: set only by the node builder, for few types,
     // so kept here instead of in every object, union and intersection type.
     pub(crate) object_types_without_abstract_construct_signatures: FxHashMap<P<Type>, P<Type>>,
@@ -1092,7 +1092,7 @@ pub struct Checker {
     /// spike/r1-read-path: a fork's instantiations under shared targets (interfaces, type alias tables, conditional
     /// roots) that the frozen tables lack, by (target or table, key) (design section 3.4, side table 2). Never filled.
     pub(crate) shared_instantiations: FxHashMap<(tsrs_core::PKey, CacheHashKey), P<Type>>,
-    pub(crate) lazy_mapped_tables: FxHashMap<P<Type>, std::rc::Rc<LazyMappedTable>>,
+    pub(crate) lazy_mapped_tables: crate::twolevel::TwoLevel<FxHashMap<P<Type>, std::rc::Rc<LazyMappedTable>>>,
     /// tsrs_core::lazymembers::enabled() (default on; `--noLazyMembers` / `TSRS_LAZY_MEMBERS=0`): no lazy table is created when false.
     pub lazy_members: bool,
     /// notes/mem-lazy.md L1: tuple references get lazy member tables too.
@@ -1488,12 +1488,12 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         source_file_links: LinkStore::default(),
         reg_exp_scanner: None,
         pattern_for_type: FxHashMap::default(),
-        lazy_member_tables: FxHashMap::default(),
+        lazy_member_tables: Default::default(),
         object_types_without_abstract_construct_signatures: FxHashMap::default(),
         structured_type_base_constraints: FxHashMap::default(),
         object_type_instantiations: Default::default(),
         shared_instantiations: FxHashMap::default(),
-        lazy_mapped_tables: FxHashMap::default(),
+        lazy_mapped_tables: Default::default(),
         lazy_members: tsrs_core::lazymembers::enabled(),
         lazy_tuples: tsrs_core::lazymembers::lazy_tuples(),
         #[cfg(feature = "site-counts")]

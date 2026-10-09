@@ -102,6 +102,60 @@ impl<K: Eq + Hash + 'static, V: Clone + 'static> GoMap<K, V> {
     }
 }
 
+/// spike/r1-read-path: `GoMap` whose table is a `FrozenCell` (no borrow counter), for the tables hung off arena objects
+/// and link records that a fork of the shared type layer would read from the frozen seed (design section 3.2):
+/// `UnionRare.constituent_map` (`TESTED`: a field of a type, which may be shared, so a read of a nil map and every
+/// write take the window test) and `ModuleSymbolLinks.type_only_export_star_map` (a field of a link record, which is
+/// the checker's own copy, so no test). Both are only ever replaced whole (`assign`), never written in place.
+pub struct FrozenGoMap<K: 'static, V: 'static, const TESTED: bool>(Cell<Option<P<tsrs_core::FrozenCell<FxHashMap<K, V>>>>>);
+
+impl<K: 'static, V: 'static, const TESTED: bool> Default for FrozenGoMap<K, V, TESTED> {
+    fn default() -> Self {
+        FrozenGoMap(Cell::new(None))
+    }
+}
+
+impl<K: Eq + Hash + 'static, V: Clone + 'static, const TESTED: bool> FrozenGoMap<K, V, TESTED> {
+    #[inline]
+    fn table(&self) -> Option<P<tsrs_core::FrozenCell<FxHashMap<K, V>>>> {
+        match self.0.get() {
+            Some(m) => Some(m),
+            None if !TESTED || !tsrs_core::shwindow::shared_ref(self) => None,
+            None => tsrs_core::shcell::side_get(std::ptr::from_ref(self).addr(), None),
+        }
+    }
+    #[inline]
+    fn set_table(&self, m: Option<P<tsrs_core::FrozenCell<FxHashMap<K, V>>>>) {
+        if TESTED && tsrs_core::shwindow::shared_ref(self) {
+            return tsrs_core::shcell::side_set(std::ptr::from_ref(self).addr(), m);
+        }
+        self.0.set(m)
+    }
+    pub fn is_nil(&self) -> bool {
+        self.table().is_none()
+    }
+    /// Go `v, ok := m[k]` (reading a nil map is allowed).
+    #[inline]
+    pub fn get<Q: ?Sized + Hash + Eq>(&self, key: &Q) -> Option<V>
+    where
+        K: std::borrow::Borrow<Q>,
+    {
+        self.table().and_then(|m| m.borrow().get(key).cloned())
+    }
+    pub fn len(&self) -> usize {
+        self.table().map_or(0, |m| m.borrow().len())
+    }
+    /// Go `a.m = nil`.
+    pub fn set_nil(&self) {
+        self.set_table(None)
+    }
+    /// Go `a.m = someFreshlyBuiltMap`.
+    pub fn assign(&self, m: FxHashMap<K, V>) {
+        let scratch = tsrs_core::arena::scratch_contains(std::ptr::from_ref::<Self>(self) as usize);
+        self.set_table(Some(P::new_in(scratch, tsrs_core::FrozenCell::new(m))))
+    }
+}
+
 // ParseFlags
 
 bitflags! {
@@ -498,7 +552,7 @@ pub struct AliasSymbolLinks {
 #[derive(Default)]
 pub struct ModuleSymbolLinks {
     pub resolved_exports: Cell<Option<P<SymbolTable>>>, // Resolved exports of module or combined early- and late-bound static members of a class.
-    pub type_only_export_star_map: GoMap<String, P<Node>>, // Set on a module symbol when some of its exports were resolved through a 'export type * from "mod"' declaration
+    pub type_only_export_star_map: FrozenGoMap<String, P<Node>, false>, // Set on a module symbol when some of its exports were resolved through a 'export type * from "mod"' declaration
     pub exports_checked: Cell<bool>,
 }
 
@@ -2206,7 +2260,7 @@ embeds!(TypeReference, object_type, ObjectType);
 /// key plus the value, and a lookup hashes the type ids instead of xxh3 over the key bytes. Exact list equality maps
 /// lists to references like Go's collision-free 128-bit key does. Nil until `make()`, like the Go map.
 #[derive(Default)]
-pub struct ReferenceInstantiations(Cell<Option<P<RefCell<hashbrown::HashTable<P<Type>>>>>>);
+pub struct ReferenceInstantiations(Cell<Option<P<tsrs_core::FrozenCell<hashbrown::HashTable<P<Type>>>>>>);
 
 impl ReferenceInstantiations {
     /// Heap census: the table's slots (4 bytes each).
@@ -2233,7 +2287,7 @@ impl ReferenceInstantiations {
 
     /// Go `m = make(map[CacheHashKey]*Type)`.
     pub fn make(&self) {
-        self.0.set(Some(P::new(RefCell::new(hashbrown::HashTable::new()))));
+        self.0.set(Some(P::new(tsrs_core::FrozenCell::new(hashbrown::HashTable::new()))));
     }
 
     /// Go `m[getTypeListKey(typeArguments)]`.
@@ -2462,7 +2516,7 @@ struct UnionRare {
     regular_type: ShCell<Option<P<Type>>>,
     origin: Cell<Option<P<Type>>>, // Denormalized union, intersection, or index type in which union originates
     key_property_name: ShStrCell,    // Property with unique unit type that exists in every object/intersection in union type
-    constituent_map: GoMap<P<Type>, P<Type>>, // Constituents keyed by unit type discriminants
+    constituent_map: FrozenGoMap<P<Type>, P<Type>, true>, // Constituents keyed by unit type discriminants
 }
 
 #[derive(Default)]
@@ -2532,7 +2586,10 @@ impl UnionOrIntersectionType {
         let cell = if skip_object_function_property_augment { &r.property_cache_without_function_property_augment } else { &r.property_cache };
         // Go `getSymbolTable(&cache)` on a `ShCell`.
         if let Some(table) = cell.get() {
-            return table;
+            if !table.is_shared() {
+                return table;
+            }
+            return copy_shared_symbol_table(cell, table);
         }
         let table = P::new(SymbolTable::default());
         cell.set(Some(table));
@@ -2601,11 +2658,11 @@ impl UnionType {
         }
     }
     /// Go `t.constituentMap` for reading (nil while there is no tail).
-    pub fn constituent_map(&self) -> Option<&'static GoMap<P<Type>, P<Type>>> {
+    pub fn constituent_map(&self) -> Option<&'static FrozenGoMap<P<Type>, P<Type>, true>> {
         self.union_rare().map(|r| &r.constituent_map)
     }
     /// Go `t.constituentMap` for writing.
-    pub fn constituent_map_for_write(&self) -> &'static GoMap<P<Type>, P<Type>> {
+    pub fn constituent_map_for_write(&self) -> &'static FrozenGoMap<P<Type>, P<Type>, true> {
         &self.union_rare_for_write().constituent_map
     }
 }
@@ -3267,3 +3324,12 @@ impl crate::links::LinkCopy for SourceFileLinks {
     }
 }
 
+
+/// spike/r1-read-path: a fork's private copy of a shared property cache, kept through the `ShCell` (side table).
+#[cold]
+#[inline(never)]
+fn copy_shared_symbol_table(cell: &ShCell<Option<P<SymbolTable>>>, table: P<SymbolTable>) -> P<SymbolTable> {
+    let copy = table.clone_table();
+    cell.set(Some(copy));
+    copy
+}

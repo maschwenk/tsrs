@@ -33,6 +33,18 @@ impl<M> std::ops::DerefMut for TwoLevel<M> {
 }
 
 impl<M> TwoLevel<M> {
+    /// `get_base` for a map keyed by one object (the lazy member and mapped tables): probed only when it is shared.
+    #[inline]
+    pub fn get_base_of<T: ?Sized, R>(&self, key: tsrs_core::P<T>, probe: impl FnOnce(&'static M) -> Option<R>) -> Option<R> {
+        if !key.is_shared() {
+            return None;
+        }
+        match self.base {
+            None => None,
+            Some(base) => probe_base(base, probe),
+        }
+    }
+
     /// The frozen map's answer for a key whose handles AND to `and` (probed only when they all lie in the window).
     #[inline]
     pub fn get_base<R>(&self, and: KeyAnd, probe: impl FnOnce(&'static M) -> Option<R>) -> Option<R> {

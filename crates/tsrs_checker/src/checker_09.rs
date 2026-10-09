@@ -2565,7 +2565,9 @@ impl Checker {
     // checker.go:19439
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn resolve_type_reference_members(&mut self, t: P<Type>) {
-        if let Some(lm) = self.lazy_member_tables.get(&t).filter(|lm| lm.ready.get().is_some()).copied() {
+        let lm = self.lazy_member_tables.get_base_of(t, |b| b.get(&t).copied()).or_else(|| self.lazy_member_tables.get(&t).copied());
+        if let Some(lm) = lm.filter(|lm| lm.ready.get().is_some()) {
+            let lm = self.own_lazy_member_table(t, lm);
             self.resolve_lazy_members(t, lm);
             return;
         }
@@ -2729,6 +2731,7 @@ pub(crate) fn lazy_member_tables_heap(c: &Checker) -> Vec<(String, crate::heapce
     ]
 }
 
+#[derive(Clone)]
 pub(crate) struct LazyMembers {
     pub(crate) unaffected: ThinSlice<&'static str>, // sorted names of declared members that instantiate to themselves
     pub(crate) call_signatures: ThinSlice<P<Signature>>,
@@ -2756,7 +2759,9 @@ impl Checker {
     /// `resolveStructuredTypeMembers` on instantiated references, which leaves the flag unset). Read-only;
     /// never resolves anything. Used by the Node API to report Go's objectFlags.
     pub fn members_resolved_like_go(&self, t: P<Type>) -> bool {
-        t.object_flags_lazy(ObjectFlags::MembersResolved).intersects(ObjectFlags::MembersResolved) || self.lazy_member_tables.contains_key(&t)
+        t.object_flags_lazy(ObjectFlags::MembersResolved).intersects(ObjectFlags::MembersResolved)
+            || self.lazy_member_tables.get_base_of(t, |b| b.get(&t).copied()).is_some()
+            || self.lazy_member_tables.contains_key(&t)
     }
 
     // Returns nil if t has no lazy member table or it is still being prepared.
@@ -2779,8 +2784,8 @@ impl Checker {
         {
             return None;
         }
-        let lm = match self.lazy_member_tables.get(&t) {
-            Some(&lm) => lm,
+        let lm = match self.lazy_member_tables.get_base_of(t, |b| b.get(&t).copied()).or_else(|| self.lazy_member_tables.get(&t).copied()) {
+            Some(lm) => self.own_lazy_member_table(t, lm),
             None => self.create_lazy_member_table(t, source.unwrap())?,
         };
         if lm.ready.get().is_none() || t.object_flags_lazy(ObjectFlags::MembersResolved).intersects(ObjectFlags::MembersResolved) {
@@ -2876,6 +2881,32 @@ impl Checker {
             // t was resolved while preparing; resolveObjectTypeMembers would now replace its members.
             self.resolve_lazy_members(t, lm);
         }
+    }
+
+    /// spike/r1-read-path: `lm`, or this checker's copy of it if it is shared (a fork fills its own tables; the
+    /// spike's `own_lazy_member_table`). One window test per use.
+    #[inline]
+    pub(crate) fn own_lazy_member_table(&mut self, t: P<Type>, lm: P<LazyMemberTable>) -> P<LazyMemberTable> {
+        if !lm.is_shared() {
+            return lm;
+        }
+        self.copy_shared_lazy_member_table(t, lm)
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn copy_shared_lazy_member_table(&mut self, t: P<Type>, lm: P<LazyMemberTable>) -> P<LazyMemberTable> {
+        let ready = std::cell::OnceCell::new();
+        if let Some(r) = lm.ready.get() {
+            let _ = ready.set(r.clone());
+        }
+        let ordered_properties = std::cell::OnceCell::new();
+        if let Some(&o) = lm.ordered_properties.get() {
+            let _ = ordered_properties.set(o);
+        }
+        let copy = P::new(LazyMemberTable { mapper: lm.mapper, ready, declared: lm.declared.clone_value(), ordered_properties });
+        self.lazy_member_tables.insert(t, copy);
+        copy
     }
 
     pub(crate) fn resolve_lazy_members(&mut self, t: P<Type>, lm: P<LazyMemberTable>) {

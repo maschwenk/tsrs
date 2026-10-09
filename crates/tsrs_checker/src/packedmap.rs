@@ -117,7 +117,7 @@ impl<K: PackedKey, V: Copy> PackedMap<K, V> {
 
 /// `GoMap` (a nil-able shared map in the arena) over a `PackedMap`, for the `CacheHashKey`-keyed instantiation maps
 /// of arena objects (conditional roots, type aliases). Same `make` / `get` / `set` behavior as `GoMap`.
-pub struct GoPackedMap<K: 'static, V: 'static>(Cell<Option<P<RefCell<PackedMap<K, V>>>>>);
+pub struct GoPackedMap<K: 'static, V: 'static>(Cell<Option<P<tsrs_core::FrozenCell<PackedMap<K, V>>>>>);
 
 impl<K: 'static, V: 'static> Default for GoPackedMap<K, V> {
     fn default() -> Self {
@@ -130,7 +130,7 @@ impl<K: PackedKey + 'static, V: Copy + 'static> GoPackedMap<K, V> {
     pub fn make(&self) {
         // As `GoMap::make`: the table lives where the map field does (emit scratch regions).
         let scratch = tsrs_core::arena::scratch_contains(std::ptr::from_ref::<Self>(self) as usize);
-        self.0.set(Some(P::new_in(scratch, RefCell::new(PackedMap::default()))));
+        self.0.set(Some(P::new_in(scratch, tsrs_core::FrozenCell::new(PackedMap::default()))));
     }
 
     pub fn is_nil(&self) -> bool {
