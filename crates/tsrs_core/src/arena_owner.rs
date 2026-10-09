@@ -18,6 +18,7 @@ use std::{
 };
 
 use oxc_allocator::Allocator;
+use rustc_hash::FxHashMap;
 
 static NEXT_ARENA_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -357,6 +358,35 @@ pub struct OwnedRoot<T: ?Sized> {
     root: ArenaKey<T>,
 }
 
+/// Heap state paired with an arena root. `state` is declared first so its destructors run while arena references
+/// are still valid; the root's strong owner is released afterwards.
+pub struct OwnedGraph<T: ?Sized, S> {
+    state: S,
+    root: OwnedRoot<T>,
+}
+
+impl<T: ?Sized, S> OwnedGraph<T, S> {
+    pub fn new(root: OwnedRoot<T>, state: S) -> Self {
+        Self { state, root }
+    }
+
+    pub fn state(&self) -> &S {
+        &self.state
+    }
+
+    pub fn state_mut(&mut self) -> &mut S {
+        &mut self.state
+    }
+
+    pub fn root(&self) -> &OwnedRoot<T> {
+        &self.root
+    }
+
+    pub fn with<R>(&self, f: impl for<'a> FnOnce(&S, ArenaRef<'a, T>) -> R) -> R {
+        self.root.with(|root| f(&self.state, root))
+    }
+}
+
 impl<T: ?Sized> OwnedRoot<T> {
     pub fn owner(&self) -> &Arc<SealedArena> {
         &self.owner
@@ -383,7 +413,7 @@ impl<T: ?Sized> Clone for OwnedRoot<T> {
 /// Strong owners used by a program or checker to resolve keys from several arenas.
 #[derive(Default)]
 pub struct ArenaGroup {
-    owners: Vec<Arc<SealedArena>>,
+    owners: FxHashMap<ArenaId, Arc<SealedArena>>,
 }
 
 impl ArenaGroup {
@@ -392,10 +422,7 @@ impl ArenaGroup {
     }
 
     pub fn insert(&mut self, owner: Arc<SealedArena>) {
-        if self.owners.iter().any(|candidate| candidate.id == owner.id) {
-            return;
-        }
-        self.owners.push(owner);
+        self.owners.entry(owner.id).or_insert(owner);
     }
 
     pub fn scope(&self) -> ArenaGroupScope<'_> {
@@ -407,12 +434,12 @@ impl ArenaGroup {
 
 #[derive(Clone, Copy)]
 pub struct ArenaGroupScope<'a> {
-    owners: &'a [Arc<SealedArena>],
+    owners: &'a FxHashMap<ArenaId, Arc<SealedArena>>,
 }
 
 impl<'a> ArenaGroupScope<'a> {
     pub fn resolve<T: ?Sized>(self, key: ArenaKey<T>) -> Option<ArenaRef<'a, T>> {
-        let owner = self.owners.iter().find(|owner| owner.id == key.arena)?;
+        let owner = self.owners.get(&key.arena)?;
         Some(owner.scope().resolve(key))
     }
 }
@@ -458,5 +485,26 @@ mod tests {
 
         assert_eq!(*group.scope().resolve(key).unwrap(), 7);
         assert!(weak.upgrade().is_some());
+    }
+
+    #[test]
+    fn sidecar_drops_before_arena_owner() {
+        struct State(std::sync::Weak<SealedArena>);
+
+        impl Drop for State {
+            fn drop(&mut self) {
+                assert!(
+                    self.0.upgrade().is_some(),
+                    "arena dropped before its sidecar"
+                );
+            }
+        }
+
+        let builder = ArenaBuilder::new();
+        let root = builder.alloc(1_u32);
+        let root = builder.finish(root);
+        let weak = Arc::downgrade(root.owner());
+        drop(OwnedGraph::new(root, State(weak.clone())));
+        assert!(weak.upgrade().is_none());
     }
 }
