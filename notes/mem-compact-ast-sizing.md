@@ -219,6 +219,15 @@ one element, 5-13% none.
 | webpack | 0.6 (0.1%) | 1.3 (0.3%) | 2.7 (0.6%) | 10.2 (2.3%) | 25.0 (5.5%) | 93.3 (20.7%) |
 | drizzle | 2.2 (0.4%) | 1.9 (0.3%) | 2.3 (0.4%) | 10.7 (1.8%) | 26.9 (4.5%) | 96.7 (16.3%) |
 
+| project | below bun with a design? |
+| --- | --- |
+| t3code | no, with any; the whole tree (133 MiB) is a fifth of the 657 MiB gap |
+| supabase | no, with any; only deleting the whole tree would (194 > 180 MiB) |
+| mikro-orm | no, with any; the whole tree (102 MiB) is half the 202 MiB gap |
+| cal-diy | no, with any; only deleting the whole tree would (176 > 157 MiB) |
+| formbricks | no, with any; only deleting the whole tree would (211 > 79 MiB) |
+| vscode | yes with B max (70.8 > 57 MiB), with B core + C shared + D2 (66.1) and with everything (111.9); no with any other |
+
 Nothing alone or combined puts tsrs below bun on t3code, supabase, mikro-orm, cal-diy or formbricks; on t3code even
 the whole tree is a fifth of the gap. vscode flips with B max or the realistic package by 9-14 MiB over the README
 run's 57 MiB gap, by 3-8 MiB over the next run's 63, and not against the compare file's 73 (tsrs 1,984 vs bun 1,911
