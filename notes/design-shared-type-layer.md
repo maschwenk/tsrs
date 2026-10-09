@@ -21,8 +21,8 @@ are labelled as such.
 - **Speed is the obstacle.** The spike measured two costs, and both stand:
   - The read paths alone, compiled in and switched off, cost +2.3..+4.8% wall at 8 checkers and +1.5..+4.3%
     single-threaded instructions (spike sections 10.1 and 4.2). The read path proposed here makes one comparison
-    against a constant and loads nothing. It has never been measured; section 5.3 is the 2-3-day experiment that
-    decides it.
+    against a constant and loads nothing. Measured since by R1 (section 5.4): +2.6% single-threaded instructions with
+    nothing shared, over the 1% kill threshold.
   - The seed costs wall time even with that floor subtracted: the best strategy (FA) measured +7.8% on cal-diy and
     +11.6% on t3code-server above the empty-seed floor (section 10.1). Folding the seed into a pool checker
     (section 3.1) removes an estimated 21-46 ms of that: 1-2 points on t3code-server, 2-4.5 on cal-diy. The budget
@@ -337,6 +337,63 @@ checkers=1,8 --input reps=10 --input poison=false`. This gives:
 pr-verify builds plain release binaries. A PGO build could move the result in either direction, so a pass should be
 repeated with `bench.yml`'s PGO build before stage 1.
 
+### 5.4 R1 result (2026-10-09)
+
+**Kill: with nothing shared, the read path costs +2.6% single-threaded instructions**, 2.6 times the kill threshold
+and five times the pass bar of section 5.3. The local screen stopped the experiment before Depot, so no Linux or
+8-checker wall number exists.
+
+Code: branch `spike/r1-read-path` (#240, not for merging), on main 4e5c85ae, one commit per item of 5.3:
+
+1. the window: the reservation's top 4 GiB, never allocated;
+2. `ShCell` on the spike's 40 lazy cell fields, plus object-flag writes and the reads of the four lazy flag families
+   that read lazy state;
+3. the two-level hook, with the key builder's AND of the type handles, in 12 interning maps;
+4. the target test at the lookups and inserts of the four instantiation tables;
+5. the parent null test in the link stores;
+6. `FrozenCell` for the tables hung off types, with tested writes, and the lazy member and mapped tables behind the map
+   hook.
+
+Output unchanged: `tools/regressions.sh` 27 of 27, the conformance gate at main's counts (13,458; `.types` and
+`.symbols` 12,779; no crash or timeout), and main's diagnostics in every measured run.
+
+Mac (18 cores), `--noEmit --singleThreaded`, `RAYON_NUM_THREADS=1`, instructions retired from `/usr/bin/time -l`,
+which includes kernel work. Minimum of 5 interleaved runs, which repeats within 0.1% for one binary.
+
+| build | xstate-main | t3code-server |
+| --- | ---: | ---: |
+| main | 7.257 G | 47.588 G |
+| + window and `ShCell` (1, 2) | +2.12% | +2.38% |
+| + interning maps (3) | +2.40% | +2.58% |
+| + instantiation tables (4) | +2.46% | +2.59% |
+| + link stores (5) | +2.60% | +2.79% |
+| + tables (6): R1 | +2.70% | +2.66% |
+| R1, two more screens | +2.53%, +2.57% | +2.62%, +2.62% |
+| R1 with every window test compiled to `false` | +0.35%, +0.39% | +0.38%, +0.42% |
+| R1 with the reads of the lazy fields untested | +0.69% | +0.82% |
+
+Where it goes:
+
+- **Reads of the lazy fields: 1.8-1.9 points.** Not the window comparison: a counting build ran it 3.8 M times on
+  xstate-main and 30.3 M times on t3code-server (item 2), about 0.1-0.3% of the instructions at 3-5 instructions each
+  (estimate). What is left is the code every read of the 40 fields now carries, set or not: the test for an unset
+  value, which the caller's own test of the value does not absorb, and the side-table call beside it (the two were
+  not measured apart).
+- **Items 3-6: about 0.5 points together.** The interning-map hook +0.2-0.3, the link stores +0.14-0.20, the
+  instantiation tables and the table cells within the ~0.1% noise (`FrozenCell` drops the borrow counters, which pays
+  for its write tests).
+- **With every window test compiled away the branch still costs ~0.4%**, mostly the link stores' parent null tests,
+  which do not use the window.
+
+What it decides. Even if reading a lazy field cost nothing, the rest of the read path is +0.7-0.8% (the untested-reads
+build), over the 0.5% pass bar. And a read cannot skip the unset test: a fork must find its own value for a field the
+seed left unset. So any use that compiles the read path into the default binary, warm runs and 32-checker machines
+included, pays about 2.6% on every check, shared layer or not. An opt-in low-memory mode would need a separately
+compiled checker, as the spike's cargo feature was, which is the "doubles the checker's code" option section 5.2
+rejected. The direction is closed for the default binary.
+
+Not measured: Linux instructions (`bench/count.py`), the 8-checker wall on Depot, a PGO build.
+
 ## 6. Cost 2: the build
 
 ### 6.1 The budget
@@ -580,7 +637,8 @@ close the direction for every use, warm runs and 32-checker machines included; i
 
 ## 10. Not determined
 
-- The cost of the redesigned read path. Nothing was built, and the spike's +2.3..+4.8% is for a different path.
+- The cost of the redesigned read path: determined since, +2.6% single-threaded instructions on the Mac (section 5.4).
+  Its Linux and 8-checker wall numbers were not measured.
 - The rebuild cost of late freeze. It is estimated as FA - `on0` less the spike's estimates for B and for the ninth
   thread, and FA - `on0` is the difference of two paired medians over runs whose walls range over 3-17% (`off` and
   FA, spike section 10.1).

@@ -202,6 +202,10 @@ pointer compression costs about +4.9% instructions and took back most of the che
   (vscode 2.1%); lists as inline ranges 0.3-0.6% (1.1%); the node id out of the header about 0 once ids stay dense;
   everything measured together, token nodes included, 1.7-3.6% (vscode 5.7%). Nothing flips the five application
   projects. Revisit only if the checkers' share of the peak shrinks until the tree is the gap.
+- The read path of an immutable shared type layer, on main with nothing shared (R1, notes/design-shared-type-layer.md
+  section 5.4, branch `spike/r1-read-path`): +2.6% single-threaded instructions on xstate-main and t3code-server
+  (Mac), 1.8-1.9 points of it the unset test on every read of the 40 lazy fields a fork would overlay, not the
+  window comparison. Closes the shared layer for the default binary.
 
 ## The lint ratchet
 
