@@ -412,13 +412,16 @@ fn verify_javascript_output(
         tspath::get_path_components_relative_to(&compiler_runner::testdata_path().to_string_lossy(), &item.path, &ComparePathsOptions::default());
     let header = tspath::get_path_from_path_components(&header_components);
     let recompiler = Recompiler { harness_options: &result.harness_options, current_directory, symlinks: &payload.symlinks };
-    let run = std::panic::AssertUnwindSafe(|| {
-        crate::emit_harness::do_js_emit_baseline(&header, result.options, result, ts_config_files, to_be_compiled, other_files, &result.harness_options, &recompiler)
-    });
-    match std::panic::catch_unwind(run) {
-        Ok(r) => Some(r),
-        Err(_) => Some(Err(crate::worker::take_last_panic_message())),
-    }
+    Some(crate::emit_harness::do_js_emit_baseline(
+        &header,
+        result.options,
+        result,
+        ts_config_files,
+        to_be_compiled,
+        other_files,
+        &result.harness_options,
+        &recompiler,
+    ))
 }
 
 #[cfg(not(feature = "checker"))]
@@ -497,19 +500,18 @@ fn verify_source_maps(result: &CompilationResult) -> Option<compiler_runner::Sou
         get_program_source_text: &get_program_source_text,
         get_source_map_record: &get_source_map_record,
     };
-    let catch = |f: &dyn Fn() -> Result<Option<String>, String>| match std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)) {
-        Ok(Ok(Some(s))) => Some(Ok(s)),
-        Ok(Ok(None)) => None,
-        Ok(Err(fatal)) => Some(Err(fatal)),
-        Err(_) => Some(Err(crate::worker::take_last_panic_message())),
+    let run = |f: &dyn Fn() -> Result<Option<String>, String>| match f() {
+        Ok(Some(s)) => Some(Ok(s)),
+        Ok(None) => None,
+        Err(fatal) => Some(Err(fatal)),
     };
     let js_map = if want & crate::EXTRA_JSMAP != 0 {
-        catch(&|| crate::sourcemap_baseline::do_sourcemap_baseline("", result.options, &sm, &result.harness_options).map(|r| r.map(|(_, s)| s)))
+        run(&|| crate::sourcemap_baseline::do_sourcemap_baseline("", result.options, &sm, &result.harness_options).map(|r| r.map(|(_, s)| s)))
     } else {
         None
     };
     let sourcemap = if want & crate::EXTRA_SOURCEMAP != 0 {
-        catch(&|| Ok(Some(crate::sourcemap_baseline::do_sourcemap_record_baseline("", result.options, &sm).1)))
+        run(&|| Ok(Some(crate::sourcemap_baseline::do_sourcemap_record_baseline("", result.options, &sm).1)))
     } else {
         None
     };

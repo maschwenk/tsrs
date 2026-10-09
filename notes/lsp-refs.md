@@ -109,8 +109,8 @@ test, a willRenameFiles test, or stops at completions.
   state first (PORTING.md callback rule). `ImportTracker` (a Go closure) is a struct with `call(checker, ...)`;
   `getImportersForExport` / `getSearchesFromDirectImports` closures are methods of private structs.
 - `handleCrossProject`: the per-project searches run sequentially on the calling thread, last-queued first (tsrs_core
-  `WorkGroup` order), not as goroutines (the request already runs on a worker thread; no thread per request). A panic
-  in a search is caught and re-raised after the queue drains, like Go's recover + panic. `iter.Seq[Resp]` is a `Vec`
+  `WorkGroup` order), not as goroutines (the request already runs on a worker thread; no thread per request). Since
+  2026-10-09 a panic aborts a release build immediately; it is not collected across searches. `iter.Seq[Resp]` is a `Vec`
   (`combineImplementations`' restart of the iteration is kept by passing all results again). `sync.Map`'s random
   `Range` order and Go's random map orders (rename `changes`, call-site grouping, combined rename edits) are
   insertion order here; results that Go sorts are sorted the same way.

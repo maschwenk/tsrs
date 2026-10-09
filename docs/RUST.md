@@ -144,6 +144,7 @@ In place:
 | Technique | Evidence here | Also in |
 | --- | --- | --- |
 | Fat LTO, one codegen unit, PGO for release binaries | `notes/perf-pgo.md`: -13.5% instructions with PGO; fat LTO alone about -2% | oxc, Rolldown, swc (fat); Ruff (fat, PGO); Turborepo, rust-analyzer (thin) |
+| Abort on panic in release builds; production entry points do not recover panics | `notes/perf-release-profile.md`: the full release-profile change is -3.8% instructions, -3.8% peak RSS and -47% binary size on the checked-in stress case; the arena bug previously exposed by abort codegen is covered by source checks and Miri | Bun |
 | BOLT on top of PGO for the Linux release binaries (`.github/scripts/bolt.sh`, gates run on the BOLT-optimized binaries) | `notes/perf-build-level.md`: -2.7% / -3.2% / -1.0% wall at 1 / 4 / 8 checkers on the 38k-file codebase, -3.4 to -4.0% on vscode; instruction-cache misses -20% | rustc (its Linux toolchain builds), CPython (`--enable-bolt`) |
 | mimalloc as the global allocator | `notes/fix-perf-memory.md` | oxc, Rolldown, Turborepo, Bun |
 | Leak arenas, one per thread; exact frees of provably dead objects | PORTING.md "Memory model", `notes/mem-recycle.md` | oxc and Bun (arenas with no `Drop`) |
@@ -172,8 +173,7 @@ largest tsrs generic `filter_type` 1.1%, on a hot path). A target CPU above the 
 Identifiers that carry their hash (same note: all Fx hashing is 0.7-1.4% of instructions, not worth a hash field on
 every name). Build-level options on top of PGO (`notes/perf-build-level.md`, Linux x86-64): text on 2 MiB pages (BOLT
 `-hugify`; instruction page walks are 1.2-1.5% of cycles and it gains nothing measurable over BOLT alone);
-`panic = "abort"` (it crashed until `notes/fix-arena-recycle-uaf.md`, and it would also need a CLI-only
-binary); mimalloc v2, jemalloc and glibc malloc instead of mimalloc v3 (3-14% slower, 3-7% less peak memory);
+mimalloc v2, jemalloc and glibc malloc instead of mimalloc v3 (3-14% slower, 3-7% less peak memory);
 THP off for the whole process (`MIMALLOC_ALLOW_THP=0`, which also drops the arena's huge pages: +4-10% check time at
 4 checkers, `notes/mem-no-thp.md`); releasing memory before the exit to shorten the kernel's teardown (an arena
 `munmap` cost 3 ms and moved the ~15 ms teardown within noise, `madvise` from 16 threads was slower than one

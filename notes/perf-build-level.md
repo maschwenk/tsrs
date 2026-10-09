@@ -1,5 +1,9 @@
 # perf-build-level: speed from how the binary is built and laid out (Linux x86-64)
 
+Update 2026-10-09: the arena bug exposed by abort code generation was fixed, production panic recovery was removed,
+and `panic = "abort"` was remeasured and adopted in the ordinary release profile. See
+`notes/perf-release-profile.md`. The abort result below records the earlier, now-superseded experiment.
+
 Question: on top of the shipped PGO + fat-LTO build, what do BOLT, huge pages for the program text,
 `panic = "abort"`, another allocator, `opt-level = "s"` for cold crates and a larger PGO training set give? Every
 binary here is a PGO + fat-LTO `dist` build made with the release workflow's commands; nothing changes source code

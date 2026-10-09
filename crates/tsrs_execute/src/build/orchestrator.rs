@@ -82,8 +82,6 @@ pub struct Orchestrator {
     order: Mutex<Vec<String>>,
     errors: Mutex<Vec<P<Diagnostic>>>,
     graph_generated: AtomicBool,
-    // Set when a builder thread panicked (see range_tasks).
-    pub(crate) aborted: AtomicBool,
     // API builds (crates/tsrs_cli/src/api.rs): every thread that works on this orchestrator allocates in a
     // region collected here, so the whole orchestrator (configs, programs, checkers' arenas, diagnostics) can be
     // freed at once (`free_api_orchestrator`). Off for the CLI, whose single build runs to process exit.
@@ -496,23 +494,16 @@ impl Orchestrator {
             build_result.statistics.projects = order.len();
             // Builders pick up projects in scheduleOrder; results are reported in Order(), waiting for each project to finish
             // (Go: a reporter goroutine; here the calling thread, while rangeTasks runs the builders on their own threads).
-            let mut aborted_report = false;
             std::thread::scope(|scope| {
                 let builders = scope.spawn(|| self.range_tasks(order, &|path, task| self.build_or_clean_project(task, path)));
                 for config in order {
                     let path = self.to_path(config);
                     let task = self.get_task(&path);
-                    if !task.built.wait(&self.aborted) {
-                        aborted_report = true;
-                        break;
-                    }
+                    task.built.wait();
                     task.report(self, &path, &mut build_result);
                 }
-                if let Err(panic) = builders.join() {
-                    std::panic::resume_unwind(panic);
-                }
+                builders.join().unwrap();
             });
-            assert!(!aborted_report, "build aborted");
         } else {
             // Circularity errors prevent any project from being built
             build_result.status = Some(ExitStatus::ProjectReferenceCycle_OutputsSkipped);
@@ -561,32 +552,14 @@ impl Orchestrator {
                     std::thread::Builder::new()
                         .name(format!("builder-{i}"))
                         .stack_size(512 << 20)
-                        .spawn_scoped(scope, || {
-                            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(run_task));
-                            if result.is_err() {
-                                self.abort();
-                            }
-                            result
-                        })
+                        .spawn_scoped(scope, run_task)
                         .unwrap()
                 })
                 .collect();
             for handle in handles {
-                if let Err(panic) | Ok(Err(panic)) = handle.join() {
-                    std::panic::resume_unwind(panic);
-                }
+                handle.join().unwrap();
             }
         });
-    }
-
-    // A builder panicked: release every waiter so the panic surfaces instead of a hang.
-    fn abort(&self) {
-        self.aborted.store(true, Ordering::SeqCst);
-        #[expect(clippy::iter_over_hash_type, reason = "wakes every waiter; the order does not matter")]
-        for task in self.tasks.lock().unwrap().values() {
-            task.done.wake();
-            task.built.wake();
-        }
     }
 
     // orchestrator.go:888
@@ -686,7 +659,6 @@ pub fn new_orchestrator(opts: Options) -> &'static Orchestrator {
         order: Mutex::new(Vec::new()),
         errors: Mutex::new(Vec::new()),
         graph_generated: AtomicBool::new(false),
-        aborted: AtomicBool::new(false),
         error_summary_reporter,
         schedule_order: Mutex::new(Vec::new()),
         regions: Mutex::new(Vec::new()),

@@ -104,8 +104,6 @@ impl Session {
             compiler_options,
         });
         let id = self.build_state.next_id.fetch_add(1, Ordering::SeqCst) + 1;
-        // A build that failed by unwinding (the moduleResolution boundary above) leaves the map intact; its lock
-        // is only poisoned.
         self.build_state.orchestrators.lock().unwrap_or_else(|e| e.into_inner()).insert(id, Orchestrator { backend: orchestrator });
         Ok(Obj::new().set("buildOrchestratorID", Value::Number(id as f64)).build())
     }
@@ -136,8 +134,6 @@ impl Session {
             };
             return Err(ApiError::internal(what));
         };
-        // A moduleResolution number with no named kind fails (stable client error, see `Session::handle_request`)
-        // only where a module is actually resolved, where pinned Go panics; import-free builds succeed as in Go.
         let outcome = if clean { o.backend.clean(project, only_references) } else { o.backend.build(project, only_references) };
         Ok(outcome_response(outcome, clean))
     }

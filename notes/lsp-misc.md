@@ -62,9 +62,8 @@ actions and auto-imports; nothing was started here).
   lists through the `VisitNodes` hook) and processed afterwards (same pattern as `format/span.rs`).
 - Semantic tokens: only the token types / modifier bits this file produces are named constants (the rest are
   positions in `TOKEN_TYPES` / `TOKEN_MODIFIERS`), to keep the crate free of dead-code warnings.
-- `handleWorkspaceSymbol` / `handleCodeLensResolve`: after a recovered panic Go returns the zero response (null);
-  workspace symbols return the default union (null), code lens resolve returns an empty `CodeLens` (the Rust
-  response type is not nullable). The request already got the recover's error response in both cases.
+- `handleWorkspaceSymbol` / `handleCodeLensResolve`: the original port returned zero responses after recovering a
+  panic. Since 2026-10-09 release builds abort instead (`notes/perf-release-profile.md`).
 - Code lens titles use English only (`locale.FromContext` is not ported).
 - `VerifyOutliningSpans` sorts the test data's range list in place, as Go's `slices.SortFunc(f.Ranges(), …)` does.
 - `VerifyBaselineSelectionRanges` compares rune indices with byte offsets, as Go does.

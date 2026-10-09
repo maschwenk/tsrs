@@ -24,7 +24,7 @@ use crate::extendedconfigcache::ExtendedConfigCache;
 use crate::filechange::FileChangeSummary;
 use crate::logging::LogTree;
 use crate::overlayfs::{OverlayMap, ToPath};
-use crate::parsecache::{ContentMappedParseCache, ParseCache, ParseCacheJournal};
+use crate::parsecache::{ContentMappedParseCache, ParseCache};
 use crate::project::{
     inferred_project_id, new_configured_project, new_inferred_project, new_inferred_project_command_line, new_synthetic_project, new_synthetic_project_id,
     ConfiguredProjectID, Kind, ModuleResolverFactoryRef, Project, ProgramUpdateKind, SyntheticProjectID, ID,
@@ -55,8 +55,6 @@ pub(crate) enum projectEntry {
 pub struct ProjectCollectionBuilder {
     pub(crate) session_options: Arc<SessionOptions>,
     pub(crate) parse_cache: Arc<ParseCache>,
-    /// The parse-cache references this clone's programs take (rolled back if the clone unwinds).
-    pub(crate) parse_cache_journal: Arc<ParseCacheJournal>,
     #[expect(dead_code, reason = "content mappers are not ported; Go reads it in compilerHost (compilerhost.go:130) and Project (project.go:535)")]
     content_mapped_parse_cache: Arc<ContentMappedParseCache>,
     pub(crate) to_path: ToPath,
@@ -114,7 +112,6 @@ pub(crate) fn new_project_collection_builder(
         inferred_content_mappers,
         inferred_content_mapper_extensions,
         parse_cache,
-        parse_cache_journal: Arc::default(),
         content_mapped_parse_cache,
         config_file_registry_builder: Arc::new(new_config_file_registry_builder(
             lsproto::get_client_capabilities(ctx).workspace.did_change_watched_files.relative_pattern_support,

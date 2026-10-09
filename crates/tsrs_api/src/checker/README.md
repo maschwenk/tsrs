@@ -35,8 +35,7 @@ if let Some(result) = tsrs_api::checker::handle(&host, method, &params) { /* map
   every lookup is a client error; no raw pointer outlives its snapshot.
 * Errors: `CheckerError { kind: InvalidRequest | Client, message }` = Go `ErrInvalidRequest` /
   `ErrClientError`. Handlers do not panic on bad input (wrong JSON types, out-of-range numbers, wrong
-  type kind for a property, stale/foreign handles); panics from deep checker invariants are not caught
-  here — core/runtime should convert them to an error response like Go's `recover` in the ipc loop.
+  type kind for a property, stale/foreign handles); release builds abort on a panic from a deep checker invariant.
 
 ## Id ownership (same as Go)
 
@@ -147,5 +146,4 @@ What `Tested` does **not** mean yet (open gaps, for the integration lead):
 * Node handles, source-file descriptors / leases and AST encoding come from core + `tsrs_api_codec`
   (wired in core's integration candidate a9b4354); `session_tests.rs` exercises them through `Session`,
   including snapshot-less file-owned lookups (`getMembersOfSymbol` / `getExportsOfSymbol` / `getParentOfSymbol`).
-* Panics from deep checker invariants are converted to errors by core's `catch_unwind`; the API checker
-  is not discarded afterwards (Go keeps it too).
+* Release builds abort on panics from deep checker invariants; there is no per-request recovery boundary.

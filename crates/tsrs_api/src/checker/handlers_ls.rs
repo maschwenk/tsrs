@@ -274,7 +274,8 @@ pub(crate) fn get_import_adder_edits(host: &dyn CheckerHost, p: &Params) -> Chec
             }
         }
     }
-    // Release the auto-import snapshot on every exit, including a panic in the import adder (Go: defer).
+    // Release the auto-import snapshot on normal/error returns and when an unwind-capable development build panics
+    // in the import adder (Go: defer). Release builds abort on panic.
     struct Release(Option<Arc<Snapshot>>);
     impl Drop for Release {
         fn drop(&mut self) {

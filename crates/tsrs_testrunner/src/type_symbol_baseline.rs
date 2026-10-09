@@ -20,8 +20,7 @@ static BRACKET_LINE_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[\t\
 static LINE_DELIMITER: LazyLock<Regex> = LazyLock::new(|| Regex::new("\r?\n").unwrap());
 
 // DoTypeAndSymbolBaseline: both baselines from one walker, the type walk first (it runs first in Go's
-// test process, and it can create types that the symbol walk then sees). Each walk runs under its own
-// panic guard (Go's per-subtest RecoverAndFail); a panic is returned as `Err(message)`.
+// test process, and it can create types that the symbol walk then sees).
 pub fn do_type_and_symbol_baseline(
     header: &str,
     program: &'static Program,
@@ -29,15 +28,9 @@ pub fn do_type_and_symbol_baseline(
     has_error_baseline: bool,
 ) -> (Result<String, String>, Result<String, String>) {
     let mut full_walker = TypeWriterWalker::new(program, has_error_baseline);
-    let types = catch(|| generate_baseline(all_files, &mut full_walker, header, false /*isSymbolBaseline*/));
-    let symbols = catch(|| generate_baseline(all_files, &mut full_walker, header, true /*isSymbolBaseline*/));
+    let types = Ok(generate_baseline(all_files, &mut full_walker, header, false /*isSymbolBaseline*/));
+    let symbols = Ok(generate_baseline(all_files, &mut full_walker, header, true /*isSymbolBaseline*/));
     (types, symbols)
-}
-
-fn catch(f: impl FnOnce() -> String) -> Result<String, String> {
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).map_err(|e| {
-        e.downcast_ref::<String>().cloned().or_else(|| e.downcast_ref::<&str>().map(|s| s.to_string())).unwrap_or_else(|| "<panic>".to_string())
-    })
 }
 
 fn generate_baseline(all_files: &[TestFile], full_walker: &mut TypeWriterWalker, header: &str, is_symbol_baseline: bool) -> String {

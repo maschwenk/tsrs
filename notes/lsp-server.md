@@ -1,5 +1,8 @@
 # lsp-server: `tsrs_lsp` (Go `internal/lsp`) and `tsrs --lsp -stdio`
 
+Update 2026-10-09: request panic recovery and the stack sanitizer were removed; release builds abort on every panic
+(`notes/perf-release-profile.md`). The table and threading notes below describe the original port.
+
 Wave agent `server`, branch `lsp-server`.
 
 ## Ported

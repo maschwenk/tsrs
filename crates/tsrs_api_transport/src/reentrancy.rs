@@ -349,7 +349,8 @@ impl<T> Drop for RequestGuard<'_, T> {
 /// Locks `mutex` for an API request without deadlocking on callback re-entry: waits like Go while the
 /// holder makes progress, and fails with `reentrancy_error` when the holder is possibly stuck on the
 /// client (immediately on sync, after the grace period on async; see module docs). Outside a request it
-/// is a plain blocking lock. Poisoned locks are recovered (the connection already reported the panic).
+/// is a plain blocking lock. Poisoned locks are tolerated in unwind-capable test and development builds; release
+/// builds abort on panic.
 pub fn lock_for_request<'a, T>(mutex: &'a Mutex<T>, resource: &str) -> Result<RequestGuard<'a, T>, ApiError> {
     let key = std::ptr::from_ref::<Mutex<T>>(mutex) as usize;
     let Some(cx) = current_request() else {

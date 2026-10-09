@@ -2,9 +2,8 @@
 // API client through server-to-client calls, with the client's serverFS sentinels
 // (useOS / identity / fakeStat / noop / error) honored exactly as the pinned server does.
 //
-// Failures follow the pinned server: an invalid or failed callback panics, the panic unwinds to the
-// connection's request dispatch, and the client receives an error response for the request that
-// triggered the filesystem access (writeFile/removeFile call failures are returned as errors).
+// Failures follow the pinned server: an invalid or failed callback panics
+// (writeFile/removeFile call failures are returned as errors).
 
 use std::sync::{Arc, OnceLock};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -40,12 +39,8 @@ pub fn is_callback_name(name: &str) -> bool {
     CALLBACK_NAMES.contains(&name)
 }
 
-/// A failed or invalid filesystem callback unwinds with a String payload (Go: panic(...) recovered by
-/// the connection); the connection reports it to the client as `panic: <message>`. `resume_unwind`
-/// skips the panic hook, so an expected callback failure (e.g. the client disconnecting while a callback
-/// is pending) does not print a panic report to stderr, matching Go's silent recover.
 fn fail(message: impl Into<String>) -> ! {
-    std::panic::resume_unwind(Box::new(message.into()))
+    panic!("{}", message.into())
 }
 
 /// Parses the `--callbacks` list (comma-separated by the CLI). Unknown names are an error

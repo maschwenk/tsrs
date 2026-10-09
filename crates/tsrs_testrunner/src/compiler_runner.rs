@@ -235,13 +235,13 @@ pub enum Outcome {
 }
 
 // The generated `.js.map` (Go DoSourcemapBaseline) and `.sourcemap.txt` (DoSourcemapRecordBaseline) baselines; `None`
-// when Go writes no baseline, `Err` for a panic or a `t.Fatal`.
+// when Go writes no baseline, `Err` for a `t.Fatal`.
 pub struct SourceMapBaselines {
     pub js_map: Option<Result<String, String>>,
     pub sourcemap: Option<Result<String, String>>,
 }
 
-// The generated `.types` and `.symbols` baselines; `Err` holds the panic message of a walk that panicked.
+// The generated `.types` and `.symbols` baselines.
 pub struct TypesAndSymbols {
     pub types: Result<String, String>,
     pub symbols: Result<String, String>,

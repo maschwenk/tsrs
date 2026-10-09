@@ -597,7 +597,7 @@ impl Project {
                 old_program.update_program(&self.dirty_file_path, Arc::<compilerHost>::clone(&host), Some(create_checker_pool), Some(create_module_resolver));
             new_program_result = program;
             program_cloned = cloned;
-            let (parse_cache, journal) = host.builder_parse_cache_journal();
+            let parse_cache = host.builder_parse_cache();
             if program_cloned {
                 update_kind = ProgramUpdateKind::Cloned;
                 for &file in new_program_result.source_files() {
@@ -606,17 +606,17 @@ impl Project {
                     // (Content mappers are not ported: no file is a failure stub, supplemental or content-mapped.)
                     if Some(file) != dirty_file {
                         // UpdateProgram acquired the changed file only, so we need to ref everything else
-                        journal.ref_(&parse_cache, parse_cache_key_for_file(file));
+                        parse_cache.ref_(&parse_cache_key_for_file(file));
                     }
                 }
                 for file in new_program_result.duplicate_source_files() {
-                    journal.ref_(&parse_cache, parse_cache_key_for_duplicate(file));
+                    parse_cache.ref_(&parse_cache_key_for_duplicate(file));
                 }
             } else if let Some(dirty_file) = dirty_file {
                 // UpdateProgram always acquires the dirty file before deciding whether it can
                 // reuse the old program. If it falls back to a full rebuild, release that
                 // speculative acquire so the rebuilt program is the only remaining owner.
-                journal.deref(&parse_cache, &parse_cache_key_for_file(dirty_file));
+                parse_cache.deref(&parse_cache_key_for_file(dirty_file));
             }
         } else {
             let mut typings_location = String::new();

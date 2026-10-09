@@ -70,10 +70,6 @@ fn worker_loop(pool: &'static workerPool) {
     }
 }
 
-// An unrecovered panic in a goroutine ends a Go program (exit status 2, after the runtime prints the panic); the
-// panic hook has already printed the message and location.
 pub(crate) fn run_or_exit(f: impl FnOnce()) {
-    if std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).is_err() {
-        std::process::exit(2);
-    }
+    f();
 }

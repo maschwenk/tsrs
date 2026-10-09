@@ -142,9 +142,8 @@ pub(crate) fn process_all_program_files(opts: &ProgramOptions, single_threaded: 
     let host = Arc::clone(&opts.host);
     let project_references = add_project_reference_tasks(&opts.program_config(), &host, single_threaded);
     // The mapper (with its resolution hosts) is leaked for the program to own (`SharedProgramData`). If loading
-    // unwinds (a panic while loading, e.g. the module resolver's `Unexpected moduleResolution`, which the API turns
-    // into an error), no program will own it: free it then. Declared before the resolver and loader, so it is
-    // dropped after them.
+    // unwinds in a development or test build, no program will own it: free it then. Declared before the resolver
+    // and loader, so it is dropped after them.
     struct FreeMapperOnUnwind(&'static projectReferenceFileMapper);
     impl Drop for FreeMapperOnUnwind {
         fn drop(&mut self) {

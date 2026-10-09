@@ -261,15 +261,11 @@ fn main() {
             let mut w = std::io::BufWriter::new(stdout.lock());
             for line in stdin.lock().lines() {
                 let path = line.unwrap();
-                let result = std::panic::catch_unwind(|| dump(&path));
-                match result {
-                    Ok(Ok(out)) => {
+                match dump(&path) {
+                    Ok(out) => {
                         let _ = writeln!(w, "{:016x} {}", fnv64a(out.as_bytes()), path);
                     }
-                    Ok(Err(e)) => eprintln!("{}", e),
-                    Err(_) => {
-                        let _ = writeln!(w, "PANIC {}", path);
-                    }
+                    Err(e) => eprintln!("{}", e),
                 }
             }
         }

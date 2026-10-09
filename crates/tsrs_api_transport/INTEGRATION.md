@@ -37,12 +37,10 @@ The client disconnects while the server waits on a `readFile` callback it will n
 
 | case | pinned Go | tsrs a9b4354 |
 | --- | --- | --- |
-| stdin EOF (sync, async) | exit 0, under 2 ms | exit 0, under 2 ms. stderr carried a panic report; fixed in this crate (see below) |
+| stdin EOF (sync, async) | exit 0, under 2 ms | exit 0, under 2 ms |
 | client vanishes (stdin and stdout closed) | killed by SIGPIPE | exit 1, `ipc: failed to write response: Broken pipe` |
 
-The fix: a callback failure now unwinds with `resume_unwind`, so no panic report reaches stderr, which
-matches Go's silent recover. I re-ran the repro against a9b4354 with only `src/callbackfs.rs` replaced;
-stderr is empty for EOF. Genuine handler panics are still reported.
+Callback and handler panics are no longer recovered; a release build aborts instead of answering the request.
 
 `SessionHandler` (in `crates/tsrs_cli/src/api.rs`) does not read `RequestContext.cancel`. After EOF, a
 long request that makes no callbacks runs to completion before `run` returns and joins it. Go behaves the
@@ -393,14 +391,12 @@ Raw sync client: `b.ts`'s readFile is answered with each of these.
 
 | answer | pinned Go | c7 | c7 + runtime |
 | --- | --- | --- | --- |
-| `{"kind":"bogus"}` | server crash (exit 2), `panic: invalid readFile callback response kind: bogus` | error response, same text | same |
-| `"value":5` | crash, `panic: json: cannot unmarshal JSON number into Go string` | error, serde text | **error, Go's text** |
-| missing kind / lone surrogate / duplicate kind / truncated / serverFS.error / CallError | crash, `panic: <text>` | error, same text as Go | same |
+| `{"kind":"bogus"}` | server crash (exit 2), `panic: invalid readFile callback response kind: bogus` | error response, same text | release server aborts |
+| `"value":5` | crash, `panic: json: cannot unmarshal JSON number into Go string` | error, serde text | release server aborts |
+| missing kind / lone surrogate / duplicate kind / truncated / serverFS.error / CallError | crash, `panic: <text>` | error, same text as Go | release server aborts |
 
 - **Text:** the panic text is now identical in all 8 cases.
-- **Deliberate divergence, explicitly kept:** pinned Go crashes the whole server when a callback fails
-  on a compiler worker goroutine (`[recovered, repanicked]`). tsrs answers that request with the
-  error and keeps the connection.
+- **Current behavior:** callback panics terminate the release server instead of being converted into request errors.
 - **Also fixed on this branch:** a present `null` readFile value now decodes to `""`, as in Go (it used
   to fail), and an absent value fails with `jsontext: unexpected EOF`, Go's error for an absent value.
 

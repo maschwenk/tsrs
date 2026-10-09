@@ -1,14 +1,13 @@
 // The test registry runner (`tsrs-fourslash run`): Go's `go test ./internal/fourslash/tests` with t.Parallel().
-// Tests run in worker processes (`tsrs-fourslash worker`), one test at a time per process, each under
-// catch_unwind on a thread with a 256 MB stack. Processes because the in-process language server ends the process
+// Tests run in worker processes (`tsrs-fourslash worker`), one test at a time per process on a thread with a
+// 256 MB stack. Processes because the in-process language server ends the process
 // on an unrecovered panic in one of its threads (like a Go program), and because programs and checkers are never
 // freed (docs/LSP.md "Memory plan"): a worker is replaced after a crash, a timeout, or WORKER_TESTS tests.
 
 use std::any::Any as StdAny;
-use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::fs;
-use std::panic::{self, AssertUnwindSafe};
+use std::panic;
 use std::path::PathBuf;
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, ChildStdin, Command, Stdio};
@@ -51,12 +50,7 @@ pub fn results_dir() -> PathBuf {
     repo_root().join("target").join("fourslash-results")
 }
 
-thread_local! {
-    static LAST_PANIC: RefCell<Option<(String, String)>> = const { RefCell::new(None) };
-}
-
-// Panics other than t.Fatal / t.Skip are recorded (message with location, backtrace) for the report and for
-// testutil::recover_and_fail; nothing is printed.
+// Panics other than t.Fatal / t.Skip are reported by worker processes before they terminate.
 pub fn install_panic_hook() {
     static ONCE: Once = Once::new();
     ONCE.call_once(|| {
@@ -67,13 +61,11 @@ pub fn install_panic_hook() {
             }
             let msg = payload_message(payload);
             let loc = info.location().map(|l| format!(" at {}:{}", l.file(), l.line())).unwrap_or_default();
-            let bt = std::backtrace::Backtrace::force_capture().to_string();
             if WORKER_MODE.load(Ordering::Relaxed) {
                 // The parent reports the last stderr line when the worker dies (a server thread's panic ends it).
                 let thread = std::thread::current().name().unwrap_or("").to_string();
                 eprintln!("panic in thread '{thread}': {msg}{loc}");
             }
-            LAST_PANIC.with(|p| *p.borrow_mut() = Some((format!("{msg}{loc}"), bt)));
         }));
     });
 }
@@ -91,19 +83,6 @@ fn payload_message(p: &(dyn StdAny + Send)) -> String {
     "panic with a non-string payload".to_string()
 }
 
-// The panic value as Go's %v would print it, with the location recorded by the hook when available.
-pub fn panic_message(p: &Box<dyn StdAny + Send>) -> String {
-    let base = payload_message(p.as_ref());
-    LAST_PANIC.with(|lp| match &*lp.borrow() {
-        Some((m, _)) if m.starts_with(&base) => m.clone(),
-        _ => base,
-    })
-}
-
-pub fn take_panic_backtrace() -> String {
-    LAST_PANIC.with(|p| p.borrow_mut().take().map(|(_, bt)| bt).unwrap_or_default())
-}
-
 pub fn run_test(entry: &TestEntry, include_skipped: bool) -> Outcome {
     if let Some(reason) = entry.skip {
         if !include_skipped {
@@ -111,13 +90,7 @@ pub fn run_test(entry: &TestEntry, include_skipped: bool) -> Outcome {
         }
     }
     let t = T::new(entry.name, entry.file);
-    let r = panic::catch_unwind(AssertUnwindSafe(|| (entry.func)(&t)));
-    if let Err(p) = r {
-        if !p.is::<FatalPanic>() && !p.is::<SkipPanic>() {
-            t.record_panic(&panic_message(&p));
-        }
-    }
-    LAST_PANIC.with(|p| *p.borrow_mut() = None);
+    (entry.func)(&t);
     if t.failed() {
         let logs = t.logs();
         return Outcome::Fail(logs.first().cloned().unwrap_or_else(|| "failed".to_string()));

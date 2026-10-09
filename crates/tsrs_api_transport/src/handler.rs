@@ -74,17 +74,3 @@ pub trait Caller: Send + Sync {
 
     fn notify(&self, method: &str, params: Option<&[u8]>) -> Result<(), TransportError>;
 }
-
-/// Renders a caught panic payload the way ipc.handleRequest does (`panic: <value>\n<stack>`).
-pub(crate) fn panic_message(payload: &(dyn std::any::Any + Send)) -> String {
-    let value = if let Some(s) = payload.downcast_ref::<&'static str>() {
-        (*s).to_string()
-    } else if let Some(s) = payload.downcast_ref::<String>() {
-        s.clone()
-    } else {
-        "<non-string panic payload>".to_string()
-    };
-    // Go appends debug.Stack(); a backtrace taken here would show the catch site, not the panic
-    // site, so only the value is reported (the default panic hook already wrote it to stderr).
-    format!("panic: {value}")
-}

@@ -431,22 +431,7 @@ impl Session {
 
 impl Handler for Session {
     fn handle_request(&self, method: &str, params: &[u8]) -> ApiResult<Response> {
-        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.dispatch(method, params))) {
-            Ok(result) => result,
-            Err(panic) => {
-                let message = panic
-                    .downcast_ref::<String>()
-                    .map(String::as_str)
-                    .or_else(|| panic.downcast_ref::<&str>().copied())
-                    .unwrap_or("unknown panic");
-                // tsrs_module's resolver, like pinned Go's (resolver.go `Unexpected moduleResolution`), panics when a
-                // module is resolved with a moduleResolution number that names no kind; Go's server crashes there.
-                if let Some(n) = message.strip_prefix("Unexpected moduleResolution: ") {
-                    return Err(ApiError::client(format!("unsupported moduleResolution value {n} (not a ModuleResolutionKind)")));
-                }
-                Err(ApiError::internal(format!("panic: {message}")))
-            }
-        }
+        self.dispatch(method, params)
     }
 
     fn handle_notification(&self, _method: &str, _params: &[u8]) -> ApiResult<()> {

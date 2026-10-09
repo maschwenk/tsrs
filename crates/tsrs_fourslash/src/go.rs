@@ -3,7 +3,6 @@
 
 use std::fmt;
 use std::hash::Hash;
-use std::panic::{self, AssertUnwindSafe};
 use std::sync::Arc;
 
 use tsrs_core::collections::OrderedMap;
@@ -124,15 +123,14 @@ impl From<String> for Any {
     }
 }
 
-// Runs the rest of a block whose Go code has a `defer`: the deferred call runs after it, panicking or not.
+// Runs the rest of a block whose Go code has a `defer`.
 pub fn run(f: impl FnOnce()) -> std::thread::Result<()> {
-    panic::catch_unwind(AssertUnwindSafe(f))
+    f();
+    Ok(())
 }
 
 pub fn resume(r: std::thread::Result<()>) {
-    if let Err(p) = r {
-        panic::resume_unwind(p);
-    }
+    assert!(r.is_ok(), "deferred block panicked");
 }
 
 // A Go construct tools/gen-fourslash could not translate.

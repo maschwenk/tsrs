@@ -7,7 +7,6 @@ pub mod lspwatcher;
 mod lsconsts;
 mod progress;
 mod server;
-mod stack_sanitizer;
 mod workerpool;
 
 pub use server::{new_server, to_reader, to_writer, npmInstallFunc, Reader, Server, ServerOptions, Writer};
@@ -20,8 +19,6 @@ mod lspwatcher_test;
 mod progress_test;
 #[cfg(test)]
 mod server_test;
-#[cfg(test)]
-mod stack_sanitizer_test;
 #[cfg(test)]
 mod server_flakydiagnostics_test;
 #[cfg(test)]

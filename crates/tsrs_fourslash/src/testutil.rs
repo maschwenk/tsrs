@@ -1,18 +1,11 @@
 // Go's testutil.RecoverAndFail and testutil/baseline (the subset fourslash uses).
 
-use std::panic;
+use crate::testing::T;
 
-use crate::testing::{FatalPanic, SkipPanic, T};
-
-// testutil.go:33. Go's deferred `recover()` sees the panic value; here the rest of the test ran under go::run
-// and its result is passed in. t.Fatal / t.Skip (runtime.Goexit in Go) are not recovered.
+// Signature-compatible form of Go's testutil.RecoverAndFail; `go::run` now returns only `Ok(())`.
 pub fn recover_and_fail(t: &T, msg: &str, r: std::thread::Result<()>) {
-    if let Err(p) = r {
-        if p.is::<FatalPanic>() || p.is::<SkipPanic>() {
-            panic::resume_unwind(p);
-        }
-        let stack = crate::runner::take_panic_backtrace();
-        t.fatal(&format!("{}:\n{}\n{}", msg, crate::runner::panic_message(&p), stack));
+    if r.is_err() {
+        t.fatal(msg);
     }
 }
 

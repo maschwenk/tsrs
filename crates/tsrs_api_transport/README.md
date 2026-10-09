@@ -23,7 +23,7 @@ microsoft/TypeScript at the commit pinned in the workspace `Cargo.toml`
   is `api.RawBinary`: verbatim tuple payload in MessagePack mode, a base64 JSON string under JSON-RPC
   (what Go's `json.Marshal([]byte)` produces). `ApiError { code, message }`: the client sees `message`
   (MessagePack `Error` tuple payload / JSON-RPC `error.message`). Session errors use
-  `CODE_INTERNAL_ERROR`, as `ipc.handleRequest` does. Panics are caught and reported as `panic: <msg>`.
+  `CODE_INTERNAL_ERROR`, as `ipc.handleRequest` does. Panics are not caught; release builds abort.
 - `getServerTiming` / `resetServerTiming` are answered by the connection (`ConnOptions.collect_timing`
   = `--timing`), never by the handler.
 - `Caller::call(method, params)` (server-to-client) is obtained before the connection runs
@@ -128,8 +128,8 @@ pinned decoder rejects.
 The pinned decoder rejects duplicate member names anywhere in a document (even inside fields it
 ignores), unpaired surrogate escapes and invalid UTF-8 — nothing is replaced with U+FFFD.
 `decode_message` (JSON-RPC: a violation is a fatal read error, as in Go, so a lone surrogate in an async
-callback result ends the connection) and the callback filesystem (the triggering request fails with
-`panic: jsontext: ...`) apply it. Session params decoding is core's: apply `strictjson::validate` to
+callback result ends the connection) and the callback filesystem (an invalid response panics) apply it.
+Session params decoding is core's: apply `strictjson::validate` to
 request params before serde so duplicates are rejected like Go's `unmarshalPayload`.
 
 ## Tests

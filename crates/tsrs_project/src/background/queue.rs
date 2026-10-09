@@ -48,9 +48,7 @@ fn worker_pool() -> &'static workerPool {
                             tasks = pool.available.wait(tasks).unwrap();
                         }
                     };
-                    // Go: a panicking task crashes the process. Here the panic hook reports it and the shared
-                    // worker keeps serving other queues.
-                    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(task));
+                    task();
                 })
                 .expect("failed to spawn background worker thread");
         }

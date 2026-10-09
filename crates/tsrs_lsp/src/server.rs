@@ -1,7 +1,5 @@
 use std::fmt::Write as _;
-use std::any::Any;
 use std::io::{Read, Write};
-use std::panic::AssertUnwindSafe;
 use std::sync::atomic::{AtomicBool, AtomicI32, AtomicI64, Ordering};
 use std::sync::{Arc, Condvar, LazyLock, Mutex, OnceLock, RwLock, Weak};
 use std::thread::JoinHandle;
@@ -27,7 +25,6 @@ use crate::logger::{is_valid_log_verbosity, logger, new_logger};
 use crate::lsconsts;
 use crate::lspwatcher;
 use crate::progress::{new_project_loading_progress, projectLoadingProgress};
-use crate::stack_sanitizer::sanitize_stack_trace;
 use crate::workerpool;
 
 // server.go:42
@@ -1305,47 +1302,8 @@ impl Server {
         Ok((default_ls, orchestrator))
     }
 
-    // server.go:1477: `defer s.recover(req)` around `f`. A panic in `f` is logged and answered with an internal
-    // error; the work then returns nil like Go's function after a recovered panic.
-    pub(crate) fn with_recover(&self, req: &RequestMessage, f: impl FnOnce() -> Result<(), Error>) -> Result<(), Error> {
-        match recover_scope(f) {
-            Ok(result) => result,
-            Err((payload, stack)) => {
-                self.recover(req, &payload, &stack);
-                Ok(())
-            }
-        }
-    }
-
-    // server.go:1477
-    fn recover(&self, req: &RequestMessage, r: &Box<dyn Any + Send>, stack: &str) {
-        let r = panic_value_string(&r);
-        self.logger.errorf(format_args!("panic handling request {}: {}\n{}", req.method, r, stack));
-        if req.id.is_some() {
-            let _ = self.send_error(
-                req.id.as_ref(),
-                Error::wrap_code(ErrorCode::InternalError, Error::new(format!("panic handling request {}: {}", req.method, r))),
-            );
-        } else {
-            self.logger.error(&format!("unhandled panic in notification{}{}", req.method, r));
-        }
-
-        if self.telemetry_enabled.load(Ordering::SeqCst) {
-            let _ = self.send_notification(
-                lsproto::TELEMETRY_EVENT_INFO,
-                lsproto::TelemetryEvent {
-                    request_failure_telemetry_event: Some(lsproto::RequestFailureTelemetryEvent {
-                        properties: lsproto::RequestFailureTelemetryProperties {
-                            error_code: ErrorCode::InternalError.string(),
-                            request_method: req.method.0.replace('/', "."),
-                            stack: sanitize_stack_trace(stack),
-                        },
-                        ..Default::default()
-                    }),
-                    ..Default::default()
-                },
-            );
-        }
+    pub(crate) fn run_request(&self, f: impl FnOnce() -> Result<(), Error>) -> Result<(), Error> {
+        f()
     }
 
     // server.go:1501
@@ -1995,15 +1953,8 @@ impl Server {
             return Err(Error::new("completion item data is nil"));
         };
         let language_service = self.session().get_language_service(ctx, &tsrs_ls::lsconv::file_name_to_document_uri(&data.file_name))?;
-        // `defer s.recover(reqMsg)`: Go answers the recovered panic with an internal error and then sends the nil
-        // result; here the handler returns an error instead of a second (null) result.
-        match recover_scope(|| language_service.resolve_completion_item(ctx, params, Some(&data))) {
-            Ok(result) => result,
-            Err((payload, stack)) => {
-                self.recover(req_msg, &payload, &stack);
-                Err(Error::new(format!("panic handling request {}", req_msg.method)))
-            }
-        }
+        let _ = req_msg;
+        language_service.resolve_completion_item(ctx, params, Some(&data))
     }
 
     // server.go:2129
@@ -2032,11 +1983,11 @@ impl Server {
     }
 
     // server.go:2156
-    fn handle_workspace_symbol(self: &Arc<Self>, ctx: &Context, params: &lsproto::WorkspaceSymbolParams, req_msg: &RequestMessage) -> Result<lsproto::WorkspaceSymbolResponse, Error> {
+    fn handle_workspace_symbol(self: &Arc<Self>, ctx: &Context, params: &lsproto::WorkspaceSymbolParams, _req_msg: &RequestMessage) -> Result<lsproto::WorkspaceSymbolResponse, Error> {
         let mut resp = lsproto::WorkspaceSymbolResponse::default();
         let mut ls_err: Option<Error> = None;
         let mut provide_symbols = |snapshot: &Arc<project::Snapshot>, programs: Vec<&'static tsrs_compiler::Program>| {
-            let _ = self.with_recover(req_msg, || {
+            let _ = self.run_request(|| {
                 match tsrs_ls::provide_workspace_symbols(ctx, &programs, &snapshot.converters(), snapshot.user_preferences(), &params.query) {
                     Ok(r) => resp = r,
                     Err(e) => ls_err = Some(e),
@@ -2125,10 +2076,8 @@ impl Server {
             // based on non-existent files and line maps from shortened files.
             return Err(ErrorCode::ContentModified.into());
         };
-        // Go: `defer s.recover(reqMsg)`. After a recovered panic Go returns a nil *CodeLens; the Rust response type
-        // is not nullable, so the (already answered) request gets an empty code lens.
         let mut resolved: Result<lsproto::CodeLens, Error> = Ok(lsproto::CodeLens::default());
-        let _ = self.with_recover(req_msg, || {
+        let _ = self.run_request(|| {
             resolved = default_ls.resolve_code_lens(
                 ctx,
                 code_lens,
@@ -2482,7 +2431,7 @@ impl handlerMap {
                 let ls = s.session().get_language_service(ctx, params.text_document_uri())?;
                 let (s, ctx, req) = (Arc::clone(s), ctx.clone(), Arc::clone(req));
                 Ok(Some(Box::new(move || {
-                    s.with_recover(&req, || {
+                    s.run_request(|| {
                         let resp = f(&s, &ctx, &ls, &params);
                         // After any language service request, check if new global diagnostics were
                         // discovered during checking and push updated tsconfig diagnostics if so.
@@ -2515,7 +2464,7 @@ impl handlerMap {
                 s.session().with_language_service_and_snapshot(ctx, &uri, |language_service, snapshot| {
                     let (s, ctx, req) = (Arc::clone(s), ctx.clone(), Arc::clone(req));
                     Ok(Some(Box::new(move || {
-                        s.with_recover(&req, || {
+                        s.run_request(|| {
                             let mut language_service = language_service;
                             let mut resp = f(&s, &ctx, &language_service, &params);
                             if matches!(&resp, Err(err) if tsrs_ls::is_err_needs_auto_imports(err)) {
@@ -2557,7 +2506,7 @@ impl handlerMap {
                 let (default_ls, orchestrator) = s.get_language_service_and_cross_project_orchestrator(ctx, params.text_document_uri(), req)?;
                 let (s, ctx, req) = (Arc::clone(s), ctx.clone(), Arc::clone(req));
                 Ok(Some(Box::new(move || {
-                    s.with_recover(&req, || {
+                    s.run_request(|| {
                         let resp = f(&default_ls, &ctx, params, orchestrator)?;
                         if let Some(err) = ctx.err() {
                             return Err(err.into());
@@ -2735,8 +2684,8 @@ impl errGroup {
 }
 
 // The server's own threads (read, dispatch, write) get the same 512 MB stacks as the request workers: the
-// dispatch thread builds programs (parse + bind) for synchronous handlers. A panic on them ends the process like
-// an unrecovered panic in a Go goroutine.
+// dispatch thread builds programs (parse + bind) for synchronous handlers. A release-build panic aborts the
+// process like an unrecovered panic in a Go goroutine.
 fn spawn_server_thread(name: &str, f: impl FnOnce() + Send + 'static) -> JoinHandle<()> {
     std::thread::Builder::new()
         .name(name.to_string())
@@ -2766,43 +2715,6 @@ fn locale_parse(s: &str) -> Option<Locale> {
         return None;
     }
     Some(Locale(s.to_string()))
-}
-
-// Go `fmt.Sprint(r)` of a recovered panic value.
-fn panic_value_string(r: &Box<dyn Any + Send>) -> String {
-    if let Some(s) = r.downcast_ref::<&str>() {
-        return s.to_string();
-    }
-    if let Some(s) = r.downcast_ref::<String>() {
-        return s.clone();
-    }
-    "panic".to_string()
-}
-
-thread_local! {
-    static RECOVER_DEPTH: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
-    static PANIC_STACK: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
-}
-
-// Runs `f`, catching a panic like a deferred Go `recover()`: inside the scope the panic hook records the stack
-// at the panic site (Go's debug.Stack() in the deferred function) instead of printing the panic.
-fn recover_scope<R>(f: impl FnOnce() -> R) -> Result<R, (Box<dyn Any + Send>, String)> {
-    static HOOK: std::sync::Once = std::sync::Once::new();
-    HOOK.call_once(|| {
-        let previous = std::panic::take_hook();
-        std::panic::set_hook(Box::new(move |info| {
-            if RECOVER_DEPTH.with(|d| d.get()) > 0 {
-                let stack = std::backtrace::Backtrace::force_capture().to_string();
-                PANIC_STACK.with(|s| *s.borrow_mut() = Some(stack));
-                return;
-            }
-            previous(info);
-        }));
-    });
-    RECOVER_DEPTH.with(|d| d.set(d.get() + 1));
-    let result = std::panic::catch_unwind(AssertUnwindSafe(f));
-    RECOVER_DEPTH.with(|d| d.set(d.get() - 1));
-    result.map_err(|payload| (payload, PANIC_STACK.with(|s| s.borrow_mut().take()).unwrap_or_default()))
 }
 
 // Go `fmt.Sprintf("%+v", v)` of a decoded JSON value (`any`): nil, bool, float64, string, []any, map[string]any

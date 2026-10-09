@@ -206,6 +206,8 @@ jobs:
         env:
           RUSTFLAGS: -Cprofile-use=${{ steps.profile.outputs.path }} -Clink-arg=-Wl,--emit-relocs
           CARGO_TARGET_DIR: /tmp/tsrs-pgo/target
+          # BOLT needs the symbol table; bolt.sh strips the final binary after rewriting it.
+          CARGO_PROFILE_DIST_STRIP: "false"
         run: cargo build --profile dist --locked -p tsrs_cli --target x86_64-unknown-linux-gnu
 
       # BOLT as in release.yml: the LLVM release that matches rustc's LLVM, then bolt.sh for tsrs alone (instrument,

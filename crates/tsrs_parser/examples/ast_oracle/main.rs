@@ -327,16 +327,11 @@ fn run() {
             for line in stdin.lock().lines() {
                 let line = line.unwrap();
                 let (path, flags) = split_line(&line);
-                // A panic in one file must not hide the results for the others.
-                let result = std::panic::catch_unwind(|| dump(path, flags));
-                match result {
-                    Ok(Ok(out)) => {
+                match dump(path, flags) {
+                    Ok(out) => {
                         let _ = writeln!(w, "{:016x} {}", fnv64a(out.as_bytes()), path);
                     }
-                    Ok(Err(e)) => eprintln!("{}", e),
-                    Err(_) => {
-                        let _ = writeln!(w, "PANIC {}", path);
-                    }
+                    Err(e) => eprintln!("{}", e),
                 }
                 let _ = w.flush();
             }

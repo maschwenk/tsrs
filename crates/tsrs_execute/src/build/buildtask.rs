@@ -66,7 +66,7 @@ impl taskResult {
 }
 
 // A Go `chan struct{}` that is only ever closed (orchestrator.go `task.done`, `task.built`): `wait` blocks until
-// `close`. `abort` also releases waiters (a builder panicked; Go would take the process down instead of hanging).
+// `close`.
 #[derive(Default)]
 pub(crate) struct closeSignal {
     closed: Mutex<bool>,
@@ -83,19 +83,13 @@ impl closeSignal {
         self.cond.notify_all();
     }
 
-    // Returns false if released by an abort rather than a close.
-    pub(crate) fn wait(&self, aborted: &AtomicBool) -> bool {
+    pub(crate) fn wait(&self) {
         let mut closed = self.closed.lock().unwrap();
-        while !*closed && !aborted.load(Ordering::SeqCst) {
+        while !*closed {
             closed = self.cond.wait(closed).unwrap();
         }
-        *closed
     }
 
-    pub(crate) fn wake(&self) {
-        let _guard = self.closed.lock().unwrap();
-        self.cond.notify_all();
-    }
 }
 
 pub struct BuildTask {
@@ -190,12 +184,10 @@ impl BuildTask {
     }
 
     // buildtask.go:109
-    fn wait_on_upstream(&self, orchestrator: &Orchestrator) {
+    fn wait_on_upstream(&self) {
         let upstream: Vec<P<BuildTask>> = self.up_stream.lock().unwrap().iter().map(|u| u.task).collect();
         for task in upstream {
-            if !task.done.wait(&orchestrator.aborted) {
-                panic!("build aborted: a builder thread panicked");
-            }
+            task.done.wait();
         }
     }
 
@@ -247,7 +239,7 @@ impl BuildTask {
     // buildtask.go:154
     pub(crate) fn build_project(&'static self, orchestrator: &'static Orchestrator, path: &Path) {
         // Wait on upstream tasks to complete
-        self.wait_on_upstream(orchestrator);
+        self.wait_on_upstream();
         // API builds: the task allocates in its own collectable region, entered after the upstream wait and left
         // before downstream tasks are released.
         let region = orchestrator.enter_api_region();

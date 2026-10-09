@@ -3,7 +3,6 @@
 // serialized by a write lock. A thread per request (rather than a bounded pool) is deliberate: a
 // handler blocked in a client callback must never prevent a nested client request from running.
 
-use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex, MutexGuard, Weak};
@@ -13,7 +12,7 @@ use std::time::Instant;
 use rustc_hash::FxHashMap;
 
 use crate::conn_sync::ConnOptions;
-use crate::handler::{panic_message, Caller, CancellationToken, Handler, RequestContext};
+use crate::handler::{Caller, CancellationToken, Handler, RequestContext};
 use crate::message::{Id, Message, Response, ResponseError, TransportError};
 use crate::protocol::{ProtocolReader, ProtocolWriter};
 use crate::timing::{server_timing_snapshot, TimingCollector, METHOD_GET_SERVER_TIMING, METHOD_RESET_SERVER_TIMING};
@@ -164,7 +163,7 @@ impl AsyncConn {
     fn dispatch(&self, msg: &Message) {
         if msg.is_notification() {
             let cx = RequestContext { cancel: self.cancel.clone(), depth: 0, callbacks: Arc::clone(&self.callbacks), state: Default::default() };
-            let _ = catch_unwind(AssertUnwindSafe(|| self.handler.handle_notification(&cx, &msg.method, msg.params_bytes())));
+            self.handler.handle_notification(&cx, &msg.method, msg.params_bytes());
             return;
         }
         if let Err(e) = self.handle_request(msg) {
@@ -222,17 +221,11 @@ impl AsyncConn {
         }
         let start = self.timing.as_ref().map(|_| Instant::now());
         let cx = RequestContext { cancel: self.cancel.clone(), depth: 0, callbacks: Arc::clone(&self.callbacks), state: Default::default() };
-        let outcome = catch_unwind(AssertUnwindSafe(|| {
-            crate::reentrancy::with_request(&cx, || self.handler.handle_request(&cx, &msg.method, msg.params_bytes()))
-        }));
+        let outcome = crate::reentrancy::with_request(&cx, || self.handler.handle_request(&cx, &msg.method, msg.params_bytes()));
         if let (Some(t), Some(start)) = (&self.timing, start) {
             t.record(&msg.method, start.elapsed());
         }
-        let result = match outcome {
-            Ok(Ok(response)) => Ok(response),
-            Ok(Err(err)) => Err(ResponseError { code: err.code, message: err.message }),
-            Err(payload) => Err(ResponseError::internal(panic_message(&*payload))),
-        };
+        let result = outcome.map_err(|err| ResponseError { code: err.code, message: err.message });
         self.write_result(id, &result)
     }
 

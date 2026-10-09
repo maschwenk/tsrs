@@ -197,14 +197,8 @@ fn run_work_group(single_threaded: bool, count: usize, task: impl Fn(usize) + Sy
                     .expect("failed to spawn checker thread")
             })
             .collect();
-        let mut panic = None;
         for handle in handles {
-            if let Err(payload) = handle.join() {
-                panic.get_or_insert(payload);
-            }
-        }
-        if let Some(payload) = panic {
-            std::panic::resume_unwind(payload);
+            assert!(handle.join().is_ok(), "checker thread panicked");
         }
     });
 }

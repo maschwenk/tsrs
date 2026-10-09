@@ -1,8 +1,7 @@
 // Go's `*testing.T`, as far as the fourslash tests and harness use it. `t.Fatal` / `t.Skip` stop the test
-// by unwinding with a `FatalPanic` / `SkipPanic` payload (Go: runtime.Goexit); the runner and `T::run`
-// catch them.
+// by panicking with a `FatalPanic` / `SkipPanic` payload (Go: runtime.Goexit).
 
-use std::panic::{self, AssertUnwindSafe};
+use std::panic;
 use std::sync::Mutex;
 
 pub struct FatalPanic;
@@ -90,12 +89,7 @@ impl T {
     // Runs f as a subtest named `<t.Name()>/<name>`; returns whether it passed. A failing subtest fails t.
     pub fn run(&self, name: &str, f: impl FnOnce(&T)) -> bool {
         let sub = T::new(&format!("{}/{}", self.name, rewrite(name)), &self.file);
-        let r = panic::catch_unwind(AssertUnwindSafe(|| f(&sub)));
-        if let Err(p) = r {
-            if !p.is::<FatalPanic>() && !p.is::<SkipPanic>() {
-                sub.record_panic(&crate::runner::panic_message(&p));
-            }
-        }
+        f(&sub);
         let s = sub.state.into_inner().unwrap();
         let mut me = self.state.lock().unwrap();
         for l in s.logs {

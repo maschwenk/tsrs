@@ -13,7 +13,7 @@ use tsrs_vfs::FS;
 use crate::configfileregistry::ConfigFileRegistry;
 use crate::configfileregistrybuilder::configFileRegistryBuilder;
 use crate::logging::LogTree;
-use crate::parsecache::{new_parse_cache_key, ParseCache, ParseCacheJournal};
+use crate::parsecache::{new_parse_cache_key, ParseCache};
 use crate::project::{Project, ID};
 use crate::projectcollectionbuilder::ProjectCollectionBuilder;
 use crate::session::SessionOptions;
@@ -23,7 +23,6 @@ use crate::snapshotfs::{new_source_fs, sourceFS, FileHandleSource, SnapshotFS};
 // builder pointer and clears it in `freeze`).
 pub(crate) struct hostBuilder {
     pub(crate) parse_cache: Arc<ParseCache>,
-    pub(crate) parse_cache_journal: Arc<ParseCacheJournal>,
     pub(crate) config_file_registry_builder: Arc<configFileRegistryBuilder>,
     pub(crate) ctx: Context,
 }
@@ -54,7 +53,6 @@ pub(crate) fn new_compiler_host(current_directory: &str, project: &Project, buil
         project: RwLock::new(Some(project.id())),
         builder: RwLock::new(Some(hostBuilder {
             parse_cache: Arc::clone(&builder.parse_cache),
-            parse_cache_journal: Arc::clone(&builder.parse_cache_journal),
             config_file_registry_builder: Arc::clone(&builder.config_file_registry_builder),
             ctx: builder.ctx.clone(),
         })),
@@ -86,11 +84,10 @@ impl compilerHost {
         }
     }
 
-    /// The builder's parse cache and the journal of the references its programs take.
-    pub(crate) fn builder_parse_cache_journal(&self) -> (Arc<ParseCache>, Arc<ParseCacheJournal>) {
+    pub(crate) fn builder_parse_cache(&self) -> Arc<ParseCache> {
         let builder = self.builder.read().unwrap();
         let builder = builder.as_ref().expect("method must not be called after snapshot initialization");
-        (Arc::clone(&builder.parse_cache), Arc::clone(&builder.parse_cache_journal))
+        Arc::clone(&builder.parse_cache)
     }
 
     pub(crate) fn builder_ctx(&self) -> Context {
@@ -139,8 +136,8 @@ impl CompilerHost for compilerHost {
         self.ensure_alive();
         let fh = self.source_fs.get_file_by_path(&opts.file_name, &opts.path)?;
         let key = new_parse_cache_key(opts, fh.hash(), fh.kind());
-        let (cache, journal) = self.builder_parse_cache_journal();
-        Some(journal.acquire(&cache, key, fh))
+        let cache = self.builder_parse_cache();
+        Some(cache.acquire(&key, fh))
     }
 
     // compilerhost.go:172

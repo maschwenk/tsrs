@@ -99,7 +99,6 @@ impl Session {
             Value::Null => Vec::new(),
             v => raw_params.unwrap_or_else(|| json::marshal(v).unwrap_or_default().into_bytes()),
         };
-        // `handle_request` already turns panics into errors.
         match crate::handler::Handler::handle_request(self, &method, &params) {
             Ok(Response::Json(text)) => encode_batch_response(&method, &text, None),
             Ok(Response::Binary(data)) => {

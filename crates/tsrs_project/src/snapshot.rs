@@ -584,11 +584,7 @@ impl Snapshot {
             client,
         );
 
-        // Building programs can unwind (a panic while building, e.g. the module resolver's `Unexpected
-        // moduleResolution`, which the API turns into an error). The parse-cache references the clone's programs took
-        // would then never reach a snapshot to release them: roll them back before unwinding further. The clone's
-        // projects (and their program owners) are dropped with the builder as the unwind continues.
-        let built = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let (api_error, project_collection, config_file_registry) = {
             if !change.ata_changes.is_empty() {
                 project_collection_builder.did_update_ata_state(&change.ata_changes, &logger.fork("DidUpdateATAState"));
             }
@@ -640,13 +636,6 @@ impl Snapshot {
             }
             let (project_collection, config_file_registry) = project_collection_builder.finalize(&logger);
             (api_error, project_collection, config_file_registry)
-        }));
-        let (api_error, project_collection, config_file_registry) = match built {
-            Ok(built) => built,
-            Err(panic) => {
-                project_collection_builder.parse_cache_journal.roll_back(&store.parse_cache);
-                std::panic::resume_unwind(panic);
-            }
         };
 
         let mut projects_with_new_program_structure: FxHashMap<ProjectID, bool> = FxHashMap::default();

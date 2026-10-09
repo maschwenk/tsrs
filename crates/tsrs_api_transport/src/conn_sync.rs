@@ -3,11 +3,10 @@
 // nested client request (issued from inside a client callback) is handled with the protocol lock
 // released, so callbacks can re-enter the API without deadlocking.
 
-use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::{Arc, Mutex, MutexGuard, Weak};
 use std::time::Instant;
 
-use crate::handler::{panic_message, Caller, CancellationToken, Handler, RequestContext};
+use crate::handler::{Caller, CancellationToken, Handler, RequestContext};
 use crate::message::{Message, Response, ResponseError, TransportError};
 use crate::protocol::{ProtocolReader, ProtocolWriter};
 use crate::timing::{server_timing_snapshot, TimingCollector, METHOD_GET_SERVER_TIMING, METHOD_RESET_SERVER_TIMING};
@@ -134,23 +133,17 @@ impl SyncConn {
         }
         let start = self.timing.as_ref().map(|_| Instant::now());
         let cx = RequestContext { cancel: self.cancel.clone(), depth, callbacks: Arc::clone(&self.callbacks), state: Default::default() };
-        let outcome = catch_unwind(AssertUnwindSafe(|| {
-            crate::reentrancy::with_request(&cx, || self.handler.handle_request(&cx, &msg.method, msg.params_bytes()))
-        }));
+        let outcome = crate::reentrancy::with_request(&cx, || self.handler.handle_request(&cx, &msg.method, msg.params_bytes()));
         if let (Some(t), Some(start)) = (&self.timing, start) {
             t.record(&msg.method, start.elapsed());
         }
-        let result = match outcome {
-            Ok(Ok(response)) => Ok(response),
-            Ok(Err(err)) => Err(ResponseError { code: err.code, message: err.message }),
-            Err(payload) => Err(ResponseError::internal(panic_message(&*payload))),
-        };
+        let result = outcome.map_err(|err| ResponseError { code: err.code, message: err.message });
         self.write_response(msg, &result)
     }
 
     fn handle_notification(&self, msg: &Message, depth: u32) {
         let cx = RequestContext { cancel: self.cancel.clone(), depth, callbacks: Arc::clone(&self.callbacks), state: Default::default() };
-        let _ = catch_unwind(AssertUnwindSafe(|| self.handler.handle_notification(&cx, &msg.method, msg.params_bytes())));
+        self.handler.handle_notification(&cx, &msg.method, msg.params_bytes());
     }
 
     /// Call: serialized; the msgpack protocol uses the method name as the response ID.

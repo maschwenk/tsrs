@@ -65,7 +65,7 @@ session.set_connection(Arc<dyn ClientConn>); session.close();  // Session: Handl
 - `echo` and `ping` are handled before method lookup exactly like Go. Unknown methods are
   `InvalidRequest` (`unknown API method "x"`).
 - Both protocols put errors on the wire as `jsonrpc.CodeInternalError` with `err.to_string()`.
-- Handler panics are caught and returned as `panic: ...` errors (Go conn recovers too).
+- Release builds abort on handler panics; the transport does not turn them into error responses.
 
 ### Runtime (requested from `tsrs_api_transport`)
 
@@ -273,7 +273,7 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
 | 147 | `getProgramDiagnostics` | core | supported | program_test (empty case) |
 | 148 | `getGlobalDiagnostics` | core | supported | program_test (empty case) |
 | 149 | `getConfigFileParsingDiagnostics` | core | supported | program_test (client-supplied diagnostics round trip) |
-| 150 | `printNode` | core | partial | upstream sync printNode/printFile tests pass; recovered printer panics use Go's `Kind…` names (`printing.rs` unit test) |
+| 150 | `printNode` | core | partial | upstream sync printNode/printFile tests pass |
 | 151 | `formatNodeForInsertion` | core | partial | upstream sync formatNodeForInsertion tests pass |
 | 152 | `emit` | core | supported | program_test (write-through, no TSRS_EMIT), requestfs_test (full filesystem returns emittedFilesContents, no disk write) |
 | 153 | `emitToString` | core | supported | program_test |
@@ -302,8 +302,8 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
 - Request filesystems are ported (`crates/tsrs_api/src/requestfs.rs`) but enter the project snapshot as a
   plain host filesystem: LSP overlay rebasing and alias expansion of client `fileNotifications` through
   request symlinks (Go `ExpandFileChanges`) are not applied. Callback filesystems (`--callbacks`, Go
-  `callbackfs.go`) are ported in `crates/tsrs_api/src/callbackfs.rs`; like Go, invalid callback responses
-  panic and become request errors (a panic on a worker thread can poison shared caches; not yet hardened).
+  `callbackfs.go`) are ported in `crates/tsrs_api/src/callbackfs.rs`; invalid callback responses panic and
+  terminate a release server.
 - API builds differ from `tsrs -b` in how they run, not in what they write: each `build` call uses a fresh
   CLI orchestrator (the state Go's `recheckAllProjects` leaves; reuse across builds comes from the
   `.tsbuildinfo` files on disk, as for any rebuild), runs one project at a time on the request thread, and
@@ -352,9 +352,8 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
   runtime-f2-review's cases. `moduleResolution` is an int32 newtype too: a number with no named kind is kept
   (createPrograms, createBuildOrchestrator, builds of import-free projects and their outputs/cleans work as
   in Go), and resolving a module with it reaches the ported resolver's `Unexpected moduleResolution` panic at
-  the same point as pinned Go (resolver.go `ResolveModuleName`); Go's server crashes there, tsrs converts that
-  panic to the stable client error `unsupported moduleResolution value N (not a ModuleResolutionKind)` and
-  stays usable (orchestrator map lock poisoning is tolerated). Unknown `moduleDetection`/`newLine` numbers are echoed and
+  the same point as pinned Go (resolver.go `ResolveModuleName`); both release servers terminate there. Unknown
+  `moduleDetection`/`newLine` numbers are echoed and
   compile like Go's fallback (runtime f552 review). Go `*int` options (`maxNodeModuleJsDepth`, `builders`,
   `checkers`) take any int64, exact from the request literal and echoed exactly (`json::Value::Integer`);
   above int64 is out of range. `checkers` is clamped like Go (`max(min(n, files, 256), 1)`; tsrs used to
@@ -369,12 +368,6 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
 - Response shapes from paired runs (parity f703): `updateSnapshot` omits an empty `changes` (json/v2
   `omitempty`); `cleanBuild` keeps Go's per-orchestrator existence answers until the next build, so a clean
   after a clean lists the project's outputs again.
-- Unwinding builds (a panic while building a program that the API answers as an error, today the module
-  resolver's `Unexpected moduleResolution`): a snapshot clone rolls back the parse-cache references its
-  programs took (journal in `ProjectCollectionBuilder`), the file loader frees its project reference mapper,
-  createSnapshot releases its root reference and an API build frees its fresh orchestrator, so repeated
-  failures stay flat (codec d9be067 probe; `failed_program_builds_release_their_files`,
-  `failed_builds_free_their_orchestrator`). Other state an arbitrary panic could leave is not audited.
 - Memory: snapshots free their programs, checkers, emit allocations and a full build's shared data
   (processed files, project-reference mapper, loader and dts-faking resolution hosts) with the build's base
   region (createSnapshot+release cycles stay flat; `tests/memory_test.rs`). The first attempt at freeing

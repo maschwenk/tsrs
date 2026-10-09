@@ -362,33 +362,18 @@ fn tsctests() {
                 let test_ref: &'static scenario = unsafe { &*(test as *const scenario) };
                 let outcome = std::thread::Builder::new()
                     .stack_size(512 << 20)
-                    .spawn(move || std::panic::catch_unwind(|| run_scenario(test_ref)))
+                    .spawn(move || run_scenario(test_ref))
                     .unwrap()
                     .join()
                     .unwrap();
                 let reference = std::fs::read_to_string(root.join("ts-ref/tsc/testdata/baselines/reference").join(&test.baseline)).ok();
-                let class = match outcome {
-                    Ok(actual) => {
-                        if reference.as_deref() == Some(actual.as_str()) {
-                            "pass"
-                        } else {
-                            let local = results_dir.join("local").join(&test.baseline);
-                            std::fs::create_dir_all(local.parent().unwrap()).unwrap();
-                            std::fs::write(local, actual).unwrap();
-                            "fail"
-                        }
-                    }
-                    Err(payload) => {
-                        let msg = payload
-                            .downcast_ref::<String>()
-                            .cloned()
-                            .or_else(|| payload.downcast_ref::<&str>().map(|s| s.to_string()))
-                            .unwrap_or_default();
-                        let local = results_dir.join("local").join(format!("{}.crash", test.baseline));
-                        std::fs::create_dir_all(local.parent().unwrap()).unwrap();
-                        std::fs::write(local, msg).unwrap();
-                        "crash"
-                    }
+                let class = if reference.as_deref() == Some(outcome.as_str()) {
+                    "pass"
+                } else {
+                    let local = results_dir.join("local").join(&test.baseline);
+                    std::fs::create_dir_all(local.parent().unwrap()).unwrap();
+                    std::fs::write(local, outcome).unwrap();
+                    "fail"
                 };
                 results.lock().unwrap().push((test.baseline.clone(), class));
             });

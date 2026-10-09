@@ -62,9 +62,14 @@ debug = false
 debug = false
 
 [profile.release]
+# Configurations explicitly listed here for clarity.
+# Using the best options for performance.
 opt-level = 3
-debug = "line-tables-only"
-panic = "unwind"
+lto = "fat"
+codegen-units = 1
+strip = "symbols" # Set to `false` for debug information
+debug = false # Set to `true` for debug information
+panic = "abort" # Let it crash and force ourselves to write safe Rust
 
 # Release binaries (.github/workflows/release.yml) build with this profile twice, for PGO: -Cprofile-generate,
 # training run, -Cprofile-use (notes/perf-pgo.md). `cargo build --release` stays the development build.

@@ -17,9 +17,8 @@ func (g *gen) stmts(list []ast.Stmt) {
 	}
 }
 
-// deferStmt: Go runs the deferred call when the function returns or panics (t.Fatal unwinds through it too).
-// The rest of the block runs under go::run (catch_unwind); the deferred call runs afterwards and the panic, if
-// any, is resumed.
+// deferStmt: the generated shape keeps the Go defer ordering on normal return. Release builds abort on panic, so
+// go::run does not recover and deferred calls do not run on that path.
 func (g *gen) deferStmt(d *ast.DeferStmt, rest []ast.Stmt) {
 	if g.inResultFunc {
 		fail("defer in a function with results")

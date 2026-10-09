@@ -48,14 +48,13 @@ fn print_file(mode: &str, path: &str, flags: &str) -> Result<String, &'static st
         return Err("SKIP");
     }
     let mode = mode.to_string();
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+    Ok({
         if mode.starts_with("synth") {
-            return print_synthesized(&mode, file);
+            return Ok(print_synthesized(&mode, file));
         }
         let mut p = new_printer(options(&mode), PrintHandlers::default(), None);
         p.emit_source_file(file)
-    }))
-    .map_err(|_| "PANIC")
+    })
 }
 
 fn set_flags_recursive(ec: P<EmitContext>, node: P<Node>, flags: EmitFlags) {

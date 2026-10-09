@@ -86,4 +86,6 @@ done
 
 mv "$dist/tsrs" "$dist/tsrs.prebolt"
 cp "$work/tsrs.bolt" "$dist/tsrs"
+# Cargo keeps the symbol table for the BOLT input; the release profile's final artifact is stripped.
+strip "$dist/tsrs"
 ls -l "$dist/tsrs" "$dist/tsrs.prebolt"

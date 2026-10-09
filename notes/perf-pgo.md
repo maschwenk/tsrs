@@ -4,7 +4,8 @@ Question: is profile-guided optimization (with fat LTO and one codegen unit) wor
 binaries? Answer: yes. PGO cuts CPU time by 7-14% and instructions by 13-14% on every project measured,
 counters and output unchanged. Release builds now use it (`.github/workflows/release.yml`, profile `dist` in
 `Cargo.toml`, training script `.github/scripts/pgo-train.sh`), and so does the README benchmark
-(`.depot/workflows/bench.yml`, since 2026-10-01). `cargo build --release` (development) is unchanged.
+(`.depot/workflows/bench.yml`, since 2026-10-01). Since 2026-10-09 the ordinary development release profile also
+uses fat LTO and one codegen unit (`notes/perf-release-profile.md`); it still does not use PGO.
 
 ## Binaries
 

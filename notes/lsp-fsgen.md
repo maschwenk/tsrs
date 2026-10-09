@@ -32,7 +32,7 @@ constant contents for the parser oracle. Parser oracle: `tools/oracle/fourslash-
 - Go `any` and all its aliases (MarkerInput, MarkerOrRangeOrName, CompletionsExpectedItem,
   ExpectedCompletionEditRange) -> one enum `go::Any` (variant per dynamic type, `Nil`); interface
   `MarkerOrRange` -> enum. `x.(bool)` -> `x.assert_bool()`.
-- `defer CALL` -> the rest of the block runs under `go::run` (catch_unwind), then CALL, then `go::resume`;
+- `defer CALL` -> the rest of the block runs under `go::run`, then CALL, then `go::resume` on normal return;
   `defer testutil.RecoverAndFail(t, msg)` -> `testutil::recover_and_fail(t, msg, result)`.
 - Closures that use the FourslashTest receive it as first parameter (PORTING.md callback rule): harness callbacks
   (`GoToEachMarker`), local closures; harness-returned closures (`done`, `reset`, `VerifyCompletionsResult`

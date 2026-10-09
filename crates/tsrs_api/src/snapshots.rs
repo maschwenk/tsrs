@@ -420,10 +420,8 @@ impl Session {
         };
         let ctx = tsrs_core::context::Context::background();
         let root = self.snapshot_host.new_root_snapshot();
-        // The root reference is released even if building a program unwinds (see `Snapshot::clone_snapshot`).
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.snapshot_host.clone_snapshot(&ctx, &root, file_changes, Some(Arc::new(req)))));
+        let result = self.snapshot_host.clone_snapshot(&ctx, &root, file_changes, Some(Arc::new(req)));
         root.deref();
-        let result = result.unwrap_or_else(|panic| std::panic::resume_unwind(panic));
         let snapshot = match result {
             Ok(s) => s,
             Err((s, err)) => {

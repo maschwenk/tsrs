@@ -140,8 +140,8 @@ pointer compression costs about +4.9% instructions and took back most of the che
 - Build-level options on top of PGO + fat LTO (notes/perf-build-level.md, Linux x86-64, Ice Lake): BOLT `-hugify`
   (text on 2 MiB pages: no gain over BOLT alone), mimalloc v2 / jemalloc / glibc malloc instead of mimalloc v3 (3-14%
   slower for 3-7% less peak), `opt-level = "s"` for the cold crates (`.text` -6%, speed unchanged), vscode at eight
-  checkers added to the PGO training (-3% instructions, cycles unchanged). `panic = "abort"` was not measured: its
-  builds crashed until notes/fix-arena-recycle-uaf.md.
+  checkers added to the PGO training (-3% instructions, cycles unchanged). `panic = "abort"` was later measured and
+  adopted after the arena fix (`notes/perf-release-profile.md`).
 - Faster file reading for the front end (`io_uring`, `readahead`, fewer syscalls): not tried, the front end is 5.6-6.6%
   of a 4- or 8-checker run on Linux x86 (same note), below the bar where it could pay.
 

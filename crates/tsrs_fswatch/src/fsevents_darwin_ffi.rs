@@ -316,8 +316,7 @@ extern "C" fn fs_events_callback_c(_stream: FSEventStreamRef, info: *mut c_void,
     // `teardown_stream` has waited for the stream's queue, so no callback outlives it.
     let cb = unsafe { &*(info as *const streamCallback) };
     let payload = fsEventsCallbackPayload { num_events, paths: event_paths.cast_const(), flags: event_flags, ids: event_ids };
-    // A panic must not unwind into CoreServices.
-    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| fs_events_callback(cb, &payload)));
+    fs_events_callback(cb, &payload);
 }
 
 // An FSEventStream handle (Go keeps it as an atomic uintptr).

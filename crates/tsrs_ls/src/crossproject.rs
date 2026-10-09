@@ -1,4 +1,3 @@
-use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
@@ -87,7 +86,6 @@ impl LanguageService {
         let mut default_definition: Option<nonLocalDefinition> = None;
         let mut queue: Vec<projectAndTextDocumentPosition> = Vec::new();
         let mut err: Option<lsproto::Error> = None;
-        let mut panics_occurred: Vec<String> = Vec::new();
 
         fn can_search_project<Resp>(results: &OrderedMap<String, response<Resp>>, project: &Arc<dyn Project>) -> bool {
             !results.contains_key(&project.id())
@@ -140,7 +138,7 @@ impl LanguageService {
                 if ctx.err().is_some() {
                     continue;
                 }
-                let outcome = catch_unwind(AssertUnwindSafe(|| -> Option<Result<Resp, lsproto::Error>> {
+                let outcome = (|| -> Option<Result<Resp, lsproto::Error>> {
                     // Process the item
                     let fetched: Arc<LanguageService>;
                     let ls: &LanguageService = match item.ls {
@@ -195,33 +193,21 @@ impl LanguageService {
                     }
 
                     Some(symbol_and_entries_to_resp(ls, ctx, params, &data, options))
-                }));
+                })();
                 match outcome {
-                    Ok(Some(Ok(result))) => {
+                    Some(Ok(result)) => {
                         let response = results.get_mut(&item.project.id()).unwrap();
                         response.complete = true;
                         response.result = result;
                         response.for_original_location = item.for_original_location;
                     }
-                    Ok(Some(Err(err_search))) => {
+                    Some(Err(err_search)) => {
                         if err.is_none() {
                             err = Some(err_search);
                         }
                     }
-                    Ok(None) => {}
-                    Err(payload) => {
-                        let r = payload
-                            .downcast_ref::<String>()
-                            .cloned()
-                            .or_else(|| payload.downcast_ref::<&str>().map(|s| s.to_string()))
-                            .unwrap_or_default();
-                        let stack = std::backtrace::Backtrace::force_capture();
-                        panics_occurred.push(format!("panic handling request: {}\n{}", r, stack));
-                    }
+                    None => {}
                 }
-            }
-            if !panics_occurred.is_empty() {
-                panic!("Panics occurred during cross-project handling: {:?}", panics_occurred);
             }
             if let Some(e) = ctx.err() {
                 return Err(e.into());

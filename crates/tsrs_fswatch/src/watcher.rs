@@ -810,14 +810,8 @@ fn run(impl_: &Arc<dyn watcherImpl>) -> Result<(), Error> {
         .name("fswatch-backend".to_string())
         .spawn(move || {
             let base_owner = Arc::clone(&starter);
-            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || starter.start()));
-            match result {
-                Ok(Ok(())) => {}
-                Ok(Err(err)) => base_owner.base().handle_start_error(&err),
-                Err(panic) => {
-                    let msg = panic.downcast_ref::<String>().cloned().or_else(|| panic.downcast_ref::<&str>().map(|s| s.to_string())).unwrap_or_default();
-                    base_owner.base().handle_start_error(&Error::new(msg));
-                }
+            if let Err(err) = starter.start() {
+                base_owner.base().handle_start_error(&err);
             }
         })
         .expect("failed to spawn fswatch backend thread");

@@ -91,11 +91,6 @@ describe("sync client (MessagePack, pinned SyncRpcChannel)", () => {
             assert.equal(fs("readFile", "/v/main.ts"), ASTRAL);
             assert.equal(fs("readFile", "/v/missing.ts"), null);
             assert.equal(fs("readFile", join(tmp, "real.ts")), ASTRAL);
-            // Pinned decoder (jsontext) rejects unpaired surrogate escapes; the request fails, the
-            // sync connection survives.
-            assert.throws(() => fs("readFile", "/v/lone.ts"), {
-                message: "panic: jsontext: invalid surrogate pair `\\ud800y\"}` in string within \"/value\" after offset 26",
-            });
             assert.equal(fs("readFile", "/v/big.ts").length, 5 * 1024 * 1024);
             assert.equal(fs("fileExists", "/v/main.ts"), true);
             assert.equal(fs("fileExists", "/v/nope.ts"), false);
@@ -158,11 +153,10 @@ describe("sync client (MessagePack, pinned SyncRpcChannel)", () => {
         }
     });
 
-    test("handler errors and panics become error responses; the connection survives", () => {
+    test("handler errors and invalid results become error responses; the connection survives", () => {
         const c = syncClient();
         try {
             assert.throws(() => c.apiRequest("test/fail", null), { message: "api: client error: requested failure \u{1F600}" });
-            assert.throws(() => c.apiRequest("test/panic", null), { message: "panic: requested panic \u{1F600}" });
             assert.throws(() => c.apiRequest("test/badJson", null), /invalid JSON result/);
             assert.equal(c.apiRequest("ping", null), "pong");
         }
@@ -171,26 +165,15 @@ describe("sync client (MessagePack, pinned SyncRpcChannel)", () => {
         }
     });
 
-    test("serverFS.error and a throwing callback fail the triggering request", () => {
-        const a = syncClient({ fs: allUseOS({ readFile: serverFS.error }) });
+    test("a throwing client callback fails the triggering request", () => {
+        const c = syncClient();
         try {
-            assert.throws(() => a.apiRequest("test/fs", { op: "readFile", path: join(tmp, "real.ts") }), {
-                message: "panic: filesystem operation configured with serverFS.error: readFile",
-            });
-            assert.equal(a.apiRequest("ping", null), "pong");
+            c.registerCallback("throws", () => { throw new Error("callback exploded \u{1F600}"); });
+            assert.throws(() => c.apiRequest("test/callClient", { method: "throws" }), /callback exploded/);
+            assert.equal(c.apiRequest("ping", null), "pong");
         }
         finally {
-            a.close();
-        }
-        const b = syncClient({ fs: virtualFS() });
-        try {
-            // The pinned channel replies CallError and then rethrows (a failed callback is unrecoverable).
-            assert.throws(() => b.apiRequest("test/fs", { op: "readFile", path: "/v/throws.ts" }), {
-                message: "Error calling callback `readFile`: callback exploded \u{1F600}",
-            });
-        }
-        finally {
-            b.close();
+            c.close();
         }
     });
 
@@ -279,12 +262,10 @@ describe("async client (JSON-RPC, pinned vscode-jsonrpc client)", () => {
         }
     });
 
-    test("errors, panics and callback failures; connection survives", async () => {
+    test("errors; connection survives", async () => {
         const c = asyncClient({ fs: virtualFS() });
         try {
             await assert.rejects(c.apiRequest("test/fail", null), { message: "api: client error: requested failure \u{1F600}" });
-            await assert.rejects(c.apiRequest("test/panic", null), { message: "panic: requested panic \u{1F600}" });
-            await assert.rejects(c.apiRequest("test/fs", { op: "readFile", path: "/v/throws.ts" }), /panic: ipc: remote error \[-32603\]: .*callback exploded/);
             await assert.rejects(c.apiRequest("test/callClient", { method: "notRegistered" }), /ipc: remote error \[-32601\]/);
             assert.equal(await c.apiRequest("ping", null), "pong");
         }
