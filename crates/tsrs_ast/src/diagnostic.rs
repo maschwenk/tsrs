@@ -1,9 +1,10 @@
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::fmt;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_core::tspath::Path;
-use tsrs_core::{alloc_slice, alloc_str, undefined_text_range, OwnedCell, ResolutionMode, TextRange, P};
+use tsrs_core::{alloc_slice, alloc_str, undefined_text_range, OwnedCell, ResolutionMode, TextPos, TextRange, P};
 use tsrs_diagnostics::{self as diagnostics, Category, Key, Message};
 
 use crate::SourceFile;
@@ -242,13 +243,47 @@ impl Diagnostic {
         if self.message.is_none() && !self.message_text.get().is_empty() {
             return self.message_text.get().to_string();
         }
-        diagnostics::localize(self.message, self.message_key, self.display_message_args())
+        diagnostics::localize(self.message, self.message_key, &self.display_message_args())
     }
 
-    // Go substitutes the original text for a content-mapper alias span here; content mappers
-    // (virtual file span maps) are not ported, so the stored arguments are always displayed.
-    fn display_message_args(&self) -> &[String] {
-        &self.message_args
+    // displayMessageArgs substitutes the original text for a complete alias span when a diagnostic argument
+    // exactly matches the virtual alias. Stored arguments remain unchanged for code fixes and serialization.
+    // diagnostic.go:134
+    fn display_message_args(&self) -> Cow<'_, [String]> {
+        let Some(file) = self.file.get() else {
+            return Cow::Borrowed(&self.message_args);
+        };
+        if !self.source.get().is_empty() {
+            return Cow::Borrowed(&self.message_args);
+        }
+        let Some(segment) = tsrs_spanmap::alias_for_virtual_span(file.span_map().as_deref(), self.loc.get()) else {
+            return Cow::Borrowed(&self.message_args);
+        };
+        let virtual_text = file.text();
+        let original_text = file.original_text();
+        if segment.virtual_start < 0
+            || segment.virtual_end > virtual_text.len() as TextPos
+            || segment.original_start < 0
+            || segment.original_end > original_text.len() as TextPos
+        {
+            return Cow::Borrowed(&self.message_args);
+        }
+        // Go slices at byte offsets, which need not fall on character boundaries (the original name is then
+        // converted lossily).
+        let virtual_name = &virtual_text.as_bytes()[segment.virtual_start as usize..segment.virtual_end as usize];
+        let original_name = &original_text.as_bytes()[segment.original_start as usize..segment.original_end as usize];
+        let mut result: Option<Vec<String>> = None;
+        for (i, arg) in self.message_args.iter().enumerate() {
+            if arg.as_bytes() != virtual_name {
+                continue;
+            }
+            let result = result.get_or_insert_with(|| self.message_args.clone());
+            result[i] = String::from_utf8_lossy(original_name).into_owned();
+        }
+        match result {
+            Some(result) => Cow::Owned(result),
+            None => Cow::Borrowed(&self.message_args),
+        }
     }
 }
 
@@ -720,6 +755,41 @@ mod tests {
             collection.add(diagnostic);
         }
         assert_eq!(collection.get_diagnostics().len(), all.len());
+    }
+
+    // displayMessageArgs (diagnostic.go:134): a diagnostic on exactly a virtual alias shows the original name instead of
+    // the virtual one; a partial span or an external source shows the stored arguments, which never change.
+    #[test]
+    fn display_message_args_substitutes_complete_alias() {
+        let f = crate::NodeFactory::default();
+        let statements = f.new_node_list(vec![]);
+        let eof = f.new_token(crate::Kind::EndOfFile);
+        let opts = crate::SourceFileParseOptions { file_name: "/a.vue".to_string(), ..Default::default() };
+        let file = f.new_source_file(opts.clone(), "let __alias = 1;", statements, eof).as_source_file_p();
+        let span_map = tsrs_spanmap::new(&[tsrs_spanmap::Segment {
+            virtual_start: 4,
+            virtual_end: 11,
+            original_start: 5,
+            original_end: 6,
+            kind: tsrs_spanmap::Kind::Alias,
+            features: tsrs_spanmap::Feature::All,
+        }]);
+        file.set_content_mapper_info(crate::ContentMapperSourceFileInfo {
+            content_mapper: "mapper@1.0.0",
+            parse_options: opts,
+            original_text: "<a b=x>",
+            span_map: Some(span_map),
+            ..Default::default()
+        });
+
+        let alias = new_diagnostic(Some(file), TextRange::new(4, 11), &diagnostics::Cannot_find_name_0, &[&"__alias"]);
+        assert_eq!(alias.localize(), "Cannot find name 'x'.");
+        assert_eq!(alias.message_args(), ["__alias"]);
+        let partial = new_diagnostic(Some(file), TextRange::new(5, 11), &diagnostics::Cannot_find_name_0, &[&"__alias"]);
+        assert_eq!(partial.localize(), "Cannot find name '__alias'.");
+        let external = new_diagnostic(Some(file), TextRange::new(4, 11), &diagnostics::Cannot_find_name_0, &[&"__alias"])
+            .set_external_data("mapper", "");
+        assert_eq!(external.localize(), "Cannot find name '__alias'.");
     }
 }
 

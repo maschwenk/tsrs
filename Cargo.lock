@@ -346,6 +346,7 @@ dependencies = [
  "rustc-hash",
  "tsrs_core",
  "tsrs_diagnostics",
+ "tsrs_spanmap",
 ]
 
 [[package]]
