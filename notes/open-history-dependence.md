@@ -267,7 +267,12 @@ the use when the using file shares a checker with an earlier user, identical bef
 would mean keeping poisoned results out of the symbol and node links as well (resolved and declared types, constraints,
 instantiated members), which is a larger change. Also unchanged: a report filed against another file while checking
 this one is kept only if this checker checks that file later (as every diagnostic), and a checked declaration file
-split into pieces (`TSRS_SPLIT_FILES`) can report one site per piece. Cost: a program that reports a TS2590 recomputes the type at every site; for the cross product this is the size
+split into pieces (`TSRS_SPLIT_FILES`) can report one site per piece, where the split self-test mode
+(`TSRS_SPLIT_FILES=shadow`) stops with its disagreement, as it does on main. Two deterministic differences from tsgo
+remain in the evaluation's identity: `K0 & K1 & K2` and `K0 & (K1 & K2)` in one file report once (the failing call is
+the two-member split in both; tsgo caches under the outer key and reports both), and a template literal type's key is
+its texts and types, so two template literal types over the same unions report separately, as tsgo does, while the
+same template literal type node evaluated twice reports once where tsgo reports twice. Cost: a program that reports a TS2590 recomputes the type at every site; for the cross product this is the size
 check only, for a union of 1,101 classes each re-evaluation pays the 100,000-comparison estimate, about 4 ms per site
 (100 sites in one file: 0.46 s against 0.05 s). `TSRS_TRACE_UNION_REDUCTION=1` (docs/DEBUGGING.md) remains, for the
 `remove_subtypes` site, for Go mode, and to find which union a TS2590 is about.

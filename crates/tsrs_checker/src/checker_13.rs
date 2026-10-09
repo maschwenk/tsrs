@@ -1193,15 +1193,18 @@ impl Checker {
     pub(crate) fn report_too_complex(&mut self, key: u64) {
         self.too_complex_reports = self.too_complex_reports.wrapping_add(1);
         match self.current_node {
-            // tsrs-only: while a file is being checked, each file reports a too-complex type once, at the first site in
-            // it that evaluated the type, whichever file's check that evaluation happened in (resolving a declaration
-            // of file A while checking file B reports at the site in A; A's later sites are then quiet), emitted when
-            // the file being checked is done (`flush_too_complex_reports`). Go reports at once, and so does a report
-            // made outside a file check (the language server asking for a type).
-            Some(node) if self.checking_file.is_some() && !tsrs_core::compat::go_compatible_history() => {
+            // tsrs-only: each file reports a too-complex type once, at the first site in it that evaluated the type,
+            // whichever file's check that evaluation happened in (resolving a declaration of file A while checking
+            // file B reports at the site in A; A's later sites are then quiet). While a file is being checked the
+            // report is emitted when the file is done (`flush_too_complex_reports`); outside a file check (the
+            // language server asking for a type) it is emitted at once. Go reports at once, every time.
+            Some(node) if !tsrs_core::compat::go_compatible_history() => {
                 let reported_before = ast::get_source_file_of_node(node).is_some_and(|file| !self.too_complex_reported.insert((file, key)));
-                if !reported_before {
+                if reported_before {
+                } else if self.checking_file.is_some() {
                     self.too_complex_nodes.push(node);
+                } else {
+                    self.error(Some(node), &diagnostics::Expression_produces_a_union_type_that_is_too_complex_to_represent, &[]);
                 }
             }
             location => {
