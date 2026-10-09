@@ -10,7 +10,7 @@
 //   TSCTESTS_FILTER=<substring> ...                    # only matching baselines
 //
 // Results: target/tsctests-results/{pass,fail,crash}.txt and the actual baselines of failures under
-// target/tsctests-results/local/. Content-mapper scenarios (not supported by tsrs) are skipped.
+// target/tsctests-results/local/. Content-mapper scenarios run with the in-process test mappers (tsrs_contentmappertest).
 
 mod readablebuildinfo;
 mod sys;
