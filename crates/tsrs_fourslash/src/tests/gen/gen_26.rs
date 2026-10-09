@@ -19,7 +19,7 @@ namespace Foo {
 
 // module, value and type
 import a2 = Foo./*4*/Bar;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3", "4"]);
@@ -48,7 +48,7 @@ namespace Foo {
 
 // module
 import a3 = Foo./*3*/Bar.Baz;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
@@ -80,7 +80,7 @@ pub fn test_references_for_modifiers(t: &T) {
 }|]
 [|/*asyncModifier*/async function fn() {}|]
 [|/*exportModifier*/export /*defaultModifier*/default class C2 {}|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["declareModifier", "abstractModifier", "staticModifier", "readonlyModifier", "publicModifier", "protectedModifier", "privateModifier", "constModifier", "asyncModifier", "exportModifier", "defaultModifier"]);
@@ -120,7 +120,7 @@ pub fn test_references_for_no_context(t: &T) {
     namespace testMod {
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3", "4"]);
@@ -148,7 +148,7 @@ var x: Foo;
 x[12];
 x = { "12": 0 };
 x = { 12: 0 };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1"]);
@@ -173,7 +173,7 @@ x["/*2*/add"];
 x./*3*/add;
 var y = x;
 y./*4*/add;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3", "4"]);
@@ -267,7 +267,7 @@ pub fn test_references_for_overrides(t: &T) {
         z.method();
 	}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["foo", "ifoo", "icfoo", "field", "method"]);
@@ -296,7 +296,7 @@ x./*2*/doSomething("ss");
 
 var y: IFoo<number>;
 y./*3*/doSomething(12);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
@@ -369,7 +369,7 @@ export const h = 1;
 // @filename: /j.ts
 export const j1 = 1;
 export const j2 = 2;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["importEqualsDecl1_importKeyword", "importEqualsDecl1_requireKeyword", "importEqualsDecl2_importKeyword", "importDecl1_importKeyword", "importDecl1_typeKeyword", "importDecl1_fromKeyword", "importDecl2_importKeyword", "importDecl2_typeKeyword", "importDecl2_asKeyword", "importDecl2_fromKeyword", "importDecl3_importKeyword", "importDecl3_typeKeyword", "importDecl3_fromKeyword", "importDecl4_importKeyword", "importDecl4_typeKeyword", "importDecl4_fromKeyword", "importDecl4_asKeyword", "importDecl5_importKeyword", "exportDecl1_exportKeyword", "exportDecl1_typeKeyword", "exportDecl1_fromKeyword", "exportDecl2_exportKeyword", "exportDecl2_typeKeyword", "exportDecl2_asKeyword", "exportDecl2_fromKeyword", "exportDecl3_exportKeyword", "exportDecl3_typeKeyword", "exportDecl3_fromKeyword", "exportDecl4_exportKeyword", "exportDecl4_typeKeyword", "exportDecl4_fromKeyword", "exportDecl4_asKeyword", "exportDecl5_exportKeyword", "exportDecl5_typeKeyword", "exportDecl6_exportKeyword", "exportDecl6_typeKeyword", "exportDecl6_asKeyword", "exportAssignment1_exportKeyword", "exportAssignment2_exportKeyword"]);
@@ -415,7 +415,7 @@ class foo2 {
 }
 // @Filename: referencesOnStatic_2.ts
 var q = foo./*9*/n;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5", "6", "7", "8", "9"]);
@@ -459,7 +459,7 @@ pub fn test_references_for_statics_and_members_with_same_names(t: &T) {
 		MixedStaticsClassTest.Foo./*11*/bar;
 	}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"]);
@@ -488,7 +488,7 @@ x.ss;
 x["ss"];
 x = { "ss": 0 };
 x = { ss: 0 };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1"]);
@@ -514,7 +514,7 @@ pub fn test_references_for_string_literal_property_names2(t: &T) {
 
 var x: Foo;
 x./*3*/blah;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
@@ -541,7 +541,7 @@ pub fn test_references_for_string_literal_property_names3(t: &T) {
 
 var y: Foo2;
 y[/*5*/42];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5"]);
@@ -564,7 +564,7 @@ pub fn test_references_for_string_literal_property_names4(t: &T) {
         let content: &str = r#"var x = { "/*1*/someProperty": 0 }
 x[/*2*/"someProperty"] = 3;
 x.someProperty = 5;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2"]);
@@ -587,7 +587,7 @@ pub fn test_references_for_string_literal_property_names5(t: &T) {
         let content: &str = r#"var x = { "/*1*/someProperty": 0 }
 x["/*2*/someProperty"] = 3;
 x.someProperty = 5;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2"]);
@@ -610,7 +610,7 @@ pub fn test_references_for_string_literal_property_names6(t: &T) {
         let content: &str = r#"const x = function () { return 111111; }
 x./*1*/someProperty = 5;
 x["/*2*/someProperty"] = 3;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2"]);
@@ -637,7 +637,7 @@ pub fn test_references_for_string_literal_property_names7(t: &T) {
 var x = { "/*1*/someProperty": 0 }
 x["/*2*/someProperty"] = 3;
 x.someProperty = 5;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2"]);
@@ -664,7 +664,7 @@ type A2<T> = T extends /*inferType_inferKeyword*/infer U ? 1 : 0;
 type A3<T> = { [P /*mappedType_inOperator*/in keyof T]: 1 };
 type A4<T> = /*keyofOperator_keyofKeyword*/keyof T;
 type A5<T> = /*readonlyOperator_readonlyKeyword*/readonly T[];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["typeParam_extendsKeyword", "conditionalType_extendsKeyword", "inferType_inferKeyword", "mappedType_inOperator", "keyofOperator_keyofKeyword", "readonlyOperator_readonlyKeyword"]);
@@ -705,7 +705,7 @@ interface Two {
 var x : One | Two;
 
 x.common./*x*/a;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["one", "base", "x"]);
@@ -729,7 +729,7 @@ pub fn test_references_in_comment(t: &T) {
 /* in comments should not find fo/*3*/o or bar/*4*/ */
 class foo { }
 var bar = 0;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3", "4"]);
@@ -757,7 +757,7 @@ class /*0*/globalClass {
 var c = /*1*/globalClass();
 // @Filename: /home/src/workspaces/project/tsconfig.json
 { "files": ["referencesForGlobals_1.ts", "referencesForGlobals_2.ts"], "compilerOptions": { "lib": ["es5"] } }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -780,7 +780,7 @@ pub fn test_references_in_empty_file(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"// @lib: es5
 /*1*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -810,7 +810,7 @@ pub fn test_references_in_empty_file_with_multiple_projects(t: &T) {
 { "files": ["b.ts"], "compilerOptions": { "lib": ["es5"] } }
 // @Filename: /home/src/workspaces/project/b/b.ts
 /*2*/;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -840,7 +840,7 @@ const str: string = "hello/*1*/";
 { "files": ["b.ts"], "compilerOptions": { "lib": ["es5"] } }
 // @Filename: /home/src/workspaces/project/b/b.ts
 const str2: string = "hello/*2*/";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -874,7 +874,7 @@ declare namespace debug {
 { "types": "index.d.ts" }
 // @Filename: /packages/playwright-core/src/index.ts
 export const debug: typeof import('../bundles/utils/node_modules//*1*/@types/debug') = require('./utilsBundleImpl').debug;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1"]);
@@ -896,7 +896,7 @@ pub fn test_references_to_non_property_name_string_literal(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"// @lib: es5
 const str: string = "hello/*1*/";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -919,7 +919,7 @@ pub fn test_references_to_string_literal_value(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"// @lib: es5
 const s: string = "some /*1*/ string";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -941,7 +941,7 @@ pub fn test_regex_detection(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = " /*1*/15 / /*2*/Math.min(61 / /*3*/42, 32 / 15) / /*4*/15;";
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -974,7 +974,7 @@ pub fn test_regex_error_recovery(t: &T) {
  Bug 579071: Parser no longer detects a Regex when an open bracket is inserted
 verify.quickInfoIs("RegExp");
 verify.not.errorExistsAfterMarker("1");"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.insert(t, "(");
@@ -995,7 +995,7 @@ pub fn test_regexp(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = "var /**/x = /aa/;";
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_quick_info_at(t, "", "var x: RegExp", "");
@@ -1190,7 +1190,7 @@ namespace remotemodTest {
 		var remoteboo = remotefoo;
 	}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30"]);
@@ -1214,7 +1214,7 @@ pub fn test_remove_declare_function_exports(t: &T) {
     function RegExp2(pattern: string): RegExp2;
     export function RegExp2(pattern: string, flags: string): RegExp2;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_bof(t);
@@ -1240,7 +1240,7 @@ pub fn test_remove_declare_in_module(t: &T) {
 }
 
 Foo.a();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -1264,7 +1264,7 @@ pub fn test_remove_declare_keyword(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"/**/declare var y;
 var x = new y;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -1288,7 +1288,7 @@ pub fn test_remove_declare_param_type_annotation(t: &T) {
         let content: &str = r#"declare class T { }
 declare function parseInt(/**/s:T):T;
 parseInt('2');"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -1311,7 +1311,7 @@ pub fn test_remove_duplicate_identifier(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"class foo{}
 function foo() { return null; }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_bof(t);
@@ -1338,7 +1338,7 @@ namespace multiM {
     /*1*/export class c { }
 }
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -1364,7 +1364,7 @@ pub fn test_remove_interface_extends_clause(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"interface IFoo<T> { }
 interface Array<T> /**/extends IFoo<T> { }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -1388,7 +1388,7 @@ pub fn test_remove_interface_used_as_generic_type_argument(t: &T) {
         let content: &str = r#"/**/interface A { a: string; }
 interface G<T, U> { }
 var v1: G<A, C>;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -1410,7 +1410,7 @@ pub fn test_remove_parameter_between_comment_and_parameter(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = "function fn(/* comment! */ /**/a: number, c) { }";
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -1441,7 +1441,7 @@ enum A {
 namespace A {
     var p;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -1468,7 +1468,7 @@ pub fn test_rename01(t: &T) {
     // This is a reference to [|Bar|] in a comment.
     "this is a reference to [|Bar|] in a string"
 }|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -1497,7 +1497,7 @@ pub fn test_rename_across_multiple_projects(t: &T) {
 //@Filename: c.ts
 /// <reference path="a.ts" />
 [|x|]++;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["x"]);
@@ -1520,7 +1520,7 @@ pub fn test_rename_alias(t: &T) {
         let content: &str = r#"namespace SomeModule { export class SomeClass { } }
 [|import [|{| "contextRangeIndex": 0 |}M|] = SomeModule;|]
 import C = [|M|].SomeClass;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["M"]);
@@ -1543,7 +1543,7 @@ pub fn test_rename_alias2(t: &T) {
         let content: &str = r#"[|module [|{| "contextRangeIndex": 0 |}SomeModule|] { export class SomeClass { } }|]
 import M = [|SomeModule|];
 import C = M.SomeClass;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["SomeModule"]);
@@ -1566,7 +1566,7 @@ pub fn test_rename_alias3(t: &T) {
         let content: &str = r#"namespace SomeModule { [|export class [|{| "contextRangeIndex": 0 |}SomeClass|] { }|] }
 import M = SomeModule;
 import C = M.[|SomeClass|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["SomeClass"]);
@@ -1592,7 +1592,7 @@ export = SomeModule;
 // @Filename: b.ts
 [|import [|{| "contextRangeIndex": 0 |}M|] = require("./a");|]
 import C = [|M|].SomeClass;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["M"]);
@@ -1618,7 +1618,7 @@ pub fn test_rename_alias_external_module2(t: &T) {
 // @Filename: b.ts
 [|import [|{| "contextRangeIndex": 4 |}M|] = require("./a");|]
 import C = [|M|].SomeClass;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::RangeMarker(f.ranges()[1].clone()), Any::RangeMarker(f.ranges()[3].clone()), Any::RangeMarker(f.ranges()[5].clone()), Any::RangeMarker(f.ranges()[6].clone())]);
@@ -1644,7 +1644,7 @@ export = SomeModule;
 // @Filename: b.ts
 import M = require("./a");
 import C = M.[|SomeClass|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["SomeClass"]);
@@ -1678,7 +1678,7 @@ const {
     nested: { lvl2 = [|external|]},
     oldName: newName = [|external|]
 } = obj;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["external"]);
@@ -1704,7 +1704,7 @@ pub fn test_rename_binding_element_initializer_property(t: &T) {
 }
 
 f({[|[|{| "contextRangeIndex": 6 |}required|]: 10|]});"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::RangeMarker(f.ranges()[1].clone()), Any::RangeMarker(f.ranges()[2].clone()), Any::RangeMarker(f.ranges()[5].clone()), Any::RangeMarker(f.ranges()[4].clone()), Any::RangeMarker(f.ranges()[7].clone())]);
@@ -1730,7 +1730,7 @@ const map1: /*2*/Map<string, number> = new Map();
 const prom: /*3*/Promise<void> = Promise.resolve();
 const str: /*4*/string = "hello";
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             for marker in vec!["1".to_string(), "2".to_string(), "3".to_string(), "4".to_string()] {
@@ -1758,7 +1758,7 @@ pub fn test_rename_comments_and_strings1(t: &T) {
     // This is a reference to Bar in a comment.
     "this is a reference to Bar in a string"
 }|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["Bar"]);
@@ -1783,7 +1783,7 @@ pub fn test_rename_comments_and_strings2(t: &T) {
     // This is a reference to Bar in a comment.
     "this is a reference to [|Bar|] in a string"
 }|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::RangeMarker(f.ranges()[1].clone())]);
@@ -1808,7 +1808,7 @@ pub fn test_rename_comments_and_strings3(t: &T) {
     // This is a reference to [|Bar|] in a comment.
     "this is a reference to Bar in a string"
 }|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::RangeMarker(f.ranges()[1].clone())]);
@@ -1838,7 +1838,7 @@ pub fn test_rename_comments_and_strings4(t: &T) {
         `[|Bar|] ba ${Bar} bara [|Bar|] berbobo ${Bar} araura [|Bar|] ara!`;
     }
 }|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::RangeMarker(f.ranges()[1].clone())]);
@@ -1912,7 +1912,7 @@ var o10: I = {
     [|set ["[|{| "contextRangeIndex": 20 |}prop1|]"](v) { }|],
     set ["prop2"](v) { }
 };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["prop1"]);
@@ -1986,7 +1986,7 @@ var o10: I = {
     set ["prop1"](v) { },
     [|set ["[|{| "contextRangeIndex": 20 |}prop2|]"](v) { }|]
 };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["prop2"]);
@@ -2012,7 +2012,7 @@ pub fn test_rename_cross_js_ts01(t: &T) {
 // @Filename: b.ts
 [|import { [|{| "contextRangeIndex": 2 |}area|] } from './a';|]
 var t = [|area|](10);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::RangeMarker(f.ranges()[1].clone()), Any::RangeMarker(f.ranges()[3].clone()), Any::RangeMarker(f.ranges()[4].clone())]);
@@ -2047,7 +2047,7 @@ pub fn test_rename_declaration_keywords(t: &T) {
 [|{| "id": "varDecl" |}[|var|] [|{| "isWriteAccess": false, "isDefinition": true, "contextRangeId": "varDecl" |}x|];|]
 [|{| "id": "letDecl" |}[|let|] [|{| "isWriteAccess": false, "isDefinition": true, "contextRangeId": "letDecl" |}y|];|]
 [|{| "id": "constDecl" |}[|const|] [|{| "isWriteAccess": true, "isDefinition": true, "contextRangeId": "constDecl" |}z|] = 1;|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::RangeMarker(f.ranges()[5].clone()), Any::RangeMarker(f.ranges()[7].clone()), Any::RangeMarker(f.ranges()[9].clone()), Any::RangeMarker(f.ranges()[12].clone()), Any::RangeMarker(f.ranges()[15].clone()), Any::RangeMarker(f.ranges()[18].clone()), Any::RangeMarker(f.ranges()[20].clone()), Any::RangeMarker(f.ranges()[23].clone()), Any::RangeMarker(f.ranges()[26].clone()), Any::RangeMarker(f.ranges()[29].clone()), Any::RangeMarker(f.ranges()[32].clone()), Any::RangeMarker(f.ranges()[35].clone()), Any::RangeMarker(f.ranges()[38].clone()), Any::RangeMarker(f.ranges()[41].clone()), Any::RangeMarker(f.ranges()[44].clone())]);
@@ -2076,7 +2076,7 @@ pub fn test_rename_default_import(t: &T) {
 [|import /*2*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 2 |}B|] from "./B";|]
 let b = new [|B|]();
 b.test();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2"]);
@@ -2107,7 +2107,7 @@ pub fn test_rename_default_import_different_name(t: &T) {
 [|import /*2*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 2 |}B|] from "./B";|]
 let b = new [|B|]();
 b.test();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2"]);
@@ -2143,10 +2143,10 @@ class /*4*/default {}
 const foo = {
     /*5*/[|default|]: 1
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
-            let mut markers = vec!["1".to_string(), "2".to_string(), "3".to_string(), "4".to_string()];
+            let markers = vec!["1".to_string(), "2".to_string(), "3".to_string(), "4".to_string()];
             for marker in markers.clone() {
                 f.go_to_marker(t, marker.as_str());
                 f.verify_rename_failed(t, None);
@@ -2172,7 +2172,7 @@ pub fn test_rename_default_lib_dont_work(t: &T) {
         let content: &str = r#"// @Filename: file1.ts
 [|var [|{| "contextRangeIndex": 0 |}test|] = "foo";|]
 console.log([|test|]);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::RangeMarker(f.ranges()[1].clone())]);
@@ -2198,7 +2198,7 @@ pub fn test_rename_destructuring_assignment(t: &T) {
 var a: I;
 var x;
 ([|{ [|{| "contextRangeIndex": 2 |}x|]: x } = a|]);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["x"]);
@@ -2231,7 +2231,7 @@ for ([|{ [|{| "contextRangeIndex": 4 |}property1|] } = elems[0]|]; p2 < 100; p2+
 }
 for ([|{ [|{| "contextRangeIndex": 7 |}property1|]: p2 } = elems[0]|]; p2 < 100; p2++) {
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_no_errors(t);
@@ -2265,7 +2265,7 @@ for ([|{ [|{| "contextRangeIndex": 4 |}property1|] } of elems|]) {
 }
 for ([|{ [|{| "contextRangeIndex": 7 |}property1|]: p2 } of elems|]) {
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_no_errors(t);
@@ -2293,7 +2293,7 @@ pub fn test_rename_destructuring_assignment_nested_in_array_literal(t: &T) {
 var elems: I[], p1: number, [|[|{| "contextRangeIndex": 2 |}property1|]: number|];
 [|[{ [|{| "contextRangeIndex": 4 |}property1|]: p1 }] = elems;|]
 [|[{ [|{| "contextRangeIndex": 6 |}property1|] }] = elems;|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::RangeMarker(f.ranges()[1].clone()), Any::RangeMarker(f.ranges()[5].clone()), Any::RangeMarker(f.ranges()[3].clone()), Any::RangeMarker(f.ranges()[7].clone())]);
@@ -2327,7 +2327,7 @@ for ([|{ skills: { [|{| "contextRangeIndex": 4 |}primary|]: primaryA, secondary:
 for ([|{ skills: { [|{| "contextRangeIndex": 6 |}primary|], secondary } } = multiRobot|], i = 0; i < 1; i++) {
     [|primary|];
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_no_errors(t);
@@ -2363,7 +2363,7 @@ for ([|{ skills: { [|{| "contextRangeIndex": 4 |}primary|]: primaryA, secondary:
 for ([|{ skills: { [|{| "contextRangeIndex": 6 |}primary|], secondary } } = multiRobot|], i = 0; i < 1; i++) {
     [|primary|];
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_no_errors(t);
@@ -2400,7 +2400,7 @@ for ([|{ skills: { [|{| "contextRangeIndex": 4 |}primary|]: primaryA, secondary:
 for ([|{ skills: { [|{| "contextRangeIndex": 6 |}primary|], secondary } } of multiRobots|]) {
     [|primary|];
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_no_errors(t);
@@ -2435,7 +2435,7 @@ for ([|{ skills: { [|{| "contextRangeIndex": 4 |}primary|]: primaryA, secondary:
 for ([|{ skills: { [|{| "contextRangeIndex": 6 |}primary|], secondary } } of multiRobots|]) {
     console.log([|primary|]);
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::RangeMarker(f.ranges()[1].clone()), Any::RangeMarker(f.ranges()[5].clone()), Any::RangeMarker(f.ranges()[3].clone()), Any::RangeMarker(f.ranges()[7].clone()), Any::RangeMarker(f.ranges()[8].clone())]);
@@ -2470,7 +2470,7 @@ class B {
         [|foo|] = "newString";
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::RangeMarker(f.ranges()[1].clone()), Any::RangeMarker(f.ranges()[5].clone()), Any::RangeMarker(f.ranges()[3].clone()), Any::RangeMarker(f.ranges()[7].clone()), Any::RangeMarker(f.ranges()[8].clone())]);
@@ -2502,7 +2502,7 @@ for ([|let { [|{| "contextRangeIndex": 2 |}property1|]: p2 } = elems[0]|]; p2 < 
 for ([|let { [|{| "contextRangeIndex": 4 |}property1|] } = elems[0]|]; p2 < 100; p2++) {
     [|property1|] = p2;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::RangeMarker(f.ranges()[1].clone()), Any::RangeMarker(f.ranges()[3].clone()), Any::RangeMarker(f.ranges()[5].clone()), Any::RangeMarker(f.ranges()[6].clone())]);
@@ -2533,7 +2533,7 @@ for ([|let { [|{| "contextRangeIndex": 2 |}property1|] } of elems|]) {
 }
 for ([|let { [|{| "contextRangeIndex": 5 |}property1|]: p2 } of elems|]) {
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::RangeMarker(f.ranges()[1].clone()), Any::RangeMarker(f.ranges()[6].clone()), Any::RangeMarker(f.ranges()[3].clone()), Any::RangeMarker(f.ranges()[4].clone())]);
@@ -2556,7 +2556,7 @@ pub fn test_rename_destructuring_function_parameter(t: &T) {
         let content: &str = r#"function f([|{[|{| "contextRangeIndex": 0 |}a|]}: {[|a|]}|]) {
     f({[|a|]});
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::RangeMarker(f.ranges()[1].clone()), Any::RangeMarker(f.ranges()[3].clone()), Any::RangeMarker(f.ranges()[2].clone())]);
@@ -2590,7 +2590,7 @@ for ([|let { skills: {[|{| "contextRangeIndex": 2|}primary|]: primaryA, secondar
 for ([|let { skills: {[|{| "contextRangeIndex": 4|}primary|], secondary } } of multiRobots|]) {
     console.log([|primary|]);
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::RangeMarker(f.ranges()[1].clone()), Any::RangeMarker(f.ranges()[3].clone()), Any::RangeMarker(f.ranges()[5].clone()), Any::RangeMarker(f.ranges()[6].clone())]);
@@ -2615,7 +2615,7 @@ pub fn test_rename_export_crash(t: &T) {
 let a;
 module.exports = /**/a;
 exports["foo"] = a;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::String("".to_string())]);
@@ -2641,7 +2641,7 @@ export { name as name/**/ };
 // @Filename: b.ts
 import { name } from './a';
 const x = name.toString();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, Some(lsutil::UserPreferences { use_aliases_for_rename: Tristate::False, ..Default::default() }), &[Any::String("".to_string())]);
@@ -2667,7 +2667,7 @@ export { name/**/ };
 // @Filename: b.ts
 import { name } from './a';
 const x = name.toString();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, Some(lsutil::UserPreferences { use_aliases_for_rename: Tristate::False, ..Default::default() }), &[Any::String("".to_string())]);
@@ -2691,7 +2691,7 @@ pub fn test_rename_file_package_json(t: &T) {
 import brushPackageJson from './visx-brush//*rename*/package.json';
 // @Filename: /src/visx-brush/package.json
 { "name": "brush" }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_rename(t, "rename", "package2.json", go::map_of([("/src/example.ts".to_string(), "import brushPackageJson from './visx-brush/package2.json';".to_string()), ("/src/visx-brush/package2.json".to_string(), r#"{ "name": "brush" }"#.to_string())]));
@@ -2715,7 +2715,7 @@ pub fn test_rename_for_aliasing_export01(t: &T) {
 let x = 1;
 
 export { /**/[|x|] as y };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -2740,7 +2740,7 @@ pub fn test_rename_for_aliasing_export02(t: &T) {
 let x = 1;
 
 export { x as /**/[|y|] };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -2770,10 +2770,10 @@ pub fn test_rename_for_default_export01(t: &T) {
 var x: [|DefaultExportedClass|];
 
 var y = new [|DefaultExportedClass|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
-            let mut ranges = f.get_ranges_by_text().get(&"DefaultExportedClass".to_string()).to_vec();
+            let ranges = f.get_ranges_by_text().get(&"DefaultExportedClass".to_string()).to_vec();
             let mut marker_or_ranges: Vec<Any> = Default::default();
             for r in ranges.clone() {
                 if !(((!r.marker.is_none()) && (!r.marker.as_ref().unwrap().data.is_empty())) && (r.marker.as_ref().unwrap().data.get("inComment").cloned().unwrap_or_default() == Any::Bool(true))) {
@@ -2807,7 +2807,7 @@ pub fn test_rename_for_default_export02(t: &T) {
 var x: typeof /*3*/[|DefaultExportedFunction|];
 
 var y = /*4*/[|DefaultExportedFunction|]();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &util::to_any(&go::filter(f.get_ranges_by_text().get(&"DefaultExportedFunction".to_string()), |r: &Arc<fourslash::RangeMarker>| -> bool {
@@ -2845,7 +2845,7 @@ var y = /*4*/[|f|]();
 [|namespace /*5*/[|{| "contextRangeIndex": 7 |}f|] {
     var local = 100;
 }|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &util::to_any(&go::filter(f.get_ranges_by_text().get(&"f".to_string()), |r: &Arc<fourslash::RangeMarker>| -> bool {
@@ -2877,7 +2877,7 @@ export default class /**/[|DefaultExportedClass|] {
 var x: DefaultExportedClass;
 
 var y = new DefaultExportedClass;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -2908,7 +2908,7 @@ export default class DefaultExportedClass {
 var x: /**/[|DefaultExportedClass|];
 
 var y = new DefaultExportedClass;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -2939,7 +2939,7 @@ export default class DefaultExportedClass {
 var x: DefaultExportedClass;
 
 var y = new /**/[|DefaultExportedClass|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -2971,7 +2971,7 @@ export default function /**/[|DefaultExportedFunction|]() {
 var x: typeof DefaultExportedFunction;
 
 var y = DefaultExportedFunction();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -3003,7 +3003,7 @@ export default function DefaultExportedFunction() {
 var x: typeof DefaultExportedFunction;
 
 var y = DefaultExportedFunction();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -3041,7 +3041,7 @@ var y = f();
 namespace f {
     var local = 100;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -3072,7 +3072,7 @@ interface Foo {
 const obj: Foo = {
     property: "foo",
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::String("".to_string())]);
@@ -3104,7 +3104,7 @@ f./*notOk*/bar;
 export interface Foo {
     bar: string;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "okWithAlias");
@@ -3140,7 +3140,7 @@ export interface Foo {
 // @Filename: /node_modules/first/node_modules/foo/bar.d.ts
 import { Foo } from "./index";
 declare type FooBar = Foo[/*ok3*/"[|bar|]"];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "okWithAlias");
@@ -3178,7 +3178,7 @@ export interface Foo {
     /*ok3*/[|bar|]: string;
 }
 // @link: /packages/foo -> /packages/first/node_modules/foo"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "ok");
@@ -3217,7 +3217,7 @@ export default hljs;
 export const h: string;
 // @Filename: /tsconfig.json
 {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "ok");
@@ -3256,7 +3256,7 @@ pub fn test_rename_function_parameter1(t: &T) {
         return p;
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::String("".to_string())]);
@@ -3282,7 +3282,7 @@ pub fn test_rename_function_parameter2(t: &T) {
 const foo = function foo(p/**/) {
     return p;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::String("".to_string())]);
@@ -3304,7 +3304,7 @@ pub fn test_rename_import_and_export(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"[|import [|{| "contextRangeIndex": 0 |}a|] from "module";|]
 [|export { [|{| "contextRangeIndex": 2 |}a|] };|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::RangeMarker(f.ranges()[1].clone()), Any::RangeMarker(f.ranges()[3].clone())]);
@@ -3329,7 +3329,7 @@ pub fn test_rename_import_and_export_in_diff_files(t: &T) {
 // @Filename: b.ts
 [|import { /*2*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 2 |}a|] } from './a';|]
 [|export { /*3*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 4 |}a|] };|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
@@ -3352,7 +3352,7 @@ pub fn test_rename_import_and_shorthand(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"[|import [|{| "contextRangeIndex": 0 |}foo|] from 'bar';|]
 const bar = { [|foo|] };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::RangeMarker(f.ranges()[1].clone()), Any::RangeMarker(f.ranges()[2].clone())]);
@@ -3374,7 +3374,7 @@ pub fn test_rename_import_namespace_and_shorthand(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"[|import * as [|{| "contextRangeIndex": 0 |}foo|] from 'bar';|]
 const bar = { [|foo|] };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::RangeMarker(f.ranges()[1].clone()), Any::RangeMarker(f.ranges()[2].clone())]);
@@ -3408,7 +3408,7 @@ declare module "b" {
     [|import { /*b*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 10 |}N|] } from "a";|]
     export const y: typeof [|N|].[|x|];
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["N", "a", "b", "x"]);
@@ -3447,7 +3447,7 @@ declare module "b" {
     [|import { [|{| "contextRangeIndex": 9 |}P|] as /*Q*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 9 |}Q|] } from "a";|]
     export const y: typeof [|Q|].x;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_no_errors(t);
@@ -3480,7 +3480,7 @@ declare module "c" {
     [|import { /*3*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 4 |}C|] } from "b";|]
     export function f(c: [|C|]): void;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_no_errors(t);
@@ -3514,7 +3514,7 @@ declare module "c" {
     [|import { /*3*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 5 |}D|] } from "b";|]
     export function f(c: [|D|]): void;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_no_errors(t);
@@ -3546,7 +3546,7 @@ a = { [|e|] };
 // @Filename: /b.ts
 [|import { [|{| "contextRangeIndex": 6 |}e|] } from "./a";|]
 [|export { [|{| "contextRangeIndex": 8 |}e|] };|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::RangeMarker(f.ranges()[1].clone()), Any::RangeMarker(f.ranges()[2].clone()), Any::RangeMarker(f.ranges()[3].clone()), Any::RangeMarker(f.ranges()[5].clone()), Any::RangeMarker(f.ranges()[7].clone()), Any::RangeMarker(f.ranges()[9].clone())]);
@@ -3573,7 +3573,7 @@ export const x = 0;
 import * as a from ".//*rename*/a";"#;
         let mut capabilities = fourslash::get_default_capabilities();
         capabilities.as_mut().unwrap().workspace.as_mut().unwrap().workspace_edit = Some(lsproto::WorkspaceEditClientCapabilities { document_changes: Some(true), resource_operations: Some(vec![]), ..Default::default() });
-        let (mut f, mut done) = fourslash::new_fourslash(t, capabilities.clone(), content);
+        let (mut f, done) = fourslash::new_fourslash(t, capabilities.clone(), content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "rename");
@@ -3598,7 +3598,7 @@ pub fn test_rename_import_specifier_property_name(t: &T) {
 export interface /**/Ginger {}
 // @Filename: dry.ts
 import { Ginger as Ale } from './canada';"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::String("".to_string())]);
@@ -3624,7 +3624,7 @@ pub fn test_rename_in_configured_project(t: &T) {
 var y = [|globalName|];
 // @Filename: tsconfig.json
 { "files": ["referencesForGlobals_1.ts", "referencesForGlobals_2.ts"], "compilerOptions": { "lib": ["es5"] } }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -3648,7 +3648,7 @@ pub fn test_rename_info_for_function_expression01(t: &T) {
         let content: &str = r#"var x = function /**/[|f|](g: any, h: any) {
     f(f, g);
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -3675,7 +3675,7 @@ pub fn test_rename_inherited_properties1(t: &T) {
 
 var v: class1;
 v.[|propName|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["propName"]);
@@ -3701,7 +3701,7 @@ pub fn test_rename_inherited_properties2(t: &T) {
 
 var v: class1;
 v.[|doStuff|]();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["doStuff"]);
@@ -3727,7 +3727,7 @@ pub fn test_rename_inherited_properties3(t: &T) {
 
 var v: interface1;
 v.[|propName|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["propName"]);
@@ -3753,7 +3753,7 @@ pub fn test_rename_inherited_properties4(t: &T) {
 
 var v: interface1;
 v.[|doStuff|]();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["doStuff"]);
@@ -3781,7 +3781,7 @@ interface D extends C {
 }
 var d: D;
 d.[|propD|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["propD"]);
@@ -3809,7 +3809,7 @@ interface D extends C {
 }
 var d: D;
 d.[|propC|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["propC"]);
@@ -3839,7 +3839,7 @@ class D extends C {
 
 var c: C;
 c.[|prop1|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["prop1"]);
@@ -3869,7 +3869,7 @@ interface D extends C {
 
 var c: C;
 c.[|prop1|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["prop1"]);
@@ -3902,7 +3902,7 @@ export interface A { }
  * @param { [|A/**/|] } a
  */
 function f(a) {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::String("".to_string())]);
@@ -3931,7 +3931,7 @@ pub fn test_rename_js_doc_type_literal(t: &T) {
  * @param {number} options.bar
  */
 function foo(/**/options) {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_file(t, "/a.js");
@@ -3958,7 +3958,7 @@ pub fn test_rename_js_exports01(t: &T) {
 // @Filename: b.js
 var mod = require('./a');
 var t = mod./*1*/[|area|](10);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1"]);
@@ -3984,7 +3984,7 @@ pub fn test_rename_js_exports02(t: &T) {
 module.exports = class /*1*/A {}
 // @Filename: b.js
 const /*2*/A = require("./a");"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2"]);
@@ -4013,7 +4013,7 @@ module.exports = A;
 // @Filename: b.js
 const /*3*/A = require("./a");
 new /*4*/A;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3", "4"]);
@@ -4051,7 +4051,7 @@ pub fn test_rename_js_overloaded_function_parameter(t: &T) {
 function foo(x/**/) {
   return x;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::String("".to_string())]);
@@ -4077,7 +4077,7 @@ function bar() {
 }
 [|bar.[|{| "contextRangeIndex": 0 |}foo|] = "foo";|]
 console.log(bar.[|foo|]);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["foo"]);
@@ -4103,7 +4103,7 @@ class Minimatch {
 }
 [|Minimatch.[|{| "contextRangeIndex": 0 |}staticProperty|] = "string";|]
 console.log(Minimatch.[|staticProperty|]);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["staticProperty"]);
@@ -4129,7 +4129,7 @@ var C = class  {
 }
 [|C.[|{| "contextRangeIndex": 0 |}staticProperty|] = "string";|]
 console.log(C.[|staticProperty|]);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["staticProperty"]);
@@ -4155,7 +4155,7 @@ function f() {
    var /*1*/foo = this;
    /*2*/foo.x = 1;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_file(t, "/a.js");
@@ -4183,7 +4183,7 @@ function bar() {
 [|bar.prototype.[|{| "contextRangeIndex": 0 |}x|] = 10;|]
 var t = new bar();
 [|t.[|{| "contextRangeIndex": 2 |}x|] = 11;|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["x"]);
@@ -4210,7 +4210,7 @@ function bar() {
 [|bar.prototype.[|{| "contextRangeIndex": 0 |}x|] = 10;|]
 var t = new bar();
 [|t.[|{| "contextRangeIndex": 2 |}x|] = 11;|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["x"]);
@@ -4240,7 +4240,7 @@ const foo = {
         this._x = [|x|].prop;
     }
 };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[]);
@@ -4270,7 +4270,7 @@ const foo = {
         this._x = [|x|].prop;
     }
 };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[]);
@@ -4297,7 +4297,7 @@ function bar() {
 }
 var t = new bar();
 [|t.[|{| "contextRangeIndex": 2 |}x|] = 11;|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["x"]);
@@ -4326,7 +4326,7 @@ class C {
 }
 var t = new C(12);
 [|t.[|{| "contextRangeIndex": 2 |}x|] = 11;|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["x"]);
@@ -4356,7 +4356,7 @@ class C {
 [|C.prototype.[|{| "contextRangeIndex": 0 |}z|] = 1;|]
 var t = new C(12);
 [|t.[|{| "contextRangeIndex": 2 |}z|] = 11;|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["z"]);
@@ -4386,7 +4386,7 @@ var C = class {
 [|C.prototype.[|{| "contextRangeIndex": 0 |}z|] = 1;|]
 var t = new C(12);
 [|t.[|{| "contextRangeIndex": 2 |}z|] = 11;|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["z"]);
@@ -4412,7 +4412,7 @@ pub fn test_rename_jsdoc_namepath(t: &T) {
  */
 var x = 1
 var /*0*/A = 0;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::String("0".to_string())]);
@@ -4435,7 +4435,7 @@ pub fn test_rename_label1(t: &T) {
         let content: &str = r#"foo: {
     break /**/foo;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::String("".to_string())]);
@@ -4458,7 +4458,7 @@ pub fn test_rename_label2(t: &T) {
         let content: &str = r#"/**/foo: {
     break foo;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::String("".to_string())]);
@@ -4484,7 +4484,7 @@ for (let i = 0; i <= 10; i++) {
    if (i === 1) continue loop;
    if (i === 10) break loop;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::String("".to_string())]);
@@ -4510,7 +4510,7 @@ for (let i = 0; i <= 10; i++) {
    if (i === 1) continue /**/loop;
    if (i === 10) break loop;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::String("".to_string())]);
@@ -4536,7 +4536,7 @@ pub fn test_rename_label5(t: &T) {
         if (j === 5) break loop2;
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::String("".to_string())]);
@@ -4562,7 +4562,7 @@ pub fn test_rename_label6(t: &T) {
         if (j === 5) break /**/loop2;
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::String("".to_string())]);
@@ -4601,7 +4601,7 @@ var y = class {
    }
 }
 var z = class Foo {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["Foo"]);
@@ -4624,7 +4624,7 @@ pub fn test_rename_locations_for_function_expression01(t: &T) {
         let content: &str = r#"var x = [|function [|{| "contextRangeIndex": 0 |}f|](g: any, h: any) {
     [|f|]([|f|], g);
 }|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["f"]);
@@ -4653,7 +4653,7 @@ var x = [|function [|{| "contextRangeIndex": 0 |}f|](g: any, h: any) {
 
     let foo = () => [|f|]([|f|], g);
 }|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["f"]);
@@ -4684,7 +4684,7 @@ pub fn test_rename_modifiers(t: &T) {
 }|]
 [|[|async|] function [|{| "isWriteAccess": true, "isDefinition": true, "contextRangeDelta": -2 |}fn|]() {}|]
 [|[|export|] [|default|] class [|{| "isWriteAccess": true, "isDefinition": true, "contextRangeDelta": -3 |}C2|] {}|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::RangeMarker(f.ranges()[1].clone()), Any::RangeMarker(f.ranges()[2].clone()), Any::RangeMarker(f.ranges()[5].clone()), Any::RangeMarker(f.ranges()[8].clone()), Any::RangeMarker(f.ranges()[11].clone()), Any::RangeMarker(f.ranges()[14].clone()), Any::RangeMarker(f.ranges()[17].clone()), Any::RangeMarker(f.ranges()[20].clone()), Any::RangeMarker(f.ranges()[23].clone()), Any::RangeMarker(f.ranges()[26].clone()), Any::RangeMarker(f.ranges()[27].clone())]);

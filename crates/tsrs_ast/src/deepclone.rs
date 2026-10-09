@@ -85,7 +85,7 @@ mod tests {
 
     #[test]
     fn deep_clone_reparse_copies_subtree_and_sets_parents() {
-        let mut f = NodeFactory::default();
+        let f = NodeFactory::default();
         let left = f.new_identifier("a");
         left.set_loc(new_text_range(0, 1));
         let right = f.new_identifier("b");

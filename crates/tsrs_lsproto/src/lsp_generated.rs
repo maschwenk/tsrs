@@ -4259,7 +4259,7 @@ impl Json for InitializedParams {
     const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
-        let mut w = ObjectWriter::new(0);
+        let w = ObjectWriter::new(0);
         w.finish()
     }
 
@@ -20767,7 +20767,7 @@ impl Json for CallHierarchyItemData {
     const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
-        let mut w = ObjectWriter::new(0);
+        let w = ObjectWriter::new(0);
         w.finish()
     }
 
@@ -20787,7 +20787,7 @@ impl Json for TypeHierarchyItemData {
     const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
-        let mut w = ObjectWriter::new(0);
+        let w = ObjectWriter::new(0);
         w.finish()
     }
 
@@ -20807,7 +20807,7 @@ impl Json for InlayHintData {
     const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
-        let mut w = ObjectWriter::new(0);
+        let w = ObjectWriter::new(0);
         w.finish()
     }
 
@@ -20827,7 +20827,7 @@ impl Json for CodeActionData {
     const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
-        let mut w = ObjectWriter::new(0);
+        let w = ObjectWriter::new(0);
         w.finish()
     }
 
@@ -20847,7 +20847,7 @@ impl Json for WorkspaceSymbolData {
     const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
-        let mut w = ObjectWriter::new(0);
+        let w = ObjectWriter::new(0);
         w.finish()
     }
 
@@ -20867,7 +20867,7 @@ impl Json for DocumentLinkData {
     const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
-        let mut w = ObjectWriter::new(0);
+        let w = ObjectWriter::new(0);
         w.finish()
     }
 
@@ -20887,7 +20887,7 @@ impl Json for DiagnosticData {
     const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
-        let mut w = ObjectWriter::new(0);
+        let w = ObjectWriter::new(0);
         w.finish()
     }
 
@@ -20907,7 +20907,7 @@ impl Json for CompletionItemDefaultsData {
     const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
-        let mut w = ObjectWriter::new(0);
+        let w = ObjectWriter::new(0);
         w.finish()
     }
 

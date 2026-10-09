@@ -12,7 +12,7 @@ pub fn test_rename_module_exports_properties1(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"[|class [|{| "contextRangeIndex": 0 |}A|] {}|]
 module.exports = { [|A|] }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, Some(lsutil::UserPreferences { use_aliases_for_rename: Tristate::True, ..Default::default() }), &[Any::RangeMarker(f.ranges()[1].clone()), Any::RangeMarker(f.ranges()[2].clone())]);
@@ -34,7 +34,7 @@ pub fn test_rename_module_exports_properties2(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"[|class [|{| "contextRangeIndex": 0 |}A|] {}|]
 module.exports = { B: [|A|] }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::RangeMarker(f.ranges()[1].clone()), Any::RangeMarker(f.ranges()[2].clone())]);
@@ -58,7 +58,7 @@ pub fn test_rename_module_exports_properties3(t: &T) {
 // @Filename: a.js
 [|class [|{| "contextRangeIndex": 0 |}A|] {}|]
 module.exports = { [|A|] }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, Some(lsutil::UserPreferences { use_aliases_for_rename: Tristate::True, ..Default::default() }), &[Any::RangeMarker(f.ranges()[1].clone()), Any::RangeMarker(f.ranges()[2].clone())]);
@@ -87,7 +87,7 @@ var y: number;
 namespace Y {
     var z = y + 5;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -116,7 +116,7 @@ pub fn test_rename_name_on_enum_member(t: &T) {
     thirdMember
 }
 var enumMember = e.[|/**/thirdMember|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -149,7 +149,7 @@ import { /*i*/someExportedVariable } from '../lib/index';
 someExportedVariable;
 // @Filename: /home/src/workspaces/project/tsconfig.json
 { "compilerOptions": { "lib": ["es5"] } }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -179,7 +179,7 @@ const type: MyTypeA = { foo: "bar" };
 export interface MyTypeA {
     foo: string;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, Some(lsutil::UserPreferences { use_aliases_for_rename: Tristate::False, ..Default::default() }), &[Any::String("import".to_string())]);
@@ -206,7 +206,7 @@ declare const f: Foo;
 export interface Foo {
     bar: string;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::String("fooImport".to_string())]);
@@ -236,7 +236,7 @@ pub fn test_rename_namespace(t: &T) {
 }
 
 const a: NS.E = NS.E.A;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::String("".to_string())]);
@@ -268,7 +268,7 @@ import * as /*i*/lib from '../lib/index';
 lib.someExportedVariable;
 // @Filename: /home/src/workspaces/project/tsconfig.json
 { "compilerOptions": { "lib": ["es5"] } }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -296,7 +296,7 @@ pub fn test_rename_no_default_lib(t: &T) {
 // @Filename: /foo.js
 // @ts-check
 const [|/**/foo|] = 1;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -319,7 +319,7 @@ pub fn test_rename_numerical_index(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"const foo = { [|0|]: true };
 foo[[|0|]];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["0"]);
@@ -341,7 +341,7 @@ pub fn test_rename_numerical_index_single_quoted(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"const foo = { [|0|]: true };
 foo[[|0|]];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, Some(lsutil::UserPreferences { quote_preference: lsutil::QuotePreference::Single, ..Default::default() }), &["0"]);
@@ -368,7 +368,7 @@ pub fn test_rename_object_binding_element_property_name01(t: &T) {
 
 var foo: I;
 [|var { [|{| "contextRangeIndex": 2 |}property1|]: prop1 } = foo;|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["property1"]);
@@ -394,7 +394,7 @@ let a1: A1;
 let a2: A2;
 let a12 = { ...a1, ...a2 };
 a12.[|a|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::RangeMarker(f.ranges()[1].clone()), Any::RangeMarker(f.ranges()[3].clone()), Any::RangeMarker(f.ranges()[4].clone())]);
@@ -419,7 +419,7 @@ interface A2 { a?: number };
 [|let [|{| "contextRangeIndex": 0 |}a1|]: A1;|]
 [|let [|{| "contextRangeIndex": 2 |}a2|]: A2;|]
 let a12 = { ...[|a1|], ...[|a2|] };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::RangeMarker(f.ranges()[1].clone()), Any::RangeMarker(f.ranges()[4].clone()), Any::RangeMarker(f.ranges()[3].clone()), Any::RangeMarker(f.ranges()[5].clone())]);
@@ -445,7 +445,7 @@ pub fn test_rename_parameter_property_declaration1(t: &T) {
         this.[|privateParam|] += 10;
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["privateParam"]);
@@ -471,7 +471,7 @@ pub fn test_rename_parameter_property_declaration2(t: &T) {
         this.[|publicParam|] += 10;
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["publicParam"]);
@@ -497,7 +497,7 @@ pub fn test_rename_parameter_property_declaration3(t: &T) {
         this.[|protectedParam|] += 10;
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["protectedParam"]);
@@ -522,7 +522,7 @@ pub fn test_rename_parameter_property_declaration4(t: &T) {
         let myProtectedParam = [|protectedParam|];
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::RangeMarker(f.ranges()[1].clone()), Any::RangeMarker(f.ranges()[2].clone())]);
@@ -547,7 +547,7 @@ pub fn test_rename_parameter_property_declaration5(t: &T) {
         let myProtectedParam = [|protectedParam|];
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["protectedParam"]);
@@ -574,7 +574,7 @@ pub fn test_rename_private_accessor(t: &T) {
        return this.[|#foo|];
    }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &util::to_any(f.get_ranges_by_text().get(&"#foo".to_string())));
@@ -601,7 +601,7 @@ pub fn test_rename_private_fields(t: &T) {
        return this.#foo;
    }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -629,7 +629,7 @@ pub fn test_rename_private_fields1(t: &T) {
        return this.[|#foo|];
    }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["#foo"]);
@@ -655,7 +655,7 @@ pub fn test_rename_private_method(t: &T) {
        return this.[|#foo|]();
    }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &util::to_any(f.get_ranges_by_text().get(&"#foo".to_string())));
@@ -681,7 +681,7 @@ function foo() {
 }
 class C extends (foo()).[|B|] {}
 class C1 extends foo().[|B|] {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["B"]);
@@ -706,7 +706,7 @@ const obj = {
   "'"/**/: 1,
 }
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::String("".to_string())]);
@@ -736,7 +736,7 @@ import { default as bee } from "./b";
 // @Filename: /b.ts
 [|const [|{| "contextRangeIndex": 6 |}b|] = 0;|]
 [|export default [|{| "contextRangeIndex": 8 |}b|];|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::RangeMarker(f.ranges()[1].clone()), Any::RangeMarker(f.ranges()[3].clone()), Any::RangeMarker(f.ranges()[5].clone()), Any::RangeMarker(f.ranges()[7].clone()), Any::RangeMarker(f.ranges()[9].clone())]);
@@ -760,7 +760,7 @@ pub fn test_rename_reference_from_link_tag1(t: &T) {
     /** {@link /**/A} */
     A
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::String("".to_string())]);
@@ -788,7 +788,7 @@ enum E {
 interface Foo {
     foo: E.Foo;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::String("".to_string())]);
@@ -817,7 +817,7 @@ enum E {
     /** {@link /**/Foo} */
     Foo
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::String("".to_string())]);
@@ -842,7 +842,7 @@ pub fn test_rename_reference_from_link_tag4(t: &T) {
     A,
     B
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::String("".to_string())]);
@@ -866,7 +866,7 @@ pub fn test_rename_reference_from_link_tag5(t: &T) {
     /** {@link E./**/A} */
     A
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::String("".to_string())]);
@@ -894,7 +894,7 @@ pub fn test_rename_rest(t: &T) {
 let t: Gen;
 var { x, ...rest } = t;
 rest.[|parent|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["parent"]);
@@ -922,7 +922,7 @@ pub fn test_rename_rest_binding_element(t: &T) {
 function foo([|{ a, ...[|{| "contextRangeIndex": 0 |}rest|] }: I|]) {
     [|rest|];
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, Some(lsutil::UserPreferences { use_aliases_for_rename: Tristate::True, ..Default::default() }), &[Any::RangeMarker(f.ranges()[1].clone())]);
@@ -949,7 +949,7 @@ const d: 'foo' = 'foo'
 declare const f: Foo
 f.f = '[|foo|]'
 f.f = `[|foo|]`"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["foo"]);
@@ -976,7 +976,7 @@ class Foo {
 const d: 'foo' = 'foo'
 declare const ff: Foo
 ff.f = '[|foo|]'"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["foo"]);
@@ -1005,7 +1005,7 @@ pub fn test_rename_string_literal_types1(t: &T) {
 function animate(o: AnimationOptions) { }
 
 animate({ deltaX: 100, deltaY: 100, easing: "[|ease-in-out|]" });"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["ease-in-out"]);
@@ -1043,7 +1043,7 @@ class C {
         if ("[|a|]" != this.p) {}
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["a"]);
@@ -1076,7 +1076,7 @@ class C {
         }
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["a"]);
@@ -1103,7 +1103,7 @@ pub fn test_rename_string_literal_types4(t: &T) {
 declare const fn: <K extends keyof I>(p: K) => void
 
 fn("Prop 1"/**/)"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::String("".to_string())]);
@@ -1130,7 +1130,7 @@ pub fn test_rename_string_literal_types5(t: &T) {
 declare const fn: <K extends keyof T>(p: K) => void
 
 fn("Prop 1"/**/)"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::String("".to_string())]);
@@ -1161,7 +1161,7 @@ o = {
 o["[|prop|]"];
 o['[|prop|]'];
 o.[|prop|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["prop"]);
@@ -1189,7 +1189,7 @@ let { foo }: Props = null as any;
 foo;
 
 let asd: Props = { "foo"/**/: true }; // rename foo here"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::String("".to_string())]);
@@ -1245,7 +1245,7 @@ obj[`[|num|]`];
 
 obj.[|bool|];
 obj[`[|bool|]`];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["num", "bool"]);
@@ -1279,7 +1279,7 @@ obj.[|prop|];
 obj['[|prop|]'];
 obj["[|prop|]"];
 obj[`[|prop|]`];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["prop"]);
@@ -1304,7 +1304,7 @@ pub fn test_rename_this(t: &T) {
 }
 this/**/;
 const _ = { [|[|{| "contextRangeIndex": 2 |}this|]: 0|] }.[|this|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -1333,7 +1333,7 @@ export function doTheOtherThing(): void;
 // @Filename: 1.ts
 /// <reference path="0.d.ts" />
 [|myLib|].doThing();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename_at_ranges_with_text(t, None, &["myLib"]);
@@ -1360,7 +1360,7 @@ export as namespace /**/[|myLib|];
 // @Filename: 1.ts
 /// <reference path="0.d.ts" />
 myLib.doThing();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -1386,7 +1386,7 @@ export { [|jsonSchema|] } from "@internal/ai-sdk-v4";
 // @Filename: /b.ts
 import { jsonSchema } from "./a";
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_rename(t, None, &[Any::RangeMarker(f.ranges()[0].clone())]);
@@ -1408,7 +1408,7 @@ pub fn test_rest_arg_signature_help(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"function f(...x: any[]) { }
 f(/**/);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -1457,7 +1457,7 @@ var t7: (...a1: string[]) => void = (/*t71*/f1, /*t72*/f2, /*t73*/f3) => { }; //
 var t8: (...a1: string[]) => void = (/*t8*/f1: number[]) => { };
 // Explicit initialization value
 var t9: (a1: string[], a2: string[]) => void = (/*t91*/f1 = 4, /*t92*/f2 = [false, true]) => { };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_quick_info_at(t, "1", "(parameter) restArgs: any[]", "");
@@ -1496,7 +1496,7 @@ pub fn test_rest_params_contextually_typed(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = "var foo: Function = function (/*1*/a, /*2*/b, /*3*/c) { };";
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_quick_info_at(t, "1", "(parameter) a: any", "");
@@ -1523,7 +1523,7 @@ pub fn test_return_recursive_type(t: &T) {
 }
 function MyFn() { return <MyInt>MyFn; }
 var My/**/Var = MyFn();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_quick_info_at(t, "", "var MyVar: MyInt", "");
@@ -1548,7 +1548,7 @@ pub fn test_return_type_of_generic_function1(t: &T) {
 }
 var x: WrappedArray<string>;
 var /**/y = x.map(s => s.length);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_quick_info_at(t, "", "var y: number[]", "");
@@ -1595,7 +1595,7 @@ type FinalType/*1*/ = ReturnType<typeof test_outer>;
 
 var k: FinalType;
 k.test.test_inner/*2*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_quick_info_at(t, "1", r#"type FinalType = {
@@ -1663,7 +1663,7 @@ export {};
 { "type": "module" }
 // @Filename: packages/main/src/index.ts
 import {} from "../../common/src/index.ts";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -1713,7 +1713,7 @@ export {};
 }
 // @Filename: src/services/services.ts
 import {} from "../compiler/parser.ts";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -1768,7 +1768,7 @@ export {};
 }
 // @Filename: src/services/services.ts
 import {} from "../compiler/parser.ts";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -1793,7 +1793,7 @@ pub fn test_satisfies_operator_completion(t: &T) {
         let content: &str = r#"type T = number;
 var x;
 var y = x satisfies /**/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("T".to_string())], ..Default::default() }), ..Default::default() }));
@@ -1816,7 +1816,7 @@ pub fn test_scope_of_union_properties(t: &T) {
         let content: &str = r#"function f(s: string | number) {
     s.constr/*1*/uctor
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_document_highlights(t, None, &[Any::String("1".to_string())]);
@@ -1840,7 +1840,7 @@ pub fn test_self_referenced_external_module(t: &T) {
 export import A = require('./app');
 export var I = 1;
 A./**/I"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "A".to_string(), detail: Some("import A = require('./app')".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "I".to_string(), detail: Some("var I: number".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
@@ -1868,7 +1868,7 @@ A.B.A.B./*2*/I;
 // @Filename: app2.ts
 export import B = require('./app');
 export var Y = 1;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_quick_info_at(t, "1", "var A.Y: number", "");
@@ -1894,7 +1894,7 @@ pub fn test_semantic_classification1(t: &T) {
     }
 }
 interface /*2*/X extends /*3*/M./*4*/I { }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_semantic_tokens(t, &[fourslash::SemanticToken { type_: "namespace.declaration".to_string(), text: "M".to_string() }, fourslash::SemanticToken { type_: "interface.declaration".to_string(), text: "I".to_string() }, fourslash::SemanticToken { type_: "interface.declaration".to_string(), text: "X".to_string() }, fourslash::SemanticToken { type_: "namespace".to_string(), text: "M".to_string() }, fourslash::SemanticToken { type_: "interface".to_string(), text: "I".to_string() }]);
@@ -1920,7 +1920,7 @@ pub fn test_semantic_classification2(t: &T) {
 
 var Thing = 0;
 Thing.toExponential();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_semantic_tokens(t, &[fourslash::SemanticToken { type_: "interface.declaration".to_string(), text: "Thing".to_string() }, fourslash::SemanticToken { type_: "method.declaration".to_string(), text: "toExponential".to_string() }, fourslash::SemanticToken { type_: "variable.declaration".to_string(), text: "Thing".to_string() }, fourslash::SemanticToken { type_: "variable".to_string(), text: "Thing".to_string() }, fourslash::SemanticToken { type_: "method.defaultLibrary".to_string(), text: "toExponential".to_string() }]);
@@ -1946,7 +1946,7 @@ export class y {};
 // @Filename: /b.ts
 import { /*0*/x, /*1*/y } from "./a";
 const v: /*2*/x = /*3*/y;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_file(t, "/b.ts");
@@ -1970,7 +1970,7 @@ pub fn test_semantic_classification_class_expression(t: &T) {
         let content: &str = r#"var x = class /*0*/C {}
 class /*1*/C {}
 class /*2*/D extends class /*3*/B{} { }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_semantic_tokens(t, &[fourslash::SemanticToken { type_: "class.declaration".to_string(), text: "x".to_string() }, fourslash::SemanticToken { type_: "class.declaration".to_string(), text: "C".to_string() }, fourslash::SemanticToken { type_: "class.declaration".to_string(), text: "C".to_string() }, fourslash::SemanticToken { type_: "class.declaration".to_string(), text: "D".to_string() }, fourslash::SemanticToken { type_: "class.declaration".to_string(), text: "B".to_string() }]);
@@ -1993,7 +1993,7 @@ pub fn test_semantic_classification_class_expression_method(t: &T) {
         let content: &str = r#"var x = class C {
   equals(other: C) { return this == other; }
 };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_semantic_tokens(t, &[fourslash::SemanticToken { type_: "class.declaration".to_string(), text: "x".to_string() }, fourslash::SemanticToken { type_: "class.declaration".to_string(), text: "C".to_string() }, fourslash::SemanticToken { type_: "method.declaration".to_string(), text: "equals".to_string() }, fourslash::SemanticToken { type_: "parameter.declaration".to_string(), text: "other".to_string() }, fourslash::SemanticToken { type_: "class".to_string(), text: "C".to_string() }, fourslash::SemanticToken { type_: "parameter".to_string(), text: "other".to_string() }]);
@@ -2022,7 +2022,7 @@ pub fn test_semantic_classification_in_template_expressions(t: &T) {
     }
 }
 `abcd${ /*3*/M./*4*/C.x + /*5*/M./*6*/E.E1}efg`"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_semantic_tokens(t, &[fourslash::SemanticToken { type_: "namespace.declaration".to_string(), text: "M".to_string() }, fourslash::SemanticToken { type_: "class.declaration".to_string(), text: "C".to_string() }, fourslash::SemanticToken { type_: "property.declaration.static".to_string(), text: "x".to_string() }, fourslash::SemanticToken { type_: "enum.declaration".to_string(), text: "E".to_string() }, fourslash::SemanticToken { type_: "enumMember.declaration.readonly".to_string(), text: "E1".to_string() }, fourslash::SemanticToken { type_: "namespace".to_string(), text: "M".to_string() }, fourslash::SemanticToken { type_: "class".to_string(), text: "C".to_string() }, fourslash::SemanticToken { type_: "property.static".to_string(), text: "x".to_string() }, fourslash::SemanticToken { type_: "namespace".to_string(), text: "M".to_string() }, fourslash::SemanticToken { type_: "enum".to_string(), text: "E".to_string() }, fourslash::SemanticToken { type_: "enumMember.readonly".to_string(), text: "E1".to_string() }]);
@@ -2056,7 +2056,7 @@ var /*2*/M = {
 var v: /*3*/M./*4*/I;
 
 var x = /*5*/M;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_semantic_tokens(t, &[fourslash::SemanticToken { type_: "namespace.declaration".to_string(), text: "M".to_string() }, fourslash::SemanticToken { type_: "interface.declaration".to_string(), text: "I".to_string() }, fourslash::SemanticToken { type_: "variable.declaration.local".to_string(), text: "x".to_string() }, fourslash::SemanticToken { type_: "variable.declaration".to_string(), text: "M".to_string() }, fourslash::SemanticToken { type_: "property.declaration".to_string(), text: "foo".to_string() }, fourslash::SemanticToken { type_: "property.declaration".to_string(), text: "bar".to_string() }, fourslash::SemanticToken { type_: "variable.declaration".to_string(), text: "v".to_string() }, fourslash::SemanticToken { type_: "namespace".to_string(), text: "M".to_string() }, fourslash::SemanticToken { type_: "interface".to_string(), text: "I".to_string() }, fourslash::SemanticToken { type_: "variable.declaration".to_string(), text: "x".to_string() }, fourslash::SemanticToken { type_: "namespace".to_string(), text: "M".to_string() }]);
@@ -2093,7 +2093,7 @@ var /*3*/M = {
 var v: /*4*/M./*5*/I;
 
 var x = /*6*/M;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_semantic_tokens(t, &[fourslash::SemanticToken { type_: "namespace.declaration".to_string(), text: "M".to_string() }, fourslash::SemanticToken { type_: "interface.declaration".to_string(), text: "I".to_string() }, fourslash::SemanticToken { type_: "namespace.declaration".to_string(), text: "M".to_string() }, fourslash::SemanticToken { type_: "variable.declaration.local".to_string(), text: "x".to_string() }, fourslash::SemanticToken { type_: "variable.declaration".to_string(), text: "M".to_string() }, fourslash::SemanticToken { type_: "property.declaration".to_string(), text: "foo".to_string() }, fourslash::SemanticToken { type_: "property.declaration".to_string(), text: "bar".to_string() }, fourslash::SemanticToken { type_: "variable.declaration".to_string(), text: "v".to_string() }, fourslash::SemanticToken { type_: "namespace".to_string(), text: "M".to_string() }, fourslash::SemanticToken { type_: "interface".to_string(), text: "I".to_string() }, fourslash::SemanticToken { type_: "variable.declaration".to_string(), text: "x".to_string() }, fourslash::SemanticToken { type_: "namespace".to_string(), text: "M".to_string() }]);
@@ -2117,7 +2117,7 @@ pub fn test_semantic_classification_jsx(t: &T) {
 const Component = () => <div>Hello</div>;
 const afterJSX = 42;
 const alsoAfterJSX = "test";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_file(t, "/a.tsx");
@@ -2146,7 +2146,7 @@ pub fn test_semantic_classification_modules(t: &T) {
 
 var x: /*2*/M./*3*/I = /*4*/M.v;
 var y = /*5*/M;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_semantic_tokens(t, &[fourslash::SemanticToken { type_: "namespace.declaration".to_string(), text: "M".to_string() }, fourslash::SemanticToken { type_: "variable.declaration.local".to_string(), text: "v".to_string() }, fourslash::SemanticToken { type_: "interface.declaration".to_string(), text: "I".to_string() }, fourslash::SemanticToken { type_: "variable.declaration".to_string(), text: "x".to_string() }, fourslash::SemanticToken { type_: "namespace".to_string(), text: "M".to_string() }, fourslash::SemanticToken { type_: "interface".to_string(), text: "I".to_string() }, fourslash::SemanticToken { type_: "namespace".to_string(), text: "M".to_string() }, fourslash::SemanticToken { type_: "variable.local".to_string(), text: "v".to_string() }, fourslash::SemanticToken { type_: "variable.declaration".to_string(), text: "y".to_string() }, fourslash::SemanticToken { type_: "namespace".to_string(), text: "M".to_string() }]);
@@ -2173,7 +2173,7 @@ pub fn test_semantic_classification_uninstantiated_module_with_variable_of_same_
 }
 
 var M = { I: 10 };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_semantic_tokens(t, &[fourslash::SemanticToken { type_: "variable".to_string(), text: "M".to_string() }, fourslash::SemanticToken { type_: "interface.declaration".to_string(), text: "I".to_string() }, fourslash::SemanticToken { type_: "variable.declaration".to_string(), text: "M".to_string() }, fourslash::SemanticToken { type_: "property.declaration".to_string(), text: "I".to_string() }]);
@@ -2206,7 +2206,7 @@ var /*2*/M = {
 var v: /*3*/M./*4*/I;
 
 var x = /*5*/M;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_semantic_tokens(t, &[fourslash::SemanticToken { type_: "variable".to_string(), text: "M".to_string() }, fourslash::SemanticToken { type_: "interface.declaration".to_string(), text: "I".to_string() }, fourslash::SemanticToken { type_: "variable.declaration".to_string(), text: "M".to_string() }, fourslash::SemanticToken { type_: "property.declaration".to_string(), text: "foo".to_string() }, fourslash::SemanticToken { type_: "property.declaration".to_string(), text: "bar".to_string() }, fourslash::SemanticToken { type_: "variable.declaration".to_string(), text: "v".to_string() }, fourslash::SemanticToken { type_: "variable".to_string(), text: "M".to_string() }, fourslash::SemanticToken { type_: "interface".to_string(), text: "I".to_string() }, fourslash::SemanticToken { type_: "variable.declaration".to_string(), text: "x".to_string() }, fourslash::SemanticToken { type_: "variable".to_string(), text: "M".to_string() }]);
@@ -2238,7 +2238,7 @@ class /*3*/C {
 
 var M: /*4*/M./*5*/I | /*6*/I | /*7*/C;
 var I: typeof M | typeof /*8*/C;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_semantic_tokens(t, &[fourslash::SemanticToken { type_: "variable".to_string(), text: "M".to_string() }, fourslash::SemanticToken { type_: "interface.declaration".to_string(), text: "I".to_string() }, fourslash::SemanticToken { type_: "interface.declaration".to_string(), text: "I".to_string() }, fourslash::SemanticToken { type_: "class.declaration".to_string(), text: "C".to_string() }, fourslash::SemanticToken { type_: "variable.declaration".to_string(), text: "M".to_string() }, fourslash::SemanticToken { type_: "variable".to_string(), text: "M".to_string() }, fourslash::SemanticToken { type_: "interface".to_string(), text: "I".to_string() }, fourslash::SemanticToken { type_: "interface".to_string(), text: "I".to_string() }, fourslash::SemanticToken { type_: "class".to_string(), text: "C".to_string() }, fourslash::SemanticToken { type_: "class.declaration".to_string(), text: "I".to_string() }, fourslash::SemanticToken { type_: "variable".to_string(), text: "M".to_string() }, fourslash::SemanticToken { type_: "class".to_string(), text: "C".to_string() }]);
@@ -2262,7 +2262,7 @@ pub fn test_semantic_classificaton_type_alias(t: &T) {
 var x: /*1*/Alias;
 var y = </*2*/Alias>{};
 function f(x: /*3*/Alias): /*4*/Alias { return undefined; }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_semantic_tokens(t, &[fourslash::SemanticToken { type_: "type.declaration".to_string(), text: "Alias".to_string() }, fourslash::SemanticToken { type_: "variable.declaration".to_string(), text: "x".to_string() }, fourslash::SemanticToken { type_: "type".to_string(), text: "Alias".to_string() }, fourslash::SemanticToken { type_: "variable.declaration".to_string(), text: "y".to_string() }, fourslash::SemanticToken { type_: "type".to_string(), text: "Alias".to_string() }, fourslash::SemanticToken { type_: "function.declaration".to_string(), text: "f".to_string() }, fourslash::SemanticToken { type_: "parameter.declaration".to_string(), text: "x".to_string() }, fourslash::SemanticToken { type_: "type".to_string(), text: "Alias".to_string() }, fourslash::SemanticToken { type_: "type".to_string(), text: "Alias".to_string() }]);
@@ -2290,7 +2290,7 @@ match({ other });
 interface B = { (): string; }; var b: B
 var s: String;
 var t: { (): string; foo: string};"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_semantic_tokens(t, &[fourslash::SemanticToken { type_: "class.declaration".to_string(), text: "A".to_string() }, fourslash::SemanticToken { type_: "method.declaration".to_string(), text: "onEvent".to_string() }, fourslash::SemanticToken { type_: "function.declaration.readonly".to_string(), text: "x".to_string() }, fourslash::SemanticToken { type_: "class".to_string(), text: "A".to_string() }, fourslash::SemanticToken { type_: "method".to_string(), text: "onEvent".to_string() }, fourslash::SemanticToken { type_: "function.declaration.readonly".to_string(), text: "match".to_string() }, fourslash::SemanticToken { type_: "parameter.declaration".to_string(), text: "s".to_string() }, fourslash::SemanticToken { type_: "function.readonly".to_string(), text: "x".to_string() }, fourslash::SemanticToken { type_: "function.declaration.readonly".to_string(), text: "other".to_string() }, fourslash::SemanticToken { type_: "function.readonly".to_string(), text: "match".to_string() }, fourslash::SemanticToken { type_: "function.readonly".to_string(), text: "match".to_string() }, fourslash::SemanticToken { type_: "method.declaration".to_string(), text: "other".to_string() }, fourslash::SemanticToken { type_: "interface.declaration".to_string(), text: "B".to_string() }, fourslash::SemanticToken { type_: "variable.declaration".to_string(), text: "b".to_string() }, fourslash::SemanticToken { type_: "interface".to_string(), text: "B".to_string() }, fourslash::SemanticToken { type_: "variable.declaration".to_string(), text: "s".to_string() }, fourslash::SemanticToken { type_: "interface.defaultLibrary".to_string(), text: "String".to_string() }, fourslash::SemanticToken { type_: "variable.declaration".to_string(), text: "t".to_string() }, fourslash::SemanticToken { type_: "property.declaration".to_string(), text: "foo".to_string() }]);
@@ -2317,7 +2317,7 @@ require.resolve.paths;
 interface LanguageMode { getFoldingRanges?: (d: string) => number[]; };
 function (mode: LanguageMode | undefined) { if (mode && mode.getFoldingRanges) { return mode.getFoldingRanges('a'); }};
 function b(a: () => void) { a(); };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_semantic_tokens(t, &[fourslash::SemanticToken { type_: "variable.declaration".to_string(), text: "fs".to_string() }, fourslash::SemanticToken { type_: "interface.declaration".to_string(), text: "LanguageMode".to_string() }, fourslash::SemanticToken { type_: "method.declaration".to_string(), text: "getFoldingRanges".to_string() }, fourslash::SemanticToken { type_: "parameter.declaration".to_string(), text: "d".to_string() }, fourslash::SemanticToken { type_: "parameter.declaration".to_string(), text: "mode".to_string() }, fourslash::SemanticToken { type_: "interface".to_string(), text: "LanguageMode".to_string() }, fourslash::SemanticToken { type_: "parameter".to_string(), text: "mode".to_string() }, fourslash::SemanticToken { type_: "parameter".to_string(), text: "mode".to_string() }, fourslash::SemanticToken { type_: "method".to_string(), text: "getFoldingRanges".to_string() }, fourslash::SemanticToken { type_: "parameter".to_string(), text: "mode".to_string() }, fourslash::SemanticToken { type_: "method".to_string(), text: "getFoldingRanges".to_string() }, fourslash::SemanticToken { type_: "function.declaration".to_string(), text: "b".to_string() }, fourslash::SemanticToken { type_: "function.declaration".to_string(), text: "a".to_string() }, fourslash::SemanticToken { type_: "function".to_string(), text: "a".to_string() }]);
@@ -2343,7 +2343,7 @@ pub fn test_semantic_modern_classification_class_properties(t: &T) {
   get z() : number { return this.x + this.y; }
   set a(v: number) { }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_semantic_tokens(t, &[fourslash::SemanticToken { type_: "class.declaration".to_string(), text: "A".to_string() }, fourslash::SemanticToken { type_: "property.declaration".to_string(), text: "y".to_string() }, fourslash::SemanticToken { type_: "parameter.declaration".to_string(), text: "x".to_string() }, fourslash::SemanticToken { type_: "parameter.declaration".to_string(), text: "_y".to_string() }, fourslash::SemanticToken { type_: "property".to_string(), text: "y".to_string() }, fourslash::SemanticToken { type_: "parameter".to_string(), text: "_y".to_string() }, fourslash::SemanticToken { type_: "property.declaration".to_string(), text: "z".to_string() }, fourslash::SemanticToken { type_: "property".to_string(), text: "x".to_string() }, fourslash::SemanticToken { type_: "property".to_string(), text: "y".to_string() }, fourslash::SemanticToken { type_: "property.declaration".to_string(), text: "a".to_string() }, fourslash::SemanticToken { type_: "parameter.declaration".to_string(), text: "v".to_string() }]);
@@ -2367,7 +2367,7 @@ pub fn test_semantic_modern_classification_constructor_types(t: &T) {
 Object.create(null);
 const x = Promise.resolve(Number.MAX_VALUE);
 if (x instanceof Promise) {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_semantic_tokens(t, &[fourslash::SemanticToken { type_: "class.defaultLibrary".to_string(), text: "Object".to_string() }, fourslash::SemanticToken { type_: "method.defaultLibrary".to_string(), text: "create".to_string() }, fourslash::SemanticToken { type_: "variable.declaration.readonly".to_string(), text: "x".to_string() }, fourslash::SemanticToken { type_: "class.defaultLibrary".to_string(), text: "Number".to_string() }, fourslash::SemanticToken { type_: "property.readonly.defaultLibrary".to_string(), text: "MAX_VALUE".to_string() }, fourslash::SemanticToken { type_: "variable.readonly".to_string(), text: "x".to_string() }]);
@@ -2391,7 +2391,7 @@ pub fn test_semantic_modern_classification_functions(t: &T) {
   return foo(Math.abs(p1))
 }
 `/${window.location}`.split("/").forEach(s => foo(s));"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_semantic_tokens(t, &[fourslash::SemanticToken { type_: "function.declaration".to_string(), text: "foo".to_string() }, fourslash::SemanticToken { type_: "parameter.declaration".to_string(), text: "p1".to_string() }, fourslash::SemanticToken { type_: "function".to_string(), text: "foo".to_string() }, fourslash::SemanticToken { type_: "variable.defaultLibrary".to_string(), text: "Math".to_string() }, fourslash::SemanticToken { type_: "method.defaultLibrary".to_string(), text: "abs".to_string() }, fourslash::SemanticToken { type_: "parameter".to_string(), text: "p1".to_string() }, fourslash::SemanticToken { type_: "variable.defaultLibrary".to_string(), text: "window".to_string() }, fourslash::SemanticToken { type_: "property.defaultLibrary".to_string(), text: "location".to_string() }, fourslash::SemanticToken { type_: "method.defaultLibrary".to_string(), text: "split".to_string() }, fourslash::SemanticToken { type_: "method.defaultLibrary".to_string(), text: "forEach".to_string() }, fourslash::SemanticToken { type_: "parameter.declaration".to_string(), text: "s".to_string() }, fourslash::SemanticToken { type_: "function".to_string(), text: "foo".to_string() }, fourslash::SemanticToken { type_: "parameter".to_string(), text: "s".to_string() }]);
@@ -2435,7 +2435,7 @@ const obj2 = {
 
 obj2.Infinity;
 obj2.NaN;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_semantic_tokens(t, &[fourslash::SemanticToken { type_: "variable.declaration.readonly".to_string(), text: "obj1".to_string() }, fourslash::SemanticToken { type_: "variable.readonly".to_string(), text: "obj1".to_string() }, fourslash::SemanticToken { type_: "variable.readonly".to_string(), text: "obj1".to_string() }, fourslash::SemanticToken { type_: "variable.readonly".to_string(), text: "obj1".to_string() }, fourslash::SemanticToken { type_: "variable.declaration.readonly".to_string(), text: "obj2".to_string() }, fourslash::SemanticToken { type_: "variable.readonly".to_string(), text: "obj2".to_string() }, fourslash::SemanticToken { type_: "variable.readonly".to_string(), text: "obj2".to_string() }]);
@@ -2458,7 +2458,7 @@ pub fn test_semantic_modern_classification_interfaces(t: &T) {
         let content: &str = r#"interface Pos { x: number, y: number };
 const p = { x: 1, y: 2 } as Pos;
 const foo = (o: Pos) => o.x + o.y;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_semantic_tokens(t, &[fourslash::SemanticToken { type_: "interface.declaration".to_string(), text: "Pos".to_string() }, fourslash::SemanticToken { type_: "property.declaration".to_string(), text: "x".to_string() }, fourslash::SemanticToken { type_: "property.declaration".to_string(), text: "y".to_string() }, fourslash::SemanticToken { type_: "variable.declaration.readonly".to_string(), text: "p".to_string() }, fourslash::SemanticToken { type_: "property.declaration".to_string(), text: "x".to_string() }, fourslash::SemanticToken { type_: "property.declaration".to_string(), text: "y".to_string() }, fourslash::SemanticToken { type_: "interface".to_string(), text: "Pos".to_string() }, fourslash::SemanticToken { type_: "function.declaration.readonly".to_string(), text: "foo".to_string() }, fourslash::SemanticToken { type_: "parameter.declaration".to_string(), text: "o".to_string() }, fourslash::SemanticToken { type_: "interface".to_string(), text: "Pos".to_string() }, fourslash::SemanticToken { type_: "parameter".to_string(), text: "o".to_string() }, fourslash::SemanticToken { type_: "property".to_string(), text: "x".to_string() }, fourslash::SemanticToken { type_: "parameter".to_string(), text: "o".to_string() }, fourslash::SemanticToken { type_: "property".to_string(), text: "y".to_string() }]);
@@ -2486,7 +2486,7 @@ pub fn test_semantic_modern_classification_members(t: &T) {
   static t() { return new A().f; };
   constructor() {}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_semantic_tokens(t, &[fourslash::SemanticToken { type_: "class.declaration".to_string(), text: "A".to_string() }, fourslash::SemanticToken { type_: "property.declaration.static".to_string(), text: "x".to_string() }, fourslash::SemanticToken { type_: "property.declaration".to_string(), text: "f".to_string() }, fourslash::SemanticToken { type_: "method.declaration.async".to_string(), text: "m".to_string() }, fourslash::SemanticToken { type_: "class".to_string(), text: "A".to_string() }, fourslash::SemanticToken { type_: "property.static".to_string(), text: "x".to_string() }, fourslash::SemanticToken { type_: "method.async".to_string(), text: "m".to_string() }, fourslash::SemanticToken { type_: "property.declaration".to_string(), text: "s".to_string() }, fourslash::SemanticToken { type_: "property".to_string(), text: "f".to_string() }, fourslash::SemanticToken { type_: "method.declaration.static".to_string(), text: "t".to_string() }, fourslash::SemanticToken { type_: "class".to_string(), text: "A".to_string() }, fourslash::SemanticToken { type_: "property".to_string(), text: "f".to_string() }]);
@@ -2509,7 +2509,7 @@ pub fn test_semantic_modern_classification_object_properties(t: &T) {
         let content: &str = r#"let x = 1, y = 1;
 const a1 = { e: 1 };
 var a2 = { x };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_semantic_tokens(t, &[fourslash::SemanticToken { type_: "variable.declaration".to_string(), text: "x".to_string() }, fourslash::SemanticToken { type_: "variable.declaration".to_string(), text: "y".to_string() }, fourslash::SemanticToken { type_: "variable.declaration.readonly".to_string(), text: "a1".to_string() }, fourslash::SemanticToken { type_: "property.declaration".to_string(), text: "e".to_string() }, fourslash::SemanticToken { type_: "variable.declaration".to_string(), text: "a2".to_string() }, fourslash::SemanticToken { type_: "property.declaration".to_string(), text: "x".to_string() }]);
@@ -2538,7 +2538,7 @@ pub fn test_semantic_modern_classification_private_identifiers(t: &T) {
 		this.#privateMethod();
 	}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_semantic_tokens(t, &[fourslash::SemanticToken { type_: "class.declaration".to_string(), text: "Foo".to_string() }, fourslash::SemanticToken { type_: "property.declaration".to_string(), text: "#privateField".to_string() }, fourslash::SemanticToken { type_: "method.declaration".to_string(), text: "#privateMethod".to_string() }, fourslash::SemanticToken { type_: "method.declaration".to_string(), text: "test".to_string() }, fourslash::SemanticToken { type_: "property".to_string(), text: "#privateField".to_string() }, fourslash::SemanticToken { type_: "method".to_string(), text: "#privateMethod".to_string() }]);
@@ -2564,7 +2564,7 @@ pub fn test_semantic_modern_classification_variables(t: &T) {
   } catch (e) {
     throw y1;
   }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_semantic_tokens(t, &[fourslash::SemanticToken { type_: "variable.declaration".to_string(), text: "x".to_string() }, fourslash::SemanticToken { type_: "variable.declaration".to_string(), text: "y1".to_string() }, fourslash::SemanticToken { type_: "variable".to_string(), text: "x".to_string() }, fourslash::SemanticToken { type_: "variable.declaration.readonly.local".to_string(), text: "s".to_string() }, fourslash::SemanticToken { type_: "variable".to_string(), text: "y1".to_string() }, fourslash::SemanticToken { type_: "variable".to_string(), text: "x".to_string() }, fourslash::SemanticToken { type_: "variable.readonly.local".to_string(), text: "s".to_string() }, fourslash::SemanticToken { type_: "variable.declaration.local".to_string(), text: "e".to_string() }, fourslash::SemanticToken { type_: "variable".to_string(), text: "y1".to_string() }]);
@@ -2585,7 +2585,7 @@ pub fn test_semicolon_formatting(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = "/**/function of1 (b:{r:{c:number";
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_eof(t);
@@ -2608,7 +2608,7 @@ pub fn test_semicolon_formatting_after_array_literal(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = "[1,2]/**/";
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -2631,7 +2631,7 @@ pub fn test_semicolon_formatting_inside_a_comment(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = "    ///**/";
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -2654,7 +2654,7 @@ pub fn test_semicolon_formatting_inside_a_string_literal(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = r#"    var x = "string/**/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -2682,7 +2682,7 @@ if (true) {
 if (true)/*directParent*/
 var x = 0/*innermost*/
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "innermost");
@@ -2720,7 +2720,7 @@ var a = 10;
 // @filename: node_modules/c.js
 exports.a = 10;
 c = 10;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_suggestion_diagnostics(t, &[]);
@@ -2747,7 +2747,7 @@ function foo(data: number) {
 function bar {
     foo(/*1*/)
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -2773,7 +2773,7 @@ pub fn test_signature_help_after_parameter(t: &T) {
 const a: Type = (a/*1*/, b/*2*/) => {}
 const b: Type = function (a/*3*/, b/*4*/) {}
 const c: Type = ({ /*5*/a: { b/*6*/ }}/*7*/ = { }/*8*/, [b/*9*/]/*10*/, .../*11*/c/*12*/) => {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_signature_help(t);
@@ -2797,7 +2797,7 @@ pub fn test_signature_help_after_parameter_vs(t: &T) {
 const a: Type = (a/*1*/, b/*2*/) => {}
 const b: Type = function (a/*3*/, b/*4*/) {}
 const c: Type = ({ /*5*/a: { b/*6*/ }}/*7*/ = { }/*8*/, [b/*9*/]/*10*/, .../*11*/c/*12*/) => {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, Some(lsproto::ClientCapabilities { vs_supports_visual_studio_extensions: Some(true), ..Default::default() }), content);
+        let (mut f, done) = fourslash::new_fourslash(t, Some(lsproto::ClientCapabilities { vs_supports_visual_studio_extensions: Some(true), ..Default::default() }), content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_signature_help(t);
@@ -2821,7 +2821,7 @@ pub fn test_signature_help_anonymous_function(t: &T) {
     return null;
 }
 anonymousFunctionTest(5, "")(/*anonymousFunction1*/1, /*anonymousFunction2*/"");"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "anonymousFunction1");
@@ -2847,7 +2847,7 @@ pub fn test_signature_help_anonymous_type(t: &T) {
         let content: &str = r#"const comparers: Array<(a: any, b: any) => boolean> = [];
 
 comparers.push((a,/**/ b) => true);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_signature_help(t);
@@ -2870,7 +2870,7 @@ pub fn test_signature_help_anonymous_type_vs(t: &T) {
         let content: &str = r#"const comparers: Array<(a: any, b: any) => boolean> = [];
 
 comparers.push((a,/**/ b) => true);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, Some(lsproto::ClientCapabilities { vs_supports_visual_studio_extensions: Some(true), ..Default::default() }), content);
+        let (mut f, done) = fourslash::new_fourslash(t, Some(lsproto::ClientCapabilities { vs_supports_visual_studio_extensions: Some(true), ..Default::default() }), content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_signature_help(t);
@@ -2898,7 +2898,7 @@ pub fn test_signature_help_applicable_range(t: &T) {
 
 let s =/*a*/ obj.foo("Hello, world!")/*b*/  
   /*c*/;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_no_signature_help_for_markers(t, &["a", "b", "c"]);
@@ -2922,7 +2922,7 @@ pub fn test_signature_help_at_eof(t: &T) {
 }
 
 Foo(/**/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -2945,7 +2945,7 @@ pub fn test_signature_help_at_eof2(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"console.log()
 /**/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_no_signature_help_for_markers_with_context(t, Some(lsproto::SignatureHelpContext { trigger_kind: lsproto::SignatureHelpTriggerKind::Invoked, ..Default::default() }), &[""]);
@@ -2969,7 +2969,7 @@ pub fn test_signature_help_before_semicolon1(t: &T) {
 }
 
 Foo(/**/;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -2997,7 +2997,7 @@ function foo<T, U>(x: string, y: T, z: U) {
 
 foo<number,number>/*1*/("hello", 123,456)
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_signature_help_with_cases(t, &[fourslash::SignatureHelpCase { marker_input: Any::String("1".to_string()), expected: None, context: Some(lsproto::SignatureHelpContext { is_retrigger: false, trigger_character: Some("(".to_string()), trigger_kind: lsproto::SignatureHelpTriggerKind::TriggerCharacter, ..Default::default() }) }]);
@@ -3067,7 +3067,7 @@ bindingLeading(/*bindingLeading*/{ a: 1, b: 2 }, 123 /*idTrailing*/)
 function multipleBindings({ a, b }, { c, d }) {}
 multipleBindings({ a: 0, b: "" }/*firstObjParam*/, { c: true, d: "" }/*secondObjParam*/)
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_signature_help(t);
@@ -3137,7 +3137,7 @@ bindingLeading(/*bindingLeading*/{ a: 1, b: 2 }, 123 /*idTrailing*/)
 function multipleBindings({ a, b }, { c, d }) {}
 multipleBindings({ a: 0, b: "" }/*firstObjParam*/, { c: true, d: "" }/*secondObjParam*/)
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, Some(lsproto::ClientCapabilities { vs_supports_visual_studio_extensions: Some(true), ..Default::default() }), content);
+        let (mut f, done) = fourslash::new_fourslash(t, Some(lsproto::ClientCapabilities { vs_supports_visual_studio_extensions: Some(true), ..Default::default() }), content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_signature_help(t);
@@ -3159,7 +3159,7 @@ pub fn test_signature_help_call_expression(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"function fnTest(str: string, num: number) { }
 fnTest(/*1*/'', /*2*/5);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -3193,7 +3193,7 @@ function someOptional(x, y) { arguments; }
 someOptional(/*2*/);
 someOptional(1, 2, 3);
 someOptional(); // no error here; x and y are optional in JS"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_no_errors(t);
@@ -3227,7 +3227,7 @@ fnVariadicWrapped/*4*/(/*5*/'', /*6*/5);
 function fnNoParams () { }
 var fnNoParamsWrapped = wrap(fnNoParams);
 fnNoParamsWrapped/*7*/(/*8*/);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_quick_info_at(t, "3", "var fnWrapped: (str: string, num: number) => void", "");
@@ -3316,7 +3316,7 @@ namespace m {
     }
 }
 var myVar = new m.m2.c1();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_signature_help(t);
@@ -3467,7 +3467,7 @@ class cWithConstructorProperty {
         this.a = a + 2 + bbbb;
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_signature_help(t);
@@ -3618,7 +3618,7 @@ class cWithConstructorProperty {
         this.a = a + 2 + bbbb;
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, Some(lsproto::ClientCapabilities { vs_supports_visual_studio_extensions: Some(true), ..Default::default() }), content);
+        let (mut f, done) = fourslash::new_fourslash(t, Some(lsproto::ClientCapabilities { vs_supports_visual_studio_extensions: Some(true), ..Default::default() }), content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_signature_help(t);
@@ -3695,7 +3695,7 @@ namespace m {
     }
 }
 var myVar = new m.m2.c1();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, Some(lsproto::ClientCapabilities { vs_supports_visual_studio_extensions: Some(true), ..Default::default() }), content);
+        let (mut f, done) = fourslash::new_fourslash(t, Some(lsproto::ClientCapabilities { vs_supports_visual_studio_extensions: Some(true), ..Default::default() }), content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_signature_help(t);
@@ -3916,7 +3916,7 @@ jsDocCommentAlignmentTest3(/*47*/"hello",/*48*/1, /*49*/2);
 /**/
 class NoQuickInfoClass {
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_signature_help(t);
@@ -4137,7 +4137,7 @@ jsDocCommentAlignmentTest3(/*47*/"hello",/*48*/1, /*49*/2);
 /**/
 class NoQuickInfoClass {
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, Some(lsproto::ClientCapabilities { vs_supports_visual_studio_extensions: Some(true), ..Default::default() }), content);
+        let (mut f, done) = fourslash::new_fourslash(t, Some(lsproto::ClientCapabilities { vs_supports_visual_studio_extensions: Some(true), ..Default::default() }), content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_signature_help(t);
@@ -4174,7 +4174,7 @@ fooWithParameters(/*10*/"a",/*11*/10);
 */
 declare function fn(a: string);
 fn(/*12*/"hello");"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_signature_help(t);
@@ -4211,7 +4211,7 @@ fooWithParameters(/*10*/"a",/*11*/10);
 */
 declare function fn(a: string);
 fn(/*12*/"hello");"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, Some(lsproto::ClientCapabilities { vs_supports_visual_studio_extensions: Some(true), ..Default::default() }), content);
+        let (mut f, done) = fourslash::new_fourslash(t, Some(lsproto::ClientCapabilities { vs_supports_visual_studio_extensions: Some(true), ..Default::default() }), content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_signature_help(t);
@@ -4257,7 +4257,7 @@ var assigned = /**
   return s.length;
 }
 assigned(/*18*/"hey");"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_signature_help(t);
@@ -4303,7 +4303,7 @@ var assigned = /**
   return s.length;
 }
 assigned(/*18*/"hey");"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, Some(lsproto::ClientCapabilities { vs_supports_visual_studio_extensions: Some(true), ..Default::default() }), content);
+        let (mut f, done) = fourslash::new_fourslash(t, Some(lsproto::ClientCapabilities { vs_supports_visual_studio_extensions: Some(true), ..Default::default() }), content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_signature_help(t);
@@ -4325,7 +4325,7 @@ pub fn test_signature_help_construct_expression(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"class sampleCls { constructor(str: string, num: number) { } }
 var x = new sampleCls(/*1*/"", /*2*/5);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -4357,7 +4357,7 @@ pub fn test_signature_help_constructor_call_param_properties(t: &T) {
     }
 }
 var a = new Circle(/**/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_signature_help(t);
@@ -4386,7 +4386,7 @@ pub fn test_signature_help_constructor_call_param_properties_vs(t: &T) {
     }
 }
 var a = new Circle(/**/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, Some(lsproto::ClientCapabilities { vs_supports_visual_studio_extensions: Some(true), ..Default::default() }), content);
+        let (mut f, done) = fourslash::new_fourslash(t, Some(lsproto::ClientCapabilities { vs_supports_visual_studio_extensions: Some(true), ..Default::default() }), content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_signature_help(t);
@@ -4418,7 +4418,7 @@ class B3 extends B2 {
         super(/*indirectSuperCall*/3);
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "indirectSuperCall");
@@ -4442,7 +4442,7 @@ pub fn test_signature_help_constructor_overload(t: &T) {
         let content: &str = r#"class clsOverload { constructor(); constructor(test: string); constructor(test?: string) { } }
 var x = new clsOverload(/*1*/);
 var y = new clsOverload(/*2*/'');"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -4487,7 +4487,7 @@ type Cb = () => void;
 const cb: Cb = (/*contextualTypeAlias*/)
 
 const cb2: () => void = (/*contextualFunctionType*/)"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "takesObj0");
@@ -4539,7 +4539,7 @@ let obj: Obj = {
     foo(/*constructOnly*/) {}
 }
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "constructOnly");
@@ -4566,7 +4566,7 @@ pub fn test_signature_help_empty_list(t: &T) {
 Foo(/*1*/);
 function Bar<T>(arg1: string, arg2: string) { }
 Bar</*2*/>();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -4596,7 +4596,7 @@ pub fn test_signature_help_expanded_rest_tuples(t: &T) {
 complex(/*1*/);
 complex("ok", "ok", /*2*/);
 complex("ok", "ok", e => void e, {}, /*3*/);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -4684,7 +4684,7 @@ logFruitTuple11("apple", { color: "red" }, /*26*/);
 function withPair(...[first, second]: [number, named: string]) {}
 withPair(/*27*/);
 withPair(101, /*28*/);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_signature_help(t);
@@ -4767,7 +4767,7 @@ logFruitTuple11("apple", { color: "red" }, /*26*/);
 function withPair(...[first, second]: [number, named: string]) {}
 withPair(/*27*/);
 withPair(101, /*28*/);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, Some(lsproto::ClientCapabilities { vs_supports_visual_studio_extensions: Some(true), ..Default::default() }), content);
+        let (mut f, done) = fourslash::new_fourslash(t, Some(lsproto::ClientCapabilities { vs_supports_visual_studio_extensions: Some(true), ..Default::default() }), content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_signature_help(t);
@@ -4794,7 +4794,7 @@ pub fn test_signature_help_expanded_rest_unlabeled_tuples(t: &T) {
 complex(/*1*/);
 complex("ok", "ok", /*2*/);
 complex("ok", "ok", e => void e, {}, /*3*/);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -4828,7 +4828,7 @@ foo(123/*1*/,)
 foo(""/*2*/, ""/*3*/)
 foo(123/*4*/, ""/*5*/, )
 foo(123/*6*/, ""/*7*/, ""/*8*/)"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -4879,7 +4879,7 @@ j(/*7*/);
 g<number>(/*8*/);
 h<number>(/*9*/);
 j<number>(/*10*/);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -4926,7 +4926,7 @@ new ViewJayEss({
         sayHello/**/
     }
 });"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -4957,7 +4957,7 @@ export const Foo: () => Thing = null as any;
 import {Foo} from "./exporter"
 function f(p = Foo()): void {}
 f(/*1*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -4988,7 +4988,7 @@ const o: Obj = {
     return {};
   }
 };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -5020,7 +5020,7 @@ export function func<T extends SomeType>(param: T, other: T): void;
 // @Filename: /usage.ts
 import { func } from "foo";
 func({/*1*/});"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -5057,7 +5057,7 @@ class C2 extends B2 {
         super(/*2*/ // sig help here?
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -5085,7 +5085,7 @@ function functionOverload(test: string);
 function functionOverload(test?: string) { }
 functionOverload(/*functionOverload1*/);
 functionOverload(""/*functionOverload2*/);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "functionOverload1");
@@ -5111,7 +5111,7 @@ pub fn test_signature_help_function_parameter(t: &T) {
         let content: &str = r#"function parameterFunction(callback: (a: number, b: string) => void) {
     callback(/*parameterFunction1*/5, /*parameterFunction2*/"");
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "parameterFunction1");
@@ -5137,7 +5137,7 @@ pub fn test_signature_help_implicit_constructor(t: &T) {
         let content: &str = r#"class ImplicitConstructor {
 }
 var implicitConstructor = new ImplicitConstructor(/**/);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -5165,7 +5165,7 @@ export = abs;
 // @Filename: /a.js
 import * as abs from "abs";
 abs.default/**/;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -5190,7 +5190,7 @@ pub fn test_signature_help_in_adjacent_block_body(t: &T) {
         let content: &str = r#"declare function foo(...args);
 
 foo(() => {/*1*/}/*2*/)"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -5217,7 +5217,7 @@ pub fn test_signature_help_in_callback(t: &T) {
 forEach(/*1*/() => {
     /*2*/
 });"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -5242,7 +5242,7 @@ pub fn test_signature_help_in_complete_generics_call(t: &T) {
         let content: &str = r#"function foo<T>(x: number, callback: (x: T) => number) {
 }
 foo(/*1*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -5267,7 +5267,7 @@ pub fn test_signature_help_in_function_call(t: &T) {
 items.forEach(item => {
     for (/**/
 });"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_no_signature_help_for_markers(t, &[""]);
@@ -5293,7 +5293,7 @@ declare function fn(x: string, y: number);
 declare function fn(x: string);
 // @Filename: signatureHelpInFunctionCallOnFunctionDeclarationInMultipleFiles_file2.ts
 fn(/*1*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -5316,7 +5316,7 @@ pub fn test_signature_help_in_parenthetical(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"class base { constructor (public n: number, public y: string) { } }
 (new base(/**/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -5350,7 +5350,7 @@ type _Reverse<Source extends any[], Result extends any[] = []> = {
 }[Source extends [] ? 1 : 0];
 
 type Foo = Reverse<[0,/**/]>;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");

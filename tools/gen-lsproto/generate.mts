@@ -2526,7 +2526,7 @@ function generateCode() {
         }
         writeLine("");
         writeLine("    fn to_json(&self) -> Value {");
-        writeLine(`        let mut w = ObjectWriter::new(${fields.length});`);
+        writeLine(`        let ${fields.length === 0 ? "" : "mut "}w = ObjectWriter::new(${fields.length});`);
         for (const f of fields) {
             const prop = f.prop!;
             const useOmitzero = prop.optional || prop.omitzeroValue;

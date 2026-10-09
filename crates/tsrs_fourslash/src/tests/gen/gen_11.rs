@@ -21,7 +21,7 @@ function f({ /*1*/property1: p1 }: I,
 
     return /*3*/property1 + 1;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["0", "1", "2", "3"]);
@@ -49,7 +49,7 @@ pub fn test_find_all_refs_object_binding_element_property_name05(t: &T) {
 function f({ /**/property1: p }, { property1 }) {
     let x = property1;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &[""]);
@@ -84,7 +84,7 @@ for (var { /*3*/property1: p1 } of elems) {
 var p2;
 for ({ /*4*/property1 : p2 } of elems) {
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["0", "1", "3", "4", "2"]);
@@ -107,7 +107,7 @@ pub fn test_find_all_refs_object_binding_element_property_name07(t: &T) {
         let content: &str = r#"let p, b;
 
 p, [{ /*1*/a: p, b }] = [{ a: 10, b: true }];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1"]);
@@ -134,7 +134,7 @@ pub fn test_find_all_refs_object_binding_element_property_name10(t: &T) {
 
 function f (/*2*/{ /*3*/next: { /*4*/next: x} }: Recursive) {
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3", "4"]);
@@ -170,7 +170,7 @@ const b = new B("b");
 const c = new C();
 const d = new D("d");
 const e = new E();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_no_errors(t);
@@ -207,7 +207,7 @@ const a = new A("a");
 const b = new B();
 const c = new C();
 const d = new D();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_no_errors(t);
@@ -243,7 +243,7 @@ export { B as B1 } from "./f";
 import B, { B1 } from "./a";
 const d = new B("b");
 const d1 = new B1("b1");"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_no_errors(t);
@@ -268,7 +268,7 @@ pub fn test_find_all_refs_of_constructor_with_modifier(t: &T) {
     public /*0*/constructor() {}
 }
 var x = new X();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["0"]);
@@ -299,7 +299,7 @@ class C {
     @/*6*/decorator
     method() {}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5", "6"]);
@@ -340,7 +340,7 @@ import Second = require("./findAllRefsOnDefinition-import");
 var second = new Second.Test()
 second./*3*/start();
 second.stop();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
@@ -372,7 +372,7 @@ import Second = require("./findAllRefsOnDefinition2-import");
 
 var start: Second.Test./*3*/start;
 var stop: Second.Test.stop;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
@@ -401,7 +401,7 @@ import { /*1*/Class } from "./a";
 var c = new /*2*/Class();
 //@Filename: c.ts
 export { /*3*/Class } from "./a";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["0", "1", "2"]);
@@ -428,7 +428,7 @@ pub fn test_find_all_refs_on_import_aliases2(t: &T) {
 var c = new /*c2_1*/[|C2|]();
 //@Filename: c.ts
 [|export { /*class2*/[|{| "contextRangeIndex": 6 |}Class|] as /*c3*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 6 |}C3|] } from "./a";|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["class0", "class1", "class2", "c2_0", "c2_1", "c3"]);
@@ -457,7 +457,7 @@ pub fn test_find_all_refs_on_private_parameter_property1(t: &T) {
         return this./*3*/z;
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
@@ -483,7 +483,7 @@ pub fn test_find_all_refs_parameter_property_declaration1(t: &T) {
         this.privateParam += 10;
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1"]);
@@ -509,7 +509,7 @@ pub fn test_find_all_refs_parameter_property_declaration2(t: &T) {
         this./*2*/publicParam += 10;
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["0", "1", "2"]);
@@ -535,7 +535,7 @@ pub fn test_find_all_refs_parameter_property_declaration3(t: &T) {
         this./*2*/protectedParam += 10;
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["0", "1", "2"]);
@@ -565,7 +565,7 @@ class D extends C {
 		super(/*3*/x);
 	}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["0", "1", "2", "3"]);
@@ -606,7 +606,7 @@ class C2 {
 }
 new C2(1).[|x|];
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &[]);
@@ -639,7 +639,7 @@ log(/*z2*/[|z|]);
 declare function log(s: string | number): void;
 [|import { /*q2*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 9 |}q|] } from "./file1";|]
 log(/*q3*/[|q|] + 1);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_no_errors(t);
@@ -670,7 +670,7 @@ pub fn test_find_all_refs_primitive_js_doc(t: &T) {
  * @returns {/*2*/number}
  */
 function f(n: /*3*/number): /*4*/number {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3", "4"]);
@@ -710,7 +710,7 @@ class E {
         this./*10*/#foo();
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]);
@@ -748,7 +748,7 @@ class E {
         this./*4*/#foo();
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3", "4"]);
@@ -787,7 +787,7 @@ class E {
         this./*5*/#foo = 20;
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5"]);
@@ -823,7 +823,7 @@ class C<T extends IFoo> {
 var x: IFoo = {
     a: "ss"
 };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1"]);
@@ -845,7 +845,7 @@ pub fn test_find_all_refs_re_export_broken(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"// @Filename: /a.ts
 /*1*/export { /*2*/x };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2"]);
@@ -867,7 +867,7 @@ pub fn test_find_all_refs_re_export_broken2(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"// @Filename: /a.ts
 /*1*/export { /*2*/x } from "nonsense";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2"]);
@@ -896,7 +896,7 @@ pub fn test_find_all_refs_re_export_local(t: &T) {
 // @Filename: /b.ts
 [|import { /*bx0*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 7 |}x|], /*by0*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 7 |}y|] } from "./a";|]
 /*bx1*/[|x|]; /*by1*/[|y|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_no_errors(t);
@@ -932,7 +932,7 @@ pub fn test_find_all_refs_re_export_right_name_wrong_symbol(t: &T) {
 /*cUse*/[|x|];
 // @Filename: /d.ts
 [|import { /*d*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 9 |}x|] } from "./c";|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_no_errors(t);
@@ -964,7 +964,7 @@ export function /*0*/foo(): void {}
 export * from "./a";
 // @Filename: /c.ts
 import { /*1*/foo } from "./b";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_no_errors(t);
@@ -992,7 +992,7 @@ export * as /*leafDef*/Leaf from './leafModule';
 // @Filename: /importing.ts
  import { /*leafImportDef*/Leaf } from './exporting';
  /*leafUse*/[|Leaf|]./*helloUse*/[|hello|]()"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_no_errors(t);
@@ -1017,7 +1017,7 @@ pub fn test_find_all_refs_re_exports2(t: &T) {
 export function /*1*/foo(): void {}
 // @Filename: /b.ts
 import { foo as oof } from "./a";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_no_errors(t);
@@ -1048,7 +1048,7 @@ pub fn test_find_all_refs_re_exports_use_in_import_type(t: &T) {
 export type fullType = /*foo3*/[|foo|]./*full1*/[|Full|];
 type namespaceImport = typeof import('./foo/types');
 type fullType2 = import('./foo/types')./*foo4*/[|foo|]./*full2*/[|Full|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_no_errors(t);
@@ -1083,7 +1083,7 @@ interface B extends A {
 }
 const a: A = { /*2*/x: 0 };
 const b: B = { /*3*/x: 0 };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["0", "1", "2", "3"]);
@@ -1108,7 +1108,7 @@ pub fn test_find_all_refs_rename_import_with_same_name(t: &T) {
 //@Filename: /b.ts
 [|import { /*1*/[|{| "contextRangeIndex": 2 |}x|] as /*2*/[|{| "isWriteAccess": true, "isDefinition": true, "contextRangeIndex": 2 |}x|] } from "./a";|]
 /*3*/[|x|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_no_errors(t);
@@ -1134,7 +1134,7 @@ pub fn test_find_all_refs_root_symbols(t: &T) {
 interface J { /*1*/x: {}; }
 declare const o: (I | J) & { /*2*/x: string };
 o./*3*/x;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["0", "1", "2", "3"]);
@@ -1177,7 +1177,7 @@ class C {
 // These are *not* real uses of the 'this' keyword, they are identifiers.
 const x = { /*10*/this: 0 }
 x./*11*/this;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"]);
@@ -1206,7 +1206,7 @@ pub fn test_find_all_refs_this_keyword_multiple_files(t: &T) {
  ((x = /*5*/this, y) => /*6*/this)(/*7*/this, /*8*/this);
  // different 'this'
  function f(this) { return this; }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5", "6", "7", "8"]);
@@ -1235,7 +1235,7 @@ export type JSX = {};
 // @Filename: /index.ts
 import type {JSX} from '/*m*/react';
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["m"]);
@@ -1257,7 +1257,7 @@ pub fn test_find_all_refs_type_parameter_in_merged_interface(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"interface I</*1*/T> { a: /*2*/T }
 interface I</*3*/T> { b: /*4*/T }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3", "4"]);
@@ -1287,7 +1287,7 @@ pub fn test_find_all_refs_typedef(t: &T) {
 /** @type {I} */
 let x;
 x./*3*/p;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
@@ -1315,7 +1315,7 @@ const dummy = 0;
 // @Filename: /b.js
 /** @type {import('./a')./*3*/Foo} */
 const x = 0;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
@@ -1339,7 +1339,7 @@ pub fn test_find_all_refs_typeof_import(t: &T) {
 /*1*/export const /*2*/x = 0;
 declare const a: typeof import("./a");
 a./*3*/x;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
@@ -1372,7 +1372,7 @@ if (t./*t3*/type === "a") {
 } else {
     t./*t5*/type;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["t0", "t1", "t3", "t4", "t5", "t2", "p0", "p1", "p2"]);
@@ -1398,7 +1398,7 @@ let c: /*a2*/Bar<string, number>;
 let d: /*b0*/Bar./*c0*/X;
 let e: /*b1*/Bar./*c1*/X<string>;
 let f: /*b2*/Bar./*d0*/X./*e0*/Y;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["a0", "a1", "a2", "b0", "b1", "b2", "c0", "c1", "d0", "e0"]);
@@ -1426,7 +1426,7 @@ let c: /*a3*/Bar<string, number>;
 let d: /*a4*/Bar./*b0*/X;
 let e: /*a5*/Bar./*b1*/X<string>;
 let f: /*a6*/Bar./*c0*/X./*d0*/Y;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["a0", "a1", "a2", "a3", "a4", "a5", "a6", "b0", "b1", "c0", "d0"]);
@@ -1454,7 +1454,7 @@ let c: /*a3*/Bar<string, number>;
 let d: /*a4*/Bar./*b0*/X;
 let e: /*a5*/Bar./*b1*/X<string>;
 let f: /*a6*/Bar./*c0*/X./*d0*/Y;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["a0", "a1", "a2", "a3", "a4", "a5", "a6", "b0", "b1", "c0", "d0"]);
@@ -1480,7 +1480,7 @@ pub fn test_find_all_refs_with_leading_underscore_names1(t: &T) {
 
 var x: Foo;
 x./*3*/_bar;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
@@ -1506,7 +1506,7 @@ pub fn test_find_all_refs_with_leading_underscore_names2(t: &T) {
 
 var x: Foo;
 x./*3*/__bar;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
@@ -1532,7 +1532,7 @@ pub fn test_find_all_refs_with_leading_underscore_names3(t: &T) {
 
 var x: Foo;
 x./*3*/___bar;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
@@ -1558,7 +1558,7 @@ pub fn test_find_all_refs_with_leading_underscore_names4(t: &T) {
 
 var x: Foo;
 x./*3*/____bar;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
@@ -1590,7 +1590,7 @@ x._bar;
 x.__bar;
 x./*3*/___bar;
 x.____bar;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
@@ -1622,7 +1622,7 @@ x._bar;
 x./*3*/__bar;
 x.___bar;
 x.____bar;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
@@ -1645,7 +1645,7 @@ pub fn test_find_all_refs_with_leading_underscore_names7(t: &T) {
         let content: &str = r#"/*1*/function /*2*/__foo() {
     /*3*/__foo();
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
@@ -1668,7 +1668,7 @@ pub fn test_find_all_refs_with_leading_underscore_names8(t: &T) {
         let content: &str = r#"(/*1*/function /*2*/__foo() {
     /*3*/__foo();
 })"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
@@ -1691,7 +1691,7 @@ pub fn test_find_all_refs_with_leading_underscore_names9(t: &T) {
         let content: &str = r#"(/*1*/function /*2*/___foo() {
     /*3*/___foo();
 })"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
@@ -1717,7 +1717,7 @@ var /*0*/name = "Foo";
 var obj = { /*1*/name };
 var obj1 = { /*2*/name: /*3*/name };
 obj./*4*/name;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["0", "3", "1", "2", "4"]);
@@ -1745,7 +1745,7 @@ namespace M {
    export var y = { /*2*/dx, z };
 }
 M.y./*3*/dx;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["0", "1", "2", "3"]);
@@ -1782,7 +1782,7 @@ o[`num`] = 3;
 
 o['num'];
 o[`num`];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1"]);
@@ -1810,7 +1810,7 @@ pub fn test_find_references_across_multiple_projects(t: &T) {
 //@Filename: c.ts
 /// <reference path="a.ts" />
 /*4*/x++;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3", "4"]);
@@ -1838,7 +1838,7 @@ pub fn test_find_references_across_multiple_projects_vs(t: &T) {
 //@Filename: c.ts
 /// <reference path="a.ts" />
 /*4*/x++;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, Some(lsproto::ClientCapabilities { vs_supports_visual_studio_extensions: Some(true), ..Default::default() }), content);
+        let (mut f, done) = fourslash::new_fourslash(t, Some(lsproto::ClientCapabilities { vs_supports_visual_studio_extensions: Some(true), ..Default::default() }), content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_vs_find_all_references(t, &["1", "2", "3", "4"]);
@@ -1868,7 +1868,7 @@ interface A {
 function foo(x: A) {
     x./*2*/foo
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2"]);
@@ -1918,7 +1918,7 @@ interface BottomSheetModalProps {
 // @Filename: src/index.ts
 import { useQuery } from "use-query";
 const { /*1*/data } = useQuery();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1"]);
@@ -1964,7 +1964,7 @@ interface BottomSheetModalProps {
 // @Filename: src/index.ts
 import { useQuery } from "use-query";
 const { /*1*/data } = useQuery();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1"]);
@@ -1993,7 +1993,7 @@ let myOption: Options = "option 1";
 
 some/*4*/Label:
 break someLabel;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3", "4"]);
@@ -2022,7 +2022,7 @@ function displaySubreddit(subreddit: string) {
 // @Filename: RedditSubmission.ts
 export const /*2*/SubmissionComp = (submission: SubmissionProps) =>
     <div style={{ fontFamily: "sans-serif" }}></div>;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2"]);
@@ -2045,7 +2045,7 @@ pub fn test_find_references_jsx_tag_name2(t: &T) {
         let content: &str = r#"// @Filename: index.tsx
 /*1*/const /*2*/obj = {Component: () => <div/>};
 const element = </*3*/obj.Component/>;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3"]);
@@ -2083,7 +2083,7 @@ namespace JSX {
 const x = [|<[|/*7*/Comp|]>
     Content
 </[|/*8*/Comp|]>|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1", "2", "3", "4", "5", "6", "7", "8"]);
@@ -2110,7 +2110,7 @@ pub fn test_find_references_see_tag_in_ts(t: &T) {
 declare const stuff: { quantity: number };
 /** @see {doStuffWithStuff} */
 if (stuff.quantity) {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_find_all_references(t, &["1"]);
@@ -2145,7 +2145,7 @@ console.log(inm)
 export interface INodeModules {
     a?: number
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &[]);
@@ -2174,7 +2174,7 @@ class Feh {
     }
     private _finishedPromiseCallback: (arg: { error?: string }) => void = () => {};
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &[]);
@@ -2205,7 +2205,7 @@ interface J {
 declare var iany: IAny
 declare var j: J
 iany/**/ = j"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &[]);
@@ -2228,7 +2228,7 @@ pub fn test_fixing_type_parameters_quick_info(t: &T) {
         let content: &str = r#"// @strict: false
 declare function f<T>(x: T, y: (p: T) => T, z: (p: T) => T): T;
 var /*1*/result = /*2*/f(0, /*3*/x => null, /*4*/x => x.blahblah);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_quick_info_at(t, "1", "var result: number", "");
@@ -2260,7 +2260,7 @@ const Components =[| {
 export const Test = () =>[| {
   return [|<Components.Nested></Components.Nested>|];
 }|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_outlining_spans(t, &[]);
@@ -2293,9 +2293,9 @@ pub fn test_folding_range_line_folding_only(t: &T) {
 export function use<T>(ctx: any): T | undefined {
   //
 }"#;
-        let mut ptr_true = true;
-        let mut capabilities = Some(lsproto::ClientCapabilities { text_document: Some(lsproto::TextDocumentClientCapabilities { folding_range: Some(lsproto::FoldingRangeClientCapabilities { line_folding_only: Some(ptr_true), folding_range: Some(lsproto::ClientFoldingRangeOptions { collapsed_text: Some(ptr_true) }), ..Default::default() }), ..Default::default() }), ..Default::default() });
-        let (mut f, mut done) = fourslash::new_fourslash(t, capabilities.clone(), content);
+        let ptr_true = true;
+        let capabilities = Some(lsproto::ClientCapabilities { text_document: Some(lsproto::TextDocumentClientCapabilities { folding_range: Some(lsproto::FoldingRangeClientCapabilities { line_folding_only: Some(ptr_true), folding_range: Some(lsproto::ClientFoldingRangeOptions { collapsed_text: Some(ptr_true) }), ..Default::default() }), ..Default::default() }), ..Default::default() });
+        let (mut f, done) = fourslash::new_fourslash(t, capabilities.clone(), content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_folding_range_lines(t, &[fourslash::FoldingRangeLineExpected { start_line: 0, end_line: 1 }, fourslash::FoldingRangeLineExpected { start_line: 2, end_line: 7 }, fourslash::FoldingRangeLineExpected { start_line: 5, end_line: 6 }, fourslash::FoldingRangeLineExpected { start_line: 10, end_line: 11 }]);
@@ -2323,9 +2323,9 @@ const y = 2;
 const z = 3;
 // #endregion
 // #endregion"#;
-        let mut ptr_true = true;
-        let mut capabilities = Some(lsproto::ClientCapabilities { text_document: Some(lsproto::TextDocumentClientCapabilities { folding_range: Some(lsproto::FoldingRangeClientCapabilities { line_folding_only: Some(ptr_true), folding_range: Some(lsproto::ClientFoldingRangeOptions { collapsed_text: Some(ptr_true) }), ..Default::default() }), ..Default::default() }), ..Default::default() });
-        let (mut f, mut done) = fourslash::new_fourslash(t, capabilities.clone(), content);
+        let ptr_true = true;
+        let capabilities = Some(lsproto::ClientCapabilities { text_document: Some(lsproto::TextDocumentClientCapabilities { folding_range: Some(lsproto::FoldingRangeClientCapabilities { line_folding_only: Some(ptr_true), folding_range: Some(lsproto::ClientFoldingRangeOptions { collapsed_text: Some(ptr_true) }), ..Default::default() }), ..Default::default() }), ..Default::default() });
+        let (mut f, done) = fourslash::new_fourslash(t, capabilities.clone(), content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_folding_range_lines(t, &[fourslash::FoldingRangeLineExpected { start_line: 0, end_line: 5 }, fourslash::FoldingRangeLineExpected { start_line: 2, end_line: 3 }, fourslash::FoldingRangeLineExpected { start_line: 7, end_line: 12 }, fourslash::FoldingRangeLineExpected { start_line: 9, end_line: 11 }]);
@@ -2355,7 +2355,7 @@ function g()
 { function h() {
 return 0;
 }}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -2386,7 +2386,7 @@ pub fn test_format01(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"// @lib: es5
 /**/namespace Default{var x= ( { } ) ;}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -2411,7 +2411,7 @@ pub fn test_format_after_multiline_comment(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"/*foo
 */"123123";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -2434,7 +2434,7 @@ pub fn test_format_after_object_literal(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = "/**/namespace Default{var x= ( { } ) ;}";
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -2457,7 +2457,7 @@ pub fn test_format_after_paste_in_string(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = "/*2*/const x = f('aa/*1*/a').x()";
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -2486,7 +2486,7 @@ pub fn test_format_after_whitespace(t: &T) {
     var bar;
     /*1*/
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -2515,7 +2515,7 @@ pub fn test_format_any_type_literal(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"function foo(x: { } /*objLit*/){
 /**/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -2559,7 +2559,7 @@ export let Things2 = [
         Burrito: ['burrito', 'carne asada', 'tinga de res', 'tinga de pollo'], /*8*/
         Pie: 'pie'
     }];/*9*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -2598,7 +2598,7 @@ pub fn test_format_array_or_object_literals_in_variable_list(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = "var v30 = [1, 2], v31, v32, v33 = [0], v34 = {'a': true}, v35;/**/";
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -2623,7 +2623,7 @@ pub fn test_format_async_class_method1(t: &T) {
         let content: &str = r#"class Foo {
     async     foo() {}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -2649,7 +2649,7 @@ pub fn test_format_async_class_method2(t: &T) {
         let content: &str = r#"class Foo {
     private    async     foo() {}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -2675,7 +2675,7 @@ pub fn test_format_async_computed_method(t: &T) {
         let content: &str = r#"class C {
     /*method*/async [0]() { }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -2700,7 +2700,7 @@ pub fn test_format_async_keyword(t: &T) {
         let content: &str = r#"/*1*/let x = async         () => 1;
 /*2*/let y = async() => 1;
 /*3*/let z = async    function   () { return 1; };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -2730,7 +2730,7 @@ pub fn test_format_bracket_in_switch_case(t: &T) {
 switch (x) {
     case[]:
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -2758,7 +2758,7 @@ pub fn test_format_colon_and_q_mark(t: &T) {
     constructor (n?: number, m = 5, o?: string) { }/*2*/
     x:number = 1?2:3;/*3*/
 }/*4*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -2797,7 +2797,7 @@ wow(
     4
 // wua/*argument2*/
 );"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -2834,7 +2834,7 @@ v = 3;
 v = 2;
 >>>>>>> Branch - a
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -2870,7 +2870,7 @@ v = 1;
 v = 2;
 >>>>>>> Branch - a
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -2900,7 +2900,7 @@ pub fn test_format_control_flow_constructs(t: &T) {
         let content: &str = r#"if (true)/**/
 {     
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -2924,7 +2924,7 @@ pub fn test_format_debugger_statement(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"if(false){debugger;}
   if    (   false   )   {    debugger  ;   }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -2948,7 +2948,7 @@ use crate::tests::prelude::*;
 pub fn test_format_document_grammar_error_initializer(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let mut content = r#"// @Filename: /a.ts
+        let content = r#"// @Filename: /a.ts
 const f = () => {
   const v = x as A & {
     a: { b: C
@@ -2959,7 +2959,7 @@ const f = () => {
   const n: T[] =
 }
 "#.to_string();
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content.as_str());
+        let (mut f, done) = fourslash::new_fourslash(t, None, content.as_str());
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "/a.ts");
@@ -2982,7 +2982,7 @@ pub fn test_format_document_no_crash_jsx_attr_unterminated_string(t: &T) {
         let content: &str = r#"// @Filename: /a.tsx
 const x = <HangupButton customClass = 'ha
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -3007,7 +3007,7 @@ pub fn test_format_document_no_crash_jsx_namespaced_name1(t: &T) {
         let content: &str = r#"// @Filename: /a.tsx
 const x = <foo:bar />;
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -3032,7 +3032,7 @@ pub fn test_format_document_no_crash_jsx_namespaced_name2(t: &T) {
         let content: &str = r#"// @Filename: /a.tsx
 const x = <A my-ns:attr="val" />;
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -3056,7 +3056,7 @@ pub fn test_format_document_no_crash_leading_whitespace1(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#" 
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -3078,7 +3078,7 @@ pub fn test_format_document_no_crash_leading_whitespace2(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#" 
 ;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -3100,7 +3100,7 @@ pub fn test_format_document_no_crash_short_last_line(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"type X = {
 	b}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -3130,7 +3130,7 @@ function b(){
     }     
 }     
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             let mut opts233 = f.get_options();
@@ -3175,7 +3175,7 @@ function f() {
      */
     var multiline;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -3230,7 +3230,7 @@ while (true) {
 // 5 above  
    
    "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -3278,7 +3278,7 @@ pub fn test_format_document_zero_tab_size(t: &T) {
         var x = 1;
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             let mut opts = f.get_options();
@@ -3313,7 +3313,7 @@ pub fn test_format_dot_after_number(t: &T) {
 1+ 2.0 .toString() +3/*3*/
 1+ (2) .toString() +3/*4*/
 1+ 2_000 .toString() +3/*5*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -3344,7 +3344,7 @@ pub fn test_format_empty_block(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = "{}";
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_eof(t);
@@ -3369,7 +3369,7 @@ pub fn test_format_empty_param_list(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = "function f( f: function){/*1*/";
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -3392,7 +3392,7 @@ pub fn test_format_export_assignment(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = "export='foo';";
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -3422,7 +3422,7 @@ try {
 }
 catch (e) {
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             let mut opts187 = f.get_options();
@@ -3460,7 +3460,7 @@ pub fn test_format_if_with_empty_condition(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"if () {
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             let mut opts123 = f.get_options();
@@ -3489,7 +3489,7 @@ pub fn test_format_implicit_module(t: &T) {
         let content: &str = r#"       export class A {
 
        }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -3519,7 +3519,7 @@ pub fn test_format_import_declaration(t: &T) {
 import bar  =    Foo;/*3*/
 
 import bar2=Foo;/*4*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -3554,7 +3554,7 @@ pub fn test_format_in_try_catch_finally(t: &T) {
 catch (e) 
 {
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -3580,7 +3580,7 @@ pub fn test_format_in_tsx_files(t: &T) {
 interface I<T1, T2> {
     next: I</* */
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -3601,7 +3601,7 @@ pub fn test_format_insert_space_after_close_brace_before_close_bracket(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = "[{}]";
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             let mut opts122 = f.get_options();
@@ -3641,7 +3641,7 @@ const ResourceCard: React.FC<Props> = (props) => {
 
 export default ResourceCard
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -3688,7 +3688,7 @@ const FormCheck: DynamicRefForwardingComponent<'input', FormCheckProps> =
 
 FormCheck.displayName = 'FormCheck';
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -3725,7 +3725,7 @@ const x = (
 <a-b.c></a-b.c>
 </a-b.c>
 );"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -3752,7 +3752,7 @@ pub fn test_format_jsx_with_keyword_in_identifier(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"// @Filename: /a.tsx
 <div module-layout=""></div>"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -3789,7 +3789,7 @@ type Complexed =
     Foo &
     Bar |
     Baz;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -3842,7 +3842,7 @@ class Foo {
 /*12*/          12*/
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -3890,7 +3890,7 @@ pub fn test_format_multiline_import_brace(t: &T) {
 	basename,
 	extname, joinPath } from '../base/resources.js';
 import { URI } from '../base/uri.js';"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -3950,7 +3950,7 @@ const f = {
 } satisfies {
   [index: string]: string
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -4025,7 +4025,7 @@ pub fn test_format_multiple_function_arguments(t: &T) {
        prop2: 6
      }
  );"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -4070,7 +4070,7 @@ pub fn test_format_nested_class_with_open_brace_on_new_lines(t: &T) {
     class B {
         /*1*/
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             let mut opts168 = f.get_options();
@@ -4123,7 +4123,7 @@ const a6 = `
     text ${ 1 }
     text
 `;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             let mut opts429 = f.get_options();
@@ -4167,7 +4167,7 @@ pub fn test_format_no_space_before_close_brace(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = "foo(1, /* comment */    );";
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -4189,7 +4189,7 @@ pub fn test_format_no_space_before_close_brace1(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = "new Foo(1, /* comment */    );";
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -4211,7 +4211,7 @@ pub fn test_format_no_space_before_close_brace2(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = "new Foo(1,     );";
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -4234,7 +4234,7 @@ pub fn test_format_no_space_before_close_brace3(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"foo( 
  1, /* comment */    );"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -4258,7 +4258,7 @@ pub fn test_format_no_space_before_close_brace4(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"new Foo(1
 , /* comment */    );"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -4282,7 +4282,7 @@ pub fn test_format_no_space_before_close_brace5(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"new Foo(1, 
     /* comment */    );"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -4306,7 +4306,7 @@ pub fn test_format_no_space_before_close_brace6(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"new Foo(1, /* comment */  
   );"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -4331,7 +4331,7 @@ pub fn test_format_no_space_between_closing_paren_and_template_string(t: &T) {
         let content: &str = r#"foo() `abc`;
 bar()`def`;
 baz()`a${x}b`;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -4358,7 +4358,7 @@ pub fn test_format_object_binding_pattern(t: &T) {
 x,
 y,
 } = 0;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -4383,7 +4383,7 @@ pub fn test_format_object_binding_pattern_rest_element_with_property_name(t: &T)
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = "const { ...a: b } = {};";
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -4405,7 +4405,7 @@ pub fn test_format_on_enter_function_declaration(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = "/*0*/function listAPIFiles(path: string): string[] {/*1*/ }";
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -4431,7 +4431,7 @@ pub fn test_format_on_enter_in_comment(t: &T) {
         let content: &str = r#"   /**
     * /*1*/
     */"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -4459,7 +4459,7 @@ pub fn test_format_on_enter_open_brace_add_new_line(t: &T) {
         let content: &str = r#"if(true) {/*0*/}
 if(false)/*1*/{
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             let mut opts148 = f.get_options();
@@ -4498,7 +4498,7 @@ pub fn test_format_on_open_curly_brace_remove_new_line(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"if(true)
 /**/ }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             let mut opts124 = f.get_options();
@@ -4526,7 +4526,7 @@ pub fn test_format_on_semi_colon_after_break(t: &T) {
         let content: &str = r#"for (var a in b) {
 break/**/
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -4560,7 +4560,7 @@ pub fn test_format_parameter(t: &T) {
     )
 ) {
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -4590,7 +4590,7 @@ pub fn test_format_range_ending_after_comma_of_call(t: &T) {
     /*start*/"firstParameter",/*end*/
     "something else"
 );"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_selection(t, "start", "end");
@@ -4616,7 +4616,7 @@ pub fn test_format_remove_new_line_after_open_brace(t: &T) {
 if (true)
 {
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -4643,7 +4643,7 @@ pub fn test_format_remove_space_between_dot_dot_dot_and_type_name(t: &T) {
         let content: &str = r#"let a: [... any[]];
 let b: [...   number[]];
 let c: [...     string[]];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");
@@ -4670,7 +4670,7 @@ pub fn test_format_satisfies_expression(t: &T) {
 const foo1 = ["a"] satisfies Foo[];
 const foo2 = ["a"]satisfies Foo[];
 const foo3 = ["a"]  satisfies Foo[];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.format_document(t, "");

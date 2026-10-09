@@ -21,7 +21,7 @@ class C2 extends C1 {
 class C3 implements C2 {[| 
     |]f2(){}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, r#"f1(): void{
@@ -49,7 +49,7 @@ pub fn test_code_fix_class_implement_class_multiple_signatures1(t: &T) {
     method(a: string | number, b?: string | number): boolean | Function { return a + b as any; }
 }
 class C implements A {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'A'".to_string(), new_file_content: r#"class A {
@@ -85,7 +85,7 @@ pub fn test_code_fix_class_implement_class_multiple_signatures2(t: &T) {
     method(a: string | number, b?: string | number): boolean | Function { return a + b as any; }
 }
 class C implements A { }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'A'".to_string(), new_file_content: r#"class A {
@@ -128,7 +128,7 @@ abstract class A {
 }
 
 class C implements A {[| |]}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'A'".to_string(), new_file_content: r#"abstract class A {
@@ -168,7 +168,7 @@ class A {
     A: typeof A;
 }
 class D implements A {[| |]}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'A'".to_string(), new_file_content: r#"class A {
@@ -219,7 +219,7 @@ class C4 extends C3 implements I0, I4, I5 {
 
 interface I6 extends C4 {}
 class C5 implements I6 {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'I6'".to_string(), new_file_content: r#"// Referenced throughout the inheritance chain.
@@ -271,7 +271,7 @@ pub fn test_code_fix_class_implement_default_class(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"interface I { x: number; }
 export default class implements I {[| |]}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'I'".to_string(), new_file_content: r#"interface I { x: number; }
@@ -298,7 +298,7 @@ pub fn test_code_fix_class_implement_interface_all(t: &T) {
 interface J { j(): void; }
 class C implements I, J {}
 class D implements J {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_all(t, fourslash::VerifyCodeFixAllOptions { fix_id: "fixClassIncorrectlyImplementsInterface".to_string(), new_file_content: r#"interface I { i(): void; }
@@ -339,7 +339,7 @@ pub fn test_code_fix_class_implement_interface_array_tuple(t: &T) {
 }
 
 class C implements I {[| |]}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'I'".to_string(), new_file_content: r#"interface I {
@@ -388,7 +388,7 @@ export interface Base {
 import { Base } from './interface';
 
 export class C implements Base {[| |]}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_file(t, "index.ts");
@@ -431,7 +431,7 @@ export interface A {
 // @Filename: b.ts
 import { A } from "./a";
 export class B implements A {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_file(t, "b.ts");
@@ -479,7 +479,7 @@ export interface Base {
 import type { Base } from './interface';
 
 export class C implements Base {[| |]}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_file(t, "index.ts");
@@ -513,7 +513,7 @@ pub fn test_code_fix_class_implement_interface_call_signature(t: &T) {
     (x: number, b: string): number;
 }
 class C implements I {[| |]}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &[]);
@@ -560,7 +560,7 @@ interface IFoo4 {
 
 class Foo4 implements IFoo4 {
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_all(t, fourslash::VerifyCodeFixAllOptions { fix_id: "fixClassIncorrectlyImplementsInterface".to_string(), new_file_content: r#"interface IFoo1 {
@@ -620,7 +620,7 @@ pub fn test_code_fix_class_implement_interface_class_expression(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"interface I { x: number; }
 new class implements I {};"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'I'".to_string(), new_file_content: r#"interface I { x: number; }
@@ -659,7 +659,7 @@ namespace N {
         /**close-brace prefix*/ }
 /**close-brace prefix*/ }
 class C implements N.I {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'N.I'".to_string(), new_file_content: r#"namespace N {
@@ -707,7 +707,7 @@ pub fn test_code_fix_class_implement_interface_computed_property_literals(t: &T)
 }
 
 class C implements I {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'I'".to_string(), new_file_content: r#"interface I {
@@ -761,7 +761,7 @@ interface I<Species> {
     [Symbol.unscopables]: any;
 }
 class C implements I<number> {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'I<number>'".to_string(), new_file_content: r#"interface I<Species> {
@@ -829,7 +829,7 @@ pub fn test_code_fix_class_implement_interface_construct_signature(t: &T) {
     new (x: number, b: string);
 }
 class C implements I {[| |]}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &[]);
@@ -853,7 +853,7 @@ pub fn test_code_fix_class_implement_interface_constructor_name1(t: &T) {
     constructor: number;
 }
 class C implements I {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'I'".to_string(), new_file_content: r#"interface I {
@@ -882,7 +882,7 @@ pub fn test_code_fix_class_implement_interface_constructor_name2(t: &T) {
     constructor(): number;
 }
 class C implements I {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'I'".to_string(), new_file_content: r#"interface I {
@@ -917,7 +917,7 @@ interface I2 {
 }
 
 class C implements I1,I2 {[| |]}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_available(t, &["Implement interface 'I1'", "Implement interface 'I2'"]);
@@ -948,7 +948,7 @@ interface I2 {
 class C implements I1,I2 {
     x: number;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &[]);
@@ -975,7 +975,7 @@ interface I {
 }
 class C implements I {
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'I'".to_string(), new_file_content: r#"interface I {
@@ -1010,7 +1010,7 @@ interface I {
 class C implements I {[|
    |]constructor() { }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'I'".to_string(), new_file_content: r#"
@@ -1055,7 +1055,7 @@ export interface Disposable {
 export interface Service {
 	d: Disposable;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_file(t, "/src/test.ts");
@@ -1095,7 +1095,7 @@ interface I {
 }
 
 class C extends D implements I { }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'I'".to_string(), new_file_content: r#"class Base {
@@ -1141,7 +1141,7 @@ interface I1 {
 }
 
 class C1 implements N1.I1 {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'N1.I1'".to_string(), new_file_content: r#"namespace N1 {
@@ -1180,7 +1180,7 @@ pub fn test_code_fix_class_implement_interface_index_signatures_both(t: &T) {
 }
 
 class C implements I {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'I'".to_string(), new_file_content: r#"interface I {
@@ -1213,7 +1213,7 @@ pub fn test_code_fix_class_implement_interface_index_signatures_no_fix(t: &T) {
 }
 
 class C implements I {[|  |]}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &[]);
@@ -1237,7 +1237,7 @@ pub fn test_code_fix_class_implement_interface_index_signatures_number(t: &T) {
     [x: number]: I;
 }
 class C implements I {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'I'".to_string(), new_file_content: r#"interface I {
@@ -1267,7 +1267,7 @@ pub fn test_code_fix_class_implement_interface_index_signatures_string(t: &T) {
 }
 
 class C implements I<number> {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'I<number>'".to_string(), new_file_content: r#"interface I<X> {
@@ -1297,7 +1297,7 @@ pub fn test_code_fix_class_implement_interface_index_type(t: &T) {
     x: keyof X;
 }
 class C<Y> implements I<Y> {[| |]}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'I<Y>'".to_string(), new_file_content: r#"interface I<X> {
@@ -1328,7 +1328,7 @@ abstract class C2 {
 }
 interface I1 extends C1, C2 { }
 class C3 implements I1 {[| |]}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'I1'".to_string(), new_file_content: r#"abstract class C1 { }
@@ -1361,7 +1361,7 @@ pub fn test_code_fix_class_implement_interface_mapped_type1(t: &T) {
     x: { readonly [K in keyof X]: X[K] };
 }
 class C<Y> implements I<Y> {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'I<Y>'".to_string(), new_file_content: r#"interface I<X> {
@@ -1395,7 +1395,7 @@ type ListenActionable<E> = ListenerTemplate<E, "add*Listener" | "remove*Listener
 type ClickEventSupport = ListenActionable<{ Click: 'some-click-event-payload' }>;
 
 [|class C implements ClickEventSupport { }|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'ClickEventSupport'".to_string(), new_range_content: r#"class C implements ClickEventSupport {
@@ -1422,7 +1422,7 @@ pub fn test_code_fix_class_implement_interface_mapped_type_indirect_keys(t: &T) 
 type BaseKeys = keyof Base;
 type MappedIndirect = { [K in BaseKeys]: boolean };
 class MappedImpl implements MappedIndirect { }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'MappedIndirect'".to_string(), new_file_content: r#"type Base = { ax: number; ay: string };
@@ -1454,7 +1454,7 @@ interface I {
     foo(x: Either<Either<string>>): void;
 }
 class C implements I {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'I'".to_string(), new_file_content: r#"type Either<T> = { val: T } | Error;
@@ -1513,7 +1513,7 @@ interface I {
     23;
 }
 class C implements I {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'I'".to_string(), new_file_content: r#"/** asdf */
@@ -1587,7 +1587,7 @@ pub fn test_code_fix_class_implement_interface_member_type_alias(t: &T) {
         let content: &str = r#"type MyType = [string, number];
 interface I { x: MyType; test(a: MyType): void; }
 class C implements I {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'I'".to_string(), new_file_content: r#"type MyType = [string, number];
@@ -1619,7 +1619,7 @@ pub fn test_code_fix_class_implement_interface_method_this_and_self_reference(t:
 }
 
 class C implements I {[| |]}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'I'".to_string(), new_file_content: r#"interface I {
@@ -1653,7 +1653,7 @@ pub fn test_code_fix_class_implement_interface_method_type_predicate(t: &T) {
 }
 
 class C implements I {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'I'".to_string(), new_file_content: r#"interface I {
@@ -1695,7 +1695,7 @@ interface I2 {
 class C implements I1,I2 {[|
     |]y: number;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, r#"
@@ -1729,7 +1729,7 @@ interface I2 {
 class C implements I1,I2 {[|
     |]x: number;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, r#"
@@ -1760,7 +1760,7 @@ interface I2 {
 }
 
 class C implements I1,I2 {[| |]}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_available(t, &["Implement interface 'I1'", "Implement interface 'I2'"]);
@@ -1791,7 +1791,7 @@ interface I2 {
 class C implements I1,I2 {
     x: string;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &[]);
@@ -1821,7 +1821,7 @@ pub fn test_code_fix_class_implement_interface_multiple_members_and_punctuation(
 }
 
 class C1 implements I1 {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'I1'".to_string(), new_file_content: r#"interface I1 {
@@ -1870,7 +1870,7 @@ pub fn test_code_fix_class_implement_interface_multiple_signatures(t: &T) {
 }
 
 class C implements I {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'I'".to_string(), new_file_content: r#"interface I {
@@ -1910,7 +1910,7 @@ pub fn test_code_fix_class_implement_interface_multiple_signatures_rest1(t: &T) 
 }
 
 class C implements I {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'I'".to_string(), new_file_content: r#"interface I {
@@ -1950,7 +1950,7 @@ pub fn test_code_fix_class_implement_interface_multiple_signatures_rest2(t: &T) 
 }
 
 class C implements I {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'I'".to_string(), new_file_content: r#"interface I {
@@ -1990,7 +1990,7 @@ interface I1 {
     f1();
 }
 class C1 implements N1.I1 {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'N1.I1'".to_string(), new_file_content: r#"namespace N1 {
@@ -2022,7 +2022,7 @@ pub fn test_code_fix_class_implement_interface_no_body(t: &T) {
    m(): void
 }
 class C/*c*/ implements I"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_error_exists_before_marker(t, "c");
@@ -2059,7 +2059,7 @@ interface A<T extends number, U extends string> {
 
 class B implements A<999, 'ASuperLongStringASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueThatWeOnlyWeOnlyUsedToHitTheNoTruncation'> {
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'A<999, 'ASuperLongStringASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueASuperLongStringThatWeOnlyWeOnlyUsedToHitTheNoTruncationIssueThatWeOnlyWeOnlyUsedToHitTheNoTruncation'>'".to_string(), new_file_content: r#"type GeneratePrefixedNumbers<Limit extends number, Prefix extends string, Result extends number[] = []> = 
@@ -2113,7 +2113,7 @@ interface Foo<T extends string> {
     
 class Bar implements Foo<manyprops> {
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'Foo<manyprops>'".to_string(), new_file_content: r#"type props = "a" | "b" | "c" | "d" | "e" | "f" | "g" | "h" | "i" | "j" | "k" | "l" | "m" | "n" | "o" | "p" | "q" | "r" | "s" | "t" | "u" | "v" | "w" | "x" | "y" | "z";
@@ -2150,7 +2150,7 @@ pub fn test_code_fix_class_implement_interface_no_undefined_on_optional_paramete
 
 class Foo implements IFoo {
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'IFoo'".to_string(), new_file_content: r#"interface IFoo {
@@ -2185,7 +2185,7 @@ pub fn test_code_fix_class_implement_interface_object_literal(t: &T) {
     }
 }
 class Person implements IPerson { }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'IPerson'".to_string(), new_file_content: r#"interface IPerson {
@@ -2219,7 +2219,7 @@ interface IPerson {
     birthday?: string;
 }
 class Person implements IPerson {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'IPerson'".to_string(), new_file_content: r#"interface IPerson {
@@ -2254,7 +2254,7 @@ class Foo implements IFoo {
   private x = 1;
   constructor() { this.x = 2 }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'IFoo'".to_string(), new_file_content: r#"interface IFoo {
@@ -2293,7 +2293,7 @@ interface I {
     w: object;
 }
 class C implements I {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'I'".to_string(), new_file_content: r#"enum E { a,b,c }
@@ -2330,7 +2330,7 @@ pub fn test_code_fix_class_implement_interface_property_from_parent_constructor_
 }
 
 class B implements A {[| |]}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &[]);
@@ -2368,7 +2368,7 @@ pub fn test_code_fix_class_implement_interface_property_signatures(t: &T) {
     a10: { (b10: number, c10: string): number; [d10: string]: I };
 }
 class C implements I {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'I'".to_string(), new_file_content: r#"interface I {
@@ -2421,7 +2421,7 @@ pub fn test_code_fix_class_implement_interface_qualified_name(t: &T) {
     export interface I { y: I; }
 }
 class C1 implements N.I {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'N.I'".to_string(), new_file_content: r#"namespace N {
@@ -2457,7 +2457,7 @@ export interface I {
 // @filename: b.ts
 import { I } from "./a";
 class Foo implements I {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_file(t, "b.ts");
@@ -2499,7 +2499,7 @@ export interface I {
 // @filename: b.ts
 import { I } from './a';
 class Foo implements I {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_file(t, "b.ts");
@@ -2538,7 +2538,7 @@ pub fn test_code_fix_class_implement_interface_quote_preference_double(t: &T) {
     d: { e: "e"; };
 }
 class Foo implements I {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'I'".to_string(), new_file_content: r#"interface I {
@@ -2582,7 +2582,7 @@ pub fn test_code_fix_class_implement_interface_quote_preference_single(t: &T) {
     d: { e: 'e'; };
 }
 class Foo implements I {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'I'".to_string(), new_file_content: r#"interface I {
@@ -2630,7 +2630,7 @@ class C implements I {[|
    |]constructor(public x: number) { }
    y: number;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'I'".to_string(), new_file_content: r#"
@@ -2670,7 +2670,7 @@ export interface I {
 // @Filename: /C.ts
 import { I } from "./I";
 export class C implements I {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_file(t, "/C.ts");
@@ -2712,7 +2712,7 @@ interface Foo {
     request(): DeepPartial<{ nested1: Nested; test2: Nested }>;
 }
 [|export class C implements Foo {}|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'Foo'".to_string(), new_range_content: r#"export class C implements Foo {
@@ -2740,7 +2740,7 @@ pub fn test_code_fix_class_implement_interface_type_param_instantiate_deeply(t: 
     x: { y: T, z: T[] };
 }
 class C implements I<number> {[| |]}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'I<number>'".to_string(), new_file_content: r#"interface I<T> {
@@ -2770,7 +2770,7 @@ pub fn test_code_fix_class_implement_interface_type_param_instantiate_error(t: &
 }
 
 class C implements I<number> { }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_available(t, &["Implement interface 'I<number>'"]);
@@ -2792,7 +2792,7 @@ pub fn test_code_fix_class_implement_interface_type_param_instantiate_number(t: 
     let __defer1 = go::run(|| {
         let content: &str = r#"interface I<T> { x: T; }
 class C implements I<number> { }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'I<number>'".to_string(), new_file_content: r#"interface I<T> { x: T; }
@@ -2817,7 +2817,7 @@ pub fn test_code_fix_class_implement_interface_type_param_instantiate_t(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"interface I<T> { x: T; }
 class C<T> implements I<T> {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'I<T>'".to_string(), new_file_content: r#"interface I<T> { x: T; }
@@ -2842,7 +2842,7 @@ pub fn test_code_fix_class_implement_interface_type_param_instantiate_u(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"interface I<T> { x: T; }
 class C<U> implements I<U> {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'I<U>'".to_string(), new_file_content: r#"interface I<T> { x: T; }
@@ -2870,7 +2870,7 @@ pub fn test_code_fix_class_implement_interface_type_param_instantiation(t: &T) {
 }
 
 class C implements I { }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &[]);
@@ -2894,7 +2894,7 @@ pub fn test_code_fix_class_implement_interface_type_param_method(t: &T) {
     f<T extends number>(x: T): T;
 }
 class C implements I {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'I'".to_string(), new_file_content: r#"interface I {
@@ -2926,7 +2926,7 @@ pub fn test_code_fix_class_implement_interface_undeclared_symbol(t: &T) {
 }
 
 class C implements I { }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_available(t, &["Implement interface 'I'"]);
@@ -2962,7 +2962,7 @@ declare global {
 /// <reference path="globals.d.ts" />
 // @Filename: a.ts
 class Foo implements Disposable {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_file(t, "a.ts");
@@ -2991,7 +2991,7 @@ pub fn test_code_fix_class_implement_interface_with_ambient_signatures2(t: &T) {
     method(): void;
 }
 class B implements A {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'A'".to_string(), new_file_content: r#"declare class A {
@@ -3022,7 +3022,7 @@ pub fn test_code_fix_class_implement_interface_with_ambient_signatures3(t: &T) {
     abstract method(): void;
 }
 class B implements A {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'A'".to_string(), new_file_content: r#"declare abstract class A {
@@ -3051,7 +3051,7 @@ pub fn test_code_fix_class_implement_interface_with_negative_number(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"interface X { value: -1 | 0 | 1; }
 class Y implements X { }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_available(t, &["Implement interface 'X'"]);
@@ -3081,7 +3081,7 @@ class C extends Base{
     |]}
     m() { this.a; } // avoid unused 'a'
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, r#"
@@ -3112,7 +3112,7 @@ class C extends Base{
         super(this.a);
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &[]);
@@ -3135,7 +3135,7 @@ pub fn test_code_fix_convert_to_mapped_object_type13(t: &T) {
         let content: &str = r#"let x: {
     [p: ""]: string;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &["fixConvertToMappedObjectType"]);
@@ -3159,7 +3159,7 @@ pub fn test_code_fix_convert_to_mapped_object_type5(t: &T) {
 class SomeType {
     [prop: K]: any;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &[]);
@@ -3194,7 +3194,7 @@ import {
 declare const b: B;
 declare const c: C;
 console.log(b, c);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_file(t, "imports.ts");
@@ -3228,7 +3228,7 @@ declare const a: A;
 declare const b: B;
 declare const c: C;
 console.log(a, b, c);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_file(t, "imports.ts");
@@ -3269,7 +3269,7 @@ declare const c: C;
 declare const d: D;
 declare const o: typeof others;
 console.log(a, b, c, d, o);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_file(t, "imports.ts");
@@ -3294,7 +3294,7 @@ pub fn test_code_fix_correct_qualified_name_to_indexed_access_type01(t: &T) {
   bar: string;
 }
 export const x: [|Foo.bar|] = """#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, r#"Foo["bar"]"#, false, 0, 0);
@@ -3315,7 +3315,7 @@ pub fn test_code_fix_correct_return_value27(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = r#"const a: ((() => number) | (() => undefined)) = () => { "" }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &[]);
@@ -3338,7 +3338,7 @@ pub fn test_code_fix_correct_return_value4(t: &T) {
         let content: &str = r#"function Foo (): any {
     1
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &[]);
@@ -3361,7 +3361,7 @@ pub fn test_code_fix_correct_return_value5(t: &T) {
         let content: &str = r#"function Foo (): void {
     undefined
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &[]);
@@ -3384,7 +3384,7 @@ pub fn test_code_fix_correct_return_value6(t: &T) {
         let content: &str = r#"function Foo (): undefined {
     undefined
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &[]);
@@ -3407,7 +3407,7 @@ pub fn test_code_fix_expected_comma03(t: &T) {
         let content: &str = r#"class C {
     const example = [|{ one: 1 one }|]
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &["fixExpectedComma"]);
@@ -3435,7 +3435,7 @@ export class C {
         return <a.div />;
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &[]);
@@ -3459,7 +3459,7 @@ pub fn test_code_fix_generate_definitions(t: &T) {
 module.exports = 0;
 // @Filename: /a.ts
 import * as foo from "foo";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &[]);
@@ -3481,7 +3481,7 @@ pub fn test_code_fix_implicit_this_ts_cant_fix_non_function(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"// @noImplicitThis: true
 this;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &[]);
@@ -3507,7 +3507,7 @@ declare function foo(): any;
 declare function bar(): any;
 // @filename: /b.ts
 import { bar } from "./a";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_file(t, "/b.ts");
@@ -3534,7 +3534,7 @@ pub fn test_code_fix_import_non_exported_member5(t: &T) {
 function bar() {}
 // @filename: /b.ts
 import { bar } from "./foo";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_file(t, "/b.ts");
@@ -3559,7 +3559,7 @@ pub fn test_code_fix_import_non_textual_specifier_text(t: &T) {
 import type { A } from `./${myFolder}/${myFile}`;
 
 new A/**/()"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -3587,7 +3587,7 @@ function inferAny( [| app |] ) {
     const result = app.use('hi')
     return result
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, "app: { use: (arg0: string) => any }", false, 0, 0);
@@ -3611,7 +3611,7 @@ pub fn test_code_fix_infer_from_expression_statement(t: &T) {
 function inferVoid( [| app |] ) {
     app.use('hi')
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, "app: { use: (arg0: string) => void; }", false, 0, 0);
@@ -3647,7 +3647,7 @@ function returnThisMember([| |]) {
  };
 
  container.returnThisMember();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, "this: Container", false, 0, 0);
@@ -3683,7 +3683,7 @@ function returnThisMember([| |]suffix: string) {
  };
 
  container.returnThisMember("");"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, "this: Container, ", false, 0, 0);
@@ -3719,7 +3719,7 @@ function returnThisMember([| |]) {
  };
 
  container.returnThisMember();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, "this: Container", false, 0, 0);
@@ -3755,7 +3755,7 @@ function returnThisMember([| |]suffix: string) {
  };
 
  container.returnThisMember("");"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, "this: Container, ", false, 0, 0);
@@ -3780,7 +3780,7 @@ pub fn test_code_fix_infer_from_function_usage(t: &T) {
 function wrap( [| arr |] ) {
      arr.other(function (a: number, b: number) { return a < b ? -1 : 1 });
  }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, "arr: { other: (arg0: (a: number, b: number) => -1 | 1) => void; }", false, 0, 0);
@@ -3804,7 +3804,7 @@ pub fn test_code_fix_infer_from_primitive_usage(t: &T) {
 function wrap( [| s |] ) {
     return s.length + s.indexOf('hi')
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, "s: string | string[]", false, 0, 0);
@@ -3827,7 +3827,7 @@ pub fn test_code_fix_infer_from_usage_binding_element(t: &T) {
         let content: &str = r#"function f([car, cdr]) {
     return car + cdr + 1
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_suggestion_diagnostics(t, &[]);
@@ -3851,7 +3851,7 @@ pub fn test_code_fix_infer_from_usage_call(t: &T) {
 function wat([|b |]) {
     b();
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, "b: () => void", false, 0, 0);
@@ -3876,7 +3876,7 @@ pub fn test_code_fix_infer_from_usage_callback_parameter6(t: &T) {
 // @noImplicitAny: false
 // @filename: /foo.js
 const foo = [(/** @type {number} */ x) => x + 1];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &[]);
@@ -3902,7 +3902,7 @@ pub fn test_code_fix_infer_from_usage_callback_parameter7(t: &T) {
 // @filename: /foo.js
 /** @type {(x: number) => number} */
 const foo = x => x + 1;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &[]);
@@ -3939,7 +3939,7 @@ function h2() {
     f2(false);
 }
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &[]);
@@ -3966,7 +3966,7 @@ class C {
         this.p.push(10);
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, "p: number[];", false, 0, 0);
@@ -3992,7 +3992,7 @@ interface I {
 }
 var i: I;
 i.p = 0;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, "p: number;", false, 0, 0);
@@ -4017,7 +4017,7 @@ class C {
     constructor([|public p)|] { }
 }
 new C("string");"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, "public p: string)", false, 0, 0);
@@ -4043,7 +4043,7 @@ class C {
     m() { this.x * 2; }
     get x { return null; }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &[]);
@@ -4070,7 +4070,7 @@ function f([|a? |]){
 }
 f();
 f(1);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, "a?: number", false, 0, 0);
@@ -4094,7 +4094,7 @@ pub fn test_code_fix_infer_from_usage_optional_param2(t: &T) {
 function f([|a? |]){
     if (a < 9) return;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, "a?: number", false, 0, 0);
@@ -4123,7 +4123,7 @@ f(1);
 f(2, "s1");
 f(3, "s1", "s2");
 f(3, "s1", "s2", "s3", "s4");"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, "...rest: string[]", false, 0, 0);
@@ -4152,7 +4152,7 @@ f(1);
 f(2, "s1");
 f(3, false, "s2");
 f(4, "s1", "s2", false, "s4");"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, "...rest: (string | boolean)[]", false, 0, 0);
@@ -4177,7 +4177,7 @@ function f(a: number, [|...rest |]){
     a;
     rest.push(22);
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, "...rest: number[]", false, 0, 0);
@@ -4206,7 +4206,7 @@ pub fn test_code_fix_infer_from_usage_variable3_js(t: &T) {
     foo += 2
     return foo
 }|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, r#"/** 
@@ -4237,7 +4237,7 @@ pub fn test_code_fix_missing_type_annotation_on_exports(t: &T) {
 // @declaration: true
 function foo() { return 42; }
 export const g = foo();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add annotation of type 'number'".to_string(), new_file_content: r#"function foo() { return 42; }
@@ -4264,7 +4264,7 @@ function foo() {
     return { x: 1, y: 1 };
 }
 export default foo();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Extract default export to variable".to_string(), new_file_content: r#"function foo() {
@@ -4298,7 +4298,7 @@ function mixin<T extends new (...a: any) => any>(ctor: T): T {
 }
 class Point2D { x = 0; y = 0; }
 export class Point3D extends mixin(Point2D) {  z = 0; }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Extract base class to variable".to_string(), new_file_content: r#"function mixin<T extends new (...a: any) => any>(ctor: T): T {
@@ -4329,7 +4329,7 @@ function foo() {
     return { x: 1, y: 1 };
 }
 export const { x, y } = foo();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Extract binding expressions to variable".to_string(), new_file_content: r#"function foo() {
@@ -4360,7 +4360,7 @@ function foo() {
     return { x: 1, y: 1 };
 }
 export const { x: abcd, y: defg } = foo();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Extract binding expressions to variable".to_string(), new_file_content: r#"function foo() {
@@ -4391,7 +4391,7 @@ function foo() {
     return { x: 1, y: 1};
 }
 export const { x, y = 0} = foo(), z= 42;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Extract binding expressions to variable".to_string(), new_file_content: r#"function foo() {
@@ -4425,7 +4425,7 @@ function foo() {
     return { x: 1, y: 1 } as const;
 }
 export const { x, y = 0 } = foo();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Extract binding expressions to variable".to_string(), new_file_content: r#"function foo() {
@@ -4460,7 +4460,7 @@ function foo3(): "42" {
     return "42";
 }
 export const { x: a , y: { [foo3()]: {dd: e} } } = foo();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Extract binding expressions to variable".to_string(), new_file_content: r#"function foo() {
@@ -4493,7 +4493,7 @@ pub fn test_code_fix_missing_type_annotation_on_exports17_unique_symbol(t: &T) {
 // @declaration: true
 // @lib: es2019
 export const a = Symbol();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add annotation of type 'unique symbol'".to_string(), new_file_content: "export const a: unique symbol = Symbol();".to_string(), index: 0, ..Default::default() });
@@ -4519,7 +4519,7 @@ function foo() { return 42; }
 export class A {
     readonly a = () => foo();
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_available(t, &["Add return type 'number'"]);
@@ -4549,7 +4549,7 @@ pub fn test_code_fix_missing_type_annotation_on_exports19(t: &T) {
 export const a = {
     z: Symbol()
 } as const;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add annotation of type '{ readonly z: symbol; }'".to_string(), new_file_content: r#"export const a: {
@@ -4578,7 +4578,7 @@ pub fn test_code_fix_missing_type_annotation_on_exports2(t: &T) {
 const a = 42;
 const b = 43;
 export function foo() { return a + b; }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_available(t, &["Add return type 'number'"]);
@@ -4607,7 +4607,7 @@ pub fn test_code_fix_missing_type_annotation_on_exports20(t: &T) {
 export function foo () {
     return Symbol();
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_available(t, &["Add return type 'symbol'"]);
@@ -4643,7 +4643,7 @@ export function foo(): number { return 0; }
 export const bar = (a = foo()) =>
    a;
 // Trivia"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add return type 'number'".to_string(), new_file_content: r#"/**
@@ -4689,7 +4689,7 @@ pub fn test_code_fix_missing_type_annotation_on_exports22_formatting(t: &T) {
  * Test
  */
 export function foo(){}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_available(t, &["Add return type 'void'"]);
@@ -4728,7 +4728,7 @@ export class Point3D extends
     {
               z = 0;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_available(t, &["Extract base class to variable"]);
@@ -4771,7 +4771,7 @@ class Point2D { x = 0; y = 0; }
 export class Point3D2 extends mixin(Point2D) {
     z = 0;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_available(t, &["Extract base class to variable"]);
@@ -4808,7 +4808,7 @@ class Point2D { x = 0; y = 0; }
 export class Point3D3 extends mixin(Point2D) /* DD*/ {
     z = 0;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_available(t, &["Extract base class to variable"]);
@@ -4848,7 +4848,7 @@ export const extensions = {
        return actualValue === expectedValue
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_all(t, fourslash::VerifyCodeFixAllOptions { fix_id: "fixMissingTypeAnnotationOnExports".to_string(), new_file_content: r#"export const extensions = {
@@ -4883,7 +4883,7 @@ let p = { x: 1, y: 2}
 const a = 1, b = 10, { x, y } = p, c = 1;
 export { x, y }
 export const d = a + b + c;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_all(t, fourslash::VerifyCodeFixAllOptions { fix_id: "fixMissingTypeAnnotationOnExports".to_string(), new_file_content: r#"let p = { x: 1, y: 2}
@@ -4945,7 +4945,7 @@ export const sessionLoader = {
         };
     },
 };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_available(t, &[r#"Add return type 'Promise<{
@@ -5053,7 +5053,7 @@ function getString() {
 export const exp = {
     prop: getString()
 };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add satisfies and an inline type assertion with 'string'".to_string(), new_file_content: r#"function getString() {
@@ -5086,7 +5086,7 @@ export class C {
   //making sure comments are not changed
   property =a+b; // comment should stay here
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add annotation of type 'number'".to_string(), new_file_content: r#"const a = 42;
@@ -5123,7 +5123,7 @@ import { getPerson } from "./person-code";
 export const exp = {
   person: getPerson()
 };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_file(t, "/code.ts");
@@ -5159,7 +5159,7 @@ import { getPerson } from "./person-code";
 export default {
   person: getPerson()
 };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_file(t, "/code.ts");
@@ -5191,7 +5191,7 @@ const x = 1;
 export default {
   x
 };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Add satisfies and an inline type assertion with 'number'".to_string(), new_file_content: r#"const x = 1;
@@ -5225,7 +5225,7 @@ export class Foo {
   m() {
   }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_available(t, &["Add return type 'void'"]);

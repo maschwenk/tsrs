@@ -2574,7 +2574,7 @@ mod tests {
 
     #[test]
     fn build_walk_and_cast() {
-        let mut f = NodeFactory::default();
+        let f = NodeFactory::default();
         let a = f.new_identifier("a");
         let plus = f.new_token(Kind::PlusToken);
         let b = f.new_identifier("b");
@@ -2616,14 +2616,14 @@ mod tests {
     #[test]
     #[should_panic]
     fn cast_mismatch_panics() {
-        let mut f = NodeFactory::default();
+        let f = NodeFactory::default();
         let a = f.new_identifier("a");
         a.as_binary_expression();
     }
 
     #[test]
     fn source_file_back_pointer() {
-        let mut f = NodeFactory::default();
+        let f = NodeFactory::default();
         let stmt = f.new_empty_statement();
         let statements = f.new_node_list(vec![stmt]);
         let eof = f.new_token(Kind::EndOfFile);
@@ -2645,7 +2645,7 @@ mod tests {
 
     #[test]
     fn reparser_mutations() {
-        let mut f = NodeFactory::default();
+        let f = NodeFactory::default();
         let name = f.new_identifier("x");
         let decl = f.new_variable_declaration(name, None, None, None);
         assert_eq!(decl.type_node(), None);

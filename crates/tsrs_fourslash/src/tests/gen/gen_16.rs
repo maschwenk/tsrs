@@ -32,7 +32,7 @@ function createFooLike() {
         hello() {}
     };
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["interface_definition"]);
@@ -55,7 +55,7 @@ pub fn test_go_to_implementation_interface_03(t: &T) {
         let content: &str = r#"interface Fo/*interface_definition*/o { hello: () => void }
 
 var x = <Foo> [|{ hello: () => {} }|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["interface_definition"]);
@@ -89,7 +89,7 @@ class Bar {
 
     constructor(public f: Foo = [|function(a) {}|] ) {}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["interface_definition"]);
@@ -115,7 +115,7 @@ pub fn test_go_to_implementation_interface_05(t: &T) {
 
 let bar2 = <Foo> [|function(a) {}|];
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["interface_definition"]);
@@ -143,7 +143,7 @@ interface SomeOtherType {}
 
 let x: Foo = [|class { constructor (a: number) {} }|];
 let y = <Foo> [|class { constructor (a: number) {} }|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["interface_definition"]);
@@ -187,7 +187,7 @@ let x11 = class [|{|"parts": ["(","local class",")"," ","C"], "kind": "local cla
 function isFoo(a: any): a is Foo {
     return true;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["interface_definition"]);
@@ -222,7 +222,7 @@ class X implements B {
 function someFunction(d : A) {
     d.he/*function_call*/llo();
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["function_call"]);
@@ -247,7 +247,7 @@ export interface Interface { P: number }
 // @Filename: ref.ts
 import { Interface } from "./def";
 const c: I/*ref*/nterface = [|{ P: 2 }|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["ref"]);
@@ -279,7 +279,7 @@ export class [|C|] implements B {
 	bar = true;
 }
 export class [|D|] extends C { }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["def"]);
@@ -317,7 +317,7 @@ class Bar {
 
     constructor(public f: Foo = { [|hello|]() {/**3*/} } ) {}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["function_call", "declaration"]);
@@ -352,7 +352,7 @@ function whatever(a: Foo) {
 }
 
 whatever(new Bar());"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["function_call", "declaration"]);
@@ -387,7 +387,7 @@ class Bar extends AbstractBar {
 function whatever(a: AbstractBar) {
     a.he/*function_call*/llo();
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["function_call", "declaration"]);
@@ -425,7 +425,7 @@ class OtherBar implements Foo {
 
 new Bar().hel/*function_call*/lo();
 new Bar()["hello"]();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["function_call"]);
@@ -464,7 +464,7 @@ class OtherBar implements Foo {
 function (x: SuperBar) {
     x.he/*function_call*/llo()
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["function_call"]);
@@ -515,7 +515,7 @@ class NotBar extends SuperBar {
 function whatever(x: Bar) {
     x.he/*function_call*/llo()
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["function_call"]);
@@ -577,7 +577,7 @@ class NotFoo implements SuperFoo {
 function (x: Foo) {
     x.he/*function_call*/llo()
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["function_call"]);
@@ -612,7 +612,7 @@ class Bar extends SuperBar {
 class SubBar extends Bar {
    [|hello|]() {}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["function_call"]);
@@ -656,7 +656,7 @@ class SuperBar extends MegaBar {
 class MegaBar implements Foo {
     hello() {}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["function_call", "element_access"]);
@@ -716,7 +716,7 @@ function someFunction(x: Foo | Bar) {
 function anotherFunction(x: Foo & Bar) {
 	 x.he/*function_call1*/llo();
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["function_call0", "function_call1"]);
@@ -742,7 +742,7 @@ pub fn test_go_to_implementation_interface_method_11(t: &T) {
 
 var x = <Foo> { [|hello|]: () => {} };
 var y = <Foo> (((({ [|hello|]: () => {} }))));"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["reference"]);
@@ -771,7 +771,7 @@ import { MyInterface } from "./file1";
 
 const x: /*impl*/MyInterface = { P: 2 };
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["impl"]);
@@ -807,7 +807,7 @@ class Bar {
 
     constructor(public f: Foo = { [|hello|]: 7 } ) {}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["reference"]);
@@ -836,7 +836,7 @@ class Bar implements Foo {
 function whatever(foo: Foo) {
     foo.he/*reference*/llo;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["reference"]);
@@ -859,7 +859,7 @@ pub fn test_go_to_implementation_invalid(t: &T) {
         let content: &str = r#"var x1 = 50/*0*/0;
 var x2 = "hel/*1*/lo";
 /*2*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["0", "1", "2"]);
@@ -881,7 +881,7 @@ pub fn test_go_to_implementation_local_00(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"he/*function_call*/llo();
 function [|hello|]() {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["function_call"]);
@@ -903,7 +903,7 @@ pub fn test_go_to_implementation_local_01(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"const [|hello|] = function() {};
 he/*function_call*/llo();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["function_call"]);
@@ -927,7 +927,7 @@ pub fn test_go_to_implementation_local_02(t: &T) {
 
 x.he/*function_call*/llo();
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["function_call"]);
@@ -953,7 +953,7 @@ x.hello();
 
 hello = {};
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["local_var"]);
@@ -977,7 +977,7 @@ pub fn test_go_to_implementation_local_04(t: &T) {
 
 hello();
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["local_var"]);
@@ -1003,7 +1003,7 @@ pub fn test_go_to_implementation_local_05(t: &T) {
 
 var [|someVar|] = new Bar();
 someVa/*reference*/r.hello();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["reference"]);
@@ -1025,7 +1025,7 @@ pub fn test_go_to_implementation_local_06(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"declare var [|someVar|]: string;
 someVa/*reference*/r"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["reference"]);
@@ -1047,7 +1047,7 @@ pub fn test_go_to_implementation_local_07(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"declare function [|someFunction|](): () => void;
 someFun/*reference*/ction();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["reference"]);
@@ -1069,7 +1069,7 @@ pub fn test_go_to_implementation_local_08(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"declare function [|someFunction|](): () => void;
 someFun/*reference*/ction();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["reference"]);
@@ -1099,7 +1099,7 @@ module /*implementation1*/Bar {
 
 let x = Fo/*reference0*/o;
 let y = Ba/*reference1*/r;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["reference0", "reference1"]);
@@ -1124,7 +1124,7 @@ pub fn test_go_to_implementation_namespace_01(t: &T) {
 }
 
 Foo.hell/*reference*/o();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["reference"]);
@@ -1149,7 +1149,7 @@ pub fn test_go_to_implementation_namespace_02(t: &T) {
 }
 
 Foo.hell/*reference*/o();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["reference"]);
@@ -1190,7 +1190,7 @@ var someVar2 = <Foo.Bar> [|{ hello: () => {/**2*/} }|];
 function whatever(x: Foo.Ba/*reference*/r) {
 
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["reference"]);
@@ -1231,7 +1231,7 @@ var someVar2 = <Foo.Bar> [|{ hello: () => {/**2*/} }|];
 function whatever(x: Foo.Ba/*reference*/r) {
 
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["reference"]);
@@ -1263,7 +1263,7 @@ let x = Fo/*reference0*/o;
 let y = Ba/*reference1*/r;
 let x1 = Foo.B/*reference2*/az;
 let y1 = Bar.B/*reference3*/az;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["reference0", "reference1", "reference2", "reference3"]);
@@ -1289,7 +1289,7 @@ pub fn test_go_to_implementation_namespace_06(t: &T) {
 
 
 let x: typeof Foo = [|{ hello() {} }|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["declaration"]);
@@ -1325,7 +1325,7 @@ export declare class Bar {
 import { Bar } from './combined';
 declare const bar: Bar;
 bar./*impl*/method();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["impl"]);
@@ -1349,7 +1349,7 @@ pub fn test_go_to_implementation_no_crash_triple_slash_ref(t: &T) {
 export declare function foo(): void;
 // @Filename: /main.d.ts
 /// <reference types="/*m*/mymod" />"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["m"]);
@@ -1378,7 +1378,7 @@ export type JSX = {};
 // @Filename: /index.ts
 import type {JSX} from '/*m*/react';
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["m"]);
@@ -1403,7 +1403,7 @@ export as namespace Lib;
 export interface /*1*/IFoo {}
 // @Filename: /user.ts
 const p = import('./lib');"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["1"]);
@@ -1434,7 +1434,7 @@ const methods = { github: {
     transformData: /*impl*/transformGitHub,
 }};
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["impl"]);
@@ -1468,7 +1468,7 @@ const methods = { github: {
     transformData: /*impl*/transformGitHub,
 }};
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["impl"]);
@@ -1502,7 +1502,7 @@ const methods = { github: {
     transformData: /*impl*/transformGitHub,
 }};
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["impl"]);
@@ -1538,7 +1538,7 @@ import type {TSE/*impl*/STree} from '@typescript-eslint/utils';
 let node: TSESTree.Node | undefined;
 export default node;
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["impl"]);
@@ -1574,7 +1574,7 @@ import type {TSE/*impl*/STree} from '@typescript-eslint/utils';
 let node: TSESTree.Node | undefined;
 export default node;
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["impl"]);
@@ -1611,7 +1611,7 @@ import type {TSE/*impl*/STree} from '@typescript-eslint/utils';
 let node: TSESTree.Node | undefined;
 export default node;
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["impl"]);
@@ -1639,7 +1639,7 @@ interface /*def*/I {
 function f() {
     const foo = { foo: '' } satisfies [|I|];
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["def"]);
@@ -1690,7 +1690,7 @@ function createBarUsingClassDeclaration(): Bar {
         Fo/*declaredClassRef*/o
     };
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["classExpressionRef", "declaredClassRef"]);
@@ -1751,7 +1751,7 @@ var y = class Foo {
 };
 
 createBarUsingClassDeclaration().Fo/*reference*/o;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["reference"]);
@@ -1786,7 +1786,7 @@ function createFoo(): Foo {
 function whatever(x: Foo) {
      x.h/*function_call*/ello();
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["function_call"]);
@@ -1815,7 +1815,7 @@ class Bar extends Foo {
         su/*super_call*/per();
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["super_call"]);
@@ -1844,7 +1844,7 @@ class Bar extends Foo {
         sup/*super_call*/er.hello();
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["super_call"]);
@@ -1871,7 +1871,7 @@ pub fn test_go_to_implementation_this_00(t: &T) {
 
     whatever() {}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["this_call"]);
@@ -1896,7 +1896,7 @@ pub fn test_go_to_implementation_this_01(t: &T) {
         return this;
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["this_type"]);
@@ -1921,7 +1921,7 @@ export type TypeAlias = { P: number }
 // @Filename: ref.ts
 import { TypeAlias } from "./def";
 const c: T/*ref*/ypeAlias = [|{ P: 2 }|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_implementation(t, &["ref"]);
@@ -1946,7 +1946,7 @@ export class /*2*/Foo {}
 // @Filename: b.ts
  import /*3*/n = require('a');
  var x = new [|/*1*/n|].Foo();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_definition(t, true, &["1"]);
@@ -2026,7 +2026,7 @@ declare namespace _ {
 }
 // @Filename: /home/src/workspaces/project/index.ts
 import { [|/*start*/add|] } from 'lodash';"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -2056,7 +2056,7 @@ export declare const a: { a: string };
 // @Filename: /home/src/workspaces/project/b.ts
 import { a } from './a';
 a.[|a/*start*/|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -2101,7 +2101,7 @@ import { command } from "yargs";
 command("foo", yargs => {
     yargs.[|/*start*/positional|]();
 });"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -2150,7 +2150,7 @@ function /*end*/leftPad(str, len, ch) {}
 // @Filename: /home/src/workspaces/project/index.mts
 import leftPad = require("left-pad");
 /*start*/leftPad("", 4);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -2175,7 +2175,7 @@ pub fn test_go_to_source14_unresolved_require_destructuring(t: &T) {
 // @allowJs: true
 // @Filename: /home/src/workspaces/project/index.js
 const { blah/**/ } = require("unresolved");"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -2221,7 +2221,7 @@ if (process.env.NODE_ENV !== 'production') {
 }
 // @Filename: /home/src/workspaces/project/index.ts
 import { [|/*start*/useState|] } from 'react';"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -2271,7 +2271,7 @@ import { command } from "yargs";
 command("foo", yargs => {
     yargs.[|/*start*/positional|]();
 });"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -2321,7 +2321,7 @@ import { command } from "yargs";
 command("foo", yargs => {
     yargs.[|/*start*/positional|]();
 });"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -2374,7 +2374,7 @@ import { command } from "yargs";
 command("foo", yargs => {
     yargs.[|/*start*/positional|]();
 });"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -2403,7 +2403,7 @@ export declare const a: string;
 // @Filename: /home/src/workspaces/project/index.ts
 import { a } from [|"./a"/*moduleSpecifier*/|];
 [|a/*identifier*/|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -2435,7 +2435,7 @@ export declare const a: string;
 // @Filename: /home/src/workspaces/project/index.ts
 import { a } from "foo";
 [|a/*start*/|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -2469,7 +2469,7 @@ export declare const a: string;
 // @Filename: /home/src/workspaces/project/index.ts
 import { a } from "foo";
 [|a/*start*/|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -2500,7 +2500,7 @@ export const a = 'a';
 // @Filename: /home/src/workspaces/project/b.ts
 import { a } from './a';
 [|a/*start*/|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -2537,7 +2537,7 @@ export const a = 'a';
 // @Filename: /home/src/workspaces/project/b.ts
 import { a } from 'foo/a';
 [|a/*start*/|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -2584,7 +2584,7 @@ if (process.env.NODE_ENV !== 'production') {
 }
 // @Filename: /home/src/workspaces/project/index.ts
 import { [|/*start*/useState|] } from 'react';"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -2673,7 +2673,7 @@ declare module "../index" {
 }
 // @Filename: /home/src/workspaces/project/index.ts
 import { [|/*start*/add|] } from 'lodash';"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -2763,7 +2763,7 @@ declare module "../index" {
 // @Filename: /home/src/workspaces/project/index.ts
 import [|/*defaultImport*/_|], { [|/*unresolvableNamedImport*/foo|] } from [|/*moduleSpecifier*/'lodash'|];
 _.[|/*propertyAccess*/add|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -2794,7 +2794,7 @@ export declare const a: string;
 // @Filename: /home/src/workspaces/project/index.ts
 import { a } from "foo";
 [|a/*start*/|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["start"]);
@@ -2816,7 +2816,7 @@ export declare const a: string;
 // @Filename: /home/src/workspaces/project/index.ts
 import { a } from [|"./a"/*moduleSpecifier*/|];
 [|a/*identifier*/|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["identifier", "moduleSpecifier"]);
@@ -2837,7 +2837,7 @@ export function /*target*/helper() { return 1; }
 // @Filename: /home/src/workspaces/project/index.ts
 import { helper } from "./utils";
 helper/*usage*/();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["usage"]);
@@ -2860,7 +2860,7 @@ export declare function typesOnly(): void;
 // @Filename: /home/src/workspaces/project/index.ts
 import { /*importName*/typesOnly } from "pkg";
 typesOnly/*callSite*/();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["importName", "callSite"]);
@@ -2893,7 +2893,7 @@ function greet() { return "hi"; }
 // @Filename: /home/src/workspaces/project/index.ts
 import { greet } from "pkg";
 greet/*usage*/();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["usage"]);
@@ -2928,7 +2928,7 @@ function greet() { return "hi"; }
 // @Filename: /home/src/workspaces/project/index.ts
 import { greet } from "pkg";
 greet/*usage*/();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["usage"]);
@@ -2953,7 +2953,7 @@ export function /*target*/foo() { return "ok"; }
 // @Filename: /home/src/workspaces/project/index.ts
 import { foo } from "pkg";
 const result = foo/*valueUsage*/();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["valueUsage"]);
@@ -2975,7 +2975,7 @@ pub fn test_go_to_source_triple_slash_reference(t: &T) {
 /// <reference path="./[|helper.js/*refPath*/|]" />
 declare function helper(): number;
 helper();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["refPath"]);
@@ -3000,7 +3000,7 @@ export declare function internalHelper(): void;
 /*entryPoint*/Object.defineProperty(exports, "internalHelper", { value: function() {} });
 // @Filename: /home/src/workspaces/project/index.ts
 import { /*importName*/internalHelper } from "pkg";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["importName"]);
@@ -3030,7 +3030,7 @@ export const /*target*/value = 42;
 // @Filename: /home/src/workspaces/project/index.ts
 import { /*importName*/value } from "pkg";
 console.log(value);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["importName"]);
@@ -3062,7 +3062,7 @@ export function /*target*/original() { return "ok"; }
 // @Filename: /home/src/workspaces/project/index.ts
 import { original as renamed } from "pkg";
 renamed/*usage*/();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["usage"]);
@@ -3087,7 +3087,7 @@ export function /*target*/helper() { return "ok"; }
 // @Filename: /home/src/workspaces/project/index.ts
 import * as ns from "pkg";
 ns./*usage*/helper();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["usage"]);
@@ -3119,7 +3119,7 @@ export function /*target*/original() { return "ok"; }
 // @Filename: /home/src/workspaces/project/index.ts
 import { original as /*aliasedImport*/renamed } from "pkg";
 renamed();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["aliasedImport"]);
@@ -3145,7 +3145,7 @@ export function unrelated() {}
 export function /*target*/original() { return "ok"; }
 // @Filename: /home/src/workspaces/project/reexport.ts
 export { original as /*reExportAlias*/renamed } from "pkg";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["reExportAlias"]);
@@ -3178,7 +3178,7 @@ export function /*targetHelper*/helper() {}
 import /*importDefault*/Widget, { /*importHelper*/helper } from "pkg";
 Widget;
 helper();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["importDefault", "importHelper"]);
@@ -3205,7 +3205,7 @@ export default class /*targetWidget*/Widget {}
 // @Filename: /home/src/workspaces/project/index.ts
 import /*importDefault*/Widget from "pkg";
 Widget;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["importDefault"]);
@@ -3230,7 +3230,7 @@ export default /*targetDefault*/function() { return "ok"; }
 // @Filename: /home/src/workspaces/project/index.ts
 import /*importDefault*/myFunc from "pkg";
 myFunc/*usage*/();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["importDefault", "usage"]);
@@ -3256,7 +3256,7 @@ export default { run() {} };
 // @Filename: /home/src/workspaces/project/index.ts
 import /*defaultImport*/pkg from "pkg";
 pkg.run();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["defaultImport"]);
@@ -3282,7 +3282,7 @@ export default _default;
 // @Filename: /home/src/workspaces/project/index.ts
 import pkg from "pkg";
 pkg/*usage*/;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["usage"]);
@@ -3309,7 +3309,7 @@ module.exports = legacyFn;
 // @Filename: /home/src/workspaces/project/index.ts
 import /*importName*/legacyFn from "legacy";
 legacyFn();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["importName"]);
@@ -3334,7 +3334,7 @@ export default function createThing() { return { value: 42 }; }
 // @Filename: /home/src/workspaces/project/index.ts
 import /*defaultName*/createThing from "pkg";
 createThing/*callDefault*/();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["defaultName", "callDefault"]);
@@ -3369,7 +3369,7 @@ export default class /*targetWidget*/Widget {
 import Widget from "pkg";
 const w = new Widget/*constructUsage*/("test");
 w./*methodUsage*/render();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["constructUsage", "methodUsage"]);
@@ -3394,7 +3394,7 @@ export default function /*targetGreet*/greet(name) { return "Hello, " + name; }
 // @Filename: /home/src/workspaces/project/index.ts
 import greet from "pkg";
 greet/*callUsage*/("world");"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["callUsage"]);
@@ -3423,7 +3423,7 @@ export declare function foo(): void;
 // @Filename: /home/src/workspaces/project/index.ts
 import { foo } from /*specifier*/"pkg";
 foo();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["specifier"]);
@@ -3449,7 +3449,7 @@ module.exports = { create: internalCreate };
 // @Filename: /home/src/workspaces/project/index.ts
 import /*importDefault*/create from "pkg";
 create();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["importDefault"]);
@@ -3479,7 +3479,7 @@ export function helper(): string { return ""; }
 // @Filename: /index.ts
 import { /*usage*/helper } from "./lib/helper";
 helper();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["usage"]);
@@ -3511,7 +3511,7 @@ exports./*target*/helper = function() { return "ok"; };
 // @Filename: /home/src/workspaces/project/index.js
 const { /*importName*/helper } = require("pkg");
 helper/*usage*/();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["importName", "usage"]);
@@ -3540,7 +3540,7 @@ async function main() {
     const mod = await import("pkg");
     mod./*usage*/dynHelper();
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["usage"]);
@@ -3572,7 +3572,7 @@ import { foo as /*importAlias*/bar } from "pkg";
 bar;
 // @Filename: /home/src/workspaces/project/reexport.ts
 export { foo as /*reExportAlias*/bar } from "pkg";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["importAlias", "reExportAlias"]);
@@ -3597,7 +3597,7 @@ export function /*target*/original() { return "ok"; }
 // @Filename: /home/src/workspaces/project/index.ts
 import { original as /*aliasedImport*/renamed } from "pkg";
 renamed();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["aliasedImport"]);
@@ -3629,7 +3629,7 @@ export class /*targetWidget*/Widget {
 import { Widget } from "pkg";
 const w = new /*constructorCall*/Widget("test");
 w./*methodCall*/render();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["constructorCall", "methodCall"]);
@@ -3667,7 +3667,7 @@ import { command } from "yargs";
 command("foo", yargs => {
     yargs.[|/*start*/positional|]();
 });"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["start"]);
@@ -3695,7 +3695,7 @@ export function /*targetBar*/bar() { return 42; }
 export { /*reExportFoo*/foo, /*reExportBar*/bar } from "pkg";
 // @Filename: /home/src/workspaces/project/index.ts
 import { foo, bar } from [|"pkg"/*moduleSpecifier*/|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["reExportFoo", "reExportBar", "moduleSpecifier"]);
@@ -3721,7 +3721,7 @@ export function /*targetAlpha*/alpha() { return "a"; }
 export function /*targetBeta*/beta() { return 2; }
 // @Filename: /home/src/workspaces/project/reexport.ts
 export { alpha, beta } from [|"pkg"/*reExportSpecifier*/|];"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["reExportSpecifier"]);
@@ -3750,7 +3750,7 @@ export function /*target*/foo() { return "ok"; }
 // @Filename: /home/src/workspaces/project/index.ts
 import { /*importName*/foo } from "pkg";
 foo/*start*/();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["importName", "start"]);
@@ -3776,7 +3776,7 @@ export function /*target*/helper() {}
 import { helper } from "pkg";
 helper/*usage*/();
 export { helper as /*reExport*/myHelper } from "pkg";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["usage", "reExport"]);
@@ -3805,7 +3805,7 @@ export { helper } from "./impl.js";
 // @Filename: /home/src/workspaces/project/index.ts
 import { helper } from "pkg";
 helper/*usage*/();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["usage"]);
@@ -3834,7 +3834,7 @@ export { doWork } from "./impl.js";
 // @Filename: /home/src/workspaces/project/index.ts
 import { /*importName*/doWork } from "pkg";
 doWork/*callSite*/();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["importName", "callSite"]);
@@ -3885,7 +3885,7 @@ var /*targetPopulationImpl*/TargetPopulation;
 import { /*namedImport*/greet, /*enumImport*/TargetPopulation } from "pkg";
 greet/*call*/("world");
 TargetPopulation/*enumAccess*/.Team;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["namedImport", "enumImport", "call", "enumAccess"]);
@@ -3923,7 +3923,7 @@ Util.version = "1.0";
 // @Filename: /home/src/workspaces/project/index.ts
 import { /*importUtil*/Util } from "pkg";
 const u: /*typeRef*/Util = new Util();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["importUtil", "typeRef"]);
@@ -3959,7 +3959,7 @@ export function /*target*/inner() { return "ok"; }
 // @Filename: /home/src/workspaces/project/index.ts
 import { /*importName*/inner } from "outer";
 inner/*usage*/();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["importName", "usage"]);
@@ -3993,7 +3993,7 @@ function unrelated() {
 // @Filename: /home/src/workspaces/project/index.ts
 import { /*importHelper*/helper } from "pkg";
 helper/*usage*/();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["importHelper", "usage"]);
@@ -4022,7 +4022,7 @@ function factory() {
 // @Filename: /home/src/workspaces/project/index.ts
 import { /*importWidget*/Widget } from "pkg";
 new Widget();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["importWidget"]);
@@ -4049,7 +4049,7 @@ export declare function helper(): string;
 // @Filename: /home/src/workspaces/project/index.ts
 import { /*usage*/helper } from "./lib/helper";
 helper();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["usage"]);
@@ -4081,7 +4081,7 @@ export function /*target*/bar() { return "hello"; }
 // @Filename: /home/src/workspaces/project/index.ts
 import { bar } from "foo";
 bar/*usage*/();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["usage"]);
@@ -4106,7 +4106,7 @@ export function /*target*/greet() { return "hi"; }
 // @Filename: /home/src/workspaces/project/index.ts
 import { greet } from "pkg";
 greet/*usage*/();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["usage"]);
@@ -4131,7 +4131,7 @@ export function /*target*/work() {}
 // @Filename: /home/src/workspaces/project/index.ts
 import { work } from "pkg";
 work/*usage*/();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["usage"]);
@@ -4156,7 +4156,7 @@ export function /*target*/work() {}
 // @Filename: /home/src/workspaces/project/index.ts
 import { work } from "pkg";
 work/*usage*/();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["usage"]);
@@ -4181,7 +4181,7 @@ export function /*target*/util() {}
 // @Filename: /home/src/workspaces/project/index.ts
 import { util } from "pkg";
 util/*usage*/();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["usage"]);
@@ -4212,7 +4212,7 @@ export const /*targetObj*/obj = { /*targetGreet*/greet(name) { return name; }, /
 import { obj } from "pkg";
 obj./*propAccess*/greet("world");
 obj./*propAccess2*/count;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["propAccess", "propAccess2"]);
@@ -4235,7 +4235,7 @@ export declare const a: { a: string };
 // @Filename: /home/src/workspaces/project/b.ts
 import { a } from './a';
 a.[|a/*start*/|]"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["start"]);
@@ -4260,7 +4260,7 @@ export const config = { /*targetName*/name: "test" };
 // @Filename: /home/src/workspaces/project/index.ts
 import { config } from "pkg";
 config./*propAccess*/name;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["propAccess"]);
@@ -4286,7 +4286,7 @@ export const obj = { a: 1, /*target*/b: 2 };
 // @Filename: /home/src/workspaces/project/index.ts
 import { obj } from "pkg";
 obj./*propAccess*/b;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["propAccess"]);
@@ -4325,7 +4325,7 @@ var TargetPopulation;
 // @Filename: /home/src/workspaces/project/index.ts
 import * as tas from "pkg";
 tas./*start*/TargetPopulation.Public;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["start"]);
@@ -4356,7 +4356,7 @@ export const obj = { /*targetA*/a: 1, /*targetB*/b: 2 };
 import { obj } from "pkg";
 obj./*propA*/a;
 obj./*propB*/b;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["propA", "propB"]);
@@ -4384,7 +4384,7 @@ export const /*targetValue*/value = 42;
 import * as pkg from "pkg";
 pkg./*helperAccess*/helper();
 pkg./*valueAccess*/value;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["helperAccess", "valueAccess"]);
@@ -4416,7 +4416,7 @@ export const config = { /*targetAlpha*/alpha: "a", /*targetBeta*/beta: "b" };
 import { config } from "pkg";
 config./*accessAlpha*/alpha;
 config./*accessBeta*/beta;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["accessAlpha", "accessBeta"]);
@@ -4441,7 +4441,7 @@ export const nested = { inner: { /*targetValue*/value: 42 } };
 // @Filename: /home/src/workspaces/project/index.ts
 import { nested } from "pkg";
 nested.inner./*accessValue*/value;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["accessValue"]);
@@ -4468,7 +4468,7 @@ export const coords = { /*targetX*/x: 10, /*targetY*/y: 20 };
 import { coords } from "pkg";
 coords./*accessX*/x;
 coords./*accessY*/y;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["accessX", "accessY"]);
@@ -4500,7 +4500,7 @@ export function /*targetHelper*/helper() { return "ok"; }
 // @Filename: /home/src/workspaces/project/index.ts
 import { /*importHelper*/helper } from "pkg";
 helper();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["importHelper"]);
@@ -4530,7 +4530,7 @@ export function /*target*/scopedHelper() { return "scoped"; }
 // @Filename: /home/src/workspaces/project/index.ts
 import { /*importName*/scopedHelper } from "@myscope/mylib";
 scopedHelper/*usage*/();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["importName", "usage"]);
@@ -4557,7 +4557,7 @@ export function /*target*/nsHelper() { return 42; }
 // @Filename: /home/src/workspaces/project/index.ts
 import { nsHelper } from "@myns/mylib";
 nsHelper/*usage*/();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["usage"]);
@@ -4590,7 +4590,7 @@ export function /*target*/bar() { return "hello"; }
 /// <reference types="[|foo/*refTypes*/|]" />
 import { bar } from "foo";
 bar();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["refTypes"]);
@@ -4620,7 +4620,7 @@ export function main() {}
 // @Filename: /home/src/workspaces/project/index.ts
 /// <reference path="./node_modules/pkg/[|lib.d.ts/*refPath*/|]" />
 declare function helper(): string;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["refPath"]);
@@ -4643,7 +4643,7 @@ pub fn test_go_to_source_definition_unresolved_triple_slash(t: &T) {
         let content: &str = r#"// @Filename: /home/src/workspaces/project/index.ts
 /// <reference /*marker*/path="nonexistent.ts" />
 export {};"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["marker"]);
@@ -4678,7 +4678,7 @@ export function create(config) { return config; }
 import { /*importConfig*/Config, create } from "pkg";
 const c: Config = { name: "test", value: 1 };
 create(c);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["importConfig"]);
@@ -4707,7 +4707,7 @@ export function create(config) { return config; }
 import { Config, create } from "pkg";
 const c: /*usageSite*/Config = { name: "test" };
 create(c);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["usageSite"]);
@@ -4732,7 +4732,7 @@ export function /*targetCreate*/create() {}
 // @Filename: /home/src/workspaces/project/index.ts
 import { /*importCreate*/create } from "pkg";
 create();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["importCreate"]);
@@ -4764,7 +4764,7 @@ exports.makeConfig = () => ({ enabled: true });
 // @Filename: /home/src/workspaces/project/index.ts
 import type { /*importName*/Config } from "pkg";
 let value: /*typeRef*/Config;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["importName", "typeRef"]);
@@ -4796,7 +4796,7 @@ export function makeConfig() { return { enabled: true }; }
 import { Config, makeConfig } from "pkg";
 let c: /*typeRef*/Config;
 makeConfig/*callRef*/();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["typeRef", "callRef"]);
@@ -4826,7 +4826,7 @@ export { Config } from "./types.js";
 // @Filename: /home/src/workspaces/project/index.ts
 import { /*importName*/Config } from "pkg";
 let c: Config;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_source_definition(t, &["importName"]);
@@ -4853,7 +4853,7 @@ class /*definition*/C {
 var c: C;
 // @Filename: goToTypeDefinition_Consumption.ts
 /*reference*/c = undefined;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_type_definition(t, &["reference"]);
@@ -4884,7 +4884,7 @@ interface I2 {
 // @Filename: goToTypeDefinition2_Consumption.ts
 var i2: I2;
 i2.prop/*reference*/erty;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_baseline_go_to_type_definition(t, &["reference"]);

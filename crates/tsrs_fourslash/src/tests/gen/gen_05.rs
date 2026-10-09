@@ -22,7 +22,7 @@ x./*variableOfEnumType*/;
 
 function foo(): Colors { return null; }
 foo()./*callOfEnumReturnType*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("enumVariable".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("Green".to_string()), Any::String("Red".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -53,7 +53,7 @@ var f: IFoo;
 var f2: IFoo2;
 f./*1*/; // completion here shows bar with return type is any
 f2./*2*/ // here bar has return type any, but bar2 is Foo2"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "bar".to_string(), detail: Some("(method) IFoo.bar(): IFoo".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
@@ -84,7 +84,7 @@ declare namespace Foo {
 }
 // @Filename: /a.ts
 import { /**/ } from "foo";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("foo".to_string()), Any::String("Static".to_string()), Any::CompletionItem(lsproto::CompletionItem { label: "type".to_string(), sort_text: Some("15".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
@@ -112,7 +112,7 @@ declare namespace Foo {
 }
 // @Filename: /a.ts
 import { /**/ } from "foo";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("Static".to_string()), Any::CompletionItem(lsproto::CompletionItem { label: "type".to_string(), sort_text: Some("15".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
@@ -138,7 +138,7 @@ interface Iterator<T, U> {
 }
 var i: Iterator<string, number>;
 i/**/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "i".to_string(), detail: Some("var i: Iterator<string, number>".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
@@ -165,7 +165,7 @@ export = x;
 ///<reference path='completionListForNonExportedMemberInAmbientModuleWithExportAssignment1_file0.ts'/>
  import test = require("completionListForNonExportedMemberInAmbientModuleWithExportAssignment1_file0");
  test./**/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), None);
@@ -204,7 +204,7 @@ let spreadUndefined: { a: number } =
     { a: 7, ...undefined }
 spreadNull./*3*/a;
 spreadUndefined./*4*/a;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "a".to_string(), detail: Some("(property) a: number".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "b".to_string(), detail: Some("(property) b: string".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
@@ -234,7 +234,7 @@ pub fn test_completion_list_for_rest(t: &T) {
 let t: Gen;
 var { x, ...rest } = t;
 rest./*1*/x;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "millenial".to_string(), detail: Some("(property) Gen.millenial: string".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "parent".to_string(), detail: Some("(property) Gen.parent: Gen".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
@@ -255,7 +255,7 @@ pub fn test_completion_list_for_shorthand_property_assignment(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = "var person: {name:string; id: number} = { n/**/";
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("id".to_string()), Any::String("name".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -276,7 +276,7 @@ pub fn test_completion_list_for_shorthand_property_assignment2(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = "var person: {name:string; id: number} = { n/**/";
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("id".to_string()), Any::String("name".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -323,7 +323,7 @@ export * from "./B"
 // @Filename: D.ts
 import * as c from "./C";
 var x = c./**/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("bVar".to_string()), Any::String("C1".to_string()), Any::String("cVar".to_string()), Any::String("Inner".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -370,7 +370,7 @@ export * from "./B"
 // @Filename: D.ts
 import * as c from "./C";
 var x = c.Inner./**/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("constVar".to_string()), Any::String("letVar".to_string()), Any::String("varVar".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -417,7 +417,7 @@ export * from "./B"
 // @Filename: D.ts
 import * as c from "./C";
 var x: c./**/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("I1".to_string()), Any::String("I2".to_string()), Any::String("I1_OR_I2".to_string()), Any::String("C1".to_string())], ..Default::default() }), ..Default::default() }));
@@ -464,7 +464,7 @@ export * from "./B"
 // @Filename: D.ts
 import * as c from "./C";
 var x: c.Inner./**/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("I3".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -488,7 +488,7 @@ pub fn test_completion_list_for_unicode_escape_name(t: &T) {
 export default function \u0043 () {}
 class \u0041 { /*2*/ }
 /*3*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("0".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("B".to_string())], ..Default::default() }), ..Default::default() }));
@@ -523,7 +523,7 @@ class DataHandler {
         }
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "local");
@@ -553,7 +553,7 @@ function fnc1() {
 }
 
 fnc1./**/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::COMPLETION_FUNCTION_MEMBERS_WITH_PROTOTYPE.clone()), ..Default::default() }), ..Default::default() }));
@@ -579,7 +579,7 @@ pub fn test_completion_list_get_exports_of_module(t: &T) {
 }
 
 let y: /**/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { excludes: vec!["x".to_string()], ..Default::default() }), ..Default::default() }));
@@ -613,7 +613,7 @@ var imp2: I1 = {
     a: () => {},
     /*1*/
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::StringSlice(vec!["0".to_string(), "1".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("b".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -636,7 +636,7 @@ pub fn test_completion_list_in_arrow_function_in_unclosed_call_site01(t: &T) {
         let content: &str = r#"declare function foo(...params: any[]): any;
 function getAllFiles(rootFileNames: string[]) {
     var processedFiles = rootFileNames.map(fileName => foo(/*1*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("fileName".to_string()), Any::String("rootFileNames".to_string()), Any::String("getAllFiles".to_string()), Any::String("foo".to_string())], ..Default::default() }), ..Default::default() }));
@@ -663,7 +663,7 @@ pub fn test_completion_list_in_class_expression_with_type_parameter(t: &T) {
    }
    prop: Ty/*1*/
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("0".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { excludes: vec!["TypeParam".to_string()], ..Default::default() }), ..Default::default() }));
@@ -701,7 +701,7 @@ class Foo {
         Foo./*4*/
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::StringSlice(vec!["1".to_string(), "2".to_string(), "3".to_string(), "4".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::completion_function_members_plus(&[Any::CompletionItem(lsproto::CompletionItem { label: "#a".to_string(), sort_text: Some("10".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "a".to_string(), sort_text: Some("10".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "b".to_string(), sort_text: Some("10".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prototype".to_string(), ..Default::default() })])), ..Default::default() }), ..Default::default() }));
@@ -724,7 +724,7 @@ pub fn test_completion_list_in_closed_function01(t: &T) {
         let content: &str = r#"function foo(x: string, y: number, z: boolean) {
     /*1*/
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("x".to_string()), Any::String("y".to_string()), Any::String("z".to_string())], ..Default::default() }), ..Default::default() }));
@@ -748,7 +748,7 @@ pub fn test_completion_list_in_closed_function02(t: &T) {
     function bar(a: number, b: string, c: typeof /*1*/) {
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("foo".to_string()), Any::String("x".to_string()), Any::String("y".to_string()), Any::String("z".to_string()), Any::String("bar".to_string()), Any::String("a".to_string()), Any::String("b".to_string())], ..Default::default() }), ..Default::default() }));
@@ -773,7 +773,7 @@ pub fn test_completion_list_in_closed_function03(t: &T) {
 
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("foo".to_string()), Any::String("x".to_string()), Any::String("y".to_string()), Any::String("z".to_string()), Any::String("bar".to_string()), Any::String("a".to_string()), Any::String("b".to_string())], ..Default::default() }), ..Default::default() }));
@@ -798,7 +798,7 @@ pub fn test_completion_list_in_closed_function04(t: &T) {
 
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("foo".to_string()), Any::String("x".to_string()), Any::String("y".to_string()), Any::String("z".to_string()), Any::String("bar".to_string()), Any::String("a".to_string())], ..Default::default() }), ..Default::default() }));
@@ -823,7 +823,7 @@ pub fn test_completion_list_in_closed_function05(t: &T) {
         var v = /*1*/
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("foo".to_string()), Any::String("x".to_string()), Any::String("y".to_string()), Any::String("z".to_string()), Any::String("bar".to_string()), Any::String("a".to_string()), Any::String("b".to_string()), Any::String("c".to_string())], ..Default::default() }), ..Default::default() }));
@@ -851,7 +851,7 @@ function foo(x: string, y: number, z: boolean) {
         var v = (x: /*1*/);
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("MyType".to_string())], excludes: vec!["x".to_string()], ..Default::default() }), ..Default::default() }));
@@ -879,7 +879,7 @@ function foo(x: string, y: number, z: boolean) {
         var v = (p: MyType) => /*1*/;
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("foo".to_string()), Any::String("x".to_string()), Any::String("y".to_string()), Any::String("z".to_string()), Any::String("bar".to_string()), Any::String("a".to_string()), Any::String("b".to_string()), Any::String("c".to_string()), Any::String("v".to_string()), Any::String("p".to_string())], excludes: vec!["MyType".to_string()], ..Default::default() }), ..Default::default() }));
@@ -905,7 +905,7 @@ pub fn test_completion_list_in_closed_object_type_literal_in_signature01(t: &T) 
 }
 
 declare function foo<TString, TNumber>(obj: I<TString, TNumber>): { str: T/*1*/ }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("I".to_string()), Any::String("TString".to_string()), Any::String("TNumber".to_string())], excludes: vec!["foo".to_string(), "obj".to_string()], ..Default::default() }), ..Default::default() }));
@@ -931,7 +931,7 @@ pub fn test_completion_list_in_closed_object_type_literal_in_signature02(t: &T) 
 }
 
 declare function foo<TString, TNumber>(obj: I<TString, TNumber>): { str: TStr/*1*/ }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("I".to_string()), Any::String("TString".to_string()), Any::String("TNumber".to_string())], excludes: vec!["foo".to_string(), "obj".to_string()], ..Default::default() }), ..Default::default() }));
@@ -957,7 +957,7 @@ pub fn test_completion_list_in_closed_object_type_literal_in_signature03(t: &T) 
 }
 
 declare function foo<TString, TNumber>(obj: I<TString, TNumber>): { str: TString/*1*/ }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("I".to_string()), Any::String("TString".to_string()), Any::String("TNumber".to_string())], excludes: vec!["foo".to_string(), "obj".to_string()], ..Default::default() }), ..Default::default() }));
@@ -983,7 +983,7 @@ pub fn test_completion_list_in_closed_object_type_literal_in_signature04(t: &T) 
 }
 
 declare function foo<TString, TNumber>(obj: I<TString, TNumber>): { /*1*/ }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "readonly".to_string(), sort_text: Some("15".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
@@ -1005,7 +1005,7 @@ pub fn test_completion_list_in_comments(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"var foo = '';
 ( // f/**/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), None);
@@ -1026,7 +1026,7 @@ pub fn test_completion_list_in_comments2(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = r#"// */{| "name" : "1" |}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), None);
@@ -1053,7 +1053,7 @@ pub fn test_completion_list_in_comments3(t: &T) {
  /*  */{| "name": "4" |}
  {| "name": "5" |}/*  */
 /* {| "name": "6" |}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::StringSlice(vec!["1".to_string(), "2".to_string(), "3".to_string(), "6".to_string()]), None);
@@ -1090,7 +1090,7 @@ class test {
 var t = new test((e) => {
     e./*2*/
 } );"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::StringSlice(vec!["1".to_string(), "2".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("x1".to_string()), Any::String("y1".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -1112,7 +1112,7 @@ pub fn test_completion_list_in_empty_file(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"var a = 0;
 /**/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("a".to_string())], ..Default::default() }), ..Default::default() }));
@@ -1142,7 +1142,7 @@ export {/*3*/} from "./m1"
 export {foo,/*4*/ from "./m1"
 export {bar as /*5*/, /*6*/ from "./m1"
 export {foo, bar, baz as b,/*7*/} from "./m1""#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::StringSlice(vec!["1".to_string(), "2".to_string(), "3".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("bar".to_string()), Any::String("baz".to_string()), Any::String("foo".to_string()), Any::CompletionItem(lsproto::CompletionItem { label: "type".to_string(), sort_text: Some("15".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
@@ -1173,7 +1173,7 @@ var W;
 declare module "M2" {
     export { /**/ } from "M1"
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("V".to_string()), Any::CompletionItem(lsproto::CompletionItem { label: "type".to_string(), sort_text: Some("15".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
@@ -1201,7 +1201,7 @@ pub fn test_completion_list_in_export_clause03(t: &T) {
 declare module "M2" {
     export { abc/**/ } from "M1";
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("abc".to_string()), Any::String("def".to_string()), Any::CompletionItem(lsproto::CompletionItem { label: "type".to_string(), sort_text: Some("15".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
@@ -1235,7 +1235,7 @@ class test1 extends Foo./*1*/ {}
 class test2 implements IFoo./*2*/ {}
 interface test3 extends IFoo./*3*/ {}
 interface test4 implements Foo./*4*/ {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::completion_function_members_plus(&[Any::CompletionItem(lsproto::CompletionItem { label: "staticMethod".to_string(), sort_text: Some("10".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "prototype".to_string(), sort_text: Some("11".to_string()), ..Default::default() })])), ..Default::default() }), ..Default::default() }));
@@ -1260,7 +1260,7 @@ pub fn test_completion_list_in_extends_clause_at_eof(t: &T) {
     class Foo { }
 }
 class Bar extends mod./**/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("Foo".to_string())], ..Default::default() }), ..Default::default() }));
@@ -1285,7 +1285,7 @@ items.forEach((n) => {
     /**/
     var q = n;
 });"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -1310,7 +1310,7 @@ pub fn test_completion_list_in_function_declaration(t: &T) {
         let content: &str = r#"// @lib: es5
 var a = 0;
 function foo(/**/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), None);
@@ -1352,7 +1352,7 @@ import {bar as /*5*/, /*6*/ from "./m1"
 import {foo, bar, baz as b,/*7*/} from "./m1"
 import { type /*8*/ } from "./m1";
 import { type b/*9*/ } from "./m1";"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::StringSlice(vec!["8".to_string(), "9".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("bar".to_string()), Any::String("baz".to_string()), Any::String("foo".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -1379,7 +1379,7 @@ pub fn test_completion_list_in_import_clause02(t: &T) {
 declare module "M2" {
     import { /**/ } from "M1"
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("V".to_string()), Any::CompletionItem(lsproto::CompletionItem { label: "type".to_string(), sort_text: Some("15".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
@@ -1407,7 +1407,7 @@ pub fn test_completion_list_in_import_clause03(t: &T) {
 declare module "M2" {
     import { abc/**/ } from "M1";
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("abc".to_string()), Any::String("def".to_string()), Any::CompletionItem(lsproto::CompletionItem { label: "type".to_string(), sort_text: Some("15".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
@@ -1436,7 +1436,7 @@ pub fn test_completion_list_in_import_clause04(t: &T) {
  export = Foo; /*2*/
 // @Filename: app.ts
 import {/*1*/} from './foo';"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { unsorted: Some(vec![Any::String("prototype".to_string()), Any::String("prop1".to_string()), Any::String("prop2".to_string()), Any::CompletionItem(lsproto::CompletionItem { label: "type".to_string(), sort_text: Some("15".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
@@ -1465,7 +1465,7 @@ import * as A from "/*1*/";
 declare module "@e/f" { function fun(): string; }
 // @Filename: /node_modules/@types/c__d/index.d.ts
 export declare let x: number;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { unsorted: Some(vec![Any::String("@e/f".to_string()), Any::String("@a/b".to_string()), Any::String("@c/d".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -1492,7 +1492,7 @@ import * as A from "/*1*/";
 export declare let x: number;
 // @Filename: T2/a__b/index.d.ts
 export declare let x: number;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("@a/b".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -1513,7 +1513,7 @@ pub fn test_completion_list_in_middle_of_identifier_in_arrow_function01(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = "xyz => x/*1*/y";
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("xyz".to_string())], ..Default::default() }), ..Default::default() }));
@@ -1539,7 +1539,7 @@ pub fn test_completion_list_in_named_class_expression(t: &T) {
    }
    /*1*/
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("0".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "myClass".to_string(), detail: Some("(local class) myClass".to_string()), kind: Some(lsproto::CompletionItemKind::Property), ..Default::default() })], ..Default::default() }), ..Default::default() }));
@@ -1574,7 +1574,7 @@ var y = class {
    }
    /*5*/
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("0".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { excludes: vec!["myClass".to_string()], ..Default::default() }), ..Default::default() }));
@@ -1610,7 +1610,7 @@ pub fn test_completion_list_in_named_function_expression(t: &T) {
 
 /*globalScope*/
 fo/*referenceInGlobalScope*/o;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::StringSlice(vec!["globalScope".to_string(), "insideFunctionDeclaration".to_string(), "insideFunctionExpression".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("foo".to_string())], ..Default::default() }), ..Default::default() }));
@@ -1635,7 +1635,7 @@ pub fn test_completion_list_in_named_function_expression1(t: &T) {
         let content: &str = r#"var x = function foo() {
    /*1*/
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "foo".to_string(), detail: Some("(local function) foo(): void".to_string()), kind: Some(lsproto::CompletionItemKind::Function), ..Default::default() })], ..Default::default() }), ..Default::default() }));
@@ -1663,7 +1663,7 @@ var x = function foo() {
 var y = function () {
    /*2*/
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::StringSlice(vec!["0".to_string(), "2".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "foo".to_string(), detail: Some("function foo(): void".to_string()), kind: Some(lsproto::CompletionItemKind::Function), ..Default::default() })], ..Default::default() }), ..Default::default() }));
@@ -1688,7 +1688,7 @@ pub fn test_completion_list_in_namespace_import_name01(t: &T) {
 export var foo: number = 1;
 // @Filename: m2.ts
 import * as /**/ from "m1""#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), None);
@@ -1715,7 +1715,7 @@ pub fn test_completion_list_in_object_binding_pattern01(t: &T) {
 
 var foo: I;
 var { /**/ } = foo;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("property1".to_string()), Any::String("property2".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -1742,7 +1742,7 @@ pub fn test_completion_list_in_object_binding_pattern02(t: &T) {
 
 var foo: I;
 var { property1, /**/ } = foo;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("property2".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -1769,7 +1769,7 @@ pub fn test_completion_list_in_object_binding_pattern03(t: &T) {
 
 var foo: I;
 var { property1: /**/ } = foo;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), None);
@@ -1796,7 +1796,7 @@ pub fn test_completion_list_in_object_binding_pattern04(t: &T) {
 
 var foo: I;
 var { prope/**/ } = foo;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("property1".to_string()), Any::String("property2".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -1823,7 +1823,7 @@ pub fn test_completion_list_in_object_binding_pattern05(t: &T) {
 
 var foo: I;
 var { property1/**/ } = foo;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("property1".to_string()), Any::String("property2".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -1850,7 +1850,7 @@ pub fn test_completion_list_in_object_binding_pattern06(t: &T) {
 
 var foo: I;
 var { property1, property2, /**/ } = foo;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), None);
@@ -1881,7 +1881,7 @@ interface J {
 
 var foo: J;
 var { property1: { /**/ } } = foo;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("propertyOfI_1".to_string()), Any::String("propertyOfI_2".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -1912,7 +1912,7 @@ interface J {
 
 var foo: J;
 var { property1: { propertyOfI_1, /**/ } } = foo;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("propertyOfI_2".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -1943,7 +1943,7 @@ interface J {
 
 var foo: J;
 var { property1: { propertyOfI_1, }, /**/ } = foo;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("property2".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -1974,7 +1974,7 @@ interface J {
 
 var foo: J[];
 var [{ property1: { propertyOfI_1, }, /*1*/ }, { /*2*/ }] = foo;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("property2".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -2001,7 +2001,7 @@ pub fn test_completion_list_in_object_binding_pattern11(t: &T) {
 }
 
 var { property1: prop1, /**/ }: I;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("property2".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -2028,7 +2028,7 @@ pub fn test_completion_list_in_object_binding_pattern12(t: &T) {
 
 function f({ property1, /**/ }: I): void {
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("property2".to_string())], excludes: vec!["property1".to_string()], ..Default::default() }), ..Default::default() }));
@@ -2060,7 +2060,7 @@ interface J {
 }
 
 let { /**/ }: I | J = { x: 10 };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("x".to_string()), Any::String("y".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -2084,7 +2084,7 @@ pub fn test_completion_list_in_object_binding_pattern14(t: &T) {
     private ab;
     protected bc;
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), None);
@@ -2119,7 +2119,7 @@ pub fn test_completion_list_in_object_binding_pattern15(t: &T) {
 
 const { /*3*/ } = new Foo();
 const { /*4*/ } = Foo;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { unsorted: Some(vec![Any::String("xxx1".to_string()), Any::String("xxx2".to_string()), Any::String("xxx3".to_string()), Any::String("foo".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -2155,7 +2155,7 @@ pub fn test_completion_list_in_object_binding_pattern16(t: &T) {
  * @param {Foo} options
  */
 function f({ /**/ }) {}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("a".to_string()), Any::String("b".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -2185,7 +2185,7 @@ interface thing {
 }
 var t: thing;
 t.pos = { x: 4, y: 3 + t./**/ };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("name".to_string()), Any::String("pos".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -2225,7 +2225,7 @@ class Foo {
         };
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::MarkerSlice(f.markers()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("count".to_string()), Any::String("fileCount".to_string()), Any::String("isEmpty".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -2252,7 +2252,7 @@ pub fn test_completion_list_in_object_literal3(t: &T) {
 var ast2: IASTNode = {
     /**/
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("children".to_string()), Any::String("name".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -2291,7 +2291,7 @@ funcC({ /*C*/ });
 funcD({ /*D*/ });
 funcE({ /*E*/ });
 funcF({ /*F*/ });"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::MarkerSlice(f.markers()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("hello".to_string()), Any::String("world".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -2330,7 +2330,7 @@ const obj = {
     },
     o/*4*/
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::StringSlice(vec!["1".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("o".to_string())], excludes: vec!["obj".to_string()], ..Default::default() }), ..Default::default() }));
@@ -2365,7 +2365,7 @@ fn(foo, {
 fn({ a: "a", b: "b" }, {
     /*2*/
 })"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::StringSlice(vec!["1".to_string(), "2".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "on_a?".to_string(), insert_text: Some("on_a".to_string()), filter_text: Some("on_a".to_string()), sort_text: Some("12".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "on_b?".to_string(), insert_text: Some("on_b".to_string()), filter_text: Some("on_b".to_string()), sort_text: Some("12".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
@@ -2395,7 +2395,7 @@ function f(arg: any) {
 f({ /*1*/ });
 f(() => ({ /*2*/ }));
 f(() => (({ /*3*/ })));"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::StringSlice(vec!["1".to_string(), "2".to_string(), "3".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("foo".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -2423,7 +2423,7 @@ test({
   hover: "",
   /**/
 });"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "pressed?".to_string(), insert_text: Some("pressed".to_string()), filter_text: Some("pressed".to_string()), sort_text: Some("12".to_string()), ..Default::default() })]), ..Default::default() }), ..Default::default() }));
@@ -2445,7 +2445,7 @@ pub fn test_completion_list_in_object_literal_assignment_pattern1(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"let x = { a: 1, b: 2 };
 let y = ({ /**/ } = x, 1);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("a".to_string()), Any::String("b".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -2467,7 +2467,7 @@ pub fn test_completion_list_in_object_literal_assignment_pattern2(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"let x = { a: 1, b: 2 };
 let y = ({ a, /**/ } = x, 1);"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("b".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -2495,7 +2495,7 @@ interface I {
 var x: I = {
     metadata: "/*1*/
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![]), ..Default::default() }), ..Default::default() }));
@@ -2519,7 +2519,7 @@ pub fn test_completion_list_in_object_literal_that_is_parameter_of_function_call
 var xc;
 f({
     /**/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("xa".to_string()), Any::String("xb".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -2557,7 +2557,7 @@ wrap(function () {
     const y = xs./*involvedInReturn*/
     return y;
 });"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("inReturn".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("x".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -2636,7 +2636,7 @@ class TestClass {
         /*insideMethod*/
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("valueReference".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("localVariable".to_string()), Any::String("exportedVariable".to_string()), Any::String("localFunction".to_string()), Any::String("exportedFunction".to_string()), Any::String("localClass".to_string()), Any::String("exportedClass".to_string()), Any::String("localModule".to_string()), Any::String("exportedModule".to_string()), Any::String("exportedVariable2".to_string()), Any::String("exportedFunction2".to_string()), Any::String("exportedClass2".to_string()), Any::String("exportedModule2".to_string())], ..Default::default() }), ..Default::default() }));
@@ -2666,7 +2666,7 @@ declare module "a" {
 }
 
 /**/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { excludes: vec!["a".to_string()], ..Default::default() }), ..Default::default() }));
@@ -2688,7 +2688,7 @@ pub fn test_completion_list_in_string_literals1(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#""/*1*/       /*2*/\/*3*/
  /*4*/   \\/*5*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::MarkerSlice(f.markers()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![]), ..Default::default() }), ..Default::default() }));
@@ -2711,7 +2711,7 @@ pub fn test_completion_list_in_string_literals2(t: &T) {
         let content: &str = r#""/*1*/       /*2*/\/*3*/
  /*4*/   \\\/*5*/
  /*6*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::MarkerSlice(f.markers()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![]), ..Default::default() }), ..Default::default() }));
@@ -2735,7 +2735,7 @@ pub fn test_completion_list_in_template_literal_parts1(t: &T) {
 /*0*/`  $ { ${/*1*/ 10/*2*/ + 1.1/*3*/ /*4*/} 12312`/*5*/
 
 /*6*/`asdasd${/*7*/ 2 + 1.1 /*8*/} 12312 {"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::StringSlice(vec!["1".to_string(), "7".to_string()]), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::COMPLETION_GLOBALS.clone()), ..Default::default() }), ..Default::default() }));
@@ -2759,7 +2759,7 @@ pub fn test_completion_list_in_template_literal_parts_negatives1(t: &T) {
         let content: &str = r#"`/*0*/ /*1*/$ /*2*/{ /*3*/$/*4*/{ 10 + 1.1 }/*5*/ 12312/*6*/`
 
 `asdasd$/*7*/{ 2 + 1.1 }/*8*/ 12312 /*9*/{/*10*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::MarkerSlice(f.markers()), None);
@@ -2794,7 +2794,7 @@ interface Bar<T extends Foo> {
 }
 
 var foobar: Bar<{/**/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { unsorted: Some(vec![Any::String("one".to_string()), Any::String("two".to_string()), Any::String(r#""333""#.to_string()), Any::String(r#""4four""#.to_string()), Any::String(r#""5 five""#.to_string()), Any::String("number".to_string()), Any::String("Object".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -2840,7 +2840,7 @@ d<{/*3*/}, {/*4*/}>();
 d<Foo, { four: {/*5*/} }>();
 
 (<T extends Foo>() => {})<{/*6*/}>();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("0".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { unsorted: Some(vec![Any::String("one".to_string()), Any::String("two".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -2888,7 +2888,7 @@ declare const C: {
 new C<{/*3*/}>()
 
 new (class <T extends Foo> {})<{/*4*/}>();"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("0".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { unsorted: Some(vec![Any::String("one".to_string()), Any::String("two".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -2928,7 +2928,7 @@ a<{ kind: 'bar', /*0*/ }>();
 declare function b<T extends Foo>(kind: 'foo'): void
 declare function b<T extends Bar>(kind: 'bar'): void
 b<{/*1*/}>('bar');"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("0".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { unsorted: Some(vec![Any::String("one".to_string()), Any::String("two".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -2960,7 +2960,7 @@ const Component = <T extends Foo>() => <></>;
 
 <Component<{/*0*/}>></Component>;
 <Component<{/*1*/}>/>;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("0".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { unsorted: Some(vec![Any::String("one".to_string()), Any::String("two".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -2987,7 +2987,7 @@ pub fn test_completion_list_in_type_literal_in_type_parameter14(t: &T) {
 }
 declare function f<T extends Foo>(x: TemplateStringsArray): void;
 f<{/*0*/}>``;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("0".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { unsorted: Some(vec![Any::String("one".to_string()), Any::String("two".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -3018,7 +3018,7 @@ class {
    @decorator<{/*0*/}>
    method() {}
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("0".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { unsorted: Some(vec![Any::String("one".to_string()), Any::String("two".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -3064,7 +3064,7 @@ declare const b: {
     <T extends { one: false }>(): {};
 }
 b<{/*3*/}>;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("0".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { unsorted: Some(vec![Any::String("one".to_string()), Any::String("two".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -3095,7 +3095,7 @@ new Foo<{ x: /*1*/ }>();
 foo<{ x: /*2*/ }>();
 foo<{ x: /*3*/ }>;
 Foo<{ x: /*4*/ }>;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("0".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String(r#""one""#.to_string()), Any::String("2".to_string())], ..Default::default() }), ..Default::default() }));
@@ -3131,7 +3131,7 @@ foo<{ x: '/*3*/' }>;
 Foo<{ x: '/*4*/' }>;
 tag<{ x: '/*5*/' }>``;
 class { @decorator<{ x: '/*6*/' }>; method() {} }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("0".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { unsorted: Some(vec![Any::String("one".to_string()), Any::String("two".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -3169,7 +3169,7 @@ foo<'/*3*/'>;
 Foo<'/*4*/'>;
 tag<'/*5*/'>``;
 class { @decorator<'/*6*/'>; method() {} }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("0".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { unsorted: Some(vec![Any::String("one".to_string()), Any::String("two".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -3205,7 +3205,7 @@ interface Bar<T extends Foo> {
 }
 
 var foobar: Bar<{ on/**/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("one".to_string()), Any::String("two".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -3234,7 +3234,7 @@ const Component2 = <T extends 'one' | 'two'>() => <></>;
 <Component1<{ x: '/*1*/' }>/>;
 <Component2<'/*2*/'>></Component>;
 <Component2<'/*3*/'>/>;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("0".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { unsorted: Some(vec![Any::String("one".to_string()), Any::String("two".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -3265,7 +3265,7 @@ new Foo<[/*1*/]>();
 foo<[/*2*/]>();
 foo<[/*3*/]>;
 Foo<[/*4*/]>;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("0".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String(r#""one""#.to_string()), Any::String("2".to_string())], ..Default::default() }), ..Default::default() }));
@@ -3299,7 +3299,7 @@ interface Bar<T extends Foo> {
 }
 
 var foobar: Bar<{ one: string, /**/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("two".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -3329,7 +3329,7 @@ interface Bar<T extends Foo> {
 }
 
 var foobar: Bar<{ one: string } & {/**/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("two".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -3359,7 +3359,7 @@ interface Bar<T extends Foo> {
 }
 
 var foobar: Bar<{ prop1: string } & {/**/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("one".to_string()), Any::String("two".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -3389,7 +3389,7 @@ interface Bar<T extends Foo> {
 }
 
 var foobar: Bar<{ one: string } | {/**/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("one".to_string()), Any::String("two".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -3422,7 +3422,7 @@ interface Bar<T extends Foo> {
 
 var foobar: Bar<{
     two: {/**/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("three".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -3466,7 +3466,7 @@ var foobar: Bar<{
     },
     /*1*/
 }>;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("4".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("four".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -3494,7 +3494,7 @@ var C1 = class D</*1*/T> {}
 var C2 = class D<T, /*2*/
 var C3 = class D<T, /*3*/U>{}
 var C4 = class D<T extends /*4*/>{}"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::StringSlice(vec!["0".to_string(), "1".to_string(), "2".to_string(), "3".to_string()]), None);
@@ -3519,7 +3519,7 @@ pub fn test_completion_list_in_type_parameter_of_type_alias1(t: &T) {
 type List2</*1*/T> = T[];
 type List4<T> = /*2*/T[];
 type List3<T1> = /*3*/;"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::StringSlice(vec!["0".to_string(), "1".to_string()]), None);
@@ -3545,7 +3545,7 @@ pub fn test_completion_list_in_type_parameter_of_type_alias2(t: &T) {
 type Map1<K, /*1*/V> = [];
 type Map1<K,V> = /*2*/[];
 type Map1<K1, V1> = </*3*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::StringSlice(vec!["0".to_string(), "1".to_string()]), None);
@@ -3568,7 +3568,7 @@ pub fn test_completion_list_in_type_parameter_of_type_alias3(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = "type constructorType<T1, T2> = new <T/*1*/, /*2*/";
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::MarkerSlice(f.markers()), None);
@@ -3593,7 +3593,7 @@ pub fn test_completion_list_in_typed_object_literals2(t: &T) {
 }
 var aaa: Foo;
 aaa = { /*9*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("9".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("x".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -3618,7 +3618,7 @@ pub fn test_completion_list_in_typed_object_literals3(t: &T) {
 }
 var aaa: Foo;
 aaa.x = { /*10*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("10".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("a".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -3646,7 +3646,7 @@ var p15: MyPoint = {
     "x1": 5,
     /*15*/
 };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("15".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("y1".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -3673,7 +3673,7 @@ pub fn test_completion_list_in_typed_object_literals_with_partial_property_names
 var p15: MyPoint = {
     /**/
 };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("x1".to_string()), Any::String("y1".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -3706,7 +3706,7 @@ pub fn test_completion_list_in_typed_object_literals_with_partial_property_names
 var p15: MyPoint = {
     /**/x1: 0,
 };"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("x1".to_string()), Any::String("y1".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -3728,7 +3728,7 @@ pub fn test_completion_list_in_unclosed_comma_expression01(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"// should NOT see a and b
 foo((a, b) => a,/*1*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { excludes: vec!["a".to_string(), "b".to_string()], ..Default::default() }), ..Default::default() }));
@@ -3750,7 +3750,7 @@ pub fn test_completion_list_in_unclosed_comma_expression02(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"// should NOT see a and b
 foo((a, b) => (a,/*1*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("a".to_string()), Any::String("b".to_string())], ..Default::default() }), ..Default::default() }));
@@ -3772,7 +3772,7 @@ pub fn test_completion_list_in_unclosed_delete_expression01(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"var x;
 var y = delete /*1*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("x".to_string())], ..Default::default() }), ..Default::default() }));
@@ -3794,7 +3794,7 @@ pub fn test_completion_list_in_unclosed_delete_expression02(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"var x;
 var y = (p) => delete /*1*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("x".to_string()), Any::String("p".to_string())], ..Default::default() }), ..Default::default() }));
@@ -3816,7 +3816,7 @@ pub fn test_completion_list_in_unclosed_element_access_expression01(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"var x;
 var y = x[/*1*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("x".to_string())], ..Default::default() }), ..Default::default() }));
@@ -3838,7 +3838,7 @@ pub fn test_completion_list_in_unclosed_element_access_expression02(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"var x;
 var y = (p) => x[/*1*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("p".to_string()), Any::String("x".to_string())], ..Default::default() }), ..Default::default() }));
@@ -3859,7 +3859,7 @@ pub fn test_completion_list_in_unclosed_for_loop01(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = "for (let i = 0; /*1*/";
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("i".to_string())], ..Default::default() }), ..Default::default() }));
@@ -3880,7 +3880,7 @@ pub fn test_completion_list_in_unclosed_for_loop02(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
         let content: &str = "for (let i = 0; i < 10; i++) /*1*/";
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("i".to_string())], ..Default::default() }), ..Default::default() }));
@@ -3903,7 +3903,7 @@ pub fn test_completion_list_in_unclosed_function01(t: &T) {
         let content: &str = r#"function foo(x: string, y: number, z: boolean) {
     /*1*/
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("foo".to_string()), Any::String("x".to_string()), Any::String("y".to_string()), Any::String("z".to_string())], ..Default::default() }), ..Default::default() }));
@@ -3925,7 +3925,7 @@ pub fn test_completion_list_in_unclosed_function02(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"function foo(x: string, y: number, z: boolean) {
     function bar(a: number, b: string, c: typeof /*1*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("foo".to_string()), Any::String("x".to_string()), Any::String("y".to_string()), Any::String("z".to_string()), Any::String("bar".to_string()), Any::String("a".to_string()), Any::String("b".to_string())], ..Default::default() }), ..Default::default() }));
@@ -3948,7 +3948,7 @@ pub fn test_completion_list_in_unclosed_function03(t: &T) {
         let content: &str = r#"function foo(x: string, y: number, z: boolean) {
     function bar(a: number, b: string, c: typeof /*1*/
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("foo".to_string()), Any::String("x".to_string()), Any::String("y".to_string()), Any::String("z".to_string()), Any::String("bar".to_string()), Any::String("a".to_string()), Any::String("b".to_string())], ..Default::default() }), ..Default::default() }));
@@ -3970,7 +3970,7 @@ pub fn test_completion_list_in_unclosed_function04(t: &T) {
     let __defer1 = go::run(|| {
         let content: &str = r#"function foo(x: string, y: number, z: boolean) {
     function bar(a: number, b: string, c: typeof x = /*1*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("foo".to_string()), Any::String("x".to_string()), Any::String("y".to_string()), Any::String("z".to_string()), Any::String("bar".to_string()), Any::String("a".to_string()), Any::String("b".to_string())], ..Default::default() }), ..Default::default() }));
@@ -3993,7 +3993,7 @@ pub fn test_completion_list_in_unclosed_function05(t: &T) {
         let content: &str = r#"function foo(x: string, y: number, z: boolean) {
     function bar(a: number, b: string, c: typeof x = /*1*/
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("foo".to_string()), Any::String("x".to_string()), Any::String("y".to_string()), Any::String("z".to_string()), Any::String("bar".to_string()), Any::String("a".to_string()), Any::String("b".to_string())], ..Default::default() }), ..Default::default() }));
@@ -4016,7 +4016,7 @@ pub fn test_completion_list_in_unclosed_function06(t: &T) {
         let content: &str = r#"function foo(x: string, y: number, z: boolean) {
     function bar(a: number, b: string = /*1*/, c: typeof x = "hello"
 "#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("foo".to_string()), Any::String("x".to_string()), Any::String("y".to_string()), Any::String("z".to_string()), Any::String("bar".to_string()), Any::String("a".to_string())], ..Default::default() }), ..Default::default() }));
@@ -4039,7 +4039,7 @@ pub fn test_completion_list_in_unclosed_function07(t: &T) {
         let content: &str = r#"function foo(x: string, y: number, z: boolean) {
     function bar(a: number, b: string = /*1*/, c: typeof x = "hello"
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("foo".to_string()), Any::String("x".to_string()), Any::String("y".to_string()), Any::String("z".to_string()), Any::String("bar".to_string()), Any::String("a".to_string())], ..Default::default() }), ..Default::default() }));
@@ -4062,7 +4062,7 @@ pub fn test_completion_list_in_unclosed_function08(t: &T) {
         let content: &str = r#"function foo(x: string, y: number, z: boolean) {
     function bar(a: number, b: string = "hello", c: typeof x = "hello") {
         var v = /*1*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("foo".to_string()), Any::String("x".to_string()), Any::String("y".to_string()), Any::String("z".to_string()), Any::String("bar".to_string()), Any::String("a".to_string()), Any::String("b".to_string()), Any::String("c".to_string())], ..Default::default() }), ..Default::default() }));
@@ -4086,7 +4086,7 @@ pub fn test_completion_list_in_unclosed_function09(t: &T) {
     function bar(a: number, b: string = "hello", c: typeof x = "hello") {
         var v = /*1*/
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("foo".to_string()), Any::String("x".to_string()), Any::String("y".to_string()), Any::String("z".to_string()), Any::String("bar".to_string()), Any::String("a".to_string()), Any::String("b".to_string()), Any::String("c".to_string())], ..Default::default() }), ..Default::default() }));
@@ -4112,7 +4112,7 @@ pub fn test_completion_list_in_unclosed_function10(t: &T) {
 function foo(x: string, y: number, z: boolean) {
     function bar(a: number, b: string = "hello", c: typeof x = "hello") {
         var v = (p: /*1*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("MyType".to_string())], ..Default::default() }), ..Default::default() }));
@@ -4138,7 +4138,7 @@ pub fn test_completion_list_in_unclosed_function11(t: &T) {
 function foo(x: string, y: number, z: boolean) {
     function bar(a: number, b: string = "hello", c: typeof x = "hello") {
         var v = (p: /*1*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("MyType".to_string())], ..Default::default() }), ..Default::default() }));
@@ -4165,7 +4165,7 @@ function foo(x: string, y: number, z: boolean) {
     function bar(a: number, b: string = "hello", c: typeof x = "hello") {
         var v = (p: /*1*/
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("MyType".to_string())], ..Default::default() }), ..Default::default() }));
@@ -4193,7 +4193,7 @@ function foo(x: string, y: number, z: boolean) {
         var v = (p: /*1*/
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("MyType".to_string())], ..Default::default() }), ..Default::default() }));
@@ -4221,7 +4221,7 @@ function foo(x: string, y: number, z: boolean) {
         var v = (p: MyType) => /*1*/
     }
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("foo".to_string()), Any::String("x".to_string()), Any::String("y".to_string()), Any::String("z".to_string()), Any::String("bar".to_string()), Any::String("a".to_string()), Any::String("b".to_string()), Any::String("c".to_string()), Any::String("v".to_string()), Any::String("p".to_string())], ..Default::default() }), ..Default::default() }));
@@ -4248,7 +4248,7 @@ function foo(x: string, y: number, z: boolean) {
     function bar(a: number, b: string = "hello", c: typeof x = "hello") {
         var v = (p: MyType) => /*1*/
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("foo".to_string()), Any::String("x".to_string()), Any::String("y".to_string()), Any::String("z".to_string()), Any::String("bar".to_string()), Any::String("a".to_string()), Any::String("b".to_string()), Any::String("c".to_string()), Any::String("v".to_string()), Any::String("p".to_string())], ..Default::default() }), ..Default::default() }));
@@ -4274,7 +4274,7 @@ pub fn test_completion_list_in_unclosed_function16(t: &T) {
 function foo(x: string, y: number, z: boolean) {
     function bar(a: number, b: string = "hello", c: typeof x = "hello") {
         var v = (p: MyType) => /*1*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("foo".to_string()), Any::String("x".to_string()), Any::String("y".to_string()), Any::String("z".to_string()), Any::String("bar".to_string()), Any::String("a".to_string()), Any::String("b".to_string()), Any::String("c".to_string()), Any::String("v".to_string()), Any::String("p".to_string())], ..Default::default() }), ..Default::default() }));
@@ -4300,7 +4300,7 @@ pub fn test_completion_list_in_unclosed_function17(t: &T) {
 function foo(x: string, y: number, z: boolean) {
     function bar(a: number, b: string = "hello", c: typeof x = "hello") {
         var v = (p: MyType) => y + /*1*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("foo".to_string()), Any::String("x".to_string()), Any::String("y".to_string()), Any::String("z".to_string()), Any::String("bar".to_string()), Any::String("a".to_string()), Any::String("b".to_string()), Any::String("c".to_string()), Any::String("v".to_string()), Any::String("p".to_string())], ..Default::default() }), ..Default::default() }));
@@ -4327,7 +4327,7 @@ function foo(x: string, y: number, z: boolean) {
     function bar(a: number, b: string = "hello", c: typeof x = "hello") {
         var v = (p: MyType) => y + /*1*/
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("foo".to_string()), Any::String("x".to_string()), Any::String("y".to_string()), Any::String("z".to_string()), Any::String("bar".to_string()), Any::String("a".to_string()), Any::String("b".to_string()), Any::String("c".to_string()), Any::String("v".to_string()), Any::String("p".to_string())], ..Default::default() }), ..Default::default() }));
@@ -4353,7 +4353,7 @@ pub fn test_completion_list_in_unclosed_function19(t: &T) {
 function foo(x: string, y: number, z: boolean) {
     function bar(a: number, b: string = "hello", c: typeof x = "hello") {
         var v = (p: MyType) => { return y + /*1*/"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("foo".to_string()), Any::String("x".to_string()), Any::String("y".to_string()), Any::String("z".to_string()), Any::String("bar".to_string()), Any::String("a".to_string()), Any::String("b".to_string()), Any::String("c".to_string()), Any::String("v".to_string()), Any::String("p".to_string())], ..Default::default() }), ..Default::default() }));
@@ -4376,7 +4376,7 @@ pub fn test_completion_list_in_unclosed_index_signature01(t: &T) {
         let content: &str = r#"class C {
     [foo: string]: typeof /*1*/
 }"#;
-        let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("foo".to_string()), Any::String("C".to_string())], ..Default::default() }), ..Default::default() }));
