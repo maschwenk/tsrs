@@ -1,0 +1,1 @@
+src/a.vue(3,1): error header7: The mapper rejected this line.

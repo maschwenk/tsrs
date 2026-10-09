@@ -111,6 +111,11 @@ jobs:
       - name: Regression cases
         run: tools/regressions.sh target/release/tsrs
 
+      # testdata/contentmapper: projects with a Node content mapper, run through the real process spawner, each with
+      # tsgo's output.
+      - name: Content mapper cases
+        run: tools/contentmapper-e2e.sh target/release/tsrs
+
       - name: Fourslash (language service) suite
         run: .github/scripts/fourslash-gate.sh
 
