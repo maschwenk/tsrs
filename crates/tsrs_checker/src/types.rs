@@ -1184,17 +1184,11 @@ impl ObjectFlagsCell {
     /// bits come from its side table.
     #[inline]
     pub fn get_lazy(&self, bit: ObjectFlags) -> ObjectFlags {
-        let v = self.0.get();
-        if v.intersects(bit) || !tsrs_core::shwindow::shared_ref(self) {
-            return v;
-        }
-        tsrs_core::shcell::side_get(std::ptr::from_ref(self).addr(), v)
+        let _ = bit;
+        self.0.get()
     }
     #[inline]
     pub fn set(&self, f: ObjectFlags) {
-        if tsrs_core::shwindow::shared_ref(self) {
-            return tsrs_core::shcell::side_set(std::ptr::from_ref(self).addr(), f);
-        }
         self.0.set(f)
     }
 }

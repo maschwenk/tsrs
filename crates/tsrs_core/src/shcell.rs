@@ -69,18 +69,11 @@ impl<T: Copy + Default + PartialEq> ShCell<T> {
 
     #[inline]
     pub fn get(&self) -> T {
-        let v = self.0.get();
-        if v != T::default() || !shared_ref(self) {
-            return v;
-        }
-        side_get(std::ptr::from_ref(self).addr(), v)
+        self.0.get()
     }
 
     #[inline]
     pub fn set(&self, v: T) {
-        if shared_ref(self) {
-            return side_set(std::ptr::from_ref(self).addr(), v);
-        }
         self.0.set(v)
     }
 
@@ -109,18 +102,11 @@ impl ShCountCell {
 
     #[inline]
     pub fn get(&self) -> i32 {
-        let v = self.0.get();
-        if v != -1 || !shared_ref(self) {
-            return v;
-        }
-        side_get(std::ptr::from_ref(self).addr(), v)
+        self.0.get()
     }
 
     #[inline]
     pub fn set(&self, v: i32) {
-        if shared_ref(self) {
-            return side_set(std::ptr::from_ref(self).addr(), v);
-        }
         self.0.set(v)
     }
 }
@@ -143,18 +129,11 @@ impl<T> ShTaggedPtrCell<T> {
 
     #[inline]
     pub fn get(&self) -> *const T {
-        let p = self.0.get();
-        if p.addr() > 1 || !shared_ref(self) {
-            return p;
-        }
-        side_get(std::ptr::from_ref(self).addr(), p)
+        self.0.get()
     }
 
     #[inline]
     pub fn set(&self, p: *const T) {
-        if shared_ref(self) {
-            return side_set(std::ptr::from_ref(self).addr(), p);
-        }
         self.0.set(p)
     }
 }
@@ -170,20 +149,12 @@ impl<T> ShOptionThinSliceCell<T> {
 
     #[inline]
     pub fn get(&self) -> Option<&'static [T]> {
-        match self.0.get() {
-            Some(s) => Some(s.get()),
-            None if !shared_ref(self) => None,
-            None => side_get(std::ptr::from_ref(self).addr(), None::<crate::ThinSlice<T>>).map(crate::ThinSlice::get),
-        }
+        self.0.get().map(crate::ThinSlice::get)
     }
 
     #[inline]
     pub fn set(&self, s: Option<&'static [T]>) {
-        let v = s.map(crate::ThinSlice::new);
-        if shared_ref(self) {
-            return side_set(std::ptr::from_ref(self).addr(), v);
-        }
-        self.0.set(v)
+        self.0.set(s.map(crate::ThinSlice::new))
     }
 }
 
@@ -204,20 +175,12 @@ impl ShStrCell {
 
     #[inline]
     pub fn get(&self) -> &'static str {
-        let s = self.0.get().as_str();
-        if !s.is_empty() || !shared_ref(self) {
-            return s;
-        }
-        side_get(std::ptr::from_ref(self).addr(), self.0.get()).as_str()
+        self.0.get().as_str()
     }
 
     #[inline]
     pub fn set(&self, s: &'static str) {
-        let v = crate::PackedStr::new(s);
-        if shared_ref(self) {
-            return side_set(std::ptr::from_ref(self).addr(), v);
-        }
-        self.0.set(v)
+        self.0.set(crate::PackedStr::new(s))
     }
 }
 
