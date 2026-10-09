@@ -42,7 +42,7 @@ git -C ts-ref sparse-checkout set tsc/testdata && git -C ts-ref checkout "$commi
 ./target/release/tsrs-test show <suite/name>                     # expected vs actual
 .github/scripts/conformance-gate.sh                              # what CI enforces: errors, .types, .symbols
 tools/regressions.sh                                             # testdata/regressions (CI runs it too)
-cargo test -p tsrs_core -p tsrs_scanner -p tsrs_tsoptions        # unit tests (see .depot/workflows/ci.yml)
+cargo test -p tsrs_core -p tsrs_scanner -p tsrs_cli              # unit and CLI tests (see .depot/workflows/ci.yml)
 ```
 
 CI runs the gate twice: in tsgo's check history, which the baselines need, and in the default mode
