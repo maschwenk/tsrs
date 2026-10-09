@@ -190,6 +190,12 @@ pointer compression costs about +4.9% instructions and took back most of the che
   other: +8% wall). Left: namespace bodies (+43 MB on formbricks-web, needs
   the binder's per-body state at parse time), lists with import types (30-60 MB never asked for on t3code-server and
   cal-diy), eager `@see`/`@link` JSDoc (4-17 MB), per-member laziness (about 1% of peak).
+- Round 2 of the lazy declaration-file lists (notes/mem-lazy-dts-members.md section 7, census branch
+  `mem/lazy-dts-census-2`): namespace and module bodies, member lists with import types and with eager `@see`/`@link`
+  JSDoc together hold 0.8-1.6% of the 8-checker peak on the 16-vCPU runner (formbricks-web, cal-diy, t3code-server,
+  supabase-studio) that no reader asks for; 3.5% on formbricks-web without the 64 KB limit for module bodies (mostly
+  googleapis); every list of every kind lazy, whatever it contains, at most 4.3%. mikro-orm has no `skipLibCheck`, so
+  nothing there is lazy. Below the 5% bar; no code.
 - Canonical base constraints for TanStack/router's checker-count-dependent TS2536 (notes/open-history-dependence.md):
   exact by recomputation (+0.4% to +4.1% single-threaded instructions on type-heavy projects, 1.4x-6x the base
   constraint computations, and an error tsgo does not print on a deep indexed-access chain); with per-result summaries

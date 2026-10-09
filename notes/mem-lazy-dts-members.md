@@ -16,6 +16,10 @@ checkers -12.0% / -4.9% / -4.7% / -3.2% / -3.7% / -3.6% / 0 / 0, single-threaded
 / -5.2% (formbricks-web / cal-diy / supabase-studio / t3code-server). On the Mac with `--noCheck` -25% /
 -15% / -13% / -10% / -1%, and 0.8-4.4% fewer instructions single-threaded.
 
+Round 2 (section 7) measured what the lists left eager could add (namespace and module bodies, lists with import types
+or eager JSDoc): 0.8-1.6% of the 8-checker peak on the 16-vCPU runner, at most 4.3% for every list of every kind.
+Rejected.
+
 ## 1. Ceiling (census)
 
 Tool (branch `mem/lazy-dts-census`, not merged): the alloc-profile build with `TSRS_LAZY_DTS_CENSUS=1`
@@ -248,6 +252,97 @@ parsed again, 422 of them while their file was bound (merges and unusual states)
 - `--incremental`, `--build`, watch, the language server and the API keep eager lists: nothing measured there, and the
   builder, the project system and the API read trees in ways not audited here.
 
+The first three were measured again in round 2 (section 7) and rejected.
+
+## 7. Round 2: namespace and module bodies, import types, eager JSDoc (measured and rejected)
+
+The question: of the three kinds of list this change left eager, (a) namespace and module bodies (`declare namespace`,
+`declare module "x" { }`, `declare global { }`), (b) member lists with an import type (`import("x").Y`) and (c) member
+lists with eager JSDoc (`@see` / `@link`), how many bytes does no reader ever ask for, as a share of the peak at the
+scoreboard's checker count (8, on the 16-vCPU runner)? The bar (AGENTS.md) is 5% of that peak on at least one of the
+projects where `bun check` still uses less memory.
+
+**Method.** The census, rebuilt on main 872027a (branch `mem/lazy-dts-census-2`, not for merging): the alloc-profile
+build with `TSRS_LAZY_DTS_CENSUS=1` runs with lazy lists off and records, per member list and module block of every
+declaration file the program does not check, its parse and bind bytes (arena plus the thread's net heap), and why it
+could not be lazy: the reasons of `lazy_list_blocked` and `parse_member_list_lazily` one by one (`this`, import
+types, `infer`, flow, diagnostic, eager JSDoc, not rewindable, other, the 64 KB limit), and for module blocks also
+imports, re-exports and nested ambient modules or `global` blocks, and `export { x }`. A list counts as asked for when
+anything read its nodes or the owner table it fills (`members` for interfaces and type literals, `members` or
+`exports` for classes, `exports` for module blocks) after the program was built, or when it is one of the lists
+forced before checking (the global libraries and the global merges of `force_shared_lists`). The report then
+replays the parse with a given rule for which lists are lazy and whether forcing a list keeps its nested lists lazy,
+and sums the bytes of lazy lists nobody asked for, less 96 bytes per lazy record (section 6). S0 is this change
+(member lists without a disqualifier, nested lists eager when forced); the other rules add to it: (a) every module
+block without a disqualifier (`infer` allowed), forced bodies keep their nested lists lazy; (a\*) the same without
+the 64 KB limit for module blocks; (b) member lists whose only disqualifier is an import type; (c) member lists whose
+only disqualifier is eager JSDoc; "everything" makes every list of every kind lazy whatever it contains, nested lists
+lazy when forced. One census run per project at 8 checkers on the Mac.
+
+The census is an upper bound of what the peak loses: S0 predicts 229 / 61 / 42 / 64 MiB for formbricks-web /
+cal-diy / t3code-server / supabase-studio, and the measured saving of this change at 8 checkers on the 16-vCPU runner
+(`TSRS_LAZY_DTS=0` against main, 3 runs) is 218 / 46 / 34 / 52 MiB (75-95% of the census).
+
+**Numbers** (MiB, net of records; peaks of main 872027a at 8 checkers: Linux on Depot `depot-ubuntu-24.04-16`, 3
+interleaved runs, median; Mac M5 Max, peak footprint, 3 runs, median):
+
+| project | Linux peak | Mac peak | (a) module bodies | (a\*) no size limit | (b) import types | (c) eager JSDoc | (a)+(b)+(c) | (a\*)+(b)+(c) | share of Linux peak | everything | share |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| formbricks-web | 1,710 | 1,686 | 7.9 | 53.9 | 2.5 | 3.0 | 13.6 | 60.4 | 0.8% / 3.5% | 73.2 | 4.3% |
+| cal-diy | 1,468 | 1,451 | 4.8 | 5.0 | 6.8 | 1.8 | 13.6 | 13.8 | 0.9% / 0.9% | 20.9 | 1.4% |
+| t3code-server | 1,805 | 1,789 | 0.5 | 0.5 | 24.3 | 4.3 | 29.3 | 29.6 | 1.6% / 1.6% | 35.7 | 2.0% |
+| supabase-studio | 1,407 | 1,371 | 6.3 | 6.5 | 1.0 | 7.0 | 14.7 | 16.8 | 1.0% / 1.2% | 30.2 | 2.1% |
+| mikro-orm | 1,641 | - | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+
+mikro-orm has no `skipLibCheck`: every declaration file is checked, so nothing is lazy there (Linux, 8 checkers:
+1.604 GiB with `TSRS_LAZY_DTS=0`, 1.603 without). Shares of the Mac peak are within 0.1 point of the Linux ones.
+
+Below the bar everywhere: all three kinds together are 0.8-1.6% of the 8-checker peak, 0.9-3.5% with module bodies of
+any size, and the bound of the whole mechanism (every list lazy, whatever it contains) is 1.4-4.3%. Rejected; no
+code. Where the bytes are:
+
+- (a) Within the 64 KB limit, module bodies hold little: their interfaces and classes are lazy already, so a lazy body
+  saves only the statement nodes, their symbols and the records (stripe's `namespace Stripe` blocks 2-4 MiB, date-fns,
+  playwright-core). formbricks-web's 54 MiB without the limit are mostly googleapis (about 40 MiB): one namespace per
+  API version, 399 of the 901 longer than 64 KB and 21 longer than 1 MB (compute alpha: 10.6 MB), which a forced body
+  would scan again in full while other checkers wait. Every `declare global` and module augmentation body is asked
+  for (`initialize_checker` merges them), and the global libraries' ambient modules are forced before checking; not
+  forcing the module bodies among them adds 0.6-0.7 MiB.
+- (b) t3code-server's 24 MiB are @opencode/schema (11.6), @redis/client (5.4) and @opencode/protocol (3.2); cal-diy's 7
+  are @trigger.dev/core. Of the never-asked lists with an import type (t3code-server 40.8 MiB, cal-diy 13.5), the rest
+  have another disqualifier too or sit inside a list that is forced.
+- (c) effect (3.5-4.1 MiB), kysely, @aws-sdk.
+- Keeping nested lists lazy when a member list is forced: 0.2-4.5 MiB (supabase-studio 4.5).
+
+**Why each kind was left eager** (what a design would have to do, for the record):
+
+- (b) The file's import list is collected right after its parse (`collect_external_module_references`, parser
+  references.rs): with `PossiblyContainsDynamicImport` set, `for_each_dynamic_import_or_require_call` finds every
+  `import` in the text with a regex and descends the tree to the node there; a pending lazy list reads as empty, so
+  its import types would be missed and their modules never loaded. Finding the positions in the skipped text is cheap
+  (the scan already does it), but the entries of `file.imports` are the specifier nodes themselves, and the file
+  loader resolves every one before any checker exists, taking the resolution mode from the `resolution-mode`
+  attribute of the specifier's `ImportType` parent (`get_mode_for_usage_location`); include reasons and their
+  diagnostics point at them, and the checker's type printer compares them. A pre-scan could record text and mode, but
+  `file.imports` would then hold nodes that are not the tree's (a different node, no parent until forced), and forcing
+  these lists at load time saves nothing.
+- (a) Binding a body changes state outside it that must exist before any checker: the owner symbol's flags
+  (`declare_module_symbol` runs `get_module_instance_state` over the body: value or namespace module, const-enum-only;
+  computable at parse time except for `export { x }`, whose alias target the walk looks up in the enclosing
+  statement lists, not yet parsed when the body ends), the declaration's `ExportContext` flag (`set_export_context_flag`:
+  whether the body has an export declaration or `export =`; parse-time), the two tables the body fills (the
+  namespace symbol's `exports`, and the declaration's `locals` for what is not exported, as in googleapis's
+  `export {};` bodies: reads of either would have to force), and, inside ambient module bodies, the program's module
+  references (imports and nested `module "x"` / `global` blocks go into `file.imports` and `module_augmentations`, the
+  problem of (b)). Pattern ambient modules and `ambient_module_names` come from the names, not the bodies. A module
+  declaration is not a flow container, so the flow graph runs through the body; ambient bodies make no flow nodes
+  unless they have initializers or expressions (the flow disqualifier). Same-file merges of namespaces would force at
+  bind time, as for interfaces; the census does not count those as asked, so it overstates (a) slightly.
+- (c) `@see` / `@link` comments are parsed with the file (`with_jsdoc_worker`) because `check_source_element_worker`
+  reads them (`eager_jsdoc`) to mark `@link` targets referenced for the unused-identifier checks of checked files; the
+  CLI's check never reads them in an unchecked declaration file. A forced list would have to add its members' JSDoc to the
+  file's `jsdoc_cache`, which lazy JSDoc already guards (`jsdoc_mu`, `resolve_jsdoc`): feasible, but worth 2-7 MiB.
+
 ## Reproduce
 
 ```sh
@@ -259,4 +354,13 @@ TSRS_LAZY_DTS=stats tsrs -p <tsconfig> --noEmit ...      # lists made lazy / def
 TSRS_LAZY_DTS=force tsrs-test run --suite all --baselines types,symbols   # every declaration file lazy; trees must equal main's
 depot ci dispatch --repo maschwenk/tsrs --workflow perf-probe.yml --ref <branch> --input script=tools/perf/lazydtsprobe.sh \
   --input projects=drizzle-orm,formbricks-web,cal-diy --input probe_args='--reps 10 --checkers 32 --no-strace'
+
+# Round 2 (section 7): the census with module blocks, disqualifier reasons and the design scenarios
+git checkout mem/lazy-dts-census-2
+CARGO_TARGET_DIR=$PWD/target/prof cargo build --release -p tsrs_cli --features alloc-profile
+cd <project> && TSRS_LAZY_DTS_CENSUS=1 TSRS_LAZY_DTS_CENSUS_TSV=/tmp/files.tsv <worktree>/target/prof/release/tsrs -p <tsconfig> \
+  --noEmit --incremental false --extendedDiagnostics --checkers 8     # report on stderr, before the alloc profile
+depot ci dispatch --repo maschwenk/tsrs --workflow perf-probe.yml --ref <branch> --input runner=depot-ubuntu-24.04-16 \
+  --input script=tools/perf/lazydtsprobe.sh --input projects=formbricks-web,cal-diy,t3code-server,supabase-studio,mikro-orm \
+  --input probe_args='--reps 3 --checkers 8 --no-strace --variant off:TSRS_LAZY_DTS=0'
 ```
