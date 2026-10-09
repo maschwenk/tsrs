@@ -15,6 +15,10 @@ ranges are too wide to distinguish that from noise. The two smaller Compiler wor
 additional 2 MiB threshold. This is not a performance improvement, but it preserves the existing allocator
 generation without a material regression.
 
+This was measured on macOS, which has no transparent huge pages. On Linux the switch cost 3-25% wall time because
+`libmimalloc-sys2` builds `no_thp` as `allow_thp = 0`, which turns THP off for the whole process; `tsrs_cli` turns it
+back on at start-up (notes/mem-no-thp.md, 2026-10-09).
+
 ## Method
 
 Apple M4 Pro (12 cores, 48 GB), macOS 26.6.2, rustc 1.99.0.
