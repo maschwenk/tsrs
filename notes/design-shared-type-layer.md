@@ -339,9 +339,9 @@ repeated with `bench.yml`'s PGO build before stage 1.
 
 ### 5.4 R1 result (2026-10-09)
 
-**Kill: with nothing shared, the read path costs +2.6% single-threaded instructions**, 2.6 times the kill threshold
-and five times the pass bar of section 5.3. The local screen stopped the experiment before Depot, so no Linux or
-8-checker wall number exists.
+**Kill: with nothing shared, the read path costs +2.6% single-threaded instructions** (Mac screen), 2.6 times the
+kill threshold and five times the pass bar of section 5.3. The screen stopped R1 itself before Depot; one attribution
+run went to Depot instead (below).
 
 Code: branch `spike/r1-read-path` (#240, not for merging), on main 4e5c85ae, one commit per item of 5.3:
 
@@ -368,31 +368,46 @@ which includes kernel work. Minimum of 5 interleaved runs, which repeats within 
 | + instantiation tables (4) | +2.46% | +2.59% |
 | + link stores (5) | +2.60% | +2.79% |
 | + tables (6): R1 | +2.70% | +2.66% |
-| R1, two more screens | +2.53%, +2.57% | +2.62%, +2.62% |
-| R1 with every window test compiled to `false` | +0.35%, +0.39% | +0.38%, +0.42% |
+| R1, three more screens | +2.52..+2.57% | +2.62..+2.64% |
+| R1 without item 2 | +0.53% | +0.59% |
 | R1 with the reads of the lazy fields untested | +0.69% | +0.82% |
+| R1 with every window test compiled to `false` | +0.35%, +0.39% | +0.38%, +0.42% |
+
+Linux, R1 without item 2 (branch `spike/r1-read-path-no2`; Depot run mbjr92dqzf, pr-verify on
+`depot-ubuntu-24.04-16` against main 4e5c85ae): user-space instructions from `bench/count.py`, and the 8-checker wall
+paired over 10 interleaved runs (median, interquartile range). Diagnostics identical in every cell.
+
+| project | instructions | 8-checker wall |
+| --- | ---: | ---: |
+| t3code-server | +0.652% | -0.2% (-1.2..+1.2) |
+| formbricks-web | +0.460% | +0.3% (-3.0..+1.6) |
+| cal-diy | +0.539% | -2.7% (-4.9..+0.6) |
+| supabase-studio | +0.474% | +0.4% (-1.2..+2.6) |
+| mikro-orm | +0.509% | +0.7% (-1.8..+4.3) |
+| vscode | +0.411% | -0.1% (-1.1..+1.2) |
+| xstate-main | +0.580% | -0.3% (-3.1..+1.6) |
 
 Where it goes:
 
-- **Reads of the lazy fields: 1.8-1.9 points.** Not the window comparison: a counting build ran it 3.8 M times on
-  xstate-main and 30.3 M times on t3code-server (item 2), about 0.1-0.3% of the instructions at 3-5 instructions each
-  (estimate). What is left is the code every read of the 40 fields now carries, set or not: the test for an unset
-  value, which the caller's own test of the value does not absorb, and the side-table call beside it (the two were
-  not measured apart).
-- **Items 3-6: about 0.5 points together.** The interning-map hook +0.2-0.3, the link stores +0.14-0.20, the
-  instantiation tables and the table cells within the ~0.1% noise (`FrozenCell` drops the borrow counters, which pays
-  for its write tests).
-- **With every window test compiled away the branch still costs ~0.4%**, mostly the link stores' parent null tests,
-  which do not use the window.
+- **Item 2: about 2.0 points** (R1 minus R1 without item 2), 1.8-1.9 of them the reads of the lazy fields. Not the
+  window comparison: a counting build ran it 3.8 M times on xstate-main and 30.3 M times on t3code-server, about
+  0.1-0.3% of the instructions at 3-5 instructions each (estimate). What is left is the code every read of the 40
+  fields now carries, set or not: the test for an unset value, which the caller's own test of the value does not
+  absorb, and the side-table call beside it (the two were not measured apart).
+- **Items 1 and 3-6: +0.41..+0.65% on Linux**, over the 0.5% pass bar on four of seven projects; the 8-checker wall
+  within noise. On the Mac: the interning-map hook +0.2-0.3, the link stores +0.14-0.20, the instantiation tables and
+  the table cells within the ~0.1% noise (`FrozenCell` drops the borrow counters, which pays for its write tests).
+- **With every window test compiled away the branch still costs ~0.4%** (Mac), mostly the link stores' parent null
+  tests, which do not use the window.
 
-What it decides. Even if reading a lazy field cost nothing, the rest of the read path is +0.7-0.8% (the untested-reads
-build), over the 0.5% pass bar. And a read cannot skip the unset test: a fork must find its own value for a field the
-seed left unset. So any use that compiles the read path into the default binary, warm runs and 32-checker machines
-included, pays about 2.6% on every check, shared layer or not. An opt-in low-memory mode would need a separately
-compiled checker, as the spike's cargo feature was, which is the "doubles the checker's code" option section 5.2
-rejected. The direction is closed for the default binary.
+What it decides. Even if reading a lazy field cost nothing, the rest of the read path fails the pass bar on Linux.
+And a read cannot skip the unset test: a fork must find its own value for a field the seed left unset. So any use
+that compiles the read path into the default binary, warm runs and 32-checker machines included, pays about 2.6% on
+every check, shared layer or not. An opt-in low-memory mode would need a separately compiled checker, as the spike's
+cargo feature was, which is the "doubles the checker's code" option section 5.2 rejected. The direction is closed for
+the default binary.
 
-Not measured: Linux instructions (`bench/count.py`), the 8-checker wall on Depot, a PGO build.
+Not measured: R1 itself on Linux (instructions and the 8-checker wall), a PGO build.
 
 ## 6. Cost 2: the build
 
@@ -638,7 +653,7 @@ close the direction for every use, warm runs and 32-checker machines included; i
 ## 10. Not determined
 
 - The cost of the redesigned read path: determined since, +2.6% single-threaded instructions on the Mac (section 5.4).
-  Its Linux and 8-checker wall numbers were not measured.
+  R1 itself was not run on Linux; without its lazy-field cells it measured +0.41..+0.65% there.
 - The rebuild cost of late freeze. It is estimated as FA - `on0` less the spike's estimates for B and for the ninth
   thread, and FA - `on0` is the difference of two paired medians over runs whose walls range over 3-17% (`off` and
   FA, spike section 10.1).
