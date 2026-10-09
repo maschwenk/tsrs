@@ -86,6 +86,9 @@ tsrs is about 1.9x faster at every thread count; tsrs uses 7-25% more memory. `b
 [`bench/README.md`](bench/README.md) explains how everything is measured and how to rerun it. The published numbers
 use the PGO-optimized release build, which is 7-14% faster than a plain `cargo build --release`.
 
+`tsrs headless` also implements the tsgolint protocol used by Oxlint, currently for
+`typescript/no-floating-promises`. See [`docs/LINT.md`](docs/LINT.md).
+
 ## Correctness
 
 tsrs is a function-by-function port of the Go implementation of TypeScript (`microsoft/TypeScript`, commit
@@ -103,6 +106,7 @@ same diagnostics and emits the same 9,257 files byte for byte. [`docs/STATUS.md`
 | feature | status | evidence and notes |
 | --- | --- | --- |
 | Type checking (`--noEmit`) | yes | 13,458 of 13,462 error baselines and all 12,779 `.types` / `.symbols` baselines match; same diagnostics on the 38k-file codebase |
+| Oxlint type-aware lint backend (`tsrs headless`) | `typescript/no-floating-promises` | tsgolint payload v2, source overlays, compiler diagnostics, fixes/suggestions and timings; unsupported type-aware rules are skipped. Use `OXLINT_TSGOLINT_PATH=/path/to/tsrs oxlint --type-aware` (`docs/LINT.md`) |
 | Multithreaded checking, `--singleThreaded`, `--pretty`, `--extendedDiagnostics`, `--listFiles`, `--listFilesOnly` | yes | |
 | Memory target (`--maxMemory <size>`) | `--noEmit` checks, opt-in | the 38k-file codebase at 8 checkers: peak 18.0 GB without it; `--maxMemory 12G` 12.9 GB (+11% instructions), `10G` 10.8 GB (+16%), `8G` 8.7 GB (+35%), same diagnostics; testdata/regressions identical with a checker retired after nearly every file, also in poison mode (notes/mem-recycle-checkers.md) |
 | Same output regardless of thread count | yes, with known exceptions (tsgo: no) | a few projects still depend on file order through tsgo's own logic (notes/open-history-dependence.md); `--checkerAssignment go` reproduces tsgo exactly |

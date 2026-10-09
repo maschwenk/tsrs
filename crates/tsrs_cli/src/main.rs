@@ -7,6 +7,7 @@ static GLOBAL: mimalloc_safe::MiMalloc = mimalloc_safe::MiMalloc;
 mod census;
 mod api;
 mod lsp;
+mod headless;
 
 use tsrs_execute::{build, execute, sys, tsc};
 
@@ -89,6 +90,19 @@ fn main() {
         // Checking recurses deeply; serve requests on a large stack like the command line below.
         let rest = args[1..].to_vec();
         let status = std::thread::Builder::new().stack_size(512 << 20).spawn(move || api::run_api(&rest)).unwrap().join().unwrap_or(1);
+        std::process::exit(status);
+    }
+    if args.first().map(String::as_str) == Some("headless") {
+        let rest = args[1..].to_vec();
+        let status = std::thread::Builder::new()
+            .name("tsrs-headless".to_string())
+            .stack_size(512 << 20)
+            .spawn(move || headless::run(&rest))
+            .unwrap()
+            .join()
+            .unwrap_or(1);
+        let _ = std::io::Write::flush(&mut std::io::stdout());
+        let _ = std::io::Write::flush(&mut std::io::stderr());
         std::process::exit(status);
     }
     // Type checking recurses deeply; run on a thread with a large stack
