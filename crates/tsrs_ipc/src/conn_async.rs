@@ -78,7 +78,7 @@ impl Conn for AsyncConn {
     fn run(&self) -> Result<(), Error> {
         let request_errors: Mutex<Option<Error>> = Mutex::new(None);
         let err = thread::scope(|s| {
-            let err = loop {
+            let read = catch_unwind(AssertUnwindSafe(|| loop {
                 let msg = match self.protocol.read_message() {
                     Ok(msg) => msg,
                     Err(err) => {
@@ -113,9 +113,17 @@ impl Conn for AsyncConn {
                         break Some(handler_thread_error(&err));
                     }
                 }
-            };
+            }));
             // conn_async.go:71, deferred: closePendingCalls, then (with no handler context to cancel) the end of the
-            // scope waits for the handlers.
+            // scope waits for the handlers. Go's defer also runs when Run panics, so the waiting calls fail then too
+            // instead of waiting forever.
+            let err = match read {
+                Ok(err) => err,
+                Err(payload) => {
+                    self.close_pending_calls(None);
+                    std::panic::resume_unwind(payload);
+                }
+            };
             self.close_pending_calls(err.as_ref());
             err
         });

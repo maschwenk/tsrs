@@ -18,6 +18,9 @@ pub use protocol::*;
 pub use protocol_jsonrpc::*;
 pub use stream::*;
 
+#[cfg(test)]
+mod conn_async_test;
+
 
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
