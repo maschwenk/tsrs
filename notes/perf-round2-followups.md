@@ -171,8 +171,14 @@ pointer compression costs about +4.9% instructions and took back most of the che
   MB per extra checker, spread over about ten causes. The one exact fix of size (`export *` tables as values) is -1.9%
   peak at 32 checkers on Linux (formbricks-web, cal-diy). The free lists peak at 6 KB per checker. hashbrown tables
   are already minimal; a non-power-of-two table would save 1.7-2.2% of peak at 32.
-- Directory listings instead of existence probes, `openat`, a typed tsbuildinfo decode, skip-if-identical
-  tsbuildinfo writes (notes/perf-dev-loop.md, perf-dev-loop2.md).
+- Directory listings instead of existence probes, `openat` and skip-if-identical tsbuildinfo writes
+  (notes/perf-dev-loop.md, perf-dev-loop2.md).
+- A typed `.tsbuildinfo` decode, revisited as a memory change after issue #258 found a 126 MiB local generic-tree
+  peak (`notes/mem-buildinfo-single-pass.md`): a single-pass typed reader cut an isolated 55.9 MB input's peak RSS
+  629.9 -> 97.8 MB and vscode's default-checker warm-incremental peak 1,389.8 -> 1,327.1 MB (-4.51%). The latter
+  misses the 5% memory bar. A macOS single-thread median was -4.84% instructions but visibly bimodal, so Linux
+  `bench/count.py` must confirm the 1% instruction bar before the prototype lands. If it does not, combine this
+  only with issue #258 item 2's compact retained reference sets; those sets overlap the actual default-mode peak.
 - Pointer compression below +2% instructions on arm64; `PSlice`/`PStr` for memory (slices are already one word)
   (notes/mem-pointer-compression.md).
 - A per-file `type_to_string` builder, lazy `ErrorSymbolName`, dropping source maps from `EmitResult`
