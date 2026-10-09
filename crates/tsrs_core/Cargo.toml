@@ -25,7 +25,6 @@ plain-ptrs = []
 rustc-hash.workspace = true
 hashbrown.workspace = true
 indexmap.workspace = true
-bitflags.workspace = true
 memchr.workspace = true
 mimalloc-safe = { workspace = true, optional = true }
 

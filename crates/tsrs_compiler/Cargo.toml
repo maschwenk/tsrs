@@ -24,8 +24,6 @@ tsrs_declarations = { workspace = true, optional = true }
 tsrs_printer = { workspace = true, optional = true }
 tsrs_transformers = { workspace = true, optional = true }
 rustc-hash.workspace = true
-indexmap.workspace = true
-bitflags.workspace = true
 rayon.workspace = true
 
 [features]

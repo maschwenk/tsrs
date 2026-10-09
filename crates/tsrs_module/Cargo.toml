@@ -13,5 +13,4 @@ tsrs_diagnostics.workspace = true
 tsrs_ast.workspace = true
 tsrs_vfs.workspace = true
 rustc-hash.workspace = true
-indexmap.workspace = true
 bitflags.workspace = true

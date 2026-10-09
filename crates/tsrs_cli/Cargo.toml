@@ -9,25 +9,17 @@ workspace = true
 
 [dependencies]
 tsrs_core.workspace = true
-tsrs_diagnostics.workspace = true
 tsrs_ast.workspace = true
-tsrs_scanner.workspace = true
-tsrs_parser.workspace = true
-tsrs_binder.workspace = true
 tsrs_vfs.workspace = true
-tsrs_module.workspace = true
 tsrs_tsoptions.workspace = true
 tsrs_compiler = { path = "../tsrs_compiler", default-features = false }
 rustc-hash.workspace = true
 tsrs_lsp.workspace = true
-tsrs_project.workspace = true
-tsrs_incremental.workspace = true
 tsrs_api.workspace = true
 tsrs_api_transport.workspace = true
 tsrs_execute = { path = "../tsrs_execute", default-features = false }
 # no_thp: no MADV_HUGEPAGE on the mimalloc heap (huge-page amplification on Linux; see notes/mem-no-thp.md).
 mimalloc-safe = { workspace = true, features = ["no_thp"] }
-libc = "0.2"
 [features]
 default = ["checker"]
 checker = ["tsrs_compiler/checker", "tsrs_execute/checker"]

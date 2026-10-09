@@ -21,7 +21,6 @@ bitflags = "2"
 rayon = "1"
 memchr = "2"
 mimalloc-safe = { version = "0.1.67", features = ["v3"] }
-unicode-id-start = "1"
 tsrs_core = { path = "crates/tsrs_core" }
 tsrs_diagnostics = { path = "crates/tsrs_diagnostics" }
 tsrs_ast = { path = "crates/tsrs_ast" }
@@ -45,7 +44,6 @@ tsrs_ls = { path = "crates/tsrs_ls" }
 tsrs_project = { path = "crates/tsrs_project" }
 tsrs_projectutil = { path = "crates/tsrs_projectutil" }
 tsrs_lsp = { path = "crates/tsrs_lsp" }
-tsrs_fourslash = { path = "crates/tsrs_fourslash" }
 tsrs_incremental = { path = "crates/tsrs_incremental" }
 tsrs_api = { path = "crates/tsrs_api" }
 tsrs_api_transport = { path = "crates/tsrs_api_transport" }
