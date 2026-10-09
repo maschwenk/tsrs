@@ -9,7 +9,7 @@ use tsrs_ast::RepopulateDiagnosticKind;
 use tsrs_core::collections::OrderedMap;
 use tsrs_core::json::Value;
 use tsrs_core::tspath::{self, ComparePathsOptions, Path};
-use tsrs_core::{CompilerOptions, ModuleKind, ResolutionMode};
+use tsrs_core::{CompilerOptions, ModuleKind, ResolutionMode, TextPos, MAX_TEXT_POS, SYNTHETIC_POSITION};
 use tsrs_diagnostics::Category;
 use tsrs_tsoptions::{self as tsoptions, CompilerOptionsValue, ParsedCommandLine};
 
@@ -227,8 +227,8 @@ pub struct BuildInfoDiagnostic {
     // BuildInfoFileId if it is for a File thats other than its stored for
     pub file: BuildInfoFileId,
     pub no_file: bool,
-    pub pos: i32,
-    pub end: i32,
+    pub pos: TextPos,
+    pub end: TextPos,
     pub code: i32,
     pub category: Category,
     pub source: String,
@@ -271,8 +271,8 @@ impl BuildInfoDiagnostic {
         let mut o = Obj::default();
         o.int("file", self.file);
         o.bool("noFile", self.no_file);
-        o.int("pos", self.pos);
-        o.int("end", self.end);
+        o.text_pos("pos", self.pos);
+        o.text_pos("end", self.end);
         o.int("code", self.code);
         o.int("category", category_to_i32(self.category));
         o.str("source", &self.source);
@@ -301,8 +301,8 @@ impl BuildInfoDiagnostic {
         Ok(BuildInfoDiagnostic {
             file: get_int(o, "file")?,
             no_file: get_bool(o, "noFile")?,
-            pos: get_int(o, "pos")?,
-            end: get_int(o, "end")?,
+            pos: get_text_pos(o, "pos")?,
+            end: get_text_pos(o, "end")?,
             code: get_int(o, "code")?,
             category: category_from_i32(get_int(o, "category")?),
             source: get_string(o, "source")?,
@@ -957,6 +957,11 @@ impl Obj {
             self.set(key, num(v));
         }
     }
+    fn text_pos(&mut self, key: &str, v: TextPos) {
+        if v != 0 {
+            self.set(key, text_pos_num(v));
+        }
+    }
     fn list<T>(&mut self, key: &str, items: &[T], f: impl Fn(&T) -> Value) {
         if !items.is_empty() {
             self.set(key, Value::Array(items.iter().map(f).collect()));
@@ -979,6 +984,10 @@ fn num(v: i32) -> Value {
     Value::Number(v as f64)
 }
 
+fn text_pos_num(v: TextPos) -> Value {
+    if v == SYNTHETIC_POSITION { num(-1) } else { Value::Number(v as f64) }
+}
+
 fn strings(v: &[String]) -> Value {
     Value::Array(v.iter().map(|s| Value::String(s.clone())).collect())
 }
@@ -990,6 +999,14 @@ fn show(v: &Value) -> String {
 fn as_int(v: &Value) -> Option<i32> {
     match v {
         Value::Number(n) if n.fract() == 0.0 => Some(*n as i32),
+        _ => None,
+    }
+}
+
+fn as_text_pos(v: &Value) -> Option<TextPos> {
+    match v {
+        Value::Number(n) if *n == -1.0 || *n == -2.0 => Some(SYNTHETIC_POSITION),
+        Value::Number(n) if n.fract() == 0.0 && *n >= 0.0 && *n <= MAX_TEXT_POS as f64 => Some(*n as TextPos),
         _ => None,
     }
 }
@@ -1042,6 +1059,13 @@ fn get_int(o: &OrderedMap<String, Value>, key: &str) -> Result<i32, String> {
     match o.get(key) {
         None | Some(Value::Null) => Ok(0),
         Some(v) => as_int(v).ok_or_else(|| format!("invalid {key}: {}", show(v))),
+    }
+}
+
+fn get_text_pos(o: &OrderedMap<String, Value>, key: &str) -> Result<TextPos, String> {
+    match o.get(key) {
+        None | Some(Value::Null) => Ok(0),
+        Some(v) => as_text_pos(v).ok_or_else(|| format!("invalid {key}: {}", show(v))),
     }
 }
 
@@ -1185,5 +1209,16 @@ mod tests {
             let expected = tsrs_core::json::marshal(&build_info.marshal_json()).unwrap();
             assert_eq!(build_info.marshal(), expected);
         }
+    }
+
+    #[test]
+    fn text_positions_preserve_unsigned_boundaries_and_legacy_sentinels() {
+        let above_i32 = i32::MAX as TextPos + 1;
+        assert_eq!(as_text_pos(&text_pos_num(above_i32)), Some(above_i32));
+        assert_eq!(as_text_pos(&text_pos_num(tsrs_core::MAX_TEXT_POS)), Some(tsrs_core::MAX_TEXT_POS));
+        assert_eq!(text_pos_num(SYNTHETIC_POSITION), Value::Number(-1.0));
+        assert_eq!(as_text_pos(&Value::Number(-1.0)), Some(SYNTHETIC_POSITION));
+        assert_eq!(as_text_pos(&Value::Number(-2.0)), Some(SYNTHETIC_POSITION));
+        assert_eq!(as_text_pos(&Value::Number(SYNTHETIC_POSITION as f64)), None);
     }
 }

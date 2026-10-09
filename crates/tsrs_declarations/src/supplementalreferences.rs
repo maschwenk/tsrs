@@ -27,7 +27,7 @@ impl SupplementalReferencesTransformer {
             }
             let mut referenced_files = source_file.referenced_files().to_vec();
             referenced_files.push(P::new(FileReference {
-                text_range: tsrs_core::TextRange::new(-1, -1),
+                text_range: tsrs_core::undefined_text_range(),
                 file_name: tspath::get_relative_path_from_file(
                     &self.declaration_file_path,
                     declaration_path,

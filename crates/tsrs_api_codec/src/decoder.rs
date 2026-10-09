@@ -249,7 +249,7 @@ impl<'a> Decoder<'a> {
                 return Err(DecodeError::InvalidTree(format!("node {i} has parent {parent}")));
             }
             let child_indices = self.collect_children(i)?;
-            let loc = TextRange::new(pos as i32, end as i32);
+            let loc = TextRange::new(pos, end);
             if kind == SYNTAX_KIND_NODE_LIST {
                 let nodes: Vec<P<Node>> = child_indices.iter().filter_map(|&ci| self.nodes[ci]).collect();
                 let list = self.factory.new_node_list(nodes);

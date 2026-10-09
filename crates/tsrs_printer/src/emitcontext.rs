@@ -973,7 +973,7 @@ impl EmitContext {
     pub fn add_synthetic_leading_comment(&self, node: P<Node>, kind: Kind, text: &str, has_trailing_new_line: bool) -> P<Node> {
         self.emit_nodes.borrow_mut().entry(node).or_default().rare_mut().leading_comments.push(SynthesizedComment {
             kind,
-            loc: TextRange::new(-1, -1),
+            loc: undefined_text_range(),
             has_leading_new_line: false,
             has_trailing_new_line,
             text: text.to_string(),
@@ -996,7 +996,7 @@ impl EmitContext {
     pub fn add_synthetic_trailing_comment(&self, node: P<Node>, kind: Kind, text: &str, has_trailing_new_line: bool) -> P<Node> {
         self.emit_nodes.borrow_mut().entry(node).or_default().rare_mut().trailing_comments.push(SynthesizedComment {
             kind,
-            loc: TextRange::new(-1, -1),
+            loc: undefined_text_range(),
             has_leading_new_line: false,
             has_trailing_new_line,
             text: text.to_string(),

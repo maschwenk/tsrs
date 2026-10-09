@@ -5,6 +5,14 @@ use crate::utilities::normalize_jsdoc_type_source_text;
 use crate::Scanner;
 
 #[test]
+fn test_lookahead_past_maximum_text_position_is_eof() {
+    let mut s = Scanner::new();
+    s.state.pos = tsrs_core::MAX_TEXT_POS;
+    s.end = tsrs_core::MAX_TEXT_POS;
+    assert_eq!(s.char_at(2), -1);
+}
+
+#[test]
 fn test_scan_string_preserves_lone_surrogates() {
     let mut s = Scanner::new();
     s.set_text(r#""🦀퟿\ud800\ud801🦀""#);
@@ -117,6 +125,6 @@ fn test_get_text_of_node_from_jsdoc_type_preserves_asterisk_type() {
     let f = NodeFactory::default();
     let node = f.new_jsdoc_all_type();
     node.set_flags(NodeFlags::JSDoc);
-    node.set_loc(tsrs_core::TextRange::new(0, source_text.len() as i32));
+    node.set_loc(tsrs_core::TextRange::new(0, u32::try_from(source_text.len()).unwrap()));
     assert_eq!(crate::get_text_of_node_from_source_text(&source_text, node, false /*includeTrivia*/), "*");
 }

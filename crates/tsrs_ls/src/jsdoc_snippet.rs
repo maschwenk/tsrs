@@ -1,7 +1,7 @@
 use std::fmt::Write as _;
 use tsrs_ast::{self as ast, Kind, Node, SourceFile};
 use tsrs_core::context::Context;
-use tsrs_core::{stringutil, P};
+use tsrs_core::{stringutil, TextPos, P};
 use tsrs_diagnostics as diagnostics;
 use tsrs_lsproto as lsproto;
 use tsrs_parser as parser;
@@ -25,7 +25,7 @@ struct commentOwnerInfo {
 
 impl LanguageService {
     // jsdoc_snippet.go:29
-    pub(crate) fn get_jsdoc_snippet_completion(&self, ctx: &Context, file: P<SourceFile>, position: i32) -> Option<CompletionList> {
+    pub(crate) fn get_jsdoc_snippet_completion(&self, ctx: &Context, file: P<SourceFile>, position: TextPos) -> Option<CompletionList> {
         if self.user_preferences().enable_jsdoc_completions.is_false() {
             return None;
         }
@@ -66,7 +66,7 @@ impl LanguageService {
 }
 
 // jsdoc_snippet.go:74
-pub(crate) fn is_potentially_valid_jsdoc_snippet_completion_position(file: P<SourceFile>, position: i32) -> bool {
+pub(crate) fn is_potentially_valid_jsdoc_snippet_completion_position(file: P<SourceFile>, position: TextPos) -> bool {
     let text = file.text();
     let line_start = format::get_line_start_position_for_position(position, file);
     let prefix = &text[line_start as usize..position as usize];
@@ -81,20 +81,20 @@ pub(crate) fn is_potentially_valid_jsdoc_snippet_completion_position(file: P<Sou
 
 impl LanguageService {
     // jsdoc_snippet.go:87
-    fn get_jsdoc_snippet_completion_range(&self, ctx: &Context, file: P<SourceFile>, position: i32, new_text: &str) -> Option<lsproto::TextEditOrInsertReplaceEdit> {
+    fn get_jsdoc_snippet_completion_range(&self, ctx: &Context, file: P<SourceFile>, position: TextPos, new_text: &str) -> Option<lsproto::TextEditOrInsertReplaceEdit> {
         let text = file.text();
         let line_start = format::get_line_start_position_for_position(position, file);
         let prefix = &text[line_start as usize..position as usize];
         let mut start = position;
         if let Some(prefix_start) = get_jsdoc_snippet_prefix_start(prefix) {
-            start = line_start + prefix_start as i32;
+            start = line_start.checked_add(TextPos::try_from(prefix_start).ok()?)?;
         }
 
         let line_end = get_line_end_of_position(file, position);
         let suffix = &text[position as usize..line_end as usize];
         let mut end = position;
         if let (suffix_end, true) = get_jsdoc_snippet_suffix_end(suffix) {
-            end += suffix_end as i32;
+            end = end.checked_add(TextPos::try_from(suffix_end).ok()?)?;
         }
 
         let (replacement_range, fidelity) = self.create_lsp_range_from_bounds(start, end, file);
@@ -112,7 +112,7 @@ impl LanguageService {
 }
 
 // jsdoc_snippet.go:124
-fn get_doc_comment_template_at_position(source_file: P<SourceFile>, position: i32, generate_return_in_doc_template: bool, new_line: &str) -> Option<docCommentTemplate> {
+fn get_doc_comment_template_at_position(source_file: P<SourceFile>, position: TextPos, generate_return_in_doc_template: bool, new_line: &str) -> Option<docCommentTemplate> {
     // Go checks the token for nil; GetTokenAtPosition never returns nil.
     let mut token_at_pos = astnav::get_token_at_position(source_file, position);
 
@@ -162,7 +162,7 @@ fn get_doc_comment_template_at_position(source_file: P<SourceFile>, position: i3
 }
 
 // jsdoc_snippet.go:181
-fn get_doc_comment_end_at_position(file: P<SourceFile>, position: i32) -> (i32, bool, bool) {
+fn get_doc_comment_end_at_position(file: P<SourceFile>, position: TextPos) -> (TextPos, bool, bool) {
     let text = file.text();
     let line_start = format::get_line_start_position_for_position(position, file);
     let line_end = get_line_end_of_position(file, position);
@@ -172,11 +172,15 @@ fn get_doc_comment_end_at_position(file: P<SourceFile>, position: i32) -> (i32, 
         return (0, false, false);
     }
     let (suffix_end, has_closing) = get_jsdoc_snippet_suffix_end(suffix);
-    (position + suffix_end as i32, true, has_closing)
+    (
+        position.checked_add(TextPos::try_from(suffix_end).expect("JSDoc suffix exceeds TextPos")).expect("JSDoc end exceeds TextPos"),
+        true,
+        has_closing,
+    )
 }
 
 // jsdoc_snippet.go:194
-fn skip_whitespace(text: &str, position: i32) -> i32 {
+fn skip_whitespace(text: &str, position: TextPos) -> TextPos {
     let mut position = position as usize;
     while position < text.len() {
         let (ch, size) = stringutil::decode_js_string_rune(&text[position..]);
@@ -188,7 +192,7 @@ fn skip_whitespace(text: &str, position: i32) -> i32 {
         }
         position += size;
     }
-    position as i32
+    TextPos::try_from(position).expect("source position exceeds TextPos")
 }
 
 // jsdoc_snippet.go:208
@@ -335,7 +339,7 @@ fn returns_doc_comment(indentation: &str, new_line: &str) -> String {
 }
 
 // jsdoc_snippet.go:332
-fn get_indentation_string_at_position(source_file: P<SourceFile>, position: i32) -> String {
+fn get_indentation_string_at_position(source_file: P<SourceFile>, position: TextPos) -> String {
     let text = source_file.text();
     let line_start = format::get_line_start_position_for_position(position, source_file) as usize;
     let mut pos = line_start;

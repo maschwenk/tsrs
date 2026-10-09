@@ -1,4 +1,4 @@
-use crate::TextRange;
+use crate::{TextPos, TextRange};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct TextChange {
@@ -7,11 +7,11 @@ pub struct TextChange {
 }
 
 impl TextChange {
-    pub fn pos(&self) -> i32 {
+    pub fn pos(&self) -> TextPos {
         self.text_range.pos()
     }
 
-    pub fn end(&self) -> i32 {
+    pub fn end(&self) -> TextPos {
         self.text_range.end()
     }
 

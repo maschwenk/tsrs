@@ -5,7 +5,7 @@
 use tsrs_ast::{Diagnostic, SourceFile};
 use tsrs_core::collections::OrderedMap;
 use tsrs_core::json::Value;
-use tsrs_core::P;
+use tsrs_core::{TextPos, P, SYNTHETIC_POSITION};
 use tsrs_diagnostics::Category;
 
 fn category_number(c: Category) -> f64 {
@@ -38,12 +38,16 @@ fn num(v: impl Into<f64>) -> Value {
     Value::Number(v.into())
 }
 
-fn source_lines(file: &SourceFile, first_line: i32, last_line: i32) -> Option<Value> {
+fn text_pos_number(pos: TextPos) -> Value {
+    if pos == SYNTHETIC_POSITION { num(-1) } else { num(pos) }
+}
+
+fn source_lines(file: &SourceFile, first_line: u32, last_line: u32) -> Option<Value> {
     let line_map = file.ecma_line_map();
     if line_map.is_empty() {
         return None;
     }
-    let lines: Vec<i32> = if last_line - first_line >= 4 {
+    let lines: Vec<u32> = if last_line - first_line >= 4 {
         vec![first_line, first_line + 1, last_line - 1, last_line]
     } else {
         (first_line..=last_line).collect()
@@ -63,9 +67,9 @@ fn diagnostic_response(d: &Diagnostic) -> Value {
     let mut pos = d.pos();
     let mut end = d.end();
     if let Some(file) = file {
-        let len = file.text().len() as i32;
-        pos = pos.min(len).max(0);
-        end = end.min(len).max(pos);
+        let len = TextPos::try_from(file.text().len()).expect("source length exceeds TextPos");
+        pos = if pos == SYNTHETIC_POSITION { 0 } else { pos.min(len) };
+        end = if end == SYNTHETIC_POSITION { pos } else { end.min(len).max(pos) };
     }
     let mut o = Obj::new();
     if let Some(file) = file {
@@ -82,7 +86,7 @@ fn diagnostic_response(d: &Diagnostic) -> Value {
             o = o.set("sourceLines", lines);
         }
     } else {
-        o = o.set("pos", num(pos)).set("end", num(end));
+        o = o.set("pos", text_pos_number(pos)).set("end", text_pos_number(end));
     }
     o = o.set("code", num(d.code())).set("category", num(category_number(d.category())));
     if !d.source().is_empty() {

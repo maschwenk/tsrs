@@ -1236,7 +1236,7 @@ pub fn is_parse_tree_node(node: P<Node>) -> bool {
 }
 
 // Returns a token if position is in [start-of-leading-trivia, end), includes JSDoc only if requested
-pub fn get_node_at_position(file: P<SourceFile>, position: i32, include_jsdoc: bool) -> P<Node> {
+pub fn get_node_at_position(file: P<SourceFile>, position: tsrs_core::TextPos, include_jsdoc: bool) -> P<Node> {
     let mut current = file.as_node();
     loop {
         let mut child: Option<P<Node>> = None;
@@ -1264,28 +1264,28 @@ pub fn get_node_at_position(file: P<SourceFile>, position: i32, include_jsdoc: b
     }
 }
 
-pub(crate) fn node_contains_position(node: P<Node>, position: i32) -> bool {
+pub(crate) fn node_contains_position(node: P<Node>, position: tsrs_core::TextPos) -> bool {
     node.kind() >= Kind::FirstNode && node.pos() <= position && (position < node.end() || position == node.end() && node.kind() == Kind::EndOfFile)
 }
 
 // Go scans for the first 'i' or 'r' and compares; the first "import" or "require" at or after `start` is the
 // same position, found here with two substring searches (the "require" search stops where "import" was found).
-pub(crate) fn find_import_or_require(text: &str, start: i32) -> (i32, i32) {
+pub(crate) fn find_import_or_require(text: &str, start: tsrs_core::TextPos) -> Option<(tsrs_core::TextPos, u32)> {
     static IMPORT: LazyLock<memchr::memmem::Finder<'static>> = LazyLock::new(|| memchr::memmem::Finder::new("import"));
     static REQUIRE: LazyLock<memchr::memmem::Finder<'static>> = LazyLock::new(|| memchr::memmem::Finder::new("require"));
     let bytes = text.as_bytes();
-    let index = (start.max(0) as usize).min(bytes.len());
+    let index = (start as usize).min(bytes.len());
     let import = IMPORT.find(&bytes[index..]).map(|i| index + i);
     let require_end = match import {
         Some(i) => (i + "require".len()).min(bytes.len()),
         None => bytes.len(),
     };
     if let Some(i) = REQUIRE.find(&bytes[index..require_end]) {
-        return ((index + i) as i32, 7);
+        return Some(((index + i) as tsrs_core::TextPos, 7));
     }
     match import {
-        Some(i) => (i as i32, 6),
-        None => (-1, 0),
+        Some(i) => Some((i as tsrs_core::TextPos, 6)),
+        None => None,
     }
 }
 
@@ -1296,8 +1296,10 @@ pub fn for_each_dynamic_import_or_require_call(
     mut cb: impl FnMut(P<Node>, P<Node>) -> bool,
 ) -> bool {
     let is_java_script_file = is_in_js_file(file.as_node());
-    let (mut last_index, mut size) = find_import_or_require(file.text(), 0);
-    while last_index >= 0 {
+    let Some((mut last_index, mut size)) = find_import_or_require(file.text(), 0) else {
+        return false;
+    };
+    loop {
         let node = get_node_at_position(file, last_index, is_java_script_file && include_type_space_imports);
         if is_java_script_file && is_require_call(node, require_string_literal_like_argument) {
             if cb(node, node.arguments()[0]) {
@@ -1317,7 +1319,10 @@ pub fn for_each_dynamic_import_or_require_call(
         }
         // skip past import/require
         last_index += size;
-        (last_index, size) = find_import_or_require(file.text(), last_index);
+        let Some(found) = find_import_or_require(file.text(), last_index) else {
+            break;
+        };
+        (last_index, size) = found;
     }
     false
 }

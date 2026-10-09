@@ -129,7 +129,9 @@ impl LanguageService {
         let mut lens_title = String::new();
         match data.kind {
             lsproto::CodeLensKind::References => {
-                let symbols_data = self.provide_symbols_and_entries_at_position(ctx, program, file, data.position, false, false).unwrap_or_default();
+                let symbols_data = self
+                    .provide_symbols_and_entries_at_position(ctx, program, file, u32::try_from(data.position).expect("code lens position is nonnegative"), false, false)
+                    .unwrap_or_default();
                 let references_resp = self.provide_references_from_data(
                     ctx,
                     &lsproto::ReferenceParams {
@@ -155,7 +157,9 @@ impl LanguageService {
                 }
             }
             lsproto::CodeLensKind::Implementations => {
-                let symbols_data = self.provide_symbols_and_entries_at_position(ctx, program, file, data.position, false, true).unwrap_or_default();
+                let symbols_data = self
+                    .provide_symbols_and_entries_at_position(ctx, program, file, u32::try_from(data.position).expect("code lens position is nonnegative"), false, true)
+                    .unwrap_or_default();
                 let implementations = self.provide_implementations_from_data(
                     ctx,
                     &lsproto::ImplementationParams { text_document: text_doc, position: code_lens.range.start, ..Default::default() },
@@ -197,10 +201,11 @@ impl LanguageService {
         if fidelity.is_none() {
             return None;
         }
+        let position = i32::try_from(pos).ok()?;
 
         Some(lsproto::CodeLens {
             range: lsp_range,
-            data: Some(lsproto::CodeLensData { kind, uri: file_uri.clone(), position: pos, supplemental_file_index: supplemental_file_index(file) }),
+            data: Some(lsproto::CodeLensData { kind, uri: file_uri.clone(), position, supplemental_file_index: supplemental_file_index(file) }),
             ..Default::default()
         })
     }

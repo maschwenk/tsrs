@@ -7,7 +7,7 @@ use tsrs_ast::{self as ast, FindAncestorResult, Kind, Node, NodeFactory, NodeFac
 use tsrs_checker::{Checker, Flags, LiteralValue, TypeFlags};
 use tsrs_compiler::Program;
 use tsrs_core::context::Context;
-use tsrs_core::{apply_bulk_edits, compare_text_ranges, goslices, tspath, CompilerOptions, TextChange, TextRange, P};
+use tsrs_core::{apply_bulk_edits, compare_text_ranges, goslices, tspath, CompilerOptions, TextChange, TextPos, TextRange, P};
 use tsrs_lsproto as lsproto;
 use tsrs_printer::{self as printer, ChangeTrackerWriter, EmitContext, EmitFlags, EmitTextWriter, Printer, PrinterOptions};
 use tsrs_scanner as scanner;
@@ -37,7 +37,8 @@ impl LanguageService {
 
         let mut checker_handle = program.get_type_checker_for_file(ctx, file);
         let checker: &mut Checker = &mut checker_handle;
-        Ok(self.get_completion_item_details(ctx, program, checker, data.position, file, item, data))
+        let position = TextPos::try_from(data.position).map_err(|_| lsproto::Error::new("completion item position is negative"))?;
+        Ok(self.get_completion_item_details(ctx, program, checker, position, file, item, data))
     }
 }
 
@@ -53,7 +54,7 @@ impl LanguageService {
         ctx: &Context,
         program: &'static Program,
         checker: &mut Checker,
-        position: i32,
+        position: TextPos,
         file: P<SourceFile>,
         mut item: lsproto::CompletionItem,
         data: &lsproto::CompletionItemData,
@@ -143,7 +144,7 @@ struct symbolDetails {
 
 impl LanguageService {
     // completions.go:5626
-    fn get_symbol_completion_from_item_data(&self, ctx: &Context, ch: &mut Checker, file: P<SourceFile>, position: i32, item_data: &lsproto::CompletionItemData) -> detailsData {
+    fn get_symbol_completion_from_item_data(&self, ctx: &Context, ch: &mut Checker, file: P<SourceFile>, position: TextPos, item_data: &lsproto::CompletionItemData) -> detailsData {
         if item_data.source == SOURCE_SWITCH_CASES {
             return detailsData { cases: Some(()), ..Default::default() };
         }
@@ -242,7 +243,7 @@ impl LanguageService {
         symbol: P<Symbol>,
         checker: &mut Checker,
         location: P<Node>,
-        _position: i32,
+        _position: TextPos,
         doc_format: lsproto::MarkupKind,
     ) -> lsproto::CompletionItem {
         let (quick_info, documentation, _, _) = self.get_quick_info_and_documentation_for_symbol(checker, Some(symbol), location, doc_format, None, false /*vsCapability*/);
@@ -450,14 +451,14 @@ fn is_module_specifier_missing_or_empty(specifier: Option<P<Node>>) -> bool {
 }
 
 // completions.go:5935
-pub(crate) fn has_doc_comment(file: P<SourceFile>, position: i32) -> bool {
+pub(crate) fn has_doc_comment(file: P<SourceFile>, position: TextPos) -> bool {
     let token = astnav::get_token_at_position(file, position);
     ast::find_ancestor(token, |n| n.is_jsdoc()).is_some()
 }
 
 // Get the corresponding JSDocTag node if the position is in a JSDoc comment
 // completions.go:5941
-pub(crate) fn get_jsdoc_tag_at_position(node: P<Node>, position: i32) -> Option<P<Node>> {
+pub(crate) fn get_jsdoc_tag_at_position(node: P<Node>, position: TextPos) -> Option<P<Node>> {
     ast::find_ancestor_or_quit(node, |n| {
         if ast::is_jsdoc_tag(n) && n.loc().contains_inclusive(position) {
             return FindAncestorResult::True;
@@ -496,7 +497,7 @@ fn is_tag_with_type_expression(tag: P<Node>) -> bool {
 
 impl LanguageService {
     // completions.go:5983
-    pub(crate) fn js_doc_completion_info(&self, ctx: &Context, position: i32, file: P<SourceFile>, mut items: Vec<CompletionItem>) -> CompletionList {
+    pub(crate) fn js_doc_completion_info(&self, ctx: &Context, position: TextPos, file: P<SourceFile>, mut items: Vec<CompletionItem>) -> CompletionList {
         let default_commit_characters = get_default_commit_characters(false /*isNewIdentifierLocation*/);
         let item_defaults = self.set_item_defaults(ctx, position, file, &mut items, Some(&default_commit_characters), None /*optionalReplacementSpan*/);
         CompletionList { is_incomplete: false, item_defaults, items, ..Default::default() }
@@ -639,7 +640,7 @@ pub(crate) fn get_jsdoc_tag_completions() -> Vec<CompletionItem> {
 pub(crate) fn get_jsdoc_parameter_completions(
     _ctx: &Context,
     file: P<SourceFile>,
-    position: i32,
+    position: TextPos,
     type_checker: &mut Checker,
     options: P<CompilerOptions>,
     preferences: &UserPreferences,
@@ -1062,7 +1063,7 @@ impl LanguageService {
         ctx: &Context,
         case_block: P<Node>,
         file: P<SourceFile>,
-        position: i32,
+        position: TextPos,
         options: P<CompilerOptions>,
         program: &'static Program,
         c: &mut Checker,
@@ -1176,7 +1177,7 @@ impl LanguageService {
                 insert_text: str_ptr_to(&insert_text),
                 additional_text_edits,
                 insert_text_format: if client_supports_item_snippet(ctx) { Some(lsproto::InsertTextFormat::Snippet) } else { None },
-                data: Some(lsproto::CompletionItemData {
+                data: i32::try_from(position).ok().map(|position| lsproto::CompletionItemData {
                     file_name: file.original_file_name().to_string(),
                     position,
                     supplemental_file_index: supplemental_file_index(file),
@@ -1326,6 +1327,8 @@ impl snippetEmitTextWriter {
             let start = self.base.get_text_pos();
             write(&mut self.base);
             let end = self.base.get_text_pos();
+            let start = TextPos::try_from(start).expect("snippet output position is negative");
+            let end = TextPos::try_from(end).expect("snippet output position is negative");
             self.escapes.push(TextChange { new_text: escaped, text_range: TextRange::new(start, end) });
         } else {
             write(&mut self.base);

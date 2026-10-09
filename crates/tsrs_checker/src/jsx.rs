@@ -1592,7 +1592,7 @@ fn pragma_factory_argument(pragma: &'static Pragma) -> &'static str {
 
 // jsx.go:1443
 pub(crate) fn mark_as_synthetic(node: P<Node>) -> bool {
-    node.set_loc(TextRange::new(-1, -1));
+    node.set_loc(undefined_text_range());
     node.for_each_child(&mut |child| mark_as_synthetic(child));
     false
 }

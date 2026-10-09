@@ -549,7 +549,7 @@ impl RuntimeSyntaxTransformer {
                 let (visited, _) = self.visitor().visit_slice(alloc_vec(vec![body]));
                 statements = visited.to_vec();
                 let module_block = get_innermost_module_declaration_from_dotted_module(node).body().unwrap();
-                statements_location = module_block.as_module_block().statements.loc.get().with_pos(-1);
+                statements_location = module_block.as_module_block().statements.loc.get().with_pos(tsrs_core::SYNTHETIC_POSITION);
             }
         }
 
@@ -1007,7 +1007,7 @@ impl RuntimeSyntaxTransformer {
         emit_context.set_source_map_range(expression, export_assignment_source_map_range);
 
         let statement = f.new_expression_statement(expression);
-        let export_statement_source_map_range = node.loc().with_pos(-1);
+        let export_statement_source_map_range = node.loc().with_pos(tsrs_core::SYNTHETIC_POSITION);
         emit_context.set_source_map_range(statement, export_statement_source_map_range);
         statement
     }

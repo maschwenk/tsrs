@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tsrs_core::collections::OrderedMap;
 use tsrs_core::stringutil;
 use tsrs_core::tspath;
-use tsrs_core::TextRange;
+use tsrs_core::{TextPos, TextRange};
 use tsrs_ls::lsconv::{self, Script};
 use tsrs_ls::spanmap::SpanMap;
 use tsrs_lsproto as lsproto;
@@ -57,7 +57,7 @@ impl RangeMarker {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Marker {
     pub(crate) file_name: String,
-    pub position: i32,
+    pub position: TextPos,
     pub ls_position: lsproto::Position,
     pub name: Option<String>, // `nil` for anonymous markers such as `{| "foo": "bar" |}`
     // Go's map is nil for markers without data; object markers always have at least one key.
@@ -367,7 +367,13 @@ fn parse_file_content(file_name: &str, content: &str, file_options: &OrderedMap<
                         return Err(report_error(&file_name, line, column, "Found range end with no matching start."));
                     };
 
-                    range_markers.push((TextRange::new(range_start.location_information.position, (ii - 1) - difference), range_start.marker));
+                    range_markers.push((
+                        TextRange::new(
+                            TextPos::try_from(range_start.location_information.position).expect("range start is nonnegative"),
+                            TextPos::try_from((ii - 1) - difference).expect("range end is nonnegative"),
+                        ),
+                        range_start.marker,
+                    ));
 
                     // copy all text up to range marker position
                     flush(&mut output, last_normal_char_position, Some(i - 1));
@@ -511,8 +517,8 @@ fn parse_file_content(file_name: &str, content: &str, file_options: &OrderedMap<
         .map(|m| {
             Arc::new(Marker {
                 file_name: file_name.clone(),
-                position: m.position,
-                ls_position: converters.position_to_line_and_character(&test_file_info, m.position),
+                position: TextPos::try_from(m.position).expect("marker position is nonnegative"),
+                ls_position: converters.position_to_line_and_character(&test_file_info, TextPos::try_from(m.position).expect("marker position is nonnegative")),
                 name: m.name,
                 data: m.data,
             })

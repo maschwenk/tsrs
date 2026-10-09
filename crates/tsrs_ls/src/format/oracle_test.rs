@@ -81,7 +81,7 @@ fn run_oracle() {
             if indent_mode {
                 let mut s = String::new();
                 for (i, &ls) in file.ecma_line_map().iter().enumerate() {
-                    s.push_str(&format!("{},", get_indentation(ls as i32, file, &options, i % 2 == 0)));
+                    s.push_str(&format!("{},", get_indentation(ls, file, &options, i % 2 == 0)));
                 }
                 return s;
             }

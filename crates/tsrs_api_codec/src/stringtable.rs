@@ -1,6 +1,7 @@
 //! Port of the pinned `tsc/internal/api/encoder/stringtable.go`.
 
 use tsrs_ast::Kind;
+use tsrs_core::TextPos;
 
 /// String offsets + string data sections. Strings that equal the slice of file text at their node's position are
 /// stored as a range of the file text; everything else is appended after it. All offsets are UTF-8 (WTF-8) byte
@@ -19,7 +20,7 @@ impl<'a> StringTable<'a> {
 
     /// Go `stringTable.add`. `text` may be WTF-8 (lone surrogates encoded by `encode_js_string_rune`); it is
     /// copied byte for byte.
-    pub fn add(&mut self, text: &str, kind: Kind, pos: i32, end: i32) -> u32 {
+    pub fn add(&mut self, text: &str, kind: Kind, pos: TextPos, end: TextPos) -> u32 {
         let index = self.offsets.len() as u32;
         if kind == Kind::SourceFile {
             self.offsets.push(pos as u32);

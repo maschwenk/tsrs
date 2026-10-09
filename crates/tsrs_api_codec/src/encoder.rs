@@ -13,7 +13,7 @@ use std::sync::OnceLock;
 use rustc_hash::FxHashMap;
 use tsrs_ast::*;
 use tsrs_core::goslices::sort_func;
-use tsrs_core::{binary_search_unique_func, P};
+use tsrs_core::{binary_search_unique_func, position_is_synthetic, TextPos, SYNTHETIC_POSITION, P};
 
 use crate::format::*;
 use crate::generated::{children_property_mask, node_common_data, node_data_type, record_extended_data, record_node_strings};
@@ -99,7 +99,10 @@ pub struct EncodeContext {
 }
 
 impl EncodeContext {
-    fn utf16(&self, pos: i32) -> u32 {
+    fn utf16(&self, pos: TextPos) -> u32 {
+        if position_is_synthetic(pos) {
+            return SYNTHETIC_POSITION;
+        }
         self.position_map.utf8_to_utf16(pos as i64) as u32
     }
 }

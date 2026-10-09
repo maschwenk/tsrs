@@ -1109,7 +1109,7 @@ impl classFieldsTransformer {
 
     // classfields.go:1027
     pub(crate) fn create_private_identifier_access_helper(&self, info: P<privateIdentifierInfo>, receiver: P<Node>) -> P<Node> {
-        self.emit_context().set_comment_range(receiver, tsrs_core::TextRange::new(-1, receiver.end()));
+        self.emit_context().set_comment_range(receiver, tsrs_core::TextRange::new(tsrs_core::SYNTHETIC_POSITION, receiver.end()));
 
         match info.kind {
             PrivateIdentifierKind::Accessor => self.factory().new_class_private_field_get_helper(receiver, info.brand_check_identifier.unwrap(), info.kind, info.getter_name.get()),
@@ -1717,7 +1717,7 @@ impl classFieldsTransformer {
             );
         }
 
-        self.emit_context().set_comment_range(receiver, tsrs_core::TextRange::new(-1, receiver.end()));
+        self.emit_context().set_comment_range(receiver, tsrs_core::TextRange::new(tsrs_core::SYNTHETIC_POSITION, receiver.end()));
 
         match info.kind {
             PrivateIdentifierKind::Accessor => self.factory().new_class_private_field_set_helper(receiver, info.brand_check_identifier.unwrap(), right, info.kind, info.setter_name.get()),

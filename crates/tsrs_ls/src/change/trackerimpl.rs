@@ -1,7 +1,7 @@
 use tsrs_ast::{self as ast, Kind, Node, SourceFile};
 use tsrs_core::collections::OrderedMap;
 use tsrs_core::stringutil;
-use tsrs_core::{apply_bulk_edits, TextRange, P};
+use tsrs_core::{apply_bulk_edits, text_pos_from_len, TextPos, TextRange, P};
 use tsrs_lsproto as lsproto;
 use tsrs_printer as printer;
 use tsrs_scanner as scanner;
@@ -175,7 +175,7 @@ impl Tracker {
         if let Some(spans) = crate::lsconv::Script::span_map(&source_file) {
             match *spans {}
         }
-        if pos < 0 || pos as usize > original.len() {
+        if pos as usize > original.len() {
             return text;
         }
         let pos = pos as usize;
@@ -203,7 +203,7 @@ impl Tracker {
         node_in: P<Node>,
         target_source_file: P<SourceFile>,
         source_file: P<SourceFile>,
-        pos: i32,
+        pos: TextPos,
         options: &NodeOptions,
     ) -> String {
         let (text, source_file_like) = self.get_nonformatted_text(node_in, target_source_file);
@@ -286,7 +286,7 @@ impl Tracker {
         node: P<Node>,
         leading_option: LeadingTriviaOption,
         has_trailing_comment: bool,
-    ) -> i32 {
+    ) -> TextPos {
         let text = source_file.text();
         if leading_option == LeadingTriviaOption::JSDoc {
             let mut f = self.node_factory.clone();
@@ -364,7 +364,7 @@ impl Tracker {
     // trackerimpl.go:394
     // method on the changeTracker because of converters
     // Return the end position of a multiline comment of it is on another line; otherwise returns `undefined`;
-    fn get_end_position_of_multiline_trailing_comment(&self, source_file: P<SourceFile>, node: P<Node>, trailing_opt: TrailingTriviaOption) -> i32 {
+    fn get_end_position_of_multiline_trailing_comment(&self, source_file: P<SourceFile>, node: P<Node>, trailing_opt: TrailingTriviaOption) -> TextPos {
         if trailing_opt == TrailingTriviaOption::Include {
             // If the trailing comment is a multiline comment that extends to the next lines,
             // return the end of the comment and track it for the next nodes to adjust.
@@ -396,7 +396,7 @@ impl Tracker {
 
     // trackerimpl.go:422
     // method on the changeTracker because of converters
-    pub(crate) fn get_adjusted_end_position(&self, source_file: P<SourceFile>, node: P<Node>, trailing_trivia_option: TrailingTriviaOption) -> i32 {
+    pub(crate) fn get_adjusted_end_position(&self, source_file: P<SourceFile>, node: P<Node>, trailing_trivia_option: TrailingTriviaOption) -> TextPos {
         if trailing_trivia_option == TrailingTriviaOption::Exclude {
             return node.end();
         }
@@ -433,7 +433,7 @@ impl Tracker {
     }
 
     // trackerimpl.go:475
-    pub(crate) fn get_insertion_position_at_source_file_top(&self, source_file: P<SourceFile>) -> i32 {
+    pub(crate) fn get_insertion_position_at_source_file_top(&self, source_file: P<SourceFile>) -> TextPos {
         let mut last_prologue: Option<P<Node>> = None;
         for &node in source_file.statements.nodes() {
             if ast::is_prologue_directive(node) {
@@ -443,10 +443,10 @@ impl Tracker {
             }
         }
 
-        let mut position: i32 = 0;
+        let mut position: TextPos = 0;
         let text = source_file.text();
         let bytes = text.as_bytes();
-        let advance_past_line_break = |position: &mut i32| {
+        let advance_past_line_break = |position: &mut TextPos| {
             if *position as usize >= bytes.len() {
                 return;
             }
@@ -466,7 +466,7 @@ impl Tracker {
 
         let shebang = scanner::get_shebang(text);
         if !shebang.is_empty() {
-            position = shebang.len() as i32;
+            position = text_pos_from_len(shebang.len());
             advance_past_line_break(&mut position);
         }
 
@@ -477,7 +477,7 @@ impl Tracker {
         // Find the first attached comment to the first node and add before it
         let mut last_comment: Option<ast::CommentRange> = None;
         let mut pinned_or_triple_slash = false;
-        let mut first_node_line = -1;
+        let mut first_node_line = None;
 
         let len_statements = source_file.statements.nodes().len();
         let line_map = source_file.ecma_line_map();
@@ -510,14 +510,14 @@ impl Tracker {
             }
 
             if len_statements > 0 {
-                if first_node_line == -1 {
-                    first_node_line = scanner::compute_line_of_position(
+                if first_node_line.is_none() {
+                    first_node_line = Some(scanner::compute_line_of_position(
                         line_map,
                         astnav::get_start_of_node(source_file.statements.nodes()[0], source_file, false),
-                    );
+                    ));
                 }
                 let comment_end_line = scanner::compute_line_of_position(line_map, r.end());
-                if first_node_line < comment_end_line + 2 {
+                if first_node_line.unwrap() < comment_end_line + 2 {
                     break;
                 }
             }
@@ -583,7 +583,7 @@ pub fn get_format_code_settings_for_writing(options: FormatCodeSettings, source_
 }
 
 // trackerimpl.go:452
-pub(crate) fn has_comments_before_line_break(text: &str, start: i32) -> bool {
+pub(crate) fn has_comments_before_line_break(text: &str, start: TextPos) -> bool {
     for ch in text[start as usize..].chars() {
         if !stringutil::is_white_space_single_line(ch as i32) {
             return ch == '/';

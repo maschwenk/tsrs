@@ -221,7 +221,7 @@ fn test_source_map_generator_add_generated_mapping_generated_line_cannot_backtra
 fn test_source_map_generator_add_generated_mapping_generated_character_cannot_be_negative() {
     let mut r#gen = new_gen();
     r#gen.add_generated_mapping(0, 0).unwrap();
-    assert_eq!(err(r#gen.add_generated_mapping(0, -1)), "generatedCharacter cannot be negative");
+    assert_eq!(err(r#gen.add_generated_mapping(0, SYNTHETIC_POSITION)), "generatedCharacter cannot be negative");
 }
 
 // generator_test.go:318
@@ -239,7 +239,7 @@ fn test_source_map_generator_add_source_mapping_generated_character_cannot_be_ne
     let mut r#gen = new_gen();
     let source_index = r#gen.add_source("/main.ts");
     r#gen.add_source_mapping(0, 0, source_index, 0, 0).unwrap();
-    assert_eq!(err(r#gen.add_source_mapping(0, -1, source_index, 0, 0)), "generatedCharacter cannot be negative");
+    assert_eq!(err(r#gen.add_source_mapping(0, SYNTHETIC_POSITION, source_index, 0, 0)), "generatedCharacter cannot be negative");
 }
 
 // generator_test.go:334
@@ -263,7 +263,7 @@ fn test_source_map_generator_add_source_mapping_source_line_cannot_be_negative()
 fn test_source_map_generator_add_source_mapping_source_character_cannot_be_negative() {
     let mut r#gen = new_gen();
     let source_index = r#gen.add_source("/main.ts");
-    assert_eq!(err(r#gen.add_source_mapping(0, 0, source_index, 0, -1)), "sourceCharacter cannot be negative");
+    assert_eq!(err(r#gen.add_source_mapping(0, 0, source_index, 0, SYNTHETIC_POSITION)), "sourceCharacter cannot be negative");
 }
 
 // generator_test.go:355
@@ -283,7 +283,7 @@ fn test_source_map_generator_add_named_source_mapping_generated_character_cannot
     let source_index = r#gen.add_source("/main.ts");
     let name_index = r#gen.add_name("foo");
     r#gen.add_named_source_mapping(0, 0, source_index, 0, 0, name_index).unwrap();
-    assert_eq!(err(r#gen.add_named_source_mapping(0, -1, source_index, 0, 0, name_index)), "generatedCharacter cannot be negative");
+    assert_eq!(err(r#gen.add_named_source_mapping(0, SYNTHETIC_POSITION, source_index, 0, 0, name_index)), "generatedCharacter cannot be negative");
 }
 
 // generator_test.go:373
@@ -310,7 +310,7 @@ fn test_source_map_generator_add_named_source_mapping_source_character_cannot_be
     let mut r#gen = new_gen();
     let name_index = r#gen.add_name("foo");
     let source_index = r#gen.add_source("/main.ts");
-    assert_eq!(err(r#gen.add_named_source_mapping(0, 0, source_index, 0, -1, name_index)), "sourceCharacter cannot be negative");
+    assert_eq!(err(r#gen.add_named_source_mapping(0, 0, source_index, 0, SYNTHETIC_POSITION, name_index)), "sourceCharacter cannot be negative");
 }
 
 // generator_test.go:397

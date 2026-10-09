@@ -6,6 +6,7 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 use tsrs_core::tspath::{self, ComparePathsOptions};
+use tsrs_core::TextPos;
 
 use crate::fourslash::FourslashDiagnostic;
 use crate::testing::T;
@@ -131,7 +132,11 @@ fn iterate_error_baseline(
 
             let this_line_start = line_starts[line_index];
             // On the last line of the file, fake the next line start number so that we handle errors on the last character of the file correctly
-            let next_line_start = if line_index == lines.len() - 1 { content.len() as i32 } else { line_starts[line_index + 1] };
+            let next_line_start = if line_index == lines.len() - 1 {
+                TextPos::try_from(content.len()).expect("source length exceeds TextPos")
+            } else {
+                line_starts[line_index + 1]
+            };
             // Emit this line from the original file
             output_lines.push_str(new_line());
             output_lines.push_str("    ");
@@ -139,12 +144,12 @@ fn iterate_error_baseline(
             for err_diagnostic in &file_errors {
                 // Does any error start or continue on to this line? Emit squiggles
                 let err_start = err_diagnostic.loc.pos();
-                let end = err_start + err_diagnostic.loc.len();
+                let end = err_start.checked_add(err_diagnostic.loc.len()).expect("diagnostic end exceeds TextPos");
                 if end >= this_line_start && (err_start < next_line_start || line_index == lines.len() - 1) {
                     // How many characters from the start of this line the error starts at (could be positive or negative)
-                    let relative_offset = err_start - this_line_start;
+                    let relative_offset = i64::from(err_start) - i64::from(this_line_start);
                     // How many characters of the error are on this line (might be longer than this line in reality)
-                    let length = (end - err_start) - 0.max(this_line_start - err_start);
+                    let length = i64::from(end - err_start) - 0.max(i64::from(this_line_start) - i64::from(err_start));
                     // Calculate the start of the squiggle
                     let squiggle_start = 0.max(relative_offset) as usize;
                     output_lines.push_str(new_line());
@@ -198,12 +203,12 @@ fn format_location(diag: &FourslashDiagnostic) -> String {
 }
 
 // diagnosticwriter.GetECMALineAndUTF16CharacterOfPosition
-fn get_ecma_line_and_utf16_character_of_position(diag: &FourslashDiagnostic, pos: i32) -> (usize, i32) {
+fn get_ecma_line_and_utf16_character_of_position(diag: &FourslashDiagnostic, pos: TextPos) -> (usize, i32) {
     let line_map = &diag.file.ecma_line_map;
-    let line = tsrs_scanner::compute_line_of_position(line_map, pos).max(0) as usize;
-    let start = line_map[line].max(0) as usize;
+    let line = tsrs_scanner::compute_line_of_position(line_map, pos) as usize;
+    let start = line_map[line] as usize;
     let text = &diag.file.content;
-    let end = (pos.max(0) as usize).min(text.len()).max(start);
+    let end = (pos as usize).min(text.len()).max(start);
     let character = text.get(start..end).map_or(0, |s| s.chars().map(|c| c.len_utf16() as i32).sum());
     (line, character)
 }

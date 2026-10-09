@@ -4,7 +4,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_ast::{self as ast, Kind, ModifierFlags, Node, NodeFlags, SourceFile, Symbol, SymbolFlags, SymbolId};
 use tsrs_checker::{self as checker, Checker, ContextFlags, LiteralValue, Type};
 use tsrs_core::context::Context;
-use tsrs_core::{stringutil, tspath, P};
+use tsrs_core::{stringutil, tspath, TextPos, P};
 use tsrs_lsproto as lsproto;
 use tsrs_scanner as scanner;
 
@@ -65,7 +65,7 @@ impl LanguageService {
             return Ok(lsproto::CompletionItemsOrListOrNull::default());
         }
         file = positions[0].script;
-        let position = positions[0].position as i32;
+        let position = positions[0].position;
         let completion_list_internal = self.get_completions_at_position_internal(ctx, file, position, trigger_character, false /*includeSymbols*/)?;
         let mut completion_list = ensure_item_data(file, position, completion_list_internal.map(CompletionList::to_lsp));
         if crate::lsconv::Script::span_map(&file).is_some() {
@@ -107,7 +107,7 @@ impl LanguageService {
         &self,
         ctx: &Context,
         file: P<SourceFile>,
-        position: i32,
+        position: TextPos,
         trigger_character: Option<&str>,
         include_symbols: bool,
     ) -> Result<Option<CompletionList>, lsproto::Error> {
@@ -151,13 +151,14 @@ pub struct CompletionList {
 }
 
 // completions.go:122
-fn ensure_item_data(file: P<SourceFile>, pos: i32, list: Option<lsproto::CompletionList>) -> Option<lsproto::CompletionList> {
+fn ensure_item_data(file: P<SourceFile>, pos: TextPos, list: Option<lsproto::CompletionList>) -> Option<lsproto::CompletionList> {
     let mut list = list?;
+    let protocol_position = i32::try_from(pos).ok();
     for item in &mut list.items {
-        if item.data.is_none() {
+        if item.data.is_none() && protocol_position.is_some() {
             item.data = Some(lsproto::CompletionItemData {
                 file_name: file.original_file_name().to_string(),
-                position: pos,
+                position: protocol_position.unwrap(),
                 supplemental_file_index: supplemental_file_index(file),
                 name: item.label.clone(),
                 ..Default::default()
@@ -516,7 +517,7 @@ impl LanguageService {
         &self,
         ctx: &Context,
         file: P<SourceFile>,
-        position: i32,
+        position: TextPos,
         trigger_character: Option<&str>,
         include_symbols: bool,
     ) -> Result<Option<CompletionList>, lsproto::Error> {
@@ -603,7 +604,7 @@ impl LanguageService {
         ctx: &Context,
         type_checker: &mut Checker,
         file: P<SourceFile>,
-        position: i32,
+        position: TextPos,
         preferences: &UserPreferences,
         for_item_resolve: bool,
     ) -> Result<Option<CompletionData>, lsproto::Error> {
@@ -1001,7 +1002,7 @@ impl LanguageService {
 // The locals of Go's getCompletionData that its closures (completions.go:796-1704) read and mutate.
 struct getCompletionDataState {
     file: P<SourceFile>,
-    position: i32,
+    position: TextPos,
     preferences: UserPreferences,
     for_item_resolve: bool,
     in_checked_file: bool,

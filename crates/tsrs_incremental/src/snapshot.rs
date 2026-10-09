@@ -8,7 +8,7 @@ use tsrs_ast::{self as ast, Diagnostic, DiagnosticExt, RepopulateDiagnosticInfo,
 use tsrs_compiler::Program as CompilerProgram;
 use tsrs_core::collections::{SyncMap, SyncSet};
 use tsrs_core::tspath::{self, ComparePathsOptions, Path};
-use tsrs_core::{alloc_str, new_text_range, CompilerOptions, ResolutionMode, Tristate, P};
+use tsrs_core::{alloc_str, new_text_range, CompilerOptions, ResolutionMode, TextPos, Tristate, P};
 use tsrs_diagnostics::{Category, Key};
 
 use crate::emit::WriteFileData;
@@ -151,8 +151,8 @@ pub(crate) struct buildInfoDiagnosticWithFileName {
     // filename if it is for a File thats other than its stored for
     pub(crate) file: Path,
     pub(crate) no_file: bool,
-    pub(crate) pos: i32,
-    pub(crate) end: i32,
+    pub(crate) pos: TextPos,
+    pub(crate) end: TextPos,
     pub(crate) code: i32,
     pub(crate) category: Category,
     pub(crate) source: String,

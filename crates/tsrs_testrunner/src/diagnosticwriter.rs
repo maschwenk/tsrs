@@ -6,12 +6,13 @@ use std::cmp::Ordering;
 use std::rc::Rc;
 
 use tsrs_core::tspath::{self, ComparePathsOptions};
+use tsrs_core::{position_cmp, TextPos};
 use tsrs_diagnostics::{self as diagnostics, Category};
 
 pub struct FileLike {
     pub file_name: String,
     pub text: String,
-    pub line_map: Vec<i32>,
+    pub line_map: Vec<TextPos>,
 }
 
 impl FileLike {
@@ -24,8 +25,8 @@ impl FileLike {
 #[derive(Clone)]
 pub struct Diag {
     pub file: Option<Rc<FileLike>>,
-    pub pos: i32,
-    pub end: i32,
+    pub pos: TextPos,
+    pub end: TextPos,
     pub code: i32,
     pub category: Category,
     // Custom prefix shown before the code instead of "TS" (empty means "TS").
@@ -40,7 +41,7 @@ pub struct Diag {
 }
 
 impl Diag {
-    pub fn len(&self) -> i32 {
+    pub fn len(&self) -> u32 {
         self.end - self.pos
     }
 }
@@ -117,14 +118,10 @@ pub fn compare_diagnostics(d1: &Diag, d2: &Diag) -> i32 {
     if c != 0 {
         return c;
     }
-    c = d1.pos - d2.pos;
-    if c != 0 {
-        return c;
-    }
-    c = d1.end - d2.end;
-    if c != 0 {
-        return c;
-    }
+    c = match position_cmp(d1.pos, d2.pos) { Ordering::Less => -1, Ordering::Equal => 0, Ordering::Greater => 1 };
+    if c != 0 { return c; }
+    c = match position_cmp(d1.end, d2.end) { Ordering::Less => -1, Ordering::Equal => 0, Ordering::Greater => 1 };
+    if c != 0 { return c; }
     c = d1.code - d2.code;
     if c != 0 {
         return c;
@@ -156,7 +153,7 @@ pub fn compare_diagnostics(d1: &Diag, d2: &Diag) -> i32 {
     compare_related_info(&d1.related, &d2.related)
 }
 
-pub fn compute_ecma_line_starts(text: &str) -> Vec<i32> {
+pub fn compute_ecma_line_starts(text: &str) -> Vec<TextPos> {
     let bytes = text.as_bytes();
     let mut result = Vec::with_capacity(bytes.iter().filter(|&&b| b == b'\n').count() + 1);
     let mut pos = 0usize;
@@ -170,11 +167,11 @@ pub fn compute_ecma_line_starts(text: &str) -> Vec<i32> {
                     if pos < bytes.len() && bytes[pos] == b'\n' {
                         pos += 1;
                     }
-                    result.push(line_start as i32);
+                    result.push(line_start as TextPos);
                     line_start = pos;
                 }
                 b'\n' => {
-                    result.push(line_start as i32);
+                    result.push(line_start as TextPos);
                     line_start = pos;
                 }
                 _ => {}
@@ -183,12 +180,12 @@ pub fn compute_ecma_line_starts(text: &str) -> Vec<i32> {
             let ch = text[pos..].chars().next().unwrap();
             pos += ch.len_utf8();
             if ch == '\u{2028}' || ch == '\u{2029}' {
-                result.push(line_start as i32);
+                result.push(line_start as TextPos);
                 line_start = pos;
             }
         }
     }
-    result.push(line_start as i32);
+    result.push(line_start as TextPos);
     result
 }
 
@@ -197,7 +194,7 @@ pub fn utf16_len(s: &str) -> i32 {
 }
 
 // scanner.ComputeLineOfPosition
-pub fn compute_line_of_position(line_starts: &[i32], pos: i32) -> usize {
+pub fn compute_line_of_position(line_starts: &[TextPos], pos: TextPos) -> usize {
     match line_starts.binary_search(&pos) {
         Ok(i) => i,
         Err(i) => i.saturating_sub(1),
@@ -218,14 +215,14 @@ fn byte_slice(text: &str, start: usize, end: usize) -> &str {
     &text[s..e]
 }
 
-pub fn get_ecma_line_and_utf16_character_of_position(file: &FileLike, pos: i32) -> (usize, i32) {
+pub fn get_ecma_line_and_utf16_character_of_position(file: &FileLike, pos: TextPos) -> (usize, i32) {
     let line = compute_line_of_position(&file.line_map, pos);
-    let start = file.line_map[line].max(0) as usize;
-    let character = utf16_len(byte_slice(&file.text, start, pos.max(0) as usize));
+    let start = file.line_map[line] as usize;
+    let character = utf16_len(byte_slice(&file.text, start, pos as usize));
     (line, character)
 }
 
-pub fn get_ecma_line_of_position(file: &FileLike, pos: i32) -> usize {
+pub fn get_ecma_line_of_position(file: &FileLike, pos: TextPos) -> usize {
     compute_line_of_position(&file.line_map, pos)
 }
 
@@ -298,19 +295,19 @@ fn is_go_space(c: char) -> bool {
 fn write_code_snippet(
     writer: &mut String,
     source_file: &FileLike,
-    start: i32,
-    length: i32,
+    start: TextPos,
+    length: u32,
     squiggle_color: &str,
     indent: &str,
     format_opts: &FormattingOptions,
 ) {
     let (first_line, first_line_char) = get_ecma_line_and_utf16_character_of_position(source_file, start);
-    let (last_line, mut last_line_char) = get_ecma_line_and_utf16_character_of_position(source_file, start + length);
+    let (last_line, mut last_line_char) = get_ecma_line_and_utf16_character_of_position(source_file, start.checked_add(length).expect("diagnostic end exceeds TextPos"));
     if length == 0 {
         last_line_char += 1; // When length is zero, squiggle the character right after the start position.
     }
 
-    let last_line_of_file = get_ecma_line_of_position(source_file, source_file.text.len() as i32);
+    let last_line_of_file = get_ecma_line_of_position(source_file, TextPos::try_from(source_file.text.len()).expect("source length exceeds TextPos"));
 
     let has_more_than_five_lines = last_line as i64 - first_line as i64 >= 4;
     let mut gutter_width = (last_line + 1).to_string().len();
@@ -426,7 +423,7 @@ pub fn write_with_style_and_reset(output: &mut String, text: &str, format_style:
     output.push_str(RESET_ESCAPE_SEQUENCE);
 }
 
-pub fn write_location(output: &mut String, file: &FileLike, pos: i32, format_opts: Option<&FormattingOptions>, write_with_style_and_reset: FormattedWriter) {
+pub fn write_location(output: &mut String, file: &FileLike, pos: TextPos, format_opts: Option<&FormattingOptions>, write_with_style_and_reset: FormattedWriter) {
     let (first_line, first_char) = get_ecma_line_and_utf16_character_of_position(file, pos);
     let relative_file_name = match format_opts {
         Some(o) => tspath::convert_to_relative_path(&file.file_name, &o.compare_paths_options),

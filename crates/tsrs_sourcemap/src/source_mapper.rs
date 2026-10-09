@@ -5,6 +5,7 @@ use tsrs_core::goslices;
 use tsrs_core::json;
 use tsrs_core::stringutil;
 use tsrs_core::tspath;
+use tsrs_core::{position_cmp, TextPos, SYNTHETIC_POSITION};
 
 use super::*;
 
@@ -19,13 +20,21 @@ pub trait Host {
 // Similar to `Mapping`, but position-based.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MappedPosition {
-    pub(crate) generated_position: i32,
-    pub(crate) source_position: i32,
+    pub(crate) generated_position: TextPos,
+    pub(crate) source_position: TextPos,
     pub(crate) source_index: SourceIndex,
     pub(crate) name_index: NameIndex,
 }
 
-pub(crate) const MISSING_POSITION: i32 = -1;
+pub(crate) const MISSING_POSITION: TextPos = SYNTHETIC_POSITION;
+
+fn compare_positions(a: TextPos, b: TextPos) -> i32 {
+    match position_cmp(a, b) {
+        std::cmp::Ordering::Less => -1,
+        std::cmp::Ordering::Equal => 0,
+        std::cmp::Ordering::Greater => 1,
+    }
+}
 
 impl MappedPosition {
     // source_mapper.go:34
@@ -74,25 +83,25 @@ pub(crate) fn create_document_position_mapper(host: &dyn Host, source_map: &RawS
     let mut decoder = decode_mappings(&source_map.mappings);
     for mapping in decoder.values() {
         // processMapping()
-        let mut generated_position = -1;
+        let mut generated_position = MISSING_POSITION;
         let line_info = host.get_ecma_line_info(&generated_absolute_file_path);
         if let Some(line_info) = &line_info {
             generated_position = tsrs_scanner::compute_position_of_line_and_utf16_character(
                 &line_info.line_starts,
-                mapping.generated_line,
+                u32::try_from(mapping.generated_line).expect("decoded source-map line is negative"),
                 mapping.generated_character,
                 &line_info.text,
                 true, /*allowEdits*/
             );
         }
 
-        let mut source_position = -1;
+        let mut source_position = MISSING_POSITION;
         if mapping.is_source_mapping() {
             let line_info = host.get_ecma_line_info(&source_file_absolute_paths[mapping.source_index as usize]);
             if let Some(line_info) = &line_info {
                 let pos = tsrs_scanner::compute_position_of_line_and_utf16_character(
                     &line_info.line_starts,
-                    mapping.source_line,
+                    u32::try_from(mapping.source_line).expect("decoded source-map line is negative"),
                     mapping.source_character,
                     &line_info.text,
                     true, /*allowEdits*/
@@ -130,7 +139,7 @@ pub(crate) fn create_document_position_mapper(host: &dyn Host, source_map: &RawS
     for list in source_mappings.values_mut() {
         goslices::sort_func(list, |a, b| {
             assert!(a.source_index == b.source_index, "All source mappings should have the same source index");
-            a.source_position - b.source_position
+            compare_positions(a.source_position, b.source_position)
         });
         *list = tsrs_core::deduplicate_sorted(list, |a, b| {
             a.generated_position == b.generated_position && a.source_index == b.source_index && a.source_position == b.source_position
@@ -139,7 +148,7 @@ pub(crate) fn create_document_position_mapper(host: &dyn Host, source_map: &RawS
 
     // getGeneratedMappings()
     let mut generated_mappings = decoded_mappings;
-    goslices::sort_func(&mut generated_mappings, |a, b| a.generated_position - b.generated_position);
+    goslices::sort_func(&mut generated_mappings, |a, b| compare_positions(a.generated_position, b.generated_position));
     let generated_mappings = tsrs_core::deduplicate_sorted(&generated_mappings, |a, b| {
         a.generated_position == b.generated_position && a.source_index == b.source_index && a.source_position == b.source_position
     });
@@ -158,7 +167,7 @@ pub(crate) fn create_document_position_mapper(host: &dyn Host, source_map: &RawS
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct DocumentPosition {
     pub file_name: String,
-    pub pos: i32,
+    pub pos: TextPos,
 }
 
 // Go's methods accept a nil receiver and return nil; callers holding an Option<DocumentPositionMapper> take that path
@@ -170,7 +179,8 @@ impl DocumentPositionMapper {
             return None;
         }
 
-        let (target_index, _) = goslices::binary_search_func(&self.generated_mappings, &loc.pos, |m, pos| m.generated_position - pos);
+        let (target_index, _) =
+            goslices::binary_search_func(&self.generated_mappings, &loc.pos, |m, pos| compare_positions(m.generated_position, *pos));
 
         if target_index >= self.generated_mappings.len() {
             return None;
@@ -197,7 +207,8 @@ impl DocumentPositionMapper {
             return None;
         }
         let source_mappings: &[SourceMappedPosition] = self.source_mappings.get(&source_index).map(|v| v.as_slice()).unwrap_or(&[]);
-        let (target_index, _) = goslices::binary_search_func(source_mappings, &loc.pos, |m, pos| m.source_position - pos);
+        let (target_index, _) =
+            goslices::binary_search_func(source_mappings, &loc.pos, |m, pos| compare_positions(m.source_position, *pos));
 
         if target_index >= source_mappings.len() {
             return None;

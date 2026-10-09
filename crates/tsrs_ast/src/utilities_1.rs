@@ -141,7 +141,7 @@ pub fn get_locals(container: P<Node>) -> P<SymbolTable> {
 pub fn node_is_missing(node: impl Into<Option<P<Node>>>) -> bool {
     match node.into() {
         None => true,
-        Some(node) => node.pos() == node.end() && node.pos() >= 0 && node.kind() != Kind::EndOfFile,
+        Some(node) => node.pos() == node.end() && !position_is_synthesized(node.pos()) && node.kind() != Kind::EndOfFile,
     }
 }
 
@@ -156,8 +156,8 @@ pub fn node_is_synthesized(node: P<Node>) -> bool {
 }
 
 // Determines whether a position is synthetic
-pub fn position_is_synthesized(pos: i32) -> bool {
-    pos < 0
+pub fn position_is_synthesized(pos: tsrs_core::TextPos) -> bool {
+    tsrs_core::position_is_synthetic(pos)
 }
 
 pub fn node_kind_is(node: P<Node>, kinds: &[Kind]) -> bool {

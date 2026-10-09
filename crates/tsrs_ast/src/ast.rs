@@ -7,8 +7,8 @@ use rustc_hash::FxHashMap;
 use tsrs_core::collections::Set;
 use tsrs_core::tspath::Path;
 use tsrs_core::{
-    alloc_slice, alloc_str, alloc_vec, compute_ecma_line_starts, undefined_text_range, LanguageVariant, ResolutionMode,
-    FrozenCell, OwnedCell, ScriptKind, TextPos, TextRange, ThinSlice, Tristate, P,
+    alloc_slice, alloc_str, alloc_vec, compute_ecma_line_starts, position_cmp, undefined_text_range, LanguageVariant,
+    ResolutionMode, FrozenCell, OwnedCell, ScriptKind, TextPos, TextRange, ThinSlice, Tristate, P, SYNTHETIC_POSITION,
 };
 use tsrs_diagnostics as diagnostics;
 
@@ -277,6 +277,15 @@ pub struct NodeList {
 
 const _: () = assert!(std::mem::size_of::<NodeList>() == 16);
 
+// Deep-cloned synthetic lists used `-2` on their last node to retain a trailing comma while
+// `-1` marked an ordinary synthetic range. A real range may not have a synthetic end, so this
+// list range preserves that distinction without reserving another TextPos value or giving a
+// node a source-looking position.
+#[inline]
+pub(crate) const fn synthetic_trailing_comma_range() -> TextRange {
+    TextRange::new(0, SYNTHETIC_POSITION)
+}
+
 impl NodeFactory {
     pub fn new_node_list(&self, nodes: Vec<P<Node>>) -> P<NodeList> {
         self.new_node_list_from_static(self.alloc_nodes_vec(nodes))
@@ -338,19 +347,22 @@ impl NodeList {
         self.loc.get()
     }
     #[inline]
-    pub fn pos(&self) -> i32 {
+    pub fn pos(&self) -> TextPos {
         self.loc.get().pos()
     }
     #[inline]
-    pub fn end(&self) -> i32 {
+    pub fn end(&self) -> TextPos {
         self.loc.get().end()
     }
 
     pub fn has_trailing_comma(&self) -> bool {
+        if self.loc() == synthetic_trailing_comma_range() {
+            return true;
+        }
         let Some(last) = self.nodes().last() else {
             return false;
         };
-        last.end() < self.end()
+        position_cmp(last.end(), self.end()).is_lt()
     }
 
     pub fn clone_list(&self, f: &NodeFactory) -> P<NodeList> {
@@ -394,11 +406,11 @@ impl ModifierList {
         self.list.loc.get()
     }
     #[inline]
-    pub fn pos(&self) -> i32 {
+    pub fn pos(&self) -> TextPos {
         self.list.pos()
     }
     #[inline]
-    pub fn end(&self) -> i32 {
+    pub fn end(&self) -> TextPos {
         self.list.end()
     }
     #[inline]
@@ -592,11 +604,11 @@ impl Node {
         self.as_p()
     }
     #[inline]
-    pub fn pos(&self) -> i32 {
+    pub fn pos(&self) -> TextPos {
         self.loc.get().pos()
     }
     #[inline]
-    pub fn end(&self) -> i32 {
+    pub fn end(&self) -> TextPos {
         self.loc.get().end()
     }
     #[inline]
@@ -1724,7 +1736,7 @@ pub struct SourceFile {
     pub(crate) has_lazy_jsdoc: OwnedCell<bool>,
     identifiers: OnceLock<Set<&'static str>>,
     // ast.go:2517 nameTableOnce/nameTable (Go map, random order; insertion order here)
-    name_table: OnceLock<tsrs_core::collections::OrderedMap<&'static str, i32>>,
+    name_table: OnceLock<tsrs_core::collections::OrderedMap<&'static str, TextPos>>,
     pub reparsed_clones: OwnedCell<&'static [P<Node>]>,
     // tsrs-only: the member lists of this declaration file that are parsed and bound on first use (`lazylist`).
     pub lazy_lists: OwnedCell<&'static [P<crate::lazylist::LazyNodeList>]>,
@@ -1891,22 +1903,22 @@ impl SourceFile {
     // GetNameTable returns a map of all names in the file to their positions.
     // If the name appears more than once, the value is -1.
     // ast.go:2857
-    pub fn get_name_table(&self) -> &tsrs_core::collections::OrderedMap<&'static str, i32> {
+    pub fn get_name_table(&self) -> &tsrs_core::collections::OrderedMap<&'static str, TextPos> {
         if let Some(t) = self.name_table.get() {
             return t;
         }
         let _region = self.owner_region();
         self.name_table.get_or_init(|| {
-            let mut name_table: tsrs_core::collections::OrderedMap<&'static str, i32> = Default::default();
+            let mut name_table: tsrs_core::collections::OrderedMap<&'static str, TextPos> = Default::default();
             let file: &'static SourceFile = self.as_node().as_source_file();
-            fn walk(node: P<Node>, file: &'static SourceFile, name_table: &mut tsrs_core::collections::OrderedMap<&'static str, i32>) -> bool {
+            fn walk(node: P<Node>, file: &'static SourceFile, name_table: &mut tsrs_core::collections::OrderedMap<&'static str, TextPos>) -> bool {
                 if is_identifier(node) && !is_tag_name(node) && !node.text().is_empty()
                     || is_string_or_numeric_literal_like(node) && literal_is_name(node)
                     || is_private_identifier(node)
                 {
                     let text = node.text();
                     if name_table.contains_key(text) {
-                        name_table.insert(text, -1);
+                        name_table.insert(text, tsrs_core::SYNTHETIC_POSITION);
                     } else {
                         name_table.insert(text, node.pos());
                     }
@@ -2252,7 +2264,7 @@ pub struct TokenCacheKey {
 
 impl SourceFile {
     // ast.go:2909
-    pub fn get_or_create_token(&self, kind: Kind, pos: i32, end: i32, parent: P<Node>, flags: TokenFlags) -> P<Node> {
+    pub fn get_or_create_token(&self, kind: Kind, pos: TextPos, end: TextPos, parent: P<Node>, flags: TokenFlags) -> P<Node> {
         let _region = self.owner_region();
         let mut token_cache = self.token_cache.lock().unwrap();
         let loc = TextRange::new(pos, end);
@@ -2412,7 +2424,7 @@ impl SourceFile {
 // `kind` should be a token kind.
 // Go keeps one lazily created factory per file (`tokenFactory`); a NodeFactory handle is not `Sync`, and a factory
 // carries no state that tokens observe, so each call uses a fresh default factory.
-fn create_token(kind: Kind, file: &SourceFile, pos: i32, end: i32, flags: TokenFlags) -> P<Node> {
+fn create_token(kind: Kind, file: &SourceFile, pos: TextPos, end: TextPos, flags: TokenFlags) -> P<Node> {
     let token_factory = NodeFactory::default();
     let text: &'static str = &file.text[pos as usize..end as usize];
     match kind {
@@ -2454,17 +2466,17 @@ pub struct CommentRange {
 
 impl CommentRange {
     #[inline]
-    pub fn pos(&self) -> i32 {
+    pub fn pos(&self) -> TextPos {
         self.text_range.pos()
     }
     #[inline]
-    pub fn end(&self) -> i32 {
+    pub fn end(&self) -> TextPos {
         self.text_range.end()
     }
 }
 
 impl NodeFactory {
-    pub fn new_comment_range(&self, kind: Kind, pos: i32, end: i32, has_trailing_new_line: bool) -> CommentRange {
+    pub fn new_comment_range(&self, kind: Kind, pos: TextPos, end: TextPos, has_trailing_new_line: bool) -> CommentRange {
         CommentRange { text_range: TextRange::new(pos, end), kind, has_trailing_new_line }
     }
 }
@@ -2479,11 +2491,11 @@ pub struct FileReference {
 
 impl FileReference {
     #[inline]
-    pub fn pos(&self) -> i32 {
+    pub fn pos(&self) -> TextPos {
         self.text_range.pos()
     }
     #[inline]
-    pub fn end(&self) -> i32 {
+    pub fn end(&self) -> TextPos {
         self.text_range.end()
     }
 }
@@ -2602,7 +2614,7 @@ mod tests {
         assert!(bin.declaration_data().is_some());
         assert!(a.has_flow_node_data());
         assert!(plus.declaration_data().is_none());
-        assert_eq!(a.loc(), TextRange::new(-1, -1));
+        assert_eq!(a.loc(), tsrs_core::undefined_text_range());
 
         // Stopping early propagates true.
         let mut seen = 0;

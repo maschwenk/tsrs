@@ -51,7 +51,7 @@ impl textWriter {
         if count > 1 {
             self.line_count += count - 1;
             let cur_len = self.builder.len() as i32;
-            self.line_pos = cur_len - s.len() as i32 + last_line_start;
+            self.line_pos = cur_len - s.len() as i32 + i32::try_from(last_line_start).expect("writer line start exceeds i32");
             self.line_start = (self.line_pos - cur_len) == 0;
             return;
         }
@@ -104,7 +104,7 @@ impl EmitTextWriter for textWriter {
     // for source map compatibility.
     fn get_column(&self) -> UTF16Offset {
         if self.line_start {
-            return self.indent * self.indent_size as i32;
+            return u32::try_from(self.indent * self.indent_size as i32).expect("writer column is negative");
         }
         // Count UTF-16 code units from the last line start.
         // For ASCII-only output (the common case), this equals the byte count.

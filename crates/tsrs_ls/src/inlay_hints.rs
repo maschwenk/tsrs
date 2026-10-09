@@ -331,8 +331,8 @@ impl InlayHintState<'_> {
     }
 
     // inlay_hints.go:344
-    fn add_type_hints(&mut self, mut hint: lsproto::StringOrInlayHintLabelParts, position: i32) {
-        let (lsp_position, fidelity) = self.converters.to_lsp_position_for_feature(&self.file, position as TextPos, Feature::InlayHints);
+    fn add_type_hints(&mut self, mut hint: lsproto::StringOrInlayHintLabelParts, position: TextPos) {
+        let (lsp_position, fidelity) = self.converters.to_lsp_position_for_feature(&self.file, position, Feature::InlayHints);
         if fidelity.is_none() {
             return;
         }
@@ -353,8 +353,8 @@ impl InlayHintState<'_> {
     }
 
     // inlay_hints.go:362
-    fn add_enum_member_value_hints(&mut self, text: &str, position: i32) {
-        let (lsp_position, fidelity) = self.converters.to_lsp_position_for_feature(&self.file, position as TextPos, Feature::InlayHints);
+    fn add_enum_member_value_hints(&mut self, text: &str, position: TextPos) {
+        let (lsp_position, fidelity) = self.converters.to_lsp_position_for_feature(&self.file, position, Feature::InlayHints);
         if fidelity.is_none() {
             return;
         }
@@ -367,8 +367,8 @@ impl InlayHintState<'_> {
     }
 
     // inlay_hints.go:376
-    fn add_parameter_hints(&mut self, text: &str, parameter: P<Node>, position: i32, is_first_variadic_argument: bool) {
-        let (lsp_position, fidelity) = self.converters.to_lsp_position_for_feature(&self.file, position as TextPos, Feature::InlayHints);
+    fn add_parameter_hints(&mut self, text: &str, parameter: P<Node>, position: TextPos, is_first_variadic_argument: bool) {
+        let (lsp_position, fidelity) = self.converters.to_lsp_position_for_feature(&self.file, position, Feature::InlayHints);
         if fidelity.is_none() {
             return;
         }
@@ -975,7 +975,7 @@ impl InlayHintState<'_> {
     }
 
     // inlay_hints.go:937
-    fn get_type_annotation_position(&self, decl: P<Node>) -> i32 {
+    fn get_type_annotation_position(&self, decl: P<Node>) -> TextPos {
         if let Some(close_paren_token) = astnav::find_child_of_kind(decl, Kind::CloseParenToken, self.file) {
             return close_paren_token.end();
         }

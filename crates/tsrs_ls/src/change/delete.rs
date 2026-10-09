@@ -1,7 +1,7 @@
 use tsrs_ast::{self as ast, Kind, Node, SourceFile};
 use tsrs_core::collections::OrderedMap;
 use tsrs_core::stringutil;
-use tsrs_core::{TextRange, P};
+use tsrs_core::{TextPos, TextRange, P};
 use tsrs_scanner as scanner;
 
 use super::tracker::*;
@@ -137,7 +137,7 @@ fn delete_import_binding(t: &mut Tracker, source_file: P<SourceFile>, node: P<No
         // Delete named imports while preserving the default import
         // import d|, * as ns| from './file'
         // import d|, { a }| from './file'
-        let previous_token = astnav::get_token_at_position(source_file, node.pos() - 1);
+        let previous_token = astnav::get_token_at_position(source_file, node.pos().checked_sub(1).expect("import binding starts at byte zero"));
         let start = astnav::get_start_of_node(previous_token, source_file, false);
         t.replace_text_range_with_text(source_file, TextRange::new(start, node.end()), "");
     } else {
@@ -231,7 +231,7 @@ fn delete_node_in_list(t: &mut Tracker, deleted_nodes_in_lists: &mut OrderedMap<
 impl Tracker {
     // delete.go:226
     // startPositionToDeleteNodeInList finds the first non-whitespace position in the leading trivia of the node
-    pub(crate) fn start_position_to_delete_node_in_list(&self, source_file: P<SourceFile>, node: P<Node>) -> i32 {
+    pub(crate) fn start_position_to_delete_node_in_list(&self, source_file: P<SourceFile>, node: P<Node>) -> TextPos {
         let start = self.get_adjusted_start_position(source_file, node, LeadingTriviaOption::IncludeAll, false);
         scanner::skip_trivia_ex(
             source_file.text(),
@@ -241,7 +241,7 @@ impl Tracker {
     }
 
     // delete.go:231
-    fn end_position_to_delete_node_in_list(&self, source_file: P<SourceFile>, node: P<Node>, prev_node: Option<P<Node>>, next_node: P<Node>) -> i32 {
+    fn end_position_to_delete_node_in_list(&self, source_file: P<SourceFile>, node: P<Node>, prev_node: Option<P<Node>>, next_node: P<Node>) -> TextPos {
         let end = self.start_position_to_delete_node_in_list(source_file, next_node);
         let Some(prev_node) = prev_node else {
             return end;
@@ -281,7 +281,7 @@ impl Tracker {
 }
 
 // delete.go:254
-pub(crate) fn positions_are_on_same_line(pos1: i32, pos2: i32, source_file: P<SourceFile>) -> bool {
+pub(crate) fn positions_are_on_same_line(pos1: TextPos, pos2: TextPos, source_file: P<SourceFile>) -> bool {
     format::get_line_start_position_for_position(pos1, source_file) == format::get_line_start_position_for_position(pos2, source_file)
 }
 

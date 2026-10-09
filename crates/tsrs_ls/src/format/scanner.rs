@@ -1,5 +1,5 @@
 use tsrs_ast::{self as ast, FindAncestorResult, Kind, Node};
-use tsrs_core::{LanguageVariant, TextChange, TextRange, P};
+use tsrs_core::{LanguageVariant, TextChange, TextPos, TextRange, P};
 use tsrs_scanner::Scanner;
 
 use super::*;
@@ -12,7 +12,7 @@ pub struct TextRangeWithKind {
 }
 
 // scanner.go:17
-pub fn new_text_range_with_kind(pos: i32, end: i32, kind: Kind) -> TextRangeWithKind {
+pub fn new_text_range_with_kind(pos: TextPos, end: TextPos, kind: Kind) -> TextRangeWithKind {
     TextRangeWithKind { loc: TextRange::new(pos, end), kind }
 }
 
@@ -27,9 +27,9 @@ pub(crate) struct TokenInfo {
 // scanner.go:30
 pub(crate) struct FormattingScanner {
     s: Scanner,
-    start_pos: i32,
-    end_pos: i32,
-    saved_pos: i32,
+    start_pos: TextPos,
+    end_pos: TextPos,
+    saved_pos: TextPos,
     has_last_token_info: bool,
     last_token_info: TokenInfo,
     last_scan_action: ScanAction,
@@ -42,8 +42,8 @@ pub(crate) struct FormattingScanner {
 pub(crate) fn new_formatting_scanner(
     text: &'static str,
     language_variant: LanguageVariant,
-    start_pos: i32,
-    end_pos: i32,
+    start_pos: TextPos,
+    end_pos: TextPos,
     worker: &mut FormatSpanWorker,
 ) -> Vec<TextChange> {
     let mut scan = Scanner::new();
@@ -386,7 +386,7 @@ impl FormattingScanner {
     }
 
     // scanner.go:365
-    pub(crate) fn get_token_full_start(&self) -> i32 {
+    pub(crate) fn get_token_full_start(&self) -> TextPos {
         if self.has_last_token_info {
             return self.last_token_info.token.loc.pos();
         }

@@ -4,7 +4,7 @@ use rustc_hash::FxHashSet;
 use tsrs_ast::{self as ast, Kind, Node, NodeFlags, SourceFile};
 use tsrs_core::context::Context;
 use tsrs_core::goslices;
-use tsrs_core::{TextRange, P};
+use tsrs_core::{TextPos, TextRange, P};
 use tsrs_lsproto as lsproto;
 use tsrs_printer as printer;
 use tsrs_scanner as scanner;
@@ -178,14 +178,13 @@ impl LanguageService {
     // folding.go:160
     fn add_region_outlining_spans(&self, ctx: &Context, source_file: P<SourceFile>) -> Vec<lsproto::FoldingRange> {
         struct RegionStart {
-            position: i32,
+            position: TextPos,
             collapsed_text: Option<String>,
         }
         let mut regions: Vec<RegionStart> = Vec::with_capacity(40);
         let mut out = Vec::with_capacity(40);
         let line_starts = scanner::get_ecma_line_starts(&*source_file);
         for &current_line_start in line_starts {
-            let current_line_start = current_line_start as i32;
             let line_end = get_line_end_of_position(source_file, current_line_start);
             let line_text = &source_file.text()[current_line_start as usize..line_end as usize];
             let result = parse_region_delimiter(line_text);
@@ -197,8 +196,11 @@ impl LanguageService {
             }
 
             if result.is_start {
+                let offset = line_text.find("//").expect("region delimiter lacks comment marker");
                 let mut region = RegionStart {
-                    position: go_strings_index(&source_file.text()[current_line_start as usize..line_end as usize], "//") + current_line_start,
+                    position: current_line_start
+                        .checked_add(TextPos::try_from(offset).expect("region comment offset exceeds TextPos"))
+                        .expect("region comment position exceeds TextPos"),
                     collapsed_text: None,
                 };
                 if supports_collapsed_text(ctx) {
@@ -221,10 +223,6 @@ impl LanguageService {
         }
         out
     }
-}
-
-fn go_strings_index(s: &str, substr: &str) -> i32 {
-    s.find(substr).map_or(-1, |i| i as i32)
 }
 
 // folding.go:203
@@ -309,17 +307,18 @@ fn add_outlining_for_leading_comments_for_node(ctx: &Context, n: P<Node>, source
 }
 
 // folding.go:302
-fn add_outlining_for_leading_comments_for_pos(ctx: &Context, pos: i32, source_file: P<SourceFile>, l: &LanguageService) -> Vec<lsproto::FoldingRange> {
+fn add_outlining_for_leading_comments_for_pos(ctx: &Context, pos: TextPos, source_file: P<SourceFile>, l: &LanguageService) -> Vec<lsproto::FoldingRange> {
     let mut folding_range = Vec::with_capacity(40);
-    let mut first_single_line_comment_start = -1;
-    let mut last_single_line_comment_end = -1;
+    let mut first_single_line_comment_start = None;
+    let mut last_single_line_comment_end = None;
     let mut single_line_comment_count = 0;
     let folding_range_kind_comment = lsproto::FoldingRangeKind::Comment;
 
-    let combine_and_add_multiple_single_line_comments = |single_line_comment_count: i32, first: i32, last: i32| -> Option<lsproto::FoldingRange> {
+    let combine_and_add_multiple_single_line_comments =
+        |single_line_comment_count: i32, first: Option<TextPos>, last: Option<TextPos>| -> Option<lsproto::FoldingRange> {
         // Only outline spans of two or more consecutive single line comments
         if single_line_comment_count > 1 {
-            return create_folding_range_from_bounds(ctx, first, last, folding_range_kind_comment, source_file, l);
+            return create_folding_range_from_bounds(ctx, first?, last?, folding_range_kind_comment, source_file, l);
         }
         None
     };
@@ -349,9 +348,9 @@ fn add_outlining_for_leading_comments_for_pos(ctx: &Context, pos: i32, source_fi
                 // For single line comments, combine consecutive ones (2 or more) into
                 // a single span from the start of the first till the end of the last
                 if single_line_comment_count == 0 {
-                    first_single_line_comment_start = comment_pos;
+                    first_single_line_comment_start = Some(comment_pos);
                 }
-                last_single_line_comment_end = comment_end;
+                last_single_line_comment_end = Some(comment_end);
                 single_line_comment_count += 1;
             }
             Kind::MultiLineCommentTrivia => {
@@ -694,8 +693,8 @@ fn create_folding_range(ctx: &Context, text_range: lsproto::Range, folding_range
 // folding.go:622
 fn create_folding_range_from_bounds(
     ctx: &Context,
-    pos: i32,
-    end: i32,
+    pos: TextPos,
+    end: TextPos,
     folding_range_kind: lsproto::FoldingRangeKind,
     source_file: P<SourceFile>,
     l: &LanguageService,
@@ -709,7 +708,7 @@ fn create_folding_range_from_bounds(
 
 impl LanguageService {
     // folding.go:630
-    fn create_folding_range_from_bounds(&self, start: i32, end: i32, source_file: P<SourceFile>) -> (lsproto::Range, Fidelity) {
+    fn create_folding_range_from_bounds(&self, start: TextPos, end: TextPos, source_file: P<SourceFile>) -> (lsproto::Range, Fidelity) {
         self.converters.to_lsp_range_for_feature(&source_file, TextRange::new(start, end), Feature::FoldingRanges)
     }
 }

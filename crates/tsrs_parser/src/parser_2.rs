@@ -1,5 +1,5 @@
 use tsrs_ast::{self as ast, DiagnosticExt, Kind, ModifierList, Node, NodeFlags, NodeList, TokenFlags};
-use tsrs_core::{TextRange, P};
+use tsrs_core::{TextPos, TextRange, P};
 use tsrs_diagnostics::{self as diagnostics, Message};
 use tsrs_scanner as scanner;
 
@@ -159,7 +159,7 @@ impl Parser {
 
     pub(crate) fn parse_export_assignment(
         &mut self,
-        pos: i32,
+        pos: TextPos,
         jsdoc: JsdocScannerInfo,
         modifiers: Option<P<ModifierList>>,
     ) -> P<Node> {
@@ -185,7 +185,7 @@ impl Parser {
 
     pub(crate) fn parse_namespace_export_declaration(
         &mut self,
-        pos: i32,
+        pos: TextPos,
         jsdoc: JsdocScannerInfo,
         modifiers: Option<P<ModifierList>>,
     ) -> P<Node> {
@@ -204,7 +204,7 @@ impl Parser {
 
     pub(crate) fn parse_export_declaration(
         &mut self,
-        pos: i32,
+        pos: TextPos,
         jsdoc: JsdocScannerInfo,
         modifiers: Option<P<ModifierList>>,
     ) -> P<Node> {
@@ -254,7 +254,7 @@ impl Parser {
         result
     }
 
-    pub(crate) fn parse_namespace_export(&mut self, pos: i32) -> P<Node> {
+    pub(crate) fn parse_namespace_export(&mut self, pos: TextPos) -> P<Node> {
         let (export_name, _) = self.parse_module_export_name(false /*disallowKeywords*/);
         let node = self.factory.new_namespace_export(export_name);
         self.finish_node(node, pos)
@@ -1277,7 +1277,7 @@ impl Parser {
 
     pub(crate) fn parse_accessor_declaration(
         &mut self,
-        pos: i32,
+        pos: TextPos,
         jsdoc: JsdocScannerInfo,
         modifiers: Option<P<ModifierList>>,
         kind: Kind,
@@ -1441,7 +1441,7 @@ impl Parser {
 
     pub(crate) fn parse_index_signature_declaration(
         &mut self,
-        pos: i32,
+        pos: TextPos,
         jsdoc: JsdocScannerInfo,
         modifiers: Option<P<ModifierList>>,
     ) -> P<Node> {
@@ -1463,7 +1463,7 @@ impl Parser {
 
     pub(crate) fn parse_property_or_method_signature(
         &mut self,
-        pos: i32,
+        pos: TextPos,
         jsdoc: JsdocScannerInfo,
         modifiers: Option<P<ModifierList>>,
     ) -> P<Node> {

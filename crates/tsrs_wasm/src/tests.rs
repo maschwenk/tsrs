@@ -3,8 +3,9 @@
 use std::io::Write;
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use tsrs_ast::Diagnostic;
-use tsrs_core::P;
+use tsrs_ast::{new_diagnostic_from_text, Diagnostic};
+use tsrs_core::{undefined_text_range, P};
+use tsrs_diagnostics::Category;
 use tsrs_execute::tsc::System;
 
 use super::*;
@@ -64,12 +65,26 @@ fn json_reply_matches_the_api_encoder() {
     let list = Arc::new(Mutex::new(Vec::<P<Diagnostic>>::new()));
     let sys: &'static sys::WasmSys = Box::leak(Box::new(sys::WasmSys::new("/p", true, false, Some(Arc::clone(&list)), Box::new(std::io::sink()))));
     let result = tsrs_execute::execute::command_line(sys, vec!["a.ts".into(), "--noEmit".into(), "--unknownOption".into()]);
+    tsrs_execute::execute::command_line(sys, vec!["a.ts".into(), "--noEmit".into()]);
     sys.flush();
-    let diagnostics = list.lock().unwrap().clone();
+    let mut diagnostics = list.lock().unwrap().clone();
     assert!(!diagnostics.is_empty(), "the bad option is reported");
+    let file = diagnostics.iter().find_map(|d| d.file()).expect("type errors have a source file");
+    diagnostics.push(new_diagnostic_from_text(
+        Some(file),
+        undefined_text_range(),
+        9999,
+        Category::Error,
+        "synthetic location",
+        &[],
+        &[],
+        false,
+        false,
+    ));
     let ours = json::encode(&diagnostics);
     let api = tsrs_core::json::marshal(&tsrs_api::diagnostics::diagnostic_responses(&diagnostics)).unwrap();
     assert_eq!(String::from_utf8(ours).unwrap(), api);
+    assert!(api.contains("\"pos\":0,\"end\":0"), "file diagnostics with synthetic locations clamp to the start of the file: {api}");
     assert_eq!(result.status as i32, 1);
 
     reset(&[("/p/a.ts", ERRORS)]);

@@ -754,7 +754,7 @@ pub(crate) struct SymbolEntryTransformOptions {
 pub struct SymbolAndEntriesData {
     pub original_node: Option<P<Node>>,
     pub symbols_and_entries: Vec<SymbolAndEntries>,
-    pub position: i32,
+    pub position: TextPos,
 }
 
 impl LanguageService {
@@ -809,7 +809,7 @@ impl LanguageService {
         ctx: &Context,
         program: &'static Program,
         source_file: P<SourceFile>,
-        position: i32,
+        position: TextPos,
         is_rename: bool,
         implementations: bool,
     ) -> Option<SymbolAndEntriesData> {
@@ -864,7 +864,7 @@ impl LanguageService {
     pub(crate) fn get_symbol_and_entries(
         &self,
         ctx: &Context,
-        position: i32,
+        position: TextPos,
         node: P<Node>,
         program: &'static Program,
         is_rename: bool,
@@ -1354,7 +1354,7 @@ impl LanguageService {
     // It returns all referenced symbols and their reference entries for the given node across the provided source files.
     // (`_exported`: the unexported Go method of the same name exists.)
     // findallreferences.go:1202
-    pub fn get_referenced_symbols_for_node_exported(&self, ctx: &Context, position: i32, node: P<Node>, source_files: &[P<SourceFile>]) -> Vec<SymbolAndEntries> {
+    pub fn get_referenced_symbols_for_node_exported(&self, ctx: &Context, position: TextPos, node: P<Node>, source_files: &[P<SourceFile>]) -> Vec<SymbolAndEntries> {
         self.get_referenced_symbols_for_node(ctx, position, node, self.get_program(), source_files, RefOptions { use_: ReferenceUse::References, ..Default::default() })
     }
 }
@@ -1431,7 +1431,7 @@ impl LanguageService {
     pub(crate) fn get_referenced_symbols_for_node(
         &self,
         ctx: &Context,
-        position: i32,
+        position: TextPos,
         node: P<Node>,
         program: &'static Program,
         source_files: &[P<SourceFile>],
@@ -1909,8 +1909,8 @@ fn index_from(text: &str, start: usize, needle: &str) -> Option<usize> {
 }
 
 // findallreferences.go:1646
-pub(crate) fn get_possible_symbol_reference_positions(source_file: P<SourceFile>, symbol_name: &str, container: Option<P<Node>>) -> Vec<i32> {
-    let mut positions: Vec<i32> = Vec::new();
+pub(crate) fn get_possible_symbol_reference_positions(source_file: P<SourceFile>, symbol_name: &str, container: Option<P<Node>>) -> Vec<TextPos> {
+    let mut positions: Vec<TextPos> = Vec::new();
 
     // TODO: Cache symbol existence for files to save text search
     // Also, need to make this work for unicode escapes.
@@ -1928,24 +1928,23 @@ pub(crate) fn get_possible_symbol_reference_positions(source_file: P<SourceFile>
     let container = container.unwrap_or_else(|| source_file.as_node());
 
     // Go quirk kept: the index is relative to container.Pos() but is used as an absolute position.
-    let mut position: isize = index_from(text_str, container.pos() as usize, symbol_name).map_or(-1, |i| i as isize);
-    let end_pos = container.end() as isize;
-    while position >= 0 && position < end_pos {
+    let mut position = index_from(text_str, container.pos() as usize, symbol_name);
+    let end_pos = container.end() as usize;
+    while let Some(p) = position.filter(|&position| position < end_pos) {
         // We found a match.  Make sure it's not part of a larger word (i.e. the char
         // before and after it have to be a non-identifier char).
-        let p = position as usize;
         let end_position = p + symbol_name_length;
 
         if (p == 0 || !scanner::is_identifier_part(text[p - 1] as i32)) && (end_position == source_length || !scanner::is_identifier_part(text[end_position] as i32)) {
             // Found a real match.  Keep searching.
-            positions.push(p as i32);
+            positions.push(TextPos::try_from(p).expect("source position exceeds TextPos"));
         }
         let start_index = p + symbol_name_length + 1;
         if start_index > text.len() {
             break;
         }
         if let Some(found_index) = index_from(text_str, start_index, symbol_name) {
-            position = (start_index + found_index) as isize;
+            position = Some(start_index + found_index);
         } else {
             break;
         }
@@ -2576,7 +2575,7 @@ impl<'a> RefState<'a> {
     }
 
     // findallreferences.go:2218
-    pub(crate) fn get_references_at_location(&mut self, source_file: P<SourceFile>, position: i32, search: &RefSearch, add_references_here: bool) {
+    pub(crate) fn get_references_at_location(&mut self, source_file: P<SourceFile>, position: TextPos, search: &RefSearch, add_references_here: bool) {
         let reference_location = astnav::get_touching_property_name(source_file, position);
 
         if !is_valid_reference_position(reference_location, &search.text) {

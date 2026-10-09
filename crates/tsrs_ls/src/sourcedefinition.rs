@@ -295,7 +295,7 @@ impl SourceDefResolver<'_> {
     // For path references to .d.ts files or type references, it uses the NoDts
     // resolver to find the corresponding implementation file.
     // sourcedefinition.go:259
-    fn resolve_triple_slash_reference(&self, file: P<SourceFile>, pos: i32, program: &'static Program) -> (Vec<P<Node>>, Option<P<FileReference>>) {
+    fn resolve_triple_slash_reference(&self, file: P<SourceFile>, pos: TextPos, program: &'static Program) -> (Vec<P<Node>>, Option<P<FileReference>>) {
         let Some(ref_) = get_reference_at_position(file, pos, program) else {
             return (Vec::new(), None);
         };
@@ -803,7 +803,7 @@ fn unique_declaration_nodes(nodes: &[P<Node>]) -> Vec<P<Node>> {
 }
 
 // sourcedefinition.go:727
-fn find_closest_declaration_node(source_file: P<SourceFile>, pos: i32) -> P<Node> {
+fn find_closest_declaration_node(source_file: P<SourceFile>, pos: TextPos) -> P<Node> {
     let node = astnav::get_touching_property_name(source_file, pos);
     let mut current = Some(node);
     while let Some(cur) = current {

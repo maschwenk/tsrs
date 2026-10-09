@@ -2,7 +2,7 @@
 
 use tsrs_ast::{self as ast, CommentRange, Kind, Node, SourceFile};
 use tsrs_core::context::Context;
-use tsrs_core::{TextChange, TextRange, P};
+use tsrs_core::{text_pos_from_len, TextChange, TextPos, TextRange, P};
 use tsrs_lsproto as lsproto;
 use tsrs_scanner as scanner;
 
@@ -43,7 +43,7 @@ impl LanguageService {
         let edits = if file.content_mapper().is_empty() {
             self.to_ls_proto_text_edits(file, &self.get_formatting_edits_for_document(ctx, file, &format_opts))
         } else {
-            self.get_formatting_edits_for_mapped_range(ctx, file, &format_opts, TextRange::new(0, file.original_text().len() as i32))
+            self.get_formatting_edits_for_mapped_range(ctx, file, &format_opts, TextRange::new(0, text_pos_from_len(file.original_text().len())))
         };
         Ok(lsproto::TextEditsOrNull { text_edits: Some(edits) })
     }
@@ -135,7 +135,7 @@ impl LanguageService {
     }
 
     // format.go:229
-    fn get_formatting_edits_after_keystroke(&self, _ctx: &Context, file: P<SourceFile>, options: &FormatCodeSettings, position: i32, key: &str) -> Vec<TextChange> {
+    fn get_formatting_edits_after_keystroke(&self, _ctx: &Context, file: P<SourceFile>, options: &FormatCodeSettings, position: TextPos, key: &str) -> Vec<TextChange> {
         let ctx = format::with_format_code_settings(&format::FormatContext::default(), options.clone(), &options.new_line_character);
 
         let token_at_position = astnav::get_token_at_position(file, position);
@@ -159,7 +159,7 @@ impl LanguageService {
 // format.go:257
 pub(crate) fn get_range_of_enclosing_comment(
     file: P<SourceFile>,
-    position: i32,
+    position: TextPos,
     preceding_token: Option<P<Node>>,
     mut token_at_position: P<Node>,
 ) -> Option<CommentRange> {
@@ -192,7 +192,7 @@ pub(crate) fn get_range_of_enclosing_comment(
         // However, unterminated multi-line comments lack a `/`, end at the end of the file, and *do* contain their end.
         //
         if comment_range.text_range.contains_exclusive(position)
-            || position == comment_range.end() && (comment_range.kind == Kind::SingleLineCommentTrivia || position == file.text().len() as i32)
+            || position == comment_range.end() && (comment_range.kind == Kind::SingleLineCommentTrivia || position == text_pos_from_len(file.text().len()))
         {
             return Some(comment_range);
         }

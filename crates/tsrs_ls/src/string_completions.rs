@@ -8,7 +8,7 @@ use tsrs_core::collections::OrderedMap;
 use tsrs_core::context::Context;
 use tsrs_core::stringutil::{self, Comparison};
 use tsrs_core::tspath::{self, ComparePathsOptions, Path};
-use tsrs_core::{try_parse_pattern, CompilerOptions, ModuleResolutionKind, ResolutionMode, TextRange, P, RESOLUTION_MODE_NONE};
+use tsrs_core::{try_parse_pattern, CompilerOptions, ModuleResolutionKind, ResolutionMode, TextPos, TextRange, P, RESOLUTION_MODE_NONE};
 use tsrs_lsproto as lsproto;
 use tsrs_module::packagejson::{ExportsOrImports, InfoCacheEntryExt, JSONValueType};
 use tsrs_modulespecifiers::{self as modulespecifiers, ImportModuleSpecifierEndingPreference, ModuleSpecifierEnding};
@@ -69,7 +69,7 @@ impl LanguageService {
         &self,
         ctx: &Context,
         file: P<SourceFile>,
-        position: i32,
+        position: TextPos,
         context_token: Option<P<Node>>,
         checker: &mut Checker,
         compiler_options: P<CompilerOptions>,
@@ -97,7 +97,7 @@ impl LanguageService {
         completion: Option<stringLiteralCompletions>,
         context_token: P<Node>,
         file: P<SourceFile>,
-        position: i32,
+        position: TextPos,
         type_checker: &mut Checker,
         options: P<CompilerOptions>,
         include_symbols: bool,
@@ -175,7 +175,7 @@ impl LanguageService {
     }
 
     // string_completions.go:206
-    fn convert_path_completions(&self, ctx: &Context, completion: Option<pathCompletions>, file: P<SourceFile>, position: i32) -> Option<CompletionList> {
+    fn convert_path_completions(&self, ctx: &Context, completion: Option<pathCompletions>, file: P<SourceFile>, position: TextPos) -> Option<CompletionList> {
         let completion = completion?;
         let is_new_identifier_location = true; // The user may type in a path that doesn't yet exist, creating a "new identifier" with respect to the collection of identifiers the server is aware of.
         let default_commit_characters = get_default_commit_characters(is_new_identifier_location);
@@ -222,7 +222,7 @@ impl LanguageService {
         _ctx: &Context,
         file: P<SourceFile>,
         node: P<Node>,
-        position: i32,
+        position: TextPos,
         type_checker: &mut Checker,
     ) -> Option<stringLiteralCompletions> {
         let parent = walk_up_parentheses(node.parent().unwrap());
@@ -381,7 +381,7 @@ fn to_string_literal_completions_from_types(types: Vec<P<Type>>) -> Option<strin
 }
 
 // string_completions.go:466
-fn from_unionable_literal_type(grandparent: P<Node>, parent: P<Node>, position: i32, type_checker: &mut Checker) -> Option<stringLiteralCompletions> {
+fn from_unionable_literal_type(grandparent: P<Node>, parent: P<Node>, position: TextPos, type_checker: &mut Checker) -> Option<stringLiteralCompletions> {
     match grandparent.kind() {
         Kind::CallExpression
         | Kind::ExpressionWithTypeArguments
@@ -473,7 +473,7 @@ fn string_literal_completions_from_properties(t: P<Type>, type_checker: &mut Che
 impl LanguageService {
     // string_completions.go:587
     fn get_string_literal_completions_from_module_names(&self, file: P<SourceFile>, node: P<Node>, program: &'static Program, checker: &mut Checker) -> Option<stringLiteralCompletions> {
-        let text_start = astnav::get_start_of_node(node, file, false /*includeJSDoc*/) + 1;
+        let text_start = astnav::get_start_of_node(node, file, false /*includeJSDoc*/).checked_add(1)?;
         let replacement_span = self.path_completion_replacement_span(file, get_directory_fragment_range(node.text(), text_start))?;
         let name_and_kinds = self.get_string_literal_completions_from_module_names_worker(file, node, program, checker);
         Some(stringLiteralCompletions { from_paths: Some(pathCompletions { entries: to_path_completions(name_and_kinds), replacement_span }), ..Default::default() })
@@ -515,7 +515,7 @@ fn is_any_directory_separator(r: char) -> bool {
 
 // Replace everything after the last directory separator that appears
 // string_completions.go:650
-fn get_directory_fragment_range(text: &str, text_start: i32) -> Option<TextRange> {
+fn get_directory_fragment_range(text: &str, text_start: TextPos) -> Option<TextRange> {
     let index = text.rfind(is_any_directory_separator);
     let mut offset = 0;
     if let Some(index) = index {
@@ -525,7 +525,8 @@ fn get_directory_fragment_range(text: &str, text_start: i32) -> Option<TextRange
     if length == 0 {
         return None;
     }
-    Some(TextRange::new(text_start + offset as i32, text_start + offset as i32 + length as i32))
+    let start = text_start.checked_add(TextPos::try_from(offset).ok()?)?;
+    Some(TextRange::new(start, start.checked_add(TextPos::try_from(length).ok()?)?))
 }
 
 impl LanguageService {
@@ -1786,7 +1787,7 @@ impl LanguageService {
         item: lsproto::CompletionItem,
         name: &str,
         file: P<SourceFile>,
-        position: i32,
+        position: TextPos,
         context_token: Option<P<Node>>,
         doc_format: lsproto::MarkupKind,
     ) -> lsproto::CompletionItem {
@@ -1805,7 +1806,7 @@ impl LanguageService {
         item: lsproto::CompletionItem,
         name: &str,
         location: P<Node>,
-        position: i32,
+        position: TextPos,
         completion: &stringLiteralCompletions,
         _file: P<SourceFile>,
         checker: &mut Checker,
@@ -1833,7 +1834,7 @@ impl LanguageService {
 }
 
 // string_completions.go:2105
-fn is_in_reference_comment(file: P<SourceFile>, position: i32) -> bool {
+fn is_in_reference_comment(file: P<SourceFile>, position: TextPos) -> bool {
     let Some(comment_range) = is_in_comment(file, position, astnav::get_token_at_position(file, position)) else {
         return false;
     };
@@ -1921,7 +1922,7 @@ fn parse_triple_slash_directive_fragment(text: &str) -> Option<(String, String, 
 
 impl LanguageService {
     // string_completions.go:2188
-    fn get_triple_slash_reference_completions(&self, file: P<SourceFile>, position: i32, program: &'static Program, _checker: &mut Checker) -> Option<pathCompletions> {
+    fn get_triple_slash_reference_completions(&self, file: P<SourceFile>, position: TextPos, program: &'static Program, _checker: &mut Checker) -> Option<pathCompletions> {
         let compiler_options = program.options();
         let token = astnav::get_token_at_position(file, position);
         let comment_ranges: Vec<ast::CommentRange> = scanner::get_leading_comment_ranges(file.text(), token.pos()).collect();
@@ -1937,7 +1938,8 @@ impl LanguageService {
 
         let text = &file.text()[found_range.pos() as usize..position as usize];
         let (prefix, kind, to_complete) = parse_triple_slash_directive_fragment(text)?;
-        let replacement_span = self.path_completion_replacement_span(file, get_directory_fragment_range(&to_complete, found_range.pos() + prefix.len() as i32))?;
+        let text_start = found_range.pos().checked_add(TextPos::try_from(prefix.len()).ok()?)?;
+        let replacement_span = self.path_completion_replacement_span(file, get_directory_fragment_range(&to_complete, text_start))?;
 
         let script_path = tspath::get_directory_path(file.path());
 

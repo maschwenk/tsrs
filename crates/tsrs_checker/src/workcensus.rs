@@ -385,7 +385,7 @@ pub(crate) fn type_identity(t: P<Type>) -> (Option<P<Symbol>>, u8) {
 
 fn file_and_line(node: P<Node>) -> String {
     let Some(sf) = ast::get_source_file_of_node(node) else { return "?".to_string() };
-    let pos = if node.pos() >= 0 { tsrs_scanner::get_token_pos_of_node(node, sf, false) } else { 0 };
+    let pos = if !tsrs_core::position_is_synthetic(node.pos()) { tsrs_scanner::get_token_pos_of_node(node, sf, false) } else { 0 };
     let line = tsrs_scanner::get_ecma_line_of_position(&*sf, pos);
     let name = sf.file_name();
     let short: String = match name.find("/node_modules/") {

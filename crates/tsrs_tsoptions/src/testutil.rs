@@ -9,7 +9,7 @@ use tsrs_core::json::{self, Value};
 use tsrs_core::tspath::{self, ComparePathsOptions};
 use tsrs_core::{
     BuildOptions, CompilerOptions, JsxEmit, ModuleDetectionKind, ModuleKind, ModuleResolutionKind, NewLineKind, PluginImport,
-    ScriptTarget, Tristate, TypeAcquisition, P,
+    ScriptTarget, TextPos, Tristate, TypeAcquisition, P,
 };
 use tsrs_diagnostics::Category;
 
@@ -179,7 +179,7 @@ pub(crate) fn write_format_diagnostics(diagnostics: &[P<Diagnostic>], new_line: 
     out
 }
 
-fn line_starts(text: &str) -> Vec<i32> {
+fn line_starts(text: &str) -> Vec<TextPos> {
     let bytes = text.as_bytes();
     let mut result = vec![0];
     let mut pos = 0;
@@ -193,10 +193,10 @@ fn line_starts(text: &str) -> Vec<i32> {
                 if i < chars.len() && chars[i].1 == '\n' {
                     i += 1;
                 }
-                result.push(if i < chars.len() { chars[i].0 as i32 } else { bytes.len() as i32 });
+                result.push(if i < chars.len() { chars[i].0 as TextPos } else { bytes.len() as TextPos });
             }
             '\n' | '\u{2028}' | '\u{2029}' => {
-                result.push(if i < chars.len() { chars[i].0 as i32 } else { bytes.len() as i32 });
+                result.push(if i < chars.len() { chars[i].0 as TextPos } else { bytes.len() as TextPos });
             }
             _ => {}
         }
@@ -206,7 +206,7 @@ fn line_starts(text: &str) -> Vec<i32> {
     result
 }
 
-fn line_and_character(file: P<SourceFile>, pos: i32) -> (usize, usize) {
+fn line_and_character(file: P<SourceFile>, pos: TextPos) -> (usize, usize) {
     let starts = line_starts(file.text());
     let line = match starts.binary_search(&pos) {
         Ok(i) => i,
@@ -241,7 +241,7 @@ fn category_color(category: Category) -> &'static str {
     }
 }
 
-fn write_location(out: &mut String, file: P<SourceFile>, pos: i32, options: &ComparePathsOptions) {
+fn write_location(out: &mut String, file: P<SourceFile>, pos: TextPos, options: &ComparePathsOptions) {
     let (line, character) = line_and_character(file, pos);
     let relative_file_name = tspath::convert_to_relative_path(file.file_name(), options);
     with_style(out, &relative_file_name, FOREGROUND_COLOR_ESCAPE_CYAN);
@@ -251,22 +251,22 @@ fn write_location(out: &mut String, file: P<SourceFile>, pos: i32, options: &Com
     with_style(out, &(character + 1).to_string(), FOREGROUND_COLOR_ESCAPE_YELLOW);
 }
 
-fn write_code_snippet(out: &mut String, file: P<SourceFile>, start: i32, length: i32, squiggle_color: &str, indent: &str, new_line: &str) {
+fn write_code_snippet(out: &mut String, file: P<SourceFile>, start: TextPos, length: u32, squiggle_color: &str, indent: &str, new_line: &str) {
     let starts = line_starts(file.text());
     let text = file.text();
-    let line_of = |pos: i32| match starts.binary_search(&pos) {
+    let line_of = |pos: TextPos| match starts.binary_search(&pos) {
         Ok(i) => i,
         Err(i) => i - 1,
     };
     let first_line = line_of(start);
     let first_line_char = text[starts[first_line] as usize..start as usize].encode_utf16().count();
-    let end = start + length;
+    let end = start.checked_add(length).expect("diagnostic end exceeds TextPos");
     let last_line = line_of(end);
     let mut last_line_char = text[starts[last_line] as usize..end as usize].encode_utf16().count();
     if length == 0 {
         last_line_char += 1; // When length is zero, squiggle the character right after the start position.
     }
-    let last_line_of_file = line_of(text.len() as i32);
+    let last_line_of_file = line_of(TextPos::try_from(text.len()).expect("source length exceeds TextPos"));
     let has_more_than_five_lines = last_line - first_line >= 4;
     let mut gutter_width = (last_line + 1).to_string().len();
     if has_more_than_five_lines {

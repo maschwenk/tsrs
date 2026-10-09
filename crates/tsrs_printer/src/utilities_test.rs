@@ -116,7 +116,11 @@ fn test_is_recognized_triple_slash_comment() {
     for (i, &(s, kind, expected)) in data.iter().enumerate() {
         let comment_range = match kind {
             Some(kind) => CommentRange { text_range: TextRange::default(), kind, has_trailing_new_line: false },
-            None => CommentRange { text_range: TextRange::new(0, s.len() as i32), kind: Kind::SingleLineCommentTrivia, has_trailing_new_line: false },
+            None => CommentRange {
+                text_range: TextRange::new(0, u32::try_from(s.len()).unwrap()),
+                kind: Kind::SingleLineCommentTrivia,
+                has_trailing_new_line: false,
+            },
         };
         assert_eq!(is_recognized_triple_slash_comment(s, comment_range), expected, "[{}] isRecognizedTripleSlashComment({:?})", i, s);
     }

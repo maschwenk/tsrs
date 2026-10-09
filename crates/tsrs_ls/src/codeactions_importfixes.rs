@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tsrs_ast::{self as ast, Diagnostic, Node, SourceFile, Symbol, SymbolFlags};
 use tsrs_checker::Checker;
 use tsrs_core::context::Context;
-use tsrs_core::{tspath, CompilerOptions, JsxEmit, TextRange, P};
+use tsrs_core::{tspath, CompilerOptions, JsxEmit, TextPos, TextRange, P};
 use tsrs_diagnostics as diagnostics;
 use tsrs_lsproto as lsproto;
 use tsrs_scanner as scanner;
@@ -165,7 +165,7 @@ fn add_import_from_diagnostic(
 }
 
 // codeactions_importfixes.go:169
-fn get_fix_infos(ch: &mut Checker, fix_context: &CodeFixContext, error_code: i32, pos: i32) -> Result<Vec<fixInfo>, lsproto::Error> {
+fn get_fix_infos(ch: &mut Checker, fix_context: &CodeFixContext, error_code: i32, pos: TextPos) -> Result<Vec<fixInfo>, lsproto::Error> {
     // Can't compute import fixes for dynamic/untitled files since they don't have real file paths
     if tspath::is_dynamic_file_name(fix_context.source_file.file_name()) {
         return Ok(Vec::new());

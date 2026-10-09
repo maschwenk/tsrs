@@ -337,8 +337,8 @@ impl Parser {
 
     pub(crate) fn gather_type_parameters(&mut self, j: P<Node>, typedef_or_callback: bool) -> Option<P<NodeList>> {
         let mut type_parameters: Vec<P<Node>> = Vec::new();
-        let mut pos = -1;
-        let mut end_pos = -1;
+        let mut pos = None;
+        let mut end_pos = None;
         let mut first_template = true;
         for &tag in j.as_jsdoc().tags.unwrap().nodes() {
             // When a JSDoc comment contains an `@typedef` or `@callback` tag, `@template` type parameter
@@ -350,10 +350,10 @@ impl Parser {
                 continue;
             }
             if first_template {
-                pos = tag.pos();
+                pos = Some(tag.pos());
                 first_template = false;
             }
-            end_pos = tag.end();
+            end_pos = Some(tag.end());
             let constraint = tag.as_jsdoc_template_tag().constraint;
             let mut first_type_parameter = true;
             for &tp in tag.type_parameters() {
@@ -382,7 +382,7 @@ impl Parser {
         if type_parameters.is_empty() {
             None
         } else {
-            Some(self.new_node_list(TextRange::new(pos, end_pos), &type_parameters))
+            Some(self.new_node_list(TextRange::new(pos.unwrap(), end_pos.unwrap()), &type_parameters))
         }
     }
 

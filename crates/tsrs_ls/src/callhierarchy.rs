@@ -6,7 +6,7 @@ use tsrs_checker::Checker;
 use tsrs_compiler::Program;
 use tsrs_core::collections::{OrderedMap, Set};
 use tsrs_core::context::Context;
-use tsrs_core::{TextPos, TextRange, P};
+use tsrs_core::{position_cmp, TextPos, TextRange, P};
 use tsrs_lsproto as lsproto;
 use tsrs_printer::{self as printer, EmitTextWriter as _};
 use tsrs_scanner as scanner;
@@ -167,7 +167,7 @@ fn get_symbol_of_call_hierarchy_declaration(c: &mut Checker, node: P<Node>) -> O
 
 // Gets the text and range for the name of a call hierarchy declaration.
 // callhierarchy.go:161
-fn get_call_hierarchy_item_name(program: &'static Program, node: P<Node>) -> (String, i32, i32) {
+fn get_call_hierarchy_item_name(program: &'static Program, node: P<Node>) -> (String, TextPos, TextPos) {
     if ast::is_source_file(node) {
         let source_file = node.as_source_file();
         return (source_file.file_name().to_string(), 0, 0);
@@ -365,7 +365,7 @@ fn find_all_initial_declarations(c: &mut Checker, node: P<Node>) -> Option<Vec<P
     #[derive(Clone)]
     struct declKey {
         file: String,
-        pos: i32,
+        pos: TextPos,
     }
 
     let mut indices: Vec<usize> = (0..symbol_declarations.len()).collect();
@@ -376,7 +376,7 @@ fn find_all_initial_declarations(c: &mut Checker, node: P<Node>) -> Option<Vec<P
         if keys[a].file != keys[b].file {
             return keys[a].file.cmp(&keys[b].file);
         }
-        keys[a].pos.cmp(&keys[b].pos)
+        position_cmp(keys[a].pos, keys[b].pos)
     });
 
     let mut declarations: Vec<P<Node>> = Vec::new();

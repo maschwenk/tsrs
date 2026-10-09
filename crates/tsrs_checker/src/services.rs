@@ -710,7 +710,7 @@ pub(crate) fn get_possible_symbol_reference_nodes(source_file: P<SourceFile>, sy
 }
 
 // services.go:655
-pub(crate) fn get_possible_symbol_reference_positions(source_file: P<SourceFile>, symbol_name: &str, container: Option<P<Node>>) -> Vec<i32> {
+pub(crate) fn get_possible_symbol_reference_positions(source_file: P<SourceFile>, symbol_name: &str, container: Option<P<Node>>) -> Vec<TextPos> {
     let mut positions = Vec::new();
 
     // TODO: Cache symbol existence for files to save text search
@@ -723,33 +723,30 @@ pub(crate) fn get_possible_symbol_reference_positions(source_file: P<SourceFile>
 
     let text = source_file.text();
     let bytes = text.as_bytes();
-    let source_length = text.len() as i32;
-    let symbol_name_length = symbol_name.len() as i32;
+    let source_length = text_pos_from_len(text.len());
+    let symbol_name_length = text_pos_from_len(symbol_name.len());
 
     let container = container.unwrap_or(source_file.as_node());
 
-    let mut position = match find_bytes(&bytes[container.pos() as usize..], symbol_name.as_bytes()) {
-        Some(i) => i as i32,
-        None => -1,
-    };
+    let mut position = find_bytes(&bytes[container.pos() as usize..], symbol_name.as_bytes()).map(text_pos_from_len);
     let end_pos = container.end();
-    while position >= 0 && position < end_pos {
+    while let Some(current_position) = position.filter(|&position| position < end_pos) {
         // We found a match.  Make sure it's not part of a larger word (i.e. the char
         // before and after it have to be a non-identifier char).
-        let end_position = position + symbol_name_length;
+        let end_position = current_position + symbol_name_length;
 
-        if (position == 0 || !tsrs_scanner::is_identifier_part(bytes[(position - 1) as usize] as i32))
+        if (current_position == 0 || !tsrs_scanner::is_identifier_part(bytes[(current_position - 1) as usize] as i32))
             && (end_position == source_length || !tsrs_scanner::is_identifier_part(bytes[end_position as usize] as i32))
         {
             // Found a real match.  Keep searching.
-            positions.push(position);
+            positions.push(current_position);
         }
-        let start_index = position + symbol_name_length + 1;
-        if start_index > text.len() as i32 {
+        let start_index = current_position + symbol_name_length + 1;
+        if start_index > source_length {
             break;
         }
         if let Some(found_index) = find_bytes(&bytes[start_index as usize..], symbol_name.as_bytes()) {
-            position = start_index + found_index as i32;
+            position = Some(start_index + text_pos_from_len(found_index));
         } else {
             break;
         }
@@ -1044,7 +1041,12 @@ impl Checker {
     // services.go:953
     // GetContextualTypeForArrayLiteralAtPosition returns the contextual type for an element at the given position
     // in an array with the given contextual type.
-    pub fn get_contextual_type_for_array_literal_at_position(&mut self, contextual_array_type: Option<P<Type>>, array_literal: P<Node>, position: i32) -> Option<P<Type>> {
+    pub fn get_contextual_type_for_array_literal_at_position(
+        &mut self,
+        contextual_array_type: Option<P<Type>>,
+        array_literal: P<Node>,
+        position: TextPos,
+    ) -> Option<P<Type>> {
         contextual_array_type?;
         let (mut first_spread_index, mut last_spread_index) = (-1, -1);
         let mut element_index = 0;

@@ -1,12 +1,12 @@
 use tsrs_ast::{self as ast, FindAncestorResult, Kind, Node, SourceFile};
-use tsrs_core::P;
+use tsrs_core::{TextPos, P};
 use tsrs_scanner as scanner;
 
 use super::*;
 use crate::astnav;
 
 // asi.go:9
-pub fn position_is_asi_candidate(pos: i32, context: P<Node>, file: P<SourceFile>) -> bool {
+pub fn position_is_asi_candidate(pos: TextPos, context: P<Node>, file: P<SourceFile>) -> bool {
     let context_ancestor = ast::find_ancestor_or_quit(context, |ancestor| {
         if ancestor.end() != pos {
             return FindAncestorResult::Quit;

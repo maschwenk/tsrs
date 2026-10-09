@@ -70,7 +70,7 @@ pub struct PrintHandlers {
     pub has_global_name: Option<Rc<dyn Fn(&str) -> bool>>,
     // MapSourcePosition composes source-map positions before they reach the generator.
     // Returning ok=false (here `None`) emits a generated-only mapping for the current output position.
-    pub map_source_position: Option<Box<dyn Fn(SourceMapSource, i32) -> Option<(SourceMapSource, i32)>>>,
+    pub map_source_position: Option<Box<dyn Fn(SourceMapSource, TextPos) -> Option<(SourceMapSource, TextPos)>>>,
 
     // !!! OnEmitNode, IsEmitNotificationEnabled, SubstituteNode, OnEmitSourceMapOf* (commented out in Go)
     pub on_before_emit_node: Option<Box<dyn FnMut(Option<P<Node>>)>>,
@@ -97,7 +97,7 @@ pub struct Printer {
     pub(crate) text_state: Rc<printerTextState>,
     pub(crate) unique_helper_names: Option<FxHashMap<String, P<Node>>>,
     pub(crate) external_helpers_module_name: Option<P<Node>>,
-    pub(crate) next_list_element_pos: i32,
+    pub(crate) next_list_element_pos: TextPos,
     pub(crate) writer: Option<Box<dyn EmitTextWriter>>,
     pub(crate) own_writer: Option<Box<dyn EmitTextWriter>>,
     pub(crate) write_kind: WriteKind,
@@ -111,9 +111,9 @@ pub struct Printer {
     pub(crate) source_map_line_char_cache: Option<lineCharacterCache>,
     pub(crate) most_recent_source_map_source: Option<SourceMapSource>,
     pub(crate) most_recent_source_map_source_index: tsrs_sourcemap::SourceIndex,
-    pub(crate) container_pos: i32,
-    pub(crate) container_end: i32,
-    pub(crate) declaration_list_container_end: i32,
+    pub(crate) container_pos: TextPos,
+    pub(crate) container_end: TextPos,
+    pub(crate) declaration_list_container_end: TextPos,
     pub(crate) detached_comments_info: Vec<detachedCommentsInfo>,
     pub(crate) comments_disabled: bool,
     pub(crate) in_extends: bool, // whether we are emitting the `extends` clause of a ConditionalTypeNode or InferTypeNode
@@ -123,17 +123,17 @@ pub struct Printer {
 
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct detachedCommentsInfo {
-    pub(crate) node_pos: i32,
-    pub(crate) detached_comment_end_pos: i32,
+    pub(crate) node_pos: TextPos,
+    pub(crate) detached_comment_end_pos: TextPos,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct commentState {
     pub(crate) emit_flags: EmitFlags, // holds the emit flags for the current node
     pub(crate) comment_range: TextRange, // holds the comment range calculated for the current node
-    pub(crate) container_pos: i32, // captures the value of containerPos prior to entering an node
-    pub(crate) container_end: i32, // captures the value of containerEnd prior to entering an node
-    pub(crate) declaration_list_container_end: i32, // captures the value of declarationListContainerEnd prior to entering an node
+    pub(crate) container_pos: TextPos, // captures the value of containerPos prior to entering an node
+    pub(crate) container_end: TextPos, // captures the value of containerEnd prior to entering an node
+    pub(crate) declaration_list_container_end: TextPos, // captures the value of declarationListContainerEnd prior to entering an node
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -191,9 +191,9 @@ pub fn new_printer(options: PrinterOptions, handlers: PrintHandlers, emit_contex
     let has_global_name = printer.print_handlers.has_global_name.clone();
     printer.name_generator.is_file_level_unique_name_in_current_file =
         Some(Rc::new(move |name: &str, _private_name: bool| is_file_level_unique_name_in_current_file_worker(&state, has_global_name.as_deref(), name)));
-    printer.container_pos = -1;
-    printer.container_end = -1;
-    printer.declaration_list_container_end = -1;
+    printer.container_pos = SYNTHETIC_POSITION;
+    printer.container_end = SYNTHETIC_POSITION;
+    printer.declaration_list_container_end = SYNTHETIC_POSITION;
     printer.comments_disabled = options.remove_comments;
     printer
 }
@@ -462,7 +462,8 @@ impl Printer {
 
     pub(crate) fn write_line_separators_after(&mut self, node: P<Node>, parent: P<Node>) {
         if self.options.preserve_source_newlines {
-            let trailing_newlines = self.get_closing_line_terminator_count(Some(parent), Some(node), ListFormat::None, TextRange::new(-1, -1) /*childrenTextRange*/);
+            let trailing_newlines =
+                self.get_closing_line_terminator_count(Some(parent), Some(node), ListFormat::None, undefined_text_range() /*childrenTextRange*/);
             if trailing_newlines > 0 {
                 self.write_line_repeat(trailing_newlines);
             }
@@ -650,14 +651,14 @@ impl Printer {
         if kind == Kind::MultiLineCommentTrivia {
             let indent_size = get_default_indent_size() as i32;
             let first_line = scanner::compute_line_of_position(line_map, loc.pos());
-            let line_count = line_map.len() as i32;
+            let line_count = u32::try_from(line_map.len()).expect("source contains more than u32::MAX lines");
             let mut first_comment_line_indent = -1;
             let mut pos = loc.pos();
             let mut current_line = first_line;
             while pos < loc.end() {
                 let next_line_start;
                 if current_line + 1 == line_count {
-                    next_line_start = text.len() as i32 + 1;
+                    next_line_start = text_pos_from_len(text.len()) + 1;
                 } else {
                     next_line_start = line_map[(current_line + 1) as usize];
                 }
@@ -716,7 +717,7 @@ impl Printer {
                         end = scan;
                         break;
                     }
-                    scan += size as i32;
+                    scan += size as u32;
                 }
                 let current_line_text = go_trim_space(&text[pos as usize..end as usize]);
                 if !current_line_text.is_empty() {
@@ -829,7 +830,7 @@ impl Printer {
         !self.source_maps_disabled && self.source_map_source.is_some() && !is_source_file(node) && !is_in_json_file(node)
     }
 
-    pub(crate) fn should_emit_token_source_maps(&self, token: Kind, _pos: i32, context_node: P<Node>, flags: tokenEmitFlags) -> bool {
+    pub(crate) fn should_emit_token_source_maps(&self, token: Kind, _pos: TextPos, context_node: P<Node>, flags: tokenEmitFlags) -> bool {
         // We don't emit source positions for most tokens as it tends to be quite noisy, however
         // we need to emit source positions for open and close braces so that tools like istanbul
         // can map branches for code coverage. However, we still omit brace source positions when
@@ -860,7 +861,7 @@ impl Printer {
         file.statements.nodes().is_empty() || !is_prologue_directive(file.statements.nodes()[0]) || node_is_synthesized(file.statements.nodes()[0])
     }
 
-    pub(crate) fn has_comments_at_position(&self, pos: i32) -> bool {
+    pub(crate) fn has_comments_at_position(&self, pos: TextPos) -> bool {
         let Some(current_source_file) = self.current_source_file() else {
             return false;
         };
@@ -919,7 +920,7 @@ impl Printer {
 //
 
 impl Printer {
-    pub(crate) fn write_token_text(&mut self, token: Kind, write_kind: WriteKind, pos: i32) -> i32 {
+    pub(crate) fn write_token_text(&mut self, token: Kind, write_kind: WriteKind, pos: TextPos) -> TextPos {
         // !!! emit leading and trailing comments
         // !!! emit leading and trailing source maps
         let token_string = scanner::token_to_string(token);
@@ -927,15 +928,15 @@ impl Printer {
         if position_is_synthesized(pos) {
             pos
         } else {
-            pos + token_string.len() as i32
+            pos + text_pos_from_len(token_string.len())
         }
     }
 
-    pub(crate) fn emit_token(&mut self, token: Kind, pos: i32, write_kind: WriteKind, context_node: P<Node>) -> i32 {
+    pub(crate) fn emit_token(&mut self, token: Kind, pos: TextPos, write_kind: WriteKind, context_node: P<Node>) -> TextPos {
         self.emit_token_ex(token, pos, write_kind, context_node, tokenEmitFlags::None)
     }
 
-    pub(crate) fn emit_token_ex(&mut self, token: Kind, pos: i32, write_kind: WriteKind, context_node: P<Node>, flags: tokenEmitFlags) -> i32 {
+    pub(crate) fn emit_token_ex(&mut self, token: Kind, pos: TextPos, write_kind: WriteKind, context_node: P<Node>, flags: tokenEmitFlags) -> TextPos {
         let (state, pos) = self.enter_token(token, pos, context_node, flags);
         let pos = self.write_token_text(token, write_kind, pos);
         self.exit_token(token, pos, context_node, state);
@@ -1349,7 +1350,7 @@ enum Mode {
 }
 
 impl Printer {
-    pub(crate) fn emit_modifier_list(&mut self, parent_node: P<Node>, modifiers: Option<P<ModifierList>>, allow_decorators: bool) -> i32 {
+    pub(crate) fn emit_modifier_list(&mut self, parent_node: P<Node>, modifiers: Option<P<ModifierList>>, allow_decorators: bool) -> TextPos {
         let Some(modifiers) = modifiers.filter(|m| !m.nodes().is_empty()) else {
             return parent_node.pos();
         };
@@ -1395,7 +1396,7 @@ impl Printer {
                     pos += 1;
                 }
 
-                let mut text_range = TextRange::new(-1, -1);
+                let mut text_range = undefined_text_range();
                 if start == 0 {
                     text_range = TextRange::new(modifiers.pos(), text_range.end());
                 }
@@ -1521,7 +1522,7 @@ impl Printer {
         self.emit_type_node_outside_extends(node);
     }
 
-    pub(crate) fn emit_initializer(&mut self, node: Option<P<Node>>, equal_token_pos: i32, context_node: P<Node>) {
+    pub(crate) fn emit_initializer(&mut self, node: Option<P<Node>>, equal_token_pos: TextPos, context_node: P<Node>) {
         let Some(node) = node else {
             return;
         };

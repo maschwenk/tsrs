@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::fmt::Display;
 
 use rustc_hash::FxHashSet;
-use tsrs_core::{stringutil, ScriptTarget};
+use tsrs_core::{stringutil, ScriptTarget, TextPos};
 use tsrs_diagnostics as diagnostics;
 use tsrs_diagnostics::Message;
 
@@ -58,7 +58,7 @@ fn reg_exp_flag_to_first_available_language_version(flag: RegularExpressionFlags
 }
 
 impl Scanner {
-    pub(crate) fn check_regular_expression_flag_availability(&mut self, flag: RegularExpressionFlags, pos: i32, size: i32) {
+    pub(crate) fn check_regular_expression_flag_availability(&mut self, flag: RegularExpressionFlags, pos: TextPos, size: u32) {
         if let Some(available_from) = reg_exp_flag_to_first_available_language_version(flag) {
             if self.language_version() < available_from {
                 let name = available_from.string().to_lowercase();
@@ -75,14 +75,14 @@ enum ClassSetExpressionType {
 }
 
 struct GroupNameReference {
-    pos: i32,
-    end: i32,
+    pos: TextPos,
+    end: TextPos,
     name: &'static str,
 }
 
 struct DecimalEscapeValue {
-    pos: i32,
-    end: i32,
+    pos: TextPos,
+    end: TextPos,
     value: i64,
 }
 
@@ -90,7 +90,7 @@ struct DecimalEscapeValue {
 /// scanner for the duration of the parse (see `Scanner::re_scan_slash_token`).
 pub(crate) struct RegExpParser {
     scanner: Scanner,
-    end: i32,
+    end: TextPos,
     any_unicode_mode: bool,
     unicode_sets_mode: bool,
     annex_b: bool,
@@ -151,7 +151,7 @@ fn add_unique(set: &mut Vec<&'static str>, name: &'static str) {
 impl RegExpParser {
     pub(crate) fn new(
         scanner: Scanner,
-        end: i32,
+        end: TextPos,
         any_unicode_mode: bool,
         unicode_sets_mode: bool,
         annex_b: bool,
@@ -181,13 +181,18 @@ impl RegExpParser {
     }
 
     #[inline]
-    fn pos(&self) -> i32 {
+    fn pos(&self) -> TextPos {
         self.scanner.state.pos
     }
 
     #[inline]
-    fn inc_pos(&mut self, n: i32) {
+    fn inc_pos(&mut self, n: u32) {
         self.scanner.state.pos += n;
+    }
+
+    #[inline]
+    fn dec_pos(&mut self, n: u32) {
+        self.scanner.state.pos = self.scanner.state.pos.checked_sub(n).expect("regular expression scanner position underflow");
     }
 
     #[inline]
@@ -196,11 +201,11 @@ impl RegExpParser {
     }
 
     #[inline]
-    fn char_at(&self, pos: i32) -> i32 {
+    fn char_at(&self, pos: TextPos) -> i32 {
         self.scanner.char_at(pos - self.pos())
     }
 
-    fn error(&mut self, msg: &'static Message, pos: i32, length: i32, args: &[&dyn Display]) {
+    fn error(&mut self, msg: &'static Message, pos: TextPos, length: u32, args: &[&dyn Display]) {
         self.scanner.error_at(msg, pos, length, args);
     }
 
@@ -210,7 +215,7 @@ impl RegExpParser {
     }
 
     #[inline]
-    fn text_byte(&self, i: i32) -> u8 {
+    fn text_byte(&self, i: TextPos) -> u8 {
         self.scanner.text.as_bytes()[i as usize]
     }
 
@@ -414,7 +419,7 @@ impl RegExpParser {
                         if self.char() != '}' as i32 {
                             if self.any_unicode_mode_or_non_annex_b {
                                 self.error(&diagnostics::X_0_expected, self.pos(), 0, &[&"}"]);
-                                self.inc_pos(-1);
+                                self.dec_pos(1);
                             } else {
                                 is_previous_term_quantifiable = true;
                                 continue;
@@ -472,7 +477,7 @@ impl RegExpParser {
         let mut curr_flags = curr_flags;
         while self.pos() < self.end {
             let (ch, size) = decode_rune(&self.text().as_bytes()[self.pos() as usize..]);
-            let size = size as i32;
+            let size = size as u32;
             if ch == RUNE_ERROR || !is_identifier_part(ch) {
                 break;
             }
@@ -574,7 +579,7 @@ impl RegExpParser {
                 if self.any_unicode_mode_or_non_annex_b {
                     self.error(&diagnostics::X_c_must_be_followed_by_an_ASCII_letter, self.pos() - 2, 2, &[]);
                 } else if atom_escape {
-                    self.inc_pos(-1);
+                    self.dec_pos(1);
                     return Cow::Borrowed("\\");
                 }
                 Cow::Owned(rune_string(ch))
@@ -584,7 +589,7 @@ impl RegExpParser {
                 Cow::Owned(rune_string(ch))
             }
             _ => {
-                self.inc_pos(-1); // back up to include the backslash for scanEscapeSequence
+                self.dec_pos(1); // back up to include the backslash for scanEscapeSequence
                 let mut flags = EscapeSequenceScanningFlags::RegularExpression;
                 if self.annex_b {
                     flags |= EscapeSequenceScanningFlags::AnnexB;
@@ -1008,7 +1013,7 @@ impl RegExpParser {
                         return Cow::Borrowed("q");
                     }
                 }
-                self.inc_pos(-1);
+                self.dec_pos(1);
                 self.scan_class_set_character()
             }
             _ => self.scan_class_set_character(),
@@ -1251,7 +1256,7 @@ impl RegExpParser {
                         &[&s],
                     );
                 } else {
-                    self.inc_pos(-1);
+                    self.dec_pos(1);
                     return false;
                 }
                 true
@@ -1302,7 +1307,7 @@ impl RegExpParser {
                 // Second of two surrogate code units for the same non-BMP character.
                 // Now advance past the full UTF-8 sequence (the high surrogate call did not advance).
                 let (_, size) = decode_rune(&text.as_bytes()[self.pos() as usize..]);
-                self.inc_pos(size as i32);
+                self.inc_pos(size as u32);
                 let low = self.pending_low_surrogate;
                 self.pending_low_surrogate = 0;
                 return Cow::Owned(stringutil::encode_js_string_rune(low));
@@ -1325,8 +1330,8 @@ impl RegExpParser {
                 self.pending_low_surrogate = low;
                 return Cow::Owned(stringutil::encode_js_string_rune(high));
             }
-            self.inc_pos(size as i32);
-            return Cow::Borrowed(&text[(self.pos() - size as i32) as usize..self.pos() as usize]);
+            self.inc_pos(size as u32);
+            return Cow::Borrowed(&text[(self.pos() - size as u32) as usize..self.pos() as usize]);
         }
         let (ch, size) = decode_rune(&text.as_bytes()[self.pos() as usize..]);
         if size == 0 {
@@ -1334,11 +1339,11 @@ impl RegExpParser {
         }
         if ch == RUNE_ERROR {
             // Invalid UTF-8; consume the byte to avoid infinite loops.
-            self.inc_pos(size as i32);
+            self.inc_pos(size as u32);
             return Cow::Borrowed("");
         }
-        self.inc_pos(size as i32);
-        Cow::Borrowed(&text[(self.pos() - size as i32) as usize..self.pos() as usize])
+        self.inc_pos(size as u32);
+        Cow::Borrowed(&text[(self.pos() - size as u32) as usize..self.pos() as usize])
     }
 
     fn scan_expected_char(&mut self, ch: i32) {

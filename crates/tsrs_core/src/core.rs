@@ -1,6 +1,6 @@
 use crate::stringutil;
 use crate::tspath;
-use crate::{CompilerOptions, ScriptKind, TextPos};
+use crate::{text_pos_from_len, CompilerOptions, ScriptKind, TextPos};
 use rustc_hash::FxHashMap;
 use std::borrow::Cow;
 use std::hash::Hash;
@@ -321,6 +321,7 @@ pub fn compute_ecma_line_starts(text: &str) -> ECMALineStarts {
 
 /// Go returns an `iter.Seq`; here the positions are pushed to `yield_` until it returns false.
 pub fn compute_ecma_line_starts_seq(text: &str, mut yield_: impl FnMut(TextPos) -> bool) {
+    text_pos_from_len(text.len());
     let bytes = text.as_bytes();
     let text_len = bytes.len();
     let mut pos = 0usize;
@@ -371,20 +372,21 @@ pub fn count_ecma_line_starts(text: &str) -> usize {
 // PositionToLineAndByteOffset returns the 0-based line and byte offset from the
 // start of that line for the given byte position, using the provided line starts.
 // The byte offset is a raw UTF-8 byte offset from the line start, not a UTF-16 code unit count.
-pub fn position_to_line_and_byte_offset(position: i32, line_starts: &[TextPos]) -> (usize, i32) {
+pub fn position_to_line_and_byte_offset(position: TextPos, line_starts: &[TextPos]) -> (usize, TextPos) {
     let idx = line_starts.partition_point(|&s| s <= position);
     let line = if idx == 0 { 0 } else { idx - 1 };
     (line, position - line_starts[line])
 }
 
 // UTF16Offset represents a character offset measured in UTF-16 code units.
-pub type UTF16Offset = i32;
+pub type UTF16Offset = u32;
 
 // UTF16Len returns the number of UTF-16 code units needed to
 // represent the given UTF-8 encoded string.
 pub fn utf16_len(s: &str) -> UTF16Offset {
+    let len = text_pos_from_len(s.len());
     if s.is_ascii() {
-        return s.len() as UTF16Offset;
+        return len;
     }
     let bytes = s.as_bytes();
     for i in 0..bytes.len() {
@@ -400,7 +402,7 @@ pub fn utf16_len(s: &str) -> UTF16Offset {
             return n;
         }
     }
-    bytes.len() as UTF16Offset
+    len
 }
 
 pub fn flatten<T: Clone>(array: &[Vec<T>]) -> Vec<T> {

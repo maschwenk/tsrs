@@ -162,7 +162,7 @@ fn test_format_selection_preserves_comments_selection_ends_inside_comment() {
     let comment_start = original_text.find("/*").unwrap();
     let selection_end = comment_start + "/* comment".len(); // ends inside the comment, before the closing `*/`
 
-    let edits = format_selection(&ctx, source_file, 0, selection_end as i32);
+    let edits = format_selection(&ctx, source_file, 0, u32::try_from(selection_end).unwrap());
     let formatted = apply_bulk_edits(original_text, &edits);
 
     // The entire statement should be preserved unchanged
@@ -181,7 +181,7 @@ fn test_format_selection_preserves_comments_selection_starts_inside_comment() {
     let comment_start = original_text.find("/*").unwrap();
     let selection_start = comment_start + 3; // inside the comment
 
-    let edits = format_selection(&ctx, source_file, selection_start as i32, original_text.len() as i32);
+    let edits = format_selection(&ctx, source_file, u32::try_from(selection_start).unwrap(), u32::try_from(original_text.len()).unwrap());
     let formatted = apply_bulk_edits(original_text, &edits);
 
     // The entire statement should be preserved unchanged

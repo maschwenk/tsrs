@@ -67,7 +67,7 @@ pub(crate) fn get_referenced_symbols_for_node(host: &dyn CheckerHost, p: &Params
     let sd = snapshot_ctx(host, p)?;
     let program = sd.program()?;
     let node = host.resolve_node_handle(program, p.string("node")?)?;
-    let position = p.i32("position")?;
+    let position = u32::try_from(p.i32("position")?).map_err(|_| CheckerError::invalid("position must be nonnegative"))?;
     let ls = language_service(&sd.scope.snapshot, program, &sd.project, "")?;
     let entries = ls.get_referenced_symbols_for_node_exported(&host.context(), position, node, program.get_source_files());
     if entries.is_empty() {
@@ -117,7 +117,7 @@ pub(crate) fn get_completions_at_position(host: &dyn CheckerHost, p: &Params) ->
             return Ok(Ok(None));
         };
         let ls = language_service(snapshot, program, &sd.project, "")?;
-        let internal = source_file.get_position_map().utf16_to_utf8(i32::try_from(position).unwrap_or(i32::MAX));
+        let internal = source_file.get_position_map().utf16_to_utf8(position);
         // With includeSymbol the language service takes the API checker itself (Go: same).
         let _lease = if include_symbol { Some(super::lease::acquire(program)?) } else { None };
         Ok(ls.get_completions_at_position(ctx, source_file, internal, trigger, include_symbol))
@@ -337,8 +337,8 @@ fn to_api_text_edits(source_file: P<tsrs_ast::SourceFile>, edits: &[tsrs_lsproto
             return Value::Null;
         };
         let mut o = obj();
-        o.num("pos", position_map.utf8_to_utf16(start as i32) as f64);
-        o.num("end", position_map.utf8_to_utf16(end as i32) as f64);
+        o.num("pos", position_map.utf8_to_utf16(start as u32) as f64);
+        o.num("end", position_map.utf8_to_utf16(end as u32) as f64);
         o.set("newText", Value::String(edit.new_text.clone()));
         out.push(o.build());
     }

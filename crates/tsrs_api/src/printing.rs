@@ -51,7 +51,7 @@ impl Session {
         let program = sd.get_program(&ProjectID(p.str("project")?.to_string()))?;
         let target = resolve_source_file(program, &p.document("file")?)?;
         let decoded = decode(p.str("data")?)?;
-        let position = p.u64("position")? as i32;
+        let position = u32::try_from(p.u64("position")?).map_err(|_| ApiError::invalid_request("position exceeds u32"))?;
         let pos = target.get_position_map().utf16_to_utf8(position);
         let format_options = sd.snapshot.user_preferences().format_code_settings.clone();
         let new_line = format_options.new_line_character.clone();

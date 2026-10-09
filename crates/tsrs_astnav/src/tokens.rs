@@ -2,7 +2,7 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use tsrs_ast::{self as ast, Kind, ModifierList, Node, NodeFlags, NodeList, NodeVisitor, NodeVisitorHooks, SourceFile};
-use tsrs_core::{binary_search_unique_func, P};
+use tsrs_core::{binary_search_unique_func, TextPos, P};
 use tsrs_scanner::{self as scanner, Scanner};
 
 pub type VisitNodeFn = Rc<dyn Fn(Option<P<Node>>, &mut NodeVisitor) -> Option<P<Node>>>;
@@ -23,33 +23,33 @@ fn scan_navigation_token(s: &mut Scanner, containing_node: P<Node>) -> Kind {
 }
 
 // tokens.go:24
-pub fn get_touching_property_name(source_file: P<SourceFile>, position: i32) -> P<Node> {
+pub fn get_touching_property_name(source_file: P<SourceFile>, position: TextPos) -> P<Node> {
     get_token_at_position_worker(source_file, position, false /*allowPositionInLeadingTrivia*/, Some(|node: P<Node>| {
         ast::is_property_name_literal(node) || ast::is_keyword_kind(node.kind()) || ast::is_private_identifier(node)
     }))
 }
 
 // tokens.go:30
-pub fn get_touching_token(source_file: P<SourceFile>, position: i32) -> P<Node> {
+pub fn get_touching_token(source_file: P<SourceFile>, position: TextPos) -> P<Node> {
     get_token_at_position_worker(source_file, position, false /*allowPositionInLeadingTrivia*/, None)
 }
 
 // tokens.go:34
-pub fn get_token_at_position(source_file: P<SourceFile>, position: i32) -> P<Node> {
+pub fn get_token_at_position(source_file: P<SourceFile>, position: TextPos) -> P<Node> {
     get_token_at_position_worker(source_file, position, true /*allowPositionInLeadingTrivia*/, None)
 }
 
 struct TokenAtPositionState {
     next: Cell<Option<P<Node>>>,
     prev_subtree: Cell<Option<P<Node>>>,
-    left: Cell<i32>,
+    left: Cell<TextPos>,
     node_after_left: Cell<Option<P<Node>>>,
 }
 
 // tokens.go:38
 pub(crate) fn get_token_at_position_worker(
     source_file: P<SourceFile>,
-    position: i32,
+    position: TextPos,
     allow_position_in_leading_trivia: bool,
     include_preceding_token_at_end_position: Option<fn(P<Node>) -> bool>,
 ) -> P<Node> {
@@ -316,7 +316,7 @@ pub(crate) fn get_token_at_position_worker(
 }
 
 // tokens.go:276
-fn get_position(node: P<Node>, source_file: P<SourceFile>, allow_position_in_leading_trivia: bool) -> i32 {
+fn get_position(node: P<Node>, source_file: P<SourceFile>, allow_position_in_leading_trivia: bool) -> TextPos {
     if allow_position_in_leading_trivia {
         return node.pos();
     }
@@ -390,18 +390,18 @@ const COMPARISON_GREATER_THAN: i32 = 1;
 // If the leftmost token satisfying `position < token.End()` is invalid, or if position
 // is in the trivia of that leftmost token,
 // we will find the rightmost valid token with `token.End() <= position`.
-pub fn find_preceding_token(source_file: P<SourceFile>, position: i32) -> Option<P<Node>> {
+pub fn find_preceding_token(source_file: P<SourceFile>, position: TextPos) -> Option<P<Node>> {
     find_preceding_token_ex(source_file, position, None, false)
 }
 
 // tokens.go:343
 pub fn find_preceding_token_ex(
     source_file: P<SourceFile>,
-    position: i32,
+    position: TextPos,
     start_node: Option<P<Node>>,
     exclude_jsdoc: bool,
 ) -> Option<P<Node>> {
-    fn find(source_file: P<SourceFile>, position: i32, exclude_jsdoc: bool, n: P<Node>) -> Option<P<Node>> {
+    fn find(source_file: P<SourceFile>, position: TextPos, exclude_jsdoc: bool, n: P<Node>) -> Option<P<Node>> {
         if ast::is_non_whitespace_token(n) && n.kind() != Kind::EndOfFile {
             return Some(n);
         }
@@ -503,13 +503,13 @@ pub fn find_preceding_token_ex(
                         if !exclude_jsdoc && position < js_doc.end() {
                             return find(source_file, position, exclude_jsdoc, js_doc);
                         } else {
-                            return find_rightmost_valid_token(js_doc.end(), source_file, n, position, exclude_jsdoc);
+                            return find_rightmost_valid_token(js_doc.end(), source_file, n, Some(position), exclude_jsdoc);
                         }
                     }
-                    return find_rightmost_valid_token(found_child.pos(), source_file, n, -1 /*position*/, exclude_jsdoc);
+                    return find_rightmost_valid_token(found_child.pos(), source_file, n, None, exclude_jsdoc);
                 } else {
                     // Answer is in tokens between two visited children.
-                    return find_rightmost_valid_token(found_child.pos(), source_file, n, position, exclude_jsdoc);
+                    return find_rightmost_valid_token(found_child.pos(), source_file, n, Some(position), exclude_jsdoc);
                 }
             } else {
                 // position is in [foundChild.getStart(), foundChild.End): recur.
@@ -520,9 +520,9 @@ pub fn find_preceding_token_ex(
         // We have two cases here: either the position is at the end of the file,
         // or the desired token is in the unvisited trailing tokens of the current node.
         if position >= n.end() {
-            find_rightmost_valid_token(n.end(), source_file, n, -1 /*position*/, exclude_jsdoc)
+            find_rightmost_valid_token(n.end(), source_file, n, None, exclude_jsdoc)
         } else {
-            find_rightmost_valid_token(n.end(), source_file, n, position, exclude_jsdoc)
+            find_rightmost_valid_token(n.end(), source_file, n, Some(position), exclude_jsdoc)
         }
     }
 
@@ -550,7 +550,7 @@ fn is_valid_preceding_node(node: P<Node>, source_file: P<SourceFile>) -> bool {
 }
 
 // tokens.go:474
-pub fn get_start_of_node(node: P<Node>, file: P<SourceFile>, include_jsdoc: bool) -> i32 {
+pub fn get_start_of_node(node: P<Node>, file: P<SourceFile>, include_jsdoc: bool) -> TextPos {
     scanner::get_token_pos_of_node(node, file, include_jsdoc)
 }
 
@@ -558,16 +558,14 @@ pub fn get_start_of_node(node: P<Node>, file: P<SourceFile>, include_jsdoc: bool
 // Looks for rightmost valid token in the range [startPos, endPos).
 // If position is >= 0, looks for rightmost valid token that precedes or touches that position.
 fn find_rightmost_valid_token(
-    end_pos: i32,
+    end_pos: TextPos,
     source_file: P<SourceFile>,
     containing_node: P<Node>,
-    mut position: i32,
+    position: Option<TextPos>,
     exclude_jsdoc: bool,
 ) -> Option<P<Node>> {
-    if position == -1 {
-        position = containing_node.end();
-    }
-    fn should_visit_node(node: P<Node>, end_pos: i32, position: i32, source_file: P<SourceFile>, exclude_jsdoc: bool) -> bool {
+    let position = position.unwrap_or_else(|| containing_node.end());
+    fn should_visit_node(node: P<Node>, end_pos: TextPos, position: TextPos, source_file: P<SourceFile>, exclude_jsdoc: bool) -> bool {
         // Node is synthetic or out of the desired range: don't visit it.
         !(node.flags().intersects(NodeFlags::Reparsed)
             || node.end() > end_pos
@@ -575,10 +573,10 @@ fn find_rightmost_valid_token(
     }
     fn find(
         n: Option<P<Node>>,
-        mut end_pos: i32,
+        mut end_pos: TextPos,
         source_file: P<SourceFile>,
         containing_node: P<Node>,
-        position: i32,
+        position: TextPos,
         exclude_jsdoc: bool,
     ) -> Option<P<Node>> {
         let n = n?;
