@@ -278,6 +278,7 @@ pub(crate) fn start_seed(program: &'static Program, weights: Vec<i64>) {
         .name("checker-seed".into())
         .stack_size(crate::checkerpool::CHECKER_STACK_SIZE)
         .spawn(move || {
+            tsrs_core::timeline::mark("seed:thread", -1, crate::checkerpool::thread_cpu_seconds());
             let files = &program.files;
             let positions = seed_positions(program, files, &|i: u32| weights.get(i as usize).copied().unwrap_or(0).max(0) as u64);
             tsrs_ast::use_id_blocks();
@@ -288,12 +289,15 @@ pub(crate) fn start_seed(program: &'static Program, weights: Vec<i64>) {
             let region = tsrs_core::arena::Region::new_scratch(32 << 20);
             let scope = region.enter();
             let mut c = tsrs_checker::new_checker(program);
+            tsrs_core::timeline::mark("seed:checker", -1, crate::checkerpool::thread_cpu_seconds());
             c.seed_mode = true;
             tsrs_core::sharedgraph::enter_overlay(&c.overlay);
             let ctx = tsrs_checker::Context::background();
             for &i in &positions {
                 let _ = c.get_diagnostics_exported(&ctx, files[i as usize]);
+                tsrs_core::timeline::mark("seed:file", c.type_count as i64, region.used_bytes() as f64);
             }
+            tsrs_core::timeline::mark("seed:files", positions.len() as i64, crate::checkerpool::thread_cpu_seconds());
             c.assert_freezable();
             c.seed_mode = false;
             if stats_enabled() && tsrs_checker::Checker::heap_census_enabled() {
@@ -306,6 +310,7 @@ pub(crate) fn start_seed(program: &'static Program, weights: Vec<i64>) {
             // Never freed: the forks read it for the rest of the process.
             #[expect(clippy::mem_forget, reason = "the frozen seed region must outlive every fork, to the end of the process")]
             std::mem::forget(region);
+            tsrs_core::timeline::mark("seed:done", -1, crate::checkerpool::thread_cpu_seconds());
             SeedOut(Box::leak(c), chunks, bytes, positions.len(), start)
         })
         .expect("failed to spawn the seed checker thread");
@@ -318,7 +323,9 @@ fn wait_base() -> Base {
     *BASE.get_or_init(|| {
         let handle = SEED_THREAD.lock().unwrap().take().expect("shared graph: the seed was not started");
         let out = handle.join().unwrap_or_else(|e| std::panic::resume_unwind(e));
+        tsrs_core::timeline::mark("seed:joined", -1, 0.0);
         tsrs_core::sharedgraph::freeze(&out.1);
+        tsrs_core::timeline::mark("seed:frozen", -1, 0.0);
         tsrs_core::phases::record("Checkers: seed", out.4.elapsed());
         if stats_enabled() {
             eprintln!(
@@ -339,12 +346,15 @@ fn wait_base() -> Base {
 
 /// In the type-check pass: replaces an unused plain pool checker by a fork of the frozen seed (waiting for it).
 #[cfg(feature = "checker")]
-pub(crate) fn fork_into(slot: &mut Box<crate::checkerpool::Checker>) {
+pub(crate) fn fork_into(slot: &mut Box<crate::checkerpool::Checker>, idx: usize) {
     // Relaxed: written by create_checkers before the pass's threads were spawned.
     if slot.is_fork || slot.type_count != FRESH_TYPES.load(std::sync::atomic::Ordering::Relaxed) {
         return;
     }
-    *slot = tsrs_checker::Checker::fork(wait_base().0);
+    let base = wait_base().0;
+    tsrs_core::timeline::mark("fork:waited", idx as i64, 0.0);
+    *slot = tsrs_checker::Checker::fork(base);
+    tsrs_core::timeline::mark("fork:made", idx as i64, 0.0);
 }
 
 fn flag_name(bit: usize) -> String {

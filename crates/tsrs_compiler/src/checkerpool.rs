@@ -569,6 +569,7 @@ impl checkerPool {
     fn create_checkers(&self) -> &poolState {
         let program = self.program;
         self.state.get_or_init(|| {
+            tsrs_core::timeline::mark("pool:enter", -1, 0.0);
             if tsrs_core::ptr::shared_check::enabled() {
                 // Debug aid: bind up front so every parser/binder allocation is recorded as shared.
                 tsrs_core::ptr::shared_check::thaw();
@@ -585,6 +586,7 @@ impl checkerPool {
             }
             let shared = crate::sharedgraph::mode() == crate::sharedgraph::Mode::On && !program.single_threaded();
             let create_and_assign = || {
+                tsrs_core::timeline::mark("create:start", -1, 0.0);
                 let create_start = std::time::Instant::now();
                 #[cfg(feature = "checker")]
                 tsrs_checker::links::set_multiple_checkers(self.checker_count > 1);
@@ -594,6 +596,7 @@ impl checkerPool {
                 #[cfg(feature = "checker")]
                 if shared {
                     crate::sharedgraph::start_seed(program, checked_file_weights(program));
+                    tsrs_core::timeline::mark("seed:spawned", -1, 0.0);
                 }
                 run_work_group(self.single_threaded, self.checker_count, |i| {
                     let c = new_checker(program);
@@ -606,7 +609,9 @@ impl checkerPool {
                 let checkers: &'static [CheckerSlot] =
                     Box::leak(slots.into_iter().map(|s| s.into_inner().unwrap().unwrap()).collect::<Vec<_>>().into_boxed_slice());
                 tsrs_core::phases::record("Checkers: create", create_start.elapsed());
+                tsrs_core::timeline::mark("create:end", -1, 0.0);
                 let associations = tsrs_core::phases::time("Checkers: assign files", || compute_associations(program, self.checker_count));
+                tsrs_core::timeline::mark("assign:end", -1, 0.0);
                 (checkers, associations)
             };
             // tsrs-only: the CLI's leaf classification reads only the loaded program; it runs meanwhile
@@ -614,12 +619,18 @@ impl checkerPool {
             let (checkers, associations) = if shared {
                 // The seed must not check a leaf file (its region is freed), so the classification comes first.
                 if program.leaf_files != crate::fileregions::LeafMode::Off && !self.single_threaded {
+                    tsrs_core::timeline::mark("prepare:start", -1, 0.0);
                     crate::fileregions::prepare(program);
+                    tsrs_core::timeline::mark("prepare:end", -1, 0.0);
                 }
                 create_and_assign()
             } else if program.leaf_files != crate::fileregions::LeafMode::Off && !self.single_threaded {
                 std::thread::scope(|s| {
-                    let prepare = s.spawn(|| crate::fileregions::prepare(program));
+                    let prepare = s.spawn(|| {
+                        tsrs_core::timeline::mark("prepare:start", -1, 0.0);
+                        crate::fileregions::prepare(program);
+                        tsrs_core::timeline::mark("prepare:end", -1, 0.0);
+                    });
                     let created = create_and_assign();
                     prepare.join().unwrap();
                     created
@@ -632,6 +643,7 @@ impl checkerPool {
             let file_indices: FxHashMap<P<SourceFile>, usize> = files.iter().enumerate().map(|(i, &f)| (f, i)).collect();
             let owners = associations.iter().map(|&c| std::sync::atomic::AtomicU32::new(c as u32)).collect();
             let weights = if self.checker_count > 1 { checked_file_weights(program) } else { Vec::new() };
+            tsrs_core::timeline::mark("pool:ready", -1, 0.0);
             poolState {
                 shared_graph: shared,
                 checkers,
@@ -769,7 +781,13 @@ impl checkerPool {
         let queues: Vec<FileQueue> = positions.into_iter().map(|p| FileQueue::new(p, weight)).collect();
         // TSRS_MEM_SPLIT: the type-check pass reports once every checker is done and before any thread exits.
         let mem_split = (allow_steal && tsrs_core::memsplit::enabled()).then(|| std::sync::Barrier::new(if single { 1 } else { active.len() }));
+        if allow_steal {
+            tsrs_core::timeline::mark("pass:start", -1, 0.0);
+        }
         let run = |checker_idx: usize| {
+            if allow_steal {
+                tsrs_core::timeline::mark("chk:enter", checker_idx as i64, thread_cpu_seconds());
+            }
             let start = stats.then(std::time::Instant::now);
             let cpu_start = if stats { thread_cpu_seconds() } else { 0.0 };
             let mut count = 0;
@@ -777,7 +795,10 @@ impl checkerPool {
             let mut guard = state.checkers[checker_idx].0.lock().unwrap();
             #[cfg(feature = "checker")]
             if allow_steal && state.shared_graph && checker_idx >= crate::sharedgraph::overlap() {
-                crate::sharedgraph::fork_into(&mut guard);
+                crate::sharedgraph::fork_into(&mut guard, checker_idx);
+            }
+            if allow_steal {
+                tsrs_core::timeline::mark("chk:ready", checker_idx as i64, thread_cpu_seconds());
             }
             crate::sharedgraph::enter_checker(&guard);
             let sg_start = sg_stats.then(|| crate::sharedgraph::Point::take(&guard));
@@ -828,6 +849,11 @@ impl checkerPool {
                 }
                 count += 1;
             }
+            if allow_steal {
+                tsrs_core::timeline::mark("chk:end", checker_idx as i64, thread_cpu_seconds());
+                tsrs_core::timeline::mark("chk:files", checker_idx as i64, count as f64);
+                tsrs_core::timeline::mark("chk:stolen", checker_idx as i64, stolen[checker_idx].load(std::sync::atomic::Ordering::Relaxed) as f64);
+            }
             if cost_cache {
                 state.file_cpu.lock().unwrap().extend(file_cpu);
             }
@@ -857,6 +883,9 @@ impl checkerPool {
             }
         };
         run_work_group(single, active.len(), |k| run(active[k]));
+        if allow_steal {
+            tsrs_core::timeline::mark("pass:end", -1, 0.0);
+        }
         splitcheck::SplitFile::report_stats(&split.files);
         if sg_stats {
             let points: Vec<_> = sg_points.into_iter().map(|p| p.into_inner().unwrap()).collect();
