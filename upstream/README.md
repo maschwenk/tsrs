@@ -126,6 +126,10 @@ commit passes with no race reports (380 s).
 
 ## Go vs Rust: counters per commit (the equivalence evidence)
 
+> The per-candidate `TSRS_LAZY_*` switches named below were removed from tsrs on 2026-10-09 (the landed candidates
+> follow `TSRS_LAZY_MEMBERS` now; notes/mem-lazy.md). To rerun a per-commit row, build tsrs from a commit before that
+> day, such as the e8d4196 these numbers came from.
+
 The private monorepo = a pristine read-only checkout (37,942 files, 0 errors at every commit), `-p <project> --noEmit
 --incremental false --extendedDiagnostics`, Go built from `lazy-stack-ref` (b85298b6 + base + commits), Rust =
 `target/release/tsrs` of this worktree (built at tsrs e8d4196) with the matching switches (`TSRS_LAZY_MEMBERS=0` for the reference; for the
