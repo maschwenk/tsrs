@@ -1,0 +1,23 @@
+[package]
+name = "tsrs_contentmapper"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+# Go's contentmapper host (host.go, hostimpl.go, transform.go) and the production process spawner
+# (cmd/tsc/sys.go spawnProcess): notes/contentmappers.md. The compiler depends on it, so it must not depend on
+# tsrs_compiler, tsrs_api_transport or tsrs_vfs.
+[dependencies]
+tsrs_core.workspace = true
+tsrs_diagnostics.workspace = true
+tsrs_ast.workspace = true
+tsrs_parser.workspace = true
+tsrs_spanmap.workspace = true
+tsrs_tsoptions.workspace = true
+tsrs_ipc.workspace = true
+rustc-hash.workspace = true
+# hostimpl.go combinedIdentity hashes with xxh3 (github.com/zeebo/xxh3), like Mapper::transform_identity.
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
