@@ -46,6 +46,7 @@ type gen struct {
 	fset *token.FileSet
 
 	vars map[types.Object]*varInfo
+	used map[types.Object]bool
 	curF string // Rust name of the innermost FourslashTest variable ("" if none)
 	curT string // Rust name of the innermost *testing.T variable
 	// names of package-level declarations of the current file (Rust names).
@@ -250,6 +251,12 @@ func moduleName(file string) string {
 }
 
 func (g *gen) setPackage(p *Package) {
+	if g.p != p {
+		g.used = make(map[types.Object]bool, len(p.Info.Uses))
+		for _, obj := range p.Info.Uses {
+			g.used[obj] = true
+		}
+	}
 	g.p = p
 	g.info = p.Info
 	curPkgPath = p.Path
@@ -541,6 +548,10 @@ func (g *gen) params(sig *types.Signature, fl *ast.FieldList, closure bool) (par
 			}
 			if n != nil {
 				if obj := g.info.Defs[n]; obj != nil {
+					if !g.objectUsed(obj) {
+						name = "_" + name
+						vi.name = name
+					}
 					g.vars[obj] = vi
 					if g.assigned[obj] && vi.kind == kPlace {
 						prologue = append(prologue, sprintf("let mut %s = %s;", name, name))
@@ -562,6 +573,10 @@ func (g *gen) params(sig *types.Signature, fl *ast.FieldList, closure bool) (par
 		}
 	}
 	return
+}
+
+func (g *gen) objectUsed(obj types.Object) bool {
+	return g.used[obj]
 }
 
 func isSliceT(t types.Type) bool { _, ok := isSlice(t); return ok }

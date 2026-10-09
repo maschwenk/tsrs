@@ -2190,8 +2190,8 @@ impl Server {
     // server.go:2280 (the `api` package is out of scope)
     fn handle_initialize_api_session(
         self: &Arc<Self>,
-        ctx: &Context,
-        params: &lsproto::InitializeAPISessionParams,
+        _ctx: &Context,
+        _params: &lsproto::InitializeAPISessionParams,
         _req: &RequestMessage,
     ) -> Result<lsproto::CustomInitializeAPISessionResponse, Error> {
         Err(not_yet_ported(Method::CustomInitializeAPISession))
@@ -2212,17 +2212,17 @@ impl Server {
     }
 
     // server.go:2400
-    fn handle_save_heap_profile(self: &Arc<Self>, _ctx: &Context, params: &lsproto::ProfileParams, _req: &RequestMessage) -> Result<lsproto::SaveHeapProfileResponse, Error> {
+    fn handle_save_heap_profile(self: &Arc<Self>, _ctx: &Context, _params: &lsproto::ProfileParams, _req: &RequestMessage) -> Result<lsproto::SaveHeapProfileResponse, Error> {
         Err(not_yet_ported(Method::CustomSaveHeapProfile))
     }
 
     // server.go:2409
-    fn handle_save_alloc_profile(self: &Arc<Self>, _ctx: &Context, params: &lsproto::ProfileParams, _req: &RequestMessage) -> Result<lsproto::SaveAllocProfileResponse, Error> {
+    fn handle_save_alloc_profile(self: &Arc<Self>, _ctx: &Context, _params: &lsproto::ProfileParams, _req: &RequestMessage) -> Result<lsproto::SaveAllocProfileResponse, Error> {
         Err(not_yet_ported(Method::CustomSaveAllocProfile))
     }
 
     // server.go:2418
-    fn handle_start_cpu_profile(self: &Arc<Self>, _ctx: &Context, params: &lsproto::ProfileParams, _req: &RequestMessage) -> Result<lsproto::StartCPUProfileResponse, Error> {
+    fn handle_start_cpu_profile(self: &Arc<Self>, _ctx: &Context, _params: &lsproto::ProfileParams, _req: &RequestMessage) -> Result<lsproto::StartCPUProfileResponse, Error> {
         Err(not_yet_ported(Method::CustomStartCPUProfile))
     }
 
@@ -2245,8 +2245,8 @@ impl Server {
     // server.go:2451 (content mappers are out of scope)
     fn handle_set_content_mapper_contributions(
         self: &Arc<Self>,
-        ctx: &Context,
-        params: &lsproto::SetContentMapperContributionsParams,
+        _ctx: &Context,
+        _params: &lsproto::SetContentMapperContributionsParams,
         _req: &RequestMessage,
     ) -> Result<lsproto::CustomSetContentMapperContributionsResponse, Error> {
         Err(not_yet_ported(Method::CustomSetContentMapperContributions))

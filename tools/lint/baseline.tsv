@@ -2,5 +2,3 @@
 # Written by `tools/lint/ratchet.py --update` with clippy from Rust 1.99.0. Counts only go down; never edit by hand.
 2	clippy::needless_pass_by_value	crates/tsrs_modulespecifiers/src/specifiers.rs
 1	dead_code	crates/tsrs_parser/src/parser_1.rs
-1	unused_variables	crates/tsrs_lsp/src/dynamic_queue.rs
-7	unused_variables	crates/tsrs_lsp/src/server.rs

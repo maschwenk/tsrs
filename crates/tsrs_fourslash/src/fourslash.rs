@@ -1037,7 +1037,7 @@ impl FourslashTest {
     }
 
     // fourslash.go:862 (goToPosition)
-    fn go_to_position_impl(&mut self, t: &T, position: lsproto::Position) {
+    fn go_to_position_impl(&mut self, _t: &T, position: lsproto::Position) {
         self.current_caret_position = position;
         self.selection_end = None;
     }
@@ -1275,7 +1275,7 @@ impl FourslashTest {
     }
 
     // fourslash.go:1083
-    pub fn verify_indentation(&mut self, t: &T, num_spaces: i32) {
+    pub fn verify_indentation(&mut self, _t: &T, _num_spaces: i32) {
         // not implemented
     }
 
