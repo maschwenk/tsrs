@@ -1,6 +1,8 @@
 // Port of Go's fourslash test harness (internal/fourslash) and its tests (internal/fourslash/tests, converted by
 // tools/gen-fourslash into tests/gen). See docs/LSP.md "Fourslash".
 
+#![forbid(unsafe_code)]
+
 pub mod baselineutil;
 pub mod contentmapper;
 pub mod contentmappertest;

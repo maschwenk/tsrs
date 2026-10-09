@@ -4,6 +4,8 @@
 //! (tools/gosig/modulespecifiers.json, signatures in docs/sigs/modulespecifiers*.txt).
 //! `ProcessEntrypointEnding` (util.go, language-service auto-imports only; needs `module.ResolvedEntrypoint`) is not ported.
 
+#![forbid(unsafe_code)]
+
 mod compare;
 mod preferences;
 mod specifiers;

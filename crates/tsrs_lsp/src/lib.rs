@@ -1,5 +1,7 @@
 // Go internal/lsp: the language server (docs/LSP.md).
 
+#![forbid(unsafe_code)]
+
 mod dynamic_queue;
 mod logger;
 pub mod lsptestutil;

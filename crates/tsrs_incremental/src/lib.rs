@@ -1,6 +1,8 @@
 // Port of Go's execute/incremental package: incremental programs, tsbuildinfo read/write and affected-file
 // tracking.
 
+#![forbid(unsafe_code)]
+
 mod affectedfileshandler;
 mod buildinfo;
 mod buildinfotosnapshot;

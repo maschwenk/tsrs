@@ -3,6 +3,8 @@
 //! (pseudotypenodebuilder.rs). `checker.go` and `type.go` (data model) are hand-ported; `lookup.go` is generated
 //! stubs (tools/gosig/pseudochecker.json, signatures in docs/sigs/pseudochecker*.txt).
 
+#![forbid(unsafe_code)]
+
 mod checker;
 mod lookup;
 mod type_;
