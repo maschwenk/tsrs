@@ -9,7 +9,8 @@
 #   depot ci run --workflow .depot/workflows/pr-verify.yml       # any branch or dirty worktree; the inputs below take
 #                                                                # their defaults (edit them in the working copy to change)
 #   depot ci dispatch --repo maschwenk/tsrs --workflow pr-verify.yml --ref <pushed branch> --input projects=vscode
-#   the `verify` label on a pull request into main: runs now and on every push, and posts the table as a comment
+#   a pull request into main that changes crates/: runs on every push and posts the table as a comment; for a pull
+#   request that changes nothing under crates/ (a Cargo.lock bump, the bench harness) the `verify` label starts it
 # A `depot ci run` is not tied to a ref, so Depot skips actions/cache there: every project is cloned and installed
 # (bench/README.md "Verifying a branch" has the durations). Dispatched and pull request runs restore bench.yml's caches.
 
@@ -40,12 +41,12 @@ on:
         type: choice
         options: ["true", "false"]
         default: "true"
-  # Only pull requests labelled `verify` run it (the job's `if`).
+  # The gate job decides which pull requests run it (a change under crates/, or the `verify` label).
   pull_request:
     branches: [main]
     types: [opened, reopened, synchronize, labeled]
 
-# A newer push to a labelled pull request cancels its older run.
+# A newer push to a pull request cancels its older run.
 concurrency:
   group: pr-verify-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -65,12 +66,48 @@ env:
   POISON: ${{ inputs.poison || 'true' }}
 
 jobs:
+  # Which pull requests run it: those that change crates/ (the compiler itself), and any other with the `verify`
+  # label. Adding some other label does not start another run. Dispatched runs always run. A job of its own because
+  # the list of changed files is not in the event payload.
+  gate:
+    runs-on: depot-ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+    steps:
+      - name: Decide
+        id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+          ACTION: ${{ github.event.action }}
+          ADDED: ${{ github.event.label.name }}
+          LABELLED: ${{ contains(github.event.pull_request.labels.*.name, 'verify') }}
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          if [ "$EVENT" != pull_request ]; then
+            run=true; why="not a pull request"
+          elif [ "$ACTION" = labeled ]; then
+            if [ "$ADDED" = verify ]; then run=true; why="the verify label was added"; else run=false; why="label '$ADDED' added"; fi
+          elif [ "$LABELLED" = true ]; then
+            run=true; why="labelled verify"
+          else
+            files=$(gh api "repos/$REPO/pulls/$PR/files" --paginate --jq '.[].filename')
+            if printf '%s\n' "$files" | grep -q '^crates/'; then
+              run=true; why="changes crates/"
+            else
+              run=false; why="no change under crates/ and no verify label"
+            fi
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          echo "$why: run=$run"
+
   verify:
-    # On a pull request: only with the `verify` label, and not again when some other label is added.
-    if: >-
-      github.event_name != 'pull_request' ||
-      (contains(github.event.pull_request.labels.*.name, 'verify') &&
-       (github.event.action != 'labeled' || github.event.label.name == 'verify'))
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     runs-on: ${{ format('depot-ubuntu-24.04-{0}', inputs.cpus || '32') }}
     timeout-minutes: 120
     outputs:
