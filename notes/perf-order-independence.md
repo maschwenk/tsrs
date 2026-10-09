@@ -113,9 +113,11 @@ Before the fix the 40k-error corpus gave four distinct outputs over the same con
   comparison takes depends on what the checker already resolved, so what is cached can decide whether they fire. Not
   observed under random assignments on these corpora; TS2590 was reported on a private monorepo (issue #218: open,
   notes/open-history-dependence.md section 4).
-- **Diagnostics located in another file:** a checker returns a file's diagnostics right after checking it, so an
-  error that checking file B reports inside file A is kept or lost depending on whether A was collected first. This
-  can occur (Go behaves the same). Not observed.
+- **Diagnostics located in another file:** a file's diagnostics come only from the checker that checks it, right
+  after checking it, so an error that checking file B files against file A is kept only if the same checker checks A
+  afterwards. This can occur (Go behaves the same). Not observed as a difference in output; the routing itself is seen
+  on webpack, where a TS2590 is filed against a JSON file (never type-checked, so never printed in any assignment;
+  notes/open-history-dependence.md section 4).
 - **Alias names of printed types:** unions, intersections and instantiations are interned with their alias in the key,
   so an alias is attached per request, not first-come. No history found.
 

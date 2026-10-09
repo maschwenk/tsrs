@@ -5,9 +5,11 @@
 //! The line says where the reduction ran and what it decided, and fingerprints its inputs, so that two runs that
 //! disagree on a TS2590 show which input differed: the constituents (`set`), their order (`order`), or the relation
 //! results (which constituents were removed, `removed`). The fingerprints are built from what a type already holds
-//! (flags, symbol names and declaration positions, resolved type arguments, literal values), never from type ids, which
-//! follow the order in which a checker created its types, and without resolving anything, so that tracing does not
-//! change what it traces.
+//! (flags, symbol names, declaration files by base name and positions, resolved type arguments, literal values), never
+//! from type ids, which follow the order in which a checker created its types, and without resolving anything, so that
+//! tracing does not change what it traces (it only fills the cached line map of the file it reports a position in). A
+//! deferred type reference whose arguments are not resolved yet is described without them, so `set` can differ
+//! between two runs whose unions are the same.
 
 use std::fmt::Write;
 use std::hash::{DefaultHasher, Hash, Hasher};
@@ -75,7 +77,8 @@ fn location(node: Option<P<Node>>) -> String {
     let Some(file) = ast::get_source_file_of_node(node) else {
         return "-".to_string();
     };
-    let (line, character) = tsrs_scanner::get_ecma_line_and_utf16_character_of_position(&*file, node.pos());
+    let start = tsrs_scanner::get_token_pos_of_node(node, file, false);
+    let (line, character) = tsrs_scanner::get_ecma_line_and_utf16_character_of_position(&*file, start);
     format!("{}({},{})", relative(file.file_name()), line + 1, character + 1)
 }
 
@@ -130,11 +133,13 @@ fn describe_into(t: P<Type>, depth: u32, out: &mut String) {
     }
 }
 
+// The declaration's file by its base name, so that the fingerprints do not depend on the directory tsrs runs in.
 fn describe_symbol(symbol: P<Symbol>, out: &mut String) {
     out.push_str(symbol.name());
     if let Some(&declaration) = symbol.declarations().first() {
         if let Some(file) = ast::get_source_file_of_node(declaration) {
-            let _ = write!(out, "@{}:{}", relative(file.file_name()), declaration.pos());
+            let name = file.file_name();
+            let _ = write!(out, "@{}:{}", name.rsplit('/').next().unwrap_or(name), declaration.pos());
         }
     }
 }
