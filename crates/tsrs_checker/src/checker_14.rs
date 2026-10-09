@@ -1,4 +1,5 @@
 use crate::*;
+use tsrs_core::shwindow::KeyAnd;
 use tsrs_ast::*;
 use tsrs_core::*;
 use tsrs_ast as ast;
@@ -1487,8 +1488,8 @@ impl Checker {
             }
         }
         let new_text_refs: Vec<&str> = new_texts.iter().map(|s| s.as_str()).collect();
-        let key = get_template_type_key(&new_text_refs, &new_types);
-        let t = match self.template_literal_types.get(&key) {
+        let (key, and) = get_template_type_key(&new_text_refs, &new_types);
+        let t = match self.template_literal_types.get_base(and, |b| b.get(&key)).or_else(|| self.template_literal_types.get(&key)) {
             Some(t) => t,
             None => {
                 let t = self.new_template_literal_type(&new_text_refs, &new_types);
@@ -1616,8 +1617,10 @@ impl Checker {
     // checker.go:29765
     pub(crate) fn get_string_mapping_type_for_generic_type(&mut self, symbol: P<Symbol>, t: P<Type>) -> P<Type> {
         let key = StringMappingKey { s: symbol, t };
-        match self.string_mapping_types.get(&key) {
-            Some(&result) => result,
+        let mut and = KeyAnd::NONE;
+        and.add(t);
+        match self.string_mapping_types.get_base(and, |b| b.get(&key).copied()).or_else(|| self.string_mapping_types.get(&key).copied()) {
+            Some(result) => result,
             None => {
                 let result = self.new_string_mapping_type(symbol, t);
                 self.string_mapping_types.insert(key, result);

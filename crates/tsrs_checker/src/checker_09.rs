@@ -445,6 +445,7 @@ impl keyBuilder {
     // checker.go:17770
     #[inline]
     pub(crate) fn write_type(&mut self, t: P<Type>) {
+        self.handles.add(t);
         self.write_uint32(t.id.0);
     }
 
@@ -561,7 +562,7 @@ pub(crate) fn get_alias_key(alias: AliasArg<'_>) -> CacheHashKey {
 }
 
 // checker.go:17848
-pub(crate) fn get_union_key(types: &[P<Type>], origin: Option<P<Type>>, alias: AliasArg<'_>) -> CacheHashKey {
+pub(crate) fn get_union_key(types: &[P<Type>], origin: Option<P<Type>>, alias: AliasArg<'_>) -> (CacheHashKey, tsrs_core::shwindow::KeyAnd) {
     let mut b = keyBuilder::default();
     match origin {
         None => b.write_types(types),
@@ -583,11 +584,11 @@ pub(crate) fn get_union_key(types: &[P<Type>], origin: Option<P<Type>>, alias: A
         _ => panic!("Unhandled case in getUnionKey"),
     }
     b.write_alias_arg(alias);
-    b.hash()
+    (b.hash(), b.handles)
 }
 
 // checker.go:17872
-pub(crate) fn get_intersection_key(types: &[P<Type>], flags: IntersectionFlags, alias: AliasArg<'_>) -> CacheHashKey {
+pub(crate) fn get_intersection_key(types: &[P<Type>], flags: IntersectionFlags, alias: AliasArg<'_>) -> (CacheHashKey, tsrs_core::shwindow::KeyAnd) {
     let mut b = keyBuilder::default();
     b.write_types(types);
     if !flags.intersects(IntersectionFlags::NoConstraintReduction) {
@@ -595,11 +596,11 @@ pub(crate) fn get_intersection_key(types: &[P<Type>], flags: IntersectionFlags, 
     } else {
         b.write_byte(b'*');
     }
-    b.hash()
+    (b.hash(), b.handles)
 }
 
 // checker.go:17883
-pub(crate) fn get_tuple_key(element_infos: &[TupleElementInfo], readonly: bool) -> CacheHashKey {
+pub(crate) fn get_tuple_key(element_infos: &[TupleElementInfo], readonly: bool) -> (CacheHashKey, tsrs_core::shwindow::KeyAnd) {
     let mut b = keyBuilder::default();
     for e in element_infos {
         if e.flags.intersects(ElementFlags::Required) {
@@ -618,7 +619,7 @@ pub(crate) fn get_tuple_key(element_infos: &[TupleElementInfo], readonly: bool) 
     if readonly {
         b.write_byte(b'!');
     }
-    b.hash()
+    (b.hash(), b.handles)
 }
 
 // checker.go:17906
@@ -638,17 +639,17 @@ pub(crate) fn get_type_instantiation_key(type_arguments: &[P<Type>], alias: Alia
 }
 
 // checker.go:17920
-pub(crate) fn get_indexed_access_key(object_type: P<Type>, index_type: P<Type>, access_flags: AccessFlags, alias: AliasArg<'_>) -> CacheHashKey {
+pub(crate) fn get_indexed_access_key(object_type: P<Type>, index_type: P<Type>, access_flags: AccessFlags, alias: AliasArg<'_>) -> (CacheHashKey, tsrs_core::shwindow::KeyAnd) {
     let mut b = keyBuilder::default();
     b.write_type(object_type);
     b.write_type(index_type);
     b.write_uint32(access_flags.bits());
     b.write_alias_arg(alias);
-    b.hash()
+    (b.hash(), b.handles)
 }
 
 // checker.go:17929
-pub(crate) fn get_template_type_key(texts: &[&str], types: &[P<Type>]) -> CacheHashKey {
+pub(crate) fn get_template_type_key(texts: &[&str], types: &[P<Type>]) -> (CacheHashKey, tsrs_core::shwindow::KeyAnd) {
     let mut b = keyBuilder::default();
     b.write_types(types);
     b.write_byte(b'|');
@@ -659,7 +660,7 @@ pub(crate) fn get_template_type_key(texts: &[&str], types: &[P<Type>]) -> CacheH
     for s in texts {
         b.write_string(s);
     }
-    b.hash()
+    (b.hash(), b.handles)
 }
 
 // checker.go:17943
