@@ -1,6 +1,11 @@
 # Status
 
-## Unreleased: content mappers in `tsc` and `tsc -b`
+## 2026-10-09: 0.10.0 release
+
+Content mappers (#260), plus parallel CI steps (#256); the TypeScript source pin remains
+`b85298b6a81f772d080b0455de0ca9d744cd6fd6` (7.1.0-dev.20260929) and the published package set is unchanged
+(`@maschwenk/tsrs` and `@maschwenk/tsrs-wasm` at `0.10.0-ts7.1.0-dev.20260929`). pr-verify on #260 found identical
+diagnostics in 102 of 102 cells, single-threaded instructions within 0.11% on every project.
 
 TypeScript 7.1 content mappers are ported for the compiler, `tsrs -p`, `tsrs -b` and incremental builds
 (notes/contentmappers.md). With `--runExternalCode`, tsrs starts the mapper processes named in a tsconfig's
