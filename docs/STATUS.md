@@ -535,7 +535,7 @@ type-id pairs in 8-byte slots (no hashing), a 24-byte AST node header (kind, dat
 type aliases allocated only when a cached constructor creates a type, reference instantiation tables keyed by
 the references' own type arguments, 12-byte pointer-keyed link slots, one read-only link access through
 `try_get`. Track B (lazy creation, Go-portable): inference context mappers created on first use
-(`TSRS_LAZY_INFERENCE_MAPPERS`, default on; -1.13M mappers); deferring two-constituent union/intersection
+(-1.13M mappers; its own switch went with the other candidate switches on 2026-10-09, `TSRS_LAZY_MEMBERS=0` turns it off); deferring two-constituent union/intersection
 property types was rejected (-3.7% types but it changes results). The private monorepo, default mode (medians of 3,
 interleaved, base dc59d8e): single-threaded peak 7.02 -> 6.02 GiB (-14.2%), 4 checkers 9.38 -> 8.07 GiB
 (-14.0%); opt-out 9.47 -> 8.01 / 14.53 -> 12.35 GiB. Details, per-step numbers and rejected candidates:

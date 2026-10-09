@@ -1453,7 +1453,7 @@ impl Checker {
     // inference.go:1273
     pub(crate) fn new_inference_context_worker(&mut self, inferences: &[P<InferenceInfo>], signature: Option<P<Signature>>, flags: InferenceFlags, compare_types: TypeComparer) -> P<InferenceContext> {
         let n = P::new_recycled(InferenceContext::new(tsrs_core::alloc_slice_recycled(inferences), signature, flags, compare_types));
-        if !tsrs_core::lazymembers::lazy_inference_mappers() {
+        if !self.lazy_members {
             n.mapper();
             n.non_fixing_mapper();
         }

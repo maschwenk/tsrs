@@ -1,5 +1,11 @@
 # mem-lazy: next lazy-resolution memory wins after #64475 / #64526
 
+> 2026-10-09: the per-candidate switches (`TSRS_LAZY_TUPLES`, `TSRS_LAZY_COND_MAPPER`, `TSRS_LAZY_PROP_CACHE`,
+> `TSRS_LAZY_UNMATCHED`, `TSRS_LAZY_EMPTY`, and `TSRS_LAZY_INFERENCE_MAPPERS` of notes/mem-round3.md) were removed:
+> the landed candidates now follow the master switch, so `TSRS_LAZY_MEMBERS=0` is still the reference-identical mode
+> and there is no untested "master on, candidate off" state. L9 (`TSRS_LAZY_HAS_PROP`, shipped off, -0.1%) was deleted
+> with its switch. The counters stay.
+
 Goal: find more checker work of the #64475 / #64526 kind (do less eager work, produce identical results), prototype
 each behind its own switch in `tsrs_core::lazymembers`, measure on the private monorepo, and write the winners up so they can be
 proposed upstream in Go.
