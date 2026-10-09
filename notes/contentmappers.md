@@ -104,3 +104,102 @@ Wave 1 (foundations) is done. What later waves build on:
 - Already ported with the definitions, so the host and incremental waves should not port them again:
   `TestMapperDiagnosticName` (`host_test.go`) and `TestStaticContentMapperTransformIdentity`
   (`execute/incremental/buildinfo_contentmapper_test.go`), in `tsrs_tsoptions/src/contentmappers_test.rs`.
+
+Wave 2 (the host and the test mappers) is done. What wave 3 builds on:
+
+- Crate `tsrs_contentmapper` (`host.rs`, `hostimpl.rs`, `transform.rs`, `process.rs`). It re-exports `Mapper`,
+  `Definition`, `Manifest`, `OptionPathSegment` and `is_supported_virtual_extension` from `tsrs_tsoptions`, so
+  `tsrs_contentmapper::Mapper` reads like Go's `contentmapper.Mapper`.
+- Construction (Go `NewHost`, `NewHostWithOptions`):
+  - `new_host(spawner: Arc<dyn Spawner>, locale: Locale) -> Arc<dyn Host>`.
+  - `new_host_with_options(spawner, locale, HostOptions { logger: Option<Logger> }) -> Arc<dyn Host>`.
+  - `Logger` is `Arc<dyn Fn(&str) + Send + Sync>`; `Locale` is `tsrs_core::Locale`.
+  - There is no context. The owner must call `Host::close()`: the host does close itself on drop, but each project
+    lease holds the host, so the drop never happens while a `Project` or an `acquire` release is still outstanding.
+    `execute/tsc/compile.go`'s `defer host.Close()` must become an explicit `close()` on every path.
+- `trait Host: Send + Sync`:
+  - `timings() -> Timings`
+  - `project(ProjectSpec) -> Option<Arc<dyn Project>>` (None is Go's nil, after close)
+  - `acquire(&[&Mapper]) -> Box<dyn Fn() + Send + Sync>` (the release; only its first call counts)
+  - `set_locale(Locale)`
+  - `transform(&'static Mapper, Request<'_>) -> Result<TransformResultFiles, Error>` (panics after close, like Go)
+  - `close() -> Result<(), Error>`
+- `trait Project: Send + Sync`, every method callable from several threads at once:
+  - `refresh()`, `identities() -> Vec<String>`, `identity(&Mapper) -> String` (the mapper is found by address),
+    `watched_files() -> Vec<String>`, `transform(&Mapper, Request) -> TransformResultFiles` and `close()`, each wrapped
+    in `Result<_, Error>`.
+  - `diagnostics() -> Vec<OptionDiagnostic>`, without a `Result`.
+- `ProjectSpec { config_file_name: String, mappers: Vec<&'static Mapper>, compiler_options: Option<P<CompilerOptions>> }`.
+  Leases are keyed by the addresses of the mappers and of the options, so pass references into the command line's
+  `content_mappers()` and its `P<CompilerOptions>`.
+- Result and request types:
+  - `Request<'a> { file_name: &'a str, content: &'a str }`.
+  - Go's `Result` is `TransformResultFiles`, renamed so it doesn't shadow `std::result::Result` under a glob import.
+    Its fields are `text`, `virtual_extension`, `diagnostics: Vec<P<ast::Diagnostic>>`, `mappings:
+    Option<P<SpanMap>>`, `diagnostic_directives: Vec<ast::MappedDiagnosticDirective>` and `supplemental:
+    Vec<MappedResult>`.
+- Timing types: `Timings { mappers: OrderedMap<String, MapperTimings>, request_wait }` with `since(&Timings)`.
+  `MapperTimings` has `spawn`, `initialize`, `open_project`, `close_project` and `transform`, each an
+  `OperationTiming { count: u64, duration }`.
+- `OptionDiagnostic { mapper: &'static Mapper, path: Vec<OptionPathSegment>, source, code: i32, message_text }`.
+- Errors: one enum, `Error`, with these variants:
+  - `Transform(TransformError)`, where `TransformError` has a `kind: TransformErrorKind` of `Unknown`,
+    `Initialize`, `Project`, `Request`, `Response` or `Mappings`, and `unwrap()`.
+  - `DiagnosticDirective(DiagnosticDirectiveError)`.
+  - `InvalidVirtualExtension(InvalidVirtualExtensionError)`.
+  - `Project(ProjectError)`.
+  - `Initialize(Box<InitializeError>)`.
+  - `SupplementalFileCollision(SupplementalFileCollisionError)`.
+  - `Mapping(tsrs_spanmap::MappingError)`.
+  - `ProjectUnavailable`, Go's `ErrProjectUnavailable`, with its text in `ERR_PROJECT_UNAVAILABLE`.
+  - `Ipc(tsrs_ipc::Error)`.
+  - `Other(String)`.
+- How Go's error matching maps over:
+  - `errors.AsType[*X](err)` is `err.as_transform_error()`, `as_diagnostic_directive_error()`,
+    `as_invalid_virtual_extension_error()`, `as_project_error()`, `as_initialize_error()`,
+    `as_supplemental_file_collision_error()` or `as_mapping_error()`. Each looks through `TransformError`'s
+    wrapped error the way Go's `Unwrap` does.
+  - `errors.Is(err, ErrProjectUnavailable)` is `err.is_project_unavailable()`.
+  - The ipc sentinels are `err.is(ipc::ErrorTag::…)`.
+  - `err.error()` and `Display` give Go's text. `new_transform_error(kind, Option<Error>)` is Go's
+    `NewTransformError`.
+- Transform helpers (`transform.go`):
+  - `SourceFiles { canonical: Option<P<SourceFile>>, supplemental: Vec<P<SourceFile>> }`.
+  - `transform_and_parse(SourceFileParseOptions, content: &str, &Mapper, &dyn Project) -> Result<SourceFiles, Error>`.
+  - `parse_result(SourceFileParseOptions, content, &Mapper, transform_identity: &str, TransformResultFiles)`.
+  - `check_supplemental_file_name_collisions(&SourceFiles, impl FnMut(&str) -> bool) -> Result<(), Error>`.
+- Spawning:
+  - `trait Spawner: Send + Sync { fn spawn(&self, command: &[String], dir: &str, stderr: Option<Box<dyn Write + Send>>)
+    -> Result<tsrs_ipc::ReadWriteCloser, String> }`. A `None` stderr is Go's `io.Discard`.
+  - `SpawnerFunc(F)` wraps a closure as a `Spawner`.
+  - The production spawner is `ProcessSpawner`, Go's `osSys.Spawn`; its function is `spawn_process`.
+- Protocol: the types and constants are public, for the test mappers. That covers `METHOD_*`, `InitializeParams`,
+  `InitializeResult`, `OpenProjectParams`, `OpenProjectResult`, `OptionDiagnosticResult`, `CloseProjectParams`,
+  `TransformParams`, `MappedOutput`, `SupplementalOutput`, `TransformResult`, `Diagnostic`, `DiagnosticDirectives`,
+  `MappedDiagnosticDirective`, `UnusedExpectDirectiveDiagnostic`, `PositionEncoding::{UTF8, UTF16}` and
+  `DiagnosticDirectivePolicy::{Ignore, Expect}`. Each type implements `ProtocolJson`, whose `marshal_json` and
+  `unmarshal_json` follow Go's json tags. `unmarshal::<T>(Option<Value>)` decodes a type.
+- Process shutdown (`process.rs`):
+  - `close` closes stdin, kills the child, waits for it, then waits at most one second (Go's `WaitDelay`) for the
+    stderr copy.
+  - A descendant of the mapper that keeps the stdout pipe open keeps the host's read-loop thread blocked. Nothing
+    joins that thread, so `close` still returns at once; the thread and its descriptors stay until the descendant
+    exits.
+  - Tested by `process_test::test_host_close_does_not_wait_for_mapper_descendants` and by the port of Go's
+    `TestChildProcessCloseDoesNotWaitForLauncherDescendants`.
+- Crate `tsrs_contentmappertest`, Go's `testutil/contentmappertest`:
+  - The tsctests harness calls `new_spawner() -> Arc<dyn Spawner>` and
+    `new_spawner_with_project_lifecycle(Arc<ProjectLifecycle>)`; `ProjectLifecycle { opens, closes }` holds
+    `AtomicI32`s. It also uses `package_json(mapper)`, `PACKAGE_NAME`, the 18 mapper name constants
+    (`TRANSFORMING_MAPPER`, …, `DUPLICATE_PROJECTION_MAPPER`) and `DECLARED_OPTIONS`.
+  - `serve(ReadWriteCloser)` serves the transforming mapper, and `Handler` is that mapper.
+  - The spawner serves each mapper in-process over `tsrs_ipc::pipe()`, on a thread.
+  - `tsrs_fourslash::contentmappertest` re-exports this crate, and `tsrs_fourslash::contentmapper::Spawner` wraps its
+    spawner. The fourslash harness still rejects a test that sets a spawner (phase 2).
+- Tests:
+  - `tsrs_contentmapper` has the port of `transform_test.go` (3 tests) and of `host_test.go` (27 tests;
+    `TestMapperDiagnosticName` is in wave 1). The test that `close` does not wait for descendants is ported from
+    `cmd/tsc/sys_unix_test.go`.
+  - Two `process_test.rs` tests run `testdata/contentmapper/header-mapper` through `ProcessSpawner`. They need
+    `node` and skip without it.
+  - `tsrs_contentmappertest` has the port of `mapper_test.go` (`TestOutOfProcess`, with its own `main`).
