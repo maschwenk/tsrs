@@ -153,8 +153,27 @@ impl Checker {
     }
 
     // checker.go:26231
+    /// tsrs-only, after can1357's microsoft/TypeScript perf/checker-speedups-v3 (a3f430da0, 628f51ceb): each flattened
+    /// union is already sorted and unique, and filtering keeps that order, so only the boundaries between inputs can
+    /// leave the list unsorted. A sorted list skips the sort, two unions are merged directly, and otherwise the
+    /// ascending runs between those boundaries are merged (`merge_ascending_runs`) instead of sorting the whole list.
+    /// `compare_types` ends with the type id, so distinct types never compare equal and every correct sort of the same
+    /// list gives the same order. That holds only while `compare_symbols` is a total order
+    /// (`Program::source_files_complete`); otherwise this sorts as Go does.
     pub(crate) fn add_types_to_union(&mut self, source_types: &[P<Type>]) -> (Vec<P<Type>>, TypeFlags) {
-        let mut types: Vec<P<Type>> = Vec::with_capacity(source_types.len());
+        let total_order = self.program.source_files_complete();
+        let mut capacity = source_types.len();
+        if source_types.len() == 2 {
+            for &t in source_types {
+                if t.flags().intersects(TypeFlags::Union) {
+                    capacity += t.types().len() - 1;
+                }
+            }
+            if source_types[0] == source_types[1] {
+                capacity /= 2;
+            }
+        }
+        let mut types: Vec<P<Type>> = Vec::with_capacity(capacity);
         let mut includes = TypeFlags::empty();
         fn add_type(c: &mut Checker, types: &mut Vec<P<Type>>, includes: &mut TypeFlags, t: P<Type>) {
             let flags = t.flags();
@@ -183,9 +202,39 @@ impl Checker {
             }
             types.push(t);
         }
+        if total_order && source_types.len() == 2 && (source_types[0].flags() & source_types[1].flags()).intersects(TypeFlags::Union) {
+            for &t in source_types {
+                if t.alias().is_some() || t.as_union_type().origin().is_some() {
+                    includes |= TypeFlags::Union;
+                }
+            }
+            // Two sorted, unique runs: merge them (a constituent of both is added once).
+            let (mut left, mut right) = (source_types[0].types(), source_types[1].types());
+            while let (Some(&l), Some(&r)) = (left.first(), right.first()) {
+                if l == r {
+                    add_type(self, &mut types, &mut includes, l);
+                    left = &left[1..];
+                    right = &right[1..];
+                } else if compare_types(self, Some(l), Some(r)) < 0 {
+                    add_type(self, &mut types, &mut includes, l);
+                    left = &left[1..];
+                } else {
+                    add_type(self, &mut types, &mut includes, r);
+                    right = &right[1..];
+                }
+            }
+            for &t in left.iter().chain(right) {
+                add_type(self, &mut types, &mut includes, t);
+            }
+            return (types, includes);
+        }
+        // The flattened list is a sequence of ascending runs: a new run starts at an input whose first constituent is
+        // below the last one before it.
+        let mut run_starts: Vec<usize> = Vec::new();
         let mut last_type: Option<P<Type>> = None;
         for &t in source_types {
             if Some(t) != last_type {
+                let start = types.len();
                 if t.flags().intersects(TypeFlags::Union) {
                     let u = t.as_union_type();
                     if t.alias().is_some() || u.origin().is_some() {
@@ -197,12 +246,19 @@ impl Checker {
                 } else {
                     add_type(self, &mut types, &mut includes, t);
                 }
+                if total_order && start > 0 && types.len() > start && compare_types(self, Some(types[start - 1]), Some(types[start])) > 0 {
+                    run_starts.push(start);
+                }
                 last_type = Some(t);
             }
         }
         if types.len() >= 2 {
             // Sort and deduplicate types
-            tsrs_core::goslices::sort_stable_func(&mut types, |&a, &b| compare_types(self, Some(a), Some(b)));
+            if !total_order {
+                tsrs_core::goslices::sort_stable_func(&mut types, |&a, &b| compare_types(self, Some(a), Some(b)));
+            } else if !run_starts.is_empty() {
+                merge_ascending_runs(self, &mut types, &run_starts);
+            }
             let mut unique = 1;
             for i in 1..types.len() {
                 let t = types[i];
@@ -1139,10 +1195,69 @@ impl Checker {
     }
 }
 
+/// Sorts `types` by `compare_types` when it consists of ascending runs starting at 0 and at each of `run_starts`
+/// (`add_types_to_union`): one type next to a run is inserted by binary search, other runs are merged pairwise, which
+/// takes at most n comparisons per round and ceil(log2 runs) rounds. Requires `compare_types` to be a total order in
+/// which only identical types compare equal; a type in several runs ends up repeated next to itself.
+fn merge_ascending_runs(c: &mut Checker, types: &mut Vec<P<Type>>, run_starts: &[usize]) {
+    let n = types.len();
+    if let [mid] = *run_starts {
+        if mid == 1 || mid == n - 1 {
+            let t = types.remove(if mid == 1 { 0 } else { n - 1 });
+            let (i, _) = tsrs_core::goslices::binary_search_func(types, &t, |&probe, &t| compare_types(c, Some(probe), Some(t)));
+            types.insert(i, t);
+            return;
+        }
+    }
+    let mut bounds: Vec<usize> = Vec::with_capacity(run_starts.len() + 2);
+    bounds.push(0);
+    bounds.extend_from_slice(run_starts);
+    bounds.push(n);
+    let mut src = std::mem::take(types);
+    let mut dst: Vec<P<Type>> = Vec::with_capacity(n);
+    while bounds.len() > 2 {
+        let runs = bounds.len() - 1;
+        let mut next: Vec<usize> = Vec::with_capacity(runs / 2 + 2);
+        next.push(0);
+        dst.clear();
+        let mut j = 0;
+        while j < runs {
+            if j + 1 < runs {
+                let (mut left, mut right) = (&src[bounds[j]..bounds[j + 1]], &src[bounds[j + 1]..bounds[j + 2]]);
+                while let (Some(&l), Some(&r)) = (left.first(), right.first()) {
+                    if l == r || compare_types(c, Some(l), Some(r)) <= 0 {
+                        dst.push(l);
+                        left = &left[1..];
+                    } else {
+                        dst.push(r);
+                        right = &right[1..];
+                    }
+                }
+                dst.extend_from_slice(left);
+                dst.extend_from_slice(right);
+                next.push(bounds[j + 2]);
+                j += 2;
+            } else {
+                dst.extend_from_slice(&src[bounds[j]..bounds[j + 1]]);
+                next.push(bounds[j + 1]);
+                j += 1;
+            }
+        }
+        std::mem::swap(&mut src, &mut dst);
+        bounds = next;
+    }
+    *types = src;
+}
+
 // Go's containsType/insertType call CompareTypes, which needs the checker (Type has no checker back pointer),
 // so they take `c` like `compare_types`.
 // checker.go:27086
 pub(crate) fn contains_type(c: &mut Checker, types: &[P<Type>], t: P<Type>) -> bool {
+    // tsrs-only (can1357's 628f51ceb): small lists often hold the very type asked for, found without comparing
+    // structure; a miss still searches. Only while the binary search would find it too (a total order).
+    if types.len() <= 8 && types.contains(&t) && c.program.source_files_complete() {
+        return true;
+    }
     tsrs_core::goslices::binary_search_func(types, &t, |&probe, &t| compare_types(c, Some(probe), Some(t))).1
 }
 
