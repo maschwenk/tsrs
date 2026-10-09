@@ -167,3 +167,34 @@ Against main (xlz11b8b2f) at each tool's default: tsrs 0.547 -> 0.60 s (+9%) and
 tie at this precision; at 4, 8 and 16 threads bun check uses 25-35% less, at 64 threads 14% less. The parse cap moved
 the default from 2.94 GiB (no_thp alone, run wb4933tkmt) to 2.87 GiB; the 8-rep check of the same configuration (run
 ck9bqglbpt) gave 0.58 s / 2.87 GiB.
+
+## 2026-10-09: with mimalloc-safe, `no_thp` turned THP off for the whole process
+
+PR #248 replaced `mimalloc 0.1.52` (`libmimalloc-sys 0.1.49`, which compiles mimalloc v3.3.2 with cc) by
+`mimalloc-safe 0.1.67` with `v3` (`libmimalloc-sys2 0.1.63`, mimalloc v3.5.2 with cmake) and kept `no_thp`. The two
+crates implement that feature differently:
+
+- `libmimalloc-sys` defines the C macro `MI_NO_THP`, which only removes the `madvise(MADV_HUGEPAGE)` in `unix_mmap`.
+  `allow_thp` keeps its default, 1.
+- `libmimalloc-sys2` sets the cmake option `MI_NO_THP`, which mimalloc's CMakeLists.txt turns into `MI_ALLOW_THP=OFF`,
+  a default `allow_thp = 0`. mimalloc's start-up (a constructor, before `main`) then calls
+  `prctl(PR_SET_THP_DISABLE, 1)` in `_mi_prim_mem_init`: the `MIMALLOC_ALLOW_THP=0` configuration of the Mechanism
+  section above, with no huge pages for the arena either.
+
+pr-verify on #248 (Depot, 32 vCPU, THP `madvise`, release builds, base 6bca8096) showed it on all 17 projects: wall
++3% to +25% (median over 1, 4, 16 and 32 checkers +4.4% to +16.6% per project), peak RSS 0% to -31%, single-threaded
+instructions +0.06% to +0.40%, so page-fault and TLB work rather than instructions. #248's own measurement ran on
+macOS, which has no THP; on an M-series Mac at the default checker count, 7 interleaved runs, main and its parent
+90b0fb48 are the same within noise (paired median wall: drizzle-orm -5.1%, t3code-server +1.7%, vscode +1.4%; peak
+RSS within 1%).
+
+`main` in `tsrs_cli` now calls `prctl(PR_SET_THP_DISABLE, 0)` first on Linux, unless `MIMALLOC_ALLOW_THP` is set.
+mimalloc keeps `allow_thp = 0`, so it still does not advise its heap, and its minimal purge size stays the OS page as
+with 3.3.2 (2 MiB only for `allow_thp = 2`). Checked in a Linux container (kernel 7.0, THP `madvise`) with mimalloc
+compiled the way each crate compiles it and a C program that reads `/proc/self/status`:
+
+| mimalloc build | THP for the process | `MADV_HUGEPAGE` 8 MiB region | fully written 64 MiB mimalloc block |
+| --- | --- | ---: | ---: |
+| 3.3.2, `libmimalloc-sys` `no_thp` (before #248) | on | 8,192 KiB huge | 0 KiB huge |
+| 3.5.2, `libmimalloc-sys2` `no_thp` (#248) | off (`THP_enabled: 0`) | 0 KiB huge | not run |
+| 3.5.2, then `prctl(PR_SET_THP_DISABLE, 0)` (this fix) | on, also after a new thread allocates 3 GiB | 8,192 KiB huge | 0 KiB huge |
