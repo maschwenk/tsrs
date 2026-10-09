@@ -1,5 +1,41 @@
 # Status
 
+## 2026-10-09: 0.9.1 release
+
+A bug-fix release for the language server, with two peak-memory cuts and a diagnostic trace from the days in between;
+the TypeScript source pin remains `b85298b6a81f772d080b0455de0ca9d744cd6fd6` (7.1.0-dev.20260929) and the published
+package set is unchanged (`@maschwenk/tsrs` and `@maschwenk/tsrs-wasm` at `0.9.1-ts7.1.0-dev.20260929`).
+
+Language server: the first diagnostics after an edit could segfault on a large project (reproduced on 0.7.0 and 0.9.0;
+reported and fixed by @walkerdb, #224). The file loader keyed each file's module resolutions by the import specifier's
+text, borrowed from that file version's syntax tree; a reused program shares the resolution map with the next program,
+and once the language server freed the edited file's old version, `get_resolved_module_by_path` compared the key
+against freed memory. The two keys are now copied into the loader's own arena, as the type-reference keys next to them
+already were. The cold `tsrs -p` path never hit the bug (no file version is freed there) and pays one copy per import
+specifier: pr-verify found identical diagnostics in 102 of 102 cells and vscode single-threaded instructions +0.02%. A
+test drives `tsrs --lsp` through open, diagnostics, edit and diagnostics under `TSRS_ARENA_POISON=1`.
+
+Memory, in the default history mode only (`--checkerAssignment go` is unchanged): on excalidraw every checker ran one
+type-argument constraint check whose diagnostics only the checker that checks the file keeps, each spending about
+0.3 s and 120 MiB on error elaboration that was thrown away; the check now runs only in the checker that checks the
+file, at the start of that file (#212: excalidraw peak -66% at 9 checkers; the `--extendedDiagnostics` Types and
+Instantiations counters drop on multi-checker runs). Tuple targets share one type parameter and one index name per
+element index per checker instead of a fresh one per element of every target, which Go's `createTupleTargetType` makes
+4.6M of on type-fest; the element symbols stay per target (#217: type-fest peak -29% at one checker and -31% at 8,
+`Types` 5.10M -> 0.52M at one checker; an audit build that logged any element parameter observed outside its own
+target's mappers found none over the conformance suite, fourslash and the bench projects).
+
+Diagnosing TS2590 (#219, for #218): `TSRS_TRACE_UNION_REDUCTION=1` prints one line per subtype reduction of a union of
+more than 1,000 types, with fingerprints of the constituent set, its order and the removed members, so two runs that
+disagree on "union type too complex to represent" show which input differed (docs/DEBUGGING.md,
+notes/open-history-dependence.md section 4). The reporter's case turned out to come from the other TS2590 site,
+`check_cross_product_union`: a checker reports it at a site only if it has not already built that type, for example by
+checking the file that builds it first, so under work stealing it flips between runs; tsgo has the same history
+dependence for a fixed assignment (the discussion on #219).
+
+Benchmarks and CI: the README scoreboard moved to a 16-vCPU Depot runner, tsrs at its default 8 checkers against
+`bun check` at 16 threads (#209); pr-verify runs on every pull request that changes `crates/` (#225).
+
 ## 2026-10-08: 0.9.0 release
 
 The WebAssembly build, published as a new package, and less peak memory at the default checker count; the
