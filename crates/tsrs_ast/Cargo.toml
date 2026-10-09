@@ -14,3 +14,8 @@ rustc-hash.workspace = true
 hashbrown.workspace = true
 bitflags.workspace = true
 memchr.workspace = true
+
+[features]
+# TOOL: TSRS_AST_SIZING=<file> counts the parsed program's syntax tree (src/sizing.rs, notes/mem-compact-ast-sizing.md).
+# Off by default; nothing of it is compiled into normal builds.
+ast-sizing = []
