@@ -1,4 +1,5 @@
 pub mod arena;
+pub mod arena_owner;
 pub mod ptr;
 #[cfg(compressed_ptrs)]
 pub mod reserve;
