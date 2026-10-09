@@ -68,8 +68,8 @@ pub trait Script {
     fn original_text(&self) -> &str;
 }
 
-// Content mappers are not ported: no SourceFile has a span map (ast.go SpanMap returns nil when
-// contentMapperInfo is nil).
+// The language server does not support content mappers yet (phase 2 of notes/contentmappers.md): it never loads a
+// content-mapped file, and its scripts report no span map.
 impl Script for SourceFile {
     fn file_name(&self) -> &str {
         SourceFile::file_name(self)

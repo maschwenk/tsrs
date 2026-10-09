@@ -1,0 +1,5 @@
+{
+  "name": "header-mapper",
+  "version": "1.0.0",
+  "typescript": { "contentMapper": { "exec": ["node", "mapper.mjs"] } }
+}

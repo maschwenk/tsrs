@@ -152,7 +152,7 @@ Ported so far: 4,277 of 24,418 lines (the declaration transformer and the base).
 
 | Go | lines | tsrs status |
 | --- | ---: | --- |
-| emitter.go | 576 | partly: `sourceFileMayBeEmitted` (without the content-mapper line; content mappers are not supported), `getSourceFilesToEmit`, `getDeclarationDiagnostics` (emitter.rs). Missing: the `emitter` type, `emit`, `emitJSFile`, `emitDeclarationFile`, `getScriptTransformers`, `getModuleTransformer`, `runScriptTransformers`, `runDeclarationTransformers`, `printSourceFile`, `writeText`, `shouldEmitSourceMaps`, `getSourceRoot`, `getSourceMapDirectory`, `getSourceMappingURL`, `declarationMapSource`. |
+| emitter.go | 576 | partly: `sourceFileMayBeEmitted`, `getSourceFilesToEmit`, `getDeclarationDiagnostics` (emitter.rs). Missing: the `emitter` type, `emit`, `emitJSFile`, `emitDeclarationFile`, `getScriptTransformers`, `getModuleTransformer`, `runScriptTransformers`, `runDeclarationTransformers`, `printSourceFile`, `writeText`, `shouldEmitSourceMaps`, `getSourceRoot`, `getSourceMapDirectory`, `getSourceMappingURL`, `declarationMapSource`. |
 | emitHost.go | 138 | partly: the declaration-emit surface (emithost.rs: output paths, module-specifier host, `DeclarationEmitHost`). Missing: `Options`, `SourceFiles`, `IsEmitBlocked`, `WriteFile`, `GetEmitModuleFormatOfFile`, the `printer.EmitHost` impl. |
 | program.go | | `IsEmitBlocked`, `blockEmittingOfFile`, `GetEmitModuleFormatOfFile`, `CommonSourceDirectory`, `getSourceFilesToEmit`, `GetDiagnosticsOfAnyProgram` exist. Missing: `Emit` (program.go:1875), `EmitOptions`/`EmitResult`/`SourceMapEmitResult`, `CombineEmitResults`, `HandleNoEmitOptions`. |
 
@@ -446,8 +446,9 @@ then-current main:
 - **Helpers.** helpers.go definitions are `static`s in `tsrs_printer/src/helpers_defs.rs` (text copied byte for
   byte), handed out with `P::from_static` (now a `const fn`), so identity comparisons behave like Go's pointers.
   The rest of factory.go is `tsrs_printer/src/factory_2.rs` (`PrivateIdentifierKind` is an enum with `as_str`).
-- **Content mappers** are not supported by tsrs (the harness skips `runExternalCode`). Go's branch structure is
-  kept where emit code checks `ContentMapper()`/`SpanMap()`, with the mapper always absent.
+- **Content mappers** are ported for `tsc` and `tsc -b` (notes/contentmappers.md): a content-mapped file is not
+  emitted unless declarations are, and declaration maps point into the original text through the span map. The
+  conformance runner still skips the `runExternalCode` cases.
 - **Checker assignment.** With several checkers, tsrs assigns files to checkers by directory locality (Go: FENNEL).
   In tsgo, inferred types printed into `.d.ts` files can depend on which files a checker saw first: it caches the
   filled-in `x?: undefined` property of widened object literals per name. tsrs keys it by the property it stands for,
@@ -512,7 +513,8 @@ then-current main:
   ops of every edit, both in the incremental run and replayed from scratch for the non-incremental comparison. The
   harness (`crates/tsrs_execute/src/tsctests`, a `#[cfg(test)]` module of the driver crate because it drives
   `execute::command_line_with_testing`) replays them with a fake clock, the FS differ, the readable buildinfo and the
-  output sanitizer of `tsctests/sys.go`. Watch and content-mapper scenarios are skipped.
+  output sanitizer of `tsctests/sys.go`. Watch scenarios are skipped; content-mapper scenarios use the in-process
+  test mappers of `tsrs_contentmappertest`.
 
 ## 11. Coordination with the LSP port
 

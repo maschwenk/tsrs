@@ -110,6 +110,11 @@ pub fn get_diagnostics_of_any_program_like(
 
     let mut syntactic_diagnostics = Vec::new();
     append_diagnostics_for_all_files(&mut syntactic_diagnostics, &mut |ctx, f| program.get_syntactic_diagnostics(ctx, f));
+    if !syntactic_diagnostics.is_empty() {
+        // Per-file content mapper failures are syntactic diagnostics, but the locationless diagnostic
+        // that disables a repeatedly failing mapper must still be reported.
+        all_diagnostics.extend_from_slice(&program.program().content_mapper_diagnostics);
+    }
     all_diagnostics.extend(syntactic_diagnostics);
 
     // If we didn't have any syntactic errors, then also try getting the program (options),

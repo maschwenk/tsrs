@@ -77,6 +77,12 @@ pub struct Orchestrator {
     pub(crate) compare_paths_options: ComparePathsOptions,
     host: OnceLock<&'static host>,
 
+    // contentMapperHost transforms content-mapped files; it is created once per build session (when
+    // enabled) and shared across all projects so mapper processes are consolidated. It closes itself when
+    // the session context is cancelled (see contentmapper.New).
+    // (Here `start_worker` closes it when the session ends.)
+    pub(crate) content_mapper_host: Mutex<Option<Arc<dyn tsrs_contentmapper::Host>>>,
+
     // order generation result
     tasks: Mutex<FxHashMap<Path, P<BuildTask>>>,
     order: Mutex<Vec<String>>,
@@ -170,6 +176,7 @@ impl Orchestrator {
                     // Reuse existing task if config is same
                     task = Some(*existing);
                 } else {
+                    existing.close_content_mapper_project();
                     build_info = existing.take_build_info_entry();
                 }
             }
@@ -266,6 +273,16 @@ impl Orchestrator {
             self.setup_build_task(project, None, false, &mut completed, &mut analyzing, &mut circularity_stack);
         }
         *self.schedule_order.lock().unwrap() = self.compute_schedule_order();
+        if let Some(old_tasks) = old_tasks {
+            // Each old task is closed on its own; the order does not matter.
+            #[expect(clippy::iter_over_hash_type, reason = "closes each replaced task's content mapper project; no output depends on the order")]
+            for (path, old_task) in old_tasks {
+                if self.tasks.lock().unwrap().get(path).is_some_and(|task| *task == *old_task) {
+                    continue;
+                }
+                old_task.close_content_mapper_project();
+            }
+        }
         self.graph_generated.store(true, Ordering::SeqCst);
     }
 
@@ -405,7 +422,10 @@ impl Orchestrator {
 
     // orchestrator.go:311
     fn start_worker(&'static self, project: &str, only_references: bool) -> OrchestratorResult {
-        // Content mappers are not supported by tsrs. Watch mode is not ported.
+        let content_mapper_host = tsc::new_content_mapper_host(self.opts.sys, &self.opts.command.compiler_options);
+        self.content_mapper_host.lock().unwrap().clone_from(&content_mapper_host);
+        // Go defers the host's Close unless this is a watch session under test; watch mode is not ported.
+        let _close_content_mapper_host = tsc::contentMapperCloser { host: content_mapper_host, project: None };
         {
             let _region = self.enter_api_region();
             if self.graph_generated.load(Ordering::SeqCst) {
@@ -692,10 +712,11 @@ pub fn new_orchestrator(opts: Options) -> &'static Orchestrator {
         regions: Mutex::new(Vec::new()),
         use_regions: AtomicBool::new(false),
         api_clean_exists: Mutex::new(FxHashMap::default()),
+        content_mapper_host: Mutex::new(None),
     }));
     let cached_fs = Arc::new(tsrs_vfs::cachedvfs::from(sys.fs()));
     let compiler_host: Arc<dyn CompilerHost> =
-        tsrs_compiler::new_compiler_host(sys.get_current_directory(), Arc::<tsrs_vfs::cachedvfs::FS<_>>::clone(&cached_fs), sys.default_library_path(), None, None);
+        tsrs_compiler::new_compiler_host(sys.get_current_directory(), Arc::<tsrs_vfs::cachedvfs::FS<_>>::clone(&cached_fs), sys.default_library_path(), None, None, None);
     let h: &'static host = Box::leak(Box::new(host {
         orchestrator: OnceLock::new(),
         host: compiler_host,

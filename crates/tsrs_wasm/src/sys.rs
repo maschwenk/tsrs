@@ -77,6 +77,11 @@ impl System for WasmSys {
         self.start.elapsed()
     }
 
+    // Go's osSys.Spawn (cmd/tsc/sys.go:68), which WASI cannot carry out: the mapper's initialization then fails.
+    fn spawn(&self, command: &[String], dir: &str, stderr: Option<Box<dyn Write + Send>>) -> Result<tsrs_execute::tsc::ReadWriteCloser, String> {
+        tsrs_contentmapper::spawn_process(command, dir, stderr)
+    }
+
     fn diagnostic_sink(&self) -> Option<&(dyn Fn(P<Diagnostic>) + Sync)> {
         self.sink.as_deref().map(|f| f as &(dyn Fn(P<Diagnostic>) + Sync))
     }

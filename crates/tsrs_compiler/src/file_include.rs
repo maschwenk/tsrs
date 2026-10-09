@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
 use tsrs_ast::{self as ast, new_compiler_diagnostic, new_diagnostic, Diagnostic, FileReference, Kind, Node, SourceFile};
-use tsrs_core::tspath::{self};
+use tsrs_core::tspath::{self, Path};
 use tsrs_core::P;
 use tsrs_diagnostics::{self as diagnostics, Message};
 use tsrs_module::PackageId;
@@ -20,19 +20,30 @@ pub enum fileIncludeKind {
     RootFile,
     LibFile,
     AutomaticTypeDirectiveFile,
+    ContentMapperSupplemental,
 }
 
+// fileInclude.go:29
 pub struct FileIncludeReason {
     pub(crate) kind: fileIncludeKind,
     pub(crate) index: usize,
     pub(crate) is_default_lib: bool,
     pub(crate) referenced_file: Option<referencedFileData>,
     pub(crate) automatic_type_directive: Option<P<automaticTypeDirectiveFileData>>,
+    // Go `tspath.Path`, set only for a supplemental content-mapper output (an arena handle: one per supplemental file).
+    pub(crate) canonical_source_file: Option<P<Path>>,
 }
 
 impl FileIncludeReason {
     pub(crate) fn new(kind: fileIncludeKind) -> FileIncludeReason {
-        FileIncludeReason { kind, index: 0, is_default_lib: false, referenced_file: None, automatic_type_directive: None }
+        FileIncludeReason {
+            kind,
+            index: 0,
+            is_default_lib: false,
+            referenced_file: None,
+            automatic_type_directive: None,
+            canonical_source_file: None,
+        }
     }
 
     pub(crate) fn new_referenced(kind: fileIncludeKind, file: &'static str, index: i32, synthetic: Option<P<Node>>) -> P<FileIncludeReason> {
@@ -258,6 +269,14 @@ fn compute_diagnostic(r: P<FileIncludeReason>, program: &Program, to_file_name: 
                 new_compiler_diagnostic(&diagnostics::Default_library, &[])
             }
         }
+        // fileInclude.go:209
+        fileIncludeKind::ContentMapperSupplemental => {
+            let canonical = program.get_source_file_by_path(r.canonical_source_file.as_deref().unwrap()).unwrap();
+            new_compiler_diagnostic(
+                &diagnostics::Supplemental_virtual_file_produced_by_the_content_mapper_for_file_0,
+                &[&to_file_name(canonical.file_name())],
+            )
+        }
         _ => panic!("unknown reason: {:?}", r.kind),
     }
 }
@@ -412,6 +431,8 @@ pub(crate) fn to_related_info(r: P<FileIncludeReason>, program: &Program) -> Opt
                 }
             }
         }
+        // fileInclude.go:293
+        fileIncludeKind::ContentMapperSupplemental => return None,
         _ => panic!("unknown reason: {:?}", r.kind),
     }
     None

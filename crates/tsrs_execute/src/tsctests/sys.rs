@@ -500,6 +500,13 @@ impl System for TestSys {
     fn now_time(&self) -> SystemTime {
         self.clock.now()
     }
+    // Spawn serves the fake content mappers in-process, selecting the implementation by the exec command the
+    // mapper package declares (see internal/testutil/contentmappertest), so tests exercise the full IPC stack
+    // without spawning a subprocess.
+    // sys.go:252
+    fn spawn(&self, command: &[String], dir: &str, stderr: Option<Box<dyn std::io::Write + Send>>) -> Result<crate::tsc::ReadWriteCloser, String> {
+        tsrs_contentmappertest::new_spawner().spawn(command, dir, stderr)
+    }
 }
 
 impl CommandLineTesting for TestSys {

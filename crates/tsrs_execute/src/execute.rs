@@ -293,12 +293,17 @@ fn perform_compilation(
     mut compile_times: CompileTimes,
     testing: Option<&'static dyn tsc::CommandLineTesting>,
 ) -> CommandLineResult {
+    let content_mapper_host = tsc::new_content_mapper_host(sys, &config.compiler_options().unwrap());
+    let content_mapper_project = get_content_mapper_project(content_mapper_host.as_ref(), config);
+    let _close_content_mappers =
+        tsc::contentMapperCloser { host: content_mapper_host.clone(), project: content_mapper_project.clone() };
     let host = new_cached_fs_compiler_host(
         sys.get_current_directory(),
         sys.fs(),
         sys.default_library_path(),
         Some(extended_config_cache),
         Some(get_trace_from_sys(sys, testing)),
+        content_mapper_project,
     );
 
     // tsrs-only (notes/mem-free-leaf-files.md): a `--noEmit` check frees the tree of each file that nothing else
@@ -330,6 +335,9 @@ fn perform_compilation(
     let parse_start = sys.now();
     let program = new_program(program_options);
     compile_times.parse_time = sys.now() - parse_start;
+    if let Some(content_mapper_host) = &content_mapper_host {
+        compile_times.content_mapper_times = content_mapper_host.timings();
+    }
     let (result, _) = emit_and_report_statistics(&EmitInput {
         sys,
         program,
@@ -367,12 +375,17 @@ fn perform_incremental_compilation(
     mut compile_times: CompileTimes,
     testing: Option<&'static dyn tsc::CommandLineTesting>,
 ) -> CommandLineResult {
+    let content_mapper_host = tsc::new_content_mapper_host(sys, &config.compiler_options().unwrap());
+    let content_mapper_project = get_content_mapper_project(content_mapper_host.as_ref(), config);
+    let _close_content_mappers =
+        tsc::contentMapperCloser { host: content_mapper_host.clone(), project: content_mapper_project.clone() };
     let host = new_cached_fs_compiler_host(
         sys.get_current_directory(),
         sys.fs(),
         sys.default_library_path(),
         Some(extended_config_cache),
         Some(get_trace_from_sys(sys, testing)),
+        content_mapper_project,
     );
     // Go reads the old program and then builds the new one. The two are independent (the read only uses the
     // config and the host's file system, both thread-safe), so the read runs on its own thread while the program
@@ -405,6 +418,9 @@ fn perform_incremental_compilation(
     let incremental_program =
         tsrs_incremental::new_program(program, old_program, tsrs_incremental::create_host(host), Some(std::time::Instant::now), testing.is_some());
     compile_times.changes_compute_time = sys.now() - changes_compute_start;
+    if let Some(content_mapper_host) = &content_mapper_host {
+        compile_times.content_mapper_times = content_mapper_host.timings();
+    }
     let (result, _) = emit_and_report_statistics(&EmitInput {
         sys,
         program: incremental_program.get_program(),
@@ -423,6 +439,24 @@ fn perform_incremental_compilation(
         testing.on_program(incremental_program);
     }
     CommandLineResult { status: result.status }
+}
+
+// tsc.go:394
+fn get_content_mapper_project(
+    host: Option<&Arc<dyn tsrs_contentmapper::Host>>,
+    config: P<ParsedCommandLine>,
+) -> Option<Arc<dyn tsrs_contentmapper::Project>> {
+    let host = host?;
+    // References into the command line's own list (an arena object): the host keys the project by their addresses.
+    let config: &'static ParsedCommandLine = config.get();
+    if config.content_mappers().is_empty() {
+        return None;
+    }
+    host.project(tsrs_contentmapper::ProjectSpec {
+        config_file_name: config.config_name().to_string(),
+        mappers: config.content_mappers().iter().collect(),
+        compiler_options: config.compiler_options(),
+    })
 }
 
 // tsc.go:93

@@ -13,6 +13,8 @@ mod programtosnapshot;
 mod referencemap;
 mod snapshot;
 mod snapshottobuildinfo;
+#[cfg(test)]
+mod buildinfo_contentmapper_test;
 
 pub use buildinfo::*;
 pub use host::{create_host, get_m_time, Host};

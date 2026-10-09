@@ -14,7 +14,7 @@ use tsrs_vfs::FS;
 
 use crate::commandlineoption::{CommandLineOption, CommandLineOptionKind, CompilerOptionsValue, ExtraValidation};
 use crate::commandlineparser::{convert_json_option_of_enum_type, try_read_file};
-use crate::contentmappers::{resolve_content_mapper_manifest, Mapper};
+use crate::contentmappers::{resolve_content_mapper_manifest, Mapper, OptionPathSegment};
 use crate::declscompiler::{OPTIONS_FOR_COMPILER, OPTIONS_DECLARATIONS};
 use crate::declstypeacquisition::TYPE_ACQUISITION_DECLARATION;
 use crate::errors::{
@@ -875,8 +875,8 @@ pub trait ParseConfigHost: Send + Sync {
     fn get_current_directory(&self) -> &str;
 }
 
-struct ResolverHost {
-    host: &'static dyn ParseConfigHost,
+pub(crate) struct ResolverHost {
+    pub(crate) host: &'static dyn ParseConfigHost,
 }
 
 impl tsrs_module::ResolutionHost for ResolverHost {
@@ -2088,6 +2088,49 @@ fn get_content_mapper_syntax(source_file: Option<P<SourceFile>>, index: i32, sub
         }
         Some(element)
     })
+}
+
+// tsconfigparsing.go:1706
+pub fn get_content_mapper_option_diagnostic_location(
+    config: Option<&ParsedCommandLine>,
+    mapper: &Mapper,
+    path: &[OptionPathSegment],
+) -> (Option<P<SourceFile>>, TextRange) {
+    let Some(config) = config else {
+        return (None, tsrs_core::undefined_text_range());
+    };
+    let Some(config_file) = config.config_file else {
+        return (None, tsrs_core::undefined_text_range());
+    };
+    // Go `slices.Index(config.ContentMappers(), mapper)` compares the *Mapper pointers.
+    let index = config.content_mappers().iter().position(|m| std::ptr::eq(m, mapper)).map_or(-1, |i| i as i32);
+    let mapper_node = get_content_mapper_syntax(Some(config_file.source_file), index, "");
+    let mut node = get_content_mapper_syntax(Some(config_file.source_file), index, "options");
+    if node.is_none() {
+        node = mapper_node;
+    }
+    for segment in path {
+        // Go dereferences the node here even when it is nil (ast.IsArrayLiteralExpression / IsObjectLiteralExpression).
+        let current = node.unwrap();
+        let mut next = None;
+        if segment.is_index && tsrs_ast::is_array_literal_expression(current) {
+            let elements = current.elements();
+            if segment.index < elements.len() {
+                next = Some(elements[segment.index]);
+            }
+        } else if !segment.is_index && tsrs_ast::is_object_literal_expression(current) {
+            next = for_each_property_assignment(Some(current), &segment.property, |property| property.initializer(), None);
+        }
+        if next.is_none() {
+            break;
+        }
+        node = next;
+    }
+    let Some(node) = node else {
+        return (None, tsrs_core::undefined_text_range());
+    };
+    let file = config_file.source_file;
+    (Some(file), TextRange::new(tsrs_scanner::skip_trivia(file.text(), node.pos()), node.end()))
 }
 
 // getContentMappersKeySyntax returns the "contentMappers" property key node, used to attribute a

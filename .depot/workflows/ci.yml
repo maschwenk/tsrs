@@ -82,8 +82,10 @@ jobs:
       - name: cargo test (fast crates)
         run: >-
           cargo test --locked --no-fail-fast
-          -p tsrs_core -p tsrs_ast -p tsrs_scanner -p tsrs_diagnostics -p tsrs_vfs -p tsrs_module
-          -p tsrs_tsoptions -p tsrs_printer -p tsrs_modulespecifiers -p tsrs_compiler -p tsrs_testrunner -p tsrs_cli
+          -p tsrs_core -p tsrs_spanmap -p tsrs_ipc -p tsrs_contentmapper -p tsrs_contentmappertest -p tsrs_ast -p tsrs_scanner
+          -p tsrs_diagnostics -p tsrs_vfs -p tsrs_module
+          -p tsrs_tsoptions -p tsrs_printer -p tsrs_modulespecifiers -p tsrs_compiler -p tsrs_incremental -p tsrs_execute
+          -p tsrs_testrunner -p tsrs_cli
 
       - name: Build release binaries
         run: cargo build --release --locked -p tsrs_cli -p tsrs_testrunner -p tsrs_fourslash
@@ -108,6 +110,11 @@ jobs:
       # testdata/regressions: bugs found outside the conformance suite, each with tsgo-ref's output.
       - name: Regression cases
         run: tools/regressions.sh target/release/tsrs
+
+      # testdata/contentmapper: projects with a Node content mapper, run through the real process spawner, each with
+      # tsgo's output.
+      - name: Content mapper cases
+        run: tools/contentmapper-e2e.sh target/release/tsrs
 
       - name: Fourslash (language service) suite
         run: .github/scripts/fourslash-gate.sh

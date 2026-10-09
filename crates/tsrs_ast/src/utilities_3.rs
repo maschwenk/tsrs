@@ -1227,14 +1227,6 @@ pub fn is_non_contextual_keyword(token: Kind) -> bool {
     is_keyword(token) && !is_contextual_keyword(token)
 }
 
-impl SourceFile {
-    // ast.go:2659 SupplementalSourceFiles returns the additional outputs produced from this canonical source file.
-    // Content mappers are not ported, so there are none (Go: `contentMapperInfo == nil`).
-    pub fn supplemental_source_files(&self) -> &'static [P<SourceFile>] {
-        &[]
-    }
-}
-
 // utilities.go:1703
 pub fn is_external_module_indicator(node: P<Node>) -> bool {
     // Exported top-level member indicates moduleness

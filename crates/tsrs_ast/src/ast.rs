@@ -11,6 +11,7 @@ use tsrs_core::{
     FrozenCell, OwnedCell, ScriptKind, TextPos, TextRange, ThinSlice, Tristate, P,
 };
 use tsrs_diagnostics as diagnostics;
+use tsrs_spanmap::SpanMap;
 
 use crate::*;
 
@@ -1701,6 +1702,8 @@ pub struct SourceFile {
     // Fields set by NewSourceFile
     parse_options: SourceFileParseOptions,
     text: &'static str,
+    // Written once by the file loader (SetContentMapperInfo) before the file is published.
+    content_mapper_info: OwnedCell<Option<P<ContentMapperSourceFileInfo>>>,
     pub statements: P<NodeList>,       // NodeList[*Statement]
     pub end_of_file_token: P<Node>, // TokenNode[*EndOfFileToken]
 
@@ -1786,6 +1789,7 @@ impl NodeFactory {
             locals_container_base: LocalsContainerBase { locals: OwnedCell::new(None), next_container: OwnedCell::new(None) },
             parse_options: opts,
             text,
+            content_mapper_info: OwnedCell::new(None),
             statements,
             end_of_file_token,
             diagnostics: OwnedCell::new(&[]),
@@ -1856,36 +1860,153 @@ impl SourceFile {
         self.text
     }
 
-    // Content mappers are not ported: every file is its own original.
-
     // OriginalText returns the untransformed source text for content-mapped files, or Text() otherwise.
+    // ast.go:2548
     pub fn original_text(&self) -> &'static str {
+        if !self.content_mapper().is_empty() {
+            return self.content_mapper_info.get().unwrap().original_text;
+        }
         self.text
     }
 
     // OriginalFileName returns the canonical filename associated with a supplemental source file, or FileName() otherwise.
+    // ast.go:2556
     pub fn original_file_name(&self) -> &str {
+        if let Some(canonical) = self.canonical_source_file() {
+            return canonical.get().file_name();
+        }
         self.file_name()
     }
 
+    // SpanMap returns the span map that maps positions in this file's transformed Text() back to its
+    // original, untransformed content, or nil if the file is not content-mapped (or is a failure stub).
+    // The returned map is nil-safe: a nil map maps positions identically.
+    // ast.go:2566 (the nil-safe calls are the `tsrs_spanmap` free functions taking `Option<&SpanMap>`.)
+    pub fn span_map(&self) -> Option<P<SpanMap>> {
+        let info = self.content_mapper_info.get()?;
+        info.span_map
+    }
+
+    // IsContentMapped reports whether this file was produced by a content mapper.
+    // ast.go:2574
     pub fn is_content_mapped(&self) -> bool {
-        false
+        self.content_mapper_info.get().is_some()
     }
 
+    // ContentMapper returns the identity of the content mapper that produced this file, or "" if the file
+    // was not produced by a content mapper (or the mapper did not identify itself).
+    // ast.go:2580
     pub fn content_mapper(&self) -> &'static str {
-        ""
+        match self.content_mapper_info.get() {
+            None => "",
+            Some(info) => info.content_mapper,
+        }
     }
 
+    // IsContentMapperFailureStub reports whether this file is the empty placeholder produced when a content
+    // mapper's transform failed.
+    // ast.go:2589
     pub fn is_content_mapper_failure_stub(&self) -> bool {
-        false
+        !self.content_mapper().is_empty() && self.span_map().is_none()
     }
 
+    // ast.go:2593
+    pub fn content_mapper_transform_identity(&self) -> &'static str {
+        match self.content_mapper_info.get() {
+            None => "",
+            Some(info) => info.transform_identity,
+        }
+    }
+
+    // ast.go:2600
+    pub fn virtual_file_name(&self) -> &'static str {
+        match self.content_mapper_info.get() {
+            None => "",
+            Some(info) => info.virtual_file_name,
+        }
+    }
+}
+
+// ast.go:2607
+#[repr(u8)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
+pub enum MappedDiagnosticDirectivePolicy {
+    #[default]
+    Ignore,
+    Expect,
+}
+
+// ast.go:2614
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
+pub struct MappedDiagnosticDirective {
+    pub original_range: TextRange,
+    pub virtual_range: TextRange,
+    pub policy: MappedDiagnosticDirectivePolicy,
+    pub unused_code: i32,
+    pub unused_message_text: &'static str,
+    pub source: &'static str,
+}
+
+// ast.go:2623 (strings and slices are arena data, like the other fields of a published SourceFile.)
+#[derive(Clone, Debug, Default)]
+pub struct ContentMapperSourceFileInfo {
+    pub content_mapper: &'static str,
+    pub transform_identity: &'static str,
+    pub parse_options: SourceFileParseOptions,
+    pub virtual_file_name: &'static str,
+    pub original_text: &'static str,
+    pub span_map: Option<P<SpanMap>>,
+    pub diagnostic_directives: &'static [MappedDiagnosticDirective],
+    pub supplemental_source_files: &'static [P<SourceFile>],
+    pub canonical_source_file: Option<P<SourceFile>>,
+}
+
+impl SourceFile {
+    // ContentMapperParseOptions returns the parse options used to acquire this file from the mapped parse cache.
+    // ast.go:2636
+    pub fn content_mapper_parse_options(&self) -> SourceFileParseOptions {
+        match self.content_mapper_info.get() {
+            None => SourceFileParseOptions::default(),
+            Some(info) => info.parse_options.clone(),
+        }
+    }
+
+    // SetContentMapperInfo initializes all content-mapper metadata before the source file is published.
+    // ast.go:2644
+    pub fn set_content_mapper_info(&self, info: ContentMapperSourceFileInfo) {
+        if self.content_mapper_info.get().is_some() {
+            panic!("content mapper source file info already set");
+        }
+        self.content_mapper_info.set(Some(P::new(info)));
+    }
+
+    // ast.go:2651
+    pub fn diagnostic_directives(&self) -> &'static [MappedDiagnosticDirective] {
+        match self.content_mapper_info.get() {
+            None => &[],
+            Some(info) => info.diagnostic_directives,
+        }
+    }
+
+    // SupplementalSourceFiles returns the additional outputs produced from this canonical source file.
+    // ast.go:2659
+    pub fn supplemental_source_files(&self) -> &'static [P<SourceFile>] {
+        match self.content_mapper_info.get() {
+            None => &[],
+            Some(info) => info.supplemental_source_files,
+        }
+    }
+
+    // CanonicalSourceFile returns the canonical output associated with this supplemental source file.
+    // ast.go:2667
     pub fn canonical_source_file(&self) -> Option<P<SourceFile>> {
-        None
+        self.content_mapper_info.get()?.canonical_source_file
     }
 
+    // IsContentMapperSupplemental reports whether this is an unnamed supplemental mapper output.
+    // ast.go:2675
     pub fn is_content_mapper_supplemental(&self) -> bool {
-        false
+        self.canonical_source_file().is_some()
     }
 
     // GetNameTable returns a map of all names in the file to their positions.
@@ -2031,6 +2152,9 @@ impl SourceFile {
 
     fn copy_from(&self, other: &SourceFile) {
         // Do not copy fields set by NewSourceFile (Text, FileName, Path, or Statements)
+        if let Some(info) = other.content_mapper_info.get() {
+            self.set_content_mapper_info(ContentMapperSourceFileInfo::clone(&info));
+        }
         self.language_variant.set(other.language_variant.get());
         self.script_kind.set(other.script_kind.get());
         self.is_declaration_file.set(other.is_declaration_file.get());

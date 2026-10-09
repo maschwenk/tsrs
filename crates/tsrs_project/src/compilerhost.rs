@@ -143,6 +143,29 @@ impl CompilerHost for compilerHost {
         Some(journal.acquire(&cache, key, fh))
     }
 
+    // compilerhost.go:113. Phase 1 of the content-mapper port (notes/contentmappers.md): the project system's builder
+    // has no content mapper host yet, so `content_mapper_project` is always None and this stops at Go's
+    // ErrProjectUnavailable, after the same file lookup.
+    fn get_content_mapped_source_files(
+        &self,
+        parse_options: SourceFileParseOptions,
+        _mapper: &tsrs_contentmapper::Mapper,
+    ) -> Result<tsrs_contentmapper::SourceFiles, tsrs_contentmapper::Error> {
+        self.ensure_alive();
+        if self.source_fs.get_file_by_path(&parse_options.file_name, &parse_options.path).is_none() {
+            return Ok(tsrs_contentmapper::SourceFiles::default());
+        }
+        let Some(_project) = self.content_mapper_project() else {
+            return Err(tsrs_contentmapper::Error::ProjectUnavailable);
+        };
+        unreachable!("the project system creates no content mapper project (phase 2)")
+    }
+
+    // compilerhost.go:153 (Go creates the project from the builder's content mapper host, which phase 1 does not port.)
+    fn content_mapper_project(&self) -> Option<std::sync::Arc<dyn tsrs_contentmapper::Project>> {
+        None
+    }
+
     // compilerhost.go:172
     fn trace(&self, msg: &'static Message, args: &[&dyn Display]) {
         self.logger.read().unwrap().log(&msg.localize(args));

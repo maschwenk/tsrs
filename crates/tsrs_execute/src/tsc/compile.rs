@@ -1,8 +1,10 @@
-use std::sync::Arc;
+use std::io::Write;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use tsrs_ast::Diagnostic;
-use tsrs_core::P;
+use tsrs_contentmapper as contentmapper;
+use tsrs_core::{CompilerOptions, Locale, P};
 use tsrs_vfs::FS;
 
 pub trait System: Sync {
@@ -13,6 +15,13 @@ pub trait System: Sync {
     fn flush(&self);
     fn write_output_is_tty(&self) -> bool;
     fn get_environment_variable(&self, name: &str) -> Option<String>;
+    // compile.go:31: starts a content mapper process (the production system's is
+    // `tsrs_contentmapper::spawn_process`, Go's cmd/tsc/sys.go spawnProcess). A `None` stderr is Go's io.Discard.
+    fn spawn(&self, command: &[String], dir: &str, stderr: Option<Box<dyn Write + Send>>) -> Result<super::ReadWriteCloser, String>;
+    // Go `sys.ErrorWriter()`, which only the content mapper logger writes to here.
+    fn write_error(&self, text: &str) {
+        eprint!("{text}");
+    }
 
     fn now(&self) -> Instant;
     fn since_start(&self) -> Duration;
@@ -32,6 +41,53 @@ pub trait System: Sync {
     /// refused. The CLI and the tsctests harness have none.
     fn diagnostic_sink(&self) -> Option<&(dyn Fn(P<Diagnostic>) + Sync)> {
         None
+    }
+}
+
+// compile.go:37
+fn new_content_mapper_logger(sys: &'static dyn System) -> Option<contentmapper::Logger> {
+    if sys.get_environment_variable("TS_CONTENT_MAPPER_DEBUG").unwrap_or_default().is_empty() {
+        return None;
+    }
+    let mu = Mutex::new(());
+    Some(Arc::new(move |message: &str| {
+        let _guard = mu.lock().unwrap();
+        sys.write_error(&format!("{message}\n"));
+    }))
+}
+
+// NewContentMapperHost creates a content mapper host when content mappers are enabled via the
+// --runExternalCode flag, spawning mapper processes through the system's Spawn. It returns
+// nil otherwise, in which case no content-mapped files can be loaded. The caller owns the host and must
+// Close it when the compilation session ends.
+// compile.go:89 (Go binds the host to the command's context, which closes it when the process ends; the callers
+// close it explicitly instead. The locale is the option's text: tsrs does not canonicalize BCP 47 tags.)
+pub fn new_content_mapper_host(sys: &'static dyn System, options: &CompilerOptions) -> Option<Arc<dyn contentmapper::Host>> {
+    if !options.run_external_code.is_true() {
+        return None;
+    }
+    let diagnostic_locale = Locale(options.locale.clone());
+    let spawner: Arc<dyn contentmapper::Spawner> =
+        Arc::new(contentmapper::SpawnerFunc(move |command: &[String], dir: &str, stderr: Option<Box<dyn Write + Send>>| sys.spawn(command, dir, stderr)));
+    Some(contentmapper::new_host_with_options(spawner, diagnostic_locale, contentmapper::HostOptions { logger: new_content_mapper_logger(sys) }))
+}
+
+// Go's `defer contentMapperProject.Close()` (tsc.go:300, 358) and the close of the host, which Go leaves to the
+// command's context (it is cancelled when the process ends): the project is closed first, then the host, on every
+// way out of the compilation. A host that is still open keeps its mapper processes running.
+pub(crate) struct contentMapperCloser {
+    pub(crate) host: Option<Arc<dyn contentmapper::Host>>,
+    pub(crate) project: Option<Arc<dyn contentmapper::Project>>,
+}
+
+impl Drop for contentMapperCloser {
+    fn drop(&mut self) {
+        if let Some(project) = &self.project {
+            let _ = project.close();
+        }
+        if let Some(host) = &self.host {
+            let _ = host.close();
+        }
     }
 }
 
@@ -105,10 +161,11 @@ pub struct CommandLineResult {
     pub status: ExitStatus,
 }
 
-#[derive(Default, Clone, Copy)]
+#[derive(Default, Clone)]
 pub struct CompileTimes {
     pub config_time: Duration,
     pub parse_time: Duration,
+    pub content_mapper_times: contentmapper::Timings,
     pub bind_time: Duration,
     pub check_time: Duration,
     pub total_time: Duration,

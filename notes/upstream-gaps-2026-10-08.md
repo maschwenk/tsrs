@@ -170,7 +170,7 @@ against the built binary in a scratch project.
 | `--help` / `--all` full text | yes | prints the version line and a two-line usage (`execute.rs:139`, `:448`) |
 | `--locale` | yes | accepted and ignored; tsconfig values are still validated (TS6048, `tsconfigparsing.rs:475`); the language server also ignores the client's locale for messages |
 | `--generateTrace` | yes | accepted and ignored, no directory is written (`checker.rs:1336`: "the tracer ... not ported") |
-| content mappers, ATA, telemetry, pprof requests (language server) | yes | `tsrs_ls/src/spanmap.rs` placeholder; `tsrs_project/src/ata.rs` keeps only the value type; `session.rs:685` and `:701` telemetry hooks send nothing; `tsrs_lsp/src/server.rs:2197-2252` answer `custom/initializeAPISession`, `runGC`, the four profile requests and `setContentMapperContributions` with "not yet ported" |
+| content mappers, ATA, telemetry, pprof requests (language server) | yes (content mappers: in the language server only, since the content-mapper port; notes/contentmappers.md) | `tsrs_ls/src/spanmap.rs` placeholder (now a re-export of `tsrs_spanmap`); `tsrs_project/src/ata.rs` keeps only the value type; `session.rs:685` and `:701` telemetry hooks send nothing; `tsrs_lsp/src/server.rs:2197-2252` answer `custom/initializeAPISession`, `runGC`, the four profile requests and `setContentMapperContributions` with "not yet ported" |
 | Node API profiling, `getCurrentLanguageServerSnapshot` | yes | `tsrs_api/src/methods.rs:191-193` NotImplemented; `session.rs:415` returns the standalone-session error |
 | Windows named pipes | yes | `tsrs_api_transport/src/transport.rs:5` |
 | 4 conformance error-baseline failures | **a harness mode, not a gap** | with `--baselines js` (the harness runs emit first, as Go's does) all 13,462 error baselines pass; the gate's default `--baselines types,symbols` run shows the known 2 codes (`incorrectRecursiveMappedTypeConstraint`, `typeParameterWithInvalidConstraintType`) and 2 fails (`mutuallyRecursiveInference`, `recursiveMappedTypes`) |
@@ -189,7 +189,8 @@ commented out).
   `tsc.NewContentMapperHost`). tsrs parses and resolves `contentMappers` and validates `--runExternalCode`, but never
   starts a mapper: no file is content-mapped (`tsrs_compiler/src/program.rs:539`, `:733`; `fileloader.rs:71`), so a
   project that depends on one gets different files and diagnostics from tsgo. 7 `tsc` and 2 `tsbuild` scenarios cover
-  it; the tsrs harness skips them.
+  it; the tsrs harness skips them. Closed by the content-mapper port (notes/contentmappers.md): `tsc`, `tsc -b` and
+  incremental builds run mappers, and the 9 scenarios match Go.
 - **`--pprofDir` is silently ignored**, on the command line and in `--lsp`. Go writes CPU and heap profiles. (Go's
   `--generateCpuProfile` is parsed and never read at the pin, so ignoring it matches.)
 - **LSP `custom/initializeAPISession`** is not ported. This is how an editor extension gets a Node API session
@@ -213,7 +214,7 @@ Sizes are from the Go source at the pin (non-test, non-generated lines). For ful
 | 2 | Windows (and Intel macOS) binaries | every Windows user: the npm package has no win32 build | release matrix entry; Windows fswatch backend 548, nativepath 129, named-pipe transport (Go 19 lines over go-winio; ~150 Rust over `windows-sys`); a CI job for the plain-pointer build. Intel macOS is a matrix line plus PGO training under Rosetta or a cross-built profile | medium (Windows), small (Intel macOS) | none in the suites; needs a Windows CI lane |
 | 3 | `--showConfig` | build tooling and anyone debugging `extends` / `${configDir}`; the command exits with an error | `tsoptions/showconfig.go` 389, 4 lines in `tsc.go`; `tsrs_core::json::marshal_indent` exists | ~450 Rust lines, small | 17 `tsc/showConfig` + 1 `extends` scenario; upstream adds 4 more (#64457) |
 | 4 | `--locale` / localized messages | non-English users: `--locale` on the command line, and the language server, which tsgo localizes from the editor's display language | `locale` 40, `diagnostics.Localize` / `getLocalizedMessages` ~70, the embedded tables (13 locales, ~85 KB gzipped each, +1.1 MB binary), a locale threaded through the reporters (~100 call sites take one in Go) | ~400 Rust lines + a generator step, small to medium | `tsc` / `tsbuild` `locale` and `bad-locale` (4) |
-| 5 | content mappers (CLI and language server) | Vue / Svelte / Astro projects that opt in with `contentMappers` + `--runExternalCode` (TypeScript 7.1); tsrs never runs the mapper, so those files have no TypeScript content | `contentmapper` 1,977, `spanmap` 818, `ipc` 989 (partly covered by `tsrs_api_transport`), ~800 lines of hooks (fileloader, program, emitter `MapSourcePosition`, project, LSP), test harness `contentmappertest` ~400 | ~4,500 Go lines, large | 55 fourslash, 7 `tsc`, 2 `tsbuild` |
+| 5 | content mappers (CLI and language server; the CLI half is ported, notes/contentmappers.md) | Vue / Svelte / Astro projects that opt in with `contentMappers` + `--runExternalCode` (TypeScript 7.1); tsrs never runs the mapper, so those files have no TypeScript content | `contentmapper` 1,977, `spanmap` 818, `ipc` 989 (partly covered by `tsrs_api_transport`), ~800 lines of hooks (fileloader, program, emitter `MapSourcePosition`, project, LSP), test harness `contentmappertest` ~400 | ~4,500 Go lines, large | 55 fourslash, 7 `tsc`, 2 `tsbuild` |
 | 6 | `--generateTrace` | people profiling slow builds with `@typescript/analyze-trace`; no trace is written | `tracing` 763, `checker/tracer.go` 366, ~60 hook sites (checker, relater, program, file loader, emitter, checker pool) | ~1,300 Rust lines, medium; the hooks sit on hot paths and must cost nothing when off, and trace thread ids must cope with tsrs's work stealing | 2 `tsc/generateTrace` |
 | 7 | `--init` | new projects; easy workaround (`npx tsc --init`) | `execute/tsc/init.go` 215 (uses the option table and `json.MarshalIndent`) | ~250 Rust lines, small | 10 `Initialized-TSConfig-*` |
 | 8 | `--help` / `--all` text | anyone reading help; tsrs prints two lines | `execute/tsc/help.go` 426 (terminal width, option categories) | ~450 Rust lines, small; port the upstream version, whose text changed (#64457, #63915, #64093) | `help`, `help-all`, 2 `show-help`, `tsbuild/help` |
@@ -265,7 +266,8 @@ tsrs already memoizes the expensive part.
    nativepath ports and named pipes.
 4. `--locale`, mainly for the language server, then `--generateTrace`.
 5. Content mappers when a framework ships one people use; it is the largest item (about 4,500 Go lines) and is
-   still opt-in upstream.
+   still opt-in upstream. (Since done for `tsc`, `-b` and incremental builds; the language server is phase 2 of
+   notes/contentmappers.md.)
 
 Cheap housekeeping found on the way: the 8 fourslash `@tsc` failures give a stale reason ("needs emit"), and the
 README should say that the 4 conformance error-baseline failures disappear when the harness runs emit

@@ -281,6 +281,22 @@ pub fn compiler_options_to_go_json(options: &CompilerOptions) -> Value {
     Value::Object(o)
 }
 
+/// Go `json.Marshal` of the one core.CompilerOptions field whose json tag is `name`, as
+/// `contentmapper.MarshalDeclaredOptions` finds it by reflection: `None` when no field has that tag, `Some(None)` when
+/// the field is zero (`reflect.Value.IsZero`, the same values `omitzero` omits).
+pub fn compiler_option_to_go_json(options: &CompilerOptions, name: &str) -> Option<Option<Value>> {
+    let unknown = |json: &str| options.api_unknown_enum_values.iter().find(|(k, _)| *k == json).map(|(_, n)| Value::Number(*n as f64));
+    macro_rules! fields {
+        ($($field:ident: $json:literal,)*) => {
+            match name {
+                $($json => Some(unknown($json).or_else(|| options.$field.to_go_json())),)*
+                _ => None,
+            }
+        };
+    }
+    for_each_compiler_options_field!(fields)
+}
+
 /// JSON names and Go integer widths of the core.CompilerOptions fields Go decodes from JSON integers.
 pub fn compiler_options_integer_fields() -> Vec<(&'static str, u32)> {
     let mut out = Vec::new();

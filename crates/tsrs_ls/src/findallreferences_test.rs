@@ -94,7 +94,7 @@ fn test_implementations_worklist_does_not_blow_up() {
         let config_host: &'static parseConfigHost = Box::leak(Box::new(parseConfigHost { fs: fs.clone() }));
         let (parsed, errors) = tsoptions::get_parsed_command_line_of_config_file("/tsconfig.json", None, None, config_host, None);
         assert_eq!(errors.len(), 0);
-        let host: Arc<dyn CompilerHost> = new_compiler_host("/", fs.clone(), &bundled::lib_path(), None, None);
+        let host: Arc<dyn CompilerHost> = new_compiler_host("/", fs.clone(), &bundled::lib_path(), None, None, None);
         let program: &'static Program = new_program(ProgramOptions::new(P::new(parsed.unwrap()), host));
         program.bind_source_files();
         let ctx = Context::background();

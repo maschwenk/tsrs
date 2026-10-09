@@ -166,6 +166,7 @@ pub struct Program {
 
     program_diagnostics: Vec<P<Diagnostic>>,
     has_emit_blocking_diagnostics: FxHashSet<Path>,
+    content_mapper_option_diagnostics: Vec<P<Diagnostic>>,
 
     // Cached unresolved imports for ATA
     unresolved_imports: OnceLock<Arc<Set<String>>>,
@@ -204,6 +205,11 @@ impl Program {
 
     pub fn get_current_directory(&self) -> &str {
         self.host.get_current_directory()
+    }
+
+    // program.go:154
+    pub fn content_mapper_project(&self) -> Option<Arc<dyn tsrs_contentmapper::Project>> {
+        self.host.content_mapper_project()
     }
 
     pub fn get_global_typings_cache_location(&self) -> &str {
@@ -313,7 +319,7 @@ impl Program {
     /** This should have similar behavior to 'processSourceFile' without diagnostics or mutation. */
     pub fn get_source_file_from_reference(&self, origin: P<SourceFile>, ref_: P<FileReference>) -> Option<P<SourceFile>> {
         let file_name = tspath::resolve_path(&tspath::get_directory_path(origin.file_name()), &[&ref_.file_name]);
-        let supported_extensions_base = tsoptions::get_supported_extensions(Some(&self.options()), &[]);
+        let supported_extensions_base = tsoptions::get_supported_extensions(Some(&self.options()), &self.command_line().content_mapper_extensions());
         let supported_extensions = tsoptions::get_supported_extensions_with_json_if_resolve_json_module(Some(&self.options()), &supported_extensions_base);
         let allow_non_ts_extensions = self.options().allow_non_ts_extensions.is_true();
         if tspath::has_extension(&file_name) {
@@ -401,6 +407,7 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
         declaration_diagnostic_cache: Mutex::new(FxHashMap::default()),
         program_diagnostics: Vec::new(),
         has_emit_blocking_diagnostics: FxHashSet::default(),
+        content_mapper_option_diagnostics: Vec::new(),
         unresolved_imports: OnceLock::new(),
         known_symlinks: OnceLock::new(),
         package_names: OnceLock::new(),
@@ -415,6 +422,7 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
     // `&'static`, so here it runs after verification, once the program is leaked. Neither pool reads anything
     // verification writes (checkers are created lazily).
     tsrs_core::phases::time("Program: verify options", || p.verify_compiler_options());
+    p.collect_content_mapper_option_diagnostics();
     let p: &'static Program = Box::leak(Box::new(p));
     // Census builds: the pool enum is mostly uninitialized bytes when set; clear the stack they come from.
     tsrs_core::census_scrub_stack();
@@ -536,11 +544,28 @@ impl Program {
         _create_module_resolver: Option<CreateModuleResolver>,
     ) -> (Option<&'static Program>, Option<P<SourceFile>>, bool) {
         let old_file = self.files_by_path[changed_file_path];
-        // Content mappers are not ported: no file is content-mapped (`oldFile.ContentMapper() == ""`), so the
-        // supplemental file lists are always empty.
-        let old_supplemental_files: &[P<SourceFile>] = &[];
-        let new_supplemental_files: &[P<SourceFile>] = &[];
-        let new_file = new_host.get_source_file(old_file.parse_options().clone());
+        let new_file;
+        let mut old_supplemental_files: &[P<SourceFile>] = &[];
+        let mut new_supplemental_files: Vec<P<SourceFile>> = Vec::new();
+        if !old_file.content_mapper().is_empty() {
+            // Content-mapped files are produced by running an external transform, which a plain reparse can't
+            // reproduce. Re-run the transform through the host; any failure (or a missing file) falls back to
+            // a full rebuild so the file loader's failure policy runs.
+            // (Go passes a nil mapper on to the host, whose transform then fails; that is the same fallback.)
+            let Some(mapper) = self.opts.config.get().get_content_mapper_for_file_name(old_file.file_name()) else {
+                return (None, None, false);
+            };
+            match new_host.get_content_mapped_source_files(old_file.parse_options().clone(), mapper) {
+                Err(_) => return (None, None, false),
+                Ok(files) => {
+                    new_file = files.canonical;
+                    old_supplemental_files = old_file.supplemental_source_files();
+                    new_supplemental_files = files.supplemental;
+                }
+            }
+        } else {
+            new_file = new_host.get_source_file(old_file.parse_options().clone());
+        }
 
         // If this file is part of a package redirect group (same package installed in multiple
         // node_modules locations), we need to rebuild the program because the redirect targets
@@ -598,6 +623,7 @@ impl Program {
             declaration_diagnostic_cache: Mutex::new(FxHashMap::default()),
             program_diagnostics: self.program_diagnostics.clone(),
             has_emit_blocking_diagnostics: self.has_emit_blocking_diagnostics.clone(),
+            content_mapper_option_diagnostics: self.content_mapper_option_diagnostics.clone(),
             unresolved_imports: OnceLock::new(),
             known_symlinks: OnceLock::new(),
             package_names: OnceLock::new(),
@@ -729,9 +755,20 @@ impl Program {
         self.opts.config.compiler_options().unwrap()
     }
 
-    // program.go:536 (content mappers are not ported)
+    // GetContentMapper returns the content mapper that produced the given source file, or nil if the
+    // file was not produced by a content mapper.
+    // program.go:525
+    pub fn get_content_mapper(&self, file: P<SourceFile>) -> Option<&'static tsrs_contentmapper::Mapper> {
+        if file.content_mapper().is_empty() {
+            return None;
+        }
+        let mapper = self.opts.config.get().get_content_mapper_for_file_name(file.file_name());
+        mapper.filter(|mapper| mapper.identity() == file.content_mapper())
+    }
+
+    // program.go:536
     pub fn content_mapper_extensions(&self) -> Vec<String> {
-        Vec::new()
+        self.opts.config.content_mapper_extensions()
     }
 
     // program.go:537
@@ -1108,8 +1145,26 @@ impl Program {
     // program.go:827
     pub fn get_program_diagnostics(&'static self) -> Vec<P<Diagnostic>> {
         let mut all = self.program_diagnostics.clone();
+        all.extend_from_slice(&self.content_mapper_diagnostics);
+        all.extend_from_slice(&self.content_mapper_option_diagnostics);
         all.extend(self.include_processor.get_diagnostics(self).lock().unwrap().get_global_diagnostics());
         sort_and_deduplicate_diagnostics(&all)
+    }
+
+    // program.go:836
+    fn collect_content_mapper_option_diagnostics(&mut self) {
+        let Some(project) = self.content_mapper_project() else {
+            return;
+        };
+        let option_diagnostics = project.diagnostics();
+        let config = self.opts.config;
+        self.content_mapper_option_diagnostics = option_diagnostics
+            .iter()
+            .map(|diagnostic| {
+                let (file, loc) = tsoptions::get_content_mapper_option_diagnostic_location(Some(&config), diagnostic.mapper, &diagnostic.path);
+                ast::new_external_diagnostic(file, loc, &diagnostic.source, diagnostics::Category::Error, diagnostic.code, &diagnostic.message_text)
+            })
+            .collect();
     }
 
     pub fn get_include_processor_diagnostics(&'static self, source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
@@ -1386,7 +1441,10 @@ impl Program {
             }
 
             for &file in self.files.iter() {
-                let root_path = file.path();
+                let mut root_path = file.path();
+                if let Some(canonical) = file.canonical_source_file() {
+                    root_path = canonical.get().path();
+                }
                 if source_file_may_be_emitted(file, self, false, false) && !root_paths.contains(root_path) {
                     self.add_processing_diagnostic(processingDiagnostic::explaining(includeExplainingDiagnostic {
                         file: Some(file.path().clone()),
@@ -2079,7 +2137,7 @@ impl Program {
                 }
             }
         }
-        filtered
+        apply_content_mapper_diagnostic_directives(source_file, filtered)
     }
 
     // program.go:1642
@@ -2708,9 +2766,59 @@ fn equal_check_js_directives(d1: Option<P<ast::CheckJsDirective>>, d2: Option<P<
     }
 }
 
+// program.go:716
 fn filter_and_sort_diagnostics(diags: &[P<Diagnostic>]) -> Vec<P<Diagnostic>> {
-    // Content-mapped files (span maps) are not ported, so no diagnostic is filtered out here.
-    sort_and_deduplicate_diagnostics(diags)
+    let filtered: Vec<P<Diagnostic>> = diags
+        .iter()
+        .copied()
+        .filter(|diag| {
+            let file = diag.file();
+            let Some(span_map) = file.and_then(|file| file.span_map()) else {
+                return true;
+            };
+            if !diag.reports_unnecessary() || !diag.source().is_empty() {
+                return true;
+            }
+            let (_, fidelity) = span_map.virtual_to_original_span(diag.loc());
+            fidelity != tsrs_spanmap::Fidelity::None
+        })
+        .collect();
+    sort_and_deduplicate_diagnostics(&filtered)
+}
+
+// program.go:1551
+fn apply_content_mapper_diagnostic_directives(source_file: P<SourceFile>, diags: Vec<P<Diagnostic>>) -> Vec<P<Diagnostic>> {
+    let directives = source_file.diagnostic_directives();
+    if directives.is_empty() {
+        return diags;
+    }
+    let mut used = vec![false; directives.len()];
+    let mut mark_used = |diag: P<Diagnostic>| -> bool {
+        if diag.file() != Some(source_file) || !diag.source().is_empty() {
+            return false;
+        }
+        for (i, directive) in directives.iter().enumerate() {
+            if diag.pos() >= directive.virtual_range.pos() && diag.pos() < directive.virtual_range.end() {
+                used[i] = true;
+                return true;
+            }
+        }
+        false
+    };
+    let mut filtered: Vec<P<Diagnostic>> = diags.into_iter().filter(|&diag| !mark_used(diag)).collect();
+    for (i, directive) in directives.iter().enumerate() {
+        if directive.policy == ast::MappedDiagnosticDirectivePolicy::Expect && !used[i] {
+            filtered.push(ast::new_external_diagnostic(
+                Some(source_file),
+                directive.original_range,
+                directive.source,
+                diagnostics::Category::Error,
+                directive.unused_code,
+                directive.unused_message_text,
+            ));
+        }
+    }
+    filtered
 }
 
 // getAdditionalJSSyntacticDiagnostics produces option-dependent syntactic diagnostics for JS files
@@ -2841,6 +2949,11 @@ pub fn get_diagnostics_of_any_program(
     let start = std::time::Instant::now();
     append_diagnostics_for_all_files(&mut syntactic_diagnostics, &mut |ctx, f| program.get_syntactic_diagnostics(ctx, f));
     tsrs_core::phases::record("Diagnostics: syntactic", start.elapsed());
+    if !syntactic_diagnostics.is_empty() {
+        // Per-file content mapper failures are syntactic diagnostics, but the locationless diagnostic
+        // that disables a repeatedly failing mapper must still be reported.
+        all_diagnostics.extend_from_slice(&program.content_mapper_diagnostics);
+    }
     all_diagnostics.extend(syntactic_diagnostics);
 
     // If we didn't have any syntactic errors, then also try getting the program (options),

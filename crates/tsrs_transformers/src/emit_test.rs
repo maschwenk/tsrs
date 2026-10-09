@@ -29,7 +29,7 @@ fn emit(files: &[(&str, &str)], file: &str, transforms: &[TransformerFactory]) -
     let (config, diagnostics) = tsoptions::get_parsed_command_line_of_config_file("/src/tsconfig.json", None, None, host, None);
     assert!(diagnostics.is_empty());
     let config = P::new(config.unwrap());
-    let program = new_program(ProgramOptions::new(config, new_compiler_host("/", fs, "", None, None)));
+    let program = new_program(ProgramOptions::new(config, new_compiler_host("/", fs, "", None, None, None)));
     let ctx = Context::default();
     let source_file = program.get_source_file(file).unwrap();
     let mut checker = program.get_type_checker_for_file(&ctx, source_file);

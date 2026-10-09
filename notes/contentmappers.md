@@ -1,0 +1,294 @@
+# Content mappers: port plan and status
+
+Go reference: `ts-ref/tsc/internal/` at the pinned commit (`Cargo.toml` `[workspace.metadata.typescript]`). Go is the
+spec (`CONTRIBUTING.md`); every ported function keeps its Go name, structure and order (`docs/PORTING.md`), with a
+`// <file>.go:<line>` comment above it.
+
+## What a content mapper is
+
+A content mapper is an external process, declared in a tsconfig `contentMappers` entry and described by the
+`typescript.contentMapper` object of its npm package's `package.json`, that turns otherwise unsupported files
+(`.vue`, `.astro`, `.svelte`) into virtual TypeScript during program construction. The compiler spawns it with
+`--runExternalCode`, talks JSON-RPC over its stdio (Content-Length frames; methods `initialize`, `openProject`,
+`transform`, `closeProject`), parses the returned text as `<file>.<ext>` (plus unnamed supplemental outputs
+`<file>.<n>.<ext>`), and keeps a span map that maps virtual positions back to the original text so diagnostics are
+reported at their original locations. Go's design: `contentmapper/contentmapper.go` (definitions), `host.go` (error
+kinds, result types, `Project` and `Host` interfaces), `hostimpl.go` (process host, project leases, protocol decode
+and position normalization), `transform.go` (parse into source files); `spanmap/spanmap.go` (the span map);
+`ipc/` + `jsonrpc/` (the connection); hooks in `compiler/fileloader.go`, `filesparser.go`, `program.go`,
+`emitter.go`, `host.go`, `diagnosticwriter/diagnosticwriter.go`, `ast/ast.go`, `ast/diagnostic.go`,
+`execute/tsc.go`, `execute/tsc/compile.go`, `execute/tsc/statistics.go`, `execute/build/*.go`,
+`execute/incremental/*.go`; tests in `contentmapper/*_test.go`, `spanmap/spanmap_test.go`,
+`compiler/contentmapper_test.go`, `tsoptions/contentmappers_test.go`, `execute/tsctests` (7 `tsc` + 2 `tsbuild`
+scenarios) with the in-process test mappers of `testutil/contentmappertest`.
+
+## Scope
+
+Phase 1 (this branch): the compiler, `tsrs` (tsc), `tsrs -b`, incremental build info, and `tsrs --api
+--runExternalCode` accepting the flag. Phase 2 (later): the language server and the API project system
+(`project/`, `lsp/server.go`, `ls` span-map features; 55 fourslash tests). `--watch` is not ported in tsrs, so the
+watch hooks (`execute/watcher.go`, `tsctests/contentmapper_watch_test.go`) stay out.
+
+## Crate layout
+
+Rust cannot mirror Go's package graph exactly: `tsrs_api_transport` (Go `api` transport + `ipc`) optionally depends on
+`tsrs_project`, which depends on `tsrs_compiler`, so anything the compiler depends on cannot use
+`tsrs_api_transport`. Hence:
+
+| Go | Rust | notes |
+| --- | --- | --- |
+| `spanmap/spanmap.go` | new crate `crates/tsrs_spanmap` (`spanmap.rs`) | deps: `tsrs_core` only. `tsrs_ls/src/spanmap.rs` re-exports it (its value types `Feature`, `Fidelity`, `MappedPosition`, `MappedSpan` already match Go) |
+| `ipc/protocol.go`, `protocol_jsonrpc.go`, `conn.go`, `conn_async.go`; `jsonrpc/jsonrpc.go`, `baseproto.go` | new crate `crates/tsrs_ipc` | deps: `tsrs_core` (json). Only what the mapper host needs: an async JSON-RPC connection over a `Read`+`Write` pair, concurrent `call`, incoming requests answered by a `Handler`, EOF/error termination. `tsrs_api_transport` keeps its own copy for now (it predates this crate); a later change may make it reuse `tsrs_ipc` |
+| `contentmapper/contentmapper.go` (`Definition`, `Manifest`, `Mapper` and methods, `IsSupportedVirtualExtension`), `tsoptions/contentmappers.go` | `crates/tsrs_tsoptions/src/contentmappers.rs` | the definitions stay in tsoptions (Go's tsoptions imports contentmapper; the host crate below imports tsoptions instead). `OptionPathSegment` lives here too |
+| `contentmapper/host.go`, `hostimpl.go`, `transform.go` | new crate `crates/tsrs_contentmapper` (`host.rs`, `hostimpl.rs`, `transform.rs`, `process.rs`) | deps: `tsrs_core`, `tsrs_diagnostics`, `tsrs_ast`, `tsrs_parser`, `tsrs_spanmap`, `tsrs_tsoptions`, `tsrs_ipc`. `process.rs` is `cmd/tsc/sys.go` `spawnProcess`/`childProcess` (std::process) |
+| `testutil/contentmappertest/*.go` | new crate `crates/tsrs_contentmappertest` | the in-process test mappers and spawner, used by `tsrs_execute`'s tsctests harness (and the fourslash harness in phase 2) |
+| `ast/ast.go` content-mapper fields and methods, `ast/diagnostic.go` `displayMessageArgs` | `crates/tsrs_ast` | `tsrs_ast` depends on `tsrs_spanmap` |
+| compiler hooks | `crates/tsrs_compiler` | `host.rs` (`CompilerHost` methods), `fileloader.rs`, `filesparser.rs`, `file_include.rs`, `program.rs`, `emitter.rs` |
+| `diagnosticwriter/diagnosticwriter.go` `resolve`, `MessageChain` note | `crates/tsrs_diagnostics` (the writer port) | |
+| `execute/tsc.go`, `tsc/compile.go`, `tsc/statistics.go`, `build/*.go`, `incremental/*.go` | `crates/tsrs_execute`, `crates/tsrs_incremental` | |
+
+Go `json.Value` is `tsrs_core::json::Value`; Go `json.Marshal` of structs is written by hand with
+`tsrs_core::json` (field order = Go struct order, `omitempty`/`omitzero` honored) because tsrs has no serde.
+
+## Threading and memory
+
+Content-mapped files are parsed inside the file loader's parallel parse, so the host is `Send + Sync` (mutexes
+where Go has them) and `transform` is called concurrently from several threads; the async connection supports that.
+`SourceFile` keeps its content-mapper info in a field written once before the file is published (`OwnedCell`, like
+the other parser-set fields); span maps are arena objects (`P<SpanMap>`), original text is `&'static str`.
+
+## Not ported (recorded, not silently dropped)
+
+- The language server and the API project system (phase 2): `project/`, `lsp/server.go`, the `ls` span-map features.
+  The project system's compiler host has no mapper host, so a file with a mapper's extension takes Go's
+  `ErrProjectUnavailable` path (`tsrs_project/src/compilerhost.rs`); `custom/setContentMapperContributions` answers
+  "not yet ported"; the 55 content-mapper fourslash tests stay among the fourslash gate's 63 failures. `tsrs --api
+  --runExternalCode` accepts the flag and nothing more.
+- `--watch` hooks (`execute/watcher.go`, `tsctests/contentmapper_watch_test.go`): tsrs has no watch mode.
+  `BuildTask::refresh_content_mapper_project` is ported but only Go's watch update calls it.
+- The 15 `compiler/contentMapper*.ts` conformance cases (`@runExternalCode: true`): `tsrs_testrunner` still skips them
+  (`crates/tsrs_testrunner/src/compile.rs:347`). Running them needs Go's harness side: a host with the test spawner
+  (`harnessutil.go:190-253`) and the mapped-text baseline (`compiler_runner.go:343`). The conformance gate counts do
+  not include them. The same behavior is covered by the tsctests scenarios and the unit tests below.
+- Locale canonicalization: the `initialize` request carries the `--locale` text as given. Go canonicalizes it with
+  `x/text` `language.Parse` (`execute/tsc/compile.go:93`, `locale/locale.go:36`) and sends nothing for an unparsable
+  tag. Checked against tsgo-ref with a mapper that logs its `initialize` params: `--locale en-us` sends `en-US` from
+  tsgo and `en-us` from tsrs; `zh-hans-cn` sends `zh-Hans-CN` and `zh-hans-cn`. Only a mapper that localizes its own
+  messages and compares the tag exactly would notice. tsrs has no BCP 47 canonicalization (and no localized messages;
+  README `--locale`).
+- Go's `context` cancellation: the host is closed explicitly (`Host::close`, also on drop of the owning session).
+
+## Cost when no mapper is configured
+
+None that matters, checked in the code: without `--runExternalCode`, `tsc::new_content_mapper_host` returns `None`
+(`crates/tsrs_execute/src/tsc/compile.rs`), so there is no host, project, process or thread, and the compiler host's
+`content_mapper_project()` is `None`. Program option diagnostics and build info identities return at that `None`
+(`program.rs` `collect_content_mapper_option_diagnostics`, `buildinfo.rs` `content_mapper_identities`). Without a
+`contentMappers` entry the file loader's per-file check is `file_extension_is_one_of` against an empty list (the
+`str_slice` of an empty `Vec` does not allocate), in `parse_source_file` and in the parse-ahead filter.
+`SourceFile::text()` does not branch; each `SourceFile` has one more `Option<P<_>>` field (4 bytes with pointer
+compression); the diagnostic writer and `display_message_args` check `span_map()` for `None` per reported
+diagnostic. A pr-verify run on the bench projects (none configures a mapper) is the measured check.
+
+## Verification
+
+- Unit tests (116), ports of Go's tests: `tsrs_spanmap` 31 (`spanmap_test.go`), `tsrs_ipc` 31, `tsrs_contentmapper`
+  33 (`host_test.go` 27, `transform_test.go` 3, process spawner 3), `tsrs_contentmappertest` 1 (`TestOutOfProcess`),
+  `tsrs_compiler` 9 (`compiler/contentmapper_test.go`), `tsrs_tsoptions` 7 (`tsoptions/contentmappers_test.go` and
+  two definition tests), `tsrs_incremental` 3 (`buildinfo_contentmapper_test.go`), the build task's supplemental path
+  test 1. The two process-spawner tests that run `testdata/contentmapper/header-mapper` skip without `node`.
+- tsctests: `tools/oracle/tsctests/dump.sh` (needs Go; `target/tsctests-dump`), then `cargo test --release -p
+  tsrs_execute tsctests`. All 7 `tsc` and 2 `tsbuild` content-mapper scenarios match their Go baselines byte for
+  byte, through the in-process test mappers.
+- End to end through the production spawner: `tools/contentmapper-e2e.sh` (CI, after the regression cases) runs
+  `testdata/contentmapper/{types,mapper-diagnostic}` with the Node `header-mapper` and `tsrs -p . --runExternalCode
+  --pretty false --singleThreaded`, against tsgo's output. `types` checks that a type error in a mapped file and one
+  in a plain file importing it are reported at original positions; `mapper-diagnostic` checks a mapper-authored
+  diagnostic. A changed `expected.txt` fails it, and so does a missing `node`.
+- The usual gates: `cargo check --workspace --locked` (CI uses `-D warnings`), `tools/lint/ratchet.py`,
+  `tools/lint/source.py`, `tools/gen-check.sh`, the conformance and fourslash suites unchanged, `pr-verify`.
+
+## Status
+
+Wave 1 (foundations) is done. What later waves build on:
+
+- `tsrs_spanmap` (all of `spanmap.go`; `spanmap_test.go`, 31 tests). Methods take `&SpanMap`. Rust cannot give an
+  inherent method and an associated function the same name, so each method Go calls on a possibly-nil receiver also
+  exists as a free function of that name taking `Option<&SpanMap>`, with Go's nil branch:
+  `tsrs_spanmap::virtual_to_original_span(file.span_map().as_deref(), loc)`. `new` and `unmarshal` return
+  `P<SpanMap>`. `Kind` is a newtype over `i32`, like `ModuleKind`, because a decoded map can carry any kind (which
+  `validate` reports). `alias_for_virtual_span` returns `Option<Segment>`. `virtual_to_original_position_exact`
+  returns `(TextPos, bool)` because Go also returns the mapped position with `false`. `tsrs_ls::spanmap` re-exports
+  the crate.
+- `tsrs_ast`: `SourceFile::set_content_mapper_info` (panics if already set) and the accessors (`span_map()` is
+  `Option<P<SpanMap>>`). `ContentMapperSourceFileInfo` holds `&'static` strings and slices, so build them with
+  `alloc_str` / `alloc_slice`. Also `MappedDiagnosticDirective` / `MappedDiagnosticDirectivePolicy`, and the alias
+  substitution in `Diagnostic::display_message_args`.
+- `tsrs_tsoptions::contentmappers`:
+  - `is_supported_virtual_extension`, `Mapper::{diagnostic_name, identity, transform_identity,
+    marshal_declared_options}`, `OptionPathSegment` and `resolve_content_mapper_manifest`.
+  - `transform_identity` returns a `u128` (Go `xxh3.Uint128`). Go's `fmt.Sprintf("%x", id.Bytes())` is
+    `format!("{id:032x}")`.
+  - Go `json.Value` is the raw JSON text in a `String` (`Definition::options`, the values of
+    `marshal_declared_options`). `gojson::compiler_option_to_go_json` marshals one `CompilerOptions` field by json tag.
+  - `tsoptions::get_content_mapper_option_diagnostic_location` finds the mapper in `content_mappers()` by address
+    (Go compares `*Mapper`), so pass a reference into that list.
+  - `ErrProjectUnavailable` (`contentmapper.go:26`) is left for the host crate, which owns the error type.
+- Already ported with the definitions, so the host and incremental waves should not port them again:
+  `TestMapperDiagnosticName` (`host_test.go`) and `TestStaticContentMapperTransformIdentity`
+  (`execute/incremental/buildinfo_contentmapper_test.go`), in `tsrs_tsoptions/src/contentmappers_test.rs`.
+
+Wave 2 (the host and the test mappers) is done. What wave 3 builds on:
+
+- Crate `tsrs_contentmapper` (`host.rs`, `hostimpl.rs`, `transform.rs`, `process.rs`). It re-exports `Mapper`,
+  `Definition`, `Manifest`, `OptionPathSegment` and `is_supported_virtual_extension` from `tsrs_tsoptions`, so
+  `tsrs_contentmapper::Mapper` reads like Go's `contentmapper.Mapper`.
+- Construction (Go `NewHost`, `NewHostWithOptions`):
+  - `new_host(spawner: Arc<dyn Spawner>, locale: Locale) -> Arc<dyn Host>`.
+  - `new_host_with_options(spawner, locale, HostOptions { logger: Option<Logger> }) -> Arc<dyn Host>`.
+  - `Logger` is `Arc<dyn Fn(&str) + Send + Sync>`; `Locale` is `tsrs_core::Locale`.
+  - There is no context. The owner must call `Host::close()`: the host does close itself on drop, but each project
+    lease holds the host, so the drop never happens while a `Project` or an `acquire` release is still outstanding.
+    `execute/tsc/compile.go`'s `defer host.Close()` must become an explicit `close()` on every path.
+- `trait Host: Send + Sync`:
+  - `timings() -> Timings`
+  - `project(ProjectSpec) -> Option<Arc<dyn Project>>` (None is Go's nil, after close)
+  - `acquire(&[&Mapper]) -> Box<dyn Fn() + Send + Sync>` (the release; only its first call counts)
+  - `set_locale(Locale)`
+  - `transform(&'static Mapper, Request<'_>) -> Result<TransformResultFiles, Error>` (panics after close, like Go)
+  - `close() -> Result<(), Error>`
+- `trait Project: Send + Sync`, every method callable from several threads at once:
+  - `refresh()`, `identities() -> Vec<String>`, `identity(&Mapper) -> String` (the mapper is found by address),
+    `watched_files() -> Vec<String>`, `transform(&Mapper, Request) -> TransformResultFiles` and `close()`, each wrapped
+    in `Result<_, Error>`.
+  - `diagnostics() -> Vec<OptionDiagnostic>`, without a `Result`.
+- `ProjectSpec { config_file_name: String, mappers: Vec<&'static Mapper>, compiler_options: Option<P<CompilerOptions>> }`.
+  Leases are keyed by the addresses of the mappers and of the options, so pass references into the command line's
+  `content_mappers()` and its `P<CompilerOptions>`.
+- Result and request types:
+  - `Request<'a> { file_name: &'a str, content: &'a str }`.
+  - Go's `Result` is `TransformResultFiles`, renamed so it doesn't shadow `std::result::Result` under a glob import.
+    Its fields are `text`, `virtual_extension`, `diagnostics: Vec<P<ast::Diagnostic>>`, `mappings:
+    Option<P<SpanMap>>`, `diagnostic_directives: Vec<ast::MappedDiagnosticDirective>` and `supplemental:
+    Vec<MappedResult>`.
+- Timing types: `Timings { mappers: OrderedMap<String, MapperTimings>, request_wait }` with `since(&Timings)`.
+  `MapperTimings` has `spawn`, `initialize`, `open_project`, `close_project` and `transform`, each an
+  `OperationTiming { count: u64, duration }`.
+- `OptionDiagnostic { mapper: &'static Mapper, path: Vec<OptionPathSegment>, source, code: i32, message_text }`.
+- Errors: one enum, `Error`, with these variants:
+  - `Transform(TransformError)`, where `TransformError` has a `kind: TransformErrorKind` of `Unknown`,
+    `Initialize`, `Project`, `Request`, `Response` or `Mappings`, and `unwrap()`.
+  - `DiagnosticDirective(DiagnosticDirectiveError)`.
+  - `InvalidVirtualExtension(InvalidVirtualExtensionError)`.
+  - `Project(ProjectError)`.
+  - `Initialize(Box<InitializeError>)`.
+  - `SupplementalFileCollision(SupplementalFileCollisionError)`.
+  - `Mapping(tsrs_spanmap::MappingError)`.
+  - `ProjectUnavailable`, Go's `ErrProjectUnavailable`, with its text in `ERR_PROJECT_UNAVAILABLE`.
+  - `Ipc(tsrs_ipc::Error)`.
+  - `Other(String)`.
+- How Go's error matching maps over:
+  - `errors.AsType[*X](err)` is `err.as_transform_error()`, `as_diagnostic_directive_error()`,
+    `as_invalid_virtual_extension_error()`, `as_project_error()`, `as_initialize_error()`,
+    `as_supplemental_file_collision_error()` or `as_mapping_error()`. Each looks through `TransformError`'s
+    wrapped error the way Go's `Unwrap` does.
+  - `errors.Is(err, ErrProjectUnavailable)` is `err.is_project_unavailable()`.
+  - The ipc sentinels are `err.is(ipc::ErrorTag::…)`.
+  - `err.error()` and `Display` give Go's text. `new_transform_error(kind, Option<Error>)` is Go's
+    `NewTransformError`.
+- Transform helpers (`transform.go`):
+  - `SourceFiles { canonical: Option<P<SourceFile>>, supplemental: Vec<P<SourceFile>> }`.
+  - `transform_and_parse(SourceFileParseOptions, content: &str, &Mapper, &dyn Project) -> Result<SourceFiles, Error>`.
+  - `parse_result(SourceFileParseOptions, content, &Mapper, transform_identity: &str, TransformResultFiles)`.
+  - `check_supplemental_file_name_collisions(&SourceFiles, impl FnMut(&str) -> bool) -> Result<(), Error>`.
+- Spawning:
+  - `trait Spawner: Send + Sync { fn spawn(&self, command: &[String], dir: &str, stderr: Option<Box<dyn Write + Send>>)
+    -> Result<tsrs_ipc::ReadWriteCloser, String> }`. A `None` stderr is Go's `io.Discard`.
+  - `SpawnerFunc(F)` wraps a closure as a `Spawner`.
+  - The production spawner is `ProcessSpawner`, Go's `osSys.Spawn`; its function is `spawn_process`.
+- Protocol: the types and constants are public, for the test mappers. That covers `METHOD_*`, `InitializeParams`,
+  `InitializeResult`, `OpenProjectParams`, `OpenProjectResult`, `OptionDiagnosticResult`, `CloseProjectParams`,
+  `TransformParams`, `MappedOutput`, `SupplementalOutput`, `TransformResult`, `Diagnostic`, `DiagnosticDirectives`,
+  `MappedDiagnosticDirective`, `UnusedExpectDirectiveDiagnostic`, `PositionEncoding::{UTF8, UTF16}` and
+  `DiagnosticDirectivePolicy::{Ignore, Expect}`. Each type implements `ProtocolJson`, whose `marshal_json` and
+  `unmarshal_json` follow Go's json tags. `unmarshal::<T>(Option<Value>)` decodes a type.
+- Process shutdown (`process.rs`):
+  - `close` closes stdin, kills the child, waits for it, then waits at most one second (Go's `WaitDelay`) for the
+    stderr copy.
+  - A descendant of the mapper that keeps the stdout pipe open keeps the host's read-loop thread blocked. Nothing
+    joins that thread, so `close` still returns at once; the thread and its descriptors stay until the descendant
+    exits.
+  - Tested by `process_test::test_host_close_does_not_wait_for_mapper_descendants` and by the port of Go's
+    `TestChildProcessCloseDoesNotWaitForLauncherDescendants`.
+- Crate `tsrs_contentmappertest`, Go's `testutil/contentmappertest`:
+  - The tsctests harness calls `new_spawner() -> Arc<dyn Spawner>` and
+    `new_spawner_with_project_lifecycle(Arc<ProjectLifecycle>)`; `ProjectLifecycle { opens, closes }` holds
+    `AtomicI32`s. It also uses `package_json(mapper)`, `PACKAGE_NAME`, the 18 mapper name constants
+    (`TRANSFORMING_MAPPER`, …, `DUPLICATE_PROJECTION_MAPPER`) and `DECLARED_OPTIONS`.
+  - `serve(ReadWriteCloser)` serves the transforming mapper, and `Handler` is that mapper.
+  - The spawner serves each mapper in-process over `tsrs_ipc::pipe()`, on a thread.
+  - `tsrs_fourslash::contentmappertest` re-exports this crate, and `tsrs_fourslash::contentmapper::Spawner` wraps its
+    spawner. The fourslash harness still rejects a test that sets a spawner (phase 2).
+- Tests:
+  - `tsrs_contentmapper` has the port of `transform_test.go` (3 tests) and of `host_test.go` (27 tests;
+    `TestMapperDiagnosticName` is in wave 1). The test that `close` does not wait for descendants is ported from
+    `cmd/tsc/sys_unix_test.go`.
+  - Two `process_test.rs` tests run `testdata/contentmapper/header-mapper` through `ProcessSpawner`. They need
+    `node` and skip without it.
+  - `tsrs_contentmappertest` has the port of `mapper_test.go` (`TestOutOfProcess`, with its own `main`).
+
+Wave 3 (the compiler and CLI integration, the scenario tests) is done. What wave 4 builds on:
+
+- Compiler (`tsrs_compiler`):
+  - `CompilerHost` has `get_content_mapped_source_files(parse_options, &Mapper) -> Result<SourceFiles, Error>`
+    (`Ok` with no canonical file is Go's "cannot read") and `content_mapper_project() -> Option<Arc<dyn Project>>`.
+    `new_compiler_host` / `new_cached_fs_compiler_host` take the project as a sixth argument;
+    `get_content_mapped_source_files_with(fs, project, ...)` is the shared body (host.go:101, build/compilerHost.go:41).
+  - The file loader's mapper code is on `sourceFileParser` (fileloader.rs), a view that both the sequential load and
+    the parallel parse ahead use, so mapped files are transformed on the worker pool as in Go. The speculative walk
+    never claims a mapped file (a wasted transform would count against the failure budget).
+  - With content mappers and `--singleThreaded`, `filesParser::parse` runs Go's single-threaded work-group order
+    (last queued first). Rounds keep FIFO order otherwise; the failure budget is the only output that depends on it.
+  - Public: `content_mapper_project_diagnostic`, `content_mapper_initialization_diagnostic`,
+    `content_mapper_project_error_diagnostic`, `Program::{content_mapper_project, get_content_mapper,
+    content_mapper_extensions}`.
+  - The diagnostic writer takes `P<Diagnostic>` and reads it through Go's `ASTDiagnostic` (`diagnostic_file`,
+    `diagnostic_pos`, `diagnostic_len`, `diagnostic_message_chain`); `FileLike` keeps Go's identity, so each
+    original-text or renamed wrapper is its own file in the error summary, as in Go.
+- `tsrs_incremental::content_mapper_identities(Option<&dyn Project>) -> Result<Option<Vec<String>>, Error>`.
+- `tsrs_execute`:
+  - `System::spawn(command, dir, stderr)` is required; `osSys`, the WebAssembly system and its test system use
+    `tsrs_contentmapper::spawn_process`, the API build system returns Go's "not supported" error, and the tsctests
+    `TestSys` serves `tsrs_contentmappertest::new_spawner()`. `System::write_error` is Go's `ErrorWriter` (stderr by
+    default), used only by the `TS_CONTENT_MAPPER_DEBUG` logger.
+  - `tsc::new_content_mapper_host(sys, options)`; `tsc::contentMapperCloser` closes the project, then the host, when
+    it is dropped: `perform_compilation`, `perform_incremental_compilation` and the build orchestrator's
+    `start_worker` hold one, so every return (and an unwind) closes them. Go leaves the host to its command context.
+  - Build: `Orchestrator.content_mapper_host`, `BuildTask::{get_content_mapper_project, close_content_mapper_project}`,
+    `is_content_mapper_supplemental_build_info_path`. `refresh_content_mapper_project` is ported but only the watch
+    update calls it in Go (`#[expect(dead_code)]`).
+- Tests: tsctests all 9 content-mapper scenarios byte-identical (380 pass; the 35 other failures are the CLI gaps of
+  notes/upstream-gaps-2026-10-08.md, unchanged). `contentmapper_test.rs` (tsrs_compiler, 9 cases),
+  `buildinfo_contentmapper_test.rs` (tsrs_incremental, 3), the build task's supplemental path test. CI's fast test
+  lane now includes tsrs_incremental and tsrs_execute (the tsctests harness needs the dump, so it is vacuous there).
+- Not done here, for wave 4 or phase 2:
+  - The conformance runner still skips the 15 `contentMappers` compiler cases (`tsrs_testrunner` compile.rs:347,
+    "content mappers (runExternalCode) are not supported"): Go's harness creates a host with the test spawner
+    (harnessutil.go:190-253, compiler_runner.go:343 baselines the mapped text, emit_harness). Porting that is test
+    harness work; the gate counts do not include them.
+  - The locale sent to mappers is the `--locale` text as given; Go sends the canonical BCP 47 tag (`en-us` ->
+    `en-US`, empty or invalid -> no locale). tsrs has no tag canonicalization.
+  - README capability table and docs/STATUS.md are not updated yet.
+
+Wave 4 (finishing) is done:
+
+- Rebased onto main (`afca418d`), with the ipc merge flattened into the linear history. Conflict: the fast-crates test
+  list in `.depot/workflows/ci.yml`, which main's step parallelization had moved.
+- `tools/contentmapper-e2e.sh` and `testdata/contentmapper/{types,mapper-diagnostic}` (Verification above), in CI
+  after the regression cases.
+- README, docs/STATUS.md (unreleased entry), docs/LSP.md, docs/AST.md, docs/EMIT.md and
+  notes/upstream-gaps-2026-10-08.md say what is ported now.
+- Gates after the rebase: `cargo check --workspace` with `-D warnings`, the wasm32-wasip1 check of `tsrs_wasm`, ratchet
+  (3 findings, none new), source checks, gen-check, unit tests, conformance 13,458 / 12,779 / 12,779 (default checker
+  mode 13,458 / 12,778 / 12,778), fourslash 4,066 pass / 63 fail, regressions 28 / 28, e2e 2 / 2, tsctests as above.
+- Left for phase 2 or later: see "Not ported".

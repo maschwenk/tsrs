@@ -139,7 +139,7 @@ fn setup(d: &dataset) -> (LanguageService, Context) {
     let config_host: &'static parseConfigHost = Box::leak(Box::new(parseConfigHost { fs: fs.clone() }));
     let (config, diagnostics) = tsoptions::get_parsed_command_line_of_config_file("/tsconfig.json", None, None, config_host, None);
     assert!(diagnostics.is_empty());
-    let host: Arc<dyn CompilerHost> = new_compiler_host("/", fs.clone(), &bundled::lib_path(), None, None);
+    let host: Arc<dyn CompilerHost> = new_compiler_host("/", fs.clone(), &bundled::lib_path(), None, None, None);
     let mut options = ProgramOptions::new(P::new(config.unwrap()), host);
     options.create_checker_pool = Some(Arc::new(|program: &'static Program| {
         let state: &'static testPoolState = Box::leak(Box::new(testPoolState { program, slots: Mutex::new(Vec::new()) }));

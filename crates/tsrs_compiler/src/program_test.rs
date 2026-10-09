@@ -26,7 +26,7 @@ impl ParseConfigHost for parseConfigHost {
 
 fn host_for(files: &[(&str, &str)]) -> Arc<dyn CompilerHost> {
     let fs: Arc<dyn FS> = Arc::new(vfstest::from_map(files.iter().map(|&(k, v)| (k, v)), true));
-    new_compiler_host("/", fs, "", None, None)
+    new_compiler_host("/", fs, "", None, None, None)
 }
 
 fn config_for(files: &[(&str, &str)]) -> P<tsoptions::ParsedCommandLine> {

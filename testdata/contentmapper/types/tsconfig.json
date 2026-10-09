@@ -1,0 +1,5 @@
+{
+  "compilerOptions": { "strict": true, "noEmit": true, "module": "esnext", "target": "es2022", "types": [] },
+  "contentMappers": [{ "package": "header-mapper", "extensions": [".vue"] }],
+  "include": ["src"]
+}

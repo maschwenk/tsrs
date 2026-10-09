@@ -20,6 +20,13 @@ pub(crate) fn source_file_may_be_emitted(source_file: P<SourceFile>, host: &Prog
         return false;
     }
 
+    // Runtime output for content-mapped files is owned by the external content mapper or build tool. Only
+    // include them in the emit set when their transformed TypeScript can produce declarations.
+    // emitter.go:508
+    if !source_file.content_mapper().is_empty() && !force_dts_emit && !options.get_emit_declarations() {
+        return false;
+    }
+
     // Source file from node_modules are not emitted
     if host.is_source_file_from_external_library(source_file) {
         return false;
@@ -180,7 +187,12 @@ mod emit {
         // `None`: the program's options (JS file); `Some`: the declaration map options
         map_options: Option<CompilerOptions>,
         should_emit_source_maps: bool,
+        // Go `PrintHandlers.MapSourcePosition` (emitDeclarationFile, for a content-mapped file).
+        map_source_position: Option<MapSourcePosition>,
     }
+
+    // `Send`: the pending print may run on the thread that writes the files (program_emit.rs).
+    type MapSourcePosition = Box<dyn Fn(printer::SourceMapSource, i32) -> Option<(printer::SourceMapSource, i32)> + Send>;
 
     impl emitter<'_> {
         // emitter.go:46 `emit` is `transform` followed by `print`. This part runs the transformers (and so needs the
@@ -202,21 +214,23 @@ mod emit {
         // diagnostics, print and write the declaration file.
         pub(crate) fn print(&mut self, writer: &mut (dyn EmitTextWriter + 'static)) {
             if let Some(pending) = self.pending_js.take() {
-                self.print_pending(&pending, writer);
+                self.print_pending(pending, writer);
             }
             for elem in std::mem::take(&mut self.declaration_diagnostics) {
                 // Add declaration transform diagnostics to emit diagnostics
                 self.emitter_diagnostics.add(elem);
             }
             if let Some(pending) = self.pending_declaration.take() {
-                self.print_pending(&pending, writer);
+                self.print_pending(pending, writer);
             }
             self.emit_result.diagnostics = self.emitter_diagnostics.get_diagnostics();
         }
 
-        fn print_pending(&mut self, pending: &pendingPrint, writer: &mut (dyn EmitTextWriter + 'static)) {
+        fn print_pending(&mut self, mut pending: pendingPrint, writer: &mut (dyn EmitTextWriter + 'static)) {
             // create a printer to print the nodes
-            let printer = printer::new_printer(pending.printer_options, PrintHandlers::default(), Some(pending.emit_context));
+            let map_source_position = pending.map_source_position.take().map(|handler| -> Box<dyn Fn(printer::SourceMapSource, i32) -> Option<(printer::SourceMapSource, i32)>> { handler });
+            let print_handlers = PrintHandlers { map_source_position, ..Default::default() };
+            let printer = printer::new_printer(pending.printer_options, print_handlers, Some(pending.emit_context));
             let options = self.host.options();
             let map_options = pending.map_options.as_ref().unwrap_or(&options);
             self.print_source_file(&pending.file_path, &pending.source_map_file_path, pending.source_file, printer, map_options, pending.should_emit_source_maps, writer);
@@ -294,6 +308,7 @@ mod emit {
                 source_map_file_path: source_map_file_path.to_string(),
                 map_options: None,
                 should_emit_source_maps: should_emit_source_maps(&options, source_file),
+                map_source_position: None,
             });
         }
 
@@ -345,9 +360,22 @@ mod emit {
                 ..Default::default()
             };
 
-            // Go installs PrintHandlers.MapSourcePosition when the file has a content-mapper span map; content mappers
-            // are not supported by tsrs (docs/EMIT.md section 10), so the handlers stay empty (`print_pending`).
-            let _ = content_mapped_source;
+            // create a printer to print the nodes (`print_pending`, with these handlers)
+            let mut map_source_position: Option<MapSourcePosition> = None;
+            if let Some(span_map) = content_mapped_source.span_map().filter(|_| emit_declaration_map) {
+                let original_source: &'static declarationMapSource = new_declaration_map_source(content_mapped_source);
+                let content_mapped_file_name = content_mapped_source.get().file_name();
+                map_source_position = Some(Box::new(move |source: printer::SourceMapSource, pos: i32| {
+                    if source.file_name() != content_mapped_file_name {
+                        return Some((source, pos));
+                    }
+                    let (mapped, ok) = span_map.virtual_to_original_position_exact(pos);
+                    if !ok {
+                        return None;
+                    }
+                    Some((original_source, mapped))
+                }));
+            }
 
             let declaration_map_options = CompilerOptions {
                 source_map: if emit_declaration_map { Tristate::True } else { Tristate::False },
@@ -365,6 +393,7 @@ mod emit {
                 source_map_file_path: declaration_map_path.to_string(),
                 map_options: Some(declaration_map_options),
                 should_emit_source_maps: should_emit,
+                map_source_position,
             });
         }
 
@@ -543,7 +572,6 @@ mod emit {
 
     // emitter.go:295
     // Go `declarationMapSource`: the original (content-mapped) source a declaration map points at.
-    #[expect(dead_code, reason = "only the content-mapper MapSourcePosition handler of emitDeclarationFile uses it; content mappers are not supported (docs/EMIT.md section 10)")]
     pub(crate) struct declarationMapSource {
         pub(crate) file_name: String,
         pub(crate) text: &'static str,
@@ -551,7 +579,6 @@ mod emit {
     }
 
     // emitter.go:301
-    #[expect(dead_code, reason = "its only Go caller, the content-mapper MapSourcePosition handler of emitDeclarationFile, is not ported (docs/EMIT.md section 10)")]
     pub(crate) fn new_declaration_map_source(source_file: P<SourceFile>) -> &'static declarationMapSource {
         let text = source_file.original_text();
         P::new(declarationMapSource { file_name: source_file.original_file_name().to_string(), text, line_map: tsrs_core::compute_ecma_line_starts(text) }).get()

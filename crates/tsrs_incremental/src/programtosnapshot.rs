@@ -114,8 +114,12 @@ impl toProgramSnapshot {
         // snapshot's sync maps. Here the per-file work runs on the program's worker pool and only reads shared state;
         // its results are stored in file order afterwards, so the maps are filled in the same order as a sequential run.
         let compute = |file: P<SourceFile>, checker_references: Option<checkerReferences>| -> (FileInfo, Option<std::sync::Arc<RefSet>>, fileChange) {
-            // Content mappers are not supported by tsrs; Go hashes the original text plus the mapper identity here.
-            let version = self.snapshot.compute_hash(file.text());
+            // programtosnapshot.go:94
+            let version = if !file.content_mapper().is_empty() {
+                self.snapshot.compute_hash(&format!("{}\x00{}", file.original_text(), file.content_mapper_transform_identity()))
+            } else {
+                self.snapshot.compute_hash(file.text())
+            };
             let implied_node_format = self.program.get_source_file_meta_data(file.path()).implied_node_format;
             let affects_global_scope = file_affects_global_scope(file);
             let mut signature = String::new();

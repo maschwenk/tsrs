@@ -19,6 +19,8 @@ tsrs_vfs.workspace = true
 tsrs_module.workspace = true
 tsrs_tsoptions.workspace = true
 tsrs_modulespecifiers.workspace = true
+tsrs_spanmap.workspace = true
+tsrs_contentmapper.workspace = true
 tsrs_checker = { workspace = true, optional = true }
 tsrs_declarations = { workspace = true, optional = true }
 tsrs_printer = { workspace = true, optional = true }

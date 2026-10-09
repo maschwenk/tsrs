@@ -1,5 +1,25 @@
 # Status
 
+## Unreleased: content mappers in `tsc` and `tsc -b`
+
+TypeScript 7.1 content mappers are ported for the compiler, `tsrs -p`, `tsrs -b` and incremental builds
+(notes/contentmappers.md). With `--runExternalCode`, tsrs starts the mapper processes named in a tsconfig's
+`contentMappers`, talks to them over JSON-RPC on stdio, parses the TypeScript they return for `.vue`, `.svelte` or
+`.astro` files, and reports diagnostics at positions in the original file through the mapper's span map. Build info
+records the mappers' identities, so a changed mapper forces a rebuild, as in Go. New crates: `tsrs_spanmap`,
+`tsrs_ipc`, `tsrs_contentmapper` and `tsrs_contentmappertest` (Go's in-process test mappers).
+
+Evidence: the 7 `tsc` and 2 `tsbuild` content-mapper scenario baselines are byte-identical (`tsc` 191 of 223 and
+`tsbuild` 189 of 192 locally, against main's 184 of 216 and 187 of 190 on the same dump: the failure lists are the
+same); 116 unit tests ported from Go's tests; and `tools/contentmapper-e2e.sh`, run in CI, checks two projects with a
+small Node mapper through the real process spawner against tsgo's output. Conformance (13,458 / 12,779 / 12,779)
+and fourslash (4,066 pass, 63 fail) are unchanged. Without `--runExternalCode` no host is created, and a file costs
+one extension check against an empty list.
+
+Not ported: content mappers in the language server and the API project system (the 55 content-mapper fourslash
+tests), watch mode, the 15 content-mapper conformance cases (the test runner skips them), and canonicalization of the
+`--locale` tag sent to mappers.
+
 ## 2026-10-09: 0.9.2 release
 
 A determinism fix for TS2590 and faster union construction, with build and dependency changes from the same day; the

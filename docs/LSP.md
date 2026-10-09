@@ -22,9 +22,9 @@ crate map, progress table and list of known gaps. Work happens on branch `lsp` u
 | `cmd/tsc/lsp.go` | `tsrs_cli` (`lsp.rs`) | `tsrs --lsp -stdio` |
 
 Out of scope until further notice: API sessions attached to the language server (the standalone `tsrs --api`
-server is ported, `docs/NODE_API.md`), content mappers (`contentmapper`, `spanmap`: no
-mapper is ever registered, so every "is this file content-mapped" branch takes the plain path; the branch structure
-is kept), ATA (`project/ata`), telemetry, pprof requests, localization (English only).
+server is ported, `docs/NODE_API.md`), content mappers in the language server (`tsc` and `tsc -b` run them,
+notes/contentmappers.md; the server never registers one, so every "is this file content-mapped" branch takes the
+plain path; the branch structure is kept), ATA (`project/ata`), telemetry, pprof requests, localization (English only).
 
 ## Protocol types and JSON
 
@@ -310,7 +310,8 @@ mkdir -p ~/.tsrs-tsdk && ln -sf "$PWD/target/release/tsrs" ~/.tsrs-tsdk/tsgo
 ```
 
 Run "TypeScript 7: Restart Server" (or reload the window); the output channel names the executable it started.
-Content mappers (`js/ts.contentMappers.enabled`) are not ported; turn them off if a workspace contributes any.
+The server does not run content mappers yet (`js/ts.contentMappers.enabled`); turn them off if a workspace
+contributes any. `tsrs -p` and `tsrs -b` do run them.
 
 **Neovim** (0.11+, built-in client):
 
@@ -334,8 +335,9 @@ checkers and old file versions are freed).
 
 ## Known gaps
 
-- Content mappers, LSP-attached API sessions, ATA, telemetry, pprof requests: not ported (see above;
-  standalone `tsrs --api` is in `docs/NODE_API.md`).
+- Content mappers in the language server (phase 2 of notes/contentmappers.md; the 55 content-mapper fourslash
+  tests), LSP-attached API sessions, ATA, telemetry, pprof requests: not ported (see above; standalone `tsrs --api`
+  is in `docs/NODE_API.md`).
 - Memory: see the memory plan (regions; phase 4).
 - Cancellation: ported (robust wave): the checker polls the request context at Go's points; canceled checkers are disposed.
 - `tsrs_ls::autoimport` (ported, actions wave): the registry builds buckets sequentially where Go fans out to
@@ -352,8 +354,9 @@ checkers and old file versions are freed).
   changes nothing on Linux (watching disabled without client support, as in Go).
 - Fourslash `@tsc` command lines (8 tests) need `tsc -b` with emit (`tsctests.GetFileMapWithBuild`); emit is not
   ported.
-- `tsrs_ls::spanmap` is a PLACEHOLDER for Go `internal/spanmap`: value types only; `SpanMap` is uninhabited (no
-  content mapper ever builds one), so content-mapped branches are kept but statically unreachable.
+- `tsrs_ls::spanmap` re-exports `tsrs_spanmap` (Go `internal/spanmap`), but the language server never loads a
+  content-mapped file (content mappers in the language server are phase 2 of notes/contentmappers.md): its scripts
+  report no span map, so the content-mapped branches are kept but never taken.
 - Nested checker acquisition (decided 2026-10-02): Go's call hierarchy (and a few other ls paths) acquires a second
   checker while holding one. The project pool (what the server uses) hands out a different query checker, as in Go.
   The compiler's built-in pool (CLI, compiler-level tests) locks each checker, where Go's non-exclusive getter returns

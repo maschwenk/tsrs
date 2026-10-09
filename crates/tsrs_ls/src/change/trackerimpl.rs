@@ -171,9 +171,13 @@ impl Tracker {
             return text;
         }
         let original = crate::lsconv::Script::original_text(&source_file);
-        let pos = change.text_range.pos();
+        let mut pos = change.text_range.pos();
         if let Some(spans) = crate::lsconv::Script::span_map(&source_file) {
-            match *spans {}
+            let (mapped, fidelity) = spans.virtual_to_original_position(pos);
+            if !fidelity.is_exact() {
+                return text;
+            }
+            pos = mapped;
         }
         if pos < 0 || pos as usize > original.len() {
             return text;
