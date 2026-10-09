@@ -362,12 +362,13 @@ pub(crate) fn throwaway_enabled() -> bool {
     *ON.get_or_init(|| std::env::var("TSRS_SHARED_GRAPH_THROWAWAY").is_ok_and(|v| !v.is_empty() && v != "0"))
 }
 
-/// `TSRS_SHARED_GRAPH_THROWAWAY=<d>` (1 means the default 1600): a throwaway takes files of weight up to the pass's
-/// total / (checkers x d), from the back of its queue.
+/// `TSRS_SHARED_GRAPH_THROWAWAY=<d>` with d > 1: a throwaway takes only files of weight up to the pass's total /
+/// (checkers x d), moved to the back of each queue. `1`: no bound (the back of the queue as it is). Measured on the
+/// Mac, d = 1600 left the throwaways without files 30-170 ms before the seed was done.
 #[cfg(feature = "checker")]
-pub(crate) fn throwaway_divisor() -> u64 {
-    static D: OnceLock<u64> = OnceLock::new();
-    *D.get_or_init(|| std::env::var("TSRS_SHARED_GRAPH_THROWAWAY").ok().and_then(|v| v.parse::<u64>().ok()).filter(|&d| d > 1).unwrap_or(1600))
+pub(crate) fn throwaway_divisor() -> Option<u64> {
+    static D: OnceLock<Option<u64>> = OnceLock::new();
+    *D.get_or_init(|| std::env::var("TSRS_SHARED_GRAPH_THROWAWAY").ok().and_then(|v| v.parse::<u64>().ok()).filter(|&d| d > 1))
 }
 
 #[cfg(feature = "checker")]
@@ -383,17 +384,46 @@ pub(crate) fn needs_fork(slot: &crate::checkerpool::Checker) -> bool {
     !slot.is_fork && slot.type_count == FRESH_TYPES.load(std::sync::atomic::Ordering::Relaxed)
 }
 
-/// Strategy F: keeps the throwaway checker's global diagnostics, replaces it by a fork of the frozen seed, and keeps
-/// the throwaway (F-lite: leaked, so the diagnostics already collected from it stay valid).
+/// Strategy F: the throwaway checker's global diagnostics (with its deferred ones produced) join the pool's.
 #[cfg(feature = "checker")]
-pub(crate) fn retire_into_fork(slot: &mut Box<crate::checkerpool::Checker>, idx: usize) {
+pub(crate) fn keep_throwaway_globals(slot: &mut Box<crate::checkerpool::Checker>) {
     let globals = slot.get_global_diagnostics();
     RETIRED_GLOBALS.lock().unwrap().extend(globals);
+}
+
+/// Strategy F: replaces the throwaway checker by a fork of the frozen seed. `keep` (F-lite) leaks the throwaway;
+/// otherwise it is dropped (its arena data is in the scratch region the caller frees next).
+#[cfg(feature = "checker")]
+pub(crate) fn retire_into_fork(slot: &mut Box<crate::checkerpool::Checker>, idx: usize, keep: bool) {
     let base = wait_base().0;
     tsrs_core::timeline::mark("fork:waited", idx as i64, 0.0);
     let old = std::mem::replace(slot, tsrs_checker::Checker::fork(base));
-    Box::leak(old);
+    if keep {
+        Box::leak(old);
+    } else {
+        drop(old);
+    }
     tsrs_core::timeline::mark("fork:made", idx as i64, 0.0);
+}
+
+/// `TSRS_SHARED_GRAPH_THROWAWAY_FREE=1`: the throwaway checks in a scratch region, freed when it retires.
+#[cfg(feature = "checker")]
+pub(crate) fn throwaway_free() -> bool {
+    static ON: OnceLock<bool> = OnceLock::new();
+    *ON.get_or_init(|| std::env::var("TSRS_SHARED_GRAPH_THROWAWAY_FREE").is_ok_and(|v| !v.is_empty() && v != "0"))
+}
+
+/// `TSRS_SHARED_GRAPH_THROWAWAY_FREE=protect`: a retired throwaway region's chunks become inaccessible instead of
+/// returned (a later read through an escaped pointer faults; memory is not given back).
+#[cfg(feature = "checker")]
+pub(crate) fn protect_retired(region: &tsrs_core::arena::Region) {
+    static ON: OnceLock<bool> = OnceLock::new();
+    if *ON.get_or_init(|| std::env::var("TSRS_SHARED_GRAPH_THROWAWAY_FREE").is_ok_and(|v| v == "protect")) {
+        let chunks = region.chunks();
+        tsrs_core::sharedgraph::protect_none(&chunks);
+        #[expect(clippy::mem_forget, reason = "debug mode: the protected chunks must never be reused")]
+        std::mem::forget(region.clone());
+    }
 }
 
 #[cfg(feature = "checker")]

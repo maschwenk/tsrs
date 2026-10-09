@@ -165,6 +165,26 @@ pub fn freeze(ranges: &[(usize, usize)]) {
     }
 }
 
+/// spike/shared-graph-seed debug mode: makes the whole pages of `ranges` inaccessible (a retired throwaway region;
+/// any later access faults).
+pub fn protect_none(ranges: &[(usize, usize)]) {
+    #[cfg(unix)]
+    {
+        let page = crate::reserve::page_size();
+        for &(start, len) in ranges {
+            let (lo, hi) = (start.next_multiple_of(page), (start + len) & !(page - 1));
+            if hi <= lo {
+                continue;
+            }
+            // SAFETY: whole pages of a chunk of the reservation that nothing may use any more.
+            let r = unsafe { libc::mprotect(std::ptr::with_exposed_provenance_mut::<libc::c_void>(lo), hi - lo, libc::PROT_NONE) };
+            assert!(r == 0, "shared graph: mprotect failed");
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = ranges;
+}
+
 /// `TSRS_SHARED_GRAPH_LOG_OVERRIDES=1`: prints the stack of every override (`faults.py` groups them).
 #[cold]
 fn log_site(msg: &[u8]) {

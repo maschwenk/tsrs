@@ -783,12 +783,12 @@ impl checkerPool {
             let threshold = total / (active.len() as u64 * heavy_share_divisor());
             positions.iter_mut().for_each(|p| heavy_files_first(p, threshold, weight));
         }
-        // Strategy F (sharedgraph.rs): the files a throwaway checker may take while the seed is built go to the back of
-        // each queue (in their order), so that the file in flight when the seed is done is a light one.
+        // Strategy F (sharedgraph.rs), with a bound: the files a throwaway checker may take while the seed is built go to
+        // the back of each queue (in their order), so that the file in flight when the seed is done is a light one.
         #[cfg(feature = "checker")]
-        let throwaway_bound = if steal && state.shared_graph && crate::sharedgraph::throwaway_enabled() {
+        let throwaway_bound = if let Some(divisor) = crate::sharedgraph::throwaway_divisor().filter(|_| steal && state.shared_graph && crate::sharedgraph::throwaway_enabled()) {
             let total: u64 = positions.iter().flatten().map(|&i| weight(i)).sum();
-            let bound = total / (active.len() as u64 * crate::sharedgraph::throwaway_divisor());
+            let bound = total / (active.len() as u64 * divisor);
             for p in &mut positions {
                 let (heavy, light): (Vec<u32>, Vec<u32>) = p.iter().partition(|&&i| weight(i) > bound);
                 *p = heavy;
@@ -796,7 +796,7 @@ impl checkerPool {
             }
             bound
         } else {
-            0
+            u64::MAX
         };
         let queues: Vec<FileQueue> = positions.into_iter().map(|p| FileQueue::new(p, weight)).collect();
         // TSRS_MEM_SPLIT: the type-check pass reports once every checker is done and before any thread exits.
@@ -862,15 +862,28 @@ impl checkerPool {
                     // Strategy F (spike/shared-graph-seed): while the seed is built, this thread checks the light
                     // files at the back of its own queue with its plain checker, then retires it and continues as a
                     // fork. A file's diagnostics do not depend on the checker's history.
-                    crate::sharedgraph::enter_checker(&guard);
-                    let mut throwaway_files = 0usize;
-                    while !crate::sharedgraph::seed_ready() {
-                        let Some(i) = queues[checker_idx].take_back_if(|i| weight(i) <= throwaway_bound) else { break };
-                        process(&mut guard, i, false);
-                        throwaway_files += 1;
+                    // With TSRS_SHARED_GRAPH_THROWAWAY_FREE=1 everything the throwaway allocates goes to a scratch
+                    // region freed when it retires; diagnostics escape it (diagnostic.rs).
+                    let region = crate::sharedgraph::throwaway_free().then(|| tsrs_core::arena::Region::new_scratch(4 << 20));
+                    {
+                        let _scratch = region.as_ref().map(tsrs_core::arena::Region::enter_scratch);
+                        crate::sharedgraph::enter_checker(&guard);
+                        let mut throwaway_files = 0usize;
+                        while !crate::sharedgraph::seed_ready() {
+                            let Some(i) = queues[checker_idx].take_back_if(|i| weight(i) <= throwaway_bound) else { break };
+                            process(&mut guard, i, false);
+                            throwaway_files += 1;
+                        }
+                        tsrs_core::timeline::mark("chk:throwaway", checker_idx as i64, throwaway_files as f64);
+                        crate::sharedgraph::keep_throwaway_globals(&mut guard);
                     }
-                    tsrs_core::timeline::mark("chk:throwaway", checker_idx as i64, throwaway_files as f64);
-                    crate::sharedgraph::retire_into_fork(&mut guard, checker_idx);
+                    crate::sharedgraph::retire_into_fork(&mut guard, checker_idx, region.is_none());
+                    if let Some(region) = region {
+                        tsrs_core::timeline::mark("chk:region", checker_idx as i64, region.used_bytes() as f64);
+                        region.retire_on_free();
+                        crate::sharedgraph::protect_retired(&region);
+                        drop(region);
+                    }
                 } else {
                     crate::sharedgraph::fork_into(&mut guard, checker_idx);
                 }
