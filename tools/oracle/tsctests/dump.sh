@@ -7,7 +7,9 @@
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 repo="$here/../../.."
-out="$(realpath -m "${1:-$repo/target/tsctests-dump}")"
+out="${1:-$repo/target/tsctests-dump}"
+mkdir -p "$out"
+out="$(cd "$out" && pwd)"
 dir="$repo/ts-ref/tsc/internal/execute/tsctests"
 cp "$dir/runner.go" "$dir/runner.go.orig"
 trap 'mv "$dir/runner.go.orig" "$dir/runner.go"; rm -f "$dir/tsrs_dump.go"' EXIT
