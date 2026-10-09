@@ -59,19 +59,52 @@ the other parser-set fields); span maps are arena objects (`P<SpanMap>`), origin
 
 ## Not ported (recorded, not silently dropped)
 
-- The language server and API project system (phase 2).
-- `--watch` hooks.
+- The language server and the API project system (phase 2): `project/`, `lsp/server.go`, the `ls` span-map features.
+  The project system's compiler host has no mapper host, so a file with a mapper's extension takes Go's
+  `ErrProjectUnavailable` path (`tsrs_project/src/compilerhost.rs`); `custom/setContentMapperContributions` answers
+  "not yet ported"; the 55 content-mapper fourslash tests stay among the fourslash gate's 63 failures. `tsrs --api
+  --runExternalCode` accepts the flag and nothing more.
+- `--watch` hooks (`execute/watcher.go`, `tsctests/contentmapper_watch_test.go`): tsrs has no watch mode.
+  `BuildTask::refresh_content_mapper_project` is ported but only Go's watch update calls it.
+- The 15 `compiler/contentMapper*.ts` conformance cases (`@runExternalCode: true`): `tsrs_testrunner` still skips them
+  (`crates/tsrs_testrunner/src/compile.rs:347`). Running them needs Go's harness side: a host with the test spawner
+  (`harnessutil.go:190-253`) and the mapped-text baseline (`compiler_runner.go:343`). The conformance gate counts do
+  not include them. The same behavior is covered by the tsctests scenarios and the unit tests below.
+- Locale canonicalization: the `initialize` request carries the `--locale` text as given. Go canonicalizes it with
+  `x/text` `language.Parse` (`execute/tsc/compile.go:93`, `locale/locale.go:36`) and sends nothing for an unparsable
+  tag. Checked against tsgo-ref with a mapper that logs its `initialize` params: `--locale en-us` sends `en-US` from
+  tsgo and `en-us` from tsrs; `zh-hans-cn` sends `zh-Hans-CN` and `zh-hans-cn`. Only a mapper that localizes its own
+  messages and compares the tag exactly would notice. tsrs has no BCP 47 canonicalization (and no localized messages;
+  README `--locale`).
 - Go's `context` cancellation: the host is closed explicitly (`Host::close`, also on drop of the owning session).
+
+## Cost when no mapper is configured
+
+None that matters, checked in the code: without `--runExternalCode`, `tsc::new_content_mapper_host` returns `None`
+(`crates/tsrs_execute/src/tsc/compile.rs`), so there is no host, project, process or thread, and the compiler host's
+`content_mapper_project()` is `None`. Program option diagnostics and build info identities return at that `None`
+(`program.rs` `collect_content_mapper_option_diagnostics`, `buildinfo.rs` `content_mapper_identities`). Without a
+`contentMappers` entry the file loader's per-file check is `file_extension_is_one_of` against an empty list (the
+`str_slice` of an empty `Vec` does not allocate), in `parse_source_file` and in the parse-ahead filter.
+`SourceFile::text()` does not branch; each `SourceFile` has one more `Option<P<_>>` field (4 bytes with pointer
+compression); the diagnostic writer and `display_message_args` check `span_map()` for `None` per reported
+diagnostic. A pr-verify run on the bench projects (none configures a mapper) is the measured check.
 
 ## Verification
 
-- `tsrs_spanmap`, `tsrs_contentmapper` unit tests: ports of `spanmap_test.go`, `transform_test.go`, the host tests of
-  `host_test.go` that do not need a real process, `compiler/contentmapper_test.go`, `tsoptions/contentmappers_test.go`.
-- tsctests: `tools/oracle/tsctests/dump.sh` (needs Go; `target/tsctests-dump`), then
-  `TSCTESTS_FILTER=contentMapper cargo test --release -p tsrs_execute tsctests` with the content-mapper filter in
-  `crates/tsrs_execute/src/tsctests/mod.rs` removed. All 7 `tsc` and 2 `tsbuild` scenarios must match their Go
-  baselines byte for byte.
-- A real out-of-process mapper: `testdata/contentmapper/` runs a small Node mapper through the production spawner.
+- Unit tests (116), ports of Go's tests: `tsrs_spanmap` 31 (`spanmap_test.go`), `tsrs_ipc` 31, `tsrs_contentmapper`
+  33 (`host_test.go` 27, `transform_test.go` 3, process spawner 3), `tsrs_contentmappertest` 1 (`TestOutOfProcess`),
+  `tsrs_compiler` 9 (`compiler/contentmapper_test.go`), `tsrs_tsoptions` 7 (`tsoptions/contentmappers_test.go` and
+  two definition tests), `tsrs_incremental` 3 (`buildinfo_contentmapper_test.go`), the build task's supplemental path
+  test 1. The two process-spawner tests that run `testdata/contentmapper/header-mapper` skip without `node`.
+- tsctests: `tools/oracle/tsctests/dump.sh` (needs Go; `target/tsctests-dump`), then `cargo test --release -p
+  tsrs_execute tsctests`. All 7 `tsc` and 2 `tsbuild` content-mapper scenarios match their Go baselines byte for
+  byte, through the in-process test mappers.
+- End to end through the production spawner: `tools/contentmapper-e2e.sh` (CI, after the regression cases) runs
+  `testdata/contentmapper/{types,mapper-diagnostic}` with the Node `header-mapper` and `tsrs -p . --runExternalCode
+  --pretty false --singleThreaded`, against tsgo's output. `types` checks that a type error in a mapped file and one
+  in a plain file importing it are reported at original positions; `mapper-diagnostic` checks a mapper-authored
+  diagnostic. A changed `expected.txt` fails it, and so does a missing `node`.
 - The usual gates: `cargo check --workspace --locked` (CI uses `-D warnings`), `tools/lint/ratchet.py`,
   `tools/lint/source.py`, `tools/gen-check.sh`, the conformance and fourslash suites unchanged, `pr-verify`.
 
@@ -246,3 +279,16 @@ Wave 3 (the compiler and CLI integration, the scenario tests) is done. What wave
   - The locale sent to mappers is the `--locale` text as given; Go sends the canonical BCP 47 tag (`en-us` ->
     `en-US`, empty or invalid -> no locale). tsrs has no tag canonicalization.
   - README capability table and docs/STATUS.md are not updated yet.
+
+Wave 4 (finishing) is done:
+
+- Rebased onto main (`afca418d`), with the ipc merge flattened into the linear history. Conflict: the fast-crates test
+  list in `.depot/workflows/ci.yml`, which main's step parallelization had moved.
+- `tools/contentmapper-e2e.sh` and `testdata/contentmapper/{types,mapper-diagnostic}` (Verification above), in CI
+  after the regression cases.
+- README, docs/STATUS.md (unreleased entry), docs/LSP.md, docs/AST.md, docs/EMIT.md and
+  notes/upstream-gaps-2026-10-08.md say what is ported now.
+- Gates after the rebase: `cargo check --workspace` with `-D warnings`, the wasm32-wasip1 check of `tsrs_wasm`, ratchet
+  (3 findings, none new), source checks, gen-check, unit tests, conformance 13,458 / 12,779 / 12,779 (default checker
+  mode 13,458 / 12,778 / 12,778), fourslash 4,066 pass / 63 fail, regressions 28 / 28, e2e 2 / 2, tsctests as above.
+- Left for phase 2 or later: see "Not ported".

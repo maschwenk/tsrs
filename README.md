@@ -174,14 +174,15 @@ against tsgo built from the same pinned commit.
 | Declaration emit (`.d.ts`) | yes (since `0.3.0`) | part of the `.js` baselines |
 | Source maps, declaration maps | yes (since `0.3.0`) | 149 `.js.map` and 156 `.sourcemap.txt` baselines pass, 0 fail |
 | Incremental compilation (`.tsbuildinfo`) | yes (since `0.3.0`) | tsbuildinfo files identical, also for `--noEmit` programs |
-| `--build` (project references, `--builders`, `--clean`, `--dry`, `--force`, `--verbose`) | yes (since `0.3.0`) | 187 of 190 `tsbuild` and 187 of 216 `tsc` scenario baselines pass; the failures are CLI outputs tsrs does not port (`--help`, `--init`, `--showConfig`, `--locale`, `--generateTrace`, the `--version` line) and one message that prints an internal symbol name. Finished projects stay in memory (Go frees them), so peak memory grows with the graph |
+| `--build` (project references, `--builders`, `--clean`, `--dry`, `--force`, `--verbose`) | yes (since `0.3.0`) | 187 of 190 `tsbuild` and 187 of 216 `tsc` scenario baselines pass; the failures are CLI outputs tsrs does not port (`--help`, `--init`, `--showConfig`, `--locale`, `--generateTrace`, the `--version` line) and one message that prints an internal symbol name. The 7 `tsc` and 2 `tsbuild` content-mapper scenarios, not in those counts, pass too. Finished projects stay in memory (Go frees them), so peak memory grows with the graph |
 | Emit on the 38k-file codebase | yes (since `0.3.0`) | all 96 packages built with `tsc`: 9,257 output files (JS, `.d.ts`, maps, `.tsbuildinfo`) byte-identical, same diagnostics and exit codes |
 | `--watch` (also `-b --watch`) | no | exits with "not supported" |
 | `--init`, `--showConfig` | no | exits with "not supported"; `--help` prints a short usage, not tsc's |
 | `--locale` | ignored | messages are English only |
 | `--generateTrace` | ignored | no trace is written |
 | Language server (`--lsp -stdio`) | yes | 4,066 of 4,546 fourslash tests pass; 13,869 of 13,869 responses identical in an xstate editor session (below) |
-| Content mappers, automatic type acquisition, telemetry, pprof requests (language server) | no | not ported |
+| Content mappers (`contentMappers` with `--runExternalCode`, TypeScript 7.1: `.vue`, `.svelte`, `.astro` files turned into TypeScript by the framework's mapper process) | `tsrs -p`, `tsrs -b` and incremental builds: yes. Language server: no (phase 2) | the 7 `tsc` and 2 `tsbuild` content-mapper scenario baselines identical; 116 unit tests ported from Go's `contentmapper`, `spanmap`, `ipc`, compiler, tsoptions and buildinfo tests; two projects with a Node mapper, run through the real process spawner, match tsgo's output (`tools/contentmapper-e2e.sh`, in CI). The 15 content-mapper conformance cases are still skipped by the test runner. No cost when no mapper is configured. `--locale` reaches the mapper as typed, not canonicalized as tsgo does (notes/contentmappers.md) |
+| Automatic type acquisition, telemetry, pprof requests (language server) | no | not ported |
 | `--api` (the IPC server behind TypeScript 7's Node API: `unstable/sync` MessagePack, `unstable/async` JSON-RPC) | yes, with gaps | pinned upstream client suites against a release build of the integration branch: `test/sync/api.test.ts` 339/339, `test/async/api.test.ts` 348/348, `ast` 111/111, `astnav` 4/4 + 4/4, `api-generators` 43/43; suite passes are not byte-level response parity. Not implemented: CPU/heap profiling requests; `getCurrentLanguageServerSnapshot` returns the standalone-session error (no LSP-attached API session); no Windows named pipes. Per-method status in `docs/NODE_API.md` |
 | Prebuilt binaries | macOS arm64, Linux x64/arm64 (glibc) | no Windows or Intel macOS binary |
 | WebAssembly build (`@maschwenk/tsrs-wasm`: Node, browsers) | yes, single-threaded, released from 0.9.0 | byte-identical to native `--singleThreaded` on 1,998 of 1,998 runnable cases of a 2,000-case conformance sample (also 1,993 of 1,993 over in-memory files), 25/25 regressions, 4 bench projects and emit on 2; 2.58 MB gzip; warm runs 1.8-2.3x native single-threaded on the bench projects (notes/wasm-build.md) |
@@ -232,8 +233,8 @@ Opened upstream and closed as too small on their own (keyof mapped types, and th
 help, symbols, semantic tokens, folding, inlay hints, call hierarchy, code fixes, organize imports, formatting,
 file watching and cancellation.
 
-* TypeScript's fourslash tests: 4,066 of 4,546 pass; the 63 failures need content mappers (not ported) or `tsc -b`
-  with emit, and the other 417 are skipped in the Go implementation too.
+* TypeScript's fourslash tests: 4,066 of 4,546 pass; the 63 failures need content mappers in the language server
+  (not ported yet) or `tsc -b` with emit, and the other 417 are skipped in the Go implementation too.
 * Replaying the same editor session against the Go server and comparing the JSON responses: 13,869 of 13,869
   identical on xstate (diagnostics, hover, definition, references, completion, signature help, symbols, with edits).
 * Memory on the 38k-file codebase over a 200-edit session: 2.9 GiB and flat (0.01 MiB per edit); the Go server goes

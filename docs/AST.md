@@ -221,7 +221,8 @@ diagnostics lists and `bind_diagnostics`) with a same-named getter. Slices are
 `ecma_line_map() -> &'static [TextPos]`, `get_position_map()`, `has_identifier(&str)`, `is_js()`,
 `bind_once(impl FnOnce())`, `is_bound()`, `set_jsdoc_cache(map)`, `set_has_lazy_jsdoc(bool)`,
 `symbol()`, `locals()`. Lazy JSDoc: the parser registers `set_parse_jsdoc_for_node(fn(&'static SourceFile, P<Node>) -> Vec<P<Node>>)`.
-Content mappers are not ported (`is_content_mapped()` is always false, `original_text()` is `text()`).
+A content-mapped file carries its mapper state in `content_mapper_info`, set once by the file loader
+(`set_content_mapper_info`); `original_text()`, `span_map()` and `is_content_mapped()` read it (notes/contentmappers.md).
 
 `SourceFileParseOptions { file_name: String, path: Path, external_module_indicator_options }` (Clone).
 
@@ -322,7 +323,7 @@ plus `pos()`/`end()`).
 Language service token cache: `SourceFile::get_or_create_token(kind, pos, end, parent, flags)` (Go `GetOrCreateToken`,
 keyed by `TokenCacheKey { parent, loc }` under a mutex; each call creates tokens with a fresh default factory).
 
-Not ported (language service / emit / API only): content mappers, `SourceFileDataKey`,
+Not ported (language service / emit / API only): `SourceFileDataKey`,
 `GetNameTable`, `GetDeclarationMap`, `Hash`.
 
 ## Diagnostics

@@ -22,9 +22,9 @@ crate map, progress table and list of known gaps. Work happens on branch `lsp` u
 | `cmd/tsc/lsp.go` | `tsrs_cli` (`lsp.rs`) | `tsrs --lsp -stdio` |
 
 Out of scope until further notice: API sessions attached to the language server (the standalone `tsrs --api`
-server is ported, `docs/NODE_API.md`), content mappers (`contentmapper`, `spanmap`: no
-mapper is ever registered, so every "is this file content-mapped" branch takes the plain path; the branch structure
-is kept), ATA (`project/ata`), telemetry, pprof requests, localization (English only).
+server is ported, `docs/NODE_API.md`), content mappers in the language server (`tsc` and `tsc -b` run them,
+notes/contentmappers.md; the server never registers one, so every "is this file content-mapped" branch takes the
+plain path; the branch structure is kept), ATA (`project/ata`), telemetry, pprof requests, localization (English only).
 
 ## Protocol types and JSON
 
@@ -310,7 +310,8 @@ mkdir -p ~/.tsrs-tsdk && ln -sf "$PWD/target/release/tsrs" ~/.tsrs-tsdk/tsgo
 ```
 
 Run "TypeScript 7: Restart Server" (or reload the window); the output channel names the executable it started.
-Content mappers (`js/ts.contentMappers.enabled`) are not ported; turn them off if a workspace contributes any.
+The server does not run content mappers yet (`js/ts.contentMappers.enabled`); turn them off if a workspace
+contributes any. `tsrs -p` and `tsrs -b` do run them.
 
 **Neovim** (0.11+, built-in client):
 
@@ -334,8 +335,9 @@ checkers and old file versions are freed).
 
 ## Known gaps
 
-- Content mappers, LSP-attached API sessions, ATA, telemetry, pprof requests: not ported (see above;
-  standalone `tsrs --api` is in `docs/NODE_API.md`).
+- Content mappers in the language server (phase 2 of notes/contentmappers.md; the 55 content-mapper fourslash
+  tests), LSP-attached API sessions, ATA, telemetry, pprof requests: not ported (see above; standalone `tsrs --api`
+  is in `docs/NODE_API.md`).
 - Memory: see the memory plan (regions; phase 4).
 - Cancellation: ported (robust wave): the checker polls the request context at Go's points; canceled checkers are disposed.
 - `tsrs_ls::autoimport` (ported, actions wave): the registry builds buckets sequentially where Go fans out to
