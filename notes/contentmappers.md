@@ -203,3 +203,46 @@ Wave 2 (the host and the test mappers) is done. What wave 3 builds on:
   - Two `process_test.rs` tests run `testdata/contentmapper/header-mapper` through `ProcessSpawner`. They need
     `node` and skip without it.
   - `tsrs_contentmappertest` has the port of `mapper_test.go` (`TestOutOfProcess`, with its own `main`).
+
+Wave 3 (the compiler and CLI integration, the scenario tests) is done. What wave 4 builds on:
+
+- Compiler (`tsrs_compiler`):
+  - `CompilerHost` has `get_content_mapped_source_files(parse_options, &Mapper) -> Result<SourceFiles, Error>`
+    (`Ok` with no canonical file is Go's "cannot read") and `content_mapper_project() -> Option<Arc<dyn Project>>`.
+    `new_compiler_host` / `new_cached_fs_compiler_host` take the project as a sixth argument;
+    `get_content_mapped_source_files_with(fs, project, ...)` is the shared body (host.go:101, build/compilerHost.go:41).
+  - The file loader's mapper code is on `sourceFileParser` (fileloader.rs), a view that both the sequential load and
+    the parallel parse ahead use, so mapped files are transformed on the worker pool as in Go. The speculative walk
+    never claims a mapped file (a wasted transform would count against the failure budget).
+  - With content mappers and `--singleThreaded`, `filesParser::parse` runs Go's single-threaded work-group order
+    (last queued first). Rounds keep FIFO order otherwise; the failure budget is the only output that depends on it.
+  - Public: `content_mapper_project_diagnostic`, `content_mapper_initialization_diagnostic`,
+    `content_mapper_project_error_diagnostic`, `Program::{content_mapper_project, get_content_mapper,
+    content_mapper_extensions}`.
+  - The diagnostic writer takes `P<Diagnostic>` and reads it through Go's `ASTDiagnostic` (`diagnostic_file`,
+    `diagnostic_pos`, `diagnostic_len`, `diagnostic_message_chain`); `FileLike` keeps Go's identity, so each
+    original-text or renamed wrapper is its own file in the error summary, as in Go.
+- `tsrs_incremental::content_mapper_identities(Option<&dyn Project>) -> Result<Option<Vec<String>>, Error>`.
+- `tsrs_execute`:
+  - `System::spawn(command, dir, stderr)` is required; `osSys`, the WebAssembly system and its test system use
+    `tsrs_contentmapper::spawn_process`, the API build system returns Go's "not supported" error, and the tsctests
+    `TestSys` serves `tsrs_contentmappertest::new_spawner()`. `System::write_error` is Go's `ErrorWriter` (stderr by
+    default), used only by the `TS_CONTENT_MAPPER_DEBUG` logger.
+  - `tsc::new_content_mapper_host(sys, options)`; `tsc::contentMapperCloser` closes the project, then the host, when
+    it is dropped: `perform_compilation`, `perform_incremental_compilation` and the build orchestrator's
+    `start_worker` hold one, so every return (and an unwind) closes them. Go leaves the host to its command context.
+  - Build: `Orchestrator.content_mapper_host`, `BuildTask::{get_content_mapper_project, close_content_mapper_project}`,
+    `is_content_mapper_supplemental_build_info_path`. `refresh_content_mapper_project` is ported but only the watch
+    update calls it in Go (`#[expect(dead_code)]`).
+- Tests: tsctests all 9 content-mapper scenarios byte-identical (380 pass; the 35 other failures are the CLI gaps of
+  notes/upstream-gaps-2026-10-08.md, unchanged). `contentmapper_test.rs` (tsrs_compiler, 9 cases),
+  `buildinfo_contentmapper_test.rs` (tsrs_incremental, 3), the build task's supplemental path test. CI's fast test
+  lane now includes tsrs_incremental and tsrs_execute (the tsctests harness needs the dump, so it is vacuous there).
+- Not done here, for wave 4 or phase 2:
+  - The conformance runner still skips the 15 `contentMappers` compiler cases (`tsrs_testrunner` compile.rs:347,
+    "content mappers (runExternalCode) are not supported"): Go's harness creates a host with the test spawner
+    (harnessutil.go:190-253, compiler_runner.go:343 baselines the mapped text, emit_harness). Porting that is test
+    harness work; the gate counts do not include them.
+  - The locale sent to mappers is the `--locale` text as given; Go sends the canonical BCP 47 tag (`en-us` ->
+    `en-US`, empty or invalid -> no locale). tsrs has no tag canonicalization.
+  - README capability table and docs/STATUS.md are not updated yet.

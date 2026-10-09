@@ -423,7 +423,7 @@ impl Orchestrator {
     // orchestrator.go:311
     fn start_worker(&'static self, project: &str, only_references: bool) -> OrchestratorResult {
         let content_mapper_host = tsc::new_content_mapper_host(self.opts.sys, &self.opts.command.compiler_options);
-        *self.content_mapper_host.lock().unwrap() = content_mapper_host.clone();
+        self.content_mapper_host.lock().unwrap().clone_from(&content_mapper_host);
         // Go defers the host's Close unless this is a watch session under test; watch mode is not ported.
         let _close_content_mapper_host = tsc::contentMapperCloser { host: content_mapper_host, project: None };
         {
