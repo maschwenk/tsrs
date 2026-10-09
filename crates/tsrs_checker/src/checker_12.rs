@@ -1,4 +1,5 @@
 use crate::*;
+use tsrs_core::shwindow::KeyAnd;
 use tsrs_ast::*;
 use tsrs_core::*;
 use tsrs_ast as ast;
@@ -200,14 +201,22 @@ impl Checker {
         }
         let links = self.type_alias_links.get(symbol);
         let type_parameters = links.type_parameters.get();
-        let key = get_type_alias_instantiation_key(type_arguments, alias);
-        let mut instantiation = links.instantiations.get(&key);
+        let (key, and) = get_type_alias_instantiation_key(type_arguments, alias);
+        let mut instantiation = if links.instantiations.is_shared() {
+            self.shared_instantiation_get(links.instantiations.table_key(), key, and, || links.instantiations.get(&key))
+        } else {
+            links.instantiations.get(&key)
+        };
         if instantiation.is_none() {
             let min_type_argument_count = self.get_min_type_argument_count(type_parameters);
             let filled = self.fill_missing_type_arguments(type_arguments, type_parameters, min_type_argument_count, ast::is_in_js_file(symbol.value_declaration()));
             let mapper = new_type_mapper(type_parameters, alloc_vec(filled));
             let result = self.instantiate_type_with_alias(t, Some(mapper), alias);
-            links.instantiations.set(key, result);
+            if links.instantiations.is_shared() {
+                self.shared_instantiation_set(links.instantiations.table_key(), key, result);
+            } else {
+                links.instantiations.set(key, result);
+            }
             instantiation = Some(result);
         }
         instantiation.unwrap()
@@ -1592,8 +1601,8 @@ impl Checker {
             }
             return self.global_array_type;
         }
-        let key = get_tuple_key(element_infos, readonly);
-        let mut t = self.tuple_types.get(&key);
+        let (key, and) = get_tuple_key(element_infos, readonly);
+        let mut t = self.tuple_types.get_base(and, |b| b.get(&key)).or_else(|| self.tuple_types.get(&key));
         if t.is_none() {
             let target = self.create_tuple_target_type(element_infos, readonly);
             self.tuple_types.insert(key, target);
@@ -2027,7 +2036,11 @@ impl Checker {
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn create_type_reference_ex(&mut self, target: P<Type>, type_arguments: &[P<Type>], object_flags: ObjectFlags) -> P<Type> {
         let intf = target.as_interface_type();
-        if let Some(t) = intf.instantiations.get(type_arguments) {
+        if target.is_shared() {
+            if let Some(t) = self.shared_reference_get(target, type_arguments) {
+                return t;
+            }
+        } else if let Some(t) = intf.instantiations.get(type_arguments) {
             return t;
         }
         let propagating_flags = self.get_propagating_flags_of_types(type_arguments, TypeFlags::None);
@@ -2035,7 +2048,11 @@ impl Checker {
         let d = t.as_type_reference();
         d.target.set(Some(target));
         d.resolved_type_arguments.set(Some(alloc_slice(type_arguments)));
-        intf.instantiations.add(t);
+        if target.is_shared() {
+            self.shared_reference_add(target, t);
+        } else {
+            intf.instantiations.add(t);
+        }
         t
     }
 
@@ -2271,7 +2288,7 @@ pub(crate) fn is_fresh_literal_type(t: P<Type>) -> bool {
 impl Checker {
     // checker.go:25775
     pub(crate) fn get_string_literal_type(&mut self, value: &str) -> P<Type> {
-        let mut t = self.string_literal_types.get(value);
+        let mut t = self.string_literal_types.get_base(KeyAnd::NONE, |b| b.get(value)).or_else(|| self.string_literal_types.get(value));
         if t.is_none() {
             let literal = self.new_literal_type(TypeFlags::StringLiteral, Some(LiteralValue::String(alloc_str(value))), None);
             self.string_literal_types.insert_new(literal);
@@ -2290,7 +2307,7 @@ impl Checker {
             }
             return self.nan_type.unwrap();
         }
-        let mut t = self.number_literal_types.get(&value).copied();
+        let mut t = self.number_literal_types.get_base(KeyAnd::NONE, |b| b.get(&value).copied()).or_else(|| self.number_literal_types.get(&value).copied());
         if t.is_none() {
             let literal = self.new_literal_type(TypeFlags::NumberLiteral, Some(LiteralValue::Number(value)), None);
             self.number_literal_types.insert(value, literal);
@@ -2301,7 +2318,7 @@ impl Checker {
 
     // checker.go:25801
     pub(crate) fn get_big_int_literal_type(&mut self, value: PseudoBigInt) -> P<Type> {
-        let mut t = self.bigint_literal_types.get(&value).copied();
+        let mut t = self.bigint_literal_types.get_base(KeyAnd::NONE, |b| b.get(&value).copied()).or_else(|| self.bigint_literal_types.get(&value).copied());
         if t.is_none() {
             let literal = self.new_literal_type(TypeFlags::BigIntLiteral, Some(LiteralValue::BigInt(value)), None);
             self.bigint_literal_types.insert(value, literal);
@@ -2360,7 +2377,7 @@ impl Checker {
                 // NaN cannot be used as a Go map key because NaN != NaN in IEEE 754,
                 // so Go map lookups for NaN always miss. Cache NaN enum types separately by enum symbol.
                 if v.is_nan() {
-                    let mut t = self.enum_nan_literal_types.get(&enum_symbol).copied();
+                    let mut t = self.enum_nan_literal_types.get_base(KeyAnd::NONE, |b| b.get(&enum_symbol).copied()).or_else(|| self.enum_nan_literal_types.get(&enum_symbol).copied());
                     if t.is_none() {
                         let literal = self.new_literal_type(flags, Some(value), None);
                         literal.set_symbol(Some(symbol));
@@ -2374,7 +2391,7 @@ impl Checker {
             _ => panic!("Unhandled case in getEnumLiteralType"),
         };
         let key = EnumLiteralKey { enum_symbol, value };
-        let mut t = self.enum_literal_types.get(&key).copied();
+        let mut t = self.enum_literal_types.get_base(KeyAnd::NONE, |b| b.get(&key).copied()).or_else(|| self.enum_literal_types.get(&key).copied());
         if t.is_none() {
             let literal = self.new_literal_type(flags, Some(value), None);
             literal.set_symbol(Some(symbol));
@@ -2665,7 +2682,10 @@ impl Checker {
                 std::mem::swap(&mut id1, &mut id2);
             }
             let key = UnionOfUnionKey { id1, id2, r: union_reduction, a: get_alias_key(alias) };
-            let mut t = self.union_of_union_types.get(&key).copied();
+            let mut and = KeyAnd::NONE;
+            and.add(types[0]);
+            and.add(types[1]);
+            let mut t = self.union_of_union_types.get_base(and, |b| b.get(&key).copied()).or_else(|| self.union_of_union_types.get(&key).copied());
             if t.is_none() {
                 let result = self.get_union_type_worker(types, union_reduction, alias, None /*origin*/);
                 self.union_of_union_types.insert(key, result);

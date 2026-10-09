@@ -817,6 +817,11 @@ impl SymbolTable {
         P::new(SymbolTable(FrozenCell::new(SymbolMap::with_capacity(n))))
     }
 
+    /// A copy of the table as a value (spike/r1-read-path: a fork's copy of a shared lazy member table).
+    pub fn clone_value(&self) -> SymbolTable {
+        SymbolTable(FrozenCell::new(self.0.borrow().clone()))
+    }
+
     /// Go `maps.Clone(table)` for a non-nil table.
     pub fn clone_table(&self) -> P<SymbolTable> {
         P::new(SymbolTable(FrozenCell::new(self.0.borrow().clone())))

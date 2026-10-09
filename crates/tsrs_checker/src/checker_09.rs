@@ -445,6 +445,7 @@ impl keyBuilder {
     // checker.go:17770
     #[inline]
     pub(crate) fn write_type(&mut self, t: P<Type>) {
+        self.handles.add(t);
         self.write_uint32(t.id.0);
     }
 
@@ -561,7 +562,7 @@ pub(crate) fn get_alias_key(alias: AliasArg<'_>) -> CacheHashKey {
 }
 
 // checker.go:17848
-pub(crate) fn get_union_key(types: &[P<Type>], origin: Option<P<Type>>, alias: AliasArg<'_>) -> CacheHashKey {
+pub(crate) fn get_union_key(types: &[P<Type>], origin: Option<P<Type>>, alias: AliasArg<'_>) -> (CacheHashKey, tsrs_core::shwindow::KeyAnd) {
     let mut b = keyBuilder::default();
     match origin {
         None => b.write_types(types),
@@ -583,11 +584,11 @@ pub(crate) fn get_union_key(types: &[P<Type>], origin: Option<P<Type>>, alias: A
         _ => panic!("Unhandled case in getUnionKey"),
     }
     b.write_alias_arg(alias);
-    b.hash()
+    (b.hash(), b.handles)
 }
 
 // checker.go:17872
-pub(crate) fn get_intersection_key(types: &[P<Type>], flags: IntersectionFlags, alias: AliasArg<'_>) -> CacheHashKey {
+pub(crate) fn get_intersection_key(types: &[P<Type>], flags: IntersectionFlags, alias: AliasArg<'_>) -> (CacheHashKey, tsrs_core::shwindow::KeyAnd) {
     let mut b = keyBuilder::default();
     b.write_types(types);
     if !flags.intersects(IntersectionFlags::NoConstraintReduction) {
@@ -595,11 +596,11 @@ pub(crate) fn get_intersection_key(types: &[P<Type>], flags: IntersectionFlags, 
     } else {
         b.write_byte(b'*');
     }
-    b.hash()
+    (b.hash(), b.handles)
 }
 
 // checker.go:17883
-pub(crate) fn get_tuple_key(element_infos: &[TupleElementInfo], readonly: bool) -> CacheHashKey {
+pub(crate) fn get_tuple_key(element_infos: &[TupleElementInfo], readonly: bool) -> (CacheHashKey, tsrs_core::shwindow::KeyAnd) {
     let mut b = keyBuilder::default();
     for e in element_infos {
         if e.flags.intersects(ElementFlags::Required) {
@@ -618,37 +619,42 @@ pub(crate) fn get_tuple_key(element_infos: &[TupleElementInfo], readonly: bool) 
     if readonly {
         b.write_byte(b'!');
     }
-    b.hash()
+    (b.hash(), b.handles)
 }
 
 // checker.go:17906
-pub(crate) fn get_type_alias_instantiation_key(type_arguments: &[P<Type>], alias: Option<P<TypeAlias>>) -> CacheHashKey {
-    get_type_instantiation_key(type_arguments, alias.into(), false)
+pub(crate) fn get_type_alias_instantiation_key(type_arguments: &[P<Type>], alias: Option<P<TypeAlias>>) -> (CacheHashKey, tsrs_core::shwindow::KeyAnd) {
+    get_type_instantiation_key_and(type_arguments, alias.into(), false)
 }
 
 // checker.go:17910
 pub(crate) fn get_type_instantiation_key(type_arguments: &[P<Type>], alias: AliasArg<'_>, single_signature: bool) -> CacheHashKey {
+    get_type_instantiation_key_and(type_arguments, alias, single_signature).0
+}
+
+/// `get_type_instantiation_key` and the AND of its handles (spike/r1-read-path).
+pub(crate) fn get_type_instantiation_key_and(type_arguments: &[P<Type>], alias: AliasArg<'_>, single_signature: bool) -> (CacheHashKey, tsrs_core::shwindow::KeyAnd) {
     let mut b = keyBuilder::default();
     b.write_types(type_arguments);
     b.write_alias_arg(alias);
     if single_signature {
         b.write_byte(b'!');
     }
-    b.hash()
+    (b.hash(), b.handles)
 }
 
 // checker.go:17920
-pub(crate) fn get_indexed_access_key(object_type: P<Type>, index_type: P<Type>, access_flags: AccessFlags, alias: AliasArg<'_>) -> CacheHashKey {
+pub(crate) fn get_indexed_access_key(object_type: P<Type>, index_type: P<Type>, access_flags: AccessFlags, alias: AliasArg<'_>) -> (CacheHashKey, tsrs_core::shwindow::KeyAnd) {
     let mut b = keyBuilder::default();
     b.write_type(object_type);
     b.write_type(index_type);
     b.write_uint32(access_flags.bits());
     b.write_alias_arg(alias);
-    b.hash()
+    (b.hash(), b.handles)
 }
 
 // checker.go:17929
-pub(crate) fn get_template_type_key(texts: &[&str], types: &[P<Type>]) -> CacheHashKey {
+pub(crate) fn get_template_type_key(texts: &[&str], types: &[P<Type>]) -> (CacheHashKey, tsrs_core::shwindow::KeyAnd) {
     let mut b = keyBuilder::default();
     b.write_types(types);
     b.write_byte(b'|');
@@ -659,18 +665,23 @@ pub(crate) fn get_template_type_key(texts: &[&str], types: &[P<Type>]) -> CacheH
     for s in texts {
         b.write_string(s);
     }
-    b.hash()
+    (b.hash(), b.handles)
 }
 
 // checker.go:17943
 pub(crate) fn get_conditional_type_key(type_arguments: &[P<Type>], alias: Option<P<TypeAlias>>, for_constraint: bool) -> CacheHashKey {
+    get_conditional_type_key_and(type_arguments, alias, for_constraint).0
+}
+
+/// `get_conditional_type_key` and the AND of its handles (spike/r1-read-path).
+pub(crate) fn get_conditional_type_key_and(type_arguments: &[P<Type>], alias: Option<P<TypeAlias>>, for_constraint: bool) -> (CacheHashKey, tsrs_core::shwindow::KeyAnd) {
     let mut b = keyBuilder::default();
     b.write_types(type_arguments);
     b.write_alias(alias);
     if for_constraint {
         b.write_byte(b'!');
     }
-    b.hash()
+    (b.hash(), b.handles)
 }
 
 // checker.go:17953
@@ -2200,7 +2211,7 @@ impl Checker {
         let t = self.get_reduced_apparent_type(t);
         if t.flags().intersects(TypeFlags::Object) {
             let key = HashedName::new(name);
-            let symbol = if t.object_flags().intersects(ObjectFlags::MembersResolved) {
+            let symbol = if t.object_flags_lazy(ObjectFlags::MembersResolved).intersects(ObjectFlags::MembersResolved) {
                 t.as_structured_type().members().and_then(|m| m.lookup_hashed(key))
             } else {
                 self.get_member_of_unresolved_structured_type(t, name, instantiate)
@@ -2224,7 +2235,7 @@ impl Checker {
             }
             // A name that no member of `Function`, `CallableFunction`, `NewableFunction` or `Object` has is not found
             // below; with `t` resolved, the signature tests below have no side effects to keep.
-            if t.object_flags().intersects(ObjectFlags::MembersResolved) && !self.may_be_augment_member(key) {
+            if t.object_flags_lazy(ObjectFlags::MembersResolved).intersects(ObjectFlags::MembersResolved) && !self.may_be_augment_member(key) {
                 return None;
             }
             let function_type = if t == self.any_function_type {
@@ -2278,7 +2289,7 @@ impl Checker {
             if !t.flags().intersects(TypeFlags::Object) {
                 continue; // get_property_of_object_type finds nothing in it
             }
-            if !t.object_flags().intersects(ObjectFlags::MembersResolved) {
+            if !t.object_flags_lazy(ObjectFlags::MembersResolved).intersects(ObjectFlags::MembersResolved) {
                 return true;
             }
             if let Some(members) = self.resolve_structured_type_members(t).unwrap().members() {
@@ -2327,7 +2338,7 @@ impl Checker {
             return ready.construct_signatures.get();
         }
         if self.lazy_members && t.object_flags().intersects(ObjectFlags::Mapped) {
-            if !t.object_flags().intersects(ObjectFlags::MembersResolved) {
+            if !t.object_flags_lazy(ObjectFlags::MembersResolved).intersects(ObjectFlags::MembersResolved) {
                 self.lazy_member_stats.mapped_signature_early_returns += 1;
             }
             // Mapped types have no signatures.
@@ -2464,7 +2475,7 @@ impl Checker {
     #[inline]
     pub(crate) fn resolve_structured_type_members(&mut self, t: P<Type>) -> Option<&'static StructuredType> {
         #[cfg(feature = "site-counts")]
-        if !t.object_flags().intersects(ObjectFlags::MembersResolved) {
+        if !t.object_flags_lazy(ObjectFlags::MembersResolved).intersects(ObjectFlags::MembersResolved) {
             // Exclusive symbol/signature counts created by this resolution, attributed to the code that asked for it.
             thread_local! { static NESTED: std::cell::RefCell<Vec<u64>> = const { std::cell::RefCell::new(Vec::new()) }; }
             let label = if t.object_flags().intersects(ObjectFlags::Reference) && t.target().is_some_and(|s| s.object_flags().intersects(ObjectFlags::Tuple)) {
@@ -2511,7 +2522,7 @@ impl Checker {
             }
             return r;
         }
-        if t.object_flags().intersects(ObjectFlags::MembersResolved) {
+        if t.object_flags_lazy(ObjectFlags::MembersResolved).intersects(ObjectFlags::MembersResolved) {
             return Some(t.as_structured_type());
         }
         self.resolve_structured_type_members_worker(t)
@@ -2520,7 +2531,7 @@ impl Checker {
     #[cfg_attr(feature = "site-counts", track_caller)]
     #[inline(never)]
     fn resolve_structured_type_members_worker(&mut self, t: P<Type>) -> Option<&'static StructuredType> {
-        if !t.object_flags().intersects(ObjectFlags::MembersResolved) {
+        if !t.object_flags_lazy(ObjectFlags::MembersResolved).intersects(ObjectFlags::MembersResolved) {
             if t.flags().intersects(TypeFlags::Object) {
                 if t.object_flags().intersects(ObjectFlags::Reference) {
                     self.resolve_type_reference_members(t);
@@ -2554,7 +2565,9 @@ impl Checker {
     // checker.go:19439
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn resolve_type_reference_members(&mut self, t: P<Type>) {
-        if let Some(lm) = self.lazy_member_tables.get(&t).filter(|lm| lm.ready.get().is_some()).copied() {
+        let lm = self.lazy_member_tables.get_base_of(t, |b| b.get(&t).copied()).or_else(|| self.lazy_member_tables.get(&t).copied());
+        if let Some(lm) = lm.filter(|lm| lm.ready.get().is_some()) {
+            let lm = self.own_lazy_member_table(t, lm);
             self.resolve_lazy_members(t, lm);
             return;
         }
@@ -2718,6 +2731,7 @@ pub(crate) fn lazy_member_tables_heap(c: &Checker) -> Vec<(String, crate::heapce
     ]
 }
 
+#[derive(Clone)]
 pub(crate) struct LazyMembers {
     pub(crate) unaffected: ThinSlice<&'static str>, // sorted names of declared members that instantiate to themselves
     pub(crate) call_signatures: ThinSlice<P<Signature>>,
@@ -2727,7 +2741,7 @@ pub(crate) struct LazyMembers {
 }
 
 pub(crate) fn may_have_lazy_members(t: P<Type>) -> bool {
-    t.object_flags() & (ObjectFlags::MembersResolved | ObjectFlags::Reference) == ObjectFlags::Reference
+    t.object_flags_lazy(ObjectFlags::MembersResolved) & (ObjectFlags::MembersResolved | ObjectFlags::Reference) == ObjectFlags::Reference
 }
 
 impl Checker {
@@ -2745,7 +2759,9 @@ impl Checker {
     /// `resolveStructuredTypeMembers` on instantiated references, which leaves the flag unset). Read-only;
     /// never resolves anything. Used by the Node API to report Go's objectFlags.
     pub fn members_resolved_like_go(&self, t: P<Type>) -> bool {
-        t.object_flags().intersects(ObjectFlags::MembersResolved) || self.lazy_member_tables.contains_key(&t)
+        t.object_flags_lazy(ObjectFlags::MembersResolved).intersects(ObjectFlags::MembersResolved)
+            || self.lazy_member_tables.get_base_of(t, |b| b.get(&t).copied()).is_some()
+            || self.lazy_member_tables.contains_key(&t)
     }
 
     // Returns nil if t has no lazy member table or it is still being prepared.
@@ -2768,11 +2784,11 @@ impl Checker {
         {
             return None;
         }
-        let lm = match self.lazy_member_tables.get(&t) {
-            Some(&lm) => lm,
+        let lm = match self.lazy_member_tables.get_base_of(t, |b| b.get(&t).copied()).or_else(|| self.lazy_member_tables.get(&t).copied()) {
+            Some(lm) => self.own_lazy_member_table(t, lm),
             None => self.create_lazy_member_table(t, source.unwrap())?,
         };
-        if lm.ready.get().is_none() || t.object_flags().intersects(ObjectFlags::MembersResolved) {
+        if lm.ready.get().is_none() || t.object_flags_lazy(ObjectFlags::MembersResolved).intersects(ObjectFlags::MembersResolved) {
             return None;
         }
         Some(lm)
@@ -2861,10 +2877,36 @@ impl Checker {
             index_infos: ThinSlice::new(alloc_vec(index_infos)),
             base_types: ThinSlice::new(alloc_vec(base_types)),
         });
-        if t.object_flags().intersects(ObjectFlags::MembersResolved) {
+        if t.object_flags_lazy(ObjectFlags::MembersResolved).intersects(ObjectFlags::MembersResolved) {
             // t was resolved while preparing; resolveObjectTypeMembers would now replace its members.
             self.resolve_lazy_members(t, lm);
         }
+    }
+
+    /// spike/r1-read-path: `lm`, or this checker's copy of it if it is shared (a fork fills its own tables; the
+    /// spike's `own_lazy_member_table`). One window test per use.
+    #[inline]
+    pub(crate) fn own_lazy_member_table(&mut self, t: P<Type>, lm: P<LazyMemberTable>) -> P<LazyMemberTable> {
+        if !lm.is_shared() {
+            return lm;
+        }
+        self.copy_shared_lazy_member_table(t, lm)
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn copy_shared_lazy_member_table(&mut self, t: P<Type>, lm: P<LazyMemberTable>) -> P<LazyMemberTable> {
+        let ready = std::cell::OnceCell::new();
+        if let Some(r) = lm.ready.get() {
+            let _ = ready.set(r.clone());
+        }
+        let ordered_properties = std::cell::OnceCell::new();
+        if let Some(&o) = lm.ordered_properties.get() {
+            let _ = ordered_properties.set(o);
+        }
+        let copy = P::new(LazyMemberTable { mapper: lm.mapper, ready, declared: lm.declared.clone_value(), ordered_properties });
+        self.lazy_member_tables.insert(t, copy);
+        copy
     }
 
     pub(crate) fn resolve_lazy_members(&mut self, t: P<Type>, lm: P<LazyMemberTable>) {
@@ -2915,7 +2957,7 @@ impl Checker {
 
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn get_member_of_structured_type_ex(&mut self, t: P<Type>, name: &str, instantiate: bool) -> Option<P<Symbol>> {
-        if t.object_flags().intersects(ObjectFlags::MembersResolved) {
+        if t.object_flags_lazy(ObjectFlags::MembersResolved).intersects(ObjectFlags::MembersResolved) {
             return t.as_structured_type().members().and_then(|m| m.lookup(name));
         }
         self.get_member_of_unresolved_structured_type(t, name, instantiate)

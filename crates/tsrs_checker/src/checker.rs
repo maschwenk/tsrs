@@ -998,15 +998,15 @@ pub struct Checker {
     pub was_canceled: bool,
     pub array_variances: &'static [VarianceFlags],
     pub globals: P<SymbolTable>,
-    pub string_literal_types: StringLiteralTypes,
-    pub number_literal_types: FxHashMap<Number, P<Type>>,
+    pub string_literal_types: crate::twolevel::TwoLevel<StringLiteralTypes>,
+    pub number_literal_types: crate::twolevel::TwoLevel<FxHashMap<Number, P<Type>>>,
     pub nan_type: Option<P<Type>>,
-    pub bigint_literal_types: FxHashMap<PseudoBigInt, P<Type>>,
-    pub enum_literal_types: FxHashMap<EnumLiteralKey, P<Type>>,
-    pub enum_nan_literal_types: FxHashMap<P<Symbol>, P<Type>>,
-    pub indexed_access_types: PackedMap<CacheHashKey, P<Type>>,
-    pub template_literal_types: PackedMap<CacheHashKey, P<Type>>,
-    pub string_mapping_types: FxHashMap<StringMappingKey, P<Type>>,
+    pub bigint_literal_types: crate::twolevel::TwoLevel<FxHashMap<PseudoBigInt, P<Type>>>,
+    pub enum_literal_types: crate::twolevel::TwoLevel<FxHashMap<EnumLiteralKey, P<Type>>>,
+    pub enum_nan_literal_types: crate::twolevel::TwoLevel<FxHashMap<P<Symbol>, P<Type>>>,
+    pub indexed_access_types: crate::twolevel::TwoLevel<PackedMap<CacheHashKey, P<Type>>>,
+    pub template_literal_types: crate::twolevel::TwoLevel<PackedMap<CacheHashKey, P<Type>>>,
+    pub string_mapping_types: crate::twolevel::TwoLevel<FxHashMap<StringMappingKey, P<Type>>>,
     pub unique_es_symbol_types: FxHashMap<P<Symbol>, P<Type>>,
     pub this_expando_kinds: FxHashMap<P<Symbol>, thisAssignmentDeclarationKind>,
     pub this_expando_locations: FxHashMap<P<Symbol>, Option<P<Node>>>,
@@ -1043,10 +1043,10 @@ pub struct Checker {
     pub name_resolver: P<NameResolver<Checker>>,
     /// Go `resolveNameForSymbolSuggestion`; call through `resolve_name_for_symbol_suggestion`.
     pub name_resolver_for_suggestion: P<NameResolver<Checker>>,
-    pub tuple_types: PackedMap<CacheHashKey, P<Type>>,
-    pub union_types: PackedMap<CacheHashKey, P<Type>>,
-    pub union_of_union_types: FxHashMap<UnionOfUnionKey, P<Type>>,
-    pub intersection_types: PackedMap<CacheHashKey, P<Type>>,
+    pub tuple_types: crate::twolevel::TwoLevel<PackedMap<CacheHashKey, P<Type>>>,
+    pub union_types: crate::twolevel::TwoLevel<PackedMap<CacheHashKey, P<Type>>>,
+    pub union_of_union_types: crate::twolevel::TwoLevel<FxHashMap<UnionOfUnionKey, P<Type>>>,
+    pub intersection_types: crate::twolevel::TwoLevel<PackedMap<CacheHashKey, P<Type>>>,
     pub properties_types: FxHashMap<PropertiesTypesKey, P<Type>>,
     pub diagnostics: ast::DiagnosticsCollection,
     pub suggestion_diagnostics: ast::DiagnosticsCollection,
@@ -1081,15 +1081,18 @@ pub struct Checker {
     pub source_file_links: LinkStore<SourceFile, SourceFileLinks>,
     pub reg_exp_scanner: Option<Box<Scanner>>,
     pub pattern_for_type: FxHashMap<P<Type>, P<Node>>,
-    pub(crate) lazy_member_tables: FxHashMap<P<Type>, P<LazyMemberTable>>,
+    pub(crate) lazy_member_tables: crate::twolevel::TwoLevel<FxHashMap<P<Type>, P<LazyMemberTable>>>,
     // Go `StructuredType.objectTypeWithoutAbstractConstructSignatures`: set only by the node builder, for few types,
     // so kept here instead of in every object, union and intersection type.
     pub(crate) object_types_without_abstract_construct_signatures: FxHashMap<P<Type>, P<Type>>,
     // Go `StructuredType.resolvedBaseConstraint` (see `resolved_base_constraint_of`).
     pub(crate) structured_type_base_constraints: FxHashMap<P<Type>, P<Type>>,
     // Go `ObjectType.instantiations` of object types that are not interfaces or tuples (see `ObjectType`).
-    pub(crate) object_type_instantiations: FxHashMap<P<Type>, PackedMap<CacheHashKey, P<Type>>>,
-    pub(crate) lazy_mapped_tables: FxHashMap<P<Type>, std::rc::Rc<LazyMappedTable>>,
+    pub(crate) object_type_instantiations: crate::twolevel::TwoLevel<FxHashMap<P<Type>, PackedMap<CacheHashKey, P<Type>>>>,
+    /// spike/r1-read-path: a fork's instantiations under shared targets (interfaces, type alias tables, conditional
+    /// roots) that the frozen tables lack, by (target or table, key) (design section 3.4, side table 2). Never filled.
+    pub(crate) shared_instantiations: FxHashMap<(tsrs_core::PKey, CacheHashKey), P<Type>>,
+    pub(crate) lazy_mapped_tables: crate::twolevel::TwoLevel<FxHashMap<P<Type>, std::rc::Rc<LazyMappedTable>>>,
     /// tsrs_core::lazymembers::enabled() (default on; `--noLazyMembers` / `TSRS_LAZY_MEMBERS=0`): no lazy table is created when false.
     pub lazy_members: bool,
     /// notes/mem-lazy.md L1: tuple references get lazy member tables too.
@@ -1407,15 +1410,15 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         was_canceled: false,
         array_variances: alloc_slice(&[VarianceFlags::Covariant]),
         globals: SymbolTable::with_capacity(count_global_symbols(files) as usize),
-        string_literal_types: StringLiteralTypes::default(),
-        number_literal_types: FxHashMap::default(),
+        string_literal_types: Default::default(),
+        number_literal_types: Default::default(),
         nan_type: None,
-        bigint_literal_types: FxHashMap::default(),
-        enum_literal_types: FxHashMap::default(),
-        enum_nan_literal_types: FxHashMap::default(),
-        indexed_access_types: PackedMap::default(),
-        template_literal_types: PackedMap::default(),
-        string_mapping_types: FxHashMap::default(),
+        bigint_literal_types: Default::default(),
+        enum_literal_types: Default::default(),
+        enum_nan_literal_types: Default::default(),
+        indexed_access_types: Default::default(),
+        template_literal_types: Default::default(),
+        string_mapping_types: Default::default(),
         unique_es_symbol_types: FxHashMap::default(),
         this_expando_kinds: FxHashMap::default(),
         this_expando_locations: FxHashMap::default(),
@@ -1447,10 +1450,10 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         class_expression_name_tables: FxHashMap::default(),
         name_resolver: dummy_resolver,
         name_resolver_for_suggestion: dummy_resolver,
-        tuple_types: PackedMap::default(),
-        union_types: PackedMap::default(),
-        union_of_union_types: FxHashMap::default(),
-        intersection_types: PackedMap::default(),
+        tuple_types: Default::default(),
+        union_types: Default::default(),
+        union_of_union_types: Default::default(),
+        intersection_types: Default::default(),
         properties_types: FxHashMap::default(),
         diagnostics: ast::DiagnosticsCollection::default(),
         suggestion_diagnostics: ast::DiagnosticsCollection::default(),
@@ -1485,11 +1488,12 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         source_file_links: LinkStore::default(),
         reg_exp_scanner: None,
         pattern_for_type: FxHashMap::default(),
-        lazy_member_tables: FxHashMap::default(),
+        lazy_member_tables: Default::default(),
         object_types_without_abstract_construct_signatures: FxHashMap::default(),
         structured_type_base_constraints: FxHashMap::default(),
-        object_type_instantiations: FxHashMap::default(),
-        lazy_mapped_tables: FxHashMap::default(),
+        object_type_instantiations: Default::default(),
+        shared_instantiations: FxHashMap::default(),
+        lazy_mapped_tables: Default::default(),
         lazy_members: tsrs_core::lazymembers::enabled(),
         lazy_tuples: tsrs_core::lazymembers::lazy_tuples(),
         #[cfg(feature = "site-counts")]
@@ -2460,11 +2464,14 @@ pub struct keyBuilder {
     pub inline_length: i32,
     pub overflow_buffer: Option<Vec<u8>>, // Go nil slice = no overflow yet
     pub inline_buffer: [u8; 192],
+    /// spike/r1-read-path: the AND of the handles of the types written (`write_type`); a two-level map probes the
+    /// shared layer's frozen map only when it lies in the window (`crate::twolevel`).
+    pub handles: tsrs_core::shwindow::KeyAnd,
 }
 
 impl Default for keyBuilder {
     fn default() -> Self {
-        keyBuilder { inline_length: 0, overflow_buffer: None, inline_buffer: [0; 192] }
+        keyBuilder { inline_length: 0, overflow_buffer: None, inline_buffer: [0; 192], handles: tsrs_core::shwindow::KeyAnd::NONE }
     }
 }
 

@@ -132,7 +132,10 @@ impl Checker {
         if types.len() == 1 {
             return types[0];
         }
-        let key = get_union_key(types, origin, alias);
+        let (key, and) = get_union_key(types, origin, alias);
+        if let Some(t) = self.union_types.get_base(and, |b| b.get(&key)) {
+            return t;
+        }
         if let Some(t) = self.union_types.get(&key) {
             return t;
         }
@@ -602,8 +605,8 @@ impl Checker {
                 }
             }
         }
-        let key = get_intersection_key(&type_set, flags, alias);
-        let mut result = self.intersection_types.get(&key);
+        let (key, and) = get_intersection_key(&type_set, flags, alias);
+        let mut result = self.intersection_types.get_base(and, |b| b.get(&key)).or_else(|| self.intersection_types.get(&key));
         if result.is_none() {
             let r;
             if includes.intersects(TypeFlags::Union) {
@@ -953,7 +956,7 @@ impl Checker {
         if !t.object_flags().intersects(ObjectFlags::Anonymous) {
             return false;
         }
-        if t.object_flags().intersects(ObjectFlags::MembersResolved) && self.is_empty_resolved_type(t.as_structured_type()) {
+        if t.object_flags_lazy(ObjectFlags::MembersResolved).intersects(ObjectFlags::MembersResolved) && self.is_empty_resolved_type(t.as_structured_type()) {
             return true;
         }
         match t.symbol() {
@@ -1557,7 +1560,10 @@ impl Checker {
             }
             // Defer the operation by creating an indexed access type.
             let persistent_access_flags = access_flags & AccessFlags::Persistent;
-            let key = get_indexed_access_key(object_type, index_type, access_flags, alias);
+            let (key, and) = get_indexed_access_key(object_type, index_type, access_flags, alias);
+            if let Some(t) = self.indexed_access_types.get_base(and, |b| b.get(&key)) {
+                return Some(t);
+            }
             if let Some(t) = self.indexed_access_types.get(&key) {
                 return Some(t);
             }
@@ -2476,7 +2482,7 @@ impl Checker {
     // checker.go:28273
     pub(crate) fn is_unknown_like_union_type(&mut self, t: P<Type>) -> bool {
         if self.strict_null_checks && t.flags().intersects(TypeFlags::Union) {
-            if !t.object_flags().intersects(ObjectFlags::IsUnknownLikeUnionComputed) {
+            if !t.object_flags_lazy(ObjectFlags::IsUnknownLikeUnionComputed).intersects(ObjectFlags::IsUnknownLikeUnionComputed) {
                 t.object_flags.set(t.object_flags() | ObjectFlags::IsUnknownLikeUnionComputed);
                 let types = t.types();
                 if types.len() >= 3
@@ -2487,7 +2493,7 @@ impl Checker {
                     t.object_flags.set(t.object_flags() | ObjectFlags::IsUnknownLikeUnion);
                 }
             }
-            return t.object_flags().intersects(ObjectFlags::IsUnknownLikeUnion);
+            return t.object_flags_lazy(ObjectFlags::IsUnknownLikeUnionComputed).intersects(ObjectFlags::IsUnknownLikeUnion);
         }
         false
     }

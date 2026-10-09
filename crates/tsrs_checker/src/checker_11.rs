@@ -504,13 +504,13 @@ impl Checker {
                 return reduced_type;
             }
         } else if t.flags().intersects(TypeFlags::Intersection) {
-            if !t.object_flags().intersects(ObjectFlags::IsNeverIntersectionComputed) {
+            if !t.object_flags_lazy(ObjectFlags::IsNeverIntersectionComputed).intersects(ObjectFlags::IsNeverIntersectionComputed) {
                 t.object_flags.set(t.object_flags() | ObjectFlags::IsNeverIntersectionComputed);
                 if !self.is_mapping_of_same_object_type(t.types()) && self.some_property_reduces_to_never(t) {
                     t.object_flags.set(t.object_flags() | ObjectFlags::IsNeverIntersection);
                 }
             }
-            if t.object_flags().intersects(ObjectFlags::IsNeverIntersection) {
+            if t.object_flags_lazy(ObjectFlags::IsNeverIntersectionComputed).intersects(ObjectFlags::IsNeverIntersection) {
                 return self.never_type;
             }
         }
@@ -541,7 +541,7 @@ impl Checker {
         let types = t.types();
         let skipped = if self.lazy_members {
             types.iter().position(|&t| {
-                t.object_flags() & (ObjectFlags::Mapped | ObjectFlags::MembersResolved) == ObjectFlags::Mapped
+                t.object_flags_lazy(ObjectFlags::MembersResolved) & (ObjectFlags::Mapped | ObjectFlags::MembersResolved) == ObjectFlags::Mapped
                     || may_have_lazy_members(t) && t.flags().intersects(TypeFlags::Object)
             })
         } else {
@@ -1313,12 +1313,13 @@ impl Checker {
         // Go `data := target.AsObjectType()`; `data.instantiations` is `self.object_type_instantiations[target]`
         // (the target is a declared anonymous or mapped type or a deferred reference, never an interface or tuple).
         assert!(target.try_as_interface_type().is_none(), "object type instantiation of an interface target");
-        let key = get_type_instantiation_key(&type_arguments, new_alias, t.object_flags().intersects(ObjectFlags::SingleSignatureType));
+        let (key, and) = get_type_instantiation_key_and(&type_arguments, new_alias, t.object_flags().intersects(ObjectFlags::SingleSignatureType));
+        let frozen = if target.is_shared() { self.shared_object_instantiation_get(target, key, and) } else { None };
         let instantiations = self.object_type_instantiations.entry(target).or_insert_with(|| {
             let initial_key = get_type_instantiation_key(type_parameters, target.alias().into(), false);
             PackedMap::from_one(initial_key, target)
         });
-        let mut result = instantiations.get(&key);
+        let mut result = frozen.or_else(|| instantiations.get(&key));
         if result.is_none() {
             let new_alias = new_alias.alias();
             let mut new_mapper = new_type_mapper(type_parameters, alloc_slice(&type_arguments));
@@ -1484,8 +1485,8 @@ impl Checker {
                     None => mapper.map(self, tp),
                 })
                 .collect();
-            let key = get_conditional_type_key(&type_arguments, alias, for_constraint);
-            let mut result = root.instantiations.get(&key);
+            let (key, and) = get_conditional_type_key_and(&type_arguments, alias, for_constraint);
+            let mut result = if root.is_shared() { self.shared_instantiation_get(root.key(), key, and, || root.instantiations.get(&key)) } else { root.instantiations.get(&key) };
             if result.is_none() {
                 let census_span = self.census_begin(crate::workcensus::Cat::CondInst, || crate::workcensus::CKey::Root(root));
                 let mut census_fan_out: Option<usize> = None;
@@ -1543,7 +1544,11 @@ impl Checker {
                         census.charge_bookkeeping();
                     }
                 }
-                root.instantiations.set(key, r);
+                if root.is_shared() {
+                    self.shared_instantiation_set(root.key(), key, r);
+                } else {
+                    root.instantiations.set(key, r);
+                }
                 result = Some(r);
                 // The mapper and its type list are garbage unless the result kept the mapper (79%, notes/mem-census.md).
                 // SAFETY: made above; a single-type mapper does not keep the list, an array mapper keeps it only if
