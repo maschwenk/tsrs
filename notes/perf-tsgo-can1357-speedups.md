@@ -294,7 +294,7 @@ peak in both modes. Diagnostics were identical to main in every run.
 | candidate (his commits) | branch | shadow | single-threaded instructions vs main | verdict |
 | --- | --- | --- | --- | --- |
 | 1. unions by merging sorted runs (a3f430da0, 628f51ceb, generalized) | `perf/union-sorted-inputs`, https://github.com/maschwenk/tsrs/pull/250 | 0 mismatches in ~9.3M unions | mikro-orm **−10.04%** (80.59 → 72.50 G; single-threaded wall −8.5%), cal-diy −0.55%, the other seven 0.00% to −0.20% | **ported** (draft) |
-| 2. member order: keyed `sort_symbols`, anonymous instantiations and generic instantiations reuse the target's order (ba343defd, 6d557d0e3) | `perf/member-order` (pushed, no PR) | 0 mismatches in ~9.3M sorts and reuses | −0.10% to −0.87% (cal-diy −0.87%, webpack −0.84%, formbricks −0.56%, supabase −0.53%), vscode +0.71% (inside its 1.1% spread) | under 1% everywhere: **not ported** |
+| 2. member order: keyed `sort_symbols`, anonymous instantiations and generic instantiations reuse the target's order (ba343defd, 6d557d0e3) | `perf/member-order` (pushed, no PR) | 0 mismatches in ~9.3M sorts and reuses; the conformance gate then caught an ordering bug (below), fixed | −0.10% to −0.87% (cal-diy −0.87%, webpack −0.84%, formbricks −0.56%, supabase −0.53%), vscode +0.71% (inside its 1.1% spread) | under 1% everywhere: **not ported** |
 | 3. top-level type-printing memo (15c911a9b, with tsrs's rules: no object created, counters replayed, off under Go history, shadow mode) | `perf/type-print-memo` (pushed, no PR) | shadow clean (drizzle-orm 5,800 hits, excalidraw 42,597) | drizzle-orm −0.51%, webpack −0.17%, mikro-orm −0.13%, supabase within noise; **excalidraw −12.95%** (not a bench project; `Types` and `Instantiations` counters unchanged) | under 1% on every bench project: **not ported**; the code is there if a project like excalidraw joins the bench |
 
 **1. Unions by merging sorted runs.** His two commits skip the sort when the inputs already arrive in order and merge
@@ -316,7 +316,13 @@ mikro-orm's sorting is spread over the checkers and is not on the critical path.
 closure that walks to each declaration's source file and hashes it in a Go map on every comparison, and because every
 instantiation built and sorted a member map. In tsrs the same sorts are a smaller share (Rust's sort is adaptive,
 `compare_nodes` already inlines the identity test, and lazy members (#64475 port) never build most instantiated member
-tables), so the keyed sort and the order reuse together stay under 1%.
+tables), so the keyed sort and the order reuse together stay under 1%. One trap for whoever picks this up: the first
+version listed an instantiation's members before marking them resolved and storing the table, where Go stores them
+first. Listing calls `symbol_is_value`, which resolves aliases, and alias resolution can come back to the type: on
+conformance/jsDeclarationsFunctionsCjs that printed two extra TS2303 ("Circular definition of import alias") for
+CommonJS `module.exports.ii = module.exports.i`. The shadow projects never hit it; the conformance gate did. With the
+flag and table set first (`49943ead`) the branch matches main exactly: regressions 28/28, conformance lists identical
+to main's in both history modes.
 
 **3. Type-printing memo.** The bench projects rarely print the same type three times; excalidraw's relation
 elaboration does (notes/perf-excalidraw-typefest.md), where the memo removes 13% of single-threaded instructions.
