@@ -17,16 +17,16 @@ unsafe impl std::alloc::GlobalAlloc for CountingAlloc {
     unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
         HEAP_ALLOCS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         // SAFETY: the caller's `GlobalAlloc` contract for `layout` is passed through unchanged.
-        unsafe { mimalloc::MiMalloc.alloc(layout) }
+        unsafe { mimalloc_safe::MiMalloc.alloc(layout) }
     }
     unsafe fn dealloc(&self, p: *mut u8, layout: std::alloc::Layout) {
         // SAFETY: the caller's `GlobalAlloc` contract for `p` and `layout` is passed through unchanged.
-        unsafe { mimalloc::MiMalloc.dealloc(p, layout) }
+        unsafe { mimalloc_safe::MiMalloc.dealloc(p, layout) }
     }
     unsafe fn realloc(&self, p: *mut u8, layout: std::alloc::Layout, new_size: usize) -> *mut u8 {
         HEAP_ALLOCS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         // SAFETY: the caller's `GlobalAlloc` contract for all arguments is passed through unchanged.
-        unsafe { mimalloc::MiMalloc.realloc(p, layout, new_size) }
+        unsafe { mimalloc_safe::MiMalloc.realloc(p, layout, new_size) }
     }
 }
 

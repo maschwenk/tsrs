@@ -8,7 +8,7 @@
 //! end of the run (`census`).
 
 use rustc_hash::FxHashMap;
-use mimalloc::MiMalloc as System;
+use mimalloc_safe::MiMalloc as System;
 use std::alloc::{GlobalAlloc, Layout};
 use std::panic::Location;
 use std::sync::atomic::{AtomicUsize, Ordering};
