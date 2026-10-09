@@ -22,6 +22,7 @@ fn new_checker(program: &'static Program) -> Box<Checker> {
 pub struct Checker {
     pub type_count: u32,
     pub symbol_count: u32,
+    pub signature_count: u32,
     pub total_instantiation_count: u32,
     pub lazy_member_stats: tsrs_core::lazymembers::LazyMemberStats,
 }
@@ -50,7 +51,7 @@ impl Checker {
 
 #[cfg(not(feature = "checker"))]
 fn new_checker(_program: &'static Program) -> Box<Checker> {
-    Box::new(Checker { type_count: 0, symbol_count: 0, total_instantiation_count: 0, lazy_member_stats: Default::default() })
+    Box::new(Checker { type_count: 0, symbol_count: 0, signature_count: 0, total_instantiation_count: 0, lazy_member_stats: Default::default() })
 }
 
 // checkerpool.go:24
@@ -84,6 +85,7 @@ enum checkerHandleKind {
 
 impl CheckerHandle {
     fn locked(guard: MutexGuard<'static, Box<Checker>>) -> CheckerHandle {
+        crate::sharedgraph::enter_checker(&guard);
         CheckerHandle { kind: checkerHandleKind::Locked(guard) }
     }
 
@@ -230,6 +232,8 @@ impl Drop for poolState {
 }
 
 pub(crate) struct poolState {
+    /// Shared-graph prototype: the seed was started; the type-check pass turns its checkers into forks.
+    shared_graph: bool,
     // Leaked like the program that owns the pool, so a handle can hold a checker's lock without borrowing the pool.
     checkers: &'static [CheckerSlot],
     // Program file index of each file.
@@ -565,6 +569,7 @@ impl checkerPool {
     fn create_checkers(&self) -> &poolState {
         let program = self.program;
         self.state.get_or_init(|| {
+            tsrs_core::timeline::mark("pool:enter", -1, 0.0);
             if tsrs_core::ptr::shared_check::enabled() {
                 // Debug aid: bind up front so every parser/binder allocation is recorded as shared.
                 tsrs_core::ptr::shared_check::thaw();
@@ -579,25 +584,53 @@ impl checkerPool {
                 }
                 crate::program::worker_pool().broadcast(|_| tsrs_core::ptr::release_own_arena());
             }
+            let shared = crate::sharedgraph::mode() == crate::sharedgraph::Mode::On && !program.single_threaded();
             let create_and_assign = || {
+                tsrs_core::timeline::mark("create:start", -1, 0.0);
                 let create_start = std::time::Instant::now();
                 #[cfg(feature = "checker")]
                 tsrs_checker::links::set_multiple_checkers(self.checker_count > 1);
                 let slots: Vec<Mutex<Option<CheckerSlot>>> = (0..self.checker_count).map(|_| Mutex::new(None)).collect();
+                // Shared-graph prototype (sharedgraph.rs): one seed checker checks the seed files in the background;
+                // in the type-check pass the pool's checkers (plain until then) become forks of its frozen graph.
+                #[cfg(feature = "checker")]
+                if shared {
+                    crate::sharedgraph::start_seed(program, checked_file_weights(program));
+                    tsrs_core::timeline::mark("seed:spawned", -1, 0.0);
+                }
                 run_work_group(self.single_threaded, self.checker_count, |i| {
-                    *slots[i].lock().unwrap() = Some(CheckerSlot(Mutex::new(new_checker(program))));
+                    let c = new_checker(program);
+                    #[cfg(feature = "checker")]
+                    if shared && i == 0 {
+                        crate::sharedgraph::note_fresh_checker(&c);
+                    }
+                    *slots[i].lock().unwrap() = Some(CheckerSlot(Mutex::new(c)));
                 });
                 let checkers: &'static [CheckerSlot] =
                     Box::leak(slots.into_iter().map(|s| s.into_inner().unwrap().unwrap()).collect::<Vec<_>>().into_boxed_slice());
                 tsrs_core::phases::record("Checkers: create", create_start.elapsed());
+                tsrs_core::timeline::mark("create:end", -1, 0.0);
                 let associations = tsrs_core::phases::time("Checkers: assign files", || compute_associations(program, self.checker_count));
+                tsrs_core::timeline::mark("assign:end", -1, 0.0);
                 (checkers, associations)
             };
             // tsrs-only: the CLI's leaf classification reads only the loaded program; it runs meanwhile
             // (fileregions.rs `prepare`).
-            let (checkers, associations) = if program.leaf_files != crate::fileregions::LeafMode::Off && !self.single_threaded {
+            let (checkers, associations) = if shared && !crate::sharedgraph::seed_prepares() {
+                // The seed must not check a leaf file (its region is freed), so the classification comes first.
+                if program.leaf_files != crate::fileregions::LeafMode::Off && !self.single_threaded {
+                    tsrs_core::timeline::mark("prepare:start", -1, 0.0);
+                    crate::fileregions::prepare(program);
+                    tsrs_core::timeline::mark("prepare:end", -1, 0.0);
+                }
+                create_and_assign()
+            } else if program.leaf_files != crate::fileregions::LeafMode::Off && !self.single_threaded {
                 std::thread::scope(|s| {
-                    let prepare = s.spawn(|| crate::fileregions::prepare(program));
+                    let prepare = s.spawn(|| {
+                        tsrs_core::timeline::mark("prepare:start", -1, 0.0);
+                        crate::fileregions::prepare(program);
+                        tsrs_core::timeline::mark("prepare:end", -1, 0.0);
+                    });
                     let created = create_and_assign();
                     prepare.join().unwrap();
                     created
@@ -610,7 +643,9 @@ impl checkerPool {
             let file_indices: FxHashMap<P<SourceFile>, usize> = files.iter().enumerate().map(|(i, &f)| (f, i)).collect();
             let owners = associations.iter().map(|&c| std::sync::atomic::AtomicU32::new(c as u32)).collect();
             let weights = if self.checker_count > 1 { checked_file_weights(program) } else { Vec::new() };
+            tsrs_core::timeline::mark("pool:ready", -1, 0.0);
             poolState {
+                shared_graph: shared,
                 checkers,
                 file_indices,
                 owners,
@@ -643,6 +678,7 @@ impl checkerPool {
         let state = self.create_checkers();
         let run = |idx: usize| {
             let mut guard = state.checkers[idx].0.lock().unwrap();
+            crate::sharedgraph::enter_checker(&guard);
             cb(idx, &mut guard);
         };
         run_work_group(self.single_threaded, state.checkers.len(), run);
@@ -655,7 +691,12 @@ impl checkerPool {
         self.for_each_checker_parallel(|idx, checker| {
             *global_diagnostics[idx].lock().unwrap() = checker.get_global_diagnostics();
         });
-        let all: Vec<P<Diagnostic>> = global_diagnostics.into_iter().flat_map(|d| d.into_inner().unwrap()).collect();
+        #[cfg_attr(not(feature = "checker"), expect(unused_mut, reason = "only the shared-graph prototype adds to it"))]
+        let mut all: Vec<P<Diagnostic>> = global_diagnostics.into_iter().flat_map(|d| d.into_inner().unwrap()).collect();
+        #[cfg(feature = "checker")]
+        if state.shared_graph {
+            all.extend(crate::sharedgraph::retired_globals());
+        }
         sort_and_deduplicate_diagnostics(&all)
     }
 
@@ -704,6 +745,20 @@ impl checkerPool {
                 positions[owner].push(i as u32);
             }
         }
+        // tsrs-only research prototype (sharedgraph.rs): the seed files leave every queue; in `emulate` mode every
+        // checker checks them first.
+        let sg_mode = if allow_steal && !single_threaded && !self.single_threaded { crate::sharedgraph::mode() } else { crate::sharedgraph::Mode::Off };
+        let sg_stats = allow_steal && crate::sharedgraph::stats_enabled();
+        let seed: Vec<u32> = if sg_mode == crate::sharedgraph::Mode::Emulate {
+            let w = |i: u32| index_of[i as usize].map_or(0, |fi| state.weights.get(fi).copied().unwrap_or(0).max(0) as u64);
+            let seed = crate::sharedgraph::seed_positions(self.program, files, &w);
+            let is_seed: rustc_hash::FxHashSet<u32> = seed.iter().copied().collect();
+            positions.iter_mut().for_each(|p| p.retain(|i| !is_seed.contains(i)));
+            seed
+        } else {
+            Vec::new()
+        };
+        let sg_points: Vec<Mutex<Option<crate::sharedgraph::Points>>> = if sg_stats { (0..n).map(|_| Mutex::new(None)).collect() } else { Vec::new() };
         // Go queues one goroutine per checker group (cheap); here each group is an OS thread, so spawn threads only for
         // the checkers that own at least one of `files`. A one-file call (incremental emit of one affected file) then
         // runs on the calling thread instead of creating `checkers.len()` threads per file.
@@ -728,27 +783,62 @@ impl checkerPool {
             let threshold = total / (active.len() as u64 * heavy_share_divisor());
             positions.iter_mut().for_each(|p| heavy_files_first(p, threshold, weight));
         }
+        // Strategy F (sharedgraph.rs), with a bound: the files a throwaway checker may take while the seed is built go to
+        // the back of each queue (in their order), so that the file in flight when the seed is done is a light one.
+        #[cfg(feature = "checker")]
+        let throwaway_bound = if let Some(divisor) = crate::sharedgraph::throwaway_divisor().filter(|_| steal && state.shared_graph && crate::sharedgraph::throwaway_enabled()) {
+            let total: u64 = positions.iter().flatten().map(|&i| weight(i)).sum();
+            let bound = total / (active.len() as u64 * divisor);
+            for p in &mut positions {
+                let (heavy, light): (Vec<u32>, Vec<u32>) = p.iter().partition(|&&i| weight(i) > bound);
+                *p = heavy;
+                p.extend(light);
+            }
+            bound
+        } else {
+            u64::MAX
+        };
+        // Strategy F: a queue's first item is critical when it alone weighs at least TSRS_SHARED_GRAPH_CRITICAL permille
+        // (default off) of a checker's share: it bounds the pass, so its throwaway checks it at once instead of after
+        // the seed.
+        let share = {
+            let total: u64 = positions.iter().flatten().map(|&i| weight(i)).sum::<u64>().max(1);
+            (total / active.len().max(1) as u64).max(1)
+        };
+        if allow_steal && tsrs_core::timeline::enabled() {
+            for (c, p) in positions.iter().enumerate() {
+                for (k, &i) in p.iter().take(2).enumerate() {
+                    tsrs_core::timeline::mark(if k == 0 { "queue:front0" } else { "queue:front1" }, c as i64, (weight(i) * 1000 / share) as f64);
+                }
+            }
+        }
         let queues: Vec<FileQueue> = positions.into_iter().map(|p| FileQueue::new(p, weight)).collect();
         // TSRS_MEM_SPLIT: the type-check pass reports once every checker is done and before any thread exits.
         let mem_split = (allow_steal && tsrs_core::memsplit::enabled()).then(|| std::sync::Barrier::new(if single { 1 } else { active.len() }));
+        if allow_steal {
+            tsrs_core::timeline::mark("pass:start", -1, 0.0);
+        }
         let run = |checker_idx: usize| {
+            if allow_steal {
+                tsrs_core::timeline::mark("chk:enter", checker_idx as i64, thread_cpu_seconds());
+            }
             let start = stats.then(std::time::Instant::now);
             let cpu_start = if stats { thread_cpu_seconds() } else { 0.0 };
             let mut count = 0;
             let mut file_cpu: Vec<(P<SourceFile>, f64)> = Vec::new();
             let mut guard = state.checkers[checker_idx].0.lock().unwrap();
-            let mut last_victim = usize::MAX;
-            while let Some((i, from_other)) = queues_next(&queues, checker_idx, steal, sticky.then_some(&mut last_victim)) {
+            // One queue item (a file or a queued piece of a split file), on `checker`.
+            let mut process = |checker: &mut Checker, i: usize, from_other: bool| {
                 if let Some(&(s, k, _)) = i.checked_sub(files.len()).map(|p| &split.piece_items[p]) {
                     let piece_start = file_times.then(std::time::Instant::now);
                     let cpu_start = if file_times { thread_cpu_seconds() } else { 0.0 };
-                    split.files[s].run_queued_piece(&mut guard, split_ctx.unwrap(), k);
+                    split.files[s].run_queued_piece(checker, split_ctx.unwrap(), k);
                     if let Some(piece_start) = piece_start {
                         let cpu = thread_cpu_seconds() - cpu_start;
                         state.file_times.lock().unwrap().push((split.files[s].file, checker_idx, piece_start.elapsed().as_secs_f64(), cpu));
                     }
                     count += 1;
-                    continue;
+                    return;
                 }
                 let file = files[i];
                 if from_other {
@@ -764,11 +854,11 @@ impl checkerPool {
                 let cpu_start = if cost_cache || file_times { thread_cpu_seconds() } else { 0.0 };
                 let split_file = split.split_of.get(&(i as u32)).map(|&s| &split.files[s]);
                 if let Some(split_file) = split_file {
-                    split_file.run_owner(&mut guard, split_ctx.unwrap());
+                    split_file.run_owner(checker, split_ctx.unwrap());
                 }
-                cb(&mut guard, i, file);
+                cb(checker, i, file);
                 if let Some(split_file) = split_file.filter(|f| f.is_shadow()) {
-                    let whole = guard.file_diagnostics_so_far(file);
+                    let whole = checker.file_diagnostics_so_far(file);
                     split_file.shadow_compare(&whole);
                 }
                 if let Some(file_start) = file_start {
@@ -779,9 +869,70 @@ impl checkerPool {
                     file_cpu.push((file, thread_cpu_seconds() - cpu_start));
                 }
                 count += 1;
+            };
+            #[cfg(feature = "checker")]
+            if allow_steal && state.shared_graph && checker_idx >= crate::sharedgraph::overlap() {
+                if crate::sharedgraph::throwaway_enabled() && crate::sharedgraph::needs_fork(&guard) {
+                    // Strategy F (spike/shared-graph-seed): while the seed is built, this thread checks the light
+                    // files at the back of its own queue with its plain checker, then retires it and continues as a
+                    // fork. A file's diagnostics do not depend on the checker's history.
+                    // With TSRS_SHARED_GRAPH_THROWAWAY_FREE=1 everything the throwaway allocates goes to a scratch
+                    // region freed when it retires; diagnostics escape it (diagnostic.rs).
+                    let region = crate::sharedgraph::throwaway_free().then(|| tsrs_core::arena::Region::new_scratch(4 << 20));
+                    {
+                        let _scratch = region.as_ref().map(tsrs_core::arena::Region::enter_scratch);
+                        crate::sharedgraph::enter_checker(&guard);
+                        let mut throwaway_files = 0usize;
+                        let critical = crate::sharedgraph::critical_permille();
+                        if critical > 0 {
+                            if let Some(i) = queues[checker_idx].take_front_if(|i| weight(i) * 1000 / share >= critical) {
+                                tsrs_core::timeline::mark("chk:critical", checker_idx as i64, (weight(i as u32) * 1000 / share) as f64);
+                                process(&mut guard, i, false);
+                                throwaway_files += 1;
+                            }
+                        }
+                        while !crate::sharedgraph::seed_ready() {
+                            let Some(i) = queues[checker_idx].take_back_if(|i| weight(i) <= throwaway_bound) else { break };
+                            process(&mut guard, i, false);
+                            throwaway_files += 1;
+                        }
+                        tsrs_core::timeline::mark("chk:throwaway", checker_idx as i64, throwaway_files as f64);
+                        crate::sharedgraph::keep_throwaway_globals(&mut guard);
+                    }
+                    crate::sharedgraph::retire_into_fork(&mut guard, checker_idx, region.is_none());
+                    if let Some(region) = region {
+                        tsrs_core::timeline::mark("chk:region", checker_idx as i64, region.used_bytes() as f64);
+                        region.retire_on_free();
+                        crate::sharedgraph::protect_retired(&region);
+                        drop(region);
+                    }
+                } else {
+                    crate::sharedgraph::fork_into(&mut guard, checker_idx);
+                }
+            }
+            if allow_steal {
+                tsrs_core::timeline::mark("chk:ready", checker_idx as i64, thread_cpu_seconds());
+            }
+            crate::sharedgraph::enter_checker(&guard);
+            let sg_start = sg_stats.then(|| crate::sharedgraph::Point::take(&guard));
+            for &i in &seed {
+                cb(&mut guard, i as usize, files[i as usize]);
+            }
+            let sg_seed = sg_stats.then(|| crate::sharedgraph::Point::take(&guard));
+            let mut last_victim = usize::MAX;
+            while let Some((i, from_other)) = queues_next(&queues, checker_idx, steal, sticky.then_some(&mut last_victim)) {
+                process(&mut guard, i, from_other);
+            }
+            if allow_steal {
+                tsrs_core::timeline::mark("chk:end", checker_idx as i64, thread_cpu_seconds());
+                tsrs_core::timeline::mark("chk:files", checker_idx as i64, count as f64);
+                tsrs_core::timeline::mark("chk:stolen", checker_idx as i64, stolen[checker_idx].load(std::sync::atomic::Ordering::Relaxed) as f64);
             }
             if cost_cache {
                 state.file_cpu.lock().unwrap().extend(file_cpu);
+            }
+            if let (Some(s), Some(w)) = (sg_start, sg_seed) {
+                *sg_points[checker_idx].lock().unwrap() = Some([s, w, crate::sharedgraph::Point::take(&guard)]);
             }
             if let Some(start) = start {
                 *times[checker_idx].lock().unwrap() = (start.elapsed().as_secs_f64(), count);
@@ -806,7 +957,14 @@ impl checkerPool {
             }
         };
         run_work_group(single, active.len(), |k| run(active[k]));
+        if allow_steal {
+            tsrs_core::timeline::mark("pass:end", -1, 0.0);
+        }
         splitcheck::SplitFile::report_stats(&split.files);
+        if sg_stats {
+            let points: Vec<_> = sg_points.into_iter().map(|p| p.into_inner().unwrap()).collect();
+            crate::sharedgraph::report(sg_mode, seed.len(), &points);
+        }
         if stats {
             state.group_runs.lock().unwrap().push(times.into_iter().map(|t| t.into_inner().unwrap()).collect());
             state.group_cpu.lock().unwrap().push(cpu.into_iter().map(|t| t.into_inner().unwrap()).collect());
@@ -994,6 +1152,46 @@ impl FileQueue {
             self.prefix[back] - self.prefix[front]
         } else {
             0
+        }
+    }
+
+    /// The first position, if `ok` accepts it.
+    #[cfg(feature = "checker")]
+    fn take_front_if(&self, ok: impl Fn(u32) -> bool) -> Option<usize> {
+        // As in `take`: the exchange only claims the position.
+        let mut r = self.range.load(std::sync::atomic::Ordering::Relaxed);
+        loop {
+            if (r & QUEUE_LOW) >= (r >> 32) {
+                return None;
+            }
+            let i = self.positions[(r & QUEUE_LOW) as usize];
+            if !ok(i) {
+                return None;
+            }
+            match self.range.compare_exchange_weak(r, r + 1, std::sync::atomic::Ordering::Relaxed, std::sync::atomic::Ordering::Relaxed) {
+                Ok(_) => return Some(i as usize),
+                Err(current) => r = current,
+            }
+        }
+    }
+
+    /// The last position, if `ok` accepts it.
+    #[cfg(feature = "checker")]
+    fn take_back_if(&self, ok: impl Fn(u32) -> bool) -> Option<usize> {
+        // As in `take`: the exchange only claims the position.
+        let mut r = self.range.load(std::sync::atomic::Ordering::Relaxed);
+        loop {
+            if (r & QUEUE_LOW) >= (r >> 32) {
+                return None;
+            }
+            let i = self.positions[((r >> 32) - 1) as usize];
+            if !ok(i) {
+                return None;
+            }
+            match self.range.compare_exchange_weak(r, r - (1 << 32), std::sync::atomic::Ordering::Relaxed, std::sync::atomic::Ordering::Relaxed) {
+                Ok(_) => return Some(i as usize),
+                Err(current) => r = current,
+            }
         }
     }
 

@@ -1744,7 +1744,7 @@ impl Checker {
     pub(crate) fn get_generic_object_flags(&mut self, t: P<Type>) -> ObjectFlags {
         let mut combined_flags = ObjectFlags::None;
         if t.flags().intersects(TypeFlags::UnionOrIntersection | TypeFlags::Substitution) {
-            if !t.object_flags().intersects(ObjectFlags::IsGenericTypeComputed) {
+            if !t.object_flags_lazy().intersects(ObjectFlags::IsGenericTypeComputed) {
                 if t.flags().intersects(TypeFlags::UnionOrIntersection) {
                     for &u in t.types() {
                         combined_flags |= self.get_generic_object_flags(u);
@@ -1753,9 +1753,9 @@ impl Checker {
                     let d = t.as_substitution_type();
                     combined_flags = self.get_generic_object_flags(d.base_type.get().unwrap()) | self.get_generic_object_flags(d.constraint.get().unwrap());
                 }
-                t.object_flags.set(t.object_flags() | ObjectFlags::IsGenericTypeComputed | combined_flags);
+                t.object_flags.set(t.object_flags_lazy() | ObjectFlags::IsGenericTypeComputed | combined_flags);
             }
-            return t.object_flags() & ObjectFlags::IsGenericType;
+            return t.object_flags_lazy() & ObjectFlags::IsGenericType;
         }
         if t.flags().intersects(TypeFlags::InstantiableNonPrimitive) || self.is_generic_mapped_type(t) || self.is_generic_tuple_type(t) {
             combined_flags |= ObjectFlags::IsGenericObjectType;
@@ -1933,7 +1933,7 @@ impl Checker {
             return non_widening_type;
         }
         let t = self.new_intrinsic_type(non_widening_type.flags(), non_widening_type.as_intrinsic_type().intrinsic_name());
-        t.object_flags.set(t.object_flags() | ObjectFlags::ContainsWideningType);
+        t.object_flags.set(t.object_flags_lazy() | ObjectFlags::ContainsWideningType);
         t
     }
 
@@ -2063,7 +2063,7 @@ impl Checker {
     // checker.go:25607
     pub(crate) fn clone_type_reference(&mut self, source: P<Type>) -> P<Type> {
         let t = self.new_object_type(ObjectFlags::Reference, source.symbol());
-        t.object_flags.set(source.object_flags() & !ObjectFlags::MembersResolved);
+        t.object_flags.set(source.object_flags_lazy() & !ObjectFlags::MembersResolved);
         t.as_type_reference().target.set(source.as_type_reference().target.get());
         t.as_type_reference().resolved_type_arguments.set(source.as_type_reference().resolved_type_arguments.get());
         t
@@ -2078,7 +2078,7 @@ impl Checker {
         construct_signatures: &[P<Signature>],
         index_infos: &[P<IndexInfo>],
     ) {
-        t.object_flags.set(t.object_flags() | ObjectFlags::MembersResolved);
+        t.object_flags.set(t.object_flags_lazy() | ObjectFlags::MembersResolved);
         let data = t.as_structured_type();
         data.set_members(members);
         let properties = self.get_named_members(members, t.symbol());

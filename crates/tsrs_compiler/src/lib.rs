@@ -22,6 +22,7 @@ mod program_emit;
 #[cfg(feature = "checker")]
 mod programlike;
 mod splitcheck;
+mod sharedgraph;
 mod projectreferencedtsfakinghost;
 mod projectreferencefilemapper;
 mod projectreferenceparser;

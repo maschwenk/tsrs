@@ -415,6 +415,7 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
     // `&'static`, so here it runs after verification, once the program is leaked. Neither pool reads anything
     // verification writes (checkers are created lazily).
     tsrs_core::phases::time("Program: verify options", || p.verify_compiler_options());
+    tsrs_core::timeline::mark("program:built", -1, 0.0);
     let p: &'static Program = Box::leak(Box::new(p));
     // Census builds: the pool enum is mostly uninitialized bytes when set; clear the stack they come from.
     tsrs_core::census_scrub_stack();
@@ -1060,7 +1061,9 @@ impl Program {
             None => {
                 // tsrs-only: the CLI's `--noEmit` check frees a leaf's tree and binder output once its diagnostics are
                 // collected (fileregions.rs).
+                tsrs_core::timeline::mark("classify:start", -1, 0.0);
                 let free_leaves = tsrs_core::phases::time("Checkers: leaf files", || crate::fileregions::classify(self));
+                tsrs_core::timeline::mark("classify:end", -1, 0.0);
                 let collect = |ctx: &Context, c: &mut Checker, file: P<SourceFile>| {
                     let diagnostics = collect(ctx, c, file);
                     if free_leaves && file.is_check_leaf() {
@@ -2848,13 +2851,17 @@ pub fn get_diagnostics_of_any_program(
         append_diagnostics_for_all_files(&mut Vec::new(), get_bind_diagnostics);
 
         if program.options().list_files_only.is_false_or_unknown() {
+            tsrs_core::timeline::mark("global1:start", -1, 0.0);
             all_diagnostics.extend(tsrs_core::phases::time("Diagnostics: global (first)", || program.get_global_diagnostics(ctx)));
+            tsrs_core::timeline::mark("global1:end", -1, 0.0);
 
             if all_diagnostics.len() == config_file_parsing_diagnostics_length {
                 append_diagnostics_for_all_files(&mut all_diagnostics, get_semantic_diagnostics);
                 // Incremental programs cache checking globals with file diagnostics;
                 // a late sweep would also collect incidental signature-generation globals.
+                tsrs_core::timeline::mark("semantic:end", -1, 0.0);
                 all_diagnostics.extend(tsrs_core::phases::time("Diagnostics: global (after)", || program.get_global_diagnostics(ctx)));
+                tsrs_core::timeline::mark("global2:end", -1, 0.0);
                 #[cfg(feature = "checker")]
                 crate::checkerpool::write_file_times(program);
             }

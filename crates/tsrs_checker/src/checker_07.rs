@@ -60,12 +60,12 @@ fn create_object_literal_type(c: &mut Checker, node: P<Node>, st: &ObjectLiteral
         index_infos.push(c.get_object_literal_index_info(is_readonly, &st.properties_array[st.offset..], es_symbol_type));
     }
     let result = c.new_anonymous_type(node.symbol(), Some(st.properties_table()), &[], &[], &index_infos);
-    result.object_flags.set(result.object_flags() | st.object_flags | ObjectFlags::ObjectLiteral | ObjectFlags::ContainsObjectOrArrayLiteral);
+    result.object_flags.set(result.object_flags_lazy() | st.object_flags | ObjectFlags::ObjectLiteral | ObjectFlags::ContainsObjectOrArrayLiteral);
     if st.contextual_type.is_none() && ast::is_in_js_file(node) && !ast::is_in_json_file(node) {
-        result.object_flags.set(result.object_flags() | ObjectFlags::JSLiteral);
+        result.object_flags.set(result.object_flags_lazy() | ObjectFlags::JSLiteral);
     }
     if st.pattern_with_computed_properties {
-        result.object_flags.set(result.object_flags() | ObjectFlags::ObjectLiteralPatternWithComputedProperties);
+        result.object_flags.set(result.object_flags_lazy() | ObjectFlags::ObjectLiteralPatternWithComputedProperties);
     }
     if st.in_destructuring_pattern {
         c.pattern_for_type.insert(result, node);
@@ -465,7 +465,7 @@ impl Checker {
             let symbol = node.symbol().unwrap();
             let result = self.new_anonymous_type(Some(symbol), symbol.exports(), &[], &[], &[]);
             if ast::is_in_js_file(node) && !ast::is_in_json_file(node) {
-                result.object_flags.set(result.object_flags() | ObjectFlags::JSLiteral);
+                result.object_flags.set(result.object_flags_lazy() | ObjectFlags::JSLiteral);
             }
             // An expando object literal has no property children (len == 0), so there
             // is nothing to check here.
@@ -922,7 +922,7 @@ impl Checker {
         }
         let index_infos = self.get_index_infos_of_type(first_type);
         let spread = self.new_anonymous_type(first_type.symbol(), Some(members), &[], &[], &index_infos);
-        spread.object_flags.set(spread.object_flags() | ObjectFlags::ObjectLiteral | ObjectFlags::ContainsObjectOrArrayLiteral);
+        spread.object_flags.set(spread.object_flags_lazy() | ObjectFlags::ObjectLiteral | ObjectFlags::ContainsObjectOrArrayLiteral);
         spread
     }
 
@@ -1605,6 +1605,10 @@ impl Checker {
         self.symbol_count += 1;
         tsrs_core::sitecount::hit("symbol", "");
         let s = Symbol::new(flags | SymbolFlags::Transient, name);
+        if self.seed_mode {
+            // Shared-graph prototype: a fork must never write an id into a frozen symbol.
+            ast::get_symbol_id(s);
+        }
         #[cfg(feature = "assignment-stats")]
         self.stats_created.1.push(s);
         s

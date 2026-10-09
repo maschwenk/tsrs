@@ -1894,7 +1894,7 @@ impl Checker {
                         let return_type = self.get_return_type_from_body(node, check_mode);
                         let return_only_signature = self.new_signature(SignatureFlags::IsNonInferrable, None, &[] /*typeParameters*/, None /*thisParameter*/, &[], Some(return_type), None /*resolvedTypePredicate*/, 0);
                         let return_only_type = self.new_anonymous_type(node.symbol(), None, &[return_only_signature], &[], &[]);
-                        return_only_type.object_flags.set(return_only_type.object_flags.get() | ObjectFlags::NonInferrableType);
+                        return_only_type.object_flags.set(return_only_type.object_flags.get_lazy() | ObjectFlags::NonInferrableType);
                         self.context_free_types.insert(node, return_only_type);
                         return return_only_type;
                     }

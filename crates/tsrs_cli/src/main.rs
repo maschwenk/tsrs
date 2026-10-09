@@ -58,6 +58,8 @@ fn mimalloc_collect(force: bool) {
 }
 
 fn main() {
+    tsrs_core::timeline::init();
+    tsrs_core::timeline::mark("main", -1, 0.0);
     let args: Vec<String> = std::env::args().skip(1).collect();
     #[cfg(not(feature = "alloc-profile"))]
     tsrs_core::memsplit::set_heap_hooks(mimalloc_heap_stats, mimalloc_collect);
@@ -97,6 +99,8 @@ fn main() {
     #[cfg(feature = "checker")]
     tsrs_compiler::Checker::infer_memo_finish();
     tsrs_core::memsplit::report("exit");
+    tsrs_core::timeline::mark("exit", -1, 0.0);
+    tsrs_core::timeline::dump();
     let _ = std::io::Write::flush(&mut std::io::stdout());
     let _ = std::io::Write::flush(&mut std::io::stderr());
     std::process::exit(status as i32)

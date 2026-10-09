@@ -4,7 +4,8 @@ The owner asked: "let's start with the graph shared between threads, at least im
 are. don't worry about exactness." This note covers the prototype on branch `spike/shared-graph` (not for landing),
 built with `--features shared-graph` and switched on with `TSRS_SHARED_GRAPH=1`. Sections 1-8 are from the Mac
 (Apple M5 Max, 18 cores, 16 KiB pages, no THP), which other agents were also using (1-minute load 15-40); bun's
-numbers there are from Linux. Section 9 has the one Linux run.
+numbers there are from Linux. Section 9 has the first Linux run. Section 10 is round 2 (branch
+`spike/shared-graph-seed`): can the seed's wall cost be hidden at 8 checkers? No.
 
 **Verdict: not pursued.** On Linux (16-vCPU runner, the README scoreboard's machine) the prototype lowers peak memory
 by 5-10% at the default 8 checkers and 4-16% at 16, and makes every project 6-18% slower in wall time, because the
@@ -369,3 +370,167 @@ Estimated cost on `depot-ubuntu-24.04-16`:
 That is about 25-30 runner-minutes on the 16-vCPU machine. Two dispatches, split by project, would build twice and
 cost about 40 minutes in total. The 32-vCPU runner is not needed: neither the scoreboard nor the bench runs more
 than 16 checkers now, and 8 -> 16 gives the per-checker slope.
+
+## 10. Seed cost at 8 checkers (round 2 of the spike)
+
+Question: can the seed's wall cost be removed, so that at 8 checkers on the 16-vCPU runner (the README's default)
+the wall is within +2% of main on t3code-server, formbricks-web, cal-diy, supabase-studio, mikro-orm and vscode
+(median of 7-10 interleaved runs), while at least two of them keep -5% peak?
+
+**Answer: no, not with the frozen-seed + fork design.** The best combination keeps -5.7..-14.4% peak and costs
++6.0..+16.2% wall. Two measured floors block the target, and either one alone is enough:
+
+1. Compiling the read paths in, with the switch off (`foff`), already costs +2.3..+4.8% wall paired on all six
+   projects. Empty-seed forks (`on0`) cost +4.3..+8.0%. Both are above +2% before any seed exists.
+2. The threads that wait for the seed cannot do much useful work without a graph of their own. Throwaway checkers
+   during the seed are 24-49% productive on the app projects (72% on vscode), so they hide about a third of `T_w`.
+
+Code: branch `spike/shared-graph-seed` (worktree `wt/seed-cost`; pushed, never merged), on top of `spike/shared-graph`
+merged with main 872027a4. Details, per-strategy commits and the CPU split are in notes/spike-shared-graph-seed.md.
+Diagnostics were byte-identical to main in every cell: 6 projects x 8 and 16 checkers x every variant, 1,200 timed
+runs over two Depot runs.
+
+### 10.1 Linux table (the result)
+
+Depot run 6slgs9vngp (commit dbeed2b5), `depot-ubuntu-24.04-16`, 8 checkers, 10 interleaved reps, medians (range).
+`off` = main's code (the default build). `FA` = the best combination: throwaway checkers in freed scratch regions
+during the seed (F), the seed started before the leaf prepare (A), and cheaper fork map reads (E1), with the default
+10 permille seed. Wall is the paired median of per-rep ratios.
+
+| project | peak off -> FA | wall off -> FA | user CPU off -> FA |
+|---|---|---|---|
+| t3code-server | 1808 (1800-1816) -> 1634 (1606-1659) MiB, -9.6% | 2.067 (2.005-2.158) -> 2.441 (2.272-2.522) s, +16.2% | 14.11 -> 16.47 s, +16.7% |
+| formbricks-web | 1714 (1709-1720) -> 1498 (1488-1515), -12.6% | 0.991 (0.970-1.006) -> 1.058 (1.045-1.080), +6.8% | 7.69 -> 8.43, +9.7% |
+| cal-diy | 1451 (1435-1489) -> 1253 (1246-1267), -13.7% | 1.013 (0.952-1.063) -> 1.148 (1.036-1.207), +13.0% | 7.65 -> 8.31, +8.7% |
+| supabase-studio | 1413 (1403-1425) -> 1266 (1260-1275), -10.4% | 1.105 (1.088-1.200) -> 1.184 (1.163-1.263), +6.8% | 8.45 -> 9.25, +9.4% |
+| mikro-orm | 1643 (1639-1649) -> 1407 (1388-1440), -14.4% | 1.404 (1.362-1.537) -> 1.528 (1.418-1.594), +6.6% | 10.14 -> 11.00, +8.5% |
+| vscode | 1967 (1960-1976) -> 1854 (1846-1858), -5.7% | 1.689 (1.658-1.734) -> 1.787 (1.739-1.857), +6.0% | 13.72 -> 14.60, +6.4% |
+
+Floors and the smaller seed in the same run, 8 checkers, wall paired / peak vs off:
+
+| project | foff | on0 | FA2.5 (2.5 permille seed) |
+|---|---:|---:|---:|
+| t3code-server | +4.2% / -0.2% | +4.6% / +0.1% | +8.6% / -2.4% |
+| formbricks-web | +2.3% / -0.0% | +4.3% / +0.3% | +7.7% / -2.6% |
+| cal-diy | +3.5% / -0.1% | +5.2% / +0.5% | +9.0% / -5.0% |
+| supabase-studio | +2.5% / +0.2% | +4.6% / +0.1% | +4.3% / -4.1% |
+| mikro-orm | +4.8% / -0.1% | +8.0% / +0.3% | +14.9% / -5.5% |
+| vscode | +3.1% / +0.2% | +5.1% / +0.3% | +6.1% / -1.0% |
+
+At 16 checkers (not the default): FA peak -7.8..-23.6%, wall +5.1..+11.9%; FA2.5 peak -1.8..-9.9%, wall
++2.4..+9.2%. The closest cell to the bar is supabase-studio FA2.5 at 16 checkers (+2.4% wall, -7.2% peak).
+
+### 10.2 Timeline at 8 checkers
+
+Same run, medians of 10, ms since process start (`TSRS_TIMELINE=1`). `T_w` = seed spawned to seed frozen. "Last
+fork" = the last pass thread to become a fork (with F, a throwaway first finishes the file it is checking).
+
+| project | variant | program built | seed spawned | pass start | seed frozen | T_w | last fork | first checker done | last checker done | exit |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| t3code-server | off | 78 | - | 83 | - | - | - | 1486 | 2054 | 2057 |
+| t3code-server | on0 | 78 | 81 | 84 | 84 | 4 | 84 | 1531 | 2161 | 2165 |
+| t3code-server | FA2.5 | 78 | 80 | 83 | 138 | 56 | 245 | 1621 | 2233 | 2237 |
+| t3code-server | FA | 79 | 81 | 85 | 355 | 274 | 1377 | 1731 | 2427 | 2431 |
+| formbricks-web | off | 132 | - | 146 | - | - | - | 954 | 972 | 979 |
+| formbricks-web | on0 | 134 | 144 | 153 | 153 | 10 | 153 | 1005 | 1019 | 1027 |
+| formbricks-web | FA2.5 | 133 | 138 | 148 | 187 | 48 | 252 | 1036 | 1047 | 1055 |
+| formbricks-web | FA | 134 | 139 | 148 | 341 | 202 | 582 | 1025 | 1038 | 1046 |
+| cal-diy | off | 94 | - | 107 | - | - | - | 958 | 994 | 1001 |
+| cal-diy | on0 | 94 | 103 | 111 | 111 | 9 | 111 | 992 | 1042 | 1049 |
+| cal-diy | FA2.5 | 95 | 99 | 107 | 155 | 55 | 205 | 993 | 1105 | 1112 |
+| cal-diy | FA | 94 | 99 | 107 | 348 | 249 | 359 | 1003 | 1132 | 1139 |
+| supabase-studio | off | 131 | - | 150 | - | - | - | 1078 | 1088 | 1095 |
+| supabase-studio | on0 | 132 | 143 | 155 | 155 | 13 | 156 | 1114 | 1133 | 1140 |
+| supabase-studio | FA2.5 | 132 | 137 | 150 | 211 | 74 | 250 | 1130 | 1140 | 1147 |
+| supabase-studio | FA | 132 | 138 | 151 | 351 | 213 | 387 | 1149 | 1168 | 1174 |
+| mikro-orm | off | 33 | - | 36 | - | - | - | 1256 | 1322 | 1394 |
+| mikro-orm | on0 | 33 | 33 | 37 | 37 | 4 | 37 | 1323 | 1425 | 1499 |
+| mikro-orm | FA2.5 | 33 | 34 | 38 | 112 | 78 | 265 | 1375 | 1521 | 1595 |
+| mikro-orm | FA | 34 | 34 | 38 | 274 | 240 | 331 | 1337 | 1444 | 1518 |
+| vscode | off | 172 | - | 192 | - | - | - | 1665 | 1669 | 1677 |
+| vscode | on0 | 178 | 187 | 202 | 202 | 14 | 202 | 1753 | 1755 | 1763 |
+| vscode | FA2.5 | 177 | 183 | 197 | 224 | 41 | 230 | 1765 | 1768 | 1776 |
+| vscode | FA | 177 | 182 | 197 | 322 | 139 | 340 | 1762 | 1767 | 1775 |
+
+How to read it:
+- The front end is unchanged (program built within 6 ms of off). The seed starts 1-11 ms after it and runs beside
+  checker creation, assignment, global diagnostics and leaf classification. Nothing serial is left in front of it.
+- `on0` (no seed at all) already moves the last checker's end by +38..+108 ms. That is the overlay's fixed cost on
+  the check span.
+- With FA the seed takes 139-274 ms. On t3code-server one throwaway is in a heavy file when the seed freezes and
+  becomes a fork only at 1377 ms. Its work is kept, but it runs share-nothing for a second, and t3code's wall is
+  +16.2% (user CPU +16.7%).
+- First-run decomposition (run bcnnl1bc96, before F): the extra wall equals the wait for the seed plus the change in
+  the check span, to within 10 ms. Before F, each pass thread's CPU while it waited was 0.1-0.3 ms.
+
+### 10.3 Strategies, with their Linux numbers (8 checkers, wall paired / peak vs off)
+
+| strategy | what it does | Linux result | why it stops there |
+|---|---|---|---|
+| prototype `on` (round 1, run bcnnl1bc96 and 2f40939vl4) | serial 10 permille seed, then forks | wall +7.7..+14.6%, peak -1.9..-11.8% | `T_w` 114-274 ms fully exposed |
+| F-lite (0a7272f5) | while the seed runs, each thread checks files with a plain throwaway checker, kept after it becomes a fork | wall +3.3..+12.8%, peak +1.5..+11.7% (run 2f40939vl4) | F minus `on0` was within +1% on 2 projects (formbricks +0.7, vscode +0.8); the stop rule needed 4. Eight kept throwaway graphs raise the peak. |
+| F full / Ffree (6f0dfcd9) | the throwaways check in scratch regions freed at the switch; diagnostics already escape scratch regions | wall +3.7..+10.3%, peak -5.2..-14.4% (run 2f40939vl4) | throwaways 24-49% productive on the app projects, 72% on vscode: 0.9-3.3 s of throwaway CPU saves only 0.4-1.7 s of fork CPU. A cold checker spends its time on library types the fork then gets from the seed. |
+| A (7128326c) | seed spawned before the leaf prepare | saves the 4-8 ms serial prepare (under 0.5%), as predicted | there was nothing else serial in front of the seed |
+| E1 (4030d080) | `P<Type>`-keyed two-level maps skip the seed's map for keys outside the frozen region | Mac, one checker, instructions vs main for `on0`: t3code +5.30% -> +4.65%, formbricks +4.89% -> +3.10%. Linux, after E1: `foff` +2.3..+4.8%, `on0` +4.3..+8.0% | the rest is diffuse: no symbol above 0.3% in the Linux profile, part of it code layout. `foff` has no fork at all and is already above +2%. |
+| critical-file-first (711e3488, off) | a throwaway checks a heavy queue-front item first | t3code's only item above 200 permille (339) took 290 ms and was not the pass's tail | the tail is not predictable from file weight |
+| FA (dbeed2b5) | Ffree + A + E1, 10 permille | wall +6.0..+16.2%, peak -5.7..-14.4% (run 6slgs9vngp, table 10.1) | both floors |
+| FA2.5 | FA with a 2.5 permille seed | `T_w` 41-78 ms, wall +4.3..+14.9%, peak -1.0..-5.5% | a smaller seed shrinks the peak saving with `T_w`, and the floor stays |
+| not built | G (plain fallback for a poor seed), B (seed checker keeps going), C (targeted seed), D (parallel seeds), H (more forks than 8) | predictions from the measured decomposition | G cannot go below `foff`; B saves 11-16 ms; C has no knee (peak saved rises linearly with `T_w`, 0.3-0.95 MiB per ms); D cannot share ids without a merge; H fails both bars |
+
+Side finding: freeing the throwaway regions makes the peak lower than the round-1 prototype (Ffree -5.2..-14.4% vs
+on -1.9..-11.8% in the same run), because the throwaways' files' graphs go away with their regions, as leaf files'
+do.
+
+### 10.4 Verdict against the target
+
+| criterion | needed | best measured (FA) | met |
+|---|---|---|---|
+| wall at 8 checkers, every project | within +2% of main, paired median | +6.0..+16.2% (no project within +2%; the closest is vscode +6.0%) | no |
+| peak at 8 checkers | -5% on two or more of six | -5.7..-14.4% on all six | yes |
+
+Not met. The memory half holds easily; the wall half fails on every project, by 4-14 points.
+
+### 10.5 Why not, and what would have to be true
+
+The wall budget is +2% = 21-49 ms on these walls (cal-diy 21, formbricks 23, supabase 25, mikro-orm 31, vscode
+35, t3code 49). The wall cost decomposes into a floor plus the exposed part of the seed: `floor + (1 - p) x T_w`,
+where p is the share of the throwaways' time the forks keep.
+
+- **The floor is already over budget.** `foff` is +2.3..+4.8% with no fork, and `on0` +4.3..+8.0%. For the target,
+  `foff` would have to be near 0 (under about +0.5%) and the fork reads under about +1%. That is not a hot spot to
+  fix: after E1 the Linux profile shows no symbol above 0.3%. It would need a different read path design, for
+  example a checker monomorphized over "has a base" so the plain checker compiles with no overlay branches. That
+  doubles the checker's code in the binary and its compile time, and was not built or measured.
+- **The exposed seed is over budget even with a zero floor.** -5% peak needs `T_w` of about 90-150 ms on Linux
+  (vscode about 300; table 10.2 has FA at 139-274 ms). With 21-49 ms allowed, the exposed share `(1 - p)` would
+  have to be at most about 23-36%, so p at least 64-77%. Measured p is 24-49% on the app projects. A cold
+  checker's time on a file goes mostly to the library graph, which is exactly what the seed builds, so it is
+  wasted once the thread becomes a fork.
+- **What would make p near 1:** a fork that keeps its own pre-fork graph and merges it with the seed's. That is Bun's
+  barrier-and-renumber design, which the brief keeps out of scope. Alternatively, a seed that costs no wall at all:
+  one built before the pass (during the parse it is not exact: checker initialization merges every
+  file's globals and module augmentations, so a seed on a partial program could compute different types), or one persisted across runs (not on the CLI's cold path). None of
+  these is a change to this design.
+- **A smaller seed does not escape.** The peak saved per ms of `T_w` is 0.3-0.95 MiB with no knee; FA2.5 keeps
+  only -1.0..-5.5% peak and still costs +4.3..+14.9% wall.
+
+So the gap to bun check at 8 checkers stays as section 9 left it. FA's measured peaks against the scoreboard's bun
+peaks (bench of 55c2d9ce): formbricks-web 1.46 vs 1.60 GiB, cal-diy 1.22 vs 1.29, mikro-orm 1.37 vs 1.40, vscode
+1.81 vs 1.86, supabase-studio 1.24 vs 1.21, t3code-server 1.60 vs 1.12. That would beat bun on four projects, but
+at a wall cost far over the bar.
+
+### 10.6 Reproduce
+
+```sh
+git checkout spike/shared-graph-seed
+depot ci dispatch --repo maschwenk/tsrs --workflow perf-probe.yml --ref spike/shared-graph-seed \
+  --input runner=depot-ubuntu-24.04-16 \
+  --input projects=t3code-server,formbricks-web,cal-diy,supabase-studio,mikro-orm,vscode \
+  --input script=tools/perf/sharedprobe.sh \
+  --input probe_args='variants=off,foff,on0,FA,FA2.5 --checkers 8,16 --reps 10 --no-strace --no-perf-stat'
+```
+
+About 25 runner-minutes for 600 runs. Each run's output in the artifact's `runs/` ends with its timeline; table
+10.2 is the median of the `timeline` lines (`seed:spawned`, `seed:frozen`, the latest `chk:ready`, `chk:end`).
+Switches: `TSRS_SHARED_GRAPH_THROWAWAY=1`, `TSRS_SHARED_GRAPH_THROWAWAY_FREE=1|protect`, `TSRS_SHARED_GRAPH_EARLY=1`,
+`TSRS_SHARED_GRAPH_CRITICAL=<permille>`, `TSRS_TIMELINE=1`.

@@ -196,6 +196,11 @@ pointer compression costs about +4.9% instructions and took back most of the che
   to reuse more (6-12% fewer computations); and not caching cut results below the top (+1.2% to +2.3% on sequelize
   and cal-diy, still history-dependent).
 
+- Hiding the shared-graph seed's serial time (notes/spike-shared-graph-seed.md, branch `spike/shared-graph-seed`):
+  throwaway checkers during the seed (kept or freed), an earlier seed start and cheaper fork map reads. Best: peak
+  -5.7..-14.4% at 8 checkers on the 16-vCPU runner, wall +6.0..+16.2%. The compiled-in read paths alone cost
+  +2.3..+4.8% wall, and a throwaway is only 24-49% productive (a cold checker mostly rebuilds library types).
+
 ## The lint ratchet
 
 `tools/lint/baseline.tsv` went from 1,373 findings to 312 (#57-#59, #61, #63; notes/lint-paydown-compiler.md,
