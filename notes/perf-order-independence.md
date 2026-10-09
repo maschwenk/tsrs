@@ -115,8 +115,12 @@ Before the fix the 40k-error corpus gave four distinct outputs over the same con
   and is closed: Go caches what it builds from the error type a TS2590 returns (an intersection split in halves, a
   union of two unions, an instantiation, a relation compared through it), so a checker reports the error only the
   first time it evaluates the type; by default tsrs does not cache a result computed while a TS2590 was reported, and
-  every file that evaluates the type reports it, at the innermost of its nested sites (`Checker::too_complex_since`,
-  `flush_too_complex_reports`; notes/open-history-dependence.md section 4).
+  every file that evaluates the type reports it, once per type at its first site, as tsgo does once per checker
+  (`Checker::too_complex_since`, `flush_too_complex_reports`; notes/open-history-dependence.md section 4). A use that
+  reaches the type through a declaration's cached type (a symbol's or node's resolved type, a constraint, a lazily
+  resolved member) is still assignment-dependent: the use evaluates the type, and so reports, only if its checker has
+  not resolved the declaration before; when the declaring file is an unchecked declaration file the report at the
+  declaration is never printed either.
 - **Diagnostics located in another file:** a file's diagnostics come only from the checker that checks it, right
   after checking it, so an error that checking file B files against file A is kept only if the same checker checks A
   afterwards. This can occur (Go behaves the same). Not observed as a difference in output; the routing itself is seen

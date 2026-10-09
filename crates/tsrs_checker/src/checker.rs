@@ -960,9 +960,9 @@ pub struct Checker {
     pub(crate) diagnostic_adds: u32,
     /// tsrs-only: TS2590 reports so far (wrapping; `Checker::too_complex_since`).
     pub(crate) too_complex_reports: u32,
-    /// tsrs-only: the TS2590 sites of the file being checked, reported when the file is done
-    /// (`Checker::flush_too_complex_reports`).
-    pub(crate) too_complex_nodes: Vec<P<Node>>,
+    /// tsrs-only: the TS2590 sites of the file being checked, one per too-complex type (`Checker::too_complex_key`),
+    /// reported when the file is done (`Checker::flush_too_complex_reports`).
+    pub(crate) too_complex_nodes: Vec<(P<Node>, u64)>,
     /// Calls of `check_expression_ex`, each of which resets `instantiation_count` (wrapping; the inference memo).
     pub(crate) expression_checks: u32,
     pub instantiation_stack: Vec<P<Type>>,

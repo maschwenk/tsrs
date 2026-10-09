@@ -232,11 +232,14 @@ tsgo-ref does not print it either).
 The fix: `Checker::too_complex_reports` counts TS2590 reports, and `too_complex_since(mark)` says whether a computation
 that began at `mark` reported one. In the default mode such a result is not cached: `get_intersection_type_ex`,
 `union_of_union_types`, the three instantiation caches and the relation cache skip their insert, so every evaluation
-computes the type again. The reports of a file are collected while it is checked and emitted when it is done, at
-the innermost of nested sites only (`report_too_complex`, `flush_too_complex_reports`): the expression whose
-evaluation first produced the too-complex type reports, the expressions enclosing it that evaluated the type again
-do not, which is what Go's caches give within one file (`compiler/normalizedIntersectionTooComplex` reports once,
-at the arrow parameter, not also at the call and its argument). The output no longer depends on the assignment:
+computes the type again. The reports of a file are collected while it is checked and emitted when it is done, one per
+too-complex type (the ids of the types it combined, `too_complex_key`) at the first site that evaluated it
+(`report_too_complex`, `flush_too_complex_reports`). That is the site Go's caches give within one file, since Go
+reports the first evaluation per checker: `compiler/normalizedIntersectionTooComplex` reports once, at the arrow
+parameter, not also at the call and its argument; a call whose parameter type is resolved before its argument reports
+at the call, as tsgo does; two different too-complex types in one expression both report. (An earlier revision kept
+the innermost of nested sites instead; the adversarial review of the fix showed it dropping the second type and
+moving the first case's location.) The output no longer depends on the assignment:
 `x/zz.ts(5,14)`
 single-threaded, at 1-4 checkers and under `random:1..8` (crates/tsrs_cli/tests/union_too_complex_cross_product.rs;
 `tools/ci/determinism.sh` sweeps the case too), and 30 of 30 identical runs on the generated project. It differs from
@@ -244,9 +247,22 @@ tsgo where tsgo's own output depends on the checker count: tsgo prints the error
 checker evaluates the type first. `--checkerAssignment go` keeps Go's caches and output (nothing single-threaded on the
 case, as tsgo-ref). The four conformance tests that contain a TS2590 (templateLiteralTypes1,
 unionSubtypeReductionErrors, normalizedIntersectionTooComplex, templateLiteralTypeTooComplex) are unchanged in both
-modes. Cost: only a program that reports a TS2590 recomputes anything, once per site that reaches the type.
+modes.
 
-Not covered, by design: caches keyed by a declaration rather than by a type (a symbol's or node's resolved type) still
-hold a type built from the error, but that report sits at the declaration, which the checker of the declaring file
-always evaluates itself, so the printed output does not depend on the assignment. `TSRS_TRACE_UNION_REDUCTION=1`
-(docs/DEBUGGING.md) remains, for the `remove_subtypes` site, for Go mode, and to find which union a TS2590 is about.
+Still open, unchanged by the fix: a type cached on a declaration rather than keyed by type (a symbol's or node's
+resolved type, a type parameter's constraint, a lazily resolved instantiated member) carries the error type to every
+later use without re-evaluation, so a use evaluates the type, and reports, only if its checker has not resolved the
+declaration before. When the declaring file is checked, the report at the declaration is deterministic, but a use in
+another file reports in addition only under some assignments (the review's cases c1, c2, c9 and c11: under
+`random:1..4` at 2 checkers the use site reports or not, or the using file's one report moves between two of its
+sites). When the declaring file is an unchecked declaration file (`skipLibCheck`), the report at the declaration is
+never printed either: a `declare const v: K0 & K1 & K2`, a `Cond<X>` alias whose true branch is the intersection, a
+`T extends K0 & K1 & K2` constraint and a lazily resolved instantiated member, each in a `.d.ts`, are each silent at
+the use when the using file shares a checker with an earlier user, identical before and after the fix. Closing these
+would mean keeping poisoned results out of the symbol and node links as well (resolved and declared types, constraints,
+instantiated members), which is a larger change. Also unchanged: a report filed against another file while checking
+this one is kept only if this checker checks that file later (as every diagnostic), and a checked declaration file
+split into pieces (`TSRS_SPLIT_FILES`) can report one site per piece. Cost: a program that reports a TS2590 recomputes the type at every site; for the cross product this is the size
+check only, for a union of 1,101 classes each re-evaluation pays the 100,000-comparison estimate, about 4 ms per site
+(100 sites in one file: 0.46 s against 0.05 s). `TSRS_TRACE_UNION_REDUCTION=1` (docs/DEBUGGING.md) remains, for the
+`remove_subtypes` site, for Go mode, and to find which union a TS2590 is about.
