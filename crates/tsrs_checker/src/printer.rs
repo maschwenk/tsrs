@@ -38,11 +38,13 @@ pub(crate) fn create_printer_with_remove_comments_omit_trailing_semicolon_never_
 
 impl Checker {
     // printer.go:43
+    #[cfg_attr(feature = "xfile-stats", track_caller)]
     pub fn type_to_string_exported(&mut self, t: P<Type>) -> String {
         self.type_to_string(t, None)
     }
 
     // printer.go:47
+    #[cfg_attr(feature = "xfile-stats", track_caller)]
     pub(crate) fn type_to_string(&mut self, t: P<Type>, enclosing_declaration: Option<P<Node>>) -> String {
         self.type_to_string_ex(
             t,
@@ -60,12 +62,15 @@ pub(crate) fn to_node_builder_flags(flags: TypeFormatFlags) -> Flags {
 
 impl Checker {
     // printer.go:55
+    #[cfg_attr(feature = "xfile-stats", track_caller)]
     pub fn type_to_string_ex_exported(&mut self, t: P<Type>, enclosing_declaration: Option<P<Node>>, flags: TypeFormatFlags, vc: Option<P<VerbosityContext>>) -> String {
         self.type_to_string_ex(t, enclosing_declaration, flags, vc)
     }
 
     // printer.go:59
+    #[cfg_attr(feature = "xfile-stats", track_caller)]
     pub fn type_to_string_ex(&mut self, t: P<Type>, enclosing_declaration: Option<P<Node>>, flags: TypeFormatFlags, vc: Option<P<VerbosityContext>>) -> String {
+        let _xf = crate::xfile::print_enter(self);
         // Serialization of types can lead to (lazy) resolution of members, which can cause diagnostics that again require
         // serialization of types. This can potentially result in infinite recursion and stack overflows. To prevent that,
         // after a certain number of recursive invocations the function simply returns "?".
@@ -131,22 +136,27 @@ impl Checker {
     }
 
     // printer.go:120
+    #[cfg_attr(feature = "xfile-stats", track_caller)]
     pub fn symbol_to_string_exported(&mut self, s: P<Symbol>) -> String {
         self.symbol_to_string(s)
     }
 
     // printer.go:124
+    #[cfg_attr(feature = "xfile-stats", track_caller)]
     pub(crate) fn symbol_to_string(&mut self, symbol: P<Symbol>) -> String {
         self.symbol_to_string_ex(symbol, None, SymbolFlags::All, SymbolFormatFlags::AllowAnyNodeKind)
     }
 
     // printer.go:128
+    #[cfg_attr(feature = "xfile-stats", track_caller)]
     pub fn symbol_to_string_ex_exported(&mut self, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags, flags: SymbolFormatFlags) -> String {
         self.symbol_to_string_ex(symbol, enclosing_declaration, meaning, flags)
     }
 
     // printer.go:132
+    #[cfg_attr(feature = "xfile-stats", track_caller)]
     pub fn symbol_to_string_ex(&mut self, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags, flags: SymbolFormatFlags) -> String {
+        let _xf = crate::xfile::print_enter(self);
         let (mut writer, put_writer) = get_single_line_string_writer();
 
         let mut node_flags = Flags::IgnoreErrors;
@@ -192,17 +202,21 @@ impl Checker {
     }
 
     // printer.go:179
+    #[cfg_attr(feature = "xfile-stats", track_caller)]
     pub(crate) fn signature_to_string(&mut self, signature: P<Signature>) -> String {
         self.signature_to_string_ex(signature, None, TypeFormatFlags::None, None)
     }
 
     // printer.go:183
+    #[cfg_attr(feature = "xfile-stats", track_caller)]
     pub fn signature_to_string_ex_exported(&mut self, signature: P<Signature>, enclosing_declaration: Option<P<Node>>, flags: TypeFormatFlags, vc: Option<P<VerbosityContext>>) -> String {
         self.signature_to_string_ex(signature, enclosing_declaration, flags, vc)
     }
 
     // printer.go:187
+    #[cfg_attr(feature = "xfile-stats", track_caller)]
     pub fn signature_to_string_ex(&mut self, signature: P<Signature>, enclosing_declaration: Option<P<Node>>, flags: TypeFormatFlags, vc: Option<P<VerbosityContext>>) -> String {
+        let _xf = crate::xfile::print_enter(self);
         let is_constructor = signature.flags.get().intersects(SignatureFlags::Construct) && !flags.intersects(TypeFormatFlags::WriteCallStyleSignature);
         let sig_output = if flags.intersects(TypeFormatFlags::WriteArrowStyleSignature) {
             if is_constructor {
@@ -243,12 +257,15 @@ impl Checker {
     }
 
     // printer.go:229
+    #[cfg_attr(feature = "xfile-stats", track_caller)]
     pub(crate) fn type_predicate_to_string(&mut self, type_predicate: P<TypePredicate>) -> String {
         self.type_predicate_to_string_ex(type_predicate, None, TypeFormatFlags::UseAliasDefinedOutsideCurrentScope)
     }
 
     // printer.go:233
+    #[cfg_attr(feature = "xfile-stats", track_caller)]
     pub(crate) fn type_predicate_to_string_ex(&mut self, type_predicate: P<TypePredicate>, enclosing_declaration: Option<P<Node>>, flags: TypeFormatFlags) -> String {
+        let _xf = crate::xfile::print_enter(self);
         let (mut writer, put_writer) = get_single_line_string_writer();
         let (node_builder, mut release) = self.get_node_builder();
         let combined_flags = to_node_builder_flags(flags) | Flags::IgnoreErrors | Flags::WriteTypeParametersInQualifiedName;

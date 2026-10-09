@@ -1,7 +1,37 @@
 // The alloc-profile build installs tsrs_core's counting allocator (over mimalloc) instead.
-#[cfg(not(feature = "alloc-profile"))]
+#[cfg(not(any(feature = "alloc-profile", feature = "xfile-stats")))]
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
+// exp/crossfile-diagnostics: mimalloc with a per-thread count of bytes handed out (tsrs_core::xfile).
+#[cfg(all(feature = "xfile-stats", not(feature = "alloc-profile")))]
+struct XfileAlloc;
+#[cfg(all(feature = "xfile-stats", not(feature = "alloc-profile")))]
+// SAFETY: forwards every call to mimalloc unchanged.
+unsafe impl std::alloc::GlobalAlloc for XfileAlloc {
+    unsafe fn alloc(&self, l: std::alloc::Layout) -> *mut u8 {
+        tsrs_core::xfile::heap_add(l.size());
+        // SAFETY: forwarded.
+        unsafe { std::alloc::GlobalAlloc::alloc(&mimalloc::MiMalloc, l) }
+    }
+    unsafe fn alloc_zeroed(&self, l: std::alloc::Layout) -> *mut u8 {
+        tsrs_core::xfile::heap_add(l.size());
+        // SAFETY: forwarded.
+        unsafe { std::alloc::GlobalAlloc::alloc_zeroed(&mimalloc::MiMalloc, l) }
+    }
+    unsafe fn dealloc(&self, p: *mut u8, l: std::alloc::Layout) {
+        // SAFETY: forwarded.
+        unsafe { std::alloc::GlobalAlloc::dealloc(&mimalloc::MiMalloc, p, l) }
+    }
+    unsafe fn realloc(&self, p: *mut u8, l: std::alloc::Layout, n: usize) -> *mut u8 {
+        tsrs_core::xfile::heap_add(n.saturating_sub(l.size()));
+        // SAFETY: forwarded.
+        unsafe { std::alloc::GlobalAlloc::realloc(&mimalloc::MiMalloc, p, l, n) }
+    }
+}
+#[cfg(all(feature = "xfile-stats", not(feature = "alloc-profile")))]
+#[global_allocator]
+static GLOBAL: XfileAlloc = XfileAlloc;
 
 #[cfg(feature = "alloc-profile")]
 mod census;

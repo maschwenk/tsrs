@@ -98,6 +98,7 @@ mod jsx;
 mod exports;
 mod jsdoc;
 mod printer;
+mod xfile;
 pub(crate) use printer::*;
 mod nodebuilder;
 mod nodebuilderimpl_1;

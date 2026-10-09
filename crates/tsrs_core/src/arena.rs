@@ -213,6 +213,7 @@ impl Arena {
         if layout.size() == 0 {
             return NonNull::new(std::ptr::without_provenance_mut(layout.align())).unwrap();
         }
+        crate::xfile::arena_add(layout.size());
         if self.up {
             return self.alloc_layout_up(layout);
         }

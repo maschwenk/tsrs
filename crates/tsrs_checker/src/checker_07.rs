@@ -1464,11 +1464,13 @@ impl Checker {
         if self.was_canceled {
             return Vec::new();
         }
-        if suggestions {
+        let result = if suggestions {
             self.suggestion_diagnostics.get_diagnostics_for_file(source_file)
         } else {
             self.diagnostics.get_diagnostics_for_file(source_file)
-        }
+        };
+        crate::xfile::on_collect(self, source_file, &result, suggestions);
+        result
     }
 
     // checker.go:14204
@@ -1497,7 +1499,9 @@ impl Checker {
     }
 
     // checker.go:14221
+    #[cfg_attr(feature = "xfile-stats", track_caller)]
     pub(crate) fn add_diagnostic(&mut self, diagnostic: P<Diagnostic>) -> P<Diagnostic> {
+        crate::xfile::on_add(self, diagnostic, false, std::panic::Location::caller());
         self.diagnostic_adds = self.diagnostic_adds.wrapping_add(1);
         // Discard diagnostics created while at the maximum number of recursive TypeToString invocations.
         if self.serialization_level < maxSerializationLevel {
@@ -1507,7 +1511,9 @@ impl Checker {
     }
 
     // checker.go:14229
+    #[cfg_attr(feature = "xfile-stats", track_caller)]
     pub(crate) fn add_suggestion_diagnostic(&mut self, diagnostic: P<Diagnostic>) -> P<Diagnostic> {
+        crate::xfile::on_add(self, diagnostic, true, std::panic::Location::caller());
         self.diagnostic_adds = self.diagnostic_adds.wrapping_add(1);
         // Discard diagnostics created while at the maximum number of recursive TypeToString invocations.
         if self.serialization_level < maxSerializationLevel {
@@ -1517,11 +1523,13 @@ impl Checker {
     }
 
     // checker.go:14237
+    #[cfg_attr(feature = "xfile-stats", track_caller)]
     pub(crate) fn error(&mut self, location: Option<P<Node>>, message: &'static Message, args: &[&dyn Display]) -> P<Diagnostic> {
         self.add_diagnostic(new_diagnostic_for_node(location, Some(message), args))
     }
 
     // checker.go:14241
+    #[cfg_attr(feature = "xfile-stats", track_caller)]
     pub(crate) fn error_skipped_on_no_emit(&mut self, location: P<Node>, message: &'static Message, args: &[&dyn Display]) -> P<Diagnostic> {
         let diagnostic = self.error(Some(location), message, args);
         diagnostic.set_skipped_on_no_emit();
@@ -1529,11 +1537,13 @@ impl Checker {
     }
 
     // checker.go:14247
+    #[cfg_attr(feature = "xfile-stats", track_caller)]
     pub(crate) fn error_or_suggestion(&mut self, is_error: bool, location: Option<P<Node>>, message: &'static Message, args: &[&dyn Display]) {
         self.add_error_or_suggestion(is_error, new_diagnostic_for_node(location, Some(message), args));
     }
 
     // checker.go:14251
+    #[cfg_attr(feature = "xfile-stats", track_caller)]
     pub(crate) fn error_and_maybe_suggest_await(&mut self, location: Option<P<Node>>, maybe_missing_await: bool, message: &'static Message, args: &[&dyn Display]) -> P<Diagnostic> {
         let diagnostic = self.error(location, message, args);
         if maybe_missing_await {
@@ -1543,6 +1553,7 @@ impl Checker {
     }
 
     // checker.go:14259
+    #[cfg_attr(feature = "xfile-stats", track_caller)]
     pub(crate) fn add_error_or_suggestion(&mut self, is_error: bool, diagnostic: P<Diagnostic>) {
         if is_error {
             self.add_diagnostic(diagnostic);
@@ -1836,6 +1847,7 @@ pub(crate) fn get_adjusted_node_for_error(node: P<Node>) -> P<Node> {
 
 impl Checker {
     // checker.go:14505
+    #[cfg_attr(feature = "xfile-stats", track_caller)]
     pub(crate) fn lookup_or_issue_error(&mut self, location: P<Node>, message: &'static Message, args: &[&dyn Display]) -> P<Diagnostic> {
         self.add_diagnostic(new_diagnostic_for_node(Some(location), Some(message), args))
     }

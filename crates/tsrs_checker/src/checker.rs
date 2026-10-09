@@ -978,6 +978,8 @@ pub struct Checker {
     /// in a file it had not started checking (`defer_type_argument_constraints`), by file. Run when this checker checks
     /// the file; dropped with the checker otherwise.
     pub(crate) deferred_type_argument_checks: FxHashMap<P<SourceFile>, Vec<P<Node>>>,
+    /// exp/crossfile-diagnostics: the files a static assignment gives this checker (TSRS_XFILE_SKIP=lost).
+    pub xfile_owned: Option<rustc_hash::FxHashSet<P<SourceFile>>>,
     pub variance_type_parameter: Option<P<Type>>,
     pub language_version: ScriptTarget,
     pub module_kind: ModuleKind,
@@ -1387,6 +1389,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         statements_checked_in_pieces: None,
         tuple_elements: Vec::new(),
         deferred_type_argument_checks: FxHashMap::default(),
+        xfile_owned: None,
         variance_type_parameter: None,
         language_version: compiler_options.get_emit_script_target(),
         module_kind: compiler_options.get_emit_module_kind(),

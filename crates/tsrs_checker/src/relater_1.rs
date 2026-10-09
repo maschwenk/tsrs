@@ -427,24 +427,28 @@ impl Checker {
     }
 
     // relater.go:339
+    #[cfg_attr(feature = "xfile-stats", track_caller)]
     pub(crate) fn check_type_assignable_to(&mut self, source: P<Type>, target: P<Type>, error_node: Option<P<Node>>, head_message: Option<&'static Message>) -> bool {
         let relation = self.assignable_relation;
         self.check_type_related_to_ex(source, target, relation, error_node, head_message, None)
     }
 
     // relater.go:343
+    #[cfg_attr(feature = "xfile-stats", track_caller)]
     pub(crate) fn check_type_assignable_to_ex(&mut self, source: P<Type>, target: P<Type>, error_node: Option<P<Node>>, head_message: Option<&'static Message>, diagnostic_output: &mut Vec<P<Diagnostic>>) -> bool {
         let relation = self.assignable_relation;
         self.check_type_related_to_ex(source, target, relation, error_node, head_message, Some(diagnostic_output))
     }
 
     // relater.go:347
+    #[cfg_attr(feature = "xfile-stats", track_caller)]
     pub(crate) fn check_type_comparable_to(&mut self, source: P<Type>, target: P<Type>, error_node: P<Node>, head_message: Option<&'static Message>) -> bool {
         let relation = self.comparable_relation;
         self.check_type_related_to_ex(source, target, relation, Some(error_node), head_message, None)
     }
 
     // relater.go:351
+    #[cfg_attr(feature = "xfile-stats", track_caller)]
     pub(crate) fn check_type_related_to(&mut self, source: P<Type>, target: P<Type>, relation: P<Relation>, error_node: Option<P<Node>>) -> bool {
         self.check_type_related_to_ex(source, target, relation, error_node, None, None)
     }
@@ -453,8 +457,13 @@ impl Checker {
     // Check that source is related to target according to the given relation. When errorNode is non-nil, errors are
     // reported to the checker's diagnostic collection or through diagnosticOutput when non-nil. Callers can assume that
     // this function only reports zero or one error to diagnosticOutput (unlike checkTypeRelatedToAndOptionallyElaborate).
+    #[cfg_attr(feature = "xfile-stats", track_caller)]
     pub(crate) fn check_type_related_to_ex(&mut self, source: P<Type>, target: P<Type>, relation: P<Relation>, error_node: Option<P<Node>>, head_message: Option<&'static Message>, diagnostic_output: Option<&mut Vec<P<Diagnostic>>>) -> bool {
         let mut error_node = error_node;
+        if crate::xfile::skip_reporting(self, error_node) {
+            error_node = None;
+        }
+        let _xf = crate::xfile::scope_enter(self, error_node);
         let r = self.get_relater();
         r.relation.set(Some(relation));
         r.error_node.set(error_node);
@@ -534,9 +543,11 @@ pub(crate) fn create_diagnostic_chain_from_error_chain(chain: Option<P<ErrorChai
 
 impl Checker {
     // relater.go:414
+    #[cfg_attr(feature = "xfile-stats", track_caller)]
     pub(crate) fn report_diagnostic(&mut self, diagnostic: Option<P<Diagnostic>>, diagnostic_output: Option<&mut Vec<P<Diagnostic>>>) {
         if let Some(diagnostic) = diagnostic {
             if let Some(diagnostic_output) = diagnostic_output {
+                crate::xfile::on_output_push();
                 diagnostic_output.push(diagnostic);
             } else {
                 self.add_diagnostic(diagnostic);
@@ -545,13 +556,17 @@ impl Checker {
     }
 
     // relater.go:424
+    #[cfg_attr(feature = "xfile-stats", track_caller)]
     pub(crate) fn check_type_assignable_to_and_optionally_elaborate(&mut self, source: P<Type>, target: P<Type>, error_node: Option<P<Node>>, expr: Option<P<Node>>, head_message: Option<&'static Message>, diagnostic_output: Option<&mut Vec<P<Diagnostic>>>) -> bool {
         let relation = self.assignable_relation;
         self.check_type_related_to_and_optionally_elaborate(source, target, relation, error_node, expr, head_message, diagnostic_output)
     }
 
     // relater.go:428
+    #[cfg_attr(feature = "xfile-stats", track_caller)]
     pub(crate) fn check_type_related_to_and_optionally_elaborate(&mut self, source: P<Type>, target: P<Type>, relation: P<Relation>, error_node: Option<P<Node>>, expr: Option<P<Node>>, head_message: Option<&'static Message>, diagnostic_output: Option<&mut Vec<P<Diagnostic>>>) -> bool {
+        let error_node = if crate::xfile::skip_reporting(self, error_node) { None } else { error_node };
+        let _xf = crate::xfile::scope_enter(self, error_node);
         let mut diagnostic_output = diagnostic_output;
         if self.is_type_related_to(source, target, relation) {
             return true;

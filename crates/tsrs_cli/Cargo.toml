@@ -35,6 +35,7 @@ checker = ["tsrs_compiler/checker", "tsrs_execute/checker"]
 site-counts = ["tsrs_compiler/site-counts", "tsrs_execute/site-counts"]
 # TSRS_WORK_CENSUS=<file>: the work census (docs/DEBUGGING.md).
 work-census = ["tsrs_compiler/work-census", "tsrs_execute/work-census"]
+xfile-stats = ["tsrs_compiler/xfile-stats", "tsrs_core/xfile-stats"]
 # Allocation profile (tsrs_core/alloc-profile); replaces the mimalloc global allocator with the counting one.
 alloc-profile = ["tsrs_core/alloc-profile", "tsrs_execute/alloc-profile"]
 # TSRS_ASSIGNMENT_STATS also attributes checker-created types/symbols to files (tsrs_compiler checkerpool_stats.rs).

@@ -12,6 +12,7 @@ workspace = true
 site-counts = ["tsrs_core/site-counts"]
 # TSRS_WORK_CENSUS: attribute checker work to source patterns (workcensus.rs, docs/DEBUGGING.md).
 work-census = []
+xfile-stats = ["tsrs_core/xfile-stats"]
 # Instrumentation only (tsrs_compiler checkerpool_stats.rs): records every type/symbol the checker creates.
 assignment-stats = []
 

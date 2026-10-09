@@ -728,6 +728,13 @@ impl checkerPool {
             let threshold = total / (active.len() as u64 * heavy_share_divisor());
             positions.iter_mut().for_each(|p| heavy_files_first(p, threshold, weight));
         }
+        // exp/crossfile-diagnostics: with a static assignment each checker knows the files it will check.
+        if !steal && !single && std::env::var("TSRS_XFILE_SKIP").is_ok_and(|v| v == "lost") {
+            for (c, p) in positions.iter().enumerate() {
+                let owned: rustc_hash::FxHashSet<P<SourceFile>> = p.iter().map(|&i| files[i as usize]).collect();
+                state.checkers[c].0.lock().unwrap().xfile_owned = Some(owned);
+            }
+        }
         let queues: Vec<FileQueue> = positions.into_iter().map(|p| FileQueue::new(p, weight)).collect();
         // TSRS_MEM_SPLIT: the type-check pass reports once every checker is done and before any thread exits.
         let mem_split = (allow_steal && tsrs_core::memsplit::enabled()).then(|| std::sync::Barrier::new(if single { 1 } else { active.len() }));
