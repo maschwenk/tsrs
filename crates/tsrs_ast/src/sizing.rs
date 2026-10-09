@@ -602,7 +602,8 @@ pub fn run(phase: &str, files: &[P<SourceFile>], skip_freed_leaves: bool) {
         c.text_bytes += text.len() as u64;
         stack.push(Frame { node: file.as_node(), parent: None, top: Kind::SourceFile, jsdoc: false });
         walk(c, &mut stack, &mut seen, text, &mut texts);
-        let docs: Vec<(P<Node>, &'static [P<Node>])> = file.jsdoc_cache.borrow().iter().map(|(&h, &d)| (h, d)).collect();
+        let docs: Vec<(P<Node>, &'static [P<Node>])> =
+            file.state.jsdoc_cache.borrow().iter().map(|(&h, &d)| (h, d)).collect();
         for (host, d) in docs {
             c.jsdoc_cache_entries += 1;
             c.jsdoc_cache_slice_bytes += 4 * d.len() as u64;

@@ -1319,7 +1319,7 @@ impl Node {
         if file.has_lazy_jsdoc.get() {
             return file.resolve_jsdoc(self.as_p());
         }
-        file.jsdoc_cache.borrow().get(&self.as_p()).copied().unwrap_or(&[])
+        file.state.jsdoc_cache.borrow().get(&self.as_p()).copied().unwrap_or(&[])
     }
 
     // EagerJSDoc returns JSDoc nodes that have already been parsed and cached,
@@ -1336,10 +1336,10 @@ impl Node {
             },
         };
         if file.has_lazy_jsdoc.get() {
-            let _guard = file.jsdoc_mu.read().unwrap();
-            return file.jsdoc_cache.borrow().get(&self.as_p()).copied().unwrap_or(&[]);
+            let _guard = file.state.jsdoc_mu.read().unwrap();
+            return file.state.jsdoc_cache.borrow().get(&self.as_p()).copied().unwrap_or(&[]);
         }
-        file.jsdoc_cache.borrow().get(&self.as_p()).copied().unwrap_or(&[])
+        file.state.jsdoc_cache.borrow().get(&self.as_p()).copied().unwrap_or(&[])
     }
 }
 
@@ -1695,11 +1695,11 @@ pub trait HasFileName {
 
 pub struct SourceFile {
     node: OwnedCell<Option<P<Node>>>, // back pointer to the SourceFile node, set by the factory
+    pub(crate) state: P<SourceFileState>,
     pub declaration_base: DeclarationBase,
     pub locals_container_base: LocalsContainerBase,
 
     // Fields set by NewSourceFile
-    parse_options: SourceFileParseOptions,
     text: &'static str,
     pub statements: P<NodeList>,       // NodeList[*Statement]
     pub end_of_file_token: P<Node>, // TokenNode[*EndOfFileToken]
@@ -1719,12 +1719,7 @@ pub struct SourceFile {
     pub ambient_module_names: OwnedCell<&'static [&'static str]>,
     pub comment_directives: OwnedCell<&'static [CommentDirective]>,
     // Written by the parser; with lazy JSDoc, also by any checker thread under `jsdoc_mu` (Go `jsdocMu`).
-    pub(crate) jsdoc_cache: FrozenCell<FxHashMap<P<Node>, &'static [P<Node>]>>,
-    jsdoc_mu: RwLock<()>,
     pub(crate) has_lazy_jsdoc: OwnedCell<bool>,
-    identifiers: OnceLock<Set<&'static str>>,
-    // ast.go:2517 nameTableOnce/nameTable (Go map, random order; insertion order here)
-    name_table: OnceLock<tsrs_core::collections::OrderedMap<&'static str, i32>>,
     pub reparsed_clones: OwnedCell<&'static [P<Node>]>,
     // tsrs-only: the member lists of this declaration file that are parsed and bound on first use (`lazylist`).
     pub lazy_lists: OwnedCell<&'static [P<crate::lazylist::LazyNodeList>]>,
@@ -1754,18 +1749,28 @@ pub struct SourceFile {
     // (`tsrs_compiler` fileregions.rs); see `is_check_leaf`.
     check_leaf: AtomicBool,
 
+}
+
+/// Heap-owning and lazily initialized state kept out of the fixed `SourceFile` arena value. During the legacy-arena
+/// transition this is a separately tracked arena allocation; the Oxc file owner will move it to its dropped sidecar.
+pub(crate) struct SourceFileState {
+    parse_options: SourceFileParseOptions,
+    pub(crate) jsdoc_cache: FrozenCell<FxHashMap<P<Node>, &'static [P<Node>]>>,
+    jsdoc_mu: RwLock<()>,
+    identifiers: OnceLock<Set<&'static str>>,
+    // ast.go:2517 nameTableOnce/nameTable (Go map, random order; insertion order here)
+    name_table: OnceLock<tsrs_core::collections::OrderedMap<&'static str, i32>>,
     // Fields set by ECMALineMap
     ecma_line_map: OnceLock<&'static [TextPos]>,
-
     // Fields for UTF-8 to UTF-16 position mapping
     position_map: OnceLock<P<PositionMap>>,
-
     // Language service token cache (Go `tokenCacheMu`, `tokenCache`), see get_or_create_token
     token_cache: std::sync::Mutex<FxHashMap<TokenCacheKey, P<Node>>>,
-
     // Go `declarationMapMu`, `declarationMap` (workspace symbols), see get_declaration_map
     declaration_map: OnceLock<FxHashMap<String, Vec<P<Node>>>>,
 }
+
+const _: () = assert!(!std::mem::needs_drop::<SourceFile>());
 
 impl NodeFactory {
     pub fn new_source_file(
@@ -1780,11 +1785,22 @@ impl NodeFactory {
         {
             panic!("fileName should be normalized and absolute: {:?}", opts.file_name);
         }
+        let state = P::new_in(self.scratch, SourceFileState {
+            parse_options: opts,
+            jsdoc_cache: FrozenCell::new(FxHashMap::default()),
+            jsdoc_mu: RwLock::new(()),
+            identifiers: OnceLock::new(),
+            name_table: OnceLock::new(),
+            ecma_line_map: OnceLock::new(),
+            position_map: OnceLock::new(),
+            token_cache: std::sync::Mutex::new(FxHashMap::default()),
+            declaration_map: OnceLock::new(),
+        });
         let node = self.new_node(Kind::SourceFile, SourceFile {
             node: OwnedCell::new(None),
+            state,
             declaration_base: DeclarationBase { symbol: OwnedCell::new(None) },
             locals_container_base: LocalsContainerBase { locals: OwnedCell::new(None), next_container: OwnedCell::new(None) },
-            parse_options: opts,
             text,
             statements,
             end_of_file_token,
@@ -1801,11 +1817,7 @@ impl NodeFactory {
             module_augmentations: OwnedCell::new(&[]),
             ambient_module_names: OwnedCell::new(&[]),
             comment_directives: OwnedCell::new(&[]),
-            jsdoc_cache: FrozenCell::new(FxHashMap::default()),
-            jsdoc_mu: RwLock::new(()),
             has_lazy_jsdoc: OwnedCell::new(false),
-            identifiers: OnceLock::new(),
-            name_table: OnceLock::new(),
             reparsed_clones: OwnedCell::new(&[]),
             lazy_lists: OwnedCell::new(&[]),
             pragmas: OwnedCell::new(&[]),
@@ -1825,10 +1837,6 @@ impl NodeFactory {
             pattern_ambient_modules: OwnedCell::new(&[]),
             global_exports: OwnedCell::new(None),
             check_leaf: AtomicBool::new(false),
-            ecma_line_map: OnceLock::new(),
-            position_map: OnceLock::new(),
-            token_cache: std::sync::Mutex::new(FxHashMap::default()),
-            declaration_map: OnceLock::new(),
         });
         node.as_source_file().node.set(Some(node));
         node
@@ -1849,7 +1857,7 @@ impl SourceFile {
     }
 
     pub fn parse_options(&self) -> &SourceFileParseOptions {
-        &self.parse_options
+        &self.state.parse_options
     }
 
     pub fn text(&self) -> &'static str {
@@ -1892,11 +1900,11 @@ impl SourceFile {
     // If the name appears more than once, the value is -1.
     // ast.go:2857
     pub fn get_name_table(&self) -> &tsrs_core::collections::OrderedMap<&'static str, i32> {
-        if let Some(t) = self.name_table.get() {
+        if let Some(t) = self.state.name_table.get() {
             return t;
         }
         let _region = self.owner_region();
-        self.name_table.get_or_init(|| {
+        self.state.name_table.get_or_init(|| {
             let mut name_table: tsrs_core::collections::OrderedMap<&'static str, i32> = Default::default();
             let file: &'static SourceFile = self.as_node().as_source_file();
             fn walk(node: P<Node>, file: &'static SourceFile, name_table: &mut tsrs_core::collections::OrderedMap<&'static str, i32>) -> bool {
@@ -1925,11 +1933,11 @@ impl SourceFile {
     }
 
     pub fn has_identifier(&self, name: &str) -> bool {
-        if let Some(ids) = self.identifiers.get() {
+        if let Some(ids) = self.state.identifiers.get() {
             return ids.keys().contains(name);
         }
         let _region = self.owner_region();
-        self.identifiers.get_or_init(|| collect_identifiers_for_source_file(self)).keys().contains(name)
+        self.state.identifiers.get_or_init(|| collect_identifiers_for_source_file(self)).keys().contains(name)
     }
 
     // Lazily filled shared data of the file lives in the file's own region in the language server (docs/LSP.md
@@ -1941,11 +1949,11 @@ impl SourceFile {
     }
 
     pub fn file_name(&self) -> &str {
-        &self.parse_options.file_name
+        &self.state.parse_options.file_name
     }
 
     pub fn path(&self) -> &Path {
-        &self.parse_options.path
+        &self.state.parse_options.path
     }
 
     pub fn imports(&self) -> &'static [P<Node>] {
@@ -1977,7 +1985,7 @@ impl SourceFile {
     }
 
     pub fn set_jsdoc_cache(&self, cache: FxHashMap<P<Node>, &'static [P<Node>]>) {
-        *self.jsdoc_cache.borrow_mut() = cache;
+        *self.state.jsdoc_cache.borrow_mut() = cache;
     }
 
     pub fn set_has_lazy_jsdoc(&self, lazy: bool) {
@@ -1990,20 +1998,20 @@ impl SourceFile {
         };
         // Fast path: check cache under read lock
         {
-            let _guard = self.jsdoc_mu.read().unwrap();
-            if let Some(&jsdocs) = self.jsdoc_cache.borrow().get(&n) {
+            let _guard = self.state.jsdoc_mu.read().unwrap();
+            if let Some(&jsdocs) = self.state.jsdoc_cache.borrow().get(&n) {
                 return jsdocs;
             }
         }
         // Slow path: parse and cache under write lock
         let _region = self.owner_region();
-        let _guard = self.jsdoc_mu.write().unwrap();
+        let _guard = self.state.jsdoc_mu.write().unwrap();
         // Double-check after acquiring write lock
-        if let Some(&jsdocs) = self.jsdoc_cache.borrow().get(&n) {
+        if let Some(&jsdocs) = self.state.jsdoc_cache.borrow().get(&n) {
             return jsdocs;
         }
         let jsdocs = alloc_vec(parse(self, n));
-        self.jsdoc_cache.borrow_mut_locked().insert(n, jsdocs);
+        self.state.jsdoc_cache.borrow_mut_locked().insert(n, jsdocs);
         jsdocs
     }
 
@@ -2050,7 +2058,7 @@ impl SourceFile {
     }
 
     pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
-        let updated = f.new_source_file(self.parse_options.clone(), self.text, self.statements, self.end_of_file_token);
+        let updated = f.new_source_file(self.parse_options().clone(), self.text, self.statements, self.end_of_file_token);
         let new_file = updated.as_source_file();
         new_file.copy_from(self);
         clone_node(updated, node, &f.hooks)
@@ -2059,18 +2067,18 @@ impl SourceFile {
     /// `ecma_line_map().len()` without computing and keeping the map when it does not exist yet (the
     /// `--extendedDiagnostics` line count would otherwise build every file's map at the end of the run).
     pub fn ecma_line_count(&self) -> usize {
-        if let Some(m) = self.ecma_line_map.get() {
+        if let Some(m) = self.state.ecma_line_map.get() {
             return m.len();
         }
         tsrs_core::count_ecma_line_starts(self.text)
     }
 
     pub fn ecma_line_map(&self) -> &'static [TextPos] {
-        if let Some(&m) = self.ecma_line_map.get() {
+        if let Some(&m) = self.state.ecma_line_map.get() {
             return m;
         }
         let _region = self.owner_region();
-        self.ecma_line_map.get_or_init(|| alloc_vec(compute_ecma_line_starts(self.text)))
+        self.state.ecma_line_map.get_or_init(|| alloc_vec(compute_ecma_line_starts(self.text)))
     }
 
     pub fn is_bound(&self) -> bool {
@@ -2092,11 +2100,11 @@ impl SourceFile {
 
     // GetPositionMap returns the PositionMap for this source file, computing it lazily.
     pub fn get_position_map(&self) -> P<PositionMap> {
-        if let Some(&m) = self.position_map.get() {
+        if let Some(&m) = self.state.position_map.get() {
             return m;
         }
         let _region = self.owner_region();
-        *self.position_map.get_or_init(|| P::new(compute_position_map(self.text)))
+        *self.state.position_map.get_or_init(|| P::new(compute_position_map(self.text)))
     }
 
     pub fn bind_once(&self, bind: impl FnOnce()) {
@@ -2235,7 +2243,7 @@ impl NodeFactory {
     pub fn update_source_file(&self, node: P<Node>, statements: P<NodeList>, end_of_file_token: P<Node>) -> P<Node> {
         let file = node.as_source_file();
         if statements != file.statements || end_of_file_token != file.end_of_file_token {
-            let updated = self.new_source_file(file.parse_options.clone(), file.text, statements, end_of_file_token);
+            let updated = self.new_source_file(file.parse_options().clone(), file.text, statements, end_of_file_token);
             updated.as_source_file().copy_from(file);
             return update_node(updated, node, &self.hooks);
         }
@@ -2254,7 +2262,7 @@ impl SourceFile {
     // ast.go:2909
     pub fn get_or_create_token(&self, kind: Kind, pos: i32, end: i32, parent: P<Node>, flags: TokenFlags) -> P<Node> {
         let _region = self.owner_region();
-        let mut token_cache = self.token_cache.lock().unwrap();
+        let mut token_cache = self.state.token_cache.lock().unwrap();
         let loc = TextRange::new(pos, end);
         let key = TokenCacheKey { parent, loc };
         if let Some(&token) = token_cache.get(&key) {
@@ -2277,11 +2285,11 @@ impl SourceFile {
 impl SourceFile {
     // ast.go:2973
     pub fn get_declaration_map(&self) -> &FxHashMap<String, Vec<P<Node>>> {
-        if let Some(m) = self.declaration_map.get() {
+        if let Some(m) = self.state.declaration_map.get() {
             return m;
         }
         let _region = self.owner_region();
-        self.declaration_map.get_or_init(|| self.compute_declaration_map())
+        self.state.declaration_map.get_or_init(|| self.compute_declaration_map())
     }
 
     // ast.go:2982
