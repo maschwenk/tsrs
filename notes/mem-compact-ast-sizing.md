@@ -14,13 +14,14 @@ six; the realistic package (name-less property, member and specifier names; inli
 
 ## 1. The scoreboard
 
-Peaks from the README table of tsrs `55c2d9ce5c41` (bench of 2026-10-08 21:05 UTC, `bench/results/2026-10-08-55c2d9ce5c41.json`,
-"wide" cells: Depot `depot-ubuntu-24.04-16`, tsrs at its default 8 checkers, bun at 16 threads, median of 10). The
-crates at the base of this branch (8a95541) are identical to `55c2d9ce5c41`, so the counts below are of the code that
-run measured. Cross-checks: the next README run (`7ff55ce2bde7`, 2026-10-09 05:28 UTC) moves the gaps by -17..+7 MiB
-(t3code 656, supabase 180, mikro-orm 209, cal-diy 140, formbricks 61, vscode 63); the newest 16-vCPU compare file
-(`bench/results/compare/2026-10-08-cccadf7cd14b-16t.md`, mean of 10) has vscode 1.94 vs 1.87 GiB, t3code 1.77 vs
-1.12, mikro-orm 1.60 vs 1.40 (the other projects are not in it).
+Peaks from the README table of tsrs `55c2d9ce5c41` (bench of 2026-10-08 21:05 UTC,
+`bench/results/2026-10-08-55c2d9ce5c41.json`, "wide" cells: Depot `depot-ubuntu-24.04-16`, tsrs at its default 8
+checkers, bun at 16 threads, median of 10). The crates at the base of this branch (8a95541) are identical to
+`55c2d9ce5c41`, so the counts below are of the code that run measured. Cross-checks: the next README run
+(`7ff55ce2bde7`, 2026-10-09 05:28 UTC) moves the gaps by -18..+7 MiB (t3code 656, supabase 180, mikro-orm 209, cal-diy
+140, formbricks 61, vscode 63); the newest 16-vCPU compare file
+(`bench/results/compare/2026-10-08-cccadf7cd14b-16t.md`, mean of 10) has vscode 1,984 vs 1,911 MiB (gap 73), t3code
+1,812 vs 1,145 (666), mikro-orm 1,641 vs 1,433 (209); the other projects are not in it.
 
 | project | tsrs peak | bun check peak | gap | gap / tsrs peak |
 | --- | ---: | ---: | ---: | ---: |
@@ -128,9 +129,11 @@ of it (t3code 15%, mikro-orm 11%, vscode 41%) and the checkers hold the rest.
 Text: 84-99.7% of identifiers derive their text from the source (96.6-99.7% on the six; webpack's reparsed JSDoc
 types store it); the rest store a pointer that also points into the source text; 2-290 identifiers per project (escapes)
 hold a copy, a few KB. Every identifier outside JSDoc has a flow node (the binder sets one on each, binder.rs:760),
-packed into the word at no cost. Over the eight projects, node ids (checker links) are on 99% of expression identifiers and on 0.0%
-of property-access names, 0.0% of member declaration names, 0.2% of specifier names, 0.3% of declaration names and
-0.2% of type-reference names: the checker keys nothing on those name nodes.
+packed into the word at no cost. Over the eight projects, node ids (assigned when the checker keys links on a node)
+are on 99% of expression identifiers and on 0.0% of property-access names, 0.0% of member declaration names, 0.2% of
+specifier names, 0.3% of declaration names and 0.2% of type-reference names: the checker keys almost nothing on those
+name nodes. The flow nodes on them are read by none of the seven `flow_node()` / `get_flow_node_of_node` call sites in
+tsrs_checker, which take references and expression locations (read, not proven).
 
 ### 4.3 Literals, tokens, lists (post, count / MiB)
 
@@ -172,8 +175,8 @@ one element, 5-13% none.
   texts. *B ext*: also object literal, JSX attribute and binding-pattern property names. *B max*: every role the
   checker gives no node id (adds declaration names, type-reference names, import bindings, JSDoc); interner over all
   texts. For property-access names alone no interner is needed: their text is the source slice that ends at the
-  parent's end, so a 20-bit text index and a 12-bit length fit the 4-byte field (2.0-5.5 MiB on the five application
-  projects, 30.5 MiB on vscode).
+  parent's end, so a 20-bit text index and a 12-bit length fit the 4-byte field, with a real node kept for longer or
+  escaped names (2.0-5.5 MiB on the five application projects, 30.5 MiB on vscode).
 - **C, a list as an inline (start, len) range into one per-file handle array.** The 16-byte `NodeList` and 24-byte
   `ModifierList` go (modifier flags recomputed from at most three nodes); elements stay 4 bytes each; lazy member lists
   keep their records. A list's position can be derived: the parser makes `pos` the first element's `pos` and `end` the
@@ -250,16 +253,16 @@ single-threaded peaks near 871 MiB, mem-round4.md section 1, where B core would 
 
 ## 6. Effort, risk and blast radius
 
-Blast radius: hand-written lines (generated lines in parentheses) in the crates that consume the tree, counted with
-a regular expression per pattern (comments and tests excluded); the script is in the reproduce section. Weeks are
+Blast radius: hand-written lines (generated lines in parentheses) at 8a95541 in the crates that consume the tree,
+one regular expression per pattern, comment lines and tests excluded (`tools/sizing/blast_radius.py`). Weeks are
 estimates.
 
 | design | saving on the six | effort | risk | blast radius |
 | --- | --- | --- | --- | --- |
 | A | -0.4..-2.5 MiB (a loss) | 1-2 weeks | low; +9% parse measured for the global form | identifier.rs, the parser's identifier creation, `new_identifier` |
-| B core | 8.2-10.3 MiB (0.5-0.7%); vscode 40.7 (2.1%) | 6-10 weeks | medium: name nodes lose their identity | 1,326 lines (+85) test for or cast to the 10 parent kinds or the element predicates that cover them: property-access parents 270, member declarations 892, specifiers 164 (checker 427, LS 308, ast 222, transformers 158); 1,392 generic `.name()` reads (+245) to audit (checker 549, LS 266, transformers 251), 103 `property_name()` reads, 138 calls of `get_name_of_declaration` / `declaration_name_to_string` / property-name text helpers |
+| B core | 8.2-10.3 MiB (0.5-0.7%); vscode 40.7 (2.1%) | 6-10 weeks | medium: name nodes lose their identity | 1,317 lines (+85) test for or cast to the 10 parent kinds or the element predicates that cover them: property-access parents 269, member declarations 885, specifiers 163 (checker 427, LS 308, ast 213, transformers 158); 1,391 generic `.name()` reads (+245) to audit (checker 549, LS 266, transformers 251), 102 `property_name()` reads, 138 calls of `get_name_of_declaration` / `declaration_name_to_string` / property-name text helpers |
 | B max | 18.8-42.7 MiB (1.1-2.5%); vscode 70.8 (3.6%) | months | high | B core plus every declaration and type-reference name: binder symbol names, checker diagnostics at names, all of the LS |
-| C | 4.2-9.2 MiB (0.3-0.6%); vscode 22.0 (1.1%) | 4-8 weeks | medium: derived positions must be exact for the printer's comments, the API's list `pos`/`end` and trailing commas | 358 lines name `NodeList`/`ModifierList` (+440), 274 list-accessor calls, 493 list-factory calls (228 in transformers), 30 list-position reads, 178 list-visitor calls (+127); every list field in tools/gen-ast/gen-ast.ts |
+| C | 4.2-9.2 MiB (0.3-0.6%); vscode 22.0 (1.1%) | 4-8 weeks | medium: derived positions must be exact for the printer's comments, the API's list `pos`/`end` and trailing commas | 354 lines name `NodeList`/`ModifierList` (+440), 274 list-accessor calls, 493 list-factory calls (228 in transformers), 30 list-position reads, 176 list-visitor calls (+127); every list field in tools/gen-ast/gen-ast.ts |
 | D1 | -4.2..+6.5 MiB | 1-2 weeks | low | the header word split in two (ast.rs:421-512), `get_node_id` (utilities_1.rs:53) |
 | D2 | 1.0-2.7 MiB | days | low | literal factories and token-flag readers |
 | D3 | 2.7-8.0 MiB; vscode 15.7 | months | high: a checker API rewrite (bun-check-memory.md section 3) | every operator, modifier and punctuation token field |
@@ -315,15 +318,15 @@ node itself (A) saves nothing since identifiers are 32 B.
 
 1. No design clears the 5% bar on any of the six at the 8-checker default. The largest single layout change measured,
    B max (months), is 1.1-2.5% on the five application projects and 3.6% on vscode; the realistic package (B core + C
-   with a shared start + D2, three to four months by estimate) is 0.9-1.4% and 3.4%.
+   with a shared start + D2, 10-18 weeks by estimate) is 0.9-1.4% and 3.4%.
 2. None flips t3code, supabase, mikro-orm or cal-diy; formbricks would need 79 MiB (37% of its tree); vscode flips
    with B max or the package by 3-14 MiB on two bench runs and misses on the third (gap 57, 63, 73 MiB).
 3. The gap is checker state: on the Mac split, arena + heap grows from 0.16-0.73 GiB at parse end to 1.3-1.8 GiB at
    check end on the six; t3code's gap is 4.9 times its tree.
-4. Do not start a compact-tree project for the scoreboard; add A, B, C, D1-D3 to "Measured and rejected" in
-   notes/perf-round2-followups.md with these numbers. First week of work: none on the tree. If a smaller tree is wanted
-   for another reason (the language server, single-threaded runs), start with B for property-access names, text from
-   the parent's end and no interner (270 lines name the parent kind; 30.5 MiB on vscode, 2.0-5.5 MiB elsewhere).
+4. Do not start a compact-tree project for the scoreboard; this change adds A, B, C and D1-D3 to "Measured and
+   rejected" in notes/perf-round2-followups.md. First week of work: none on the tree. If a smaller tree is wanted for
+   another reason (the language server, single-threaded runs), start with B for property-access names, text from the
+   parent's end and no interner (269 lines name the parent kind; 30.5 MiB on vscode, 2.0-5.5 MiB elsewhere).
 
 ## 10. Reproduce
 
@@ -340,6 +343,5 @@ TSRS_MEM_SPLIT=1 target/release/tsrs -p <project> --noEmit --incremental false -
 python3 tools/sizing/compact_ast.py --dir /tmp/sizing --bench bench/results/2026-10-08-55c2d9ce5c41.json
 ```
 
-The blast-radius counts come from a regular expression per pattern over `crates/tsrs_{ast,parser,binder,checker,
-compiler,declarations,transformers,printer,ls,lsp,api,api_codec,astnav,pseudochecker,fourslash,incremental,execute,
-project}`, `generated.rs` counted apart; the patterns are in the PR description.
+Blast radius: `python3 tools/sizing/blast_radius.py <tree>` on a clean export of the base (`git archive 8a95541 crates
+| tar -x -C <tree>`), so the tool's own hooks are not counted.

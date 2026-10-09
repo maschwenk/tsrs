@@ -464,6 +464,8 @@ fn walk(c: &mut ClassCounts, stack: &mut Vec<Frame>, seen: &mut Seen, text: &'st
         let kind = n.kind();
         let k = kind as usize;
         let size = alloc_size(&n) as u64;
+        // Relaxed: the walk runs while no checker thread runs (before the pass, or after it joined), and only reads
+        // whether an id was written.
         let has_id = n.id.load(Ordering::Relaxed) != 0;
         let row = &mut c.kinds[k];
         row.count += 1;

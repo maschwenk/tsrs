@@ -195,6 +195,13 @@ pointer compression costs about +4.9% instructions and took back most of the che
   constraint computations, and an error tsgo does not print on a deep indexed-access chain); with per-result summaries
   to reuse more (6-12% fewer computations); and not caching cut results below the top (+1.2% to +2.3% on sequelize
   and cal-diy, still history-dependent).
+- A more compact syntax tree for the 8-checker scoreboard losses (notes/mem-compact-ast-sizing.md; counts of the real
+  trees on t3code-server, supabase-studio, mikro-orm, cal-diy, formbricks-web and vscode, nothing built): the whole
+  tree alive at the peak is 6-21% of it. Identifier text as an atom in the node saves nothing (identifiers are already
+  32 B; -0.4 to -2.5 MiB after the interner); name-less property-access, member and specifier names 0.5-0.7% of peak
+  (vscode 2.1%); lists as inline ranges 0.3-0.6% (1.1%); the node id out of the header about 0 once ids stay dense;
+  everything measured together, token nodes included, 1.7-3.6% (vscode 5.7%). Nothing flips the five application
+  projects. Revisit only if the checkers' share of the peak shrinks until the tree is the gap.
 
 ## The lint ratchet
 
