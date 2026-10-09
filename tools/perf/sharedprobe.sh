@@ -11,6 +11,8 @@
 #   on     the prototype, TSRS_SHARED_GRAPH=1, 10 permille seed
 #   on0    the prototype with an empty seed (forks of a fresh checker: the overlay's cost without any sharing)
 #   on<p>  the prototype with a <p> permille seed
+#   F      on, plus strategy F: throwaway checkers check light files while the seed is built (TSRS_SHARED_GRAPH_THROWAWAY)
+#   F<p>   F with a <p> permille seed
 # Every variant runs with TSRS_TIMELINE=1 (spike/shared-graph-seed): each run's output in runs/ ends with the
 # timeline of the front end, the seed, the forks and each checker's start and end.
 set -euo pipefail
@@ -19,6 +21,14 @@ OFF="$PROBE_OUT/tsrs-off"
 cp "$TSRS_BIN" "$OFF"
 cargo build --release --locked -p tsrs_cli --features shared-graph
 ON="$PWD/target/release/tsrs"
+# A leading `variants=<list>` in PROBE_ARGS picks the variants (perf-probe.yml has no input for it).
+args="${PROBE_ARGS:-}"
+if [[ "$args" == variants=* ]]; then
+  SHAREDPROBE_VARIANTS="${args%% *}"
+  SHAREDPROBE_VARIANTS="${SHAREDPROBE_VARIANTS#variants=}"
+  args="${args#variants=* }"
+  if [[ "$args" == variants=* ]]; then args=""; fi
+fi
 variants=()
 IFS=, read -r -a names <<< "${SHAREDPROBE_VARIANTS:-off,foff,on,on0,on2.5}"
 for v in "${names[@]}"; do
@@ -26,11 +36,13 @@ for v in "${names[@]}"; do
     off) variants+=(--variant "off:BIN=$OFF;TSRS_SHARED_GRAPH=0;TSRS_TIMELINE=1") ;;
     foff) variants+=(--variant "foff:BIN=$ON;TSRS_SHARED_GRAPH=0;TSRS_TIMELINE=1") ;;
     on) variants+=(--variant "on:BIN=$ON;TSRS_SHARED_GRAPH=1;TSRS_TIMELINE=1") ;;
+    F) variants+=(--variant "F:BIN=$ON;TSRS_SHARED_GRAPH=1;TSRS_SHARED_GRAPH_THROWAWAY=1;TSRS_TIMELINE=1") ;;
+    F*) variants+=(--variant "$v:BIN=$ON;TSRS_SHARED_GRAPH=1;TSRS_SHARED_GRAPH_THROWAWAY=1;TSRS_TIMELINE=1;TSRS_SHARED_GRAPH_SEED=spread:${v#F}") ;;
     on*) variants+=(--variant "$v:BIN=$ON;TSRS_SHARED_GRAPH=1;TSRS_TIMELINE=1;TSRS_SHARED_GRAPH_SEED=spread:${v#on}") ;;
   esac
 done
-# shellcheck disable=SC2086 # PROBE_ARGS is a list of arguments
+# shellcheck disable=SC2086 # args (PROBE_ARGS) is a list of arguments
 python3 tools/perf/leafprobe.py --tsrs "$OFF" --work "$BENCH_WORK" --out "$PROBE_OUT" \
   --projects "${PROBE_PROJECTS:-t3code-server}" "${variants[@]}" \
-  ${PROBE_ARGS:-} 2>&1 | tee "$PROBE_OUT/log.txt"
+  $args 2>&1 | tee "$PROBE_OUT/log.txt"
 rm -f "$OFF"

@@ -426,6 +426,16 @@ pub(crate) fn classify(program: &Program) -> bool {
     mode == LeafMode::Free
 }
 
+/// spike/shared-graph-seed: whether `classify` will mark `file` a leaf (the seed starts before it runs and must not
+/// check a leaf, whose region a pool checker frees). Needs `prepare` first.
+pub(crate) fn will_be_leaf(program: &Program, file: P<SourceFile>) -> bool {
+    if program.leaf_files == LeafMode::Off || file.is_check_leaf() {
+        return file.is_check_leaf();
+    }
+    let has_region = REGIONS.lock().unwrap().contains_key(&file);
+    has_region && !program.leaf_referred.get().is_some_and(|r| r.contains(&file)) && adds_nothing(program, file)
+}
+
 /// Computes the part of `classify` that reads only the loaded program (`leaf_referred`) ahead of the pass, while the
 /// checker pool creates its checkers and assigns them files (checkerpool.rs `create_checkers`), so that it is not
 /// one more serial step between them and the pass (vscode: 4-5 ms on the 64-vCPU runner, about 1% of the check time

@@ -66,7 +66,7 @@ fn parse_permille(s: &str) -> u64 {
 pub(crate) fn seed_positions(program: &Program, files: &[P<SourceFile>], weight: &dyn Fn(u32) -> u64) -> Vec<u32> {
     let eligible = |i: usize| {
         let f = files[i];
-        !f.is_declaration_file() && !f.is_check_leaf() && !program.skip_type_checking(f, false) && weight(i as u32) > 0
+        !f.is_declaration_file() && !crate::fileregions::will_be_leaf(program, f) && !program.skip_type_checking(f, false) && weight(i as u32) > 0
     };
     match seed_rule() {
         SeedRule::Files(path) => {
@@ -311,6 +311,8 @@ pub(crate) fn start_seed(program: &'static Program, weights: Vec<i64>) {
             #[expect(clippy::mem_forget, reason = "the frozen seed region must outlive every fork, to the end of the process")]
             std::mem::forget(region);
             tsrs_core::timeline::mark("seed:done", -1, crate::checkerpool::thread_cpu_seconds());
+            // Release: the throwaway checkers poll it (seed_ready) and then join this thread.
+            SEED_READY.store(true, std::sync::atomic::Ordering::Release);
             SeedOut(Box::leak(c), chunks, bytes, positions.len(), start)
         })
         .expect("failed to spawn the seed checker thread");
@@ -342,6 +344,61 @@ fn wait_base() -> Base {
         }
         Base(out.0)
     })
+}
+
+/// Set by the seed thread when its checker is done (strategy F: the throwaways stop at the next file).
+#[cfg(feature = "checker")]
+static SEED_READY: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Global diagnostics of the retired throwaway checkers, added to the pool's (`get_global_diagnostics`).
+#[cfg(feature = "checker")]
+static RETIRED_GLOBALS: std::sync::Mutex<Vec<P<tsrs_ast::Diagnostic>>> = std::sync::Mutex::new(Vec::new());
+
+/// `TSRS_SHARED_GRAPH_THROWAWAY=1` (strategy F, spike/shared-graph-seed): while the seed is built, each pass thread
+/// checks the light files at the back of its queue with its plain checker, then retires it and becomes a fork.
+#[cfg(feature = "checker")]
+pub(crate) fn throwaway_enabled() -> bool {
+    static ON: OnceLock<bool> = OnceLock::new();
+    *ON.get_or_init(|| std::env::var("TSRS_SHARED_GRAPH_THROWAWAY").is_ok_and(|v| !v.is_empty() && v != "0"))
+}
+
+/// `TSRS_SHARED_GRAPH_THROWAWAY=<d>` (1 means the default 1600): a throwaway takes files of weight up to the pass's
+/// total / (checkers x d), from the back of its queue.
+#[cfg(feature = "checker")]
+pub(crate) fn throwaway_divisor() -> u64 {
+    static D: OnceLock<u64> = OnceLock::new();
+    *D.get_or_init(|| std::env::var("TSRS_SHARED_GRAPH_THROWAWAY").ok().and_then(|v| v.parse::<u64>().ok()).filter(|&d| d > 1).unwrap_or(1600))
+}
+
+#[cfg(feature = "checker")]
+pub(crate) fn seed_ready() -> bool {
+    // Acquire: pairs with the seed thread's store.
+    SEED_READY.load(std::sync::atomic::Ordering::Acquire)
+}
+
+/// Whether the pass would replace this pool checker by a fork (it is plain and unused).
+#[cfg(feature = "checker")]
+pub(crate) fn needs_fork(slot: &crate::checkerpool::Checker) -> bool {
+    // Relaxed: written by create_checkers before the pass's threads were spawned.
+    !slot.is_fork && slot.type_count == FRESH_TYPES.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Strategy F: keeps the throwaway checker's global diagnostics, replaces it by a fork of the frozen seed, and keeps
+/// the throwaway (F-lite: leaked, so the diagnostics already collected from it stay valid).
+#[cfg(feature = "checker")]
+pub(crate) fn retire_into_fork(slot: &mut Box<crate::checkerpool::Checker>, idx: usize) {
+    let globals = slot.get_global_diagnostics();
+    RETIRED_GLOBALS.lock().unwrap().extend(globals);
+    let base = wait_base().0;
+    tsrs_core::timeline::mark("fork:waited", idx as i64, 0.0);
+    let old = std::mem::replace(slot, tsrs_checker::Checker::fork(base));
+    Box::leak(old);
+    tsrs_core::timeline::mark("fork:made", idx as i64, 0.0);
+}
+
+#[cfg(feature = "checker")]
+pub(crate) fn retired_globals() -> Vec<P<tsrs_ast::Diagnostic>> {
+    RETIRED_GLOBALS.lock().unwrap().clone()
 }
 
 /// In the type-check pass: replaces an unused plain pool checker by a fork of the frozen seed (waiting for it).
