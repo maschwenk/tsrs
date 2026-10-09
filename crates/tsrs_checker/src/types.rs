@@ -2,7 +2,7 @@ use std::fmt;
 use std::hash::Hash;
 
 use bitflags::bitflags;
-use tsrs_core::{OptionThinSliceCell, StrCell, ThinSliceCell};
+use tsrs_core::ThinSliceCell;
 use tsrs_core::shcell::{ShCell, ShCountCell, ShOptionThinSliceCell, ShStrCell, ShTaggedPtrCell};
 
 use crate::*;
