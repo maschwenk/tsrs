@@ -75,9 +75,7 @@ reproducible counters. `TSRS_HISTORY=canonical` runs the tsgo-baseline harnesses
 included, without naming an assignment.
 Each checker begins the type-check pass with the files of its queue whose static weight exceeds 1/200 of an average
 checker's share, heaviest first, then the rest in program order (notes/perf-checker-64.md,
-notes/perf-heavy-first-threshold.md); `TSRS_HEAVY_SHARE_DIVISOR=<n>` changes the divisor for experiments.
-`--checkerCostCache <file>` (opt-in, locality only) balances the checkers on the previous run's per-file CPU times
-(notes/perf-balance.md); `TSRS_ASSIGNMENT_STATS=times` prints per-checker wall and CPU seconds.
+notes/perf-heavy-first-threshold.md). `TSRS_ASSIGNMENT_STATS=times` prints per-checker wall and CPU seconds.
 From 16 checkers on, the locality placement also counts the modules (files and their imports, library declaration
 files included) a group shares with each checker, then moves groups while that lowers the modules held per checker
 (notes/perf-clustered-assignment.md); `TSRS_MODULE_AFFINITY=off` restores the placement by import edges alone, and

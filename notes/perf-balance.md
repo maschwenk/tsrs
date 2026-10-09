@@ -1,5 +1,10 @@
 # perf-balance: balancing the checkers
 
+> Removed on 2026-10-09: the opt-in cost cache (`--checkerCostCache`, `TSRS_CHECKER_COST_CACHE`, the measured-cost
+> placement and its refinement moves) was deleted. It stayed opt-in, so no published number used it, and work stealing
+> (notes/perf-checker-stealing.md) balances the checkers at run time. `TSRS_FILE_TIMES` still records per-file CPU
+> seconds for experiments. The measurements below stand as they were.
+
 With 4 checkers the locality assignment (notes/mem-assignment.md) leaves the slowest checker ~10% above the mean on
 the private monorepo, 22% on vscode and 35% on mui-docs. Wall time is the slowest checker's total, so the imbalance
 is lost wall time. This note tries ordering, static cost models and a cost cache from a previous run.

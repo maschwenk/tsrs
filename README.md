@@ -201,8 +201,6 @@ classes and type literals in declaration files are parsed and bound the first ti
 the lists of the global libraries (default libs, `types`, `/// <reference types>`) are forced in parallel before
 the checkers start (formbricks-web: -7% peak memory at 32 checkers, -12% at 4; `TSRS_LAZY_DTS=0` turns it off;
 notes/mem-lazy-dts-members.md).
-`--checkerCostCache <file>` (opt-in) records per-file check times in `<file>` and balances the checker threads on
-them in the next run (a few percent to ~15% less wall time on repeated runs; it never changes diagnostics).
 By default tsrs also runs with checker changes that are not merged upstream yet; `--noLazyMembers` turns them
 off and gives the reference-identical mode. None of them changes any diagnostic (verified on the whole conformance
 suite, errors, types and symbols):

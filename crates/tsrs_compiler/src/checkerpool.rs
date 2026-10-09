@@ -247,8 +247,6 @@ pub(crate) struct poolState {
     pub(crate) group_cpu: Mutex<Vec<Vec<f64>>>,
     // TSRS_FILE_TIMES only: (file, checker, seconds, thread CPU seconds) per checked file, in completion order.
     pub(crate) file_times: Mutex<Vec<(P<SourceFile>, usize, f64, f64)>>,
-    // Cost cache only: (file, thread CPU seconds) per checked file, per checker pass.
-    file_cpu: Mutex<Vec<(P<SourceFile>, f64)>>,
 }
 
 // TSRS_FILE_TIMES=<path> (experiments): after checking, write one line per file run by a checker group:
@@ -619,7 +617,6 @@ impl checkerPool {
                 group_runs: Mutex::new(Vec::new()),
                 group_cpu: Mutex::new(Vec::new()),
                 file_times: Mutex::new(Vec::new()),
-                file_cpu: Mutex::new(Vec::new()),
             }
         })
     }
@@ -694,7 +691,6 @@ impl checkerPool {
         let cpu: Vec<Mutex<f64>> = if stats { (0..n).map(|_| Mutex::new(0.0)).collect() } else { Vec::new() };
         let stolen: Vec<std::sync::atomic::AtomicUsize> = (0..n).map(|_| std::sync::atomic::AtomicUsize::new(0)).collect();
         let file_times = file_times_path().is_some();
-        let cost_cache = checker_cost_cache_path().is_some() && n > 1;
         // Each checker's positions in `files`, in the order of `files` (visit_order).
         let index_of: Vec<Option<usize>> = files.iter().map(|f| state.file_indices.get(f).copied()).collect();
         let mut positions: Vec<Vec<u32>> = vec![Vec::new(); n];
@@ -735,7 +731,6 @@ impl checkerPool {
             let start = stats.then(std::time::Instant::now);
             let cpu_start = if stats { thread_cpu_seconds() } else { 0.0 };
             let mut count = 0;
-            let mut file_cpu: Vec<(P<SourceFile>, f64)> = Vec::new();
             let mut guard = state.checkers[checker_idx].0.lock().unwrap();
             let mut last_victim = usize::MAX;
             while let Some((i, from_other)) = queues_next(&queues, checker_idx, steal, sticky.then_some(&mut last_victim)) {
@@ -761,7 +756,7 @@ impl checkerPool {
                     stolen[checker_idx].fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 }
                 let file_start = file_times.then(std::time::Instant::now);
-                let cpu_start = if cost_cache || file_times { thread_cpu_seconds() } else { 0.0 };
+                let cpu_start = if file_times { thread_cpu_seconds() } else { 0.0 };
                 let split_file = split.split_of.get(&(i as u32)).map(|&s| &split.files[s]);
                 if let Some(split_file) = split_file {
                     split_file.run_owner(&mut guard, split_ctx.unwrap());
@@ -775,13 +770,7 @@ impl checkerPool {
                     let cpu = thread_cpu_seconds() - cpu_start;
                     state.file_times.lock().unwrap().push((file, checker_idx, file_start.elapsed().as_secs_f64(), cpu));
                 }
-                if cost_cache {
-                    file_cpu.push((file, thread_cpu_seconds() - cpu_start));
-                }
                 count += 1;
-            }
-            if cost_cache {
-                state.file_cpu.lock().unwrap().extend(file_cpu);
             }
             if let Some(start) = start {
                 *times[checker_idx].lock().unwrap() = (start.elapsed().as_secs_f64(), count);
@@ -1148,108 +1137,6 @@ fn compute_associations(program: &Program, checker_count: usize) -> Vec<usize> {
     associations
 }
 
-// tsrs-only, opt-in: `--checkerCostCache <file>` (CLI) or TSRS_CHECKER_COST_CACHE=<file>. The locality
-// assignment balances the checkers on per-file check seconds measured by a previous run (read from the file
-// when it exists) instead of the syntactic weight, and the run writes its own measurements back. Without
-// the option nothing is read or written and the assignment depends only on the program.
-static CLI_CHECKER_COST_CACHE: OnceLock<String> = OnceLock::new();
-
-pub fn set_checker_cost_cache_from_cli(path: &str) {
-    let _ = CLI_CHECKER_COST_CACHE.set(path.to_string());
-}
-
-// The cost cache path; None unless the option is set and the locality assignment is used.
-fn checker_cost_cache_path() -> Option<&'static str> {
-    static PATH: OnceLock<Option<String>> = OnceLock::new();
-    PATH.get_or_init(|| {
-        CLI_CHECKER_COST_CACHE
-            .get()
-            .cloned()
-            .or_else(|| std::env::var("TSRS_CHECKER_COST_CACHE").ok())
-            .filter(|p| !p.is_empty() && matches!(checker_assignment(), CheckerAssignment::Locality))
-    })
-    .as_deref()
-}
-
-const COST_CACHE_MAGIC: &str = "# tsrs checker cost cache v2";
-
-// One cost cache entry: the check CPU seconds a file took in the previous run and the checker that ran it.
-#[derive(Clone, Copy)]
-struct CostEntry {
-    seconds: f64,
-    checker: usize,
-}
-
-// The cost cache: `<magic> checkers=<n>`, then `<seconds>\t<checker>\t<file path>` per checked file. Returns
-// the entries and the previous run's checker count; a missing, unreadable or foreign file reads as empty, and
-// malformed lines are skipped.
-fn read_cost_cache(path: &str) -> (FxHashMap<String, CostEntry>, usize) {
-    let mut entries = FxHashMap::default();
-    let Ok(text) = std::fs::read_to_string(path) else {
-        return (entries, 0);
-    };
-    let mut lines = text.lines();
-    let Some(checker_count) = lines
-        .next()
-        .and_then(|header| header.strip_prefix(COST_CACHE_MAGIC))
-        .and_then(|rest| rest.trim().strip_prefix("checkers="))
-        .and_then(|n| n.parse::<usize>().ok())
-    else {
-        return (entries, 0);
-    };
-    for line in lines {
-        let mut fields = line.splitn(3, '\t');
-        let (Some(seconds), Some(checker), Some(file)) = (fields.next(), fields.next(), fields.next()) else {
-            continue;
-        };
-        let (Ok(seconds), Ok(checker)) = (seconds.parse::<f64>(), checker.parse::<usize>()) else {
-            continue;
-        };
-        if seconds.is_finite() && seconds >= 0.0 && checker < checker_count {
-            entries.insert(file.to_string(), CostEntry { seconds, checker });
-        }
-    }
-    (entries, checker_count)
-}
-
-// Writes the cost cache when it is enabled and more than one checker ran: per type-checked file, its thread CPU
-// seconds summed over the checker passes and its checker. Files of other runs are dropped.
-pub(crate) fn write_cost_cache(program: &'static Program) {
-    use std::fmt::Write;
-    // Programs with an external checker pool (language server / API projects) have no cost state to write.
-    let (Some(path), Some(state)) = (checker_cost_cache_path(), program.compiler_checker_pool().and_then(|pool| pool.state.get())) else {
-        return;
-    };
-    if state.checkers.len() <= 1 {
-        return;
-    }
-    let file_indices: FxHashMap<P<SourceFile>, usize> = program.files.iter().enumerate().map(|(i, &f)| (f, i)).collect();
-    let mut measured: Vec<f64> = vec![-1.0; program.files.len()];
-    for &(file, seconds) in state.file_cpu.lock().unwrap().iter() {
-        if let Some(&i) = file_indices.get(&file) {
-            measured[i] = measured[i].max(0.0) + seconds;
-        }
-    }
-    let mut entries: Vec<(&str, f64, usize)> = Vec::new();
-    for (i, file) in program.files.iter().enumerate() {
-        let skipped = (file.is_declaration_file.get() || ast::is_json_source_file(*file)) && program.skip_type_checking(*file, false);
-        if measured[i] >= 0.0 && !skipped {
-            entries.push((file.path(), measured[i], state.owner_at(i)));
-        }
-    }
-    entries.sort_by(|a, b| a.0.cmp(b.0));
-    let mut out = String::with_capacity(entries.len() * 100);
-    let _ = writeln!(out, "{COST_CACHE_MAGIC} checkers={}", state.checkers.len());
-    for (file, seconds, checker) in entries {
-        let _ = writeln!(out, "{seconds:.6}\t{checker}\t{file}");
-    }
-    // Write-then-rename so a concurrent reader never sees a partial file; on failure the old cache stays.
-    let tmp = format!("{path}.tmp{}", std::process::id());
-    if std::fs::write(&tmp, out).is_ok() && std::fs::rename(&tmp, path).is_err() {
-        let _ = std::fs::remove_file(&tmp);
-    }
-}
-
 // tsrs-only: how files are assigned to checkers. `--checkerAssignment <name>` (CLI) or
 // TSRS_CHECKER_ASSIGNMENT=<name> (any binary). The assignment never changes what a file's diagnostics are, only
 // which checker computes them (and so how much checker state is duplicated across checkers).
@@ -1424,9 +1311,7 @@ fn locality_associations_with(program: &Program, checker_count: usize, import_ta
         crate::program::worker_pool().install(|| order.par_sort_unstable_by(by_path));
     }
 
-    // With a cost cache, groups are formed and placed by measured cost (see measured_file_costs).
-    let measured = checker_cost_cache_path().and_then(|path| measured_file_costs(&read_cost_cache(path), checker_count, files, &order, &weights));
-    let costs: &[i64] = measured.as_ref().map_or(&weights, |m| &m.costs);
+    let costs: &[i64] = &weights;
 
     let total: i64 = order.iter().map(|&i| costs[i]).sum();
     let threshold = total / (checker_count as i64 * LOCALITY_GROUP_FRACTION);
@@ -1476,158 +1361,11 @@ fn locality_associations_with(program: &Program, checker_count: usize, import_ta
         }
         placed
     };
-    let group_associations = match &measured {
-        None => fennel(&group_weights),
-        Some(measured) => {
-            // Each group starts on the checker that ran most of its cached cost in the previous run, so that
-            // costs are used in the context they were measured in; then a few groups are moved.
-            let mut previous = vec![(usize::MAX, 0i64); group_weights.len()];
-            if let Some(file_checkers) = &measured.checkers {
-                let mut shares = vec![0i64; group_weights.len() * checker_count];
-                for &i in &order {
-                    if let Some(c) = file_checkers[i] {
-                        shares[group_of_file[i] * checker_count + c] += costs[i].max(1);
-                    }
-                }
-                for (g, previous) in previous.iter_mut().enumerate() {
-                    for c in 0..checker_count {
-                        if shares[g * checker_count + c] > previous.1 {
-                            *previous = (c, shares[g * checker_count + c]);
-                        }
-                    }
-                }
-            }
-            let mut result = if previous.iter().all(|p| p.0 == usize::MAX) { fennel(&group_weights) } else { vec![usize::MAX; group_weights.len()] };
-            let mut loads = vec![0i64; checker_count];
-            for g in 0..result.len() {
-                if previous[g].0 != usize::MAX {
-                    result[g] = previous[g].0;
-                }
-                if result[g] != usize::MAX {
-                    loads[result[g]] += group_weights[g];
-                }
-            }
-            // Groups without a previous checker (new files) go to the least loaded checker, largest first.
-            let mut unplaced: Vec<usize> = (0..result.len()).filter(|&g| result[g] == usize::MAX).collect();
-            unplaced.sort_by(|&a, &b| group_weights[b].cmp(&group_weights[a]).then(a.cmp(&b)));
-            for g in unplaced {
-                let c = (0..checker_count).min_by_key(|&c| (loads[c], c)).unwrap();
-                result[g] = c;
-                loads[c] += group_weights[g];
-            }
-            refine_group_associations(&mut result, &group_weights, &group_adjacency, checker_count);
-            result
-        }
-    };
+    let group_associations = fennel(&group_weights);
     for &i in &order {
         associations[i] = group_associations[group_of_file[i]];
     }
     associations
-}
-
-struct MeasuredCosts {
-    // Per program file: the cached check cost in nanoseconds, or for files without an entry their static
-    // weight converted at the average nanoseconds per weight unit of the files that have one.
-    costs: Vec<i64>,
-    // Per program file, the checker that ran it in the previous run (None without an entry); None when that
-    // run used a different checker count.
-    checkers: Option<Vec<Option<usize>>>,
-}
-
-// None when the cache has no entry for a checked file of this program (first run, other project, ...).
-fn measured_file_costs(
-    cache: &(FxHashMap<String, CostEntry>, usize),
-    checker_count: usize,
-    files: &[P<SourceFile>],
-    order: &[usize],
-    weights: &[i64],
-) -> Option<MeasuredCosts> {
-    let (entries, cached_checker_count) = cache;
-    let mut cached: Vec<Option<CostEntry>> = vec![None; files.len()];
-    let (mut cached_seconds, mut cached_weight) = (0.0f64, 0i64);
-    for &i in order {
-        cached[i] = entries.get(files[i].path() as &str).copied();
-        if let Some(entry) = cached[i] {
-            cached_seconds += entry.seconds;
-            cached_weight += weights[i];
-        }
-    }
-    if cached_weight == 0 || cached_seconds <= 0.0 {
-        return None;
-    }
-    let ns_per_weight = cached_seconds * 1e9 / cached_weight as f64;
-    let costs = (0..files.len())
-        .map(|i| match cached[i] {
-            _ if weights[i] == 0 => 0,
-            Some(entry) => ((entry.seconds * 1e9) as i64).max(1),
-            None => ((weights[i] as f64 * ns_per_weight) as i64).max(1),
-        })
-        .collect();
-    let checkers = (*cached_checker_count == checker_count).then(|| cached.iter().map(|e| e.map(|e| e.checker)).collect());
-    Some(MeasuredCosts { costs, checkers })
-}
-
-// A group moved to another checker shares less with its new neighbors than with its old ones: measured on the
-// private monorepo, the destination checker gains ~1.3x the group's measured cost while the source loses ~1x.
-const MOVE_COST_PREMIUM: f64 = 1.3;
-const MAX_REFINE_MOVES: usize = 64;
-const REFINE_START_IMBALANCE: f64 = 0.03;
-const REFINE_STOP_IMBALANCE: f64 = 0.01;
-
-// Moves single groups off the most loaded checker (by measured cost) while that lowers the predicted maximum
-// load by more than 0.25% of the mean. Starting from the previous run's placement, few moves keep most groups in
-// the context their costs were measured in, and later runs correct what a move mispredicted. Deterministic for a
-// given cache: ties go to the stronger import affinity to the destination, then to the lower group and checker.
-fn refine_group_associations(associations: &mut [usize], costs: &[i64], adjacency: &[Vec<usize>], checker_count: usize) {
-    let mut loads = vec![0f64; checker_count];
-    for (g, &c) in associations.iter().enumerate() {
-        loads[c] += costs[g] as f64;
-    }
-    let mean = loads.iter().sum::<f64>() / checker_count as f64;
-    let min_gain = mean * 0.0025;
-    let mut affinity = vec![0i64; checker_count];
-    for moves in 0..MAX_REFINE_MOVES {
-        let heavy = (0..checker_count).max_by(|&a, &b| loads[a].total_cmp(&loads[b]).then(b.cmp(&a))).unwrap();
-        // Measured loads vary by a few percent run to run: leave a placement alone unless its slowest checker is
-        // REFINE_START_IMBALANCE above the mean, then move groups until it is within REFINE_STOP_IMBALANCE.
-        let imbalance = loads[heavy] / mean - 1.0;
-        if imbalance < if moves == 0 { REFINE_START_IMBALANCE } else { REFINE_STOP_IMBALANCE } {
-            break;
-        }
-        let mut best: Option<(f64, i64, usize, usize)> = None; // (new max, -affinity gain, group, destination)
-        for g in 0..costs.len() {
-            if associations[g] != heavy {
-                continue;
-            }
-            affinity.iter_mut().for_each(|a| *a = 0);
-            for &n in &adjacency[g] {
-                affinity[associations[n]] += 1;
-            }
-            let cost = costs[g] as f64;
-            for dest in 0..checker_count {
-                if dest == heavy {
-                    continue;
-                }
-                let mut new_max = (loads[heavy] - cost).max(loads[dest] + cost * MOVE_COST_PREMIUM);
-                for c in 0..checker_count {
-                    if c != heavy && c != dest {
-                        new_max = new_max.max(loads[c]);
-                    }
-                }
-                let key = (new_max, affinity[heavy] - affinity[dest], g, dest);
-                if best.is_none_or(|b| key.0 < b.0 || key.0 == b.0 && (key.1, key.2, key.3) < (b.1, b.2, b.3)) {
-                    best = Some(key);
-                }
-            }
-        }
-        let Some((new_max, _, g, dest)) = best else { break };
-        if new_max > loads[heavy] - min_gain {
-            break;
-        }
-        loads[heavy] -= costs[g] as f64;
-        loads[dest] += costs[g] as f64 * MOVE_COST_PREMIUM;
-        associations[g] = dest;
-    }
 }
 
 // Go's file weights (base work, regime-2 source multiplier, normalized import fanout) for the files a checker
