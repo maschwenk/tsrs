@@ -1924,7 +1924,7 @@ pub fn test_signature_help_on_type_arguments_with_unresolved_target(t: &T) {
         let (mut f, mut done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
-            f.go_to_each_marker(t, &[], |f: &mut fourslash::FourslashTest, marker: Arc<fourslash::Marker>, index: i32| {
+            f.go_to_each_marker(t, &[], |f: &mut fourslash::FourslashTest, _marker: Arc<fourslash::Marker>, _index: i32| {
                 f.verify_no_signature_help(t);
             });
         });

@@ -158,7 +158,7 @@ fn test_walk_dir_reports_root_file_symlink() {
 fn test_walk_dir_skip_dir() {
     let file_system = vfstest::from_map([("/root/a/hidden.ts", ""), ("/root/b.ts", "")], true);
     let mut paths: Vec<String> = Vec::new();
-    let err = walk_dir(&file_system, "/root", &mut |path, entry, err| {
+    let err = walk_dir(&file_system, "/root", &mut |path, _entry, err| {
         assert!(err.is_none());
         paths.push(path.to_string());
         if path == "/root/a" {
@@ -174,7 +174,7 @@ fn test_walk_dir_skip_dir() {
 fn test_walk_dir_skip_all() {
     let file_system = vfstest::from_map([("/root/a.ts", ""), ("/root/b.ts", "")], true);
     let mut paths: Vec<String> = Vec::new();
-    let err = walk_dir(&file_system, "/root", &mut |path, entry, err| {
+    let err = walk_dir(&file_system, "/root", &mut |path, _entry, err| {
         assert!(err.is_none());
         paths.push(path.to_string());
         if path == "/root/a.ts" {
@@ -189,7 +189,7 @@ fn test_walk_dir_skip_all() {
 #[test]
 fn test_walk_dir_consumes_skip_dir_for_root_file() {
     let file_system = vfstest::from_map([("/root.ts", "")], true);
-    let err = walk_dir(&file_system, "/root.ts", &mut |path, entry, err| {
+    let err = walk_dir(&file_system, "/root.ts", &mut |_path, _entry, err| {
         assert!(err.is_none());
         Err(WalkDirError::SkipDir)
     });
@@ -200,7 +200,7 @@ fn test_walk_dir_consumes_skip_dir_for_root_file() {
 fn test_walk_dir_consumes_skip_for_missing_root() {
     let file_system = vfstest::from_map(Vec::<(&str, &str)>::new(), true);
     for sentinel in [WalkDirError::SkipDir, WalkDirError::SkipAll] {
-        let err = walk_dir(&file_system, "/missing", &mut |path, entry, err| {
+        let err = walk_dir(&file_system, "/missing", &mut |_path, _entry, err| {
             assert_eq!(err, Some(&FsError::NotExist));
             Err(sentinel.clone())
         });
@@ -224,7 +224,7 @@ fn test_walk_dir_uses_symlink_metadata_without_realpath_calls() {
         },
     };
 
-    let err = walk_dir(&file_system, "/root", &mut |path, entry, err| match err {
+    let err = walk_dir(&file_system, "/root", &mut |_path, _entry, err| match err {
         Some(err) => Err(WalkDirError::Err(err.clone())),
         None => Ok(()),
     });

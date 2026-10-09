@@ -45,7 +45,7 @@ pub(crate) const DOCUMENT_SYMBOLS_CMD: BaselineCommand = BaselineCommand("Docume
 
 impl FourslashTest {
     // baselineutil.go:48
-    pub(crate) fn add_result_to_baseline(&mut self, t: &T, command: BaselineCommand, actual: &str) {
+    pub(crate) fn add_result_to_baseline(&mut self, _t: &T, command: BaselineCommand, actual: &str) {
         let b: &mut String = if self.test_data.is_state_baselining_enabled() {
             // Single baseline for all commands
             &mut self.state_baseline.as_mut().unwrap().baseline
@@ -67,7 +67,7 @@ impl FourslashTest {
     }
 
     // baselineutil.go:96
-    pub(crate) fn get_baseline_options(&self, command: BaselineCommand, test_path: &str) -> baseline::Options {
+    pub(crate) fn get_baseline_options(&self, command: BaselineCommand, _test_path: &str) -> baseline::Options {
         baseline::Options { subfolder: format!("fourslash/{}", normalize_command_name(command.0)), ..Default::default() }
     }
 }

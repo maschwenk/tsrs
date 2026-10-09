@@ -1504,11 +1504,11 @@ const a = require("./[|a|]");
             let mut prefs_false = lsutil::UserPreferences { include_completions_for_module_exports: Tristate::True, include_completions_for_import_statements: Tristate::True, allow_rename_of_import_path: Tristate::False, ..Default::default() };
             let mut markers = vec!["a".to_string(), "dir".to_string(), "index".to_string()];
             f.configure(t, prefs_true.clone());
-            f.go_to_each_marker(t, &go::strs(&markers), |f: &mut fourslash::FourslashTest, marker: Arc<fourslash::Marker>, index: i32| {
+            f.go_to_each_marker(t, &go::strs(&markers), |f: &mut fourslash::FourslashTest, _marker: Arc<fourslash::Marker>, _index: i32| {
                 f.verify_rename_succeeded(t, Some(prefs_true.clone()));
             });
             f.configure(t, prefs_false.clone());
-            f.go_to_each_marker(t, &go::strs(&markers), |f: &mut fourslash::FourslashTest, marker: Arc<fourslash::Marker>, index: i32| {
+            f.go_to_each_marker(t, &go::strs(&markers), |f: &mut fourslash::FourslashTest, _marker: Arc<fourslash::Marker>, _index: i32| {
                 f.verify_rename_failed(t, Some(prefs_false.clone()));
             });
         });
