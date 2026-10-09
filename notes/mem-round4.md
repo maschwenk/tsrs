@@ -114,3 +114,35 @@ cal-diy within 18-23%, and t3code stays at 1.7x for the structural reason in sec
 - Still eager in #202: namespace bodies (+43 MB on formbricks), lists with import types (30-60 MB never asked for on
   t3code and cal-diy), lists with eager JSDoc (4-17 MB); per-member laziness would add ~1%. The mode is off in
   incremental, build, watch, LSP and API runs.
+
+## 7. Where it stands on the 16-vCPU scoreboard (2026-10-08, evening)
+
+The README scoreboard moved to Depot's 16-vCPU runner (#209): tsrs runs 8 checkers there, bun check 16 threads. At
+the bench of 55c2d9ce (after #212 and #217) bun check uses less peak memory on six projects: t3code-server 1.76 vs
+1.12 GiB (0.64x), supabase-studio 1.39 vs 1.21 (0.87x), mikro-orm 1.60 vs 1.40 (0.88x), cal-diy 1.44 vs 1.29 (0.89x),
+formbricks-web 1.68 vs 1.60 (0.95x), vscode 1.92 vs 1.86 (0.97x). tsrs is faster on all six and uses less memory on
+the other eleven projects.
+
+Measured after section 6, none of it clearing the AGENTS.md bar (5% of peak at the default count) on any of the six:
+
+| lever | most it can save at 8 checkers | note |
+| --- | --- | --- |
+| error elaboration a relation builds and throws away (lazy formatting) | 0.08% (mikro-orm) | notes/mem-discarded-elaboration.md |
+| diagnostics a checker files against files it does not check (#212 generalized) | 0.23% (formbricks-web) | notes/mem-crossfile-diagnostics.md |
+| lazy declaration-file lists, round 2 (namespace bodies, lists with import types, eager JSDoc) | 1.6% (t3code-server); 4.3% on formbricks-web if every list were lazy | notes/mem-lazy-dts-members.md section 7 |
+| a type graph shared by the checker threads (frozen seed + forks) | -5..-10% peak, but +7..+13% wall | notes/spike-shared-graph.md |
+
+With sections 1-4 (garbage, scratch, never-read objects, resident slack, heap tables all under the bar), every exact
+change found so far that costs no speed has been made. What is left is the per-checker copy of the type graph: a
+checker rebuilds the library types its files need and, on t3code-server, the library generics instantiated with the
+project's own types (54% of what an extra checker creates). bun check keeps one graph for all its threads and adds
+6-15 MiB per thread; tsrs adds 21-47 MiB per checker on these projects.
+
+The one lever that reaches it, a shared graph, costs wall time because its seed is built serially before the other
+checkers start (about 7/8 of the seed's time goes onto the wall clock). It becomes a win only with a seed that costs
+no wall time: seeding while the parse finishes, or seeding the files the pool would check first, plus removing the
++6-8% single-checker overhead of the overlay. The spike note estimates two weeks with an open answer. Even fully
+working it would bring formbricks-web and cal-diy level with bun at 8 checkers, not t3code-server, whose duplicated
+types are instantiations no seed can predict. Fewer checkers would trade speed for memory and is excluded by the goal.
+An AST and front-end redesign in bun's style (24-byte expression rows, inline atoms; notes/bun-check-memory.md) is the
+other structural lever, for vscode's front-end-heavy gap (0.97x); it is months of work.
