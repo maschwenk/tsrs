@@ -66,7 +66,26 @@ impl<K: PackedKey, V: Copy> Based<PackedMap<K, V>> {
     }
 }
 
-impl<K: Hash + Eq + Clone, V> Based<FxHashMap<K, V>, K> {
+/// A key of a two-level map that can tell it is not one of the seed's objects (strategy E, spike/shared-graph-seed):
+/// then the base cannot hold it and the second probe is skipped.
+pub trait BaseKey {
+    #[inline]
+    fn maybe_in_base(&self) -> bool {
+        true
+    }
+}
+
+impl BaseKey for crate::checker::UnionOfUnionKey {}
+
+/// A type the seed created lies in its frozen region; a fork's own types never do.
+impl BaseKey for tsrs_core::P<crate::types::Type> {
+    #[inline]
+    fn maybe_in_base(&self) -> bool {
+        tsrs_core::sharedgraph::is_frozen_addr(self.addr())
+    }
+}
+
+impl<K: Hash + Eq + Clone + BaseKey, V> Based<FxHashMap<K, V>, K> {
     #[inline]
     pub fn get(&self, key: &K) -> Option<&V> {
         match self.own.get(key) {
@@ -79,6 +98,9 @@ impl<K: Hash + Eq + Clone, V> Based<FxHashMap<K, V>, K> {
     #[inline]
     pub fn base_get(&self, key: &K) -> Option<&'static V> {
         let b = self.base.filter(|_| tsrs_core::sharedgraph::COMPILED_IN)?;
+        if !key.maybe_in_base() {
+            return None;
+        }
         if !self.removed.is_empty() && self.removed.contains(key) {
             return None;
         }
@@ -99,7 +121,7 @@ impl<K: Hash + Eq + Clone, V> Based<FxHashMap<K, V>, K> {
     }
 
     pub fn remove(&mut self, key: &K) -> Option<V> {
-        if self.base.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).is_some_and(|b| b.contains_key(key)) {
+        if key.maybe_in_base() && self.base.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).is_some_and(|b| b.contains_key(key)) {
             self.removed.insert(key.clone());
         }
         self.own.remove(key)
