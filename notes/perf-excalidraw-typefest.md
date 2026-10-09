@@ -303,7 +303,11 @@ Bun also caches the member shape per list of element flags.
    It is exact in Go mode by construction. In canonical mode, output is unchanged by the order-independence
    argument, and the gates confirm it.
 
-2. **type-fest: share tuple-element type parameters across targets within a checker, as bun does.** The same idea
+2. **Done for the type parameters and index names: notes/perf-shared-tuple-elements.md** (type-fest 983 -> 701
+   MiB at one checker, 1,714 -> 1,182 at 8). Sharing the element symbols as well is not exact; see that note.
+   The original estimate follows.
+
+   **type-fest: share tuple-element type parameters across targets within a checker, as bun does.** The same idea
    extends to the per-element property symbols, keyed by (index, optional, readonly), and to the index-name strings.
    - **Expected gain:** most of the ~480 MB of per-element state at one checker (983 → ~550 MiB, about -44%), and
      about twice that at 9 checkers (1,683 → ~900 MiB). There are also fewer instructions spent creating 4.6M
@@ -311,7 +315,7 @@ Bun also caches the member shape per list of element flags.
    - **Not exact by construction.** It needs an audit of every reader of a target's own type parameters: the target's
      `Array<T0 | ... | Tn>` base type, the target used directly as a type, printing, and `compare_types`' type-id
      fallback for type parameters without a symbol.
-   - This is the largest open item for type-fest.
+   - This was the largest open item for type-fest.
 
 3. **Format relation error arguments lazily.** Keep the types and print them only when the error chain becomes a
    diagnostic.

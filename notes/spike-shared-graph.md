@@ -2,10 +2,16 @@
 
 The owner asked: "let's start with the graph shared between threads, at least implement it and see what the gains
 are. don't worry about exactness." This note covers the prototype on branch `spike/shared-graph` (not for landing),
-built with `--features shared-graph` and switched on with `TSRS_SHARED_GRAPH=1`. **Every number is from the Mac**
-(Apple M5 Max, 18 cores, 16 KiB pages, no THP), which other agents were also using (1-minute load 15-40). Depot was
-not used (the owner's spend). Section 9 gives the Linux probe to run later, with its cost. Bun's numbers are from
-Linux.
+built with `--features shared-graph` and switched on with `TSRS_SHARED_GRAPH=1`. Sections 1-8 are from the Mac
+(Apple M5 Max, 18 cores, 16 KiB pages, no THP), which other agents were also using (1-minute load 15-40); bun's
+numbers there are from Linux. Section 9 has the one Linux run.
+
+**Verdict: not pursued.** On Linux (16-vCPU runner, the README scoreboard's machine) the prototype lowers peak memory
+by 5-10% at the default 8 checkers and 4-16% at 16, and makes every project 6-18% slower in wall time, because the
+seed is built serially before the checkers start. That breaks the rule for this work (beat bun check on memory
+without losing speed): at 8 checkers it would tie bun on cal-diy and beat it on formbricks-web, and still trail on
+t3code-server, mikro-orm, supabase-studio and vscode. The code stays on the unmerged branch `spike/shared-graph`
+(PR 213, closed). Diagnostics were identical in every run, on the Mac and on Linux.
 
 ## 1. Question and answer
 
@@ -249,7 +255,7 @@ not a measurement. Linux has 4 KiB pages and THP, and the slack and residency be
   with project types (54% of t3code's duplicated types, notes/mem-per-checker-duplication.md), which no seed can
   predict. This is why t3code keeps 24.7 MiB per extra checker against bun's ~14.
 
-## 7. What a landing would still need (estimates)
+## 7. What a landing would still need (estimates; not pursued, see the verdict)
 
 - **The landing gates with the switch on** (common5.md): conformance in canonical mode and with
   `TSRS_LAZY_MEMBERS=0`, fourslash, the determinism CI with random assignments plus the seed. 1-2 days if they pass,
@@ -302,14 +308,39 @@ object flags).
 The Mac scripts (sgrun.py: one run with a timeout and a load wait; measure.py: interleaved matrix; analyze.py:
 tables) were in the session's scratch directory. The commands, interleaved, used `/usr/bin/time -l`.
 
-**Linux probe, not run (the owner decides on the Depot spend).** The branch was rebased onto main 6df09dbe on
-2026-10-08: the wasm build (#203), #212 (a fork now carries the seed's deferred type-argument checks, a5d2a57) and
-#209 (right-sized runners). The commit ids in sections 4-5 are from before the rebase; the measured code is the
-same. After the rebase:
+**Linux probe.** The branch was rebased onto main 6df09dbe on 2026-10-08: the wasm build (#203), #212 (a fork now
+carries the seed's deferred type-argument checks, a5d2a57) and #209 (right-sized runners). The commit ids in
+sections 4-5 are from before the rebase; the measured code is the same. After the rebase:
 - the switch-off identity holds (xstate-main and webpack at 1 and 4 checkers, byte-identical to a main build of
   6df09dbe);
 - with the switch on at 16 checkers, xstate-main and t3code-server match main;
 - mikro-orm matches main at 8 and 16 checkers (Mac peak -10% and -15%, one run each).
+
+Result (Depot run 413806b8q7, `depot-ubuntu-24.04-16`, spike head 0fa5258, off = the default build, on = the
+prototype with `TSRS_SHARED_GRAPH=1`, 5 interleaved reps, medians; error counts identical in every run). The whole
+dispatch took about 6 runner-minutes, not the 25-30 estimated below.
+
+| project | checkers | peak off | peak on | peak | wall off | wall on | wall | user CPU |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| t3code-server | 8 | 1802 MiB | 1710 MiB | -5.1% | 2.10 s | 2.26 s | +7.5% | +1.1% |
+| t3code-server | 16 | 2181 | 1987 | -8.9% | 1.79 | 1.90 | +6.0% | -7.3% |
+| formbricks-web | 8 | 1710 | 1546 | -9.6% | 1.01 | 1.14 | +12.8% | -8.0% |
+| formbricks-web | 16 | 2007 | 1679 | -16.3% | 0.81 | 0.95 | +18.3% | -15.8% |
+| cal-diy | 8 | 1454 | 1311 | -9.9% | 1.02 | 1.11 | +8.4% | -3.4% |
+| cal-diy | 16 | 1925 | 1628 | -15.4% | 0.83 | 0.93 | +11.8% | -11.2% |
+| supabase-studio | 8 | 1413 | 1280 | -9.4% | 1.22 | 1.32 | +8.6% | -6.4% |
+| supabase-studio | 16 | 1720 | 1464 | -14.9% | 0.86 | 0.99 | +14.5% | -15.9% |
+| mikro-orm | 8 | 1649 | 1495 | -9.3% | 1.51 | 1.69 | +11.7% | -2.8% |
+| mikro-orm | 16 | 1987 | 1679 | -15.5% | 1.15 | 1.30 | +13.0% | -12.7% |
+| vscode | 8 | 1987 | 1946 | -2.1% | 1.81 | 1.95 | +7.2% | +1.9% |
+| vscode | 16 | 2140 | 2058 | -3.8% | 1.12 | 1.25 | +11.4% | +0.8% |
+
+User CPU falls at 16 checkers (the forks do not redo the seed's work) while wall rises at both counts: the seed is a
+serial phase on the critical path. Shrinking it (section 7, "Shrinking T_w") is the only lever left, and the wall
+cost would have to fall below the 2% bar while the memory gain at 8 checkers is 5-10%. Against bun on this machine
+(bench of 4a3c1877, peak tsrs / bun at the defaults): formbricks-web 1.68 / 1.61 GiB, cal-diy 1.44 / 1.29,
+supabase-studio 1.38 / 1.21, mikro-orm 1.60 / 1.41, vscode 1.94 / 1.86, t3code-server 1.77 / 1.11. Applying the
+8-checker savings, only formbricks-web and cal-diy reach bun.
 
 The README scoreboard is now the 16-vCPU machine's default mode (bench.yml `measure-wide` on
 `depot-ubuntu-24.04-16`). There tsrs runs 8 checkers (half the cores, at least 8), and the bench adds a
