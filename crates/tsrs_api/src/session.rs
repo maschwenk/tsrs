@@ -141,6 +141,9 @@ impl Session {
             npm_executor: None,
             parse_cache: None,
             content_mapped_parse_cache: None,
+            // Go also passes the server's ContentMapperSpawner here (api/server.go:99). The project system does not
+            // transform content-mapped files yet (phase 2, notes/contentmappers.md): `--runExternalCode` is accepted
+            // and recorded in the session options, and its projects get no content mapper project.
         };
         let parse_config_host: &'static crate::config::ApiParseConfigHost =
             Box::leak(Box::new(crate::config::ApiParseConfigHost { fs: Arc::clone(&init.fs), cwd: init.options.current_directory.clone() }));

@@ -1441,7 +1441,10 @@ impl Program {
             }
 
             for &file in self.files.iter() {
-                let root_path = file.path();
+                let mut root_path = file.path();
+                if let Some(canonical) = file.canonical_source_file() {
+                    root_path = canonical.get().path();
+                }
                 if source_file_may_be_emitted(file, self, false, false) && !root_paths.contains(root_path) {
                     self.add_processing_diagnostic(processingDiagnostic::explaining(includeExplainingDiagnostic {
                         file: Some(file.path().clone()),
