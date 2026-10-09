@@ -16,7 +16,7 @@ use crate::astnav;
 use crate::format;
 use crate::lsconv::Converters;
 use crate::lsutil::FormatCodeSettings;
-use crate::spanmap::Feature;
+use crate::spanmap::{self, Feature};
 
 // tracker.go:21
 #[derive(Clone, Debug, Default)]
@@ -649,12 +649,21 @@ impl Tracker {
             return;
         }
 
-        let pos = self.get_insertion_position_at_source_file_top(source_file);
-        let original_pos = pos;
+        let mut pos = self.get_insertion_position_at_source_file_top(source_file);
+        let mut original_pos = pos;
         // A content mapper may synthesize a header. Advance to the first writable segment so the insertion
         // maps exactly to the original file, and use its original position when deciding leading trivia.
         if let Some(span_map) = crate::lsconv::Script::span_map(&source_file) {
-            match *span_map {}
+            for segment in span_map.segments() {
+                if segment.kind != spanmap::Kind::Verbatim || segment.virtual_end <= pos {
+                    continue;
+                }
+                if segment.virtual_start > pos {
+                    pos = segment.virtual_start;
+                }
+                original_pos = segment.original_start + pos - segment.virtual_start;
+                break;
+            }
         }
         let mut options = NodeOptions::default();
         if original_pos != 0 {

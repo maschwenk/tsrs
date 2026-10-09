@@ -564,6 +564,7 @@ dependencies = [
  "tsrs_projectutil",
  "tsrs_scanner",
  "tsrs_sourcemap",
+ "tsrs_spanmap",
  "tsrs_tsoptions",
  "tsrs_vfs",
 ]
