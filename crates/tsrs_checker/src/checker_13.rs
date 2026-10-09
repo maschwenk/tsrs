@@ -1181,6 +1181,10 @@ impl Checker {
     /// so that what Go's cache would have told apart (an aliased and an alias-free intersection) is told apart here.
     pub(crate) fn check_cross_product_union(&mut self, types: &[P<Type>], key: u64) -> bool {
         let size = self.get_cross_product_union_size(types);
+        // tsrs-only: TSRS_TRACE_UNION_REDUCTION (uniontrace.rs).
+        if size >= 1_000 && crate::uniontrace::enabled() {
+            crate::uniontrace::report_cross_product(self, types, size);
+        }
         if size >= 100_000 {
             self.report_too_complex(key);
             return false;

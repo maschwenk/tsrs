@@ -92,27 +92,62 @@ cached, so every file that evaluates the type reports it, once per too-complex t
 it (`Checker::too_complex_since`, `flush_too_complex_reports`, notes/open-history-dependence.md section 4). The trace below is for `--checkerAssignment go`, which keeps Go's caches and so Go's first-evaluation-only
 reports, and for finding which union a TS2590 is about.
 
-TS2590 ("Expression produces a union type that is too complex to represent") from `removeSubtypes` is decided after
-100,000 comparisons: the number of comparisons per constituent so far, times the union's length, must stay at most
-1,000,000. So only a union of more than 1,000 types can get it. `TSRS_TRACE_UNION_REDUCTION=1` prints one line on
-stderr for every subtype reduction of such a union (crates/tsrs_checker/src/uniontrace.rs):
+TS2590 ("Expression produces a union type that is too complex to represent") comes from two places. `removeSubtypes`
+gives up when, after 100,000 comparisons, the comparisons per constituent so far times the union's length exceed
+1,000,000, so only a union of more than 1,000 types can get it. `checkCrossProductUnion` gives up when a cross product
+would have 100,000 members or more: the union an intersection of unions expands to (`X & (A | B) & (C | D)` is
+`X & A & C | X & A & D | ...`), a spread of a union, a template literal over unions, a tuple with a union in a variadic
+element. Neither caches its failure, but what is built from the error type it returns is cached higher up, so in Go
+mode a checker reports the TS2590 only where it first builds the type (notes/open-history-dependence.md section 4).
+`TSRS_TRACE_UNION_REDUCTION=1` prints three kinds of lines on stderr (crates/tsrs_checker/src/uniontrace.rs; the first
+two below are from the reporter's reproduction (PR #228, now testdata/regressions/union-too-complex-cross-product), the third
+from
+testdata/regressions/union-too-complex-canonical-order):
 
 ```
-tsrs union reduction: at b.ts(4,20) while checking b.ts | 1101 -> 1101 types, too complex (TS2590) | 100000 comparisons, at 100000: 91 sources begun, estimate 1208898 | set 2d3aac47bef09b0c order bffdf1259fb1b3bf removed d1fba762150c532c | first [...] last [...]
+tsrs check file: checker 1 begins a.ts
+tsrs cross product: checker 1 at a.ts(2,1) while checking a.ts | size 160000, too complex (TS2590) | union 400 set af528f69d0d47f2c order 984925cdeb94e613 first [...] | union 400 set f7cbe6dc7c301bb4 order c846db1e17ad27de first [...]
+tsrs union reduction: checker 1 at b.ts(4,20) while checking b.ts | 1101 -> 1101 types, too complex (TS2590) | 100000 comparisons, at 100000: 91 sources begun, estimate 1208898 | set 2d3aac47bef09b0c order bffdf1259fb1b3bf removed d1fba762150c532c | first [...] last [...]
 ```
 
-`at` is the node the error is reported at and `while checking` the file the checker was checking; when they differ,
-the error is filed against another file, and it is printed only if this checker checks that file afterwards: it is
-lost if this checker already handed that file's diagnostics over or another checker checks it, and never collected for
-a file that is not type-checked (a JSON file, a declaration file under `skipLibCheck`).
-`-> n types` is what was kept (or left when it gave up), `from the cache` an answer reused from an earlier reduction of
-the same list on that checker. The three fingerprints are built from the
-types' symbols, declaration files (by base name) and positions, type arguments and literal values, not from type ids,
-so they are comparable between runs and checker counts (the example is testdata/regressions/union-too-complex-canonical-order): if two runs disagree on a TS2590, a different `set` means the union itself differed, a
-different `order` with the same `set` means its constituents were ordered differently, and the same `set` and `order`
-with a different `removed` (or a different count at the 100,000 checkpoint) means some comparisons answered
-differently. Tracing reads only what the types already hold and resolves nothing. notes/open-history-dependence.md
-section 4 has what is known.
+- `check file`: the checker begins to check that file (`statements a..b of` a file: a piece of a split declaration
+  file). One checker's lines, in order, are its history: what it had checked, and so may have built and cached, when
+  it reached a TS2590 site. `checker N` is the checker's id, the same on all three kinds of lines (1 to the checker
+  count in a CLI run). The checkers are created concurrently, so the same assignment can number them differently from
+  run to run: compare runs by which files share a checker, not by the numbers.
+- `cross product`: every cross product of at least 1,000 members, `too complex (TS2590)` from 100,000 on, then each
+  operand: a union as its length, its fingerprints and its first two members, another type described.
+- `union reduction`: every subtype reduction of a union of more than 1,000 types. `-> n types` is what was kept (or
+  left when it gave up), `from the cache` an answer reused from an earlier reduction of the same list on that checker.
+
+On both TS2590 lines, `at` is the node the error is reported at and `while checking` the file the checker was checking.
+When they differ, the error is filed against another file, and it is printed only if this checker checks that file
+afterwards: it is lost if this checker already handed that file's diagnostics over or another checker checks it, and
+never collected for a file that is not type-checked (a JSON file, a declaration file under `skipLibCheck`). The
+fingerprints are built from the types' symbols, declaration files (by base name) and positions, type arguments and
+literal values, not from type ids, so they are comparable between runs and checker counts. Tracing reads only what
+the types already hold and resolves nothing. When two runs disagree on a TS2590:
+
+- The same line in both, the error printed in one: it was filed against another file and lost in the other.
+- The same location with a different `set`: the union itself differed; the same `set` with a different `order`: its
+  constituents were ordered differently; for a reduction, the same `set` and `order` with a different `removed` (or a
+  different count at the 100,000 checkpoint): some comparisons answered differently.
+- No line at that location in the run without the error: that checker did not build the type there. Look at its
+  `check file` lines: if it had checked a file before that printed the same line (same fingerprints), it reused what
+  it cached then. Issue #218 was read this way. The TS2590 at `getIntegrationModalData.test.ts(845,3)` comes from the
+  cross products that `RecordMap.ts` also builds; in four default-mode runs at 8 checkers the two files were on
+  different checkers and the error was printed every time:
+
+  | run | `RecordMap.ts` on checker | error file on checker | same checker, `RecordMap.ts` first? | TS2590 |
+  | --- | --- | --- | --- | --- |
+  | 1 | 4 | 3 | no | yes |
+  | 2 | 1 | 3 | no | yes |
+  | 3 | 1 | 4 | no | yes |
+  | 4 | 4 | 6 | no | yes |
+
+  On another commit, the checker that checked `RecordMap.ts` and then `execution.ts` printed no line at
+  `execution.ts(89,23)` and no error, while under `--checkerAssignment go` the two files were on different checkers
+  and `execution.ts`'s checker built the cross products itself and reported the TS2590, as tsgo does.
 
 ## `.types` / `.symbols` equivalence on the private monorepo against the cached reference
 
