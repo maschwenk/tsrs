@@ -828,7 +828,7 @@ flow_memo_shadow_check | fn flow_memo_shadow_check(&mut self, f: P<FlowState>, e
 flow_memo_shadow_key_bytes | fn flow_memo_shadow_key_bytes(&mut self, f: P<FlowState>) | rust:flow.rs:529 | Checker
 flow_memo_shadow_settle | fn flow_memo_shadow_settle(&mut self, f: P<FlowState>, memo: FrameMemo, entry_depth: i32, t: FlowType, taint: FrameTaint) | rust:flow.rs:491 | Checker
 flow_type_of | fn flow_type_of(t: P<Type>) -> FlowType | rust:flow.rs:32 | -
-flush_too_complex_reports | pub(crate) fn flush_too_complex_reports(&mut self) | rust:checker_13.rs:1351 | Checker
+flush_too_complex_reports | pub(crate) fn flush_too_complex_reports(&mut self) | rust:checker_13.rs:1350 | Checker
 for_each_enclosing_class | pub(crate) fn for_each_enclosing_class(&mut self, node: P<Node>, callback: impl FnMut(&mut Checker, P<Node>) -> bool) -> bool | checker.go:12167 | Checker
 for_each_export_and_property_of_module | pub fn for_each_export_and_property_of_module(&mut self, module_symbol: P<Symbol>, cb: impl FnMut(&mut Checker, P<Symbol>, &str)) | services.go:136 | Checker
 for_each_mapped_type_property_key_type_and_index_signature_key_type | pub(crate) fn for_each_mapped_type_property_key_type_and_index_signature_key_type(&mut self, t: P<Type>, include: TypeFlags, strings_only: bool, cb: impl FnMut(&mut Checker, P<Type>)) | checker.go:23152 | Checker
@@ -1260,7 +1260,7 @@ get_index_signatures_at_location_exported | pub fn get_index_signatures_at_locat
 get_index_symbol | pub(crate) fn get_index_symbol(&mut self, symbol: P<Symbol>) -> Option<P<Symbol>> | checker.go:20143 | Checker
 get_index_type | pub(crate) fn get_index_type(&mut self, t: P<Type>) -> P<Type> | checker.go:27150 | Checker
 get_index_type_ex | pub(crate) fn get_index_type_ex(&mut self, t: P<Type>, index_flags: IndexFlags) -> P<Type> | checker.go:27154 | Checker
-get_index_type_ex_inner | fn get_index_type_ex_inner(&mut self, t: P<Type>, index_flags: IndexFlags) -> P<Type> | rust:checker_13.rs:1409 | Checker
+get_index_type_ex_inner | fn get_index_type_ex_inner(&mut self, t: P<Type>, index_flags: IndexFlags) -> P<Type> | rust:checker_13.rs:1408 | Checker
 get_index_type_for_generic_type | pub(crate) fn get_index_type_for_generic_type(&mut self, t: P<Type>, index_flags: IndexFlags) -> P<Type> | checker.go:27323 | Checker
 get_index_type_for_mapped_type | pub(crate) fn get_index_type_for_mapped_type(&mut self, t: P<Type>, index_flags: IndexFlags) -> P<Type> | checker.go:27341 | Checker
 get_index_type_of_type | pub fn get_index_type_of_type(&mut self, t: P<Type>, key_type: P<Type>) -> Option<P<Type>> | checker.go:19337 | Checker
@@ -1271,7 +1271,7 @@ get_indexed_access_key | pub(crate) fn get_indexed_access_key(object_type: P<Typ
 get_indexed_access_type | pub(crate) fn get_indexed_access_type(&mut self, object_type: P<Type>, index_type: P<Type>) -> P<Type> | checker.go:27393 | Checker
 get_indexed_access_type_ex | pub(crate) fn get_indexed_access_type_ex(&mut self, object_type: P<Type>, index_type: P<Type>, access_flags: AccessFlags, access_node: Option<P<Node>>, alias: AliasArg<'_>) -> P<Type> | checker.go:27397 | Checker
 get_indexed_access_type_or_undefined | pub fn get_indexed_access_type_or_undefined(&mut self, object_type: P<Type>, index_type: P<Type>, access_flags: AccessFlags, access_node: Option<P<Node>>, alias: AliasArg<'_>) -> Option<P<Type>> | checker.go:27405 | Checker
-get_indexed_access_type_or_undefined_inner | fn get_indexed_access_type_or_undefined_inner(&mut self, object_type: P<Type>, index_type: P<Type>, access_flags: AccessFlags, access_node: Option<P<Node>>, alias: AliasArg<'_>) -> Option<P<Type>> | rust:checker_13.rs:1716 | Checker
+get_indexed_access_type_or_undefined_inner | fn get_indexed_access_type_or_undefined_inner(&mut self, object_type: P<Type>, index_type: P<Type>, access_flags: AccessFlags, access_node: Option<P<Node>>, alias: AliasArg<'_>) -> Option<P<Type>> | rust:checker_13.rs:1715 | Checker
 get_indexed_mapped_type_substituted_type_of_contextual_type | pub(crate) fn get_indexed_mapped_type_substituted_type_of_contextual_type(&mut self, t: P<Type>, name: &str, name_type: Option<P<Type>>) -> Option<P<Type>> | checker.go:31096 | Checker
 get_infer_type_parameters | pub(crate) fn get_infer_type_parameters(&mut self, node: P<Node>) -> Vec<P<Type>> | checker.go:24264 | Checker
 get_inference_context | pub(crate) fn get_inference_context(&mut self, node: P<Node>) -> Option<P<InferenceContext>> | checker.go:31454 | Checker
@@ -2032,7 +2032,7 @@ initialize_closures | pub(crate) fn initialize_closures(&mut self) | checker.go:
 initialize_iteration_resolvers | pub(crate) fn initialize_iteration_resolvers(&mut self) | checker.go:1269 | Checker
 insert | pub fn insert(&mut self, key: K, value: V) -> Option<V> | rust:packedmap.rs:78 | PackedMap
 insert_new | pub fn insert_new(&mut self, t: P<Type>) | rust:packedmap.rs:197 | StringLiteralTypes
-insert_type | pub(crate) fn insert_type(c: &mut Checker, types: &[P<Type>], t: P<Type>) -> (Vec<P<Type>>, bool) | checker.go:27091 | -
+insert_type | pub(crate) fn insert_type(c: &mut Checker, types: &mut Vec<P<Type>>, t: P<Type>) -> bool | checker.go:27091 | -
 instantiate_alias_or_interface_with_defaults | pub(crate) fn instantiate_alias_or_interface_with_defaults(&mut self, managed_sym: P<Symbol>, type_arguments: &[P<Type>], in_java_script: bool) -> Option<P<Type>> | jsx.go:1030 | Checker
 instantiate_anonymous_type | pub(crate) fn instantiate_anonymous_type(&mut self, t: P<Type>, m: P<TypeMapper>, alias: Option<P<TypeAlias>>) -> P<Type> | checker.go:22883 | Checker
 instantiate_contextual_type | pub(crate) fn instantiate_contextual_type(&mut self, contextual_type: Option<P<Type>>, node: P<Node>, context_flags: ContextFlags) -> Option<P<Type>> | checker.go:31306 | Checker
@@ -2164,7 +2164,7 @@ is_empty_literal_type | pub(crate) fn is_empty_literal_type(&mut self, t: P<Type
 is_empty_object_type | pub(crate) fn is_empty_object_type(&mut self, t: P<Type>) -> bool | checker.go:26955 | Checker
 is_empty_object_type_or_spreads_into_empty_object | pub(crate) fn is_empty_object_type_or_spreads_into_empty_object(&mut self, t: P<Type>) -> bool | checker.go:13822 | Checker
 is_empty_resolved_type | pub(crate) fn is_empty_resolved_type(&mut self, t: &'static StructuredType) -> bool | checker.go:26951 | Checker
-is_empty_structured_type | pub(crate) fn is_empty_structured_type(&mut self, t: P<Type>) -> bool | rust:checker_13.rs:1029 | Checker
+is_empty_structured_type | pub(crate) fn is_empty_structured_type(&mut self, t: P<Type>) -> bool | rust:checker_13.rs:1028 | Checker
 is_entity_name_visible | pub(crate) fn is_entity_name_visible(&self, c: &mut Checker, entity_name: P<Node>, enclosing_declaration: Option<P<Node>>, should_compute_alias_to_make_visible: bool) -> SymbolAccessibilityResult | emitresolver.go:340 | EmitResolver
 is_entity_name_visible_exported | pub fn is_entity_name_visible_exported(&self, c: &mut Checker, entity_name: P<Node>, enclosing_declaration: Option<P<Node>>) -> SymbolAccessibilityResult | emitresolver.go:334 | EmitResolver
 is_enum_literal | pub fn is_enum_literal(&self) -> bool | rust:types.rs:1726 | Type
@@ -2631,7 +2631,7 @@ maybe_type_of_kind_considering_base_constraint | pub(crate) fn maybe_type_of_kin
 members | pub fn members(&self) -> Option<P<SymbolTable>> | rust:types.rs:2057 | StructuredType
 members_related_to_index_info | pub(crate) fn members_related_to_index_info(&self, c: &mut Checker, source: P<Type>, target_info: P<IndexInfo>, report_errors: bool, intersection_state: IntersectionState) -> Ternary | relater.go:4666 | Relater
 members_resolved_like_go | pub fn members_resolved_like_go(&self, t: P<Type>) -> bool | rust:checker_09.rs:2751 | Checker
-merge_ascending_runs | fn merge_ascending_runs(c: &mut Checker, types: &mut Vec<P<Type>>, run_starts: &[usize]) | rust:checker_13.rs:1203 | -
+merge_ascending_runs | fn merge_ascending_runs(c: &mut Checker, types: &mut Vec<P<Type>>, run_starts: &[usize]) | rust:checker_13.rs:1202 | -
 merge_global_symbol | pub(crate) fn merge_global_symbol(&mut self, symbol: P<Symbol>) | checker.go:1397 | Checker
 merge_inferences | pub(crate) fn merge_inferences(&mut self, target: &mut [P<InferenceInfo>], source: &[P<InferenceInfo>]) | inference.go:1679 | Checker
 merge_module_augmentation | pub(crate) fn merge_module_augmentation(&mut self, module_name: P<Node>) | checker.go:1436 | Checker
@@ -2937,7 +2937,7 @@ report_operator_error_unless | pub(crate) fn report_operator_error_unless(&mut s
 report_private_in_base_of_class_expression | pub fn report_private_in_base_of_class_expression(&self, property_name: &str) | symboltracker.go:50 | SymbolTrackerImpl
 report_private_in_base_of_class_expression | pub fn report_private_in_base_of_class_expression(&self, property_name: &str) | nodecopy.go:175 | wrappingTracker
 report_relation_error | pub(crate) fn report_relation_error(&self, c: &mut Checker, message: Option<&'static Message>, source: P<Type>, target: P<Type>) | relater.go:4783 | Relater
-report_too_complex | pub(crate) fn report_too_complex(&mut self, key: u64) | rust:checker_13.rs:1313 | Checker
+report_too_complex | pub(crate) fn report_too_complex(&mut self, key: u64) | rust:checker_13.rs:1312 | Checker
 report_truncation_error | pub fn report_truncation_error(&self) | symboltracker.go:82 | SymbolTrackerImpl
 report_truncation_error | pub fn report_truncation_error(&self) | nodecopy.go:179 | wrappingTracker
 report_type_not_iterable_error | pub(crate) fn report_type_not_iterable_error(&mut self, error_node: P<Node>, t: P<Type>, allow_async_iterables: bool) -> P<Diagnostic> | checker.go:6869 | Checker
@@ -3012,7 +3012,7 @@ resolve_type_reference_name | pub(crate) fn resolve_type_reference_name(&mut sel
 resolve_union_type_members | pub(crate) fn resolve_union_type_members(&mut self, t: P<Type>) | checker.go:21393 | Checker
 resolve_untyped_call | pub(crate) fn resolve_untyped_call(&mut self, node: P<Node>) -> P<Signature> | checker.go:10094 | Checker
 resolved_apparent_type | pub fn resolved_apparent_type(&self) -> Option<P<Type>> | rust:types.rs:2600 | IntersectionType
-resolved_base_constraint_of | pub(crate) fn resolved_base_constraint_of(&self, t: P<Type>) -> Option<P<Type>> | rust:checker_13.rs:2369 | Checker
+resolved_base_constraint_of | pub(crate) fn resolved_base_constraint_of(&self, t: P<Type>) -> Option<P<Type>> | rust:checker_13.rs:2368 | Checker
 resolved_for_write | fn resolved_for_write(&self) -> P<StructuredMembers> | rust:types.rs:2045 | StructuredType
 resolved_properties | pub fn resolved_properties(&self) -> Option<&'static [P<Symbol>]> | rust:types.rs:2474 | UnionOrIntersectionType
 resolved_reduced_type | pub fn resolved_reduced_type(&self) -> Option<P<Type>> | rust:types.rs:2523 | UnionType
@@ -3221,8 +3221,8 @@ this_type | pub fn this_type(&self) -> Option<P<Type>> | rust:types.rs:2262 | In
 to_node_builder_flags | pub(crate) fn to_node_builder_flags(flags: TypeFormatFlags) -> Flags | printer.go:51 | -
 to_type_reference_node | pub fn to_type_reference_node(&self, c: &mut Checker, b: P<NodeBuilderImpl>) -> P<Node> | nodebuilderimpl.go:3639 | TypeAlias
 to_vec | pub fn to_vec(&self) -> Vec<T> | rust:checker.rs:582 | LazyVec
-too_complex_key | pub(crate) fn too_complex_key<K: std::hash::Hash + ?Sized>(key: &K) -> u64 | rust:checker_13.rs:1339 | Checker
-too_complex_since | pub(crate) fn too_complex_since(&self, before: u32) -> bool | rust:checker_13.rs:1365 | Checker
+too_complex_key | pub(crate) fn too_complex_key<K: std::hash::Hash + ?Sized>(key: &K) -> u64 | rust:checker_13.rs:1338 | Checker
+too_complex_since | pub(crate) fn too_complex_since(&self, before: u32) -> bool | rust:checker_13.rs:1364 | Checker
 total | fn total(counter: &AtomicU64) -> u64 | rust:infermemo.rs:160 | -
 total | fn total(counter: &AtomicU64) -> u64 | rust:unioncache.rs:129 | -
 total | fn total(&self) -> u64 | rust:heapcensus.rs:94 | HeapCensus

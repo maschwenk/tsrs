@@ -114,7 +114,7 @@ impl Checker {
             }
             if named_types_count + reduced_types.len() == type_set.len() {
                 for &t in &named_unions {
-                    reduced_types = insert_type(self, &reduced_types, t).0;
+                    insert_type(self, &mut reduced_types, t);
                 }
                 origin = Some(self.new_union_type(ObjectFlags::None, &reduced_types));
             }
@@ -367,7 +367,7 @@ impl Checker {
                     let it = t.as_intersection_type().types();
                     let index = if !it[0].flags().intersects(TypeFlags::TypeVariable) { 1 } else { 0 };
                     if it[index] == type_variable {
-                        primitives = insert_type(self, &primitives, it[1 - index]).0;
+                        insert_type(self, &mut primitives, it[1 - index]);
                     }
                 }
             }
@@ -387,7 +387,7 @@ impl Checker {
                         }
                     }
                 }
-                types = insert_type(self, &types, type_variable).0;
+                insert_type(self, &mut types, type_variable);
             }
         }
         types
@@ -890,8 +890,7 @@ impl Checker {
         let mut result: Vec<P<Type>> = Vec::new();
         for &u in &union_types {
             for &t in u.types() {
-                let inserted;
-                (checked, inserted) = insert_type(self, &checked, t);
+                let inserted = insert_type(self, &mut checked, t);
                 if inserted {
                     if self.each_union_contains(&union_types, t) {
                         // undefinedType/missingType are always sorted first so we leverage that here
@@ -902,7 +901,7 @@ impl Checker {
                             result[0] = self.missing_type;
                             continue;
                         }
-                        result = insert_type(self, &result, t).0;
+                        insert_type(self, &mut result, t);
                     }
                 }
             }
@@ -1263,13 +1262,13 @@ pub(crate) fn contains_type(c: &mut Checker, types: &[P<Type>], t: P<Type>) -> b
 }
 
 // checker.go:27091
-pub(crate) fn insert_type(c: &mut Checker, types: &[P<Type>], t: P<Type>) -> (Vec<P<Type>>, bool) {
+// Go returns `slices.Insert(types, i, t)` and every caller assigns it back to `types`, so the list is updated in place.
+pub(crate) fn insert_type(c: &mut Checker, types: &mut Vec<P<Type>>, t: P<Type>) -> bool {
     if let (i, false) = tsrs_core::goslices::binary_search_func(types, &t, |&probe, &t| compare_types(c, Some(probe), Some(t))) {
-        let mut result = types.to_vec();
-        result.insert(i, t);
-        return (result, true);
+        types.insert(i, t);
+        return true;
     }
-    (types.to_vec(), false)
+    false
 }
 
 // checker.go:27098
