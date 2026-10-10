@@ -221,23 +221,7 @@ impl Checker {
                 }
             }
             // Two sorted, unique runs: merge them (a constituent of both is added once).
-            let (mut left, mut right) = (source_types[0].types(), source_types[1].types());
-            while let (Some(&l), Some(&r)) = (left.first(), right.first()) {
-                if l == r {
-                    add_type(self, &mut types, &mut includes, l);
-                    left = &left[1..];
-                    right = &right[1..];
-                } else if compare_types(self, Some(l), Some(r)) < 0 {
-                    add_type(self, &mut types, &mut includes, l);
-                    left = &left[1..];
-                } else {
-                    add_type(self, &mut types, &mut includes, r);
-                    right = &right[1..];
-                }
-            }
-            for &t in left.iter().chain(right) {
-                add_type(self, &mut types, &mut includes, t);
-            }
+            merge_sorted_types(self, source_types[0].types(), source_types[1].types(), true /*dedup*/, &mut |c, t| add_type(c, &mut types, &mut includes, t));
             return (types, includes);
         }
         // The flattened list is a sequence of ascending runs: a new run starts at an input whose first constituent is
@@ -1238,18 +1222,7 @@ fn merge_ascending_runs(c: &mut Checker, types: &mut Vec<P<Type>>, run_starts: &
         let mut j = 0;
         while j < runs {
             if j + 1 < runs {
-                let (mut left, mut right) = (&src[bounds[j]..bounds[j + 1]], &src[bounds[j + 1]..bounds[j + 2]]);
-                while let (Some(&l), Some(&r)) = (left.first(), right.first()) {
-                    if l == r || compare_types(c, Some(l), Some(r)) <= 0 {
-                        dst.push(l);
-                        left = &left[1..];
-                    } else {
-                        dst.push(r);
-                        right = &right[1..];
-                    }
-                }
-                dst.extend_from_slice(left);
-                dst.extend_from_slice(right);
+                merge_sorted_types(c, &src[bounds[j]..bounds[j + 1]], &src[bounds[j + 1]..bounds[j + 2]], false /*dedup*/, &mut |_, t| dst.push(t));
                 next.push(bounds[j + 2]);
                 j += 2;
             } else {
@@ -1262,6 +1235,55 @@ fn merge_ascending_runs(c: &mut Checker, types: &mut Vec<P<Type>>, run_starts: &
         bounds = next;
     }
     *types = src;
+}
+
+/// Merges two runs sorted by `compare_types` (a total order in which only identical types compare equal), passing
+/// each type to `out` in order; a type in both runs is passed once with `dedup`, else twice. When one run is much
+/// shorter, each of its types is placed by binary search in the other (m log n comparisons instead of up to n + m):
+/// a small union added to a large one.
+fn merge_sorted_types(c: &mut Checker, mut left: &[P<Type>], mut right: &[P<Type>], dedup: bool, out: &mut impl FnMut(&mut Checker, P<Type>)) {
+    let (short, long) = (left.len().min(right.len()), left.len().max(right.len()));
+    if short > 0 && short * (usize::BITS - long.leading_zeros()) as usize * 2 < long {
+        let left_is_long = left.len() >= right.len();
+        let (mut long_run, short_run) = if left_is_long { (left, right) } else { (right, left) };
+        for &t in short_run {
+            let i = long_run.partition_point(|&x| x != t && compare_types(c, Some(x), Some(t)) < 0);
+            for &x in &long_run[..i] {
+                out(c, x);
+            }
+            long_run = &long_run[i..];
+            out(c, t);
+            if long_run.first() == Some(&t) {
+                long_run = &long_run[1..];
+                if !dedup {
+                    out(c, t);
+                }
+            }
+        }
+        for &x in long_run {
+            out(c, x);
+        }
+        return;
+    }
+    while let (Some(&l), Some(&r)) = (left.first(), right.first()) {
+        if l == r {
+            out(c, l);
+            if !dedup {
+                out(c, r);
+            }
+            left = &left[1..];
+            right = &right[1..];
+        } else if compare_types(c, Some(l), Some(r)) < 0 {
+            out(c, l);
+            left = &left[1..];
+        } else {
+            out(c, r);
+            right = &right[1..];
+        }
+    }
+    for &t in left.iter().chain(right) {
+        out(c, t);
+    }
 }
 
 // Go's containsType/insertType call CompareTypes, which needs the checker (Type has no checker back pointer),
