@@ -3015,7 +3015,8 @@ impl Checker {
         f: &mut dyn FnMut(&mut Checker, P<Symbol>) -> bool,
     ) -> bool {
         if let Some(declared_members) = self.resolve_declared_members(t.target().unwrap()).unwrap().declared_members.get() {
-            for (id, symbol) in declared_members.entries() {
+            for i in 0..declared_members.len() {
+                let (id, symbol) = declared_members.entry(i);
                 if self.is_named_member(symbol, id) && seen.insert(id) && !f(self, symbol) {
                     return false;
                 }

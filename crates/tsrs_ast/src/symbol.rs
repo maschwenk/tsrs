@@ -902,6 +902,15 @@ impl SymbolTable {
         self.0.borrow().pairs()
     }
 
+    /// The `i`-th entry in insertion order (`entries()[i]` without the snapshot). Iterating `0..len()` with the
+    /// length read first visits what `entries()` would, as long as nothing is deleted meanwhile (a `set` replaces in
+    /// place or appends past the end).
+    #[inline]
+    pub fn entry(&self, i: usize) -> (&'static str, P<Symbol>) {
+        let m = self.0.borrow();
+        (m.key(i), m.entries[i].symbol())
+    }
+
     pub fn keys(&self) -> Vec<&'static str> {
         let m = self.0.borrow();
         (0..m.entries.len()).map(|i| m.key(i)).collect()

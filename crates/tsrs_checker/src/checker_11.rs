@@ -888,20 +888,22 @@ impl Checker {
         // For classes and interfaces, we store explicitly declared members ahead of inherited members. This ensures we process
         // explicitly declared members first in type relations, which is beneficial because explicitly declared members are more
         // likely to contain discriminating differences. See for example https://github.com/microsoft/TypeScript/tsc/issues/1968.
-        let entries = members.entries();
-        let mut result: Vec<P<Symbol>> = Vec::with_capacity(entries.len());
+        let n = members.len();
+        let mut result: Vec<P<Symbol>> = Vec::with_capacity(n);
         let mut contained_count = 0;
         let is_class_or_interface_container = container.is_some_and(|c| c.flags().intersects(SymbolFlags::Class | SymbolFlags::Interface));
         if is_class_or_interface_container {
             let container = container.unwrap();
-            for &(id, symbol) in &entries {
+            for i in 0..n {
+                let (id, symbol) = members.entry(i);
                 if self.is_named_member(symbol, id) && self.is_declaration_contained_by(symbol, container) {
                     result.push(symbol);
                 }
             }
             contained_count = result.len();
         }
-        for &(id, symbol) in &entries {
+        for i in 0..n {
+            let (id, symbol) = members.entry(i);
             if self.is_named_member(symbol, id) && (!is_class_or_interface_container || !self.is_declaration_contained_by(symbol, container.unwrap())) {
                 result.push(symbol);
             }
