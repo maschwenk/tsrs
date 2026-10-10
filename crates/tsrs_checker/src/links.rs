@@ -502,9 +502,31 @@ impl<V: Default + LinkCopy + 'static> IdLinkStore<V> {
         self.create(id)
     }
 
+    /// `create` with the record of the frozen seed taken from `frozen` instead of the parent store (a seed record
+    /// that lives in a column of the seed's transient rows, `ValueSymbolLinkStore`).
+    #[inline(never)]
+    #[cfg_attr(feature = "site-counts", track_caller)]
+    fn create_from(&mut self, id: u64, frozen: Option<P<V>>) -> P<V> {
+        let v = self.create_slot(id);
+        if let Some(frozen) = frozen {
+            v.copy_link_from(&frozen);
+        }
+        v
+    }
+
     #[inline(never)]
     #[cfg_attr(feature = "site-counts", track_caller)]
     fn create(&mut self, id: u64) -> P<V> {
+        let v = self.create_slot(id);
+        if let Some(frozen) = self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|p| p.try_get(id)) {
+            v.copy_link_from(&frozen);
+        }
+        v
+    }
+
+    /// A fresh default record for `id` (not copied from the parent).
+    #[inline]
+    fn create_slot(&mut self, id: u64) -> P<V> {
         tsrs_core::sitecount::hit("links", std::any::type_name::<V>());
         let slot = self.len;
         if slot as usize % ID_LINK_CHUNK == 0 {
@@ -546,10 +568,182 @@ impl<V: Default + LinkCopy + 'static> IdLinkStore<V> {
         } else {
             self.wide_slots.insert(id, slot);
         }
-        if let Some(frozen) = self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|p| p.try_get(id)) {
-            self.at(slot).copy_link_from(&frozen);
-        }
         self.at(slot)
+    }
+}
+
+/// A column of link records indexed by the dense rows of a checker's transient symbols (`ast::TransientSymbols`,
+/// notes/dod-semantic-tables.md): one record per row, in arena chunks of `ROW_CHUNK` rows (one per row block,
+/// indexed by the block's `local` number) allocated when the first row of the block is linked; no key, no index, no
+/// slot offsets. Stable addresses as in `IdLinkStore` (chunks are never moved or freed), so a `P<V>` handed out
+/// stays valid for the store's lifetime.
+pub struct RowLinks<V: 'static> {
+    chunks: Vec<Option<P<PSlot<V>>>>, // first slot of each chunk, by `RowBlock::local`
+}
+
+impl<V: 'static> Default for RowLinks<V> {
+    fn default() -> Self {
+        RowLinks { chunks: Vec::new() }
+    }
+}
+
+impl<V: 'static> RowLinks<V> {
+    /// The record of a row whose chunk exists (the owner linked a row of its block).
+    #[inline]
+    fn at(&self, local: u32, index: usize) -> P<V> {
+        let chunk = self.chunks[local as usize].expect("linked row without its links chunk");
+        // SAFETY: `chunk` is the first slot of a `ROW_CHUNK`-slot array, and `index` is below `ROW_CHUNK`.
+        unsafe { PSlot::nth(chunk, index) }
+    }
+
+    /// Heap census: the chunk list (the records are in the arena).
+    pub fn heap_parts(&self) -> Vec<(&'static str, crate::heapcensus::HeapStat)> {
+        use crate::heapcensus::HeapSize;
+        vec![("row chunk list", self.chunks.heap_stat())]
+    }
+}
+
+impl<V: Default + 'static> RowLinks<V> {
+    /// The record of a row, allocating its block's chunk on the first access to a row of the block.
+    #[inline]
+    fn get(&mut self, local: u32, index: usize) -> P<V> {
+        let c = local as usize;
+        if c >= self.chunks.len() || self.chunks[c].is_none() {
+            self.create_chunk(c);
+        }
+        self.at(local, index)
+    }
+
+    #[inline(never)]
+    fn create_chunk(&mut self, c: usize) {
+        if c >= self.chunks.len() {
+            self.chunks.resize(c + 1, None);
+        }
+        self.chunks[c] = Some(PSlot::first(alloc_vec((0..ast::ROW_CHUNK).map(|_| PSlot(V::default())).collect())));
+    }
+}
+
+/// Go `valueSymbolLinks` (a `symbolArenaLinkStore`): the links of the checker's own transient symbols are a column
+/// indexed by the symbol's row (`RowLinks`); every other symbol's links (binder symbols, and the frozen seed's
+/// symbols in a shared-graph fork) are keyed by the symbol id as before (`IdLinkStore`). Every access still assigns
+/// the symbol its id the way Go's store does: ids are observable, so the assignment order must match.
+pub struct ValueSymbolLinkStore<V: 'static> {
+    owner: u32, // `Checker::id`, the owner of the rows this store indexes
+    rows: RowLinks<V>,
+    ids: IdLinkStore<V>,
+    /// Shared graph: the frozen seed's store, whose rows hold the seed's transient symbols' records.
+    parent: Option<&'static ValueSymbolLinkStore<V>>,
+}
+
+impl<V: 'static> Default for ValueSymbolLinkStore<V> {
+    fn default() -> Self {
+        ValueSymbolLinkStore { owner: 0, rows: RowLinks::default(), ids: IdLinkStore::default(), parent: None }
+    }
+}
+
+/// Where a symbol's record is kept.
+enum LinksPlace {
+    Own(ast::TransientRow, u32),  // this checker's row, and its block's local number
+    Seed(ast::TransientRow, u32), // the frozen seed's row (a fork)
+    Id,
+}
+
+impl<V: 'static> ValueSymbolLinkStore<V> {
+    pub fn new(owner: u32) -> Self {
+        ValueSymbolLinkStore { owner, ..Default::default() }
+    }
+
+    /// Shared graph: an empty store of a fork (`owner` is the fork's own checker id) that reads through to `self`.
+    pub fn fork(&'static self, owner: u32) -> Self {
+        ValueSymbolLinkStore { owner, rows: RowLinks::default(), ids: self.ids.fork(), parent: Some(self) }
+    }
+
+    #[inline]
+    fn place(&self, symbol: P<Symbol>) -> LinksPlace {
+        let Some(row) = symbol.transient_row() else {
+            return LinksPlace::Id;
+        };
+        let block = row.block_ref();
+        if block.owner == self.owner {
+            LinksPlace::Own(row, block.local)
+        } else if tsrs_core::sharedgraph::COMPILED_IN && self.parent.is_some_and(|p| p.owner == block.owner) {
+            LinksPlace::Seed(row, block.local)
+        } else {
+            LinksPlace::Id
+        }
+    }
+
+    /// The seed's record of its own transient symbol, if the seed linked it.
+    #[inline]
+    fn seed_record(&self, row: ast::TransientRow, local: u32) -> Option<P<V>> {
+        row.has_links().then(|| self.parent.unwrap().rows.at(local, row.index()))
+    }
+
+    #[inline]
+    pub fn try_get(&self, symbol: P<Symbol>) -> Option<P<V>> {
+        let id = ast::get_symbol_id(symbol).0;
+        match self.place(symbol) {
+            LinksPlace::Own(row, local) => row.has_links().then(|| self.rows.at(local, row.index())),
+            LinksPlace::Seed(row, local) => self.ids.slot(id).map(|s| self.ids.at(s)).or_else(|| self.seed_record(row, local)),
+            LinksPlace::Id => self.ids.try_get(id),
+        }
+    }
+
+    /// `try_get` that returns `None` for a symbol without an id instead of assigning one (no side effect, no call:
+    /// for fast paths whose fallback does the `get`).
+    #[inline]
+    pub fn try_get_if_id_assigned(&self, symbol: P<Symbol>) -> Option<P<V>> {
+        match self.place(symbol) {
+            // A linked row always has an id (`get` assigned it).
+            LinksPlace::Own(row, local) => row.has_links().then(|| self.rows.at(local, row.index())),
+            LinksPlace::Seed(row, local) => {
+                let id = ast::get_assigned_symbol_id(symbol)?;
+                self.ids.narrow_slot(id).map(|s| self.ids.at(s)).or_else(|| self.seed_record(row, local))
+            }
+            LinksPlace::Id => {
+                let id = ast::get_assigned_symbol_id(symbol)?;
+                match self.ids.narrow_slot(id) {
+                    Some(slot) => Some(self.ids.at(slot)),
+                    None => self.ids.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|p| p.try_get(id as u64)),
+                }
+            }
+        }
+    }
+
+    #[inline]
+    pub fn has(&self, symbol: P<Symbol>) -> bool {
+        self.try_get(symbol).is_some()
+    }
+
+    pub fn heap_parts(&self) -> Vec<(&'static str, crate::heapcensus::HeapStat)> {
+        let mut parts = self.rows.heap_parts();
+        parts.extend(self.ids.heap_parts());
+        parts
+    }
+}
+
+impl<V: Default + LinkCopy + 'static> ValueSymbolLinkStore<V> {
+    #[inline]
+    #[cfg_attr(feature = "site-counts", track_caller)]
+    pub fn get(&mut self, symbol: P<Symbol>) -> P<V> {
+        let id = ast::get_symbol_id(symbol).0;
+        match self.place(symbol) {
+            LinksPlace::Own(row, local) => {
+                if !row.has_links() {
+                    tsrs_core::sitecount::hit("links", std::any::type_name::<V>());
+                    row.set_has_links();
+                }
+                self.rows.get(local, row.index())
+            }
+            LinksPlace::Seed(row, local) => match self.ids.slot(id) {
+                Some(slot) => self.ids.at(slot),
+                None => {
+                    let frozen = self.seed_record(row, local);
+                    self.ids.create_from(id, frozen)
+                }
+            },
+            LinksPlace::Id => self.ids.get(id),
+        }
     }
 }
 
@@ -968,6 +1162,57 @@ mod tests {
             assert_eq!(store.reference_kinds(symbol), expected, "symbol {i}");
         }
         assert_eq!(store.slots.len(), symbols.len() - symbols.len().div_ceil(3));
+    }
+
+    // Rows: a checker's own transient symbols read and write their own record through the row column, binder symbols
+    // through the id store, and `has` / `try_get` tell a symbol whose links were never created from one whose record
+    // is still default, across chunk boundaries and in a scrambled order of first access.
+    #[test]
+    fn rows_and_ids_keep_each_symbol_its_own_record() {
+        let mut table = ast::TransientSymbols::new(4242);
+        let mut store: ValueSymbolLinkStore<Cell<u32>> = ValueSymbolLinkStore::new(table.owner());
+        let transient: Vec<P<Symbol>> = (0..10_000)
+            .map(|_| {
+                let s = Symbol::new(SymbolFlags::Property | SymbolFlags::Transient, "p");
+                table.add_row(s);
+                s
+            })
+            .collect();
+        let binder: Vec<P<Symbol>> = (0..3_000).map(|_| Symbol::new(SymbolFlags::Property, "b")).collect();
+        let mut order: Vec<usize> = (0..transient.len() + binder.len()).collect();
+        let shuffled = scrambled(order.iter().map(|&i| i as u64).collect(), 99);
+        order = shuffled.iter().map(|&i| i as usize).collect();
+        let mut held: Vec<Option<P<Cell<u32>>>> = vec![None; order.len()];
+        for &i in &order {
+            if i % 5 == 0 {
+                continue; // never linked
+            }
+            let symbol = if i < transient.len() { transient[i] } else { binder[i - transient.len()] };
+            assert!(!store.has(symbol), "{i} linked before get");
+            assert!(store.try_get_if_id_assigned(symbol).is_none());
+            let record = store.get(symbol);
+            assert_eq!((*record).get(), 0);
+            (*record).set(i as u32 + 1);
+            held[i] = Some(record);
+        }
+        for i in 0..order.len() {
+            let symbol = if i < transient.len() { transient[i] } else { binder[i - transient.len()] };
+            if i % 5 == 0 {
+                assert!(!store.has(symbol), "{i}");
+                assert!(store.try_get(symbol).is_none());
+                assert!(store.try_get_if_id_assigned(symbol).is_none());
+                continue;
+            }
+            let record = store.try_get(symbol).unwrap();
+            assert!(Some(record) == held[i], "{i} moved");
+            assert!(store.get(symbol) == record);
+            assert!(store.try_get_if_id_assigned(symbol) == Some(record));
+            assert_eq!((*record).get(), i as u32 + 1, "{i}");
+        }
+        assert_eq!(transient[7].transient_row().map(|r| (r.block_ref().owner, r.block_ref().local, r.index(), r.has_links())), Some((4242, 0, 7, true)));
+        assert_eq!(transient[ast::ROW_CHUNK + 1].transient_row().map(|r| (r.block_ref().local, r.index())), Some((1, 1)));
+        assert_eq!(transient[5].transient_row().map(|r| r.has_links()), Some(false));
+        assert!(binder[0].transient_row().is_none());
     }
 
     // A wrong index hands out another id's links: the checker would read a foreign symbol's type without any visible

@@ -1,5 +1,5 @@
 use std::hash::BuildHasher;
-use std::sync::atomic::AtomicU32;
+use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 
 use hashbrown::HashTable;
 use rustc_hash::FxBuildHasher;
@@ -24,15 +24,163 @@ use crate::*;
 // first declaration moves it to the tail first). Both bits (`TAG_TABLES`, `TAG_VALUE_FIRST`) are the tag bits of
 // the name word (`OwnedTaggedStrCell`: pointer, length and tags in one word). `declarations` is an
 // `OwnedPSliceCell`: 40 bytes, 32 with compressed pointers (handle-sized parent, 8-byte declarations).
+//
+// Transient symbols as rows (notes/dod-semantic-tables.md): a checker-created symbol gets a dense row of its
+// checker's `TransientSymbols` table at creation, kept in `row` (owner, row number, and a bit saying the checker made
+// value links for it). Its `CheckFlags`, non-zero only in transient symbols (Go `symbol.CheckFlags`), live in a
+// column of that table indexed by the row instead of in this struct, and the checker's value-symbol links are a
+// column of the same table instead of a store keyed by the lazily assigned id. A binder symbol has `row` 0 and
+// no check flags.
 
 #[derive(Default)]
 pub struct Symbol {
     pub flags: OwnedCell<SymbolFlags>,
-    pub check_flags: OwnedCell<CheckFlags>, // Non-zero only in transient symbols created by Checker
+    row: OwnedCell<u32>, // `TransientRow`; 0 in binder symbols
     pub name: OwnedTaggedStrCell,
     declarations: OwnedPSliceCell<P<Node>>, // Go slice: shared by copies, replaced (not mutated) on append
     pub(crate) id: AtomicU32,               // Go uint64; ids above u32::MAX panic in get_symbol_id
     parent_or_tables: OwnedCell<PKey>,      // `P::key` of the parent or (with `TAG_TABLES`) of the tail; 0 = none
+}
+
+/// The row word of a transient symbol: a process-wide row number, `block << ROW_CHUNK_SHIFT | index`, where the
+/// block (20 bits, from 1) is a `RowBlock` of `ROW_CHUNK` rows that one checker's table took from the process-wide
+/// counter, found through `BLOCKS`. 0 is "no row" (binder symbols, the placeholder symbols of `new_checker`, the
+/// transient symbols made outside a checker's `new_symbol`). Blocks are numbered process-wide so that no table needs
+/// a registry slot (the pool leaks its checkers, so slots would never be freed); a table's own blocks are dense for
+/// its row-indexed columns through `RowBlock::local`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct TransientRow(u32);
+
+/// Rows per block (16 KiB of check flags; the value links of tsrs_checker use the same chunking).
+pub const ROW_CHUNK_SHIFT: u32 = 12;
+pub const ROW_CHUNK: usize = 1 << ROW_CHUNK_SHIFT;
+const BLOCKS_LEN: usize = 1 << (32 - ROW_CHUNK_SHIFT);
+
+impl TransientRow {
+    #[inline]
+    pub fn block(self) -> u32 {
+        self.0 >> ROW_CHUNK_SHIFT
+    }
+    #[inline]
+    pub fn index(self) -> usize {
+        self.0 as usize & (ROW_CHUNK - 1)
+    }
+    /// The row's block.
+    #[inline]
+    pub fn block_ref(self) -> &'static RowBlock {
+        // Relaxed: the owner installs a block before it hands out a row of it, and another thread only reads rows it
+        // learned of afterwards (through the shared-graph freeze, or on the same thread). The dropped-table case is
+        // a bug (nothing reads a retired checker's symbols).
+        let bits = BLOCKS[self.block() as usize].load(Ordering::Relaxed);
+        // SAFETY: a nonzero word is `P::to_bits` of a block `TransientSymbols::add_row` installed, cleared only when
+        // its table is dropped.
+        unsafe { P::<RowBlock>::from_bits_opt(bits) }.expect("transient symbol of a dropped checker").get()
+    }
+    /// Whether the owning checker created value-symbol links for the row (`RowBlock::linked`).
+    #[inline]
+    pub fn has_links(self) -> bool {
+        let i = self.index();
+        self.block_ref().linked[i >> 6].get() & 1 << (i & 63) != 0
+    }
+    /// Records that the owning checker created value-symbol links for the row.
+    #[inline]
+    pub fn set_has_links(self) {
+        let i = self.index();
+        let word = &self.block_ref().linked[i >> 6];
+        word.set(word.get() | 1 << (i & 63));
+    }
+}
+
+/// `ROW_CHUNK` rows of one checker's transient symbols: the owner, the block's index among the owner's blocks (its
+/// row-indexed columns are dense in that index), a bit per row saying the owner linked it, and the check flags
+/// column. An arena object of the owning checker (in its region under `--maxMemory`; frozen with the seed under the
+/// shared graph, so `OwnedCell` writes by a fork go to the fork's overlay as they did in the `Symbol` field).
+#[repr(C)]
+pub struct RowBlock {
+    /// `Checker::id` of the table's checker.
+    pub owner: u32,
+    /// The block's index among its table's blocks (0, 1, 2, ...).
+    pub local: u32,
+    linked: [OwnedCell<u64>; ROW_CHUNK / 64],
+    check_flags: [OwnedCell<CheckFlags>; ROW_CHUNK],
+}
+
+/// Every live block, by block number: `P::to_bits` of the `RowBlock` (0 = none). 8 MiB of zero pages in .bss, of
+/// which a process touches 8 bytes per 4,096 transient symbols it ever made. Entries are cleared when the owning
+/// table is dropped (a retired checker). The process-wide block counter overflowing 2^20 (2^32 transient symbols in
+/// one process, the limit symbol ids have too) panics in `add_row`.
+static BLOCKS: [AtomicUsize; BLOCKS_LEN] = [const { AtomicUsize::new(0) }; BLOCKS_LEN];
+static NEXT_BLOCK: AtomicU32 = AtomicU32::new(1);
+
+/// The dense rows of one checker's transient symbols and their columns (tsrs-only; the checker's value-symbol links
+/// are a column of the same rows in tsrs_checker). Rows are assigned at creation in creation order, so a column is
+/// as dense as the symbols; the symbol id stays lazily assigned (its order is observable).
+pub struct TransientSymbols {
+    owner: u32,
+    len: u32,
+    blocks: Vec<u32>, // block numbers, in `RowBlock::local` order
+}
+
+impl TransientSymbols {
+    /// The table of the checker with `Checker::id` `owner`.
+    pub fn new(owner: u32) -> TransientSymbols {
+        TransientSymbols { owner, len: 0, blocks: Vec::new() }
+    }
+
+    #[inline]
+    pub fn owner(&self) -> u32 {
+        self.owner
+    }
+
+    /// Rows handed out so far.
+    #[inline]
+    pub fn len(&self) -> u32 {
+        self.len
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    /// Blocks taken so far (the length of a column indexed by `RowBlock::local`).
+    #[inline]
+    pub fn block_count(&self) -> usize {
+        self.blocks.len()
+    }
+
+    /// Gives `symbol` (just created by this table's checker, on its thread) the next row.
+    pub fn add_row(&mut self, symbol: P<Symbol>) {
+        debug_assert!(symbol.row.get() == 0, "symbol already has a row");
+        let i = self.len as usize & (ROW_CHUNK - 1);
+        if i == 0 {
+            // Relaxed: the counter only hands out distinct block numbers.
+            let block = NEXT_BLOCK.fetch_add(1, Ordering::Relaxed);
+            assert!((block as usize) < BLOCKS_LEN, "more than 2^32 transient symbols in this process");
+            let p = P::new(RowBlock {
+                owner: self.owner,
+                local: self.blocks.len() as u32,
+                linked: [const { OwnedCell::new(0) }; ROW_CHUNK / 64],
+                check_flags: [const { OwnedCell::new(CheckFlags::None) }; ROW_CHUNK],
+            });
+            // Release: the block's cells are initialized before a reader can find the block (see `block_ref`).
+            BLOCKS[block as usize].store(p.to_bits(), Ordering::Release);
+            self.blocks.push(block);
+        }
+        let block = *self.blocks.last().unwrap();
+        self.len += 1;
+        symbol.row.set(block << ROW_CHUNK_SHIFT | i as u32);
+    }
+}
+
+impl Drop for TransientSymbols {
+    fn drop(&mut self) {
+        for &block in &self.blocks {
+            // Relaxed: nothing reads a dropped table's rows (a retired checker's symbols are unreachable); clearing
+            // only turns a stale read into a panic instead of a read of freed memory.
+            BLOCKS[block as usize].store(0, Ordering::Relaxed);
+        }
+    }
 }
 
 #[derive(Default)]
@@ -81,10 +229,38 @@ impl Symbol {
     pub fn set_flags(&self, flags: SymbolFlags) {
         self.flags.set(flags)
     }
+    /// Go `symbol.CheckFlags`: the check flags column of the owning checker's table; `None` for a binder symbol.
     #[inline]
     pub fn check_flags(&self) -> CheckFlags {
-        self.check_flags.get()
+        match self.transient_row() {
+            None => CheckFlags::None,
+            Some(row) => row.block_ref().check_flags[row.index()].get(),
+        }
     }
+
+    /// Go `symbol.CheckFlags = flags`. Only a symbol with a row (a checker-created one) has check flags to set.
+    #[inline]
+    pub fn set_check_flags(&self, flags: CheckFlags) {
+        let row = self.transient_row().expect("check flags set on a symbol without a transient row");
+        row.block_ref().check_flags[row.index()].set(flags)
+    }
+
+    /// Go `symbol.CheckFlags |= flags`.
+    #[inline]
+    pub fn add_check_flags(&self, flags: CheckFlags) {
+        let row = self.transient_row().expect("check flags set on a symbol without a transient row");
+        let cell = &row.block_ref().check_flags[row.index()];
+        cell.set(cell.get() | flags)
+    }
+
+    /// The row of a transient symbol in its checker's table, or `None` for a binder symbol (and the few transient
+    /// symbols made outside a checker's `new_symbol`).
+    #[inline]
+    pub fn transient_row(&self) -> Option<TransientRow> {
+        let w = self.row.get();
+        (w != 0).then_some(TransientRow(w))
+    }
+
     #[inline]
     pub fn name(&self) -> &'static str {
         self.name.get()
@@ -979,6 +1155,57 @@ pub fn escape_symbol_name(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // The check flags of a transient symbol live in its block: every row must read back its own flags across block
+    // boundaries, a binder symbol has none, two live tables keep their blocks apart, and a dropped table's blocks are
+    // gone from the block table.
+    #[test]
+    fn transient_rows_keep_their_own_check_flags() {
+        let mut a = TransientSymbols::new(1001);
+        let mut b = TransientSymbols::new(1002);
+        let rows_a: Vec<P<Symbol>> = (0..ROW_CHUNK as u32 * 2 + 3)
+            .map(|i| {
+                let s = Symbol::new(SymbolFlags::Property | SymbolFlags::Transient, "a");
+                a.add_row(s);
+                let row = s.transient_row().unwrap();
+                assert_eq!((row.block_ref().owner, row.block_ref().local, row.index()), (1001, i / ROW_CHUNK as u32, i as usize % ROW_CHUNK));
+                assert_eq!(s.check_flags(), CheckFlags::None);
+                assert!(!row.has_links());
+                s
+            })
+            .collect();
+        let s_b = Symbol::new(SymbolFlags::Property | SymbolFlags::Transient, "b");
+        b.add_row(s_b);
+        s_b.set_check_flags(CheckFlags::Mapped);
+        for (i, s) in rows_a.iter().enumerate() {
+            if i % 3 == 0 {
+                s.set_check_flags(CheckFlags::Instantiated);
+            }
+            if i % 2 == 0 {
+                s.add_check_flags(CheckFlags::Readonly);
+            }
+            if i % 7 == 0 {
+                s.transient_row().unwrap().set_has_links();
+            }
+        }
+        for (i, s) in rows_a.iter().enumerate() {
+            let expected = if i % 3 == 0 { CheckFlags::Instantiated } else { CheckFlags::None } | if i % 2 == 0 { CheckFlags::Readonly } else { CheckFlags::None };
+            assert_eq!(s.check_flags(), expected, "row {i}");
+            assert_eq!(s.transient_row().unwrap().has_links(), i % 7 == 0, "row {i}");
+        }
+        assert_eq!(s_b.check_flags(), CheckFlags::Mapped);
+        assert_eq!(s_b.transient_row().unwrap().block_ref().owner, 1002);
+        let binder = Symbol::new(SymbolFlags::Property, "c");
+        assert!(binder.transient_row().is_none());
+        assert_eq!(binder.check_flags(), CheckFlags::None);
+        assert_eq!(a.block_count(), 3);
+        assert_eq!(a.len(), rows_a.len() as u32);
+        let block_b = s_b.transient_row().unwrap().block();
+        drop(b);
+        // Relaxed is enough: the test is single-threaded, and the drop that stores 0 ran on this thread.
+        assert_eq!(BLOCKS[block_b as usize].load(Ordering::Relaxed), 0);
+        assert!(rows_a[0].check_flags() == CheckFlags::Instantiated | CheckFlags::Readonly);
+    }
 
     #[test]
     fn name_filter_keeps_every_key() {

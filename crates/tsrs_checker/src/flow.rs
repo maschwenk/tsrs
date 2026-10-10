@@ -1471,7 +1471,7 @@ impl Checker {
     pub(crate) fn is_type_presence_possible(&mut self, t: P<Type>, prop_name: &str, assume_true: bool) -> bool {
         let prop = self.get_property_of_type(t, prop_name);
         if let Some(prop) = prop {
-            return prop.flags().intersects(SymbolFlags::Optional) || prop.check_flags.get().intersects(CheckFlags::Partial) || assume_true;
+            return prop.flags().intersects(SymbolFlags::Optional) || prop.check_flags().intersects(CheckFlags::Partial) || assume_true;
         }
         self.get_applicable_index_info_for_name(t, prop_name).is_some() || !assume_true
     }
@@ -2838,7 +2838,7 @@ impl Checker {
             return Some(self.get_type_of_symbol(symbol));
         }
         if symbol.flags().intersects(SymbolFlags::Variable | SymbolFlags::Property) {
-            if symbol.check_flags.get().intersects(CheckFlags::Mapped) {
+            if symbol.check_flags().intersects(CheckFlags::Mapped) {
                 let origin = self.mapped_symbol_links.get(symbol).synthetic_origin.get();
                 if let Some(origin) = origin {
                     if self.get_explicit_type_of_symbol(origin, diagnostic).is_some() {

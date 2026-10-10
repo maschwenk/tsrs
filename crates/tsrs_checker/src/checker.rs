@@ -1072,7 +1072,9 @@ pub struct Checker {
     pub jsx_element_links: LinkStore<Node, JsxElementLinks>,
     pub computed_name_links: LinkStore<Node, ComputedNameNodeLinks>,
     pub symbol_reference_links: SymbolReferenceLinkStore,
-    pub value_symbol_links: SymbolArenaLinkStore<ValueSymbolLinks>,
+    pub value_symbol_links: ValueSymbolLinkStore<ValueSymbolLinks>,
+    /// tsrs-only: the dense rows of this checker's transient symbols (notes/dod-semantic-tables.md).
+    pub transient: ast::TransientSymbols,
     pub mapped_symbol_links: LinkStore<Symbol, MappedSymbolLinks>,
     pub deferred_symbol_links: LinkStore<Symbol, DeferredSymbolLinks>,
     pub alias_symbol_links: LinkStore<Symbol, AliasSymbolLinks>,
@@ -1377,8 +1379,11 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
     });
 
     let files = program.source_files();
+    // Relaxed: the counter only hands out distinct ids.
+    let id = nextCheckerID.fetch_add(1, Ordering::Relaxed) + 1;
+    let transient = ast::TransientSymbols::new(id);
     let mut c = Box::new(Checker {
-        id: nextCheckerID.fetch_add(1, Ordering::Relaxed) + 1,
+        id,
         program,
         compiler_options,
         files,
@@ -1485,7 +1490,8 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         jsx_element_links: LinkStore::default(),
         computed_name_links: LinkStore::default(),
         symbol_reference_links: SymbolReferenceLinkStore::default(),
-        value_symbol_links: SymbolArenaLinkStore::default(),
+        value_symbol_links: ValueSymbolLinkStore::new(transient.owner()),
+        transient,
         mapped_symbol_links: LinkStore::default(),
         deferred_symbol_links: LinkStore::default(),
         alias_symbol_links: LinkStore::default(),
@@ -1855,9 +1861,11 @@ impl Checker {
     #[expect(clippy::clone_on_copy, reason = "a field-by-field list: `clone` for every field, whatever its type")]
     pub fn fork(base: &'static Checker) -> Box<Checker> {
         base.assert_freezable();
+        // Relaxed: the counter only hands out distinct ids (as in new_checker).
+        let id = nextCheckerID.fetch_add(1, Ordering::Relaxed) + 1;
+        let transient = ast::TransientSymbols::new(id);
         let mut c = Box::new(Checker {
-            // Relaxed: the counter only hands out distinct ids (as in new_checker).
-            id: nextCheckerID.fetch_add(1, Ordering::Relaxed) + 1,
+            id,
             program: base.program,
             compiler_options: base.compiler_options.clone(),
             files: base.files,
@@ -1967,7 +1975,8 @@ impl Checker {
             jsx_element_links: base.jsx_element_links.fork(),
             computed_name_links: base.computed_name_links.fork(),
             symbol_reference_links: base.symbol_reference_links.fork(),
-            value_symbol_links: base.value_symbol_links.fork(),
+            value_symbol_links: base.value_symbol_links.fork(transient.owner()),
+            transient,
             mapped_symbol_links: base.mapped_symbol_links.fork(),
             deferred_symbol_links: base.deferred_symbol_links.fork(),
             alias_symbol_links: base.alias_symbol_links.fork(),

@@ -31,7 +31,7 @@ impl Checker {
             let key = if prop.name() == name { prop.name() } else { alloc_str(name) };
             cache.set(key, prop);
             // Propagate an entry from the non-augmented cache to the augmented cache unless the property is partial.
-            if skip_object_function_property_augment && !prop.check_flags.get().intersects(CheckFlags::Partial) {
+            if skip_object_function_property_augment && !prop.check_flags().intersects(CheckFlags::Partial) {
                 let augmented_cache = t.as_union_or_intersection_type().property_cache_for_write(false);
                 if augmented_cache.lookup(name).is_none() {
                     augmented_cache.set(key, prop);
@@ -52,7 +52,7 @@ impl Checker {
         }
         if !skip_object_function_property_augment {
             if let Some(prop) = d.property_cache(true).and_then(|c| c.lookup(name)) {
-                if !prop.check_flags.get().intersects(CheckFlags::Partial) {
+                if !prop.check_flags().intersects(CheckFlags::Partial) {
                     self.lazy_member_stats.prop_cache_shared_hits += 1;
                     return Some(prop);
                 }
@@ -63,7 +63,7 @@ impl Checker {
             let key = if prop.name() == name { prop.name() } else { alloc_str(name) };
             d.property_cache_for_write(skip_object_function_property_augment).set(key, prop);
             if skip_object_function_property_augment
-                && !prop.check_flags.get().intersects(CheckFlags::Partial)
+                && !prop.check_flags().intersects(CheckFlags::Partial)
                 && d.property_cache(false).map_or(true, |c| c.lookup(name).is_none())
             {
                 self.lazy_member_stats.prop_cache_copies_avoided += 1;
@@ -286,7 +286,7 @@ impl Checker {
         links.set_name_type(name_type);
         if prop_types.len() > 2 {
             // When `propTypes` has the potential to explode in size when normalized, defer normalization until absolutely needed
-            result.check_flags.set(result.check_flags.get() | CheckFlags::DeferredType);
+            result.add_check_flags(CheckFlags::DeferredType);
             let deferred = self.deferred_symbol_links.get(result);
             deferred.parent.set(Some(containing_type));
             deferred.constituents.set(alloc_vec(prop_types));
@@ -312,7 +312,7 @@ impl Checker {
     pub(crate) fn get_target_symbol(&mut self, s: P<Symbol>) -> Option<P<Symbol>> {
         // if symbol is instantiated its flags are not copied from the 'target'
         // so we'll need to get back original 'target' symbol to work with correct set of flags
-        if s.check_flags.get().intersects(CheckFlags::Instantiated) {
+        if s.check_flags().intersects(CheckFlags::Instantiated) {
             return self.value_symbol_links.get(s).target();
         }
         Some(s)
@@ -325,7 +325,7 @@ impl Checker {
  */
 // checker.go:22037
 pub(crate) fn is_prototype_property(symbol: P<Symbol>) -> bool {
-    symbol.flags().intersects(SymbolFlags::Method) || symbol.check_flags.get().intersects(CheckFlags::SyntheticMethod)
+    symbol.flags().intersects(SymbolFlags::Method) || symbol.check_flags().intersects(CheckFlags::SyntheticMethod)
 }
 
 impl Checker {
@@ -353,7 +353,7 @@ impl Checker {
 
     // checker.go:22065
     pub(crate) fn create_symbol_with_type(&mut self, source: P<Symbol>, t: Option<P<Type>>) -> P<Symbol> {
-        let symbol = self.new_symbol_ex(source.flags(), source.name(), source.check_flags.get() & CheckFlags::Readonly);
+        let symbol = self.new_symbol_ex(source.flags(), source.name(), source.check_flags() & CheckFlags::Readonly);
         symbol.set_declarations_static(source.declarations());
         symbol.set_parent(source.parent());
         symbol.set_value_declaration(source.value_declaration());
@@ -652,7 +652,7 @@ impl Checker {
         // Return true for a synthetic non-optional property with non-uniform types, where at least one is
         // a literal type and none is never, that reduces to never.
         !prop.flags().intersects(SymbolFlags::Optional)
-            && (prop.check_flags.get() & (CheckFlags::NonUniformAndLiteral | CheckFlags::HasNeverType)) == CheckFlags::NonUniformAndLiteral
+            && (prop.check_flags() & (CheckFlags::NonUniformAndLiteral | CheckFlags::HasNeverType)) == CheckFlags::NonUniformAndLiteral
             && self.get_type_of_symbol(prop).flags().intersects(TypeFlags::Never)
     }
 }
@@ -660,7 +660,7 @@ impl Checker {
 // checker.go:22284
 pub(crate) fn is_conflicting_private_property(prop: P<Symbol>) -> bool {
     // Return true for a synthetic property with multiple declarations, at least one of which is private.
-    prop.value_declaration().is_none() && prop.check_flags.get().intersects(CheckFlags::ContainsPrivate)
+    prop.value_declaration().is_none() && prop.check_flags().intersects(CheckFlags::ContainsPrivate)
 }
 
 impl Checker {

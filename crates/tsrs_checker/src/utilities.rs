@@ -962,7 +962,7 @@ pub fn get_declaration_modifier_flags_from_symbol(s: P<Symbol>) -> ModifierFlags
 
 // utilities.go:761
 pub(crate) fn get_declaration_modifier_flags_from_symbol_ex(s: P<Symbol>, is_write: bool) -> ModifierFlags {
-    let check_flags = s.check_flags.get();
+    let check_flags = s.check_flags();
     if check_flags.intersects(CheckFlags::Synthetic) {
         let mut access_modifier = ModifierFlags::None;
         if !is_write && check_flags.intersects(CheckFlags::ContainsPublic) || is_write && check_flags.intersects(CheckFlags::ContainsWritePublic) {

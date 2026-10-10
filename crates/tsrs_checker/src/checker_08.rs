@@ -1224,7 +1224,7 @@ impl Checker {
                     None => self.new_symbol_ex(SymbolFlags::None, InternalSymbolNameIndex, CheckFlags::Late),
                     Some(early) => {
                         let s = self.clone_symbol(early);
-                        s.check_flags.set(s.check_flags.get() | CheckFlags::Late);
+                        s.add_check_flags(CheckFlags::Late);
                         s
                     }
                 };
@@ -1252,7 +1252,7 @@ impl Checker {
     // members.
     // checker.go:16419
     pub(crate) fn add_declaration_to_late_bound_symbol(&mut self, symbol: P<Symbol>, member: P<Node>, symbol_flags: SymbolFlags) {
-        assert!(symbol.check_flags.get().intersects(CheckFlags::Late), "Expected a late-bound symbol.");
+        assert!(symbol.check_flags().intersects(CheckFlags::Late), "Expected a late-bound symbol.");
         let member_symbol = member.symbol().unwrap();
         self.late_bound_links.get(member_symbol).late_symbol.set(Some(symbol));
         if symbol.declarations().is_empty() || !member_symbol.flags().intersects(SymbolFlags::ReplaceableByMethod) {
@@ -1651,7 +1651,7 @@ impl Checker {
     // intersection of the writeTypes of their constituents.
     // checker.go:16757
     pub(crate) fn get_write_type_of_symbol(&mut self, symbol: P<Symbol>) -> Option<P<Type>> {
-        let check_flags = symbol.check_flags.get();
+        let check_flags = symbol.check_flags();
         if check_flags.intersects(CheckFlags::SyntheticProperty) {
             if check_flags.intersects(CheckFlags::DeferredType) {
                 return Some(self.get_write_type_of_symbol_with_deferred_type(symbol));
@@ -1715,7 +1715,7 @@ impl Checker {
 
     // checker.go:16816
     pub fn get_type_of_symbol(&mut self, symbol: P<Symbol>) -> P<Type> {
-        let check_flags = symbol.check_flags.get();
+        let check_flags = symbol.check_flags();
         // The cached type of an instantiated symbol or a variable / parameter / property (the two branches below that
         // return `resolved_type` when it is set), read here so that this hit returns without a frame.
         let value_symbol = !check_flags.intersects(CheckFlags::DeferredType)

@@ -1799,7 +1799,7 @@ impl Checker {
         // Keep the flags from the symbol we're instantiating.  Mark that is instantiated, and
         // also transient so that we can just store data on it directly.
         let result = self.new_symbol(symbol.flags(), symbol.name());
-        result.check_flags.set(
+        result.set_check_flags(
             CheckFlags::Instantiated
                 | symbol.check_flags() & (CheckFlags::Readonly | CheckFlags::Late | CheckFlags::OptionalParameter | CheckFlags::RestParameter),
         );
@@ -2054,7 +2054,7 @@ impl Checker {
             late_flag = modifiers_prop.check_flags() & CheckFlags::Late;
         }
         let prop = self.new_symbol(SymbolFlags::Property | if is_optional { SymbolFlags::Optional } else { SymbolFlags::None }, alloc_str(prop_name));
-        prop.check_flags.set(
+        prop.set_check_flags(
             late_flag
                 | CheckFlags::Mapped
                 | if is_readonly { CheckFlags::Readonly } else { CheckFlags::None }

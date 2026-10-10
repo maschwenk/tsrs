@@ -119,7 +119,7 @@ impl Checker {
     // checker.go:24041
     pub(crate) fn get_type_from_type_alias_reference(&mut self, node: P<Node>, symbol: P<Symbol>) -> P<Type> {
         let type_arguments = node.type_arguments();
-        if symbol.check_flags.get().intersects(CheckFlags::Unresolved) {
+        if symbol.check_flags().intersects(CheckFlags::Unresolved) {
             let alias_type_arguments: Vec<P<Type>> = type_arguments.iter().map(|&n| self.get_type_from_type_node(n)).collect();
             let alias = P::new(TypeAlias { symbol: Cell::new(Some(symbol)), type_arguments: ThinSliceCell::new(alloc_vec(alias_type_arguments)) });
             let key = get_alias_key(Some(alias).into());
