@@ -1,7 +1,7 @@
 import {
     API,
     type APIOptions,
-} from "@maschwenk/tsrs/unstable/sync";
+} from "tsrs/unstable/sync";
 import { fileURLToPath } from "node:url";
 import { createVirtualFileSystem } from "../testUtils.ts";
 

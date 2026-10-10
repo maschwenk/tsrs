@@ -1,6 +1,6 @@
-import { API } from "@maschwenk/tsrs/unstable/async"; // @sync-skip
+import { API } from "tsrs/unstable/async"; // @sync-skip
 // @sync-only-start
-// import { API } from "@maschwenk/tsrs/unstable/sync";
+// import { API } from "tsrs/unstable/sync";
 // @sync-only-end
 import {
     findNextToken,
@@ -8,11 +8,11 @@ import {
     formatSyntaxKind,
     getTokenAtPosition,
     getTouchingPropertyName,
-} from "@maschwenk/tsrs/unstable/ast";
+} from "tsrs/unstable/ast";
 import type {
     Node,
     SourceFile,
-} from "@maschwenk/tsrs/unstable/ast";
+} from "tsrs/unstable/ast";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";

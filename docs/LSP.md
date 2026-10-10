@@ -290,7 +290,7 @@ before and after; lazy-off `.types` / `.symbols` 12,779 / 12,779).
 
 `tsrs --lsp -stdio` speaks the same protocol as `tsgo --lsp -stdio` (Go's flag parsing: `-stdio` and `--stdio` both
 work; only stdio is supported, like Go). Build it with `cargo build --release -p tsrs_cli` (binary
-`target/release/tsrs`) or install the npm package (`@maschwenk/tsrs`, binary `tsrs`). Nothing below has been installed
+`target/release/tsrs`) or install the npm package (`tsrs`, binary `tsrs`). Nothing below has been installed
 on the development machine; the configurations follow the editors' documented mechanisms.
 
 **VS Code** — the TypeScript 7 extension (`TypeScriptTeam.native-preview`, source in

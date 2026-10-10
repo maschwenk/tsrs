@@ -2,11 +2,11 @@ import type {
     Path,
     SourceFile,
     Statement,
-} from "@maschwenk/tsrs/unstable/ast";
+} from "tsrs/unstable/ast";
 import {
     SyntaxKind,
     TokenFlags,
-} from "@maschwenk/tsrs/unstable/ast";
+} from "tsrs/unstable/ast";
 import {
     createArrayLiteralExpression,
     createBlock,
@@ -26,7 +26,7 @@ import {
     createVariableDeclaration,
     createVariableDeclarationList,
     createVariableStatement,
-} from "@maschwenk/tsrs/unstable/ast/factory";
+} from "tsrs/unstable/ast/factory";
 import assert from "node:assert";
 import {
     describe,

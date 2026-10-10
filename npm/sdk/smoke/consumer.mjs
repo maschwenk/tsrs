@@ -1,4 +1,4 @@
-// Runs in a temp consumer project that installed the packed @maschwenk/tsrs tarballs (see ../smoke-consumer.mjs).
+// Runs in a temp consumer project that installed the packed tsrs tarballs (see ../smoke-consumer.mjs).
 // Drives the sync and the async JS API (the same steps; `await` is a no-op on sync results) against the packaged
 // server: config parsing, diagnostics, emit to disk and to strings, AST traversal, checker queries, a snapshot
 // update after an on-disk edit, an in-memory request filesystem, and host filesystem callbacks. Each step prints
@@ -9,14 +9,14 @@ import path from "node:path";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const root = require("@maschwenk/tsrs");
+const root = require("tsrs");
 assert.match(root.version, /^\d+\.\d+\.\d+.*-ts/);
 assert.match(root.typescriptCommit, /^[0-9a-f]{40}$/);
 
-const sync = await import("@maschwenk/tsrs/unstable/sync");
-const asyncApi = await import("@maschwenk/tsrs/unstable/async");
-const { SyntaxKind } = await import("@maschwenk/tsrs/unstable/ast");
-const { createFileSystemWithLib, serverFS } = await import("@maschwenk/tsrs/unstable/fs");
+const sync = await import("tsrs/unstable/sync");
+const asyncApi = await import("tsrs/unstable/async");
+const { SyntaxKind } = await import("tsrs/unstable/ast");
+const { createFileSystemWithLib, serverFS } = await import("tsrs/unstable/fs");
 
 const base = path.resolve(process.argv[2] ?? "project");
 const only = process.argv[3]; // optional: "sync" or "async"

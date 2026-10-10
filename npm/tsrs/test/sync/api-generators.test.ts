@@ -20,11 +20,11 @@ import {
     type Node,
     type SourceFile,
     SyntaxKind,
-} from "@maschwenk/tsrs/unstable/ast";
+} from "tsrs/unstable/ast";
 import type {
     APIRequest,
     APIResponse,
-} from "@maschwenk/tsrs/unstable/proto";
+} from "tsrs/unstable/proto";
 import {
     all,
     type AllAPIRequestGenerator,
@@ -59,7 +59,7 @@ import {
     type TypePredicate,
     type TypeReference,
     type UnionOrIntersectionType,
-} from "@maschwenk/tsrs/unstable/sync";
+} from "tsrs/unstable/sync";
 import assert from "node:assert";
 import {
     describe,

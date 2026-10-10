@@ -4,7 +4,7 @@ import { test } from "node:test";
 
 test("close shuts down the API process cleanly", async () => {
     const script = `
-        import { API } from "@maschwenk/tsrs/unstable/sync";
+        import { API } from "tsrs/unstable/sync";
         const api = new API({ cwd: process.cwd() });
         api.parseCommandLine([]);
         api.close();

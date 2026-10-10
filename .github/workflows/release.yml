@@ -6,8 +6,7 @@
 #
 # Setup before the first release:
 #   - repository secret NPM_TOKEN: an npm automation (or granular, publish-enabled) token for an account that may
-#     publish to the package scope (npm/tsrs/package.json "name"; the @maschwenk scope exists iff the npm user is
-#     maschwenk, otherwise create the org or rename the package there).
+#     publish `tsrs`, `@ts-rs/wasm` and the platform packages in the `@ts-rs` org.
 #   - tag pushes `v<workspace version>` or `v<npm version>` (node npm/build.mjs --print-version), e.g. v0.1.0.
 # Provenance (`npm publish --provenance`) is only possible from a public repository; it is enabled automatically
 # when the repository is public and skipped while it is private.
@@ -208,7 +207,7 @@ jobs:
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - run: cargo check --workspace --locked
 
-  # `@maschwenk/tsrs-wasm` (npm/tsrs-wasm, notes/wasm-build.md): the module as ci.yml's wasm job builds it, the
+  # `@ts-rs/wasm` (npm/tsrs-wasm, notes/wasm-build.md): the module as ci.yml's wasm job builds it, the
   # package's tests (they compare against a native release build), the package packed by npm/build.mjs, and that
   # tarball installed and run before it is handed to the publish job.
   wasm:
@@ -312,7 +311,7 @@ jobs:
         with:
           name: npm-packages
           path: npm/dist/*.tgz
-      - name: Publish (platform packages first, then the main package, then the WebAssembly package)
+      - name: Publish (@ts-rs platform packages, tsrs, then @ts-rs/wasm)
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}

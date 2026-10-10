@@ -40,12 +40,12 @@ try {
     fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name: "tsrs-consumer", private: true, type: "module" }));
     run("npm", ["install", "--no-audit", "--no-fund", "--offline", ...tarballs], { shell: process.platform === "win32" });
 
-    const pkg = JSON.parse(fs.readFileSync(path.join(dir, "node_modules/@maschwenk/tsrs/package.json"), "utf8"));
+    const pkg = JSON.parse(fs.readFileSync(path.join(dir, "node_modules/tsrs/package.json"), "utf8"));
     for (const sub of Object.keys(pkg.exports)) {
         if (!sub.startsWith("./unstable/")) continue;
         const target = pkg.exports[sub].default;
-        if (!fs.existsSync(path.join(dir, "node_modules/@maschwenk/tsrs", target))) throw new Error(`export ${sub} -> ${target} is not in the tarball`);
-        if (!fs.existsSync(path.join(dir, "node_modules/@maschwenk/tsrs", target.replace(/\.js$/, ".d.ts")))) throw new Error(`export ${sub} has no declarations`);
+        if (!fs.existsSync(path.join(dir, "node_modules/tsrs", target))) throw new Error(`export ${sub} -> ${target} is not in the tarball`);
+        if (!fs.existsSync(path.join(dir, "node_modules/tsrs", target.replace(/\.js$/, ".d.ts")))) throw new Error(`export ${sub} has no declarations`);
     }
 
     const bin = path.join(dir, "node_modules", ".bin", process.platform === "win32" ? "tsrs.cmd" : "tsrs");
@@ -64,9 +64,9 @@ try {
     for (const node of nodes) {
         const version = run(node, ["--version"]).trim();
         // The CLI launcher under this Node: --version, and a type error must exit 2 (the binary's own code).
-        run(node, [path.join(dir, "node_modules/@maschwenk/tsrs/bin/tsrs"), "--version"]);
+        run(node, [path.join(dir, "node_modules/tsrs/bin/tsrs"), "--version"]);
         fs.writeFileSync(path.join(dir, "bad.ts"), 'const x: number = "no";\n');
-        const bad = spawnSync(node, [path.join(dir, "node_modules/@maschwenk/tsrs/bin/tsrs"), "--noEmit", "--ignoreConfig", "bad.ts"], { cwd: dir, encoding: "utf8" });
+        const bad = spawnSync(node, [path.join(dir, "node_modules/tsrs/bin/tsrs"), "--noEmit", "--ignoreConfig", "bad.ts"], { cwd: dir, encoding: "utf8" });
         if (bad.status !== 2 || !bad.stdout.includes("TS2322")) throw new Error(`launcher under node ${version}: expected exit 2 with TS2322, got ${bad.status}\n${bad.stdout}${bad.stderr}`);
         // The consumer runs every step and reports each; a failing step does not stop the other Node versions.
         const consumer = spawnSync(node, ["consumer.mjs", path.join(dir, "project")], { cwd: dir, encoding: "utf8", timeout: 300_000 });

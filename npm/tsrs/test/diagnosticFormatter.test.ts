@@ -2,7 +2,7 @@ import {
     API,
     formatDiagnostics,
     formatDiagnosticsWithColorAndContext,
-} from "@maschwenk/tsrs/unstable/async";
+} from "tsrs/unstable/async";
 import assert from "node:assert";
 import {
     describe,
