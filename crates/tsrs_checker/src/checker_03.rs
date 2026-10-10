@@ -164,7 +164,7 @@ impl Checker {
             if is_static_member {
                 if let Some(member_name_node) = member_name_node {
                     let (member_name, _) = self.get_effective_property_name_for_property_name_node(member_name_node);
-                    match member_name.as_str() {
+                    match &*member_name {
                         "name" | "length" | "caller" | "arguments" => {
                             let class_symbol = self.get_symbol_of_declaration(node).unwrap();
                             let class_name = self.symbol_to_string(class_symbol);

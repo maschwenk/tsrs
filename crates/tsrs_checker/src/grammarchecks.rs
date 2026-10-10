@@ -1064,7 +1064,7 @@ impl Checker {
 
     // grammarchecks.go:998
     pub(crate) fn check_grammar_object_literal_expression(&mut self, node: P<Node>, in_destructuring: bool) -> bool {
-        let mut seen: FxHashMap<String, DeclarationMeaning> = FxHashMap::default();
+        let mut seen: FxHashMap<std::borrow::Cow<'static, str>, DeclarationMeaning> = FxHashMap::default();
 
         let properties = node.as_object_literal_expression().properties.nodes();
         for &prop in properties {
