@@ -104,7 +104,7 @@ same diagnostics and emits the same 9,257 files byte for byte. [`docs/STATUS.md`
 | --- | --- | --- |
 | Type checking (`--noEmit`) | yes | 13,458 of 13,462 error baselines and all 12,779 `.types` / `.symbols` baselines match; same diagnostics on the 38k-file codebase |
 | Multithreaded checking, `--singleThreaded`, `--pretty`, `--extendedDiagnostics`, `--listFiles`, `--listFilesOnly` | yes | |
-| Memory target (`--maxMemory <size>`) | `--noEmit` checks; by default only when memory is short | the 38k-file codebase at 8 checkers: peak 18.0 GB without it; `--maxMemory 12G` 12.9 GB (+11% instructions), `10G` 10.8 GB (+16%), `8G` 8.7 GB (+35%), same diagnostics; testdata/regressions identical with a checker retired after nearly every file, also in poison mode (notes/mem-recycle-checkers.md). Without the flag: 75% of the memory available at startup, applied only when the estimated peak is above it and checkers would reach the 128 MiB retirement floor; never on the bench machines (notes/perf-default-checkers-16.md) |
+| Memory target (`--maxMemory <size>`) | `--noEmit` checks, opt-in | the 38k-file codebase at 8 checkers: peak 18.0 GB without it; `--maxMemory 12G` 12.9 GB (+11% instructions), `10G` 10.8 GB (+16%), `8G` 8.7 GB (+35%), same diagnostics; testdata/regressions identical with a checker retired after nearly every file, also in poison mode (notes/mem-recycle-checkers.md) |
 | Same output regardless of thread count | yes, with known exceptions (tsgo: no) | a few projects still depend on file order through tsgo's own logic (notes/open-history-dependence.md); `--checkerAssignment go` reproduces tsgo exactly |
 | JavaScript emit | yes | all of tsgo's transforms; 13,392 `.js` baselines pass, 0 fail |
 | Declaration emit (`.d.ts`) | yes | part of the `.js` baselines |
@@ -138,11 +138,6 @@ tsrs accepts every `tsc` flag it supports. A few extra ones control performance:
 - `--maxMemory <size>` (for example `12G`; `--noEmit` checks only) keeps the process near that much memory: above it,
   tsrs replaces its largest checker with a fresh one, trading CPU for memory. Useful on very large programs (the
   38k-file codebase: 18.0 GB without it, 10.8 GB at `10G` for 16% more instructions). The diagnostics are the same.
-  Without the flag, tsrs sets a target of 75% of the memory available at startup (`MemAvailable` and the cgroup
-  limit on Linux, free plus inactive memory on macOS). It applies only when the estimated peak (3x the memory at the
-  end of parsing plus an allowance per checker) is above it and the checkers would be big enough to retire (128 MiB
-  each), so a machine with memory to spare, or a mid-size project, runs exactly as without it. `--extendedDiagnostics`
-  prints what was decided (`Memory:` rows). `--maxMemory 0` turns it off.
 - `--checkerAssignment go` splits files across threads the way tsgo does, for byte-identical output with tsgo.
 - `--noLazyMembers` turns off a set of checker optimizations that are not yet merged upstream. They never change
   diagnostics; the patches are in [`upstream/`](upstream/).

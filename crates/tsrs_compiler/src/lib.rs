@@ -33,7 +33,7 @@ mod contentmapper_test;
 #[cfg(all(test, feature = "checker"))]
 mod modulespecifiers_oracle_test;
 
-pub use checkerpool::{assignment_stats_enabled, checker_count_upper_bound, set_checker_assignment_from_cli, set_checker_cost_cache_from_cli, parse_memory_size, set_max_memory_from_cli, derive_max_memory_from_available, use_go_default_checker_count, Checker, CheckerHandle, CheckerPool, Context, PooledChecker};
+pub use checkerpool::{assignment_stats_enabled, checker_count_upper_bound, set_checker_assignment_from_cli, set_checker_cost_cache_from_cli, parse_memory_size, set_max_memory_from_cli, use_go_default_checker_count, Checker, CheckerHandle, CheckerPool, Context, PooledChecker};
 #[cfg(feature = "checker")]
 pub use emitter::EmitOnly;
 #[cfg(feature = "checker")]

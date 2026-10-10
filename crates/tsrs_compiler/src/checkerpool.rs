@@ -218,7 +218,7 @@ fn run_work_group(single_threaded: bool, count: usize, task: impl Fn(usize) + Sy
 struct CheckerSlot(Mutex<SlotChecker>);
 
 // tsrs-only (notes/mem-recycle-checkers.md): a checker of the built-in pool and, when the type-check pass may retire
-// checkers (`memory_target`), the region that holds everything it allocates. The region is the allocation target
+// checkers (`max_memory`), the region that holds everything it allocates. The region is the allocation target
 // whenever the checker runs (`enter`), so dropping the checker and then the region gives back all of its memory.
 pub(crate) struct SlotChecker {
     checker: Box<Checker>,
@@ -308,13 +308,12 @@ fn leaves_first() -> bool {
     *S.get_or_init(|| std::env::var("TSRS_LEAVES_FIRST").map_or(true, |v| v != "0"))
 }
 
-// tsrs-only: `--maxMemory <size>` (CLI) or TSRS_MAX_MEMORY=<size>: a target for the process's memory
+// tsrs-only, opt-in: `--maxMemory <size>` (CLI) or TSRS_MAX_MEMORY=<size>: a target for the process's memory
 // (`memsplit::process_memory`). In the type-check pass of a program that allows it
 // (`ProgramOptions::checker_recycling`), once the process is above it the checker holding the largest region is
 // retired between two files and the rest of its queue goes to a fresh checker (`retire_checker`;
 // notes/mem-recycle-checkers.md). A target below what the front end and fresh checkers hold cannot be met; checkers
-// smaller than `RETIRE_MIN` are never retired, so such a target costs retirements but does not thrash. `0` turns it
-// off, the default target included. Unset: the default target (`derive_max_memory_from_available`).
+// smaller than `RETIRE_MIN` are never retired, so such a target costs retirements but does not thrash. Unset: never.
 static CLI_MAX_MEMORY: OnceLock<usize> = OnceLock::new();
 
 /// `--maxMemory`: a size with an optional `K`, `M` or `G` suffix (binary units; `B` after it is allowed); a bare
@@ -336,91 +335,10 @@ pub fn set_max_memory_from_cli(bytes: usize) {
     let _ = CLI_MAX_MEMORY.set(bytes);
 }
 
-// The target `--maxMemory` or TSRS_MAX_MEMORY names, in bytes (Some(0): none, and no default target either).
-fn explicit_max_memory() -> Option<usize> {
-    static MAX: OnceLock<Option<usize>> = OnceLock::new();
-    *MAX.get_or_init(|| CLI_MAX_MEMORY.get().copied().or_else(|| std::env::var("TSRS_MAX_MEMORY").ok().and_then(|v| parse_memory_size(&v))))
-}
-
-// The default target is this share of the memory available at startup: the rest is left to the other processes and to
-// the overshoot of a retirement, which happens only between two files.
-const DEFAULT_TARGET_PERCENT: usize = 75;
-// The default target applies only when the program could reach it and a checker could be retired under it
-// (`default_target_applies`). Reach: the memory at parse end (the front end: source text, trees, binder output) times
-// FRONT_END_GROWTH, plus per checker the larger of 1/CHECKER_SHARE_OF_FRONT_END of the front end and MIN_PER_CHECKER,
-// is above the target. Fitted above every peak measured with 2-16 checkers (macOS footprint,
-// notes/perf-default-checkers-16.md): the bench projects peak at 1.5-5.5x their front end and add 8-150 MiB per
-// checker; the 38k-file codebase, ~5.9 GB of front end, at 15.9 / 18.0 / 21.3 GB with 4 / 8 / 16 checkers
-// (notes/mem-recycle-checkers.md). Retirement: only a checker holding `retire_min` (128 MiB) is retired, so the
-// estimate's growth beyond the front end, shared by the checkers, must reach it. At 16 checkers no bench project's
-// checkers do (57-110 MiB each), and an armed target that retires nothing costs memory of its own (checker regions:
-// +2% peak on vscode, +17% on t3code-server, 0 retired, with 2 GiB available), so those programs keep the plain pass:
-// checkers in the thread arenas, program order, relation caches never emptied.
-const FRONT_END_GROWTH: usize = 3;
-const CHECKER_SHARE_OF_FRONT_END: usize = 8;
-const MIN_PER_CHECKER: usize = 128 << 20;
-
-// The default target: memory available at startup and the target derived from it, in bytes.
-#[derive(Clone, Copy)]
-struct DefaultTarget {
-    available: usize,
-    target: usize,
-}
-
-static DEFAULT_MAX_MEMORY: OnceLock<DefaultTarget> = OnceLock::new();
-
-/// tsrs-only: without `--maxMemory` / TSRS_MAX_MEMORY, derives the default memory target from the memory available
-/// now (`memsplit::available_memory`; `TSRS_AVAILABLE_MEMORY=<size>` stands in for it, for tests and experiments).
-/// The CLI calls it before it loads a program that allows checker recycling; the type-check pass applies the target
-/// only when the program could reach it (`memory_target`), so on a machine with memory to spare nothing changes.
-pub fn derive_max_memory_from_available() {
-    if explicit_max_memory().is_some() {
-        return;
-    }
-    let available = std::env::var("TSRS_AVAILABLE_MEMORY").ok().and_then(|v| parse_memory_size(&v)).or_else(tsrs_core::memsplit::available_memory);
-    if let Some(available) = available {
-        let _ = DEFAULT_MAX_MEMORY.set(DefaultTarget { available, target: available / 100 * DEFAULT_TARGET_PERCENT });
-    }
-}
-
-// Whether the default target `target` applies to a pass of `checkers` checkers after a front end of `front_end` bytes.
-fn default_target_applies(target: usize, front_end: usize, checkers: usize, retire_min: usize) -> bool {
-    let growth = front_end.saturating_mul(FRONT_END_GROWTH - 1);
-    estimated_peak(front_end, checkers) > target && growth / checkers.max(1) >= retire_min
-}
-
-// An upper bound of the peak of a type-check pass with `checkers` checkers after a front end of `front_end` bytes.
-fn estimated_peak(front_end: usize, checkers: usize) -> usize {
-    let per_checker = (front_end / CHECKER_SHARE_OF_FRONT_END).max(MIN_PER_CHECKER);
-    front_end.saturating_mul(FRONT_END_GROWTH).saturating_add(checkers.saturating_mul(per_checker))
-}
-
-// The memory target of the type-check pass, in bytes (0: none), decided once the program is parsed and bound:
-// `--maxMemory` / TSRS_MAX_MEMORY, else the default target where it applies. `--extendedDiagnostics` shows what was
-// decided (`Memory:` rows, and `Checkers: retired` when a target applies).
-fn memory_target(checkers: usize) -> usize {
-    if let Some(explicit) = explicit_max_memory() {
-        if explicit > 0 {
-            tsrs_core::phases::count("Memory: target (MiB)", (explicit >> 20) as u64);
-        }
-        return explicit;
-    }
-    let Some(default) = DEFAULT_MAX_MEMORY.get().copied() else {
-        return 0;
-    };
-    let front_end = tsrs_core::memsplit::process_memory();
-    let estimate = estimated_peak(front_end, checkers);
-    tsrs_core::phases::count("Memory: available at start (MiB)", (default.available >> 20) as u64);
-    tsrs_core::phases::count("Memory: default target (MiB)", (default.target >> 20) as u64);
-    tsrs_core::phases::count("Memory: at parse end (MiB)", (front_end >> 20) as u64);
-    tsrs_core::phases::count("Memory: estimated peak (MiB)", (estimate >> 20) as u64);
-    let applies = default_target_applies(default.target, front_end, checkers, retire_min());
-    tsrs_core::phases::count("Memory: default target applied", u64::from(applies));
-    if applies {
-        default.target
-    } else {
-        0
-    }
+// The target in bytes (0: off).
+fn max_memory() -> usize {
+    static MAX: OnceLock<usize> = OnceLock::new();
+    *MAX.get_or_init(|| CLI_MAX_MEMORY.get().copied().or_else(|| std::env::var("TSRS_MAX_MEMORY").ok().and_then(|v| parse_memory_size(&v))).unwrap_or(0))
 }
 
 // A checker whose region holds less than this is never retired (`TSRS_RETIRE_MIN=<size>` overrides it, for tests):
@@ -469,10 +387,8 @@ pub(crate) struct poolState {
     pub(crate) file_times: Mutex<Vec<(P<SourceFile>, usize, f64, f64)>>,
     // Cost cache only: (file, thread CPU seconds) per checked file, per checker pass.
     file_cpu: Mutex<Vec<(P<SourceFile>, f64)>>,
-    // Whether checkers live in regions and the type-check pass may retire them (`memory_target`).
+    // Whether checkers live in regions and the type-check pass may retire them (`max_memory`).
     recycle: bool,
-    // The memory target of the type-check pass in bytes, when `recycle`.
-    max_memory: usize,
     pub(crate) retired: Mutex<RetiredCheckers>,
 }
 
@@ -804,8 +720,7 @@ impl checkerPool {
                 }
                 crate::program::worker_pool().broadcast(|_| tsrs_core::ptr::release_own_arena());
             }
-            let max_memory = if program.checker_recycling && !self.single_threaded { memory_target(self.checker_count) } else { 0 };
-            let recycle = max_memory > 0;
+            let recycle = program.checker_recycling && !self.single_threaded && max_memory() > 0;
             let shared = crate::sharedgraph::enabled() && !program.single_threaded();
             let create_and_assign = || {
                 let create_start = std::time::Instant::now();
@@ -857,7 +772,6 @@ impl checkerPool {
                 file_times: Mutex::new(Vec::new()),
                 file_cpu: Mutex::new(Vec::new()),
                 recycle,
-                max_memory,
                 retired: Mutex::new(RetiredCheckers::default()),
             }
         })
@@ -1069,7 +983,7 @@ impl checkerPool {
                 if switch_to_fork
                     || recycle
                     && guard.region_bytes() >= retire_min()
-                    && tsrs_core::memsplit::process_memory() > state.max_memory
+                    && tsrs_core::memsplit::process_memory() > max_memory()
                     // Relaxed: see the store above.
                     && region_sizes.iter().all(|s| s.load(std::sync::atomic::Ordering::Relaxed) <= guard.region_bytes())
                     && queues.iter().any(|q| q.remaining() > 0)
@@ -1659,8 +1573,7 @@ const MIN_CHECKED_FILES_PER_DEFAULT_CHECKER: i64 = 32;
 // from 1.69 to 1.42 for 8-30% more peak memory (notes/perf-default-checkers-16.md); on the 8-vCPU bench, 8 instead of
 // 4 cut 14-42% (notes/perf-default-checkers-small-machines.md). Above it, half the cores: from 16 to 32 checkers the
 // app projects gain 6-23% wall (vscode 32%) for 24-34% more memory (notes/mem-round4.md section 3), and leaf freeing
-// stops at 16 (fileregions.rs `MAX_DEFAULT_CHECKERS`). A machine short of memory for this many checkers gets a default
-// `--maxMemory` target (`derive_max_memory_from_available`).
+// stops at 16 (fileregions.rs `MAX_DEFAULT_CHECKERS`).
 const SMALL_MACHINE_CHECKERS: i64 = 16;
 
 static GO_DEFAULT_CHECKER_COUNT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -1716,66 +1629,6 @@ mod default_checker_tests {
         for (cores, checkers) in table {
             assert_eq!(default_checkers_for_parallelism(cores), checkers, "{cores} cores");
         }
-    }
-}
-
-#[cfg(test)]
-mod default_memory_target_tests {
-    use super::{default_target_applies, estimated_peak, DEFAULT_TARGET_PERCENT};
-
-    const MIB: usize = 1 << 20;
-    const RETIRE_MIN: usize = 128 << 20;
-
-    fn target(available: usize) -> usize {
-        available / 100 * DEFAULT_TARGET_PERCENT
-    }
-
-    /// The estimate covers every peak measured (front end at parse end, checkers, peak; macOS footprint), so a machine
-    /// one of these programs would fill gets the default target: the bench projects (notes/perf-default-checkers-16.md)
-    /// and the 38k-file codebase (notes/mem-recycle-checkers.md, in MB).
-    #[test]
-    fn estimate_covers_measured_peaks() {
-        let mb = |n: usize| n * 1_000_000;
-        let measured = [
-            ("vscode", 1171 * MIB, 16, 2087 * MIB),
-            ("cal-diy", 406 * MIB, 16, 1904 * MIB),
-            ("formbricks-web", 730 * MIB, 16, 1994 * MIB),
-            ("supabase-studio", 524 * MIB, 16, 1689 * MIB),
-            ("t3code-server", 391 * MIB, 4, 1187 * MIB),
-            ("t3code-server", 391 * MIB, 8, 1784 * MIB),
-            ("t3code-server", 391 * MIB, 16, 2147 * MIB),
-            ("mui-docs", 323 * MIB, 8, 1341 * MIB),
-            ("mui-docs", 323 * MIB, 16, 1623 * MIB),
-            ("drizzle-orm", 237 * MIB, 16, 783 * MIB),
-            ("38k-file codebase", mb(5850), 4, mb(15_900)),
-            ("38k-file codebase", mb(5850), 8, mb(18_000)),
-            ("38k-file codebase", mb(5850), 16, mb(21_300)),
-        ];
-        for (name, front_end, checkers, peak) in measured {
-            assert!(estimated_peak(front_end, checkers) > peak, "{name} at {checkers} checkers");
-        }
-    }
-
-    /// The bench machines never get the default target for the bench projects, so their tables measure the default
-    /// path: the largest front end measured (vscode) at each runner's default count, with what `MemAvailable` reports
-    /// there (8 vCPU / 32 GB, 16 vCPU / 63 GB, 64 vCPU / 252 GB, a few GiB below the total).
-    #[test]
-    fn bench_machines_get_no_target() {
-        for (available_gib, checkers) in [(29, 8), (58, 16), (240, 32)] {
-            assert!(!default_target_applies(target(available_gib << 30), 1171 * MIB, checkers, RETIRE_MIN), "{available_gib} GiB, {checkers} checkers");
-        }
-    }
-
-    /// The target applies where retiring a checker can hold the peak down (the 38k-file codebase, ~5.9 GB of front
-    /// end, on a 16 GB machine with 12 GB available), and not where every checker stays below the retirement floor
-    /// (t3code-server, 391 MiB of front end, at 16 checkers with 2 GiB available: armed, it retired nothing and peaked
-    /// 17% higher).
-    #[test]
-    fn applies_only_where_a_checker_can_be_retired() {
-        for checkers in [4, 8, 16] {
-            assert!(default_target_applies(target(12_000_000_000), 5_850_000_000, checkers, RETIRE_MIN), "{checkers} checkers");
-        }
-        assert!(!default_target_applies(target(2 << 30), 391 * MIB, 16, RETIRE_MIN));
     }
 }
 
