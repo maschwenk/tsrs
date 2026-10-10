@@ -1888,6 +1888,9 @@ impl Checker {
             serialization_level: base.serialization_level.clone(),
             current_node: None,
             checking_file: None,
+            lint_config: base.lint_config,
+            // Node links retain the seed's lint-dispatch flags, so forks also need its pending output.
+            lint_output: base.lint_output.clone(),
             statements_checked_in_pieces: None,
             // The seed's history: its checks deferred to files it did not check run in the fork that checks them.
             deferred_type_argument_checks: base.deferred_type_argument_checks.clone(),

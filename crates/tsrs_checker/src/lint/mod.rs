@@ -83,7 +83,7 @@ pub struct LintOutput {
     pub no_emit: bool,
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub(crate) struct FileLintOutput {
     diagnostics: Vec<RuleDiagnostic>,
     timings: BTreeMap<&'static str, (Duration, u64)>,

@@ -127,7 +127,7 @@ fn create_configured_program(
         ));
     }
     let config = P::new(parsed);
-    let host = new_cached_fs_compiler_host(&cwd, fs, &bundled::lib_path(), None, None);
+    let host = new_cached_fs_compiler_host(&cwd, fs, &bundled::lib_path(), None, None, None);
     let mut opts = ProgramOptions::new(config, host);
     opts.use_source_of_project_reference = true;
     opts.single_threaded = Tristate::False;
@@ -176,7 +176,7 @@ fn create_empty_program(
             use_case_sensitive_file_names: fs.use_case_sensitive_file_names(),
         },
     ));
-    let host = new_cached_fs_compiler_host(cwd, fs, &bundled::lib_path(), None, None);
+    let host = new_cached_fs_compiler_host(cwd, fs, &bundled::lib_path(), None, None, None);
     let mut opts = ProgramOptions::new(config, host);
     opts.single_threaded = Tristate::False;
     opts.lint = Some(lint);
@@ -513,6 +513,42 @@ try { p(); } catch { p(); } finally { p(); }
             .collect();
         assert_eq!(files, ["/a.ts", "/b.ts", "/b.ts"]);
         assert_eq!(result.lint.timings[0].calls, 4);
+    }
+
+    #[test]
+    fn forked_checker_preserves_pending_lint_output() {
+        let lint = config(&["/a.ts", "/b.ts"], true);
+        let fs = vfstest::from_map(
+            [
+                ("/a.ts", vfstest::MapFile::from("Promise.resolve();")),
+                ("/b.ts", vfstest::MapFile::from("Promise.reject();")),
+            ],
+            true,
+        );
+        let program = create_empty_program(
+            Arc::new(bundled::wrap_fs(fs)),
+            "/",
+            &["/a.ts".into(), "/b.ts".into()],
+            Arc::clone(&lint),
+        );
+        program.bind_source_files();
+        let file = program.get_source_file("/a.ts").unwrap();
+        let ctx = Context::default();
+        let mut seed = tsrs_checker::new_checker(program);
+        seed.get_diagnostics_exported(&ctx, file);
+        let mut fork = tsrs_checker::Checker::fork(Box::leak(seed));
+        lint.collect(&mut fork, file);
+        let file = program.get_source_file("/b.ts").unwrap();
+        assert!(
+            program
+                .get_semantic_diagnostics_with_checker(&ctx, &mut fork, file)
+                .is_empty()
+        );
+        let output = lint.take_output();
+        assert_eq!(output.diagnostics.len(), 2);
+        assert_eq!(output.diagnostics[0].message.id, "floatingVoid");
+        assert_eq!(output.diagnostics[1].message.id, "floatingVoid");
+        assert_eq!(output.timings[0].calls, 2);
     }
 
     #[test]

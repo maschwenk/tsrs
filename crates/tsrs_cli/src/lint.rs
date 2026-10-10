@@ -1,4 +1,5 @@
 //! Native compiler entry point for `--lint <headless-config.json>`.
+use std::io::Write;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -38,6 +39,17 @@ impl tsc::System for LintSystem {
     }
     fn get_environment_variable(&self, name: &str) -> Option<String> {
         self.base.get_environment_variable(name)
+    }
+    fn spawn(
+        &self,
+        command: &[String],
+        dir: &str,
+        stderr: Option<Box<dyn Write + Send>>,
+    ) -> Result<tsc::ReadWriteCloser, String> {
+        self.base.spawn(command, dir, stderr)
+    }
+    fn write_error(&self, text: &str) {
+        self.base.write_error(text);
     }
     fn now(&self) -> Instant {
         self.base.now()
