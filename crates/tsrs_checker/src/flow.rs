@@ -1352,7 +1352,7 @@ impl Checker {
                         }
                         Some(c.never_type)
                     } else {
-                        if are_different_plain_literals(t, n) {
+                        if crate::relater_1::are_different_plain_literals(t, n) {
                             return Some(c.never_type); // each relation below is false
                         }
                         if c.is_type_strict_subtype_of(t, n) {
@@ -3517,13 +3517,4 @@ impl Checker {
         }
         pos
     }
-}
-
-/// Whether `a` and `b` are literals of one kind (string, number or bigint, not enum members) with different values:
-/// no relation holds between them in either direction (`is_type_related_to`).
-fn are_different_plain_literals(a: P<Type>, b: P<Type>) -> bool {
-    let flags = a.flags();
-    flags == b.flags()
-        && matches!(flags, TypeFlags::StringLiteral | TypeFlags::NumberLiteral | TypeFlags::BigIntLiteral)
-        && a.as_literal_type().regular_type.get() != b.as_literal_type().regular_type.get()
 }

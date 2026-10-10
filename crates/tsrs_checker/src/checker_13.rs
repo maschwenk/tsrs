@@ -654,7 +654,7 @@ impl Checker {
                     if self.is_type_strict_subtype_of(constraint, primitive_type) {
                         return type_variable;
                     }
-                    if !(constraint.flags().intersects(TypeFlags::Union) && some_type(self, constraint, |c, n| c.is_type_strict_subtype_of(n, primitive_type))) {
+                    if !(constraint.flags().intersects(TypeFlags::Union) && some_type(self, constraint, |c, n| !crate::relater_1::are_different_plain_literals(n, primitive_type) && c.is_type_strict_subtype_of(n, primitive_type))) {
                         // No constituent of T's constraint is a subtype of P. If P is also not a subtype of T's constraint,
                         // then the constraint and P are unrelated, and the intersection reduces to never. For example, given
                         // `T extends "a" | "b"`, the intersection `T & number` reduces to never.
