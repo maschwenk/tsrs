@@ -324,6 +324,8 @@ pub fn process_memory() -> usize {
         return VALUE.load(Ordering::Relaxed);
     }
     let v = read_process_memory();
+    // Relaxed (both): these atomics publish only a heuristic sample and its refresh time; readers may see
+    // a stale value with a newer timestamp, since neither synchronizes access to other memory.
     VALUE.store(v, Ordering::Relaxed);
     LAST_NS.store(now.max(1), Ordering::Relaxed);
     v
