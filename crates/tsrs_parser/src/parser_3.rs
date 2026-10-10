@@ -2925,15 +2925,10 @@ fn skip_to(text: &str, pos: usize, s: &str) -> i32 {
 }
 
 fn line_end_pos(text: &str, pos: usize) -> usize {
-    let mut pos = pos;
-    while pos < text.len() {
-        let ch = text[pos..].chars().next().unwrap();
-        if tsrs_core::stringutil::is_line_break(ch) {
-            return pos;
-        }
-        pos += ch.len_utf8();
+    if pos >= text.len() {
+        return text.len();
     }
-    text.len()
+    pos + tsrs_core::stringutil::find_line_break(&text[pos..]).unwrap_or(text.len() - pos)
 }
 
 fn extract_name(text: &str, pos: usize) -> String {
@@ -2971,5 +2966,24 @@ fn find_index(nodes: &[P<Node>], mut f: impl FnMut(P<Node>) -> bool) -> i32 {
     match nodes.iter().position(|&n| f(n)) {
         Some(i) => i as i32,
         None => -1,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::line_end_pos;
+
+    #[test]
+    fn line_end_byte_offsets() {
+        for terminator in ["\r", "\n", "\r\n", "\u{2028}", "\u{2029}"] {
+            let text = format!("é😀\u{2027}{terminator}next");
+            assert_eq!(line_end_pos(&text, 0), "é😀\u{2027}".len());
+            assert_eq!(line_end_pos(&text, 2), "é😀\u{2027}".len());
+            assert_eq!(line_end_pos(&text, text.len()), text.len());
+            assert_eq!(line_end_pos(&text, text.len() + 1), text.len());
+        }
+        for text in ["", "é😀\u{2027}\u{202A}", "\u{2080}a", "a\u{2020}"] {
+            assert_eq!(line_end_pos(text, 0), text.len());
+        }
     }
 }

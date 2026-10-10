@@ -5904,10 +5904,8 @@ fn format_call_hierarchy_item_span(f: &FourslashTest, file: Option<&ScriptInfo>,
 // fourslash.go:3712
 fn compute_line_starts(content: &str) -> Vec<usize> {
     let mut line_starts = vec![0];
-    for (i, ch) in content.char_indices() {
-        if ch == '\n' {
-            line_starts.push(i + 1);
-        }
+    for (i, _) in content.match_indices('\n') {
+        line_starts.push(i + 1);
     }
     line_starts
 }

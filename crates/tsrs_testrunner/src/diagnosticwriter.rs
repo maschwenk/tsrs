@@ -157,39 +157,7 @@ pub fn compare_diagnostics(d1: &Diag, d2: &Diag) -> i32 {
 }
 
 pub fn compute_ecma_line_starts(text: &str) -> Vec<i32> {
-    let bytes = text.as_bytes();
-    let mut result = Vec::with_capacity(bytes.iter().filter(|&&b| b == b'\n').count() + 1);
-    let mut pos = 0usize;
-    let mut line_start = 0usize;
-    while pos < bytes.len() {
-        let b = bytes[pos];
-        if b < 0x80 {
-            pos += 1;
-            match b {
-                b'\r' => {
-                    if pos < bytes.len() && bytes[pos] == b'\n' {
-                        pos += 1;
-                    }
-                    result.push(line_start as i32);
-                    line_start = pos;
-                }
-                b'\n' => {
-                    result.push(line_start as i32);
-                    line_start = pos;
-                }
-                _ => {}
-            }
-        } else {
-            let ch = text[pos..].chars().next().unwrap();
-            pos += ch.len_utf8();
-            if ch == '\u{2028}' || ch == '\u{2029}' {
-                result.push(line_start as i32);
-                line_start = pos;
-            }
-        }
-    }
-    result.push(line_start as i32);
-    result
+    tsrs_core::compute_ecma_line_starts(text)
 }
 
 pub fn utf16_len(s: &str) -> i32 {
@@ -545,4 +513,17 @@ pub fn write_format_diagnostic(output: &mut String, diagnostic: &Diag, format_op
     let _ = write!(output, "{} {}{}: ", diagnostic.category.name(), diagnostic_prefix(diagnostic), diagnostic.code);
     write_flattened_diagnostic_message(output, diagnostic, format_opts.new_line);
     output.push_str(format_opts.new_line);
+}
+
+#[cfg(test)]
+mod line_start_tests {
+    use super::compute_ecma_line_starts;
+
+    #[test]
+    fn unicode_line_starts_are_byte_offsets() {
+        assert_eq!(compute_ecma_line_starts(""), [0]);
+        assert_eq!(compute_ecma_line_starts("é😀\u{2027}\u{202A}"), [0]);
+        assert_eq!(compute_ecma_line_starts("é\r\n😀\u{2028}\u{2029}x\r"), [0, 4, 11, 14, 16]);
+        assert_eq!(compute_ecma_line_starts("\n\r\r\n"), [0, 1, 2, 4]);
+    }
 }

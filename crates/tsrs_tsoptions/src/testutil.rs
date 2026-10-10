@@ -58,30 +58,7 @@ pub(crate) fn write_format_diagnostics(diagnostics: &[P<Diagnostic>], new_line: 
 }
 
 fn line_starts(text: &str) -> Vec<i32> {
-    let bytes = text.as_bytes();
-    let mut result = vec![0];
-    let mut pos = 0;
-    let chars: Vec<(usize, char)> = text.char_indices().collect();
-    let mut i = 0;
-    while i < chars.len() {
-        let (p, c) = chars[i];
-        i += 1;
-        match c {
-            '\r' => {
-                if i < chars.len() && chars[i].1 == '\n' {
-                    i += 1;
-                }
-                result.push(if i < chars.len() { chars[i].0 as i32 } else { bytes.len() as i32 });
-            }
-            '\n' | '\u{2028}' | '\u{2029}' => {
-                result.push(if i < chars.len() { chars[i].0 as i32 } else { bytes.len() as i32 });
-            }
-            _ => {}
-        }
-        pos = p;
-    }
-    let _ = pos;
-    result
+    tsrs_core::compute_ecma_line_starts(text)
 }
 
 fn line_and_character(file: P<SourceFile>, pos: i32) -> (usize, usize) {
@@ -241,4 +218,17 @@ pub(crate) fn format_diagnostics_with_color_and_context(
         }
     }
     out
+}
+
+#[cfg(test)]
+mod line_start_tests {
+    use super::line_starts;
+
+    #[test]
+    fn unicode_line_starts_are_byte_offsets() {
+        assert_eq!(line_starts(""), [0]);
+        assert_eq!(line_starts("é😀\u{2027}\u{202A}"), [0]);
+        assert_eq!(line_starts("é\r\n😀\u{2028}\u{2029}x\r"), [0, 4, 11, 14, 16]);
+        assert_eq!(line_starts("\n\r\r\n"), [0, 1, 2, 4]);
+    }
 }

@@ -1,0 +1,5 @@
+a.ts(2,4): error TS1200: Line terminator not permitted before arrow.
+a.ts(4,4): error TS1200: Line terminator not permitted before arrow.
+a.ts(6,4): error TS1200: Line terminator not permitted before arrow.
+a.ts(8,4): error TS1200: Line terminator not permitted before arrow.
+a.ts(10,4): error TS1200: Line terminator not permitted before arrow.

@@ -58,6 +58,21 @@ pub fn is_line_break(ch: impl AsRune) -> bool {
     )
 }
 
+#[inline]
+pub fn find_line_break(text: &str) -> Option<usize> {
+    let bytes = text.as_bytes();
+    let mut pos = 0;
+    while let Some(i) = memchr::memchr3(b'\r', b'\n', 0xE2, &bytes[pos..]) {
+        let i = pos + i;
+        if bytes[i] != 0xE2 || bytes[i + 1] == 0x80 && matches!(bytes[i + 2], 0xA8 | 0xA9) {
+            return Some(i);
+        }
+        // In valid UTF-8, E2 always starts a three-byte character. Skip its continuation bytes.
+        pos = i + 3;
+    }
+    None
+}
+
 pub fn is_digit(ch: impl AsRune) -> bool {
     let ch = ch.as_rune();
     ch >= '0' as Rune && ch <= '9' as Rune
@@ -405,6 +420,17 @@ pub fn combine_surrogate_pairs(s: &str) -> std::borrow::Cow<'_, str> {
 mod tests {
     use super::*;
     use crate::stringutil::{is_unicode_identifier_part, is_unicode_identifier_start};
+
+    #[test]
+    fn line_break_byte_offsets() {
+        for prefix in ["", "ascii", "é😀", "\u{2027}\u{202A}", "\u{2080}\u{2020}"] {
+            assert_eq!(find_line_break(prefix), None);
+            for terminator in ["\r", "\n", "\r\n", "\u{2028}", "\u{2029}"] {
+                let text = format!("{prefix}{terminator}next\n");
+                assert_eq!(find_line_break(&text), Some(prefix.len()), "{text:?}");
+            }
+        }
+    }
 
     #[test]
     fn test_encode_uri() {

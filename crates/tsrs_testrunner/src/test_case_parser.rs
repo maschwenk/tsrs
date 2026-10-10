@@ -241,13 +241,7 @@ fn skip_trivia(text: &str, mut pos: usize) -> usize {
             '\r' | '\n' | '\t' | '\u{000B}' | '\u{000C}' | ' ' => pos += 1,
             '/' if rest.starts_with("//") => {
                 pos += 2;
-                while pos < bytes.len() {
-                    let c = text[pos..].chars().next().unwrap();
-                    if matches!(c, '\n' | '\r' | '\u{2028}' | '\u{2029}') {
-                        break;
-                    }
-                    pos += c.len_utf8();
-                }
+                pos += tsrs_core::stringutil::find_line_break(&text[pos..]).unwrap_or(text.len() - pos);
             }
             '/' if rest.starts_with("/*") => {
                 pos += 2;
@@ -268,6 +262,17 @@ fn skip_trivia(text: &str, mut pos: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn single_line_comment_unicode_terminators() {
+        for terminator in ["\r", "\n", "\r\n", "\u{2028}", "\u{2029}"] {
+            let prefix = format!("// é😀\u{2027}{terminator}");
+            let text = format!("{prefix}let x = 1;");
+            assert_eq!(skip_trivia(&text, 0), prefix.len());
+        }
+        let text = "// é😀\u{2027}\u{202A}";
+        assert_eq!(skip_trivia(text, 0), text.len());
+    }
 
     #[test]
     fn test_make_units_from_test() {

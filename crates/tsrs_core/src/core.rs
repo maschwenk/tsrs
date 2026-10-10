@@ -322,35 +322,21 @@ pub fn compute_ecma_line_starts(text: &str) -> ECMALineStarts {
 /// Go returns an `iter.Seq`; here the positions are pushed to `yield_` until it returns false.
 pub fn compute_ecma_line_starts_seq(text: &str, mut yield_: impl FnMut(TextPos) -> bool) {
     let bytes = text.as_bytes();
-    let text_len = bytes.len();
-    let mut pos = 0usize;
     let mut line_start = 0usize;
-    while pos < text_len {
+    while let Some(offset) = stringutil::find_line_break(&text[line_start..]) {
+        let pos = line_start + offset;
         let b = bytes[pos];
-        if b < 0x80 {
-            pos += 1;
-            match b {
-                b'\r' | b'\n' => {
-                    if b == b'\r' && pos < text_len && bytes[pos] == b'\n' {
-                        pos += 1;
-                    }
-                    if !yield_(line_start as TextPos) {
-                        return;
-                    }
-                    line_start = pos;
-                }
-                _ => {}
-            }
+        let size = if b == 0xE2 {
+            3
+        } else if b == b'\r' && bytes.get(pos + 1) == Some(&b'\n') {
+            2
         } else {
-            let (ch, size) = stringutil::decode_rune(&bytes[pos..]);
-            pos += size;
-            if stringutil::is_line_break(ch) {
-                if !yield_(line_start as TextPos) {
-                    return;
-                }
-                line_start = pos;
-            }
+            1
+        };
+        if !yield_(line_start as TextPos) {
+            return;
         }
+        line_start = pos + size;
     }
     yield_(line_start as TextPos);
 }
@@ -782,6 +768,16 @@ mod tests {
         assert_eq!(position_to_line_and_byte_offset(4, &[0, 3, 5]), (1, 1));
         assert_eq!(utf16_len("a😀é"), 4);
         assert_eq!(get_script_kind_from_file_name("a.D.TS"), ScriptKind::TS);
+    }
+
+    #[test]
+    fn line_starts_stop_when_yield_returns_false() {
+        let mut starts = Vec::new();
+        compute_ecma_line_starts_seq("é\r\n😀\u{2028}next\u{2029}", |pos| {
+            starts.push(pos);
+            starts.len() < 2
+        });
+        assert_eq!(starts, [0, 4]);
     }
 
     #[test]
