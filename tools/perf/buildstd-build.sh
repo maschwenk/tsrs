@@ -11,6 +11,8 @@
 #   DA   A + non-PIE
 #   E    A + -Ztune-cpu=znver4 (RUSTC_BOOTSTRAP=1; scheduling for Zen 4/5, the ISA stays x86-64)
 #   F    A + -Cno-vectorize-loops -Cno-vectorize-slp
+#   AN   A with BOLT minus -split-eh
+#   DN   DA with BOLT minus -split-eh
 #
 #   buildstd-build.sh <out dir> <bench work dir> [variants, default A,B,C,D,DA]
 #
@@ -35,7 +37,7 @@ step() { # $1 = name; runs the rest and records its duration
 rustflags_of() {
   case $1 in
     C) echo "-Zlocation-detail=none" ;;
-    D|DA) echo "-Crelocation-model=static -Clink-arg=-no-pie" ;;
+    D|DA|DN) echo "-Crelocation-model=static -Clink-arg=-no-pie" ;;
     E) echo "-Ztune-cpu=znver4" ;;
     F) echo "-Cno-vectorize-loops -Cno-vectorize-slp" ;;
     *) echo "" ;;
@@ -62,7 +64,7 @@ instrumented() { # $1 = variant
 final() { # $1 = variant
   local v=$1
   cargo_dist "$v" "$out/$v/final" "-Cprofile-use=$out/$v/merged.profdata -Clink-arg=-Wl,--emit-relocs $(rustflags_of "$v")" \
-    -p tsrs_cli > "$out/$v/final.log" 2>&1 || { tail -40 "$out/$v/final.log"; return 1; }
+    -p tsrs_cli -p tsrs_testrunner -p tsrs_fourslash > "$out/$v/final.log" 2>&1 || { tail -40 "$out/$v/final.log"; return 1; }
 }
 parallel() { # $1 = function, rest = variants; at most $JOBS at a time
   local f=$1 pids=() v; shift
@@ -89,7 +91,10 @@ done
 step "final builds (${variants[*]})" parallel final "${variants[@]}"
 for v in "${variants[@]}"; do
   d=$out/$v/final/$tgt/dist
-  step "BOLT $v" bash -c "BOLT_TSRS_ONLY=1 .github/scripts/bolt.sh '$d' '$out/$v/bolt' '$work' > '$out/$v/bolt.log' 2>&1 || { tail -40 '$out/$v/bolt.log'; exit 1; }"
+  split_eh=1; case $v in AN|DN) split_eh=0 ;; esac
+  # The whole of bolt.sh, gates included (conformance and fourslash on the BOLT-optimized tsrs-test and tsrs-fourslash).
+  step "BOLT $v (split-eh $split_eh)" bash -c "BOLT_SPLIT_EH=$split_eh .github/scripts/bolt.sh '$d' '$out/$v/bolt' '$work' > '$out/$v/bolt.log' 2>&1 || { tail -40 '$out/$v/bolt.log'; exit 1; }"
+  grep -E '^(conformance|fourslash):' "$out/$v/bolt.log" | sed "s/^/  $v /" | tee -a "$out/profiles.txt" || true
   mkdir -p "$out/bin/$v"; cp "$d/tsrs" "$out/bin/$v/tsrs"
   {
     echo "== $v"

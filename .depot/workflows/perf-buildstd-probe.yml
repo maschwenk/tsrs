@@ -17,7 +17,7 @@ on:
         default: "5"
       bins:
         description: comma-separated variants of buildstd-build.sh to build and measure (the first is the baseline)
-        default: A,E,F
+        default: A,AN,DN
 
 permissions:
   contents: read
@@ -26,9 +26,9 @@ env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
   REPS: ${{ inputs.reps || '5' }}
-  BINS: ${{ inputs.bins || 'A,E,F' }}
-  UNWIND_ONLY: "1"
-  PROJECTS: xstate-main,webpack
+  BINS: ${{ inputs.bins || 'A,AN,DN' }}
+  UNWIND_ONLY: "0"
+  PROJECTS: vscode,xstate-main,webpack,mui-docs,cal-diy,formbricks-web,supabase-studio,t3code-server,drizzle-orm
 
 jobs:
   probe:
@@ -186,6 +186,7 @@ jobs:
           rustc -vV | tee probe-out/rustc.txt
 
       - name: Unwinding of the non-PIE build (fourslash gate before and after BOLT)
+        if: env.UNWIND_ONLY == '1'
         run: |
           mkdir -p probe-out
           bash tools/perf/nopie-unwind.sh /tmp/unw bench/.work 2>&1 | tee probe-out/unwind.txt

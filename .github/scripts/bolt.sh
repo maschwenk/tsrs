@@ -21,11 +21,12 @@ dist=$(cd "$1" && pwd)
 mkdir -p "$2"
 work=$(cd "$2" && pwd)
 bench=$(cd "$3" && pwd)
-flags=(-reorder-blocks=ext-tsp -reorder-functions=cdsort -split-functions -split-all-cold -split-eh -icf=1
+flags=(-reorder-blocks=ext-tsp -reorder-functions=cdsort -split-functions -split-all-cold -icf=1
   -use-gnu-stack -update-debug-sections -dyno-stats)
 # aarch64: rustc links aarch64-unknown-linux-gnu with -Wl,--fix-cortex-a53-843419 (its target spec; GNU ld 2.38 has no
 # --no- form), and llvm-bolt refuses a binary with the erratum veneers unless told to drop them. The BOLT-optimized
 # binaries therefore carry no 843419 workaround; it only matters on Cortex-A53 r0p0-r0p4 cores.
+[ "${BOLT_SPLIT_EH:-1}" = 1 ] && flags+=(-split-eh)  # probe only
 arch_flags=()
 [ "$(uname -m)" = aarch64 ] && arch_flags=(--drop-cortex-a53-843419-veneers)
 bins=(tsrs tsrs-test tsrs-fourslash)
