@@ -383,7 +383,7 @@ impl LanguageService {
         let mut new_path = tspath::combine_paths(&tspath::get_directory_path(old_path), &[new_name]);
         let ignore_case = !self.use_case_sensitive_file_names();
         let old_ext = if tspath::is_declaration_file_name(old_path) {
-            tspath::get_declaration_file_extension(old_path)
+            tspath::get_declaration_file_extension(old_path).to_string()
         } else {
             tspath::get_any_extension_from_path(old_path, &[] /*extensions*/, ignore_case)
         };
