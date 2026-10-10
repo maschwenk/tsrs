@@ -83,6 +83,7 @@ mod unioncache;
 mod uniontrace;
 mod infermemo;
 mod flow;
+mod flowskip;
 pub(crate) use flow::*;
 pub mod flowmemo;
 pub mod heapcensus;

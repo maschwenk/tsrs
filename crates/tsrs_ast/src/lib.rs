@@ -3,6 +3,7 @@ pub mod checkflags;
 pub mod deepclone;
 pub mod diagnostic;
 pub mod flow;
+pub mod flownames;
 pub mod functionflags;
 pub mod generated;
 pub mod identifier;

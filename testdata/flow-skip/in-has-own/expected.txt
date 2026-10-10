@@ -1,0 +1,1 @@
+a.ts(13,11): error TS2322: Type 'undefined' is not assignable to type 'string'.

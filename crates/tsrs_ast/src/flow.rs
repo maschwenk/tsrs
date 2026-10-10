@@ -55,8 +55,20 @@ pub(crate) fn census_layout() {}
 
 impl FlowNode {
     pub fn new(flags: FlowFlags, node: Option<P<Node>>, antecedent: Option<P<FlowNode>>, text_index: u32) -> FlowNode {
+        FlowNode::new_in_graph(flags, node, antecedent, text_index, 0)
+    }
+    /// Not in Go: a flow node of flow graph `graph` of its file (flownames.rs), kept in the flag bits from
+    /// `FLOW_GRAPH_SHIFT` up, which no flag test reads.
+    pub fn new_in_graph(flags: FlowFlags, node: Option<P<Node>>, antecedent: Option<P<FlowNode>>, text_index: u32, graph: u32) -> FlowNode {
         assert!(antecedent.is_none() || !flags.intersects(FlowFlags::Label), "flow label created with an antecedent");
+        debug_assert!(graph <= crate::flownames::FLOW_GRAPH_MAX && flags.bits() >> crate::flownames::FLOW_GRAPH_SHIFT == 0);
+        let flags = FlowFlags::from_bits_retain(flags.bits() | graph << crate::flownames::FLOW_GRAPH_SHIFT);
         FlowNode { flags: OwnedCell::new(flags), text_index, node: OwnedCell::new(node), link: OwnedCell::new(P::key_opt(antecedent)) }
+    }
+    /// The flow graph of this node in its file's `FlowNameIndex`, or 0 (flownames.rs).
+    #[inline]
+    pub fn graph(&self) -> u32 {
+        self.flags.get().bits() >> crate::flownames::FLOW_GRAPH_SHIFT
     }
     pub fn flags(&self) -> FlowFlags {
         self.flags.get()

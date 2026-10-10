@@ -295,6 +295,23 @@ output. Environment switches, read once per process:
 testdata/flow-memo holds the hazard cases (each with tsgo's output); `cargo test -p tsrs_cli --test flow_memo` runs
 them with the memo on, off and in shadow mode.
 
+## Skipping flow walks nothing can narrow: `TSRS_FLOW_SKIP`
+
+The binder records per flow graph which reference paths its conditions, switches, assignments and assertion-candidate
+calls can narrow (`crates/tsrs_binder/src/flownames.rs`), and the checker skips a walk whose reference none of them
+reaches (`crates/tsrs_checker/src/flowskip.rs`, notes/perf-flow-skip-unnarrowed.md). On by default; it must never
+change output. Read once per process:
+
+- `TSRS_FLOW_SKIP=0`: off; the binder builds no index and every walk runs.
+- `TSRS_FLOW_SKIP=shadow`: every walk the index would skip runs anyway; a result other than the declared type panics
+  with the reference, its position and both types. Run it over the suite
+  (`TSRS_FLOW_SKIP=shadow tsrs-test run --suite all --baselines types,symbols --panic-summary`) and the corpora after
+  changing what a flow walk can match or narrow through (`narrowType` and its helpers, `isMatchingReference`,
+  `getTypeAtFlowAssignment`, `getTypeAtFlowCall`, the binder's flow nodes): the index must record every such path.
+
+testdata/flow-skip holds the cases (each with tsgo's output); `cargo test -p tsrs_cli --test flow_skip` runs them on,
+off and in shadow mode.
+
 ## The union front cache and its shadow mode: `TSRS_UNION_CACHE`
 
 `getUnionType` calls with two or more inputs and no origin first look in a small direct-mapped table per checker
