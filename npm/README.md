@@ -144,7 +144,8 @@ Wire contract the server has to speak (from the pinned `tsc/cmd/tsc/api.go`, `ts
    release version, exit code 2 on a type error), and uploads it as the `npm-wasm` artifact;
 4. assembles and packs the native packages with `npm/build.mjs`, uploads the tarballs as the `npm-packages` artifact,
    and publishes the platform packages, then the main package, then `@ts-rs/wasm`, with
-   `--access public --tag latest` (skipping any already on the registry, so a failed run can be re-run).
+   `--access public --tag latest` using npm trusted publishing (skipping any already on the registry, so a failed
+   run can be re-run). Releases publish directly, without a staged approval step.
 
 The conformance and fourslash gates run on the Linux release binaries (`bolt.sh`). The macOS binary gets only the
 smoke tests; `ci.yml` (Linux) gates the source, and the WebAssembly differential gate (`tools/wasm/gate.sh`) runs only
@@ -154,10 +155,12 @@ there.
 
 What maintainers must configure before the first release:
 
-- Repository secret `NPM_TOKEN` (Settings -> Secrets and variables -> Actions): an npm granular access token with
-  read and write access to `tsrs`, `@ts-rs/wasm` and the `@ts-rs/<os>-<arch>` platform packages.
-- The `@ts-rs` npm org must exist, and the token's account must have permission to publish its packages and the
-  unscoped `tsrs` package.
+- The `@ts-rs` npm org and each package must exist. Configure a GitHub Actions trusted publisher for `tsrs`,
+  `@ts-rs/wasm` and each `@ts-rs/<os>-<arch>` platform package: owner `maschwenk`, repository `tsrs`, workflow
+  filename `release.yml`, no environment name, with direct `npm publish` allowed.
+- The publish job uses npm 12.2.0 and `id-token: write` to authenticate through GitHub Actions OIDC. No npm publish
+  token or repository secret is required. See [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/)
+  for configuration and first-publish validation requirements.
 - Provenance: npm only accepts `--provenance` from public repositories. The workflow adds `--provenance` automatically
   when the repository is public and omits it while it is private.
 - Linux binaries are built on Ubuntu 22.04, so they need glibc >= 2.35 at most (a build on Debian 12 needed 2.34);
@@ -196,5 +199,4 @@ them keep working.
 
 - win32-x64: uncomment its matrix entry; Windows has never been built or run.
 - Gate the macOS release binary on the conformance suite too (the Linux builds already run it in `bolt.sh`).
-- Provenance: needs the repository to be public (or switch to npm trusted publishing).
 - Optionally target an older glibc for Linux (e.g. `cargo zigbuild --target x86_64-unknown-linux-gnu.2.17`).
