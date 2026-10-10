@@ -31,6 +31,13 @@ is type-checked, CI runs on pull requests, and the workspace is at 0.11.0. The i
   indexed-access chain (see "Measured and rejected"). Not tried: redesigning `getResolvedBaseConstraint` to resolve
   each type from the top (the note's option 3).
 
+## Pending review
+
+- **Resolver path scratch buffers** (`notes/perf-resolver-allocations.md`): reuse thread-local strings for
+  extension and module-suffix probes. Allocation calls fall 3.7% / 12.7% in the corresponding probes;
+  historical whole-project instructions fall 0.09% on xstate / 0.04% on VS Code. Retained for owner review;
+  below the usual landing thresholds, with deterministic Linux verification outstanding.
+
 ## Not verified yet
 
 - **The 32 GiB reservation outside macOS and GitHub runners: verified.** main ran in a Linux x86-64 dev sandbox

@@ -12,6 +12,7 @@ use crate::cache::{
     TypeRefDirectiveResolutionCache, TypeRefDirectiveResolutionCacheKey,
 };
 use crate::packagejson::{self, with_package_directory, InfoCache, InfoCacheEntry, InfoCacheEntryExt, JSONValueType, PackageJson, TypeValidatedField, VersionPaths};
+use crate::scratch::{with_path_buffer, PathBuffer};
 use crate::types::{
     Extensions, NodeResolutionFeatures, PackageId, ResolutionHost, ResolvedModule, ResolvedProjectReference, ResolvedTypeReferenceDirective, Resolver,
 };
@@ -1825,8 +1826,12 @@ impl<'r> ResolutionState<'r> {
     }
 
     fn try_extension(&mut self, extension: &str, extensionless: &str, resolved_using_ts_extension: bool) -> Option<Resolved> {
-        let file_name = format!("{}{}", extensionless, extension);
-        if let Some(path) = self.try_file(&file_name) {
+        let path = with_path_buffer(PathBuffer::Extension, |file_name| {
+            file_name.push_str(extensionless);
+            file_name.push_str(extension);
+            self.try_file(file_name)
+        });
+        if let Some(path) = path {
             return Some(Resolved {
                 path,
                 extension: extension.to_string(),
@@ -1850,13 +1855,18 @@ impl<'r> ResolutionState<'r> {
 
         let ext = tspath::try_get_extension_from_path(file_name);
         let file_name_no_extension = tspath::remove_extension(file_name, ext);
-        for suffix in module_suffixes {
-            let path = format!("{}{}{}", file_name_no_extension, suffix, ext);
-            if self.try_file_lookup(&path) {
-                return Some(path);
+        with_path_buffer(PathBuffer::Suffix, |path| {
+            for suffix in module_suffixes {
+                path.clear();
+                path.push_str(file_name_no_extension);
+                path.push_str(suffix);
+                path.push_str(ext);
+                if self.try_file_lookup(path) {
+                    return Some(path.clone());
+                }
             }
-        }
-        None
+            None
+        })
     }
 
     fn try_file_lookup(&mut self, file_name: &str) -> bool {
