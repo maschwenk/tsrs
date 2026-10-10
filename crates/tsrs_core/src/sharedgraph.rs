@@ -16,6 +16,8 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 
 use rustc_hash::FxHashMap;
 
+/// The system page size (`mprotect` granularity; every caller is unix-only).
+#[cfg(unix)]
 fn page_size() -> usize {
     // SAFETY: sysconf has no preconditions.
     unsafe { libc::sysconf(libc::_SC_PAGESIZE) as usize }
@@ -186,6 +188,8 @@ fn log_site(msg: &[u8]) {
     if !*ON.get_or_init(|| std::env::var("TSRS_SHARED_GRAPH_LOG_OVERRIDES").is_ok_and(|v| v == "1")) {
         return;
     }
+    #[cfg(not(unix))]
+    let _ = msg;
     #[cfg(unix)]
     {
         unsafe extern "C" {
