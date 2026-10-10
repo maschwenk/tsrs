@@ -183,7 +183,8 @@ So the non-PIE code unwinds, and BOLT's `-split-eh` (landing pads moved into the
 information the unwinder cannot use when the input is not PIE. bolt.sh now passes `-split-eh` only for a PIE input
 (`readelf -h`: `DYN`), so the aarch64 Linux binaries keep it. A fourth probe (Depot run `smw6n1l4rm`) ran the whole of
 bolt.sh, gates included, on A, on AN (A without `-split-eh`) and on DN (non-PIE without `-split-eh`). All three passed
-conformance (13,458 / 12,779 / 12,779) and fourslash (4,066 pass, 63 fail), and the byte comparison of tsrs.
+conformance (13,458 / 12,779 / 12,779) and fourslash (4,066 pass, 63 fail), and the byte comparison of tsrs. The
+release dry run with this bolt.sh (GitHub Actions run 38031904294) passed every job, the x86_64 gates included.
 
 | project | A | AN | DN | DN peak RSS |
 | --- | ---: | ---: | ---: | ---: |
