@@ -1,8 +1,64 @@
 use tsrs_ast::Kind;
-use tsrs_core::stringutil;
+use tsrs_core::{stringutil, LanguageVariant};
 
 use crate::utilities::normalize_jsdoc_type_source_text;
 use crate::Scanner;
+
+#[test]
+fn test_identifier_character_properties() {
+    for rune in -1..=0x110000 {
+        let start = stringutil::is_ascii_letter(rune)
+            || rune == '_' as i32
+            || rune == '$' as i32
+            || rune >= 128 && stringutil::is_unicode_identifier_start(rune);
+        let part = start || stringutil::is_digit(rune) || rune >= 128 && stringutil::is_unicode_identifier_part(rune);
+        assert_eq!(crate::is_identifier_start(rune), start, "start {rune:#x}");
+        assert_eq!(crate::is_identifier_part(rune), part, "part {rune:#x}");
+        assert_eq!(crate::is_identifier_part_ex(rune, LanguageVariant::JSX), part || rune == '-' as i32, "JSX {rune:#x}");
+    }
+    for rune in [i32::MIN, i32::MAX] {
+        assert!(!crate::is_identifier_start(rune));
+        assert!(!crate::is_identifier_part(rune));
+    }
+}
+
+#[test]
+fn test_identifier_text_ascii_and_unicode_boundaries() {
+    let reference = |name: &str, variant| {
+        let mut chars = name.chars();
+        let Some(first) = chars.next() else { return false };
+        crate::is_identifier_start(first) && chars.all(|ch| crate::is_identifier_part_ex(ch, variant))
+    };
+    for variant in [LanguageVariant::Standard, LanguageVariant::JSX] {
+        for len in 0..=26 {
+            let ascii = "a".repeat(len);
+            assert_eq!(crate::is_identifier_text(&ascii, variant), reference(&ascii, variant));
+            for ch in (0..128).map(|b| char::from(b as u8)).chain([
+                'µ', 'ख', '𐀀', '£', '৸', '𐄬', '\u{200c}', '\u{200d}', '\u{30fb}', '\u{ff65}', '\u{feff}', '\u{10ffff}',
+            ]) {
+                for index in 0..=len {
+                    let name = format!("{}{}{}", &ascii[..index], ch, &ascii[index..]);
+                    let expected = reference(&name, variant);
+                    assert_eq!(crate::is_identifier_text(&name, variant), expected, "{name:?} {variant:?}");
+                    if variant == LanguageVariant::Standard {
+                        assert_eq!(crate::is_valid_identifier(&name), expected, "{name:?}");
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn test_scan_identifier_ascii_table_and_unicode_tail() {
+    let mut scanner = Scanner::new();
+    scanner.set_text("a $ _ A0 abcdefghijklmnopqrstuvwxyz µ aµख𐀀 a\u{200c}\u{200d} a\\u0062");
+    for name in ["a", "$", "_", "A0", "abcdefghijklmnopqrstuvwxyz", "µ", "aµख𐀀", "a\u{200c}\u{200d}", "ab"] {
+        assert_eq!(scanner.scan(), Kind::Identifier);
+        assert_eq!(scanner.token_value(), name);
+    }
+    assert_eq!(scanner.scan(), Kind::EndOfFile);
+}
 
 #[test]
 fn test_scan_string_preserves_lone_surrogates() {

@@ -319,17 +319,27 @@ pub struct Scanner {
 
 pub(crate) const RUNE_SELF: i32 = 0x80;
 
-/// `[A-Za-z0-9_$]` by byte.
-static ASCII_IDENTIFIER_PART: [bool; 256] = {
-    let mut t = [false; 256];
+const ID_START: u8 = 1;
+const ID_CONTINUE: u8 = 2;
+
+#[repr(align(64))]
+struct AsciiIdentifierFlags([u8; 128]);
+
+// Share start/part flags in two aligned cache lines. Non-ASCII bytes take the Unicode path.
+static ASCII_IDENTIFIER_FLAGS: AsciiIdentifierFlags = AsciiIdentifierFlags({
+    let mut t = [0; 128];
     let mut b = 0;
     while b < 128 {
         let c = b as u8;
-        t[b] = c.is_ascii_alphanumeric() || c == b'_' || c == b'$';
+        if c.is_ascii_alphabetic() || c == b'_' || c == b'$' {
+            t[b] = ID_START | ID_CONTINUE;
+        } else if c.is_ascii_digit() {
+            t[b] = ID_CONTINUE;
+        }
         b += 1;
     }
     t
-};
+});
 pub(crate) const RUNE_ERROR: i32 = 0xFFFD;
 
 /// Go `utf8.DecodeRuneInString` over raw bytes: `(RuneError, 0)` for empty input,
@@ -1783,9 +1793,9 @@ impl Scanner {
         let identifier_start = self.state.pos;
         let ch = self.char();
         // Fast path for simple ASCII identifiers
-        if variant != IdentifierVariant::JSX && (stringutil::is_ascii_letter(ch) || ch == '_' as i32 || ch == '$' as i32) {
+        if variant != IdentifierVariant::JSX && (ch as u32) < RUNE_SELF as u32 && is_identifier_start_ascii(ch as u8) {
             self.state.pos += 1;
-            self.scan_ascii_while(|b| ASCII_IDENTIFIER_PART[b as usize]);
+            self.scan_ascii_while(is_identifier_part_ascii);
             let ch = self.char();
             if ch < RUNE_SELF && ch != '\\' as i32 {
                 self.state.token_value = self.slice(start, self.state.pos);
@@ -2645,15 +2655,7 @@ pub fn get_identifier_token(str: &str) -> Kind {
 }
 
 pub fn is_valid_identifier(s: &str) -> bool {
-    if s.is_empty() {
-        return false;
-    }
-    for (i, ch) in s.char_indices() {
-        if i == 0 && !is_identifier_start(ch) || i != 0 && !is_identifier_part(ch) {
-            return false;
-        }
-    }
-    true
+    crate::utilities::is_identifier_text(s, LanguageVariant::Standard)
 }
 
 // Section 6.1.4
@@ -2664,7 +2666,20 @@ pub(crate) fn is_word_character(ch: i32) -> bool {
 #[inline]
 pub fn is_identifier_start(ch: impl stringutil::AsRune) -> bool {
     let rune = ch.as_rune();
-    stringutil::is_ascii_letter(ch) || rune == '_' as i32 || rune == '$' as i32 || rune >= RUNE_SELF && stringutil::is_unicode_identifier_start(ch)
+    if (rune as u32) < RUNE_SELF as u32 {
+        return is_identifier_start_ascii(rune as u8);
+    }
+    stringutil::is_unicode_identifier_start(ch)
+}
+
+#[inline]
+pub(crate) fn is_identifier_start_ascii(ch: u8) -> bool {
+    ASCII_IDENTIFIER_FLAGS.0[ch as usize] & ID_START != 0
+}
+
+#[inline]
+pub(crate) fn is_identifier_part_ascii(ch: u8) -> bool {
+    ASCII_IDENTIFIER_FLAGS.0[ch as usize] & ID_CONTINUE != 0
 }
 
 #[inline]
@@ -2675,10 +2690,11 @@ pub fn is_identifier_part(ch: impl stringutil::AsRune) -> bool {
 #[inline]
 pub fn is_identifier_part_ex(ch: impl stringutil::AsRune, language_variant: LanguageVariant) -> bool {
     let rune = ch.as_rune();
-    is_word_character(rune)
-        || rune == '$' as i32
-        || rune >= RUNE_SELF && stringutil::is_unicode_identifier_part(ch)
-        || language_variant == LanguageVariant::JSX && rune == '-' as i32 // ":" is part of JSXNamespacedName, but not JSXIdentifier.
+    if (rune as u32) < RUNE_SELF as u32 {
+        return is_identifier_part_ascii(rune as u8)
+            || language_variant == LanguageVariant::JSX && rune == '-' as i32; // ":" is part of JSXNamespacedName, but not JSXIdentifier.
+    }
+    stringutil::is_unicode_identifier_part(ch)
 }
 
 fn token_to_text() -> &'static [&'static str] {

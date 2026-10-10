@@ -2,7 +2,7 @@ use tsrs_ast as ast;
 use tsrs_ast::{Kind, Node, NodeFlags, NodeList, SourceFile, TokenFlags};
 use tsrs_core::{stringutil, LanguageVariant, P};
 
-use crate::scanner::{decode_char, decode_rune, is_identifier_part_ex, is_identifier_start, skip_trivia, text_to_keyword};
+use crate::scanner::{decode_rune, is_identifier_part_ascii, is_identifier_part_ex, is_identifier_start, is_identifier_start_ascii, skip_trivia, text_to_keyword};
 
 pub(crate) fn token_is_identifier_or_keyword(token: Kind) -> bool {
     token >= Kind::Identifier
@@ -135,21 +135,66 @@ pub fn declaration_name_to_string(name: Option<P<Node>>) -> String {
 }
 
 pub fn is_identifier_text(name: &str, language_variant: LanguageVariant) -> bool {
-    let b = name.as_bytes();
-    let (ch, mut size) = decode_char(b);
-    if !is_identifier_start(ch) {
-        return false;
+    match language_variant {
+        LanguageVariant::JSX => is_identifier_text_impl::<true>(name),
+        LanguageVariant::Standard => is_identifier_text_impl::<false>(name),
     }
-    let mut i = size;
-    while i < b.len() {
-        let (ch, s) = decode_char(&b[i..]);
-        size = s;
-        if !is_identifier_part_ex(ch, language_variant) {
+}
+
+fn is_identifier_text_impl<const JSX: bool>(name: &str) -> bool {
+    let bytes = name.as_bytes();
+    let Some(&first) = bytes.first() else { return false };
+    let mut chars = if first.is_ascii() {
+        if !is_identifier_start_ascii(first) {
             return false;
         }
-        i += size;
-    }
-    true
+        let mut index = 1;
+        'ascii: loop {
+            let remaining = &bytes[index..];
+            if let Some(next) = remaining.first_chunk::<8>() {
+                if u64::from_ne_bytes(*next) & 0x8080_8080_8080_8080 != 0 {
+                    break;
+                }
+                for &b in next {
+                    if !is_identifier_part_ascii(b) && !(JSX && b == b'-') {
+                        return false;
+                    }
+                }
+                index += 8;
+            } else if let Some(next) = remaining.first_chunk::<4>() {
+                if u32::from_ne_bytes(*next) & 0x8080_8080 != 0 {
+                    break;
+                }
+                for &b in next {
+                    if !is_identifier_part_ascii(b) && !(JSX && b == b'-') {
+                        return false;
+                    }
+                }
+                index += 4;
+            } else {
+                for &b in remaining {
+                    if !b.is_ascii() {
+                        break 'ascii;
+                    }
+                    if !is_identifier_part_ascii(b) && !(JSX && b == b'-') {
+                        return false;
+                    }
+                    index += 1;
+                }
+                return true;
+            }
+        }
+        // Every consumed byte was ASCII, so index is still a UTF-8 character boundary.
+        name[index..].chars()
+    } else {
+        let mut chars = name.chars();
+        if !is_identifier_start(chars.next().unwrap()) {
+            return false;
+        }
+        chars
+    };
+    let language_variant = if JSX { LanguageVariant::JSX } else { LanguageVariant::Standard };
+    chars.all(|ch| is_identifier_part_ex(ch, language_variant))
 }
 
 pub fn is_intrinsic_jsx_name(name: &str) -> bool {
