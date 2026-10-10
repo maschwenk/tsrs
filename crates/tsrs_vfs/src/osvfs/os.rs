@@ -3,7 +3,7 @@ use std::io;
 use std::sync::LazyLock;
 use std::time::SystemTime;
 
-use tsrs_core::tspath;
+use tsrs_core::{stringutil, tspath};
 
 use crate::internal::{self, Common, IoDirEntry, IoFS};
 use crate::{Entries, FileInfo, FileMode, FsError, FS};
@@ -98,33 +98,17 @@ static IS_FILE_SYSTEM_CASE_SENSITIVE: LazyLock<bool> = LazyLock::new(|| {
 
 // Convert all lowercase chars to uppercase, and vice-versa
 fn swap_case(str: &str) -> String {
-    str.chars()
-        .map(|r| {
-            let upper = simple_to_upper(r);
-            if upper == r {
-                simple_to_lower(r)
-            } else {
-                upper
-            }
-        })
-        .collect()
-}
-
-// unicode.ToUpper / unicode.ToLower map a rune to a single rune.
-fn simple_to_upper(r: char) -> char {
-    let mut it = r.to_uppercase();
-    match (it.next(), it.next()) {
-        (Some(c), None) => c,
-        _ => r,
+    let mut out = String::with_capacity(str.len());
+    for r in str.chars() {
+        let r = r as stringutil::Rune;
+        let upper = stringutil::unicode_to_upper(r);
+        if upper == r {
+            stringutil::push_rune(&mut out, stringutil::unicode_to_lower(r));
+        } else {
+            stringutil::push_rune(&mut out, upper);
+        }
     }
-}
-
-fn simple_to_lower(r: char) -> char {
-    let mut it = r.to_lowercase();
-    match (it.next(), it.next()) {
-        (Some(c), None) => c,
-        _ => r,
-    }
+    out
 }
 
 impl FS for OsFS {

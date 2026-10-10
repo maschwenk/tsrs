@@ -132,3 +132,9 @@ fn test_clean() {
         assert_eq!(clean(input), want, "clean({:?})", input);
     }
 }
+
+// Not in Go: swapCase uses unicode.ToUpper / unicode.ToLower, the simple mappings (U+1FB3 -> U+1FBC, U+0130 -> 'i').
+#[test]
+fn test_swap_case_simple_mapping() {
+    assert_eq!(swap_case("\u{1FB3}\u{130}aB\u{DF}"), "\u{1FBC}iAb\u{DF}");
+}

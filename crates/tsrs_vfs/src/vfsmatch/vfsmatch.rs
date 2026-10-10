@@ -1,5 +1,5 @@
 use rustc_hash::{FxHashMap, FxHashSet};
-use tsrs_core::tspath;
+use tsrs_core::{stringutil, tspath};
 
 use crate::{Entries, FS};
 
@@ -417,7 +417,7 @@ impl GlobPattern {
             return false;
         }
         // Avoid allocating via strings.ToLower; compare suffix case-insensitively.
-        equal_fold(&f[f.len() - MIN_JS.len()..], MIN_JS.as_bytes())
+        stringutil::equal_fold_bytes(&f[f.len() - MIN_JS.len()..], MIN_JS.as_bytes())
     }
 
     fn pattern_mentions_min_suffix(&self, segs: &[Segment]) -> bool {
@@ -425,7 +425,7 @@ impl GlobPattern {
             if seg.kind != SegmentKind::Literal {
                 continue;
             }
-            let lit = if !self.case_sensitive { to_lower(&seg.literal) } else { seg.literal.clone() };
+            let lit = if !self.case_sensitive { stringutil::go_strings_to_lower(&seg.literal) } else { seg.literal.clone() };
             if lit.contains(".min.js") || lit.contains(".min.") {
                 return true;
             }
@@ -438,7 +438,7 @@ impl GlobPattern {
         if self.case_sensitive {
             return a == b;
         }
-        equal_fold(a, b)
+        stringutil::equal_fold_bytes(a, b)
     }
 }
 
@@ -522,9 +522,9 @@ fn is_hidden_path(name: &str) -> bool {
 fn is_package_folder(name: &str) -> bool {
     let b = name.as_bytes();
     match b.len() {
-        12 => equal_fold(b, b"node_modules"),
-        13 => equal_fold(b, b"jspm_packages"),
-        16 => equal_fold(b, b"bower_components"),
+        12 => stringutil::equal_fold_bytes(b, b"node_modules"),
+        13 => stringutil::equal_fold_bytes(b, b"jspm_packages"),
+        16 => stringutil::equal_fold_bytes(b, b"bower_components"),
         _ => false,
     }
 }
@@ -555,83 +555,6 @@ fn decode_rune(b: &[u8]) -> (char, usize) {
         Ok(s) => (s.chars().next().unwrap(), n),
         Err(_) => (char::REPLACEMENT_CHARACTER, 1),
     }
-}
-
-fn simple_fold_eq(sr: char, tr: char) -> bool {
-    fn single(mut it: impl Iterator<Item = char>, r: char) -> char {
-        match (it.next(), it.next()) {
-            (Some(c), None) => c,
-            _ => r,
-        }
-    }
-    single(sr.to_lowercase(), sr) == single(tr.to_lowercase(), tr) || single(sr.to_uppercase(), sr) == single(tr.to_uppercase(), tr)
-}
-
-// strings.EqualFold over bytes (which may be cut mid-rune, as Go slices are).
-fn equal_fold(s: &[u8], t: &[u8]) -> bool {
-    // ASCII fast path
-    let mut i = 0;
-    while i < s.len() && i < t.len() {
-        let mut sr = s[i];
-        let mut tr = t[i];
-        if (sr | tr) >= 0x80 {
-            return equal_fold_unicode(&s[i..], &t[i..]);
-        }
-        i += 1;
-        if tr == sr {
-            continue;
-        }
-        if tr < sr {
-            std::mem::swap(&mut tr, &mut sr);
-        }
-        if sr.is_ascii_uppercase() && tr == sr + b'a' - b'A' {
-            continue;
-        }
-        return false;
-    }
-    s.len() == t.len()
-}
-
-fn equal_fold_unicode(mut s: &[u8], mut t: &[u8]) -> bool {
-    while !s.is_empty() {
-        let (mut sr, size) = decode_rune(s);
-        s = &s[size..];
-        if t.is_empty() {
-            return false;
-        }
-        let (mut tr, tsize) = decode_rune(t);
-        t = &t[tsize..];
-        if tr == sr {
-            continue;
-        }
-        if tr < sr {
-            std::mem::swap(&mut tr, &mut sr);
-        }
-        if (tr as u32) < 0x80 {
-            if sr.is_ascii_uppercase() && tr as u32 == sr as u32 + 'a' as u32 - 'A' as u32 {
-                continue;
-            }
-            return false;
-        }
-        if simple_fold_eq(sr, tr) {
-            continue;
-        }
-        return false;
-    }
-    t.is_empty()
-}
-
-// strings.ToLower with unicode.ToLower's one-rune-to-one-rune mapping.
-fn to_lower(s: &str) -> String {
-    s.chars()
-        .map(|c| {
-            let mut it = c.to_lowercase();
-            match (it.next(), it.next()) {
-                (Some(l), None) => l,
-                _ => c,
-            }
-        })
-        .collect()
 }
 
 // globMatcher combines include and exclude patterns for file matching.
