@@ -2405,8 +2405,12 @@ impl Checker {
         if is_late_bound_name(name) {
             return self.get_applicable_index_info(t, self.es_symbol_type);
         }
+        let index_infos = self.get_index_infos_of_type(t);
+        if index_infos.is_empty() {
+            return None; // most types: the name's literal type is not needed
+        }
         let key_type = self.get_string_literal_type(name);
-        self.get_applicable_index_info(t, key_type)
+        self.find_applicable_index_info(&index_infos, key_type)
     }
 
     // checker.go:19363
