@@ -2413,8 +2413,8 @@ pub struct constructorAccessibilityError {
 #[derive(Clone, Default)]
 pub struct CallState {
     pub node: Option<P<Node>>,
-    pub type_arguments: Vec<P<Node>>,
-    pub args: Vec<P<Node>>,
+    pub type_arguments: &'static [P<Node>],
+    pub args: std::borrow::Cow<'static, [P<Node>]>,
     pub candidates: Vec<P<Signature>>,
     pub arg_check_mode: CheckMode,
     pub is_single_non_generic_candidate: bool,

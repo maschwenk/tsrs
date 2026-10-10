@@ -325,11 +325,10 @@ impl Checker {
         let mut s = CallState::default();
         s.node = Some(node);
         if !is_decorator && !is_instanceof && !is_super_call(node) && !is_jsx_opening_fragment(node) {
-            s.type_arguments = node.type_arguments().to_vec();
+            s.type_arguments = node.type_arguments();
             // We already perform checking on the type arguments on the class declaration itself.
             if is_tagged_template || is_jsx_opening_or_self_closing_element || node.expression().unwrap().kind() != Kind::SuperKeyword {
-                let type_arguments = s.type_arguments.clone();
-                self.check_source_elements(&type_arguments);
+                self.check_source_elements(s.type_arguments);
             }
         }
         s.candidates = self.reorder_candidates(signatures, call_chain_flags);
@@ -363,7 +362,7 @@ impl Checker {
         let mut some_context_sensitive = false;
         if !is_decorator && !s.is_single_non_generic_candidate {
             let args = s.args.clone();
-            for arg in args {
+            for &arg in args.iter() {
                 if self.is_context_sensitive(arg) {
                     some_context_sensitive = true;
                     break;
@@ -549,7 +548,7 @@ impl Checker {
             }
             return Some(candidate);
         }
-        let type_arguments = s.type_arguments.clone();
+        let type_arguments = s.type_arguments;
         for candidate_index in 0..s.candidates.len() {
             let candidate = s.candidates[candidate_index];
             if !self.has_correct_type_argument_arity(candidate, &type_arguments) || !self.has_correct_arity(node, &args, candidate, s.signature_help_trailing_comma) {
@@ -1350,7 +1349,7 @@ impl Checker {
         } else if let Some(candidate_for_type_argument_error) = s.candidate_for_type_argument_error {
             self.check_type_arguments(candidate_for_type_argument_error, s_node.type_arguments(), true /*reportErrors*/, head_message);
         } else if !is_jsx_opening_fragment(node) {
-            let type_arguments = s.type_arguments.clone();
+            let type_arguments = s.type_arguments;
             let mut signatures_with_correct_type_argument_arity = Vec::new();
             for &sig in signatures {
                 if self.has_correct_type_argument_arity(sig, &type_arguments) {
