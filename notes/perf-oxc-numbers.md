@@ -2,14 +2,16 @@
 
 ## Decision
 
-Measured and not applied. Neither Dragonbox formatting alone nor formatting plus Oxc-style numeric-literal
-conversion established a qualifying whole-project improvement. After repeating the noisy xstate measurement,
-the largest median paired single-threaded instruction reduction was 0.030%; default-mode peak RSS was essentially
-unchanged. The production code and dependencies were restored. This note records the experiment, not a shipped
-change; capability counts and the README table are unchanged.
+Applied at the owner's explicit request on 2026-10-11 to align numeric conversion and formatting with Oxc,
+despite not clearing the performance gate. Neither Dragonbox formatting alone nor formatting plus Oxc-style
+numeric-literal conversion established a qualifying whole-project improvement. After repeating the noisy xstate
+measurement, the largest median paired single-threaded instruction reduction was 0.030%; default-mode peak RSS
+was essentially unchanged. Both changes are retained without a speedup claim. Capability counts and the README
+table are unchanged.
 
-Revisit only with a profile showing numeric conversion as a material cost on a configured benchmark project, or
-new evidence of a qualifying end-to-end improvement. A formatter microbenchmark alone does not meet the gate.
+Further performance work needs a profile showing numeric conversion as a material cost on a configured benchmark
+project, or new evidence of a qualifying end-to-end improvement. A formatter microbenchmark alone does not meet
+the gate.
 
 ## Candidates
 
@@ -104,5 +106,5 @@ for both. Nothing establishes the 1% instruction, 2% headline wall-time or 5% de
 
 Local experiment artifacts remain under `target/scratch/numeric-alignment/` (git-ignored): the numeric-only
 `candidate.patch`, candidate sources and binaries, `measurements-base-format.json`, `measurements-base-both.json`,
-`measurements-repeat-base-format-both.json`, measurement and oracle scripts, and validation logs. Applying the
-patch to the same starting state recreates the experiment; it is deliberately not part of production code.
+`measurements-repeat-base-format-both.json`, measurement and oracle scripts, and validation logs. These preserve
+the original comparison; the combined candidate is now applied to the working source.

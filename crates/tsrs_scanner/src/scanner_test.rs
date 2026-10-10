@@ -70,6 +70,42 @@ fn test_errors_are_buffered_in_report_order() {
 }
 
 #[test]
+fn test_numeric_conversion_preserves_recovery() {
+    // Values, flags and errors checked against the pinned Go scanner oracle.
+    for (text, value, flags, error) in [
+        ("0x20000000000001", "9007199254740992", 64, None),
+        ("0o400000000000000001", "9007199254740992", 256, None),
+        ("9007199254740993", "9007199254740992", 0, None),
+        ("18446744073709551616", "18446744073709552000", 0, None),
+        ("1e21", "1e+21", 16, None),
+        ("1e-9999", "0", 16, None),
+        ("1e9999", "Infinity", 16, None),
+        ("1__2", "12", 16896, Some((6189, 2, 1))),
+        ("0x", "0", 64, Some((1125, 2, 0))),
+        ("1e+", "1", 16, Some((1124, 3, 0))),
+        ("0b1__0", "2", 640, Some((6189, 4, 1))),
+        ("0777777777777777777777777", "9223372036854775807", 32, Some((1121, 0, 25))),
+    ] {
+        let mut s = Scanner::new();
+        s.set_text(text);
+        s.set_on_error(true);
+        // Repeat with the same scanner to cover both conversion and cache hits.
+        for _ in 0..2 {
+            s.set_text(text);
+            assert_eq!(s.scan(), Kind::NumericLiteral, "{text}");
+            assert_eq!(s.token_value(), value, "{text}");
+            assert_eq!(s.token_flags().bits(), flags, "{text}");
+            assert_eq!((s.token_start(), s.token_end()), (0, text.len() as i32), "{text}");
+            let errors = s.take_errors();
+            assert_eq!(errors.len(), usize::from(error.is_some()), "{text}");
+            if let Some((code, start, length)) = error {
+                assert_eq!((errors[0].message.code(), errors[0].start, errors[0].length), (code, start, length), "{text}");
+            }
+        }
+    }
+}
+
+#[test]
 fn test_is_jsdoc_type_expression_or_child() {
     use tsrs_ast::{NodeFactory, NodeFlags};
     let f = NodeFactory::default();

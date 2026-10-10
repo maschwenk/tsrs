@@ -130,8 +130,9 @@ is type-checked, CI runs on pull requests, and the workspace is at 0.11.0. The i
   pinned Go and all existing passing baselines, but no qualifying gain on Compiler, Compiler-Unions, xstate-main
   or vscode. After repeating a noisy xstate sample, the largest median paired single-threaded instruction
   reduction was 0.030%; default peak RSS was essentially unchanged (macOS screening, not the Linux instruction
-  gate). Neither candidate was applied. Revisit only with a numeric-conversion profile or new evidence of a
-  qualifying whole-project improvement.
+  gate). Initially rejected on performance, then both changes were applied at the owner's explicit request on
+  2026-10-11 to align with Oxc. These measurements do not establish a speedup; further performance work needs a
+  numeric-conversion profile or new evidence of a qualifying whole-project improvement.
 - `mimalloc-safe 0.1.67` without its `v3` feature (notes/perf-mimalloc-safe.md): the crate defaults to mimalloc
   v2.5.2, unlike the old crate's v3.3.2 default. On macOS arm64 it adds about 4% peak RSS at the default checker
   count on both Compiler workloads; the prior large Linux measurement found v2 3-14% slower. The migration enables

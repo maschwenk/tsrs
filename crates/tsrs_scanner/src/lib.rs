@@ -1,3 +1,4 @@
+mod number;
 mod regexp;
 mod scanner;
 mod unicodeproperties;

@@ -21,6 +21,7 @@ bitflags = "2"
 rayon = "1"
 memchr = "2"
 simdutf8 = { version = "0.1.5", features = ["aarch64_neon"] }
+dragonbox_ecma = "0.1.12"
 mimalloc-safe = { version = "0.1.67", features = ["v3"] }
 # Pin exactly: 1.1.2 uses Unicode 15.1.0, matching the pinned TypeScript identifier tables.
 # Newer Unicode versions accept additional identifier characters; upgrade only when TypeScript's tables change.
