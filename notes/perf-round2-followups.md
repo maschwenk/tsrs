@@ -385,6 +385,13 @@ with the switch off, which is why it is not in the default build.
   inlined); a 256-bit Bloom filter of the keys of indexed symbol tables (+0.25%: `SymbolMap::search` and `insert`
   both grew); rejecting different-flag pairs before the identity relation in inference's exact matching (+0.03%:
   nearly all pairs are object types with equal flags).
+- Heap allocation churn (notes/perf-heap-churn.md, landed): vscode single-threaded 41.3M -> 22.3M heap allocations,
+  -2.0% to -4.0% instructions on five projects, from returning stored names and lists instead of copies (accessed
+  property names, effective call arguments, path helpers), arena concatenation of symbol declarations, two pools and
+  two `SmallVec`s. Do not redo those sites. Left, with the reason, in the note: `SymbolMap` growth (memory-tuned),
+  `SymbolTable` snapshots (callees may mutate the table), results Go allocates too, `get_text_of_node`'s copy
+  (58 callers). The heap profile's `TSRS_HEAP_PROFILE=count` names the caller's caller of each allocation as built
+  (the note has the fix used); check a site's attribution before trusting it.
 
 ## The lint ratchet
 
