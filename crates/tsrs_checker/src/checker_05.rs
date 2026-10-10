@@ -425,6 +425,7 @@ impl Checker {
             if let Some(out) = candidates_out_array.as_deref_mut() {
                 out.clone_from(&s.candidates);
             }
+            self.free_signature_list(std::mem::take(&mut s.candidates));
             return result;
         }
         let args = s.args.clone();
@@ -453,7 +454,16 @@ impl Checker {
             }
             self.report_call_resolution_errors(node, &mut s, signatures, head_message);
         }
+        self.free_signature_list(std::mem::take(&mut s.candidates));
         result
+    }
+
+    // Rust-only: returns a `reorder_candidates` list to the pool (Go's lists are garbage once resolveCall returns).
+    fn free_signature_list(&mut self, mut list: Vec<P<Signature>>) {
+        if list.capacity() <= 256 {
+            list.clear();
+            self.free_signature_lists.push(list);
+        }
     }
 
     // checker.go:9145
@@ -464,7 +474,8 @@ impl Checker {
         let mut cutoff_index: usize = 0;
         let mut splice_index: usize;
         let mut specialized_index: i32 = -1;
-        let mut result: Vec<P<Signature>> = Vec::with_capacity(signatures.len());
+        let mut result: Vec<P<Signature>> = self.free_signature_lists.pop().unwrap_or_default();
+        result.reserve(signatures.len());
         for &signature in signatures {
             let mut signature = signature;
             let mut symbol: Option<P<Symbol>> = None;
@@ -2085,7 +2096,8 @@ impl Checker {
     // checker.go:10502
     pub(crate) fn get_contextual_call_signature(&mut self, t: P<Type>, node: P<Node>) -> Option<P<Signature>> {
         let signatures = self.get_signatures_of_type(t, SignatureKind::Call);
-        let mut applicable_by_arity = Vec::new();
+        // Almost always one signature, so it stays inline.
+        let mut applicable_by_arity: smallvec::SmallVec<[P<Signature>; 4]> = smallvec::SmallVec::new();
         for &s in signatures {
             if !self.is_arity_smaller(s, node) {
                 applicable_by_arity.push(s);

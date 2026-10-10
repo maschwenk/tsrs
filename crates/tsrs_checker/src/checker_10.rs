@@ -391,10 +391,13 @@ impl Checker {
                 if this_argument.is_none() {
                     this_argument = target.as_interface_type().this_type.get();
                 }
-                let mut args = Vec::with_capacity(type_arguments.len() + 1);
+                // A pooled buffer: create_type_reference copies the list only when it creates the reference.
+                let mut args = self.free_type_lists.pop().unwrap_or_default();
                 args.extend_from_slice(type_arguments);
                 args.push(this_argument.unwrap());
-                return self.create_type_reference(target, &args);
+                let result = self.create_type_reference(target, &args);
+                self.free_type_list(args);
+                return result;
             }
             return t;
         } else if t.flags().intersects(TypeFlags::Intersection) {
