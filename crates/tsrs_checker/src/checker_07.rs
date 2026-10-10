@@ -1076,7 +1076,12 @@ impl Checker {
             if t.flags().intersects(TypeFlags::Union) && t.object_flags().intersects(ObjectFlags::PrimitiveUnion) {
                 return false;
             }
-            return t.types().iter().any(|&s| self.is_const_type_variable(Some(s), depth));
+            for &s in t.types() {
+                if self.may_be_const_type_variable(s) && self.is_const_type_variable(Some(s), depth) {
+                    return true;
+                }
+            }
+            return false;
         } else if t.flags().intersects(TypeFlags::IndexedAccess) {
             return self.is_const_type_variable(t.as_indexed_access_type().object_type.get(), depth + 1);
         } else if t.flags().intersects(TypeFlags::Conditional) {
@@ -1095,6 +1100,17 @@ impl Checker {
             }
         }
         false
+    }
+
+    /// False for a type `is_const_type_variable` answers false for at every depth, tested without the call
+    /// (a union's constituents: mostly object types and literals).
+    #[inline]
+    fn may_be_const_type_variable(&mut self, t: P<Type>) -> bool {
+        let flags = t.flags();
+        if flags.intersects(TypeFlags::TypeParameter | TypeFlags::UnionOrIntersection | TypeFlags::IndexedAccess | TypeFlags::Conditional | TypeFlags::Substitution) {
+            return true;
+        }
+        t.object_flags().intersects(ObjectFlags::Mapped) || self.is_generic_tuple_type(t)
     }
 
     // checker.go:13908
