@@ -2132,12 +2132,16 @@ impl Relater {
         let numeric_names_only = is_tuple_type(source) && is_tuple_type(target);
         // `found` is by position in `properties` when it covers them all and nothing is excluded.
         let found = if found.len() == properties.len() && excluded_properties.len() == 0 { found } else { &[] };
+        let resolved_source = c.resolved_property_source(source);
         for (i, target_prop) in exclude_properties(&properties, excluded_properties).iter().copied().enumerate() {
             let name = target_prop.name();
             if !target_prop.flags().intersects(SymbolFlags::Prototype) && (!numeric_names_only || is_numeric_literal_name(name) || name == "length") && (!optionals_only || target_prop.flags().intersects(SymbolFlags::Optional)) {
                 let source_prop = match found.get(i) {
                     Some(&Some(source_prop)) => source_prop,
-                    _ => c.get_property_of_type(source, name),
+                    _ => match &resolved_source {
+                        Some(resolved_source) => c.get_resolved_property(resolved_source, name),
+                        None => c.get_property_of_type(source, name),
+                    },
                 };
                 if let Some(source_prop) = source_prop {
                     if source_prop != target_prop {

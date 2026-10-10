@@ -1397,6 +1397,7 @@ impl Checker {
         };
         // Only full lookups are worth recording (has_property_of_type does not instantiate).
         let mut found = found.filter(|_| !lazy && !self.lazy_has_prop);
+        let resolved_source = self.resolved_property_source(source);
         for &target_prop in properties.iter() {
             // tsrs: the flag test first, the declaration-reading test only for a property that is looked up (both
             // only skip it).
@@ -1409,6 +1410,8 @@ impl Checker {
                 let source_prop = if (lazy || self.lazy_has_prop) && !match_discriminant_properties {
                     // notes/mem-lazy.md L9/L10: only whether the source has the property matters below.
                     if self.has_property_of_type(source, target_prop.name()) { Some(target_prop) } else { None }
+                } else if let Some(resolved_source) = &resolved_source {
+                    self.get_resolved_property(resolved_source, target_prop.name())
                 } else {
                     self.get_property_of_type(source, target_prop.name())
                 };

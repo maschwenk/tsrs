@@ -2270,6 +2270,36 @@ impl Checker {
         None
     }
 
+    /// `t`'s resolved member table, for a loop that looks up many names in `t` with `get_resolved_property` (the
+    /// relater's walks over a target's properties): `t` must be a plain object type (its own reduced apparent type)
+    /// with resolved members and no module symbol, so that `get_property_of_type` answers from the table alone.
+    pub(crate) fn resolved_property_source(&mut self, t: P<Type>) -> Option<ResolvedPropertySource> {
+        if t.flags() != TypeFlags::Object
+            || t.object_flags().intersects(ObjectFlags::Mapped)
+            || !t.object_flags_lazy().intersects(ObjectFlags::MembersResolved)
+            || t.symbol().is_some_and(|s| s.flags().intersects(SymbolFlags::ValueModule))
+        {
+            return None;
+        }
+        Some(ResolvedPropertySource { t, members: t.as_structured_type().members(), epoch: self.members_reset_epoch })
+    }
+
+    /// `get_property_of_type(source.t, name)`: a value member or a name no augmenting global type has is answered
+    /// from the table; anything else (and any lookup after a type's members were reset) takes the full path.
+    #[inline]
+    pub(crate) fn get_resolved_property(&mut self, source: &ResolvedPropertySource, name: &str) -> Option<P<Symbol>> {
+        if source.epoch == self.members_reset_epoch {
+            let key = HashedName::new(name);
+            match source.members.and_then(|m| m.lookup_hashed(key)) {
+                Some(symbol) if symbol.flags().intersects(SymbolFlags::Value) => return Some(symbol),
+                Some(_) => {}
+                None if !self.may_be_augment_member(key) => return None,
+                None => {}
+            }
+        }
+        self.get_property_of_type(source.t, name)
+    }
+
     /// `program.get_emit_module_format_of_file(file)`, remembered for the last file: the checker asks it for the
     /// file being checked, per import, export and declaration, and the program answers by hashing the file's path.
     #[inline]
@@ -3265,4 +3295,11 @@ impl Checker {
         }
         t.as_interface_type().resolved_base_types.set(alloc_vec(vec![reduced_base_type]));
     }
+}
+
+/// See `Checker::resolved_property_source`.
+pub(crate) struct ResolvedPropertySource {
+    t: P<Type>,
+    members: Option<P<SymbolTable>>,
+    epoch: u32,
 }
