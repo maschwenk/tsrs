@@ -34,10 +34,15 @@ struct ObjectLiteralState {
 
 impl ObjectLiteralState {
     fn properties_table(&self) -> P<SymbolTable> {
+        self.properties_table_for(0)
+    }
+
+    /// `properties_table`, made with room for `capacity` members (the literal's members still to come) if new.
+    fn properties_table_for(&self, capacity: usize) -> P<SymbolTable> {
         match self.properties_table.get() {
             Some(table) => table,
             None => {
-                let table = SymbolTable::new();
+                let table = SymbolTable::with_capacity(capacity);
                 self.properties_table.set(Some(table));
                 table
             }
@@ -516,7 +521,7 @@ impl Checker {
                 }
             }
         }
-        for &member_decl in node.properties() {
+        for (member_index, &member_decl) in node.properties().iter().enumerate() {
             let mut member = self.get_symbol_of_declaration(member_decl);
             let mut computed_name_type: Option<P<Type>> = None;
             if let Some(name) = member_decl.name() {
@@ -645,7 +650,7 @@ impl Checker {
                     }
                 }
             } else {
-                st.properties_table().set(member.name(), member);
+                st.properties_table_for(node.properties().len() - member_index).set(member.name(), member);
             }
             st.properties_array.push(member);
         }
