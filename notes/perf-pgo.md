@@ -4,11 +4,17 @@ Question: is profile-guided optimization (with fat LTO and one codegen unit) wor
 binaries? Answer: yes. PGO cuts CPU time by 7-14% and instructions by 13-14% on every project measured,
 counters and output unchanged. Release builds now use it (`.github/workflows/release.yml`, profile `dist` in
 `Cargo.toml`, training script `.github/scripts/pgo-train.sh`), and so does the README benchmark
-(`.depot/workflows/bench.yml`, since 2026-10-01). `cargo build --release` (development) is unchanged.
+(`.depot/workflows/bench.yml`, since 2026-10-01). `cargo build --release` (development) was unchanged at the time.
+
+Status (2026-10-10): `[profile.release]` in Cargo.toml is now fat LTO, one codegen unit, `debug = false` and
+`strip = "symbols"` (the strip setting came with PR #245, section "2026-10-09" below; the size change is at the end),
+so `release` differs from `dist` only by PGO, and on Linux BOLT. Binary (a) below is the `release` profile as it was
+when this was measured; `cargo build --release` numbers in notes older than that change are from the thin-LTO profile.
 
 ## Binaries
 
-- (a) current `release` profile (opt-level 3, 16 codegen units, thin-local LTO).
+- (a) the `release` profile of the time (opt-level 3, 16 codegen units, thin-local LTO; since changed, see the status
+  above).
 - (b) (a) + `lto = "fat"`, `codegen-units = 1` (= profile `dist`).
 - (c) (b) + PGO: `-Cprofile-generate` build of tsrs + tsrs-test, training run, `llvm-profdata merge`,
   `-Cprofile-use` build (rustc 1.95, llvm-tools from rustup; `cargo pgo` not needed).
@@ -161,3 +167,10 @@ kernel work, so they spread by up to a few percent where bench/count.py's Linux 
 
 Diagnostics and exit codes were the same in every run. The mismatched build is +15.3% / +14.9% over 0f136be0, the
 bench's +15.8% / +16.2%.
+
+Size (moved here from a former note on the release profile): on macOS arm64 at 3183bbd3, a clean `tsrs_cli` build with the
+new `[profile.release]` was 20,233,280 bytes against 33,226,472 before (-39.1%). Stripping symbols and debug
+information changes file metadata, not generated code, so it does not change retired instructions or peak RSS. The
+Linux `dist` build stays unstripped until after BOLT: release.yml and bench.yml set `CARGO_PROFILE_DIST_STRIP=none`
+for the PGO-use build (and, since the fix, the instrumented build), and `bolt.sh` strips the optimized `tsrs` after
+BOLT's training, optimization and correctness comparisons.

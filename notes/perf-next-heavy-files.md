@@ -176,6 +176,12 @@ unchanged at 1 and 4; single-threaded instructions +0.000-0.005% on every projec
 are within -1.1% to +1.8% (webpack and next-root +3-4% at 16-32 checkers, 0.01 s, where they split lib.dom.d.ts; mikro-orm
 +6% at 32 and -2.4% at 16, which does not split anything). Peak RSS at most +3.8% (webpack, 16 checkers).
 
+Status (2026-10-10): a later rule raised the bar for default library files. `plan_splits` splits one only when it
+weighs `splitcheck::LIB_MIN_SHARE_PERCENT` = 80% of a share (splitcheck.rs, checkerpool.rs `plan_splits`), because
+splitting lib.dom.d.ts on webpack at 16 checkers, where it is half a share, cost 3-4% of wall. At 32 checkers on
+webpack and next-packages-next it is about a whole share and is still split. Other declaration files keep the 40%
+threshold above.
+
 ## 7. Not done
 
 - The split is static: which files and how many ranges come from the static weight, which misjudges declaration files

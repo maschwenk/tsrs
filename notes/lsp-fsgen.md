@@ -1,25 +1,18 @@
 # lsp-fsgen: fourslash generator, harness and runner (`tools/gen-fourslash`, `tsrs_fourslash`)
 
-## What exists
+`tools/gen-fourslash` (Go, `go/types`) turns every Go fourslash test into a Rust function in
+`crates/tsrs_fourslash/src/tests/gen/gen_NN.rs` (one `pub mod` per Go file, one `pub fn` per Go function) plus a
+registry in `gen/mod.rs` (name, Go file, line, fn, skip reason). The harness (`fourslash.rs`, `baselineutil.rs`,
+`statebaseline.rs`, `harnessutil.rs`, `tsbaseline.rs`, `testing.rs`, `test_parser.rs`) is a port of Go's and drives the
+in-process server. How to regenerate and run, and the pass counts: docs/LSP.md, "Fourslash". This note keeps the
+mapping rules of the generator and the harness's deviations from Go. (It absorbs the
+former note of the wave that wired the harness to the in-process server.)
 
-| Go | Rust |
-| --- | --- |
-| `fourslash/tests/*_test.go` (4,364 files, 4,559 `Test*` functions) | `crates/tsrs_fourslash/src/tests/gen/gen_NN.rs` (generated, one `pub mod` per Go file, one `pub fn` per Go function) + `gen/mod.rs` (`REGISTRY`: name, Go file, line, fn, skip reason) |
-| `fourslash/tests/util/util.go` | `tests/util.rs` (functions, by hand) + `tests/util_gen.rs` (package-level vars as `LazyLock` statics, generated) |
-| `fourslash/test_parser.go` | `test_parser.rs` (full port) |
-| `testrunner/test_case_parser.go` `ParseTestFilesAndSymlinksWithOptions` | `testrunner.rs` (the Go version with the erroring `parseFile`; tsrs_testrunner is a binary crate with its own non-erroring copy) |
-| `fourslash/fourslash.go` | `fourslash.rs`: struct, options/expected-value types, capabilities (`GetDefaultCapabilities*`, `getCapabilitiesWithDefaults`), `newFourslash` up to the server, `getBaseFileNameFromTest`, scriptInfo/converters, marker/range accessors, GoTo* navigation, `GetRangesByText`, `verifyBaselines`; every method that talks to the server calls `FourslashTest::server_unavailable(t, "<Method>")` |
-| `fourslash/baselineutil.go` | `baselineutil.rs`: commands, file names/extensions, options, `addResultToBaseline`, `getBaselineContentForFile`, `textWithContext`, `annotateContentWithTooltips`, `codeFence`, `symbolInformationToData` |
-| `fourslash/semantictokens.go` | `semantictokens.rs` (decode/format ported, verify stubbed) |
-| `fourslash/statebaseline.go` | `statebaseline.rs` (struct only: everything it prints comes from the server's session) |
-| `testutil.RecoverAndFail`, `testutil/baseline` | `testutil.rs` (`recover_and_fail`, `baseline::run` = Go's Run/writeComparison: references from `ts-ref/tsc/testdata/baselines/reference`, actuals to `target/fourslash-results/local`) |
-| `testing.T` | `testing.rs` (`T`: failures/logs behind a Mutex, `fatal`/`skip` unwind with `FatalPanic`/`SkipPanic`, `run` = subtests) |
-| `go test` | `runner.rs` + binary `tsrs-fourslash` (`run [--filter re] [--include-skipped] [-j N] [-v]`, `list`) |
-| `ls.SortText*`, `contentmappertest`, `stringtestutil.Dedent` | `ls_shim.rs` (generated code's `ls::`), `contentmappertest.rs`, `contentmapper.rs`, `stringtestutil.rs` |
-
-Regenerate: `cd tools/gen-fourslash && GOTOOLCHAIN=auto go run .` (≈5 s; deterministic). `-survey` prints node
-kinds / call targets / interface conversions, `-sigs` the fourslash API the tests use, `-parser-inputs FILE` the
-constant contents for the parser oracle. Parser oracle: `tools/oracle/fourslash-parser/run.sh`.
+Generator options: `-survey` prints node kinds / call targets / interface conversions, `-sigs` the fourslash API the
+tests use, `-parser-inputs FILE` the constant contents for the parser oracle (`tools/oracle/fourslash-parser/run.sh`;
+at the time all 4,484 constant contents produced the same files, markers, ranges, symlinks and global options as Go's
+`ParseTestData`, including Go's parse failures). Generation takes about 5 s and is deterministic; test files that
+`go test` does not build (Go build constraints, e.g. `*_js_test.go`) are skipped with `go/build` `MatchFile`.
 
 ## Generator design (how Go maps to Rust)
 
@@ -42,37 +35,28 @@ constant contents for the parser oracle. Parser oracle: `tools/oracle/fourslash-
 - Package-level declarations of test files live in their file's module; cross-file references are resolved
   after the modules are assigned to `gen_NN` files.
 
-## Gates (2026-10-01)
-
-- `cargo check -p tsrs_fourslash`: 0 errors, 0 warnings, all 4,559 tests generated and compiling; untranslated
-  constructs: none.
-- Compile time of the crate alone (deps built, `CARGO_INCREMENTAL=0`): check 2.8 s, debug build 52 s
-  (dev profile is opt-level 1); generated code is 14 MB (one Go test file alone is 4 MB).
-- `tsrs-fourslash run`: 4,559 tests, 4,173 fail with "server unavailable: NewFourslash ...", 386 skipped (known
-  failing), 0.1 s. With `--include-skipped` all 4,559 fail, 4,547 with server unavailable plus
-  `TestImportSuggestionsCache_invalidPackageJson` whose content Go's parser also rejects (and the 11 parent tests of
-  subtests, reported with the subtest's message).
-- `cargo test -p tsrs_fourslash --lib`: parser unit test + oracle sample (617 cases); the full oracle
-  (`TSRS_FOURSLASH_PARSER_ORACLE=target/scratch/fsgen/parser_out.jsonl`): all 4,484 constant contents produce the
-  same files, markers (positions, LSP positions, names, object data), named markers, ranges (with marker links),
-  symlinks and global options as Go's `ParseTestData`, including Go's parse failures.
-
-## Shared-file edits
-
-- `Cargo.toml`: `tsrs_fourslash` in `[workspace.dependencies]`; `Cargo.lock`.
-- `ts-ref/tsc/cmd/tsrs-oracle-fourslash-parser/oracle_test.go` (oracle copy, as PORTING.md allows; source of
-  truth `tools/oracle/fourslash-parser/oracle_test.go`).
-
-## Deviations
+## Harness deviations
 
 - `fourslash.AnyTextEdits` / `NoTextEdits` are compared by pointer identity in Go; Rust uses sentinel values (one
   edit with an impossible text) and `is_any_text_edits` / `is_no_text_edits`.
 - `GetRangesByText` takes `&self` (cache in a `OnceLock`) because tests call it inside arguments of `&mut self`
   methods. `MarkerByName` fails the test for an unknown name instead of returning nil.
 - `scriptInfos` is `Arc<RwLock<FxHashMap<..>>>` shared with the converters' line-map callback (Go shares the map);
-  `getScriptInfo` returns a snapshot.
+  `getScriptInfo` returns a snapshot. Go mutates the shared `*scriptInfo` and later conversions in the same function
+  see the edit; the Rust methods re-read the script info after each edit at the same points.
+- Markers are shared `Arc<Marker>` / `Arc<RangeMarker>`; Go edits the shared objects in place on every edit.
+  `editScriptAndUpdateMarkersWorker` replaces the edited markers by updated copies in `markers`, `marker_positions`,
+  `ranges` and the ranges' `marker` links; a marker a test took out before an edit keeps the old position.
+- `handleServerRequest` reads `f.userPreferences` from the client's router goroutine; the Rust handler reads an
+  `Arc<Mutex<UserPreferences>>` copy that `Configure` keeps in sync.
+- `assertDeepEqual` prints both values' Debug forms instead of `cmp.Diff`; `diagnosticsIgnoreOpts` is applied by
+  clearing `severity`, `source`, `related_information` on both sides.
 - Go maps that the harness iterates (`Symlinks`, `GlobalOptions`, `MarkerPositions`, baselines) are `OrderedMap`
-  (insertion order instead of Go's random order).
+  (insertion order instead of Go's random order). `VerifyBaselineNonSuggestionDiagnostics` iterates the script infos
+  sorted by name (the output is sorted either way).
+- `tsbaseline.rs` is the pretty=false subset of `GetErrorBaseline` over fourslash diagnostics; the global error /
+  library / tsconfig count assertions of `iterateErrorBaseline` are not ported (fourslash diagnostics always have a
+  file).
 - `Marker.Data` is an `OrderedMap<String, Any>` holding what Go's encoding/json produces for `any` (empty = Go nil;
   object markers always have keys).
 - Two hand-ported lsutil fields are `Option<Vec<String>>` where Go has `[]string`
@@ -81,16 +65,8 @@ constant contents for the parser oracle. Parser oracle: `tools/oracle/fourslash-
   closure (`f.verify_completions(t, m, path_completion(&mut *f, ..))`); Go evaluates the receiver first, but it is
   a plain variable.
 - `T::run` names subtests `parent/name` with whitespace replaced by `_` (Go's `rewrite` also escapes unprintables).
-
-## Needs from others
-
-- The in-process server (`lsptestutil.LSPClient` over `tsrs_lsp`): replace `FourslashTest::server_unavailable`
-  call sites (start with `new_fourslash_impl`: compiler options via `harnessutil.SetOptionsFromTestConfig`, the
-  vfs from `testfs`, `initialize`, opening files; `new_done_fn` is ready) and port the method bodies from
-  fourslash.go.
-- `ls` completions: when `SortText*` / `DeprecateSortText` / `SortBelow` / `ObjectLiteralPropertySortText` exist in
-  `tsrs_ls`, point `ls` in `tests/prelude.rs` at them and delete `ls_shim.rs`.
-- Content mappers are out of scope: the content-mapper tests build a placeholder spawner.
+- An unrecovered server-thread panic ends the whole Go test binary; tsrs's worker processes turn it into one failing
+  test, so a crash does not hide later results (but also cannot fail the run as a whole).
 
 ## Doubts
 

@@ -176,6 +176,13 @@ not pursued.
 
 ## Row 2: derived generics related to their generic base by variances (handoff)
 
+Status (2026-10-10): removed on 2026-10-07 (#194, docs/STATUS.md). `crates/tsrs_checker/src/relater_derived.rs`,
+the `TSRS_DERIVED_VARIANCE*` switches and the `derived_variance` CLI test no longer exist; only the
+`testdata/regressions/derived-variance-*` cases remain. Differential fuzzing found nine more kinds of disagreement; the guards that close them (4-6) remove the
+savings below (guarded: -1.8% / -0.3% check time at 1 / 8 checkers), so the verdict was not to enable it
+(notes/fuzz-derived-variance.md). The section below is the state at handoff: the code paths, switch and test it names
+are gone, and its savings are for guards 1-3 only, which are not exact.
+
 Full write-up: notes/perf-derived-variance.md. Code: `crates/tsrs_checker/src/relater_derived.rs`, switch
 `TSRS_DERIVED_VARIANCE=off|shadow|on` (default off; forced off under `--checkerAssignment go`), docs/DEBUGGING.md.
 

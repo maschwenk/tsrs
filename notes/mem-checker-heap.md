@@ -191,6 +191,8 @@ comes from is not established (the 8-bit search is inline, the wider ones out of
 Rejected without a branch: sparse id pages by default for multi-checker CLI runs (`TSRS_SPARSE_ID_PAGES=1` on main:
 -2.4% peak at 8 checkers, -1.2% at 4, but every lookup becomes a rank computation; +1.2% instructions at 8 checkers
 in notes/mem-shared-base.md, not re-measured here at 8 checkers with `perf`).
+Status (2026-10-10): `TSRS_SPARSE_ID_PAGES` no longer does anything: notes/mem-64.md replaced the id pages with
+128-id groups and removed the sparse form; the switch is ignored (crates/tsrs_checker/src/links.rs).
 
 ## What remains per checker (8 checkers, after 1-5)
 

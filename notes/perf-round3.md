@@ -2,7 +2,7 @@
 
 The third performance round. The owner lifted the "mirror Go function for function" rule for type-check performance:
 results must stay right, the implementation may differ. This note is the index: what landed, what the design space
-looks like, what was rejected and why, and what is still open. Detail lives in the notes it points to.
+looks like, what was rejected and why, and what became of what was open. Detail lives in the notes it points to.
 
 ## The bar this round
 
@@ -62,12 +62,18 @@ tsgo-baseline harnesses run that way.
 - **Per-file check regions**: any type created while checking a body can be stored in a long-lived cache.
 - **mmap for source files**: a file truncated during the run becomes SIGBUS.
 
-## Open at the time of writing
+## What became of the open items (status 2026-10-10)
 
-- Flow-analysis memo, union front cache, call-inference memo: branch `perf/flow-memo`, handoff in
-  notes/perf-flow-union-inference.md on that branch.
-- Derived-generic variance shortcut (`TSRS_DERIVED_VARIANCE`, off by default; -14% check time and -15% peak at four
-  checkers on the 38k-file codebase, zero disagreements in shadow mode after three guards, not provable): branch
-  `perf/algo-derived-variance-pr`; whether it may be on by default is the owner's decision.
-- Build-level speed on Linux (BOLT, huge pages for text, `panic=abort`, allocator): branch `perf/build-level`.
-- Source-level fixes in the checked codebase itself (two patterns were worth 10% of its cold check).
+- Flow-analysis memo: landed (#97), on by default (`crates/tsrs_checker/src/flowmemo.rs`, notes/perf-flow-union-inference.md).
+- Union front cache: landed, on by default (`crates/tsrs_checker/src/unioncache.rs`, notes/perf-union-inference.md).
+- Call-inference memo: not built; the part it could skip is 0.3-2.2% of one checker's check time (notes/perf-union-inference.md, and
+  the "Measured and rejected" list in notes/perf-round2-followups.md); a narrower memo of repeated `inferTypes` walks
+  landed later and is on by default (`TSRS_INFER_MEMO`, notes/perf-heavy-files-infer-memo.md).
+- Derived-generic variance shortcut (`TSRS_DERIVED_VARIANCE`, then off by default; -14% check time and -15% peak at
+  four checkers on the 38k-file codebase with guards 1-3, which are not exact): removed on 2026-10-07. The guards that make it exact remove the
+  savings (notes/perf-checker-algorithms.md "Row 2", notes/fuzz-derived-variance.md).
+- Build-level speed on Linux: BOLT ships in the Linux release binaries; huge pages for text, other allocators and
+  `opt-level = "s"` for cold crates were rejected (notes/perf-build-level.md). The native release profile still uses
+  `panic = "unwind"`.
+- Source-level fixes in the checked codebase itself (two patterns were worth 10% of its cold check): done there, not in
+  tsrs (notes/perf-round2-followups.md, idea 1).

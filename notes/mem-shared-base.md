@@ -16,6 +16,15 @@ file assignment saves at most ~1% of the duplicates. The one exact win is in the
 `TSRS_SPARSE_ID_PAGES=1` stores sparse pages as a bitmap plus slots, -0.14 GiB (-1.8%) peak on 4 checkers and
 -0.40 GiB (-4.2%) on 8, +0.45% / +1.2% instructions, nothing else changes. Default off.
 
+Status (2026-10-10): sections 1 and 3 describe code that is not on main. The duplication census
+(`TSRS_ASSIGNMENT_STATS=dup`, dupstats.rs, checkerpool_dupstats.rs) does not exist there; the `assignment-stats`
+feature now only attributes checker-created types and symbols to files. The sparse id pages are gone:
+`TSRS_SPARSE_ID_PAGES` is ignored and `set_sparse_id_pages` is a no-op (crates/tsrs_checker/src/links.rs). Their
+premise no longer holds either: checker threads take node and symbol ids in blocks of 1,024
+(`use_id_blocks`, crates/tsrs_ast/src/utilities_1.rs), so one checker's ids are dense in its own blocks, and
+`IdLinkStore` uses 128-id groups (notes/mem-dense-link-tables.md). The sharing verdict (section 2 and the first
+sentence of "Verdict") still stands.
+
 ## 1. The measurement: a cross-checker duplication census
 
 `cargo build --release -p tsrs_cli --features assignment-stats`, run with `TSRS_ASSIGNMENT_STATS=dup` and
@@ -199,6 +208,8 @@ Two-phase schemes (one checker resolves the common core first) do not help witho
 still build their own copies.
 
 ## 3. Prototype: sparse id pages (`TSRS_SPARSE_ID_PAGES=1`, default off)
+
+(History: not on main, see the status line at the top.)
 
 crates/tsrs_checker/src/links.rs. With the switch and a pool of more than one checker (`set_multiple_checkers`,
 called by `checkerpool::create_checkers`), an `IdLinkStore` page starts sparse: a 1,024-bit bitmap of the ids

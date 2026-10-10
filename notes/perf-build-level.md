@@ -112,7 +112,8 @@ Proposed: `.github/scripts/bolt.sh` and two steps in `release.yml` for the two L
 the BOLT-optimized tsrs-test and tsrs-fourslash and the byte comparison of tsrs on both bench projects before the
 binary is staged. aarch64 was not measured here (BOLT supports its instrumentation; the workflow's dry run is the
 check). Not changed: `.depot/workflows/bench.yml`, which builds the README benchmark's binary with the release
-commands, would need the same step to keep measuring what ships.
+commands, would need the same step to keep measuring what ships. (Status 2026-10-10: bench.yml now runs `bolt.sh`
+too; notes/perf-binary-layout.md.)
 
 ## 2. Huge pages for the program text
 

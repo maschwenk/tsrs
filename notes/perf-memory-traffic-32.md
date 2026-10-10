@@ -52,7 +52,8 @@ What the table says:
   has to fetch once whatever the layout. The `far_cache` (other socket) count is zero: one NUMA node. The shared atomics
   left on the checker path were already per thread or off by default: node and symbol ids in 1,024-id blocks per checker
   thread (`use_id_blocks`), `FrozenCell` with no counter in release builds, and the statistics counters (`unioncache`,
-  `infermemo`, `relater_derived`) only under their env switches.
+  `infermemo`, `relater_derived`) only under their env switches. (Status 2026-10-10: `relater_derived` was removed on
+2026-10-07, notes/perf-derived-variance.md.)
 - **Memory bandwidth is not the limit.** DRAM demand fills per instruction rise 11% on vscode (each checker has its own
   30-40 MiB of tables and one CCX's 32 MiB L3 is shared by 8 checkers) and fall 25% on t3code-server, whose extra
   instructions are mostly duplicated work on data the checker already holds. The extra DRAM fills on vscode are about 2

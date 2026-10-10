@@ -19,7 +19,8 @@ The machine was shared with another agent's builds, so single runs move a few pe
 
 `TSRS_ASSIGNMENT_STATS=1` at 17 checkers: sixteen checkers finish at 0.63 s, one at 0.92 s. `TSRS_FILE_TIMES` for that
 checker: 521 files, file wall 0.917 s, thread CPU 0.876 s (busy the whole time, not descheduled), and its longest file
-is `src/vs/platform/agentHost/test/node/mapSessionEvents.test.ts` at 0.302 s, the file perf-checker-64.md found at
+is `src/vs/platform/agentHost/test/node/mapSessionEvents.test.ts` at 0.302 s (status 2026-10-10: the inference memo
+later cut this file to 0.04 s on one checker, notes/perf-heavy-files-infer-memo.md), the file perf-checker-64.md found at
 24-64 checkers (0.34 s on one checker; 15,102 nodes, 609 calls of a 155-member union inference). The tail is exactly
 one such file started at about 0.62 s: stealing moves unstarted files, it cannot split one. At 16 checkers the file's
 owner holds 184 files and reaches it early; at 17 it is reached last. Same at 13 and 14 against 12 and 15.

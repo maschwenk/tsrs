@@ -1,23 +1,57 @@
 # perf-memory: peak memory on the private monorepo
 
-Targets (Go reference at the same checker count): 4 checkers <= 25 GB, `--singleThreaded` <= 17 GB.
-Acceptance per change: `--extendedDiagnostics` counters identical, conformance pass lists identical (errors,
-`.types`, `.symbols`), no wall-time regression.
+First memory round (main 5ca48f3 -> 3fe4280). Acceptance per change: `--extendedDiagnostics` counters identical,
+conformance pass lists identical (errors, `.types`, `.symbols`), no wall-time regression. Later rounds changed most of
+the data structures named here (see notes/mem-layout.md and the `mem-*` notes); this note keeps the result, the
+fixes that still stand, and the profiler.
 
 ## Allocation profile (opt-in)
 
-Build: `CARGO_TARGET_DIR=$PWD/target/prof cargo build --release -p tsrs_cli --features alloc-profile` (was `--features tsrs_core/alloc-profile` before mimalloc; see notes/mem-layout.md).
-Compiled out otherwise (`#[cfg_attr(feature, track_caller)]`, the counters are `#[cfg]`).
+Build: `CARGO_TARGET_DIR=$PWD/target/prof cargo build --release -p tsrs_cli --features alloc-profile` (replaces the
+mimalloc global allocator with a counting one). Compiled out otherwise (`#[cfg_attr(feature, track_caller)]`, the
+counters are `#[cfg]`). docs/DEBUGGING.md has the current heap-sampler options.
 
 - Every arena allocation (`P::new`, `alloc`, `alloc_slice`, `alloc_vec`, `alloc_str`) is recorded per (call site,
   element type); the per-type table doubles as the `size_of` x count table (`B/each` = `size_of::<T>()` for
   `P::new`). Call sites are one level deep: allocations through a wrapper (`Symbol::new`, `new_node`, link stores)
   show the wrapper's line; the type column tells them apart.
-- A counting global allocator reports the Rust heap (which includes the arena's chunks).
-- `TSRS_HEAP_PROFILE=1`: sampling heap profiler (one raw stack per ~256 KB allocated, live bytes per stack,
-  resolved with `atos` at exit; arena chunk allocations are reported as one `<arena chunks>` row). Slow (~45 s
-  check instead of 27 s) but fine for a profile run.
+- The counting global allocator reports the Rust heap (which includes the arena's chunks).
+- `TSRS_HEAP_PROFILE=1`: sampling heap profiler (one raw stack per ~256 KB allocated, live bytes per stack, resolved
+  at exit with `atos` on macOS or `addr2line` on Linux; arena chunk allocations are reported as one `<arena chunks>`
+  row). Slow (~45 s check instead of 27 s at the time) but fine for a profile run.
 - `TSRS_ALLOC_PROFILE_TOP` / `TSRS_HEAP_PROFILE_TOP` set N for the top-N tables. Output goes to stderr at exit.
+
+## Result
+
+Single-threaded peak footprint 19.53 GB -> 15.35 GB (Go 16.7 GB); 4 checkers 28.31 GB -> 23.35 GB (Go 24.4 GB). Arena
+requested 13.1 GB -> 9.57 GB. Before, the largest arena item was `str`: 3,516.9 MB, 3,242.6 MB of it at one parser
+call site (48,706 calls).
+
+| change | 1 checker peak | 1 checker wall | 4 checkers peak | 4 checkers wall |
+| --- | --- | --- | --- | --- |
+| before (5ca48f3) | 19.53 GB | 31.5-32.9 s | 28.31 GB | 17.5 s |
+| lazy JSDoc parse shares the source text | 16.35 GB | 31.4-34.5 s | 25.14 GB | 17.0 s |
+| + module references appended once, transient symbol names not copied | 15.98 GB | 31.2 s | 24.63 GB | 16.9 s |
+| + 32-byte `TypeMapper`, relater comparers built once per relater | 15.78 GB | 35.7 s (load 6-7; user 27.6 s) | 24.30 GB | 14.4 s |
+| + id-keyed link stores map u32 id -> slot in value chunks | 15.35 GB | 29.2-30.6 s (prev 30.8-35.0) | 23.35 GB | best 14.5 s, check 12.0 s (prev 14.4 s, 11.9 s) |
+
+The fixes, all pure memory changes with nothing observable:
+
+1. Lazy JSDoc parsing copied the whole file text into the arena per node (`parse_jsdoc_for_node` ->
+   `Parser::initialize_state` -> `alloc_str(source_text)`): ~9.8k calls, 3.0 GB. Go assigns the string (shared
+   backing array). Now `initialize_state_static` takes the `&'static` text of the `SourceFile`.
+2. `collect_module_references` copied the whole imports / ambient-module-names / module-augmentations slice into the
+   arena on every append (166 MB). The appends go to local vectors stored once at the end of
+   `collect_external_module_references`; nothing reads these fields in between.
+3. `Checker::new_symbol` copied the name for every transient symbol (269 MB on four checkers). Go stores the
+   caller's string; `new_symbol` and its siblings take `&'static str`.
+4. `TypeMapper` 40 -> 32 bytes (-173 MB / -320 MB). It has shrunk further since (16 bytes, assert in mapper.rs).
+5. The relater's `type_comparer` leaked one closure per call (2.2M closures on four checkers, 30 MB).
+   Each relater now builds them once (`Relater::worker_comparer`, `signature_comparers`);
+   relaters are pooled and their handles never change, so a cached comparer calls exactly what a fresh one would.
+6. `valueSymbolLinks` / `symbolNodeLinks` became id-keyed (`IdLinkStore`): -460 MB single, -940 MB on four checkers.
+   Go's paging by id did not fit, because ids are process-wide atomics shared by the checkers. The store has been
+   redesigned since (128-id groups, links.rs; notes/mem-64.md); ids are still assigned on every access, in Go's order.
 
 ## The private monorepo, single-threaded, before (main at 5ca48f3)
 
@@ -57,46 +91,6 @@ Top live heap stacks (sampled, outside the arena): `SymbolArenaLinkStore::get` h
 225 MB, `NodeLinkStore::get` 136 MB, `SymbolTable` (IndexMap) growth in `resolve_object_type_members` /
 `get_union_or_intersection_property` / mapped-type members ~600 MB over many stacks, other `LinkStore`s ~120 MB.
 
-## Fixes
-
-| change | 1 checker peak | 1 checker wall | 4 checkers peak | 4 checkers wall |
-| --- | --- | --- | --- | --- |
-| before (5ca48f3) | 19.53 GB | 31.5-32.9 s | 28.31 GB | 17.5 s |
-| lazy JSDoc parse shares the source text | 16.35 GB | 31.4-34.5 s | 25.14 GB | 17.0 s |
-| + module references appended once, transient symbol names not copied | 15.98 GB | 31.2 s | 24.63 GB | 16.9 s |
-| + 32-byte `TypeMapper`, relater comparers built once per relater | 15.78 GB | 35.7 s (load 6-7; user 27.6 s) | 24.30 GB | 14.4 s |
-| + id-keyed link stores map u32 id -> slot in value chunks | 15.35 GB | 29.2-30.6 s (prev 30.8-35.0) | 23.35 GB | best 14.5 s, check 12.0 s (prev 14.4 s, 11.9 s) |
-
-1. **Lazy JSDoc parsing copied the whole file text into the arena per node** (`parse_jsdoc_for_node` ->
-   `Parser::initialize_state` -> `alloc_str(source_text)`): ~9.8k calls, 3.0 GB. Go assigns the string (shared
-   backing array). Now `initialize_state_static` takes the `&'static` text of the `SourceFile`; the main parse
-   still copies the freshly read file once. Pure memory change, nothing observable.
-2. **`collect_module_references` copied the whole imports / ambient-module-names / module-augmentations slice
-   into the arena on every append** (Go appends with amortized growth; the old arrays are garbage): 166 MB. The
-   appends now go to local vectors stored once at the end of `collect_external_module_references`; nothing reads
-   these fields in between.
-3. **`Checker::new_symbol` copied the name** (`alloc_str(name)`) for every transient symbol, 22M x 7 B on one
-   checker, 36M on four (269 MB). Go stores the caller's string. `new_symbol`/`new_symbol_ex`/`new_parameter`/
-   `new_property` now take `&'static str`; the 14 callers that pass a freshly built `String` copy it there.
-4. **`TypeMapper` was 40 bytes** (21.7M on one checker, 39.9M on four) because `Array` held two slice headers
-   and `Deferred` a slice plus a `Vec`. `Array` now holds a `tsrs_core::SlicePair` (two pointers, two u32
-   lengths: 24 bytes) and the rare `Deferred` mapper lives out of line, so the enum is 32 bytes (compile-time
-   assert in mapper.rs): -173 MB / -320 MB. Same lengths and elements, so mapping and `compare_type_mappers` are
-   unchanged.
-5. **relater `type_comparer` leaked one closure per call** (`signatures_related_to`, template-literal matching,
-   infer-type-parameter contexts; 2.2M closures on four checkers, 30 MB, `notes/relater-2.md`). The closures only
-   capture the relater handle (and the intersection state), so each relater now builds them once
-   (`Relater::worker_comparer`, `signature_comparers`). Relaters are pooled and their handles never change, so a
-   cached comparer calls exactly what a fresh one would.
-6. **`valueSymbolLinks` / `symbolNodeLinks` were `FxHashMap<P<K>, P<V>>` plus one arena allocation per value**
-   (24.2M / 3.7M entries on one checker; the value-links table alone was a 570 MB hash table with a 285 MB old
-   table alive during its last resize). Go keys these two stores by symbol/node id (`PagedLinkStore`). Go's paging
-   by id does not fit here (ids are process-wide atomics shared by the checkers, so every checker would touch
-   nearly every page), so `IdLinkStore` maps `u32 id -> u32 slot` (9 bytes per table slot) and keeps the values
-   in 4096-entry chunks allocated in the arena (stable addresses, `P<V>` handed out as before; ids >= 2^32 go to a
-   second map). Ids are still assigned by `get_node_id`/`get_symbol_id` on every access, in the same order.
-   -460 MB single, -940 MB on four checkers.
-
 ## The private monorepo, single-threaded, after (3fe4280)
 
 Peak footprint 15.35 GB (Go 16.7 GB); 4 checkers 23.35 GB (Go 24.4 GB). Arena requested 9.57 GB (was 13.1 GB),
@@ -117,14 +111,16 @@ Top live heap stacks now: `IdLinkStore` table for value links 288 MB, `Relation:
 index maps in `resolve_object_type_members` & co. ~400 MB spread over many stacks, `symbolNodeLinks` table 72 MB,
 other pointer-keyed `LinkStore`s ~100 MB.
 
-## Not done (each < 2% or not behavior-safe)
+## Not done, still applies
 
-- `SymbolTable` is an `IndexMap` (insertion-ordered: ~45-60 B per entry incl. stored hash and Vec slack vs ~30 B
-  for Go's map). Replacing it changes iteration order, which ported code depends on for determinism.
-- `Symbol` (88 B) is already smaller than Go's (96 B). `ValueSymbolLinks` values (56 B) are the same fields as Go.
-- Pointer-keyed `LinkStore`s (`mappedSymbolLinks`, `signatureLinks`, `typeNodeLinks`, ...) could move to slot
-  chunks too, but they must stay keyed by pointer (Go does not assign ids there; ids are observable): ~100 MB.
-- `get_union_or_intersection_property` copies `name` for the property cache key (and again for the augmented
-  cache): ~65 MB; the symbol name is not provably the same string, so left as is.
-- ~1.1 GB of the footprint is neither arena nor live heap: malloc retention after ~23 GB of transient heap churn
+- Pointer-keyed `LinkStore`s (`mappedSymbolLinks`, `signatureLinks`, `typeNodeLinks`, ...) stay keyed by pointer: Go
+  assigns no ids there, and ids are observable (~100 MB at the time). Their values have since moved to arena chunks
+  (links.rs `LinkStore`).
+- ~1.1 GB of the footprint was neither arena nor live heap: malloc retention after ~23 GB of transient heap churn
   (Vec/HashMap temporaries). Reducing churn is a wall-time topic as much as a memory one.
+
+Status (2026-10-10): three points of the original "Not done" list are obsolete: `SymbolTable` is no longer an
+`IndexMap` but a `SymbolMap` with one-word entries that keeps insertion order (crates/tsrs_ast/src/symbol.rs);
+`Symbol` is 32-40 B now, not 88 B (symbol.rs:51); `get_union_or_intersection_property` (~65 MB of copied cache-key
+names at the time) now reuses the property's name when it equals the key (checker_11.rs). The arena no longer uses
+bumpalo (crates/tsrs_core/src/arena.rs).

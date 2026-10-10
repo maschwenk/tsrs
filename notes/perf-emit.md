@@ -135,6 +135,9 @@ Base is 9850161 (worktree `perf-emit-base`); head is this branch.
   - `get_nearest_ancestor_directory_with_package_json`: a memo would save about 0.1 s.
   - `get_accessible_symbol_chain_from_symbol_table`.
 - **webpack with `--declaration`** (JS input, `checkJs`):
+  - Status (2026-10-10): fixed by per-file emit scratch regions (notes/mem-emit-regions.md;
+    `crates/tsrs_printer/src/emitcontext.rs`): there, base aborted at 50.9 s and the new build completed in 120.7 s
+    at 17.3 GiB peak, with output identical to tsgo-ref's. The bullets below are the state when this note was written.
   - tsrs aborts after 32 s: the compressed-pointer arena range is exhausted at 32 GiB.
   - tsgo takes 163 s and peaks at 52.7 GiB.
   - The node builder serializes huge inferred types, and none of it is freed. A per-file emit region would need

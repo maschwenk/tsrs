@@ -1,7 +1,8 @@
 # lsp-memfix: auto-import registry ownership, census hits with completions (phase 4)
 
 Wave agent `memfix`, branch `lsp-memfix` (from `lsp` 3be0092). Leftovers of notes/lsp-mem.md ("Needs from others",
-"Doubts").
+"Doubts"; on 2026-10-10 lsp-mem.md dropped the items resolved here and kept the rest under "Limitations noted at the
+time").
 
 ## 1. Auto-import registry ownership
 

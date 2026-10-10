@@ -65,6 +65,8 @@ Normal binary: 22.1 s, peak footprint 6,802,906,576 B (6.34 GiB), output byte-id
 (MB = 2^20 bytes. Arena chunks are 6,406 / 10,518 MB: bumpalo doubles chunk sizes and the untouched tail of the
 last chunk is not resident.) So about 0.7 GiB of the 6.3 GiB peak (11%) is garbage that Go would have collected.
 That is the ceiling for recycling and scoping; the rest of the peak is live.
+(Status 2026-10-10: the bumpalo remark describes the arena of that time; tsrs no longer depends on bumpalo, and the
+arena's chunks now come from its own reservation, crates/tsrs_core/src/reserve.rs.)
 
 ## Garbage by cause (default mode; from the sampled stacks, scaled x16)
 
