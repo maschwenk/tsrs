@@ -1,0 +1,7 @@
+a.ts(14,11): error TS2322: Type 'string' is not assignable to type 'number'.
+a.ts(20,11): error TS2322: Type 'string' is not assignable to type 'number'.
+a.ts(25,11): error TS2322: Type 'string' is not assignable to type 'number'.
+a.ts(31,11): error TS2322: Type 'string' is not assignable to type 'number'.
+a.ts(43,11): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+a.ts(45,11): error TS2322: Type 'string' is not assignable to type 'number'.

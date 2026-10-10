@@ -187,6 +187,8 @@ pub struct FlowMemo {
     pub(crate) shadow_hits: Vec<ShadowHit>,
     pub(crate) key_buf: Vec<u8>,
     pub(crate) stats: FlowMemoStats,
+    /// Skipping walks that cannot narrow (flowskip.rs).
+    pub(crate) skip_state: crate::flowskip::FlowSkip,
 }
 
 impl crate::heapcensus::HeapSize for FlowMemo {
@@ -214,6 +216,7 @@ impl FlowMemo {
             shadow_hits: Vec::new(),
             key_buf: Vec::new(),
             stats: FlowMemoStats::default(),
+            skip_state: crate::flowskip::FlowSkip::new(),
         }
     }
 

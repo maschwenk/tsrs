@@ -110,6 +110,7 @@ impl Checker {
         if self.flow_analysis_disabled {
             return self.error_type;
         }
+        let explicit_flow_node = flow_node.is_some();
         let flow_node = match flow_node {
             Some(flow_node) => flow_node,
             None => match get_flow_node_of_node(reference) {
@@ -117,6 +118,16 @@ impl Checker {
                 None => return declared_type,
             },
         };
+        // Not in Go: a walk that can only return the declared type is skipped (flowskip.rs).
+        let skip_mode = self.flow_memo.skip_state.mode;
+        let skippable = skip_mode != tsrs_ast::flownames::FlowSkipMode::Off && {
+            let start = if explicit_flow_node || reference.pos() < 0 { u32::MAX } else { reference.pos() as u32 };
+            self.flow_walk_skippable(reference, declared_type, initial_type, flow_container, flow_node, start)
+        };
+        if skippable && skip_mode == tsrs_ast::flownames::FlowSkipMode::On {
+            self.flow_invocation_count += 1;
+            return declared_type;
+        }
         let f = self.get_flow_state();
         f.reference.set(Some(reference));
         f.declared_type.set(Some(declared_type));
@@ -198,13 +209,18 @@ impl Checker {
         } else {
             self.finalize_evolving_array_type(evolved_type)
         };
-        if result_type == self.unreachable_never_type
+        let result_type = if result_type == self.unreachable_never_type
             || reference.parent().is_some()
                 && ast::is_non_null_expression(reference.parent().unwrap())
                 && !result_type.flags().intersects(TypeFlags::Never)
                 && self.get_type_with_facts(result_type, TypeFacts::NEUndefinedOrNull).flags().intersects(TypeFlags::Never)
         {
-            return declared_type;
+            declared_type
+        } else {
+            result_type
+        };
+        if skippable && skip_mode == tsrs_ast::flownames::FlowSkipMode::Shadow && result_type != declared_type {
+            self.flow_skip_shadow_failure(reference, declared_type, result_type);
         }
         result_type
     }

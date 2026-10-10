@@ -552,6 +552,8 @@ pub(crate) fn pass_done() {
 /// checked it; nothing reads the file's tree or binder output afterwards (`classify`).
 pub(crate) fn free(file: P<SourceFile>) {
     let Some(region) = REGIONS.lock().unwrap().remove(&file) else { return };
+    // The binder put the file's flow name index in its region (tsrs_ast flownames.rs).
+    tsrs_ast::flownames::unregister_flow_name_index(file.text_index.get());
     if stats() {
         // Relaxed: counters read after the pass's threads joined.
         FREED.fetch_add(1, Ordering::Relaxed);

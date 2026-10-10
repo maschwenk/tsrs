@@ -12,6 +12,8 @@ use tsrs_diagnostics as diagnostics;
 use tsrs_diagnostics::Message;
 use tsrs_scanner as scanner;
 
+use crate::flownames::FlowNames;
+
 bitflags! {
     #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
     pub struct ContainerFlags: i32 {
@@ -78,6 +80,8 @@ pub struct Binder {
     // Go appends to file.BindDiagnostics on every report; they are collected here and stored on the
     // file once binding completes (nothing reads them in between).
     bind_diagnostics: Vec<P<Diagnostic>>,
+    // Not in Go: the names each flow graph can narrow (flownames.rs).
+    flow_names: FlowNames,
 }
 
 pub struct ActiveLabel {
@@ -107,6 +111,7 @@ fn bind_source_file_worker(file: P<SourceFile>) {
         let mut b = Binder::new(file);
         b.bind(file.as_node());
         b.bind_deferred_expando_assignments();
+        b.flow_names.finish(file);
         file.set_bind_diagnostics(&b.bind_diagnostics);
         file.symbol_count.set(b.symbol_count);
         for &lazy in file.lazy_lists.get() {
@@ -131,19 +136,20 @@ fn bind_lazy_list(record: &LazyNodeList, file: P<SourceFile>, nodes: &'static [P
     b.bind_lazy_members(ctx, nodes);
 }
 
-fn new_flow_node_value(flags: FlowFlags, node: Option<P<Node>>, antecedent: Option<P<FlowNode>>, text_index: u32) -> P<FlowNode> {
-    P::new_recycled(FlowNode::new(flags, node, antecedent, text_index))
+fn new_flow_node_value(flags: FlowFlags, node: Option<P<Node>>, antecedent: Option<P<FlowNode>>, text_index: u32, graph: u32) -> P<FlowNode> {
+    P::new_recycled(FlowNode::new_in_graph(flags, node, antecedent, text_index, graph))
 }
 
 impl Binder {
     fn new_for_lazy_list(file: P<SourceFile>, unreachable_flow: P<FlowNode>) -> Binder {
         let mut b = Binder::new_with(file, unreachable_flow, Vec::new());
         b.symbol_count = 0;
+        b.flow_names = FlowNames::new(false);
         b
     }
 
     fn new(file: P<SourceFile>) -> Binder {
-        let unreachable_flow = new_flow_node_value(FlowFlags::Unreachable, None, None, file.text_index.get());
+        let unreachable_flow = new_flow_node_value(FlowFlags::Unreachable, None, None, file.text_index.get(), 0);
         Binder::new_with(file, unreachable_flow, file.bind_diagnostics().to_vec())
     }
 
@@ -174,6 +180,8 @@ impl Binder {
             not_const_enum_only_modules: FxHashSet::default(),
             expando_assignments: Vec::new(),
             bind_diagnostics,
+            // Declaration files have no code to walk through.
+            flow_names: FlowNames::new(tsrs_ast::flownames::flow_skip_mode() != tsrs_ast::flownames::FlowSkipMode::Off && !file.is_declaration_file.get()),
         }
     }
 
@@ -562,11 +570,13 @@ impl Binder {
     }
 
     pub(crate) fn new_flow_node(&mut self, flags: FlowFlags) -> P<FlowNode> {
-        new_flow_node_value(flags, None, None, self.file.text_index.get())
+        self.flow_names.count_node();
+        new_flow_node_value(flags, None, None, self.file.text_index.get(), self.flow_names.graph())
     }
 
     pub(crate) fn new_flow_node_ex(&mut self, flags: FlowFlags, node: Option<P<Node>>, antecedent: Option<P<FlowNode>>) -> P<FlowNode> {
-        new_flow_node_value(flags, node, antecedent, self.file.text_index.get())
+        self.flow_names.count_node();
+        new_flow_node_value(flags, node, antecedent, self.file.text_index.get(), self.flow_names.graph())
     }
 
     pub(crate) fn create_loop_label(&mut self) -> P<FlowNode> {
@@ -602,12 +612,17 @@ impl Binder {
             return antecedent;
         }
         set_flow_node_referenced(antecedent);
+        self.flow_names.record_condition(expression);
         self.new_flow_node_ex(flags, Some(expression), Some(antecedent))
     }
 
     pub(crate) fn create_flow_mutation(&mut self, flags: FlowFlags, antecedent: P<FlowNode>, node: P<Node>) -> P<FlowNode> {
         set_flow_node_referenced(antecedent);
         self.has_flow_effects = true;
+        // An array mutation narrows only auto-typed references, which are never skipped.
+        if flags.intersects(FlowFlags::Assignment) {
+            self.flow_names.record_assignment(node);
+        }
         let result = self.new_flow_node_ex(flags, Some(node), Some(antecedent));
         if self.current_exception_target.is_some() {
             self.add_antecedent(self.current_exception_target, result);
@@ -623,6 +638,7 @@ impl Binder {
         clause_end: usize,
     ) -> P<FlowNode> {
         set_flow_node_referenced(antecedent);
+        self.flow_names.record_switch(switch_statement);
         self.new_flow_node_ex(
             FlowFlags::SwitchClause,
             Some(ast::new_flow_switch_clause_data(switch_statement, clause_start, clause_end)),
@@ -633,6 +649,7 @@ impl Binder {
     pub(crate) fn create_flow_call(&mut self, antecedent: P<FlowNode>, node: P<Node>) -> P<FlowNode> {
         set_flow_node_referenced(antecedent);
         self.has_flow_effects = true;
+        self.flow_names.record_call(node);
         self.new_flow_node_ex(FlowFlags::Call, Some(node), Some(antecedent))
     }
 
@@ -804,7 +821,11 @@ impl Binder {
             }
             Kind::TypeParameter => self.bind_type_parameter(node),
             Kind::Parameter => self.bind_parameter(node),
-            Kind::VariableDeclaration => self.bind_variable_declaration_or_binding_element(node),
+            Kind::VariableDeclaration => {
+                let global = self.container.is_some_and(|c| matches!(c.kind(), Kind::SourceFile | Kind::ModuleDeclaration));
+                self.flow_names.record_alias(node, global);
+                self.bind_variable_declaration_or_binding_element(node);
+            }
             Kind::BindingElement => {
                 node.set_flow_node(self.current_flow);
                 self.bind_variable_declaration_or_binding_element(node);
@@ -1796,10 +1817,13 @@ impl Binder {
                 || node.kind() == Kind::ClassStaticBlockDeclaration;
             // A non-async, non-generator IIFE is considered part of the containing control flow. Return statements behave
             // similarly to break statements that exit to a label just past the statement body.
+            let save_flow_graph = self.flow_names.graph();
             if !is_immediately_invoked {
+                let continues = container_flags.intersects(ContainerFlags::IsFunctionExpression | ContainerFlags::IsObjectLiteralOrClassExpressionMethodOrAccessor);
+                self.flow_names.enter_graph(continues.then_some(node));
                 let flow_start = self.new_flow_node(FlowFlags::Start);
                 self.current_flow = Some(flow_start);
-                if container_flags.intersects(ContainerFlags::IsFunctionExpression | ContainerFlags::IsObjectLiteralOrClassExpressionMethodOrAccessor) {
+                if continues {
                     flow_start.node.set(Some(node));
                 }
             }
@@ -1844,6 +1868,7 @@ impl Binder {
             }
             if !is_immediately_invoked {
                 self.current_flow = save_current_flow;
+                self.flow_names.exit_graph(save_flow_graph);
             }
             self.current_break_target = save_break_target;
             self.current_continue_target = save_continue_target;
@@ -2246,6 +2271,7 @@ impl Binder {
     }
 
     pub(crate) fn bind_while_statement(&mut self, node: P<Node>) {
+        self.flow_names.record_span(node);
         let stmt = node.as_while_statement();
         let loop_label = self.create_loop_label();
         let pre_while_label = self.set_continue_target(node, loop_label);
@@ -2261,6 +2287,7 @@ impl Binder {
     }
 
     pub(crate) fn bind_do_statement(&mut self, node: P<Node>) {
+        self.flow_names.record_span(node);
         let stmt = node.as_do_statement();
         let pre_do_label = self.create_loop_label();
         let branch_label = self.create_branch_label();
@@ -2276,6 +2303,7 @@ impl Binder {
     }
 
     pub(crate) fn bind_for_statement(&mut self, node: P<Node>) {
+        self.flow_names.record_span(node);
         let stmt = node.as_for_statement();
         self.bind(stmt.initializer());
         if self.current_flow == Some(self.unreachable_flow) {
@@ -2307,6 +2335,7 @@ impl Binder {
     }
 
     pub(crate) fn bind_for_in_or_for_of_statement(&mut self, node: P<Node>) {
+        self.flow_names.record_span(node);
         let stmt = node.as_for_in_or_of_statement();
         self.bind(stmt.expression());
         if self.current_flow == Some(self.unreachable_flow) {
@@ -2858,6 +2887,7 @@ impl Binder {
             // the current control flow (which includes evaluation of the IIFE arguments).
             let expr = ast::skip_parentheses(call.expression());
             if expr.kind() == Kind::FunctionExpression || expr.kind() == Kind::ArrowFunction {
+                self.flow_names.record_span(node);
                 self.bind_node_list(call.type_arguments());
                 self.bind_each(call.arguments().nodes());
                 self.bind(call.expression());

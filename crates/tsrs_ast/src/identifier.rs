@@ -65,6 +65,7 @@ pub fn register_source_text(text: &'static str) -> u32 {
 // Forgets the text of a file whose memory is about to be freed (language server regions): the table must not keep a
 // pointer into freed memory. The index is not reused.
 pub fn unregister_source_text(index: u32) {
+    crate::flownames::unregister_flow_name_index(index);
     if (index as usize) < SOURCE_TEXTS_CAP {
         let slot = &SOURCE_TEXTS[index as usize];
         slot.len.store(0, Relaxed);
