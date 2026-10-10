@@ -556,6 +556,7 @@ version = "0.11.0"
 dependencies = [
  "libc",
  "rustc-hash",
+ "tsrs_core",
 ]
 
 [[package]]

@@ -1,32 +1,79 @@
-use super::rangetable::{decode_rune, unicode_to_lower, unicode_to_upper, Rune};
+use super::rangetable::{decode_rune, unicode_simple_fold, unicode_to_lower, Rune};
 use std::cmp::Ordering;
 
 /// Go `strings.EqualFold` (Unicode simple case folding).
 pub fn equal_fold(a: &str, b: &str) -> bool {
-    let (mut a, mut b) = (a.as_bytes(), b.as_bytes());
-    loop {
-        if a.is_empty() || b.is_empty() {
-            return a.is_empty() && b.is_empty();
-        }
-        let (ra, sa) = decode_rune(a);
-        let (rb, sb) = decode_rune(b);
-        a = &a[sa..];
-        b = &b[sb..];
-        if ra == rb {
-            continue;
-        }
-        if !fold_equal_rune(ra, rb) {
-            return false;
-        }
-    }
+    equal_fold_bytes(a.as_bytes(), b.as_bytes())
 }
 
-fn fold_equal_rune(ra: Rune, rb: Rune) -> bool {
-    let (lo, hi) = if ra < rb { (ra, rb) } else { (rb, ra) };
-    if hi < 0x80 {
-        return (b'A' as Rune..=b'Z' as Rune).contains(&lo) && hi == lo + ('a' as Rune - 'A' as Rune);
+/// Go `strings.EqualFold` (Go 1.27 strings/strings.go:1185) over bytes, which may be cut mid-rune as Go strings
+/// can be; invalid UTF-8 decodes as U+FFFD, one byte at a time.
+pub fn equal_fold_bytes(s: &[u8], t: &[u8]) -> bool {
+    // ASCII fast path
+    let mut i = 0;
+    while i < s.len() && i < t.len() {
+        let (mut sr, mut tr) = (s[i], t[i]);
+        if (sr | tr) >= 0x80 {
+            return equal_fold_unicode(&s[i..], &t[i..]);
+        }
+        i += 1;
+        // Easy case.
+        if tr == sr {
+            continue;
+        }
+        // Make sr < tr to simplify what follows.
+        if tr < sr {
+            std::mem::swap(&mut tr, &mut sr);
+        }
+        // ASCII only, sr/tr must be upper/lower case
+        if sr.is_ascii_uppercase() && tr == sr + b'a' - b'A' {
+            continue;
+        }
+        return false;
     }
-    unicode_to_lower(ra) == unicode_to_lower(rb) || unicode_to_upper(ra) == unicode_to_upper(rb)
+    // Check if we've exhausted both strings.
+    s.len() == t.len()
+}
+
+// The `hasUnicode:` half of Go's EqualFold.
+fn equal_fold_unicode(mut s: &[u8], mut t: &[u8]) -> bool {
+    while !s.is_empty() {
+        let (mut sr, size) = decode_rune(s);
+        s = &s[size..];
+        // If t is exhausted the strings are not equal.
+        if t.is_empty() {
+            return false;
+        }
+        let (mut tr, size) = decode_rune(t);
+        t = &t[size..];
+        // Easy case.
+        if tr == sr {
+            continue;
+        }
+        // Make sr < tr to simplify what follows.
+        if tr < sr {
+            std::mem::swap(&mut tr, &mut sr);
+        }
+        // Fast check for ASCII.
+        if tr < 0x80 {
+            // ASCII only, sr/tr must be upper/lower case
+            if (b'A' as Rune..=b'Z' as Rune).contains(&sr) && tr == sr + ('a' as Rune - 'A' as Rune) {
+                continue;
+            }
+            return false;
+        }
+        // General case. SimpleFold(x) returns the next equivalent rune > x or wraps around to smaller values.
+        let mut r = unicode_simple_fold(sr);
+        while r != sr && r < tr {
+            r = unicode_simple_fold(r);
+        }
+        if r == tr {
+            continue;
+        }
+        return false;
+    }
+    // First string is empty, so check if the second one is also empty.
+    t.is_empty()
 }
 
 pub fn equate_string_case_insensitive(a: &str, b: &str) -> bool {
@@ -128,22 +175,6 @@ pub fn has_suffix(s: &str, suffix: &str, case_sensitive: bool) -> bool {
     equal_fold_bytes(&s.as_bytes()[s.len() - suffix.len()..], suffix.as_bytes())
 }
 
-fn equal_fold_bytes(a: &[u8], b: &[u8]) -> bool {
-    let (mut a, mut b) = (a, b);
-    loop {
-        if a.is_empty() || b.is_empty() {
-            return a.is_empty() && b.is_empty();
-        }
-        let (ra, sa) = decode_rune(a);
-        let (rb, sb) = decode_rune(b);
-        a = &a[sa..];
-        b = &b[sb..];
-        if ra != rb && !fold_equal_rune(ra, rb) {
-            return false;
-        }
-    }
-}
-
 pub fn has_prefix_and_suffix_without_overlap(s: &str, prefix: &str, suffix: &str, case_sensitive: bool) -> bool {
     if prefix.len() + suffix.len() > s.len() {
         return false;
@@ -185,4 +216,38 @@ pub fn go_strings_to_lower(s: &str) -> String {
         i += size;
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Expected values are Go 1.27's strings.EqualFold. On these pairs a lowercase/uppercase comparison disagrees with
+    // Go's SimpleFold orbit walk; an exhaustive comparison over all case-related rune pairs finds no others.
+    #[test]
+    fn test_equal_fold_simple_fold_orbits() {
+        for (a, b) in [("I", "\u{130}"), ("i", "\u{130}"), ("I", "\u{131}"), ("i", "\u{131}")] {
+            assert!(!equal_fold(a, b), "{a} {b}");
+            assert!(!equal_fold(b, a), "{b} {a}");
+        }
+        for (a, b) in [("\u{390}", "\u{1FD3}"), ("\u{3B0}", "\u{1FE3}"), ("\u{3D1}", "\u{3F4}"), ("\u{FB05}", "\u{FB06}")] {
+            assert!(equal_fold(a, b), "{a} {b}");
+            assert!(equal_fold(b, a), "{b} {a}");
+            assert!(equal_fold(&format!("ab{a}c"), &format!("AB{b}C")), "{a} {b}");
+        }
+        assert!(equal_fold("k", "\u{212A}"));
+        assert!(equal_fold("\u{1F80}", "\u{1F88}"));
+        assert!(equal_fold("Stra\u{DF}e", "STRA\u{1E9E}E"));
+        assert!(!equal_fold("abc", "ab"));
+    }
+
+    // has_prefix / has_suffix compare byte slices that can end mid-rune, as Go's do.
+    #[test]
+    fn test_has_suffix_ignore_case_cut_rune() {
+        assert!(has_suffix("x\u{3F4}.TS", "\u{3D1}.ts", false));
+        assert!(!has_suffix("x\u{131}.TS", "i.ts", false));
+        assert!(has_prefix("\u{3B8}", "\u{3D1}", false));
+        // The 2-byte prefix of U+1FD3 is invalid UTF-8, which never folds to U+0390.
+        assert!(!has_prefix("\u{1FD3}x", "\u{390}", false));
+    }
 }
