@@ -60,10 +60,10 @@ thread_local! {
     static ROOT_PARSE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
-/// File regions by file, with the file's node rows (`tsrs_core::nodetable::end_segment`: the rows its parse took,
+/// File regions by file, with the ranges of node rows the file's parse kept (`tsrs_core::nodetable::end_segment`,
 /// given back with the region). Filled by the parse workers, read by the binding ones, emptied of leaves by the
 /// checkers.
-static REGIONS: LazyLock<Mutex<FxHashMap<P<SourceFile>, (Region, (u32, u32))>>> = LazyLock::new(Default::default);
+static REGIONS: LazyLock<Mutex<FxHashMap<P<SourceFile>, (Region, Vec<(u32, u32)>)>>> = LazyLock::new(Default::default);
 
 // `TSRS_FREE_LEAVES=stats` / `keep` counters: written before and during the pass, read after its threads joined.
 static LEAVES: AtomicUsize = AtomicUsize::new(0);
@@ -324,10 +324,8 @@ fn first_chunk(text_len: usize) -> usize {
 /// back.
 pub(crate) fn parse(opts: SourceFileParseOptions, text: String, script_kind: ScriptKind) -> P<SourceFile> {
     let region = Region::new_scratch_in_large_slabs(first_chunk(text.len()));
-    // The file's node rows in one contiguous range, so that their pages go back with the region (`free`). About 9
-    // bytes of text per node on the bench projects (notes/mem-compact-ast-sizing.md section 4.1); a file denser than 3
-    // bytes per node spills into ordinary chunks, which are kept.
-    tsrs_core::nodetable::begin_segment(text.len() / 3 + 64);
+    // The file's node rows, so that their pages go back with the region (`free`).
+    tsrs_core::nodetable::begin_segment();
     let file = {
         let _scratch = region.enter_scratch();
         tsrs_parser::parse_source_file_keep_text(opts, text, script_kind)
@@ -565,7 +563,7 @@ pub(crate) fn pass_done() {
 /// Frees `file`'s region (a leaf whose diagnostics the pass has collected). Called on the checker thread that
 /// checked it; nothing reads the file's tree or binder output afterwards (`classify`).
 pub(crate) fn free(file: P<SourceFile>) {
-    let Some((region, (first_row, end_row))) = REGIONS.lock().unwrap().remove(&file) else { return };
+    let Some((region, rows)) = REGIONS.lock().unwrap().remove(&file) else { return };
     if stats() {
         // Relaxed: counters read after the pass's threads joined.
         FREED.fetch_add(1, Ordering::Relaxed);
@@ -573,8 +571,10 @@ pub(crate) fn free(file: P<SourceFile>) {
     }
     region.retire_on_free();
     drop(region);
-    // SAFETY: the file's tree is dead with its region (`classify`): nothing reads its node rows again.
-    unsafe { tsrs_core::nodetable::discard(first_row, end_row) };
+    for (start, end) in rows {
+        // SAFETY: the file's tree is dead with its region (`classify`): nothing reads its node rows again.
+        unsafe { tsrs_core::nodetable::discard(start, end) };
+    }
 }
 
 /// The `TSRS_FREE_LEAVES=stats` / `keep` line (for stderr), if asked for.

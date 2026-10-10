@@ -12,8 +12,11 @@
 //! (`take_chunk`, doubling up to `MAX_CHUNK`), and the thread allocates from it without synchronization. A
 //! speculative parse records the thread's position (`checkpoint`) and gives the indices it took back (`rewind`),
 //! under the same rule the arena uses (the parser rewinds nodes only when it rewinds the arena). A file parsed into a
-//! region of its own takes a contiguous segment sized from its text (`begin_segment` / `end_segment`), so that the
-//! pages of its rows can be given back when the file's region is freed (`discard`, fileregions.rs).
+//! region of its own is a segment (`begin_segment` / `end_segment`): it allocates from the thread's chunks like any
+//! other node and `end_segment` returns the exact ranges of rows it kept, so that their pages can be given back when
+//! the file's region is freed (`discard`, fileregions.rs). Nothing is reserved for it: a reservation leaves a gap
+//! after each file, and every column then keeps a partly used page per file (seven columns, where the arena's header
+//! had one), which cost about 160 MiB of resident memory on the vscode bench project.
 //!
 //! Columns are written by the thread that creates the node, then read by every thread, like the cells of the old
 //! header ("Threading" in docs/PORTING.md); the id column is atomic, as the id was (`get_node_id` races).
@@ -22,15 +25,14 @@
 //! constant base folds into the addressing mode), mapped read-write and never committed until touched, so untouched
 //! index space costs nothing. Elsewhere (wasm, Windows) columns are chunked tables allocated on demand.
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Mutex;
 
 use crate::ptr::PKey;
 use crate::TextRange;
 
-/// Indices are below `1 << INDEX_BITS`: 512M nodes (the 38k-file codebase has 23M; files parsed into regions
-/// reserve about a third of their text length in indices, `begin_segment`).
+/// Indices are below `1 << INDEX_BITS`: 512M nodes (the 38k-file codebase has 23M).
 pub const INDEX_BITS: u32 = 29;
 pub const MAX: usize = 1 << INDEX_BITS;
 
@@ -247,14 +249,11 @@ static NEXT: AtomicU32 = AtomicU32::new(1);
 const FIRST_CHUNK: u32 = 1 << 10;
 const MAX_CHUNK: u32 = 1 << 16;
 
-/// A file region's segment: how the thread was allocating before it, and where the segment's reservation ends.
-#[derive(Clone, Copy)]
+/// A file region's segment: the thread's chunk when it began (`begin`, `begin_end`) and the chunks it took since.
 struct Segment {
-    start: u32,
-    reserved_end: u32,
-    overflowed: bool,
-    saved_chunk: (u32, u32),
-    saved_size: u32,
+    begin: u32,
+    begin_end: u32,
+    chunks: Vec<(u32, u32)>,
 }
 
 thread_local! {
@@ -262,7 +261,7 @@ thread_local! {
     static CHUNK: Cell<(u32, u32)> = const { Cell::new((0, 0)) };
     /// Size of the thread's next chunk (doubles).
     static CHUNK_SIZE: Cell<u32> = const { Cell::new(FIRST_CHUNK) };
-    static SEGMENT: Cell<Option<Segment>> = const { Cell::new(None) };
+    static SEGMENT: RefCell<Option<Segment>> = const { RefCell::new(None) };
 }
 
 #[cold]
@@ -286,18 +285,15 @@ fn take_indices(n: u32) -> u32 {
 #[cold]
 #[inline(never)]
 fn take_chunk() -> u32 {
-    if let Some(mut seg) = SEGMENT.get() {
-        if !seg.overflowed {
-            // The file has more nodes than its segment reserved: the rest go to ordinary chunks (not contiguous, not
-            // discarded with the file).
-            seg.overflowed = true;
-            SEGMENT.set(Some(seg));
-        }
-    }
     let size = CHUNK_SIZE.get();
     CHUNK_SIZE.set((size * 2).min(MAX_CHUNK));
     let start = take_indices(size);
     CHUNK.set((start + 1, start + size));
+    SEGMENT.with_borrow_mut(|seg| {
+        if let Some(seg) = seg {
+            seg.chunks.push((start, start + size));
+        }
+    });
     start
 }
 
@@ -342,23 +338,35 @@ pub fn rewind(cp: Checkpoint) {
     CHUNK.set(cp.0);
 }
 
-/// Starts a segment for a file whose rows should be contiguous: reserves `estimate` indices (clamped) and allocates
-/// from them until `end_segment`. The thread's current chunk is resumed afterwards.
-pub fn begin_segment(estimate: usize) {
-    debug_assert!(SEGMENT.get().is_none(), "nodetable: nested segment");
-    let n = estimate.clamp(64, 1 << 24) as u32;
-    let start = take_indices(n);
-    SEGMENT.set(Some(Segment { start, reserved_end: start + n, overflowed: false, saved_chunk: CHUNK.get(), saved_size: CHUNK_SIZE.get() }));
-    CHUNK.set((start, start + n));
+/// Starts a segment (a file's rows): the thread goes on allocating from its current chunk, and the chunks it takes
+/// are recorded until `end_segment`.
+pub fn begin_segment() {
+    let (begin, begin_end) = CHUNK.get();
+    SEGMENT.with_borrow_mut(|seg| {
+        debug_assert!(seg.is_none(), "nodetable: nested segment");
+        *seg = Some(Segment { begin, begin_end, chunks: Vec::new() });
+    });
 }
 
-/// Ends the segment: the rows `start .. end` it used (the whole reservation if it overflowed into ordinary chunks).
-pub fn end_segment() -> (u32, u32) {
-    let seg = SEGMENT.take().expect("nodetable: end_segment without begin_segment");
-    let used_end = if seg.overflowed { seg.reserved_end } else { CHUNK.get().0 };
-    CHUNK.set(seg.saved_chunk);
-    CHUNK_SIZE.set(seg.saved_size);
-    (seg.start, used_end)
+/// Ends the segment: the ranges `start .. end` of rows it kept, in index order. The rows of chunks a rewind abandoned
+/// are not in them, and the thread goes on from where the segment's last kept row ends, so the next file's rows
+/// share the pages of this file's last one (and nothing is reserved or left as a gap).
+pub fn end_segment() -> Vec<(u32, u32)> {
+    let seg = SEGMENT.with_borrow_mut(Option::take).expect("nodetable: end_segment without begin_segment");
+    let (next, end) = CHUNK.get();
+    // The chunk the thread is in now (after any rewind) is the last one of the segment's own rows.
+    let mut chunks = Vec::with_capacity(seg.chunks.len() + 1);
+    chunks.push((seg.begin, seg.begin_end));
+    chunks.extend(seg.chunks);
+    let last = chunks.iter().position(|&(_, e)| e == end).expect("nodetable: the current chunk is not one of the segment's");
+    let mut ranges = Vec::with_capacity(last + 1);
+    for (i, &(start, chunk_end)) in chunks[..=last].iter().enumerate() {
+        let stop = if i == last { next } else { chunk_end };
+        if stop > start {
+            ranges.push((start, stop));
+        }
+    }
+    ranges
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -569,17 +577,16 @@ mod tests {
     }
 
     #[test]
-    fn segments_are_contiguous_and_resume_the_chunk() {
+    fn segment_ranges_are_the_rows_it_kept() {
         let before = alloc(1, 1, 0, TextRange::new(0, 0));
-        let saved = CHUNK.get();
-        begin_segment(100);
+        begin_segment();
         let first = alloc(1, 1, 0, TextRange::new(0, 0));
         let second = alloc(1, 1, 0, TextRange::new(0, 0));
         assert_eq!(second, first + 1);
-        let (s, e) = end_segment();
-        assert_eq!((s, e), (first, second + 1));
-        assert_eq!(CHUNK.get(), saved);
+        let ranges = end_segment();
+        assert!(ranges.iter().any(|&(s, e)| s <= first && second < e));
+        assert!(ranges.iter().all(|&(s, _)| s > before));
         let after = alloc(1, 1, 0, TextRange::new(0, 0));
-        assert_eq!(after, before + 1);
+        assert_eq!(after, second + 1);
     }
 }
