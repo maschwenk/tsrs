@@ -5,7 +5,9 @@ practices. This file adds the rules below.
 
 ## General
 
-- Do not name the private monorepo; call it "the 38k-file codebase".
+- When you run tsrs on private code (to test performance, hill-climb or reproduce a bug), say only that it was run on
+  a large private monorepo. Never divulge anything else about that repo: not its name, paths, package or file names,
+  size, types or code. This holds in code, comments, notes, commit messages and pull requests.
 - Do not edit the benchmark section of `README.md` between `<!-- bench:start -->` and `<!-- bench:end -->`. The bench
   workflow (`.depot/workflows/bench.yml`) rewrites it; change its generator, `bench/run.py`, instead.
 
