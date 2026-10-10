@@ -117,6 +117,11 @@ is type-checked, CI runs on pull requests, and the workspace is at 0.11.0. The i
 
 ## Measured and rejected (do not redo)
 
+- Rayon construction of the collect walk's four main per-file maps (notes/perf-rayon-collect.md): exact in 102/102
+  verification cells, but +0.000..+0.003% single-threaded instructions; xstate, mui and formbricks +1.8..+2.1% wall
+  at 16 checkers on 32 vCPUs, with peak RSS -0.2..+0.3%. No qualifying gain; prototype removed. Revisit only with
+  a larger measured map-construction cost or a design without the staging buffers and additional pass.
+
 - A tracing collector for checker data instead of retiring checkers (notes/mem-checker-gc.md): weak identity caches
   free 3% more than garbage at mid-run; even an upper bound with member tables and value-symbol links weak frees
   ~37% of the program's memory, about where `--maxMemory` already gets, for weeks of data-model changes.
