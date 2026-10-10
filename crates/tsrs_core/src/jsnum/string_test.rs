@@ -82,6 +82,14 @@ fn from_string_tests() -> Vec<StringTest> {
         st(nan(), "e"),
         st(nan(), ".e"),
         st(nan(), "+"),
+        st(nan(), "-"),
+        st(nan(), "１２"),
+        st(nan(), "١٢"),
+        st(nan(), "0xé"),
+        st(nan(), "1\u{2028}2"),
+        st(nan(), "1e٢"),
+        st(Number(12.5), "\u{FEFF}\u{00A0}12.5\u{2028}\u{2029}"),
+        st(Number(100.0), "1E2"),
         st(Number(0.0), "0X0"),
         st(nan(), "e0"),
         st(nan(), "E0"),
@@ -177,6 +185,16 @@ fn test_string_roundtrip() {
     for test in string_tests() {
         assert_eq!(from_string(test.str).string(), test.str);
     }
+}
+
+#[test]
+fn cut_any_preserves_unicode_cutsets() {
+    assert_eq!(cut_any("é1E2e3", "eE"), ("é1", "2e3", true));
+    assert_eq!(cut_any("é😀1", "😀é"), ("", "😀1", true));
+    assert_eq!(cut_any("a😀b", "😀"), ("a", "b", true));
+    assert_eq!(cut_any("aébE2", "éE"), ("a", "bE2", true));
+    assert_eq!(cut_any("é😀", "eE"), ("é😀", "", false));
+    assert_eq!(cut_any("é😀", ""), ("é😀", "", false));
 }
 
 // TestStringJS, FuzzStringJS, FuzzFromStringJS and getStringResultsFromJS
