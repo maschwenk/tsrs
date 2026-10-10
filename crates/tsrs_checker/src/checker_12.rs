@@ -207,7 +207,7 @@ impl Checker {
             let too_complex_before = self.too_complex_reports;
             let min_type_argument_count = self.get_min_type_argument_count(type_parameters);
             let filled = self.fill_missing_type_arguments(type_arguments, type_parameters, min_type_argument_count, ast::is_in_js_file(symbol.value_declaration()));
-            let mapper = new_type_mapper(type_parameters, alloc_vec(filled));
+            let mapper = new_type_mapper(type_parameters, alloc_slice(&filled));
             let result = self.instantiate_type_with_alias(t, Some(mapper), alias);
             // tsrs-only: not cached when the instantiation reported TS2590 (`too_complex_since`).
             if !self.too_complex_since(too_complex_before) {

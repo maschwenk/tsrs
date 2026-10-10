@@ -818,7 +818,7 @@ impl Checker {
                 }
             }
         }
-        type_argument_types
+        type_argument_types.into_owned()
     }
 
     // checker.go:9448
