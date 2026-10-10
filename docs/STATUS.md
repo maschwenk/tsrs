@@ -1,5 +1,25 @@
 # Status
 
+## 2026-10-10: 0.13.0 release
+
+Walker Boyle's checker optimizations (#299): faster union construction and membership, caching of long union
+keys and indexed accesses, fewer type-relation and property lookups, and less allocation in checker and front-end
+paths. Module affinity and sticky work stealing now apply from 8 checkers on programs with at least 24,000 checked
+files; smaller programs retain the existing threshold.
+
+The measurements in `notes/perf-icount-hillclimb.md` compare plain release builds on Linux x64 with 8 checkers:
+the 38k-file codebase uses 38.7% fewer user-space instructions, checks about 24% faster (42.44–42.50 s to
+31.78–32.49 s over three runs each), and uses about 3.3% less peak RSS, with identical diagnostics. These are
+workload-specific measurements of #299, not new measurements of the PGO/BOLT npm binaries. Its pre-release
+validation preserved the conformance pass lists, passed all 29 regression cases, and found matching diagnostics
+in all 102 public-project verification cells.
+
+Release tooling now uses pinned pnpm 12.10.1 for installation, packing and direct OIDC publication (#295).
+All five packages (`tsrs`, `@ts-rs/darwin-arm64`, `@ts-rs/linux-x64`, `@ts-rs/linux-arm64` and `@ts-rs/wasm`)
+use `0.13.0-ts7.1.0-dev.20260929`. The TypeScript source pin remains
+`b85298b6a81f772d080b0455de0ca9d744cd6fd6` (7.1.0-dev.20260929). The shared checker seed still requires
+the `shared-graph` Cargo feature and `TSRS_SHARED_GRAPH=1`; npm binaries use the default Cargo features.
+
 ## 2026-10-10: 0.12.0 release
 
 The native compiler and JS API move to `tsrs`, the native binaries to `@ts-rs/darwin-arm64`, `@ts-rs/linux-x64`
