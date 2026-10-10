@@ -2259,6 +2259,20 @@ impl Checker {
         None
     }
 
+    /// `program.get_emit_module_format_of_file(file)`, remembered for the last file: the checker asks it for the
+    /// file being checked, per import, export and declaration, and the program answers by hashing the file's path.
+    #[inline]
+    pub(crate) fn emit_module_format_of_file(&mut self, file: P<SourceFile>) -> ModuleKind {
+        if let Some((last, kind)) = self.last_emit_module_format
+            && last == file
+        {
+            return kind;
+        }
+        let kind = self.program.get_emit_module_format_of_file(file);
+        self.last_emit_module_format = Some((file, kind));
+        kind
+    }
+
     /// False if `key` is a member of none of the global types `get_property_of_type_worker` looks up a missing
     /// property in (most lookups that miss a type's own members). True until all four are resolved: the filter is
     /// built from their member tables, which do not change after resolution, and asking must not resolve them early.

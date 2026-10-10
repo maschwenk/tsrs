@@ -1124,6 +1124,8 @@ pub struct Checker {
     /// The member names of `Function`, `CallableFunction`, `NewableFunction` and `Object`, once all four are
     /// resolved (`may_be_augment_member`).
     pub(crate) augment_filter: Option<tsrs_ast::NameFilter>,
+    /// The last `program.get_emit_module_format_of_file` answer (`emit_module_format_of_file`).
+    pub(crate) last_emit_module_format: Option<(P<SourceFile>, ModuleKind)>,
     /// Instrumentation (feature `assignment-stats`): every type / symbol this checker created.
     #[cfg(feature = "assignment-stats")]
     pub stats_created: (Vec<P<Type>>, Vec<P<Symbol>>),
@@ -1525,6 +1527,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         lazy_empty: tsrs_core::lazymembers::lazy_empty(),
         lazy_member_stats: Default::default(),
         augment_filter: None,
+        last_emit_module_format: None,
         #[cfg(feature = "assignment-stats")]
         stats_created: Default::default(),
         context_free_types: FxHashMap::default(),
@@ -1921,6 +1924,7 @@ impl Checker {
             enum_nan_literal_types: base.enum_nan_literal_types.clone(),
             indexed_access_types: crate::basedmap::Based::over(&base.indexed_access_types),
             node_file_cache: Vec::new(),
+            last_emit_module_format: None,
             indexed_access_union_memo: FxHashMap::default(),
             template_literal_types: base.template_literal_types.clone(),
             string_mapping_types: base.string_mapping_types.clone(),

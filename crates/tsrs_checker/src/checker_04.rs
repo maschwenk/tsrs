@@ -632,14 +632,14 @@ impl Checker {
             if self.compiler_options.verbatim_module_syntax.is_true()
                 && !is_import_equals_declaration(node)
                 && !is_in_js_file(node)
-                && self.program.get_emit_module_format_of_file(get_source_file_of_node(node).unwrap()) == ModuleKind::CommonJS
+                && self.emit_module_format_of_file(get_source_file_of_node(node).unwrap()) == ModuleKind::CommonJS
             {
                 self.error(Some(node), get_verbatim_module_syntax_error_message(node), &[]);
             } else if self.module_kind == ModuleKind::Preserve
                 && !is_import_equals_declaration(node)
                 && !is_variable_declaration(node)
                 && !is_binding_element(node)
-                && self.program.get_emit_module_format_of_file(get_source_file_of_node(node).unwrap()) == ModuleKind::CommonJS
+                && self.emit_module_format_of_file(get_source_file_of_node(node).unwrap()) == ModuleKind::CommonJS
             {
                 // In `--module preserve`, ESM input syntax emits ESM output syntax, but there will be times
                 // when we look at the `impliedNodeFormat` of this file and decide it's CommonJS (i.e., currently,

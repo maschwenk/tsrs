@@ -2568,7 +2568,7 @@ impl Checker {
                     {
                         // This is a declaration file from a project reference, so we can determine
                         // its module format from the referenced project's options
-                        let target_module_kind = self.program.get_emit_module_format_of_file(file.as_source_file_p());
+                        let target_module_kind = self.emit_module_format_of_file(file.as_source_file_p());
                         if usage_mode == ModuleKind::ESNext && ModuleKind::ES2015 <= target_module_kind && target_module_kind <= ModuleKind::ESNext {
                             return false;
                         }
