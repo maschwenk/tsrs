@@ -10,6 +10,9 @@ keep 8 (half their cores rounds below it), 18 cores keep 9, 64 or more keep 32, 
 comparison. The small-program floor (one checker per 32 type-checked files beyond Go's 4) and the `-b` build-mode
 default (Go's 4) are unchanged.
 
+Superseded on 2026-10-10 by notes/perf-default-checkers-16.md: every core up to 16, with a default `--maxMemory`
+target on machines short of memory.
+
 ## Evidence: the 8-vCPU runner, default (4 checkers) against `--checkers 8`
 
 bench/results/2026-10-07-313e834a19e0.md (Depot `depot-ubuntu-24.04-8`, 8 vCPU / 32 GB, PGO dist build with BOLT,

@@ -115,12 +115,13 @@ tsrs's errors (`(ref N)` in the table).
 ## What is measured
 
 - Invocation, identical for both: `-p <project> --noEmit --incremental false --extendedDiagnostics --pretty false`,
-  in the default mode (no thread flag: tsgo uses 4 checker threads; tsrs every core up to 8, then half the cores,
+  in the default mode (no thread flag: tsgo uses 4 checker threads; tsrs every core up to 16, then half the cores,
   from 4 to 32, lowered toward 4 for programs with fewer than 32 type-checked files per checker, so 8 on the 8-vCPU
-  machine, but fewer on small or mid-size projects (Compiler and Compiler-Unions get 4, xstate-main fewer than 8); tsrs additionally resolves members lazily, its default), with `--singleThreaded`, with
+  machine and 16 on the 16-vCPU one, but fewer on small or mid-size projects (Compiler and Compiler-Unions get 4, xstate-main fewer than 8); tsrs additionally resolves members lazily, its default), with `--singleThreaded`, with
   `--checkers 8` (the `checkers8` mode: both compilers at 8 checker threads, twice tsgo's default), and on a 16-vCPU machine (see "CI") in the default mode again (the `wide` mode: the same flags as
   `default`, kept apart so that one result can hold both machines) and with `--checkers 16` (the `checkers16` mode: how
-  each scales on a wide machine). Select modes with `--modes` (default `default,single,checkers8`; flags in `MODE_FLAGS`
+  each scales on a wide machine; for tsrs the same count as `wide` there, except on the projects the file-count rule
+  gives fewer). Select modes with `--modes` (default `default,single,checkers8`; flags in `MODE_FLAGS`
   in `run.py`).
 - `bun check` (`--bun <binary>`, Bun 1.4.3 canary or later) is a third column in every mode it is measured in: `bun check
   -p <project> --no-pretty --all`, with `--threads N` where tsgo and tsrs get `--checkers N` (bun's only thread knob,
@@ -236,7 +237,7 @@ once the four application projects were in):
    `bench-partial-<name>` artifact, the compiler output `bench-logs-<name>`. The jobs run at the same time but never
    share a machine, so a measurement is what it was in the sequential run: one project on an idle 8-vCPU machine.
 3. `measure-wide`, one job on `depot-ubuntu-24.04-16` (16 vCPU): every project in the default mode (`wide`: each
-   compiler at its own thread count, tsrs 8 checkers there) and in `--checkers 16` mode (`bench/run.py --modes
+   compiler at its own thread count, tsrs 16 checkers there, fewer on small projects) and in `--checkers 16` mode (`bench/run.py --modes
    wide,checkers16`), each with `bun check` from Bun canary as a third column (`--bun`). 16 checker threads would
    oversubscribe the fixed-spec machine. The job runs while the `measure` jobs do; it is the run's only 16-vCPU job. It
    restores the caches the `measure` jobs save (a project added to `projects.json` needs a restore step in it too). If
@@ -378,7 +379,7 @@ mean of 20 runs). It runs four compilers on the same checkouts:
   counted).
 
 Thread settings (`--threads`, default `default,4,8,16,all`): `default` passes no flag (tsgo uses 4 checker threads,
-tsrs half the cores, at least min(cores, 8), at most 32, bun one thread per core); a number N passes `--checkers N` to tsgo and tsrs and
+tsrs every core up to 16, then half the cores, at most 32, bun one thread per core); a number N passes `--checkers N` to tsgo and tsrs and
 `--threads N` to bun;
 `all` is the machine's thread count. The knobs are not identical: `--checkers` sets only the checker threads (parsing
 and binding still use every core), while bun's `--threads` caps all of its threads. Per project, one untimed warm-up
