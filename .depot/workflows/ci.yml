@@ -130,6 +130,9 @@ jobs:
         run: |
           if [ -f npm/package-lock.json ]; then npm ci --prefix npm --no-audit --no-fund; fi
           node npm/build.mjs --binary x86_64-unknown-linux-gnu=target/release/tsrs --pack
+          # Also pack with the publish job's npm; its JSON output differs from Node 24's bundled npm.
+          npm install --prefix "$RUNNER_TEMP/npm-pack" npm@12.2.0 --ignore-scripts --no-audit --no-fund
+          PATH="$RUNNER_TEMP/npm-pack/node_modules/.bin:$PATH" node npm/build.mjs --binary x86_64-unknown-linux-gnu=target/release/tsrs --pack
           dir=$(mktemp -d)
           cd "$dir"
           npm init -y > /dev/null

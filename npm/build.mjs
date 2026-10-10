@@ -221,7 +221,8 @@ function npmPack(dir, out) {
         encoding: "utf8",
         shell: process.platform === "win32",
     });
-    const [info] = JSON.parse(stdout);
+    // npm 12 keys the results by package name; earlier versions return an array.
+    const [info] = Object.values(JSON.parse(stdout));
     return path.join(out, info.filename);
 }
 
