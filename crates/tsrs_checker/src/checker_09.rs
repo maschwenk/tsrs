@@ -2300,6 +2300,26 @@ impl Checker {
         self.get_property_of_type(source.t, name)
     }
 
+    /// `get_property_of_type_ex(t, key.name, skip_object_function_property_augment, false)` when `t` is a plain
+    /// object type with resolved members and the member table alone answers it (as in `get_resolved_property`);
+    /// `None` when the full path must decide. For a loop that looks up one name in many types.
+    #[inline]
+    pub(crate) fn try_resolved_property(&mut self, t: P<Type>, key: HashedName<'_>, skip_object_function_property_augment: bool) -> Option<Option<P<Symbol>>> {
+        if t.flags() != TypeFlags::Object
+            || t.object_flags().intersects(ObjectFlags::Mapped)
+            || !t.object_flags_lazy().intersects(ObjectFlags::MembersResolved)
+            || t.symbol().is_some_and(|s| s.flags().intersects(SymbolFlags::ValueModule))
+        {
+            return None;
+        }
+        match t.as_structured_type().members().and_then(|m| m.lookup_hashed(key)) {
+            Some(symbol) if symbol.flags().intersects(SymbolFlags::Value) => Some(Some(symbol)),
+            Some(_) => None,
+            None if skip_object_function_property_augment || !self.may_be_augment_member(key) => Some(None),
+            None => None,
+        }
+    }
+
     /// `program.get_emit_module_format_of_file(file)`, remembered for the last file: the checker asks it for the
     /// file being checked, per import, export and declaration, and the program answers by hashing the file's path.
     #[inline]

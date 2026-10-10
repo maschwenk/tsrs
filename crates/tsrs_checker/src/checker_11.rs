@@ -89,10 +89,14 @@ impl Checker {
         }
         let mut synthetic_flag = CheckFlags::SyntheticMethod;
         let mut merged_instantiations = false;
+        let key = HashedName::new(name);
         for &current in containing_type.types() {
             let t = self.get_apparent_type(current);
             if !self.is_error_type(t) && !t.flags().intersects(TypeFlags::Never) {
-                let prop = self.get_property_of_type_ex(t, name, skip_object_function_property_augment, false);
+                let prop = match self.try_resolved_property(t, key, skip_object_function_property_augment) {
+                    Some(prop) => prop,
+                    None => self.get_property_of_type_ex(t, name, skip_object_function_property_augment, false),
+                };
                 if let Some(prop) = prop {
                     let modifiers = get_declaration_modifier_flags_from_symbol(prop);
                     let write_modifiers = get_declaration_modifier_flags_from_symbol_ex(prop, true /*isWrite*/);
