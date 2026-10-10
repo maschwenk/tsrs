@@ -98,9 +98,20 @@ impl Checker {
         if origin.is_none() && includes.intersects(TypeFlags::Union) {
             let named_unions = self.add_named_unions(&[], types);
             let mut reduced_types: Vec<P<Type>> = Vec::new();
-            for &t in &type_set {
-                if !named_unions.iter().any(|u| contains_type(self, u.types(), t)) {
-                    reduced_types.push(t);
+            if named_unions.len() > 1 && self.program.source_files_complete() {
+                // tsrs-only: under a total order `contains_type` finds exactly the identical type, so one set of the
+                // named unions' constituents answers every constituent's question; the binary searches, one per
+                // named union per constituent, were most of the `compare_types` calls on the 38k-file codebase.
+                let mut named: FxHashSet<P<Type>> = FxHashSet::default();
+                for u in &named_unions {
+                    named.extend(u.types().iter().copied());
+                }
+                reduced_types.extend(type_set.iter().copied().filter(|t| !named.contains(t)));
+            } else {
+                for &t in &type_set {
+                    if !named_unions.iter().any(|u| contains_type(self, u.types(), t)) {
+                        reduced_types.push(t);
+                    }
                 }
             }
             if alias.is_none() && named_unions.len() == 1 && reduced_types.is_empty() {
