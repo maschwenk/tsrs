@@ -3,7 +3,8 @@
 Status (2026-10-10): sections 1-9 are the first round, without a memory target and with the pool waiting for the
 seed. Section 10 is the version proposed for landing (PR #281): built with `--features shared-graph`, on with
 `TSRS_SHARED_GRAPH=1`, and meant for `--maxMemory`, where a retired checker is replaced by a fork of the seed. That
-version keeps two knobs, `TSRS_SHARED_GRAPH_SEED=<permille>` and `TSRS_SHARED_GRAPH_PROTECT=0`, plus
+version keeps two knobs, `TSRS_SHARED_GRAPH_SEED_PERCENT` (section 10.2; the first round's
+`TSRS_SHARED_GRAPH_SEED` was in permille, so its 10 is 1%) and `TSRS_SHARED_GRAPH_PROTECT=0`, plus
 `TSRS_DEBUG_REGIONS=1` for debugging. It removed the switches the first round used for measurement and discovery,
 which sections 1-9 still name: `TSRS_SHARED_GRAPH=emulate`, the `spread:`/`files:` seed rules,
 `TSRS_SHARED_GRAPH_OVERLAP`, `_STATS`, `_LOG_OWNED`, `_LOG_OVERRIDES`, `_WAIT`, protect mode `log`, and
@@ -432,3 +433,25 @@ now starts at once. Without a target it still waits for the seed and forks each 
 GB now costs +14% wall against +29% without the seed. What remains of the cost: plain checkers retired at the freeze
 (their state is rebuilt by the forks), the forks' own rebuilds after each retirement, and the +3.6% the feature costs
 compiled in.
+
+### 10.2 Seed size under `--maxMemory` (2026-10-10)
+
+The first round chose 10 permille (1%) while every checker waited for the seed: a larger seed saved more, but its
+serial time grew with it. With the pool no longer waiting under `--maxMemory`, that cost is gone and the trade is
+different: a larger seed means fewer rebuilds after retirements, but a later freeze, and the plain checkers' work up
+to the freeze is discarded when they become forks. Sweep at commit 47cac77d (38k-file codebase, 8 checkers,
+`--maxMemory 8G`, 3 interleaved runs, medians, diagnostics identical in all 15):
+
+| seed | wall | user CPU | instructions | peak |
+| --- | ---: | ---: | ---: | ---: |
+| 1% | 29.56 s | 217.7 s | 2.804 T | 8.63 GB |
+| 2% | 29.13 s | 216.1 s | 2.785 T | 8.67 GB |
+| 5% | 28.59 s | 214.1 s | 2.764 T | 8.83 GB |
+| 10% | 28.90 s | 220.0 s | 2.803 T | 8.87 GB |
+| 20% | 28.86 s | 221.3 s | 2.819 T | 8.95 GB |
+
+5% is best on wall (-3.3%), CPU and instructions (-1.4%) against 1%, for +0.2 GB peak (the seed is frozen, so it
+counts toward the target but is never retired). Past 5% the discarded plain-checker work outweighs the saved
+rebuilds. The default is now 5% with `--maxMemory` and stays 1% without, and the knob is a percent
+(`TSRS_SHARED_GRAPH_SEED_PERCENT`, decimals allowed) instead of permille. One program only: the bench projects were
+not swept in this mode.

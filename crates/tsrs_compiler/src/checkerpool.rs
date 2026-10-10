@@ -904,7 +904,7 @@ impl checkerPool {
         #[cfg(feature = "checker")]
         if allow_steal && state.shared_graph {
             static SEED_STARTED: std::sync::Once = std::sync::Once::new();
-            SEED_STARTED.call_once(|| crate::sharedgraph::start_seed(self.program, state.weights.clone()));
+            SEED_STARTED.call_once(|| crate::sharedgraph::start_seed(self.program, state.weights.clone(), state.recycle));
         }
         let queues: Vec<FileQueue> = positions.into_iter().map(|p| FileQueue::new(p, weight)).collect();
         // `--maxMemory`: each checker's region size after its last file, to retire the largest.

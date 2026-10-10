@@ -7,8 +7,9 @@
 //! and the pool does not wait for the seed: its checkers start as plain checkers and are retired for forks at their
 //! first file boundary after the freeze.
 //!
-//! Built with `--features shared-graph`, on with `TSRS_SHARED_GRAPH=1`. `TSRS_SHARED_GRAPH_SEED=<permille>` sets the
-//! seed's share of the checked weight (default 10).
+//! Built with `--features shared-graph`, on with `TSRS_SHARED_GRAPH=1`. `TSRS_SHARED_GRAPH_SEED_PERCENT` sets the
+//! seed's share of the estimated checking work, in percent (default 5 with `--maxMemory`, 1 without;
+//! notes/spike-shared-graph.md 10.2).
 
 use std::sync::OnceLock;
 
@@ -30,25 +31,27 @@ pub(crate) fn enabled() -> bool {
     })
 }
 
-// The seed's share of the checked weight, in thousandths of a permille ("2.5" -> 2500).
-fn seed_milli_permille() -> u64 {
-    static V: OnceLock<u64> = OnceLock::new();
-    *V.get_or_init(|| {
-        let permille: f64 = std::env::var("TSRS_SHARED_GRAPH_SEED").ok().and_then(|v| v.trim().parse().ok()).unwrap_or(10.0);
-        (permille * 1000.0).round().max(0.0) as u64
-    })
+// The seed's share of the estimated checking work (the files' weights), in parts per million ("2.5" percent ->
+// 25000). Under `--maxMemory` the pool does not wait for the seed, so a larger one costs no serial time: 5% measured
+// best there (-1.4% instructions, -3% wall against 1% on the 38k-file codebase; 10% and 20% lost both). Without a
+// target every checker waits for the seed, whose time grows with its size, so the default stays at the first round's 1%.
+fn seed_ppm(recycle: bool) -> u64 {
+    let default = if recycle { 5.0 } else { 1.0 };
+    let percent: f64 = std::env::var("TSRS_SHARED_GRAPH_SEED_PERCENT").ok().and_then(|v| v.trim().trim_end_matches('%').parse().ok()).unwrap_or(default);
+    (percent * 10_000.0).round().clamp(0.0, 1_000_000.0) as u64
 }
 
 /// The seed files, as positions in `files`, in program order: the lighter half of the checked files, evenly spaced up
-/// to the seed's share of the checked weight. Never a declaration file, and never a file that may be freed once it is
-/// checked (one with a region of its own, `fileregions`), since a frozen object must not point into a freed tree.
-pub(crate) fn seed_positions(program: &Program, files: &[P<SourceFile>], weight: &dyn Fn(u32) -> u64) -> Vec<u32> {
+/// to `ppm` (parts per million) of the checked weight. Never a declaration file, and never a file that may be freed
+/// once it is checked (one with a region of its own, `fileregions`), since a frozen object must not point into a freed
+/// tree.
+pub(crate) fn seed_positions(program: &Program, files: &[P<SourceFile>], weight: &dyn Fn(u32) -> u64, ppm: u64) -> Vec<u32> {
     let eligible = |i: usize| {
         let f = files[i];
         !f.is_declaration_file() && !f.is_check_leaf() && !crate::fileregions::has_region(f) && !program.skip_type_checking(f, false) && weight(i as u32) > 0
     };
     let total: u64 = (0..files.len()).map(|i| weight(i as u32)).sum();
-    let budget = (total as u128 * seed_milli_permille() as u128 / 1_000_000) as u64;
+    let budget = (total as u128 * ppm as u128 / 1_000_000) as u64;
     let mut candidates: Vec<usize> = (0..files.len()).filter(|&i| eligible(i)).collect();
     if candidates.is_empty() || budget == 0 {
         return Vec::new();
@@ -119,14 +122,14 @@ pub(crate) fn note_fresh_checker(c: &crate::checkerpool::Checker) {
 /// Starts checking the seed files on a thread of its own (at the start of the type-check pass, once the leaves are
 /// classified, so that the leaf guard also keeps the seed from reading another leaf).
 #[cfg(feature = "checker")]
-pub(crate) fn start_seed(program: &'static Program, weights: Vec<i64>) {
+pub(crate) fn start_seed(program: &'static Program, weights: Vec<i64>, recycle: bool) {
     let start = std::time::Instant::now();
     let handle = std::thread::Builder::new()
         .name("checker-seed".into())
         .stack_size(crate::checkerpool::CHECKER_STACK_SIZE)
         .spawn(move || {
             let files = &program.files;
-            let positions = seed_positions(program, files, &|i: u32| weights.get(i as usize).copied().unwrap_or(0).max(0) as u64);
+            let positions = seed_positions(program, files, &|i: u32| weights.get(i as usize).copied().unwrap_or(0).max(0) as u64, seed_ppm(recycle));
             tsrs_ast::use_id_blocks();
             tsrs_core::sharedgraph::set_seed_thread(true);
             // Everything the seed checker allocates goes to this region, which is frozen afterwards. Not a scratch scope:
