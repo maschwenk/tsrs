@@ -730,7 +730,17 @@ impl Node {
     }
 
     /// Go `Text()`. Joined texts (JsxNamespacedName, JSDoc text) are allocated in the arena.
+    /// Identifiers (most calls) inline; the other kinds out of line.
+    #[inline]
     pub fn text(&self) -> &'static str {
+        if self.kind() == Kind::Identifier {
+            return self.as_identifier().text();
+        }
+        self.text_of_non_identifier()
+    }
+
+    #[inline(never)]
+    fn text_of_non_identifier(&self) -> &'static str {
         match self.kind() {
             Kind::Identifier => self.as_identifier().text(),
             Kind::PrivateIdentifier => self.as_private_identifier().text(),
