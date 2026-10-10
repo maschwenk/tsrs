@@ -13,6 +13,9 @@ default = ["compressed-ptrs"]
 checked-cells = []
 # Per-call-site arena allocation profile and a counting global allocator (src/alloc_profile.rs).
 alloc-profile = ["dep:mimalloc-safe"]
+# The no-malloc ceiling probe (src/arena_probe.rs, notes/exp-arena-probe.md): a global allocator that bumps checker
+# threads' heap allocations from their arena. Needs compressed pointers; excludes alloc-profile.
+arena-probe = ["dep:mimalloc-safe"]
 # Creation-site counters for checker objects (src/sitecount.rs).
 site-counts = []
 # `P<T>` as a 32-bit handle into one reserved address range (src/reserve.rs, notes/mem-pointer-compression.md), on

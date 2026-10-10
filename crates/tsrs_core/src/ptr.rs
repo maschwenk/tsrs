@@ -85,7 +85,7 @@ fn init_current() -> &'static Arena {
 /// arena. A region is not `'static`, but it outlives every allocation made while it is entered by contract (see
 /// `arena`), like the thread arena outlives everything.
 #[inline]
-fn with_arena<R>(f: impl FnOnce(&'static Arena) -> R) -> R {
+pub(crate) fn with_arena<R>(f: impl FnOnce(&'static Arena) -> R) -> R {
     #[cfg(feature = "alloc-profile")]
     let _chunk = crate::alloc_profile::ArenaScope::enter();
     let p = arena::CURRENT.with(|c| c.get());

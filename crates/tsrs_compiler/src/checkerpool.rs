@@ -180,6 +180,8 @@ pub const CHECKER_STACK_SIZE: usize = 512 << 20;
 // and waits for all of them. Single-threaded runs execute the tasks in order on the calling thread.
 fn run_work_group(single_threaded: bool, count: usize, task: impl Fn(usize) + Sync) {
     if single_threaded || count <= 1 {
+        // The arena probe (tsrs_core::arena_probe) routes the checker's heap allocations while it runs.
+        let _probe = tsrs_core::arena_probe::enter_arena_mode();
         (0..count).for_each(task);
         return;
     }
@@ -192,7 +194,10 @@ fn run_work_group(single_threaded: bool, count: usize, task: impl Fn(usize) + Sy
                     .stack_size(CHECKER_STACK_SIZE)
                     .spawn_scoped(s, move || {
                         tsrs_ast::use_id_blocks();
-                        task(i);
+                        {
+                            let _probe = tsrs_core::arena_probe::enter_arena_mode();
+                            task(i);
+                        }
                         // The next pass's thread (or checker) continues in this thread's arena.
                         tsrs_core::ptr::release_own_arena();
                     })

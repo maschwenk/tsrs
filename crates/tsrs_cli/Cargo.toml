@@ -40,6 +40,9 @@ work-census = ["tsrs_compiler/work-census", "tsrs_execute/work-census"]
 ast-sizing = ["tsrs_compiler/ast-sizing"]
 # Allocation profile (tsrs_core/alloc-profile); replaces the mimalloc global allocator with the counting one.
 alloc-profile = ["tsrs_core/alloc-profile", "tsrs_execute/alloc-profile"]
+# The arena probe (tsrs_core/arena-probe) replaces the mimalloc global allocator with the routing one; stats on
+# stderr at exit. Build with `-p tsrs_cli` alone: other binaries keep their own global allocator.
+arena-probe = ["tsrs_core/arena-probe"]
 # TSRS_ASSIGNMENT_STATS also attributes checker-created types/symbols to files (tsrs_compiler checkerpool_stats.rs).
 assignment-stats = ["tsrs_compiler/assignment-stats", "tsrs_execute/assignment-stats"]
 

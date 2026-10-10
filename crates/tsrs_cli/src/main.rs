@@ -1,5 +1,6 @@
-// The alloc-profile build installs tsrs_core's counting allocator (over mimalloc) instead.
-#[cfg(not(feature = "alloc-profile"))]
+// The alloc-profile build installs tsrs_core's counting allocator (over mimalloc) instead; the arena-probe build
+// its routing one.
+#[cfg(not(any(feature = "alloc-profile", feature = "arena-probe")))]
 #[global_allocator]
 static GLOBAL: mimalloc_safe::MiMalloc = mimalloc_safe::MiMalloc;
 
@@ -114,6 +115,7 @@ fn main() {
     #[cfg(feature = "checker")]
     tsrs_compiler::Checker::infer_memo_finish();
     tsrs_core::memsplit::report("exit");
+    tsrs_core::arena_probe::dump();
     let _ = std::io::Write::flush(&mut std::io::stdout());
     let _ = std::io::Write::flush(&mut std::io::stderr());
     std::process::exit(status as i32)

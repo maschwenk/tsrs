@@ -84,6 +84,8 @@ pub struct Arena {
     large_slabs: bool,
     #[cfg(feature = "alloc-profile")]
     pub(crate) free_stats: FreeStats,
+    #[cfg(feature = "arena-probe")]
+    pub(crate) probe: crate::arena_probe::ArenaState,
 }
 
 /// Alloc-profile builds: what this arena's free lists hold, per size class (blocks on the list now and at the class's
@@ -186,6 +188,8 @@ impl Arena {
             large_slabs,
             #[cfg(feature = "alloc-profile")]
             free_stats: FreeStats::new(),
+            #[cfg(feature = "arena-probe")]
+            probe: crate::arena_probe::ArenaState::new(),
         };
         a.new_chunk(first_chunk);
         a
@@ -323,6 +327,14 @@ impl Arena {
         let mut out = vec![(self.start.get().addr(), self.end.get().addr() - self.start.get().addr())];
         out.extend(self.retired.borrow().iter().map(|&(start, end, _)| (start, end - start)));
         out
+    }
+
+    /// Whether `addr` lies in this arena's current chunk (the arena probe's O(1) ownership test; blocks in retired
+    /// chunks are not recognized).
+    #[cfg(feature = "arena-probe")]
+    #[inline]
+    pub(crate) fn owns_current_chunk(&self, addr: usize) -> bool {
+        addr >= self.start.get().addr() && addr < self.end.get().addr()
     }
 
     /// Whether `addr` lies in one of this arena's chunks (debug checks).
