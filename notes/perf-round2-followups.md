@@ -107,6 +107,13 @@ pointer compression costs about +4.9% instructions and took back most of the che
 
 ## Measured and rejected (do not redo)
 
+- Treating owned checker cache arrays as enough to recover the full migration gates
+  (`notes/rust-owned-checker-arrays.md`): single-thread instructions fall only -0.11% / -0.13%, and default RSS
+  -0.55% / -0.75%, below the landing bar. Cumulative single-thread instructions remain +8.41–12.49% against Oxc,
+  and default RSS +98–109% against pre-Oxc. Cache-array fields now have Rust owners, but string/raw graph
+  referents and the runtime remain legacy. Revisit landing after the typed graph/runtime migration, complete
+  oracle/API/LSP lifetime coverage and recovered instruction/RSS gates.
+
 - Calling owned type arrays, mappers and inference state a completed or memory-preserving migration
   (`notes/rust-owned-type-arrays.md`): single-thread instructions rise +0.41% / +3.96%; default RSS changes
   +0.51% / -0.90%, below the landing bar. Cumulative single-thread instructions are +8.53–12.59% against Oxc,

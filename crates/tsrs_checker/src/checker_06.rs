@@ -7,14 +7,14 @@ use tsrs_diagnostics::Message;
 use std::borrow::Cow;
 
 // Go closure state of getInstantiationExpressionType.
-struct InstantiationExpressionState {
+struct InstantiationExpressionState<'a> {
     node: P<Node>,
-    type_arguments: &'static [P<Node>],
+    type_arguments: &'a [P<Node>],
     has_some_applicable_signature: bool,
     non_applicable_type: Option<P<Type>>,
 }
 
-fn get_instantiated_signatures<'a>(c: &mut Checker, st: &InstantiationExpressionState, signatures: &'a [P<Signature>]) -> Cow<'a, [P<Signature>]> {
+fn get_instantiated_signatures<'a>(c: &mut Checker, st: &InstantiationExpressionState<'_>, signatures: &'a [P<Signature>]) -> Cow<'a, [P<Signature>]> {
     let type_arguments = st.type_arguments;
     let applicable_signatures = tsrs_core::filter(signatures, |sig| !sig.type_parameters.get().is_empty() && c.has_correct_type_argument_arity(*sig, type_arguments));
     let mapped = tsrs_core::same_map(&applicable_signatures, |sig| {
@@ -30,7 +30,7 @@ fn get_instantiated_signatures<'a>(c: &mut Checker, st: &InstantiationExpression
     }
 }
 
-fn get_instantiated_type(c: &mut Checker, st: &mut InstantiationExpressionState, t: P<Type>) -> P<Type> {
+fn get_instantiated_type(c: &mut Checker, st: &mut InstantiationExpressionState<'_>, t: P<Type>) -> P<Type> {
     let mut has_signatures = false;
     let mut has_applicable_signature = false;
     let result = get_instantiated_type_part(c, st, &mut has_signatures, &mut has_applicable_signature, t);
@@ -43,7 +43,7 @@ fn get_instantiated_type(c: &mut Checker, st: &mut InstantiationExpressionState,
     result
 }
 
-fn get_instantiated_type_part(c: &mut Checker, st: &mut InstantiationExpressionState, has_signatures: &mut bool, has_applicable_signature: &mut bool, t: P<Type>) -> P<Type> {
+fn get_instantiated_type_part(c: &mut Checker, st: &mut InstantiationExpressionState<'_>, has_signatures: &mut bool, has_applicable_signature: &mut bool, t: P<Type>) -> P<Type> {
     if t.flags().intersects(TypeFlags::Object) {
         let resolved = c.resolve_structured_type_members(&t).unwrap();
         let declared_calls = resolved.call_signatures();

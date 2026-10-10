@@ -1617,9 +1617,9 @@ impl Checker {
         if self.value_symbol_links.at(links).resolved_type.get().is_none() {
             let deferred = self.deferred_symbol_links.get_key(symbol);
             let t = if self.deferred_symbol_links.at(deferred).parent.get().unwrap().flags().intersects(TypeFlags::Union) {
-                self.get_union_type(self.deferred_symbol_links.at(deferred).constituents.get())
+                self.get_union_type(&self.deferred_symbol_links.at(deferred).constituents.get())
             } else {
-                self.get_intersection_type(self.deferred_symbol_links.at(deferred).constituents.get())
+                self.get_intersection_type(&self.deferred_symbol_links.at(deferred).constituents.get())
             };
             self.value_symbol_links.at(links).resolved_type.set(Some(t));
         }
@@ -1633,9 +1633,9 @@ impl Checker {
             let deferred = self.deferred_symbol_links.get_key(symbol);
             let t = if !self.deferred_symbol_links.at(deferred).write_constituents.get().is_empty() {
                 if self.deferred_symbol_links.at(deferred).parent.get().unwrap().flags().intersects(TypeFlags::Union) {
-                    self.get_union_type(self.deferred_symbol_links.at(deferred).write_constituents.get())
+                    self.get_union_type(&self.deferred_symbol_links.at(deferred).write_constituents.get())
                 } else {
-                    self.get_intersection_type(self.deferred_symbol_links.at(deferred).write_constituents.get())
+                    self.get_intersection_type(&self.deferred_symbol_links.at(deferred).write_constituents.get())
                 }
             } else {
                 self.get_type_of_symbol_with_deferred_type(symbol)

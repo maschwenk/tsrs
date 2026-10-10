@@ -754,20 +754,20 @@ impl IterationTypesResolver {
     pub fn get_global_generator_type(&self, c: &mut Checker) -> P<Type> {
         if self.is_async { c.get_global_async_generator_type() } else { c.get_global_generator_type() }
     }
-    pub fn get_global_builtin_iterator_types(&self, c: &mut Checker) -> &'static [P<Type>] {
+    pub fn get_global_builtin_iterator_types(&self, c: &mut Checker) -> ArrayView<P<Type>> {
         if self.is_async {
-            if let Some(types) = c.global_builtin_async_iterator_types_cache {
-                return types;
+            if let Some(types) = &c.global_builtin_async_iterator_types_cache {
+                return types.clone();
             }
             let types = c.get_global_types(&["ReadableStreamAsyncIterator"], 1, false /*reportErrors*/);
-            c.global_builtin_async_iterator_types_cache = Some(types);
+            c.global_builtin_async_iterator_types_cache = Some(types.clone());
             types
         } else {
-            if let Some(types) = c.global_builtin_iterator_types_cache {
-                return types;
+            if let Some(types) = &c.global_builtin_iterator_types_cache {
+                return types.clone();
             }
             let types = c.get_global_types(&["ArrayIterator", "MapIterator", "SetIterator", "StringIterator"], 1, false /*reportErrors*/);
-            c.global_builtin_iterator_types_cache = Some(types);
+            c.global_builtin_iterator_types_cache = Some(types.clone());
             types
         }
     }
@@ -789,7 +789,7 @@ pub struct WideningContext {
     pub parent: Cell<Option<P<WideningContext>>>, // Parent context
     pub property_name: Cell<&'static str>, // Name of property in parent
     pub siblings: RefCell<Option<Vec<P<Type>>>>, // Types of siblings (nil = not computed)
-    pub resolved_properties: Cell<Option<&'static [P<Symbol>]>>, // Properties occurring in sibling object literals (nil = not computed)
+    pub resolved_properties: OptionArrayCell<P<Symbol>>, // Properties occurring in sibling object literals (nil = not computed)
     pub child_contexts: OwnedMap<String, P<WideningContext>>,
     pub widened_types: OwnedMap<P<Type>, P<Type>>,
 }
@@ -875,7 +875,7 @@ pub struct Checker {
     pub exact_optional_property_types: bool,
     pub can_collect_symbol_alias_accessibility_data: bool,
     pub was_canceled: bool,
-    pub array_variances: &'static [VarianceFlags],
+    pub array_variances: [VarianceFlags; 1],
     pub globals: P<SymbolTable>,
     pub string_literal_types: StringLiteralTypes,
     pub number_literal_types: FxHashMap<Number, P<Type>>,
@@ -889,7 +889,7 @@ pub struct Checker {
     pub unique_es_symbol_types: FxHashMap<P<Symbol>, P<Type>>,
     pub this_expando_kinds: FxHashMap<P<Symbol>, thisAssignmentDeclarationKind>,
     pub this_expando_locations: FxHashMap<P<Symbol>, Option<P<Node>>>,
-    pub subtype_reduction_cache: FxHashMap<CacheHashKey, &'static [P<Type>]>,
+    pub subtype_reduction_cache: FxHashMap<CacheHashKey, Box<[P<Type>]>>,
     pub cached_types: FxHashMap<CachedTypeKey, P<Type>>,
     pub cached_signatures: PackedMap<CachedSignatureKey, P<Signature>>,
     pub undefined_properties: FxHashMap<String, P<Symbol>>,
@@ -916,7 +916,7 @@ pub struct Checker {
     /// resolver's string, alive and unchanged as long as the program): `resolve_external_module`.
     pub(crate) resolved_module_source_files: FxHashMap<(usize, usize), Option<P<SourceFile>>>,
     pub global_this_symbol: P<Symbol>,
-    pub symbol_table_alias_cache: FxHashMap<symbolTableID, &'static [P<Symbol>]>,
+    pub symbol_table_alias_cache: FxHashMap<symbolTableID, Box<[P<Symbol>]>>,
     pub class_expression_name_tables: FxHashMap<NodeId, P<SymbolTable>>,
     /// Go `resolveName = c.createNameResolver().Resolve`; call through `resolve_name`.
     pub name_resolver: P<NameResolver<Checker>>,
@@ -1177,8 +1177,8 @@ pub struct Checker {
     pub get_global_class_accessor_decorator_target_type_cache: Option<P<Type>>,
     pub get_global_class_accessor_decorator_result_type_cache: Option<P<Type>>,
     pub get_global_class_field_decorator_context_type_cache: Option<P<Type>>,
-    pub global_builtin_iterator_types_cache: Option<&'static [P<Type>]>,
-    pub global_builtin_async_iterator_types_cache: Option<&'static [P<Type>]>,
+    pub global_builtin_iterator_types_cache: Option<ArrayView<P<Type>>>,
+    pub global_builtin_async_iterator_types_cache: Option<ArrayView<P<Type>>>,
     pub sync_iteration_types_resolver: P<IterationTypesResolver>,
     pub async_iteration_types_resolver: P<IterationTypesResolver>,
     pub _jsx_namespace: String,
@@ -1282,7 +1282,7 @@ pub fn new_checker(program: Arc<dyn Program>) -> Box<Checker> {
         exact_optional_property_types: compiler_options.exact_optional_property_types == Tristate::True,
         can_collect_symbol_alias_accessibility_data: compiler_options.verbatim_module_syntax.is_false_or_unknown(),
         was_canceled: false,
-        array_variances: alloc_slice(&[VarianceFlags::Covariant]),
+        array_variances: [VarianceFlags::Covariant],
         globals: SymbolTable::with_capacity(count_global_symbols(&files) as usize),
         string_literal_types: StringLiteralTypes::default(),
         number_literal_types: FxHashMap::default(),
@@ -1780,9 +1780,9 @@ impl Checker {
     }
 
     /// The closure built by Go `getGlobalTypesResolver(names, arity, reportErrors)`.
-    pub(crate) fn get_global_types(&mut self, names: &[&str], arity: i32, report_errors: bool) -> &'static [P<Type>] {
+    pub(crate) fn get_global_types(&mut self, names: &[&str], arity: i32, report_errors: bool) -> ArrayView<P<Type>> {
         let types: Vec<P<Type>> = names.iter().map(|name| self.get_global_type(name, arity, report_errors)).collect();
-        alloc_slice(&types)
+        ArrayView::from_vec(types)
     }
 
     // Lazily resolved globals (Go: `c.getGlobalXxx = c.getGlobalTypeResolver(...)` etc. in NewChecker).

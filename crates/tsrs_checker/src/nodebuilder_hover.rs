@@ -527,7 +527,7 @@ impl NodeBuilderImpl {
                 for sig in sigs {
                     let ctx = self.ctx();
                     ctx.approximate_length.set(ctx.approximate_length.get() + 1);
-                    let options = P::new(SignatureToSignatureDeclarationOptions { modifiers: &[], name: Some(self.f.new_identifier(m.name())), question_token: None });
+                    let options = P::new(SignatureToSignatureDeclarationOptions { modifiers: ArrayView::default(), name: Some(self.f.new_identifier(m.name())), question_token: None });
                     let decl = self.signature_to_signature_declaration_helper(c, sig, Kind::FunctionDeclaration, Some(options));
                     body_stmts.push(HoverStatement { node: decl, is_local: false });
                 }

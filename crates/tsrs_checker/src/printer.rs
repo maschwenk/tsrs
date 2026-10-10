@@ -575,9 +575,9 @@ impl Checker {
         let containing_file = ast::get_source_file_of_node(enclosing_declaration).unwrap();
         let id = ast::get_node_id(containing_file.as_node());
         let links = self.symbol_container_links.get_key(symbol);
-        let existing = self.symbol_container_links.at(links).extended_containers_by_file.borrow().get(&id).copied();
+        let existing = self.symbol_container_links.at(links).extended_containers_by_file.borrow().get(&id).map(|values| values.to_vec());
         if let Some(existing) = existing {
-            return existing.to_vec();
+            return existing;
         }
         let mut results: Vec<P<Symbol>> = Vec::new();
         if !containing_file.imports().is_empty() {
@@ -599,7 +599,7 @@ impl Checker {
                 results.push(resolved_module);
             }
             if !results.is_empty() {
-                self.symbol_container_links.at(links).extended_containers_by_file.borrow_mut().insert(id, alloc_slice(&results));
+                self.symbol_container_links.at(links).extended_containers_by_file.borrow_mut().insert(id, results.clone().into_boxed_slice());
                 return results;
             }
         }
@@ -632,7 +632,7 @@ impl Checker {
                 }
             }
         }
-        self.symbol_container_links.at(links).extended_containers.set(Some(alloc_slice(&results)));
+        self.symbol_container_links.at(links).extended_containers.set(Some(&results));
         results
     }
 
@@ -1058,9 +1058,9 @@ impl Checker {
             location: first_relevant_location,
             meaning: ctx.meaning,
         };
-        let existing = self.symbol_container_links.at(links).accessible_chain_cache.borrow().get(&link_key).copied();
+        let existing = self.symbol_container_links.at(links).accessible_chain_cache.borrow().get(&link_key).map(|values| values.to_vec());
         if let Some(existing) = existing {
-            return existing.to_vec();
+            return existing;
         }
 
         let mut result: Vec<P<Symbol>> = Vec::new();
@@ -1073,7 +1073,7 @@ impl Checker {
             }
             false
         });
-        self.symbol_container_links.at(links).accessible_chain_cache.borrow_mut().insert(link_key, alloc_slice(&result));
+        self.symbol_container_links.at(links).accessible_chain_cache.borrow_mut().insert(link_key, result.clone().into_boxed_slice());
         // A location in a file's emit scratch region (a synthesized node) dies with it; its handle may then name a
         // new node, so the entry is forgotten when the file's transform ends (`forget_scratch_keyed_caches`).
         if let Some(location) = first_relevant_location {
@@ -1133,7 +1133,7 @@ impl Checker {
             }
         }
         if kind == stKindGlobals || kind == stKindExports || kind == stKindResolvedExports {
-            self.symbol_table_alias_cache.insert(table_id, alloc_slice(&aliases));
+            self.symbol_table_alias_cache.insert(table_id, aliases.clone().into_boxed_slice());
         }
         aliases
     }

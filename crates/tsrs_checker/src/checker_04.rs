@@ -44,7 +44,7 @@ impl Checker {
         // - `StringIterator<T>`
         // - `ReadableStreamAsyncIterator<T>`
         let builtin = r.get_global_builtin_iterator_types(self);
-        if self.is_reference_to_some_type(Some(t), builtin) {
+        if self.is_reference_to_some_type(Some(t), &builtin) {
             let yield_type = self.get_type_arguments(t)[0];
             let return_type = self.get_builtin_iterator_return_type();
             let unknown_type = self.unknown_type;
@@ -245,7 +245,7 @@ impl Checker {
         // - `StringIterator<T>`
         // - `ReadableStreamAsyncIterator<T>`
         let builtin = r.get_global_builtin_iterator_types(self);
-        if self.is_reference_to_some_type(Some(t), builtin) {
+        if self.is_reference_to_some_type(Some(t), &builtin) {
             let yield_type = self.get_type_arguments(t)[0];
             let return_type = self.get_builtin_iterator_return_type();
             let unknown_type = self.unknown_type;

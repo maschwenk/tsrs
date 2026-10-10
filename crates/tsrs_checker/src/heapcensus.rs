@@ -40,6 +40,11 @@ impl HeapStat {
         let slot = std::mem::size_of::<T>();
         HeapStat { containers: 1, len: v.len() as u64, cap: v.capacity() as u64, slot: slot as u64, bytes: (v.capacity() * slot) as u64 }
     }
+
+    pub fn boxed_slice<T>(values: &[T]) -> HeapStat {
+        let slot = std::mem::size_of::<T>();
+        HeapStat { containers: 1, len: values.len() as u64, cap: values.len() as u64, slot: slot as u64, bytes: std::mem::size_of_val(values) as u64 }
+    }
 }
 
 pub trait HeapSize {
@@ -231,6 +236,22 @@ impl Checker {
             contextual_infos, inference_context_infos, shared_flows, antecedent_types,
         );
         // Values that own heap memory themselves.
+        let mut arrays = HeapStat::default();
+        for values in self.subtype_reduction_cache.values() {
+            arrays.add(HeapStat::boxed_slice(values));
+        }
+        h.row("subtype_reduction_cache (owned arrays)", arrays);
+        let mut arrays = HeapStat::default();
+        for values in self.symbol_table_alias_cache.values() {
+            arrays.add(HeapStat::boxed_slice(values));
+        }
+        h.row("symbol_table_alias_cache (owned arrays)", arrays);
+        let mut arrays = HeapStat::default();
+        for values in self.global_builtin_iterator_types_cache.iter().chain(self.global_builtin_async_iterator_types_cache.iter()) {
+            let (len, cap, bytes) = values.heap_usage();
+            arrays.add(HeapStat { containers: 1, len: len as u64, cap: cap as u64, slot: std::mem::size_of::<P<Type>>() as u64, bytes: bytes as u64 });
+        }
+        h.row("global builtin iterator caches (owned arrays)", arrays);
         let mut keys = HeapStat::default();
         for k in self.undefined_properties.keys().chain(self.unresolved_symbols.keys()) {
             keys.add(HeapStat { containers: 1, len: k.len() as u64, cap: k.capacity() as u64, slot: 1, bytes: k.capacity() as u64 });

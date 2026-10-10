@@ -251,7 +251,7 @@ pub struct sortedSymbolNamePair {
 /// Go `SignatureToSignatureDeclarationOptions`, passed as `Option<P<…>>` (built once by a composite literal).
 #[derive(Default)]
 pub struct SignatureToSignatureDeclarationOptions {
-    pub modifiers: &'static [P<Node>],
+    pub modifiers: ArrayView<P<Node>>,
     pub name: Option<P<Node>>, // a PropertyName node
     pub question_token: Option<P<Node>>,
 }

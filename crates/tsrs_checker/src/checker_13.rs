@@ -417,11 +417,11 @@ impl Checker {
         // tsrs-only: TSRS_TRACE_UNION_REDUCTION (uniontrace.rs). Only a union of more than 1,000 types can reach the
         // TS2590 limit below.
         let trace = types.len() > 1000 && crate::uniontrace::enabled();
-        if let Some(cached) = self.subtype_reduction_cache.get(&key).copied() {
+        if let Some(cached) = self.subtype_reduction_cache.get(&key).map(|values| values.to_vec()) {
             if trace {
-                crate::uniontrace::report(self, types, cached, "reduced", None, None);
+                crate::uniontrace::report(self, types, &cached, "reduced", None, None);
             }
-            return Some(cached.to_vec());
+            return Some(cached);
         }
         let input = types;
         let mut types = types.to_vec();
@@ -521,7 +521,7 @@ impl Checker {
         if trace {
             crate::uniontrace::report(self, input, &types, "reduced", Some(count), checkpoint);
         }
-        self.subtype_reduction_cache.insert(key, alloc_slice(&types));
+        self.subtype_reduction_cache.insert(key, types.clone().into_boxed_slice());
         Some(types)
     }
 
@@ -2424,7 +2424,7 @@ impl Checker {
                 }
             }
             if constraints.len() == types.len() {
-                return Some(self.get_template_literal_type(t.as_template_literal_type().texts(), &constraints));
+                return Some(self.get_template_literal_type(&t.as_template_literal_type().texts(), &constraints));
             }
             return Some(self.string_type);
         } else if flags.intersects(TypeFlags::StringMapping) {

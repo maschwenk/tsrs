@@ -1910,7 +1910,7 @@ impl Checker {
                 }
                 // Store the results unless a restarted computation has already stored them.
                 if variances_len(self.variance_links.at(links)) == 0 {
-                    self.variance_links.at(links).variances.set(Some(alloc_vec(variances)));
+                    self.variance_links.at(links).variances.set_owned(Some(variances));
                 }
                 self.variance_stack.pop();
                 if self.variance_stack.is_empty() {
@@ -3096,7 +3096,7 @@ impl Checker {
                 }
                 return result;
             }
-            return self.infer_from_literal_parts_to_template_literal(source_template.texts(), &source_template.types(), target);
+            return self.infer_from_literal_parts_to_template_literal(&source_template.texts(), &source_template.types(), target);
         }
         Vec::new()
     }

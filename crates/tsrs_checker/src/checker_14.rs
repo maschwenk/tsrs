@@ -1519,7 +1519,7 @@ impl Checker {
         } else if t.flags().intersects(TypeFlags::StringLiteral) {
             self.get_string_literal_type(&apply_string_mapping(symbol, &get_string_literal_value(t)))
         } else if t.flags().intersects(TypeFlags::TemplateLiteral) {
-            let (texts, types) = self.apply_template_string_mapping(symbol, t.as_template_literal_type().texts.get(), &t.as_template_literal_type().types.get());
+            let (texts, types) = self.apply_template_string_mapping(symbol, &t.as_template_literal_type().texts.get(), &t.as_template_literal_type().types.get());
             let text_refs: Vec<&str> = texts.iter().map(|s| s.as_str()).collect();
             self.get_template_literal_type(&text_refs, &types)
         } else if t.flags().intersects(TypeFlags::StringMapping) && Some(symbol) == t.symbol() {
@@ -1552,7 +1552,7 @@ fn add_template_spans(c: &mut Checker, state: &mut TemplateSpansState, texts: &[
             state.sb.push_str(texts[i + 1]);
         } else if t.flags().intersects(TypeFlags::TemplateLiteral) {
             state.sb.push_str(t.as_template_literal_type().texts.get()[0]);
-            if !add_template_spans(c, state, t.as_template_literal_type().texts.get(), &t.as_template_literal_type().types.get()) {
+            if !add_template_spans(c, state, &t.as_template_literal_type().texts.get(), &t.as_template_literal_type().types.get()) {
                 return false;
             }
             state.sb.push_str(texts[i + 1]);

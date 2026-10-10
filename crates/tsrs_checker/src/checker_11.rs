@@ -288,8 +288,8 @@ impl Checker {
             result.check_flags.set(result.check_flags.get() | CheckFlags::DeferredType);
             let deferred = self.deferred_symbol_links.get_key(result);
             self.deferred_symbol_links.at(deferred).parent.set(Some(containing_type));
-            self.deferred_symbol_links.at(deferred).constituents.set(alloc_vec(prop_types));
-            self.deferred_symbol_links.at(deferred).write_constituents.set(write_types.map_or(&[][..], alloc_vec));
+            self.deferred_symbol_links.at(deferred).constituents.set_owned(prop_types);
+            self.deferred_symbol_links.at(deferred).write_constituents.set_owned(write_types.unwrap_or_default());
             return Some(result);
         }
         if is_union {
@@ -1206,7 +1206,7 @@ impl Checker {
             return self.get_indexed_access_type_ex(object_type, index_type, d.access_flags.get(), None /*accessNode*/, alias);
         } else if flags.intersects(TypeFlags::TemplateLiteral) {
             let types = self.instantiate_types(&t.as_template_literal_type().types(), Some(m));
-            return self.get_template_literal_type(t.as_template_literal_type().texts(), &types);
+            return self.get_template_literal_type(&t.as_template_literal_type().texts(), &types);
         } else if flags.intersects(TypeFlags::StringMapping) {
             let target = self.instantiate_type(t.as_string_mapping_type().target().unwrap(), Some(m));
             return self.get_string_mapping_type(t.symbol().unwrap(), target);
@@ -1270,7 +1270,7 @@ impl Checker {
         } else {
             t
         };
-        let type_parameters: &'static [P<Type>] = match self.type_node_links.at(links).outer_type_parameters.get() {
+        let type_parameters = match self.type_node_links.at(links).outer_type_parameters.get() {
             Some(type_parameters) => type_parameters,
             None => {
                 // The first time an anonymous type is instantiated we compute and store a list of the type
@@ -1298,9 +1298,8 @@ impl Checker {
                         type_parameters = filtered;
                     }
                 }
-                let type_parameters = alloc_vec(type_parameters);
-                self.type_node_links.at(links).outer_type_parameters.set(Some(type_parameters));
-                type_parameters
+                self.type_node_links.at(links).outer_type_parameters.set_owned(Some(type_parameters));
+                self.type_node_links.at(links).outer_type_parameters.get().unwrap()
             }
         };
         if type_parameters.is_empty() {
@@ -1310,7 +1309,7 @@ impl Checker {
         // mapper to the type parameters to produce the effective list of type arguments, and compute the
         // instantiation cache key from the type IDs of the type arguments.
         let mut type_arguments = self.free_type_lists.pop().unwrap_or_default();
-        for &tp in type_parameters {
+        for &tp in &type_parameters {
             let mapped = self.map_type_with_composite_mapper(tp, t.mapper(), m.unwrap());
             type_arguments.push(mapped);
         }
@@ -1321,14 +1320,14 @@ impl Checker {
         assert!(target.try_as_interface_type().is_none(), "object type instantiation of an interface target");
         let key = get_type_instantiation_key(&type_arguments, new_alias, t.object_flags().intersects(ObjectFlags::SingleSignatureType));
         let instantiations = self.object_type_instantiations.entry(target).or_insert_with(|| {
-            let initial_key = get_type_instantiation_key(type_parameters, target.alias().into(), false);
+            let initial_key = get_type_instantiation_key(&type_parameters, target.alias().into(), false);
             PackedMap::from_one(initial_key, target)
         });
         let mut result = instantiations.get(&key);
         if result.is_none() {
             let too_complex_before = self.too_complex_reports;
             let new_alias = new_alias.alias();
-            let mut new_mapper = new_type_mapper(type_parameters, &type_arguments);
+            let mut new_mapper = new_type_mapper(&type_parameters, &type_arguments);
             if target.object_flags().intersects(ObjectFlags::SingleSignatureType) && m.is_some() {
                 new_mapper = self.combine_type_mappers(Some(new_mapper), m.unwrap());
             }

@@ -2152,7 +2152,7 @@ impl Checker {
     // checker.go:25685
     pub(crate) fn new_template_literal_type(&mut self, texts: &[&str], types: &[P<Type>]) -> P<Type> {
         let data = TemplateLiteralType::default();
-        data.texts.set(alloc_vec(texts.iter().map(|s| alloc_str(s)).collect()));
+        data.texts.set_owned(texts.iter().map(|s| alloc_str(s)).collect());
         data.types.set(types);
         self.new_type(TypeFlags::TemplateLiteral, ObjectFlags::None, data)
     }

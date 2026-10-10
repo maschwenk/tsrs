@@ -175,8 +175,8 @@ pub struct MappedSymbolLinks {
 #[derive(Default)]
 pub struct DeferredSymbolLinks {
     pub parent: Cell<Option<P<Type>>>, // Source union/intersection of a deferred type
-    pub constituents: Cell<&'static [P<Type>]>, // Calculated list of constituents for a deferred type
-    pub write_constituents: Cell<&'static [P<Type>]>, // Constituents of a deferred `writeType`
+    pub constituents: ArrayCell<P<Type>>, // Calculated list of constituents for a deferred type
+    pub write_constituents: ArrayCell<P<Type>>, // Constituents of a deferred `writeType`
 }
 
 // Links for alias symbols
@@ -258,8 +258,8 @@ pub struct SwitchStatementLinks {
     pub exhaustive_state: Cell<ExhaustiveState>, // Switch statement exhaustiveness
     pub switch_types_computed: Cell<bool>,
     pub witnesses_computed: Cell<bool>,
-    pub switch_types: Cell<&'static [P<Type>]>,
-    pub witnesses: Cell<Option<&'static [&'static str]>>, // Go nil (non-literal case) vs empty
+    pub switch_types: ArrayCell<P<Type>>,
+    pub witnesses: OptionArrayCell<&'static str>, // Go nil (non-literal case) vs empty
 }
 
 #[derive(Default)]
@@ -302,7 +302,7 @@ pub struct SpreadLinks {
 
 #[derive(Default)]
 pub struct VarianceLinks {
-    pub variances: Cell<Option<&'static [VarianceFlags]>>, // nil = not computed (Go distinguishes nil from empty)
+    pub variances: OptionArrayCell<VarianceFlags>, // nil = not computed (Go distinguishes nil from empty)
 }
 
 bitflags! {
@@ -335,9 +335,9 @@ pub struct accessibleChainCacheKey {
 
 #[derive(Default)]
 pub struct ContainingSymbolLinks {
-    pub extended_containers_by_file: RefCell<FxHashMap<NodeId, &'static [P<Symbol>]>>, // Symbols of nodes which which logically contain this one, cached by file the request is made within
-    pub extended_containers: Cell<Option<&'static [P<Symbol>]>>, // Containers (other than the parent) which this symbol is aliased in
-    pub accessible_chain_cache: RefCell<FxHashMap<accessibleChainCacheKey, &'static [P<Symbol>]>>,
+    pub extended_containers_by_file: RefCell<FxHashMap<NodeId, Box<[P<Symbol>]>>>, // Symbols of nodes which which logically contain this one, cached by file the request is made within
+    pub extended_containers: OptionArrayCell<P<Symbol>>, // Containers (other than the parent) which this symbol is aliased in
+    pub accessible_chain_cache: RefCell<FxHashMap<accessibleChainCacheKey, Box<[P<Symbol>]>>>,
 }
 
 bitflags! {
@@ -390,7 +390,7 @@ pub struct SymbolNodeLinks {
 #[derive(Default)]
 pub struct TypeNodeLinks {
     pub resolved_type: Cell<Option<P<Type>>>, // Resolved type associated with node
-    pub outer_type_parameters: Cell<Option<&'static [P<Type>]>>, // Outer type parameters of anonymous object type (Go distinguishes nil = not computed)
+    pub outer_type_parameters: OptionArrayCell<P<Type>>, // Outer type parameters of anonymous object type (Go distinguishes nil = not computed)
     link_key: Cell<tsrs_core::PKey>, // tsrs: the node this record is filed under (`KeyedLinkStore`), in what was padding
 }
 
@@ -400,11 +400,11 @@ impl crate::links::KeyedLinks for TypeNodeLinks {
     }
 }
 
-// The native-pointer key makes this 32 bytes.
+// Three owner/edge words: the resolved type, array owner and native-pointer lookup key.
 #[cfg(target_pointer_width = "64")]
-const _: () = assert!(std::mem::size_of::<TypeNodeLinks>() == 32);
+const _: () = assert!(std::mem::size_of::<TypeNodeLinks>() == 24);
 #[cfg(target_pointer_width = "32")]
-const _: () = assert!(std::mem::size_of::<TypeNodeLinks>() == 16);
+const _: () = assert!(std::mem::size_of::<TypeNodeLinks>() == 12);
 
 #[derive(Default)]
 pub struct ComputedNameNodeLinks {
@@ -2353,13 +2353,13 @@ impl IndexedAccessType {
 #[derive(Default)]
 pub struct TemplateLiteralType {
     pub constrained_type: ConstrainedType,
-    pub texts: Cell<&'static [&'static str]>, // Always one element longer than types
+    pub texts: ArrayCell<&'static str>, // Always one element longer than types
     pub types: ArrayCell<P<Type>>, // Always at least one element
 }
 embeds!(TemplateLiteralType, constrained_type, ConstrainedType);
 
 impl TemplateLiteralType {
-    pub fn texts(&self) -> &'static [&'static str] {
+    pub fn texts(&self) -> ArrayView<&'static str> {
         self.texts.get()
     }
     pub fn types(&self) -> ArrayView<P<Type>> {

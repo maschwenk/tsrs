@@ -272,7 +272,7 @@ impl Checker {
     pub(crate) fn initialize_checker(&mut self) {
         // Initialize global symbol table
         let mut ambient_module_symbols: Vec<P<Symbol>> = Vec::new();
-        let mut augmentations: Vec<&'static [P<Node>]> = Vec::with_capacity(self.files.len());
+        let mut augmentations: Vec<&[P<Node>]> = Vec::with_capacity(self.files.len());
         let files = std::sync::Arc::clone(&self.files);
         for &file in files.iter() {
             if !ast::is_external_or_common_js_module(file) {

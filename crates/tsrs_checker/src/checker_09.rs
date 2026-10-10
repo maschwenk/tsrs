@@ -57,16 +57,17 @@ impl Checker {
                                             //   type Foo<T extends string, U extends T> = [T, U];
                                             //   type Bar<T> = T extends Foo<infer X, infer X> ? Foo<X, X> : T;
                                             // the instantiated constraint for U is X, so we discard that inference.
-                                            let type_parameters: &'static [P<Type>] = alloc_vec(type_parameters);
+                                            let type_parameters = ArrayView::from_vec(type_parameters);
                                             let targets: Vec<Box<dyn Fn(&mut Checker) -> P<Type>>> = (0..type_parameters.len())
                                                 .map(|index| {
+                                                    let type_parameters = type_parameters.clone();
                                                     let f: Box<dyn Fn(&mut Checker) -> P<Type>> = Box::new(move |c: &mut Checker| {
-                                                        c.get_effective_type_argument_at_index(parent, type_parameters, index as i32)
+                                                        c.get_effective_type_argument_at_index(parent, &type_parameters, index as i32)
                                                     });
                                                     f
                                                 })
                                                 .collect();
-                                            let mapper = new_deferred_type_mapper(type_parameters, targets);
+                                            let mapper = new_deferred_type_mapper(&type_parameters, targets);
                                             let constraint = self.instantiate_type(declared_constraint, Some(mapper));
                                             if constraint != t {
                                                 inferences.push(constraint);
@@ -1675,7 +1676,7 @@ impl Checker {
                 }
             }
             let values: Vec<P<Symbol>> = names.values().copied().collect();
-            context.resolved_properties.set(Some(alloc_vec(values)));
+            context.resolved_properties.set_owned(Some(values));
         }
         context.resolved_properties.get().unwrap().to_vec()
     }

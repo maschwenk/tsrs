@@ -1623,7 +1623,7 @@ impl Checker {
         let has_default_clause = clause_start == clause_end || (default_index >= clause_start && default_index < clause_end);
         if has_default_clause {
             // In the default clause we filter constituents down to those that are not-equal to all handled cases.
-            let not_equal_facts = self.get_not_equal_facts_from_typeof_switch(clause_start, clause_end, witnesses);
+            let not_equal_facts = self.get_not_equal_facts_from_typeof_switch(clause_start, clause_end, &witnesses);
             return self.filter_type(t, move |c, t| c.get_type_facts(t, not_equal_facts) == not_equal_facts);
         }
         // In the non-default cause we create a union of the type narrowed by each of the listed cases.
@@ -2598,7 +2598,7 @@ impl Checker {
             let operand_type = self.check_expression_cached(expression.expression().unwrap());
             let operand_constraint = self.get_base_constraint_or_type(operand_type);
             // Get the not-equal flags for all handled cases.
-            let not_equal_facts = self.get_not_equal_facts_from_typeof_switch(0, 0, witnesses);
+            let not_equal_facts = self.get_not_equal_facts_from_typeof_switch(0, 0, &witnesses);
             if operand_constraint.flags().intersects(TypeFlags::AnyOrUnknown) {
                 // We special case the top types to be exhaustive when all cases are handled.
                 return TypeFacts::AllTypeofNE & not_equal_facts == TypeFacts::AllTypeofNE;
@@ -2630,7 +2630,7 @@ impl Checker {
     // Get the type names from all cases in a switch on `typeof`. The default clause and/or duplicate type names are
     // represented as empty strings. Return nil if one or more case clause expressions are not string literals.
     // flow.go:1989
-    pub(crate) fn get_switch_clause_type_of_witnesses(&mut self, node: P<Node>) -> Option<&'static [&'static str]> {
+    pub(crate) fn get_switch_clause_type_of_witnesses(&mut self, node: P<Node>) -> Option<ArrayView<&'static str>> {
         let links = self.switch_statement_links.get_key(node);
         if !self.switch_statement_links.at(links).witnesses_computed.get() {
             let clauses = node.as_switch_statement().case_block.as_case_block().clauses.nodes();
@@ -2649,7 +2649,7 @@ impl Checker {
                     }
                 }
             }
-            self.switch_statement_links.at(links).witnesses.set(witnesses.map(alloc_vec));
+            self.switch_statement_links.at(links).witnesses.set_owned(witnesses);
             self.switch_statement_links.at(links).witnesses_computed.set(true);
         }
         self.switch_statement_links.at(links).witnesses.get()
@@ -2681,7 +2681,7 @@ impl Checker {
             for &clause in clauses {
                 types.push(self.get_type_of_switch_clause(clause));
             }
-            self.switch_statement_links.at(links).switch_types.set(alloc_vec(types));
+            self.switch_statement_links.at(links).switch_types.set_owned(types);
             self.switch_statement_links.at(links).switch_types_computed.set(true);
         }
         self.switch_statement_links.at(links).switch_types.get().to_vec()

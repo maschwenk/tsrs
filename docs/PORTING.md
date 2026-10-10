@@ -110,8 +110,10 @@ Type argument/member arrays, signatures and inference lists own their storage th
 `ArrayView` snapshots. Keep the snapshot across recursion and borrow its slice only for the call. A snapshot
 retains the array, not its legacy `P` referents. Mappers own a closed enum with owned array/deferred payloads;
 mapper views borrow their record. Signature/inference tails and candidate vectors have ordinary Rust owners,
-and comparison callbacks use `Arc`. Manual mapper/inference escape and recycling are removed. Static strings,
-template-text arrays and other link/cache arrays remain legacy (`notes/rust-owned-type-arrays.md`).
+and comparison callbacks use `Arc`. Manual mapper/inference escape and recycling are removed
+(`notes/rust-owned-type-arrays.md`). Checker link/cache arrays and template-text lists now own their storage too;
+cache values that are copied before recursion use boxed slices. Deferred mapper closures retain their input lists.
+Their string and raw graph referents remain legacy (`notes/rust-owned-checker-arrays.md`).
 
 Build orchestrators and their hosts use `Arc`; the host's back-reference is weak. Returned build outcomes retain
 the actual orchestrator, including programs whose diagnostics they expose, through conversion to an API response.

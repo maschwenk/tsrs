@@ -1075,21 +1075,21 @@ impl Checker {
 
     // checker.go:3064
     pub(crate) fn check_type_argument_constraints(&mut self, node: P<Node>, type_parameters: &[P<Type>]) -> bool {
-        let mut type_arguments: Option<&'static [P<Type>]> = None;
+        let mut type_arguments: Option<Vec<P<Type>>> = None;
         let mut mapper: Option<P<TypeMapper>> = None;
         let mut result = true;
         for (i, &type_parameter) in type_parameters.iter().enumerate() {
             let constraint = self.get_constraint_of_type_parameter(type_parameter);
             if let Some(constraint) = constraint {
                 if type_arguments.is_none() {
-                    let args = alloc_vec(self.get_effective_type_arguments(node, type_parameters));
+                    let args = self.get_effective_type_arguments(node, type_parameters);
+                    mapper = Some(new_type_mapper(type_parameters, &args));
                     type_arguments = Some(args);
-                    mapper = Some(new_type_mapper(type_parameters, args));
                 }
                 result = result && {
                     let instantiated = self.instantiate_type(constraint, mapper);
                     self.check_type_assignable_to(
-                        type_arguments.unwrap()[i],
+                        type_arguments.as_ref().unwrap()[i],
                         instantiated,
                         element_or_nil(node.type_arguments(), i),
                         Some(&diagnostics::Type_0_does_not_satisfy_the_constraint_1),

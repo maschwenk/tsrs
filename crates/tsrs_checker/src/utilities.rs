@@ -751,7 +751,7 @@ fn compare_types_same_flags(c: &mut Checker, t1: P<Type>, t2: P<Type>) -> i32 {
             return r;
         }
     } else if flags.intersects(TypeFlags::TemplateLiteral) {
-        let r = t1.as_template_literal_type().texts.get().cmp(t2.as_template_literal_type().texts.get()) as i32;
+        let r = t1.as_template_literal_type().texts.get().as_ref().cmp(t2.as_template_literal_type().texts.get().as_ref()) as i32;
         if r != 0 {
             return r;
         }
