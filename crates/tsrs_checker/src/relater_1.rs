@@ -166,6 +166,12 @@ impl Checker {
         if source == target {
             return true;
         }
+        // Two different regular literals of one kind (not enum members) are related by no relation: narrowing a
+        // union of string literals by a literal asks this of every constituent.
+        let flags = source.flags();
+        if flags == target.flags() && matches!(flags, TypeFlags::StringLiteral | TypeFlags::NumberLiteral | TypeFlags::BigIntLiteral) {
+            return false;
+        }
         if relation != self.identity_relation {
             if relation == self.comparable_relation
                 && !target.flags().intersects(TypeFlags::Never)
