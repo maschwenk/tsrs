@@ -98,7 +98,7 @@ impl NodeBuilder {
 
     // IndexInfoToIndexSignatureDeclaration implements NodeBuilderInterface.
     // nodebuilder.go:111
-    pub fn index_info_to_index_signature_declaration(&self, c: &mut Checker, info: P<IndexInfo>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: Option<&'static dyn SymbolTracker>) -> Option<P<Node>> {
+    pub fn index_info_to_index_signature_declaration(&self, c: &mut Checker, info: IndexInfoKey, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: Option<&'static dyn SymbolTracker>) -> Option<P<Node>> {
         self.enter_context(enclosing_declaration, flags, internal_flags, tracker);
         let result = self.impl_.index_info_to_index_signature_declaration_helper(c, info, None);
         self.exit_context(Some(result))
@@ -272,7 +272,7 @@ impl NodeBuilder {
 
     // TypePredicateToTypePredicateNode implements NodeBuilderInterface.
     // nodebuilder.go:261
-    pub fn type_predicate_to_type_predicate_node(&self, c: &mut Checker, predicate: P<TypePredicate>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: Option<&'static dyn SymbolTracker>) -> Option<P<Node>> {
+    pub fn type_predicate_to_type_predicate_node(&self, c: &mut Checker, predicate: TypePredicateKey, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: Option<&'static dyn SymbolTracker>) -> Option<P<Node>> {
         self.enter_context(enclosing_declaration, flags, internal_flags, tracker);
         let result = self.impl_.type_predicate_to_type_predicate_node(c, predicate);
         self.exit_context(Some(result))

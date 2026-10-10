@@ -2,7 +2,7 @@
 // (`newSymbolResponse`, `newTypeResponse`, `newSignatureResponse`, `newIndexInfoResponse`).
 
 use tsrs_ast::{Node, SourceFile, Symbol, SymbolFlags};
-use tsrs_checker::{Checker, IndexInfo, ObjectFlags, Signature, Type, TypeFlags};
+use tsrs_checker::{Checker, IndexInfoKey, ObjectFlags, Signature, Type, TypeFlags};
 use tsrs_compiler::{CheckerHandle, Program};
 use tsrs_core::context::{with_checker_lifetime, CheckerLifetime};
 use tsrs_core::json::Value;
@@ -195,12 +195,14 @@ impl<'h> Setup<'h> {
     }
 
     /// Go `checkerSetup.newIndexInfoResponse`.
-    pub(crate) fn index_info_response(&mut self, info: P<IndexInfo>) -> CheckerResult<Value> {
+    pub(crate) fn index_info_response(&mut self, info: IndexInfoKey) -> CheckerResult<Value> {
         let mut o = Obj::new();
-        o.set("keyType", self.type_response(info.key_type())?);
-        o.set("valueType", self.type_response(info.value_type())?);
-        o.set("isReadonly", Value::Bool(info.is_readonly()));
-        if let Some(decl) = info.declaration() {
+        let key_type = self.c().index_info(info).key_type();
+        o.set("keyType", self.type_response(key_type)?);
+        let value_type = self.c().index_info(info).value_type();
+        o.set("valueType", self.type_response(value_type)?);
+        o.set("isReadonly", Value::Bool(self.c().index_info(info).is_readonly()));
+        if let Some(decl) = self.c().index_info(info).declaration() {
             o.str_nonempty("declaration", &self.sd.host.node_handle(decl)?);
         }
         Ok(o.build())

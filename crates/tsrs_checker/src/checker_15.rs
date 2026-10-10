@@ -764,7 +764,7 @@ impl Checker {
         let Some(index_info) = index_info else {
             return None;
         };
-        index_info.value_type.get()
+        self.index_info(index_info).value_type.get()
     }
 
     // checker.go:31152
@@ -2042,7 +2042,7 @@ impl Checker {
             let object_type = self.get_type_of_expression(node.parent().unwrap().expression().unwrap());
             for t in object_type.distributed() {
                 for info in self.get_applicable_index_infos(t, key_type) {
-                    if let Some(declaration) = info.declaration.get() {
+                    if let Some(declaration) = self.index_info(info).declaration.get() {
                         append_if_unique(&mut signatures, declaration);
                     }
                 }
@@ -2353,11 +2353,11 @@ impl Checker {
     }
 
     // checker.go:32575
-    pub(crate) fn get_applicable_index_infos(&mut self, t: P<Type>, key_type: P<Type>) -> Vec<P<IndexInfo>> {
+    pub(crate) fn get_applicable_index_infos(&mut self, t: P<Type>, key_type: P<Type>) -> Vec<IndexInfoKey> {
         let index_infos = self.get_index_infos_of_type(t);
         let mut result = Vec::new();
         for info in index_infos {
-            if self.is_applicable_index_type(key_type, info.key_type.get().unwrap()) {
+            if self.is_applicable_index_type(key_type, self.index_info(info).key_type.get().unwrap()) {
                 result.push(info);
             }
         }
@@ -2368,14 +2368,14 @@ impl Checker {
     pub(crate) fn get_applicable_index_symbol(&mut self, t: P<Type>, key_type: P<Type>) -> Option<P<Symbol>> {
         if let Some(info) = self.get_applicable_index_info(t, key_type) {
             if info != self.any_base_type_index_info {
-                if info.index_symbol.get().is_none() {
+                if self.index_info(info).index_symbol.get().is_none() {
                     let mut declarations = Vec::new();
-                    if let Some(declaration) = info.declaration.get() {
+                    if let Some(declaration) = self.index_info(info).declaration.get() {
                         declarations = vec![declaration];
                     } else {
                         for info in self.get_index_infos_of_type(t).iter().copied() {
-                            if let Some(declaration) = info.declaration.get() {
-                                if self.is_applicable_index_type(key_type, info.key_type.get().unwrap()) {
+                            if let Some(declaration) = self.index_info(info).declaration.get() {
+                                if self.is_applicable_index_type(key_type, self.index_info(info).key_type.get().unwrap()) {
                                     declarations.push(declaration);
                                 }
                             }
@@ -2388,11 +2388,11 @@ impl Checker {
                         symbol.set_declarations(&declarations);
                         symbol.set_parent(t.symbol());
                         let links = self.value_symbol_links.get_key(symbol);
-                        self.value_symbol_links.at(links).resolved_type.set(info.value_type.get());
-                        info.index_symbol.set(Some(symbol));
+                        self.value_symbol_links.at(links).resolved_type.set(self.index_info(info).value_type.get());
+                        self.index_info(info).index_symbol.set(Some(symbol));
                     }
                 }
-                return info.index_symbol.get();
+                return self.index_info(info).index_symbol.get();
             }
         }
         None

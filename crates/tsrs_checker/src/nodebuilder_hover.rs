@@ -390,9 +390,9 @@ impl NodeBuilderImpl {
         let mut result: Vec<P<Node>> = Vec::new();
         for info in c.get_index_infos_of_type(input).iter().copied() {
             if let Some(base_type) = base_type {
-                let base_info = c.get_index_info_of_type(base_type, info.key_type.get().unwrap());
+                let base_info = c.get_index_info_of_type(base_type, c.index_info(info).key_type.get().unwrap());
                 if let Some(base_info) = base_info {
-                    if c.is_type_identical_to(info.value_type.get().unwrap(), base_info.value_type.get().unwrap()) {
+                    if c.is_type_identical_to(c.index_info(info).value_type.get().unwrap(), c.index_info(base_info).value_type.get().unwrap()) {
                         continue;
                     }
                 }

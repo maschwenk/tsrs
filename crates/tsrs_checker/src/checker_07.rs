@@ -45,7 +45,7 @@ impl ObjectLiteralState {
 }
 
 fn create_object_literal_type(c: &mut Checker, node: P<Node>, st: &ObjectLiteralState) -> P<Type> {
-    let mut index_infos: Vec<P<IndexInfo>> = Vec::new();
+    let mut index_infos: Vec<IndexInfoKey> = Vec::new();
     let is_readonly = c.is_const_context(node);
     if st.has_computed_string_property {
         let string_type = c.string_type;
@@ -830,7 +830,7 @@ impl Checker {
                 members.set(left_prop.name(), s);
             }
         }
-        let spread_index_infos: Vec<P<IndexInfo>> = index_infos.iter().map(|&info| self.get_index_info_with_readonly(info, readonly)).collect();
+        let spread_index_infos: Vec<IndexInfoKey> = index_infos.iter().map(|&info| self.get_index_info_with_readonly(info, readonly)).collect();
         let spread = self.new_anonymous_type(symbol, Some(members), &[], &[], &spread_index_infos);
         spread.object_flags.set(
             spread.object_flags() | ObjectFlags::ObjectLiteral | ObjectFlags::ContainsObjectOrArrayLiteral | ObjectFlags::ContainsSpread | object_flags,
@@ -839,9 +839,9 @@ impl Checker {
     }
 
     // checker.go:13715
-    pub(crate) fn get_index_info_with_readonly(&mut self, info: P<IndexInfo>, readonly: bool) -> P<IndexInfo> {
-        if info.is_readonly.get() != readonly {
-            return self.new_index_info(info.key_type.get().unwrap(), info.value_type.get().unwrap(), readonly, info.declaration.get(), &info.components.get());
+    pub(crate) fn get_index_info_with_readonly(&mut self, info: IndexInfoKey, readonly: bool) -> IndexInfoKey {
+        if self.index_info(info).is_readonly.get() != readonly {
+            return self.new_index_info(self.index_info(info).key_type.get().unwrap(), self.index_info(info).value_type.get().unwrap(), readonly, self.index_info(info).declaration.get(), &self.index_info(info).components.get());
         }
         info
     }
@@ -855,15 +855,18 @@ impl Checker {
     }
 
     // checker.go:13728
-    pub(crate) fn get_union_index_infos(&mut self, types: &[P<Type>]) -> Vec<P<IndexInfo>> {
+    pub(crate) fn get_union_index_infos(&mut self, types: &[P<Type>]) -> Vec<IndexInfoKey> {
         let source_infos = self.get_index_infos_of_type(types[0]);
         let mut result = Vec::new();
         for info in source_infos {
-            let index_type = info.key_type.get().unwrap();
+            let index_type = self.index_info(info).key_type.get().unwrap();
             if types.iter().all(|&t| self.get_index_info_of_type(t, index_type).is_some()) {
                 let value_types: Vec<P<Type>> = types.iter().map(|&t| self.get_index_type_of_type(t, index_type).unwrap()).collect();
                 let value_type = self.get_union_type(&value_types);
-                let is_readonly = types.iter().any(|&t| self.get_index_info_of_type(t, index_type).unwrap().is_readonly.get());
+                let is_readonly = types.iter().any(|&t| {
+                    let info = self.get_index_info_of_type(t, index_type).unwrap();
+                    self.index_info(info).is_readonly.get()
+                });
                 result.push(self.new_index_info(index_type, value_type, is_readonly, None, &[]));
             }
         }

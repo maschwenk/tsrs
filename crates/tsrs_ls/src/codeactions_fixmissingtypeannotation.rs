@@ -779,7 +779,7 @@ impl isolatedDeclarationsFixer<'_> {
         if is_value_signature_declaration(Some(node)) {
             let signature = self.checker.get_signature_from_declaration_exported(node);
             if let Some(type_predicate) = self.checker.get_type_predicate_of_signature_exported(signature) {
-                let Some(predicate_type) = type_predicate.type_() else {
+                let Some(predicate_type) = self.checker.type_predicate(type_predicate).type_() else {
                     return None;
                 };
                 let enclosing_decl = ast::find_ancestor(node, ast::is_declaration).unwrap_or(self.source_file.as_node());

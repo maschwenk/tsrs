@@ -713,7 +713,7 @@ impl Checker {
         }
         for info in index_infos {
             let mut local_index_declaration: Option<P<Node>> = None;
-            if let Some(info_declaration) = info.declaration() {
+            if let Some(info_declaration) = self.index_info(info).declaration() {
                 let info_symbol = self.get_symbol_of_declaration(info_declaration).unwrap();
                 if self.get_parent_of_symbol(info_symbol) == t.symbol() {
                     local_index_declaration = Some(info_declaration);
@@ -726,7 +726,7 @@ impl Checker {
             if error_node.is_none() && interface_declaration.is_some() {
                 let mut some = false;
                 for base in self.get_base_types(t) {
-                    if self.get_property_of_object_type(base, prop.name()).is_some() && self.get_index_type_of_type(base, info.key_type()).is_some() {
+                    if self.get_property_of_object_type(base, prop.name()).is_some() && self.get_index_type_of_type(base, self.index_info(info).key_type()).is_some() {
                         some = true;
                         break;
                     }
@@ -736,11 +736,11 @@ impl Checker {
                 }
             }
             if let Some(error_node) = error_node {
-                if !self.is_type_assignable_to(prop_type, info.value_type()) {
+                if !self.is_type_assignable_to(prop_type, self.index_info(info).value_type()) {
                     let a0 = self.symbol_to_string(prop);
                     let a1 = self.type_to_string(prop_type, None);
-                    let a2 = self.type_to_string(info.key_type(), None);
-                    let a3 = self.type_to_string(info.value_type(), None);
+                    let a2 = self.type_to_string(self.index_info(info).key_type(), None);
+                    let a3 = self.type_to_string(self.index_info(info).value_type(), None);
                     let diagnostic = new_diagnostic_for_node(Some(error_node), Some(&diagnostics::Property_0_of_type_1_is_not_assignable_to_2_index_type_3), &[&a0, &a1, &a2, &a3]);
                     if let Some(prop_declaration) = prop_declaration.filter(|&d| d != error_node) {
                         let a0 = self.symbol_to_string(prop);
@@ -753,9 +753,9 @@ impl Checker {
     }
 
     // checker.go:4950
-    pub(crate) fn check_index_constraint_for_index_signature(&mut self, t: P<Type>, check_info: P<IndexInfo>) {
-        let declaration = check_info.declaration();
-        let index_infos = self.get_applicable_index_infos(t, check_info.key_type());
+    pub(crate) fn check_index_constraint_for_index_signature(&mut self, t: P<Type>, check_info: IndexInfoKey) {
+        let declaration = self.index_info(check_info).declaration();
+        let index_infos = self.get_applicable_index_infos(t, self.index_info(check_info).key_type());
         if index_infos.is_empty() {
             return;
         }
@@ -775,7 +775,7 @@ impl Checker {
                 continue;
             }
             let mut local_index_declaration: Option<P<Node>> = None;
-            if let Some(info_declaration) = info.declaration() {
+            if let Some(info_declaration) = self.index_info(info).declaration() {
                 let info_symbol = self.get_symbol_of_declaration(info_declaration).unwrap();
                 if self.get_parent_of_symbol(info_symbol) == t.symbol() {
                     local_index_declaration = Some(info_declaration);
@@ -788,7 +788,7 @@ impl Checker {
             if error_node.is_none() && interface_declaration.is_some() {
                 let mut some = false;
                 for base in self.get_base_types(t) {
-                    if self.get_index_info_of_type(base, check_info.key_type()).is_some() && self.get_index_type_of_type(base, info.key_type()).is_some() {
+                    if self.get_index_info_of_type(base, self.index_info(check_info).key_type()).is_some() && self.get_index_type_of_type(base, self.index_info(info).key_type()).is_some() {
                         some = true;
                         break;
                     }
@@ -797,11 +797,11 @@ impl Checker {
                     error_node = interface_declaration;
                 }
             }
-            if error_node.is_some() && !self.is_type_assignable_to(check_info.value_type(), info.value_type()) {
-                let a0 = self.type_to_string(check_info.key_type(), None);
-                let a1 = self.type_to_string(check_info.value_type(), None);
-                let a2 = self.type_to_string(info.key_type(), None);
-                let a3 = self.type_to_string(info.value_type(), None);
+            if error_node.is_some() && !self.is_type_assignable_to(self.index_info(check_info).value_type(), self.index_info(info).value_type()) {
+                let a0 = self.type_to_string(self.index_info(check_info).key_type(), None);
+                let a1 = self.type_to_string(self.index_info(check_info).value_type(), None);
+                let a2 = self.type_to_string(self.index_info(info).key_type(), None);
+                let a3 = self.type_to_string(self.index_info(info).value_type(), None);
                 self.error(error_node, &diagnostics::X_0_index_type_1_is_not_assignable_to_2_index_type_3, &[&a0, &a1, &a2, &a3]);
             }
         }

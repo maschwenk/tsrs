@@ -1,0 +1,53 @@
+{
+  "pass": {
+    "entries": 371,
+    "tsc": 184,
+    "tsbuild": 187,
+    "sha256": "c098f73f3d6b65efc8f424f818733f95001a4e375a13c876e0fe6f3e3b041f7c",
+    "comparisons": {
+      "owned-type-text": {
+        "differences": 0,
+        "sha256": "c098f73f3d6b65efc8f424f818733f95001a4e375a13c876e0fe6f3e3b041f7c"
+      },
+      "oxc-owned-type-text": {
+        "differences": 0,
+        "sha256": "c098f73f3d6b65efc8f424f818733f95001a4e375a13c876e0fe6f3e3b041f7c"
+      }
+    }
+  },
+  "fail": {
+    "entries": 35,
+    "tsc": 32,
+    "tsbuild": 3,
+    "sha256": "6b37bec6778e170c9c46a56cae092936ab15a3a7597e945c48f0f307d8cd9d1f",
+    "comparisons": {
+      "owned-type-text": {
+        "differences": 0,
+        "sha256": "6b37bec6778e170c9c46a56cae092936ab15a3a7597e945c48f0f307d8cd9d1f"
+      },
+      "oxc-owned-type-text": {
+        "differences": 0,
+        "sha256": "6b37bec6778e170c9c46a56cae092936ab15a3a7597e945c48f0f307d8cd9d1f"
+      }
+    }
+  },
+  "crash": {
+    "entries": 0,
+    "tsc": 0,
+    "tsbuild": 0,
+    "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "comparisons": {
+      "owned-type-text": {
+        "differences": 0,
+        "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+      },
+      "oxc-owned-type-text": {
+        "differences": 0,
+        "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+      }
+    }
+  },
+  "local_output_differences": [
+    "tsc/incremental/internal-symbolname-in-tsbuildInfo.js"
+  ]
+}

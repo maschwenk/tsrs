@@ -524,10 +524,10 @@ pub(crate) fn get_type_predicate_of_signature(host: &dyn CheckerHost, p: &Params
         return Ok(Value::Null);
     };
     let mut o = obj();
-    o.num("kind", pred.kind() as i32 as f64);
-    o.num("parameterIndex", pred.parameter_index() as f64);
-    o.str_nonempty("parameterName", &pred.parameter_name());
-    if let Some(t) = pred.type_() {
+    o.num("kind", s.c().type_predicate(pred).kind() as i32 as f64);
+    o.num("parameterIndex", s.c().type_predicate(pred).parameter_index() as f64);
+    o.str_nonempty("parameterName", &s.c().type_predicate(pred).parameter_name());
+    if let Some(t) = s.c().type_predicate(pred).type_() {
         o.set("type", s.type_response(t)?);
     }
     Ok(o.build())

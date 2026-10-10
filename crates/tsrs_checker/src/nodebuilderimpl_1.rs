@@ -1718,21 +1718,21 @@ impl NodeBuilderImpl {
     }
 
     // nodebuilderimpl.go:1646
-    pub(crate) fn type_predicate_to_type_predicate_node(&self, c: &mut Checker, predicate: P<TypePredicate>) -> P<Node> {
-        let kind = predicate.kind.get();
+    pub(crate) fn type_predicate_to_type_predicate_node(&self, c: &mut Checker, predicate: TypePredicateKey) -> P<Node> {
+        let kind = c.type_predicate(predicate).kind();
         let mut asserts_modifier: Option<P<Node>> = None;
         if kind == TypePredicateKind::AssertsIdentifier || kind == TypePredicateKind::AssertsThis {
             asserts_modifier = Some(self.f.new_token(Kind::AssertsKeyword));
         }
         let parameter_name: P<Node>;
         if kind == TypePredicateKind::Identifier || kind == TypePredicateKind::AssertsIdentifier {
-            parameter_name = self.f.new_identifier(&predicate.parameter_name.get());
+            parameter_name = self.f.new_identifier(&c.type_predicate(predicate).parameter_name());
             self.e.add_emit_flags(parameter_name, EmitFlags::NoAsciiEscaping);
         } else {
             parameter_name = self.f.new_this_type_node();
         }
         let mut type_node: Option<P<Node>> = None;
-        if let Some(t) = predicate.t.get() {
+        if let Some(t) = c.type_predicate(predicate).type_() {
             type_node = self.type_to_type_node(c, Some(t));
         }
         self.f.new_type_predicate_node(asserts_modifier, parameter_name, type_node)
@@ -1913,18 +1913,18 @@ impl NodeBuilderImpl {
     }
 
     // nodebuilderimpl.go:1837
-    pub(crate) fn type_predicate_to_type_predicate_node_helper(&self, c: &mut Checker, type_predicate: P<TypePredicate>) -> P<Node> {
-        let kind = type_predicate.kind.get();
+    pub(crate) fn type_predicate_to_type_predicate_node_helper(&self, c: &mut Checker, type_predicate: TypePredicateKey) -> P<Node> {
+        let kind = c.type_predicate(type_predicate).kind();
         let asserts_modifier: Option<P<Node>> = if kind == TypePredicateKind::AssertsThis || kind == TypePredicateKind::AssertsIdentifier { Some(self.f.new_token(Kind::AssertsKeyword)) } else { None };
         let parameter_name: P<Node>;
         if kind == TypePredicateKind::Identifier || kind == TypePredicateKind::AssertsIdentifier {
-            parameter_name = self.new_identifier(c, &type_predicate.parameter_name.get(), None /*symbol*/);
+            parameter_name = self.new_identifier(c, &c.type_predicate(type_predicate).parameter_name(), None /*symbol*/);
             self.e.set_emit_flags(parameter_name, EmitFlags::NoAsciiEscaping);
         } else {
             parameter_name = self.f.new_this_type_node();
         }
         let mut type_node: Option<P<Node>> = None;
-        if let Some(t) = type_predicate.t.get() {
+        if let Some(t) = c.type_predicate(type_predicate).type_() {
             type_node = self.type_to_type_node(c, Some(t));
         }
         self.f.new_type_predicate_node(asserts_modifier, parameter_name, type_node)

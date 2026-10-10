@@ -159,18 +159,18 @@ impl Checker {
                         synthetic_flag = CheckFlags::SyntheticProperty;
                     }
                 } else if is_union {
-                    let mut index_info: Option<P<IndexInfo>> = None;
+                    let mut index_info: Option<IndexInfoKey> = None;
                     if !is_late_bound_name(name) {
                         index_info = self.get_applicable_index_info_for_name(t, name);
                     }
                     if let Some(index_info) = index_info {
                         prop_flags = (prop_flags & !SymbolFlags::Accessor) | SymbolFlags::Property;
-                        check_flags |= CheckFlags::WritePartial | tsrs_core::if_else(index_info.is_readonly(), CheckFlags::Readonly, CheckFlags::None);
+                        check_flags |= CheckFlags::WritePartial | tsrs_core::if_else(self.index_info(index_info).is_readonly(), CheckFlags::Readonly, CheckFlags::None);
                         if is_tuple_type(t) {
                             let index_type = self.get_rest_type_of_tuple_type(t).unwrap_or(self.undefined_type);
                             index_types.push(index_type);
                         } else {
-                            index_types.push(index_info.value_type());
+                            index_types.push(self.index_info(index_info).value_type());
                         }
                     } else if is_object_literal_type(t) && !t.object_flags().intersects(ObjectFlags::ContainsSpread) {
                         check_flags |= CheckFlags::WritePartial;
@@ -1820,8 +1820,8 @@ impl Checker {
             cb(self, self.string_type);
         } else {
             for info in self.get_index_infos_of_type(t) {
-                if !strings_only || info.key_type().flags().intersects(TypeFlags::String | TypeFlags::TemplateLiteral) {
-                    cb(self, info.key_type());
+                if !strings_only || self.index_info(info).key_type().flags().intersects(TypeFlags::String | TypeFlags::TemplateLiteral) {
+                    cb(self, self.index_info(info).key_type());
                 }
             }
         }
@@ -1907,7 +1907,7 @@ impl Checker {
     }
 
     // checker.go:23204
-    pub(crate) fn instantiate_index_infos(&mut self, index_infos: &[P<IndexInfo>], m: P<TypeMapper>) -> Vec<P<IndexInfo>> {
+    pub(crate) fn instantiate_index_infos(&mut self, index_infos: &[IndexInfoKey], m: P<TypeMapper>) -> Vec<IndexInfoKey> {
         self.instantiate_list(index_infos, Some(m), |c, info, m| c.instantiate_index_info(info, m))
     }
 

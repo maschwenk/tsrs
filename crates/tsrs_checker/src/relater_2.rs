@@ -335,7 +335,7 @@ impl Checker {
         }
         let index_info = self.get_applicable_index_info_for_name(t, name);
         if let Some(index_info) = index_info {
-            return Some(index_info.value_type());
+            return Some(self.index_info(index_info).value_type());
         }
         Some(self.undefined_type)
     }
@@ -2457,14 +2457,14 @@ impl Relater {
         }
         let index_infos = c.get_index_infos_of_type(target);
         let string_type = c.string_type;
-        let target_has_string_index = index_infos.iter().any(|info| info.key_type() == string_type);
+        let target_has_string_index = index_infos.iter().any(|info| c.index_info(*info).key_type() == string_type);
         let mut result = Ternary::True;
         for target_info in index_infos {
-            let related = if self.rel() != c.strict_subtype_relation && !source_is_primitive && target_has_string_index && target_info.value_type().flags().intersects(TypeFlags::Any) {
+            let related = if self.rel() != c.strict_subtype_relation && !source_is_primitive && target_has_string_index && c.index_info(target_info).value_type().flags().intersects(TypeFlags::Any) {
                 Ternary::True
             } else if c.is_generic_mapped_type(source) && target_has_string_index {
                 let template_type = c.get_template_type_from_mapped_type(source);
-                self.is_related_to(c, template_type, target_info.value_type(), RecursionFlags::Both, report_errors)
+                self.is_related_to(c, template_type, c.index_info(target_info).value_type(), RecursionFlags::Both, report_errors)
             } else {
                 self.type_related_to_index_info(c, source, target_info, report_errors, intersection_state)
             };
@@ -2477,8 +2477,8 @@ impl Relater {
     }
 
     // relater.go:4635
-    pub(crate) fn type_related_to_index_info(&self, c: &mut Checker, source: P<Type>, target_info: P<IndexInfo>, report_errors: bool, intersection_state: IntersectionState) -> Ternary {
-        let source_info = c.get_applicable_index_info(source, target_info.key_type());
+    pub(crate) fn type_related_to_index_info(&self, c: &mut Checker, source: P<Type>, target_info: IndexInfoKey, report_errors: bool, intersection_state: IntersectionState) -> Ternary {
+        let source_info = c.get_applicable_index_info(source, c.index_info(target_info).key_type());
         if let Some(source_info) = source_info {
             return self.index_info_related_to(c, source_info, target_info, report_errors, intersection_state);
         }
@@ -2492,7 +2492,7 @@ impl Relater {
             return self.members_related_to_index_info(c, source, target_info, report_errors, intersection_state);
         }
         if report_errors {
-            let key_type_string = c.type_to_string_exported(target_info.key_type());
+            let key_type_string = c.type_to_string_exported(c.index_info(target_info).key_type());
             let source_string = c.type_to_string_exported(source);
             self.report_error(c, &diagnostics::Index_signature_for_type_0_is_missing_in_type_1, &[&key_type_string, &source_string]);
         }
@@ -2525,9 +2525,9 @@ impl Checker {
 
 impl Relater {
     // relater.go:4666
-    pub(crate) fn members_related_to_index_info(&self, c: &mut Checker, source: P<Type>, target_info: P<IndexInfo>, report_errors: bool, intersection_state: IntersectionState) -> Ternary {
+    pub(crate) fn members_related_to_index_info(&self, c: &mut Checker, source: P<Type>, target_info: IndexInfoKey, report_errors: bool, intersection_state: IntersectionState) -> Ternary {
         let mut result = Ternary::True;
-        let key_type = target_info.key_type();
+        let key_type = c.index_info(target_info).key_type();
         let props = if source.flags().intersects(TypeFlags::Intersection) {
             c.get_properties_of_union_or_intersection_type(source)
         } else {
@@ -2546,7 +2546,7 @@ impl Relater {
                 } else {
                     c.get_type_with_facts(prop_type, TypeFacts::NEUndefined)
                 };
-                let related = self.is_related_to_ex(c, t, target_info.value_type(), RecursionFlags::Both, report_errors, None /*headMessage*/, intersection_state);
+                let related = self.is_related_to_ex(c, t, c.index_info(target_info).value_type(), RecursionFlags::Both, report_errors, None /*headMessage*/, intersection_state);
                 if related == Ternary::False {
                     if report_errors {
                         let prop_string = c.symbol_to_string(prop);
@@ -2558,7 +2558,7 @@ impl Relater {
             }
         }
         for info in c.get_index_infos_of_type(source).iter().copied() {
-            if c.is_applicable_index_type(info.key_type(), key_type) {
+            if c.is_applicable_index_type(c.index_info(info).key_type(), key_type) {
                 let related = self.index_info_related_to(c, info, target_info, report_errors, intersection_state);
                 if related == Ternary::False {
                     return Ternary::False;
@@ -2570,15 +2570,15 @@ impl Relater {
     }
 
     // relater.go:4710
-    pub(crate) fn index_info_related_to(&self, c: &mut Checker, source_info: P<IndexInfo>, target_info: P<IndexInfo>, report_errors: bool, intersection_state: IntersectionState) -> Ternary {
-        let related = self.is_related_to_ex(c, source_info.value_type(), target_info.value_type(), RecursionFlags::Both, report_errors, None /*headMessage*/, intersection_state);
+    pub(crate) fn index_info_related_to(&self, c: &mut Checker, source_info: IndexInfoKey, target_info: IndexInfoKey, report_errors: bool, intersection_state: IntersectionState) -> Ternary {
+        let related = self.is_related_to_ex(c, c.index_info(source_info).value_type(), c.index_info(target_info).value_type(), RecursionFlags::Both, report_errors, None /*headMessage*/, intersection_state);
         if related == Ternary::False && report_errors {
-            if source_info.key_type() == target_info.key_type() {
-                let key_type_string = c.type_to_string_exported(source_info.key_type());
+            if c.index_info(source_info).key_type() == c.index_info(target_info).key_type() {
+                let key_type_string = c.type_to_string_exported(c.index_info(source_info).key_type());
                 self.report_error(c, &diagnostics::X_0_index_signatures_are_incompatible, &[&key_type_string]);
             } else {
-                let source_key_string = c.type_to_string_exported(source_info.key_type());
-                let target_key_string = c.type_to_string_exported(target_info.key_type());
+                let source_key_string = c.type_to_string_exported(c.index_info(source_info).key_type());
+                let target_key_string = c.type_to_string_exported(c.index_info(target_info).key_type());
                 self.report_error(c, &diagnostics::X_0_and_1_index_signatures_are_incompatible, &[&source_key_string, &target_key_string]);
             }
         }
@@ -2593,10 +2593,10 @@ impl Relater {
             return Ternary::False;
         }
         for target_info in target_infos {
-            let source_info = c.get_index_info_of_type(source, target_info.key_type());
+            let source_info = c.get_index_info_of_type(source, c.index_info(target_info).key_type());
             if !(source_info.is_some()
-                && self.is_related_to(c, source_info.unwrap().value_type(), target_info.value_type(), RecursionFlags::Both, false) != Ternary::False
-                && source_info.unwrap().is_readonly() == target_info.is_readonly())
+                && self.is_related_to(c, c.index_info(source_info.unwrap()).value_type(), c.index_info(target_info).value_type(), RecursionFlags::Both, false) != Ternary::False
+                && c.index_info(source_info.unwrap()).is_readonly() == c.index_info(target_info).is_readonly())
             {
                 return Ternary::False;
             }

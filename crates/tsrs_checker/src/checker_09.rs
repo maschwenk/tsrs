@@ -1008,7 +1008,7 @@ impl Checker {
     // checker.go:18261
     pub(crate) fn get_type_from_object_binding_pattern(&mut self, pattern: P<Node>, include_pattern_in_type: bool, report_errors: bool) -> P<Type> {
         let members = SymbolTable::new();
-        let mut string_index_info: Option<P<IndexInfo>> = None;
+        let mut string_index_info: Option<IndexInfoKey> = None;
         let mut object_flags = ObjectFlags::ObjectLiteral | ObjectFlags::ContainsObjectOrArrayLiteral;
         for &e in pattern.elements() {
             let name = e.property_name_or_name();
@@ -1029,7 +1029,7 @@ impl Checker {
             self.value_symbol_links.get(symbol).resolved_type.set(Some(t));
             members.set(symbol.name(), symbol);
         }
-        let index_infos: Vec<P<IndexInfo>> = match string_index_info {
+        let index_infos: Vec<IndexInfoKey> = match string_index_info {
             Some(info) => vec![info],
             None => Vec::new(),
         };
@@ -1599,12 +1599,12 @@ impl Checker {
                 }
             }
         }
-        let index_infos: Vec<P<IndexInfo>> = self
+        let index_infos: Vec<IndexInfoKey> = self
             .get_index_infos_of_type(t)
             .into_iter()
             .map(|info| {
-                let value_type = self.get_widened_type(info.value_type());
-                self.new_index_info(info.key_type(), value_type, info.is_readonly(), info.declaration(), &info.components.get())
+                let value_type = self.get_widened_type(self.index_info(info).value_type());
+                self.new_index_info(self.index_info(info).key_type(), value_type, self.index_info(info).is_readonly(), self.index_info(info).declaration(), &self.index_info(info).components.get())
             })
             .collect();
         let result = self.new_anonymous_type(t.symbol(), Some(members), &[], &[], &index_infos);
@@ -2347,18 +2347,18 @@ impl Checker {
     }
 
     // checker.go:19318
-    pub fn get_index_infos_of_type(&mut self, t: P<Type>) -> ArrayView<P<IndexInfo>> {
+    pub fn get_index_infos_of_type(&mut self, t: P<Type>) -> ArrayView<IndexInfoKey> {
         let t = self.get_reduced_apparent_type(t);
         self.get_index_infos_of_structured_type(t)
     }
 
     // checker.go:19322
-    pub(crate) fn get_index_infos_of_structured_type(&mut self, t: P<Type>) -> ArrayView<P<IndexInfo>> {
+    pub(crate) fn get_index_infos_of_structured_type(&mut self, t: P<Type>) -> ArrayView<IndexInfoKey> {
         self.index_infos_of_structured_type(t)
     }
 
     // Go's getIndexInfosOfStructuredType returns the stored slice; this is it without the copy.
-    pub(crate) fn index_infos_of_structured_type(&mut self, t: P<Type>) -> ArrayView<P<IndexInfo>> {
+    pub(crate) fn index_infos_of_structured_type(&mut self, t: P<Type>) -> ArrayView<IndexInfoKey> {
         if t.flags().intersects(TypeFlags::StructuredType) {
             if let Some(lm) = self.get_ready_lazy_member_table(t) {
                 self.lazy_member_stats.member_index_info_queries += 1;
@@ -2375,9 +2375,9 @@ impl Checker {
     // Return the indexing info of the given kind in the given type. Creates synthetic union index types when necessary and
     // maps primitive types and type parameters are to their apparent types.
     // checker.go:19331
-    pub fn get_index_info_of_type(&mut self, t: P<Type>, key_type: P<Type>) -> Option<P<IndexInfo>> {
+    pub fn get_index_info_of_type(&mut self, t: P<Type>, key_type: P<Type>) -> Option<IndexInfoKey> {
         let index_infos = self.get_index_infos_of_type(t);
-        find_index_info(&index_infos, key_type)
+        find_index_info(self, &index_infos, key_type)
     }
 
     // Return the index type of the given kind in the given type. Creates synthetic union index types when necessary and
@@ -2386,7 +2386,7 @@ impl Checker {
     pub fn get_index_type_of_type(&mut self, t: P<Type>, key_type: P<Type>) -> Option<P<Type>> {
         let info = self.get_index_info_of_type(t, key_type);
         if let Some(info) = info {
-            return info.value_type.get();
+            return self.index_info(info).value_type.get();
         }
         None
     }
@@ -2400,13 +2400,13 @@ impl Checker {
     }
 
     // checker.go:19352
-    pub(crate) fn get_applicable_index_info(&mut self, t: P<Type>, key_type: P<Type>) -> Option<P<IndexInfo>> {
+    pub(crate) fn get_applicable_index_info(&mut self, t: P<Type>, key_type: P<Type>) -> Option<IndexInfoKey> {
         let index_infos = self.get_index_infos_of_type(t);
         self.find_applicable_index_info(&index_infos, key_type)
     }
 
     // checker.go:19356
-    pub(crate) fn get_applicable_index_info_for_name(&mut self, t: P<Type>, name: &str) -> Option<P<IndexInfo>> {
+    pub(crate) fn get_applicable_index_info_for_name(&mut self, t: P<Type>, name: &str) -> Option<IndexInfoKey> {
         if is_late_bound_name(name) {
             return self.get_applicable_index_info(t, self.es_symbol_type);
         }
@@ -2415,14 +2415,14 @@ impl Checker {
     }
 
     // checker.go:19363
-    pub(crate) fn find_applicable_index_info(&mut self, index_infos: &[P<IndexInfo>], key_type: P<Type>) -> Option<P<IndexInfo>> {
+    pub(crate) fn find_applicable_index_info(&mut self, index_infos: &[IndexInfoKey], key_type: P<Type>) -> Option<IndexInfoKey> {
         // Index signatures for type 'string' are considered only when no other index signatures apply.
-        let mut string_index_info: Option<P<IndexInfo>> = None;
-        let mut applicable_infos: Vec<P<IndexInfo>> = Vec::new();
+        let mut string_index_info: Option<IndexInfoKey> = None;
+        let mut applicable_infos: Vec<IndexInfoKey> = Vec::new();
         for &info in index_infos {
-            if info.key_type.get() == Some(self.string_type) {
+            if self.index_info(info).key_type.get() == Some(self.string_type) {
                 string_index_info = Some(info);
-            } else if self.is_applicable_index_type(key_type, info.key_type()) {
+            } else if self.is_applicable_index_type(key_type, self.index_info(info).key_type()) {
                 applicable_infos.push(info);
             }
         }
@@ -2443,8 +2443,8 @@ impl Checker {
                 let mut is_readonly = true;
                 let mut types: Vec<P<Type>> = Vec::with_capacity(applicable_infos.len());
                 for info in &applicable_infos {
-                    types.push(info.value_type());
-                    if !info.is_readonly() {
+                    types.push(self.index_info(*info).value_type());
+                    if !self.index_info(*info).is_readonly() {
                         is_readonly = false;
                     }
                 }
@@ -2575,7 +2575,7 @@ impl Checker {
         let mut members: Option<P<SymbolTable>>;
         let mut call_signatures: Vec<P<Signature>>;
         let mut construct_signatures: Vec<P<Signature>>;
-        let mut index_infos: Vec<P<IndexInfo>>;
+        let mut index_infos: Vec<IndexInfoKey>;
         let mut instantiated = false;
         let resolved = self.resolve_declared_members(&source).unwrap();
         if type_parameters == type_arguments {
@@ -2614,9 +2614,9 @@ impl Checker {
 }
 
 // checker.go:19499
-pub(crate) fn find_index_info(index_infos: &[P<IndexInfo>], key_type: P<Type>) -> Option<P<IndexInfo>> {
+pub(crate) fn find_index_info(c: &Checker, index_infos: &[IndexInfoKey], key_type: P<Type>) -> Option<IndexInfoKey> {
     for &info in index_infos {
-        if info.key_type.get() == Some(key_type) {
+        if c.index_info(info).key_type.get() == Some(key_type) {
             return Some(info);
         }
     }
@@ -2629,16 +2629,16 @@ impl Checker {
         &mut self,
         call_signatures: &mut Vec<P<Signature>>,
         construct_signatures: &mut Vec<P<Signature>>,
-        index_infos: &mut Vec<P<IndexInfo>>,
+        index_infos: &mut Vec<IndexInfoKey>,
         base_type: P<Type>,
     ) {
         let sigs = self.get_signatures_of_type(base_type, SignatureKind::Call);
         call_signatures.extend(sigs);
         let sigs = self.get_signatures_of_type(base_type, SignatureKind::Construct);
         construct_signatures.extend(sigs);
-        let inherited_index_infos: Vec<P<IndexInfo>> =
+        let inherited_index_infos: Vec<IndexInfoKey> =
             if base_type != self.any_type { self.get_index_infos_of_type(base_type).to_vec() } else { vec![self.any_base_type_index_info] };
-        let filtered: Vec<P<IndexInfo>> = inherited_index_infos.into_iter().filter(|info| find_index_info(index_infos, info.key_type()).is_none()).collect();
+        let filtered: Vec<IndexInfoKey> = inherited_index_infos.into_iter().filter(|info| find_index_info(self, index_infos, self.index_info(*info).key_type()).is_none()).collect();
         index_infos.extend(filtered);
     }
 }
@@ -2730,7 +2730,7 @@ pub(crate) struct LazyMembers {
     pub(crate) unaffected: ArrayCell<TextView>, // sorted names of declared members that instantiate to themselves
     pub(crate) call_signatures: ArrayCell<P<Signature>>,
     pub(crate) construct_signatures: ArrayCell<P<Signature>>,
-    pub(crate) index_infos: ArrayCell<P<IndexInfo>>,
+    pub(crate) index_infos: ArrayCell<IndexInfoKey>,
     pub(crate) base_types: ArrayCell<P<Type>>,
 }
 

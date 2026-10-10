@@ -2,7 +2,7 @@ use std::cell::RefCell;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_ast::{self as ast, CheckFlags, Kind, ModifierFlags, Node, NodeFactory, NodeFlags, NodeList, SourceFile, Symbol, SymbolFlags, TokenFlags};
-use tsrs_checker::{self as checker, Checker, Flags, IndexInfo, InternalFlags, NodeBuilder, Signature, Type};
+use tsrs_checker::{self as checker, Checker, Flags, IndexInfoKey, InternalFlags, NodeBuilder, Signature, Type};
 use tsrs_compiler::Program;
 use tsrs_core::context::Locale;
 use tsrs_core::{ P};
@@ -581,7 +581,7 @@ impl<'a> missingMemberFixer<'a> {
 
     // codeactions_missingmemberfixer.go:413
     pub(crate) fn create_index_signature_declaration_from_type(&mut self, class_declaration: P<Node>, implemented_type: P<Type>, key_type: P<Type>) -> Option<P<Node>> {
-        let index_info: P<IndexInfo> = self.type_checker.get_index_info_of_type_exported(implemented_type, key_type)?;
+        let index_info: IndexInfoKey = self.type_checker.get_index_info_of_type_exported(implemented_type, key_type)?;
 
         let builder = checker::new_node_builder(self.type_checker, self.change_tracker.emit_context);
         builder.index_info_to_index_signature_declaration(self.type_checker, index_info, Some(class_declaration), Flags::None, InternalFlags::None, None)

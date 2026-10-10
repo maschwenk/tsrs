@@ -849,7 +849,7 @@ pub(crate) fn census_layouts() {
         let header = CensusField::all_but(0, size_of::<Type>(), &[offset_of!(Type, symbol), offset_of!(Type, alias), pointer]);
         tsrs_core::census_layout(type_name::<Type>(), &header);
         let name = type_name::<LiteralType>();
-        // The number and boolean variants leave the rest of the value uninitialized (its string edges remain legacy).
+        // Literal snapshots own their text; discriminants and numeric payload bytes are not graph edges.
         let d = 0;
         let value = CensusField::NoPointer { off: d + offset_of!(LiteralType, value), len: size_of::<SnapshotCell<Option<LiteralValue>>>() };
         tsrs_core::census_layout(name, &[value]);
@@ -1705,7 +1705,7 @@ const _: () = assert!(std::mem::size_of::<StructuredMembers>() == 20);
 #[derive(Default)]
 struct CountOrIndexInfos {
     call_signature_count: Cell<i32>,
-    index_infos: ArrayCell<P<IndexInfo>>,
+    index_infos: ArrayCell<IndexInfoKey>,
 }
 
 impl CountOrIndexInfos {
@@ -1714,8 +1714,8 @@ impl CountOrIndexInfos {
     #[inline]
     fn set_call_signature_count(&self, count: i32) { self.call_signature_count.set(count); }
     #[inline]
-    fn index_infos(&self) -> ArrayView<P<IndexInfo>> { self.index_infos.get() }
-    fn set_index_infos(&self, index_infos: &[P<IndexInfo>]) { self.index_infos.set(index_infos); }
+    fn index_infos(&self) -> ArrayView<IndexInfoKey> { self.index_infos.get() }
+    fn set_index_infos(&self, index_infos: &[IndexInfoKey]) { self.index_infos.set(index_infos); }
 }
 
 impl StructuredType {
@@ -1758,11 +1758,11 @@ impl StructuredType {
         self.resolved_for_write().count_or_index_infos.set_call_signature_count(count);
     }
     #[inline]
-    pub fn index_infos(&self) -> ArrayView<P<IndexInfo>> {
+    pub fn index_infos(&self) -> ArrayView<IndexInfoKey> {
         self.resolved.get().map_or_else(ArrayView::default, |r| r.count_or_index_infos.index_infos())
     }
     #[inline]
-    pub fn set_index_infos(&self, index_infos: &[P<IndexInfo>]) {
+    pub fn set_index_infos(&self, index_infos: &[IndexInfoKey]) {
         self.resolved_for_write().count_or_index_infos.set_index_infos(index_infos);
     }
     pub fn call_signatures(&self) -> ArrayView<P<Signature>> {
@@ -1905,7 +1905,7 @@ pub struct InterfaceType {
     pub declared_members: Cell<Option<P<SymbolTable>>>, // Declared members
     pub declared_call_signatures: ArrayCell<P<Signature>>, // Declared call signatures
     pub declared_construct_signatures: ArrayCell<P<Signature>>, // Declared construct signatures
-    pub declared_index_infos: ArrayCell<P<IndexInfo>>, // Declared index signatures
+    pub declared_index_infos: ArrayCell<IndexInfoKey>, // Declared index signatures
 }
 embeds!(InterfaceType, type_reference, TypeReference);
 
@@ -2490,7 +2490,7 @@ struct SignatureRare {
     this_parameter: Cell<Option<P<Symbol>>>,
     isolated_signature_type: Cell<Option<P<Type>>>,
     composite: Cell<Option<P<CompositeSignature>>>,
-    resolved_type_predicate: Cell<Option<P<TypePredicate>>>, // never the checker's `noTypePredicate` sentinel
+    resolved_type_predicate: Cell<Option<TypePredicateKey>>, // never the checker's `noTypePredicate` sentinel
 }
 
 impl Signature {
@@ -2514,14 +2514,14 @@ impl Signature {
     }
     /// Go `sig.resolvedTypePredicate`; `no_type_predicate` is the checker's `noTypePredicate`.
     #[inline]
-    pub fn resolved_type_predicate(&self, no_type_predicate: P<TypePredicate>) -> Option<P<TypePredicate>> {
+    pub fn resolved_type_predicate(&self, no_type_predicate: TypePredicateKey) -> Option<TypePredicateKey> {
         if self.no_type_predicate.get() {
             return Some(no_type_predicate);
         }
         self.rare.get().and_then(|r| r.resolved_type_predicate.get())
     }
     /// Go `sig.resolvedTypePredicate = predicate`; `no_type_predicate` is the checker's `noTypePredicate`.
-    pub fn set_resolved_type_predicate(&self, predicate: Option<P<TypePredicate>>, no_type_predicate: P<TypePredicate>) {
+    pub fn set_resolved_type_predicate(&self, predicate: Option<TypePredicateKey>, no_type_predicate: TypePredicateKey) {
         let none = predicate == Some(no_type_predicate);
         self.no_type_predicate.set(none);
         let stored = if none { None } else { predicate };
@@ -2580,30 +2580,37 @@ pub enum TypePredicateKind {
     AssertsIdentifier,
 }
 
+/// A predicate edge is a qualified key. It has no implicit pointer dereference.
+pub type TypePredicateKey = tsrs_core::arena_owner::ArenaKey<TypePredicate>;
+
+/// Immutable predicate metadata in the owning checker's typed store. Its type edge remains legacy.
 #[derive(Default)]
 pub struct TypePredicate {
-    pub kind: Cell<TypePredicateKind>,
-    pub parameter_index: Cell<i32>,
-    pub parameter_name: TextCell,
-    pub t: Cell<Option<P<Type>>>,
+    kind: TypePredicateKind,
+    parameter_index: i32,
+    parameter_name: TextView,
+    t: Option<P<Type>>,
 }
 
+#[cfg(target_pointer_width = "64")]
+const _: () = assert!(std::mem::size_of::<TypePredicate>() == 24);
+#[cfg(target_pointer_width = "32")]
+const _: () = assert!(std::mem::size_of::<TypePredicate>() == 16);
+
 impl TypePredicate {
-    pub fn type_(&self) -> Option<P<Type>> {
-        self.t.get()
+    pub(crate) fn new(kind: TypePredicateKind, parameter_name: &str, parameter_index: i32, t: Option<P<Type>>) -> Self {
+        Self { kind, parameter_index, parameter_name: parameter_name.into(), t }
     }
-    pub fn kind(&self) -> TypePredicateKind {
-        self.kind.get()
-    }
-    pub fn parameter_index(&self) -> i32 {
-        self.parameter_index.get()
-    }
-    pub fn parameter_name(&self) -> TextView {
-        self.parameter_name.get()
-    }
+    pub fn type_(&self) -> Option<P<Type>> { self.t }
+    pub fn kind(&self) -> TypePredicateKind { self.kind }
+    pub fn parameter_index(&self) -> i32 { self.parameter_index }
+    pub fn parameter_name(&self) -> TextView { self.parameter_name.clone() }
 }
 
 // IndexInfo
+
+/// An index-signature metadata edge, resolved by its owning checker.
+pub type IndexInfoKey = tsrs_core::arena_owner::ArenaKey<IndexInfo>;
 
 #[derive(Default)]
 pub struct IndexInfo {
@@ -2614,6 +2621,11 @@ pub struct IndexInfo {
     pub index_symbol: Cell<Option<P<Symbol>>>, // Synthetic property symbol for this index signature
     pub components: ArrayCell<P<Node>>, // ElementWithComputedPropertyName
 }
+
+#[cfg(target_pointer_width = "64")]
+const _: () = assert!(std::mem::size_of::<IndexInfo>() == 48);
+#[cfg(target_pointer_width = "32")]
+const _: () = assert!(std::mem::size_of::<IndexInfo>() == 24);
 
 impl IndexInfo {
     pub fn key_type(&self) -> P<Type> {
@@ -2730,6 +2742,49 @@ pub type StringLiteralType = Type;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn index_metadata_key_keeps_cache_identity_after_store_growth() {
+        let region = tsrs_core::arena::Region::new(4096);
+        let _scope = region.enter();
+        let symbol = Symbol::new(SymbolFlags::Property, "index");
+        let mut records = tsrs_core::arena_owner::ArenaBuilder::with_capacity(1);
+        let key = records.alloc(IndexInfo::default());
+        for _ in 0..128 {
+            records.alloc(IndexInfo::default());
+        }
+        records.get(key).unwrap().index_symbol.set(Some(symbol));
+        assert_eq!(records.get(key).unwrap().index_symbol.get(), Some(symbol));
+        let mut other = tsrs_core::arena_owner::ArenaBuilder::new();
+        let foreign = other.alloc(IndexInfo::default());
+        assert!(records.get(foreign).is_none());
+        assert!(other.get(key).is_none());
+        assert_eq!(other.get(foreign).unwrap().index_symbol.get(), None);
+    }
+
+    #[test]
+    fn predicate_keys_preserve_sentinel_identity_and_reject_foreign_storage() {
+        let mut predicates = tsrs_core::arena_owner::ArenaBuilder::with_capacity(1);
+        let sentinel = predicates.alloc(TypePredicate::new(TypePredicateKind::Identifier, "<<unresolved>>", 0, None));
+        let predicate = predicates.alloc(TypePredicate::new(TypePredicateKind::Identifier, "retained λ parameter", 1, None));
+        let signature = Signature::default();
+        assert_eq!(signature.resolved_type_predicate(sentinel), None);
+        signature.set_resolved_type_predicate(Some(sentinel), sentinel);
+        assert_eq!(signature.resolved_type_predicate(sentinel), Some(sentinel));
+        signature.set_resolved_type_predicate(Some(predicate), sentinel);
+        assert_eq!(signature.resolved_type_predicate(sentinel), Some(predicate));
+        let mut other = tsrs_core::arena_owner::ArenaBuilder::new();
+        let foreign = other.alloc(TypePredicate::default());
+        assert!(predicates.get(foreign).is_none());
+        assert!(other.get(predicate).is_none());
+        for _ in 0..128 {
+            predicates.alloc(TypePredicate::default());
+        }
+        let text = predicates.get(predicate).unwrap().parameter_name();
+        assert_eq!(predicates.get(predicate).unwrap().parameter_index(), 1);
+        drop(predicates);
+        assert_eq!(text, "retained λ parameter");
+    }
 
     #[test]
     fn literal_snapshots_survive_replacement_and_type_owner_destruction() {

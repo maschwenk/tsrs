@@ -1119,7 +1119,7 @@ impl EmitResolver {
         let type_of_sym = c.get_type_of_symbol(sym);
         let static_infos = c.get_index_infos_of_type(type_of_sym).to_vec();
         let instance_index_symbol = c.get_index_symbol(sym);
-        let mut instance_infos: Vec<P<IndexInfo>> = Vec::new();
+        let mut instance_infos: Vec<IndexInfoKey> = Vec::new();
         if let Some(instance_index_symbol) = instance_index_symbol {
             let sibling_symbols = c.get_members_of_symbol(sym).map(|m| m.values()).unwrap_or_default();
             instance_infos = c.get_index_infos_of_index_symbol(instance_index_symbol, &sibling_symbols);
@@ -1135,13 +1135,13 @@ impl EmitResolver {
                 continue;
             }
             for info in info_list {
-                if info.declaration.get().is_some() {
+                if c.index_info(info).declaration.get().is_some() {
                     continue;
                 }
                 if info == c.any_base_type_index_info {
                     continue; // inherited, but looks like a late-bound signature because it has no declarations
                 }
-                let components = info.components.get();
+                let components = c.index_info(info).components.get();
                 if !components.is_empty() {
                     // !!! TODO: Complete late-bound index info support - getObjectLiteralIndexInfo does not yet add late bound components to index signatures
                     let all_component_computed_names_serializable = enclosing_declaration.is_some()
@@ -1176,7 +1176,7 @@ impl EmitResolver {
                             // Go's core.IfElse evaluates both arms, so the static modifier is created either way.
                             let static_modifier = f.new_modifier(Kind::StaticKeyword);
                             let mut mods: Option<Vec<P<Node>>> = if is_static { Some(vec![static_modifier]) } else { None };
-                            if info.is_readonly.get() {
+                            if c.index_info(info).is_readonly.get() {
                                 mods.get_or_insert_with(Vec::new).push(f.new_modifier(Kind::ReadonlyKeyword));
                             }
 

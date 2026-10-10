@@ -1,0 +1,32 @@
+[
+  {
+    "mode": "all",
+    "exit": 0,
+    "report": {
+      "name": "typed-metadata-all",
+      "identical": 5,
+      "different": 0,
+      "missing": 0,
+      "extra": 0,
+      "ref_status": 0,
+      "rs_status": 0,
+      "diagnostics_match": true,
+      "rs_panic": ""
+    }
+  },
+  {
+    "mode": "decl",
+    "exit": 0,
+    "report": {
+      "name": "typed-metadata-decl",
+      "identical": 3,
+      "different": 0,
+      "missing": 0,
+      "extra": 0,
+      "ref_status": 0,
+      "rs_status": 0,
+      "diagnostics_match": true,
+      "rs_panic": ""
+    }
+  }
+]

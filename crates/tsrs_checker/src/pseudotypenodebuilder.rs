@@ -681,7 +681,7 @@ impl NodeBuilderImpl {
     // pseudotypenodebuilder.go:645
     // pseudoReturnTypeMatchesPredicate checks if a pseudo return type (which should be a Direct type
     // wrapping a TypePredicate) matches the given type predicate from the checker.
-    pub(crate) fn pseudo_return_type_matches_predicate(&self, c: &mut Checker, rt: Option<P<PseudoType>>, predicate: P<TypePredicate>) -> bool {
+    pub(crate) fn pseudo_return_type_matches_predicate(&self, c: &mut Checker, rt: Option<P<PseudoType>>, predicate: TypePredicateKey) -> bool {
         let rt = rt.unwrap();
         if rt.kind != PseudoTypeKind::Direct {
             return false;
@@ -693,7 +693,7 @@ impl NodeBuilderImpl {
         let tp = node.as_type_predicate_node();
         // Check asserts modifier matches
         let is_asserts = tp.asserts_modifier.is_some();
-        let kind = predicate.kind.get();
+        let kind = c.type_predicate(predicate).kind();
         let predicate_is_asserts = kind == TypePredicateKind::AssertsThis || kind == TypePredicateKind::AssertsIdentifier;
         if is_asserts != predicate_is_asserts {
             return false;
@@ -705,11 +705,11 @@ impl NodeBuilderImpl {
             return false;
         }
         // For identifier predicates, check parameter name matches
-        if !is_this && tp.parameter_name.text() != predicate.parameter_name.get() {
+        if !is_this && tp.parameter_name.text() != c.type_predicate(predicate).parameter_name() {
             return false;
         }
         // Check the narrowed type, if any
-        if let Some(predicate_t) = predicate.t.get() {
+        if let Some(predicate_t) = c.type_predicate(predicate).type_() {
             let Some(tp_type) = tp.type_ else {
                 return false;
             };

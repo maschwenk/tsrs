@@ -1673,7 +1673,7 @@ impl Checker {
         }
         let index_info = self.get_applicable_index_info_for_name(t, name);
         if let Some(index_info) = index_info {
-            return Some(self.add_optionality_ex(index_info.value_type(), true /*isProperty*/, true /*isOptional*/));
+            return Some(self.add_optionality_ex(self.index_info(index_info).value_type(), true /*isProperty*/, true /*isOptional*/));
         }
         None
     }
@@ -2351,7 +2351,7 @@ impl Checker {
                     |c, t| {
                         let index_infos = c.get_index_infos_of_structured_type(t);
                         let index_info = c.find_applicable_index_info(&index_infos, name_type);
-                        index_info.map(|info| info.value_type())
+                        index_info.map(|info| c.index_info(info).value_type())
                     },
                     true, /*noReductions*/
                 );

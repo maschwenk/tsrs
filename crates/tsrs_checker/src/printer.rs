@@ -243,12 +243,12 @@ impl Checker {
     }
 
     // printer.go:229
-    pub(crate) fn type_predicate_to_string(&mut self, type_predicate: P<TypePredicate>) -> String {
+    pub(crate) fn type_predicate_to_string(&mut self, type_predicate: TypePredicateKey) -> String {
         self.type_predicate_to_string_ex(type_predicate, None, TypeFormatFlags::UseAliasDefinedOutsideCurrentScope)
     }
 
     // printer.go:233
-    pub(crate) fn type_predicate_to_string_ex(&mut self, type_predicate: P<TypePredicate>, enclosing_declaration: Option<P<Node>>, flags: TypeFormatFlags) -> String {
+    pub(crate) fn type_predicate_to_string_ex(&mut self, type_predicate: TypePredicateKey, enclosing_declaration: Option<P<Node>>, flags: TypeFormatFlags) -> String {
         let (mut writer, put_writer) = get_single_line_string_writer();
         let (node_builder, mut release) = self.get_node_builder();
         let combined_flags = to_node_builder_flags(flags) | Flags::IgnoreErrors | Flags::WriteTypeParametersInQualifiedName;
@@ -384,7 +384,7 @@ impl Checker {
     }
 
     // printer.go:353
-    pub fn type_predicate_to_type_predicate_node(&mut self, t: P<TypePredicate>, enclosing_declaration: Option<P<Node>>, flags: Flags, id_to_symbol: Option<P<RefCell<FxHashMap<P<Node>, P<Symbol>>>>>) -> Option<P<Node>> {
+    pub fn type_predicate_to_type_predicate_node(&mut self, t: TypePredicateKey, enclosing_declaration: Option<P<Node>>, flags: Flags, id_to_symbol: Option<P<RefCell<FxHashMap<P<Node>, P<Symbol>>>>>) -> Option<P<Node>> {
         let node_builder = self.get_node_builder_ex(id_to_symbol);
         node_builder.type_predicate_to_type_predicate_node(self, t, enclosing_declaration, flags, InternalFlags::None, None)
     }

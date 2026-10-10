@@ -1137,14 +1137,14 @@ impl Checker {
             return;
         };
         let parameter_name = node.as_type_predicate_node().parameter_name;
-        if type_predicate.kind.get() != TypePredicateKind::This && type_predicate.kind.get() != TypePredicateKind::AssertsThis {
-            if type_predicate.parameter_index.get() >= 0 {
-                if signature_has_rest_parameter(signature) && type_predicate.parameter_index.get() as usize == signature.parameters.get().len() - 1 {
+        if self.type_predicate(type_predicate).kind() != TypePredicateKind::This && self.type_predicate(type_predicate).kind() != TypePredicateKind::AssertsThis {
+            if self.type_predicate(type_predicate).parameter_index() >= 0 {
+                if signature_has_rest_parameter(signature) && self.type_predicate(type_predicate).parameter_index() as usize == signature.parameters.get().len() - 1 {
                     self.error(Some(parameter_name), &diagnostics::A_type_predicate_cannot_reference_a_rest_parameter, &[]);
                 } else {
-                    if let Some(predicate_type) = type_predicate.t.get() {
+                    if let Some(predicate_type) = self.type_predicate(type_predicate).type_() {
                         let mut diags: Vec<P<Diagnostic>> = Vec::new();
-                        let parameter_type = self.get_type_of_symbol(signature.parameters.get()[type_predicate.parameter_index.get() as usize]);
+                        let parameter_type = self.get_type_of_symbol(signature.parameters.get()[self.type_predicate(type_predicate).parameter_index() as usize]);
                         if !self.check_type_assignable_to_ex(predicate_type, parameter_type, node.type_node(), None /*headMessage*/, &mut diags) {
                             self.add_diagnostic(ast::new_diagnostic_chain(diags[0], &diagnostics::A_type_predicate_s_type_must_be_assignable_to_its_parameter_s_type, &[]));
                         }
@@ -1156,14 +1156,14 @@ impl Checker {
                 for &param in parent.parameters() {
                     let name = param.name().unwrap();
                     if ast::is_binding_pattern(name)
-                        && self.check_if_type_predicate_variable_is_declared_in_binding_pattern(name, parameter_name, &type_predicate.parameter_name.get())
+                        && self.check_if_type_predicate_variable_is_declared_in_binding_pattern(name, parameter_name, &self.type_predicate(type_predicate).parameter_name())
                     {
                         has_reported_error = true;
                         break;
                     }
                 }
                 if !has_reported_error {
-                    self.error(Some(parameter_name), &diagnostics::Cannot_find_parameter_0, &[&type_predicate.parameter_name.get()]);
+                    self.error(Some(parameter_name), &diagnostics::Cannot_find_parameter_0, &[&self.type_predicate(type_predicate).parameter_name()]);
                 }
             }
         }

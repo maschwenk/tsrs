@@ -4,14 +4,15 @@
 
 The ownership worktree has migrated persistent link/build stores, shared program/build roots, symbol-table
 buffers, type payloads, type/signature/inference and checker link/cache arrays, mapper payloads and comparison
-callbacks, literal/type text and symbol names to Rust owners.
+callbacks, literal/type text and symbol names to Rust owners. Predicate and index-signature metadata now live
+in checker-owned typed vectors; signatures/index-info lists retain owner-qualified keys.
 The complete compiler graph still uses raw `P` handles, legacy source text and static graph slices; the allocation
 compatibility runtime and unchecked thread boundaries remain. This is not a released or completed memory model
 migration. Leaf-file retirement was disabled by the Oxc backend; `TSRS_FREE_LEAVES` currently has no effect.
 
 The latest checkpoint retains all conformance and fourslash classifications, with clean local compiler census
 runs at one/four checkers and eager members. Instruction/RSS gates still fail, so it is not ready to land as a
-performance change. `notes/rust-owned-type-text.md` records measurements, validation limits and remaining work.
+performance change. `notes/rust-typed-metadata.md` records measurements, validation limits and remaining work.
 The fresh pinned-tsgo scenario audit retains the original Oxc classifications: tsc 184/216 and tsbuild 187/190,
 zero crashes. It corrects the README's old tsc count and documents three pre-existing casing diagnostic gaps.
 

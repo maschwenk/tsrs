@@ -265,7 +265,7 @@ impl Checker {
     }
 
     // exports.go:215
-    pub fn get_type_predicate_of_signature_exported(&mut self, sig: P<Signature>) -> Option<P<TypePredicate>> {
+    pub fn get_type_predicate_of_signature_exported(&mut self, sig: P<Signature>) -> Option<TypePredicateKey> {
         self.get_type_predicate_of_signature(sig)
     }
 
@@ -313,7 +313,7 @@ impl Checker {
     }
 
     // exports.go:251
-    pub fn type_predicate_to_string_exported(&mut self, t: P<TypePredicate>) -> String {
+    pub fn type_predicate_to_string_exported(&mut self, t: TypePredicateKey) -> String {
         self.type_predicate_to_string(t)
     }
 
@@ -421,7 +421,7 @@ impl Checker {
     }
 
     // exports.go:338
-    pub fn get_index_info_of_type_exported(&mut self, t: P<Type>, key_type: P<Type>) -> Option<P<IndexInfo>> {
+    pub fn get_index_info_of_type_exported(&mut self, t: P<Type>, key_type: P<Type>) -> Option<IndexInfoKey> {
         self.get_index_info_of_type(t, key_type)
     }
 
@@ -431,7 +431,7 @@ impl Checker {
     }
 
     // exports.go:346
-    pub fn get_index_infos_of_type_exported(&mut self, t: P<Type>) -> ArrayView<P<IndexInfo>> {
+    pub fn get_index_infos_of_type_exported(&mut self, t: P<Type>) -> ArrayView<IndexInfoKey> {
         self.get_index_infos_of_type(t)
     }
 

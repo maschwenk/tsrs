@@ -1459,11 +1459,11 @@ impl Checker {
             types.push(self.get_literal_type_from_property(prop, include, false));
         }
         for info in index_infos {
-            if info != self.enum_number_index_info && self.is_key_type_included(info.key_type(), include) {
-                if info.key_type() == self.string_type && include.intersects(TypeFlags::Number) {
+            if info != self.enum_number_index_info && self.is_key_type_included(self.index_info(info).key_type(), include) {
+                if self.index_info(info).key_type() == self.string_type && include.intersects(TypeFlags::Number) {
                     types.push(self.string_or_number_type);
                 } else {
-                    types.push(info.key_type());
+                    types.push(self.index_info(info).key_type());
                 }
             }
         }
@@ -1892,7 +1892,7 @@ impl Checker {
                 index_info = self.get_index_info_of_type(object_type, string_type);
             }
             if let Some(index_info) = index_info {
-                if access_flags.intersects(AccessFlags::NoIndexSignatures) && index_info.key_type() != self.number_type {
+                if access_flags.intersects(AccessFlags::NoIndexSignatures) && self.index_info(index_info).key_type() != self.number_type {
                     if let Some(access_expression) = access_expression {
                         if access_flags.intersects(AccessFlags::Writing) {
                             let type_string = self.type_to_string_exported(original_object_type);
@@ -1905,15 +1905,15 @@ impl Checker {
                     }
                     return None;
                 }
-                if access_node.is_some() && index_info.key_type() == self.string_type && !self.is_type_assignable_to_kind(index_type, TypeFlags::String | TypeFlags::Number) {
+                if access_node.is_some() && self.index_info(index_info).key_type() == self.string_type && !self.is_type_assignable_to_kind(index_type, TypeFlags::String | TypeFlags::Number) {
                     let index_node = get_index_node_for_access_expression(access_node.unwrap());
                     let index_string = self.type_to_string_exported(index_type);
                     self.error(index_node, &diagnostics::Type_0_cannot_be_used_as_an_index_type, &[&index_string]);
                     if access_flags.intersects(AccessFlags::IncludeUndefined) {
                         let missing_type = self.missing_type;
-                        return Some(self.get_union_type(&[index_info.value_type(), missing_type]));
+                        return Some(self.get_union_type(&[self.index_info(index_info).value_type(), missing_type]));
                     } else {
-                        return Some(index_info.value_type());
+                        return Some(self.index_info(index_info).value_type());
                     }
                 }
                 self.error_if_writing_to_readonly_index(Some(index_info), object_type, access_expression);
@@ -1927,9 +1927,9 @@ impl Checker {
                             && self.get_parent_of_symbol(index_type.symbol().unwrap()) == object_type.symbol()))
                 {
                     let missing_type = self.missing_type;
-                    return Some(self.get_union_type(&[index_info.value_type(), missing_type]));
+                    return Some(self.get_union_type(&[self.index_info(index_info).value_type(), missing_type]));
                 }
-                return Some(index_info.value_type());
+                return Some(self.index_info(index_info).value_type());
             }
             if index_type.flags().intersects(TypeFlags::Never) {
                 return Some(self.never_type);
@@ -2106,9 +2106,9 @@ pub(crate) fn get_index_node_for_access_expression(access_node: P<Node>) -> Opti
 
 impl Checker {
     // checker.go:27739
-    pub(crate) fn error_if_writing_to_readonly_index(&mut self, index_info: Option<P<IndexInfo>>, object_type: P<Type>, access_expression: Option<P<Node>>) {
+    pub(crate) fn error_if_writing_to_readonly_index(&mut self, index_info: Option<IndexInfoKey>, object_type: P<Type>, access_expression: Option<P<Node>>) {
         if let (Some(index_info), Some(access_expression)) = (index_info, access_expression) {
-            if index_info.is_readonly() && (is_assignment_target(access_expression) || is_delete_target(access_expression)) {
+            if self.index_info(index_info).is_readonly() && (is_assignment_target(access_expression) || is_delete_target(access_expression)) {
                 let type_string = self.type_to_string_exported(object_type);
                 self.error(Some(access_expression), &diagnostics::Index_signature_in_type_0_only_permits_reading, &[&type_string]);
             }
@@ -2648,8 +2648,8 @@ pub(crate) fn is_rest_parameter(param: P<Node>) -> bool {
 }
 
 // checker.go:28266
-pub(crate) fn get_name_from_index_info(info: P<IndexInfo>) -> String {
-    if let Some(declaration) = info.declaration() {
+pub(crate) fn get_name_from_index_info(c: &Checker, info: IndexInfoKey) -> String {
+    if let Some(declaration) = c.index_info(info).declaration() {
         return tsrs_scanner::declaration_name_to_string(declaration.parameters()[0].name());
     }
     "x".to_string()

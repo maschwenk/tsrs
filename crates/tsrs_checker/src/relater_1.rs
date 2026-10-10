@@ -841,7 +841,7 @@ impl Checker {
         if target_prop.is_none() {
             let index_info = self.get_applicable_index_info(target, name_type);
             if let Some(index_info) = index_info {
-                if let Some(declaration) = index_info.declaration() {
+                if let Some(declaration) = self.index_info(index_info).declaration() {
                     if !self.program.is_source_file_default_library(get_source_file_of_node(declaration).unwrap().path()) {
                         issued_elaboration = true;
                         diagnostic.add_related_info(create_diagnostic_for_node(
@@ -2190,8 +2190,8 @@ impl Checker {
                         reborrow_reporter(&mut error_reporter),
                         compare_types,
                     );
-                } else if target_type_predicate.kind() == TypePredicateKind::Identifier
-                    || target_type_predicate.kind() == TypePredicateKind::This
+                } else if self.type_predicate(target_type_predicate).kind() == TypePredicateKind::Identifier
+                    || self.type_predicate(target_type_predicate).kind() == TypePredicateKind::This
                 {
                     if report_errors {
                         let a = self.signature_to_string(source);
@@ -2235,9 +2235,9 @@ impl Checker {
     }
 
     // relater.go:1675
-    pub(crate) fn compare_type_predicate_related_to(&mut self, source: P<TypePredicate>, target: P<TypePredicate>, report_errors: bool, error_reporter: Option<ErrorReporter<'_>>, compare_types: &TypeComparer) -> Ternary {
+    pub(crate) fn compare_type_predicate_related_to(&mut self, source: TypePredicateKey, target: TypePredicateKey, report_errors: bool, error_reporter: Option<ErrorReporter<'_>>, compare_types: &TypeComparer) -> Ternary {
         let mut error_reporter = error_reporter;
-        if source.kind() != target.kind() {
+        if self.type_predicate(source).kind() != self.type_predicate(target).kind() {
             if report_errors {
                 (error_reporter.as_mut().unwrap())(self, &diagnostics::A_this_based_type_guard_is_not_compatible_with_a_parameter_based_type_guard, &[]);
                 let a = self.type_predicate_to_string(source);
@@ -2246,11 +2246,11 @@ impl Checker {
             }
             return Ternary::False;
         }
-        if source.kind() == TypePredicateKind::Identifier || source.kind() == TypePredicateKind::AssertsIdentifier {
-            if source.parameter_index() != target.parameter_index() {
+        if self.type_predicate(source).kind() == TypePredicateKind::Identifier || self.type_predicate(source).kind() == TypePredicateKind::AssertsIdentifier {
+            if self.type_predicate(source).parameter_index() != self.type_predicate(target).parameter_index() {
                 if report_errors {
-                    let a = source.parameter_name();
-                    let b = target.parameter_name();
+                    let a = self.type_predicate(source).parameter_name();
+                    let b = self.type_predicate(target).parameter_name();
                     (error_reporter.as_mut().unwrap())(self, &diagnostics::Parameter_0_is_not_in_the_same_position_as_parameter_1, &[&a, &b]);
                     let a = self.type_predicate_to_string(source);
                     let b = self.type_predicate_to_string(target);
@@ -2259,9 +2259,9 @@ impl Checker {
                 return Ternary::False;
             }
         }
-        let related = if source.type_() == target.type_() {
+        let related = if self.type_predicate(source).type_() == self.type_predicate(target).type_() {
             Ternary::True
-        } else if let (Some(st), Some(tt)) = (source.type_(), target.type_()) {
+        } else if let (Some(st), Some(tt)) = (self.type_predicate(source).type_(), self.type_predicate(target).type_()) {
             compare_types(self, st, tt, report_errors)
         } else {
             Ternary::False
@@ -2677,7 +2677,7 @@ impl Checker {
     }
 
     // relater.go:2049
-    pub fn get_type_predicate_of_signature(&mut self, sig: P<Signature>) -> Option<P<TypePredicate>> {
+    pub fn get_type_predicate_of_signature(&mut self, sig: P<Signature>) -> Option<TypePredicateKey> {
         if sig.resolved_type_predicate(self.no_type_predicate).is_none() {
             if let Some(target) = sig.target() {
                 let target_type_predicate = self.get_type_predicate_of_signature(target);
@@ -2715,20 +2715,20 @@ impl Checker {
     }
 
     // relater.go:2083
-    pub(crate) fn get_union_or_intersection_type_predicate(&mut self, signatures: &[P<Signature>], is_union: bool) -> Option<P<TypePredicate>> {
-        let mut last: Option<P<TypePredicate>> = None;
+    pub(crate) fn get_union_or_intersection_type_predicate(&mut self, signatures: &[P<Signature>], is_union: bool) -> Option<TypePredicateKey> {
+        let mut last: Option<TypePredicateKey> = None;
         let mut types: Vec<P<Type>> = Vec::new();
         for &sig in signatures {
             let pred = self.get_type_predicate_of_signature(sig);
             if let Some(pred) = pred {
                 // Constituent type predicates must all have matching kinds. We don't create composite type predicates for assertions.
-                if pred.kind() != TypePredicateKind::This && pred.kind() != TypePredicateKind::Identifier
+                if self.type_predicate(pred).kind() != TypePredicateKind::This && self.type_predicate(pred).kind() != TypePredicateKind::Identifier
                     || last.is_some() && !self.type_predicate_kinds_match(last.unwrap(), pred)
                 {
                     return None;
                 }
                 last = Some(pred);
-                types.push(pred.type_().unwrap());
+                types.push(self.type_predicate(pred).type_().unwrap());
             } else {
                 // In composite union signatures we permit and ignore signatures with a return type `false`.
                 let mut return_type: Option<P<Type>> = None;
@@ -2742,16 +2742,16 @@ impl Checker {
         }
         let last = last?;
         let composite_type = self.get_union_or_intersection_type(&types, is_union, UnionReduction::Literal);
-        Some(self.new_type_predicate(last.kind(), &last.parameter_name(), last.parameter_index(), Some(composite_type)))
+        Some(self.new_type_predicate(self.type_predicate(last).kind(), &self.type_predicate(last).parameter_name(), self.type_predicate(last).parameter_index(), Some(composite_type)))
     }
 
     // relater.go:2113
-    pub(crate) fn type_predicate_kinds_match(&mut self, a: P<TypePredicate>, b: P<TypePredicate>) -> bool {
-        a.kind() == b.kind() && a.parameter_index() == b.parameter_index()
+    pub(crate) fn type_predicate_kinds_match(&mut self, a: TypePredicateKey, b: TypePredicateKey) -> bool {
+        self.type_predicate(a).kind() == self.type_predicate(b).kind() && self.type_predicate(a).parameter_index() == self.type_predicate(b).parameter_index()
     }
 
     // relater.go:2117
-    pub(crate) fn create_type_predicate_from_type_predicate_node(&mut self, node: P<Node>, signature: P<Signature>) -> P<TypePredicate> {
+    pub(crate) fn create_type_predicate_from_type_predicate_node(&mut self, node: P<Node>, signature: P<Signature>) -> TypePredicateKey {
         let predicate_node = node.as_type_predicate_node();
         let mut t: Option<P<Type>> = None;
         if let Some(type_node) = predicate_node.type_ {
@@ -2772,23 +2772,23 @@ impl Checker {
     }
 
     // relater.go:2133
-    pub(crate) fn instantiate_type_predicate(&mut self, predicate: P<TypePredicate>, mapper: P<TypeMapper>) -> P<TypePredicate> {
+    pub(crate) fn instantiate_type_predicate(&mut self, predicate: TypePredicateKey, mapper: P<TypeMapper>) -> TypePredicateKey {
         // Go instantiateType returns nil for a nil type.
-        let t = predicate.type_().map(|t| self.instantiate_type(t, Some(mapper)));
-        if t == predicate.type_() {
+        let t = self.type_predicate(predicate).type_().map(|t| self.instantiate_type(t, Some(mapper)));
+        if t == self.type_predicate(predicate).type_() {
             return predicate;
         }
-        self.new_type_predicate(predicate.kind(), &predicate.parameter_name(), predicate.parameter_index(), t)
+        self.new_type_predicate(self.type_predicate(predicate).kind(), &self.type_predicate(predicate).parameter_name(), self.type_predicate(predicate).parameter_index(), t)
+    }
+
+    /// Resolve predicate metadata through this checker. A foreign key cannot select another owner's slot.
+    pub fn type_predicate(&self, key: TypePredicateKey) -> &TypePredicate {
+        self.type_predicates.get(key).expect("type predicate belongs to another checker")
     }
 
     // relater.go:2141
-    pub(crate) fn new_type_predicate(&mut self, kind: TypePredicateKind, parameter_name: &str, parameter_index: i32, t: Option<P<Type>>) -> P<TypePredicate> {
-        P::new(TypePredicate {
-            kind: Cell::new(kind),
-            parameter_index: Cell::new(parameter_index),
-            parameter_name: TextCell::new(parameter_name),
-            t: Cell::new(t),
-        })
+    pub(crate) fn new_type_predicate(&mut self, kind: TypePredicateKind, parameter_name: &str, parameter_index: i32, t: Option<P<Type>>) -> TypePredicateKey {
+        self.type_predicates.alloc(TypePredicate::new(kind, parameter_name, parameter_index, t))
     }
 
     // relater.go:2145
@@ -2985,7 +2985,7 @@ impl Checker {
     }
 
     // relater.go:2303
-    pub(crate) fn compare_type_predicates_identical(&mut self, source: Option<P<TypePredicate>>, target: Option<P<TypePredicate>>, compare_types: impl FnMut(&mut Checker, P<Type>, P<Type>) -> Ternary) -> Ternary {
+    pub(crate) fn compare_type_predicates_identical(&mut self, source: Option<TypePredicateKey>, target: Option<TypePredicateKey>, compare_types: impl FnMut(&mut Checker, P<Type>, P<Type>) -> Ternary) -> Ternary {
         let mut compare_types = compare_types;
         let (Some(source), Some(target)) = (source, target) else {
             return Ternary::False;
@@ -2993,10 +2993,10 @@ impl Checker {
         if !self.type_predicate_kinds_match(source, target) {
             return Ternary::False;
         }
-        if source.type_() == target.type_() {
+        if self.type_predicate(source).type_() == self.type_predicate(target).type_() {
             return Ternary::True;
         }
-        if let (Some(st), Some(tt)) = (source.type_(), target.type_()) {
+        if let (Some(st), Some(tt)) = (self.type_predicate(source).type_(), self.type_predicate(target).type_()) {
             return compare_types(self, st, tt);
         }
         Ternary::False

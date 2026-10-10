@@ -4,7 +4,7 @@ use std::cell::RefCell;
 
 use rustc_hash::FxHashMap;
 use tsrs_ast::{self as ast, Kind, Node, SourceFile, Symbol, SymbolFlags};
-use tsrs_checker::{self as checker, Checker, ElementFlags, Flags, Signature, Type, TypeFlags, TypePredicate};
+use tsrs_checker::{self as checker, Checker, ElementFlags, Flags, Signature, Type, TypeFlags, TypePredicateKey};
 use tsrs_core::context::Context;
 use tsrs_core::stringutil;
 use tsrs_core::{TextPos, TextRange, P};
@@ -134,7 +134,7 @@ impl InlayHintState<'_> {
 
         let type_predicate = self.checker.get_type_predicate_of_signature(signature);
 
-        if let Some(type_predicate) = type_predicate.filter(|p| p.type_().is_some()) {
+        if let Some(type_predicate) = type_predicate.filter(|p| self.checker.type_predicate(*p).type_().is_some()) {
             let hint_parts = self.type_predicate_to_inlay_hint_parts(type_predicate);
             let position = self.get_type_annotation_position(decl);
             self.add_type_hints(hint_parts, position);
@@ -321,7 +321,7 @@ impl InlayHintState<'_> {
     }
 
     // inlay_hints.go:332
-    fn type_predicate_to_inlay_hint_parts(&mut self, type_predicate: P<TypePredicate>) -> lsproto::StringOrInlayHintLabelParts {
+    fn type_predicate_to_inlay_hint_parts(&mut self, type_predicate: TypePredicateKey) -> lsproto::StringOrInlayHintLabelParts {
         let flags = Flags::IgnoreErrors | Flags::AllowUniqueESSymbolType | Flags::UseAliasDefinedOutsideCurrentScope;
         let id_to_symbol: P<RefCell<FxHashMap<P<Node>, P<Symbol>>>> = P::new(RefCell::new(FxHashMap::default()));
         // !!! Avoid type node reuse so we collect identifier symbols.

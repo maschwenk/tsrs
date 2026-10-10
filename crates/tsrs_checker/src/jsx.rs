@@ -1313,7 +1313,7 @@ impl Checker {
             let intrinsic_elements_type = self.get_jsx_type(JsxNames.intrinsic_elements, node);
             let index_info = self.get_applicable_index_info_for_name(intrinsic_elements_type, node.tag_name().text());
             if let Some(index_info) = index_info {
-                self.jsx_element_links.at(links).resolved_jsx_element_attributes_type.set(index_info.value_type.get());
+                self.jsx_element_links.at(links).resolved_jsx_element_attributes_type.set(self.index_info(index_info).value_type.get());
                 return self.jsx_element_links.at(links).resolved_jsx_element_attributes_type.get();
             }
         }

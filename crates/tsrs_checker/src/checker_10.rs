@@ -447,7 +447,7 @@ impl Checker {
     }
 
     // checker.go:19966
-    pub(crate) fn get_index_infos_of_symbol(&mut self, symbol: P<Symbol>) -> Vec<P<IndexInfo>> {
+    pub(crate) fn get_index_infos_of_symbol(&mut self, symbol: P<Symbol>) -> Vec<IndexInfoKey> {
         let index_symbol = self.get_index_symbol(symbol);
         if let Some(index_symbol) = index_symbol {
             let members = self.get_members_of_symbol(symbol);
@@ -459,8 +459,8 @@ impl Checker {
 
     // note intentional similarities to index signature building in `checkObjectLiteral` for parity
     // checker.go:19975
-    pub(crate) fn get_index_infos_of_index_symbol(&mut self, index_symbol: P<Symbol>, sibling_symbols: &[P<Symbol>]) -> Vec<P<IndexInfo>> {
-        let mut index_infos: Vec<P<IndexInfo>> = Vec::new();
+    pub(crate) fn get_index_infos_of_index_symbol(&mut self, index_symbol: P<Symbol>, sibling_symbols: &[P<Symbol>]) -> Vec<IndexInfoKey> {
+        let mut index_infos: Vec<IndexInfoKey> = Vec::new();
         let mut has_computed_string_property = false;
         let mut has_computed_number_property = false;
         let mut has_computed_symbol_property = false;
@@ -482,7 +482,7 @@ impl Checker {
                         }
                         let key_types = self.get_type_from_type_node(type_node);
                         for_each_type(self, key_types, |c, key_type| {
-                            if c.is_valid_index_key_type(key_type) && find_index_info(&index_infos, key_type).is_none() {
+                            if c.is_valid_index_key_type(key_type) && find_index_info(c, &index_infos, key_type).is_none() {
                                 let index_info = c.new_index_info(key_type, value_type, ast::has_modifier(declaration, ModifierFlags::Readonly), Some(declaration), &[]);
                                 index_infos.push(index_info);
                             }
@@ -500,7 +500,7 @@ impl Checker {
                 } else {
                     self.check_computed_property_name(decl_name)
                 };
-                if find_index_info(&index_infos, key_type).is_some() {
+                if find_index_info(self, &index_infos, key_type).is_some() {
                     continue;
                     // Explicit index for key type takes priority
                 }
@@ -532,15 +532,15 @@ impl Checker {
                 }
             }
             // aggregate similar index infos implied to be the same key to the same combined index info
-            if has_computed_string_property && find_index_info(&index_infos, self.string_type).is_none() {
+            if has_computed_string_property && find_index_info(self, &index_infos, self.string_type).is_none() {
                 let info = self.get_object_literal_index_info(readonly_computed_string_property, &property_symbols, self.string_type);
                 index_infos.push(info);
             }
-            if has_computed_number_property && find_index_info(&index_infos, self.number_type).is_none() {
+            if has_computed_number_property && find_index_info(self, &index_infos, self.number_type).is_none() {
                 let info = self.get_object_literal_index_info(readonly_computed_number_property, &property_symbols, self.number_type);
                 index_infos.push(info);
             }
-            if has_computed_symbol_property && find_index_info(&index_infos, self.es_symbol_type).is_none() {
+            if has_computed_symbol_property && find_index_info(self, &index_infos, self.es_symbol_type).is_none() {
                 let info = self.get_object_literal_index_info(readonly_computed_symbol_property, &property_symbols, self.es_symbol_type);
                 index_infos.push(info);
             }
@@ -550,7 +550,7 @@ impl Checker {
 
     // NOTE: currently does not make pattern literal indexers, eg `${number}px`
     // checker.go:20062
-    pub(crate) fn get_object_literal_index_info(&mut self, is_readonly: bool, properties: &[P<Symbol>], key_type: P<Type>) -> P<IndexInfo> {
+    pub(crate) fn get_object_literal_index_info(&mut self, is_readonly: bool, properties: &[P<Symbol>], key_type: P<Type>) -> IndexInfoKey {
         let mut prop_types: Vec<P<Type>> = Vec::new();
         let mut components: Vec<P<Node>> = Vec::new();
         for &prop in properties {
@@ -1484,7 +1484,7 @@ impl Checker {
     }
 
     // checker.go:20876
-    pub(crate) fn get_type_predicate_from_body(&mut self, fn_: P<Node>) -> Option<P<TypePredicate>> {
+    pub(crate) fn get_type_predicate_from_body(&mut self, fn_: P<Node>) -> Option<TypePredicateKey> {
         match fn_.kind() {
             Kind::Constructor | Kind::GetAccessor | Kind::SetAccessor => return None,
             _ => {}
@@ -1515,7 +1515,7 @@ impl Checker {
     }
 
     // checker.go:20906
-    pub(crate) fn check_if_expression_refines_any_parameter(&mut self, fn_: P<Node>, expr: P<Node>) -> Option<P<TypePredicate>> {
+    pub(crate) fn check_if_expression_refines_any_parameter(&mut self, fn_: P<Node>, expr: P<Node>) -> Option<TypePredicateKey> {
         let expr = ast::skip_parentheses(expr);
         let return_type = self.check_expression_cached(expr);
         if !return_type.flags().intersects(TypeFlags::Boolean) {
@@ -1616,12 +1616,12 @@ impl Checker {
     }
 
     // checker.go:20983
-    pub(crate) fn instantiate_index_info(&mut self, info: P<IndexInfo>, m: Option<P<TypeMapper>>) -> P<IndexInfo> {
-        let new_value_type = self.instantiate_type(info.value_type(), m);
-        if new_value_type == info.value_type() {
+    pub(crate) fn instantiate_index_info(&mut self, info: IndexInfoKey, m: Option<P<TypeMapper>>) -> IndexInfoKey {
+        let new_value_type = self.instantiate_type(self.index_info(info).value_type(), m);
+        if new_value_type == self.index_info(info).value_type() {
             return info;
         }
-        self.new_index_info(info.key_type(), new_value_type, info.is_readonly.get(), info.declaration.get(), &info.components.get())
+        self.new_index_info(self.index_info(info).key_type(), new_value_type, self.index_info(info).is_readonly.get(), self.index_info(info).declaration.get(), &self.index_info(info).components.get())
     }
 
     // checker.go:20991
@@ -1653,7 +1653,7 @@ impl Checker {
         }
         // Combinations of function, class, enum and module
         let mut members = self.get_exports_of_symbol(symbol);
-        let mut index_infos: Vec<P<IndexInfo>> = Vec::new();
+        let mut index_infos: Vec<IndexInfoKey> = Vec::new();
         if symbol == self.global_this_symbol {
             let vars_only = SymbolTable::new();
             if let Some(members) = members {
@@ -1999,7 +1999,7 @@ impl Checker {
     // #64526 (behind `Checker::lazy_members`)
     pub(crate) fn append_mapped_type_index_info(
         &mut self,
-        index_infos: Vec<P<IndexInfo>>,
+        index_infos: Vec<IndexInfoKey>,
         t: P<Type>,
         modifiers_type: P<Type>,
         type_parameter: P<Type>,
@@ -2007,7 +2007,7 @@ impl Checker {
         template_modifiers: MappedTypeModifiers,
         key_type: P<Type>,
         prop_name_type: P<Type>,
-    ) -> Vec<P<IndexInfo>> {
+    ) -> Vec<IndexInfoKey> {
         let mut index_infos = index_infos;
         if !self.is_valid_index_key_type(prop_name_type) && !prop_name_type.flags().intersects(TypeFlags::Any | TypeFlags::Enum) {
             return index_infos;
@@ -2023,7 +2023,7 @@ impl Checker {
         // SAFETY: made here for this one instantiation.
         let modifiers_index_info = self.get_applicable_index_info(modifiers_type, prop_name_type);
         let is_readonly = template_modifiers.intersects(MappedTypeModifiers::IncludeReadonly)
-            || !template_modifiers.intersects(MappedTypeModifiers::ExcludeReadonly) && modifiers_index_info.is_some_and(|i| i.is_readonly.get());
+            || !template_modifiers.intersects(MappedTypeModifiers::ExcludeReadonly) && modifiers_index_info.is_some_and(|i| self.index_info(i).is_readonly.get());
         let index_info = self.new_index_info(index_key_type, prop_type, is_readonly, None, &[]);
         self.append_index_info(&mut index_infos, index_info, true /*union*/)
     }
@@ -2082,7 +2082,7 @@ pub(crate) struct LazyMappedTable {
     pub(crate) template_modifiers: MappedTypeModifiers,
     pub(crate) should_link_prop_declarations: bool,
     pub(crate) members: RefCell<FxHashMap<String, Option<P<Symbol>>>>,
-    pub(crate) index_infos: ArrayCell<P<IndexInfo>>,
+    pub(crate) index_infos: ArrayCell<IndexInfoKey>,
     pub(crate) index_infos_ready: Cell<bool>,
     pub(crate) resolving: Cell<bool>,
 }
@@ -2178,14 +2178,14 @@ impl Checker {
         Some(member)
     }
 
-    pub(crate) fn get_lazy_mapped_type_index_infos(&mut self, t: P<Type>, lazy: &std::rc::Rc<LazyMappedTable>) -> ArrayView<P<IndexInfo>> {
+    pub(crate) fn get_lazy_mapped_type_index_infos(&mut self, t: P<Type>, lazy: &std::rc::Rc<LazyMappedTable>) -> ArrayView<IndexInfoKey> {
         if !lazy.index_infos_ready.get() {
             if lazy.resolving.get() {
                 // Recursive requests see no index infos, as they would while resolveMappedTypeMembers runs.
                 return ArrayView::default();
             }
             lazy.resolving.set(true);
-            let mut index_infos: Vec<P<IndexInfo>> = Vec::new();
+            let mut index_infos: Vec<IndexInfoKey> = Vec::new();
             for info in self.get_index_infos_of_type(lazy.modifiers_type) {
                 index_infos = self.append_mapped_type_index_info(
                     index_infos,
@@ -2194,8 +2194,8 @@ impl Checker {
                     lazy.type_parameter,
                     lazy.template_type,
                     lazy.template_modifiers,
-                    info.key_type(),
-                    info.key_type(),
+                    self.index_info(info).key_type(),
+                    self.index_info(info).key_type(),
                 );
             }
             lazy.resolving.set(false);
@@ -2214,7 +2214,7 @@ impl Checker {
 struct MappedTypeMembersState {
     t: P<Type>,
     members: P<SymbolTable>,
-    index_infos: Vec<P<IndexInfo>>,
+    index_infos: Vec<IndexInfoKey>,
     type_parameter: P<Type>,
     name_type: Option<P<Type>>,
     should_link_prop_declarations: bool,
@@ -2667,7 +2667,7 @@ impl Checker {
         // intersection type use getPropertiesOfType (only the language service uses this).
         let mut call_signatures: Vec<P<Signature>> = Vec::new();
         let mut construct_signatures: Vec<P<Signature>> = Vec::new();
-        let mut index_infos: Vec<P<IndexInfo>> = Vec::new();
+        let mut index_infos: Vec<IndexInfoKey> = Vec::new();
         let types = t.types();
         let (mixin_flags, mixin_count) = self.find_mixins(&types);
         for (i, &t) in types.iter().enumerate() {
@@ -2722,20 +2722,20 @@ impl Checker {
     }
 
     // checker.go:21687
-    pub(crate) fn append_index_info(&mut self, index_infos: &mut [P<IndexInfo>], new_info: P<IndexInfo>, union: bool) -> Vec<P<IndexInfo>> {
+    pub(crate) fn append_index_info(&mut self, index_infos: &mut [IndexInfoKey], new_info: IndexInfoKey, union: bool) -> Vec<IndexInfoKey> {
         for i in 0..index_infos.len() {
             let info = index_infos[i];
-            if info.key_type.get() == new_info.key_type.get() {
+            if self.index_info(info).key_type.get() == self.index_info(new_info).key_type.get() {
                 let value_type;
                 let is_readonly;
                 if union {
-                    value_type = self.get_union_type(&[info.value_type(), new_info.value_type()]);
-                    is_readonly = info.is_readonly.get() || new_info.is_readonly.get();
+                    value_type = self.get_union_type(&[self.index_info(info).value_type(), self.index_info(new_info).value_type()]);
+                    is_readonly = self.index_info(info).is_readonly.get() || self.index_info(new_info).is_readonly.get();
                 } else {
-                    value_type = self.get_intersection_type(&[info.value_type(), new_info.value_type()]);
-                    is_readonly = info.is_readonly.get() && new_info.is_readonly.get();
+                    value_type = self.get_intersection_type(&[self.index_info(info).value_type(), self.index_info(new_info).value_type()]);
+                    is_readonly = self.index_info(info).is_readonly.get() && self.index_info(new_info).is_readonly.get();
                 }
-                index_infos[i] = self.new_index_info(info.key_type(), value_type, is_readonly, None, &[]);
+                index_infos[i] = self.new_index_info(self.index_info(info).key_type(), value_type, is_readonly, None, &[]);
                 return index_infos.to_vec();
             }
         }

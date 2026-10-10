@@ -122,6 +122,12 @@ lookup, or retain a cloned value across mutation. AST literal and synthesized id
 string borrows and own their stored text. Getters borrow the record. Source-file/compact-identifier text and
 joined JSDoc/JSX text still use legacy storage; no new static bridge is allowed (`notes/rust-owned-type-text.md`).
 
+Checker type-predicate and index-signature metadata records live in typed vectors. Retain `TypePredicateKey` or
+`IndexInfoKey` across recursion, then resolve through `Checker::type_predicate` / `index_info` with a short borrow.
+Qualified keys cannot dereference themselves or select another owner's slot. Signatures and structured/interface
+index-info arrays store keys. Predicate metadata is immutable; index-symbol caching retains its cell. The type,
+symbol and AST entries inside these records remain legacy graph edges (`notes/rust-typed-metadata.md`).
+
 Build orchestrators and their hosts use `Arc`; the host's back-reference is weak. Returned build outcomes retain
 the actual orchestrator, including programs whose diagnostics they expose, through conversion to an API response.
 There is no manual orchestrator free or raw box reconstruction. Build tasks are Rust-owned records in a typed

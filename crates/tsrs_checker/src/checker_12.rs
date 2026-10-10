@@ -1998,7 +1998,7 @@ impl Checker {
         members: Option<P<SymbolTable>>,
         call_signatures: &[P<Signature>],
         construct_signatures: &[P<Signature>],
-        index_infos: &[P<IndexInfo>],
+        index_infos: &[IndexInfoKey],
     ) -> P<Type> {
         let t = self.new_object_type(ObjectFlags::Anonymous, symbol);
         self.set_structured_type_members(t, members, call_signatures, construct_signatures, index_infos);
@@ -2073,7 +2073,7 @@ impl Checker {
         members: Option<P<SymbolTable>>,
         call_signatures: &[P<Signature>],
         construct_signatures: &[P<Signature>],
-        index_infos: &[P<IndexInfo>],
+        index_infos: &[IndexInfoKey],
     ) {
         t.object_flags.set(t.object_flags() | ObjectFlags::MembersResolved);
         let data = t.as_structured_type();
@@ -2199,7 +2199,7 @@ impl Checker {
         this_parameter: Option<P<Symbol>>,
         parameters: &[P<Symbol>],
         resolved_return_type: Option<P<Type>>,
-        resolved_type_predicate: Option<P<TypePredicate>>,
+        resolved_type_predicate: Option<TypePredicateKey>,
         min_argument_count: i32,
     ) -> P<Signature> {
         self.signature_count += 1;
@@ -2218,15 +2218,20 @@ impl Checker {
         sig
     }
 
+    /// Resolve an index record with a borrow of its checker; keys from other stores are rejected.
+    pub fn index_info(&self, key: IndexInfoKey) -> &IndexInfo {
+        self.index_infos.get(key).expect("index info belongs to another checker")
+    }
+
     // checker.go:25733
-    pub(crate) fn new_index_info(&mut self, key_type: P<Type>, value_type: P<Type>, is_readonly: bool, declaration: Option<P<Node>>, components: &[P<Node>]) -> P<IndexInfo> {
-        let info = P::new(IndexInfo::default());
+    pub(crate) fn new_index_info(&mut self, key_type: P<Type>, value_type: P<Type>, is_readonly: bool, declaration: Option<P<Node>>, components: &[P<Node>]) -> IndexInfoKey {
+        let info = IndexInfo::default();
         info.key_type.set(Some(key_type));
         info.value_type.set(Some(value_type));
         info.is_readonly.set(is_readonly);
         info.declaration.set(declaration);
         info.components.set(components);
-        info
+        self.index_infos.alloc(info)
     }
 
     // checker.go:25743

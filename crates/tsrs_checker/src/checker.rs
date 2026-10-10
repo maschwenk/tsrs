@@ -1053,14 +1053,16 @@ pub struct Checker {
     pub marker_other_type: P<Type>,
     pub marker_super_type_for_check: P<Type>,
     pub marker_sub_type_for_check: P<Type>,
-    pub no_type_predicate: P<TypePredicate>,
+    pub(crate) type_predicates: tsrs_core::arena_owner::ArenaBuilder<TypePredicate>,
+    pub no_type_predicate: TypePredicateKey,
     pub any_signature: P<Signature>,
     pub unknown_signature: P<Signature>,
     pub resolving_signature: P<Signature>,
     pub silent_never_signature: P<Signature>,
     pub cached_arguments_referenced: FxHashMap<P<Node>, bool>,
-    pub enum_number_index_info: P<IndexInfo>,
-    pub any_base_type_index_info: P<IndexInfo>,
+    pub(crate) index_infos: tsrs_core::arena_owner::ArenaBuilder<IndexInfo>,
+    pub enum_number_index_info: IndexInfoKey,
+    pub any_base_type_index_info: IndexInfoKey,
     pub pattern_ambient_modules: Vec<P<ast::PatternAmbientModule>>,
     pub pattern_ambient_module_augmentations: Option<P<SymbolTable>>,
     pub pattern_ambient_module_augmentation_targets: Option<P<SymbolTable>>,
@@ -1225,7 +1227,8 @@ pub fn new_checker(program: Arc<dyn Program>) -> Box<Checker> {
     let dummy_symbol = P::new(Symbol::default());
     let dummy_mapper = new_simple_type_mapper(dummy_type, dummy_type);
     let dummy_signature = P::new(Signature::default());
-    let dummy_index_info = P::new(IndexInfo::default());
+    let mut index_infos = tsrs_core::arena_owner::ArenaBuilder::new();
+    let dummy_index_info = index_infos.alloc(IndexInfo::default());
     let dummy_resolver = P::new(NameResolver::<Checker>::new(compiler_options, None));
     let dummy_iteration_resolver = P::new(IterationTypesResolver {
         is_async: false,
@@ -1235,6 +1238,8 @@ pub fn new_checker(program: Arc<dyn Program>) -> Box<Checker> {
         must_have_a_value_diagnostic: &diagnostics::The_type_returned_by_the_0_method_of_an_iterator_must_have_a_value_property,
     });
 
+    let mut type_predicates = tsrs_core::arena_owner::ArenaBuilder::new();
+    let dummy_predicate = type_predicates.alloc(TypePredicate::default());
     let files = program.source_files();
     let mut c = Box::new(Checker {
         id: nextCheckerID.fetch_add(1, Ordering::Relaxed) + 1,
@@ -1440,12 +1445,14 @@ pub fn new_checker(program: Arc<dyn Program>) -> Box<Checker> {
         marker_other_type: dummy_type,
         marker_super_type_for_check: dummy_type,
         marker_sub_type_for_check: dummy_type,
-        no_type_predicate: P::new(TypePredicate::default()),
+        type_predicates,
+        no_type_predicate: dummy_predicate,
         any_signature: dummy_signature,
         unknown_signature: dummy_signature,
         resolving_signature: dummy_signature,
         silent_never_signature: dummy_signature,
         cached_arguments_referenced: FxHashMap::default(),
+        index_infos,
         enum_number_index_info: dummy_index_info,
         any_base_type_index_info: dummy_index_info,
         pattern_ambient_modules: Vec::new(),
@@ -1663,28 +1670,13 @@ pub fn new_checker(program: Arc<dyn Program>) -> Box<Checker> {
     c.marker_super_type_for_check = c.new_type_parameter(None);
     c.marker_sub_type_for_check = c.new_type_parameter(None);
     c.marker_sub_type_for_check.as_type_parameter().constraint.set(Some(c.marker_super_type_for_check));
-    c.no_type_predicate = P::new(TypePredicate {
-        kind: Cell::new(TypePredicateKind::Identifier),
-        parameter_index: Cell::new(0),
-        parameter_name: TextCell::new("<<unresolved>>"),
-        t: Cell::new(Some(c.any_type)),
-    });
+    c.no_type_predicate = c.new_type_predicate(TypePredicateKind::Identifier, "<<unresolved>>", 0, Some(c.any_type));
     c.any_signature = c.new_signature(SignatureFlags::None, None, &[], None, &[], Some(c.any_type), None, 0);
     c.unknown_signature = c.new_signature(SignatureFlags::None, None, &[], None, &[], Some(c.error_type), None, 0);
     c.resolving_signature = c.new_signature(SignatureFlags::None, None, &[], None, &[], Some(c.any_type), None, 0);
     c.silent_never_signature = c.new_signature(SignatureFlags::None, None, &[], None, &[], Some(c.silent_never_type), None, 0);
-    c.enum_number_index_info = P::new(IndexInfo {
-        key_type: Cell::new(Some(c.number_type)),
-        value_type: Cell::new(Some(c.string_type)),
-        is_readonly: Cell::new(true),
-        ..Default::default()
-    });
-    c.any_base_type_index_info = P::new(IndexInfo {
-        key_type: Cell::new(Some(c.string_type)),
-        value_type: Cell::new(Some(c.any_type)),
-        is_readonly: Cell::new(false),
-        ..Default::default()
-    });
+    c.enum_number_index_info = c.new_index_info(c.number_type, c.string_type, true, None, &[]);
+    c.any_base_type_index_info = c.new_index_info(c.string_type, c.any_type, false, None, &[]);
     c.empty_string_type = c.get_string_literal_type("");
     c.zero_type = c.get_number_literal_type(Number(0.0));
     c.zero_big_int_type = c.get_big_int_literal_type(PseudoBigInt::default());

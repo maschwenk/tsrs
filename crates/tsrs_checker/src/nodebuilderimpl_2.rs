@@ -348,8 +348,8 @@ impl NodeBuilderImpl {
     }
 
     // nodebuilderimpl.go:2159
-    pub(crate) fn index_info_to_object_computed_names_or_signature_declaration(&self, c: &mut Checker, index_info: P<IndexInfo>, type_node: Option<P<Node>>) -> Vec<P<Node>> {
-        let components = index_info.components.get();
+    pub(crate) fn index_info_to_object_computed_names_or_signature_declaration(&self, c: &mut Checker, index_info: IndexInfoKey, type_node: Option<P<Node>>) -> Vec<P<Node>> {
+        let components = c.index_info(index_info).components.get();
         if !components.is_empty() {
             // Index info is derived from object or class computed property names (plus explicit named members) - we can clone those instead of writing out the result computed index signature
             let all_component_computed_names_serializable = self.ctx().enclosing_declaration.get().is_some() && components.iter().all(|&e| self.is_trivially_serializable_computed_name(c, Some(e)));
@@ -372,7 +372,7 @@ impl NodeBuilderImpl {
                             // Still need to track visibility even if we've already checked it to paint references as used
                             self.track_computed_name(c, e.name().unwrap().expression().unwrap(), self.ctx().enclosing_declaration.get());
                             let mut mods: Option<P<ModifierList>> = None;
-                            if index_info.is_readonly.get() {
+                            if c.index_info(index_info).is_readonly.get() {
                                 mods = Some(self.f.new_modifier_list(vec![self.f.new_modifier(Kind::ReadonlyKeyword)]));
                             }
                             let mut postfix_token: Option<P<Node>> = None;
@@ -402,25 +402,25 @@ impl NodeBuilderImpl {
     }
 
     // nodebuilderimpl.go:2210
-    pub(crate) fn index_info_to_index_signature_declaration_helper(&self, c: &mut Checker, index_info: P<IndexInfo>, type_node: Option<P<Node>>) -> P<Node> {
-        let name = get_name_from_index_info(index_info);
-        let indexer_type_node = self.type_to_type_node(c, index_info.key_type.get());
+    pub(crate) fn index_info_to_index_signature_declaration_helper(&self, c: &mut Checker, index_info: IndexInfoKey, type_node: Option<P<Node>>) -> P<Node> {
+        let name = get_name_from_index_info(c, index_info);
+        let indexer_type_node = self.type_to_type_node(c, c.index_info(index_info).key_type.get());
 
         let indexing_parameter = self.f.new_parameter_declaration(None, None, self.new_identifier(c, &name, None /*symbol*/), None, indexer_type_node, None);
         let mut type_node = type_node;
         if type_node.is_none() {
-            if index_info.value_type.get().is_none() {
+            if c.index_info(index_info).value_type.get().is_none() {
                 type_node = Some(self.f.new_keyword_type_node(Kind::AnyKeyword));
             } else {
-                type_node = self.type_to_type_node(c, index_info.value_type.get());
+                type_node = self.type_to_type_node(c, c.index_info(index_info).value_type.get());
             }
         }
-        if index_info.value_type.get().is_none() && !self.ctx().flags.get().intersects(Flags::AllowEmptyIndexInfoType) {
+        if c.index_info(index_info).value_type.get().is_none() && !self.ctx().flags.get().intersects(Flags::AllowEmptyIndexInfoType) {
             self.ctx().encountered_error.set(true);
         }
         add_approximate_length(self, name.len() as i32 + 4);
         let mut modifiers: Option<P<ModifierList>> = None;
-        if index_info.is_readonly.get() {
+        if c.index_info(index_info).is_readonly.get() {
             add_approximate_length(self, 9);
             modifiers = Some(self.f.new_modifier_list(vec![self.f.new_modifier(Kind::ReadonlyKeyword)]));
         }

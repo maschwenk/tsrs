@@ -804,7 +804,7 @@ impl Checker {
         let prop_type: P<Type>;
         match prop {
             None => {
-                let mut index_info: Option<P<IndexInfo>> = None;
+                let mut index_info: Option<IndexInfoKey> = None;
                 if !ast::is_private_identifier(right) && (assignment_kind == AssignmentKind::None || !self.is_generic_object_type(left_type) || is_this_type_parameter(left_type)) {
                     index_info = self.get_applicable_index_info_for_name(apparent_type, right.text());
                 }
@@ -832,11 +832,11 @@ impl Checker {
                     }
                     return self.error_type;
                 };
-                if index_info.is_readonly.get() && (ast::is_assignment_target(node) || is_delete_target(node)) {
+                if self.index_info(index_info).is_readonly.get() && (ast::is_assignment_target(node) || is_delete_target(node)) {
                     let type_string = self.type_to_string_exported(apparent_type);
                     self.error(Some(node), &diagnostics::Index_signature_in_type_0_only_permits_reading, &[&type_string]);
                 }
-                let mut pt = index_info.value_type.get().unwrap();
+                let mut pt = self.index_info(index_info).value_type.get().unwrap();
                 if self.compiler_options.no_unchecked_indexed_access == Tristate::True && get_assignment_target_kind(node) != AssignmentKind::Definite {
                     let missing_type = self.missing_type;
                     pt = self.get_union_type(&[pt, missing_type]);
@@ -844,7 +844,7 @@ impl Checker {
                 if self.compiler_options.no_property_access_from_index_signature == Tristate::True && ast::is_property_access_expression(node) {
                     self.error(Some(right), &diagnostics::Property_0_comes_from_an_index_signature_so_it_must_be_accessed_with_0, &[&right.text()]);
                 }
-                if let Some(declaration) = index_info.declaration.get() {
+                if let Some(declaration) = self.index_info(index_info).declaration.get() {
                     if self.is_deprecated_declaration(declaration) {
                         self.add_deprecated_suggestion(right, &[declaration], right.text());
                     }

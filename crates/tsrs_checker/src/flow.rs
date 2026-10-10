@@ -657,16 +657,16 @@ impl Checker {
         if let Some(signature) = signature {
             let predicate = self.get_type_predicate_of_signature(signature);
             if let Some(predicate) = predicate {
-                if predicate.kind.get() == TypePredicateKind::AssertsThis || predicate.kind.get() == TypePredicateKind::AssertsIdentifier {
+                if self.type_predicate(predicate).kind() == TypePredicateKind::AssertsThis || self.type_predicate(predicate).kind() == TypePredicateKind::AssertsIdentifier {
                     let flow_type = self.get_type_at_flow_node(f, flow.antecedent().unwrap());
                     if f.memo_aborted.get() {
                         return flow_type;
                     }
                     let t = self.finalize_evolving_array_type(flow_type.t.unwrap());
-                    let parameter_index = predicate.parameter_index.get();
-                    let narrowed_type = if predicate.t.get().is_some() {
+                    let parameter_index = self.type_predicate(predicate).parameter_index();
+                    let narrowed_type = if self.type_predicate(predicate).type_().is_some() {
                         self.narrow_type_by_type_predicate(f, t, predicate, node, true /*assumeTrue*/)
-                    } else if predicate.kind.get() == TypePredicateKind::AssertsIdentifier && parameter_index >= 0 && (parameter_index as usize) < node.arguments().len() {
+                    } else if self.type_predicate(predicate).kind() == TypePredicateKind::AssertsIdentifier && parameter_index >= 0 && (parameter_index as usize) < node.arguments().len() {
                         self.narrow_type_by_assertion(f, t, node.arguments()[parameter_index as usize])
                     } else {
                         t
@@ -685,10 +685,10 @@ impl Checker {
     }
 
     // flow.go:316
-    pub(crate) fn narrow_type_by_type_predicate(&mut self, f: P<FlowState>, t: P<Type>, predicate: P<TypePredicate>, call_expression: P<Node>, assume_true: bool) -> P<Type> {
+    pub(crate) fn narrow_type_by_type_predicate(&mut self, f: P<FlowState>, t: P<Type>, predicate: TypePredicateKey, call_expression: P<Node>, assume_true: bool) -> P<Type> {
         let mut t = t;
         // Don't narrow from 'any' if the predicate type is exactly 'Object' or 'Function'
-        if let Some(predicate_type) = predicate.t.get() {
+        if let Some(predicate_type) = self.type_predicate(predicate).type_() {
             if !(is_type_any(Some(t)) && (predicate_type == self.global_object_type || predicate_type == self.global_function_type)) {
                 let predicate_argument = self.get_type_predicate_argument(predicate, call_expression);
                 if let Some(predicate_argument) = predicate_argument {
@@ -845,7 +845,7 @@ impl Checker {
     // flow.go:444
     pub(crate) fn narrow_type_by_call_expression(&mut self, f: P<FlowState>, t: P<Type>, call_expression: P<Node>, assume_true: bool) -> P<Type> {
         if self.has_matching_argument(call_expression, f.ref_node()) {
-            let mut predicate: Option<P<TypePredicate>> = None;
+            let mut predicate: Option<TypePredicateKey> = None;
             if assume_true || !is_call_chain(call_expression) {
                 let signature = self.get_effects_signature(call_expression);
                 if let Some(signature) = signature {
@@ -853,7 +853,7 @@ impl Checker {
                 }
             }
             if let Some(predicate) = predicate {
-                if predicate.kind.get() == TypePredicateKind::This || predicate.kind.get() == TypePredicateKind::Identifier {
+                if self.type_predicate(predicate).kind() == TypePredicateKind::This || self.type_predicate(predicate).kind() == TypePredicateKind::Identifier {
                     return self.narrow_type_by_type_predicate(f, t, predicate, call_expression, assume_true);
                 }
             }
@@ -1262,13 +1262,13 @@ impl Checker {
         // if the right-hand side has an object type with a custom `[Symbol.hasInstance]` method, and that method
         // has a type predicate, use the type predicate to perform narrowing. This allows normal `object` types to
         // participate in `instanceof`, as per Step 2 of https://tc39.es/ecma262/#sec-instanceofoperator.
-        let mut predicate: Option<P<TypePredicate>> = None;
+        let mut predicate: Option<TypePredicateKey> = None;
         if let Some(signature) = self.get_effects_signature(expr) {
             predicate = self.get_type_predicate_of_signature(signature);
         }
         if let Some(predicate) = predicate {
-            if predicate.kind.get() == TypePredicateKind::Identifier && predicate.parameter_index.get() == 0 {
-                return self.get_narrowed_type(t, predicate.t.get().unwrap(), assume_true, true /*checkDerived*/);
+            if self.type_predicate(predicate).kind() == TypePredicateKind::Identifier && self.type_predicate(predicate).parameter_index() == 0 {
+                return self.get_narrowed_type(t, self.type_predicate(predicate).type_().unwrap(), assume_true, true /*checkDerived*/);
             }
         }
         if !self.is_type_derived_from(right_type, self.global_function_type) {
@@ -3064,7 +3064,7 @@ impl Checker {
             return prop_type;
         }
         if let Some(index_info) = self.get_applicable_index_info_for_name(t, &text) {
-            return self.include_undefined_in_index_signature(index_info.value_type.get().unwrap());
+            return self.include_undefined_in_index_signature(self.index_info(index_info).value_type.get().unwrap());
         }
         self.error_type
     }
@@ -3149,10 +3149,10 @@ impl Checker {
     }
 
     // flow.go:2451
-    pub(crate) fn get_type_predicate_argument(&mut self, predicate: P<TypePredicate>, call_expression: P<Node>) -> Option<P<Node>> {
-        if predicate.kind.get() == TypePredicateKind::Identifier || predicate.kind.get() == TypePredicateKind::AssertsIdentifier {
+    pub(crate) fn get_type_predicate_argument(&mut self, predicate: TypePredicateKey, call_expression: P<Node>) -> Option<P<Node>> {
+        if self.type_predicate(predicate).kind() == TypePredicateKind::Identifier || self.type_predicate(predicate).kind() == TypePredicateKind::AssertsIdentifier {
             let arguments = call_expression.arguments();
-            let parameter_index = predicate.parameter_index.get();
+            let parameter_index = self.type_predicate(predicate).parameter_index();
             if parameter_index >= 0 && (parameter_index as usize) < arguments.len() {
                 return Some(arguments[parameter_index as usize]);
             }
@@ -3258,9 +3258,9 @@ impl Checker {
                 let node = flow.node().unwrap();
                 if let Some(signature) = self.get_effects_signature(node) {
                     if let Some(predicate) = self.get_type_predicate_of_signature(signature) {
-                        if predicate.kind.get() == TypePredicateKind::AssertsIdentifier && predicate.t.get().is_none() {
+                        if self.type_predicate(predicate).kind() == TypePredicateKind::AssertsIdentifier && self.type_predicate(predicate).type_().is_none() {
                             let arguments = node.arguments();
-                            let parameter_index = predicate.parameter_index.get();
+                            let parameter_index = self.type_predicate(predicate).parameter_index();
                             if parameter_index >= 0 && (parameter_index as usize) < arguments.len() && self.is_false_expression(arguments[parameter_index as usize]) {
                                 return false;
                             }

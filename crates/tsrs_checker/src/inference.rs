@@ -988,7 +988,7 @@ impl Checker {
             let source_type_predicate = self.get_type_predicate_of_signature(source);
             if let Some(source_type_predicate) = source_type_predicate {
                 if self.type_predicate_kinds_match(source_type_predicate, target_type_predicate) {
-                    if let (Some(s), Some(t)) = (source_type_predicate.t.get(), target_type_predicate.t.get()) {
+                    if let (Some(s), Some(t)) = (self.type_predicate(source_type_predicate).type_(), self.type_predicate(target_type_predicate).type_()) {
                         callback(self, s, t);
                         return;
                     }
@@ -1015,7 +1015,7 @@ impl Checker {
                 let mut prop_types: Vec<P<Type>> = Vec::new();
                 for prop in self.get_properties_of_type(source).iter().copied() {
                     let literal_type = self.get_literal_type_from_property(prop, TypeFlags::StringOrNumberLiteralOrUnique, false);
-                    if self.is_applicable_index_type(literal_type, target_info.key_type()) {
+                    if self.is_applicable_index_type(literal_type, self.index_info(target_info).key_type()) {
                         let mut prop_type = self.get_type_of_symbol(prop);
                         if prop.flags.get().intersects(SymbolFlags::Optional) {
                             prop_type = self.remove_missing_or_undefined_type(prop_type);
@@ -1024,20 +1024,20 @@ impl Checker {
                     }
                 }
                 for info in self.get_index_infos_of_type(source) {
-                    if self.is_applicable_index_type(info.key_type(), target_info.key_type()) {
-                        prop_types.push(info.value_type());
+                    if self.is_applicable_index_type(self.index_info(info).key_type(), self.index_info(target_info).key_type()) {
+                        prop_types.push(self.index_info(info).value_type());
                     }
                 }
                 if !prop_types.is_empty() {
                     let union = self.get_union_type(&prop_types);
-                    self.infer_with_priority(n, union, target_info.value_type(), priority);
+                    self.infer_with_priority(n, union, self.index_info(target_info).value_type(), priority);
                 }
             }
         }
         for &target_info in &index_infos {
-            let source_info = self.get_applicable_index_info(source, target_info.key_type());
+            let source_info = self.get_applicable_index_info(source, self.index_info(target_info).key_type());
             if let Some(source_info) = source_info {
-                self.infer_with_priority(n, source_info.value_type(), target_info.value_type(), priority);
+                self.infer_with_priority(n, self.index_info(source_info).value_type(), self.index_info(target_info).value_type(), priority);
             }
         }
     }
@@ -1101,7 +1101,7 @@ impl Checker {
             let index_types: Vec<P<Type>> = self
                 .get_index_infos_of_type(source)
                 .iter()
-                .map(|&info| if info != self.enum_number_index_info { info.value_type() } else { self.never_type })
+                .map(|&info| if info != self.enum_number_index_info { self.index_info(info).value_type() } else { self.never_type })
                 .collect();
             prop_types.extend(index_types);
             let union = self.get_union_type(&prop_types);
@@ -1249,10 +1249,10 @@ impl Checker {
         let modifiers = get_mapped_type_modifiers(r_mapped_type);
         let readonly_mask = !modifiers.intersects(MappedTypeModifiers::IncludeReadonly);
         let optional_mask = if modifiers.intersects(MappedTypeModifiers::IncludeOptional) { SymbolFlags::None } else { SymbolFlags::Optional };
-        let mut index_infos: Vec<P<IndexInfo>> = Vec::new();
+        let mut index_infos: Vec<IndexInfoKey> = Vec::new();
         if let Some(index_info) = index_info {
-            let value_type = self.infer_reverse_mapped_type(index_info.value_type(), r_mapped_type, r_constraint_type).unwrap_or(self.unknown_type);
-            index_infos = vec![self.new_index_info(string_type, value_type, readonly_mask && index_info.is_readonly(), None, &[])];
+            let value_type = self.infer_reverse_mapped_type(self.index_info(index_info).value_type(), r_mapped_type, r_constraint_type).unwrap_or(self.unknown_type);
+            index_infos = vec![self.new_index_info(string_type, value_type, readonly_mask && self.index_info(index_info).is_readonly(), None, &[])];
         }
         let members = SymbolTable::new();
         let limited_constraint = self.get_limited_constraint(t);
@@ -1418,7 +1418,7 @@ impl Checker {
             }
             members.set(literal_prop.name.get(), literal_prop);
         }
-        let mut index_infos: Vec<P<IndexInfo>> = Vec::new();
+        let mut index_infos: Vec<IndexInfoKey> = Vec::new();
         if t.flags().intersects(TypeFlags::String) {
             let (string_type, empty_object_type) = (self.string_type, self.empty_object_type);
             index_infos = vec![self.new_index_info(string_type, empty_object_type, false /*isReadonly*/, None, &[])];
@@ -1728,7 +1728,7 @@ impl Checker {
     pub(crate) fn is_type_parameter_at_top_level_in_return_type(&mut self, signature: P<Signature>, type_parameter: P<Type>) -> bool {
         let type_predicate = self.get_type_predicate_of_signature(signature);
         if let Some(type_predicate) = type_predicate {
-            return match type_predicate.t.get() {
+            return match self.type_predicate(type_predicate).type_() {
                 Some(t) => self.is_type_parameter_at_top_level(t, type_parameter, 0),
                 None => false,
             };

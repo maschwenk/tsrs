@@ -107,6 +107,14 @@ pointer compression costs about +4.9% instructions and took back most of the che
 
 ## Measured and rejected (do not redo)
 
+- Treating typed predicate/index metadata as enough to recover the complete migration gates
+  (`notes/rust-typed-metadata.md`): single-thread instructions change -0.07% / +0.12%, default RSS
+  +0.69% / -0.17%, below the landing bar. Cumulative single-thread instructions remain +15–17% versus
+  original Oxc and default RSS +112–120% versus pre-Oxc. The changed constraint is complete ownership:
+  metadata records and edges now use typed stores/qualified keys, but their type/symbol/AST referents and
+  the compatibility runtime remain legacy. Revisit landing after the complete typed graph/runtime migration,
+  full API/LSP lifetime validation and recovered instruction/RSS gates.
+
 - Treating owned compiler text/literal snapshots as a completed or memory-preserving migration
   (`notes/rust-owned-type-text.md`): single-thread instructions rise +3.51% / +6.04%, and default peak RSS
   +4.37% / +10.78% against the preceding checkpoint. Cumulative single-thread instructions are +15–17% versus
