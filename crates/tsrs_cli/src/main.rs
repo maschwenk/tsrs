@@ -1,7 +1,64 @@
 // The alloc-profile build installs tsrs_core's counting allocator (over mimalloc) instead.
 #[cfg(not(feature = "alloc-profile"))]
 #[global_allocator]
-static GLOBAL: mimalloc_safe::MiMalloc = mimalloc_safe::MiMalloc;
+static GLOBAL: MiMalloc = MiMalloc;
+
+/// mimalloc as the global allocator, like `mimalloc_safe::MiMalloc` except that an allocation whose alignment
+/// mimalloc gives every block of its size (at most 16 bytes, and at most the size) takes the plain entry points
+/// rather than the `_aligned` ones, whose extra alignment handling every allocation paid (as the `mimalloc` crate
+/// does).
+#[cfg(not(feature = "alloc-profile"))]
+struct MiMalloc;
+
+#[cfg(not(feature = "alloc-profile"))]
+const MI_MAX_ALIGN_SIZE: usize = 16;
+
+#[cfg(not(feature = "alloc-profile"))]
+// SAFETY: every method forwards to mimalloc, which returns blocks aligned as asked (`MI_MAX_ALIGN_SIZE` for the plain
+// entry points, for blocks at least that large; small blocks are aligned to their size class).
+unsafe impl std::alloc::GlobalAlloc for MiMalloc {
+    #[inline]
+    unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
+        // SAFETY: plain FFI calls; mimalloc handles any size.
+        unsafe {
+            if layout.align() <= MI_MAX_ALIGN_SIZE && layout.align() <= layout.size() {
+                libmimalloc_sys2::mi_malloc(layout.size()).cast()
+            } else {
+                libmimalloc_sys2::mi_malloc_aligned(layout.size(), layout.align()).cast()
+            }
+        }
+    }
+
+    #[inline]
+    unsafe fn alloc_zeroed(&self, layout: std::alloc::Layout) -> *mut u8 {
+        // SAFETY: as in `alloc`.
+        unsafe {
+            if layout.align() <= MI_MAX_ALIGN_SIZE && layout.align() <= layout.size() {
+                libmimalloc_sys2::mi_zalloc(layout.size()).cast()
+            } else {
+                libmimalloc_sys2::mi_zalloc_aligned(layout.size(), layout.align()).cast()
+            }
+        }
+    }
+
+    #[inline]
+    unsafe fn dealloc(&self, ptr: *mut u8, _layout: std::alloc::Layout) {
+        // SAFETY: `ptr` came from this allocator (GlobalAlloc's contract).
+        unsafe { libmimalloc_sys2::mi_free(ptr.cast()) }
+    }
+
+    #[inline]
+    unsafe fn realloc(&self, ptr: *mut u8, layout: std::alloc::Layout, new_size: usize) -> *mut u8 {
+        // SAFETY: as in `dealloc`.
+        unsafe {
+            if layout.align() <= MI_MAX_ALIGN_SIZE && layout.align() <= new_size {
+                libmimalloc_sys2::mi_realloc(ptr.cast(), new_size).cast()
+            } else {
+                libmimalloc_sys2::mi_realloc_aligned(ptr.cast(), new_size, layout.align()).cast()
+            }
+        }
+    }
+}
 
 #[cfg(feature = "alloc-profile")]
 mod census;
