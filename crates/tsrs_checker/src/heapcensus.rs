@@ -229,7 +229,7 @@ impl Checker {
             object_types_without_abstract_construct_signatures, structured_type_base_constraints, context_free_types,
             cached_arguments_referenced, module_import_attributes_types, flow_loop_cache, flow_node_reachable,
             flow_node_post_super, enum_relation, skip_direct_inference_nodes, active_mappers, scratch_mappers,
-            scratch_contexts, scratch_mapper_lists, free_type_lists, free_signature_lists, ambient_modules, reported_unreachable_nodes,
+            scratch_contexts, scratch_mapper_lists, free_type_lists, free_signature_lists, free_property_counts, ambient_modules, reported_unreachable_nodes,
             non_existent_properties, exports_by_target_index, scratch_keyed_chain_cache, type_resolutions,
             contextual_infos, inference_context_infos, shared_flows, antecedent_types,
         );

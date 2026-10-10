@@ -5,7 +5,7 @@ use tsrs_ast as ast;
 use tsrs_diagnostics as diagnostics;
 use tsrs_diagnostics::Message;
 use rustc_hash::FxHashMap;
-use tsrs_core::collections::{OrderedMap, OrderedSet, OrderedSetExt};
+use tsrs_core::collections::{OrderedSet, OrderedSetExt};
 
 // Generated as signature stubs by tools/gosig (checker.json); the bodies have since been ported by hand. Do not re-run
 // gosig into this directory: it rewrites every file listed in checker.json.
@@ -548,7 +548,8 @@ impl Checker {
         } else {
             None
         };
-        let mut counts: OrderedMap<&'static str, i32> = OrderedMap::default();
+        // A pooled map (Go's is garbage after the call); a recursive call takes another one.
+        let mut counts = self.free_property_counts.pop().unwrap_or_default();
         for (i, &t) in types.iter().enumerate() {
             if Some(i) != skipped {
                 for prop in self.get_properties_of_type(t) {
@@ -567,16 +568,23 @@ impl Checker {
         }
         // Check if any property appears in more than one constituent type and reduces to 'never'.
         // Go in the order the properties were found so the combined properties are created in the same order every time.
-        for (prop_name, count) in counts {
+        let mut result = false;
+        for i in 0..counts.len() {
+            let (&prop_name, &count) = counts.get_index(i).unwrap();
             if count > 1 {
                 if let Some(prop) = self.get_property_of_union_or_intersection_type(t, prop_name, true /*skipObjectFunctionPropertyAugment*/) {
                     if self.is_never_reduced_property(prop) {
-                        return true;
+                        result = true;
+                        break;
                     }
                 }
             }
         }
-        false
+        if counts.capacity() <= 1024 {
+            counts.clear();
+            self.free_property_counts.push(counts);
+        }
+        result
     }
 
     // checker.go:22240
