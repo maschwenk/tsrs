@@ -98,9 +98,20 @@ impl Checker {
         if origin.is_none() && includes.intersects(TypeFlags::Union) {
             let named_unions = self.add_named_unions(&[], types);
             let mut reduced_types: Vec<P<Type>> = Vec::new();
-            for &t in &type_set {
-                if !named_unions.iter().any(|u| contains_type(self, u.types(), t)) {
-                    reduced_types.push(t);
+            if (named_unions.len() > 1 || type_set.len() > 8) && self.program.source_files_complete() {
+                // tsrs-only: under a total order `contains_type` finds exactly the identical type, so one set of the
+                // named unions' constituents answers every constituent's question; the binary searches, one per
+                // named union per constituent, were most of the `compare_types` calls on the 38k-file codebase.
+                let mut named: FxHashSet<P<Type>> = FxHashSet::default();
+                for u in &named_unions {
+                    named.extend(u.types().iter().copied());
+                }
+                reduced_types.extend(type_set.iter().copied().filter(|t| !named.contains(t)));
+            } else {
+                for &t in &type_set {
+                    if !named_unions.iter().any(|u| contains_type(self, u.types(), t)) {
+                        reduced_types.push(t);
+                    }
                 }
             }
             if alias.is_none() && named_unions.len() == 1 && reduced_types.is_empty() {
@@ -210,23 +221,7 @@ impl Checker {
                 }
             }
             // Two sorted, unique runs: merge them (a constituent of both is added once).
-            let (mut left, mut right) = (source_types[0].types(), source_types[1].types());
-            while let (Some(&l), Some(&r)) = (left.first(), right.first()) {
-                if l == r {
-                    add_type(self, &mut types, &mut includes, l);
-                    left = &left[1..];
-                    right = &right[1..];
-                } else if compare_types(self, Some(l), Some(r)) < 0 {
-                    add_type(self, &mut types, &mut includes, l);
-                    left = &left[1..];
-                } else {
-                    add_type(self, &mut types, &mut includes, r);
-                    right = &right[1..];
-                }
-            }
-            for &t in left.iter().chain(right) {
-                add_type(self, &mut types, &mut includes, t);
-            }
+            merge_sorted_types(self, source_types[0].types(), source_types[1].types(), true /*dedup*/, &mut |c, t| add_type(c, &mut types, &mut includes, t));
             return (types, includes);
         }
         // The flattened list is a sequence of ascending runs: a new run starts at an input whose first constituent is
@@ -303,7 +298,7 @@ impl Checker {
                 || flags.intersects(TypeFlags::BigIntLiteral) && includes.intersects(TypeFlags::BigInt)
                 || flags.intersects(TypeFlags::UniqueESSymbol) && includes.intersects(TypeFlags::ESSymbol)
                 || reduce_void_undefined && flags.intersects(TypeFlags::Undefined) && includes.intersects(TypeFlags::Void)
-                || is_fresh_literal_type(t) && contains_type(self, &types, t.as_literal_type().regular_type().unwrap());
+                || is_fresh_literal_type(t) && contains_regular_literal_type(self, &types, i, t.as_literal_type().regular_type().unwrap());
             if remove {
                 types.remove(i);
             }
@@ -643,7 +638,7 @@ impl Checker {
                     if self.is_type_strict_subtype_of(constraint, primitive_type) {
                         return type_variable;
                     }
-                    if !(constraint.flags().intersects(TypeFlags::Union) && some_type(self, constraint, |c, n| c.is_type_strict_subtype_of(n, primitive_type))) {
+                    if !(constraint.flags().intersects(TypeFlags::Union) && some_type(self, constraint, |c, n| !crate::relater_1::are_different_plain_literals(n, primitive_type) && c.is_type_strict_subtype_of(n, primitive_type))) {
                         // No constituent of T's constraint is a subtype of P. If P is also not a subtype of T's constraint,
                         // then the constraint and P are unrelated, and the intersection reduces to never. For example, given
                         // `T extends "a" | "b"`, the intersection `T & number` reduces to never.
@@ -1011,10 +1006,13 @@ impl Checker {
     }
 
     // checker.go:26946
+    #[inline]
     pub fn is_empty_anonymous_object_type(&mut self, t: P<Type>) -> bool {
-        if !t.object_flags().intersects(ObjectFlags::Anonymous) {
-            return false;
-        }
+        t.object_flags().intersects(ObjectFlags::Anonymous) && self.is_empty_anonymous_object_type_worker(t)
+    }
+
+    #[inline(never)]
+    fn is_empty_anonymous_object_type_worker(&mut self, t: P<Type>) -> bool {
         if t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) && self.is_empty_resolved_type(t.as_structured_type()) {
             return true;
         }
@@ -1224,18 +1222,7 @@ fn merge_ascending_runs(c: &mut Checker, types: &mut Vec<P<Type>>, run_starts: &
         let mut j = 0;
         while j < runs {
             if j + 1 < runs {
-                let (mut left, mut right) = (&src[bounds[j]..bounds[j + 1]], &src[bounds[j + 1]..bounds[j + 2]]);
-                while let (Some(&l), Some(&r)) = (left.first(), right.first()) {
-                    if l == r || compare_types(c, Some(l), Some(r)) <= 0 {
-                        dst.push(l);
-                        left = &left[1..];
-                    } else {
-                        dst.push(r);
-                        right = &right[1..];
-                    }
-                }
-                dst.extend_from_slice(left);
-                dst.extend_from_slice(right);
+                merge_sorted_types(c, &src[bounds[j]..bounds[j + 1]], &src[bounds[j + 1]..bounds[j + 2]], false /*dedup*/, &mut |_, t| dst.push(t));
                 next.push(bounds[j + 2]);
                 j += 2;
             } else {
@@ -1250,8 +1237,72 @@ fn merge_ascending_runs(c: &mut Checker, types: &mut Vec<P<Type>>, run_starts: &
     *types = src;
 }
 
+/// Merges two runs sorted by `compare_types` (a total order in which only identical types compare equal), passing
+/// each type to `out` in order; a type in both runs is passed once with `dedup`, else twice. When one run is much
+/// shorter, each of its types is placed by binary search in the other (m log n comparisons instead of up to n + m):
+/// a small union added to a large one.
+fn merge_sorted_types(c: &mut Checker, mut left: &[P<Type>], mut right: &[P<Type>], dedup: bool, out: &mut impl FnMut(&mut Checker, P<Type>)) {
+    let (short, long) = (left.len().min(right.len()), left.len().max(right.len()));
+    if short > 0 && short * (usize::BITS - long.leading_zeros()) as usize * 2 < long {
+        let left_is_long = left.len() >= right.len();
+        let (mut long_run, short_run) = if left_is_long { (left, right) } else { (right, left) };
+        for &t in short_run {
+            let i = long_run.partition_point(|&x| x != t && compare_types(c, Some(x), Some(t)) < 0);
+            for &x in &long_run[..i] {
+                out(c, x);
+            }
+            long_run = &long_run[i..];
+            out(c, t);
+            if long_run.first() == Some(&t) {
+                long_run = &long_run[1..];
+                if !dedup {
+                    out(c, t);
+                }
+            }
+        }
+        for &x in long_run {
+            out(c, x);
+        }
+        return;
+    }
+    while let (Some(&l), Some(&r)) = (left.first(), right.first()) {
+        if l == r {
+            out(c, l);
+            if !dedup {
+                out(c, r);
+            }
+            left = &left[1..];
+            right = &right[1..];
+        } else if compare_types(c, Some(l), Some(r)) < 0 {
+            out(c, l);
+            left = &left[1..];
+        } else {
+            out(c, r);
+            right = &right[1..];
+        }
+    }
+    for &t in left.iter().chain(right) {
+        out(c, t);
+    }
+}
+
 // Go's containsType/insertType call CompareTypes, which needs the checker (Type has no checker back pointer),
 // so they take `c` like `compare_types`.
+/// `maybe_type_of_kind` of any of `types`.
+/// A loop rather than `any` with a closure: the recursive closure was not inlined, a call per constituent.
+fn maybe_constituent_of_kind(types: &[P<Type>], kind: TypeFlags) -> bool {
+    for &t in types {
+        let flags = t.flags();
+        if flags.intersects(kind) {
+            return true;
+        }
+        if flags.intersects(TypeFlags::UnionOrIntersection) && maybe_constituent_of_kind(t.types(), kind) {
+            return true;
+        }
+    }
+    false
+}
+
 // checker.go:27086
 pub(crate) fn contains_type(c: &mut Checker, types: &[P<Type>], t: P<Type>) -> bool {
     // tsrs-only (can1357's 628f51ceb): small lists often hold the very type asked for, found without comparing
@@ -1260,6 +1311,31 @@ pub(crate) fn contains_type(c: &mut Checker, types: &[P<Type>], t: P<Type>) -> b
         return true;
     }
     tsrs_core::goslices::binary_search_func(types, &t, |&probe, &t| compare_types(c, Some(probe), Some(t))).1
+}
+
+/// `contains_type(types, regular)` for the regular type of the fresh literal `types[i]`. tsrs-only: the two differ
+/// only in their ids, so in the sorted list the regular type, when present, is a neighbor; the binary search runs
+/// only when neither neighbor is it. Same answers as `contains_type` (a neighbor that is the type is in the list).
+fn contains_regular_literal_type(c: &mut Checker, types: &[P<Type>], i: usize, regular: P<Type>) -> bool {
+    if (i > 0 && types[i - 1] == regular) || types.get(i + 1) == Some(&regular) {
+        return true;
+    }
+    contains_type(c, types, regular)
+}
+
+/// Whether every type of the sorted, unique `source` is in the sorted, unique `target`, under a total order
+/// (`Program::source_files_complete`). tsrs-only: `contains_type` for each source type binary-searches the target
+/// with `compare_types`; in sorted lists each source type can only be found after the previous one's position, so a
+/// forward scan by identity answers the same with no comparisons. Used when the scan is the cheaper of the two.
+pub(crate) fn is_sorted_subset(source: &[P<Type>], target: &[P<Type>]) -> bool {
+    let mut rest = target;
+    for &t in source {
+        match rest.iter().position(|&u| u == t) {
+            Some(k) => rest = &rest[k + 1..],
+            None => return false,
+        }
+    }
+    true
 }
 
 // checker.go:27091
@@ -1710,7 +1786,48 @@ impl Checker {
             self.census.as_mut().unwrap().record(crate::workcensus::Cat::IndexedAccess, key, timing, n as u64, literal_index, 0);
             return r;
         }
+        if access_node.is_none() && alias.is_none() && index_type.flags().intersects(TypeFlags::Union) && !index_type.flags().intersects(TypeFlags::Boolean) {
+            return self.get_indexed_access_type_by_union_memoized(object_type, index_type, access_flags);
+        }
         self.get_indexed_access_type_or_undefined_inner(object_type, index_type, access_flags, access_node, alias)
+    }
+
+    /// tsrs-only: `getIndexedAccessTypeOrUndefined` for a union index without an access node or an alias, memoized
+    /// per checker. TypeScript resolves such a `T[K]` again at every request (only a deferred one is interned), one
+    /// property lookup per constituent of `K`; on the 38k-file codebase 92% of those lookups repeat an earlier call
+    /// with the same object type, index type and flags. The store rule is the union front cache's
+    /// (unioncache.rs): a call is stored only if it created no type but the one it returns, instantiated nothing,
+    /// took no impure union reduction, added no diagnostic and did not return `errorType`; such a call reads only
+    /// caches that grow, so a later identical call returns the same answer. `TSRS_IA_MEMO=0` turns it off, `=shadow`
+    /// computes every hit again and panics on a different answer.
+    fn get_indexed_access_type_by_union_memoized(&mut self, object_type: P<Type>, index_type: P<Type>, access_flags: AccessFlags) -> Option<P<Type>> {
+        let mode = crate::unioncache::indexed_access_memo_mode();
+        if mode == crate::unioncache::UnionCacheMode::Off {
+            return self.get_indexed_access_type_or_undefined_inner(object_type, index_type, access_flags, None, AliasArg::None);
+        }
+        let key = (object_type, index_type, access_flags.bits());
+        if let Some(&cached) = self.indexed_access_union_memo.get(&key) {
+            if mode == crate::unioncache::UnionCacheMode::Shadow {
+                let fresh = self.get_indexed_access_type_or_undefined_inner(object_type, index_type, access_flags, None, AliasArg::None);
+                assert!(fresh == cached, "TSRS_IA_MEMO=shadow: indexed access {} [{}]: cached {:?}, fresh {:?}", object_type.id.0, index_type.id.0, cached.map(|t| t.id.0), fresh.map(|t| t.id.0));
+            }
+            return cached;
+        }
+        let type_count = self.type_count;
+        let instantiation_count = self.instantiation_count;
+        let total_instantiation_count = self.total_instantiation_count;
+        let impure = self.union_front_cache.impure;
+        let diagnostic_count = self.diagnostics.count() + self.suggestion_diagnostics.count();
+        let too_complex_reports = self.too_complex_reports;
+        let result = self.get_indexed_access_type_or_undefined_inner(object_type, index_type, access_flags, None, AliasArg::None);
+        let created = type_count != self.type_count && !(self.type_count == type_count + 1 && result.is_some_and(|r| r.id.0 == self.type_count));
+        let instantiated = instantiation_count != self.instantiation_count || total_instantiation_count != self.total_instantiation_count;
+        let impure = impure != self.union_front_cache.impure;
+        let reported = diagnostic_count != self.diagnostics.count() + self.suggestion_diagnostics.count() || too_complex_reports != self.too_complex_reports;
+        if !(created || instantiated || impure || reported || result == Some(self.error_type)) {
+            self.indexed_access_union_memo.insert(key, result);
+        }
+        result
     }
 
     fn get_indexed_access_type_or_undefined_inner(&mut self, object_type: P<Type>, index_type: P<Type>, access_flags: AccessFlags, access_node: Option<P<Node>>, alias: AliasArg<'_>) -> Option<P<Type>> {
@@ -2499,18 +2616,30 @@ impl Checker {
     // Return true if type might be of the given kind. A union or intersection type might be of a given
     // kind if at least one constituent type is of the given kind.
     // checker.go:28076
+    /// tsrs: the constituents' flags are tested in the loop, so only nested unions and intersections recurse
+    /// (0.9G calls on the 38k-file codebase, most of them for constituents of large unions).
+    #[inline]
     pub(crate) fn maybe_type_of_kind(&mut self, t: P<Type>, kind: TypeFlags) -> bool {
-        if t.flags().intersects(kind) {
+        let flags = t.flags();
+        if flags.intersects(kind) {
             return true;
         }
-        if t.flags().intersects(TypeFlags::UnionOrIntersection) {
-            for &t in t.types() {
-                if self.maybe_type_of_kind(t, kind) {
-                    return true;
-                }
-            }
+        if !flags.intersects(TypeFlags::UnionOrIntersection) {
+            return false;
         }
-        false
+        // A union of primitives has no constituent of these kinds (`NotPrimitiveUnion` in getUnionType); `kind` is
+        // nearly always a constant, so this test folds away for the other kinds.
+        const NOT_IN_PRIMITIVE_UNION: TypeFlags = TypeFlags::Any
+            .union(TypeFlags::Unknown)
+            .union(TypeFlags::Void)
+            .union(TypeFlags::Never)
+            .union(TypeFlags::Object)
+            .union(TypeFlags::Intersection)
+            .union(TypeFlags::Instantiable);
+        if NOT_IN_PRIMITIVE_UNION.contains(kind) && t.object_flags().intersects(ObjectFlags::PrimitiveUnion) {
+            return false;
+        }
+        maybe_constituent_of_kind(t.types(), kind)
     }
 
     // checker.go:28090

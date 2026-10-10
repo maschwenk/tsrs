@@ -2298,13 +2298,13 @@ pub fn try_parse_patterns(path_mappings: Option<&OrderedMap<String, Vec<String>>
 }
 
 pub fn match_pattern_or_exact(patterns: &ParsedPatterns, candidate: &str) -> Pattern {
-    if patterns.matchable_string_set.has(&candidate.to_string()) {
+    if patterns.matchable_string_set.m.contains(candidate) {
         return Pattern { text: candidate.to_string(), star_index: -1 };
     }
     if patterns.patterns.is_empty() {
         return Pattern::default();
     }
-    tsrs_core::find_best_pattern_match(&patterns.patterns, |p| p.clone(), candidate).unwrap_or_default()
+    tsrs_core::find_best_pattern_match(&patterns.patterns, |p| p, candidate).unwrap_or_default()
 }
 
 // If you import from "." inside a containing directory "/foo", the result of `tspath.NormalizePath`

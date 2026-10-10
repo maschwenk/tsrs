@@ -680,6 +680,17 @@ pub(crate) fn get_relation_key(c: &mut Checker, source: P<Type>, target: P<Type>
     if is_identity && source.id > target.id {
         std::mem::swap(&mut source, &mut target);
     }
+    // Only type references can have generic arguments: the rest (most calls) need no registers for the key builder.
+    if !is_non_deferred_type_reference(source) || !is_non_deferred_type_reference(target) {
+        if let Some(key) = RelationKey::pair(source.id, target.id, intersection_state) {
+            return (key, false);
+        }
+    }
+    get_relation_key_worker(c, source, target, intersection_state, ignore_constraints)
+}
+
+#[inline(never)]
+fn get_relation_key_worker(c: &mut Checker, source: P<Type>, target: P<Type>, intersection_state: IntersectionState, ignore_constraints: bool) -> (RelationKey, bool) {
     let mut b = keyBuilder::default();
     let constrained;
     if is_type_reference_with_generic_arguments(c, source) && is_type_reference_with_generic_arguments(c, target) {
@@ -1687,7 +1698,7 @@ impl Checker {
                     let prop = self.get_property_of_object_type(t, context.property_name.get());
                     if let Some(prop) = prop {
                         let prop_type = self.get_type_of_symbol(prop);
-                        siblings.extend(prop_type.distributed());
+                        siblings.extend(prop_type.distributed_iter());
                     }
                 }
             }
@@ -2259,6 +2270,20 @@ impl Checker {
         None
     }
 
+    /// `program.get_emit_module_format_of_file(file)`, remembered for the last file: the checker asks it for the
+    /// file being checked, per import, export and declaration, and the program answers by hashing the file's path.
+    #[inline]
+    pub(crate) fn emit_module_format_of_file(&mut self, file: P<SourceFile>) -> ModuleKind {
+        if let Some((last, kind)) = self.last_emit_module_format
+            && last == file
+        {
+            return kind;
+        }
+        let kind = self.program.get_emit_module_format_of_file(file);
+        self.last_emit_module_format = Some((file, kind));
+        kind
+    }
+
     /// False if `key` is a member of none of the global types `get_property_of_type_worker` looks up a missing
     /// property in (most lookups that miss a type's own members). True until all four are resolved: the filter is
     /// built from their member tables, which do not change after resolution, and asking must not resolve them early.
@@ -2274,13 +2299,15 @@ impl Checker {
     #[cold]
     #[inline(never)]
     fn build_augment_filter(&mut self, key: HashedName<'_>) -> bool {
+        let types = [self.global_function_type, self.global_callable_function_type, self.global_newable_function_type, self.global_object_type];
+        // Until all four are resolved every miss comes back here: test that before reading any of their tables.
+        if types.iter().any(|t| t.flags().intersects(TypeFlags::Object) && !t.object_flags_lazy().intersects(ObjectFlags::MembersResolved)) {
+            return true;
+        }
         let mut filter = NameFilter::default();
-        for t in [self.global_function_type, self.global_callable_function_type, self.global_newable_function_type, self.global_object_type] {
+        for t in types {
             if !t.flags().intersects(TypeFlags::Object) {
                 continue; // get_property_of_object_type finds nothing in it
-            }
-            if !t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) {
-                return true;
             }
             if let Some(members) = self.resolve_structured_type_members(t).unwrap().members() {
                 filter.add_keys(&members);
@@ -2405,8 +2432,12 @@ impl Checker {
         if is_late_bound_name(name) {
             return self.get_applicable_index_info(t, self.es_symbol_type);
         }
+        let index_infos = self.get_index_infos_of_type(t);
+        if index_infos.is_empty() {
+            return None; // most types: the name's literal type is not needed
+        }
         let key_type = self.get_string_literal_type(name);
-        self.get_applicable_index_info(t, key_type)
+        self.find_applicable_index_info(&index_infos, key_type)
     }
 
     // checker.go:19363
@@ -3009,7 +3040,8 @@ impl Checker {
         f: &mut dyn FnMut(&mut Checker, P<Symbol>) -> bool,
     ) -> bool {
         if let Some(declared_members) = self.resolve_declared_members(t.target().unwrap()).unwrap().declared_members.get() {
-            for (id, symbol) in declared_members.entries() {
+            for i in 0..declared_members.len() {
+                let (id, symbol) = declared_members.entry(i);
                 if self.is_named_member(symbol, id) && seen.insert(id) && !f(self, symbol) {
                     return false;
                 }
@@ -3080,7 +3112,7 @@ impl Checker {
             // for resolution of type parameter defaults to cause circularity errors, possibly leaving
             // members partially resolved. Here we ensure any such partial resolution is reset.
             // See https://github.com/microsoft/TypeScript/issues/16861 for an example.
-            t.object_flags.set(t.object_flags.get_lazy() & !ObjectFlags::MembersResolved);
+            t.object_flags.set(t.object_flags.get_lazy() & !(ObjectFlags::MembersResolved | ObjectFlags::WeakTypeMemo));
             self.augment_filter = None; // t may be one of the filter's four types: its members are resolved again
             data.base_types_resolved.set(true);
             if canonical {
@@ -3132,7 +3164,7 @@ impl Checker {
             let data = r.as_interface_type();
             data.base_types_resolved.set(false);
             data.resolved_base_types.set(&[]);
-            r.object_flags.set(r.object_flags.get_lazy() & !ObjectFlags::MembersResolved);
+            r.object_flags.set(r.object_flags.get_lazy() & !(ObjectFlags::MembersResolved | ObjectFlags::WeakTypeMemo));
         }
         self.augment_filter = None; // as in get_base_types
         // Each pass resolves `first` for good, so a later reset (another cycle) covers fewer types and this ends.

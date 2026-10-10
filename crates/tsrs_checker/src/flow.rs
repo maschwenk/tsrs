@@ -1352,6 +1352,9 @@ impl Checker {
                         }
                         Some(c.never_type)
                     } else {
+                        if crate::relater_1::are_different_plain_literals(t, n) {
+                            return Some(c.never_type); // each relation below is false
+                        }
                         if c.is_type_strict_subtype_of(t, n) {
                             return Some(t);
                         } else if c.is_type_strict_subtype_of(n, t) {
@@ -2324,21 +2327,22 @@ impl Checker {
 
     // flow.go:1727
     // Public for lint rules (tsgolint's shim exposes Checker_getAccessedPropertyName).
-    pub fn get_accessed_property_name(&mut self, access: P<Node>) -> (String, bool) {
+    /// tsrs: a property access's name is borrowed from the node (the common case, asked per narrowing step).
+    pub fn get_accessed_property_name(&mut self, access: P<Node>) -> (std::borrow::Cow<'static, str>, bool) {
         if ast::is_property_access_expression(access) {
-            return (access.name().unwrap().text().to_string(), true);
+            return (access.name().unwrap().text().into(), true);
         }
-        if ast::is_element_access_expression(access) {
-            return self.try_get_element_access_expression_name(access);
-        }
-        if ast::is_binding_element(access) {
-            return self.get_destructuring_property_name(access);
-        }
-        if ast::is_parameter_declaration(access) {
+        let (name, ok) = if ast::is_element_access_expression(access) {
+            self.try_get_element_access_expression_name(access)
+        } else if ast::is_binding_element(access) {
+            self.get_destructuring_property_name(access)
+        } else if ast::is_parameter_declaration(access) {
             let index = access.parent().unwrap().parameters().iter().position(|&p| p == access).map_or(-1, |i| i as i32);
-            return (index.to_string(), true);
-        }
-        (String::new(), false)
+            (index.to_string(), true)
+        } else {
+            (String::new(), false)
+        };
+        (name.into(), ok)
     }
 
     // flow.go:1743

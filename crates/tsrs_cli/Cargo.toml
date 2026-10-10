@@ -21,6 +21,8 @@ tsrs_execute = { path = "../tsrs_execute", default-features = false }
 # no_thp: no MADV_HUGEPAGE on the mimalloc heap (huge-page amplification on Linux; see notes/mem-no-thp.md). mimalloc-safe
 # builds it as `allow_thp = 0`, which also turns THP off for the whole process; `main` turns it back on.
 mimalloc-safe = { workspace = true, features = ["no_thp"] }
+# The C allocator mimalloc-safe links, called directly by the global allocator in main.rs.
+libmimalloc-sys2 = "0.1.63"
 libc = "0.2"
 [features]
 default = ["checker"]

@@ -52,7 +52,21 @@ impl Checker {
     }
 
     // checker.go:28335
+    /// tsrs: the types every branch below passes through unchanged (no fresh literal, reference, union,
+    /// intersection, substitution or simplifiable type) return inline; the relater normalizes both sides of every
+    /// relation (0.5G calls on the 38k-file codebase).
+    #[inline]
     pub(crate) fn get_normalized_type(&mut self, t: P<Type>, writing: bool) -> P<Type> {
+        if !t.flags().intersects(TypeFlags::Freshable | TypeFlags::UnionOrIntersection | TypeFlags::Substitution | TypeFlags::Simplifiable)
+            && !t.object_flags().intersects(ObjectFlags::Reference)
+        {
+            return t;
+        }
+        self.get_normalized_type_worker(t, writing)
+    }
+
+    #[inline(never)]
+    fn get_normalized_type_worker(&mut self, t: P<Type>, writing: bool) -> P<Type> {
         let mut t = t;
         loop {
             let n: P<Type>;
@@ -277,6 +291,16 @@ impl Checker {
 
     // checker.go:28530
     pub(crate) fn should_normalize_intersection(&mut self, t: P<Type>) -> bool {
+        let flags = t.object_flags_lazy();
+        if flags.intersects(ObjectFlags::ShouldNormalizeComputed) {
+            return flags.intersects(ObjectFlags::ShouldNormalize);
+        }
+        let result = self.should_normalize_intersection_worker(t);
+        t.object_flags.set(t.object_flags_lazy() | ObjectFlags::ShouldNormalizeComputed | if result { ObjectFlags::ShouldNormalize } else { ObjectFlags::None });
+        result
+    }
+
+    fn should_normalize_intersection_worker(&mut self, t: P<Type>) -> bool {
         let mut has_instantiable = false;
         let mut has_nullable_or_empty = false;
         for &t in t.types() {
@@ -402,7 +426,7 @@ impl Checker {
         let regular = self.new_anonymous_type(t.symbol(), Some(members), resolved.call_signatures(), resolved.construct_signatures(), resolved.index_infos());
         // resolved is t's own structured data, so resolved.flags/objectFlags are t's header flags
         regular.flags.set(t.flags());
-        regular.object_flags.set(regular.object_flags_lazy() | (t.object_flags_lazy() & !ObjectFlags::FreshLiteral));
+        regular.object_flags.set(regular.object_flags_lazy() | (t.object_flags_lazy() & !(ObjectFlags::FreshLiteral | ObjectFlags::WeakTypeMemo)));
         self.cached_types.insert(key, regular);
         regular
     }

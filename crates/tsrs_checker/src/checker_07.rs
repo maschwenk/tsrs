@@ -34,10 +34,15 @@ struct ObjectLiteralState {
 
 impl ObjectLiteralState {
     fn properties_table(&self) -> P<SymbolTable> {
+        self.properties_table_for(0)
+    }
+
+    /// `properties_table`, made with room for `capacity` members (the literal's members still to come) if new.
+    fn properties_table_for(&self, capacity: usize) -> P<SymbolTable> {
         match self.properties_table.get() {
             Some(table) => table,
             None => {
-                let table = SymbolTable::new();
+                let table = SymbolTable::with_capacity(capacity);
                 self.properties_table.set(Some(table));
                 table
             }
@@ -516,7 +521,7 @@ impl Checker {
                 }
             }
         }
-        for &member_decl in node.properties() {
+        for (member_index, &member_decl) in node.properties().iter().enumerate() {
             let mut member = self.get_symbol_of_declaration(member_decl);
             let mut computed_name_type: Option<P<Type>> = None;
             if let Some(name) = member_decl.name() {
@@ -645,7 +650,7 @@ impl Checker {
                     }
                 }
             } else {
-                st.properties_table().set(member.name(), member);
+                st.properties_table_for(node.properties().len() - member_index).set(member.name(), member);
             }
             st.properties_array.push(member);
         }
@@ -777,14 +782,23 @@ impl Checker {
             }
             return self.get_intersection_type(&[left, right]);
         }
-        let members = SymbolTable::new();
         let mut skipped_private_members: FxHashSet<&'static str> = FxHashSet::default();
         let index_infos = if left == self.empty_object_type {
             self.get_index_infos_of_type(right).to_vec()
         } else {
             self.get_union_index_infos(&[left, right])
         };
-        for right_prop in self.get_properties_of_type(right).iter().copied() {
+        let right_props = self.get_properties_of_type(right);
+        // tsrs: sized for the larger side (the spread nearly always has that many members): spreading a large object
+        // grew the table, and rebuilt its index, step by step. The left side counts only when already resolved, so
+        // that nothing is resolved earlier than below.
+        let left_len = if left.flags().intersects(TypeFlags::Object) && left.object_flags_lazy().intersects(ObjectFlags::MembersResolved) {
+            left.as_structured_type().properties().len()
+        } else {
+            0
+        };
+        let members = SymbolTable::with_capacity(right_props.len().max(left_len));
+        for right_prop in right_props.iter().copied() {
             if get_declaration_modifier_flags_from_symbol(right_prop).intersects(ModifierFlags::Private | ModifierFlags::Protected) {
                 skipped_private_members.insert(right_prop.name());
             } else if self.is_spreadable_property(right_prop) {
@@ -1063,10 +1077,25 @@ impl Checker {
         if depth >= 5 {
             return false;
         }
+        // tsrs-only: every branch below that can answer true reaches a type variable, so a type already known not to
+        // contain one (`couldContainTypeVariables` computed false; read only, never computed here) answers false.
+        if t.object_flags() & (ObjectFlags::CouldContainTypeVariablesComputed | ObjectFlags::CouldContainTypeVariables) == ObjectFlags::CouldContainTypeVariablesComputed {
+            return false;
+        }
         if t.flags().intersects(TypeFlags::TypeParameter) {
             return t.symbol().is_some_and(|symbol| symbol.declarations().iter().any(|&d| ast::has_syntactic_modifier(d, ModifierFlags::Const)));
         } else if t.flags().intersects(TypeFlags::UnionOrIntersection) {
-            return t.types().iter().any(|&s| self.is_const_type_variable(Some(s), depth));
+            // tsrs-only: a union of primitives (`PrimitiveUnion`: no object, intersection or instantiable constituent)
+            // has no constituent any branch here answers true for; `isConstContext` asks this of large literal unions.
+            if t.flags().intersects(TypeFlags::Union) && t.object_flags().intersects(ObjectFlags::PrimitiveUnion) {
+                return false;
+            }
+            for &s in t.types() {
+                if self.may_be_const_type_variable(s) && self.is_const_type_variable(Some(s), depth) {
+                    return true;
+                }
+            }
+            return false;
         } else if t.flags().intersects(TypeFlags::IndexedAccess) {
             return self.is_const_type_variable(t.as_indexed_access_type().object_type.get(), depth + 1);
         } else if t.flags().intersects(TypeFlags::Conditional) {
@@ -1085,6 +1114,17 @@ impl Checker {
             }
         }
         false
+    }
+
+    /// False for a type `is_const_type_variable` answers false for at every depth, tested without the call
+    /// (a union's constituents: mostly object types and literals).
+    #[inline]
+    fn may_be_const_type_variable(&mut self, t: P<Type>) -> bool {
+        let flags = t.flags();
+        if flags.intersects(TypeFlags::TypeParameter | TypeFlags::UnionOrIntersection | TypeFlags::IndexedAccess | TypeFlags::Conditional | TypeFlags::Substitution) {
+            return true;
+        }
+        t.object_flags().intersects(ObjectFlags::Mapped) || self.is_generic_tuple_type(t)
     }
 
     // checker.go:13908
@@ -2528,7 +2568,7 @@ impl Checker {
                     {
                         // This is a declaration file from a project reference, so we can determine
                         // its module format from the referenced project's options
-                        let target_module_kind = self.program.get_emit_module_format_of_file(file.as_source_file_p());
+                        let target_module_kind = self.emit_module_format_of_file(file.as_source_file_p());
                         if usage_mode == ModuleKind::ESNext && ModuleKind::ES2015 <= target_module_kind && target_module_kind <= ModuleKind::ESNext {
                             return false;
                         }

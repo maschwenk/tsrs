@@ -837,7 +837,7 @@ impl Checker {
                 let parameters = declaration.parameters();
                 if parameters.len() == 1 {
                     if let Some(type_node) = parameters[0].type_node() {
-                        for t in self.get_type_from_type_node(type_node).distributed() {
+                        for t in self.get_type_from_type_node(type_node).distributed_iter() {
                             index_signature_map.entry(t).or_default().push(declaration);
                         }
                     }
@@ -1158,7 +1158,7 @@ impl Checker {
             if self.compiler_options.verbatim_module_syntax.is_true()
                 && is_source_file(node.parent().unwrap())
                 && node.modifier_flags().intersects(ModifierFlags::Export)
-                && self.program.get_emit_module_format_of_file(node.parent().unwrap().as_source_file_p()) == ModuleKind::CommonJS
+                && self.emit_module_format_of_file(node.parent().unwrap().as_source_file_p()) == ModuleKind::CommonJS
             {
                 let export_modifier = node.modifier_nodes().iter().copied().find(|m| m.kind() == Kind::ExportKeyword);
                 self.error(export_modifier, &diagnostics::A_top_level_export_modifier_cannot_be_used_on_value_declarations_in_a_CommonJS_module_when_verbatimModuleSyntax_is_enabled, &[]);
@@ -1321,7 +1321,7 @@ impl Checker {
                 if let Some(named_bindings) = named_bindings {
                     if is_namespace_import(named_bindings) {
                         self.check_import_binding(named_bindings);
-                        if self.program.get_emit_module_format_of_file(get_source_file_of_node(node).unwrap()) == ModuleKind::CommonJS {
+                        if self.emit_module_format_of_file(get_source_file_of_node(node).unwrap()) == ModuleKind::CommonJS {
                             // import * as ns from "foo";
                             needs_import_star = true;
                             self.check_external_emit_helpers(node, ExternalEmitHelpers::ImportStar);
@@ -1336,7 +1336,7 @@ impl Checker {
                         }
                     }
                 }
-                if import_clause.name().is_some() && !needs_import_star && self.program.get_emit_module_format_of_file(get_source_file_of_node(node).unwrap()) == ModuleKind::CommonJS {
+                if import_clause.name().is_some() && !needs_import_star && self.emit_module_format_of_file(get_source_file_of_node(node).unwrap()) == ModuleKind::CommonJS {
                     // import d from "foo";
                     self.check_external_emit_helpers(node, ExternalEmitHelpers::ImportDefault);
                 }
@@ -1409,7 +1409,7 @@ impl Checker {
         if is_import_specifier(node) {
             self.check_module_export_name(node.property_name(), true /*allowStringLiteral*/);
             if module_export_name_is_default(node.property_name_or_name().unwrap())
-                && self.program.get_emit_module_format_of_file(get_source_file_of_node(node).unwrap()) == ModuleKind::CommonJS
+                && self.emit_module_format_of_file(get_source_file_of_node(node).unwrap()) == ModuleKind::CommonJS
             {
                 self.check_external_emit_helpers(node, ExternalEmitHelpers::ImportDefault);
             }
@@ -1607,7 +1607,7 @@ impl Checker {
                     self.check_alias_symbol(export_clause);
                     self.check_module_export_name(export_clause.name(), true /*allowStringLiteral*/);
                 }
-                if self.program.get_emit_module_format_of_file(get_source_file_of_node(node).unwrap()) == ModuleKind::CommonJS {
+                if self.emit_module_format_of_file(get_source_file_of_node(node).unwrap()) == ModuleKind::CommonJS {
                     if node.as_export_declaration().export_clause.is_some() {
                         // export * as ns from "foo";
                         self.check_external_emit_helpers(node, ExternalEmitHelpers::ImportStar);
@@ -1659,7 +1659,7 @@ impl Checker {
             } else {
                 self.mark_linked_references(node, ReferenceHint::ExportSpecifier, None /*propSymbol*/, None /*parentType*/);
             }
-        } else if self.program.get_emit_module_format_of_file(get_source_file_of_node(node).unwrap()) == ModuleKind::CommonJS && module_export_name_is_default(node.property_name_or_name().unwrap()) {
+        } else if self.emit_module_format_of_file(get_source_file_of_node(node).unwrap()) == ModuleKind::CommonJS && module_export_name_is_default(node.property_name_or_name().unwrap()) {
             self.check_external_emit_helpers(node, ExternalEmitHelpers::ImportDefault);
         }
     }
@@ -1708,7 +1708,7 @@ impl Checker {
         let is_illegal_export_default_in_cjs = !is_export_equals
             && !node.flags().intersects(NodeFlags::Ambient)
             && self.compiler_options.verbatim_module_syntax.is_true()
-            && self.program.get_emit_module_format_of_file(get_source_file_of_node(node).unwrap()) == ModuleKind::CommonJS;
+            && self.emit_module_format_of_file(get_source_file_of_node(node).unwrap()) == ModuleKind::CommonJS;
         if is_identifier(node.expression().unwrap()) {
             let id = node.expression().unwrap();
             let resolved = self.resolve_entity_name(id, SymbolFlags::All, true /*ignoreErrors*/, true /*dontResolveAlias*/, Some(node));

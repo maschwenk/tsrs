@@ -433,7 +433,7 @@ impl Checker {
                             && node.kind() != Kind::InterfaceDeclaration
                             && node.kind() != Kind::ModuleDeclaration
                             && parent.kind() == Kind::SourceFile
-                            && self.program.get_emit_module_format_of_file(ast::get_source_file_of_node(node).unwrap()) == ModuleKind::CommonJS
+                            && self.emit_module_format_of_file(ast::get_source_file_of_node(node).unwrap()) == ModuleKind::CommonJS
                         {
                             return self.grammar_error_on_node(modifier, &diagnostics::A_top_level_export_modifier_cannot_be_used_on_value_declarations_in_a_CommonJS_module_when_verbatimModuleSyntax_is_enabled, &[]);
                         }
@@ -1676,7 +1676,7 @@ impl Checker {
             }
         }
 
-        if self.program.get_emit_module_format_of_file(ast::get_source_file_of_node(node).unwrap()) < ModuleKind::System
+        if self.emit_module_format_of_file(ast::get_source_file_of_node(node).unwrap()) < ModuleKind::System
             && !grandparent.flags().intersects(NodeFlags::Ambient)
             && ast::has_syntactic_modifier(grandparent, ModifierFlags::Export)
         {

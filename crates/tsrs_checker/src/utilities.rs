@@ -470,16 +470,38 @@ impl Checker {
         let Some(n2) = n2 else {
             return -1;
         };
-        let s1 = ast::get_source_file_of_node(n1);
-        let s2 = ast::get_source_file_of_node(n2);
+        let (s1, f1) = self.source_file_and_index_of_node(n1);
+        let (s2, f2) = self.source_file_and_index_of_node(n2);
         if s1 != s2 {
-            let f1 = s1.and_then(|s| self.file_index_map.get(&s).copied()).unwrap_or(0);
-            let f2 = s2.and_then(|s| self.file_index_map.get(&s).copied()).unwrap_or(0);
             // Order by index of file in the containing program
             return f1 - f2;
         }
         // In the same file, order by source position
         n1.pos() - n2.pos()
+    }
+}
+
+impl Checker {
+    /// `get_source_file_of_node(n)` (as a key, 0 for none) and its `file_index_map` index (0 for none), through a
+    /// direct-mapped cache. tsrs-only: `compare_nodes` orders the declarations of union constituents, which walked
+    /// both nodes' parents to their files and hashed the files for every comparison; a node's file never changes.
+    #[inline]
+    fn source_file_and_index_of_node(&mut self, n: P<Node>) -> (tsrs_core::ptr::PKey, i32) {
+        const BITS: u32 = 12;
+        let key = n.key();
+        let slot = ((key as u32).wrapping_mul(0x9E37_79B1) >> (32 - BITS)) as usize;
+        if self.node_file_cache.is_empty() {
+            self.node_file_cache = vec![(0, 0, 0); 1 << BITS];
+        }
+        let (k, file, index) = self.node_file_cache[slot];
+        if k == key {
+            return (file, index);
+        }
+        let s = ast::get_source_file_of_node(n);
+        let file = s.map_or(0, |s| s.as_node().key());
+        let index = s.and_then(|s| self.file_index_map.get(&s).copied()).unwrap_or(0);
+        self.node_file_cache[slot] = (key, file, index);
+        (file, index)
     }
 }
 

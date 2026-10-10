@@ -602,9 +602,27 @@ unsafe impl Send for ExtraSlot {}
 // is only read.
 unsafe impl Sync for ExtraSlot {}
 
+/// A symbol name's 32-bit hash: one widening multiply over the first and last bytes (names of up to 16 bytes, nearly
+/// all of them), the string hasher beyond that. Every lookup hashes its name, so this is kept to a few instructions.
 #[inline]
 fn hash_name(name: &str) -> u32 {
-    let h = FxBuildHasher.hash_one(name);
+    let b = name.as_bytes();
+    let len = b.len();
+    let (x, y) = if len >= 8 {
+        if len > 16 {
+            let h = FxBuildHasher.hash_one(name);
+            return (h ^ (h >> 32)) as u32;
+        }
+        (u64::from_le_bytes(b[..8].try_into().unwrap()), u64::from_le_bytes(b[len - 8..].try_into().unwrap()))
+    } else if len >= 4 {
+        (u32::from_le_bytes(b[..4].try_into().unwrap()) as u64, u32::from_le_bytes(b[len - 4..].try_into().unwrap()) as u64)
+    } else if len > 0 {
+        (b[0] as u64, (b[len - 1] as u64) << 8 | b[len / 2] as u64)
+    } else {
+        (0, 0)
+    };
+    let m = ((x ^ 0x243f_6a88_85a3_08d3) as u128).wrapping_mul((y ^ 0x1319_8a2e_0370_7344 ^ len as u64) as u128);
+    let h = (m as u64) ^ ((m >> 64) as u64);
     (h ^ (h >> 32)) as u32
 }
 
@@ -900,6 +918,15 @@ impl SymbolTable {
 
     pub fn entries(&self) -> Vec<(&'static str, P<Symbol>)> {
         self.0.borrow().pairs()
+    }
+
+    /// The `i`-th entry in insertion order (`entries()[i]` without the snapshot). Iterating `0..len()` with the
+    /// length read first visits what `entries()` would, as long as nothing is deleted meanwhile (a `set` replaces in
+    /// place or appends past the end).
+    #[inline]
+    pub fn entry(&self, i: usize) -> (&'static str, P<Symbol>) {
+        let m = self.0.borrow();
+        (m.key(i), m.entries[i].symbol())
     }
 
     pub fn keys(&self) -> Vec<&'static str> {

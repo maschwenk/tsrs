@@ -1028,6 +1028,13 @@ bitflags! {
         const IsNeverIntersectionComputed = 1 << 25; // IsNeverLike flag has been computed
         const IsNeverIntersection = 1 << 26; // Intersection reduces to never
         const IsConstrainedTypeVariable = 1 << 27; // T & C, where T's constraint and C are primitives, object, or {}
+        // tsrs-only, intersections: shouldNormalizeIntersection memoized (its answer depends only on the constituents).
+        const ShouldNormalizeComputed = 1 << 30;
+        const ShouldNormalize = 1 << 31;
+        // tsrs-only, object types: isWeakType memoized; cleared with MembersResolved (`WeakTypeMemo`).
+        const IsWeakTypeComputed = 1 << 30;
+        const IsWeakType = 1 << 31;
+        const WeakTypeMemo = Self::IsWeakTypeComputed.bits() | Self::IsWeakType.bits(); // also the intersection memo bits: new_type drops them
     }
 }
 
@@ -1729,6 +1736,7 @@ impl Type {
 
     // Common accessors
 
+    #[inline]
     pub fn target(&self) -> Option<P<Type>> {
         let flags = self.flags.get();
         if flags.intersects(TypeFlags::Object) {
@@ -1887,9 +1895,37 @@ impl Type {
 pub trait TypeExt {
     /// Go `t.Distributed()`.
     fn distributed(self) -> Vec<P<Type>>;
+    /// `distributed()` without the vector, for iterating over it.
+    fn distributed_iter(self) -> DistributedIter;
+}
+
+/// The types of `TypeExt::distributed_iter`: a union's constituents, nothing for `never`, or the type itself.
+pub struct DistributedIter {
+    one: Option<P<Type>>,
+    many: std::slice::Iter<'static, P<Type>>,
+}
+
+impl Iterator for DistributedIter {
+    type Item = P<Type>;
+    #[inline]
+    fn next(&mut self) -> Option<P<Type>> {
+        if let Some(t) = self.one.take() {
+            return Some(t);
+        }
+        self.many.next().copied()
+    }
 }
 
 impl TypeExt for P<Type> {
+    #[inline]
+    fn distributed_iter(self) -> DistributedIter {
+        if self.flags.get().intersects(TypeFlags::Union) {
+            return DistributedIter { one: None, many: self.as_union_type().types.get().iter() };
+        }
+        let one = (!self.flags.get().intersects(TypeFlags::Never)).then_some(self);
+        DistributedIter { one, many: [].iter() }
+    }
+
     #[inline]
     fn distributed(self) -> Vec<P<Type>> {
         if self.flags.get().intersects(TypeFlags::Union) {

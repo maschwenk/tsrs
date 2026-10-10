@@ -662,7 +662,7 @@ impl NodeBuilderImpl {
             if module_resolution_kind == ModuleResolutionKind::Node16 || module_resolution_kind == ModuleResolutionKind::NodeNext {
                 // An `import` type directed at an esm format file is only going to resolve in esm mode - set the esm mode assertion
                 if let (Some(target_file), Some(context_file)) = (target_file, context_file) {
-                    if c.program.get_emit_module_format_of_file(target_file) == ModuleKind::ESNext && c.program.get_emit_module_format_of_file(target_file) != c.program.get_emit_module_format_of_file(context_file) {
+                    if c.emit_module_format_of_file(target_file) == ModuleKind::ESNext && c.emit_module_format_of_file(target_file) != c.emit_module_format_of_file(context_file) {
                         specifier_result = self.get_specifier_for_module_symbol(c, chain[0], ModuleKind::ESNext);
                         import_mode_override = ModuleKind::ESNext;
                     }
@@ -678,7 +678,7 @@ impl NodeBuilderImpl {
                 if module_resolution_kind == ModuleResolutionKind::Node16 || module_resolution_kind == ModuleResolutionKind::NodeNext {
                     // We might be able to write a portable import type using a mode override; try specifier generation again, but with a different mode set
                     let mut swapped_mode = ModuleKind::ESNext;
-                    if c.program.get_emit_module_format_of_file(context_file.unwrap()) == ModuleKind::ESNext {
+                    if c.emit_module_format_of_file(context_file.unwrap()) == ModuleKind::ESNext {
                         swapped_mode = ModuleKind::CommonJS;
                     }
                     specifier_result = self.get_specifier_for_module_symbol(c, chain[0], swapped_mode);

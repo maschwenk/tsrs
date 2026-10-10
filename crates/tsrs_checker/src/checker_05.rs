@@ -2264,7 +2264,7 @@ impl Checker {
     // checker.go:10660
     pub(crate) fn check_collision_with_require_exports_in_generated_code(&mut self, node: P<Node>, name: Option<P<Node>>) {
         // No need to check for require or exports for ES6 modules and later
-        if self.program.get_emit_module_format_of_file(get_source_file_of_node(node).unwrap()) >= ModuleKind::ES2015 {
+        if self.emit_module_format_of_file(get_source_file_of_node(node).unwrap()) >= ModuleKind::ES2015 {
             return;
         }
         let Some(name_node) = name else {
@@ -2300,7 +2300,7 @@ impl Checker {
         }
         // In case of variable declaration, node.parent is variable statement so look at the variable statement's parent
         let parent = get_declaration_container(node).unwrap();
-        if is_source_file(parent) && is_external_or_common_js_module(parent.as_source_file_p()) && self.program.get_emit_module_format_of_file(parent.as_source_file_p()) == ModuleKind::CommonJS {
+        if is_source_file(parent) && is_external_or_common_js_module(parent.as_source_file_p()) && self.emit_module_format_of_file(parent.as_source_file_p()) == ModuleKind::CommonJS {
             // If the declaration happens to be in external module, report error that Object is a reserved identifier.
             let s = tsrs_scanner::declaration_name_to_string(Some(name_node));
             self.error_skipped_on_no_emit(name_node, &diagnostics::Duplicate_identifier_0_Compiler_reserves_name_1_in_top_level_scope_of_a_module, &[&s, &s]);
@@ -2446,7 +2446,7 @@ impl Checker {
 
     // checker.go:10808
     pub(crate) fn check_class_name_collision_with_object(&mut self, name: P<Node>) {
-        if name.text() == "Object" && self.program.get_emit_module_format_of_file(get_source_file_of_node(name).unwrap()) < ModuleKind::ES2015 {
+        if name.text() == "Object" && self.emit_module_format_of_file(get_source_file_of_node(name).unwrap()) < ModuleKind::ES2015 {
             let module_kind = self.module_kind.to_string();
             self.error(Some(name), &diagnostics::Class_name_cannot_be_Object_when_targeting_ES5_and_above_with_module_0, &[&module_kind]);
         }

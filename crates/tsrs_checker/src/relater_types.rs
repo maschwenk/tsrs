@@ -173,7 +173,7 @@ pub struct TypeDiscriminator<'a> {
 /// Go `Discriminator` interface. Implementations delegate to the inherent (generated) methods.
 pub trait Discriminator {
     fn len(&mut self, c: &mut Checker) -> i32; // Number of discriminant properties
-    fn name(&mut self, c: &mut Checker, index: i32) -> String; // Property name of index-th discriminator
+    fn name(&mut self, c: &mut Checker, index: i32) -> &'static str; // Property name of index-th discriminator
     fn matches(&mut self, c: &mut Checker, index: i32, t: P<Type>) -> bool; // True if index-th discriminator matches the given type
 }
 
@@ -240,7 +240,7 @@ impl Discriminator for TypeDiscriminator<'_> {
     fn len(&mut self, c: &mut Checker) -> i32 {
         TypeDiscriminator::len(self, c)
     }
-    fn name(&mut self, c: &mut Checker, index: i32) -> String {
+    fn name(&mut self, c: &mut Checker, index: i32) -> &'static str {
         TypeDiscriminator::name(self, c, index)
     }
     fn matches(&mut self, c: &mut Checker, index: i32, t: P<Type>) -> bool {
@@ -252,7 +252,7 @@ impl Discriminator for ObjectLiteralDiscriminator {
     fn len(&mut self, c: &mut Checker) -> i32 {
         ObjectLiteralDiscriminator::len(self, c)
     }
-    fn name(&mut self, c: &mut Checker, index: i32) -> String {
+    fn name(&mut self, c: &mut Checker, index: i32) -> &'static str {
         ObjectLiteralDiscriminator::name(self, c, index)
     }
     fn matches(&mut self, c: &mut Checker, index: i32, t: P<Type>) -> bool {

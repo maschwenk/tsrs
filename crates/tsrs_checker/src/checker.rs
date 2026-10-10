@@ -945,6 +945,8 @@ pub struct Checker {
     pub compiler_options: P<CompilerOptions>,
     pub files: &'static [P<SourceFile>],
     pub file_index_map: FxHashMap<P<SourceFile>, i32>,
+    /// `source_file_and_index_of_node` (utilities.rs): (node key, file key, file index); key 0 is an empty slot.
+    pub(crate) node_file_cache: Vec<(tsrs_core::ptr::PKey, tsrs_core::ptr::PKey, i32)>,
     pub type_count: u32,
     pub symbol_count: u32,
     pub signature_count: u32,
@@ -1014,6 +1016,8 @@ pub struct Checker {
     pub enum_literal_types: FxHashMap<EnumLiteralKey, P<Type>>,
     pub enum_nan_literal_types: FxHashMap<P<Symbol>, P<Type>>,
     pub indexed_access_types: crate::basedmap::Based<PackedMap<CacheHashKey, P<Type>>>,
+    /// `get_indexed_access_type_by_union_memoized` (checker_13.rs).
+    pub(crate) indexed_access_union_memo: FxHashMap<(P<Type>, P<Type>, u32), Option<P<Type>>>,
     pub template_literal_types: PackedMap<CacheHashKey, P<Type>>,
     pub string_mapping_types: FxHashMap<StringMappingKey, P<Type>>,
     pub unique_es_symbol_types: FxHashMap<P<Symbol>, P<Type>>,
@@ -1120,6 +1124,8 @@ pub struct Checker {
     /// The member names of `Function`, `CallableFunction`, `NewableFunction` and `Object`, once all four are
     /// resolved (`may_be_augment_member`).
     pub(crate) augment_filter: Option<tsrs_ast::NameFilter>,
+    /// The last `program.get_emit_module_format_of_file` answer (`emit_module_format_of_file`).
+    pub(crate) last_emit_module_format: Option<(P<SourceFile>, ModuleKind)>,
     /// Instrumentation (feature `assignment-stats`): every type / symbol this checker created.
     #[cfg(feature = "assignment-stats")]
     pub stats_created: (Vec<P<Type>>, Vec<P<Symbol>>),
@@ -1383,6 +1389,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         compiler_options,
         files,
         file_index_map: create_file_index_map(files),
+        node_file_cache: Vec::new(),
         type_count: 0,
         symbol_count: 0,
         signature_count: 0,
@@ -1432,6 +1439,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         enum_literal_types: FxHashMap::default(),
         enum_nan_literal_types: FxHashMap::default(),
         indexed_access_types: Default::default(),
+        indexed_access_union_memo: FxHashMap::default(),
         template_literal_types: PackedMap::default(),
         string_mapping_types: FxHashMap::default(),
         unique_es_symbol_types: FxHashMap::default(),
@@ -1519,6 +1527,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         lazy_empty: tsrs_core::lazymembers::lazy_empty(),
         lazy_member_stats: Default::default(),
         augment_filter: None,
+        last_emit_module_format: None,
         #[cfg(feature = "assignment-stats")]
         stats_created: Default::default(),
         context_free_types: FxHashMap::default(),
@@ -1914,6 +1923,9 @@ impl Checker {
             enum_literal_types: base.enum_literal_types.clone(),
             enum_nan_literal_types: base.enum_nan_literal_types.clone(),
             indexed_access_types: crate::basedmap::Based::over(&base.indexed_access_types),
+            node_file_cache: Vec::new(),
+            last_emit_module_format: None,
+            indexed_access_union_memo: FxHashMap::default(),
             template_literal_types: base.template_literal_types.clone(),
             string_mapping_types: base.string_mapping_types.clone(),
             unique_es_symbol_types: base.unique_es_symbol_types.clone(),

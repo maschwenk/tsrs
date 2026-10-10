@@ -1721,6 +1721,8 @@ impl Checker {
             signatures.extend(construct_signatures);
             d.set_signatures(alloc_vec(signatures));
         }
+        // The members were resolved above with no signatures or index infos yet: drop what isWeakType memoized meanwhile.
+        t.object_flags.set(t.object_flags_lazy() & !ObjectFlags::WeakTypeMemo);
     }
 
     // checker.go:21070

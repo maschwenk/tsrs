@@ -362,6 +362,12 @@ impl Checker {
     // relater.go:2867
     pub(crate) fn is_type_subset_of_union(&mut self, source: P<Type>, target: P<Type>) -> bool {
         if source.flags().intersects(TypeFlags::Union) {
+            let (n, m) = (source.types().len(), target.types().len());
+            // A scan touches each target type at most once; the searches cost about log2(m) comparisons per source
+            // type, each far more than an identity test.
+            if n * (usize::BITS - m.leading_zeros()) as usize * 8 >= m && self.program.source_files_complete() {
+                return crate::checker_13::is_sorted_subset(source.types(), target.types());
+            }
             for &t in source.types() {
                 if !contains_type(self, target.types(), t) {
                     return false;
@@ -2061,7 +2067,7 @@ impl Relater {
         }
         if is_object_literal_type(target) {
             let source_properties = c.get_properties_of_type(source);
-            for source_prop in exclude_properties(&source_properties, excluded_properties) {
+            for source_prop in exclude_properties(&source_properties, excluded_properties).iter().copied() {
                 if c.get_property_of_object_type(target, source_prop.name()).is_none() {
                     if report_errors {
                         let source_prop_string = c.symbol_to_string(source_prop);
@@ -2076,7 +2082,7 @@ impl Relater {
         // from the target union, across all members
         let properties = c.get_properties_of_type(target);
         let numeric_names_only = is_tuple_type(source) && is_tuple_type(target);
-        for target_prop in exclude_properties(&properties, excluded_properties) {
+        for target_prop in exclude_properties(&properties, excluded_properties).iter().copied() {
             let name = target_prop.name();
             if !target_prop.flags().intersects(SymbolFlags::Prototype) && (!numeric_names_only || is_numeric_literal_name(name) || name == "length") && (!optionals_only || target_prop.flags().intersects(SymbolFlags::Optional)) {
                 let source_prop = c.get_property_of_type(source, name);
@@ -2283,7 +2289,7 @@ impl Relater {
             return Ternary::False;
         }
         let mut result = Ternary::True;
-        for &source_prop in &source_properties {
+        for &source_prop in source_properties.iter() {
             let target_prop = c.get_property_of_object_type(target, source_prop.name());
             let Some(target_prop) = target_prop else {
                 return Ternary::False;

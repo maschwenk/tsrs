@@ -506,7 +506,7 @@ impl Checker {
                     }
                     return Some(merged_candidate);
                 }
-                let pattern = find_best_pattern_match(&best_type_candidates, |v| v.pattern.clone(), module_reference).unwrap();
+                let pattern = find_best_pattern_match(&best_type_candidates, |v| &v.pattern, module_reference).unwrap();
                 let merged_candidate = self.get_merged_symbol(pattern.symbol);
                 if augmentation.is_some() && augmentation_target == Some(merged_candidate) {
                     return Some(self.get_merged_symbol(augmentation.unwrap()));
@@ -2132,7 +2132,7 @@ impl Checker {
         }
         let index_infos = self.get_index_infos_of_type(t);
         let result = self.new_anonymous_type(t.symbol(), Some(members), &[], &[], &index_infos);
-        result.object_flags.set(t.object_flags_lazy());
+        result.object_flags.set(t.object_flags_lazy() & !ObjectFlags::WeakTypeMemo);
         result
     }
 

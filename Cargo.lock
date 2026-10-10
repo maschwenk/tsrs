@@ -403,6 +403,7 @@ name = "tsrs_cli"
 version = "0.12.0"
 dependencies = [
  "libc",
+ "libmimalloc-sys2",
  "mimalloc-safe",
  "rustc-hash",
  "tsrs_api",

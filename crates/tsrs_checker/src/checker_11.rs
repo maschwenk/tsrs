@@ -383,7 +383,28 @@ impl Checker {
      * type itself.
      */
     // checker.go:22091
+    /// tsrs: the case that returns `t` itself (no flag below and not mapped: most object types) inline; called about
+    /// 1.8G times on the 38k-file codebase, where the out-of-line body spent most of its instructions on its frame.
+    #[inline]
     pub fn get_apparent_type(&mut self, t: P<Type>) -> P<Type> {
+        const SLOW: TypeFlags = TypeFlags::Instantiable
+            .union(TypeFlags::Intersection)
+            .union(TypeFlags::StringLike)
+            .union(TypeFlags::NumberLike)
+            .union(TypeFlags::BigIntLike)
+            .union(TypeFlags::BooleanLike)
+            .union(TypeFlags::ESSymbolLike)
+            .union(TypeFlags::NonPrimitive)
+            .union(TypeFlags::Index)
+            .union(TypeFlags::Unknown);
+        if !t.flags().intersects(SLOW) && !t.object_flags().intersects(ObjectFlags::Mapped) {
+            return t;
+        }
+        self.get_apparent_type_worker(t)
+    }
+
+    #[inline(never)]
+    fn get_apparent_type_worker(&mut self, t: P<Type>) -> P<Type> {
         let original_type = t;
         let mut t = t;
         if t.flags().intersects(TypeFlags::Instantiable) {
@@ -489,6 +510,10 @@ impl Checker {
         let flags = t.flags();
         if !flags.intersects(TypeFlags::UnionOrIntersection) || flags.intersects(TypeFlags::Union) && !t.object_flags().intersects(ObjectFlags::ContainsIntersections) {
             return t;
+        }
+        // An intersection whose never-reduction is already known (the worker's answer without computing anything).
+        if flags.intersects(TypeFlags::Intersection) && t.object_flags().intersects(ObjectFlags::IsNeverIntersectionComputed) {
+            return if t.object_flags().intersects(ObjectFlags::IsNeverIntersection) { self.never_type } else { t };
         }
         self.get_reduced_type_worker(t)
     }
@@ -612,7 +637,17 @@ impl Checker {
     }
 
     // checker.go:22256
+    #[inline]
     pub(crate) fn get_reduced_apparent_type(&mut self, t: P<Type>) -> P<Type> {
+        // An object type other than a mapped type is its own reduced and apparent type (most property lookups).
+        if t.flags() == TypeFlags::Object && !t.object_flags().intersects(ObjectFlags::Mapped) {
+            return t;
+        }
+        self.get_reduced_apparent_type_worker(t)
+    }
+
+    #[inline(never)]
+    fn get_reduced_apparent_type_worker(&mut self, t: P<Type>) -> P<Type> {
         // Since getApparentType may return a non-reduced union or intersection type, we need to perform
         // type reduction both before and after obtaining the apparent type. For example, given a type parameter
         // 'T extends A | B', the type 'T & X' becomes 'A & X | B & X' after obtaining the apparent type, and
@@ -853,20 +888,22 @@ impl Checker {
         // For classes and interfaces, we store explicitly declared members ahead of inherited members. This ensures we process
         // explicitly declared members first in type relations, which is beneficial because explicitly declared members are more
         // likely to contain discriminating differences. See for example https://github.com/microsoft/TypeScript/tsc/issues/1968.
-        let entries = members.entries();
-        let mut result: Vec<P<Symbol>> = Vec::with_capacity(entries.len());
+        let n = members.len();
+        let mut result: Vec<P<Symbol>> = Vec::with_capacity(n);
         let mut contained_count = 0;
         let is_class_or_interface_container = container.is_some_and(|c| c.flags().intersects(SymbolFlags::Class | SymbolFlags::Interface));
         if is_class_or_interface_container {
             let container = container.unwrap();
-            for &(id, symbol) in &entries {
+            for i in 0..n {
+                let (id, symbol) = members.entry(i);
                 if self.is_named_member(symbol, id) && self.is_declaration_contained_by(symbol, container) {
                     result.push(symbol);
                 }
             }
             contained_count = result.len();
         }
-        for &(id, symbol) in &entries {
+        for i in 0..n {
+            let (id, symbol) = members.entry(i);
             if self.is_named_member(symbol, id) && (!is_class_or_interface_container || !self.is_declaration_contained_by(symbol, container.unwrap())) {
                 result.push(symbol);
             }

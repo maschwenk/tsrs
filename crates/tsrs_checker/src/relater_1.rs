@@ -166,6 +166,12 @@ impl Checker {
         if source == target {
             return true;
         }
+        // Two different regular literals of one kind (not enum members) are related by no relation: narrowing a
+        // union of string literals by a literal asks this of every constituent.
+        let flags = source.flags();
+        if flags == target.flags() && matches!(flags, TypeFlags::StringLiteral | TypeFlags::NumberLiteral | TypeFlags::BigIntLiteral) {
+            return false;
+        }
         if relation != self.identity_relation {
             if relation == self.comparable_relation
                 && !target.flags().intersects(TypeFlags::Never)
@@ -227,6 +233,21 @@ impl Checker {
         let mut error_reporter = error_reporter;
         let s = source.flags();
         let t = target.flags();
+        // Two structured or instantiable types (most calls, from is_type_related_to and is_related_to_ex) pass none
+        // of the flag tests below; only the last one, a target union of undefined, null and {}, can answer true.
+        const STRUCTURED: TypeFlags = TypeFlags::Object
+            .union(TypeFlags::Union)
+            .union(TypeFlags::Intersection)
+            .union(TypeFlags::TypeParameter)
+            .union(TypeFlags::Index)
+            .union(TypeFlags::IndexedAccess)
+            .union(TypeFlags::Conditional)
+            .union(TypeFlags::Substitution);
+        if STRUCTURED.contains(s | t) {
+            return t.intersects(TypeFlags::Union)
+                && (relation == self.assignable_relation || relation == self.comparable_relation)
+                && self.is_unknown_like_union_type(target);
+        }
         if t.intersects(TypeFlags::Any) || s.intersects(TypeFlags::Never) || source == self.wildcard_type {
             return true;
         }
@@ -968,11 +989,21 @@ impl Checker {
     // and no required properties, call/construct signatures or index signatures
     pub(crate) fn is_weak_type(&mut self, t: P<Type>) -> bool {
         if t.flags().intersects(TypeFlags::Object) {
-            return self.signatures_of_structured_type(t, SignatureKind::Call).is_empty()
+            // tsrs-only: memoized once the members are resolved (the answer follows from them; a reset of the members
+            // clears the memo with MembersResolved).
+            let flags = t.object_flags_lazy();
+            if flags.intersects(ObjectFlags::IsWeakTypeComputed) {
+                return flags.intersects(ObjectFlags::IsWeakType);
+            }
+            let result = self.signatures_of_structured_type(t, SignatureKind::Call).is_empty()
                 && self.signatures_of_structured_type(t, SignatureKind::Construct).is_empty()
                 && self.index_infos_of_structured_type(t).is_empty()
                 && self.has_properties_of_structured_type(t)
                 && self.every_property_of_structured_type(t, &mut |_, p| p.flags().intersects(SymbolFlags::Optional));
+            if t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) {
+                t.object_flags.set(t.object_flags_lazy() | ObjectFlags::IsWeakTypeComputed | if result { ObjectFlags::IsWeakType } else { ObjectFlags::None });
+            }
+            return result;
         }
         if t.flags().intersects(TypeFlags::Substitution) {
             return self.is_weak_type(t.as_substitution_type().base_type.get().unwrap());
@@ -1466,14 +1497,15 @@ impl Checker {
 }
 
 // relater.go:1008
-pub(crate) fn exclude_properties(properties: &[P<Symbol>], excluded_properties: &Set<String>) -> Vec<P<Symbol>> {
+/// tsrs: borrows `properties` when nothing is excluded (nearly always: the set is empty).
+pub(crate) fn exclude_properties<'a>(properties: &'a [P<Symbol>], excluded_properties: &Set<String>) -> std::borrow::Cow<'a, [P<Symbol>]> {
     if excluded_properties.len() == 0 || properties.is_empty() {
-        return properties.to_vec();
+        return properties.into();
     }
     let mut reduced: Vec<P<Symbol>> = Vec::new();
     let mut excluded = false;
     for (i, &prop) in properties.iter().enumerate() {
-        if !excluded_properties.has(&prop.name().to_string()) {
+        if !excluded_properties.m.contains(prop.name()) {
             if excluded {
                 reduced.push(prop);
             }
@@ -1483,9 +1515,9 @@ pub(crate) fn exclude_properties(properties: &[P<Symbol>], excluded_properties: 
         }
     }
     if excluded {
-        return reduced;
+        return reduced.into();
     }
-    properties.to_vec()
+    properties.into()
 }
 
 impl<'a> TypeDiscriminator<'a> {
@@ -1496,15 +1528,15 @@ impl<'a> TypeDiscriminator<'a> {
     }
 
     // relater.go:1040
-    pub(crate) fn name(&mut self, c: &mut Checker, index: i32) -> String {
+    pub(crate) fn name(&mut self, c: &mut Checker, index: i32) -> &'static str {
         let _ = c;
-        self.props[index as usize].name().to_string()
+        self.props[index as usize].name()
     }
 
     // relater.go:1044
     pub(crate) fn matches(&mut self, c: &mut Checker, index: i32, t: P<Type>) -> bool {
         let prop_type = c.get_type_of_symbol(self.props[index as usize]);
-        for s in prop_type.distributed() {
+        for s in prop_type.distributed_iter() {
             if (self.is_related_to)(c, s, t) != Ternary::False {
                 return true;
             }
@@ -1678,7 +1710,7 @@ impl Checker {
                     return FxHashMap::default();
                 };
                 let mut duplicate = false;
-                for d in discriminant.distributed() {
+                for d in discriminant.distributed_iter() {
                     let key = self.get_regular_type_of_literal_type(d);
                     match types_by_key.get(&key).copied() {
                         None => {
@@ -1718,10 +1750,10 @@ impl Checker {
             // have non-matching discriminants. This ensures that we ignore erroneous discriminators and gradually
             // refine the target set without eliminating every constituent (which would lead to `never`).
             let mut matched = false;
+            let name = discriminator.name(self, n);
             for i in 0..types.len() {
                 if include[i] != Ternary::False {
-                    let name = discriminator.name(self, n);
-                    let target_type = self.get_type_of_property_or_index_signature_of_type(types[i], &name);
+                    let target_type = self.get_type_of_property_or_index_signature_of_type(types[i], name);
                     if let Some(target_type) = target_type {
                         if discriminator.matches(self, n, target_type) {
                             matched = true;
@@ -3304,4 +3336,13 @@ pub(crate) fn visibility_to_string(flags: ModifierFlags) -> String {
         return "protected".to_string();
     }
     "public".to_string()
+}
+
+/// Whether `a` and `b` are literals of one kind (string, number or bigint, not enum members) with different values:
+/// no relation holds between them in either direction (`is_type_related_to`).
+pub(crate) fn are_different_plain_literals(a: P<Type>, b: P<Type>) -> bool {
+    let flags = a.flags();
+    flags == b.flags()
+        && matches!(flags, TypeFlags::StringLiteral | TypeFlags::NumberLiteral | TypeFlags::BigIntLiteral)
+        && a.as_literal_type().regular_type.get() != b.as_literal_type().regular_type.get()
 }
