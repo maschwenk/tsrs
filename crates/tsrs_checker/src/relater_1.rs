@@ -227,6 +227,21 @@ impl Checker {
         let mut error_reporter = error_reporter;
         let s = source.flags();
         let t = target.flags();
+        // Two structured or instantiable types (most calls, from is_type_related_to and is_related_to_ex) pass none
+        // of the flag tests below; only the last one, a target union of undefined, null and {}, can answer true.
+        const STRUCTURED: TypeFlags = TypeFlags::Object
+            .union(TypeFlags::Union)
+            .union(TypeFlags::Intersection)
+            .union(TypeFlags::TypeParameter)
+            .union(TypeFlags::Index)
+            .union(TypeFlags::IndexedAccess)
+            .union(TypeFlags::Conditional)
+            .union(TypeFlags::Substitution);
+        if STRUCTURED.contains(s | t) {
+            return t.intersects(TypeFlags::Union)
+                && (relation == self.assignable_relation || relation == self.comparable_relation)
+                && self.is_unknown_like_union_type(target);
+        }
         if t.intersects(TypeFlags::Any) || s.intersects(TypeFlags::Never) || source == self.wildcard_type {
             return true;
         }
