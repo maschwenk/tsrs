@@ -1,38 +1,32 @@
-# Checker-thread fix (draft; coordinator-approved design: original six-line hunk)
+# Checker-thread fix
 
-Base: main fb867b1. Code at this head = the six-line `checkerpool.rs` hunk of 52be3a5 (mfs-cx/emit-builders-review,
-unchanged), byte-identical in its +/- lines. Commits 600723a/4bf81a6 on this branch (contract-preserving
-`run_work_group_for` revision) are SUPERSEDED: measured output-neutral but no memory gain (table below), and removed by
-this head.
+Status (2026-10-10): landed. `for_each_checker_group_do` (crates/tsrs_compiler/src/checkerpool.rs) builds groups only
+from the checkers that own at least one of `files`, and runs on the calling thread when one group is active (the
+comment there states the rule; this note has the numbers).
 
 ## Change
-`crates/tsrs_compiler/src/checkerpool.rs`, `for_each_checker_group_do`: only checkers that own at least one of `files`
-form groups; `run_work_group(single_threaded, active.len(), |k| run(active[k]))`. With one active group,
-`run_work_group`'s `count <= 1` rule runs it on the calling thread (no checker thread); with several, one
-`checker-{k}` thread (512 MB stack) per active group, numbered by position among the active groups.
 
-## Single-group path: who the calling thread is
-Callers of `for_each_checker_group_do` (built-in checker pool only; the language server uses an external pool and is not
-affected): `Program::emit` (program_emit.rs:105), `collect_checker_diagnostics_from_files` (program.rs:868),
-`get_declaration_diagnostics` (program.rs:1784). Their calling threads:
-- CLI: the 512 MB main thread (crates/tsrs_cli/src/main.rs:23).
-- `-b` (incremental/build branches, e.g. 535adce): the 512 MB `builder-N` threads (build/orchestrator.rs:357).
-- `tsrs-test` workers: 256 MB (crates/tsrs_testrunner/src/worker.rs:16); fourslash test threads: 256 MB
-  (crates/tsrs_fourslash/src/runner.rs:162).
-Checker threads use 512 MB (`CHECKER_STACK_SIZE`); gates below pass on the 256 MB test threads.
+Only checkers that own at least one of `files` form groups. With one active group, `run_work_group`'s `count <= 1`
+rule runs it on the calling thread (no checker thread); with several, one `checker-{k}` thread (512 MB stack,
+`CHECKER_STACK_SIZE`) per active group. This is the built-in checker pool (emit, checker and declaration
+diagnostics); the language server uses an external pool and is not affected. The calling thread is the 512 MB CLI main thread or `builder-N` thread, or a 256 MB `tsrs-test`
+or fourslash test thread; the gates passed on the 256 MB test threads.
 
-## Problem (why)
+## Problem
+
 Incremental emit calls `Program::emit` once per affected file; before the fix each call started `checkers.len()`
 threads, each with its own arena chunk and allocator heap that are never reused.
 
 ## Measurements (`TSRS_EMIT=1 tsrs -b . --builders N`, 8 composite projects x 150 files, peak RSS / wall)
-`checkerpool.rs` is byte-identical at fb867b1 and 535adce, so each hunk was applied unchanged to 535adce (local builds).
+
+Each hunk applied unchanged to 535adce (local builds). Peak RSS via `getrusage(RUSAGE_CHILDREN).ru_maxrss`; thread
+creations via `MIMALLOC_SHOW_STATS=1`.
 
 | binary | builders 1 | builders 4 | builders 8 | threads created (b4) |
 |---|---|---|---|---|
 | 535adce (no fix) | 1694 MB / 1.40 s | 1727 MB / 1.21 s | 1749 MB / 1.18 s | 4.9 K |
-| 535adce + six-line hunk (this head's code) | 354 MB / 0.52 s | 393 MB / 0.46 s | 409 MB / 0.47 s | 171 |
-| 535adce + 600723a (superseded) | 1691 MB / 1.27 s | 1717 MB / 1.13 s | 1746 MB / 1.14 s | 1.3 K |
+| 535adce + this fix | 354 MB / 0.52 s | 393 MB / 0.46 s | 409 MB / 0.47 s | 171 |
+| 535adce + 600723a (rejected, below) | 1691 MB / 1.27 s | 1717 MB / 1.13 s | 1746 MB / 1.14 s | 1.3 K |
 | tsgo (ts-ref b85298b6) | 192 MB / 0.55 s | 257 MB / 0.34 s | 353 MB / 0.36 s | — |
 
 Single 150-file composite project, `TSRS_EMIT=1 tsrs -p .`, 4 checkers: threads created 654 -> 54, peak RSS 306 -> 131 MB.
@@ -72,6 +66,11 @@ TSRS_EMIT=1 MIMALLOC_SHOW_STATS=1 <tsrs> -b . --builders 4 2>&1 | grep -E '^ *th
 ```
 `-b` needs a binary that has it (this hunk applied to the incremental/build branch).
 
+## Rejected
+
+A contract-preserving revision (`run_work_group_for`, commits 600723a/4bf81a6) was output-neutral but gave no memory
+gain (table above), so the simpler hunk was kept.
+
 ## Gates of the code at 4121002 (vs main fb867b1, both built from these heads)
 - conformance errors + `--baselines types,symbols --timeout 60`: result trees identical, default and
   `TSRS_LAZY_MEMBERS=0` (13458 pass each). (`compiler/intersectionConstructorReductionCrash` needs ~20 s on this box
@@ -79,14 +78,9 @@ TSRS_EMIT=1 MIMALLOC_SHOW_STATS=1 <tsrs> -b . --builders 4 2>&1 | grep -E '^ *th
 - `--baselines js --timeout 60`: same pass list (8680); fourslash 4066/63, same pass list;
   `RUSTFLAGS="-D warnings" cargo check --workspace --locked --all-targets` clean; `tests/emit_gate.rs` 3/3.
 
-## Output checks against tsgo built from ts-ref b85298b6
-- This head's CLI (`TSRS_EMIT=1`, non-incremental): a 150-file fixture project (`-p . --incremental false --composite
-  false --declaration`, 150 `.d.ts`) and a CommonJS JS+`.d.ts` project with a cross-file const enum (8 files,
-  `--listEmittedFiles`): stdout, exit code and every file identical.
-- Same hunk applied unchanged to 535adce (-b, emitDeclarationOnly projects): diamond + independent chain, 8 edit steps,
-  `-b . --verbose --listEmittedFiles` at builders 1/4/8; the n8 fixture cold + no-op at builders 1/4/8; the branch's
-  committed fixtures (inc1, inc2, b1, b1-outputs): identical, including tsbuildinfo.
-- Same hunk on 7eb3e04 + emit/transforms f708ab1 (incremental JS emit): 17-step CJS edit sequence, diagnostics replay,
-  13-step two-project `-b` sequence: identical; an 18-step allowJs sequence identical except step 9 (`lib` change),
-  where tsgo itself is nondeterministic (programtosnapshot.go:162-179 stops at the first removed file in sync.Map order;
-  tsgo emits 11 or 1 files across runs, tsrs 1).
+## Output checks
+
+Against tsgo built from ts-ref b85298b6: CLI non-incremental fixtures, `-b` diamond/chain edit sequences at builders
+1/4/8 (including tsbuildinfo) and incremental JS emit sequences were identical, except one allowJs step (a `lib`
+change) where tsgo itself is nondeterministic (programtosnapshot.go:162-179 stops at the first removed file in
+sync.Map order; tsgo emits 11 or 1 files across runs, tsrs 1).

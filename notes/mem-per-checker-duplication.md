@@ -264,6 +264,11 @@ app projects for a few lines of code, at a speed cost on some of them.
 The default is `clamp(cores / 2, 4, 32)` with at most one checker per 32 checked files
 (crates/tsrs_compiler/src/checkerpool.rs:1135-1148); on a 64-vCPU machine it is 32 on all five projects.
 
+Status (2026-10-10): the rule has changed since. `default_checkers_for_parallelism` (checkerpool.rs) is now
+`max(cores / 2, min(cores, 8))`, clamped to 4..32, with the same file-count cap (`SMALL_MACHINE_CHECKERS = 8`,
+notes/perf-default-checkers-small-machines.md): 8 checkers on 8 and on 16 cores, still 32 on 64. The 64-vCPU
+analysis below is unchanged by it.
+
 ### 5a. Speed: what is measured
 
 64-vCPU Linux (Depot `depot-ubuntu-24.04-64`), median of the three bench results files at 1cbf079, bd86c6d, ce6a7dc

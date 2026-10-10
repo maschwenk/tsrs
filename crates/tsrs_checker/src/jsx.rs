@@ -786,7 +786,7 @@ impl Checker {
         fn create_jsx_attributes_type(c: &mut Checker, object_flags: &mut ObjectFlags, attributes_symbol: Option<P<Symbol>>, attributes_table: P<SymbolTable>) -> P<Type> {
             *object_flags |= ObjectFlags::FreshLiteral;
             let result = c.new_anonymous_type(attributes_symbol, Some(attributes_table), &[], &[], &[]);
-            result.object_flags.set(result.object_flags.get() | *object_flags | ObjectFlags::ObjectLiteral | ObjectFlags::ContainsObjectOrArrayLiteral);
+            result.object_flags.set(result.object_flags.get_lazy() | *object_flags | ObjectFlags::ObjectLiteral | ObjectFlags::ContainsObjectOrArrayLiteral);
             result
         }
         let jsx_namespace = self.get_jsx_namespace_at(Some(opening_like_element));
@@ -836,6 +836,8 @@ impl Checker {
                 } else {
                     assert!(attribute_decl.kind() == Kind::JsxSpreadAttribute);
                     if attributes_table.len() != 0 {
+                        // Go passes `objectFlags` in the same call as `createJsxAttributesType()`, which mutates it; gc
+                        // reads the plain variable after the call, so `object_flags` is read after it here too (also below).
                         let t = create_jsx_attributes_type(self, &mut object_flags, attributes_symbol, attributes_table);
                         spread = self.get_spread_type(spread, t, attributes_symbol, object_flags, false /*readonly*/);
                         attributes_table = SymbolTable::new();

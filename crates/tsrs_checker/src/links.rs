@@ -18,6 +18,8 @@ pub struct LinkStore<K: 'static, V: 'static> {
     chunks: Vec<P<PSlot<V>>>, // first slot of each chunk
     len: u32,
     key: std::marker::PhantomData<P<K>>,
+    /// Shared graph: the frozen seed's store, read through; a record is copied on first `get`.
+    parent: Option<&'static LinkStore<K, V>>,
 }
 
 #[repr(C, packed(4))]
@@ -37,7 +39,7 @@ const LINK_CHUNK: usize = 1 << LINK_CHUNK_SHIFT;
 
 impl<K: 'static, V: 'static> Default for LinkStore<K, V> {
     fn default() -> Self {
-        LinkStore { slots: hashbrown::HashTable::new(), chunks: Vec::new(), len: 0, key: std::marker::PhantomData }
+        LinkStore { slots: hashbrown::HashTable::new(), chunks: Vec::new(), len: 0, key: std::marker::PhantomData, parent: None }
     }
 }
 
@@ -68,18 +70,30 @@ impl<K: 'static, V: 'static> LinkStore<K, V> {
 
     #[inline]
     fn index(&self, key: P<K>) -> Option<u32> {
-        let key = Self::address(key);
+        self.index_by_pkey(Self::address(key))
+    }
+
+    #[inline]
+    fn index_by_pkey(&self, key: PKey) -> Option<u32> {
         self.slots.find(Self::hash(key), |slot| ({ slot.key }) == key).map(|slot| slot.index)
     }
 
     #[inline]
     pub fn try_get(&self, key: P<K>) -> Option<P<V>> {
-        self.index(key).map(|index| self.at(index))
+        match self.index(key) {
+            Some(index) => Some(self.at(index)),
+            None => self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|p| p.try_get(key)),
+        }
     }
 
     #[inline]
     pub fn has(&self, key: P<K>) -> bool {
-        self.index(key).is_some()
+        self.index(key).is_some() || self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).is_some_and(|p| p.has(key))
+    }
+
+    /// Shared graph: an empty store that reads through to `self` (frozen).
+    pub fn fork(&'static self) -> Self {
+        LinkStore { slots: hashbrown::HashTable::new(), chunks: Vec::new(), len: 0, key: std::marker::PhantomData, parent: Some(self) }
     }
 }
 
@@ -91,7 +105,7 @@ impl<K: 'static, V: 'static> LinkStore<K, V> {
     }
 }
 
-impl<K: 'static, V: Default + 'static> LinkStore<K, V> {
+impl<K: 'static, V: Default + LinkCopy + 'static> LinkStore<K, V> {
     /// Returns the links for `key`, creating them on first use.
     #[inline]
     #[cfg_attr(feature = "site-counts", track_caller)]
@@ -107,12 +121,48 @@ impl<K: 'static, V: Default + 'static> LinkStore<K, V> {
                     self.chunks.push(PSlot::first(alloc_vec((0..LINK_CHUNK).map(|_| PSlot(V::default())).collect())));
                 }
                 self.len += 1;
+                if let Some(frozen) = self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|p| p.index_by_pkey(key).map(|i| p.at(i))) {
+                    self.at(index).copy_link_from(&frozen);
+                }
                 index
             }
         };
         self.at(index)
     }
 }
+
+/// Shared graph: how a fork copies a link record of the frozen seed into its own store on first access.
+/// Records made only of `Cell`s copy bitwise (`bitwise_link_copy!`); records that own or point to mutable side
+/// objects copy those too.
+pub trait LinkCopy {
+    fn copy_link_from(&self, frozen: &Self);
+}
+
+/// Bitwise copy of a record of `Cell`s.
+///
+/// # Safety
+/// `V` holds only `Cell`s of `Copy` values with no pointer to a mutable side object of its own.
+pub unsafe fn copy_cells_bitwise<V>(dst: &V, src: &V) {
+    const { assert!(!std::mem::needs_drop::<V>()) };
+    // SAFETY: the caller's contract: every byte of `V` is inside a `Cell`, so writing through `dst` is a `Cell` write;
+    // `src` and `dst` are distinct records (the frozen seed's and this checker's).
+    unsafe { std::ptr::copy_nonoverlapping(std::ptr::from_ref(src).cast::<u8>(), std::ptr::from_ref(dst).cast::<u8>().cast_mut(), std::mem::size_of::<V>()) };
+}
+
+#[macro_export]
+macro_rules! bitwise_link_copy {
+    ($($t:ty),* $(,)?) => {
+        $(impl $crate::links::LinkCopy for $t {
+            #[inline]
+            fn copy_link_from(&self, frozen: &Self) {
+                // SAFETY: a record of `Cell`s of `Copy` values (listed by hand in links.rs).
+                unsafe { $crate::links::copy_cells_bitwise(self, frozen) }
+            }
+        })*
+    };
+}
+
+bitwise_link_copy!(Cell<u64>, Cell<u32>);
 
 /// A link value that holds its own key, for `KeyedLinkStore`.
 pub trait KeyedLinks {
@@ -137,11 +187,13 @@ pub struct KeyedLinkStore<K: 'static, V: 'static> {
     chunks: Vec<P<PSlot<V>>>,         // first slot of each chunk
     len: u32,
     key: std::marker::PhantomData<P<K>>,
+    /// Shared graph: as `LinkStore::parent`.
+    parent: Option<&'static KeyedLinkStore<K, V>>,
 }
 
 impl<K: 'static, V: 'static> Default for KeyedLinkStore<K, V> {
     fn default() -> Self {
-        KeyedLinkStore { slots: hashbrown::HashTable::new(), chunks: Vec::new(), len: 0, key: std::marker::PhantomData }
+        KeyedLinkStore { slots: hashbrown::HashTable::new(), chunks: Vec::new(), len: 0, key: std::marker::PhantomData, parent: None }
     }
 }
 
@@ -165,9 +217,21 @@ impl<K: 'static, V: KeyedLinks + 'static> KeyedLinkStore<K, V> {
 
     #[inline]
     pub fn try_get(&self, key: P<K>) -> Option<P<V>> {
-        let key = key.key();
+        self.try_get_pkey(key.key())
+    }
+
+    #[inline]
+    fn try_get_pkey(&self, key: PKey) -> Option<P<V>> {
         let chunks = &self.chunks;
-        self.slots.find(Self::hash(key), |&i| keyed_at(chunks, i).link_key().get() == key).map(|&i| keyed_at(chunks, i))
+        match self.slots.find(Self::hash(key), |&i| keyed_at(chunks, i).link_key().get() == key).map(|&i| keyed_at(chunks, i)) {
+            Some(v) => Some(v),
+            None => self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|p| p.try_get_pkey(key)),
+        }
+    }
+
+    /// Shared graph: an empty store that reads through to `self` (frozen).
+    pub fn fork(&'static self) -> Self {
+        KeyedLinkStore { slots: hashbrown::HashTable::new(), chunks: Vec::new(), len: 0, key: std::marker::PhantomData, parent: Some(self) }
     }
 
     #[inline]
@@ -182,7 +246,7 @@ impl<K: 'static, V: KeyedLinks + 'static> KeyedLinkStore<K, V> {
     }
 }
 
-impl<K: 'static, V: KeyedLinks + Default + 'static> KeyedLinkStore<K, V> {
+impl<K: 'static, V: KeyedLinks + Default + LinkCopy + 'static> KeyedLinkStore<K, V> {
     /// Returns the links for `key`, creating them on first use.
     #[inline]
     #[cfg_attr(feature = "site-counts", track_caller)]
@@ -203,6 +267,9 @@ impl<K: 'static, V: KeyedLinks + Default + 'static> KeyedLinkStore<K, V> {
                 }
                 self.len += 1;
                 let value = keyed_at(&self.chunks, index);
+                if let Some(frozen) = self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|p| p.try_get_pkey(key)) {
+                    value.copy_link_from(&frozen);
+                }
                 value.link_key().set(key);
                 slot.insert(index);
                 value
@@ -221,6 +288,13 @@ impl<K: 'static, V: KeyedLinks + Default + 'static> KeyedLinkStore<K, V> {
 #[derive(Default)]
 pub struct SymbolReferenceLinkStore {
     slots: hashbrown::HashTable<ReferenceKindsSlot>,
+}
+
+impl SymbolReferenceLinkStore {
+    /// Shared graph: a copy (the slots are heap data of the frozen seed checker).
+    pub fn fork(&'static self) -> Self {
+        SymbolReferenceLinkStore { slots: self.slots.clone() }
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -289,6 +363,8 @@ pub struct IdLinkStore<V: 'static> {
     wide_slots: FxHashMap<u64, u32>, // ids >= 2^32 (long-running processes such as the test runner)
     chunks: Vec<P<PSlot<V>>>,        // first slot of each chunk
     len: u32,
+    /// Shared graph: as `LinkStore::parent`.
+    parent: Option<&'static IdLinkStore<V>>,
 }
 
 /// Slots as `slot - before` (0 = no links); `before` is one less than the first slot the group got (wrapping; slots
@@ -320,7 +396,7 @@ const ID_GROUP: usize = 1 << ID_GROUP_SHIFT;
 
 impl<V: 'static> Default for IdLinkStore<V> {
     fn default() -> Self {
-        IdLinkStore { index: Vec::new(), wide_slots: FxHashMap::default(), chunks: Vec::new(), len: 0 }
+        IdLinkStore { index: Vec::new(), wide_slots: FxHashMap::default(), chunks: Vec::new(), len: 0, parent: None }
     }
 }
 
@@ -369,12 +445,20 @@ impl<V: 'static> IdLinkStore<V> {
 
     #[inline]
     pub fn try_get(&self, id: u64) -> Option<P<V>> {
-        self.slot(id).map(|slot| self.at(slot))
+        match self.slot(id) {
+            Some(slot) => Some(self.at(slot)),
+            None => self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|p| p.try_get(id)),
+        }
     }
 
     #[inline]
     pub fn has(&self, id: u64) -> bool {
-        self.slot(id).is_some()
+        self.slot(id).is_some() || self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).is_some_and(|p| p.has(id))
+    }
+
+    /// Shared graph: an empty store that reads through to `self` (frozen).
+    pub fn fork(&'static self) -> Self {
+        IdLinkStore { index: Vec::new(), wide_slots: FxHashMap::default(), chunks: Vec::new(), len: 0, parent: Some(self) }
     }
 }
 
@@ -408,7 +492,7 @@ impl<V: 'static> IdLinkStore<V> {
     }
 }
 
-impl<V: Default + 'static> IdLinkStore<V> {
+impl<V: Default + LinkCopy + 'static> IdLinkStore<V> {
     #[inline]
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub fn get(&mut self, id: u64) -> P<V> {
@@ -462,6 +546,9 @@ impl<V: Default + 'static> IdLinkStore<V> {
         } else {
             self.wide_slots.insert(id, slot);
         }
+        if let Some(frozen) = self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|p| p.try_get(id)) {
+            self.at(slot).copy_link_from(&frozen);
+        }
         self.at(slot)
     }
 }
@@ -485,6 +572,8 @@ impl<V: Default + 'static> IdLinkStore<V> {
 pub struct InlineIdStore<V: 'static> {
     blocks: Vec<Option<P<InlineBlock<V>>>>,
     wide: FxHashMap<u64, P<V>>, // ids >= 2^32 (long-running processes such as the test runner)
+    /// Shared graph: the frozen seed's store; a new group starts as a copy of the parent's group.
+    parent: Option<&'static InlineIdStore<V>>,
 }
 
 const INLINE_GROUP_SHIFT: u32 = 5;
@@ -498,7 +587,7 @@ type InlineBlock<V> = [Cell<Option<P<InlineGroup<V>>>>; INLINE_BLOCK_GROUPS];
 
 impl<V: 'static> Default for InlineIdStore<V> {
     fn default() -> Self {
-        InlineIdStore { blocks: Vec::new(), wide: FxHashMap::default() }
+        InlineIdStore { blocks: Vec::new(), wide: FxHashMap::default(), parent: None }
     }
 }
 
@@ -512,10 +601,19 @@ impl<V: 'static> InlineIdStore<V> {
 
     #[inline]
     pub fn try_get(&self, id: u64) -> Option<&'static V> {
-        match u32::try_from(id) {
+        let own = match u32::try_from(id) {
             Ok(id) => self.narrow(id),
             Err(_) => self.wide_get(id),
+        };
+        match own {
+            Some(v) => Some(v),
+            None => self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|p| p.try_get(id)),
         }
+    }
+
+    /// Shared graph: an empty store that reads through to `self` (frozen).
+    pub fn fork(&'static self) -> Self {
+        InlineIdStore { blocks: Vec::new(), wide: FxHashMap::default(), parent: Some(self) }
     }
 
     // Out of line: keeps the hash lookup out of every inlined `try_get`.
@@ -552,7 +650,7 @@ impl<V: 'static> InlineIdStore<V> {
     }
 }
 
-impl<V: Default + 'static> InlineIdStore<V> {
+impl<V: Default + LinkCopy + 'static> InlineIdStore<V> {
     #[inline]
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub fn get(&mut self, id: u64) -> &'static V {
@@ -570,7 +668,18 @@ impl<V: Default + 'static> InlineIdStore<V> {
     fn create(&mut self, id: u64) -> &'static V {
         tsrs_core::sitecount::hit("links", std::any::type_name::<V>());
         let Ok(id) = u32::try_from(id) else {
-            return self.wide.entry(id).or_insert_with(|| P::new(V::default())).get();
+            let parent = self.parent;
+            return self
+                .wide
+                .entry(id)
+                .or_insert_with(|| {
+                    let v = P::new(V::default());
+                    if let Some(frozen) = parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|p| p.wide_get(id)) {
+                        v.copy_link_from(frozen);
+                    }
+                    v
+                })
+                .get();
         };
         let b = (id >> INLINE_BLOCK_SHIFT) as usize;
         if b >= self.blocks.len() {
@@ -587,7 +696,18 @@ impl<V: Default + 'static> InlineIdStore<V> {
         let group = match cell.get() {
             Some(group) => group,
             None => {
-                let group = P::new(std::array::from_fn(|_| V::default()));
+                let group: P<InlineGroup<V>> = P::new(std::array::from_fn(|_| V::default()));
+                if let Some(p) = self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN) {
+                    let first = id & !(INLINE_GROUP as u32 - 1);
+                    if let Some(frozen) = p.narrow(first) {
+                        let frozen_group: &'static [V] = std::slice::from_ref(frozen);
+                        // SAFETY: `frozen` is the first value of the parent's group array of INLINE_GROUP values.
+                        let frozen_group = unsafe { std::slice::from_raw_parts(frozen_group.as_ptr(), INLINE_GROUP) };
+                        for (dst, src) in group.get().iter().zip(frozen_group) {
+                            dst.copy_link_from(src);
+                        }
+                    }
+                }
                 cell.set(Some(group));
                 group
             }
@@ -609,7 +729,14 @@ impl<V: 'static> Default for NodeLinkStore<V> {
     }
 }
 
-impl<V: Default + 'static> NodeLinkStore<V> {
+impl<V: 'static> NodeLinkStore<V> {
+    /// Shared graph: see `InlineIdStore::fork`.
+    pub fn fork(&'static self) -> Self {
+        NodeLinkStore { store: self.store.fork() }
+    }
+}
+
+impl<V: Default + LinkCopy + 'static> NodeLinkStore<V> {
     /// The node's links, created on first use. The reference stays valid for the store's lifetime (`InlineIdStore`).
     #[inline]
     #[cfg_attr(feature = "site-counts", track_caller)]
@@ -633,7 +760,11 @@ impl<V: 'static> NodeLinkStore<V> {
     /// `try_get` that returns `None` for a node without an id instead of assigning one (no side effect).
     #[inline]
     pub fn try_get_if_id_assigned(&self, node: P<Node>) -> Option<&'static V> {
-        self.store.narrow(ast::get_assigned_node_id(node)?)
+        let id = ast::get_assigned_node_id(node)?;
+        match self.store.narrow(id) {
+            Some(v) => Some(v),
+            None => self.store.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|p| p.narrow(id)),
+        }
     }
 }
 
@@ -651,7 +782,14 @@ impl<V: 'static> Default for SymbolArenaLinkStore<V> {
     }
 }
 
-impl<V: Default + 'static> SymbolArenaLinkStore<V> {
+impl<V: 'static> SymbolArenaLinkStore<V> {
+    /// Shared graph: see `IdLinkStore::fork`.
+    pub fn fork(&'static self) -> Self {
+        SymbolArenaLinkStore { store: self.store.fork() }
+    }
+}
+
+impl<V: Default + LinkCopy + 'static> SymbolArenaLinkStore<V> {
     #[inline]
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub fn get(&mut self, symbol: P<Symbol>) -> P<V> {
@@ -674,7 +812,10 @@ impl<V: 'static> SymbolArenaLinkStore<V> {
     #[inline]
     pub fn try_get_if_id_assigned(&self, symbol: P<Symbol>) -> Option<P<V>> {
         let id = ast::get_assigned_symbol_id(symbol)?;
-        self.store.narrow_slot(id).map(|slot| self.store.at(slot))
+        match self.store.narrow_slot(id) {
+            Some(slot) => Some(self.store.at(slot)),
+            None => self.store.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|p| p.try_get(id as u64)),
+        }
     }
 
     #[inline]
@@ -768,6 +909,8 @@ mod tests {
         n: Cell<u32>,
         key: Cell<PKey>,
     }
+
+    crate::bitwise_link_copy!(Keyed);
 
     impl KeyedLinks for Keyed {
         fn link_key(&self) -> &Cell<PKey> {

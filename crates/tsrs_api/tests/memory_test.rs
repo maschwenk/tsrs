@@ -1,5 +1,7 @@
 // Memory ownership tests. RSS is process-wide, so these tests serialize on MEMORY and live in their own test
 // binary (other test files are separate processes).
+// `rss_kib` needs glibc `malloc_trim` and `/proc`, so the binary is empty elsewhere.
+#![cfg(all(target_os = "linux", target_env = "gnu"))]
 mod common;
 use common::*;
 use std::sync::Mutex;

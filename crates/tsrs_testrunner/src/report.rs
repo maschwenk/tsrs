@@ -61,7 +61,7 @@ pub type Summary = BTreeMap<String, Entry>;
 
 pub fn load_summary(path: &Path) -> Summary {
     let mut summary = Summary::new();
-    let Ok(text) = std::fs::read_to_string(path) else { return summary };
+    let Ok(text) = tsrs_core::utf8::read_to_string(path) else { return summary };
     let Ok(v) = serde_json::from_str::<Value>(&text) else { return summary };
     for t in v["tests"].as_array().into_iter().flatten() {
         let s = |k: &str| t[k].as_str().unwrap_or("").to_string();
@@ -227,7 +227,7 @@ fn enclosing_fn(loc: &str) -> Option<String> {
     let line: usize = parts.next()?.parse().ok()?;
     let file = parts.next()?;
     let path = if Path::new(file).is_absolute() { Path::new(file).to_path_buf() } else { crate::compiler_runner::repo_root().join(file) };
-    let text = std::fs::read_to_string(path).ok()?;
+    let text = tsrs_core::utf8::read_to_string(path).ok()?;
     let lines: Vec<&str> = text.lines().collect();
     for l in lines[..line.min(lines.len())].iter().rev() {
         let t = l.trim_start();

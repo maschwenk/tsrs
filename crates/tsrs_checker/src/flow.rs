@@ -46,8 +46,8 @@ enum FlowStep {
     Done(FlowType),
 }
 
-/// About one in four flow nodes, chosen by the node: a checkpoint for the flow memo on long linear chains. (One in
-/// two, eight or none measured worse: notes/perf-flow-union-inference.md.)
+/// About one in four flow nodes, chosen by the node: a checkpoint for the flow memo on long linear chains. (None
+/// measured worse: notes/perf-flow-union-inference.md.)
 #[inline]
 fn is_flow_memo_checkpoint(flow: P<FlowNode>) -> bool {
     (flow.key() as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 62 == 0

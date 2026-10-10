@@ -1355,14 +1355,14 @@ fn go_lossy_utf8(bytes: &[u8]) -> String {
     let mut out = String::new();
     let mut i = 0;
     while i < bytes.len() {
-        match std::str::from_utf8(&bytes[i..]) {
+        match tsrs_core::utf8::compat::from_utf8(&bytes[i..]) {
             Ok(s) => {
                 out.push_str(s);
                 break;
             }
             Err(e) => {
                 let valid = e.valid_up_to();
-                out.push_str(std::str::from_utf8(&bytes[i..i + valid]).unwrap());
+                out.push_str(tsrs_core::utf8::compat::from_utf8(&bytes[i..i + valid]).unwrap());
                 i += valid;
                 // json/v2 replaces each invalid byte with U+FFFD
                 out.push('\u{FFFD}');

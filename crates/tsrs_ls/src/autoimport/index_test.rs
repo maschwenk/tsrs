@@ -74,3 +74,16 @@ fn test_index_clone_filters_all_entries() {
     assert_eq!(cloned.entries.len(), 0);
     assert_eq!(cloned.index_len(), 0);
 }
+
+// Not in Go: names are keyed by unicode.ToUpper of their first rune (simple mapping: U+1F80 -> U+1F88), so a
+// case-insensitive lookup starting with U+1F80 finds a name starting with U+1F88. Results checked against tsgo.
+#[test]
+fn test_index_keys_by_simple_uppercase() {
+    let mut idx: Index<testEntry> = Index::default();
+    idx.insert_as_words(entry("\u{1F88}bc", "pkg"));
+    idx.insert_as_words(entry("foo\u{1F80}bc", "pkg"));
+    assert_eq!(idx.find("\u{1F80}bc", false).len(), 1);
+    let results = idx.search_word_prefix("\u{1F80}");
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0].name, "\u{1F88}bc");
+}

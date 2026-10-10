@@ -29,7 +29,7 @@ impl writerAggregator {
     }
 
     pub(crate) fn string(self) -> String {
-        String::from_utf8_lossy(&self.buf).into_owned()
+        tsrs_core::utf8::from_utf8_lossy(&self.buf).into_owned()
     }
 }
 
@@ -247,7 +247,7 @@ impl sourceMapSpanWriter<'_> {
 }
 
 fn remove_byte_order_mark(text: &[u8]) -> &[u8] {
-    match std::str::from_utf8(text) {
+    match tsrs_core::utf8::basic::from_utf8(text) {
         Ok(s) => stringutil::remove_byte_order_mark(s).as_bytes(),
         Err(_) => text.strip_prefix("\u{FEFF}".as_bytes()).unwrap_or(text),
     }
@@ -390,7 +390,7 @@ impl recordedSpanWriter<'_, '_> {
 // The source text slice is cut at a byte offset computed from UTF-16 positions, which is always a character
 // boundary for well-formed input; fall back to a lossy copy otherwise (Go would keep the raw bytes).
 fn bytes_to_string(bytes: &[u8]) -> String {
-    String::from_utf8_lossy(bytes).into_owned()
+    tsrs_core::utf8::from_utf8_lossy(bytes).into_owned()
 }
 
 // harnessutil.go:931 (`CompilationResult.GetSourceMapRecord`)

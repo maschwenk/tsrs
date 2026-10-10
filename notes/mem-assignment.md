@@ -102,6 +102,9 @@ groups of <= 1, 1/2, 1/4, 1/8 checker loads and penalty 1 or 16 (1/4 with penalt
 
 Deterministic (sorted paths, groups numbered in path order, index tie-breaks; hash maps only for lookups).
 `--checkerAssignment go` keeps Go's scheme. The checker count default stays Go's 4.
+(Status 2026-10-10: no longer true. The default checker count now scales with the machine: every core up to 8,
+half the cores above that, at least Go's 4 and at most 32, and no more than one checker per fixed number of checked
+files; `default_checker_count` in crates/tsrs_compiler/src/checkerpool.rs.)
 
 Diagnostics do not depend on the assignment: each file's diagnostics are computed by the checker that owns the
 file and stored by file index; output is concatenated in file order and then sorted/deduplicated. Verified:
@@ -148,5 +151,7 @@ symbols).
 - Per-checker check times are still uneven (e.g. 6.7 / 7.7 / 8.1 / 7.3 s): the weight proxy (nodes + text +
   imports) does not see semantic cost (zod-heavy routers are expensive). A cost model from a previous run, or
   work stealing of whole groups between checkers, would shorten the critical path.
+  (Status 2026-10-10: both were tried since. A cost cache from a previous run exists (notes/perf-balance.md;
+  `checker_cost_cache_path` in checkerpool.rs) and work stealing landed (notes/perf-checker-stealing.md).)
 - The adaptive grouping uses directory structure as the locality signal; projects with flat layouts fall back to
   per-file groups (FENNEL with penalty 1 in weight order), which is close to Go's scheme.

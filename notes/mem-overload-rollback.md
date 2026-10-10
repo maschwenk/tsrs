@@ -103,6 +103,10 @@ and link write that takes a type). The b1 column bounds it: at most 127 MB in th
 
 ## Instrumentation landed on the branch
 
+Status (2026-10-10): none of this is on main. `tsrs_core::census_hooks`, `crates/tsrs_checker/src/census_weak.rs`
+and the `TSRS_CENSUS_REGION` / `TSRS_CENSUS_WEAK` switches are absent from crates/; rerunning the measurement needs
+the experiment branch.
+
 - `tsrs_core::census_hooks` (no-ops without the alloc-profile feature): `region_enter` / `region_exit`, `weak`,
   `ephemeron`, `note` / `noted`. `census.rs` tags region blocks and prints the region report (types, weak tables
   holding the b2 part, heap blocks by allocating function, `region` rows in `TSRS_CENSUS_TSV`).

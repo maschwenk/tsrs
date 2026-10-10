@@ -60,6 +60,9 @@ non-generic mapped types; no observable difference anywhere below).
   types) are one `OnceCell<LazyMembers>`: Go assigns them together immediately before `ready = true` and nothing
   reads them earlier. The tables live in `Rc`s in the checker's maps, so dropping a table frees it like Go's
   `delete` + GC; the signature/index-info slices are arena-allocated (they become the resolved members' slices).
+  Status (2026-10-10): lazy member tables are no longer `Rc`s but arena values (`lazy_member_tables:
+  FxHashMap<P<Type>, P<LazyMemberTable>>`, checker.rs; notes/mem-checker-heap.md change 1): a table dropped from the
+  map stays alive in the arena for callers that still hold it. Only `lazy_mapped_tables` still holds `Rc`s.
 - Go iterates `declaredMembers` (a map: random order) in `prepareLazyMembers`, `resolveLazyMembers` and
   `everyLazyProperty`; tsrs's `SymbolTable` is insertion-ordered, so these are deterministic here.
 - `lazyMappedTable.members` (a SymbolTable holding nil entries for "being created / no member") is a

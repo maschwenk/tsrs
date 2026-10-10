@@ -91,7 +91,7 @@ fn ops(v: Option<&Value>) -> Vec<scenarioOp> {
 }
 
 fn load_scenario(path: &FsPath) -> scenario {
-    let text = std::fs::read_to_string(path).unwrap();
+    let text = tsrs_core::utf8::read_to_string(path).unwrap();
     let Value::Object(o) = tsrs_core::json::unmarshal(&text).unwrap() else { panic!("scenario") };
     let mut env = FxHashMap::default();
     if let Some(Value::Object(e)) = o.get("env") {
@@ -366,7 +366,7 @@ fn tsctests() {
                     .unwrap()
                     .join()
                     .unwrap();
-                let reference = std::fs::read_to_string(root.join("ts-ref/tsc/testdata/baselines/reference").join(&test.baseline)).ok();
+                let reference = tsrs_core::utf8::read_to_string(root.join("ts-ref/tsc/testdata/baselines/reference").join(&test.baseline)).ok();
                 let class = match outcome {
                     Ok(actual) => {
                         if reference.as_deref() == Some(actual.as_str()) {

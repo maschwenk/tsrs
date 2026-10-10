@@ -2,24 +2,34 @@
 
 One list of the open ideas, decisions and loose ends from the round that landed #37, #40, #38, #41, #42, #49, #50,
 #51 and #55. Each stream's own note has the detail and the measurements; this file is the index, ordered by expected
-value. Numbers are from the 38k-file codebase on an 18-core Apple Silicon machine unless noted.
+value. Numbers are from the 38k-file codebase on an 18-core Apple Silicon machine unless noted. The sections above
+"Measured and rejected" were brought up to date on 2026-10-10; the list itself is the part to read before a new idea.
 
-Where the round ended: peak memory -15% (4.25 GiB with one checker, 5.68 with four), warm no-edit run ~0.9 s, leaf
-edit ~1.1 s, hub edit 12.4 s, cold incremental peak 5.94 GiB, emit 1.4-2.3x faster. The cold check itself is flat:
+Where the round ended (2026-10-04): peak memory -15% (4.25 GiB with one checker, 5.68 with four), warm no-edit run
+~0.9 s, leaf edit ~1.1 s, hub edit 12.4 s, cold incremental peak 5.94 GiB, emit 1.4-2.3x faster. The cold check itself is flat:
 pointer compression costs about +4.9% instructions and took back most of the checker-CPU round's -6.9%
 (notes/perf-round2.md).
 
-## Decisions waiting on the owner
+Since then, by 2026-10-10: the default checker count scales with the cores, BOLT ships in the Linux release binaries,
+the union front cache is on by default, the lazy declaration-file member lists are on whenever no declaration file
+is type-checked, CI runs on pull requests, and the workspace is at 0.11.0. The items below say so where they apply.
 
-- **Default checker count** (#48, draft; notes/perf-checker-scaling.md). `clamp(cores/2, 4, 8)` gives -16% wall for
-  +1.6 GiB on the 38k-file codebase (-34% on vscode) and makes `--extendedDiagnostics` counters machine-dependent.
-  Recommendation: close it and pass `--checkers` where the hardware is known (8 on laptops, 4 or 1 on small boxes).
-- **#36** (persisted front-end design, docs only): close, or merge as the record of why not to build it.
-- **A release.** main is well ahead of 0.3.0; nothing from this round is published.
-- **Checker-count-dependent output on TanStack/router** (notes/open-history-dependence.md): the exact fix (branch
-  `exp/canonical-base-constraints`) costs +1.5% instructions on router, +4.1% on sequelize, +0.4% on type-fest and
-  reports an error tsgo does not on a ten-level indexed-access chain. Options: leave it open (the README now says so),
-  or redesign `getResolvedBaseConstraint` to resolve each type from the top (the note's option 3).
+## Decisions from the round (all settled by 2026-10-10)
+
+- **Default checker count** (#48 at the time; notes/perf-checker-scaling.md). The round measured
+  `clamp(cores/2, 4, 8)` at -16% wall for +1.6 GiB on the 38k-file codebase (-34% on vscode) and recommended `--checkers` instead. The opposite
+  landed: `default_checker_count` (checkerpool.rs) scales with the cores, half the parallelism but every core up to a
+  small-machine limit, at least Go's 4, capped by the number of type-checked files (4 on 4 cores, 8 on 8 and 16, 32 on
+  64 or more). The `--extendedDiagnostics` Types / Symbols / Instantiations counters depend on the machine unless
+  `--checkers` is given.
+- **#36** (persisted front-end design): the design is on main as docs/PERSISTED_FRONTEND.md, the record of why not to
+  build it.
+- **A release**: done; releases have been cut since (the workspace is at 0.11.0).
+- **Checker-count-dependent output on TanStack/router** (notes/open-history-dependence.md): left open. The README's
+  capability table lists it as a known exception. The exact fix (branch `exp/canonical-base-constraints`) costs +1.5%
+  instructions on router, +4.1% on sequelize, +0.4% on type-fest and reports an error tsgo does not on a ten-level
+  indexed-access chain (see "Measured and rejected"). Not tried: redesigning `getResolvedBaseConstraint` to resolve
+  each type from the top (the note's option 3).
 
 ## Not verified yet
 
@@ -37,9 +47,15 @@ pointer compression costs about +4.9% instructions and took back most of the che
   runs in parallel, so the writer cap and the remaining transform CPU may both matter (notes/perf-emit.md).
 - **CI on main: fine.** CI moved to Depot (`.depot/workflows/ci.yml`: `check-and-test`, `lint-ratchet`); results are
   check runs on the commit (`gh api repos/<repo>/commits/<sha>/check-runs`), not `gh run list`. It runs on pushes to
-  main only, so a PR that adds a lint finding turns main red after the merge: run `tools/lint/ratchet.py` before merging.
-- **`cargo test -p tsrs_cli` does not link on macOS**: `api::memory_tests` calls glibc `malloc_trim`. Every agent
-  this round excluded it locally. Needs a `cfg(target_os = "linux")` from the Node API side.
+  main and on pull requests into main, drafts included (ci.yml's `on:`), so a lint finding shows on the PR.
+- **`cargo test -p tsrs_cli` does not link on macOS** (still so on 2026-10-10): `api::memory_tests` in
+  tsrs_cli/src/api.rs declares glibc `malloc_trim` under `#[cfg(test)]` only. CI runs the tsrs_cli tests on Linux
+  (#226). Needs a `cfg(target_os = "linux")` on the module.
+- **`cargo test -p tsrs_api` does not link on macOS either** (still so on 2026-10-10):
+  crates/tsrs_api/tests/memory_test.rs declares glibc `malloc_trim` with no cfg.
+- **`pinned_node_clients_round_trip` failed on macOS on main** (crates/tsrs_api_transport/tests/node_roundtrip.rs,
+  seen in the tsrs_api lint paydown's gates): it expects `/var/folders/...` and gets `/private/var/folders/...`
+  (macOS `/var` is a symlink). Not re-checked since (Linux box).
 
 - **`panic = "abort"` builds segfaulted: fixed** (notes/fix-arena-recycle-uaf.md). `recycle_mapper_with_targets`
   freed a type list it had received as a `&[P<Type>]` parameter, a protected borrow for the call, so LLVM could and
@@ -49,10 +65,9 @@ pointer compression costs about +4.9% instructions and took back most of the che
 
 ## Ideas, by expected value
 
-0. **BOLT for the Linux release binaries** (notes/perf-build-level.md): -2.7% / -3.2% / -1.0% wall at 1 / 4 / 8
-   checkers on the 38k-file codebase, -3.4% to -4.0% on vscode, identical output and gates; a draft PR adds it to
-   `release.yml` with the gates on the BOLT-optimized binaries. The bench workflow needs the same step to keep
-   measuring what ships.
+0. **BOLT for the Linux release binaries: landed** (notes/perf-build-level.md): -2.7% / -3.2% / -1.0% wall at 1 / 4 /
+   8 checkers on the 38k-file codebase, -3.4% to -4.0% on vscode, identical output and gates. `release.yml` and
+   `.depot/workflows/bench.yml` both run `.github/scripts/bolt.sh`, so the bench measures what ships.
 1. **The heavy type graphs every checker rebuilds: fixed in the checked codebase**, not in tsrs
    (notes/perf-checker-scaling.md has the measurement). Two causes, both worth knowing for any project:
    `export default new Ctor(...)` makes the checker check the whole constructor call, pulling in every argument's
@@ -89,10 +104,10 @@ pointer compression costs about +4.9% instructions and took back most of the che
    compares target symbols) and are most of what is left against bun. The same note ranks lazy formatting of
    relation error arguments (excalidraw's remaining ~120 MiB) next.
 
-## Round 3, union and inference work (#100, draft; notes/perf-union-inference.md)
+## Round 3, union and inference work (#100, landed; notes/perf-union-inference.md)
 
-- **Union front cache** (`TSRS_UNION_CACHE`, on by default and off under `--checkerAssignment go`; its shadow mode is
-  in docs/DEBUGGING.md). It is a direct-mapped table in front of `getUnionType` for calls without an origin. It stores
+- **Union front cache** (`TSRS_UNION_CACHE`, crates/tsrs_checker/src/unioncache.rs; on by default and off under
+  Go-compatible history, `--checkerAssignment go`; its shadow mode is in docs/DEBUGGING.md). It is a direct-mapped table in front of `getUnionType` for calls without an origin. It stores
   a call only if that call created nothing but the union it returns, instantiated nothing, took no state-dependent
   reduction and did not return `errorType`.
   - Instructions: -0.5% to -1.1% on four corpora, with 1, 4 and 8 checkers.
@@ -198,7 +213,7 @@ pointer compression costs about +4.9% instructions and took back most of the che
   memory is free blocks in pages that still hold live blocks; a forced purge at the peak finds 4-5 MiB), smaller
   stacks (4-11 MiB resident in all), switching a running checker into a finished checker's arena.
 - Lazily parsed and bound member lists of unchecked declaration files (notes/mem-lazy-dts-members.md): exact, landed
-  as a draft (`TSRS_LAZY_DTS=0` turns it off): -7.1% peak on formbricks-web at 32 checkers on Linux, -1.5% to -2.2% on
+  (on when `skipLibCheck` or `noCheck` is set; `TSRS_LAZY_DTS=0` turns it off): -7.1% peak on formbricks-web at 32 checkers on Linux, -1.5% to -2.2% on
   cal-diy, supabase-studio, t3code-server, drizzle-orm and xstate-main, wall within +-1% on eight projects once the
   global libraries' lists are forced before the checkers start (without that, drizzle-orm's checkers waited on each
   other: +8% wall). Left: namespace bodies (+43 MB on formbricks-web, needs
@@ -222,20 +237,117 @@ pointer compression costs about +4.9% instructions and took back most of the che
   read, not the window comparison); the rest alone is +0.41..+0.65% on Linux. Closes the shared layer for the default
   binary.
 
+- A contract-preserving form of the one-active-group checker-thread fix (`run_work_group_for`, 600723a;
+  notes/emit-checker-thread-fix.md): it was output-neutral and created fewer threads (1.3 K vs 4.9 K at 4 builders)
+  but saved no memory on `TSRS_EMIT=1 tsrs -b .` over
+  8 x 150-file composite projects (1,691 / 1,717 / 1,746 MB at 1 / 4 / 8 builders against 1,694 / 1,727 / 1,749 MB
+  without a fix; the landed six-line hunk: 354 / 393 / 409 MB).
+- Three items of the Bun study that its adversarial checks refuted (notes/bun-check-memory.md section 3, vscode,
+  estimates): instantiation caches keyed by result arguments (0 MB; values do not determine keys), dropping the
+  default-library text as Bun does (net 0-1 MB, medium risk; the zero-copy half landed instead), numeric literals in a
+  table (0 MB).
+- Frozen binder symbol tables with Bun's per-file entry ranges (PR 147, closed; notes/mem-flat-symbol-tables.md):
+  -9.4 MB front end on vscode, -8.0 MB on formbricks-web, for +0.4% to +2.5% single-threaded instructions and ~340
+  lines. Untried: a wider header filter, a bulk freeze without per-table headers.
+- Flat flow-label edges and one shared Start per file for bodyless signatures (reverted in #191;
+  notes/mem-flow-compaction.md): -5.4 MB arena on vscode (0.2% of peak), for 377 lines of binder representation.
+- A global identifier interner (notes/mem-round2.md, step 9): -0.075 GiB single-threaded on the private monorepo, but
+  parse time +9% (2.6 -> 2.8 s) and +1% instructions from hashing and locking 7.8M identifiers; `PackedStr` took -0.10
+  GiB with no table.
+- Mapper interning (identity is observable: `find_active_mapper`, `compare_type_mappers`) and type-list interning
+  (10.0M lists, 5.35M distinct: a hash-consing table costs more than the 80 MB it saves) (notes/mem-round2.md).
+- Deferring the type of two-constituent union/intersection properties (B1, notes/mem-round3.md): -3.7% types but only
+  6.289 -> 6.275 GiB, and it changed results (a TS2578 on the private monorepo).
+- Lazy member tables in the arena instead of `Rc` (notes/mem-round3.md): peak +0.01 / +0.03 GiB (the `Rc` blocks fit
+  a 176-byte size class exactly); packed inside the `Rc`, -0.01 / -0.02 GiB, not worth the churn.
+- U1 / U2, discriminant matching and base resolution without instantiating lazy members (notes/mem-use-census.md, PR
+  #7 closed): exact, -0.5% / -0.6% peak at 1 / 4 checkers on the private monorepo; 0.1-0.4% of the per-checker growth
+  on the app projects (notes/mem-never-read-apps.md).
+- Rolling back the speculative work of overload resolution (notes/mem-overload-rollback.md): 175-201 MB upper bound
+  for the argument checks in `isSignatureApplicable`, below the 300 MB threshold; all of `chooseOverload` 351-409 MB at
+  exit only; any of it needs a store barrier on every checker write.
+- Bun-style dense link tables over lazily committed pages, per-kind node numbering, symbol-id or type-id groups for
+  the hashed link stores (notes/mem-dense-link-tables.md): pages cost 23-632 MB more than the landed 32/128-id groups
+  at 4-32 checkers on vscode; node numbering saves at most 4-5 MB at one checker, for a parser and AST change.
+- Sparse id pages by default (notes/mem-64.md, notes/mem-checker-heap.md): -0.15 GiB at 64 checkers for +2%
+  instructions; the 128-id groups save the same at 64 and more at 4-16 for no instructions, and the sparse form is
+  removed.
+- A symbol-table position index in 8/16 bits (change 6 of notes/mem-checker-heap.md): -1.4% to -1.5% peak for +0.39%
+  instructions, above the 0.3% bar.
+- Pre-faulting whole arena chunks on Linux (notes/linux-perf.md): peak RSS +1.2-2.2 GiB (+16% to +36%) and no wall
+  gain (the faults it removes were ~25 K 2 MiB faults); with THP off it removes two thirds of the faults, but sys time
+  still goes up.
+- A thin generic shim over `&mut dyn FnMut` bodies for the port's `impl FnMut` callbacks
+  (notes/monomorphization-audit.md): the port's own closures are 3.6% of tsrs_checker's LLVM IR and the largest
+  generic tsrs function 1.1%; nothing to gain.
+
+- Relating derived generics to their generic base by variances (`TSRS_DERIVED_VARIANCE`, #96, removed in #194;
+  notes/perf-derived-variance.md, notes/fuzz-derived-variance.md): with guards 1-3, -8.4% / -16.8% instructions at 1 /
+  8 checkers on the 38k-file codebase, but not exact: the fuzzer found disagreements in 3,670 of 8,000 programs in
+  ordinary shapes (`keyof T`, conditionals on `this`, `T & {...}`). Guards 4-6 make it exact (471,465 decisions, 0
+  disagreements) and leave about 1% of instantiations and -1.8% / -0.3% check time at 1 / 8 checkers (noise).
+  `testdata/regressions/derived-variance-*` stay.
+- A variance table shared by the checkers of a program (notes/perf-heavy-files.md, branch
+  `perf/heavy-files-variance-share`): -33% checker CPU on mui-docs at 16 checkers, -8% on formbricks-web, -6% on
+  cal-diy, but not exact: TypeScript's unreliable / unmeasurable marks depend on what the checker related before the
+  measurement, so variances differ between checkers (cal-diy at 4 checkers printed 40 more lines).
+- Go's pdqsort (`goslices::sort_func`) for every symbol sort, not only where `compareSymbols` is not total
+  (notes/lsp-memfix.md): +1.4% instructions on webpack (16.56 vs 16.33 G).
+- Flow memo variants (notes/perf-flow-union-inference.md): no checkpoints (webpack -4.4% instead of -7.0%, xstate
+  +0.50% instead of +0.13%), table sizes 2^10 to 2^16 (no measurable difference), the per-node step out of line
+  (+0.17% on xstate).
+- Checker CPU micro-changes (notes/perf-checker-cpu2.md, notes/perf-checker-cpu3.md): a direct-mapped cache in front
+  of `lazy_member_tables` (94% hits, no instruction change), inline fast paths III (-0.08%).
+- `ReferenceInstantiations` hashing argument handles instead of type ids (notes/perf-checker-cpu3.md: paired median
+  -0.07%, no change in instructions or cycles; notes/perf-memory-traffic-32.md A1: within noise at 16 and 32
+  checkers).
+
+- Static cost models for the checker assignment (notes/perf-balance.md): per-file cost per weight unit differs 40x
+  between kinds of files; import-closure weights are worse on all three projects (mui-docs CPU imbalance 36% -> 77-98%);
+  dropping the fanout term helps vscode and mui-docs but slows mui-docs' slowest checker. In-checker order is not free
+  either: reversing it changed a printed TS2345 message.
+- A per-file check-cost model fitted from syntax (notes/speed-frontend.md): in-sample within 0.5 points, but used for
+  the assignment it made the slowest checker 21.5% above the mean (check 8.2 -> 9.5 s), because the assignment moves
+  the first-touch costs.
+- Longest-processing-time-first queues and thieves taking from the front (notes/perf-checker-64.md): LPT +3.6% CPU at
+  16 checkers and 5-8% more CPU per checker with the static assignment (program order keeps caches warm), README bench
+  -2%; front-stealing +4-6% CPU at every count.
+- Memory-traffic work at 32 checkers (notes/perf-memory-traffic-32.md): IPC is equal or higher at 32 checkers than at
+  1 (vscode 1.92 -> 1.96) and miss rates are low, so padding, pinning, prefetching and hot/cold splits have nothing to
+  win; `ReferenceInstantiations` slot hashes (A2) were within noise (+11 MiB peak).
+- Overlapping checker creation with the file assignment (#162) and computing the program diagnostics on a helper
+  beside checker creation (#164) (notes/perf-serial-steps.md): 3-4 ms of serial time each at 32 checkers on the
+  64-vCPU runner (Diagnostics: global (first) 15 -> 11 ms; program + global 18 -> 15 ms), reverted in #190 because a
+  new thread or overlap needs more than that. `common_source_directory`'s file list on the worker pool: "verify
+  options" stayed at 2 ms in 22 runs.
+- Largest files first in the parallel parse (notes/perf-frontend-64.md): 0.06 -> 0.24 s at 64 threads (rayon put the
+  150 largest files in one leaf); neutral with a leaf cap; the phase is not tail-bound.
+- A 64-shard map for the resolver's module-resolution cache (notes/speed-frontend.md): the parse + resolve phase is
+  bound by file-system calls; 0.51 s either way on the private monorepo.
+- Releasing memory before exit and a smaller rayon pool (notes/perf-front-end-fixed-costs.md): `munmap` of the arena
+  3.0 ms with the teardown unchanged, `madvise` from 16 threads 4.2 ms; 8-, 32- and 64-thread pools changed wall within
+  noise.
+- mimalloc options on macOS (`PURGE_DELAY=-1`, `ARENA_EAGER_COMMIT=1`, `ARENA_RESERVE=4GiB`, `ALLOW_LARGE_OS_PAGES=1`;
+  notes/speed-frontend.md): within noise, peak within 0.05 GB.
+- Unlimited concurrent emit writes (notes/perf-emit.md): emit on the 38k-file codebase 6.4 / 4.3 / 4.5 / 7.0 s with 1
+  / 2 / 4 / unlimited writers; the cap is 4.
+- Lower edge cut in the locality assignment (notes/mem-assignment.md): label-propagation refinement halves the cut
+  (0.36 -> 0.22) and gains nothing in peak (15.97 -> 16.02 GB, 4 checkers, private monorepo); keeping directory
+  subtrees together is what helps.
+- A resident daemon / watch mode for the CLI (notes/perf-round3.md, not attempted): it holds several GiB per checkout,
+  while the cold-process incremental path is ~1 s. Also reasoned out there without measurement: per-file summaries as
+  declaration text (declaration emit is not total, import cycles, not identity-preserving), per-file check regions
+  (types made in a body can enter long-lived caches), mmap of source files (SIGBUS on truncation).
+
 ## The lint ratchet
 
-`tools/lint/baseline.tsv` went from 1,373 findings to 312 (#57-#59, #61, #63; notes/lint-paydown-compiler.md,
-notes/lint-paydown-project.md). Left: 195 in `tsrs_api*` (the Node API crates, not touched), ~112 in the
-project / language-service crates that need a redesign rather than a cleanup (by-value handler arguments fixed by
-fn-pointer types, one large JSON error type, 31 hash-iteration loops whose order is observable), and 5 compiler-side
-findings blocked on callers in those crates. Measured on the way: none of the 43 `#[inline(always)]` were needed;
-the unchecked string conversions and link-store indexing are (+1.6% to +5%, +0.6%); removing ~170 clones did not
-change speed.
+`tools/lint/baseline.tsv` went from 1,373 findings to 312 (#57-#59, #61, #63; notes/lint-paydown-compiler.md) and is
+now 3 (status 2026-10-10: 2 `clippy::needless_pass_by_value` in tsrs_modulespecifiers/src/specifiers.rs, 1 `dead_code`
+in tsrs_parser/src/parser_1.rs). Measured on the way: none of the 43 `#[inline(always)]` were needed; the unchecked
+string conversions and link-store indexing are (+1.6% to +5%, +0.6%); removing ~170 clones did not change speed.
 
 ## Housekeeping
 
-- `bench-cache/solutions/mui-docs` (a local bench checkout) holds ~13k stray emit outputs from a benchmark that used
-  `--outDir` without `--rootDir`; mui-docs numbers are off until it is restored. The file list is in the perf-emit
-  worktree's `scratch/mui-polluted-files.txt`. Emitting benchmarks must pass `--rootDir <repo root>` and run under a
-  write-deny `sandbox-exec` profile (notes/perf-emit.md, "Reproducing").
-- Finished agent worktrees under `wt/` hold ~80 GiB of build output and scratch; all their branches are merged.
+- Emitting benchmarks must pass `--rootDir <repo root>` and run under a write-deny `sandbox-exec` profile
+  (notes/perf-emit.md, "How to reproduce"): a run with `--outDir` and no `--rootDir` once wrote ~13k stray outputs into
+  a local bench checkout.

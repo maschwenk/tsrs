@@ -8,6 +8,15 @@ notes/mem-*.md; every candidate technique then went to two adversarial checks (a
 transfer). The study was stopped early for cost: 17 of the 30 checks ran. Statuses below say which. File:line
 citations refer to Bun's `src/sema` at the PR head and to this repository at 626da9d.
 
+Status (2026-10-10): the "tsrs" column describes 626da9d; several rows were followed up since. Leaf freeing landed for
+CLI `--noEmit` runs with at most 16 checkers (`TSRS_FREE_LEAVES`, docs/DEBUGGING.md; notes/mem-free-leaf-files.md).
+Bundled libs are parsed zero-copy from the binary's text (notes/mem-zero-copy-libs.md; crates/tsrs_compiler/src/host.rs).
+Dense link tables: the 60-90 MB did not hold; the store layouts that paid landed (`InlineIdStore`, `KeyedLinkStore`,
+`SymbolReferenceLinkStore` in crates/tsrs_checker/src/links.rs; notes/mem-dense-link-tables.md,
+notes/mem-link-tables-landed.md). Flat symbol tables were not landed (PR 147
+closed, notes/mem-flat-symbol-tables.md). Flow compaction was reverted (#191, notes/mem-flow-compaction.md). Read
+those notes before proposing any of these rows again.
+
 Measured context (vscode, 64 vCPU): at each tool's default tsrs 0.60 s / 2.87 GiB vs bun check 0.87 s / 2.85 GiB;
 at 4 / 8 / 16 / 64 threads bun check uses 35% / 33% / 28% / 14% less; across ten projects tsrs is faster on all and
 uses 1.18-1.90x bun's memory on cal-diy, formbricks-web, supabase-studio and t3code-server (README table of
@@ -55,7 +64,7 @@ Ranked by midpoint saving, vscode. Front-end items save the same at 32 checkers 
 - Instantiation caches keyed by result arguments: 0 MB; values do not determine keys (checker_11.rs:1294-1330). Pointer-to-slice variant 4-7 MB, inferred, facts lens only.
 - Bun-style lib text drop: net 0-1 MB, medium risk; replaced by the zero-copy row.
 - Header-less pieces alone: id-as-handle saves 0 B (8-byte rounding); lazy parents are net negative; token removal is a checker-API rewrite.
-- Numeric literals into a table: 0 MB. String atoms rebuild the interner rejected for +9% parse (mem-round2.md:203-212).
+- Numeric literals into a table: 0 MB. String atoms rebuild the interner rejected for +9% parse (mem-round2.md "Global identifier interner (step 9, rejected)").
 
 ## 4. Recommended order of work
 

@@ -127,6 +127,8 @@ Not done (each judged against its size):
   slice stays valid). Rejected.
 - **NodeList packing** (24 -> 20 bytes, or elements inline): the bump allocator's 8-byte alignment eats the 4 bytes;
   inline elements change the public `nodes` slice field (312 sites) and sentinel-slice identity. ~30 MB at most.
+  Status (2026-10-10): `NodeList` is 16 bytes now, by a different route: the slice became a one-word `ThinSlice`
+  (notes/mem-layout3.md step 1; size assertion in crates/tsrs_ast/src/ast.rs).
 - **Smaller loader / resolver leftovers**, each ~10-20 MB: `parseTask.package_id` (64 B per task), the per-file
   `SourceFileParseOptions.file_name` copy (9 MB), resolved-path strings in `ResolvedModule` (17 MB), `cachedvfs`
   existence-probe keys (19 MB, needed for the cache).

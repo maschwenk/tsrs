@@ -41,7 +41,7 @@ cfg = json.load(open("bench/projects.json")); p = next(p for p in cfg["projects"
 cwd, proj = rb.project_path(cfg, p, rb.Path(sys.argv[2])); print(f"{cwd}\t{proj}")' "$1" "$work"
 }
 # Runs tsrs binary $1 on every EXTRA_TRAIN project at each of EXTRA_CHECKERS (`default`: no flag); $2 = env
-# assignment. tsrs ends with `exit`, which writes the profile (MIMALLOC_SHOW_STATS is a leftover from `_exit` days).
+# assignment. tsrs ends with `exit`, which writes the profile.
 extra_runs() {
   local exe=$1 envset=$2 p cwd proj c t0
   IFS=, read -ra projects <<< "$EXTRA_TRAIN"
@@ -50,7 +50,7 @@ extra_runs() {
     for c in $EXTRA_CHECKERS; do
       args=(); [ "$c" = default ] || args=(--checkers "$c")
       t0=$(date +%s.%N)
-      (cd "$cwd" && env "${envset//@P@/$p-$c}" MIMALLOC_SHOW_STATS=1 "$exe" -p "$proj" --noEmit --incremental false \
+      (cd "$cwd" && env "${envset//@P@/$p-$c}" "$exe" -p "$proj" --noEmit --incremental false \
         --pretty false "${args[@]}" > /dev/null 2>> "$out/train-stderr.log") && status=0 || status=$?
       check_exit "$status" "$exe -p $p ($c)"
       awk -v n="  $(basename "$(dirname "$exe")")/$(basename "$exe") $p $c" -v a="$t0" -v b="$(date +%s.%N)" \
@@ -118,7 +118,7 @@ instrument() { # $1 = input binary, $2 = name
 release_runs() { # bolt.sh's tsrs workload: xstate-main and webpack, default checker count
   local exe=$1 p
   for p in xstate-main webpack; do
-    (cd "$work/solutions/$p" && MIMALLOC_SHOW_STATS=1 "$exe" -p . --noEmit --incremental false --pretty false \
+    (cd "$work/solutions/$p" && "$exe" -p . --noEmit --incremental false --pretty false \
       > /dev/null 2>> "$out/train-stderr.log") && status=0 || status=$?
     check_exit "$status" "$exe -p $p"
   done

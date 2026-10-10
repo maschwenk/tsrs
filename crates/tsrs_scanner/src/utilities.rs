@@ -2,7 +2,7 @@ use tsrs_ast as ast;
 use tsrs_ast::{Kind, Node, NodeFlags, NodeList, SourceFile, TokenFlags};
 use tsrs_core::{stringutil, LanguageVariant, P};
 
-use crate::scanner::{decode_rune, is_identifier_part_ex, is_identifier_start, skip_trivia, text_to_keyword};
+use crate::scanner::{decode_char, decode_rune, is_identifier_part_ex, is_identifier_start, skip_trivia, text_to_keyword};
 
 pub(crate) fn token_is_identifier_or_keyword(token: Kind) -> bool {
     token >= Kind::Identifier
@@ -136,13 +136,13 @@ pub fn declaration_name_to_string(name: Option<P<Node>>) -> String {
 
 pub fn is_identifier_text(name: &str, language_variant: LanguageVariant) -> bool {
     let b = name.as_bytes();
-    let (ch, mut size) = decode_rune(b);
+    let (ch, mut size) = decode_char(b);
     if !is_identifier_start(ch) {
         return false;
     }
     let mut i = size;
     while i < b.len() {
-        let (ch, s) = decode_rune(&b[i..]);
+        let (ch, s) = decode_char(&b[i..]);
         size = s;
         if !is_identifier_part_ex(ch, language_variant) {
             return false;

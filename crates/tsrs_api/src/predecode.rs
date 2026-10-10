@@ -351,7 +351,7 @@ impl<'a> Scanner<'a> {
             self.i += 1;
         }
         self.i += 1;
-        let raw = String::from_utf8_lossy(&self.b[start..self.i.min(self.b.len())]).into_owned();
+        let raw = tsrs_core::utf8::from_utf8_lossy(&self.b[start..self.i.min(self.b.len())]).into_owned();
         match tsrs_core::json::unmarshal(&raw) {
             Ok(Value::String(s)) => s,
             _ => raw.trim_matches('"').to_string(),

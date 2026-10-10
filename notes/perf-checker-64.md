@@ -110,6 +110,8 @@ plus 0.05 s config, global diagnostics and reporting.
 
 ## 3. The default checker count
 
+Status (2026-10-10): the default changed again after this note; it is now `max(cores/2, min(cores, 8))` clamped to 4..32 (notes/perf-default-checkers-small-machines.md; `default_checkers_for_parallelism` in checkerpool.rs).
+
 `default_checker_count` was `clamp(available_parallelism / 2, 4, 8)`, with at most one checker per 32 type-checked
 files. On the 64-vCPU machine that chose 8: 1.73 s total where 32 checkers give 0.81 s. Measured with this change
 (section 2 tables): 8 -> 16 saves 0.63 s, 16 -> 32 another 0.28 s, 32 -> 64 nothing (0.81-0.82 s, the one-file floor)
@@ -130,7 +132,7 @@ memory is a few GiB; past 32 the check phase does not move and the memory keeps 
 the files floor gives xstate (248 checked files) 7 checkers and a 5-file program 4.
 
 bench/compare.py and bench/README.md still describe the default as "half the cores between 4 and 8" (not in this
-change's write set); bench/run.py's mode title now derives the count from the machine.
+change's write set; status 2026-10-10: both now describe the current rule); bench/run.py's mode title now derives the count from the machine.
 
 ## 4. Result: the branch head on the 64-vCPU machine
 
@@ -169,6 +171,9 @@ TSRS_FILE_TIMES=ft64.tsv tsrs -p src --noEmit --incremental false --checkers 64 
 ```
 
 ## 5. The hot file: why `mapSessionEvents.test.ts` costs 0.34 s, and whether tsrs is slow on it
+
+Status (2026-10-10): the inference memo (`crates/tsrs_checker/src/infermemo.rs`, on by default) removed most of this
+cost: 0.30 s -> 0.04 s on one checker (notes/perf-heavy-files-infer-memo.md).
 
 Setup: a tsconfig next to vscode's (`src/tsconfig.hot.json`: `extends: ./tsconfig.json`, `plugins: []`,
 `include: [./typings, ./vscode-dts/...]`, `files: [./vs/platform/agentHost/test/node/mapSessionEvents.test.ts]`), 831

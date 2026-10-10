@@ -9,19 +9,12 @@ workspace = true
 
 [dependencies]
 tsrs_core.workspace = true
-tsrs_diagnostics.workspace = true
 tsrs_ast.workspace = true
-tsrs_scanner.workspace = true
-tsrs_parser.workspace = true
-tsrs_binder.workspace = true
 tsrs_vfs.workspace = true
-tsrs_module.workspace = true
 tsrs_tsoptions.workspace = true
 tsrs_compiler = { path = "../tsrs_compiler", default-features = false }
 rustc-hash.workspace = true
 tsrs_lsp.workspace = true
-tsrs_project.workspace = true
-tsrs_incremental.workspace = true
 tsrs_api.workspace = true
 tsrs_api_transport.workspace = true
 tsrs_execute = { path = "../tsrs_execute", default-features = false }
@@ -42,6 +35,8 @@ ast-sizing = ["tsrs_compiler/ast-sizing"]
 alloc-profile = ["tsrs_core/alloc-profile", "tsrs_execute/alloc-profile"]
 # TSRS_ASSIGNMENT_STATS also attributes checker-created types/symbols to files (tsrs_compiler checkerpool_stats.rs).
 assignment-stats = ["tsrs_compiler/assignment-stats", "tsrs_execute/assignment-stats"]
+# The shared type graph (TSRS_SHARED_GRAPH=1; tsrs_core/shared-graph).
+shared-graph = ["tsrs_core/shared-graph"]
 
 [[bin]]
 name = "tsrs"

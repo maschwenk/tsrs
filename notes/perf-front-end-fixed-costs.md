@@ -56,6 +56,10 @@ Module resolution is 14.6% of the front end's CPU, mostly cache misses (relative
 
 ## Changes
 
+Status (2026-10-10): #143's `_exit` was reverted in #191 (docs/STATUS.md); `crates/tsrs_cli/src/main.rs` ends
+with `std::process::exit` again. The #143 row and its exit-time numbers no longer describe the binary; the lesson in
+"A regression I caused" still applies to any change to how the process ends.
+
 | PR | change | numbers (runner, dist A/B) |
 | --- | --- | --- |
 | #140 (merged) | Statistics: "Memory used" from /proc/self/statm (macOS: proc_pidinfo) instead of spawning `ps`; "Lines" from memchr passes instead of the per-byte loop | Statistics 13 -> 5 ms; instructions 143.6 -> 142.2 G at 32 checkers; wall 0.70 -> 0.68 s (10 ms resolution) |

@@ -223,7 +223,7 @@ pub fn get_document_position_mapper(host: &dyn Host, generated_file_name: &str) 
                 if let Some(decoded) = base64_std_decode_string(base64_object) {
                     // Go converts the bytes to a string and json.Unmarshal rejects invalid UTF-8, so invalid UTF-8
                     // ends in the same nil result.
-                    return match String::from_utf8(decoded) {
+                    return match tsrs_core::utf8::into_string(decoded) {
                         Ok(decoded) => convert_document_to_source_mapper(host, &decoded, generated_file_name),
                         Err(_) => None,
                     };

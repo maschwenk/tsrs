@@ -68,7 +68,7 @@ impl FSDiffer {
                 snap.insert(path, new_entry);
                 continue;
             } else if file.mode.is_regular() {
-                let content = sanitize_internal_symbol_name(&String::from_utf8_lossy(&file.data));
+                let content = sanitize_internal_symbol_name(&tsrs_core::utf8::from_utf8_lossy(&file.data));
                 let new_entry = DiffEntry { content, m_time: file.mod_time, is_written: written.contains(&path), ..Default::default() };
                 self.add_fs_entry_diff(&mut diffs, Some(&new_entry), &path);
                 snap.insert(path, new_entry);

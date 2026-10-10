@@ -2142,7 +2142,7 @@ impl Checker {
             return cached;
         }
         let literal_type = self.clone_type_reference(t);
-        literal_type.object_flags.set(literal_type.object_flags() | ObjectFlags::ArrayLiteral | ObjectFlags::ContainsObjectOrArrayLiteral);
+        literal_type.object_flags.set(literal_type.object_flags_lazy() | ObjectFlags::ArrayLiteral | ObjectFlags::ContainsObjectOrArrayLiteral);
         self.cached_types.insert(key, literal_type);
         literal_type
     }

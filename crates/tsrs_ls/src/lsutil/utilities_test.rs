@@ -123,3 +123,12 @@ fn test_compare_organize_imports_natural_strings() {
 fn cmp_sign(value: i32) -> i32 {
     value.signum()
 }
+
+// Not in Go: unicode.ToUpper uses the simple case mapping, so a Greek letter with ypogegrammeni maps to its titlecase
+// form (U+1FB3 -> U+1FBC) although its full uppercase is two characters. Outputs checked against tsgo.
+#[test]
+fn test_module_specifier_to_valid_identifier_simple_uppercase() {
+    assert_eq!(module_specifier_to_valid_identifier("./foo-\u{1FB3}bar", false), "foo\u{1FBC}bar");
+    assert_eq!(module_specifier_to_valid_identifier("./\u{1F80}", true), "\u{1F88}");
+    assert_eq!(module_specifier_to_valid_identifier("./x-\u{1FA0}-\u{1FC3}", false), "x\u{1FA8}\u{1FCC}");
+}

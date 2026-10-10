@@ -20,8 +20,11 @@ hashbrown = { version = "0.17", default-features = false, features = ["inline-mo
 bitflags = "2"
 rayon = "1"
 memchr = "2"
+simdutf8 = { version = "0.1.5", features = ["aarch64_neon"] }
 mimalloc-safe = { version = "0.1.67", features = ["v3"] }
-unicode-id-start = "1"
+# Pin exactly: 1.1.2 uses Unicode 15.1.0, matching the pinned TypeScript identifier tables.
+# Newer Unicode versions accept additional identifier characters; upgrade only when TypeScript's tables change.
+unicode-id-start = "=1.1.2"
 tsrs_core = { path = "crates/tsrs_core" }
 tsrs_diagnostics = { path = "crates/tsrs_diagnostics" }
 tsrs_spanmap = { path = "crates/tsrs_spanmap" }
@@ -46,7 +49,6 @@ tsrs_ls = { path = "crates/tsrs_ls" }
 tsrs_project = { path = "crates/tsrs_project" }
 tsrs_projectutil = { path = "crates/tsrs_projectutil" }
 tsrs_lsp = { path = "crates/tsrs_lsp" }
-tsrs_fourslash = { path = "crates/tsrs_fourslash" }
 tsrs_incremental = { path = "crates/tsrs_incremental" }
 tsrs_api = { path = "crates/tsrs_api" }
 tsrs_api_transport = { path = "crates/tsrs_api_transport" }
@@ -75,7 +77,8 @@ debug = false # set to `true` for debug information
 panic = "unwind"
 
 # Release binaries (.github/workflows/release.yml) build with this profile twice, for PGO: -Cprofile-generate,
-# training run, -Cprofile-use (notes/perf-pgo.md). `cargo build --release` stays the development build.
+# training run, -Cprofile-use (notes/perf-pgo.md). `release` has the same LTO and codegen units; the release
+# workflow's `dist` builds add only the PGO profile (and, on Linux, BOLT through .github/scripts/bolt.sh).
 [profile.dist]
 inherits = "release"
 lto = "fat"

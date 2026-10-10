@@ -66,7 +66,11 @@ pub(crate) fn census_layout() {
 impl Symbol {
     /// Allocates a fresh symbol (Go `&ast.Symbol{Flags: flags, Name: name}`).
     pub fn new(flags: SymbolFlags, name: &'static str) -> P<Symbol> {
-        P::new(Symbol { flags: OwnedCell::new(flags), name: OwnedTaggedStrCell::new(name), ..Default::default() })
+        let s = P::new(Symbol { flags: OwnedCell::new(flags), name: OwnedTaggedStrCell::new(name), ..Default::default() });
+        if tsrs_core::sharedgraph::on_seed_thread() {
+            crate::get_symbol_id(s);
+        }
+        s
     }
 
     #[inline]
@@ -815,6 +819,11 @@ impl SymbolTable {
     /// Go `make(ast.SymbolTable, n)`.
     pub fn with_capacity(n: usize) -> P<SymbolTable> {
         P::new(SymbolTable(FrozenCell::new(SymbolMap::with_capacity(n))))
+    }
+
+    /// A copy of the table as a value (shared graph: a checker's copy of a frozen table held inline).
+    pub fn clone_value(&self) -> SymbolTable {
+        SymbolTable(FrozenCell::new(self.0.borrow().clone()))
     }
 
     /// Go `maps.Clone(table)` for a non-nil table.

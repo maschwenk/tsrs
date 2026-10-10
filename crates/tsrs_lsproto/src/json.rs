@@ -230,7 +230,7 @@ pub fn marshal<T: Json>(v: &T) -> Result<String, String> {
 
 // Go `json.Unmarshal(data, &v)`.
 pub fn unmarshal<T: Json>(data: &[u8]) -> Result<T, JsonError> {
-    let text = std::str::from_utf8(data).map_err(|_| JsonError::plain("jsontext: invalid UTF-8"))?;
+    let text = tsrs_core::utf8::basic::from_utf8(data).map_err(|_| JsonError::plain("jsontext: invalid UTF-8"))?;
     let v = tsrs_core::json::unmarshal(text).map_err(JsonError::plain)?;
     T::from_json(&v)
 }

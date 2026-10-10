@@ -257,7 +257,7 @@ impl TestSys {
                 add_fs_entry_diff(&serialized, current_libs.as_ref(), &mut diffs, Some(&entry), &path);
                 snap.insert(path, entry);
             } else if file.mode.is_regular() {
-                let content = sanitize_internal_symbol_name(&String::from_utf8_lossy(&file.data));
+                let content = sanitize_internal_symbol_name(&tsrs_core::utf8::from_utf8_lossy(&file.data));
                 let entry = DiffEntry { content, m_time: file.mod_time, is_written: written.contains(&path), symlink_target: String::new() };
                 add_fs_entry_diff(&serialized, current_libs.as_ref(), &mut diffs, Some(&entry), &path);
                 snap.insert(path, entry);

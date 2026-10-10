@@ -909,6 +909,22 @@ impl<T> Clone for ThinSlice<T> {
 }
 impl<T> Copy for ThinSlice<T> {}
 
+/// Identity: the same pointer and length (the shared-graph overlay's "unset" test).
+impl<T> PartialEq for ThinSlice<T> {
+    fn eq(&self, other: &Self) -> bool {
+        #[cfg(target_pointer_width = "64")]
+        return self.0 == other.0;
+        #[cfg(target_pointer_width = "32")]
+        return self.0 == other.0 && self.1 == other.1;
+    }
+}
+
+impl<T> Default for ThinSlice<T> {
+    fn default() -> Self {
+        ThinSlice::new(&[])
+    }
+}
+
 #[cfg(target_pointer_width = "64")]
 impl<T> ThinSlice<T> {
     const ALIGNED: () = assert!(std::mem::align_of::<T>() >= 2, "ThinSlice needs bit 0 of the data pointer");

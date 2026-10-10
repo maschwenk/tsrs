@@ -294,7 +294,7 @@ impl Session {
                 return Ok(if self.binary_responses {
                     Response::Binary(params.to_vec())
                 } else {
-                    Response::Json(String::from_utf8_lossy(params).into_owned())
+                    Response::Json(tsrs_core::utf8::from_utf8_lossy(params).into_owned())
                 })
             }
             "ping" => return Ok(Response::Json("\"pong\"".to_string())),
@@ -476,7 +476,7 @@ pub fn parse_params(params: &[u8]) -> ApiResult<Value> {
     if params.is_empty() {
         return Ok(Value::Null);
     }
-    let text = std::str::from_utf8(params).map_err(|e| ApiError::invalid_request(format!("params are not UTF-8: {e}")))?;
+    let text = tsrs_core::utf8::compat::from_utf8(params).map_err(|e| ApiError::invalid_request(format!("params are not UTF-8: {e}")))?;
     json::unmarshal(text).map_err(ApiError::invalid_request)
 }
 

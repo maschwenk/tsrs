@@ -183,7 +183,9 @@ lookup (+0.3%) and the value declaration read (+0.2%).
 
 - `Symbol` 40 -> 32 bytes: the 4-byte id is written lazily by any checker (atomic), the flag words are public
   `OwnedCell`s that call sites assign whole, and the declarations need a length; a packed 8-byte declarations
-  slice still leaves 36 bytes.
+  slice still leaves 36 bytes. Status (2026-10-10): done since, by pointer compression (4-byte handles):
+  `Symbol` is 32 bytes with compressed pointers and 40 with plain ones (assertion in crates/tsrs_ast/src/symbol.rs;
+  notes/mem-pointer-compression.md).
 - `TypeMapper` (255 MB), type lists (217 MB), value-symbol links (24 bytes per record): their size is already
   minimal for what they hold; their count is checker semantics.
 - Smaller layout candidates, each <= ~20 MB: `NodeList` 24 -> 20 bytes (4-aligned slice), the rarely set

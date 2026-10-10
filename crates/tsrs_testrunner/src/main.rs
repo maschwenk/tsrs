@@ -234,7 +234,7 @@ impl Selection {
         };
         let filter = args.value("--filter");
         let list = args.value("--list").map(|p| {
-            std::fs::read_to_string(&p)
+            tsrs_core::utf8::read_to_string(&p)
                 .unwrap_or_else(|e| panic!("--list {p}: {e}"))
                 .lines()
                 .map(|l| l.trim().to_string())

@@ -135,7 +135,7 @@ fn iterate_error_baseline(
             // Emit this line from the original file
             output_lines.push_str(new_line());
             output_lines.push_str("    ");
-            output_lines.push_str(&String::from_utf8_lossy(line));
+            output_lines.push_str(&tsrs_core::utf8::from_utf8_lossy(line));
             for err_diagnostic in &file_errors {
                 // Does any error start or continue on to this line? Emit squiggles
                 let err_start = err_diagnostic.loc.pos();

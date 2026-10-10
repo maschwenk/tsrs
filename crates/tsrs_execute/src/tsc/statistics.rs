@@ -68,7 +68,7 @@ pub struct Statistics {
 // `--extendedDiagnostics` run): the resident pages of /proc/self/statm, which is where Linux `ps` reads it.
 #[cfg(target_os = "linux")]
 fn memory_used_bytes() -> u64 {
-    let statm = std::fs::read_to_string("/proc/self/statm").unwrap_or_default();
+    let statm = tsrs_core::utf8::read_to_string("/proc/self/statm").unwrap_or_default();
     let pages = statm.split_whitespace().nth(1).and_then(|s| s.parse::<u64>().ok()).unwrap_or(0);
     // SAFETY: sysconf has no preconditions.
     let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
@@ -102,7 +102,7 @@ fn memory_used_bytes() -> u64 {
         .args(["-o", "rss=", "-p", &pid])
         .output()
         .ok()
-        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .and_then(|o| tsrs_core::utf8::into_string(o.stdout).ok())
         .and_then(|s| s.trim().parse::<u64>().ok())
         .map(|kb| kb * 1024)
         .unwrap_or(0)

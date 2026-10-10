@@ -123,7 +123,7 @@ pub fn run(args: &DumpArgs) {
 
 // One relative path per line; blank lines and `#` comments are ignored.
 fn read_list(path: &str) -> FxHashSet<String> {
-    std::fs::read_to_string(path)
+    tsrs_core::utf8::read_to_string(path)
         .unwrap_or_else(|e| panic!("{path}: {e}"))
         .lines()
         .map(|l| l.trim().to_string())

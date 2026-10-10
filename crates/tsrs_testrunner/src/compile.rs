@@ -87,7 +87,7 @@ fn test_lib_folder_map() -> Vec<(String, String)> {
                 walk(&p, root, out);
             } else if let Ok(b) = std::fs::read(&p) {
                 let rel = p.strip_prefix(root).unwrap().to_string_lossy().replace('\\', "/");
-                out.push((format!("{TEST_LIB_FOLDER}/{rel}"), String::from_utf8_lossy(&b).into_owned()));
+                out.push((format!("{TEST_LIB_FOLDER}/{rel}"), tsrs_core::utf8::from_utf8_lossy(&b).into_owned()));
             }
         }
     }

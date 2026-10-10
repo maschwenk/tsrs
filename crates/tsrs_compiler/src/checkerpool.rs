@@ -86,6 +86,7 @@ enum checkerHandleKind {
 impl CheckerHandle {
     fn locked(guard: MutexGuard<'static, SlotChecker>) -> CheckerHandle {
         let scope = guard.enter();
+        crate::sharedgraph::enter_checker(&guard);
         CheckerHandle { kind: checkerHandleKind::Locked { guard, _scope: scope } }
     }
 
@@ -233,6 +234,21 @@ impl SlotChecker {
         let checker = {
             let _scope = region.enter_scratch();
             new_checker(program)
+        };
+        SlotChecker { checker, region: Some(region) }
+    }
+
+    // A replacement for a retired checker: a fork of the frozen shared-graph seed when there is one (it starts with the
+    // seed's graph instead of rebuilding it), else a fresh checker; in a region of its own either way.
+    fn new_replacement(program: &'static Program) -> SlotChecker {
+        let region = tsrs_core::arena::Region::new_scratch(1 << 20);
+        let checker = {
+            let _scope = region.enter_scratch();
+            #[cfg(feature = "checker")]
+            let fork = crate::sharedgraph::fresh_fork();
+            #[cfg(not(feature = "checker"))]
+            let fork = None;
+            fork.unwrap_or_else(|| new_checker(program))
         };
         SlotChecker { checker, region: Some(region) }
     }
@@ -432,6 +448,8 @@ impl Drop for poolState {
 }
 
 pub(crate) struct poolState {
+    /// The shared graph is on (sharedgraph.rs): the type-check pass starts the seed and turns its checkers into forks.
+    shared_graph: bool,
     // Leaked like the program that owns the pool, so a handle can hold a checker's lock without borrowing the pool.
     checkers: &'static [CheckerSlot],
     // Program file index of each file.
@@ -788,13 +806,21 @@ impl checkerPool {
             }
             let max_memory = if program.checker_recycling && !self.single_threaded { memory_target(self.checker_count) } else { 0 };
             let recycle = max_memory > 0;
+            let shared = crate::sharedgraph::enabled() && !program.single_threaded();
             let create_and_assign = || {
                 let create_start = std::time::Instant::now();
                 #[cfg(feature = "checker")]
                 tsrs_checker::links::set_multiple_checkers(self.checker_count > 1);
                 let slots: Vec<Mutex<Option<CheckerSlot>>> = (0..self.checker_count).map(|_| Mutex::new(None)).collect();
+                // With the shared graph (sharedgraph.rs) the pool's checkers are plain until the type-check pass makes
+                // them forks of the seed.
                 run_work_group(self.single_threaded, self.checker_count, |i| {
-                    *slots[i].lock().unwrap() = Some(CheckerSlot(Mutex::new(SlotChecker::new(program, recycle))));
+                    let c = SlotChecker::new(program, recycle);
+                    #[cfg(feature = "checker")]
+                    if shared && i == 0 {
+                        crate::sharedgraph::note_fresh_checker(&c.checker);
+                    }
+                    *slots[i].lock().unwrap() = Some(CheckerSlot(Mutex::new(c)));
                 });
                 let checkers: &'static [CheckerSlot] =
                     Box::leak(slots.into_iter().map(|s| s.into_inner().unwrap().unwrap()).collect::<Vec<_>>().into_boxed_slice());
@@ -820,6 +846,7 @@ impl checkerPool {
             let owners = associations.iter().map(|&c| std::sync::atomic::AtomicU32::new(c as u32)).collect();
             let weights = if self.checker_count > 1 { checked_file_weights(program) } else { Vec::new() };
             poolState {
+                shared_graph: shared,
                 checkers,
                 file_indices,
                 owners,
@@ -856,6 +883,7 @@ impl checkerPool {
         let run = |idx: usize| {
             let mut guard = state.checkers[idx].0.lock().unwrap();
             let _scope = guard.enter();
+            crate::sharedgraph::enter_checker(&guard);
             cb(idx, &mut guard);
         };
         run_work_group(self.single_threaded, state.checkers.len(), run);
@@ -955,6 +983,15 @@ impl checkerPool {
                 }
             }
         }
+        // The shared-graph seed starts with the type-check pass, after the leaf files are classified
+        // (`fileregions::classify`): as for every checker, the leaf guard (`Checker::is_unreadable_check_leaf`) then
+        // keeps it from reading a leaf file, which may be freed while the seed runs or while a frozen object points into
+        // it.
+        #[cfg(feature = "checker")]
+        if allow_steal && state.shared_graph {
+            static SEED_STARTED: std::sync::Once = std::sync::Once::new();
+            SEED_STARTED.call_once(|| crate::sharedgraph::start_seed(self.program, state.weights.clone(), state.recycle));
+        }
         let queues: Vec<FileQueue> = positions.into_iter().map(|p| FileQueue::new(p, weight)).collect();
         // `--maxMemory`: each checker's region size after its last file, to retire the largest.
         let region_sizes: Vec<std::sync::atomic::AtomicUsize> = (0..n).map(|_| std::sync::atomic::AtomicUsize::new(0)).collect();
@@ -966,7 +1003,15 @@ impl checkerPool {
             let mut count = 0;
             let mut file_cpu: Vec<(P<SourceFile>, f64)> = Vec::new();
             let mut guard = state.checkers[checker_idx].0.lock().unwrap();
+            // Without `--maxMemory` the checker becomes a fork of the seed now, waiting for it; with it, at its first
+            // file boundary after the freeze (`switch_to_fork` below), so that the pool does not wait for the seed.
+            #[cfg(feature = "checker")]
+            if allow_steal && state.shared_graph && !state.recycle {
+                let _region = guard.enter();
+                crate::sharedgraph::fork_into(&mut guard.checker);
+            }
             let mut scope = guard.enter();
+            crate::sharedgraph::enter_checker(&guard);
             let recycle = allow_steal && state.recycle;
             let mut last_victim = usize::MAX;
             while let Some((i, from_other)) = queues_next(&queues, checker_idx, steal, sticky.then_some(&mut last_victim)) {
@@ -1017,7 +1062,12 @@ impl checkerPool {
                     // Read by the other checker threads only to pick the largest; a stale value picks another one.
                     region_sizes[checker_idx].store(guard.region_bytes(), std::sync::atomic::Ordering::Relaxed);
                 }
-                if recycle
+                #[cfg(feature = "checker")]
+                let switch_to_fork = recycle && state.shared_graph && !guard.checker.is_fork && crate::sharedgraph::try_base().is_some();
+                #[cfg(not(feature = "checker"))]
+                let switch_to_fork = false;
+                if switch_to_fork
+                    || recycle
                     && guard.region_bytes() >= retire_min()
                     && tsrs_core::memsplit::process_memory() > state.max_memory
                     // Relaxed: see the store above.
@@ -1027,6 +1077,7 @@ impl checkerPool {
                     drop(scope);
                     self.retire_checker(state, &mut guard);
                     scope = guard.enter();
+                    crate::sharedgraph::enter_checker(&guard);
                 }
             }
             drop(scope);
@@ -1074,9 +1125,11 @@ impl checkerPool {
     // diagnostics of the files the old checker checked have been collected, and no later pass runs a checker over
     // them (the CLI's `--noEmit` check, as for leaf freeing).
     fn retire_checker(&self, state: &poolState, slot: &mut SlotChecker) {
-        let mut old = std::mem::replace(slot, SlotChecker::new(self.program, true));
+        let mut old = std::mem::replace(slot, SlotChecker::new_replacement(self.program));
         {
             let _scope = old.enter();
+            // Making the replacement left the thread's overlay (sharedgraph.rs): the old checker reads its own again.
+            crate::sharedgraph::enter_checker(&old.checker);
             let globals = old.checker.get_global_diagnostics();
             let mut retired = state.retired.lock().unwrap();
             retired.count += 1;
@@ -1086,6 +1139,19 @@ impl checkerPool {
             retired.instantiation_count += u64::from(old.checker.total_instantiation_count);
             retired.lazy_member_stats.add(&old.checker.lazy_member_stats);
             drop(retired);
+            if crate::sharedgraph::debug_regions() {
+                if let Some(region) = &old.region {
+                    region.retire_on_free();
+                    let chunks: Vec<String> = region.chunks().iter().map(|&(s, n)| format!("{s:x}+{n:x}")).collect();
+                    eprintln!(
+                        "dbg-retire thread={} fork={} types={} chunks={}",
+                        std::thread::current().name().unwrap_or("?"),
+                        old.checker.is_fork,
+                        old.checker.type_count,
+                        chunks.join(",")
+                    );
+                }
+            }
             drop(old.checker);
         }
         drop(old.region);
@@ -1413,7 +1479,7 @@ fn compute_associations(program: &Program, checker_count: usize) -> Vec<usize> {
             (0..program.files.len()).map(|_| (splitmix64(&mut state) % checker_count as u64) as usize).collect()
         }
         CheckerAssignment::File(path) => {
-            let text = std::fs::read_to_string(path).expect("TSRS_CHECKER_ASSIGNMENT file");
+            let text = tsrs_core::utf8::read_to_string(path).expect("TSRS_CHECKER_ASSIGNMENT file");
             let associations: Vec<usize> = text.lines().map(|l| l.trim().parse::<usize>().unwrap().min(checker_count - 1)).collect();
             assert_eq!(associations.len(), program.files.len(), "TSRS_CHECKER_ASSIGNMENT file length");
             associations
@@ -1462,7 +1528,7 @@ struct CostEntry {
 // malformed lines are skipped.
 fn read_cost_cache(path: &str) -> (FxHashMap<String, CostEntry>, usize) {
     let mut entries = FxHashMap::default();
-    let Ok(text) = std::fs::read_to_string(path) else {
+    let Ok(text) = tsrs_core::utf8::read_to_string(path) else {
         return (entries, 0);
     };
     let mut lines = text.lines();

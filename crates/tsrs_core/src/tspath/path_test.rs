@@ -646,3 +646,19 @@ fn test_contains_ignored_path() {
         assert!(contains_ignored_path(&format!("/test{pattern}/file.ts")));
     }
 }
+
+// Case-insensitive path components compare with Go's strings.EqualFold (SimpleFold orbits). Expected values are
+// tsgo's ContainsPath / GetRelativePathFromDirectory.
+#[test]
+fn test_ignore_case_paths_use_simple_fold() {
+    let ci = ComparePathsOptions { use_case_sensitive_file_names: false, current_directory: "/".to_string() };
+    assert!(!contains_path("/dir/I", "/dir/\u{131}/a.ts", &ci));
+    assert_eq!(get_relative_path_from_directory("/dir/I", "/dir/\u{131}/a.ts", &ci), "../\u{131}/a.ts");
+    assert!(!contains_path("/dir/i", "/dir/\u{130}/a.ts", &ci));
+    assert_eq!(get_relative_path_from_directory("/dir/i", "/dir/\u{130}/a.ts", &ci), "../\u{130}/a.ts");
+    assert!(contains_path("/dir/\u{3D1}", "/dir/\u{3F4}/a.ts", &ci));
+    assert_eq!(get_relative_path_from_directory("/dir/\u{3D1}", "/dir/\u{3F4}/a.ts", &ci), "a.ts");
+    assert!(contains_path("/dir/\u{FB05}", "/dir/\u{FB06}/a.ts", &ci));
+    assert_eq!(get_relative_path_from_directory("/dir/\u{FB05}", "/dir/\u{FB06}/a.ts", &ci), "a.ts");
+    assert!(contains_path("/dir/\u{1F80}", "/dir/\u{1F88}/a.ts", &ci));
+}

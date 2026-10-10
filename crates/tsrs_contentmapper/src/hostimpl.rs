@@ -936,7 +936,7 @@ impl stderrLogger {
         pending.extend_from_slice(data);
         while let Some(index) = pending.iter().position(|&b| b == b'\n') {
             let line = pending[..index].strip_suffix(b"\r").unwrap_or(&pending[..index]);
-            self.log(&String::from_utf8_lossy(line));
+            self.log(&tsrs_core::utf8::from_utf8_lossy(line));
             pending.drain(..=index);
         }
         Ok(data.len())
@@ -947,7 +947,7 @@ impl stderrLogger {
         let mut pending = lock(&self.mu);
         if !pending.is_empty() {
             let line = pending.strip_suffix(b"\r").unwrap_or(&pending);
-            self.log(&String::from_utf8_lossy(line));
+            self.log(&tsrs_core::utf8::from_utf8_lossy(line));
             pending.clear();
         }
     }

@@ -1,5 +1,6 @@
 use std::sync::Mutex;
 use rustc_hash::FxHashMap;
+use tsrs_core::stringutil::equal_fold;
 
 use crate::canonicalize::{fold_native_path, nativePathFolding};
 use crate::watcher::{is_in_directory_or_self, join_path_suffix, rebase_path};
@@ -210,43 +211,4 @@ fn cut(s: &str, sep: char) -> (&str, &str, bool) {
         Some(i) => (&s[..i], &s[i + sep.len_utf8()..], true),
         None => (s, "", false),
     }
-}
-
-// Go `strings.EqualFold`: simple Unicode case folding, rune by rune.
-pub(crate) fn equal_fold(a: &str, b: &str) -> bool {
-    let mut ai = a.chars();
-    let mut bi = b.chars();
-    loop {
-        match (ai.next(), bi.next()) {
-            (None, None) => return true,
-            (Some(x), Some(y)) => {
-                if x == y {
-                    continue;
-                }
-                if simple_fold_eq(x, y) {
-                    continue;
-                }
-                return false;
-            }
-            _ => return false,
-        }
-    }
-}
-
-fn simple_fold_eq(x: char, y: char) -> bool {
-    let lower = |c: char| {
-        let mut l = c.to_lowercase();
-        match (l.next(), l.next()) {
-            (Some(l0), None) => l0,
-            _ => c,
-        }
-    };
-    let upper = |c: char| {
-        let mut u = c.to_uppercase();
-        match (u.next(), u.next()) {
-            (Some(u0), None) => u0,
-            _ => c,
-        }
-    };
-    lower(x) == lower(y) || upper(x) == upper(y)
 }

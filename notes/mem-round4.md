@@ -7,6 +7,13 @@ formbricks-web 2.88 vs 2.20 (0.76x), cal-diy 2.57 vs 2.02 (0.79x), drizzle-orm 1
 2.29 vs 2.12 (0.93x); it was faster than bun on all seventeen. The round ran four Opus agents and the coordinator's own
 measurements; every number below is from the Depot 64-vCPU runner unless it says Mac.
 
+Status (2026-10-10): the scoreboard framing above is dated. The README bench now runs on the 16-vCPU Depot runner
+(`depot-ubuntu-24.04-16`) with tsrs at its default 8 checkers and bun at 16 threads (README.md;
+`default_checkers_for_parallelism` in crates/tsrs_compiler/src/checkerpool.rs gives 8 on 16 cores and still 32 on 64).
+The 64-vCPU figures in this note, including the section 5 table and its projection, are a record of that board; the
+16-vCPU gaps are in notes/mem-compact-ast-sizing.md section 1. This note has six sections; the "section 7" that
+notes/design-shared-type-layer.md cites is on branch `notes/discarded-work` (81b504bc), not on main.
+
 ## 1. Where the gap is
 
 - Single-threaded, tsrs is within ~9% of bun (t3code 871 vs 802 MiB). The whole gap is what each extra checker holds.

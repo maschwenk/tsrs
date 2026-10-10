@@ -126,7 +126,7 @@ impl Checker {
             }
             // Go slices bytes; a cut inside a multi-byte character yields U+FFFD here instead of the raw bytes.
             let cut = &result.as_bytes()[0..max_length as usize - "...".len()];
-            return String::from_utf8_lossy(cut).into_owned() + "...";
+            return tsrs_core::utf8::from_utf8_lossy(cut).into_owned() + "...";
         }
         result
     }

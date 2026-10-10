@@ -1,8 +1,16 @@
 # Records completion-related responses from tsgo-ref --lsp -stdio for the tsrs_ls completions smoke test.
-# usage: record.py <proj> <cases.json>  -> prints one JSON object per case: {"id":..., "result":...}
+# usage: TSGO=<reference tsgo> record.py <proj> <cases.json>  -> prints one JSON object per case: {"id":..., "result":...}
 import json, subprocess, sys, os
+def reference_binary():
+    # Same lookup as tools/oracle/emit/run.py: $TSGO, else $TSRS_WORK/bin/tsgo-ref.
+    if os.environ.get('TSGO'):
+        return os.environ['TSGO']
+    work = os.environ.get('TSRS_WORK')
+    if work and os.path.exists(os.path.join(work, 'bin', 'tsgo-ref')):
+        return os.path.join(work, 'bin', 'tsgo-ref')
+    sys.exit('set TSGO to the reference tsgo binary (or TSRS_WORK to a directory with bin/tsgo-ref)')
 proj = os.path.abspath(sys.argv[1]); spec = json.load(open(sys.argv[2]))
-p = subprocess.Popen(['/Users/maxschwenk/Developer/tsrs-work/bin/tsgo-ref', '--lsp', '-stdio'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+p = subprocess.Popen([reference_binary(), '--lsp', '-stdio'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 def send(o):
     b = json.dumps(o).encode(); p.stdin.write(b'Content-Length: %d\r\n\r\n' % len(b) + b); p.stdin.flush()
 def recv():

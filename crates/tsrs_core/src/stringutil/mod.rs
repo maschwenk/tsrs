@@ -1,6 +1,5 @@
 mod compare;
 mod identifier;
-mod identifier_parts_generated;
 mod js_case;
 mod js_case_generated;
 mod norm;

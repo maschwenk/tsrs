@@ -57,7 +57,7 @@ pub fn call(op: u32, arg: &[u8]) -> Result<Vec<u8>, HostError> {
     if r >= 0 {
         Ok(out)
     } else {
-        Err(HostError::Other(String::from_utf8_lossy(&out).into_owned()))
+        Err(HostError::Other(tsrs_core::utf8::from_utf8_lossy(&out).into_owned()))
     }
 }
 
@@ -84,7 +84,7 @@ pub mod test_host {
 
     fn split_nul(arg: &[u8]) -> (String, &[u8]) {
         let i = arg.iter().position(|&b| b == 0).unwrap_or(arg.len());
-        (String::from_utf8_lossy(&arg[..i]).into_owned(), arg.get(i + 1..).unwrap_or(&[]))
+        (tsrs_core::utf8::from_utf8_lossy(&arg[..i]).into_owned(), arg.get(i + 1..).unwrap_or(&[]))
     }
 
     pub fn call(op: u32, arg: &[u8]) -> Result<Vec<u8>, HostError> {
@@ -203,7 +203,7 @@ impl IoFS for HostRoot {
         let full = self.join(name)?;
         tsrs_vfs::osvfs::count_stat_call();
         let out = call(OP_STAT, full.as_bytes()).map_err(fs_error)?;
-        let text = String::from_utf8_lossy(&out);
+        let text = tsrs_core::utf8::from_utf8_lossy(&out);
         let mut fields = text.split(' ');
         let mode = match fields.next() {
             Some("d") => FileMode::Dir | FileMode::from_bits_retain(0o755),
@@ -223,7 +223,7 @@ impl IoFS for HostRoot {
             .split(|&b| b == 0)
             .filter(|e| !e.is_empty())
             .map(|e| IoDirEntry {
-                name: String::from_utf8_lossy(&e[1..]).into_owned(),
+                name: tsrs_core::utf8::from_utf8_lossy(&e[1..]).into_owned(),
                 type_: match e[0] {
                     b'd' => FileMode::Dir,
                     b'f' => FileMode::None,
@@ -312,7 +312,7 @@ impl FS for HostFs {
     fn realpath(&self, path: &str) -> String {
         let _ = internal::root_length(path); // Assert path is rooted
         match call(OP_REALPATH, path.as_bytes()) {
-            Ok(real) => tspath::normalize_slashes(&String::from_utf8_lossy(&real)),
+            Ok(real) => tspath::normalize_slashes(&tsrs_core::utf8::from_utf8_lossy(&real)),
             Err(_) => path.to_string(),
         }
     }

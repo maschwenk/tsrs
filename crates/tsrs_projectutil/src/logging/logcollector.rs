@@ -19,7 +19,7 @@ struct sharedBuilder(Arc<Mutex<String>>);
 
 impl Write for sharedBuilder {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.0.lock().unwrap().push_str(&String::from_utf8_lossy(buf));
+        self.0.lock().unwrap().push_str(&tsrs_core::utf8::from_utf8_lossy(buf));
         Ok(buf.len())
     }
 

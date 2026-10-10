@@ -475,7 +475,7 @@ impl Generator {
     // generator.go:356
     // Gets the string representation of the source map
     pub fn string(&mut self) -> String {
-        String::from_utf8(self.bytes()).unwrap()
+        tsrs_core::utf8::into_string(self.bytes()).unwrap()
     }
 
     // generator.go:360

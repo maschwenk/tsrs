@@ -163,10 +163,10 @@ one element, 5-13% none.
 - **A, identifier text as a 32-bit atom in the node.** Atom (4 B) + flow handle (4 B) is today's 8-byte word, so a
   compact identifier stays 32 B: 0 B saved on 96.6-99.7% of identifiers. An identifier that stores its text (40 B)
   becomes 32 B. The interner costs ~14 B per distinct text (an 8-byte text pointer plus a hash slot; estimate), and
-  the measured global interner cost +9% parse time (mem-round2.md:203-212, section 9: sharded mutex tables, hashing
-  7.8M identifiers). A per-file interner avoids the locks but its atoms do not compare across files; a parallel merge
-  of per-file tables keeps the hashing and adds a remap pass (estimate: most of the cost stays; not measured). A saves
-  nothing to pay for either.
+  the measured global interner cost +9% parse time (mem-round2.md "Global identifier interner (step 9,
+  rejected)": sharded mutex tables, hashing 7.8M identifiers). A per-file interner avoids the locks but its atoms do
+  not compare across files; a parallel merge of per-file tables keeps the hashing and adds a remap pass (estimate:
+  most of the cost stays; not measured). A saves nothing to pay for either.
 - **B, identifier nodes removed where the checker keys nothing on them, the atom in the parent.** The parent's 4-byte
   name field holds the atom instead of the handle, so the parent does not grow; a "name is inline" bit fits the header
   word's spare bits (with 32-bit handles bits 32-44 of the parent field are always 0, ptr.rs:444-450). 32 B saved per
@@ -305,8 +305,9 @@ Outputs that touch the moved fields:
   id-as-handle 0 B after rounding; lists as inline ranges 10-44 MB, "lenses disagree"; flat symbol tables 12-15 MB
   (built as #147, closed below the bar); literal `TokenFlags` 0-7.7 MiB; inline single declaration at most 9.7 MB;
   numeric literals into a table 0 MB.
-- notes/mem-round2.md:203-212: a global identifier interner, -0.075 GiB single-threaded for +9% parse time, rejected
-  for `PackedStr`; notes/perf-round2-followups.md item 5: full name interning for about 0.2% of instructions.
+- notes/mem-round2.md "Global identifier interner (step 9, rejected)": a global identifier interner, -0.075 GiB
+  single-threaded for +9% parse time, rejected for `PackedStr`; notes/perf-round2-followups.md item 5: full name
+  interning for about 0.2% of instructions.
 - notes/mem-small.md step 2: identifiers became 32 B with their text derived from the source; notes/mem-frontend.md:
   the tree is headers, payloads, identifiers and lists, nothing node_modules-specific.
 - notes/mem-round4.md sections 1 and 6: the gap is what each extra checker holds; a type graph shared by the checkers

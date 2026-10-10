@@ -7,6 +7,10 @@ exact checker-side reductions, and measures the one allocator setting that would
 1368df3 (the 64-thread probe workflow, fd2ffc1, on top). All diagnostics byte-identical (vscode, webpack,
 xstate-main at 1, 4, 16 checkers; 371 / 840 / 0 errors).
 
+Status (2026-10-10): the `no_thp` setting measured in section 3 has since shipped (notes/mem-no-thp.md;
+crates/tsrs_cli/Cargo.toml). Where this note says "the huge-page heap (the shipped configuration)" or "Not applied
+here", read it as the configuration of 1368df3.
+
 ## 1. Where the memory is
 
 ### Linux, 64 vCPUs (Depot `depot-ubuntu-24.04-64`, EPYC 9R45, THP `madvise`), vscode, release build
