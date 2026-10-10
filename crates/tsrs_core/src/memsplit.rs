@@ -307,3 +307,55 @@ mod linux {
         );
     }
 }
+
+/// tsrs-only (`--maxMemory`, notes/mem-recycle-checkers.md): the process's memory in bytes as the system accounts it
+/// for limits: the physical footprint on macOS (what `/usr/bin/time -l` reports as peak memory footprint), the resident
+/// set on Linux (`/proc/self/statm`). Re-read at most every 5 ms; callers between two checked files share the value.
+pub fn process_memory() -> usize {
+    use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+    use std::sync::OnceLock;
+    static START: OnceLock<std::time::Instant> = OnceLock::new();
+    static LAST_NS: AtomicU64 = AtomicU64::new(0);
+    static VALUE: AtomicUsize = AtomicUsize::new(0);
+    let now = START.get_or_init(std::time::Instant::now).elapsed().as_nanos() as u64;
+    // Relaxed (both): a cached reading; a stale or doubly refreshed value only moves a heuristic by 5 ms.
+    let last = LAST_NS.load(Ordering::Relaxed);
+    if last != 0 && now.saturating_sub(last) < 5_000_000 {
+        return VALUE.load(Ordering::Relaxed);
+    }
+    let v = read_process_memory();
+    VALUE.store(v, Ordering::Relaxed);
+    LAST_NS.store(now.max(1), Ordering::Relaxed);
+    v
+}
+
+#[cfg(target_os = "macos")]
+fn read_process_memory() -> usize {
+    unsafe extern "C" {
+        static mach_task_self_: u32;
+        fn task_info(target_task: u32, flavor: i32, task_info_out: *mut u32, count: *mut u32) -> i32;
+    }
+    const TASK_VM_INFO: i32 = 22;
+    // `task_vm_info_data_t`: `phys_footprint` is the u64 at byte 144 (revision 1 and later).
+    let mut info = [0u32; 128];
+    let mut count = info.len() as u32;
+    // SAFETY: `info` has room for `count` naturals; the kernel writes at most that many and updates `count`.
+    let kr = unsafe { task_info(mach_task_self_, TASK_VM_INFO, info.as_mut_ptr(), &raw mut count) };
+    if kr != 0 || count < 38 {
+        return 0;
+    }
+    (u64::from(info[36]) | u64::from(info[37]) << 32) as usize
+}
+
+#[cfg(target_os = "linux")]
+fn read_process_memory() -> usize {
+    let statm = std::fs::read_to_string("/proc/self/statm").unwrap_or_default();
+    let pages: usize = statm.split_whitespace().nth(1).and_then(|v| v.parse().ok()).unwrap_or(0);
+    // SAFETY: sysconf has no preconditions.
+    pages * unsafe { libc::sysconf(libc::_SC_PAGESIZE) } as usize
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+fn read_process_memory() -> usize {
+    0
+}

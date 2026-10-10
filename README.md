@@ -104,6 +104,7 @@ same diagnostics and emits the same 9,257 files byte for byte. [`docs/STATUS.md`
 | --- | --- | --- |
 | Type checking (`--noEmit`) | yes | 13,458 of 13,462 error baselines and all 12,779 `.types` / `.symbols` baselines match; same diagnostics on the 38k-file codebase |
 | Multithreaded checking, `--singleThreaded`, `--pretty`, `--extendedDiagnostics`, `--listFiles`, `--listFilesOnly` | yes | |
+| Memory target (`--maxMemory <size>`) | `--noEmit` checks, opt-in | the 38k-file codebase at 8 checkers: peak 18.0 GB without it; `--maxMemory 12G` 12.9 GB (+11% instructions), `10G` 10.8 GB (+16%), `8G` 8.7 GB (+35%), same diagnostics; testdata/regressions identical with a checker retired after nearly every file, also in poison mode (notes/mem-recycle-checkers.md) |
 | Same output regardless of thread count | yes, with known exceptions (tsgo: no) | a few projects still depend on file order through tsgo's own logic (notes/open-history-dependence.md); `--checkerAssignment go` reproduces tsgo exactly |
 | JavaScript emit | yes | all of tsgo's transforms; 13,392 `.js` baselines pass, 0 fail |
 | Declaration emit (`.d.ts`) | yes | part of the `.js` baselines |
@@ -132,6 +133,9 @@ tsrs accepts every `tsc` flag it supports. A few extra ones control performance:
 - `--singleThreaded` uses one thread, for the lowest memory use.
 - `--checkerCostCache <file>` remembers how long each file took to check and uses that to balance threads on the next
   run (up to ~15% faster on repeated runs).
+- `--maxMemory <size>` (for example `12G`; `--noEmit` checks only) keeps the process near that much memory: above it,
+  tsrs replaces its largest checker with a fresh one, trading CPU for memory. Useful on very large programs (the
+  38k-file codebase: 18.0 GB without it, 10.8 GB at `10G` for 16% more instructions). The diagnostics are the same.
 - `--checkerAssignment go` splits files across threads the way tsgo does, for byte-identical output with tsgo.
 - `--noLazyMembers` turns off a set of checker optimizations that are not yet merged upstream. They never change
   diagnostics; the patches are in [`upstream/`](upstream/).
