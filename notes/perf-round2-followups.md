@@ -117,13 +117,6 @@ is type-checked, CI runs on pull requests, and the workspace is at 0.11.0. The i
 
 ## Measured and rejected (do not redo)
 
-- Oxc identifier techniques (`notes/perf-oxc-identifiers.md`), isolated experiment: an aligned packed ASCII
-  start/continue table, inline Unicode dispatch, and 8-/4-byte ASCII checks in whole-name validation. Pinned
-  Compiler / Compiler-Unions single-threaded instructions -0.042% / -0.024% on macOS; default peak RSS
-  -0.020% / +0.266%, with identical conformance results. Below the landing bar; implementation is retained
-  on the requested experimental branch. Revisit for landing only with a qualifying gain on a pinned project
-  or headline workload; other projects and the Linux instruction gate are not measured.
-
 - A tracing collector for checker data instead of retiring checkers (notes/mem-checker-gc.md): weak identity caches
   free 3% more than garbage at mid-run; even an upper bound with member tables and value-symbol links weak frees
   ~37% of the program's memory, about where `--maxMemory` already gets, for weeks of data-model changes.
