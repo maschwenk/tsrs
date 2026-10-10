@@ -989,11 +989,21 @@ impl Checker {
     // and no required properties, call/construct signatures or index signatures
     pub(crate) fn is_weak_type(&mut self, t: P<Type>) -> bool {
         if t.flags().intersects(TypeFlags::Object) {
-            return self.signatures_of_structured_type(t, SignatureKind::Call).is_empty()
+            // tsrs-only: memoized once the members are resolved (the answer follows from them; a reset of the members
+            // clears the memo with MembersResolved).
+            let flags = t.object_flags_lazy();
+            if flags.intersects(ObjectFlags::IsWeakTypeComputed) {
+                return flags.intersects(ObjectFlags::IsWeakType);
+            }
+            let result = self.signatures_of_structured_type(t, SignatureKind::Call).is_empty()
                 && self.signatures_of_structured_type(t, SignatureKind::Construct).is_empty()
                 && self.index_infos_of_structured_type(t).is_empty()
                 && self.has_properties_of_structured_type(t)
                 && self.every_property_of_structured_type(t, &mut |_, p| p.flags().intersects(SymbolFlags::Optional));
+            if t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) {
+                t.object_flags.set(t.object_flags_lazy() | ObjectFlags::IsWeakTypeComputed | if result { ObjectFlags::IsWeakType } else { ObjectFlags::None });
+            }
+            return result;
         }
         if t.flags().intersects(TypeFlags::Substitution) {
             return self.is_weak_type(t.as_substitution_type().base_type.get().unwrap());

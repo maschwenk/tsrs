@@ -1031,6 +1031,10 @@ bitflags! {
         // tsrs-only, intersections: shouldNormalizeIntersection memoized (its answer depends only on the constituents).
         const ShouldNormalizeComputed = 1 << 30;
         const ShouldNormalize = 1 << 31;
+        // tsrs-only, object types: isWeakType memoized; cleared with MembersResolved (`WeakTypeMemo`).
+        const IsWeakTypeComputed = 1 << 30;
+        const IsWeakType = 1 << 31;
+        const WeakTypeMemo = Self::IsWeakTypeComputed.bits() | Self::IsWeakType.bits(); // also the intersection memo bits: new_type drops them
     }
 }
 

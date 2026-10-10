@@ -3084,7 +3084,7 @@ impl Checker {
             // for resolution of type parameter defaults to cause circularity errors, possibly leaving
             // members partially resolved. Here we ensure any such partial resolution is reset.
             // See https://github.com/microsoft/TypeScript/issues/16861 for an example.
-            t.object_flags.set(t.object_flags.get_lazy() & !ObjectFlags::MembersResolved);
+            t.object_flags.set(t.object_flags.get_lazy() & !(ObjectFlags::MembersResolved | ObjectFlags::WeakTypeMemo));
             self.augment_filter = None; // t may be one of the filter's four types: its members are resolved again
             data.base_types_resolved.set(true);
             if canonical {
@@ -3136,7 +3136,7 @@ impl Checker {
             let data = r.as_interface_type();
             data.base_types_resolved.set(false);
             data.resolved_base_types.set(&[]);
-            r.object_flags.set(r.object_flags.get_lazy() & !ObjectFlags::MembersResolved);
+            r.object_flags.set(r.object_flags.get_lazy() & !(ObjectFlags::MembersResolved | ObjectFlags::WeakTypeMemo));
         }
         self.augment_filter = None; // as in get_base_types
         // Each pass resolves `first` for good, so a later reset (another cycle) covers fewer types and this ends.

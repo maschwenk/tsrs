@@ -426,7 +426,7 @@ impl Checker {
         let regular = self.new_anonymous_type(t.symbol(), Some(members), resolved.call_signatures(), resolved.construct_signatures(), resolved.index_infos());
         // resolved is t's own structured data, so resolved.flags/objectFlags are t's header flags
         regular.flags.set(t.flags());
-        regular.object_flags.set(regular.object_flags_lazy() | (t.object_flags_lazy() & !ObjectFlags::FreshLiteral));
+        regular.object_flags.set(regular.object_flags_lazy() | (t.object_flags_lazy() & !(ObjectFlags::FreshLiteral | ObjectFlags::WeakTypeMemo)));
         self.cached_types.insert(key, regular);
         regular
     }

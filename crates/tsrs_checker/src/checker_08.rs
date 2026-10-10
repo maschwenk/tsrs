@@ -2132,7 +2132,7 @@ impl Checker {
         }
         let index_infos = self.get_index_infos_of_type(t);
         let result = self.new_anonymous_type(t.symbol(), Some(members), &[], &[], &index_infos);
-        result.object_flags.set(t.object_flags_lazy());
+        result.object_flags.set(t.object_flags_lazy() & !ObjectFlags::WeakTypeMemo);
         result
     }
 

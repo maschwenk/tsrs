@@ -1916,7 +1916,7 @@ impl Checker {
         tsrs_core::sitecount::hit("type", type_kind_label(flags, object_flags));
         let t = Type::alloc(
             flags,
-            object_flags & !(ObjectFlags::CouldContainTypeVariablesComputed | ObjectFlags::CouldContainTypeVariables | ObjectFlags::MembersResolved),
+            object_flags & !(ObjectFlags::CouldContainTypeVariablesComputed | ObjectFlags::CouldContainTypeVariables | ObjectFlags::MembersResolved | ObjectFlags::WeakTypeMemo),
             TypeId(self.type_count),
             data,
         );
@@ -2073,7 +2073,7 @@ impl Checker {
     // checker.go:25607
     pub(crate) fn clone_type_reference(&mut self, source: P<Type>) -> P<Type> {
         let t = self.new_object_type(ObjectFlags::Reference, source.symbol());
-        t.object_flags.set(source.object_flags_lazy() & !ObjectFlags::MembersResolved);
+        t.object_flags.set(source.object_flags_lazy() & !(ObjectFlags::MembersResolved | ObjectFlags::WeakTypeMemo));
         t.as_type_reference().target.set(source.as_type_reference().target.get());
         t.as_type_reference().resolved_type_arguments.set(source.as_type_reference().resolved_type_arguments.get());
         t
@@ -2088,7 +2088,9 @@ impl Checker {
         construct_signatures: &[P<Signature>],
         index_infos: &[P<IndexInfo>],
     ) {
-        t.object_flags.set(t.object_flags_lazy() | ObjectFlags::MembersResolved);
+        // A class or interface sets its own members, then again with the inherited ones: drop what isWeakType
+        // memoized in between.
+        t.object_flags.set(t.object_flags_lazy() & !ObjectFlags::WeakTypeMemo | ObjectFlags::MembersResolved);
         let data = t.as_structured_type();
         data.set_members(members);
         let properties = self.get_named_members(members, t.symbol());
