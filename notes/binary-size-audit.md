@@ -3,8 +3,8 @@
 The largest data opportunity is compressing the embedded TypeScript libraries: 3.03 MiB of payload before decoder
 overhead. The strongest code opportunities are a narrower matcher for auto-import exclusion regexes and sharing
 the compiler-option traversal that is currently expanded into three large functions. These are candidates, not
-measured source-change savings. The subsequent [regex implementation](binary-size-regex.md) saves 420.6 KiB
-(2.09%) with existing features preserved. The baseline attribution and other candidates below are unchanged.
+measured source-change savings. The subsequent [regex feature adjustment](binary-size-regex.md) saves 64.6 KiB
+(0.32%) with existing features preserved. The baseline attribution and other candidates below are unchanged.
 
 ## Build and measurement
 
@@ -85,9 +85,10 @@ literal-only matcher would change behavior. A smaller engine may make this LSP p
 executable and exclusion-heavy completion requests. Merely deleting `is_excluded_by_regex` would remove a supported
 preference and is not a suitable optimization.
 
-Implemented after this audit: [the Unicode-capable PikeVM adapter](binary-size-regex.md) saves **420.6 KiB (2.09%)**
-in the linked CLI. It retains the old syntax, matching, compilation limits and literal-alternation acceptance paths.
-The implementation note records differential checks and the measured completion-latency tradeoff.
+Implemented after this audit: [the reduced regex feature set](binary-size-regex.md) saves **64.6 KiB (0.32%)**
+in the linked CLI while retaining the existing matcher. Syntax, Unicode, matching, compilation limits and
+literal-alternation acceptance are preserved. The owner selected the simpler dependency-only change over a custom
+PikeVM adapter that saved 420.6 KiB. The implementation note records both experiments and compatibility checks.
 
 ### Share compiler-option traversal
 
@@ -161,7 +162,7 @@ footprint describes removing the whole reachable implementation, so a replacemen
 | Target | Current footprint | Saving evidence | Candidate and constraint |
 | --- | ---: | --- | --- |
 | Embedded libraries | 3.62 MiB | 3.03 MiB payload measured | Generate compressed blobs; decode requested libraries once. Adds startup work and heap storage; current reads are zero-copy. |
-| Auto-import regex matcher | 944.8 KiB retained | 420.6 KiB measured linked CLI saving | Implemented Unicode-capable PikeVM adapter; syntax, flags, invalid patterns, compilation limits and cache behavior preserved. See binary-size-regex.md for latency. |
+| Auto-import regex matcher | 944.8 KiB retained | 64.6 KiB measured linked CLI saving | Reduced performance features; existing matcher, Unicode, flags, compilation acceptance and cache behavior preserved. See binary-size-regex.md. |
 | Compiler-option comparisons | 101.2 KiB / 3 copies | 67.4 KiB one-copy ceiling | Keep one non-generic comparison body with small filter adapters. Fat LTO may specialize it again; preserve strict and allow-JS semantics. |
 | Compiler-option field traversal | 71.3 KiB body | Unknown | Share field access and conversion scaffolding. Also inspect 43.7 KiB JSON conversion and 24.9 KiB merge routines. |
 | Unicode case mappings | 191.3 KiB constants | Unknown | Pack offsets/lengths or simple scalar mappings in generated data. 2,927 records currently carry three string slices; preserve final sigma and WTF-8. |
@@ -275,7 +276,7 @@ The mapping below adds two table leads and separates safe ASCII cleanup from Uni
 
 | Plan check | Evidence in this binary | Assessment |
 | --- | --- | --- |
-| Heavy dependencies | Baseline auto-import regex retained 944.8 KiB; no duplicate dependency versions | The compatible PikeVM adapter saves 420.6 KiB in the linked CLI. Unicode and regex syntax are retained. |
+| Heavy dependencies | Baseline auto-import regex retained 944.8 KiB; no duplicate dependency versions | The reduced regex features save 64.6 KiB in the linked CLI. Unicode, syntax and compilation acceptance are retained. |
 | Thin generic shim, shared non-generic body | Option comparisons: 101.2 KiB / 3 copies. LSP wrapper families: 97.7 KiB / 48 copies. Checker scheduling: 102.0 KiB / 7 copies | Start with the cold option and request scaffolding. The existing rejection of hot checker-predicate type erasure still applies. One-copy ceilings exclude adapters and are not linked savings. |
 | Unicode conversion for ASCII-only data | Three regex scanner diagnostic calls lowercase ScriptTarget names; parser extract_name explicitly scans only ASCII letters and hyphens | These calls can use ASCII conversion without changing their input domain. Required Unicode conversion elsewhere still keeps the standard tables reachable. This is not evidence for a large table-removal win. |
 | Repeated static string lookup tables | Kind formatting tables, compiler feature membership, regex property aliases, and LSP preference metadata | Compact string IDs and shared tables deserve explicit linked A/B experiments. See the source counts and current attributed footprints below. |

@@ -129,10 +129,15 @@ is type-checked, CI runs on pull requests, and the workspace is at 0.11.0. The i
 - Binary-size attribution (notes/binary-size-audit.md, macOS arm64 at `2fbb51f4`): the stripped analysis binary is
   19.626 MiB. Embedded libraries can shrink 3.03 MiB in payload before decoder overhead, but that gives up the
   existing zero-copy reads; the auto-import regex filter retains 944.8 KiB, and three cold option walkers total
-  101.2 KiB (67.4 KiB one-copy estimate). The regex follow-up (notes/binary-size-regex.md) adopts a Unicode-capable
-  PikeVM adapter: actual linked CLI -420.6 KiB (-2.09%), existing matching/acceptance preserved. The owner explicitly
-  prioritizes size on this cold path; a synthetic 701-file LSP session has +0.52% instructions, -1.10% peak RSS and
-  +0.096 ms median filtered-completion latency. A bare PikeVM and regex-lite were rejected for compatibility.
+  101.2 KiB (67.4 KiB one-copy estimate). The regex follow-up (notes/binary-size-regex.md) adopts a feature-only
+  change retaining `std`, `unicode`, `perf-literal` and `perf-dfa`: linked CLI -64.6 KiB (-0.32%),
+  existing matcher retained, all 278 isolated probe pattern groups agree. The owner explicitly prioritizes size on
+  this cold path and then chose simpler maintenance over a custom adapter. The prior compatible PikeVM adapter
+  saved 420.6 KiB (-2.09%) in the linked CLI, with +0.52% synthetic LSP instructions and +0.096 ms completion median,
+  but needed custom literal matching, a VM cache and reverse-NFA validation. Revisit that adapter only if the
+  larger saving justifies the extra maintenance. A bare PikeVM, regex-lite and disabling literal/DFA features were
+  rejected for compatibility. Standalone savings are 80.7 KiB for selected features versus 452.9 KiB for the adapter;
+  these are separate from linked CLI measurements. The implementation note records instructions and peak RSS.
   The other candidates still need actual linked A/B savings and instructions/peak RSS, preserving library text.
   This is new whole-program size evidence,
   not a reason to repeat the rejected hot checker-callback experiment. The plan cross-check adds compact static

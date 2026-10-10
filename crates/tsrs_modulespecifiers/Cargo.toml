@@ -13,8 +13,4 @@ tsrs_ast.workspace = true
 tsrs_module.workspace = true
 tsrs_tsoptions.workspace = true
 rustc-hash.workspace = true
-regex-automata = { version = "0.4", default-features = false, features = ["std", "syntax", "nfa-pikevm", "unicode"] }
-regex-syntax = "0.8"
-
-[dev-dependencies]
-regex = "1"
+regex = { version = "1", default-features = false, features = ["std", "unicode", "perf-dfa", "perf-literal"] }

@@ -205,7 +205,7 @@ pub struct regexPatternCacheKey {
 }
 
 /// Go `regexPatternCache` guarded by `regexPatternCacheMu` (one `RwLock`).
-pub(crate) static regexPatternCache: LazyLock<RwLock<FxHashMap<regexPatternCacheKey, Option<P<ExcludeRegex>>>>> =
+pub(crate) static regexPatternCache: LazyLock<RwLock<FxHashMap<regexPatternCacheKey, Option<P<regex::Regex>>>>> =
     LazyLock::new(|| RwLock::new(FxHashMap::default()));
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

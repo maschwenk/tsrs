@@ -52,7 +52,7 @@ pub fn is_excluded_by_regex(module_specifier: &str, excludes: &[String]) -> bool
 }
 
 // util.go:59
-pub(crate) fn string_to_regex(pattern: &str) -> Option<P<ExcludeRegex>> {
+pub(crate) fn string_to_regex(pattern: &str) -> Option<P<regex::Regex>> {
     let mut pattern = pattern;
     let mut case_insensitive = false;
 
@@ -102,12 +102,12 @@ pub(crate) fn string_to_regex(pattern: &str) -> Option<P<ExcludeRegex>> {
         compile_pattern = format!("(?i:{pattern})");
     }
 
-    match ExcludeRegex::new(&compile_pattern) {
-        None => {
+    match regex::Regex::new(&compile_pattern) {
+        Err(_) => {
             cache.insert(key, None);
             None
         }
-        Some(compiled) => {
+        Ok(compiled) => {
             // The cache is process-wide: never in a freeable region (language server).
             let compiled = {
                 let _arena = tsrs_core::arena::enter_thread_arena();

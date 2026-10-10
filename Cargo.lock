@@ -651,8 +651,6 @@ name = "tsrs_modulespecifiers"
 version = "0.11.0"
 dependencies = [
  "regex",
- "regex-automata",
- "regex-syntax",
  "rustc-hash",
  "tsrs_ast",
  "tsrs_core",
