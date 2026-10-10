@@ -366,8 +366,9 @@ def speedup_sort_key(project: dict, mode: str) -> tuple[int, float]:
 
 
 def tsrs_default_checkers(machine: dict) -> int:
-    """tsrs's default checker count on a machine (checkerpool.rs default_checker_count; the small-program floor does
-    not bind on these projects)."""
+    """tsrs's default checker count on a machine (checkerpool.rs default_checker_count_by_machine; the per-file
+    limit is not applied, so this overstates projects with fewer than 32 type-checked files per checker, e.g.
+    Compiler, Compiler-Unions and xstate-main)."""
     cpus = machine.get("cpus") or 1
     return max(4, min(32, max(cpus // 2, min(cpus, 8))))
 

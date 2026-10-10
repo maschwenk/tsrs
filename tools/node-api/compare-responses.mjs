@@ -4,13 +4,15 @@
 //   node tools/node-api/compare-responses.mjs --a go-cap --b tsrs-cap [--out <dir>] [--drift <method>]
 //
 // Pairing: server processes are matched by the test that spawned them (preload.mjs); within a test, each A process
-// is paired with the first unused B process of the same mode and request-method sequence, falling back to start
-// order. Within a pair, sync traffic is aligned request-by-request (the sync client is strictly
+// is paired with the first unused B process of the same mode and request-method sequence, else the first unused B
+// process of the same mode. Within a pair, sync traffic is aligned request-by-request (the sync client is strictly
 // sequential); async traffic is aligned by JSON-RPC request id. batchRequests are expanded into their inner
 // method entries. Server->client filesystem callbacks are compared as per-pair multisets (their order depends
 // on server-side parallelism).
 //
-// Normalization (only these; everything else, binary payloads included, is compared exactly):
+// Normalization (only these; JSON is compared as parsed values, so object key order is ignored; everything else,
+// binary payloads included, is compared exactly; payloads over the capture limit are compared by sha256, and a
+// mismatch is inconclusive):
 //   - each run's private work-tree path is replaced by <TREE> in text, and by a same-length `#` fill in binary
 //     (msgpack bin / AST) payloads;
 //   - async JSON-RPC envelopes are reduced to their params / result / error;
@@ -19,8 +21,8 @@
 //     bijections per process pair (see ID_KEYS / handle strings / COUNTER_SUFFIX), applied to requests and
 //     responses alike, so a handle returned by one call must be the one the next call sends; a broken bijection
 //     is reported as a mismatch, not normalized away;
-//   - with --a2, arrays whose order the two oracle runs disagree on are reordered to run A's order before
-//     comparing (outcome "unordered").
+//   - with --a2, an exchange equal to oracle run 2 also counts as equal (outcome "run2"), and arrays whose order
+//     the two oracle runs disagree on are reordered to run A's order before comparing (outcome "unordered").
 // --drift <method> mutates the first successful <method> response of run B (negative control): the comparison
 // must then report a mismatch for that method.
 
@@ -520,7 +522,7 @@ const slowExchanges = [];
 const callDiffs = [];
 let pairedProcesses = 0;
 // Processes of one test started concurrently can start in either order; pair each A process with the first
-// unpaired B process of the same mode and request-method sequence, falling back to start order.
+// unpaired B process of the same mode and request-method sequence, else the first unpaired B process of the same mode.
 const signature = proc => proc.mode + ":" + proc.records.filter(r => r.kind === "request").map(r => r.method).join(",");
 function pairUp(listA, listB) {
     const used = new Set();

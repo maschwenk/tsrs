@@ -209,7 +209,8 @@ fn global_library_files(program: &crate::program::Program) -> Vec<P<SourceFile>>
 /// (`stats_report`); `all` gives every TypeScript root file a region (`LeafSettings::every_file`), at any count. Off
 /// under the debug modes that walk files or checker data after the pass (`TSRS_FILE_TIMES` walks every tree;
 /// `TSRS_ASSIGNMENT_STATS`, the work and heap censuses walk checker tables) or that must see every block alive (the
-/// reachability census, `TSRS_CENSUS=1`).
+/// reachability census, `TSRS_CENSUS=1`). Off without compressed pointers on unix (`Region::retire_on_free`),
+/// whatever the value.
 pub fn leaf_settings_from_env(checkers: usize) -> LeafSettings {
     let census = std::env::var_os("TSRS_CENSUS").is_some_and(|v| v == "1") || tsrs_core::census_recording();
     #[cfg(feature = "checker")]

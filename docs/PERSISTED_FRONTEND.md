@@ -105,8 +105,8 @@ handle-based inside the segment, or be rebuilt live on load.
 
 | item | today | in the image |
 | --- | --- | --- |
-| `P<T>` fields and the packed words (node parent, identifier slot, `SymbolParentWord`, `FlowNode.link`) | 32-bit handles in the default `compressed-ptrs` build (absolute with `plain-ptrs`) | handles; no fixup when the image is mapped at its window offset |
-| slices and strings: `ThinSlice` (`NodeList.nodes`), `PackedStr` / `StrCell`, `OwnedSliceCell` (symbol declarations), `&'static [P<Node>]` in `SourceFile`, `&'static str` symbol names | absolute (pointer compression leaves them; its notes name `PSlice` / `PStr` as the follow-up) | `PSlice` / `PStr` (32-bit handle + length) are a **prerequisite** |
+| `P<T>` fields and the packed words (node parent, identifier slot, `Symbol.parent_or_tables`, `FlowNode.link`) | 32-bit handles in the default `compressed-ptrs` build (absolute with `plain-ptrs`) | handles; no fixup when the image is mapped at its window offset |
+| slices and strings: `ThinSlice` (`NodeList.nodes`), `PackedStr` / `StrCell`, `OwnedPSliceCell` (symbol declarations; a one-word `ThinSliceCell` with compressed pointers), `&'static [P<Node>]` in `SourceFile`, `OwnedTaggedStrCell` symbol names | absolute (pointer compression leaves them; its notes name `PSlice` / `PStr` as the follow-up) | `PSlice` / `PStr` (32-bit handle + length) are a **prerequisite** |
 | `SymbolTable` entries | `EntryVec`: a `malloc` buffer of words holding symbol address / 8, plus a heap `HashTable` index above a size | arena-resident entry buffer of handles; the hash bits are name-based, so the index can be rebuilt or stored |
 | `SourceFile` heap and sync fields: `parse_options` (`String`, `Path(Arc<str>)`), `OnceLock`s (line map, position map, identifier set, name table, declaration map), `jsdoc_cache` (map keyed by node address) + `jsdoc_mu`, `token_cache`, `bind_once`, `is_bound` | in the struct | split: a persisted `SourceFileRecord` of handles and scalars in the segment, and a live side struct built on load (below) |
 | `pragmas` (`Pragma` with `String` / `FxHashMap`), `FileReference.file_name: String` | heap inside arena structs | `PStr`-based copies in the segment |
@@ -163,7 +163,8 @@ it elsewhere would mean adding a delta to every handle, which writes every page.
   `A` and maps each generation file `MAP_FIXED | MAP_PRIVATE` over its range of the `PROT_NONE` reservation. The
   range from `A` to `W` stays reserved for this run's misses. A process without a cache reserves no window.
 
-What this needs from pointer compression (landed; these are additions to it):
+What this needs from pointer compression (landed): items 1, 2, 4 and 5 are additions; item 3 already holds (fixed
+base address, `tsrs_core/src/reserve.rs`) except for the segment alignment.
 
 1. A start-up hook that sets the size of the reserved low window before the first chunk is handed out. The chunk
    allocator never hands out window ranges. A miss's segment is committed at the append point on demand, with a

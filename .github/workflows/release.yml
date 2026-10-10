@@ -1,7 +1,8 @@
 # Builds the tsrs binaries and the WebAssembly module and publishes the npm packages (npm/README.md), all at the
 # version npm/build.mjs derives from Cargo.toml. The conformance and fourslash gates run here on the BOLT-optimized
-# Linux binaries (.github/scripts/bolt.sh); the macOS binary and the WebAssembly differential gate are gated only in
-# .depot/workflows/ci.yml.
+# Linux binaries (.github/scripts/bolt.sh). The macOS binary gets only the smoke tests below; nothing runs the suites
+# on macOS (.depot/workflows/ci.yml, Linux only, gates the source). The WebAssembly differential gate
+# (tools/wasm/gate.sh) runs only in ci.yml.
 #
 # Setup before the first release:
 #   - repository secret NPM_TOKEN: an npm automation (or granular, publish-enabled) token for an account that may

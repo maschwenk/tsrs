@@ -146,8 +146,9 @@ Wire contract the server has to speak (from the pinned `tsc/cmd/tsc/api.go`, `ts
    and publishes the platform packages, then the main package, then `@maschwenk/tsrs-wasm`, with
    `--access public --tag latest` (skipping any already on the registry, so a failed run can be re-run).
 
-The conformance and fourslash gates run on the Linux release binaries (`bolt.sh`). The macOS binary and the
-WebAssembly differential gate (`tools/wasm/gate.sh`) are gated only in `ci.yml`.
+The conformance and fourslash gates run on the Linux release binaries (`bolt.sh`). The macOS binary gets only the
+smoke tests; `ci.yml` (Linux) gates the source, and the WebAssembly differential gate (`tools/wasm/gate.sh`) runs only
+there.
 
 `workflow_dispatch` runs the same with `npm publish --dry-run` by default.
 
@@ -186,8 +187,8 @@ pnpm exec tsrs -p path/to/project --noEmit --extendedDiagnostics
 ```
 
 Without `--checkers`, tsrs picks its checker count per machine (tsgo always uses 4): every core up to 8, then half
-the cores, never fewer than 4 nor more than 32, and at most one checker per 32 type-checked files (so small projects
-use 4). `--build` uses 4 per project; `--singleThreaded` uses one. `GOMEMLIMIT` has no effect on tsrs.
+the cores, from 4 to 32; a program with fewer than 32 type-checked files per checker gets fewer, down to 4, and never
+more checkers than files. `--build` uses 4 per project; `--singleThreaded` uses one. `GOMEMLIMIT` has no effect on tsrs.
 `--extendedDiagnostics` prints the same counters as tsgo (`Memory used` is the process RSS), so scripts that parse
 them keep working.
 

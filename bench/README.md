@@ -116,8 +116,8 @@ tsrs's errors (`(ref N)` in the table).
 
 - Invocation, identical for both: `-p <project> --noEmit --incremental false --extendedDiagnostics --pretty false`,
   in the default mode (no thread flag: tsgo uses 4 checker threads; tsrs every core up to 8, then half the cores,
-  never fewer than 4 nor more than 32, and at most one per 32 type-checked files, so 8 on the 8-vCPU machine for all
-  but small projects; tsrs additionally resolves members lazily, its default), with `--singleThreaded`, with
+  from 4 to 32, lowered toward 4 for programs with fewer than 32 type-checked files per checker, so 8 on the 8-vCPU
+  machine, but fewer on small or mid-size projects (Compiler and Compiler-Unions get 4, xstate-main fewer than 8); tsrs additionally resolves members lazily, its default), with `--singleThreaded`, with
   `--checkers 8` (the `checkers8` mode: both compilers at 8 checker threads, twice tsgo's default), and on a 16-vCPU machine (see "CI") in the default mode again (the `wide` mode: the same flags as
   `default`, kept apart so that one result can hold both machines) and with `--checkers 16` (the `checkers16` mode: how
   each scales on a wide machine). Select modes with `--modes` (default `default,single,checkers8`; flags in `MODE_FLAGS`

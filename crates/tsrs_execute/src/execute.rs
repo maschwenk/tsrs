@@ -1,4 +1,5 @@
-// Port of Go's execute/tsc.go (no watch mode, --init or --showConfig).
+// Port of Go's execute/tsc.go (no watch mode, --init, --showConfig or --generateTrace; --help prints a short usage
+// instead of tsc's option list).
 
 use std::sync::Arc;
 

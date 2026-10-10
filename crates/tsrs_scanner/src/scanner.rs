@@ -1,7 +1,7 @@
 //! Scanner API notes for consumers (parser, checker):
 //!
-//! Text and positions. The scanner scans a `&'static str` (the file's source text: leaked, embedded,
-//! or copied into the current arena or region).
+//! Text and positions. The scanner scans a `&'static str` (for the parser, the file's source text: leaked,
+//! embedded, or copied into the current arena or region; other callers pass their own static or `alloc_str` text).
 //! Positions are byte offsets (`i32`), exactly as in Go.
 //!
 //! Token values. `token_value()` returns `&'static str`. When the Go scanner would produce a
