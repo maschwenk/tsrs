@@ -317,6 +317,62 @@ pub struct Scanner {
     hex_digit_cache: FxHashMap<&'static str, &'static str>,
 }
 
+// Like Oxc's byte handlers, dispatch out of the token loop so simple tokens do not
+// pay for the stack frame of numeric, comment, and Unicode scanning. Handlers keep
+// Go's state updates; Continue is the old `continue 'scan` for skipped trivia.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ScanAction {
+    Return,
+    Continue,
+}
+
+type ByteHandler = fn(&mut Scanner) -> ScanAction;
+
+static BYTE_HANDLERS: [ByteHandler; 256] = {
+    let mut table = [Scanner::scan_byte_default as ByteHandler; 256];
+    let mut byte = 0;
+    while byte < table.len() {
+        table[byte] = match byte as u8 {
+            0x09 | 0x0B | 0x0C | 0x20 => Scanner::scan_byte_whitespace,
+            0x0A | 0x0D => Scanner::scan_byte_line_break,
+            0x21 /* ! */ => Scanner::scan_byte_exclamation,
+            0x22 | 0x27 /* " ' */ => Scanner::scan_byte_string,
+            0x60 /* ` */ => Scanner::scan_byte_template,
+            0x25 /* % */ => Scanner::scan_byte_percent,
+            0x26 /* & */ => Scanner::scan_byte_ampersand,
+            0x28 /* ( */ => Scanner::scan_byte_open_paren,
+            0x29 /* ) */ => Scanner::scan_byte_close_paren,
+            0x2A /* * */ => Scanner::scan_byte_asterisk,
+            0x2B /* + */ => Scanner::scan_byte_plus,
+            0x2C /* , */ => Scanner::scan_byte_comma,
+            0x2D /* - */ => Scanner::scan_byte_minus,
+            0x2E /* . */ => Scanner::scan_byte_dot,
+            0x2F /* / */ => Scanner::scan_byte_slash,
+            0x30..=0x39 /* 0-9 */ => Scanner::scan_byte_number,
+            0x3A /* : */ => Scanner::scan_byte_colon,
+            0x3B /* ; */ => Scanner::scan_byte_semicolon,
+            0x3C /* < */ => Scanner::scan_byte_less_than,
+            0x3D /* = */ => Scanner::scan_byte_equals,
+            0x3E /* > */ => Scanner::scan_byte_greater_than,
+            0x3F /* ? */ => Scanner::scan_byte_question,
+            0x5B /* [ */ => Scanner::scan_byte_open_bracket,
+            0x5D /* ] */ => Scanner::scan_byte_close_bracket,
+            0x5E /* ^ */ => Scanner::scan_byte_caret,
+            0x7B /* { */ => Scanner::scan_byte_open_brace,
+            0x7C /* | */ => Scanner::scan_byte_bar,
+            0x7D /* } */ => Scanner::scan_byte_close_brace,
+            0x7E /* ~ */ => Scanner::scan_byte_tilde,
+            0x40 /* @ */ => Scanner::scan_byte_at,
+            0x5C /* \ */ => Scanner::scan_byte_identifier,
+            0x23 /* # */ => Scanner::scan_byte_hash,
+            b'a'..=b'z' | b'A'..=b'Z' | b'_' | b'$' => Scanner::scan_byte_identifier,
+            _ => Scanner::scan_byte_default,
+        };
+        byte += 1;
+    }
+    table
+};
+
 pub(crate) const RUNE_SELF: i32 = 0x80;
 
 /// `[A-Za-z0-9_$]` by byte.
@@ -740,522 +796,612 @@ impl Scanner {
     pub fn scan(&mut self) -> Kind {
         self.state.full_start_pos = self.state.pos;
         self.state.token_flags = TokenFlags::None;
-        'scan: loop {
-            let ch = self.char();
+        loop {
             self.state.token_start = self.state.pos;
+            if self.state.pos >= self.end {
+                self.state.token = Kind::EndOfFile;
+                return self.state.token;
+            }
+            let byte = self.text.as_bytes()[self.state.pos as usize];
+            if BYTE_HANDLERS[byte as usize](self) == ScanAction::Return {
+                return self.state.token;
+            }
+        }
+    }
 
-            match ch {
-                0x09 | 0x0B | 0x0C | 0x20 => {
-                    self.state.pos += 1;
-                    if self.skip_trivia {
-                        // The next iteration would skip any further single-line whitespace byte the same way.
-                        self.scan_ascii_while(|b| b == b' ' || b == b'\t' || b == 0x0B || b == 0x0C);
-                        continue 'scan;
-                    }
-                    loop {
-                        let (ch, size) = self.char_and_size();
-                        if !stringutil::is_white_space_single_line(ch) {
-                            break;
-                        }
-                        self.state.pos += size;
-                    }
-                    self.state.token = Kind::WhitespaceTrivia;
+    fn scan_byte_whitespace(&mut self) -> ScanAction {
+        self.state.pos += 1;
+        if self.skip_trivia {
+            // The next iteration would skip any further single-line whitespace byte the same way.
+            self.scan_ascii_while(|b| b == b' ' || b == b'\t' || b == 0x0B || b == 0x0C);
+            return ScanAction::Continue;
+        }
+        loop {
+            let (ch, size) = self.char_and_size();
+            if !stringutil::is_white_space_single_line(ch) {
+                break;
+            }
+            self.state.pos += size;
+        }
+        self.state.token = Kind::WhitespaceTrivia;
+        ScanAction::Return
+    }
+
+    fn scan_byte_line_break(&mut self) -> ScanAction {
+        let ch = self.char();
+        self.state.token_flags |= TokenFlags::PrecedingLineBreak;
+        if self.skip_trivia {
+            self.state.pos += 1;
+            self.scan_ascii_while(|b| b == b' ' || (b'\t'..=b'\r').contains(&b));
+            return ScanAction::Continue;
+        }
+        if ch == '\r' as i32 && self.char_at(1) == '\n' as i32 {
+            self.state.pos += 2;
+        } else {
+            self.state.pos += 1;
+        }
+        self.state.token = Kind::NewLineTrivia;
+        ScanAction::Return
+    }
+
+    fn scan_byte_exclamation(&mut self) -> ScanAction {
+        if self.char_at(1) == '=' as i32 {
+            if self.char_at(2) == '=' as i32 {
+                self.state.pos += 3;
+                self.state.token = Kind::ExclamationEqualsEqualsToken;
+            } else {
+                self.state.pos += 2;
+                self.state.token = Kind::ExclamationEqualsToken;
+            }
+        } else {
+            self.state.pos += 1;
+            self.state.token = Kind::ExclamationToken;
+        }
+        ScanAction::Return
+    }
+
+    fn scan_byte_string(&mut self) -> ScanAction {
+        self.state.token_value = self.scan_string(false /*jsxAttributeString*/);
+        self.state.token = Kind::StringLiteral;
+        ScanAction::Return
+    }
+
+    fn scan_byte_template(&mut self) -> ScanAction {
+        self.state.token =
+            self.scan_template_and_set_token_value(false /*shouldEmitInvalidEscapeError*/);
+        ScanAction::Return
+    }
+
+    fn scan_byte_percent(&mut self) -> ScanAction {
+        if self.char_at(1) == '=' as i32 {
+            self.state.pos += 2;
+            self.state.token = Kind::PercentEqualsToken;
+        } else {
+            self.state.pos += 1;
+            self.state.token = Kind::PercentToken;
+        }
+        ScanAction::Return
+    }
+
+    fn scan_byte_ampersand(&mut self) -> ScanAction {
+        let next = self.char_at(1);
+        if next == '&' as i32 {
+            if self.char_at(2) == '=' as i32 {
+                self.state.pos += 3;
+                self.state.token = Kind::AmpersandAmpersandEqualsToken;
+            } else {
+                self.state.pos += 2;
+                self.state.token = Kind::AmpersandAmpersandToken;
+            }
+        } else if next == '=' as i32 {
+            self.state.pos += 2;
+            self.state.token = Kind::AmpersandEqualsToken;
+        } else {
+            self.state.pos += 1;
+            self.state.token = Kind::AmpersandToken;
+        }
+        ScanAction::Return
+    }
+
+    fn scan_byte_open_paren(&mut self) -> ScanAction {
+        self.state.pos += 1;
+        self.state.token = Kind::OpenParenToken;
+        ScanAction::Return
+    }
+
+    fn scan_byte_close_paren(&mut self) -> ScanAction {
+        self.state.pos += 1;
+        self.state.token = Kind::CloseParenToken;
+        ScanAction::Return
+    }
+
+    fn scan_byte_asterisk(&mut self) -> ScanAction {
+        let next = self.char_at(1);
+        if next == '=' as i32 {
+            self.state.pos += 2;
+            self.state.token = Kind::AsteriskEqualsToken;
+        } else if next == '*' as i32 {
+            if self.char_at(2) == '=' as i32 {
+                self.state.pos += 3;
+                self.state.token = Kind::AsteriskAsteriskEqualsToken;
+            } else {
+                self.state.pos += 2;
+                self.state.token = Kind::AsteriskAsteriskToken;
+            }
+        } else {
+            self.state.pos += 1;
+            if self.state.skip_jsdoc_leading_asterisks != 0
+                && !self
+                    .state
+                    .token_flags
+                    .intersects(TokenFlags::PrecedingJSDocLeadingAsterisks)
+                && self
+                    .state
+                    .token_flags
+                    .intersects(TokenFlags::PrecedingLineBreak)
+            {
+                self.state.token_flags |= TokenFlags::PrecedingJSDocLeadingAsterisks;
+                return ScanAction::Continue;
+            }
+            self.state.token = Kind::AsteriskToken;
+        }
+        ScanAction::Return
+    }
+
+    fn scan_byte_plus(&mut self) -> ScanAction {
+        let next = self.char_at(1);
+        if next == '=' as i32 {
+            self.state.pos += 2;
+            self.state.token = Kind::PlusEqualsToken;
+        } else if next == '+' as i32 {
+            self.state.pos += 2;
+            self.state.token = Kind::PlusPlusToken;
+        } else {
+            self.state.pos += 1;
+            self.state.token = Kind::PlusToken;
+        }
+        ScanAction::Return
+    }
+
+    fn scan_byte_comma(&mut self) -> ScanAction {
+        self.state.pos += 1;
+        self.state.token = Kind::CommaToken;
+        ScanAction::Return
+    }
+
+    fn scan_byte_minus(&mut self) -> ScanAction {
+        let next = self.char_at(1);
+        if next == '=' as i32 {
+            self.state.pos += 2;
+            self.state.token = Kind::MinusEqualsToken;
+        } else if next == '-' as i32 {
+            self.state.pos += 2;
+            self.state.token = Kind::MinusMinusToken;
+        } else {
+            self.state.pos += 1;
+            self.state.token = Kind::MinusToken;
+        }
+        ScanAction::Return
+    }
+
+    fn scan_byte_dot(&mut self) -> ScanAction {
+        let next = self.char_at(1);
+        if stringutil::is_digit(next) {
+            self.state.token = self.scan_number();
+        } else if next == '.' as i32 && self.char_at(2) == '.' as i32 {
+            self.state.pos += 3;
+            self.state.token = Kind::DotDotDotToken;
+        } else {
+            self.state.pos += 1;
+            self.state.token = Kind::DotToken;
+        }
+        ScanAction::Return
+    }
+
+    fn scan_byte_slash(&mut self) -> ScanAction {
+        // Single-line comment
+        if self.char_at(1) == '/' as i32 {
+            self.state.pos += 2;
+
+            loop {
+                self.scan_ascii_while(|b| b != b'\n' && b != b'\r');
+                let (ch1, size) = self.char_and_size();
+                if size == 0 || stringutil::is_line_break(ch1) {
+                    break;
                 }
-                0x0A | 0x0D => {
+                self.state.pos += size;
+            }
+
+            self.process_comment_directive(self.state.token_start, self.state.pos, false);
+
+            if self.skip_trivia {
+                return ScanAction::Continue;
+            }
+            self.state.token = Kind::SingleLineCommentTrivia;
+            return ScanAction::Return;
+        }
+        // Multi-line comment
+        if self.char_at(1) == '*' as i32 {
+            self.state.pos += 2;
+            let is_jsdoc = self.char() == '*' as i32 && self.char_at(1) != '/' as i32;
+
+            let mut comment_closed = false;
+            let mut last_line_start = self.state.token_start;
+            loop {
+                self.scan_ascii_while(|b| b != b'*' && b != b'\n' && b != b'\r');
+                let (ch1, size) = self.char_and_size();
+                if size == 0 {
+                    break;
+                }
+
+                if ch1 == '*' as i32 && self.char_at(1) == '/' as i32 {
+                    self.state.pos += 2;
+                    comment_closed = true;
+                    break;
+                }
+
+                self.state.pos += size;
+
+                if stringutil::is_line_break(ch1) {
+                    last_line_start = self.state.pos;
                     self.state.token_flags |= TokenFlags::PrecedingLineBreak;
-                    if self.skip_trivia {
-                        self.state.pos += 1;
-                        self.scan_ascii_while(|b| b == b' ' || (b'\t'..=b'\r').contains(&b));
-                        continue 'scan;
-                    }
-                    if ch == '\r' as i32 && self.char_at(1) == '\n' as i32 {
-                        self.state.pos += 2;
-                    } else {
-                        self.state.pos += 1;
-                    }
-                    self.state.token = Kind::NewLineTrivia;
-                }
-                0x21 /* ! */ => {
-                    if self.char_at(1) == '=' as i32 {
-                        if self.char_at(2) == '=' as i32 {
-                            self.state.pos += 3;
-                            self.state.token = Kind::ExclamationEqualsEqualsToken;
-                        } else {
-                            self.state.pos += 2;
-                            self.state.token = Kind::ExclamationEqualsToken;
-                        }
-                    } else {
-                        self.state.pos += 1;
-                        self.state.token = Kind::ExclamationToken;
-                    }
-                }
-                0x22 | 0x27 /* " ' */ => {
-                    self.state.token_value = self.scan_string(false /*jsxAttributeString*/);
-                    self.state.token = Kind::StringLiteral;
-                }
-                0x60 /* ` */ => {
-                    self.state.token = self.scan_template_and_set_token_value(false /*shouldEmitInvalidEscapeError*/);
-                }
-                0x25 /* % */ => {
-                    if self.char_at(1) == '=' as i32 {
-                        self.state.pos += 2;
-                        self.state.token = Kind::PercentEqualsToken;
-                    } else {
-                        self.state.pos += 1;
-                        self.state.token = Kind::PercentToken;
-                    }
-                }
-                0x26 /* & */ => {
-                    let next = self.char_at(1);
-                    if next == '&' as i32 {
-                        if self.char_at(2) == '=' as i32 {
-                            self.state.pos += 3;
-                            self.state.token = Kind::AmpersandAmpersandEqualsToken;
-                        } else {
-                            self.state.pos += 2;
-                            self.state.token = Kind::AmpersandAmpersandToken;
-                        }
-                    } else if next == '=' as i32 {
-                        self.state.pos += 2;
-                        self.state.token = Kind::AmpersandEqualsToken;
-                    } else {
-                        self.state.pos += 1;
-                        self.state.token = Kind::AmpersandToken;
-                    }
-                }
-                0x28 /* ( */ => {
-                    self.state.pos += 1;
-                    self.state.token = Kind::OpenParenToken;
-                }
-                0x29 /* ) */ => {
-                    self.state.pos += 1;
-                    self.state.token = Kind::CloseParenToken;
-                }
-                0x2A /* * */ => {
-                    let next = self.char_at(1);
-                    if next == '=' as i32 {
-                        self.state.pos += 2;
-                        self.state.token = Kind::AsteriskEqualsToken;
-                    } else if next == '*' as i32 {
-                        if self.char_at(2) == '=' as i32 {
-                            self.state.pos += 3;
-                            self.state.token = Kind::AsteriskAsteriskEqualsToken;
-                        } else {
-                            self.state.pos += 2;
-                            self.state.token = Kind::AsteriskAsteriskToken;
-                        }
-                    } else {
-                        self.state.pos += 1;
-                        if self.state.skip_jsdoc_leading_asterisks != 0
-                            && !self.state.token_flags.intersects(TokenFlags::PrecedingJSDocLeadingAsterisks)
-                            && self.state.token_flags.intersects(TokenFlags::PrecedingLineBreak)
-                        {
-                            self.state.token_flags |= TokenFlags::PrecedingJSDocLeadingAsterisks;
-                            continue 'scan;
-                        }
-                        self.state.token = Kind::AsteriskToken;
-                    }
-                }
-                0x2B /* + */ => {
-                    let next = self.char_at(1);
-                    if next == '=' as i32 {
-                        self.state.pos += 2;
-                        self.state.token = Kind::PlusEqualsToken;
-                    } else if next == '+' as i32 {
-                        self.state.pos += 2;
-                        self.state.token = Kind::PlusPlusToken;
-                    } else {
-                        self.state.pos += 1;
-                        self.state.token = Kind::PlusToken;
-                    }
-                }
-                0x2C /* , */ => {
-                    self.state.pos += 1;
-                    self.state.token = Kind::CommaToken;
-                }
-                0x2D /* - */ => {
-                    let next = self.char_at(1);
-                    if next == '=' as i32 {
-                        self.state.pos += 2;
-                        self.state.token = Kind::MinusEqualsToken;
-                    } else if next == '-' as i32 {
-                        self.state.pos += 2;
-                        self.state.token = Kind::MinusMinusToken;
-                    } else {
-                        self.state.pos += 1;
-                        self.state.token = Kind::MinusToken;
-                    }
-                }
-                0x2E /* . */ => {
-                    let next = self.char_at(1);
-                    if stringutil::is_digit(next) {
-                        self.state.token = self.scan_number();
-                    } else if next == '.' as i32 && self.char_at(2) == '.' as i32 {
-                        self.state.pos += 3;
-                        self.state.token = Kind::DotDotDotToken;
-                    } else {
-                        self.state.pos += 1;
-                        self.state.token = Kind::DotToken;
-                    }
-                }
-                0x2F /* / */ => {
-                    // Single-line comment
-                    if self.char_at(1) == '/' as i32 {
-                        self.state.pos += 2;
-
-                        loop {
-                            self.scan_ascii_while(|b| b != b'\n' && b != b'\r');
-                            let (ch1, size) = self.char_and_size();
-                            if size == 0 || stringutil::is_line_break(ch1) {
-                                break;
-                            }
-                            self.state.pos += size;
-                        }
-
-                        self.process_comment_directive(self.state.token_start, self.state.pos, false);
-
-                        if self.skip_trivia {
-                            continue 'scan;
-                        }
-                        self.state.token = Kind::SingleLineCommentTrivia;
-                        return self.state.token;
-                    }
-                    // Multi-line comment
-                    if self.char_at(1) == '*' as i32 {
-                        self.state.pos += 2;
-                        let is_jsdoc = self.char() == '*' as i32 && self.char_at(1) != '/' as i32;
-
-                        let mut comment_closed = false;
-                        let mut last_line_start = self.state.token_start;
-                        loop {
-                            self.scan_ascii_while(|b| b != b'*' && b != b'\n' && b != b'\r');
-                            let (ch1, size) = self.char_and_size();
-                            if size == 0 {
-                                break;
-                            }
-
-                            if ch1 == '*' as i32 && self.char_at(1) == '/' as i32 {
-                                self.state.pos += 2;
-                                comment_closed = true;
-                                break;
-                            }
-
-                            self.state.pos += size;
-
-                            if stringutil::is_line_break(ch1) {
-                                last_line_start = self.state.pos;
-                                self.state.token_flags |= TokenFlags::PrecedingLineBreak;
-                            }
-                        }
-
-                        if is_jsdoc {
-                            self.state.token_flags |= TokenFlags::PrecedingJSDocComment;
-                            self.scan_jsdoc_comment_for_tags(self.slice(self.state.token_start, self.state.pos));
-                        }
-
-                        self.process_comment_directive(last_line_start, self.state.pos, true);
-
-                        if !comment_closed {
-                            self.error(&diagnostics::Asterisk_Slash_expected);
-                        }
-
-                        if self.skip_trivia {
-                            continue 'scan;
-                        }
-
-                        if !comment_closed {
-                            self.state.token_flags |= TokenFlags::Unterminated;
-                        }
-                        self.state.token = Kind::MultiLineCommentTrivia;
-                        return self.state.token;
-                    }
-                    if self.char_at(1) == '=' as i32 {
-                        self.state.pos += 2;
-                        self.state.token = Kind::SlashEqualsToken;
-                    } else {
-                        self.state.pos += 1;
-                        self.state.token = Kind::SlashToken;
-                    }
-                }
-                0x30..=0x39 /* 0-9 */ => 'digit: {
-                    if ch == '0' as i32 {
-                        if self.char_at(1) == 'X' as i32 || self.char_at(1) == 'x' as i32 {
-                            let start = self.state.pos;
-                            self.state.pos += 2;
-                            let mut digits = self.scan_hex_digits(1, true, true);
-                            if digits.is_empty() {
-                                self.error(&diagnostics::Hexadecimal_digit_expected);
-                                digits = "0";
-                            }
-                            if let Some(&cached_value) = self.hex_number_cache.get(digits) {
-                                self.state.token_value = cached_value;
-                            } else {
-                                let raw_text = self.slice(start, self.state.pos);
-                                if raw_text.starts_with("0x") && &raw_text[2..] == digits {
-                                    self.state.token_value = raw_text;
-                                } else {
-                                    self.state.token_value = alloc_str(&format!("0x{digits}"));
-                                }
-                                self.pin_unless_source(digits, self.state.token_value);
-                                self.hex_number_cache.insert(digits, self.state.token_value);
-                            }
-                            self.state.token_flags |= TokenFlags::HexSpecifier;
-                            self.state.token = self.scan_big_int_suffix();
-                            break 'digit;
-                        }
-                        if self.char_at(1) == 'B' as i32 || self.char_at(1) == 'b' as i32 {
-                            self.state.pos += 2;
-                            let mut digits = self.scan_binary_or_octal_digits(2);
-                            if digits.is_empty() {
-                                self.error(&diagnostics::Binary_digit_expected);
-                                digits = "0".to_string();
-                            }
-                            self.state.token_value = alloc_str(&format!("0b{digits}"));
-                            self.state.token_flags |= TokenFlags::BinarySpecifier;
-                            self.state.token = self.scan_big_int_suffix();
-                            break 'digit;
-                        }
-                        if self.char_at(1) == 'O' as i32 || self.char_at(1) == 'o' as i32 {
-                            self.state.pos += 2;
-                            let mut digits = self.scan_binary_or_octal_digits(8);
-                            if digits.is_empty() {
-                                self.error(&diagnostics::Octal_digit_expected);
-                                digits = "0".to_string();
-                            }
-                            self.state.token_value = alloc_str(&format!("0o{digits}"));
-                            self.state.token_flags |= TokenFlags::OctalSpecifier;
-                            self.state.token = self.scan_big_int_suffix();
-                            break 'digit;
-                        }
-                    }
-                    self.state.token = self.scan_number();
-                }
-                0x3A /* : */ => {
-                    self.state.pos += 1;
-                    self.state.token = Kind::ColonToken;
-                }
-                0x3B /* ; */ => {
-                    self.state.pos += 1;
-                    self.state.token = Kind::SemicolonToken;
-                }
-                0x3C /* < */ => {
-                    if self.char_at(1) == '<' as i32 && is_conflict_marker_trivia(self.text, self.state.pos) {
-                        self.state.pos = self.scan_conflict_marker_trivia_reporting(self.state.pos);
-                        if self.skip_trivia {
-                            continue 'scan;
-                        } else {
-                            self.state.token = Kind::ConflictMarkerTrivia;
-                            return self.state.token;
-                        }
-                    }
-                    if self.char_at(1) == '<' as i32 {
-                        if self.char_at(2) == '=' as i32 {
-                            self.state.pos += 3;
-                            self.state.token = Kind::LessThanLessThanEqualsToken;
-                        } else {
-                            self.state.pos += 2;
-                            self.state.token = Kind::LessThanLessThanToken;
-                        }
-                    } else if self.char_at(1) == '=' as i32 {
-                        self.state.pos += 2;
-                        self.state.token = Kind::LessThanEqualsToken;
-                    } else if self.language_variant == LanguageVariant::JSX && self.char_at(1) == '/' as i32 && self.char_at(2) != '*' as i32 {
-                        self.state.pos += 2;
-                        self.state.token = Kind::LessThanSlashToken;
-                    } else {
-                        self.state.pos += 1;
-                        self.state.token = Kind::LessThanToken;
-                    }
-                }
-                0x3D /* = */ => {
-                    if self.char_at(1) == '=' as i32 && is_conflict_marker_trivia(self.text, self.state.pos) {
-                        self.state.pos = self.scan_conflict_marker_trivia_reporting(self.state.pos);
-                        if self.skip_trivia {
-                            continue 'scan;
-                        } else {
-                            self.state.token = Kind::ConflictMarkerTrivia;
-                            return self.state.token;
-                        }
-                    }
-                    if self.char_at(1) == '=' as i32 {
-                        if self.char_at(2) == '=' as i32 {
-                            self.state.pos += 3;
-                            self.state.token = Kind::EqualsEqualsEqualsToken;
-                        } else {
-                            self.state.pos += 2;
-                            self.state.token = Kind::EqualsEqualsToken;
-                        }
-                    } else if self.char_at(1) == '>' as i32 {
-                        self.state.pos += 2;
-                        self.state.token = Kind::EqualsGreaterThanToken;
-                    } else {
-                        self.state.pos += 1;
-                        self.state.token = Kind::EqualsToken;
-                    }
-                }
-                0x3E /* > */ => {
-                    if self.char_at(1) == '>' as i32 && is_conflict_marker_trivia(self.text, self.state.pos) {
-                        self.state.pos = self.scan_conflict_marker_trivia_reporting(self.state.pos);
-                        if self.skip_trivia {
-                            continue 'scan;
-                        } else {
-                            self.state.token = Kind::ConflictMarkerTrivia;
-                            return self.state.token;
-                        }
-                    }
-                    self.state.pos += 1;
-                    self.state.token = Kind::GreaterThanToken;
-                }
-                0x3F /* ? */ => {
-                    if self.char_at(1) == '.' as i32 && !stringutil::is_digit(self.char_at(2)) {
-                        self.state.pos += 2;
-                        self.state.token = Kind::QuestionDotToken;
-                    } else if self.char_at(1) == '?' as i32 {
-                        if self.char_at(2) == '=' as i32 {
-                            self.state.pos += 3;
-                            self.state.token = Kind::QuestionQuestionEqualsToken;
-                        } else {
-                            self.state.pos += 2;
-                            self.state.token = Kind::QuestionQuestionToken;
-                        }
-                    } else {
-                        self.state.pos += 1;
-                        self.state.token = Kind::QuestionToken;
-                    }
-                }
-                0x5B /* [ */ => {
-                    self.state.pos += 1;
-                    self.state.token = Kind::OpenBracketToken;
-                }
-                0x5D /* ] */ => {
-                    self.state.pos += 1;
-                    self.state.token = Kind::CloseBracketToken;
-                }
-                0x5E /* ^ */ => {
-                    if self.char_at(1) == '=' as i32 {
-                        self.state.pos += 2;
-                        self.state.token = Kind::CaretEqualsToken;
-                    } else {
-                        self.state.pos += 1;
-                        self.state.token = Kind::CaretToken;
-                    }
-                }
-                0x7B /* { */ => {
-                    self.state.pos += 1;
-                    self.state.token = Kind::OpenBraceToken;
-                }
-                0x7C /* | */ => {
-                    if self.char_at(1) == '|' as i32 && is_conflict_marker_trivia(self.text, self.state.pos) {
-                        self.state.pos = self.scan_conflict_marker_trivia_reporting(self.state.pos);
-                        if self.skip_trivia {
-                            continue 'scan;
-                        } else {
-                            self.state.token = Kind::ConflictMarkerTrivia;
-                            return self.state.token;
-                        }
-                    }
-                    if self.char_at(1) == '|' as i32 {
-                        if self.char_at(2) == '=' as i32 {
-                            self.state.pos += 3;
-                            self.state.token = Kind::BarBarEqualsToken;
-                        } else {
-                            self.state.pos += 2;
-                            self.state.token = Kind::BarBarToken;
-                        }
-                    } else if self.char_at(1) == '=' as i32 {
-                        self.state.pos += 2;
-                        self.state.token = Kind::BarEqualsToken;
-                    } else {
-                        self.state.pos += 1;
-                        self.state.token = Kind::BarToken;
-                    }
-                }
-                0x7D /* } */ => {
-                    self.state.pos += 1;
-                    self.state.token = Kind::CloseBraceToken;
-                }
-                0x7E /* ~ */ => {
-                    self.state.pos += 1;
-                    self.state.token = Kind::TildeToken;
-                }
-                0x40 /* @ */ => {
-                    self.state.pos += 1;
-                    self.state.token = Kind::AtToken;
-                }
-                0x5C /* \ */ => {
-                    if self.scan_identifier(0, IdentifierVariant::Standard) {
-                        self.state.token = get_identifier_token(self.state.token_value);
-                    } else {
-                        self.scan_invalid_character();
-                    }
-                }
-                0x23 /* # */ => 'hash: {
-                    if self.char_at(1) == '!' as i32 {
-                        if self.state.pos == 0 {
-                            self.state.pos += 2;
-                            let (mut ch, mut size) = self.char_and_size();
-                            while size > 0 && !stringutil::is_line_break(ch) {
-                                self.state.pos += size;
-                                (ch, size) = self.char_and_size();
-                            }
-                            continue 'scan;
-                        }
-                        self.error_at(&diagnostics::X_can_only_be_used_at_the_start_of_a_file, self.state.pos, 2, &[]);
-                        self.state.pos += 2;
-                        self.state.token = Kind::Unknown;
-                        break 'hash;
-                    }
-                    if !self.scan_identifier(1, IdentifierVariant::Standard) {
-                        self.error_at(&diagnostics::Invalid_character, self.state.pos - 1, 1, &[]);
-                        self.state.token_value = "#";
-                    }
-                    self.state.token = Kind::PrivateIdentifier;
-                }
-                _ => 'default: {
-                    if ch < 0 {
-                        self.state.token = Kind::EndOfFile;
-                        break 'default;
-                    }
-                    if self.scan_identifier(0, IdentifierVariant::Standard) {
-                        self.state.token = get_identifier_token(self.state.token_value);
-                        break 'default;
-                    }
-                    let (mut ch, mut size) = self.char_and_size();
-                    if ch == RUNE_ERROR {
-                        self.error_at(&diagnostics::File_appears_to_be_binary, 0, 0, &[]);
-                        self.state.pos = self.text.len() as i32;
-                        self.state.token = Kind::NonTextFileMarkerTrivia;
-                        break 'default;
-                    }
-                    if stringutil::is_white_space_single_line(ch) {
-                        self.state.pos += size;
-
-                        // If we get here and it's not 0x0085 (nextLine), then we're handling non-ASCII whitespace.
-                        // Handle skipTrivia like we do in the space case above.
-                        if ch == 0x0085 || self.skip_trivia {
-                            continue 'scan;
-                        }
-
-                        loop {
-                            (ch, size) = self.char_and_size();
-                            if !stringutil::is_white_space_single_line(ch) {
-                                break;
-                            }
-                            self.state.pos += size;
-                        }
-                        self.state.token = Kind::WhitespaceTrivia;
-                        return self.state.token;
-                    }
-                    if stringutil::is_line_break(ch) {
-                        self.state.token_flags |= TokenFlags::PrecedingLineBreak;
-                        self.state.pos += size;
-                        continue 'scan;
-                    }
-                    self.scan_invalid_character();
                 }
             }
-            return self.state.token;
+
+            if is_jsdoc {
+                self.state.token_flags |= TokenFlags::PrecedingJSDocComment;
+                self.scan_jsdoc_comment_for_tags(
+                    self.slice(self.state.token_start, self.state.pos),
+                );
+            }
+
+            self.process_comment_directive(last_line_start, self.state.pos, true);
+
+            if !comment_closed {
+                self.error(&diagnostics::Asterisk_Slash_expected);
+            }
+
+            if self.skip_trivia {
+                return ScanAction::Continue;
+            }
+
+            if !comment_closed {
+                self.state.token_flags |= TokenFlags::Unterminated;
+            }
+            self.state.token = Kind::MultiLineCommentTrivia;
+            return ScanAction::Return;
         }
+        if self.char_at(1) == '=' as i32 {
+            self.state.pos += 2;
+            self.state.token = Kind::SlashEqualsToken;
+        } else {
+            self.state.pos += 1;
+            self.state.token = Kind::SlashToken;
+        }
+        ScanAction::Return
+    }
+
+    fn scan_byte_number(&mut self) -> ScanAction {
+        let ch = self.char();
+        'digit: {
+            if ch == '0' as i32 {
+                if self.char_at(1) == 'X' as i32 || self.char_at(1) == 'x' as i32 {
+                    let start = self.state.pos;
+                    self.state.pos += 2;
+                    let mut digits = self.scan_hex_digits(1, true, true);
+                    if digits.is_empty() {
+                        self.error(&diagnostics::Hexadecimal_digit_expected);
+                        digits = "0";
+                    }
+                    if let Some(&cached_value) = self.hex_number_cache.get(digits) {
+                        self.state.token_value = cached_value;
+                    } else {
+                        let raw_text = self.slice(start, self.state.pos);
+                        if raw_text.starts_with("0x") && &raw_text[2..] == digits {
+                            self.state.token_value = raw_text;
+                        } else {
+                            self.state.token_value = alloc_str(&format!("0x{digits}"));
+                        }
+                        self.pin_unless_source(digits, self.state.token_value);
+                        self.hex_number_cache.insert(digits, self.state.token_value);
+                    }
+                    self.state.token_flags |= TokenFlags::HexSpecifier;
+                    self.state.token = self.scan_big_int_suffix();
+                    break 'digit;
+                }
+                if self.char_at(1) == 'B' as i32 || self.char_at(1) == 'b' as i32 {
+                    self.state.pos += 2;
+                    let mut digits = self.scan_binary_or_octal_digits(2);
+                    if digits.is_empty() {
+                        self.error(&diagnostics::Binary_digit_expected);
+                        digits = "0".to_string();
+                    }
+                    self.state.token_value = alloc_str(&format!("0b{digits}"));
+                    self.state.token_flags |= TokenFlags::BinarySpecifier;
+                    self.state.token = self.scan_big_int_suffix();
+                    break 'digit;
+                }
+                if self.char_at(1) == 'O' as i32 || self.char_at(1) == 'o' as i32 {
+                    self.state.pos += 2;
+                    let mut digits = self.scan_binary_or_octal_digits(8);
+                    if digits.is_empty() {
+                        self.error(&diagnostics::Octal_digit_expected);
+                        digits = "0".to_string();
+                    }
+                    self.state.token_value = alloc_str(&format!("0o{digits}"));
+                    self.state.token_flags |= TokenFlags::OctalSpecifier;
+                    self.state.token = self.scan_big_int_suffix();
+                    break 'digit;
+                }
+            }
+            self.state.token = self.scan_number();
+        }
+        ScanAction::Return
+    }
+
+    fn scan_byte_colon(&mut self) -> ScanAction {
+        self.state.pos += 1;
+        self.state.token = Kind::ColonToken;
+        ScanAction::Return
+    }
+
+    fn scan_byte_semicolon(&mut self) -> ScanAction {
+        self.state.pos += 1;
+        self.state.token = Kind::SemicolonToken;
+        ScanAction::Return
+    }
+
+    fn scan_byte_less_than(&mut self) -> ScanAction {
+        if self.char_at(1) == '<' as i32 && is_conflict_marker_trivia(self.text, self.state.pos) {
+            self.state.pos = self.scan_conflict_marker_trivia_reporting(self.state.pos);
+            if self.skip_trivia {
+                return ScanAction::Continue;
+            } else {
+                self.state.token = Kind::ConflictMarkerTrivia;
+                return ScanAction::Return;
+            }
+        }
+        if self.char_at(1) == '<' as i32 {
+            if self.char_at(2) == '=' as i32 {
+                self.state.pos += 3;
+                self.state.token = Kind::LessThanLessThanEqualsToken;
+            } else {
+                self.state.pos += 2;
+                self.state.token = Kind::LessThanLessThanToken;
+            }
+        } else if self.char_at(1) == '=' as i32 {
+            self.state.pos += 2;
+            self.state.token = Kind::LessThanEqualsToken;
+        } else if self.language_variant == LanguageVariant::JSX
+            && self.char_at(1) == '/' as i32
+            && self.char_at(2) != '*' as i32
+        {
+            self.state.pos += 2;
+            self.state.token = Kind::LessThanSlashToken;
+        } else {
+            self.state.pos += 1;
+            self.state.token = Kind::LessThanToken;
+        }
+        ScanAction::Return
+    }
+
+    fn scan_byte_equals(&mut self) -> ScanAction {
+        if self.char_at(1) == '=' as i32 && is_conflict_marker_trivia(self.text, self.state.pos) {
+            self.state.pos = self.scan_conflict_marker_trivia_reporting(self.state.pos);
+            if self.skip_trivia {
+                return ScanAction::Continue;
+            } else {
+                self.state.token = Kind::ConflictMarkerTrivia;
+                return ScanAction::Return;
+            }
+        }
+        if self.char_at(1) == '=' as i32 {
+            if self.char_at(2) == '=' as i32 {
+                self.state.pos += 3;
+                self.state.token = Kind::EqualsEqualsEqualsToken;
+            } else {
+                self.state.pos += 2;
+                self.state.token = Kind::EqualsEqualsToken;
+            }
+        } else if self.char_at(1) == '>' as i32 {
+            self.state.pos += 2;
+            self.state.token = Kind::EqualsGreaterThanToken;
+        } else {
+            self.state.pos += 1;
+            self.state.token = Kind::EqualsToken;
+        }
+        ScanAction::Return
+    }
+
+    fn scan_byte_greater_than(&mut self) -> ScanAction {
+        if self.char_at(1) == '>' as i32 && is_conflict_marker_trivia(self.text, self.state.pos) {
+            self.state.pos = self.scan_conflict_marker_trivia_reporting(self.state.pos);
+            if self.skip_trivia {
+                return ScanAction::Continue;
+            } else {
+                self.state.token = Kind::ConflictMarkerTrivia;
+                return ScanAction::Return;
+            }
+        }
+        self.state.pos += 1;
+        self.state.token = Kind::GreaterThanToken;
+        ScanAction::Return
+    }
+
+    fn scan_byte_question(&mut self) -> ScanAction {
+        if self.char_at(1) == '.' as i32 && !stringutil::is_digit(self.char_at(2)) {
+            self.state.pos += 2;
+            self.state.token = Kind::QuestionDotToken;
+        } else if self.char_at(1) == '?' as i32 {
+            if self.char_at(2) == '=' as i32 {
+                self.state.pos += 3;
+                self.state.token = Kind::QuestionQuestionEqualsToken;
+            } else {
+                self.state.pos += 2;
+                self.state.token = Kind::QuestionQuestionToken;
+            }
+        } else {
+            self.state.pos += 1;
+            self.state.token = Kind::QuestionToken;
+        }
+        ScanAction::Return
+    }
+
+    fn scan_byte_open_bracket(&mut self) -> ScanAction {
+        self.state.pos += 1;
+        self.state.token = Kind::OpenBracketToken;
+        ScanAction::Return
+    }
+
+    fn scan_byte_close_bracket(&mut self) -> ScanAction {
+        self.state.pos += 1;
+        self.state.token = Kind::CloseBracketToken;
+        ScanAction::Return
+    }
+
+    fn scan_byte_caret(&mut self) -> ScanAction {
+        if self.char_at(1) == '=' as i32 {
+            self.state.pos += 2;
+            self.state.token = Kind::CaretEqualsToken;
+        } else {
+            self.state.pos += 1;
+            self.state.token = Kind::CaretToken;
+        }
+        ScanAction::Return
+    }
+
+    fn scan_byte_open_brace(&mut self) -> ScanAction {
+        self.state.pos += 1;
+        self.state.token = Kind::OpenBraceToken;
+        ScanAction::Return
+    }
+
+    fn scan_byte_bar(&mut self) -> ScanAction {
+        if self.char_at(1) == '|' as i32 && is_conflict_marker_trivia(self.text, self.state.pos) {
+            self.state.pos = self.scan_conflict_marker_trivia_reporting(self.state.pos);
+            if self.skip_trivia {
+                return ScanAction::Continue;
+            } else {
+                self.state.token = Kind::ConflictMarkerTrivia;
+                return ScanAction::Return;
+            }
+        }
+        if self.char_at(1) == '|' as i32 {
+            if self.char_at(2) == '=' as i32 {
+                self.state.pos += 3;
+                self.state.token = Kind::BarBarEqualsToken;
+            } else {
+                self.state.pos += 2;
+                self.state.token = Kind::BarBarToken;
+            }
+        } else if self.char_at(1) == '=' as i32 {
+            self.state.pos += 2;
+            self.state.token = Kind::BarEqualsToken;
+        } else {
+            self.state.pos += 1;
+            self.state.token = Kind::BarToken;
+        }
+        ScanAction::Return
+    }
+
+    fn scan_byte_close_brace(&mut self) -> ScanAction {
+        self.state.pos += 1;
+        self.state.token = Kind::CloseBraceToken;
+        ScanAction::Return
+    }
+
+    fn scan_byte_tilde(&mut self) -> ScanAction {
+        self.state.pos += 1;
+        self.state.token = Kind::TildeToken;
+        ScanAction::Return
+    }
+
+    fn scan_byte_at(&mut self) -> ScanAction {
+        self.state.pos += 1;
+        self.state.token = Kind::AtToken;
+        ScanAction::Return
+    }
+
+    fn scan_byte_identifier(&mut self) -> ScanAction {
+        if self.scan_identifier(0, IdentifierVariant::Standard) {
+            self.state.token = get_identifier_token(self.state.token_value);
+        } else {
+            self.scan_invalid_character();
+        }
+        ScanAction::Return
+    }
+
+    fn scan_byte_hash(&mut self) -> ScanAction {
+        'hash: {
+            if self.char_at(1) == '!' as i32 {
+                if self.state.pos == 0 {
+                    self.state.pos += 2;
+                    let (mut ch, mut size) = self.char_and_size();
+                    while size > 0 && !stringutil::is_line_break(ch) {
+                        self.state.pos += size;
+                        (ch, size) = self.char_and_size();
+                    }
+                    return ScanAction::Continue;
+                }
+                self.error_at(
+                    &diagnostics::X_can_only_be_used_at_the_start_of_a_file,
+                    self.state.pos,
+                    2,
+                    &[],
+                );
+                self.state.pos += 2;
+                self.state.token = Kind::Unknown;
+                break 'hash;
+            }
+            if !self.scan_identifier(1, IdentifierVariant::Standard) {
+                self.error_at(&diagnostics::Invalid_character, self.state.pos - 1, 1, &[]);
+                self.state.token_value = "#";
+            }
+            self.state.token = Kind::PrivateIdentifier;
+        }
+        ScanAction::Return
+    }
+
+    fn scan_byte_default(&mut self) -> ScanAction {
+        'default: {
+            if self.scan_identifier(0, IdentifierVariant::Standard) {
+                self.state.token = get_identifier_token(self.state.token_value);
+                break 'default;
+            }
+            let (mut ch, mut size) = self.char_and_size();
+            if ch == RUNE_ERROR {
+                self.error_at(&diagnostics::File_appears_to_be_binary, 0, 0, &[]);
+                self.state.pos = self.text.len() as i32;
+                self.state.token = Kind::NonTextFileMarkerTrivia;
+                break 'default;
+            }
+            if stringutil::is_white_space_single_line(ch) {
+                self.state.pos += size;
+
+                // If we get here and it's not 0x0085 (nextLine), then we're handling non-ASCII whitespace.
+                // Handle skipTrivia like we do in the space case above.
+                if ch == 0x0085 || self.skip_trivia {
+                    return ScanAction::Continue;
+                }
+
+                loop {
+                    (ch, size) = self.char_and_size();
+                    if !stringutil::is_white_space_single_line(ch) {
+                        break;
+                    }
+                    self.state.pos += size;
+                }
+                self.state.token = Kind::WhitespaceTrivia;
+                return ScanAction::Return;
+            }
+            if stringutil::is_line_break(ch) {
+                self.state.token_flags |= TokenFlags::PrecedingLineBreak;
+                self.state.pos += size;
+                return ScanAction::Continue;
+            }
+            self.scan_invalid_character();
+        }
+        ScanAction::Return
     }
 
     fn scan_conflict_marker_trivia_reporting(&mut self, pos: i32) -> i32 {

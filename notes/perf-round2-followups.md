@@ -33,6 +33,10 @@ is type-checked, CI runs on pull requests, and the workspace is at 0.11.0. The i
 
 ## Not verified yet
 
+- **Scanner byte-handler dispatch** (`notes/perf-oxc-scanner.md`): isolated Oxc-style function-table experiment;
+  scanner and AST oracles, conformance and lint are unchanged. Optimized arm64 scanner-crate assembly reduces
+  `scan`'s frame from 208 to 32 bytes. The owner will provide instruction and peak-RSS measurements; no landing
+  decision yet. This tests separate handler frames, not the previously neutral identifier-start precheck.
 - **The 32 GiB reservation outside macOS and GitHub runners: verified.** main ran in a Linux x86-64 dev sandbox
   (gVisor-style microVM, `ulimit -v` unlimited, overcommit 1): check, emit and incremental all work. It still needs
   a 47-bit address space and no `ulimit -v` below 32 GiB.
