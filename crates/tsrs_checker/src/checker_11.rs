@@ -637,7 +637,17 @@ impl Checker {
     }
 
     // checker.go:22256
+    #[inline]
     pub(crate) fn get_reduced_apparent_type(&mut self, t: P<Type>) -> P<Type> {
+        // An object type other than a mapped type is its own reduced and apparent type (most property lookups).
+        if t.flags() == TypeFlags::Object && !t.object_flags().intersects(ObjectFlags::Mapped) {
+            return t;
+        }
+        self.get_reduced_apparent_type_worker(t)
+    }
+
+    #[inline(never)]
+    fn get_reduced_apparent_type_worker(&mut self, t: P<Type>) -> P<Type> {
         // Since getApparentType may return a non-reduced union or intersection type, we need to perform
         // type reduction both before and after obtaining the apparent type. For example, given a type parameter
         // 'T extends A | B', the type 'T & X' becomes 'A & X | B & X' after obtaining the apparent type, and
