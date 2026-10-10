@@ -339,6 +339,14 @@ is type-checked, CI runs on pull requests, and the workspace is at 0.11.0. The i
   declaration text (declaration emit is not total, import cycles, not identity-preserving), per-file check regions
   (types made in a body can enter long-lived caches), mmap of source files (SIGBUS on truncation).
 
+- The node header as columns (notes/dod-ast-tables.md, branch `dod/ast-tables`, data-oriented step 1): a node is a `u32`
+  row index with kind, tag, flags, id, parent, data handle and range in seven columns, and `Node` a zero-sized view.
+  Diagnostics are identical on the five bench projects; single-threaded instructions go up 6-12% (webpack +11%,
+  vscode +12%), peak footprint 1-5% (about 3 bytes per node more than the 24-byte header), wall within its spread.
+  Not explained at call-site level (no kperf here). Do not redo without first removing the zero-sized-view address
+  decode from the hot accessors. The first version reserved rows per file and cost +17% peak on vscode; per-file
+  reservations leave a partly used page per column, so keep any future per-file layout gap-free.
+
 ## The lint ratchet
 
 `tools/lint/baseline.tsv` went from 1,373 findings to 312 (#57-#59, #61, #63; notes/lint-paydown-compiler.md) and is
