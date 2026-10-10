@@ -654,7 +654,6 @@ impl Checker {
     fn contextual_property_type_of_constituent(&mut self, t: P<Type>, name: &str, name_type: Option<P<Type>>) -> Option<P<Type>> {
         if t.flags().intersects(TypeFlags::Intersection) {
             let mut types: Vec<P<Type>> = Vec::new();
-            let mut index_info_candidates: Vec<P<Type>> = Vec::new();
             let mut ignore_index_infos = false;
             for &constituent_type in t.types() {
                 if !constituent_type.flags().intersects(TypeFlags::Object) {
@@ -667,18 +666,23 @@ impl Checker {
                 }
                 let property_type = self.get_type_of_concrete_property_of_contextual_type(constituent_type, name);
                 if property_type.is_none() {
-                    if !ignore_index_infos {
-                        index_info_candidates.push(constituent_type);
-                    }
                     continue;
                 }
                 ignore_index_infos = true;
-                index_info_candidates = Vec::new();
                 self.append_contextual_property_type_constituent(&mut types, property_type);
             }
-            for candidate in index_info_candidates {
-                let index_info_type = self.get_type_from_index_infos_of_contextual_type(candidate, name, name_type);
-                self.append_contextual_property_type_constituent(&mut types, index_info_type);
+            // Go collects the index info candidates (the constituents above without the property) and drops them at
+            // the first constituent with it, so they are used only when no constituent has it: all of them, in order.
+            if !ignore_index_infos {
+                for &candidate in t.types() {
+                    if !candidate.flags().intersects(TypeFlags::Object)
+                        || self.is_generic_mapped_type(candidate) && self.get_mapped_type_name_type_kind(candidate) != MappedTypeNameTypeKind::Remapping
+                    {
+                        continue;
+                    }
+                    let index_info_type = self.get_type_from_index_infos_of_contextual_type(candidate, name, name_type);
+                    self.append_contextual_property_type_constituent(&mut types, index_info_type);
+                }
             }
             if types.is_empty() {
                 return None;
