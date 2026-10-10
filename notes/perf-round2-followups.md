@@ -338,6 +338,16 @@ is type-checked, CI runs on pull requests, and the workspace is at 0.11.0. The i
   while the cold-process incremental path is ~1 s. Also reasoned out there without measurement: per-file summaries as
   declaration text (declaration emit is not total, import cycles, not identity-preserving), per-file check regions
   (types made in a body can enter long-lived caches), mmap of source files (SIGBUS on truncation).
+- From the instruction-count hill climb (notes/perf-icount-hillclimb.md; the 38k-file codebase, 8 checkers, static
+  assignment, user-space instructions): an inline fast path in `getPropertyOfType` for a hit in resolved members
+  (1.7387T -> 1.7836T, +2.6%), the same as a small out-of-line function (+2.6%: most calls are on lazy member tables,
+  and the slow path repeats the lookup), and an inline value-hit path with the rest out of line (1.5660T -> 1.6111T,
+  +2.9%); a union fast path in `getNormalizedType` (+0.04%) and in the inline `getReducedApparentType` (+0.19%);
+  `isSimpleTypeRelatedTo` answering object-object pairs inline (-0.02%, within noise); recursion identities cached
+  per relater stack entry (+0.13%); negative entries (a marker symbol) in union/intersection property caches, stored
+  only with no member or type resolution in progress (+0.05%: 9M hits for 3.5M stores, shadow-verified, but the
+  larger caches slow every other lookup and insert). Extra code inlined into functions with many call sites cost more
+  than it saved every time it was tried.
 
 ## The lint ratchet
 
