@@ -176,7 +176,8 @@ jobs:
       - name: Set up benchmark projects
         run: python3 bench/run.py --setup-only --projects vscode,xstate-main,webpack
 
-      # tsrs as released: PGO `dist` build with the release workflow's commands and training (as in bench.yml).
+      # tsrs as a PGO `dist` build with the release workflow's PGO commands and training, without the BOLT step of
+      # release.yml and bench.yml.
       - name: PGO instrumented build
         env:
           RUSTFLAGS: -Cprofile-generate=/tmp/tsrs-pgo/raw

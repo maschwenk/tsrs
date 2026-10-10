@@ -359,7 +359,6 @@ func (g *gen) closureBody(fl *ast.FuncLit, sig *types.Signature) string {
 	}
 	g.inResultFunc = sig.Results().Len() > 0
 	g.indent = savedIndent + 1
-	// a single `return x` body becomes an expression body
 	g.stmts(fl.Body.List)
 	g.indent = savedIndent
 	g.buf, g.resultTypes, g.inResultFunc = savedBuf, savedRes, savedInRes

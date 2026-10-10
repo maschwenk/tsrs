@@ -9,8 +9,8 @@
 // package's `engines` minimum.
 //
 // Nothing is fetched from the registry: the main package has no runtime dependencies and its platform package is
-// installed from the same dist directory. The binary inside the platform package is whatever --binary packed (the
-// tsrs build, or a pinned tsgo while the Rust `--api` server is under construction).
+// installed from the same dist directory. The binary inside the platform package is whatever --binary packed (normally the
+// tsrs release build; any TypeScript 7 `--api`-compatible binary, e.g. a pinned tsgo, also works for comparison).
 
 import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";

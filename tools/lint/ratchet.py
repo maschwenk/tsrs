@@ -30,7 +30,7 @@ EXCLUDE = ["tsrs_fourslash"]
 # findings remain: `cargo check` runs with -D warnings.
 RUSTC_LINTS = ["unsafe_op_in_unsafe_fn", "dead_code", "unused_imports", "unused_variables", "unused_mut"]
 
-# unsafe_op_in_unsafe_fn reports under its error code in edition 2021.
+# unsafe_op_in_unsafe_fn reports under its error code, E0133.
 CODE_ALIASES = {"E0133": "unsafe_op_in_unsafe_fn"}
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

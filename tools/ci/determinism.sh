@@ -5,8 +5,8 @@
 # random static assignments with random visit orders (`--checkerAssignment random:<seed>`) at 2 and 4 checkers must
 # print the same bytes and exit with the same status. Both history-dependent diagnostics of
 # notes/fix-history-dependent-diagnostics.md (nuxt's TS2320, drizzle-orm's TS2769) appeared under such assignments at
-# 2-4 checkers, so those two projects are in the default set with the two cheapest bench projects. pr-verify (label
-# `verify`) is the other half: every bench project at 1/4/16/32 checkers against the base build.
+# 2-4 checkers, so those two projects are in the default set with the two cheapest bench projects. pr-verify (every pull
+# request that changes crates/, or with the `verify` label) is the other half: every bench project at 1/4/16/32 checkers against the base build.
 #
 #   tools/ci/determinism.sh <tsrs binary> [--projects xstate-main,webpack,nuxt,drizzle-orm] [--seeds 6]
 #                           [--default-reps 3] [--work-dir bench/.work] [--no-regressions]

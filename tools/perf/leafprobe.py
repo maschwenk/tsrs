@@ -98,7 +98,7 @@ def main() -> None:
     ap.add_argument("--projects", default="vscode,formbricks-web")
     ap.add_argument("--checkers", default="1,4")
     ap.add_argument("--reps", type=int, default=5)
-    ap.add_argument("--variant", action="append", default=[], help="name:K=V[,K=V...]")
+    ap.add_argument("--variant", action="append", default=[], help="name:K=V[;K=V...]")
     ap.add_argument("--profile", action="append", default=[], help="project:checkers to perf record per variant")
     ap.add_argument("--no-strace", action="store_true")
     ap.add_argument("--no-perf-stat", action="store_true")

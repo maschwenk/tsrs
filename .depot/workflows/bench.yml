@@ -1,13 +1,15 @@
 # Depot CI workflow (https://depot.dev/docs/ci/overview). Benchmarks tsrs against tsgo (typescript@7.0.2) on the
-# typescript-benchmarking projects and four open-source applications (bench/README.md) and rewrites the table between
-# the bench markers at the top of README.md. Not a GitHub Actions workflow: this repository is connected to Depot CI,
-# and Depot's runners for GitHub Actions only serve organization-owned repositories.
+# typescript-benchmarking projects and the open-source applications of bench/projects.json (bench/README.md) and
+# rewrites the table between the bench markers at the top of README.md. Not a GitHub Actions workflow: this
+# repository is connected to Depot CI, and Depot's runners for GitHub Actions only serve organization-owned
+# repositories.
 #
 # Four jobs (bench/README.md "CI"): `build` makes the PGO dist binary once; `measure` is one job per project of
 # bench/projects.json, each on its own machine of the fixed spec, so the projects are measured at the same time
 # without ever sharing a CPU (one job measuring them one after the other took 18-20 min; the longest project, vscode,
-# takes about 5); `measure-wide` measures every project with `--checkers 16` on one 16-vCPU machine; `merge` joins
-# the partial results into one result file (bench/run.py --merge), flags regressions and commits.
+# takes about 5); `measure-wide` measures every project in the default mode (`wide`, the README table) and with
+# `--checkers 16` on one 16-vCPU machine, with `bun check` as a third column; `merge` joins the partial results into
+# one result file (bench/run.py --merge), flags regressions and commits.
 #
 # Loop guards: the results commit only touches README.md and bench/results/** (excluded by `paths`), and carries
 # [skip ci], which the build job's `if` also checks (the commit is pushed by Depot's GitHub app, which may trigger

@@ -1,5 +1,5 @@
 # Depot CI workflow: one-off probe of how the Linux x86-64 dist binary is built (notes/perf-binary-layout.md). In one
-# job on the 32-vCPU bench machine it builds main's bench binary (PGO, bench.yml `build`) and variants of it from the
+# job on a 32-vCPU runner it builds the PGO-only bench binary (A, what bench.yml built before it added BOLT) and variants of it from the
 # same instrumented build (the training runs of tsrs writing their profiles again, a larger PGO training set, BOLT as
 # release.yml does it, a larger BOLT training set, BOLT with -hugify: tools/perf/layout-build.sh), then measures them interleaved on every bench project
 # (tools/perf/layout-measure.py) and profiles the baseline on vscode. Not scheduled; run it from a pushed branch, which

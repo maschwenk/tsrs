@@ -5,7 +5,8 @@
   bench/regressions.py (<result.json> | --latest) [--threshold 1] [--comment]
 
 Compares each project's single-threaded instruction count and peak RSS (bench/count.py, recorded by bench/run.py)
-with the newest earlier result in bench/results from the same runner label and build. The instruction count repeats
+with the nearest earlier benchmarked ancestor commit's result in bench/results from the same runner label and build
+(the newest earlier result when the checkout doesn't know the commits). The instruction count repeats
 to about 0.001% and peak RSS to under 0.4%, so a change past the thresholds below is the code's; only a different CPU
 model or C library (which pick different memcpy-style routines) can move them otherwise, and then the project is not
 judged (the machine is compared per project: bench/run.py --merge records the machine on a cell measured elsewhere).

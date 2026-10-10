@@ -13,7 +13,7 @@
 # Env: TSGO (reference tsgo binary, required), TSRS (default target/release/tsrs), TSRS_CHECKER_ASSIGNMENT (default
 # go), OUT_GO (/tmp/emit-go),
 # OUT_RS (/tmp/emit-rs). A package built with `tsc -p <file>` uses that config; `tsc --build`/`-b` packages are
-# emitted with `-p` on their tsconfig until `-b` is ported (TODO(emit/incremental)).
+# emitted with `-p` on their tsconfig (this script has no build mode; tsrs itself supports `-b`).
 # Output: one line per selected package (verdict, identical/different/missing/extra counts, exit codes, diagnostics
 # agreement, tsrs panic) and totals (summarize.py); JSON rows in $OUT_RS.results.jsonl. Exit status: 0 only if every
 # selected package has one result and it is identical (nonzero compiler statuses are fine when both agree); 1 on any

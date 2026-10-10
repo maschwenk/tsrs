@@ -41,7 +41,7 @@ cfg = json.load(open("bench/projects.json")); p = next(p for p in cfg["projects"
 cwd, proj = rb.project_path(cfg, p, rb.Path(sys.argv[2])); print(f"{cwd}\t{proj}")' "$1" "$work"
 }
 # Runs tsrs binary $1 on every EXTRA_TRAIN project at each of EXTRA_CHECKERS (`default`: no flag); $2 = env
-# assignment. MIMALLOC_SHOW_STATS: tsrs then ends with `exit`, which writes the profile (pgo-train.sh).
+# assignment. tsrs ends with `exit`, which writes the profile (MIMALLOC_SHOW_STATS is a leftover from `_exit` days).
 extra_runs() {
   local exe=$1 envset=$2 p cwd proj c t0
   IFS=, read -ra projects <<< "$EXTRA_TRAIN"
