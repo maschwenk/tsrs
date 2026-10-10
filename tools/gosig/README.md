@@ -1,17 +1,25 @@
 # gosig: Rust signature stubs from a Go package
 
-`gosig` type-checks a Go package and writes Rust stubs (`todo!()` bodies) for its functions,
-so that many agents can port bodies in parallel against signatures that already agree.
-Its main job is deciding `P<T>` vs `Option<P<T>>` for every pointer parameter and result
-with a whole-package nil-ability analysis.
+`gosig` type-checks a Go package and writes Rust stubs (`todo!()` bodies) for its functions. It generated the
+signatures that the ported bodies were written against, for the checker, declarations, modulespecifiers and
+pseudochecker crates (`checker.json`, `declarations.json`, `modulespecifiers.json`, `pseudochecker.json`). Its main
+job was deciding `P<T>` vs `Option<P<T>>` for every pointer parameter and result with a whole-package nil-ability
+analysis.
 
-## Running
+That workflow is finished: every body is ported and no `todo!()` stubs remain. `docs/sigs/{checker,declarations,
+modulespecifiers,pseudochecker}.txt` are now generated from the Rust sources by `tools/sigs-from-rust.py`.
+
+Do not run gosig with a config's default output. It rewrites every Rust file listed in the config's `files` (in its
+`outDir`, e.g. `crates/tsrs_checker/src`) with `todo!()` stubs, which would overwrite the ported code, and it rewrites
+`docs/sigs/*.txt`. The ported checker files no longer carry the stub marker line, so gosig now reads their functions
+as hand-written, but it still rewrites every listed file. Use `-dry`, or `-out` to a scratch directory (the sigs files then go to `<out>/sigs/`).
+
+## Running (reference only)
 
 ```sh
 cd tools/gosig
-GOTOOLCHAIN=auto go run . -config checker.json           # writes crates/tsrs_checker/src/*.rs + docs/sigs/*.txt
 GOTOOLCHAIN=auto go run . -config checker.json -dry      # analysis + statistics only
-GOTOOLCHAIN=auto go run . -config checker.json -out ../../target/scratch/gosig/out   # write elsewhere
+GOTOOLCHAIN=auto go run . -config checker.json -out ../../target/scratch/gosig/out   # write to a scratch directory
 python3 check_stubs.py ../../target/scratch/gosig/out     # compile the stubs against dummy types
 ```
 
@@ -38,7 +46,7 @@ Paths are relative to the config file.
 | key | meaning |
 | --- | --- |
 | `moduleDir`, `package` | Go module root and the import path to generate |
-| `resultOnlyPackages` | extra in-module packages whose bodies are analyzed only so their *results* are known (`ast` accessors, `core`, `binder`) |
+| `resultOnlyPackages` | extra in-module packages whose bodies are analyzed only so their *results* are known (`ast` accessors, `core`, `binder`, `pseudochecker`) |
 | `outDir`, `sigsFile`, `advisorySigsFile` | stub directory; grep file for generated signatures; grep file for functions that are ported by hand or later (e.g. `types.go`, `nodebuilder*.go`). A stub is never emitted when a hand-written file in `outDir` (one without the stub marker) already defines a function of that name on the same receiver; such functions are listed in the stub file's comments and kept in `sigsFile` |
 | `prelude` | text at the top of every generated file |
 | `files` | emitted Go files in output order: `{go, rust}` or `{go, chunks: [{rust, from, to}]}` (a declaration goes to the chunk holding its first line); `declsNote` labels the comment block that lists the file's non-function declarations. Several Go files may share a Rust file |

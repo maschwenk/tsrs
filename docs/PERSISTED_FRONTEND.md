@@ -11,9 +11,9 @@ source text) could be written once to a cache image and `mmap`ed on later runs, 
 content hash. Parse + bind then turns into page faults, and only the pages the checker reads become resident.
 Neither tsc nor tsgo does this.
 
-The idea depends on 32-bit position-independent arena handles (`P<T>` as an offset from one process-wide base,
-branch `mem/pointer-compression`, notes/mem-pointer-compression.md). Without handles, every pointer in a mapped
-image would need relocating, which means writing every page and losing the laziness.
+The idea depends on 32-bit position-independent arena handles (`P<T>` as an offset from one process-wide base:
+the default `compressed-ptrs` build, `tsrs_core/src/reserve.rs`, notes/mem-pointer-compression.md). Without handles,
+every pointer in a mapped image would need relocating, which means writing every page and losing the laziness.
 
 ## What the measurements say (summary)
 
@@ -70,7 +70,7 @@ image would need relocating, which means writing every page and losing the lazin
 
 ### Address order
 
-`P<T>` orders and hashes by address (by handle after pointer compression). The port has no `BTreeMap<P<_>>` and no
+`P<T>` orders and hashes by address (by handle in the default `compressed-ptrs` build). The port has no `BTreeMap<P<_>>` and no
 address-keyed sort (survey in this note and in mem-pointer-compression). The one `FxHashMap<P<Symbol>>` iteration
 that reaches output is sorted by `sort_symbols` afterwards. Addresses already differ from run to run (which rayon
 worker parses which file), so a dependency on address order would already show up as flakiness.
@@ -105,7 +105,7 @@ handle-based inside the segment, or be rebuilt live on load.
 
 | item | today | in the image |
 | --- | --- | --- |
-| `P<T>` fields and the packed words (node parent, identifier slot, `SymbolParentWord`, `FlowNode.link`) | absolute; `to_bits` after pointer compression | handles; no fixup when the image is mapped at its window offset |
+| `P<T>` fields and the packed words (node parent, identifier slot, `SymbolParentWord`, `FlowNode.link`) | 32-bit handles in the default `compressed-ptrs` build (absolute with `plain-ptrs`) | handles; no fixup when the image is mapped at its window offset |
 | slices and strings: `ThinSlice` (`NodeList.nodes`), `PackedStr` / `StrCell`, `OwnedSliceCell` (symbol declarations), `&'static [P<Node>]` in `SourceFile`, `&'static str` symbol names | absolute (pointer compression leaves them; its notes name `PSlice` / `PStr` as the follow-up) | `PSlice` / `PStr` (32-bit handle + length) are a **prerequisite** |
 | `SymbolTable` entries | `EntryVec`: a `malloc` buffer of words holding symbol address / 8, plus a heap `HashTable` index above a size | arena-resident entry buffer of handles; the hash bits are name-based, so the index can be rebuilt or stored |
 | `SourceFile` heap and sync fields: `parse_options` (`String`, `Path(Arc<str>)`), `OnceLock`s (line map, position map, identifier set, name table, declaration map), `jsdoc_cache` (map keyed by node address) + `jsdoc_mu`, `token_cache`, `bind_once`, `is_bound` | in the struct | split: a persisted `SourceFileRecord` of handles and scalars in the segment, and a live side struct built on load (below) |
@@ -163,7 +163,7 @@ it elsewhere would mean adding a delta to every handle, which writes every page.
   `A` and maps each generation file `MAP_FIXED | MAP_PRIVATE` over its range of the `PROT_NONE` reservation. The
   range from `A` to `W` stays reserved for this run's misses. A process without a cache reserves no window.
 
-What this needs from the pointer-compression branch (to request when it lands):
+What this needs from pointer compression (landed; these are additions to it):
 
 1. A start-up hook that sets the size of the reserved low window before the first chunk is handed out. The chunk
    allocator never hands out window ranges. A miss's segment is committed at the append point on demand, with a
@@ -226,7 +226,7 @@ stays valid after a later one is published.
 ### Loading: hit or miss per file
 
 The file loader calls `host.get_source_file(opts)`. The cache wraps that call: the default host in
-`tsrs_compiler/src/host.rs`, the `--build` host's `.d.ts` cache in `tsrs_cli/src/build/host.rs` and the language
+`tsrs_compiler/src/host.rs`, the `--build` host's `.d.ts` cache in `tsrs_execute/src/build/host.rs` and the language
 server's `parsecache` all go through it. Steps:
 
 1. Not cacheable (extension, options key, or a flagged file) → parse as today.
@@ -303,7 +303,7 @@ segment).
 | 4-8 vCPU CI runner, cold full check | front end 1.1 s (4 threads) / 0.97 s (8) on this Mac's cores; the runner's cores are slower (not measured) | ~0.06-0.1 s at 4 vCPU, ~0.03-0.05 s at 8; ≤ 0.15 GiB. **Negative** if the image must be downloaded first | the same CPU split at 4 and 8 threads; front-end wall from the `RAYON_NUM_THREADS` runs |
 | language server cold start (open one file) | 1.20 s, 2.4 GiB | ~0.02-0.03 s (18 threads), ~0.06-0.08 s (4), ~0.3 s (1); ~0.2-0.25 GiB at start, plus ~0.22 GiB shared per additional server process | LSP runs at 1/4/8/18 threads; checker creation touches 36% of cacheable pages |
 
-**Effort**, after pointer compression lands, in focused agent time:
+**Effort**, on top of pointer compression (landed), in focused agent time:
 
 - `PSlice` / `PStr` for the front end: 1-2 weeks (hundreds of sites: `NodeList.nodes` alone has ~300).
 - Arena-resident symbol-table entries: 2-3 days.

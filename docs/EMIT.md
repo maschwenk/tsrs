@@ -1,31 +1,28 @@
-# Emit plan: JavaScript, declarations, source maps, `--build`
+# Emit: JavaScript, declarations, source maps, `--build`
 
-Status (2026-10-03): **tsrs 0.3.0 emits by default, like tsgo**. The
-`TSRS_EMIT=1` opt-in gate of section 6 is removed: no forced `--noEmit`, `-b` and incremental compilation run without
-an environment flag, and the project's/CLI's `noEmit`, `emitDeclarationOnly`, `noEmitOnError` and
-`incremental`/`composite` decide as in Go (an incremental `--noEmit` program still writes its tsbuildinfo). The old
-variable no longer changes anything. Regression test: `crates/tsrs_cli/tests/default_emit.rs`. The sections below are
-the history of the emit port (written while emit was opt-in); progress: section 13.
+Status: **emit is fully ported and on by default, like tsgo** (since tsrs 0.3.0). Every transformer, the printer's
+emit paths, source maps, `.tsbuildinfo` and `--build` are ported; no stub is left. The `TSRS_EMIT=1` opt-in gate of
+section 6 is removed: the project's/CLI's `noEmit`, `emitDeclarationOnly`, `noEmitOnError` and
+`incremental`/`composite` decide as in Go (an incremental `--noEmit` program still writes its tsbuildinfo), and the
+old variable no longer changes anything (regression test: `crates/tsrs_cli/tests/default_emit.rs`). Current pass
+counts are in the README capability table ("What it does and doesn't do": 13,392 `.js` baselines pass, 0 fail; 149 `.js.map` and 156
+`.sourcemap.txt` baselines pass; the `tsbuild`/`tsc` scenario counts).
 
-## Why the work stopped after phase 0
-
-A cold build of the 97 packages that emit with tsc in the private monorepo adds up to ~49 s of task time
-(19 s wall). Emit would make tsrs complete, but it would not make that build meaningfully faster, so the usage
-budget went to the LSP port instead. This document is written so the work can be resumed without
-re-deriving anything: it lists what exists, what is missing, the order to build it in, the waves, the gates and
-the harness.
+Sections 10, 10b, 12 and 14 are design notes that describe the current code. Sections 1 and 3–9 are the plan as
+written on 2026-10-03, while emit was opt-in and most transformers were missing, and section 13 is the per-wave log of
+that day; they are kept as history and do not describe the current state.
 
 Reference commit: the same as the rest of the port (`ts-ref/tsc` = microsoft/TypeScript b85298b6a81f, nightly
 7.1.0-dev.20260929). Reference binary: `$TSRS_WORK/bin/tsgo-ref`.
 
-## 1. Ground rules for whoever resumes this
+## 1. Ground rules of the port (history)
 
-- Same porting rules as the checker (PORTING.md, BODY_PORTING.md): one Rust file per Go file, functions in Go
+- Same porting rules as the checker (PORTING.md): one Rust file per Go file, functions in Go
   order, snake_case Go names, `// file.go:LINE` origin markers, Go quirks kept, no "improvements", never
   special-case a test. Signatures come from `tools/gosig` (section 9).
-- **tsrs emits by default, like tsc.** The `TSRS_EMIT=1` gate (section 6) was removed once the user signed off;
-  `--noEmit` (which the 38k-file codebase passes everywhere) is the only thing that keeps files from being written.
-  Nothing may change what `--noEmit` prints or writes (nothing).
+- **tsrs emits by default, like tsc.** The `TSRS_EMIT=1` gate (section 6) was removed once the user signed off.
+  `--noEmit` (which the 38k-file codebase passes everywhere) keeps that codebase from writing files; `noEmitOnError`
+  and `emitDeclarationOnly` behave as in tsc. Nothing may change what `--noEmit` prints or writes (nothing).
 - Land on `main` in small commits (rebase, gates, `git push origin HEAD:main`, never force-push). Emit is additive,
   so partial waves can land as long as the gates hold:
   - conformance suite errors plus `--baselines types,symbols` byte-identical to the base binary, in the default
@@ -65,10 +62,11 @@ execute/tsc.go  performCompilation / performIncrementalCompilation (incremental/
        └ exit status from EmitSkipped + diagnostics
 ```
 
-`GetESTransformer` (estransforms/definitions.go) picks a chain by target. Even `ESNext` runs
-`esDecorator + classFields`; ES2021–ES2026 add `using`; every older target adds more, down to ES2015 and below,
-which run every estransform. Each transformer returns early on `SubtreeFacts`, so files without the syntax pass
-through, but the transformers still have to exist and run.
+`GetESTransformer` (estransforms/definitions.go) picks a chain by target. `ESNext` selects
+`esDecorator + classFields`, but both constructors return nil when `useDefineForClassFields` is on (the default from
+ES2022), and `esDecorator` also returns nil under `experimentalDecorators`, so with default options no estransform
+runs at ESNext. ES2021–ES2026 add `using`; every older target adds more, down to ES2015 and below, which run every
+estransform. Each transformer returns early on `SubtreeFacts`, so files without the syntax pass through.
 
 ## 3. Inventory: Go files, line counts, tsrs status
 
@@ -403,10 +401,10 @@ then-current main:
   `DeclarationTransformer` does. Factories are `fn(&TransformOptions) -> Option<P<Transformer>>`
   (`TransformerFactory`; `None` is Go's nil from `newClassFieldsTransformer` and friends). Go's package-level
   `transformers.Chain(...)` vars are functions that call `chain(&[...])(opts)` (estransforms/definitions.rs).
-- **Gate stubs.** One file per Go file. Each stub has the Go struct fields its constructor sets, the constructor
-  (including Go's nil returns and panics), and `visit` with the Go `SubtreeFacts` early return; past it,
-  `unimplemented!("emit: <file>.go not ported")`. Transformers whose Go `visit` has no early return (importelision,
-  esmodule, constenum) stop at their first statement. Ported in full because they are tiny or pure dispatch:
+- **Gate stubs** (history: every stub has since been replaced by the full port). One file per Go file. Each stub
+  had the Go struct fields its constructor sets, the constructor (including Go's nil returns and panics), and `visit`
+  with the Go `SubtreeFacts` early return; past it, `unimplemented!("emit: <file>.go not ported")`. Transformers
+  whose Go `visit` has no early return (importelision, esmodule, constenum) stopped at their first statement. Ported in full because they are tiny or pure dispatch:
   estransforms/definitions.go, usestrict.go, moduletransforms/impliedmodule.go and esdecorator.go's
   `visitSourceFile` (it visits every file for every target below ESNext, so a stub there would block everything).
   async/forawait's early return goes through `fallbackVisitor`, whose own early return always holds while nothing
@@ -436,13 +434,11 @@ then-current main:
 - **Writing files.** Go's `emitHost.WriteFile` is `program.Host().FS().WriteFile`. Rust: the compiler's
   `EmitHost::write_file` calls `program.host().fs().write_file` (`tsrs_vfs`): the CLI's cached FS over the OS FS,
   which creates missing directories (iovfs `write_file_ensuring_dir`); the harness's recorder FS over the
-  in-memory test FS. `Program::emit` is only called by the CLI under `TSRS_EMIT=1` and by the harness under
-  `--baselines js`.
-- **Source maps** (E7). `print_source_file` keeps Go's structure; when `shouldEmitSourceMaps` is true it is
-  `unimplemented!` (`TODO(emit/sourcemaps)`): replace the uninhabited `SourceMapGenerator` with
-  `tsrs_sourcemap::Generator`, the two `unreachable!`s in printer_3.rs with the Go bodies, and add the
-  `sourceMapGenerator != nil` branch of `printSourceFile` (emitter.rs). `get_source_mapping_url`,
-  `get_source_map_directory` and `get_source_root` are ported already.
+  in-memory test FS. `Program::emit` is called by the CLI (unless the options turn emit off), by the Node API
+  (`emit`, `transpile`) and by the harness under `--baselines js`.
+- **Source maps** (E7). `print_source_file` keeps Go's structure; the printer takes an
+  `Option<&mut SourceMapGenerator>` (`tsrs_sourcemap::Generator`) in `write` and implements Go's source-map paths
+  (printer_3.rs); `get_source_mapping_url`, `get_source_map_directory` and `get_source_root` are ported.
 - **Helpers.** helpers.go definitions are `static`s in `tsrs_printer/src/helpers_defs.rs` (text copied byte for
   byte), handed out with `P::from_static` (now a `const fn`), so identity comparisons behave like Go's pointers.
   The rest of factory.go is `tsrs_printer/src/factory_2.rs` (`PrivateIdentifierKind` is an enum with `as_str`).
@@ -456,21 +452,20 @@ then-current main:
   properties in source order, which differs from tsgo in 8 of the private monorepo's 2,460 declaration files. The
   monorepo oracle therefore runs tsrs with `TSRS_CHECKER_ASSIGNMENT=go` (Go's assignment and Go's cache); with it every
   declaration file is identical.
-- **Incremental programs** (E13, `emit/incremental`): under the gate the CLI runs `performIncrementalCompilation`
-  (reads and writes `.tsbuildinfo`, section 10b). The `--baselines js` harness wraps the 5 `@incremental` test
+- **Incremental programs** (E13, `emit/incremental`): the CLI runs `performIncrementalCompilation` for incremental
+  projects (reads and writes `.tsbuildinfo`, section 10b). The `--baselines js` harness wraps the `@incremental` test
   variants in `incremental.NewProgram` like Go's `createProgram` (with `testBuildInfoReader`), through
-  `compiler.ProgramLike`; the default mode keeps the plain program. `jsEmitIntersectionProperty` passes that way; the
-  other 4 stop at the importelision gate stub (their error/types/symbols baselines pass in the default mode).
+  `compiler.ProgramLike`; the default mode keeps the plain program.
 
 ## 10b. Design notes for E13/E14/E15 (implemented on `emit/incremental`)
 
 - **Crates.** `execute/incremental` is `tsrs_incremental` (one file per Go file). `execute/build` is the module
-  `tsrs_cli::build`, not a `tsrs_build` crate: it needs the `tsc` module of the binary crate (Go's `execute/tsc`), the
-  same reason Go keeps both under `execute/`. `compiler.ProgramLike` with `HandleNoEmitOptions` and
-  `GetDiagnosticsOfAnyProgram` over it live in `tsrs_incremental::emit` (TODO(emit/core): move into tsrs_compiler
-  next to the concrete-program versions).
-- **Gate.** Without `TSRS_EMIT=1` nothing changes: incremental projects are checked from scratch, no tsbuildinfo is
-  read or written, `-b` prints "not supported" (`crates/tsrs_cli/tests/emit_gate.rs` checks both).
+  `tsrs_execute::build` (crates/tsrs_execute/src/build), not a `tsrs_build` crate: it sits next to `tsrs_execute::tsc`
+  (Go's `execute/tsc`), as Go keeps both under `execute/`. `compiler.ProgramLike`, `HandleNoEmitOptions` and
+  `GetDiagnosticsOfAnyProgram` over it live in tsrs_compiler (programlike.rs, program_emit.rs); `tsrs_incremental::emit`
+  re-exports them.
+- **Gate** (removed): emit, tsbuildinfo and `-b` run by default; `crates/tsrs_cli/tests/default_emit.rs` checks that
+  `TSRS_EMIT` no longer changes anything.
 - **JSON.** `BuildInfo` is marshaled by building a `tsrs_core::json::Value` tree field by field in Go's declaration
   order with Go's `omitzero` rules (nil vs empty kept where Go distinguishes them, e.g. `fileInfos: []`) and the
   tuple encodings of the custom `MarshalJSON`s; unmarshaling follows the `UnmarshalJSON` fallbacks.
@@ -479,9 +474,9 @@ then-current main:
   `7.1.0-dev`, Go's source default), so a tsrs built with the tsgo version reads and writes tsbuildinfo files that tsgo
   accepts, and vice versa. Different versions simply rebuild from scratch, as in Go.
 - **Default library path.** Go's embedded build reads libs from `bundled:///libs`, the npm (noembed) tsgo from its
-  executable directory; the path sorts differently against project files, which reorders `referencedMap` keys. Under
-  `TSRS_EMIT=1`, `TSRS_LIB_PATH=<dir>` makes tsrs read them from a directory like the noembed build (the oracles set it
-  to tsgo's directory).
+  executable directory; the path sorts differently against project files, which reorders `referencedMap` keys.
+  `TSRS_LIB_PATH=<dir>` makes tsrs read them from a directory like the noembed build (the oracles set it to tsgo's
+  directory).
 - **Concurrency.** Go runs the per-file snapshot and affected-file work on work groups; tsrs runs it on the calling
   thread in a deterministic order (sorted paths). The transforms run on the checker threads (emit/core); each
   transformed file is then printed and written on the rayon worker pool, at most 4 writes at a time
@@ -538,7 +533,7 @@ row is identical (equal nonzero tsc statuses 0-4 are fine; 5 NotImplemented, sig
 fail even when equal); any file difference, status or diagnostics difference, tsrs panic, timeout,
 missing/duplicate/unexpected/malformed row (non-object, wrong field types, negative counts) or an empty selection
 exits 1.
-`tools/oracle/emit/test_monorepo.sh` (`TSGO=... TSRS=...`) checks that on a throwaway two-package repo. `tsc --build` packages are emitted with `-p` until `-b` exists.
+`tools/oracle/emit/test_monorepo.sh` (`TSGO=... TSRS=...`) checks that on a throwaway two-package repo. `tsc --build` packages are emitted with `-p` by monorepo.sh (the script has no build mode; tsrs itself supports `-b`).
 
 **Reference binary.** Use a `tsgo` built from `ts-ref` (`cd ts-ref/tsc && go build -o $TSRS_WORK/bin/tsgo-ref ./cmd/tsc`,
 Go 1.27). The npm nightly `@typescript/typescript-linux-x64@7.1.0-dev.20260929.1` was built before the pinned commit
@@ -546,10 +541,10 @@ b85298b6 and lacks microsoft/TypeScript#64460 ("Fix declaration maps for export 
 2026-09-29), so its `.d.ts.map` for `export default <identifier>` differs from the Go source tsrs ports.
 
 The reference binary already emits, so no Go oracle program is needed (add one under `ts-ref/tsc/cmd/` only if
-`EmitResult` internals are needed). Planned `tools/oracle/emit/run.py <tsconfig|dir> [--name N] [-- extra tsc flags]`:
+`EmitResult` internals are needed). `tools/oracle/emit/run.py <tsconfig|dir> [--name N] [-- extra tsc flags]`:
 
 - runs `tsgo-ref -p <cfg> --noEmit false --incremental false --outDir <W>/ref [--declarationDir <W>/ref-dts]
-  --tsBuildInfoFile <W>/ref.tsbuildinfo <extra>` and `TSRS_EMIT=1 tsrs -p <cfg>` with the same flags into
+  --tsBuildInfoFile <W>/ref.tsbuildinfo <extra>` and `tsrs -p <cfg>` with the same flags into
   `<W>/rs`, where `<W> = target/scratch/emit-oracle/<name>`. Every output path is overridden, so nothing is ever
   written into the project;
 - compares the stdout/stderr diagnostics and exit codes, then walks both trees and compares every file byte for
@@ -564,7 +559,10 @@ sides and emit still happens); webpack (JS only: `allowJs`, `target: ES2017`, co
 chain on `.js` input); vscode `src` (`ES2024`, nodenext, `preserveConstEnums`, `outDir`; large, a good stress test
 for E1–E6); mui-docs (JSX).
 
-## 13. Progress tables
+## 13. Progress tables (history, 2026-10-03)
+
+These rows are the per-wave log of the port, before the remaining transformers landed; for current pass counts see
+the README capability table.
 
 `.js` = `tsrs-test run --suite all --baselines js` (js pass / js total, crash = gate stub reached). Oracle =
 `tools/oracle/emit/monorepo.sh <private monorepo>` (103 packages whose `build` runs `tsc`); "dts" mode adds
@@ -613,7 +611,7 @@ in declaration-only mode is 2325/2325. The JS side of the sweep waits for the tr
 - Temp-name generation (`namegenerator.go`) is ported and validated only through the printer oracle's synthesized
   modes. The transformers will be its first real users.
 - The const-enum inliner type-checks property accesses during emit (that is what causes the 4 harness artifacts).
-  Running emit from the CLI under `TSRS_EMIT=1` may therefore change which node an error is first reported from,
-  exactly as in tsc. The default mode is not affected.
+  Running emit from the CLI may therefore change which node an error is first reported from, exactly as in tsc;
+  `--noEmit` runs are not affected.
 - `tsrs_compiler/src/outputpaths.rs` and `tsrs_tsoptions::outputpaths` overlap; consolidate in E1.
 - Build mode does not free finished programs (section 10b, "Build concurrency"); Go drops them for the GC.

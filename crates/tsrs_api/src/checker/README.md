@@ -11,8 +11,8 @@ The core lane owns the crate root, snapshots, source-file leases, the AST encode
 dispatch. It integrates this module through:
 
 ```rust
-// in core's request dispatch, before/after its own methods:
-if let Some(result) = tsrs_api::checker::handle(&host, method, &params) { /* map result */ }
+// in core's request dispatch (crate-private; it wraps the session in `SessionHost`, the `CheckerHost` impl):
+if let Some(result) = checker::handle(session, method, &params) { /* map result */ }
 ```
 
 * `CheckerHost` (checker/host.rs) — implemented by core:
@@ -33,10 +33,11 @@ if let Some(result) = tsrs_api::checker::handle(&host, method, &params) { /* map
 * `CheckerRegistry` (checker/registry.rs) — one per API snapshot handle, stored in core's snapshot data.
   Core must call `registry.release()` before releasing the snapshot's last API reference. After release
   every lookup is a client error; no raw pointer outlives its snapshot.
-* Errors: `CheckerError { kind: InvalidRequest | Client, message }` = Go `ErrInvalidRequest` /
-  `ErrClientError`. Handlers do not panic on bad input (wrong JSON types, out-of-range numbers, wrong
+* Errors: `CheckerError { kind: InvalidRequest | Client | Unsupported | Internal, message }` = Go
+  `ErrInvalidRequest` / `ErrClientError` / an explicit unsupported error / other errors (mapped to core's
+  `ErrorKind` in checker.rs). Handlers do not panic on bad input (wrong JSON types, out-of-range numbers, wrong
   type kind for a property, stale/foreign handles); panics from deep checker invariants are not caught
-  here — core/runtime should convert them to an error response like Go's `recover` in the ipc loop.
+  here; core's `Session` converts them to a `panic: ...` error response like Go's `recover` in the ipc loop.
 
 ## Id ownership (same as Go)
 
@@ -92,9 +93,9 @@ What `Tested` does **not** mean yet (open gaps, for the integration lead):
   This is a Go-server comparison through tsrs' test-only node table. It is not a Node-client or
   `Session` run; the broad upstream client suite belongs to the parity lane.
 * `session_responses_match_pinned_go` (checker/session_tests.rs) runs through core's real `Session`, with
-  codec node handles, source-file descriptors and leases. It compares 66 full responses with
+  codec node handles, source-file descriptors and leases. It compares 84 full responses with
   `testdata/go_probe/go_shapes_b85298b6.jsonl`, recorded by `TestTsrsCheckerShapes` in the same probe.
-  All 66 match after normalizing per-process counters: type, signature and symbol ids, source-file node
+  All 84 match after normalizing per-process counters: type, signature and symbol ids, source-file node
   ids, and the symbol id embedded in `__@iterator@<id>` names. Node handles, content hashes, flags and
   error texts are compared as is. It pins:
   * **encoding/json v2 rules.** `omitempty` drops only null, "", [] and {}. So `objectFlags: 0`,

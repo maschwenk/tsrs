@@ -88,9 +88,10 @@ encodings, printNode outputs) and `gen/goprobe.sh` (in-process Go probes: `GetIn
 
 ## Known gaps
 
-* Content-mapped source files are not ported in tsrs (`is_content_mapped()` is always false), so the span map,
-  supplemental/canonical file names, content mapper, virtual file name and diagnostic directive fields are
-  always the "absent" values; those are what the pinned encoder writes for an ordinary file.
+* The API's project system does not content-map files yet (`tsrs_project` compilerhost.rs, phase 1 of
+  notes/contentmappers.md), and the encoder always writes the "absent" values for the span map,
+  supplemental/canonical file names, content mapper, virtual file name and diagnostic directive fields; those
+  are what the pinned encoder writes for an ordinary file. Encoding content-mapper info is not implemented.
 * Binder data (header offset 60) is always 0, as in the pinned encoder.
 * The decoder rejects malformed input that the Go decoder would panic on or misread (out-of-range offsets,
   non-forward sibling links, unknown kinds/enum values, invalid UTF-8 other than WTF-8 surrogates, missing
@@ -99,4 +100,5 @@ encodings, printNode outputs) and `gen/goprobe.sh` (in-process Go probes: `GetIn
   it), so lone surrogates are covered only through string-literal escapes; `PositionMap` follows Go's
   `DecodeJSStringRune` for them.
 * `tsrs_printer` formats kinds in panic messages without Go's `Kind` prefix (`unhandled statement:
-  JSImportDeclaration` vs `KindJSImportDeclaration`); printer-owned, noted for the session lane.
+  JSImportDeclaration` vs `KindJSImportDeclaration`); the API session adds the prefix when it turns a recovered
+  printer panic into an error (`tsrs_api/src/printing.rs`, `go_kind_text`).

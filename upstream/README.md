@@ -13,7 +13,7 @@ microsoft/TypeScript, tested the way upstream CI tests and measured on a 38k-fil
 | 5 | `patches/0005-Instantiate-conditional-types-...patch` | L5 | conditional instantiation without the throwaway composite mapper | nothing (also in `patches/standalone-main/`) |
 
 - `pr-01-...md` .. `pr-05-...md`: title and description per commit. `pr-04` and `pr-05` are final (line 1 = title,
-  line 3 on = body, ready for `gh pr create`); `pr-01`..`pr-03` are still drafts with a `**Title:**`/`**Base:**` header.
+  line 3 on = body; the texts opened as #64600 / #64601); `pr-01`..`pr-03` are still drafts with a `**Title:**`/`**Base:**` header.
 - `review-notes.md`: likely pushback and the answers we have.
 - `results/`: raw per-run measurements (JSON lines from `tools/measure.py`) and `results/testfiles.md`. `equiv*` are
   the Go-vs-Rust counter runs (b85298b6 base), `main*` the per-commit runs on main, `variance*` repeated 4-checker
@@ -22,32 +22,15 @@ microsoft/TypeScript, tested the way upstream CI tests and measured on a 38k-fil
 - `tools/`: the measurement scripts used below, and `variance-debug.patch` (throwaway instrumentation for the
   6-symbol variation, review-notes.md).
 
-## To open (L6 and L5, against main)
+## Opened (L6 and L5, against main)
 
-Current base: main **82f0546163** (2026-10-01). Both are one commit each, independent of each other and of
-#64475/#64526. From `$TSRS_WORK/TypeScript-upstream` (`$TSRS` = this repo); `fork` is
-https://github.com/maschwenk/TypeScript (exists; neither branch name is taken there):
+L6 is microsoft/TypeScript#64600 (`maschwenk:perf/union-property-cache`, text `pr-04-union-property-cache.md`) and L5
+is #64601 (`maschwenk:perf/conditional-instantiation-mapper`, text `pr-05-conditional-instantiation-mapper.md`),
+opened as drafts on 2026-10-02 after a rebase onto main 59f5b0233f. Both are one commit each, independent of each
+other and of #64475/#64526. L1, L11, L10 stay local until #64475 lands (they need its lazy tables); see "Local
+branches".
 
-```sh
-cd $TSRS_WORK/TypeScript-upstream
-git remote add fork https://github.com/maschwenk/TypeScript.git    # once; the checkout only has origin
-git fetch origin main && git log --oneline -1 origin/main          # if main moved: git rebase origin/main <branch>, re-run the gates
-
-git push fork perf/union-property-cache
-tail -n +3 $TSRS/upstream/pr-04-union-property-cache.md | gh pr create -R microsoft/TypeScript --draft --base main \
-  --head maschwenk:perf/union-property-cache \
-  --title "don't copy union and intersection properties into the augmented property cache" --body-file -
-
-git push fork perf/conditional-instantiation-mapper
-tail -n +3 $TSRS/upstream/pr-05-conditional-instantiation-mapper.md | gh pr create -R microsoft/TypeScript --draft --base main \
-  --head maschwenk:perf/conditional-instantiation-mapper \
-  --title "instantiate conditional types without a combined mapper for the cache lookup" --body-file -
-```
-
-Add the `#64475`/`#64526` cross-links by hand if wanted; the texts reference them by number. L1, L11, L10 stay local
-until #64475 lands (they need its lazy tables); see "Local branches".
-
-## Local branches (in `$TSRS_WORK/TypeScript-upstream`, none pushed)
+## Local branches (in `$TSRS_WORK/TypeScript-upstream`)
 
 On main 82f0546163, rebased 2026-10-01 from edf7da4e93. The 8 upstream commits in between touch `checker.go` only in
 `checkInterfaceDeclaration` / `checkEnumDeclaration` / `checkExportsOnMergedDeclarations` (#64566), away from all seven
@@ -57,8 +40,8 @@ numbers below differ from the edf7da4e93 ones for that reason).
 
 | branch | head | what |
 | --- | --- | --- |
-| `perf/union-property-cache` | 2a3563f0b7 | L6 on main (to open, pr-04) |
-| `perf/conditional-instantiation-mapper` | 8dc563d641 | L5 on main (to open, pr-05) |
+| `perf/union-property-cache` | 2a3563f0b7 | L6 on main (#64600, pr-04; head before the rebase onto 59f5b0233f) |
+| `perf/conditional-instantiation-mapper` | 8dc563d641 | L5 on main (#64601, pr-05; head before the rebase onto 59f5b0233f) |
 | `perf/lazy-base` | 15e6d92251 | main + #64475 + #64526, squashed (= `patches/base/`) |
 | `perf/lazy-tuple-members` | cc5011c63f | + L1 (on `perf/lazy-base`) |
 | `perf/lazy-empty-object-checks` | ae4d097199 | + L11 (on `perf/lazy-tuple-members`) |

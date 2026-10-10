@@ -109,7 +109,7 @@ same diagnostics and emits the same 9,257 files byte for byte. [`docs/STATUS.md`
 | Declaration emit (`.d.ts`) | yes | part of the `.js` baselines |
 | Source maps, declaration maps | yes | 149 `.js.map` and 156 `.sourcemap.txt` baselines pass, 0 fail |
 | Incremental builds (`.tsbuildinfo`) | yes | identical tsbuildinfo files |
-| `--build` (project references) | yes | 187 of 190 `tsbuild` and 187 of 216 `tsc` scenario baselines pass; the failures are CLI commands tsrs doesn't port (`--help`, `--init`, …). Uses more memory than tsgo on large graphs |
+| `--build` (project references) | yes | 189 of 192 `tsbuild` and 191 of 223 `tsc` scenario baselines pass; the failures are CLI commands tsrs doesn't port (`--help`, `--init`, …). Uses more memory than tsgo on large graphs |
 | Emit on the 38k-file codebase | yes | all 96 packages: 9,257 output files byte-identical, same diagnostics and exit codes |
 | Content mappers (`.vue`, `.svelte`, `.astro` via `contentMappers`) | CLI and `-b`: yes. Language server: no | all 9 content-mapper scenario baselines identical; the 15 content-mapper conformance cases are not run yet (notes/contentmappers.md) |
 | Language server (`--lsp -stdio`) | yes | 4,066 of 4,546 fourslash tests pass; 13,869 of 13,869 responses identical in a recorded editor session |
@@ -127,8 +127,10 @@ same diagnostics and emits the same 9,257 files byte for byte. [`docs/STATUS.md`
 
 tsrs accepts every `tsc` flag it supports. A few extra ones control performance:
 
-- `--checkers N` sets the number of checker threads. By default tsrs uses one per core up to 8, then half the cores,
-  up to 32. More threads are faster but use more memory. The thread count never changes the diagnostics.
+- `--checkers N` sets the number of checker threads. By default tsrs uses one per core up to 8 cores, then half the
+  cores, never fewer than 4 nor more than 32, and at most one checker per 32 type-checked files (so small projects use
+  4). `--build` uses 4 per project. More threads are faster but use more memory. The thread count doesn't change the
+  diagnostics, apart from the known exceptions in the table above.
 - `--singleThreaded` uses one thread, for the lowest memory use.
 - `--checkerCostCache <file>` remembers how long each file took to check and uses that to balance threads on the next
   run (up to ~15% faster on repeated runs).

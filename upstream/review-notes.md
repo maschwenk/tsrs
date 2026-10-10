@@ -18,8 +18,8 @@ Evidence that applies to every commit (README.md has the commands):
 
 - **"This is a stack on two unmerged PRs."** L1, L11 and L10 need #64475's lazy member tables (L1 only needs #64475;
   L11 and L10 were measured on #64475 + #64526 + the earlier commits). L6 and L5 don't depend on them at all: they
-  apply cleanly to main, pass the suite there, and have their own main-only numbers (pr-04, pr-05). Opening L6 and L5
-  against main first is possible and probably easier to review.
+  apply cleanly to main, pass the suite there, and have their own main-only numbers (pr-04, pr-05). L6 and L5 were opened
+  against main first (#64600, #64601).
 - **CONTRIBUTING.md bars "bulk, agent-driven contributions".** It requires that a human picked the change and
   shepherds it. Open these one at a time, as Max's own follow-ups to #64475/#64526, and keep the disclosure line.
 - **"Check time?"** Within noise everywhere. The machine was shared (load 8-18 during the runs); single-threaded check
@@ -130,6 +130,7 @@ counters) were the same idea at other sites:
 
 - **"No heap change, why bother?"** -4.34M allocations single-threaded (-2.9%), -8.8M with 4 checkers (-3.5%), all
   of them 40-byte objects that were dropped immediately. The port's count of avoided composites (4,340,555) and the Go
-  malloc delta (4,340,505) agree to within 50.
+  malloc delta on the stack on main 82f0546163 (4,340,793, the number in the PR) agree to within 250; the earlier
+  edf7da4e93 runs gave 4,340,505 and 4,340,242.
 - **"Why not `mapTypeWithCompositeMapper`?"** It goes through `getMappedType`, which substitutes a distributed type
   parameter's constraint; `CompositeTypeMapper.Map` doesn't, so it would change type arguments in some cases.

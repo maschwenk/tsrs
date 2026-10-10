@@ -1,10 +1,10 @@
 # rust_name | signature | origin | receiver  (generated from the Rust sources by tools/sigs-from-rust.py)
 add_undefined_if_definitely_required | pub(crate) fn add_undefined_if_definitely_required(expr: P<PseudoType>) -> P<PseudoType> | lookup.go:619 | -
-as_pseudo_get_accessor | pub fn as_pseudo_get_accessor(&self) -> &PseudoGetAccessor | rust:type_.rs:269 | PseudoObjectElement
-as_pseudo_object_element | pub fn as_pseudo_object_element(&self) -> &PseudoObjectElement | rust:type_.rs:235 | PseudoObjectElement
-as_pseudo_object_method | pub fn as_pseudo_object_method(&self) -> &PseudoObjectMethod | rust:type_.rs:248 | PseudoObjectElement
-as_pseudo_property_assignment | pub fn as_pseudo_property_assignment(&self) -> &PseudoPropertyAssignment | rust:type_.rs:255 | PseudoObjectElement
-as_pseudo_set_accessor | pub fn as_pseudo_set_accessor(&self) -> &PseudoSetAccessor | rust:type_.rs:262 | PseudoObjectElement
+as_pseudo_get_accessor | pub fn as_pseudo_get_accessor(&self) -> &PseudoGetAccessor | rust:type_.rs:277 | PseudoObjectElement
+as_pseudo_object_element | pub fn as_pseudo_object_element(&self) -> &PseudoObjectElement | rust:type_.rs:243 | PseudoObjectElement
+as_pseudo_object_method | pub fn as_pseudo_object_method(&self) -> &PseudoObjectMethod | rust:type_.rs:256 | PseudoObjectElement
+as_pseudo_property_assignment | pub fn as_pseudo_property_assignment(&self) -> &PseudoPropertyAssignment | rust:type_.rs:263 | PseudoObjectElement
+as_pseudo_set_accessor | pub fn as_pseudo_set_accessor(&self) -> &PseudoSetAccessor | rust:type_.rs:270 | PseudoObjectElement
 can_get_type_from_array_literal | pub(crate) fn can_get_type_from_array_literal(&self, node: P<Node>) -> Vec<P<Node>> | lookup.go:457 | PseudoChecker
 can_get_type_from_object_literal | pub(crate) fn can_get_type_from_object_literal(&self, node: P<Node>) -> Vec<P<Node>> | lookup.go:406 | PseudoChecker
 clone_parameters | pub(crate) fn clone_parameters(&self, nodes: Option<P<NodeList>>) -> Vec<P<PseudoParameter>> | lookup.go:687 | PseudoChecker
@@ -26,26 +26,27 @@ is_undefined_pseudo_type | pub(crate) fn is_undefined_pseudo_type(t: P<PseudoTyp
 is_value_signature_declaration | pub(crate) fn is_value_signature_declaration(node: P<Node>) -> bool | lookup.go:196 | -
 last_required_param_index | pub(crate) fn last_required_param_index(params: &[P<Node>]) -> i32 | lookup.go:610 | -
 new_pseudo_checker | pub fn new_pseudo_checker(strict_null_checks: bool, exact_optional_property_types: bool) -> P<PseudoChecker> | rust:checker.rs:19 | -
-new_pseudo_get_accessor | pub fn new_pseudo_get_accessor(signature: P<Node>, name: P<Node>, optional: bool, t: P<PseudoType>) -> P<PseudoObjectElement> | rust:type_.rs:351 | -
-new_pseudo_object_element | fn new_pseudo_object_element(kind: PseudoObjectElementKind, name: P<Node>, optional: bool, data: PseudoObjectElementData) -> P<PseudoObjectElement> | rust:type_.rs:286 | -
-new_pseudo_object_method | pub fn new_pseudo_object_method(signature: P<Node>, name: P<Node>, optional: bool, type_parameters: &[P<Node>], parameters: &[P<PseudoParameter>], return_type: P<PseudoType>) -> P<PseudoObjectElement> | rust:type_.rs:297 | -
-new_pseudo_parameter | pub fn new_pseudo_parameter(is_rest: bool, name: P<Node>, is_optional: bool, t: P<PseudoType>) -> P<PseudoParameter> | rust:type_.rs:185 | -
-new_pseudo_property_assignment | pub fn new_pseudo_property_assignment(readonly: bool, name: P<Node>, optional: bool, t: P<PseudoType>) -> P<PseudoObjectElement> | rust:type_.rs:323 | -
-new_pseudo_set_accessor | pub fn new_pseudo_set_accessor(signature: P<Node>, name: P<Node>, optional: bool, p: P<PseudoParameter>) -> P<PseudoObjectElement> | rust:type_.rs:337 | -
-new_pseudo_type | fn new_pseudo_type(kind: PseudoTypeKind, data: PseudoTypeData) -> P<PseudoType> | rust:type_.rs:66 | -
-new_pseudo_type_big_int_literal | pub fn new_pseudo_type_big_int_literal(node: P<Node>) -> P<PseudoType> | rust:type_.rs:382 | -
-new_pseudo_type_direct | pub fn new_pseudo_type_direct(type_node: P<Node>) -> P<PseudoType> | rust:type_.rs:108 | -
-new_pseudo_type_inferred | pub fn new_pseudo_type_inferred(expr: P<Node>, is_signature_return: bool) -> P<PseudoType> | rust:type_.rs:123 | -
-new_pseudo_type_inferred_with_errors | pub fn new_pseudo_type_inferred_with_errors(expr: P<Node>, is_signature_return: bool, error_nodes: &[P<Node>]) -> P<PseudoType> | rust:type_.rs:127 | -
-new_pseudo_type_maybe_const_location | pub fn new_pseudo_type_maybe_const_location(loc: P<Node>, ct: P<PseudoType>, reg: P<PseudoType>) -> P<PseudoType> | rust:type_.rs:161 | -
-new_pseudo_type_no_result | pub fn new_pseudo_type_no_result(decl: P<Node>) -> P<PseudoType> | rust:type_.rs:141 | -
-new_pseudo_type_numeric_literal | pub fn new_pseudo_type_numeric_literal(node: P<Node>) -> P<PseudoType> | rust:type_.rs:378 | -
-new_pseudo_type_object_literal | pub fn new_pseudo_type_object_literal(elements: &[P<PseudoObjectElement>]) -> P<PseudoType> | rust:type_.rs:365 | -
-new_pseudo_type_single_call_signature | pub fn new_pseudo_type_single_call_signature(signature: P<Node>, parameters: &[P<PseudoParameter>], type_parameters: &[P<Node>], return_type: P<PseudoType>) -> P<PseudoType> | rust:type_.rs:197 | -
-new_pseudo_type_string_literal | pub fn new_pseudo_type_string_literal(node: P<Node>) -> P<PseudoType> | rust:type_.rs:374 | -
-new_pseudo_type_tuple | pub fn new_pseudo_type_tuple(elements: &[P<PseudoType>]) -> P<PseudoType> | rust:type_.rs:214 | -
-new_pseudo_type_union | pub fn new_pseudo_type_union(types: &[P<PseudoType>]) -> P<PseudoType> | rust:type_.rs:173 | -
-signature | pub fn signature(&self) -> Option<P<Node>> | rust:type_.rs:239 | PseudoObjectElement
+new_pseudo_get_accessor | pub fn new_pseudo_get_accessor(signature: P<Node>, name: P<Node>, optional: bool, t: P<PseudoType>) -> P<PseudoObjectElement> | rust:type_.rs:359 | -
+new_pseudo_object_element | fn new_pseudo_object_element(kind: PseudoObjectElementKind, name: P<Node>, optional: bool, data: PseudoObjectElementData) -> P<PseudoObjectElement> | rust:type_.rs:294 | -
+new_pseudo_object_method | pub fn new_pseudo_object_method(signature: P<Node>, name: P<Node>, optional: bool, type_parameters: &[P<Node>], parameters: &[P<PseudoParameter>], return_type: P<PseudoType>) -> P<PseudoObjectElement> | rust:type_.rs:305 | -
+new_pseudo_parameter | pub fn new_pseudo_parameter(is_rest: bool, name: P<Node>, is_optional: bool, t: P<PseudoType>) -> P<PseudoParameter> | rust:type_.rs:193 | -
+new_pseudo_property_assignment | pub fn new_pseudo_property_assignment(readonly: bool, name: P<Node>, optional: bool, t: P<PseudoType>) -> P<PseudoObjectElement> | rust:type_.rs:331 | -
+new_pseudo_set_accessor | pub fn new_pseudo_set_accessor(signature: P<Node>, name: P<Node>, optional: bool, p: P<PseudoParameter>) -> P<PseudoObjectElement> | rust:type_.rs:345 | -
+new_pseudo_type | fn new_pseudo_type(kind: PseudoTypeKind, data: PseudoTypeData) -> P<PseudoType> | rust:type_.rs:68 | -
+new_pseudo_type_big_int_literal | pub fn new_pseudo_type_big_int_literal(node: P<Node>) -> P<PseudoType> | rust:type_.rs:390 | -
+new_pseudo_type_direct | pub fn new_pseudo_type_direct(type_node: P<Node>) -> P<PseudoType> | rust:type_.rs:116 | -
+new_pseudo_type_inferred | pub fn new_pseudo_type_inferred(expr: P<Node>, is_signature_return: bool) -> P<PseudoType> | rust:type_.rs:131 | -
+new_pseudo_type_inferred_with_errors | pub fn new_pseudo_type_inferred_with_errors(expr: P<Node>, is_signature_return: bool, error_nodes: &[P<Node>]) -> P<PseudoType> | rust:type_.rs:135 | -
+new_pseudo_type_maybe_const_location | pub fn new_pseudo_type_maybe_const_location(loc: P<Node>, ct: P<PseudoType>, reg: P<PseudoType>) -> P<PseudoType> | rust:type_.rs:169 | -
+new_pseudo_type_no_result | pub fn new_pseudo_type_no_result(decl: P<Node>) -> P<PseudoType> | rust:type_.rs:149 | -
+new_pseudo_type_numeric_literal | pub fn new_pseudo_type_numeric_literal(node: P<Node>) -> P<PseudoType> | rust:type_.rs:386 | -
+new_pseudo_type_object_literal | pub fn new_pseudo_type_object_literal(elements: &[P<PseudoObjectElement>]) -> P<PseudoType> | rust:type_.rs:373 | -
+new_pseudo_type_single_call_signature | pub fn new_pseudo_type_single_call_signature(signature: P<Node>, parameters: &[P<PseudoParameter>], type_parameters: &[P<Node>], return_type: P<PseudoType>) -> P<PseudoType> | rust:type_.rs:205 | -
+new_pseudo_type_string_literal | pub fn new_pseudo_type_string_literal(node: P<Node>) -> P<PseudoType> | rust:type_.rs:382 | -
+new_pseudo_type_tuple | pub fn new_pseudo_type_tuple(elements: &[P<PseudoType>]) -> P<PseudoType> | rust:type_.rs:222 | -
+new_pseudo_type_union | pub fn new_pseudo_type_union(types: &[P<PseudoType>]) -> P<PseudoType> | rust:type_.rs:181 | -
+new_static_pseudo_type | fn new_static_pseudo_type(kind: PseudoTypeKind) -> P<PseudoType> | rust:type_.rs:73 | -
+signature | pub fn signature(&self) -> Option<P<Node>> | rust:type_.rs:247 | PseudoObjectElement
 type_from_accessor | pub(crate) fn type_from_accessor(&self, accessor: P<Node>) -> Option<P<PseudoType>> | lookup.go:146 | PseudoChecker
 type_from_array_literal | pub(crate) fn type_from_array_literal(&self, node: P<Node>) -> P<PseudoType> | lookup.go:438 | PseudoChecker
 type_from_expando_property | pub(crate) fn type_from_expando_property(&self, node: P<Node>) -> P<PseudoType> | lookup.go:88 | PseudoChecker

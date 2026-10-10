@@ -39,19 +39,19 @@ One source of truth, the workspace `Cargo.toml`:
 
 ```toml
 [workspace.package]
-version = "0.1.0"
+version = "0.10.0"
 
 [workspace.metadata.typescript]
 version = "7.1.0-dev.20260929"                         # the TypeScript version the port follows
 commit = "b85298b6a81f772d080b0455de0ca9d744cd6fd6"    # and its commit (CI checks out its tsc/testdata)
 ```
 
-npm version: `<version>-ts<typescript version>` = `0.1.0-ts7.1.0-dev.20260929`, for every package including
+npm version: `<version>-ts<typescript version>` = `0.10.0-ts7.1.0-dev.20260929`, for every package including
 `@maschwenk/tsrs-wasm` (`npm/tsrs-wasm/package.json` holds a placeholder that `npm/build.mjs` replaces). `tsrs --version`
 and `tsrs-wasm --version` print the same, embedded at build time by `crates/tsrs_execute/build.rs`:
 
 ```
-Version 7.1.0-dev (tsrs 0.1.0-ts7.1.0-dev.20260929, microsoft/TypeScript@b85298b6a81f)
+Version 7.1.0-dev (tsrs 0.10.0-ts7.1.0-dev.20260929, microsoft/TypeScript@b85298b6a81f)
 ```
 
 To release a fix on the same TypeScript commit, bump `[workspace.package] version`; after porting a newer TypeScript
@@ -135,8 +135,10 @@ Wire contract the server has to speak (from the pinned `tsc/cmd/tsc/api.go`, `ts
 `.github/workflows/release.yml` runs on a pushed tag `v<workspace version>` or `v<npm version>` (e.g. `v0.1.0`):
 
 1. checks the tag against `Cargo.toml`, and runs `cargo check --workspace`;
-2. builds release binaries for macOS arm64 and Linux x64 and arm64
-   (`ubuntu-22.04`), and smoke-runs the native ones (`--version`, exit code 2 on a type error);
+2. builds PGO release binaries (`dist` profile, trained by `.github/scripts/pgo-train.sh`) for macOS arm64 and Linux
+   x64 and arm64 (`ubuntu-22.04`); on Linux, BOLT-optimizes them and runs the conformance and fourslash gates on the
+   BOLT-optimized binaries (`.github/scripts/bolt.sh`); smoke-runs the native ones (`--version`, exit code 2 on a type
+   error) and the installed package (`npm/sdk/smoke-consumer.mjs`);
 3. builds the WebAssembly module (`tools/wasm/build.sh`, binaryen 133), runs `npm test` in `npm/tsrs-wasm`, packs
    `@maschwenk/tsrs-wasm` with `npm/build.mjs --wasm`, installs that tarball and runs it (`--version` must name the
    release version, exit code 2 on a type error), and uploads it as the `npm-wasm` artifact;
@@ -144,8 +146,8 @@ Wire contract the server has to speak (from the pinned `tsc/cmd/tsc/api.go`, `ts
    and publishes the platform packages, then the main package, then `@maschwenk/tsrs-wasm`, with
    `--access public --tag latest` (skipping any already on the registry, so a failed run can be re-run).
 
-The conformance suite and the WebAssembly differential gate (`tools/wasm/gate.sh`) do not gate releases; they run in
-`ci.yml`.
+The conformance and fourslash gates run on the Linux release binaries (`bolt.sh`). The macOS binary and the
+WebAssembly differential gate (`tools/wasm/gate.sh`) are gated only in `ci.yml`.
 
 `workflow_dispatch` runs the same with `npm publish --dry-run` by default.
 
@@ -160,9 +162,10 @@ What Max must configure before the first release:
 - Linux binaries are built on Ubuntu 22.04, so they need glibc >= 2.35 at most (a build on Debian 12 needed 2.34);
   Alpine/musl is not supported.
 
-`.depot/workflows/ci.yml` (Depot CI; push to main and manual dispatch): `cargo check --workspace` with warnings denied,
-`cargo test` for the fast crates, a release build, the conformance and fourslash gates, an npm install smoke test of
-the packed tarballs, and the lint ratchet.
+`.depot/workflows/ci.yml` (Depot CI; pushes to main, pull requests into main, manual dispatch): `cargo check
+--workspace` with warnings denied, `cargo test` for the fast crates, a release build, the conformance and fourslash
+gates, the determinism gate, an npm install smoke test of the packed tarballs, the WebAssembly build and differential
+gate, the lint ratchet, and the skip-marker, generated-code and arena-safety jobs.
 
 ## Adopting it in a pnpm workspace
 
@@ -171,7 +174,7 @@ After a release is on npm (version below as an example):
 ```sh
 # 1. Add it next to the TypeScript compiler. If the workspace sets pnpm's minimumReleaseAge, either wait or list
 #    the main package and the platform packages in minimumReleaseAgeExclude.
-pnpm add -D @maschwenk/tsrs@0.1.0-ts7.1.0-dev.20260929
+pnpm add -D @maschwenk/tsrs@0.10.0-ts7.1.0-dev.20260929
 #    Review the pnpm-lock.yaml diff: a non-frozen install can re-resolve unrelated entries.
 
 # 2. Run it.
@@ -182,14 +185,15 @@ pnpm exec tsrs -p path/to/project --noEmit --extendedDiagnostics
 #    (`--noEmit` for a typecheck-only script).
 ```
 
-tsrs runs 4 checker threads by default, like tsgo (`--singleThreaded` for one). `GOMEMLIMIT` has no effect on tsrs.
+Without `--checkers`, tsrs picks its checker count per machine (tsgo always uses 4): every core up to 8, then half
+the cores, never fewer than 4 nor more than 32, and at most one checker per 32 type-checked files (so small projects
+use 4). `--build` uses 4 per project; `--singleThreaded` uses one. `GOMEMLIMIT` has no effect on tsrs.
 `--extendedDiagnostics` prints the same counters as tsgo (`Memory used` is the process RSS), so scripts that parse
 them keep working.
 
 ## TODO
 
 - win32-x64: uncomment its matrix entry; Windows has never been built or run.
-- Make the conformance suite a release gate again (`.github/scripts/conformance-gate.sh`, already green in `ci.yml`
-  with a 120 s per-test timeout).
+- Gate the macOS release binary on the conformance suite too (the Linux builds already run it in `bolt.sh`).
 - Provenance: needs the repository to be public (or switch to npm trusted publishing).
 - Optionally target an older glibc for Linux (e.g. `cargo zigbuild --target x86_64-unknown-linux-gnu.2.17`).

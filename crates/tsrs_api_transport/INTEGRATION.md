@@ -1,5 +1,11 @@
 # Runtime integration review for core candidate a9b4354
 
+> Historical record: the reviews of the Node API integration (PR 34) before it merged, kept because code comments
+> cite it. The work it plans has landed, including strict params JSON, request-filesystem rebasing and
+> `fileNotifications` alias expansion, `ContentionWait` / `Holder` in the checker lease, `ScopedFs` and exact integer
+> lexemes. Statements about "core today" describe the reviewed candidate, not main; see docs/NODE_API.md and this
+> crate's README.md for current behavior. Artifact paths under `/root/artifacts` are not in the repository.
+
 This review covers the core candidate `a9b435432f4fa38e140fccacc50d461d15e4ce90` (`mfs-cx/node-api-core`), which
 contains this crate at fe051ba. The reference is the pinned Go server built at b85298b (`go build ./cmd/tsc`).
 Both servers were driven by the pinned Node clients.
@@ -69,6 +75,9 @@ Go's text is `api: invalid request: failed to unmarshal *api.<Type>Params: <json
 `strictjson` already produces that jsontext error text exactly (tests/strictjson_oracle.rs).
 
 ## Request filesystem
+
+(Resolved after this review: core's `requestfs.rs` now implements `LayeredFileSystem`, `RebasableFileSystem` and
+`FileChangeExpander`, and tsrs_project rebases it.)
 
 Core keeps its own `crates/tsrs_api/src/requestfs.rs` instead of this crate's `requestfs` feature.
 Its filesystem behaviour matches pinned Go on this crate's differential fixture: I ran core's
