@@ -1,17 +1,16 @@
 use std::collections::BTreeMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashSet;
 use tsrs_ast::{Diagnostic, SourceFile};
-use tsrs_compiler::{Context, Program, ProgramOptions, new_cached_fs_compiler_host, new_program};
-use tsrs_core::tspath::{self, ComparePathsOptions, Path};
+use tsrs_compiler::{Context, Program};
+use tsrs_core::context::{CheckerLifetime, with_checker_lifetime};
+use tsrs_core::tspath;
 use tsrs_core::{
     CompilerOptions, JsxEmit, ModuleKind, ModuleResolutionKind, P, ScriptTarget, TextRange,
     Tristate,
 };
-use tsrs_tsoptions::{
-    ParseConfigHost, get_parsed_command_line_of_config_file, new_parsed_command_line,
-};
+use tsrs_project::{SessionInit, SessionOptions, Snapshot, new_snapshot_host};
 use tsrs_vfs::{FS, bundled};
 
 use crate::{LintConfig, LintOutput};
@@ -25,12 +24,6 @@ pub struct InternalDiagnostic {
     pub file_path: Option<String>,
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct Workload {
-    pub programs: BTreeMap<String, Vec<String>>,
-    pub unmatched_files: Vec<String>,
-}
-
 #[derive(Clone, Copy, Debug, Default)]
 pub struct TypeErrors {
     pub report_syntactic: bool,
@@ -39,30 +32,74 @@ pub struct TypeErrors {
 
 pub struct RunLinterOptions {
     pub current_directory: String,
-    pub workload: Workload,
+    pub file_names: Vec<String>,
     pub fs: Arc<dyn FS>,
     pub lint: Arc<LintConfig>,
     pub type_errors: TypeErrors,
     pub suppress_program_diagnostics: bool,
 }
 
+/// Keeps the discovered programs and their ASTs alive while diagnostics are consumed.
 pub struct LinterResult {
-    pub lint: LintOutput,
-    pub diagnostics: Vec<InternalDiagnostic>,
+    lint: LintOutput,
+    diagnostics: Vec<InternalDiagnostic>,
+    _projects: LoadedProjects,
 }
 
-struct ConfigHost {
-    fs: Arc<dyn FS>,
-    cwd: String,
+impl LinterResult {
+    pub fn lint(&self) -> &LintOutput {
+        &self.lint
+    }
+
+    pub fn diagnostics(&self) -> &[InternalDiagnostic] {
+        &self.diagnostics
+    }
 }
 
-impl ParseConfigHost for ConfigHost {
-    fn fs(&self) -> &dyn FS {
-        &*self.fs
+struct LoadedProjects(Arc<Snapshot>);
+
+impl Drop for LoadedProjects {
+    fn drop(&mut self) {
+        self.0.deref();
     }
-    fn get_current_directory(&self) -> &str {
-        &self.cwd
-    }
+}
+
+fn load_projects(options: &RunLinterOptions) -> Result<LoadedProjects, String> {
+    let inferred_options = P::new(CompilerOptions {
+        allow_js: Tristate::True,
+        module: ModuleKind::ESNext,
+        module_resolution: ModuleResolutionKind::Bundler,
+        target: ScriptTarget::ES2022,
+        jsx: JsxEmit::ReactJSX,
+        allow_importing_ts_extensions: Tristate::True,
+        strict_null_checks: Tristate::True,
+        strict_function_types: Tristate::True,
+        source_map: Tristate::True,
+        es_module_interop: Tristate::True,
+        allow_non_ts_extensions: Tristate::True,
+        resolve_json_module: Tristate::True,
+        ..Default::default()
+    });
+    let host = new_snapshot_host(&SessionInit {
+        background_ctx: Context::default(),
+        options: Arc::new(SessionOptions {
+            current_directory: options.current_directory.clone(),
+            default_library_path: bundled::lib_path(),
+            compiler_options_for_inferred_projects: Some(inferred_options),
+            lint: Some(Arc::clone(&options.lint)),
+            ..Default::default()
+        }),
+        fs: Arc::clone(&options.fs),
+        client: None,
+        logger: None,
+        npm_executor: None,
+        parse_cache: None,
+        content_mapped_parse_cache: None,
+    });
+    let root = LoadedProjects(host.new_root_snapshot());
+    host.open_files(&Context::default(), &root.0, &options.file_names)
+        .map(LoadedProjects)
+        .map_err(|error| error.to_string())
 }
 
 fn diagnostic_to_internal(
@@ -91,142 +128,17 @@ fn diagnostic_to_internal(
     }
 }
 
-fn create_configured_program(
-    fs: Arc<dyn FS>,
-    config_name: &str,
-    suppress_program_diagnostics: bool,
-    lint: Arc<LintConfig>,
-) -> Result<(Option<&'static Program>, Vec<InternalDiagnostic>), String> {
-    let cwd = tspath::get_directory_path(config_name);
-    let parse_host: &'static ConfigHost = Box::leak(Box::new(ConfigHost {
-        fs: Arc::clone(&fs),
-        cwd: cwd.clone(),
-    }));
-    let (parsed, read_errors) =
-        get_parsed_command_line_of_config_file(config_name, None, None, parse_host, None);
-    if !read_errors.is_empty() {
-        return Ok((
-            None,
-            read_errors
-                .into_iter()
-                .map(|d| diagnostic_to_internal(d, Some(config_name), true))
-                .collect(),
-        ));
-    }
-    let Some(parsed) = parsed else {
-        return Err(format!("couldn't parse tsconfig at {config_name}"));
-    };
-    let diagnostics = parsed.get_config_file_parsing_diagnostics();
-    if !diagnostics.is_empty() && !suppress_program_diagnostics {
-        return Ok((
-            None,
-            diagnostics
-                .into_iter()
-                .map(|d| diagnostic_to_internal(d, Some(config_name), true))
-                .collect(),
-        ));
-    }
-    let config = P::new(parsed);
-    let host = new_cached_fs_compiler_host(&cwd, fs, &bundled::lib_path(), None, None, None);
-    let mut opts = ProgramOptions::new(config, host);
-    opts.use_source_of_project_reference = true;
-    opts.single_threaded = Tristate::False;
-    opts.lint = Some(lint);
-    let program = new_program(opts);
-    let diagnostics = program.get_program_diagnostics();
-    if !diagnostics.is_empty() && !suppress_program_diagnostics {
-        return Ok((
-            None,
-            diagnostics
-                .into_iter()
-                .map(|d| diagnostic_to_internal(d, Some(config_name), true))
-                .collect(),
-        ));
-    }
-    Ok((Some(program), Vec::new()))
-}
-
-fn create_empty_program(
-    fs: Arc<dyn FS>,
-    cwd: &str,
-    files: &[String],
-    lint: Arc<LintConfig>,
-) -> &'static Program {
-    let options = P::new(CompilerOptions {
-        allow_js: Tristate::True,
-        module: ModuleKind::ESNext,
-        module_resolution: ModuleResolutionKind::Bundler,
-        target: ScriptTarget::ES2022,
-        jsx: JsxEmit::ReactJSX,
-        allow_importing_ts_extensions: Tristate::True,
-        strict_null_checks: Tristate::True,
-        strict_function_types: Tristate::True,
-        source_map: Tristate::True,
-        es_module_interop: Tristate::True,
-        allow_non_ts_extensions: Tristate::True,
-        resolve_json_module: Tristate::True,
-        ..Default::default()
-    });
-    let config = P::new(new_parsed_command_line(
-        options,
-        files.to_vec(),
-        Vec::new(),
-        ComparePathsOptions {
-            current_directory: cwd.to_string(),
-            use_case_sensitive_file_names: fs.use_case_sensitive_file_names(),
-        },
-    ));
-    let host = new_cached_fs_compiler_host(cwd, fs, &bundled::lib_path(), None, None, None);
-    let mut opts = ProgramOptions::new(config, host);
-    opts.single_threaded = Tristate::False;
-    opts.lint = Some(lint);
-    new_program(opts)
-}
-
-fn requested_source_files(
-    program: &'static Program,
-    names: &[String],
-    cwd: &str,
-) -> Result<Vec<P<SourceFile>>, String> {
-    let mut requested: FxHashMap<Path, &str> = names
-        .iter()
-        .map(|name| {
-            (
-                tspath::to_path(
-                    name,
-                    cwd,
-                    program.host().fs().use_case_sensitive_file_names(),
-                ),
-                name.as_str(),
-            )
-        })
-        .collect();
-    let mut files = Vec::with_capacity(names.len());
-    for &source_file in program.source_files() {
-        if requested.remove(source_file.path()).is_some() {
-            files.push(source_file);
-        }
-    }
-    if requested.is_empty() {
-        return Ok(files);
-    }
-    Err(format!(
-        "requested files are not in their TypeScript program: {}",
-        requested.values().copied().collect::<Vec<_>>().join(", ")
-    ))
-}
-
 fn run_on_program(
     options: &RunLinterOptions,
     program: &'static Program,
     files: &[P<SourceFile>],
-) -> Result<Vec<InternalDiagnostic>, String> {
-    program.bind_source_files();
-    let ctx = Context::default();
-    let output = Mutex::new(Vec::new());
-    if !program.for_each_checker_group(files, |checker, _, file| {
+) -> Vec<InternalDiagnostic> {
+    let ctx = with_checker_lifetime(&Context::default(), CheckerLifetime::Diagnostics);
+    let mut checker = program.get_type_checker(&ctx);
+    let mut output = Vec::new();
+    for &file in files {
         // Reporting switches never decide whether a requested file is checked.
-        let semantic = program.get_semantic_diagnostics_with_checker(&ctx, checker, file);
+        let semantic = program.get_semantic_diagnostics_with_checker(&ctx, &mut checker, file);
         let mut diagnostics = if options.type_errors.report_syntactic {
             program.get_syntactic_diagnostics(&ctx, Some(file))
         } else {
@@ -235,64 +147,72 @@ fn run_on_program(
         if options.type_errors.report_semantic {
             diagnostics.extend(semantic);
         }
-        output.lock().unwrap().extend(
+        output.extend(
             diagnostics
                 .into_iter()
-                .filter(|diagnostic| {
-                    diagnostic
-                        .file()
-                        .is_some_and(|f| f.file_name() == file.file_name())
-                })
+                .filter(|diagnostic| diagnostic.file().is_some_and(|f| f == file))
                 .map(|diagnostic| {
                     diagnostic_to_internal(diagnostic, Some(file.file_name()), false)
                 }),
         );
-    }) {
-        return Err("program does not expose a checker pool".to_string());
     }
-    Ok(output.into_inner().unwrap())
+    output
 }
 
-/// Create the requested TypeScript programs and check their files. Rules run inside those checks.
+/// Discover projects for the requested paths and check the selected files in their existing programs.
 pub fn run_linter(options: &RunLinterOptions) -> Result<LinterResult, String> {
-    let mut diagnostics = Vec::new();
-    for (config_name, names) in &options.workload.programs {
-        let cwd = tspath::get_directory_path(config_name);
-        let (program, errors) = create_configured_program(
-            Arc::clone(&options.fs),
-            config_name,
-            options.suppress_program_diagnostics,
-            Arc::clone(&options.lint),
-        )?;
-        diagnostics.extend(errors);
-        let Some(program) = program else { continue };
-        let files = requested_source_files(program, names, &cwd)?;
-        diagnostics.extend(run_on_program(options, program, &files)?);
-    }
-    if !options.workload.unmatched_files.is_empty() {
-        let program = create_empty_program(
-            Arc::clone(&options.fs),
+    let projects = load_projects(options)?;
+    let collection = &projects.0.project_collection;
+    let mut selected = BTreeMap::<_, FxHashSet<P<SourceFile>>>::new();
+    for name in &options.file_names {
+        let name = tspath::get_normalized_absolute_path(name, &options.current_directory);
+        let path = tspath::to_path(
+            &name,
             &options.current_directory,
-            &options.workload.unmatched_files,
-            Arc::clone(&options.lint),
+            options.fs.use_case_sensitive_file_names(),
         );
-        let mut files = Vec::with_capacity(options.workload.unmatched_files.len());
-        let mut seen = FxHashSet::default();
-        for name in &options.workload.unmatched_files {
-            // Like tsgolint's inferred program, look up each path so package redirects and
-            // symlink aliases resolve to their source file. Check each resolved file only once.
-            let file = program.get_source_file(name).ok_or_else(|| {
-                format!("requested file is not in its inferred TypeScript program: {name}")
-            })?;
-            if seen.insert(file) {
-                files.push(file);
+        let project = collection
+            .get_default_project(&path)
+            .ok_or_else(|| format!("no project found for requested file: {name}"))?;
+        let file = project
+            .get_program()
+            .and_then(|program| program.get_source_file(&name))
+            .ok_or_else(|| format!("requested file is not in its TypeScript program: {name}"))?;
+        selected.entry(project.id()).or_default().insert(file);
+    }
+    let mut diagnostics = Vec::new();
+    for (id, selected_files) in selected {
+        let project = collection.get_project(&id).unwrap();
+        let program = project.get_program().unwrap();
+        if id.configured().is_some() && !options.suppress_program_diagnostics {
+            let mut errors = project
+                .command_line
+                .unwrap()
+                .get_config_file_parsing_diagnostics();
+            if errors.is_empty() {
+                errors = program.get_program_diagnostics();
+            }
+            if !errors.is_empty() {
+                diagnostics.extend(
+                    errors
+                        .into_iter()
+                        .map(|d| diagnostic_to_internal(d, Some(project.config_file_name()), true)),
+                );
+                continue;
             }
         }
-        diagnostics.extend(run_on_program(options, program, &files)?);
+        let files: Vec<_> = program
+            .source_files()
+            .iter()
+            .copied()
+            .filter(|file| selected_files.contains(file))
+            .collect();
+        diagnostics.extend(run_on_program(options, program, &files));
     }
     Ok(LinterResult {
         lint: options.lint.take_output(),
         diagnostics,
+        _projects: projects,
     })
 }
 
@@ -303,6 +223,17 @@ mod tests {
     use serde_json::{Value, json};
     use tsrs_ast::{Kind, Node};
     use tsrs_vfs::vfstest;
+
+    fn program_for_file(result: &LinterResult, name: &str) -> &'static Program {
+        result
+            ._projects
+            .0
+            .project_collection
+            .get_default_project(&tspath::Path::new(name))
+            .unwrap()
+            .get_program()
+            .unwrap()
+    }
 
     fn config(files: &[&str], enabled: bool) -> Arc<LintConfig> {
         Arc::new(
@@ -350,34 +281,25 @@ mod tests {
                     true,
                 )));
                 let lint = config(&[file_name], enabled);
-                let (program, errors) = create_configured_program(
-                    Arc::clone(&fs),
-                    "/tsconfig.json",
-                    false,
-                    Arc::clone(&lint),
-                )
-                .unwrap();
-                assert!(errors.is_empty());
-                let program = program.unwrap();
-                let file = program.get_source_file(file_name).unwrap();
-                let options = RunLinterOptions {
+                let result = run_linter(&RunLinterOptions {
                     current_directory: "/".into(),
-                    workload: Workload::default(),
+                    file_names: vec![file_name.into()],
                     fs,
                     lint: Arc::clone(&lint),
                     type_errors: TypeErrors::default(),
                     suppress_program_diagnostics: false,
-                };
-                assert!(
-                    run_on_program(&options, program, &[file])
-                        .unwrap()
-                        .is_empty()
-                );
-                program.for_each_checker_group(&[file], |checker, _, file| {
+                })
+                .unwrap();
+                assert!(result.diagnostics.is_empty());
+                let program = program_for_file(&result, file_name);
+                let file = program.get_source_file(file_name).unwrap();
+                let ctx = with_checker_lifetime(&Context::default(), CheckerLifetime::Diagnostics);
+                {
+                    let mut checker = program.get_type_checker(&ctx);
                     assert!(checker.source_file_links.get(file).type_checked.get());
                     assert!(checker.source_file_links.get(file).unused_checked.get());
-                });
-                let output = lint.take_output();
+                }
+                let output = &result.lint;
                 assert_eq!(output.diagnostics.len(), usize::from(enabled));
                 assert_eq!(
                     output
@@ -387,7 +309,7 @@ mod tests {
                         .sum::<u64>(),
                     u64::from(enabled)
                 );
-                program.get_semantic_diagnostics(&Context::default(), Some(file));
+                program.get_semantic_diagnostics(&ctx, Some(file));
                 let repeated = lint.take_output();
                 assert!(repeated.diagnostics.is_empty());
                 assert!(repeated.timings.is_empty());
@@ -413,9 +335,17 @@ try { p(); } catch { p(); } finally { p(); }
             true,
         )));
         let lint = config(&["/file.ts"], true);
-        let program = create_empty_program(fs, "/", &["/file.ts".into()], Arc::clone(&lint));
+        let result = run_linter(&RunLinterOptions {
+            current_directory: "/".into(),
+            file_names: vec!["/file.ts".into()],
+            fs,
+            lint: Arc::clone(&lint),
+            type_errors: TypeErrors::default(),
+            suppress_program_diagnostics: false,
+        })
+        .unwrap();
+        let program = program_for_file(&result, "/file.ts");
         let file = program.get_source_file("/file.ts").unwrap();
-        program.get_semantic_diagnostics(&Context::default(), Some(file));
         fn walk(node: P<Node>, nodes: &mut Vec<P<Node>>) {
             if node.kind() == Kind::ExpressionStatement {
                 nodes.push(node);
@@ -428,7 +358,9 @@ try { p(); } catch { p(); } finally { p(); }
         let mut nodes = Vec::new();
         walk(file.as_node(), &mut nodes);
         assert_eq!(nodes.len(), 14);
-        program.for_each_checker_group(&[file], |checker, _, _| {
+        {
+            let ctx = with_checker_lifetime(&Context::default(), CheckerLifetime::Diagnostics);
+            let mut checker = program.get_type_checker(&ctx);
             for &node in &nodes {
                 assert!(
                     checker
@@ -441,8 +373,8 @@ try { p(); } catch { p(); } finally { p(); }
                     node.pos()
                 );
             }
-        });
-        let output = lint.take_output();
+        }
+        let output = &result.lint;
         assert_eq!(output.timings[0].calls, 14);
         assert_eq!(output.diagnostics.len(), 12); // with's `any` and the void-returning IIFE are not promises.
         assert!(
@@ -491,13 +423,7 @@ try { p(); } catch { p(); } finally { p(); }
         let lint = Arc::new(LintConfig::new(&configs, "/", true, Fixes::default(), true).unwrap());
         let result = run_linter(&RunLinterOptions {
             current_directory: "/".into(),
-            workload: Workload {
-                programs: BTreeMap::from([(
-                    "/tsconfig.json".into(),
-                    vec!["/a.ts".into(), "/b.ts".into()],
-                )]),
-                unmatched_files: vec![],
-            },
+            file_names: vec!["/a.ts".into(), "/b.ts".into()],
             fs,
             lint,
             type_errors: TypeErrors::default(),
@@ -525,12 +451,20 @@ try { p(); } catch { p(); } finally { p(); }
             ],
             true,
         );
-        let program = create_empty_program(
-            Arc::new(bundled::wrap_fs(fs)),
-            "/",
-            &["/a.ts".into(), "/b.ts".into()],
-            Arc::clone(&lint),
-        );
+        let projects = load_projects(&RunLinterOptions {
+            current_directory: "/".into(),
+            file_names: vec!["/a.ts".into(), "/b.ts".into()],
+            fs: Arc::new(bundled::wrap_fs(fs)),
+            lint: Arc::clone(&lint),
+            type_errors: TypeErrors::default(),
+            suppress_program_diagnostics: false,
+        })
+        .unwrap();
+        let program = projects.0.project_collection
+            .get_default_project(&tspath::Path::new("/a.ts"))
+            .unwrap()
+            .get_program()
+            .unwrap();
         program.bind_source_files();
         let file = program.get_source_file("/a.ts").unwrap();
         let ctx = Context::default();
@@ -583,10 +517,7 @@ try { p(); } catch { p(); } finally { p(); }
         ];
         let result = run_linter(&RunLinterOptions {
             current_directory: "/repo".into(),
-            workload: Workload {
-                programs: BTreeMap::new(),
-                unmatched_files: names.iter().map(|name| (*name).into()).collect(),
-            },
+            file_names: names.iter().map(|name| (*name).into()).collect(),
             fs: Arc::new(bundled::wrap_fs(fs)),
             lint: config(&names, true),
             type_errors: TypeErrors {
@@ -601,5 +532,195 @@ try { p(); } catch { p(); } finally { p(); }
         assert_eq!(result.lint.diagnostics.len(), 1);
         assert_eq!(result.lint.diagnostics[0].message.id, "floatingVoid");
         assert_eq!(result.lint.timings[0].calls, 3);
+    }
+
+    fn discover(files: &[(&str, &str)], names: &[&str]) -> LinterResult {
+        run_linter(&RunLinterOptions {
+            current_directory: "/repo".into(),
+            file_names: names.iter().map(|name| (*name).into()).collect(),
+            fs: Arc::new(bundled::wrap_fs(vfstest::from_map(
+                files.iter().copied(),
+                true,
+            ))),
+            lint: config(names, true),
+            type_errors: TypeErrors {
+                report_syntactic: true,
+                report_semantic: true,
+            },
+            suppress_program_diagnostics: false,
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn discovery_selects_nearest_ancestor_and_inferred_projects() {
+        let files = [
+            ("/repo/tsconfig.json", r#"{"include":["packages/**/*.ts"]}"#),
+            (
+                "/repo/packages/cli/tsconfig.json",
+                r#"{"files":["kept.ts"]}"#,
+            ),
+            ("/repo/packages/cli/kept.ts", "export {};"),
+            ("/repo/packages/cli/excluded.ts", "export {};"),
+            ("/repo/outside.ts", "Promise.resolve();"),
+        ];
+        for (name, expected) in [
+            (
+                "/repo/packages/cli/kept.ts",
+                "/repo/packages/cli/tsconfig.json",
+            ),
+            ("/repo/packages/cli/excluded.ts", "/repo/tsconfig.json"),
+            ("/repo/outside.ts", ""),
+        ] {
+            let result = discover(&files, &[name]);
+            assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+            let program = program_for_file(&result, name);
+            assert_eq!(program.command_line().config_name(), expected);
+            assert_eq!(
+                result.lint.diagnostics.len(),
+                usize::from(expected.is_empty())
+            );
+        }
+        let result = discover(
+            &files,
+            &[
+                "/repo/packages/cli/kept.ts",
+                "/repo/packages/cli/excluded.ts",
+                "/repo/outside.ts",
+            ],
+        );
+        assert!(result.diagnostics.is_empty());
+        for (name, expected) in [
+            (
+                "/repo/packages/cli/kept.ts",
+                "/repo/packages/cli/tsconfig.json",
+            ),
+            ("/repo/packages/cli/excluded.ts", "/repo/tsconfig.json"),
+            ("/repo/outside.ts", ""),
+        ] {
+            assert_eq!(
+                program_for_file(&result, name).command_line().config_name(),
+                expected
+            );
+        }
+        assert_eq!(result.lint.diagnostics.len(), 1);
+    }
+
+    #[test]
+    fn discovery_follows_solution_references_and_handles_cycles() {
+        let files = [
+            (
+                "/repo/tsconfig.json",
+                r#"{"files":[],"references":[{"path":"./project"}]}"#,
+            ),
+            (
+                "/repo/project/tsconfig.json",
+                r#"{"compilerOptions":{"target":"es2022"},"files":["../shared.ts"]}"#,
+            ),
+            ("/repo/shared.ts", "export {}; Promise.resolve();"),
+        ];
+        let result = discover(&files, &["/repo/shared.ts"]);
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        assert_eq!(
+            program_for_file(&result, "/repo/shared.ts")
+                .command_line()
+                .config_name(),
+            "/repo/project/tsconfig.json"
+        );
+        assert_eq!(result.lint.diagnostics.len(), 1);
+
+        let result = discover(
+            &[
+                (
+                    "/repo/tsconfig.json",
+                    r#"{"files":[],"references":[{"path":"./project"}]}"#,
+                ),
+                (
+                    "/repo/project/tsconfig.json",
+                    r#"{"files":[],"references":[{"path":".."}]}"#,
+                ),
+                ("/repo/outside.ts", "Promise.resolve();"),
+            ],
+            &["/repo/outside.ts"],
+        );
+        assert_eq!(
+            program_for_file(&result, "/repo/outside.ts")
+                .command_line()
+                .config_name(),
+            ""
+        );
+        assert_eq!(result.lint.diagnostics.len(), 1);
+    }
+
+    #[test]
+    fn imported_files_use_the_discovered_config_and_only_requested_files_are_linted() {
+        let result = discover(
+            &[
+                (
+                    "/repo/tsconfig.json",
+                    r#"{"compilerOptions":{"target":"es2022","strictNullChecks":false},"files":["index.ts"],"exclude":["imported.ts"]}"#,
+                ),
+                ("/repo/index.ts", "import './imported'; Promise.resolve();"),
+                (
+                    "/repo/imported.ts",
+                    "export const value: string = null; Promise.resolve();",
+                ),
+            ],
+            &["/repo/imported.ts", "/repo/imported.ts"],
+        );
+        assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
+        let program = program_for_file(&result, "/repo/imported.ts");
+        assert_eq!(program.command_line().config_name(), "/repo/tsconfig.json");
+        assert_eq!(program.command_line().file_names(), ["/repo/index.ts"]);
+        assert!(program.get_source_file("/repo/index.ts").is_some());
+        assert_eq!(result.lint.diagnostics.len(), 1);
+        assert_eq!(
+            result.lint.diagnostics[0].source_file.file_name(),
+            "/repo/imported.ts"
+        );
+        assert_eq!(result.lint.timings[0].calls, 1);
+    }
+
+    #[test]
+    fn discovery_normalizes_relative_paths_and_case() {
+        let names = vec!["src/../src/INDEX.ts".into()];
+        let fs: Arc<dyn FS> = Arc::new(bundled::wrap_fs(vfstest::from_map(
+            [
+                (
+                    "/repo/tsconfig.json",
+                    r#"{"compilerOptions":{"target":"es2022"},"files":["src/index.ts"]}"#,
+                ),
+                ("/repo/src/index.ts", "Promise.resolve();"),
+            ],
+            false,
+        )));
+        let lint = Arc::new(
+            LintConfig::new(
+                &[FileConfig {
+                    file_paths: names.clone(),
+                    rules: vec![RequestedRule {
+                        name: NO_FLOATING_PROMISES.into(),
+                        options: Value::Null,
+                    }],
+                }],
+                "/repo",
+                false,
+                Fixes::default(),
+                true,
+            )
+            .unwrap(),
+        );
+        let result = run_linter(&RunLinterOptions {
+            current_directory: "/repo".into(),
+            file_names: names,
+            fs,
+            lint,
+            type_errors: TypeErrors::default(),
+            suppress_program_diagnostics: false,
+        })
+        .unwrap();
+        assert!(result.diagnostics.is_empty());
+        assert_eq!(result.lint.diagnostics.len(), 1);
+        assert_eq!(result.lint.timings[0].calls, 1);
     }
 }

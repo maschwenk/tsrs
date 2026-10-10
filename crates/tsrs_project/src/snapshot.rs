@@ -246,6 +246,8 @@ pub struct SnapshotChange {
     pub(crate) replace_file_system: bool,
     // fileChanges are the changes that have occurred since the last snapshot.
     pub(crate) file_changes: FileChangeSummary,
+    // Batch clients can open several overlay documents in one snapshot.
+    pub(crate) opened_documents: Vec<lsproto::DocumentUri>,
     // compilerOptionsForInferredProjects is the compiler options to use for inferred projects.
     // It should only be set the value in the next snapshot should be changed. If nil, the
     // value from the previous snapshot will be copied to the new snapshot.
@@ -618,13 +620,14 @@ impl Snapshot {
             if !change.file_changes.is_empty() {
                 project_collection_builder.did_change_files(&change.file_changes, &logger.fork("DidChangeFiles"));
             }
+            project_collection_builder.did_open_files(&change.opened_documents, &logger.fork("DidOpenFiles"));
 
             let mut api_error = None;
             if let Some(api_request) = &change.api_request {
                 api_error = project_collection_builder.handle_api_request(api_request, &logger.fork("HandleAPIRequest")).err();
             }
 
-            for uri in &change.resource_request.documents {
+            for uri in change.resource_request.documents.iter().chain(&change.opened_documents) {
                 project_collection_builder.did_request_file(uri, false /*configuredProjectsOnly*/, &logger.fork("DidRequestFile"));
             }
 

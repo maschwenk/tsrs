@@ -551,11 +551,28 @@ impl ProjectCollectionBuilder {
         // Handle opened file
         if !summary.opened.0.is_empty() || !summary.reopened.0.is_empty() {
             let opened = if !summary.opened.0.is_empty() { &summary.opened } else { &summary.reopened };
-            let file_name = opened.file_name();
+            self.open_files(std::slice::from_ref(opened), logger);
+        }
+    }
+
+    // Batch clients use the same discovery as didOpen, retaining projects until all files are placed.
+    pub(crate) fn did_open_files(&self, uris: &[lsproto::DocumentUri], logger: &LogTree) {
+        if uris.is_empty() {
+            return;
+        }
+        self.open_files_changed.set(true);
+        self.open_files(uris, logger);
+    }
+
+    fn open_files(&self, uris: &[lsproto::DocumentUri], logger: &LogTree) {
+        let mut retain = Set::default();
+        for uri in uris {
+            let file_name = uri.file_name();
             let path = (self.to_path)(&file_name);
             let open_file_result = self.ensure_configured_project_and_ancestors_for_file(&file_name, &path, logger);
-            self.cleanup_configured_projects(Some(&open_file_result.retain), logger);
+            retain.union(&open_file_result.retain);
         }
+        self.cleanup_configured_projects(Some(&retain), logger);
     }
 
     // projectcollectionbuilder.go:500

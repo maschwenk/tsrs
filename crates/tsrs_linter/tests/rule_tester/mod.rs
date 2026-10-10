@@ -6,11 +6,9 @@ use std::sync::Arc;
 
 use serde::Deserialize;
 use serde_json::Value;
+use tsrs_compiler::{Context, ProgramOptions, new_cached_fs_compiler_host, new_program};
 use tsrs_core::tspath;
-use tsrs_linter::{
-    FileConfig, Fixes, LintConfig, RequestedRule, RuleDiagnostic, RuleFix, RunLinterOptions,
-    TypeErrors, Workload, run_linter,
-};
+use tsrs_linter::{FileConfig, Fixes, LintConfig, RequestedRule, RuleDiagnostic, RuleFix};
 use tsrs_scanner::get_ecma_line_and_utf16_character_of_position;
 use tsrs_vfs::{FS, bundled, vfstest};
 
@@ -121,27 +119,25 @@ fn lint(
         )
         .unwrap(),
     );
-    let result = run_linter(&RunLinterOptions {
-        current_directory: ROOT.to_string(),
-        workload: Workload {
-            programs: BTreeMap::from([(
-                tspath::get_normalized_absolute_path(config, ROOT),
-                vec![file_name],
-            )]),
-            unmatched_files: Vec::new(),
-        },
-        fs,
-        lint,
-        type_errors: TypeErrors::default(),
-        suppress_program_diagnostics: false,
-    })
-    .unwrap_or_else(|error| panic!("{}: {error}", case.name));
-    assert!(
-        result.diagnostics.is_empty(),
-        "unexpected internal diagnostics: {:?}",
-        result.diagnostics
-    );
-    result.lint.diagnostics
+    // Upstream cases explicitly select a fixture config; exercise the native checker with it.
+    let host = new_cached_fs_compiler_host(ROOT, fs, &bundled::lib_path(), None, None, None);
+    let config_name = tspath::get_normalized_absolute_path(config, ROOT);
+    let config = host
+        .get_resolved_project_reference(&config_name, tspath::to_path(&config_name, ROOT, true))
+        .unwrap();
+    assert!(config.get_config_file_parsing_diagnostics().is_empty());
+    let mut options = ProgramOptions::new(config, host);
+    options.use_source_of_project_reference = true;
+    options.lint = Some(Arc::clone(&lint));
+    let program = new_program(options);
+    assert!(program.get_program_diagnostics().is_empty());
+    program.bind_source_files();
+    let file = program.get_source_file(&file_name).unwrap();
+    let ctx = Context::default();
+    assert!(program.for_each_checker_group(&[file], |checker, _, file| {
+        program.get_semantic_diagnostics_with_checker(&ctx, checker, file);
+    }));
+    lint.take_output().diagnostics
 }
 
 // source_code_fixer.go: ApplyRuleFixes. Keep overlapping diagnostic fixes together.

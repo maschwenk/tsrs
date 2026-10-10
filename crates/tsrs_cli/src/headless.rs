@@ -7,9 +7,8 @@ use serde::Serialize;
 use tsrs_core::tspath;
 use tsrs_linter::{
     Fixes, HeadlessConfig as Payload, InternalDiagnostic, LintConfig, RuleDiagnostic,
-    RunLinterOptions, TypeErrors, Workload,
+    RunLinterOptions, TypeErrors,
 };
-use tsrs_project::TsConfigResolver;
 use tsrs_vfs::{Entries, FS, FileInfo, FileMode, bundled, osvfs};
 
 #[derive(Clone, Copy, Default)]
@@ -338,7 +337,6 @@ pub fn run(args: &[String]) -> i32 {
     let os: Arc<dyn FS> = Arc::new(osvfs::fs());
     let overlay = OverlayFs::new(os, payload.source_overrides.unwrap_or_default());
     let fs: Arc<dyn FS> = Arc::new(bundled::wrap_fs(overlay));
-    let resolver = TsConfigResolver::new(Arc::clone(&fs), &cwd);
     let lint = match LintConfig::new(
         &payload.configs,
         &cwd,
@@ -362,16 +360,9 @@ pub fn run(args: &[String]) -> i32 {
             files.push(file);
         }
     }
-    let mut workload = Workload::default();
-    for (file, config) in resolver.find_tsconfigs(&files) {
-        match config {
-            Some(config) => workload.programs.entry(config).or_default().push(file),
-            None => workload.unmatched_files.push(file),
-        }
-    }
     let run_options = RunLinterOptions {
         current_directory: cwd,
-        workload,
+        file_names: files,
         fs,
         lint,
         type_errors: TypeErrors {
@@ -395,14 +386,16 @@ pub fn run(args: &[String]) -> i32 {
     // Preserve tsgolint's compiler-diagnostics-before-rule-diagnostics framing even though each
     // file now runs both during the same checker task.
     for diagnostic in result
-        .diagnostics
-        .into_iter()
+        .diagnostics()
+        .iter()
+        .cloned()
         .map(internal_diagnostic)
         .chain(
             result
-                .lint
+                .lint()
                 .diagnostics
-                .into_iter()
+                .iter()
+                .cloned()
                 .map(|d| rule_diagnostic(d, options)),
         )
     {
@@ -413,11 +406,11 @@ pub fn run(args: &[String]) -> i32 {
     }
     if options.timings {
         let rules = result
-            .lint
+            .lint()
             .timings
-            .into_iter()
+            .iter()
             .map(|timing| Timing {
-                rule_name: timing.rule_name,
+                rule_name: timing.rule_name.clone(),
                 duration: u64::try_from(timing.duration.as_nanos()).unwrap_or(u64::MAX),
                 calls: timing.calls,
             })

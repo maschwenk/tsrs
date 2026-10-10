@@ -590,7 +590,10 @@ impl Project {
         let region = Region::new(1 << 20);
         let region_scope = region.enter();
         tsrs_core::census_scrub_stack();
-        let reuse = !self.dirty_file_path.0.is_empty() && self.program.is_some_and(|program| Some(program.command_line()) == command_line);
+        // Like native --lint, lint-enabled projects need a fresh checking pass.
+        let reuse = host.session_options.lint.is_none()
+            && !self.dirty_file_path.0.is_empty()
+            && self.program.is_some_and(|program| Some(program.command_line()) == command_line);
         if reuse {
             let old_program = self.program.unwrap();
             let (program, dirty_file, cloned) =
@@ -623,7 +626,9 @@ impl Project {
             if self.get_type_acquisition().is_some_and(|ta| ta.enable.is_true()) {
                 typings_location.clone_from(&host.session_options.typings_location);
             }
+            let lint = host.session_options.lint.clone();
             let mut opts = ProgramOptions::new(command_line.unwrap(), host);
+            opts.lint = lint;
             opts.use_source_of_project_reference = true;
             opts.typings_location = typings_location;
             opts.create_checker_pool = Some(create_checker_pool);

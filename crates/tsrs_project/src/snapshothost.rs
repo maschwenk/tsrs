@@ -5,7 +5,7 @@ use rustc_hash::FxHashMap;
 use tsrs_ast::{SourceFile, SourceFileParseOptions};
 use tsrs_core::context::Context;
 use tsrs_core::tspath::{self, Path};
-use tsrs_core::{ScriptKind, P};
+use tsrs_core::{get_script_kind_from_file_name, ScriptKind, P};
 use tsrs_ls::lsutil;
 use tsrs_lsproto as lsproto;
 use tsrs_vfs::FS;
@@ -13,7 +13,7 @@ use tsrs_vfs::FS;
 use crate::extendedconfigcache::{new_extended_config_cache, ExtendedConfigCache};
 use crate::filechange::FileChangeSummary;
 use crate::logging::Logger;
-use crate::overlayfs::{new_cached_file_handle, new_overlay_fs, FsRef, ToPath};
+use crate::overlayfs::{new_cached_file_handle, new_overlay, new_overlay_fs, FsRef, ToPath};
 use crate::parsecache::{new_content_mapped_parse_cache, new_parse_cache, new_parse_cache_key, ContentMappedParseCache, ParseCache, ParseCacheKey};
 use crate::programcounter::programCounter;
 use crate::refcountcache::RefCountCacheOptions;
@@ -113,6 +113,21 @@ impl SnapshotHost {
         snapshot.ref_();
     }
 
+    /// Open a batch of files through the same discovery path as editor documents, without a live session.
+    pub fn open_files(&self, ctx: &Context, base_snapshot: &Snapshot, file_names: &[String]) -> Result<Arc<Snapshot>, lsproto::Error> {
+        let mut overlays = (*base_snapshot.overlays()).clone();
+        let mut documents = Vec::with_capacity(file_names.len());
+        for name in file_names {
+            let name = tspath::get_normalized_absolute_path(name, self.get_current_directory());
+            let content = base_snapshot.read_file(&name).ok_or_else(|| lsproto::Error::new(format!("cannot read requested file: {name}")))?;
+            let kind = get_script_kind_from_file_name(&name);
+            documents.push(tsrs_ls::lsconv::file_name_to_document_uri(&name));
+            overlays.insert((self.to_path)(&name), Arc::new(new_overlay(name, content, 0, kind)));
+        }
+        let change = SnapshotChange { opened_documents: documents, ..Default::default() };
+        Ok(base_snapshot.clone_snapshot(ctx, change, Arc::new(overlays), None, None))
+    }
+
     // snapshothost.go:116
     // CloneSnapshot derives a snapshot from baseSnapshot without adopting it as any
     // canonical session state or performing session side effects.
@@ -169,7 +184,7 @@ impl SnapshotHost {
             id,
             Arc::new(new_snapshot_fs(Arc::clone(&self.to_path), Arc::new(file_system))),
             Arc::default(),
-            None,
+            self.options.compiler_options_for_inferred_projects,
             lsutil::new_default_user_preferences(),
             None,
             Some(new_watched_files(

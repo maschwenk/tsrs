@@ -135,6 +135,8 @@ impl Session {
                 run_external_code: options.run_external_code,
                 debounce_delay: std::time::Duration::ZERO,
                 checker_pool_options: Default::default(),
+                compiler_options_for_inferred_projects: None,
+                lint: None,
             }),
             fs: options.fs,
             client: None,

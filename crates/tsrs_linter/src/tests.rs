@@ -5,21 +5,25 @@ mod no_floating_promises {
     use tsrs_vfs::{FS, bundled, vfstest};
 
     use crate::{
-        FileConfig, Fixes, LintConfig, RequestedRule, RunLinterOptions, TypeErrors, Workload,
-        run_linter,
+        FileConfig, Fixes, LintConfig, RequestedRule, RunLinterOptions, TypeErrors, run_linter,
     };
 
     use crate::NO_FLOATING_PROMISES;
 
-    fn lint(code: &str, options: Value, suggestions: bool) -> Vec<crate::RuleDiagnostic> {
+    struct Diagnostics(crate::LinterResult);
+
+    impl std::ops::Deref for Diagnostics {
+        type Target = [crate::RuleDiagnostic];
+        fn deref(&self) -> &Self::Target {
+            &self.0.lint().diagnostics
+        }
+    }
+
+    fn lint(code: &str, options: Value, suggestions: bool) -> Diagnostics {
         lint_files(&[("/file.ts", code)], options, suggestions)
     }
 
-    fn lint_files(
-        files: &[(&str, &str)],
-        options: Value,
-        suggestions: bool,
-    ) -> Vec<crate::RuleDiagnostic> {
+    fn lint_files(files: &[(&str, &str)], options: Value, suggestions: bool) -> Diagnostics {
         let fs: Arc<dyn FS> = Arc::new(bundled::wrap_fs(vfstest::from_map(
             files.iter().copied(),
             true,
@@ -45,10 +49,7 @@ mod no_floating_promises {
         );
         let result = run_linter(&RunLinterOptions {
             current_directory: "/".to_string(),
-            workload: Workload {
-                programs: Default::default(),
-                unmatched_files: vec!["/file.ts".to_string()],
-            },
+            file_names: vec!["/file.ts".to_string()],
             fs,
             lint,
             type_errors: TypeErrors::default(),
@@ -56,17 +57,17 @@ mod no_floating_promises {
         })
         .unwrap();
         assert!(
-            result.diagnostics.is_empty(),
+            result.diagnostics().is_empty(),
             "unexpected internal diagnostics: {:?}",
-            result.diagnostics
+            result.diagnostics()
         );
-        result.lint.diagnostics
+        Diagnostics(result)
     }
 
     fn ids(code: &str, options: Value) -> Vec<String> {
         lint(code, options, false)
-            .into_iter()
-            .map(|diagnostic| diagnostic.message.id)
+            .iter()
+            .map(|diagnostic| diagnostic.message.id.clone())
             .collect()
     }
 
@@ -197,8 +198,8 @@ fire();
         ];
         assert_eq!(
             lint_files(&files, Value::Null, false)
-                .into_iter()
-                .map(|diagnostic| diagnostic.message.id)
+                .iter()
+                .map(|diagnostic| diagnostic.message.id.clone())
                 .collect::<Vec<_>>(),
             ["floatingVoid"]
         );

@@ -87,6 +87,8 @@ pub struct SessionOptions {
     pub run_external_code: bool,
     pub debounce_delay: Duration,
     pub checker_pool_options: CheckerPoolOptions,
+    pub compiler_options_for_inferred_projects: Option<P<CompilerOptions>>,
+    pub lint: Option<Arc<tsrs_checker::lint::LintConfig>>,
 }
 
 // (Content mappers and ATA are not ported: Go's `Spawner` and `ContentMapperLogger` are omitted, and an
@@ -227,7 +229,7 @@ pub fn new_session(init: &SessionInit) -> Arc<Session> {
         watches: new_watch_registry(),
         snapshot_host,
         content_mapper_registration: Mutex::new((None, 0)),
-        compiler_options_for_inferred_projects: Mutex::new(None),
+        compiler_options_for_inferred_projects: Mutex::new(init.options.compiler_options_for_inferred_projects),
         snapshot_update_mu: Mutex::new(()),
         scheduled_snapshot_update: Mutex::new(cancelState::default()),
         configure_mu: Mutex::new(()),

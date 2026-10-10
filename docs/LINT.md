@@ -17,8 +17,21 @@ but do not bypass the check needed by linting.
 
 Both entry points parse the same headless config and prepare rule options once, before creating the program.
 The checker checks an expression statement, then dispatches its configured native rules immediately. Rules live
-in `tsrs_checker::lint`; `tsrs_linter` only loads headless programs and requests checks. There is no binder candidate
-list, compiler-host wrapper, file-completion callback, or separate lint pass.
+in `tsrs_checker::lint`; `tsrs_linter` selects requested files from the project system and requests checks. There
+is no binder candidate list, compiler-host wrapper, file-completion callback, or separate lint pass.
+
+Headless uses the existing project discovery and its loaded programs, including configured projects, solution
+references and inferred projects. Requested paths select the files to check within those programs; imports and
+other dependencies remain available for type information. Imported files use their discovered project's options
+even when they are absent from the config's root-file list. Repeated paths and symlink aliases resolving to the
+same source file in a program are checked once. Headless uses the project pool's diagnostics checker for each
+program; the native `--lint` flag continues to use the compiler's checker pool.
+
+Project membership can differ from tsgolint's root-file-based config selection: an imported file may now belong
+to a configured project instead of an inferred one. Its compiler options and config errors then apply to linting.
+The shared project system currently has a deadlock on self-extending configs and a directory-order difference
+that affects competing global declarations. See [the ecosystem comparison](../notes/lint-project-discovery.md)
+for reductions, observed differences and measurements.
 
 A node-link flag prevents repeated dispatch when type inference and deferred checking revisit a statement. Each
 checker buffers its diagnostics; the compiler collects only the files assigned to that checker. Configured
@@ -75,10 +88,10 @@ cargo test -p tsrs_linter --test no_floating_promises test_no_floating_promises_
 `crates/tsrs_linter/tests/` imports the complete `no_floating_promises_test.go` suite from tsgolint commit
 `24b18b48c47b7ae0d84e21a0e974575026e27908`: 77 valid and 112 invalid cases, including the cases constructed by Go
 loops. The original `node:test` case remains ignored, as upstream marks it `Skip: true`; 188 cases run and pass.
-The crate also has 17 local checks, including mandatory semantic checking, once-per-node dispatch, deferred and
-skipped subtree coverage, per-file options across multiple checkers, pending output in forked checkers, and
-inferred-project lookups through symlinked package aliases. Eight CLI integration checks cover the protocol and
-native flag. Depot CI runs both suites in its fast-crates job.
+The crate also has 21 local checks, including mandatory semantic checking, once-per-node dispatch, deferred and
+skipped subtree coverage, per-file options across imported files, pending output in forked checkers, inferred-project lookups through
+symlinked package aliases, and project discovery across ancestors and references. Nine CLI integration checks cover
+the protocol and native flag. Depot CI runs both suites in its fast-crates job.
 
 The Rust rule tester uses the upstream fixture files and tsconfig settings, and checks diagnostic count, order,
 message IDs, the specified UTF-16 line/column positions, suggestion count/order/IDs and exact edited output. It

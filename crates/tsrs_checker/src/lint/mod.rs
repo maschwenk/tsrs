@@ -49,6 +49,7 @@ pub struct RequestedRule {
     pub options: Value,
 }
 
+#[derive(Debug)]
 enum ConfiguredRule {
     NoFloatingPromises(no_floating_promises::Options),
 }
@@ -76,7 +77,7 @@ pub struct RuleTimingRecord {
     pub calls: u64,
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct LintOutput {
     pub diagnostics: Vec<RuleDiagnostic>,
     pub timings: Vec<RuleTimingRecord>,
@@ -92,6 +93,7 @@ pub(crate) struct FileLintOutput {
 /// Prepared once before program creation. Checkers keep their own results and publish only files
 /// they own; type queries may visit a different file's bodies before its own checker gets to it.
 /// An empty rule list still selects the file for mandatory semantic checking.
+#[derive(Debug)]
 pub struct LintConfig {
     files: FxHashMap<Path, Arc<[ConfiguredRule]>>,
     fixes: Fixes,

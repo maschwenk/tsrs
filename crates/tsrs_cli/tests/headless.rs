@@ -282,6 +282,26 @@ fn reporting_flags_only_control_compiler_output() {
 }
 
 #[test]
+fn headless_selects_imported_files_from_the_discovered_program() {
+    let dir = scratch("discovery");
+    std::fs::write(dir.join("index.ts"), "import './imported'; Promise.resolve();").unwrap();
+    std::fs::write(dir.join("imported.ts"), "export const value: string = null; Promise.resolve();").unwrap();
+    std::fs::write(dir.join("tsconfig.json"), r#"{"compilerOptions":{"target":"es2022","strictNullChecks":false},"files":["index.ts"],"exclude":["imported.ts"]}"#).unwrap();
+    let output = run(&dir, &["-debug", "timings"], &json!({
+        "version": 2,
+        "configs": [{"file_paths": ["imported.ts", "imported.ts"], "rules": [{"name": "no-floating-promises"}]}],
+        "report_semantic": true
+    }));
+    assert!(output.status.success(), "{output:?}");
+    let messages = frames(&output.stdout);
+    assert_eq!(messages.len(), 2, "{messages:?}");
+    assert_eq!(messages[0].1["message"]["id"], "floatingVoid");
+    assert!(messages[0].1["file_path"].as_str().unwrap().ends_with("/imported.ts"));
+    assert_eq!(messages[1].1["rules"][0]["calls"], 1);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
 fn native_lint_flag_uses_headless_rules_options_and_overlays() {
     let dir = scratch("native");
     let file = dir.join("index.test.ts");
