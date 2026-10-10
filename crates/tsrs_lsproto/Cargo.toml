@@ -11,4 +11,3 @@ workspace = true
 tsrs_core.workspace = true
 tsrs_vfs.workspace = true
 rustc-hash.workspace = true
-indexmap.workspace = true

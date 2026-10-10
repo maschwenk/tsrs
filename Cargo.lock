@@ -301,7 +301,6 @@ dependencies = [
  "tsrs_ls",
  "tsrs_lsproto",
  "tsrs_module",
- "tsrs_parser",
  "tsrs_printer",
  "tsrs_project",
  "tsrs_scanner",
@@ -377,7 +376,6 @@ version = "0.11.0"
 dependencies = [
  "bitflags",
  "hashbrown",
- "indexmap",
  "rustc-hash",
  "tsrs_ast",
  "tsrs_astnav",
@@ -404,17 +402,10 @@ dependencies = [
  "tsrs_api",
  "tsrs_api_transport",
  "tsrs_ast",
- "tsrs_binder",
  "tsrs_compiler",
  "tsrs_core",
- "tsrs_diagnostics",
  "tsrs_execute",
- "tsrs_incremental",
  "tsrs_lsp",
- "tsrs_module",
- "tsrs_parser",
- "tsrs_project",
- "tsrs_scanner",
  "tsrs_tsoptions",
  "tsrs_vfs",
 ]
@@ -423,8 +414,6 @@ dependencies = [
 name = "tsrs_compiler"
 version = "0.11.0"
 dependencies = [
- "bitflags",
- "indexmap",
  "rayon",
  "rustc-hash",
  "tsrs_ast",
@@ -477,7 +466,6 @@ dependencies = [
 name = "tsrs_core"
 version = "0.11.0"
 dependencies = [
- "bitflags",
  "hashbrown",
  "indexmap",
  "libc",
@@ -507,7 +495,6 @@ name = "tsrs_diagnostics"
 version = "0.11.0"
 dependencies = [
  "rustc-hash",
- "tsrs_core",
 ]
 
 [[package]]
@@ -619,7 +606,6 @@ version = "0.11.0"
 dependencies = [
  "indexmap",
  "rustc-hash",
- "tsrs_ast",
  "tsrs_compiler",
  "tsrs_core",
  "tsrs_diagnostics",
@@ -627,7 +613,6 @@ dependencies = [
  "tsrs_ls",
  "tsrs_lsproto",
  "tsrs_project",
- "tsrs_tsoptions",
  "tsrs_vfs",
 ]
 
@@ -635,7 +620,6 @@ dependencies = [
 name = "tsrs_lsproto"
 version = "0.11.0"
 dependencies = [
- "indexmap",
  "rustc-hash",
  "tsrs_core",
  "tsrs_vfs",
@@ -646,7 +630,6 @@ name = "tsrs_module"
 version = "0.11.0"
 dependencies = [
  "bitflags",
- "indexmap",
  "rustc-hash",
  "tsrs_ast",
  "tsrs_core",
@@ -685,7 +668,6 @@ name = "tsrs_printer"
 version = "0.11.0"
 dependencies = [
  "bitflags",
- "indexmap",
  "rustc-hash",
  "tsrs_ast",
  "tsrs_core",
@@ -699,8 +681,6 @@ dependencies = [
 name = "tsrs_project"
 version = "0.11.0"
 dependencies = [
- "bitflags",
- "indexmap",
  "rustc-hash",
  "tsrs_ast",
  "tsrs_binder",
@@ -723,7 +703,6 @@ dependencies = [
 name = "tsrs_projectutil"
 version = "0.11.0"
 dependencies = [
- "indexmap",
  "rustc-hash",
  "tsrs_core",
 ]
@@ -801,7 +780,6 @@ dependencies = [
  "tsrs_checker",
  "tsrs_compiler",
  "tsrs_core",
- "tsrs_diagnostics",
  "tsrs_printer",
  "tsrs_scanner",
  "tsrs_tsoptions",
@@ -812,8 +790,6 @@ dependencies = [
 name = "tsrs_tsoptions"
 version = "0.11.0"
 dependencies = [
- "bitflags",
- "indexmap",
  "rustc-hash",
  "tsrs_ast",
  "tsrs_core",
