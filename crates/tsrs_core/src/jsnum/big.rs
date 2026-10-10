@@ -259,15 +259,6 @@ impl Int {
         Int { neg: self.neg && odd && !result.is_empty(), abs: result }
     }
 
-    pub(crate) fn mul(&self, y: &Int) -> Int {
-        let abs = mul(&self.abs, &y.abs);
-        Int { neg: self.neg != y.neg && !abs.is_empty(), abs }
-    }
-
-    pub(crate) fn lsh(&self, n: usize) -> Int {
-        Int { neg: self.neg, abs: shl(&self.abs, n) }
-    }
-
     // Rounds to prec significant bits (round-to-nearest-even), like
     // new(big.Float).SetPrec(prec).SetInt(x).
     pub(crate) fn round_to_prec(&self, prec: usize) -> Int {

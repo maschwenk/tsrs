@@ -2548,7 +2548,7 @@ impl Scanner {
 
     /// Go `jsnum.FromString(v).String()`, reusing `v` when it is already canonical.
     fn canonical_number(&self, v: &'static str) -> &'static str {
-        let s = jsnum::from_string(v).string();
+        let s = crate::number::parse_literal(v).unwrap_or_else(|| jsnum::from_string(v)).string();
         if s == v {
             return v;
         }

@@ -31,6 +31,7 @@ indexmap.workspace = true
 memchr.workspace = true
 unicode-id-start.workspace = true
 simdutf8.workspace = true
+dragonbox_ecma.workspace = true
 mimalloc-safe = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]
