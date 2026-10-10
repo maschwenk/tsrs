@@ -348,6 +348,12 @@ is type-checked, CI runs on pull requests, and the workspace is at 0.11.0. The i
   only with no member or type resolution in progress (+0.05%: 9M hits for 3.5M stores, shadow-verified, but the
   larger caches slow every other lookup and insert). Extra code inlined into functions with many call sites cost more
   than it saved every time it was tried.
+  Round 2 (same note): the contextual-union position cache guarded per constituent (a stack of the types whose
+  members are being resolved) instead of by no resolution in progress (1.47283T -> 1.47307T); a per-(union, name) set
+  of absent properties checked before `createUnionOrIntersectionProperty`, recorded only when every constituent is a
+  resolved plain object without it (+0.05%); an inline compare of up to 16 bytes instead of `bcmp` in symbol-table key
+  matching (C library -2.7G, `SymbolMap::search` +2.7G, total +0.36%); a per-union memo that the apparent-type
+  mapping in `getApparentTypeOfContextualType` is the identity (+0.02%).
 
 ## The lint ratchet
 

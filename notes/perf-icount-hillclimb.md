@@ -20,8 +20,11 @@ false --pretty false --checkers 8`, Linux x86-64, 8 cores. Diagnostics identical
 
 Conformance: identical pass lists to main for errors, `.types` and `.symbols`, in check history and in default mode
 (`TS_TEST_PROGRAM_SINGLE_THREADED=false TSRS_HISTORY=canonical`), and for the error baselines with
-`TSRS_LAZY_MEMBERS=0`. `tools/regressions.sh`: 29/29. Not run: `bench/run.py` (the public projects) and a
-single-threaded count, so the 1%-of-`bench/count.py` bar is unmeasured; the evidence here is the 38k-file codebase.
+`TSRS_LAZY_MEMBERS=0`. `tools/regressions.sh`: 29/29.
+
+Public projects (#299's pr-verify run of the bench suite): diagnostics identical in 102 of 102 cells; single-threaded
+instructions -6.5% (drizzle-orm) to -22.0% (Compiler-Unions) on all 17 projects; median wall -1.5% to -17.8% per
+project; peak RSS -2.9% to +3.5% (the largest increase Compiler at 16 checkers, not investigated).
 
 ## How it was measured
 
@@ -73,6 +76,42 @@ Added to notes/perf-round2-followups.md "Measured and rejected". In short: inlin
 `getPropertyOfType` (+2.6% to +2.9%: most calls miss the resolved members, and extra inline code at many call sites
 costs more than it saves), union fast paths in `getNormalizedType` and `getReducedApparentType`, cached recursion
 identities per relater stack entry, and negative entries in union/intersection property caches (+0.05%).
+
+## Round 2 (after #299)
+
+Five more commits on a07bd4b7. Clean `--release` builds, a07bd4b7 (main) against the branch, same command and
+machine as above, diagnostics identical:
+
+| | main | branch | change |
+|---|---|---|---|
+| instructions, default mode | 1.4687T | 1.4074T | -4.2% |
+| instructions, `--checkerAssignment locality` | 1.4460T | 1.3869T | -4.1% |
+| wall, native, 3 runs each | 31.73-32.44 s | 30.59-31.31 s | -4.1% |
+| peak RSS | 16.87-16.99 GB | 17.00 GB | +0.5% |
+
+Conformance pass lists, `tools/regressions.sh` and `--maxMemory 6G` diagnostics as in the first round: unchanged.
+
+- A contextual union's constituents that cannot have the property are skipped (-1.6%). On the 38k-file codebase the
+  contextual unions of object literals average over 100 constituents, an object literal asks about each property three
+  or four times, and 84% of the (union, name) pairs repeat; the positions of the constituents that can answer are kept
+  per (union, name).
+- `checkExpressionForMutableLocation` takes the contextual type `isConstContext` already computed (-1.3%).
+- The maybe stack of `recursiveTypeRelatedTo` is scanned while it holds at most 32 keys instead of going through its
+  hash set (-0.8%).
+- Discrimination keeps a large union's discriminant property types that are known for good per name (-0.3%).
+- `propertiesRelatedTo` reuses the source lookups `getUnmatchedProperty` made (-0.1%).
+
+The two caches (contextual union positions, discriminant property types) only record answers that hold for good: a
+constituent counts only if it is a plain object type with resolved members, no member resolution is in progress when
+they are computed, and they are dropped whenever a type's members are reset. Each of the three reuse changes was
+shadow-checked (the reused answer recomputed and compared) on the 38k-file codebase and the conformance suite in both
+histories, with no difference.
+
+Measured and rejected in this round (also in notes/perf-round2-followups.md): a per-constituent guard instead of "no
+member resolution in progress" for the contextual cache (no gain), an absent-property set for large unions before
+`createUnionOrIntersectionProperty` (+0.05%), an inline 16-byte compare instead of `bcmp` in symbol-table key
+matching (+0.36%), and a per-union memo that the apparent-type mapping of a contextual type is the identity (no
+gain).
 
 ## Found on the way, not pursued
 
