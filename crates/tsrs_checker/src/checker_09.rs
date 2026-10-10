@@ -2415,7 +2415,8 @@ impl Checker {
     pub(crate) fn find_applicable_index_info(&mut self, index_infos: &[P<IndexInfo>], key_type: P<Type>) -> Option<P<IndexInfo>> {
         // Index signatures for type 'string' are considered only when no other index signatures apply.
         let mut string_index_info: Option<P<IndexInfo>> = None;
-        let mut applicable_infos: Vec<P<IndexInfo>> = Vec::new();
+        // Almost always zero or one entry, so it stays inline.
+        let mut applicable_infos: smallvec::SmallVec<[P<IndexInfo>; 4]> = smallvec::SmallVec::new();
         for &info in index_infos {
             if info.key_type.get() == Some(self.string_type) {
                 string_index_info = Some(info);

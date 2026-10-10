@@ -28,6 +28,7 @@ tsrs_pseudochecker.workspace = true
 tsrs_modulespecifiers.workspace = true
 tsrs_printer.workspace = true
 tsrs_astnav.workspace = true
+smallvec.workspace = true
 rustc-hash.workspace = true
 hashbrown.workspace = true
 indexmap.workspace = true
