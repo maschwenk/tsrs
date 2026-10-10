@@ -1,8 +1,8 @@
 # spike-shared-graph: one type graph shared by the checker threads (2026-10-08, updated 2026-10-10)
 
 Status (2026-10-10): sections 1-9 are the first round, without a memory target and with the pool waiting for the
-seed. Section 10 is the version proposed for landing (PR #281): built with `--features shared-graph`, on with
-`TSRS_SHARED_GRAPH=1`, and meant for `--maxMemory`, where a retired checker is replaced by a fork of the seed. That
+seed. Section 10 is the version that landed in main (#281): built with `--features shared-graph`, on with
+`TSRS_SHARED_GRAPH=1`, and used with `--maxMemory`, where a retired checker is replaced by a fork of the seed. That
 version keeps two knobs, `TSRS_SHARED_GRAPH_SEED_PERCENT` (section 10.2; the first round's
 `TSRS_SHARED_GRAPH_SEED` was in permille, so its 10 is 1%) and `TSRS_SHARED_GRAPH_PROTECT=0`, plus
 `TSRS_DEBUG_REGIONS=1` for debugging. It removed the switches the first round used for measurement and discovery,

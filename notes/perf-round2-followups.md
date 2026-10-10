@@ -115,6 +115,17 @@ is type-checked, CI runs on pull requests, and the workspace is at 0.11.0. The i
   - No change in memory or `--extendedDiagnostics` counters.
   - Diagnostics byte-identical, and shadow mode clean on the suite, fourslash and four corpora.
 
+## Shared type graph under `--maxMemory` (#281, landed, opt-in)
+
+A seed checker checks a sample of files and its region is frozen; checkers become forks that read it and keep their
+own writes in overlays. Under `--maxMemory` a retired checker is replaced by a fork, so it starts with the seed's graph
+instead of rebuilding it, and the pool starts at once instead of waiting for the seed. In main behind the
+`shared-graph` Cargo feature and `TSRS_SHARED_GRAPH=1` (npm binaries do not include it); the seed is 5% of the checking
+work under `--maxMemory` (`TSRS_SHARED_GRAPH_SEED_PERCENT`). On the 38k-file codebase at 8 checkers and `--maxMemory
+8G`: 28.6 s and 2.76 T instructions against 32.9 s and 3.17 T without the seed, at the same peak (8.7-8.8 GB);
+diagnostics identical (notes/spike-shared-graph.md sections 10-10.2). The feature compiled in costs +3.6% instructions
+with the switch off, which is why it is not in the default build.
+
 ## Measured and rejected (do not redo)
 
 - A tracing collector for checker data instead of retiring checkers (notes/mem-checker-gc.md): weak identity caches
@@ -131,9 +142,10 @@ is type-checked, CI runs on pull requests, and the workspace is at 0.11.0. The i
   count on both Compiler workloads; the prior large Linux measurement found v2 3-14% slower. The migration enables
   `v3` (v3.5.2): on pinned vscode it is within +0.03-0.15% instructions and -0.69% to +0.46% peak RSS of the old
   build; the smaller Compiler workloads agree.
-- A type graph shared by the checker threads (frozen seed + forks; notes/spike-shared-graph.md, branch
-  `spike/shared-graph`, PR 213 closed): exact in every run, but on the 16-vCPU Linux runner peak -5..-10% at the
-  default 8 checkers for +6..+18% wall (the serial seed). Revisit only with a seed that costs no wall time.
+- A type graph shared by the checker threads as the default (frozen seed + forks; notes/spike-shared-graph.md
+  sections 1-9, PR 213 closed): exact in every run, but on the 16-vCPU Linux runner peak -5..-10% at the default 8
+  checkers for +6..+18% wall, because every checker waits for the serial seed. Under `--maxMemory` it landed (see
+  "Shared type graph under `--maxMemory`" above); without a memory target the wait is still there.
 - Checking a relation without reporting first and elaborating only on failure, as bun does
   (notes/perf-excalidraw-typefest.md): on excalidraw at 9 checkers, 501 -> 379 MiB after the deferred constraint
   check. Not exact against tsgo: the reporting run spends more of the relation complexity budget, so a
