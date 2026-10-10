@@ -648,11 +648,6 @@ pub(crate) fn is_internal_module_import_equals_declaration(node: P<Node>) -> boo
     node.kind() == Kind::ImportEqualsDeclaration && node.as_import_equals_declaration().module_reference.kind() != Kind::ExternalModuleReference
 }
 
-// emitresolver.go:693 (duplicate of emitresolver.rs's `is_const_enum_or_const_enum_only_module`)
-fn is_const_enum_or_const_enum_only_module(s: P<Symbol>) -> bool {
-    is_const_enum_symbol(s) || s.flags().intersects(SymbolFlags::ConstEnumOnlyModule)
-}
-
 impl Checker {
     // checker.go:28867
     pub(crate) fn mark_identifier_alias_referenced(&mut self, location: P<Node>) {
