@@ -921,7 +921,10 @@ impl EmitResolver {
                     get_export_symbol_of_value_symbol_if_exported: Some(|c: &mut Checker, symbol: P<Symbol>| {
                         c.get_export_symbol_of_value_symbol_if_exported(Some(symbol))
                     }),
-                    get_element_access_expression_name: Some(Checker::try_get_element_access_expression_name),
+                    get_element_access_expression_name: Some(|c: &mut Checker, node: P<Node>| {
+                        let (name, ok) = c.try_get_element_access_expression_name(node);
+                        (name.into_owned(), ok)
+                    }),
                 },
             )
         })
