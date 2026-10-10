@@ -6,6 +6,7 @@
 //! (`process_entrypoint_ending`).
 
 mod compare;
+mod exclude_regex;
 mod preferences;
 mod specifiers;
 mod types;
@@ -18,6 +19,7 @@ pub use types::*;
 pub use util::*;
 
 pub(crate) use tsrs_core::collections::OrderedMap;
+pub(crate) use exclude_regex::ExcludeRegex;
 pub(crate) use tsrs_module::symlinks::KnownSymlinks;
 pub(crate) use tsrs_module::ResolvedModule;
 pub(crate) use tsrs_tsoptions::outputpaths::OutputPathsHost;

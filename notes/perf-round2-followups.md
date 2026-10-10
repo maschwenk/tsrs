@@ -126,6 +126,19 @@ is type-checked, CI runs on pull requests, and the workspace is at 0.11.0. The i
   +4% wall from page faults); retiring a checker only where its queue changes directory (no instruction change: the
   rebuild cost is the shared base); staggering the checkers' first retirements (-2.2% peak for +2.5% instructions).
 
+- Binary-size attribution (notes/binary-size-audit.md, macOS arm64 at `2fbb51f4`): the stripped analysis binary is
+  19.626 MiB. Embedded libraries can shrink 3.03 MiB in payload before decoder overhead, but that gives up the
+  existing zero-copy reads; the auto-import regex filter retains 944.8 KiB, and three cold option walkers total
+  101.2 KiB (67.4 KiB one-copy estimate). The regex follow-up (notes/binary-size-regex.md) adopts a Unicode-capable
+  PikeVM adapter: actual linked CLI -420.6 KiB (-2.09%), existing matching/acceptance preserved. The owner explicitly
+  prioritizes size on this cold path; a synthetic 701-file LSP session has +0.52% instructions, -1.10% peak RSS and
+  +0.096 ms median filtered-completion latency. A bare PikeVM and regex-lite were rejected for compatibility.
+  The other candidates still need actual linked A/B savings and instructions/peak RSS, preserving library text.
+  This is new whole-program size evidence,
+  not a reason to repeat the rejected hot checker-callback experiment. The plan cross-check adds compact static
+  feature/property/preference records as unmeasured candidates. Four bounded ASCII lowercase calls are safe to
+  simplify, but required Unicode callers still retain the tables; source occurrence counts are not linked savings.
+
 - `mimalloc-safe 0.1.67` without its `v3` feature (notes/perf-mimalloc-safe.md): the crate defaults to mimalloc
   v2.5.2, unlike the old crate's v3.3.2 default. On macOS arm64 it adds about 4% peak RSS at the default checker
   count on both Compiler workloads; the prior large Linux measurement found v2 3-14% slower. The migration enables

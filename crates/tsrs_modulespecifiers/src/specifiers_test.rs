@@ -251,6 +251,30 @@ fn test_is_excluded_by_regex() {
 }
 
 #[test]
+fn test_regex_cache_normalizes_flags_and_remembers_invalid_patterns() {
+    let first = string_to_regex(r"/^cached_regex\/é/i").unwrap();
+    assert_eq!(Some(first), string_to_regex(r"/^cached_regex\/é/gi"));
+    assert!(first.is_match("CACHED_REGEX/É"));
+    for _ in 0..2 {
+        assert!(string_to_regex("(?P<cached_invalid>").is_none());
+    }
+    let key = regexPatternCacheKey { pattern: "(?P<cached_invalid>".to_string(), case_insensitive: false };
+    assert!(regexPatternCache.read().unwrap().get(&key).is_some_and(Option::is_none));
+}
+
+#[test]
+fn test_regex_cache_outlives_the_request_region() {
+    let region = tsrs_core::arena::Region::new(4096);
+    let cached = {
+        let _scope = region.enter();
+        string_to_regex(r"^request_region_regex/\p{L}+$").unwrap()
+    };
+    drop(region);
+    assert!(cached.is_match("request_region_regex/café"));
+    assert_eq!(Some(cached), string_to_regex(r"^request_region_regex/\p{L}+$"));
+}
+
+#[test]
 fn test_count_path_components() {
     assert_eq!(count_path_components("./a/b"), 1);
     assert_eq!(count_path_components("../a/b"), 2);
