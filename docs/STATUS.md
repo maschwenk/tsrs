@@ -1,9 +1,22 @@
 # Status
 
-## Current development
+## 2026-10-10: 0.12.0 release
 
-The release pipeline publishes the native compiler and JS API as `tsrs`, with optional native binaries in
-`@ts-rs/<os>-<arch>` and the WebAssembly package as `@ts-rs/wasm`. Earlier releases used the `@maschwenk` scope.
+The native compiler and JS API move to `tsrs`, the native binaries to `@ts-rs/darwin-arm64`, `@ts-rs/linux-x64`
+and `@ts-rs/linux-arm64`, and WebAssembly to `@ts-rs/wasm` (#288). All five packages use
+`0.12.0-ts7.1.0-dev.20260929`, published directly by the release workflow using npm trusted publishing (OIDC).
+Install with `npm install -D tsrs`; JS API consumers change imports from `@maschwenk/tsrs/unstable/*` to
+`tsrs/unstable/*`. Earlier releases remain under `@maschwenk`. The TypeScript source pin remains
+`b85298b6a81f772d080b0455de0ca9d744cd6fd6` (7.1.0-dev.20260929).
+
+Native checking now uses every core up to 16, then at least 16 or half the cores, with at most 32 checkers
+and the existing small-program cap; build mode still uses four (#270, notes/perf-default-checkers-16.md).
+Scanner byte dispatch (#287) and SIMD UTF-8 validation (#280) improve the front end. Identifier classification
+pins Unicode 15.1 to match the reference (#279), and Unicode uppercasing now follows Go's simple mapping (#275).
+
+The shared checker seed under `--maxMemory` (#281) remains an opt-in source-build experiment: it requires the
+`shared-graph` Cargo feature and `TSRS_SHARED_GRAPH=1` (notes/spike-shared-graph.md). The npm release uses the
+default Cargo features. Dependency cleanup and documentation corrections are also included.
 
 ## 2026-10-09: 0.11.0 release
 
