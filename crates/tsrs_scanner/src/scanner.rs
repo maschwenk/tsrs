@@ -318,15 +318,9 @@ pub struct Scanner {
 }
 
 // Like Oxc's byte handlers, dispatch out of the token loop so simple tokens do not
-// pay for the stack frame of numeric, comment, and Unicode scanning. Handlers keep
-// Go's state updates; Continue is the old `continue 'scan` for skipped trivia.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum ScanAction {
-    Return,
-    Continue,
-}
-
-type ByteHandler = fn(&mut Scanner) -> ScanAction;
+// pay for the stack frame of numeric, comment, and Unicode scanning. None is the
+// old `continue 'scan` for skipped trivia; Some returns the token kind directly.
+type ByteHandler = fn(&mut Scanner) -> Option<Kind>;
 
 static BYTE_HANDLERS: [ByteHandler; 256] = {
     let mut table = [Scanner::scan_byte_default as ByteHandler; 256];
@@ -363,7 +357,7 @@ static BYTE_HANDLERS: [ByteHandler; 256] = {
             0x7D /* } */ => Scanner::scan_byte_close_brace,
             0x7E /* ~ */ => Scanner::scan_byte_tilde,
             0x40 /* @ */ => Scanner::scan_byte_at,
-            0x5C /* \ */ => Scanner::scan_byte_identifier,
+            0x5C /* \ */ => Scanner::scan_byte_identifier_slow,
             0x23 /* # */ => Scanner::scan_byte_hash,
             b'a'..=b'z' | b'A'..=b'Z' | b'_' | b'$' => Scanner::scan_byte_identifier,
             _ => Scanner::scan_byte_default,
@@ -797,25 +791,42 @@ impl Scanner {
         self.state.full_start_pos = self.state.pos;
         self.state.token_flags = TokenFlags::None;
         loop {
-            self.state.token_start = self.state.pos;
-            if self.state.pos >= self.end {
-                self.state.token = Kind::EndOfFile;
-                return self.state.token;
-            }
-            let byte = self.text.as_bytes()[self.state.pos as usize];
-            if BYTE_HANDLERS[byte as usize](self) == ScanAction::Return {
-                return self.state.token;
+            let mut pos = self.state.pos;
+            let bytes = self.text.as_bytes();
+            let byte = loop {
+                if pos >= self.end {
+                    self.state.pos = pos;
+                    self.state.token_start = pos;
+                    self.state.token = Kind::EndOfFile;
+                    return Kind::EndOfFile;
+                }
+                let byte = bytes[pos as usize];
+                if self.skip_trivia {
+                    // Keep ASCII trivia out of the function table: even a single space
+                    // otherwise pays for the frame of the Unicode trivia path.
+                    match byte {
+                        b' ' | b'\t' | 0x0B | 0x0C => {}
+                        b'\r' | b'\n' => self.state.token_flags |= TokenFlags::PrecedingLineBreak,
+                        _ => break byte,
+                    }
+                    pos += 1;
+                } else {
+                    break byte;
+                }
+            };
+            self.state.pos = pos;
+            self.state.token_start = pos;
+            if let Some(token) = BYTE_HANDLERS[byte as usize](self) {
+                self.state.token = token;
+                return token;
             }
         }
     }
 
-    fn scan_byte_whitespace(&mut self) -> ScanAction {
+    #[cold]
+    fn scan_byte_whitespace(&mut self) -> Option<Kind> {
+        debug_assert!(!self.skip_trivia);
         self.state.pos += 1;
-        if self.skip_trivia {
-            // The next iteration would skip any further single-line whitespace byte the same way.
-            self.scan_ascii_while(|b| b == b' ' || b == b'\t' || b == 0x0B || b == 0x0C);
-            return ScanAction::Continue;
-        }
         loop {
             let (ch, size) = self.char_and_size();
             if !stringutil::is_white_space_single_line(ch) {
@@ -823,110 +834,100 @@ impl Scanner {
             }
             self.state.pos += size;
         }
-        self.state.token = Kind::WhitespaceTrivia;
-        ScanAction::Return
+        Some(Kind::WhitespaceTrivia)
     }
 
-    fn scan_byte_line_break(&mut self) -> ScanAction {
+    #[cold]
+    fn scan_byte_line_break(&mut self) -> Option<Kind> {
+        debug_assert!(!self.skip_trivia);
         let ch = self.char();
         self.state.token_flags |= TokenFlags::PrecedingLineBreak;
-        if self.skip_trivia {
-            self.state.pos += 1;
-            self.scan_ascii_while(|b| b == b' ' || (b'\t'..=b'\r').contains(&b));
-            return ScanAction::Continue;
-        }
         if ch == '\r' as i32 && self.char_at(1) == '\n' as i32 {
             self.state.pos += 2;
         } else {
             self.state.pos += 1;
         }
-        self.state.token = Kind::NewLineTrivia;
-        ScanAction::Return
+        Some(Kind::NewLineTrivia)
     }
 
-    fn scan_byte_exclamation(&mut self) -> ScanAction {
-        if self.char_at(1) == '=' as i32 {
+    fn scan_byte_exclamation(&mut self) -> Option<Kind> {
+        let token = if self.char_at(1) == '=' as i32 {
             if self.char_at(2) == '=' as i32 {
                 self.state.pos += 3;
-                self.state.token = Kind::ExclamationEqualsEqualsToken;
+                Kind::ExclamationEqualsEqualsToken
             } else {
                 self.state.pos += 2;
-                self.state.token = Kind::ExclamationEqualsToken;
+                Kind::ExclamationEqualsToken
             }
         } else {
             self.state.pos += 1;
-            self.state.token = Kind::ExclamationToken;
-        }
-        ScanAction::Return
+            Kind::ExclamationToken
+        };
+        Some(token)
     }
 
-    fn scan_byte_string(&mut self) -> ScanAction {
+    fn scan_byte_string(&mut self) -> Option<Kind> {
         self.state.token_value = self.scan_string(false /*jsxAttributeString*/);
-        self.state.token = Kind::StringLiteral;
-        ScanAction::Return
+        Some(Kind::StringLiteral)
     }
 
-    fn scan_byte_template(&mut self) -> ScanAction {
-        self.state.token =
-            self.scan_template_and_set_token_value(false /*shouldEmitInvalidEscapeError*/);
-        ScanAction::Return
+    fn scan_byte_template(&mut self) -> Option<Kind> {
+        Some(self.scan_template_and_set_token_value(false /*shouldEmitInvalidEscapeError*/))
     }
 
-    fn scan_byte_percent(&mut self) -> ScanAction {
-        if self.char_at(1) == '=' as i32 {
+    fn scan_byte_percent(&mut self) -> Option<Kind> {
+        let token = if self.char_at(1) == '=' as i32 {
             self.state.pos += 2;
-            self.state.token = Kind::PercentEqualsToken;
+            Kind::PercentEqualsToken
         } else {
             self.state.pos += 1;
-            self.state.token = Kind::PercentToken;
-        }
-        ScanAction::Return
+            Kind::PercentToken
+        };
+        Some(token)
     }
 
-    fn scan_byte_ampersand(&mut self) -> ScanAction {
+    fn scan_byte_ampersand(&mut self) -> Option<Kind> {
         let next = self.char_at(1);
-        if next == '&' as i32 {
+        let token = if next == '&' as i32 {
             if self.char_at(2) == '=' as i32 {
                 self.state.pos += 3;
-                self.state.token = Kind::AmpersandAmpersandEqualsToken;
+                Kind::AmpersandAmpersandEqualsToken
             } else {
                 self.state.pos += 2;
-                self.state.token = Kind::AmpersandAmpersandToken;
+                Kind::AmpersandAmpersandToken
             }
         } else if next == '=' as i32 {
             self.state.pos += 2;
-            self.state.token = Kind::AmpersandEqualsToken;
+            Kind::AmpersandEqualsToken
         } else {
             self.state.pos += 1;
-            self.state.token = Kind::AmpersandToken;
-        }
-        ScanAction::Return
+            Kind::AmpersandToken
+        };
+        Some(token)
     }
 
-    fn scan_byte_open_paren(&mut self) -> ScanAction {
+    fn scan_byte_open_paren(&mut self) -> Option<Kind> {
         self.state.pos += 1;
-        self.state.token = Kind::OpenParenToken;
-        ScanAction::Return
+        Some(Kind::OpenParenToken)
     }
 
-    fn scan_byte_close_paren(&mut self) -> ScanAction {
+    fn scan_byte_close_paren(&mut self) -> Option<Kind> {
         self.state.pos += 1;
-        self.state.token = Kind::CloseParenToken;
-        ScanAction::Return
+        Some(Kind::CloseParenToken)
     }
 
-    fn scan_byte_asterisk(&mut self) -> ScanAction {
+    fn scan_byte_asterisk(&mut self) -> Option<Kind> {
         let next = self.char_at(1);
-        if next == '=' as i32 {
+        let token = if next == '=' as i32 {
             self.state.pos += 2;
-            self.state.token = Kind::AsteriskEqualsToken;
+            Kind::AsteriskEqualsToken
         } else if next == '*' as i32 {
             if self.char_at(2) == '=' as i32 {
                 self.state.pos += 3;
-                self.state.token = Kind::AsteriskAsteriskEqualsToken;
+                Kind::AsteriskAsteriskEqualsToken
             } else {
                 self.state.pos += 2;
-                self.state.token = Kind::AsteriskAsteriskToken;
+                Kind::AsteriskAsteriskToken
             }
         } else {
             self.state.pos += 1;
@@ -941,64 +942,63 @@ impl Scanner {
                     .intersects(TokenFlags::PrecedingLineBreak)
             {
                 self.state.token_flags |= TokenFlags::PrecedingJSDocLeadingAsterisks;
-                return ScanAction::Continue;
+                return None;
             }
-            self.state.token = Kind::AsteriskToken;
-        }
-        ScanAction::Return
+            Kind::AsteriskToken
+        };
+        Some(token)
     }
 
-    fn scan_byte_plus(&mut self) -> ScanAction {
+    fn scan_byte_plus(&mut self) -> Option<Kind> {
         let next = self.char_at(1);
-        if next == '=' as i32 {
+        let token = if next == '=' as i32 {
             self.state.pos += 2;
-            self.state.token = Kind::PlusEqualsToken;
+            Kind::PlusEqualsToken
         } else if next == '+' as i32 {
             self.state.pos += 2;
-            self.state.token = Kind::PlusPlusToken;
+            Kind::PlusPlusToken
         } else {
             self.state.pos += 1;
-            self.state.token = Kind::PlusToken;
-        }
-        ScanAction::Return
+            Kind::PlusToken
+        };
+        Some(token)
     }
 
-    fn scan_byte_comma(&mut self) -> ScanAction {
+    fn scan_byte_comma(&mut self) -> Option<Kind> {
         self.state.pos += 1;
-        self.state.token = Kind::CommaToken;
-        ScanAction::Return
+        Some(Kind::CommaToken)
     }
 
-    fn scan_byte_minus(&mut self) -> ScanAction {
+    fn scan_byte_minus(&mut self) -> Option<Kind> {
         let next = self.char_at(1);
-        if next == '=' as i32 {
+        let token = if next == '=' as i32 {
             self.state.pos += 2;
-            self.state.token = Kind::MinusEqualsToken;
+            Kind::MinusEqualsToken
         } else if next == '-' as i32 {
             self.state.pos += 2;
-            self.state.token = Kind::MinusMinusToken;
+            Kind::MinusMinusToken
         } else {
             self.state.pos += 1;
-            self.state.token = Kind::MinusToken;
-        }
-        ScanAction::Return
+            Kind::MinusToken
+        };
+        Some(token)
     }
 
-    fn scan_byte_dot(&mut self) -> ScanAction {
+    fn scan_byte_dot(&mut self) -> Option<Kind> {
         let next = self.char_at(1);
-        if stringutil::is_digit(next) {
-            self.state.token = self.scan_number();
+        let token = if stringutil::is_digit(next) {
+            self.scan_number()
         } else if next == '.' as i32 && self.char_at(2) == '.' as i32 {
             self.state.pos += 3;
-            self.state.token = Kind::DotDotDotToken;
+            Kind::DotDotDotToken
         } else {
             self.state.pos += 1;
-            self.state.token = Kind::DotToken;
-        }
-        ScanAction::Return
+            Kind::DotToken
+        };
+        Some(token)
     }
 
-    fn scan_byte_slash(&mut self) -> ScanAction {
+    fn scan_byte_slash(&mut self) -> Option<Kind> {
         // Single-line comment
         if self.char_at(1) == '/' as i32 {
             self.state.pos += 2;
@@ -1015,10 +1015,9 @@ impl Scanner {
             self.process_comment_directive(self.state.token_start, self.state.pos, false);
 
             if self.skip_trivia {
-                return ScanAction::Continue;
+                return None;
             }
-            self.state.token = Kind::SingleLineCommentTrivia;
-            return ScanAction::Return;
+            return Some(Kind::SingleLineCommentTrivia);
         }
         // Multi-line comment
         if self.char_at(1) == '*' as i32 {
@@ -1062,28 +1061,27 @@ impl Scanner {
             }
 
             if self.skip_trivia {
-                return ScanAction::Continue;
+                return None;
             }
 
             if !comment_closed {
                 self.state.token_flags |= TokenFlags::Unterminated;
             }
-            self.state.token = Kind::MultiLineCommentTrivia;
-            return ScanAction::Return;
+            return Some(Kind::MultiLineCommentTrivia);
         }
-        if self.char_at(1) == '=' as i32 {
+        let token = if self.char_at(1) == '=' as i32 {
             self.state.pos += 2;
-            self.state.token = Kind::SlashEqualsToken;
+            Kind::SlashEqualsToken
         } else {
             self.state.pos += 1;
-            self.state.token = Kind::SlashToken;
-        }
-        ScanAction::Return
+            Kind::SlashToken
+        };
+        Some(token)
     }
 
-    fn scan_byte_number(&mut self) -> ScanAction {
+    fn scan_byte_number(&mut self) -> Option<Kind> {
         let ch = self.char();
-        'digit: {
+        let token = 'digit: {
             if ch == '0' as i32 {
                 if self.char_at(1) == 'X' as i32 || self.char_at(1) == 'x' as i32 {
                     let start = self.state.pos;
@@ -1106,8 +1104,7 @@ impl Scanner {
                         self.hex_number_cache.insert(digits, self.state.token_value);
                     }
                     self.state.token_flags |= TokenFlags::HexSpecifier;
-                    self.state.token = self.scan_big_int_suffix();
-                    break 'digit;
+                    break 'digit self.scan_big_int_suffix();
                 }
                 if self.char_at(1) == 'B' as i32 || self.char_at(1) == 'b' as i32 {
                     self.state.pos += 2;
@@ -1118,8 +1115,7 @@ impl Scanner {
                     }
                     self.state.token_value = alloc_str(&format!("0b{digits}"));
                     self.state.token_flags |= TokenFlags::BinarySpecifier;
-                    self.state.token = self.scan_big_int_suffix();
-                    break 'digit;
+                    break 'digit self.scan_big_int_suffix();
                 }
                 if self.char_at(1) == 'O' as i32 || self.char_at(1) == 'o' as i32 {
                     self.state.pos += 2;
@@ -1130,209 +1126,213 @@ impl Scanner {
                     }
                     self.state.token_value = alloc_str(&format!("0o{digits}"));
                     self.state.token_flags |= TokenFlags::OctalSpecifier;
-                    self.state.token = self.scan_big_int_suffix();
-                    break 'digit;
+                    break 'digit self.scan_big_int_suffix();
                 }
             }
-            self.state.token = self.scan_number();
-        }
-        ScanAction::Return
+            self.scan_number()
+        };
+        Some(token)
     }
 
-    fn scan_byte_colon(&mut self) -> ScanAction {
+    fn scan_byte_colon(&mut self) -> Option<Kind> {
         self.state.pos += 1;
-        self.state.token = Kind::ColonToken;
-        ScanAction::Return
+        Some(Kind::ColonToken)
     }
 
-    fn scan_byte_semicolon(&mut self) -> ScanAction {
+    fn scan_byte_semicolon(&mut self) -> Option<Kind> {
         self.state.pos += 1;
-        self.state.token = Kind::SemicolonToken;
-        ScanAction::Return
+        Some(Kind::SemicolonToken)
     }
 
-    fn scan_byte_less_than(&mut self) -> ScanAction {
+    fn scan_byte_less_than(&mut self) -> Option<Kind> {
         if self.char_at(1) == '<' as i32 && is_conflict_marker_trivia(self.text, self.state.pos) {
             self.state.pos = self.scan_conflict_marker_trivia_reporting(self.state.pos);
             if self.skip_trivia {
-                return ScanAction::Continue;
+                return None;
             } else {
-                self.state.token = Kind::ConflictMarkerTrivia;
-                return ScanAction::Return;
+                return Some(Kind::ConflictMarkerTrivia);
             }
         }
-        if self.char_at(1) == '<' as i32 {
+        let token = if self.char_at(1) == '<' as i32 {
             if self.char_at(2) == '=' as i32 {
                 self.state.pos += 3;
-                self.state.token = Kind::LessThanLessThanEqualsToken;
+                Kind::LessThanLessThanEqualsToken
             } else {
                 self.state.pos += 2;
-                self.state.token = Kind::LessThanLessThanToken;
+                Kind::LessThanLessThanToken
             }
         } else if self.char_at(1) == '=' as i32 {
             self.state.pos += 2;
-            self.state.token = Kind::LessThanEqualsToken;
+            Kind::LessThanEqualsToken
         } else if self.language_variant == LanguageVariant::JSX
             && self.char_at(1) == '/' as i32
             && self.char_at(2) != '*' as i32
         {
             self.state.pos += 2;
-            self.state.token = Kind::LessThanSlashToken;
+            Kind::LessThanSlashToken
         } else {
             self.state.pos += 1;
-            self.state.token = Kind::LessThanToken;
-        }
-        ScanAction::Return
+            Kind::LessThanToken
+        };
+        Some(token)
     }
 
-    fn scan_byte_equals(&mut self) -> ScanAction {
+    fn scan_byte_equals(&mut self) -> Option<Kind> {
         if self.char_at(1) == '=' as i32 && is_conflict_marker_trivia(self.text, self.state.pos) {
             self.state.pos = self.scan_conflict_marker_trivia_reporting(self.state.pos);
             if self.skip_trivia {
-                return ScanAction::Continue;
+                return None;
             } else {
-                self.state.token = Kind::ConflictMarkerTrivia;
-                return ScanAction::Return;
+                return Some(Kind::ConflictMarkerTrivia);
             }
         }
-        if self.char_at(1) == '=' as i32 {
+        let token = if self.char_at(1) == '=' as i32 {
             if self.char_at(2) == '=' as i32 {
                 self.state.pos += 3;
-                self.state.token = Kind::EqualsEqualsEqualsToken;
+                Kind::EqualsEqualsEqualsToken
             } else {
                 self.state.pos += 2;
-                self.state.token = Kind::EqualsEqualsToken;
+                Kind::EqualsEqualsToken
             }
         } else if self.char_at(1) == '>' as i32 {
             self.state.pos += 2;
-            self.state.token = Kind::EqualsGreaterThanToken;
+            Kind::EqualsGreaterThanToken
         } else {
             self.state.pos += 1;
-            self.state.token = Kind::EqualsToken;
-        }
-        ScanAction::Return
+            Kind::EqualsToken
+        };
+        Some(token)
     }
 
-    fn scan_byte_greater_than(&mut self) -> ScanAction {
+    fn scan_byte_greater_than(&mut self) -> Option<Kind> {
         if self.char_at(1) == '>' as i32 && is_conflict_marker_trivia(self.text, self.state.pos) {
             self.state.pos = self.scan_conflict_marker_trivia_reporting(self.state.pos);
             if self.skip_trivia {
-                return ScanAction::Continue;
+                return None;
             } else {
-                self.state.token = Kind::ConflictMarkerTrivia;
-                return ScanAction::Return;
+                return Some(Kind::ConflictMarkerTrivia);
             }
         }
         self.state.pos += 1;
-        self.state.token = Kind::GreaterThanToken;
-        ScanAction::Return
+        Some(Kind::GreaterThanToken)
     }
 
-    fn scan_byte_question(&mut self) -> ScanAction {
-        if self.char_at(1) == '.' as i32 && !stringutil::is_digit(self.char_at(2)) {
+    fn scan_byte_question(&mut self) -> Option<Kind> {
+        let token = if self.char_at(1) == '.' as i32 && !stringutil::is_digit(self.char_at(2)) {
             self.state.pos += 2;
-            self.state.token = Kind::QuestionDotToken;
+            Kind::QuestionDotToken
         } else if self.char_at(1) == '?' as i32 {
             if self.char_at(2) == '=' as i32 {
                 self.state.pos += 3;
-                self.state.token = Kind::QuestionQuestionEqualsToken;
+                Kind::QuestionQuestionEqualsToken
             } else {
                 self.state.pos += 2;
-                self.state.token = Kind::QuestionQuestionToken;
+                Kind::QuestionQuestionToken
             }
         } else {
             self.state.pos += 1;
-            self.state.token = Kind::QuestionToken;
-        }
-        ScanAction::Return
+            Kind::QuestionToken
+        };
+        Some(token)
     }
 
-    fn scan_byte_open_bracket(&mut self) -> ScanAction {
+    fn scan_byte_open_bracket(&mut self) -> Option<Kind> {
         self.state.pos += 1;
-        self.state.token = Kind::OpenBracketToken;
-        ScanAction::Return
+        Some(Kind::OpenBracketToken)
     }
 
-    fn scan_byte_close_bracket(&mut self) -> ScanAction {
+    fn scan_byte_close_bracket(&mut self) -> Option<Kind> {
         self.state.pos += 1;
-        self.state.token = Kind::CloseBracketToken;
-        ScanAction::Return
+        Some(Kind::CloseBracketToken)
     }
 
-    fn scan_byte_caret(&mut self) -> ScanAction {
-        if self.char_at(1) == '=' as i32 {
+    fn scan_byte_caret(&mut self) -> Option<Kind> {
+        let token = if self.char_at(1) == '=' as i32 {
             self.state.pos += 2;
-            self.state.token = Kind::CaretEqualsToken;
+            Kind::CaretEqualsToken
         } else {
             self.state.pos += 1;
-            self.state.token = Kind::CaretToken;
-        }
-        ScanAction::Return
+            Kind::CaretToken
+        };
+        Some(token)
     }
 
-    fn scan_byte_open_brace(&mut self) -> ScanAction {
+    fn scan_byte_open_brace(&mut self) -> Option<Kind> {
         self.state.pos += 1;
-        self.state.token = Kind::OpenBraceToken;
-        ScanAction::Return
+        Some(Kind::OpenBraceToken)
     }
 
-    fn scan_byte_bar(&mut self) -> ScanAction {
+    fn scan_byte_bar(&mut self) -> Option<Kind> {
         if self.char_at(1) == '|' as i32 && is_conflict_marker_trivia(self.text, self.state.pos) {
             self.state.pos = self.scan_conflict_marker_trivia_reporting(self.state.pos);
             if self.skip_trivia {
-                return ScanAction::Continue;
+                return None;
             } else {
-                self.state.token = Kind::ConflictMarkerTrivia;
-                return ScanAction::Return;
+                return Some(Kind::ConflictMarkerTrivia);
             }
         }
-        if self.char_at(1) == '|' as i32 {
+        let token = if self.char_at(1) == '|' as i32 {
             if self.char_at(2) == '=' as i32 {
                 self.state.pos += 3;
-                self.state.token = Kind::BarBarEqualsToken;
+                Kind::BarBarEqualsToken
             } else {
                 self.state.pos += 2;
-                self.state.token = Kind::BarBarToken;
+                Kind::BarBarToken
             }
         } else if self.char_at(1) == '=' as i32 {
             self.state.pos += 2;
-            self.state.token = Kind::BarEqualsToken;
+            Kind::BarEqualsToken
         } else {
             self.state.pos += 1;
-            self.state.token = Kind::BarToken;
+            Kind::BarToken
+        };
+        Some(token)
+    }
+
+    fn scan_byte_close_brace(&mut self) -> Option<Kind> {
+        self.state.pos += 1;
+        Some(Kind::CloseBraceToken)
+    }
+
+    fn scan_byte_tilde(&mut self) -> Option<Kind> {
+        self.state.pos += 1;
+        Some(Kind::TildeToken)
+    }
+
+    fn scan_byte_at(&mut self) -> Option<Kind> {
+        self.state.pos += 1;
+        Some(Kind::AtToken)
+    }
+
+    fn scan_byte_identifier(&mut self) -> Option<Kind> {
+        debug_assert!(matches!(self.char(), 0x41..=0x5A | 0x61..=0x7A | 0x24 | 0x5F));
+        let start = self.state.pos;
+        self.state.pos += 1;
+        self.scan_ascii_while(|b| ASCII_IDENTIFIER_PART[b as usize]);
+        let ch = self.char();
+        if ch < RUNE_SELF && ch != '\\' as i32 {
+            self.state.token_value = self.slice(start, self.state.pos);
+            return Some(get_identifier_token(self.state.token_value));
         }
-        ScanAction::Return
+        // The generic scanner handles a Unicode continuation or escape from the
+        // original start, including malformed escapes and diagnostic positions.
+        self.state.pos = start;
+        self.scan_byte_identifier_slow()
     }
 
-    fn scan_byte_close_brace(&mut self) -> ScanAction {
-        self.state.pos += 1;
-        self.state.token = Kind::CloseBraceToken;
-        ScanAction::Return
-    }
-
-    fn scan_byte_tilde(&mut self) -> ScanAction {
-        self.state.pos += 1;
-        self.state.token = Kind::TildeToken;
-        ScanAction::Return
-    }
-
-    fn scan_byte_at(&mut self) -> ScanAction {
-        self.state.pos += 1;
-        self.state.token = Kind::AtToken;
-        ScanAction::Return
-    }
-
-    fn scan_byte_identifier(&mut self) -> ScanAction {
-        if self.scan_identifier(0, IdentifierVariant::Standard) {
-            self.state.token = get_identifier_token(self.state.token_value);
+    #[cold]
+    fn scan_byte_identifier_slow(&mut self) -> Option<Kind> {
+        let token = if self.scan_identifier(0, IdentifierVariant::Standard) {
+            get_identifier_token(self.state.token_value)
         } else {
             self.scan_invalid_character();
-        }
-        ScanAction::Return
+            Kind::Unknown
+        };
+        Some(token)
     }
 
-    fn scan_byte_hash(&mut self) -> ScanAction {
-        'hash: {
+    fn scan_byte_hash(&mut self) -> Option<Kind> {
+        let token = 'hash: {
             if self.char_at(1) == '!' as i32 {
                 if self.state.pos == 0 {
                     self.state.pos += 2;
@@ -1341,7 +1341,7 @@ impl Scanner {
                         self.state.pos += size;
                         (ch, size) = self.char_and_size();
                     }
-                    return ScanAction::Continue;
+                    return None;
                 }
                 self.error_at(
                     &diagnostics::X_can_only_be_used_at_the_start_of_a_file,
@@ -1350,30 +1350,27 @@ impl Scanner {
                     &[],
                 );
                 self.state.pos += 2;
-                self.state.token = Kind::Unknown;
-                break 'hash;
+                break 'hash Kind::Unknown;
             }
             if !self.scan_identifier(1, IdentifierVariant::Standard) {
                 self.error_at(&diagnostics::Invalid_character, self.state.pos - 1, 1, &[]);
                 self.state.token_value = "#";
             }
-            self.state.token = Kind::PrivateIdentifier;
-        }
-        ScanAction::Return
+            Kind::PrivateIdentifier
+        };
+        Some(token)
     }
 
-    fn scan_byte_default(&mut self) -> ScanAction {
-        'default: {
+    fn scan_byte_default(&mut self) -> Option<Kind> {
+        let token = 'default: {
             if self.scan_identifier(0, IdentifierVariant::Standard) {
-                self.state.token = get_identifier_token(self.state.token_value);
-                break 'default;
+                break 'default get_identifier_token(self.state.token_value);
             }
             let (mut ch, mut size) = self.char_and_size();
             if ch == RUNE_ERROR {
                 self.error_at(&diagnostics::File_appears_to_be_binary, 0, 0, &[]);
                 self.state.pos = self.text.len() as i32;
-                self.state.token = Kind::NonTextFileMarkerTrivia;
-                break 'default;
+                break 'default Kind::NonTextFileMarkerTrivia;
             }
             if stringutil::is_white_space_single_line(ch) {
                 self.state.pos += size;
@@ -1381,7 +1378,7 @@ impl Scanner {
                 // If we get here and it's not 0x0085 (nextLine), then we're handling non-ASCII whitespace.
                 // Handle skipTrivia like we do in the space case above.
                 if ch == 0x0085 || self.skip_trivia {
-                    return ScanAction::Continue;
+                    return None;
                 }
 
                 loop {
@@ -1391,17 +1388,17 @@ impl Scanner {
                     }
                     self.state.pos += size;
                 }
-                self.state.token = Kind::WhitespaceTrivia;
-                return ScanAction::Return;
+                return Some(Kind::WhitespaceTrivia);
             }
             if stringutil::is_line_break(ch) {
                 self.state.token_flags |= TokenFlags::PrecedingLineBreak;
                 self.state.pos += size;
-                return ScanAction::Continue;
+                return None;
             }
             self.scan_invalid_character();
-        }
-        ScanAction::Return
+            Kind::Unknown
+        };
+        Some(token)
     }
 
     fn scan_conflict_marker_trivia_reporting(&mut self, pos: i32) -> i32 {
