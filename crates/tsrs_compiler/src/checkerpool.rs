@@ -1668,6 +1668,76 @@ fn locality_associations(program: &Program, checker_count: usize) -> Vec<usize> 
     })
 }
 
+// Each chunk owns its map. Only integer totals are merged, so the reduction order cannot affect grouping.
+#[expect(clippy::iter_over_hash_type, reason = "merges integer totals by key; only keyed lookups observe the result")]
+fn directory_subtree_weights<'a>(
+    order: &[usize],
+    costs: &[i64],
+    path_of: impl Fn(usize) -> &'a str + Sync,
+    parallel: bool,
+) -> FxHashMap<&'a str, i64> {
+    let accumulate = |chunk: &[usize]| {
+        let mut weights = FxHashMap::default();
+        for &i in chunk {
+            let path = path_of(i);
+            for (pos, _) in path.match_indices('/') {
+                *weights.entry(&path[..pos]).or_default() += costs[i];
+            }
+        }
+        weights
+    };
+    // Bound the number of temporary maps, and keep short inputs on the calling thread.
+    const CHUNK_SIZE: usize = 512;
+    if !parallel || order.len() <= CHUNK_SIZE {
+        return accumulate(order);
+    }
+    use rayon::prelude::*;
+    crate::program::worker_pool().install(|| {
+        order.par_chunks(CHUNK_SIZE).map(accumulate).reduce(FxHashMap::default, |mut left, right| {
+            for (path, cost) in right {
+                *left.entry(path).or_default() += cost;
+            }
+            left
+        })
+    })
+}
+
+fn group_import_adjacency(
+    order: &[usize],
+    adjacent_files: &[Vec<usize>],
+    group_of_file: &[usize],
+    group_count: usize,
+    parallel: bool,
+) -> Vec<Vec<usize>> {
+    if !parallel || group_count < 2 {
+        let mut adjacency = vec![Vec::new(); group_count];
+        for &i in order {
+            for &j in &adjacent_files[i] {
+                let (gi, gj) = (group_of_file[i], group_of_file[j]);
+                if gj != usize::MAX && gi != gj {
+                    adjacency[gi].push(gj);
+                }
+            }
+        }
+        return adjacency;
+    }
+    // Preserve the path order within each group, then build each group's list independently. Repeated edges
+    // carry weight in FENNEL and affinity refinement, so keep both their multiplicity and their order.
+    let mut members = vec![Vec::new(); group_count];
+    for &i in order {
+        members[group_of_file[i]].push(i);
+    }
+    use rayon::prelude::*;
+    crate::program::worker_pool().install(|| {
+        members.par_iter().enumerate().map(|(gi, files)| {
+            files.iter().flat_map(|&i| &adjacent_files[i]).filter_map(|&j| {
+                let gj = group_of_file[j];
+                (gj != usize::MAX && gi != gj).then_some(gj)
+            }).collect()
+        }).collect()
+    })
+}
+
 fn locality_associations_with(program: &Program, checker_count: usize, import_targets: impl FnOnce() -> Vec<Vec<usize>>) -> Vec<usize> {
     let files = &program.files;
     let weights = checked_file_weights(program);
@@ -1693,13 +1763,9 @@ fn locality_associations_with(program: &Program, checker_count: usize, import_ta
     let threshold = total / (checker_count as i64 * LOCALITY_GROUP_FRACTION);
 
     // Checked weight of every directory subtree (keys are path prefixes ending before a '/').
-    let mut subtree_weights: FxHashMap<&str, i64> = FxHashMap::default();
-    for &i in &order {
-        let path: &str = files[i].path();
-        for (pos, _) in path.match_indices('/') {
-            *subtree_weights.entry(&path[..pos]).or_default() += costs[i];
-        }
-    }
+    let subtree_weights = tsrs_core::phases::time("Checkers: subtree weights", || {
+        directory_subtree_weights(&order, costs, |i| files[i].path().as_str(), !program.single_threaded())
+    });
     let mut group_ids: FxHashMap<&str, usize> = FxHashMap::default();
     let mut group_of_file = vec![usize::MAX; files.len()];
     let mut group_weights: Vec<i64> = Vec::new();
@@ -1717,15 +1783,9 @@ fn locality_associations_with(program: &Program, checker_count: usize, import_ta
     // Import edges between groups of checked files, one adjacency entry per file-level edge and direction.
     let import_targets = import_targets();
     let adjacent_files = undirected(&import_targets);
-    let mut group_adjacency: Vec<Vec<usize>> = vec![Vec::new(); group_weights.len()];
-    for &i in &order {
-        for &j in &adjacent_files[i] {
-            let (gi, gj) = (group_of_file[i], group_of_file[j]);
-            if gj != usize::MAX && gi != gj {
-                group_adjacency[gi].push(gj);
-            }
-        }
-    }
+    let group_adjacency = tsrs_core::phases::time("Checkers: group adjacency", || {
+        group_import_adjacency(&order, &adjacent_files, &group_of_file, group_weights.len(), !program.single_threaded())
+    });
 
     let fennel = |group_weights: &[i64]| {
         let mut group_order: Vec<usize> = (0..group_weights.len()).collect();
@@ -2085,5 +2145,36 @@ mod stealing_tests {
         let mut unchanged = positions.clone();
         heavy_files_first(&mut unchanged, 100, |i| weights[i as usize]);
         assert_eq!(unchanged, positions);
+    }
+}
+
+#[cfg(test)]
+mod assignment_preparation_tests {
+    use super::{directory_subtree_weights, group_import_adjacency};
+
+    #[test]
+    fn subtree_totals_agree_across_parallel_chunks() {
+        let paths: Vec<String> = (0..2049).map(|i| format!("/src/package{}/file{i}.ts", i % 7)).collect();
+        let costs: Vec<i64> = (0..paths.len()).map(|i| (i % 13 + 1) as i64).collect();
+        let order: Vec<usize> = (0..paths.len()).rev().collect();
+        let serial = directory_subtree_weights(&order, &costs, |i| paths[i].as_str(), false);
+        let parallel = directory_subtree_weights(&order, &costs, |i| paths[i].as_str(), true);
+        assert_eq!(parallel, serial);
+        assert_eq!(parallel["/src"], costs.iter().sum::<i64>());
+        assert!(directory_subtree_weights(&[], &[], |_| "", true).is_empty());
+    }
+
+    #[test]
+    fn group_edges_preserve_order_duplicates_and_unchecked_files() {
+        // Interleave two members of group 0, include an unchecked file, and leave group 3 empty.
+        let groups = [0, 1, 0, usize::MAX, 2];
+        let order = [2, 1, 4, 0];
+        let adjacent = vec![vec![1, 1, 3, 2, 4], vec![0, 2, 4], vec![4, 1, 1, 0], vec![0], vec![2, 0, 1]];
+        let expected = vec![vec![2, 1, 1, 1, 1, 2], vec![0, 0, 2], vec![0, 0, 1], vec![]];
+        for parallel in [false, true] {
+            assert_eq!(group_import_adjacency(&order, &adjacent, &groups, 4, parallel), expected);
+            assert!(group_import_adjacency(&[], &[], &[], 0, parallel).is_empty());
+            assert_eq!(group_import_adjacency(&[0], &[vec![0]], &[0], 1, parallel), vec![Vec::<usize>::new()]);
+        }
     }
 }
