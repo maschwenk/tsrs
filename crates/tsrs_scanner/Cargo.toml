@@ -13,5 +13,4 @@ tsrs_diagnostics.workspace = true
 tsrs_ast.workspace = true
 rustc-hash.workspace = true
 bitflags.workspace = true
-unicode-id-start.workspace = true
 memchr.workspace = true
