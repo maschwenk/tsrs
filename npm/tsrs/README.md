@@ -1,4 +1,4 @@
-# @maschwenk/tsrs
+# tsrs
 
 `tsrs` is a Rust port of the TypeScript 7 compiler and language server (the Go implementation in
 microsoft/TypeScript). It does what `tsc` does: same diagnostics, same exit codes, same `tsconfig.json` handling, and
@@ -6,7 +6,7 @@ it emits by default like tsc (pass `--noEmit` to only type check). `tsrs --lsp -
 following TypeScript `7.1.0-dev.20260929`.
 
 ```sh
-pnpm add -D @maschwenk/tsrs
+pnpm add -D tsrs
 pnpm exec tsrs -p path/to/project              # like `tsc -p path/to/project` (emits)
 pnpm exec tsrs -p path/to/project --noEmit     # like `tsc --noEmit -p path/to/project`
 pnpm exec tsrs -p . --extendedDiagnostics      # counters and timings, like tsc
@@ -16,10 +16,10 @@ pnpm exec tsrs --lsp -stdio                    # language server; editor setup: 
 ```
 
 Supported platforms: macOS arm64, Linux x64/arm64 (glibc). The binary comes from the optional
-dependency `@maschwenk/tsrs-<os>-<arch>`, installed automatically for the current platform. To run a locally built
+dependency `@ts-rs/<os>-<arch>`, installed automatically for the current platform. To run a locally built
 binary through the same launcher, set `TSRS_BINARY=/path/to/tsrs`.
 
-`require("@maschwenk/tsrs")` exports `version`, `typescriptVersion` and `typescriptCommit`.
+`require("tsrs")` exports `version`, `typescriptVersion` and `typescriptCommit`.
 
 ## JS API (unstable)
 
@@ -29,13 +29,13 @@ The package also ships TypeScript 7's programmatic API, copied unchanged from mi
 
 | subpath | contents |
 | --- | --- |
-| `@maschwenk/tsrs/unstable/sync` | `API` with synchronous calls (MessagePack over the server's stdio) |
-| `@maschwenk/tsrs/unstable/async` | `API` with promise-returning calls (JSON-RPC) |
-| `@maschwenk/tsrs/unstable/ast` (`/is`, `/factory`, `/utils`, `/scanner`, `/visitor`, `/clone`) | AST types, guards, factory and traversal |
-| `@maschwenk/tsrs/unstable/fs`, `/proto` | filesystem callbacks/request filesystems, protocol types |
+| `tsrs/unstable/sync` | `API` with synchronous calls (MessagePack over the server's stdio) |
+| `tsrs/unstable/async` | `API` with promise-returning calls (JSON-RPC) |
+| `tsrs/unstable/ast` (`/is`, `/factory`, `/utils`, `/scanner`, `/visitor`, `/clone`) | AST types, guards, factory and traversal |
+| `tsrs/unstable/fs`, `/proto` | filesystem callbacks/request filesystems, protocol types |
 
 ```js
-import { API } from "@maschwenk/tsrs/unstable/sync";
+import { API } from "tsrs/unstable/sync";
 
 const api = new API({ cwd: process.cwd() });            // spawns `tsrs --api`; tsserverPath overrides the binary
 const snapshot = api.createSnapshot({ openProject: "/abs/path/tsconfig.json" });

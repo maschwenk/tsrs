@@ -12,12 +12,12 @@ import {
     formatSyntaxKind,
     getTokenAtPosition,
     getTouchingPropertyName,
-} from "@maschwenk/tsrs/unstable/ast";
+} from "tsrs/unstable/ast";
 import type {
     Node,
     SourceFile,
-} from "@maschwenk/tsrs/unstable/ast";
-import { API } from "@maschwenk/tsrs/unstable/sync";
+} from "tsrs/unstable/ast";
+import { API } from "tsrs/unstable/sync";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";

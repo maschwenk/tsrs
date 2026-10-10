@@ -1,6 +1,6 @@
 # tsrs
 
-[![npm](https://img.shields.io/npm/v/@maschwenk/tsrs)](https://www.npmjs.com/package/@maschwenk/tsrs)
+[![npm](https://img.shields.io/npm/v/tsrs)](https://www.npmjs.com/package/tsrs)
 [![license](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
 tsrs is a Rust port of the TypeScript 7 compiler and language server. It's a drop-in replacement for `tsc`: same
@@ -13,11 +13,11 @@ On the vscode codebase it type-checks **18x faster than tsc 7** using about a th
 ## Quick start
 
 ```sh
-npx -y @maschwenk/tsrs -p path/to/project            # compile, like tsc
-npx -y @maschwenk/tsrs -p path/to/project --noEmit   # type check only
+npx -y tsrs -p path/to/project            # compile, like tsc
+npx -y tsrs -p path/to/project --noEmit   # type check only
 ```
 
-Or install it with `pnpm add -D @maschwenk/tsrs` and run `tsrs` in place of `tsc`. Prebuilt binaries are available for
+Or install it with `pnpm add -D tsrs` and run `tsrs` in place of `tsc`. Prebuilt binaries are available for
 macOS arm64 and Linux x64/arm64. There is also a [WebAssembly build](#webassembly) for Node and browsers.
 
 ## Performance
@@ -116,7 +116,7 @@ same diagnostics and emits the same 9,257 files byte for byte. [`docs/STATUS.md`
 | Language server (`--lsp -stdio`) | yes | 4,066 of 4,546 fourslash tests pass; 13,869 of 13,869 responses identical in a recorded editor session |
 | Automatic type acquisition, telemetry, profiling (language server) | no | not ported |
 | Node API server (`--api`) | yes, with gaps | upstream client test suites pass; no profiling requests, no Windows named pipes ([`docs/NODE_API.md`](docs/NODE_API.md)) |
-| WebAssembly (`@maschwenk/tsrs-wasm`) | yes, single-threaded | byte-identical to native `--singleThreaded` on a 2,000-case conformance sample (notes/wasm-build.md) |
+| WebAssembly (`@ts-rs/wasm`) | yes, single-threaded | byte-identical to native `--singleThreaded` on a 2,000-case conformance sample (notes/wasm-build.md) |
 | Options TypeScript 7 removed (ES5 target, AMD/UMD/System, `baseUrl`, …) | rejected, as in tsgo | same TS5102 / TS5108 errors |
 | `--watch` | no | exits with "not supported" |
 | `--init`, `--showConfig` | no | exits with "not supported"; `--help` prints a short usage |
@@ -166,15 +166,15 @@ known gaps.
 
 ## WebAssembly
 
-`@maschwenk/tsrs-wasm` runs tsrs in Node 22+ or in a browser. It is single-threaded and its output matches native
+`@ts-rs/wasm` runs tsrs in Node 22+ or in a browser. It is single-threaded and its output matches native
 `tsrs --singleThreaded` byte for byte.
 
 ```sh
-npx -y @maschwenk/tsrs-wasm -p .
+npx -y @ts-rs/wasm -p .
 ```
 
 ```js
-import { tsc } from "@maschwenk/tsrs-wasm";
+import { tsc } from "@ts-rs/wasm";
 const { exitCode, diagnostics } = await tsc(["-p", "."], { files: { "/tsconfig.json": "{}", "/a.ts": "let x: string = 1;" }, diagnostics: "json" });
 ```
 

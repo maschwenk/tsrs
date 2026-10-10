@@ -3,7 +3,7 @@ import {
     SpanMapFeature,
     SpanMapFidelity,
     SpanMapKind,
-} from "@maschwenk/tsrs/unstable/ast";
+} from "tsrs/unstable/ast";
 import assert from "node:assert";
 import {
     describe,

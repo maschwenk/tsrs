@@ -9,18 +9,18 @@ import type {
     Block,
     Identifier,
     Node,
-} from "@maschwenk/tsrs/unstable/ast";
+} from "tsrs/unstable/ast";
 import {
     isBlock,
     isIdentifier,
-} from "@maschwenk/tsrs/unstable/ast";
+} from "tsrs/unstable/ast";
 import {
     createBlock,
     createExpressionStatement,
     createIdentifier,
     createIfStatement,
-} from "@maschwenk/tsrs/unstable/ast/factory";
-import { API } from "@maschwenk/tsrs/unstable/sync";
+} from "tsrs/unstable/ast/factory";
+import { API } from "tsrs/unstable/sync";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";

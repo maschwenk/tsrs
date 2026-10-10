@@ -1,17 +1,17 @@
-# @maschwenk/tsrs-wasm
+# @ts-rs/wasm
 
 tsrs (a Rust port of the TypeScript 7 compiler) built as a WebAssembly module, with a small host for Node and
 browsers. It runs `tsc` single-threaded; its output is byte-identical to native `tsrs --singleThreaded` on the
 differential gate in the repository (`tools/wasm/diff.mjs`; numbers in
 [notes/wasm-build.md](https://github.com/maschwenk/tsrs/blob/main/notes/wasm-build.md)). The package version names the
-TypeScript commit it ports, as `@maschwenk/tsrs`'s does: `0.10.0-ts7.1.0-dev.20260929` is tsrs 0.10.0 following
+TypeScript commit it ports, as `tsrs`'s does: `0.10.0-ts7.1.0-dev.20260929` is tsrs 0.10.0 following
 TypeScript `7.1.0-dev.20260929`.
 
 ## Command line (Node 22+)
 
 ```
-npx -y @maschwenk/tsrs-wasm -p .             # or `npm i -D @maschwenk/tsrs-wasm`, then `tsrs-wasm -p .`
-npx -y @maschwenk/tsrs-wasm --version
+npx -y @ts-rs/wasm -p .             # or `npm i -D @ts-rs/wasm`, then `tsrs-wasm -p .`
+npx -y @ts-rs/wasm --version
 ```
 
 It reads and writes the real file system, prints what `tsc` prints and exits with its status. A crash (a panic, or a
@@ -24,7 +24,7 @@ From a checkout of the repository, `tools/wasm/build.sh` writes `npm/tsrs-wasm/t
 ## API
 
 ```js
-import { tsc } from "@maschwenk/tsrs-wasm";
+import { tsc } from "@ts-rs/wasm";
 
 // The real file system (Node)
 const { exitCode, stdout } = await tsc(["-p", "."], { cwd: "/path/to/project" });
@@ -42,7 +42,7 @@ r.files;       // what the compiler wrote, path -> text (with emit)
 Options: `cwd`, `files`, `env` (none by default), `diagnostics: "text" | "json"`, `tty`, `stdout` / `stderr`
 (`"inherit"` writes to this process's fds; collected otherwise), `caseInsensitive`, `stackSizeMb`. The result has
 `exitCode`, `stdout`, `stderr`, `diagnostics?`, `files?` and `memoryBytes` (the module's linear memory at the end,
-which is its peak). `@maschwenk/tsrs-wasm/core` exposes the lower layer: `runTsc(module, request, host, io)` over
+which is its peak). `@ts-rs/wasm/core` exposes the lower layer: `runTsc(module, request, host, io)` over
 any `HostFileSystem`, and `memoryFileSystem(files)`.
 
 ## Runtime notes

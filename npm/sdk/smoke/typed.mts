@@ -1,11 +1,11 @@
 // Type-only check of the published declarations from a nodenext consumer: compiled with `tsrs -p` in the temp
 // consumer (see ../smoke-consumer.mjs), never run.
-import { typescriptCommit, version } from "@maschwenk/tsrs";
-import { API as AsyncAPI } from "@maschwenk/tsrs/unstable/async";
-import { type Node, type SourceFile, SyntaxKind } from "@maschwenk/tsrs/unstable/ast";
-import { isIdentifier } from "@maschwenk/tsrs/unstable/ast/is";
-import { createFileSystem, type FileSystemCallbacks } from "@maschwenk/tsrs/unstable/fs";
-import { API, type APIOptions, type Diagnostic, type Snapshot } from "@maschwenk/tsrs/unstable/sync";
+import { typescriptCommit, version } from "tsrs";
+import { API as AsyncAPI } from "tsrs/unstable/async";
+import { type Node, type SourceFile, SyntaxKind } from "tsrs/unstable/ast";
+import { isIdentifier } from "tsrs/unstable/ast/is";
+import { createFileSystem, type FileSystemCallbacks } from "tsrs/unstable/fs";
+import { API, type APIOptions, type Diagnostic, type Snapshot } from "tsrs/unstable/sync";
 
 declare const callbacks: FileSystemCallbacks;
 const options: APIOptions = { cwd: "/", tsserverPath: "/path/to/tsrs", fs: callbacks };

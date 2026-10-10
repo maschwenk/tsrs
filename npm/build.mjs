@@ -8,13 +8,13 @@
 //   node npm/build.mjs --print-version          # also --print-typescript-commit, --check-tag <tag>
 //   node npm/build.mjs --sdk-only               # just compile the JS API (npm/tsrs/src -> npm/tsrs/dist)
 //
-// The main package also carries TypeScript 7's unstable JS API (`@maschwenk/tsrs/unstable/sync`, `/async`, `/ast`, ...),
+// The main package also carries TypeScript 7's unstable JS API (`tsrs/unstable/sync`, `/async`, `/ast`, ...),
 // copied from microsoft/TypeScript packages/typescript by npm/sdk/sync-upstream.mjs. It is compiled here with the
 // build-only compiler in npm/package.json (`npm ci --prefix npm` first; `--tsc <path>` to use another TypeScript 7 tsc).
 //
-// The package name comes from npm/tsrs/package.json; platform packages are `<name>-<os>-<cpu>`. The version is
+// The package name comes from npm/tsrs/package.json; platform packages are `@ts-rs/<os>-<cpu>`. The version is
 // `<workspace version>-ts<[workspace.metadata.typescript] version>` from the workspace Cargo.toml, for every package
-// including `@maschwenk/tsrs-wasm` (npm/tsrs-wasm). The main package lists exactly the platforms given here, so a
+// including `@ts-rs/wasm` (npm/tsrs-wasm). The main package lists exactly the platforms given here, so a
 // release never points at a platform package that was not published.
 
 import { execFileSync } from "node:child_process";
@@ -187,7 +187,7 @@ function stripSourceConditions(value) {
     );
 }
 
-// `@maschwenk/tsrs-wasm`: npm/tsrs-wasm's published files, the module tools/wasm/build.sh wrote, LICENSE and NOTICE,
+// `@ts-rs/wasm`: npm/tsrs-wasm's published files, the module tools/wasm/build.sh wrote, LICENSE and NOTICE,
 // at the native packages' version (the module's `--version` prints the same, from crates/tsrs_execute/build.rs).
 function stageWasm(module, out, versions, license, notice) {
     const srcDir = path.join(npmDir, "tsrs-wasm");
@@ -270,7 +270,7 @@ function main() {
     for (const [triple, binary] of [...opts.binaries].sort()) {
         if (!fs.existsSync(binary)) throw new Error(`binary for ${triple} not found: ${binary}`);
         const { os, cpu, libc } = TARGETS[triple];
-        const platformName = `${name}-${os}-${cpu}`;
+        const platformName = `@ts-rs/${os}-${cpu}`;
         const dir = path.join(opts.out, `${baseName}-${os}-${cpu}`);
         fs.mkdirSync(dir, { recursive: true });
 

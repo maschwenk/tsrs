@@ -1,5 +1,5 @@
 {
-    "name": "@maschwenk/tsrs",
+    "name": "tsrs",
     "version": "0.0.0-set-by-npm-build",
     "license": "Apache-2.0",
     "description": "A Rust port of the TypeScript 7 compiler (tsc) and language server, with TypeScript 7's unstable JS API",

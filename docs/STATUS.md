@@ -1,5 +1,10 @@
 # Status
 
+## Current development
+
+The release pipeline publishes the native compiler and JS API as `tsrs`, with optional native binaries in
+`@ts-rs/<os>-<arch>` and the WebAssembly package as `@ts-rs/wasm`. Earlier releases used the `@maschwenk` scope.
+
 ## 2026-10-09: 0.11.0 release
 
 An opt-in memory target for native CLI type checks (#265), plus an explicit warning for unsupported tracing
