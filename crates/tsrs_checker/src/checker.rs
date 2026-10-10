@@ -1,6 +1,7 @@
 //! Non-function declarations of `checker.go`, the `Checker` struct, `NewChecker`, and the methods that replace Go's
 //! function-valued `Checker` fields.
 
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{LazyLock, OnceLock};
 
@@ -940,9 +941,9 @@ pub type symbolTableID = u64;
 
 pub struct Checker {
     pub id: u32,
-    pub program: &'static dyn Program,
+    pub program: Arc<dyn Program>,
     pub compiler_options: P<CompilerOptions>,
-    pub files: &'static [P<SourceFile>],
+    pub files: Arc<[P<SourceFile>]>,
     pub file_index_map: FxHashMap<P<SourceFile>, i32>,
     pub type_count: u32,
     pub symbol_count: u32,
@@ -1349,7 +1350,7 @@ pub struct Checker {
 
 // checker.go:911
 /// Go `NewChecker(program, tracer)`. The tracer and the returned mutex are not ported.
-pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
+pub fn new_checker(program: Arc<dyn Program>) -> Box<Checker> {
     program.bind_source_files();
     crate::types::census_layouts();
 
@@ -1374,8 +1375,8 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         id: nextCheckerID.fetch_add(1, Ordering::Relaxed) + 1,
         program,
         compiler_options,
-        files,
-        file_index_map: create_file_index_map(files),
+        files: Arc::clone(&files),
+        file_index_map: create_file_index_map(&files),
         type_count: 0,
         symbol_count: 0,
         signature_count: 0,
@@ -1417,7 +1418,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         can_collect_symbol_alias_accessibility_data: compiler_options.verbatim_module_syntax.is_false_or_unknown(),
         was_canceled: false,
         array_variances: alloc_slice(&[VarianceFlags::Covariant]),
-        globals: SymbolTable::with_capacity(count_global_symbols(files) as usize),
+        globals: SymbolTable::with_capacity(count_global_symbols(&files) as usize),
         string_literal_types: StringLiteralTypes::default(),
         number_literal_types: FxHashMap::default(),
         nan_type: None,

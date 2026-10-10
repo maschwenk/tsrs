@@ -154,7 +154,7 @@ impl tsrs_transformers::EmitHost for EmitHost {
     }
 
     // emitHost.go:114
-    fn source_files(&self) -> &'static [P<SourceFile>] {
+    fn source_files(&self) -> &[P<SourceFile>] {
         let _outer = tsrs_core::arena::escape_scratch();
         self.program.source_files()
     }
@@ -174,7 +174,7 @@ impl tsrs_transformers::EmitHost for EmitHost {
     // emitHost.go:116
     fn common_source_directory(&self) -> String {
         let _outer = tsrs_core::arena::escape_scratch();
-        self.program.common_source_directory().to_string()
+        crate::program::ProgramData::common_source_directory(self.program).to_string()
     }
 
     // emitHost.go:126

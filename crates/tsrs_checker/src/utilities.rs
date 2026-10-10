@@ -1801,7 +1801,7 @@ impl Checker {
 // incremental builder (repopulation of cached diagnostics).
 // Mirrors createModuleNotFoundChain in the TypeScript compiler's utilities.ts.
 // utilities.go:1839
-pub fn create_module_not_found_chain(program: &'static dyn Program, file: P<SourceFile>, module_reference: &str, mode: ModuleKind, package_name: &str) -> DiagnosticDetails {
+pub fn create_module_not_found_chain(program: &dyn Program, file: P<SourceFile>, module_reference: &str, mode: ModuleKind, package_name: &str) -> DiagnosticDetails {
     let mut package_name = package_name.to_string();
     let resolved_module = program.get_resolved_module(file, module_reference, mode);
 
@@ -1841,7 +1841,7 @@ pub fn create_module_not_found_chain(program: &'static dyn Program, file: P<Sour
 // incremental builder (repopulation of cached diagnostics).
 // Mirrors createModeMismatchDetails in the TypeScript compiler's utilities.ts.
 // utilities.go:1875
-pub fn create_mode_mismatch_details(program: &'static dyn Program, file: P<SourceFile>) -> DiagnosticDetails {
+pub fn create_mode_mismatch_details(program: &dyn Program, file: P<SourceFile>) -> DiagnosticDetails {
     let ext = tspath::try_get_extension_from_path(file.file_name());
     let target_ext = if ext == tspath::EXTENSION_TS {
         tspath::EXTENSION_MTS

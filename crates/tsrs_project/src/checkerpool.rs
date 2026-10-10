@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 
 use rustc_hash::FxHashMap;
 use tsrs_ast::{Diagnostic, SourceFile};
-use tsrs_compiler::{sort_and_deduplicate_diagnostics, Checker, CheckerHandle, CheckerPool, PooledChecker, Program};
+use tsrs_compiler::{sort_and_deduplicate_diagnostics, Checker, CheckerHandle, CheckerPool, PooledChecker, ProgramData};
 use tsrs_core::context::{get_checker_lifetime, get_request_id, CheckerLifetime, Context};
 use tsrs_core::arena::{Region, RegionScope};
 
@@ -65,7 +65,7 @@ impl semaphore {
 //     Never idle-cleaned.
 pub struct checkerPool {
     opts: CheckerPoolOptions,
-    program: &'static Program,
+    program: Arc<ProgramData>,
 
     mu: Mutex<checkerPoolState>,
 
@@ -122,7 +122,7 @@ struct checkerPoolState {
 }
 
 // checkerpool.go:84
-pub(crate) fn new_checker_pool(mut opts: CheckerPoolOptions, program: &'static Program, log: Option<Box<dyn Fn(&str) + Send + Sync>>) -> Arc<checkerPool> {
+pub(crate) fn new_checker_pool(mut opts: CheckerPoolOptions, program: Arc<ProgramData>, log: Option<Box<dyn Fn(&str) + Send + Sync>>) -> Arc<checkerPool> {
     if opts.max_checkers == 0 {
         opts.max_checkers = 4;
     } else if opts.max_checkers < 2 {
@@ -189,7 +189,7 @@ impl checkerPool {
             // Census builds: the checker struct is built on the stack with unset fields (e.g. the length word of a
             // `None` slice); clear the stale words they would copy.
             tsrs_core::census_scrub_stack();
-            PooledChecker::new(tsrs_checker::new_checker(self.program))
+            PooledChecker::new(tsrs_checker::new_checker(Arc::clone(&self.program) as Arc<dyn tsrs_checker::Program>))
         };
         self.regions.lock().unwrap().insert(checker.as_non_null().as_ptr() as usize, region);
         checker

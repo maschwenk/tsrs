@@ -75,6 +75,12 @@ them. Auto-import builders and alias resolvers retain their hosts and filesystem
 This removes manual frees for these containers, but not the `Program` root, parsed-config pointers or graph
 edges inside them (`notes/rust-owned-program-data.md`).
 
+Checkers, node-builder hosts and both compiler/project checker pools retain `Arc<ProgramData>`, independently
+of the outer program's pool. Pool factories receive this owned data rather than a static program reference;
+the data must not retain a pool. Program and alias-resolver file lists use shared Rust arrays. Getters borrow
+those arrays or clone their owner, never fabricate a static slice. The `P<SourceFile>` entries still depend on
+the legacy graph lifetime; retaining the array does not retain those referents (`notes/rust-owned-checker-inputs.md`).
+
 The following describes the **remaining legacy graph**, not a rule for new stores. Go objects that are referenced
 by pointer, live long, reference each other cyclically and
 are compared by identity — AST nodes, symbols, types, signatures, links, flow nodes,

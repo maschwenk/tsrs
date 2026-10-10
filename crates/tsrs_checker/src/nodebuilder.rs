@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use crate::*;
 use tsrs_ast::*;
 use tsrs_ast as ast;
@@ -33,7 +34,7 @@ impl NodeBuilder {
             max_truncation_length: Cell::new(max_truncation_length),
             enclosing_declaration: Cell::new(enclosing_declaration),
             enclosing_file: Cell::new(ast::get_source_file_of_node(enclosing_declaration)),
-            ..NodeBuilderContext::new(self.host)
+            ..NodeBuilderContext::new(Arc::clone(&self.host))
         });
         self.impl_.ctx.set(Some(ctx));
         let tracker = new_symbol_tracker_impl(ctx, tracker);
@@ -301,7 +302,7 @@ pub fn new_node_builder(ch: &mut Checker, e: P<EmitContext>) -> P<NodeBuilder> {
 // nodebuilder.go:283
 pub fn new_node_builder_ex(ch: &mut Checker, e: P<EmitContext>, id_to_symbol: Option<P<RefCell<FxHashMap<P<Node>, P<Symbol>>>>>) -> P<NodeBuilder> {
     let impl_ = new_node_builder_impl(ch, e, id_to_symbol);
-    P::new_in(e.factory.is_scratch(), NodeBuilder { impl_, ctx_stack: RefCell::new(Vec::with_capacity(1)), host: ch.program.as_module_specifier_generation_host(), verbosity: Cell::new(None) })
+    P::new_in(e.factory.is_scratch(), NodeBuilder { impl_, ctx_stack: RefCell::new(Vec::with_capacity(1)), host: Arc::clone(&ch.program).as_module_specifier_generation_host(), verbosity: Cell::new(None) })
 }
 
 impl Checker {

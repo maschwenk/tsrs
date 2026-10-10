@@ -1,19 +1,19 @@
 use std::ptr::NonNull;
-use std::sync::{Mutex, MutexGuard, OnceLock};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 use rustc_hash::FxHashMap;
 use tsrs_ast::{self as ast, Diagnostic, SourceFile};
 use tsrs_core::P;
 
-use crate::program::{sort_and_deduplicate_diagnostics, Program};
+use crate::program::{sort_and_deduplicate_diagnostics, Program, ProgramData};
 use crate::splitcheck;
 
 #[cfg(feature = "checker")]
 pub use tsrs_checker::{Checker, Context};
 
 #[cfg(feature = "checker")]
-fn new_checker(program: &'static Program) -> Box<Checker> {
-    tsrs_checker::new_checker(program)
+fn new_checker(program: &Arc<ProgramData>) -> Box<Checker> {
+    tsrs_checker::new_checker(Arc::clone(program) as Arc<dyn tsrs_checker::Program>)
 }
 
 // Built without the checker crate: programs can be created, parsed and bound, but nothing can
@@ -49,7 +49,7 @@ impl Checker {
 }
 
 #[cfg(not(feature = "checker"))]
-fn new_checker(_program: &'static Program) -> Box<Checker> {
+fn new_checker(_program: &Arc<ProgramData>) -> Box<Checker> {
     Box::new(Checker { type_count: 0, symbol_count: 0, total_instantiation_count: 0, lazy_member_stats: Default::default() })
 }
 
@@ -321,7 +321,7 @@ pub fn assignment_stats_enabled() -> bool {
 }
 
 pub(crate) struct checkerPool {
-    program: &'static Program,
+    program: Arc<ProgramData>,
     checker_count: usize,
     single_threaded: bool,
     state: OnceLock<poolState>,
@@ -511,20 +511,21 @@ fn get_checker_association_weights(base_weights: &[i64], import_counts: &[i64]) 
 
 impl checkerPool {
     // checkerpool.go:305 newCheckerPool / checkerpool.go:309 newCheckerPoolWithTracing (tracing is not ported).
-    pub(crate) fn new(program: &'static Program) -> checkerPool {
+    pub(crate) fn new(program: Arc<ProgramData>) -> checkerPool {
         // Go's default is a constant 4; tsrs picks it per machine and program (default_checker_count).
         let checker_count: i64 = if program.single_threaded() {
             1
         } else if let Some(c) = program.options().checkers {
             c
         } else {
-            default_checker_count(program)
+            default_checker_count(&program)
         };
 
         // Go `max(min(checkerCount, len(files), 256), 1)` on int: a negative or zero count is one checker.
         let checker_count = checker_count.min(program.files.len() as i64).min(256).max(1) as usize;
 
-        checkerPool { program, checker_count, single_threaded: program.single_threaded() || checker_count == 1, state: OnceLock::new() }
+        let single_threaded = program.single_threaded() || checker_count == 1;
+        checkerPool { program, checker_count, single_threaded, state: OnceLock::new() }
     }
 
     // checkerpool.go:331
@@ -563,7 +564,7 @@ impl checkerPool {
 
     // checkerpool.go:367
     fn create_checkers(&self) -> &poolState {
-        let program = self.program;
+        let program = &self.program;
         self.state.get_or_init(|| {
             if tsrs_core::ptr::shared_check::enabled() {
                 // Debug aid: bind up front so every parser/binder allocation is recorded as shared.
@@ -715,7 +716,7 @@ impl checkerPool {
         let file_weight = |i: u32| index_of[i as usize].map_or(1, |fi| state.weights.get(fi).copied().unwrap_or(1).max(0) as u64);
         // Positions from `files.len()` on are the queued pieces of split files (`piece_items`).
         let split = match split_ctx {
-            Some(_) if steal && splitcheck::split_config().enabled => plan_splits(self.program, files, &mut positions, &active, file_weight),
+            Some(_) if steal && splitcheck::split_config().enabled => plan_splits(&self.program, files, &mut positions, &active, file_weight),
             _ => SplitPlan::default(),
         };
         let weight = |i: u32| match split.item_weight(files.len(), i) {
@@ -900,7 +901,7 @@ impl SplitPlan {
 // a share (with `force:<k>`, every checked declaration file into k pieces); a file that would be one piece is not
 // split. Each queued piece goes to the active checker, other than the file's owner, with the least work in heavy items
 // so far, so the pieces start at once on different checkers.
-fn plan_splits(program: &Program, files: &[P<SourceFile>], positions: &mut [Vec<u32>], active: &[usize], weight: impl Fn(u32) -> u64) -> SplitPlan {
+fn plan_splits(program: &ProgramData, files: &[P<SourceFile>], positions: &mut [Vec<u32>], active: &[usize], weight: impl Fn(u32) -> u64) -> SplitPlan {
     let config = splitcheck::split_config();
     let mut plan = SplitPlan::default();
     if active.len() < 2 {
@@ -1084,7 +1085,7 @@ fn splitmix64(state: &mut u64) -> u64 {
 }
 
 // Go `createCheckers`' association step (FENNEL over the import graph, see above).
-fn go_associations(program: &Program, checker_count: usize) -> Vec<usize> {
+fn go_associations(program: &ProgramData, checker_count: usize) -> Vec<usize> {
     let files = &program.files;
     let mut base_weights = vec![0i64; files.len()];
     let mut import_counts = vec![0i64; files.len()];
@@ -1124,7 +1125,7 @@ fn go_associations(program: &Program, checker_count: usize) -> Vec<usize> {
     )
 }
 
-fn compute_associations(program: &Program, checker_count: usize) -> Vec<usize> {
+fn compute_associations(program: &ProgramData, checker_count: usize) -> Vec<usize> {
     if checker_count <= 1 {
         return vec![0; program.files.len()];
     }
@@ -1331,7 +1332,7 @@ pub fn use_go_default_checker_count() {
 // Go's 4: 4 checkers on 4 cores, 8 on 8 and on 16, 9 on 18, 32 on 64 or more. Diagnostics do not depend on the count; the --extendedDiagnostics Types / Symbols /
 // Instantiations counters do (each checker counts what it creates), so they depend on the machine unless --checkers
 // is given.
-fn default_checker_count(program: &Program) -> i64 {
+fn default_checker_count(program: &ProgramData) -> i64 {
     let by_machine = default_checker_count_by_machine();
     if by_machine <= GO_DEFAULT_CHECKERS {
         return GO_DEFAULT_CHECKERS;
@@ -1395,7 +1396,7 @@ pub fn checker_count_upper_bound(options: &tsrs_core::CompilerOptions, single_th
 // edges between groups, 101% load cap) in descending weight order, largest first. Deterministic: paths are
 // sorted, groups are numbered in path order, ties are broken by index. Unchecked declaration files go to
 // checker 0 (no checker ever runs over them).
-fn locality_associations(program: &Program, checker_count: usize) -> Vec<usize> {
+fn locality_associations(program: &ProgramData, checker_count: usize) -> Vec<usize> {
     // tsrs-only: the import graph (built on the worker pool) does not depend on the groups; it is built while they
     // are formed.
     if program.single_threaded() {
@@ -1407,7 +1408,7 @@ fn locality_associations(program: &Program, checker_count: usize) -> Vec<usize> 
     })
 }
 
-fn locality_associations_with(program: &Program, checker_count: usize, import_targets: impl FnOnce() -> Vec<Vec<usize>>) -> Vec<usize> {
+fn locality_associations_with(program: &ProgramData, checker_count: usize, import_targets: impl FnOnce() -> Vec<Vec<usize>>) -> Vec<usize> {
     let files = &program.files;
     let weights = checked_file_weights(program);
     let mut order: Vec<usize> = (0..files.len()).filter(|&i| weights[i] > 0).collect();
@@ -1638,7 +1639,7 @@ fn refine_group_associations(associations: &mut [usize], costs: &[i64], adjacenc
 // unchecked files already weigh 0, so declaration files that are checked (no skipLibCheck) get it too. Measured
 // on webpack (642 checked declaration files): 393 ns of check CPU per base unit for declaration files, 536 for
 // sources; with 4 checkers the slowest checker (the one holding the lib files) went from 53% to 12% above the mean.
-fn checked_file_weights(program: &Program) -> Vec<i64> {
+fn checked_file_weights(program: &ProgramData) -> Vec<i64> {
     let files = &program.files;
     let checked: Vec<bool> = files
         .iter()
@@ -1662,7 +1663,7 @@ fn checked_file_weights(program: &Program) -> Vec<i64> {
 // TSRS_ASSIGNMENT_DUMP=<path>: writes the assignment inputs for offline experiments: `<path>.files.tsv`
 // (index, checked, declaration, node count, text length, import count, association, file name) and
 // `<path>.edges.tsv` (directed resolved in-program imports, by file index).
-fn dump_assignment_inputs(program: &Program, associations: &[usize], path: &str) {
+fn dump_assignment_inputs(program: &ProgramData, associations: &[usize], path: &str) {
     use std::fmt::Write;
     let files = &program.files;
     let mut out = String::new();
@@ -1702,12 +1703,12 @@ fn dump_assignment_inputs(program: &Program, associations: &[usize], path: &str)
 }
 
 // getImportAdjacency returns an undirected import graph represented by file index.
-fn get_import_adjacency(program: &Program) -> Vec<Vec<usize>> {
+fn get_import_adjacency(program: &ProgramData) -> Vec<Vec<usize>> {
     undirected(&get_import_targets(program))
 }
 
 // The in-program files each program file imports (resolved, other than itself), by file index.
-fn get_import_targets(program: &Program) -> Vec<Vec<usize>> {
+fn get_import_targets(program: &ProgramData) -> Vec<Vec<usize>> {
     let files = &program.files;
     let mut file_indices: FxHashMap<P<SourceFile>, usize> = FxHashMap::default();
     for (i, &file) in files.iter().enumerate() {

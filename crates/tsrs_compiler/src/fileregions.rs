@@ -13,7 +13,7 @@ use tsrs_ast::{self as ast, SourceFile, SourceFileParseOptions, SymbolFlags};
 use tsrs_core::arena::Region;
 use tsrs_core::{ScriptKind, P};
 
-use crate::program::Program;
+use crate::program::{Program, ProgramData};
 
 /// What a program does with its file regions (`ProgramOptions::leaf_files`; `TSRS_FREE_LEAVES`).
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -116,7 +116,7 @@ static LAZY_DTS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::
 ///   `declare global` blocks): `initialize_checker` clones the first symbol's tables and merges the others into them.
 ///
 /// Forcing a list early changes nothing observable (`lazylist`). `TSRS_LAZY_DTS_SHARED=0` forces only the merges.
-pub(crate) fn force_shared_lists(program: &crate::program::Program) {
+pub(crate) fn force_shared_lists(program: &ProgramData) {
     // Relaxed: see `LAZY_DTS`.
     if !LAZY_DTS.load(std::sync::atomic::Ordering::Relaxed) {
         return;
@@ -155,7 +155,7 @@ pub(crate) fn force_shared_lists(program: &crate::program::Program) {
 }
 
 /// The declaration files of the global libraries (`force_shared_lists`), in program order.
-fn global_library_files(program: &crate::program::Program) -> Vec<P<SourceFile>> {
+fn global_library_files(program: &ProgramData) -> Vec<P<SourceFile>> {
     use crate::file_include::fileIncludeKind as K;
     let reasons = &program.file_include_data.file_include_reasons;
     let mut global: FxHashSet<&str> = FxHashSet::default();
@@ -307,13 +307,13 @@ pub(crate) fn classify(program: &Program) -> bool {
     // CLI has bound every file by now (its bind diagnostics come first); creating the checkers would bind them next
     // anyway, in the same order.
     program.bind_source_files();
-    let files = program.files;
+    let files = &program.files;
     let regions = REGIONS.lock().unwrap();
     let referred = leaf_referred(program, |file| regions.contains_key(&file));
     let (mut leaves, mut leaf_bytes, mut checked) = (0, 0, 0);
     // `stats`: leaves the prediction missed (parsed into the thread arena, so not freed), and the nodes of both kinds.
     let (mut missed, mut missed_nodes, mut leaf_nodes) = (0, 0, 0);
-    for &file in files {
+    for &file in files.iter() {
         if !program.skip_type_checking(file, false) {
             checked += 1;
         }
@@ -372,7 +372,7 @@ pub(crate) fn classify(program: &Program) -> bool {
 /// checker pool creates its checkers and assigns them files (checkerpool.rs `create_checkers`), so that it is not
 /// one more serial step between them and the pass (vscode: 4-5 ms on the 64-vCPU runner, about 1% of the check time
 /// at 32 checkers). Does nothing for a program that frees nothing.
-pub(crate) fn prepare(program: &Program) {
+pub(crate) fn prepare(program: &ProgramData) {
     if program.leaf_files != LeafMode::Off {
         // Not under the lock: binding (`bind`) takes it, and creating a checker may bind.
         let with_region: FxHashSet<P<SourceFile>> = REGIONS.lock().unwrap().keys().copied().collect();
@@ -383,7 +383,7 @@ pub(crate) fn prepare(program: &Program) {
 /// `referred_files` of the files that can be leaves (those with a region; every file with `stats`, which also counts
 /// the leaves the prediction missed), computed once per program. The program's files, include reasons and resolutions
 /// do not change once it is loaded, and the regions are all made while it loads.
-fn leaf_referred(program: &Program, has_region: impl Fn(P<SourceFile>) -> bool + Sync) -> &FxHashSet<P<SourceFile>> {
+fn leaf_referred(program: &ProgramData, has_region: impl Fn(P<SourceFile>) -> bool + Sync) -> &FxHashSet<P<SourceFile>> {
     program.leaf_referred.get_or_init(|| referred_files(program, |file| stats() || has_region(file)))
 }
 
@@ -396,7 +396,7 @@ fn leaf_referred(program: &Program, has_region: impl Fn(P<SourceFile>) -> bool +
 /// the import graph of the checker assignment (checkerpool.rs `get_import_adjacency`), and a resolved name is looked
 /// up by the name itself first (`files_by_name`): normalizing every name (`get_source_file_for_resolved_module`) took
 /// 24 ms on one thread, and collecting every importer's names before that another 3-5 ms on one thread.
-fn referred_files(program: &Program, wanted: impl Fn(P<SourceFile>) -> bool + Sync) -> FxHashSet<P<SourceFile>> {
+fn referred_files(program: &ProgramData, wanted: impl Fn(P<SourceFile>) -> bool + Sync) -> FxHashSet<P<SourceFile>> {
     let mut referred = FxHashSet::default();
     #[expect(clippy::iter_over_hash_type, reason = "builds a set; the order of insertion cannot be seen")]
     for (path, reasons) in &program.file_include_data.file_include_reasons {
@@ -438,7 +438,7 @@ fn referred_files(program: &Program, wanted: impl Fn(P<SourceFile>) -> bool + Sy
 /// The program's files by name, for `referred_files`: only files that `files_by_path` maps their own path to, so that
 /// finding a resolved name here gives the file `get_source_file_for_resolved_module` would (it looks the normalized
 /// name up in `files_by_path`, and a file's path is its normalized name).
-fn files_by_name(program: &Program) -> FxHashMap<&str, P<SourceFile>> {
+fn files_by_name(program: &ProgramData) -> FxHashMap<&str, P<SourceFile>> {
     program.files.iter().filter(|&&file| program.files_by_path.get(file.path()) == Some(&file)).map(|file| (file.file_name(), *file)).collect()
 }
 
@@ -451,7 +451,7 @@ fn files_by_name(program: &Program) -> FxHashMap<&str, P<SourceFile>> {
 /// (`getAlternativeContainingModules`) ask every module whether it re-exports a symbol, and a module whose exports
 /// are its own declarations answers no for any symbol declared elsewhere, so they can skip it
 /// (`Checker::is_unreadable_check_leaf`).
-fn adds_nothing(program: &Program, file: P<SourceFile>) -> bool {
+fn adds_nothing(program: &ProgramData, file: P<SourceFile>) -> bool {
     if program.skip_type_checking(file, false)
         || file.is_declaration_file.get()
         || !matches!(file.script_kind.get(), ScriptKind::TS | ScriptKind::TSX)

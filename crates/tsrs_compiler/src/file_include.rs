@@ -7,7 +7,7 @@ use tsrs_diagnostics::{self as diagnostics, Message};
 use tsrs_module::PackageId;
 use tsrs_tsoptions as tsoptions;
 
-use crate::program::Program;
+use crate::program::ProgramData;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum fileIncludeKind {
@@ -122,7 +122,7 @@ pub(crate) fn is_referenced_file(r: Option<P<FileIncludeReason>>) -> bool {
     r.is_some_and(|r| r.is_referenced_file())
 }
 
-pub(crate) fn get_referenced_location(r: P<FileIncludeReason>, program: &Program) -> referenceFileLocation {
+pub(crate) fn get_referenced_location(r: P<FileIncludeReason>, program: &ProgramData) -> referenceFileLocation {
     let ref_ = r.as_referenced_file_data();
     let file = program.get_source_file_by_path_str(ref_.file).unwrap();
     match r.kind {
@@ -179,7 +179,7 @@ pub(crate) fn get_referenced_location(r: P<FileIncludeReason>, program: &Program
     }
 }
 
-pub(crate) fn to_diagnostic(r: P<FileIncludeReason>, program: &Program, relative_file_name: bool) -> P<Diagnostic> {
+pub(crate) fn to_diagnostic(r: P<FileIncludeReason>, program: &ProgramData, relative_file_name: bool) -> P<Diagnostic> {
     let key = (r, relative_file_name);
     if let Some(diagnostic) = program.include_processor.reason_diagnostics.lock().unwrap().get(&key) {
         return *diagnostic;
@@ -194,7 +194,7 @@ pub(crate) fn to_diagnostic(r: P<FileIncludeReason>, program: &Program, relative
     *program.include_processor.reason_diagnostics.lock().unwrap().entry(key).or_insert(diagnostic)
 }
 
-fn compute_diagnostic(r: P<FileIncludeReason>, program: &Program, to_file_name: &dyn Fn(&str) -> String) -> P<Diagnostic> {
+fn compute_diagnostic(r: P<FileIncludeReason>, program: &ProgramData, to_file_name: &dyn Fn(&str) -> String) -> P<Diagnostic> {
     if r.is_referenced_file() {
         return compute_reference_file_diagnostic(r, program, to_file_name);
     }
@@ -262,7 +262,7 @@ fn compute_diagnostic(r: P<FileIncludeReason>, program: &Program, to_file_name: 
     }
 }
 
-fn compute_reference_file_diagnostic(r: P<FileIncludeReason>, program: &Program, to_file_name: &dyn Fn(&str) -> String) -> P<Diagnostic> {
+fn compute_reference_file_diagnostic(r: P<FileIncludeReason>, program: &ProgramData, to_file_name: &dyn Fn(&str) -> String) -> P<Diagnostic> {
     let reference_location = program.include_processor.get_reference_location(r, program);
     let reference_text = reference_location.text();
     let file_name = to_file_name(reference_location.file.file_name());
@@ -326,7 +326,7 @@ fn compute_reference_file_diagnostic(r: P<FileIncludeReason>, program: &Program,
     }
 }
 
-pub(crate) fn to_related_info(r: P<FileIncludeReason>, program: &Program) -> Option<P<Diagnostic>> {
+pub(crate) fn to_related_info(r: P<FileIncludeReason>, program: &ProgramData) -> Option<P<Diagnostic>> {
     if r.is_referenced_file() {
         return compute_reference_file_related_info(r, program);
     }
@@ -417,7 +417,7 @@ pub(crate) fn to_related_info(r: P<FileIncludeReason>, program: &Program) -> Opt
     None
 }
 
-fn compute_reference_file_related_info(r: P<FileIncludeReason>, program: &Program) -> Option<P<Diagnostic>> {
+fn compute_reference_file_related_info(r: P<FileIncludeReason>, program: &ProgramData) -> Option<P<Diagnostic>> {
     let reference_location = program.include_processor.get_reference_location(r, program);
     if reference_location.is_synthetic {
         return None;

@@ -78,7 +78,7 @@ pub struct DuplicateSourceFile {
 
 #[derive(Default)]
 pub struct processedFiles {
-    pub(crate) files: &'static [P<SourceFile>],
+    pub(crate) files: Arc<[P<SourceFile>]>,
     // duplicateSourceFiles tracks parsed files loaded during program construction
     // that were later dropped from the final program, such as losing filename
     // casing variants for the same path or files hidden behind package redirect

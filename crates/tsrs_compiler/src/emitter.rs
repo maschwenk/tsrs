@@ -5,9 +5,11 @@ use tsrs_core::tspath::{self, ComparePathsOptions};
 use tsrs_core::P;
 
 use crate::outputpaths;
+#[cfg(feature = "checker")]
 use crate::program::Program;
+use crate::program::ProgramData;
 
-pub(crate) fn source_file_may_be_emitted(source_file: P<SourceFile>, host: &Program, force_dts_emit: bool, force_js_emit: bool) -> bool {
+pub(crate) fn source_file_may_be_emitted(source_file: P<SourceFile>, host: &ProgramData, force_dts_emit: bool, force_js_emit: bool) -> bool {
     // TODO: move this to outputpaths?
     let options = host.options();
     // Js files are emitted only if option is enabled
@@ -82,7 +84,7 @@ pub(crate) fn source_file_may_be_emitted(source_file: P<SourceFile>, host: &Prog
 }
 
 pub(crate) fn get_source_files_to_emit(
-    host: &Program,
+    host: &ProgramData,
     target_source_files: Option<&[P<SourceFile>]>,
     force_dts_emit: bool,
     force_js_emit: bool,

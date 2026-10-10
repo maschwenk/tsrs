@@ -9,7 +9,7 @@ use tsrs_tsoptions as tsoptions;
 
 use crate::file_include::{self, get_referenced_location, is_referenced_file, referenceFileLocation, FileIncludeReason};
 use crate::processing_diagnostic::{includeExplainingDiagnostic, processingDiagnostic};
-use crate::program::Program;
+use crate::program::ProgramData;
 
 #[derive(Default)]
 pub(crate) struct fileIncludeData {
@@ -28,7 +28,7 @@ pub(crate) struct includeProcessor {
 }
 
 impl includeProcessor {
-    pub(crate) fn get_diagnostics(&self, p: &Program) -> &Mutex<DiagnosticsCollection> {
+    pub(crate) fn get_diagnostics(&self, p: &ProgramData) -> &Mutex<DiagnosticsCollection> {
         self.computed_diagnostics.get_or_init(|| {
             let mut computed = DiagnosticsCollection::default();
             for d in p.processing_diagnostics().iter() {
@@ -57,7 +57,7 @@ impl includeProcessor {
         })
     }
 
-    pub(crate) fn get_reference_location(&self, r: P<FileIncludeReason>, program: &Program) -> &'static referenceFileLocation {
+    pub(crate) fn get_reference_location(&self, r: P<FileIncludeReason>, program: &ProgramData) -> &'static referenceFileLocation {
         if let Some(existing) = self.reason_to_reference_location.lock().unwrap().get(&r) {
             return existing;
         }
@@ -65,7 +65,7 @@ impl includeProcessor {
         *self.reason_to_reference_location.lock().unwrap().entry(r).or_insert(loc)
     }
 
-    pub(crate) fn get_compiler_options_object_literal_syntax(&self, program: &Program) -> Option<P<Node>> {
+    pub(crate) fn get_compiler_options_object_literal_syntax(&self, program: &ProgramData) -> Option<P<Node>> {
         *self.compiler_options_syntax.get_or_init(|| {
             let config_file = program.opts.config.config_file.as_ref()?;
             let compiler_options_property =
@@ -79,7 +79,7 @@ impl includeProcessor {
         })
     }
 
-    pub(crate) fn get_related_info(&self, r: P<FileIncludeReason>, program: &Program) -> Option<P<Diagnostic>> {
+    pub(crate) fn get_related_info(&self, r: P<FileIncludeReason>, program: &ProgramData) -> Option<P<Diagnostic>> {
         if let Some(existing) = self.include_reason_to_related_info.lock().unwrap().get(&r) {
             return *existing;
         }
@@ -89,7 +89,7 @@ impl includeProcessor {
 
     pub(crate) fn explain_redirect_and_implied_format(
         &self,
-        program: &Program,
+        program: &ProgramData,
         file_path: &Path,
         to_file_name: &dyn Fn(&str) -> String,
     ) -> Option<Vec<P<Diagnostic>>> {

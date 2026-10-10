@@ -104,8 +104,10 @@ frees after an edit with **regions**: Oxc arena owners plus resource sidecars th
 
 The ownership migration now gives shared processed-file containers, project-reference redirect data and
 resolution hosts strong Rust owners. Auto-import hosts, module resolvers and wrapped filesystems also retain
-their dependencies without lifetime transmutation. Their AST/config/type edges, alias-resolver roots and the
-`Program` itself still depend on the region lifetime rules above (`notes/rust-owned-program-data.md`).
+their dependencies without lifetime transmutation. Checkers and pools now retain input data independently of
+the outer `Program`, and program/alias-resolver file-list containers use shared Rust arrays. Their AST/config/type
+referents and the `Program` root still depend on the region lifetime rules above
+(`notes/rust-owned-program-data.md`, `notes/rust-owned-checker-inputs.md`).
 
 Mechanism (`tsrs_core::arena`): `Region::enter` makes a region the thread's allocation target until the returned
 scope is dropped (scopes nest; `with_arena` reads one thread-local pointer, as before). A region is an `Arena` of its

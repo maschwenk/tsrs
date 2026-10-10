@@ -2,7 +2,7 @@ use std::fmt::Write as _;
 use std::sync::{Arc, Mutex, OnceLock};
 
 use tsrs_ast::Diagnostic;
-use tsrs_compiler::{new_program, sort_and_deduplicate_diagnostics, CheckerPool, CreateCheckerPool, CreateModuleResolver, Program, ProgramOptions};
+use tsrs_compiler::{new_program, sort_and_deduplicate_diagnostics, CheckerPool, CreateCheckerPool, CreateModuleResolver, Program, ProgramData, ProgramOptions};
 use tsrs_core::collections::{Set, SyncSet};
 use tsrs_core::context::Context;
 use tsrs_core::tspath::{self, ComparePathsOptions, Path};
@@ -562,7 +562,7 @@ impl Project {
         let create_checker_pool: CreateCheckerPool = {
             let options = host.session_options.checker_pool_options;
             let pool_slot = Arc::clone(&pool_slot);
-            Arc::new(move |program: &'static Program| -> Box<dyn CheckerPool> {
+            Arc::new(move |program: Arc<ProgramData>| -> Box<dyn CheckerPool> {
                 let pool = new_checker_pool(options, program, None);
                 *pool_slot.lock().unwrap() = Some(Arc::clone(&pool));
                 Box::new(checkerPoolHandle(pool))

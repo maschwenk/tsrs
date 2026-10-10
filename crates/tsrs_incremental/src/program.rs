@@ -457,9 +457,9 @@ impl ProgramLike for &'static Program {
     }
 
     // GetSourceFiles implements compiler.AnyProgram interface.
-    fn get_source_files(&self) -> &'static [P<SourceFile>] {
+    fn get_source_files(&self) -> &[P<SourceFile>] {
         self.panic_if_no_program("GetSourceFiles");
-        self.p().get_source_files()
+        tsrs_compiler::ProgramData::get_source_files(self.p())
     }
 
     // GetConfigFileParsingDiagnostics implements compiler.AnyProgram interface.
@@ -542,7 +542,7 @@ impl ProgramLike for &'static Program {
     // CommonSourceDirectory implements compiler.AnyProgram interface.
     fn common_source_directory(&self) -> String {
         self.panic_if_no_program("CommonSourceDirectory");
-        self.p().common_source_directory().to_string()
+        tsrs_compiler::ProgramData::common_source_directory(self.p()).to_string()
     }
 
     // IsSourceFileDefaultLibrary implements compiler.AnyProgram interface.

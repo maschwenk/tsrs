@@ -1074,7 +1074,7 @@ impl filesParser {
 
         processedFiles {
             finished_processing: true,
-            files: tsrs_core::alloc_vec(all_files),
+            files: all_files.into(),
             duplicate_source_files,
             files_by_path,
             project_reference_file_mapper: Some(loader.project_references.take_mapper()),

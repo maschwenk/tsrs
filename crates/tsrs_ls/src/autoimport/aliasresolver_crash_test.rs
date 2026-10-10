@@ -69,7 +69,7 @@ fn test_alias_resolver_get_diagnostics_does_not_panic() {
 
     let resolver = Arc::new(tsrs_module::new_resolver(ResolverOptions::new(Arc::clone(&host) as Arc<dyn ResolutionHost>, tsrs_core::empty_compiler_options())));
     let r = new_alias_resolver(vec![source_file], Default::default(), host, resolver, Arc::new(|f: &str| Path::from(f)), Box::new(|_, _| {}));
-    let r = Box::leak(Box::new(r));
+    let r = Arc::new(r);
 
     let mut ch = tsrs_checker::new_checker(r);
 

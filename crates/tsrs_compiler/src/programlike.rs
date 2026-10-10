@@ -6,14 +6,14 @@ use tsrs_ast::{Diagnostic, SourceFile};
 use tsrs_core::{CompilerOptions, P};
 
 use crate::checkerpool::Context;
-use crate::program::Program as CompilerProgram;
+use crate::program::{Program as CompilerProgram, ProgramData};
 use crate::program_emit::{EmitOptions, EmitResult};
 
 // compiler.ProgramLike (program.go:1965).
 pub trait ProgramLike {
     fn options(&self) -> P<CompilerOptions>;
     fn get_source_file(&self, path: &str) -> Option<P<SourceFile>>;
-    fn get_source_files(&self) -> &'static [P<SourceFile>];
+    fn get_source_files(&self) -> &[P<SourceFile>];
     fn get_config_file_parsing_diagnostics(&self) -> Vec<P<Diagnostic>>;
     fn get_syntactic_diagnostics(&self, ctx: &Context, file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>>;
     fn get_bind_diagnostics(&self, ctx: &Context, file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>>;
@@ -32,25 +32,25 @@ pub trait ProgramLike {
 
 impl ProgramLike for &'static CompilerProgram {
     fn options(&self) -> P<CompilerOptions> {
-        CompilerProgram::options(self)
+        ProgramData::options(self)
     }
     fn get_source_file(&self, path: &str) -> Option<P<SourceFile>> {
-        CompilerProgram::get_source_file(self, path)
+        ProgramData::get_source_file(self, path)
     }
-    fn get_source_files(&self) -> &'static [P<SourceFile>] {
-        CompilerProgram::get_source_files(self)
+    fn get_source_files(&self) -> &[P<SourceFile>] {
+        ProgramData::get_source_files(self)
     }
     fn get_config_file_parsing_diagnostics(&self) -> Vec<P<Diagnostic>> {
-        CompilerProgram::get_config_file_parsing_diagnostics(self)
+        ProgramData::get_config_file_parsing_diagnostics(self)
     }
     fn get_syntactic_diagnostics(&self, ctx: &Context, file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
-        CompilerProgram::get_syntactic_diagnostics(self, ctx, file)
+        ProgramData::get_syntactic_diagnostics(self, ctx, file)
     }
     fn get_bind_diagnostics(&self, ctx: &Context, file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
-        CompilerProgram::get_bind_diagnostics(self, ctx, file)
+        ProgramData::get_bind_diagnostics(self, ctx, file)
     }
     fn get_program_diagnostics(&self) -> Vec<P<Diagnostic>> {
-        CompilerProgram::get_program_diagnostics(self)
+        ProgramData::get_program_diagnostics(self)
     }
     fn get_global_diagnostics(&self, ctx: &Context) -> Vec<P<Diagnostic>> {
         CompilerProgram::get_global_diagnostics(self, ctx)
@@ -68,10 +68,10 @@ impl ProgramLike for &'static CompilerProgram {
         Some(CompilerProgram::emit(self, ctx, &options))
     }
     fn common_source_directory(&self) -> String {
-        CompilerProgram::common_source_directory(self).to_string()
+        ProgramData::common_source_directory(self).to_string()
     }
     fn is_source_file_default_library(&self, path: &tsrs_core::tspath::Path) -> bool {
-        CompilerProgram::is_source_file_default_library(self, path)
+        ProgramData::is_source_file_default_library(self, path)
     }
     fn program(&self) -> &'static CompilerProgram {
         self

@@ -604,7 +604,7 @@ impl Checker {
             stored_package_name = "";
         }
 
-        let details = crate::create_module_not_found_chain(self.program, ast::get_source_file_of_node(error_node).unwrap(), module_reference, mode, package_name);
+        let details = crate::create_module_not_found_chain(&*self.program, ast::get_source_file_of_node(error_node).unwrap(), module_reference, mode, package_name);
         let args: Vec<&dyn Display> = details.args.iter().map(|a| a as &dyn Display).collect();
         let result = new_diagnostic_for_node(Some(error_node), Some(details.message), &args);
         result.set_repopulate_info(RepopulateDiagnosticInfo {
@@ -618,7 +618,7 @@ impl Checker {
 
     // checker.go:15838
     pub(crate) fn create_mode_mismatch_details(&mut self, source_file: P<SourceFile>, error_node: P<Node>) -> P<Diagnostic> {
-        let details = crate::create_mode_mismatch_details(self.program, source_file);
+        let details = crate::create_mode_mismatch_details(&*self.program, source_file);
         let args: Vec<&dyn Display> = details.args.iter().map(|a| a as &dyn Display).collect();
         let result = new_diagnostic_for_node(Some(error_node), Some(details.message), &args);
         result.set_repopulate_info(RepopulateDiagnosticInfo {

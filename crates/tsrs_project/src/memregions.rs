@@ -42,9 +42,9 @@ impl programOwner {
     }
 }
 
-// The address `Program::get_symlink_cache` routes by (`Program` derefs to its shared `processedFiles`).
+// The address `ProgramData::get_symlink_cache` routes by: the shared processed-file container.
 fn processed_files_addr(program: &'static Program) -> usize {
-    std::ptr::from_ref(&**program).cast::<()>() as usize
+    std::ptr::from_ref(&***program).cast::<()>() as usize
 }
 
 impl Drop for programOwner {
@@ -64,5 +64,52 @@ fn log_region(msg: impl FnOnce() -> String) {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     if *ON.get_or_init(|| std::env::var_os("TSRS_REGION_LOG").is_some_and(|v| v == "1")) {
         eprintln!("regions: {}", msg());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tsrs_compiler::{new_compiler_host, new_program, ProgramOptions};
+    use tsrs_core::{CompilerOptions, Tristate, P};
+    use tsrs_core::tspath::Path;
+
+    #[test]
+    fn symlink_cache_uses_shared_base_after_program_data_split() {
+        let (processed_addr, cache_addr) = {
+            let base = Region::new(4096);
+            let host = |text: &str| {
+                new_compiler_host("/", Arc::new(tsrs_vfs::vfstest::from_map([("/index.ts", text)], true)), "", None, None)
+            };
+            let old = {
+                let _scope = base.enter();
+                let options = P::new(CompilerOptions { no_lib: Tristate::True, ..Default::default() });
+                let config = P::new(tsrs_tsoptions::new_parsed_command_line(options, vec!["/index.ts".into()], Vec::new(), Default::default()));
+                let mut opts = ProgramOptions::new(config, host("export const value = 1;"));
+                opts.single_threaded = Tristate::True;
+                new_program(opts)
+            };
+            let old_owner = programOwner::new(old, None, base.clone(), base.clone(), true);
+            let processed_addr = processed_files_addr(old);
+            assert!(Region::containing(processed_addr).is_some());
+            let cache = old.get_symlink_cache();
+            assert!(Region::containing(cache.addr()).is_some(), "the cache must allocate in the base region");
+
+            let version = Region::new(4096);
+            let new = {
+                let _scope = version.enter();
+                let (new, _, reused) = old.reuse_program(&Path::from("/index.ts"), host("export const value = 2;"), None, None);
+                assert!(reused);
+                new.unwrap()
+            };
+            let _new_owner = programOwner::new(new, None, version, base, false);
+            assert_eq!(processed_files_addr(new), processed_addr);
+            drop(old_owner);
+            assert_eq!(new.get_symlink_cache(), cache);
+            assert!(Region::containing(cache.addr()).is_some());
+            (processed_addr, cache.addr())
+        };
+        assert!(Region::containing(processed_addr).is_none());
+        assert!(Region::containing(cache_addr).is_none());
     }
 }

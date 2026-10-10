@@ -287,7 +287,7 @@ fn repopulate_mode_mismatch_chain(b: &buildInfoDiagnosticWithFileName, p: &'stat
         return b.to_diagnostic_without_repopulate(p, file);
     };
 
-    let details = tsrs_checker::create_mode_mismatch_details(p as &'static dyn tsrs_checker::Program, file);
+    let details = tsrs_checker::create_mode_mismatch_details(&**p as &dyn tsrs_checker::Program, file);
 
     let next_chain: Vec<P<Diagnostic>> = b.message_chain.iter().map(|msg| msg.to_diagnostic(p, Some(file))).collect();
 
@@ -322,7 +322,7 @@ fn repopulate_module_not_found_chain(
         package_name = &info.module_reference;
     }
 
-    let details = tsrs_checker::create_module_not_found_chain(p as &'static dyn tsrs_checker::Program, file, &info.module_reference, info.mode, package_name);
+    let details = tsrs_checker::create_module_not_found_chain(&**p as &dyn tsrs_checker::Program, file, &info.module_reference, info.mode, package_name);
 
     let next_chain: Vec<P<Diagnostic>> = b.message_chain.iter().map(|msg| msg.to_diagnostic(p, Some(file))).collect();
 

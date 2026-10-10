@@ -1335,7 +1335,7 @@ impl NodeBuilderImpl {
         // just like how the declaration emitter does for the ambient module declarations - we can easily accomplish this
         // using the `baseUrl` compiler option (which we would otherwise never use in declaration emit) and a non-relative
         // specifier preference
-        let host = self.ctx().host;
+        let host = std::sync::Arc::clone(&self.ctx().host);
         let specifier_compiler_options = c.compiler_options;
         let specifier_pref = modulespecifiers::ImportModuleSpecifierPreference::ProjectRelative;
         let mut ending_pref = modulespecifiers::ImportModuleSpecifierEndingPreference::None;
@@ -1347,7 +1347,7 @@ impl NodeBuilderImpl {
             c,
             &specifier_compiler_options,
             context_file,
-            host,
+            &*host,
             modulespecifiers::UserPreferences { import_module_specifier_preference: specifier_pref, import_module_specifier_ending: ending_pref, ..Default::default() },
             modulespecifiers::ModuleSpecifierOptions { override_import_mode },
             false, /*forAutoImports*/

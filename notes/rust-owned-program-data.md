@@ -32,6 +32,10 @@ root itself is still leaked and manually freed; checkers still retain a static p
 hosts still use the older static host contract. An owned container or host does not establish ownership of the
 graph pointers inside it. The next stages must remove these remaining boundaries and the raw AST/type graph.
 
+The following checkpoint (`rust-owned-checker-inputs.md`) removes the static checker and pool input references,
+owns file-list containers, and drops inputs normally if pool construction panics. The outer program, checker
+leases and graph referents still need migration.
+
 ## Local measurements
 
 Apple M3 Max / macOS / Rust 1.99.0, locked fat-LTO release build without PGO, using the same pinned Compiler

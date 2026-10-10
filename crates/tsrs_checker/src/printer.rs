@@ -612,7 +612,7 @@ impl Checker {
             Some(found) => results = found,
             None => {
                 let other_files = self.program.source_files();
-                for &file in other_files {
+                for &file in other_files.iter() {
                     if !ast::is_external_module(file) {
                         continue;
                     }

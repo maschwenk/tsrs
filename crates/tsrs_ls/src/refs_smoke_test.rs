@@ -7,7 +7,7 @@
 use std::ptr::NonNull;
 use std::sync::{Arc, Mutex};
 
-use tsrs_compiler::{new_compiler_host, new_program, CheckerHandle, CheckerPool, CompilerHost, PooledChecker, Program, ProgramOptions};
+use tsrs_compiler::{new_compiler_host, new_program, CheckerHandle, CheckerPool, CompilerHost, PooledChecker, Program, ProgramData, ProgramOptions};
 use tsrs_core::context::Context;
 use tsrs_core::json::{self, Value};
 use tsrs_core::P;
@@ -102,20 +102,20 @@ impl ParseConfigHost for parseConfigHost {
 // compiler pool, whose checkers are locked per acquisition here), a nested acquisition while a checker is held
 // gets another checker. Call hierarchy acquires checkers while holding one, as Go does.
 struct testPoolState {
-    program: &'static Program,
+    program: Arc<ProgramData>,
     slots: Mutex<Vec<(PooledChecker, bool)>>,
 }
 
-struct testPool(&'static testPoolState);
+struct testPool(Arc<testPoolState>);
 
 impl CheckerPool for testPool {
     fn get_checker(&self, _ctx: &Context, _file: Option<P<tsrs_ast::SourceFile>>) -> CheckerHandle {
-        let state = self.0;
+        let state = Arc::clone(&self.0);
         let mut slots = state.slots.lock().unwrap();
         let index = match slots.iter().position(|(_, held)| !held) {
             Some(index) => index,
             None => {
-                slots.push((PooledChecker::new(tsrs_checker::new_checker(state.program)), false));
+                slots.push((PooledChecker::new(tsrs_checker::new_checker(Arc::clone(&state.program) as Arc<dyn tsrs_checker::Program>)), false));
                 slots.len() - 1
             }
         };
@@ -141,8 +141,8 @@ fn setup(d: &dataset) -> (LanguageService, Context) {
     assert!(diagnostics.is_empty());
     let host: Arc<dyn CompilerHost> = new_compiler_host("/", fs.clone(), &bundled::lib_path(), None, None);
     let mut options = ProgramOptions::new(P::new(config.unwrap()), host);
-    options.create_checker_pool = Some(Arc::new(|program: &'static Program| {
-        let state: &'static testPoolState = Box::leak(Box::new(testPoolState { program, slots: Mutex::new(Vec::new()) }));
+    options.create_checker_pool = Some(Arc::new(|program: Arc<ProgramData>| {
+        let state = Arc::new(testPoolState { program, slots: Mutex::new(Vec::new()) });
         Box::new(testPool(state)) as Box<dyn CheckerPool>
     }));
     let program: &'static Program = new_program(options);

@@ -273,8 +273,8 @@ impl Checker {
         // Initialize global symbol table
         let mut ambient_module_symbols: Vec<P<Symbol>> = Vec::new();
         let mut augmentations: Vec<&'static [P<Node>]> = Vec::with_capacity(self.files.len());
-        let files = self.files;
-        for &file in files {
+        let files = std::sync::Arc::clone(&self.files);
+        for &file in files.iter() {
             if !ast::is_external_or_common_js_module(file) {
                 // It is an error for a non-external-module (i.e. script) to declare its own `globalThis`.
                 if let Some(file_global_this_symbol) = file.locals().and_then(|locals| locals.lookup("globalThis")) {

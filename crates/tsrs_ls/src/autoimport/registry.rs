@@ -1296,8 +1296,8 @@ impl registryBuilder<'_> {
                         // no-op
                     }),
                 );
-                let alias_resolver: &'static super::aliasresolver::aliasResolver = tsrs_core::alloc(alias_resolver);
-                let mut ch = tsrs_checker::new_checker(alias_resolver);
+                let alias_resolver = Arc::new(alias_resolver);
+                let mut ch = tsrs_checker::new_checker(Arc::clone(&alias_resolver) as Arc<dyn tsrs_checker::Program>);
                 let sources = br.possible_failed_ambient_module_lookup_sources.to_map();
                 let bucket = br.bucket.as_mut().unwrap();
                 let mut index = bucket.index.as_ref().map(|i| (**i).clone()).unwrap_or_default();
@@ -1488,7 +1488,7 @@ impl registryBuilder<'_> {
         let program = self.host.get_program_for_project(project_id).unwrap();
         let project_root_path = (self.base.to_path)(program.get_current_directory());
         let symlink_cache = Some(program.get_symlink_cache());
-        let mut pool = create_checker_pool(program);
+        let mut pool = create_checker_pool(program.checker_data());
         // Go map (random iteration order).
         let mut exports: FxHashMap<Path, Vec<Arc<Export>>> = FxHashMap::default();
         let mut skipped_file_count = 0;
@@ -1793,13 +1793,13 @@ impl registryBuilder<'_> {
                 });
             }),
         );
-        let alias_resolver: &'static super::aliasresolver::aliasResolver = tsrs_core::alloc(alias_resolver);
+        let alias_resolver = Arc::new(alias_resolver);
 
-        let mut ch = tsrs_checker::new_checker(alias_resolver);
+        let mut ch = tsrs_checker::new_checker(Arc::clone(&alias_resolver) as Arc<dyn tsrs_checker::Program>);
         let mut extractor = new_export_extractor(package_name, &mut ch, &resolver, Arc::clone(&self.base.to_path), Some(to_realpath));
 
         let mut non_module_files: Set<Path> = Set::new();
-        for &entrypoint in &alias_resolver.root_files {
+        for &entrypoint in alias_resolver.root_files.iter() {
             if ctx.err().is_some() {
                 return None;
             }

@@ -8,7 +8,7 @@ use tsrs_diagnostics::{self as diagnostics, Message};
 use tsrs_tsoptions as tsoptions;
 
 use crate::file_include::{self, fileIncludeKind, get_referenced_location, is_referenced_file, FileIncludeReason};
-use crate::program::Program;
+use crate::program::ProgramData;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum processingDiagnosticKind {
@@ -50,7 +50,7 @@ pub(crate) struct includeExplainingDiagnostic {
 }
 
 impl processingDiagnostic {
-    pub(crate) fn to_diagnostic(&self, program: &Program) -> P<Diagnostic> {
+    pub(crate) fn to_diagnostic(&self, program: &ProgramData) -> P<Diagnostic> {
         match self.kind {
             processingDiagnosticKind::UnknownReference => {
                 let ref_ = self.as_file_include_reason();
@@ -85,7 +85,7 @@ impl processingDiagnostic {
         }
     }
 
-    fn create_diagnostic_explaining_file(&self, program: &Program) -> P<Diagnostic> {
+    fn create_diagnostic_explaining_file(&self, program: &ProgramData) -> P<Diagnostic> {
         let diag = self.as_include_explaining_diagnostic();
         let mut include_details: Option<Vec<P<Diagnostic>>> = None;
         let mut related_info: Option<Vec<P<Diagnostic>>> = None;

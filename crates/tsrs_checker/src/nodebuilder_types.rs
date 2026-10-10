@@ -2,6 +2,7 @@
 //! model). See docs/CHECKER.md, "Node builder".
 
 use std::cell::OnceCell;
+use std::sync::Arc;
 
 use tsrs_ast::{NodeFactory, VisitFn};
 use tsrs_core::collections::{CopyOnWriteMap, CopyOnWriteSet};
@@ -18,7 +19,7 @@ use crate::*;
 pub struct NodeBuilder {
     /// Go pushes `b.impl.ctx`, which is nil for the outermost call.
     pub ctx_stack: RefCell<Vec<Option<P<NodeBuilderContext>>>>,
-    pub host: &'static dyn ModuleSpecifierGenerationHost, // Go `Host`
+    pub host: Arc<dyn ModuleSpecifierGenerationHost>, // Go `Host`
     pub impl_: P<NodeBuilderImpl>,
     pub verbosity: Cell<Option<P<VerbosityContext>>>, // nil for non-hover callers
 }
@@ -78,7 +79,7 @@ pub struct moduleSpecifierResult {
 /// (Go swaps `b.impl.ctx` pointers, `SymbolTrackerImpl` and the `cloneNodeBuilderContext` restore closure hold it);
 /// every field Go assigns is a `Cell`/`RefCell`. Build with `NodeBuilderContext { …, ..NodeBuilderContext::new(host) }`.
 pub struct NodeBuilderContext {
-    pub host: &'static dyn ModuleSpecifierGenerationHost, // Go `Host`
+    pub host: Arc<dyn ModuleSpecifierGenerationHost>, // Go `Host`
     pub tracker: Cell<Option<&'static dyn SymbolTracker>>, // never None after NodeBuilder::enter_context
     pub approximate_length: Cell<i32>,
     pub max_truncation_length: Cell<i32>,
@@ -116,7 +117,7 @@ pub struct NodeBuilderContext {
 
 impl NodeBuilderContext {
     /// The Go zero value (with the one field that has no zero value).
-    pub fn new(host: &'static dyn ModuleSpecifierGenerationHost) -> NodeBuilderContext {
+    pub fn new(host: Arc<dyn ModuleSpecifierGenerationHost>) -> NodeBuilderContext {
         NodeBuilderContext {
             host,
             tracker: Cell::new(None),

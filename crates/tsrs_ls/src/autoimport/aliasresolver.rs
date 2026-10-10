@@ -30,14 +30,13 @@ pub(crate) struct aliasResolver {
     host: Arc<dyn RegistryCloneHost>,
     module_resolver: Arc<DefaultResolver>,
 
-    pub(crate) root_files: Vec<P<SourceFile>>,
+    pub(crate) root_files: Arc<[P<SourceFile>]>,
     // symlinks maps from realpath to symlinked path and file name
     pub(crate) symlinks: FxHashMap<Path, pathAndFileName>,
     on_failed_ambient_module_lookup: OnFailedAmbientModuleLookup,
     resolved_modules: Mutex<FxHashMap<Path, Arc<Mutex<FxHashMap<ModeAwareCacheKey, P<ResolvedModule>>>>>>,
 
     options: P<CompilerOptions>,
-    root_files_static: &'static [P<SourceFile>],
     empty_resolved_modules: FxHashMap<Path, FxHashMap<ModeAwareCacheKey, P<ResolvedModule>>>,
     empty_packages_map: FxHashMap<String, bool>,
 }
@@ -51,18 +50,16 @@ pub(crate) fn new_alias_resolver(
     to_path: ToPathFunc,
     on_failed_ambient_module_lookup: OnFailedAmbientModuleLookup,
 ) -> aliasResolver {
-    let root_files_static = tsrs_core::alloc_slice(&root_files);
     aliasResolver {
         to_path,
         host,
         module_resolver,
-        root_files,
+        root_files: root_files.into(),
         symlinks,
         on_failed_ambient_module_lookup,
         resolved_modules: Mutex::new(FxHashMap::default()),
         // aliasresolver.go:61: `Options` returns a fresh `&core.CompilerOptions{NoCheck: core.TSTrue}`.
         options: P::new(CompilerOptions { no_check: Tristate::True, ..Default::default() }),
-        root_files_static,
         empty_resolved_modules: FxHashMap::default(),
         empty_packages_map: FxHashMap::default(),
     }
@@ -86,8 +83,8 @@ impl checker::Program for aliasResolver {
     }
 
     // aliasresolver.go:56
-    fn source_files(&self) -> &'static [P<SourceFile>] {
-        self.root_files_static
+    fn source_files(&self) -> Arc<[P<SourceFile>]> {
+        Arc::clone(&self.root_files)
     }
 
     // Not in Go (see `checker::Program::source_files_complete`): files are loaded on demand.
@@ -220,7 +217,7 @@ impl checker::Program for aliasResolver {
         ModuleKind::ESNext
     }
 
-    fn as_module_specifier_generation_host(&self) -> &dyn ModuleSpecifierGenerationHost {
+    fn as_module_specifier_generation_host(self: Arc<Self>) -> Arc<dyn ModuleSpecifierGenerationHost> {
         self
     }
 }

@@ -210,19 +210,19 @@ pub(crate) fn add_project_reference_output_mappings(program: &'static Program, r
 // Go's pool hands out up to GOMAXPROCS checkers to the extraction goroutines; extraction runs sequentially here,
 // so the pool holds the one checker the first request creates.
 pub(crate) struct checkerPool {
-    program: &'static dyn checker::Program,
+    program: Arc<dyn checker::Program>,
     checker: Option<Box<Checker>>,
     created: i32,
 }
 
-pub(crate) fn create_checker_pool(program: &'static dyn checker::Program) -> checkerPool {
+pub(crate) fn create_checker_pool(program: Arc<dyn checker::Program>) -> checkerPool {
     checkerPool { program, checker: None, created: 0 }
 }
 
 impl checkerPool {
     pub(crate) fn get_checker(&mut self) -> &mut Checker {
         if self.checker.is_none() {
-            self.checker = Some(checker::new_checker(self.program));
+            self.checker = Some(checker::new_checker(Arc::clone(&self.program)));
             self.created += 1;
         }
         self.checker.as_mut().unwrap()

@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use tsrs_core::tspath::Path;
 use tsrs_core::{CompilerOptions, ModuleKind, ResolutionMode};
 use tsrs_module::{ModeAwareCacheKey, ResolvedModule};
@@ -10,7 +11,7 @@ pub use tsrs_tsoptions::{ParsedCommandLine, SourceOutputAndProjectReference};
 /// `ast.HasFileName` parameters are `P<SourceFile>`.
 pub trait Program: Send + Sync {
     fn options(&self) -> P<CompilerOptions>;
-    fn source_files(&self) -> &'static [P<SourceFile>];
+    fn source_files(&self) -> Arc<[P<SourceFile>]>;
     fn bind_source_files(&self);
     fn file_exists(&self, file_name: &str) -> bool;
     fn get_source_file(&self, file_name: &str) -> Option<P<SourceFile>>;
@@ -41,7 +42,7 @@ pub trait Program: Send + Sync {
 
     /// Go's implicit conversion of the program to the checker's `Host` (= `modulespecifiers.ModuleSpecifierGenerationHost`),
     /// done by `NewNodeBuilderEx` (`host: ch.program`). The program type implements that trait separately.
-    fn as_module_specifier_generation_host(&self) -> &dyn ModuleSpecifierGenerationHost;
+    fn as_module_specifier_generation_host(self: Arc<Self>) -> Arc<dyn ModuleSpecifierGenerationHost>;
 
     /// Not in Go: whether every source file the checker can reach is in `source_files` (true for a program). When it
     /// is not (the auto-import alias resolver loads files on demand), `compareNodes` maps the missing files to index

@@ -67,7 +67,7 @@ fn program_of(session: &Session) -> &'static Program {
 
 // checkerpool_test.go:55
 fn new_test_checker_pool(program: &'static Program, opts: CheckerPoolOptions) -> Arc<checkerPool> {
-    new_checker_pool(opts, program, Some(Box::new(|_: &str| {})))
+    new_checker_pool(opts, program.checker_data(), Some(Box::new(|_: &str| {})))
 }
 
 fn secs(s: u64) -> Duration {

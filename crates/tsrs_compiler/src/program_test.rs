@@ -9,7 +9,7 @@ use tsrs_tsoptions::{self as tsoptions, ParseConfigHost};
 use tsrs_vfs::{vfstest, FS};
 
 use crate::checkerpool::checkerPool;
-use crate::{new_compiler_host, new_program, CheckerHandle, PooledChecker, CheckerPool, CompilerHost, Context, CreateCheckerPool, Program, ProgramOptions};
+use crate::{new_compiler_host, new_program, CheckerHandle, PooledChecker, CheckerPool, CompilerHost, Context, CreateCheckerPool, Program, ProgramData, ProgramOptions};
 
 struct parseConfigHost {
     fs: Arc<dyn FS>,
@@ -40,7 +40,7 @@ fn config_for(files: &[(&str, &str)]) -> P<tsoptions::ParsedCommandLine> {
 // A pool outside the built-in one: hands out checkers through `CheckerHandle::from_raw` and takes them back on
 // release, like the project system's pool.
 struct testPool {
-    program: &'static Program,
+    program: Arc<ProgramData>,
     idle: Arc<Mutex<Vec<PooledChecker>>>,
     acquired: Arc<AtomicUsize>,
 }
@@ -48,7 +48,7 @@ struct testPool {
 impl CheckerPool for testPool {
     fn get_checker(&self, _ctx: &Context, _file: Option<P<tsrs_ast::SourceFile>>) -> CheckerHandle {
         self.acquired.fetch_add(1, Ordering::Relaxed);
-        let mut checker = self.idle.lock().unwrap().pop().unwrap_or_else(|| PooledChecker::new(tsrs_checker::new_checker(self.program)));
+        let mut checker = self.idle.lock().unwrap().pop().unwrap_or_else(|| PooledChecker::new(tsrs_checker::new_checker(Arc::clone(&self.program) as Arc<dyn tsrs_checker::Program>)));
         let ptr = checker.as_non_null();
         let idle = self.idle.clone();
         // SAFETY: the checker is out of the idle list (held) until the release function puts it back.
@@ -71,7 +71,7 @@ fn program_hosts_and_factories() {
     let resolvers = Arc::new(AtomicUsize::new(0));
     let mut opts = ProgramOptions::new(config, host_for(&files));
     let pools_c = pools.clone();
-    opts.create_checker_pool = Some(Arc::new(move |p: &'static Program| -> Box<dyn CheckerPool> {
+    opts.create_checker_pool = Some(Arc::new(move |p: Arc<ProgramData>| -> Box<dyn CheckerPool> {
         pools_c.fetch_add(1, Ordering::Relaxed);
         Box::new(checkerPool::new(p))
     }));
@@ -96,7 +96,7 @@ fn program_hosts_and_factories() {
     let new_host = host_for(&new_files);
     let pools_c = pools.clone();
     let new_host_c = new_host.clone();
-    let create: CreateCheckerPool = Arc::new(move |p: &'static Program| -> Box<dyn CheckerPool> {
+    let create: CreateCheckerPool = Arc::new(move |p: Arc<ProgramData>| -> Box<dyn CheckerPool> {
         pools_c.fetch_add(1, Ordering::Relaxed);
         assert!(Arc::ptr_eq(p.host(), &new_host_c));
         assert_eq!(p.get_source_file("/src/index.ts").unwrap().text(), format!("\n{index}"));
@@ -155,7 +155,7 @@ fn external_checker_pool_diagnostics() {
     let acquired = Arc::new(AtomicUsize::new(0));
     let mut opts = ProgramOptions::new(config, host_for(&files));
     let (idle_c, acquired_c) = (idle.clone(), acquired.clone());
-    opts.create_checker_pool = Some(Arc::new(move |program: &'static Program| -> Box<dyn CheckerPool> {
+    opts.create_checker_pool = Some(Arc::new(move |program: Arc<ProgramData>| -> Box<dyn CheckerPool> {
         Box::new(testPool { program, idle: idle_c.clone(), acquired: acquired_c.clone() })
     }));
     let external = new_program(opts);

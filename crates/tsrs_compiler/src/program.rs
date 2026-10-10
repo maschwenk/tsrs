@@ -36,7 +36,7 @@ use tsrs_module::ResolutionHost;
 pub type CreateModuleResolver = Arc<dyn Fn(ResolverOptions) -> Box<dyn Resolver> + Send + Sync>;
 
 // Go `ProgramFactories.CreateCheckerPool func(*Program) CheckerPool`.
-pub type CreateCheckerPool = Arc<dyn Fn(&'static Program) -> Box<dyn CheckerPool> + Send + Sync>;
+pub type CreateCheckerPool = Arc<dyn Fn(Arc<ProgramData>) -> Box<dyn CheckerPool> + Send + Sync>;
 
 // Go `ProgramOptions` (= ProgramConfig + ProgramHosts + ProgramFactories, flattened; tracing is not ported).
 pub struct ProgramOptions {
@@ -139,12 +139,27 @@ enum programCheckerPool {
 }
 
 pub struct Program {
+    // Pools and checkers retain only the data, which never retains a pool.
+    data: Arc<ProgramData>,
+    checker_pool: OnceLock<programCheckerPool>,
+}
+
+/// The checker input and program caches, independent of the checker pool.
+/// Rust owners retain this data and its file list; AST/type referents still use the legacy graph.
+///
+/// File-list borrows cannot escape their owner.
+/// ```compile_fail
+/// fn files(program: std::sync::Arc<tsrs_compiler::ProgramData>)
+///     -> &'static [tsrs_core::P<tsrs_ast::SourceFile>]
+/// {
+///     program.source_files()
+/// }
+/// ```
+pub struct ProgramData {
     pub(crate) opts: ProgramConfig,
     host: Arc<dyn CompilerHost>,
     resolution_host: Arc<dyn ResolutionHost>,
     pub(crate) resolution_data: P<module::ResolutionData>,
-    // Always set once the program is constructed (see `init_checker_pool`).
-    checker_pool: OnceLock<programCheckerPool>,
     pub(crate) include_processor: includeProcessor,
     module_resolution_error: Option<String>,
 
@@ -152,7 +167,7 @@ pub struct Program {
 
     // Go's embedded `processedFiles`: `files` and `filesByPath` are per program (ReuseProgram replaces one file);
     // the rest is shared by the programs ReuseProgram derives from this one, as Go's shallow struct copy shares it.
-    pub(crate) files: &'static [P<SourceFile>],
+    pub(crate) files: Arc<[P<SourceFile>]>,
     pub(crate) files_by_path: FxHashMap<Path, P<SourceFile>>,
     processed: Arc<processedFiles>,
     project_reference_file_mapper: Arc<projectReferenceFileMapper>,
@@ -191,14 +206,587 @@ pub struct Program {
 }
 
 impl std::ops::Deref for Program {
+    type Target = ProgramData;
+    fn deref(&self) -> &ProgramData {
+        &self.data
+    }
+}
+
+impl std::ops::Deref for ProgramData {
     type Target = processedFiles;
     fn deref(&self) -> &processedFiles {
         &self.processed
     }
 }
 
+impl Program {
+    pub fn checker_data(&self) -> Arc<ProgramData> {
+        Arc::clone(&self.data)
+    }
+}
+
+// Parsing and binding recurse deeply on large files; Go's goroutine stacks grow on demand, so the
+// worker threads get large stacks. The pool has at most PARSE_THREAD_CAP threads: with the heap on 4 KiB pages
+// (mimalloc `no_thp`, notes/mem-no-thp.md) the parallel parse is bound by page-fault contention, not threads (vscode
+// on 64 vCPUs: 0.124 s at 32 threads, 0.131 s at 64), and every allocating thread keeps its own partly filled
+// allocator pages and arena chunk tail (64 -> 32 threads: -0.09 GiB peak). RAYON_NUM_THREADS still sets the count
+// exactly, as before (bench/run.py's single-threaded counter uses 1).
+const PARSE_THREAD_CAP: usize = 32;
+
+/// `tsrs_core::NO_THREADS` targets: a one-thread pool on the calling thread (`use_current_thread`), on which
+/// `install`, `par_iter`, `broadcast` and nested scopes run inline. It must be the first rayon use on that thread:
+/// once rayon's global pool has started there, building it fails with "The current thread is already part of
+/// another thread pool", so an embedder calls `worker_pool()` before anything else.
+pub fn worker_pool() -> &'static rayon::ThreadPool {
+    static POOL: OnceLock<rayon::ThreadPool> = OnceLock::new();
+    POOL.get_or_init(|| {
+        if tsrs_core::NO_THREADS {
+            return rayon::ThreadPoolBuilder::new().num_threads(1).use_current_thread().build().unwrap();
+        }
+        let threads = std::env::var("RAYON_NUM_THREADS")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .filter(|&n| n > 0)
+            .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get()).min(PARSE_THREAD_CAP));
+        rayon::ThreadPoolBuilder::new().num_threads(threads).stack_size(256 << 20).build().unwrap()
+    })
+}
+
+// program.go:305
+pub fn new_program(opts: ProgramOptions) -> &'static Program {
+    let single_threaded =
+        tsrs_core::NO_THREADS || opts.single_threaded.default_if_unknown(opts.config.compiler_options().unwrap().single_threaded).is_true();
+    let (mut processed, resolution_data, module_resolution_error) = process_all_program_files(&opts, single_threaded);
+    let project_reference_file_mapper: Arc<projectReferenceFileMapper> = processed.project_reference_file_mapper.take().unwrap();
+    let processing_diagnostics = std::mem::take(&mut processed.file_include_data.processing_diagnostics);
+    let files = std::mem::take(&mut processed.files);
+    let files_by_path = std::mem::take(&mut processed.files_by_path);
+    let host = Arc::clone(&opts.host);
+    let mut p = ProgramData {
+        opts: opts.program_config(),
+        // Go's NewProgram never sets `comparePathsOptions`: it is the zero value (no current directory,
+        // case-insensitive), which e.g. makes IsGlobalTypingsFile false when no typings location is set.
+        compare_paths_options: ComparePathsOptions::default(),
+        resolution_host: crate::projectreferencefilemapper::resolution_host_for(Arc::clone(&host)),
+        host,
+        resolution_data,
+        include_processor: includeProcessor::default(),
+        module_resolution_error,
+        files,
+        files_by_path,
+        processed: Arc::new(processed),
+        project_reference_file_mapper,
+        processing_diagnostics: Mutex::new(processing_diagnostics),
+        uses_uri_style_node_core_modules: Tristate::Unknown,
+        common_source_directory: OnceLock::new(),
+        declaration_diagnostic_cache: Mutex::new(FxHashMap::default()),
+        program_diagnostics: Vec::new(),
+        has_emit_blocking_diagnostics: FxHashSet::default(),
+        unresolved_imports: OnceLock::new(),
+        known_symlinks: OnceLock::new(),
+        package_names: OnceLock::new(),
+        has_ts_file: OnceLock::new(),
+        packages_map: OnceLock::new(),
+        exports_module_name_cache: Default::default(),
+        leaf_files: opts.leaf_files,
+        leaf_pass_started: std::sync::atomic::AtomicBool::new(false),
+        leaf_referred: OnceLock::new(),
+    };
+    // Go initializes the pool before verification. Here the pool receives frozen, owned data after
+    // verification; checkers are still created lazily, so this preserves what they observe.
+    tsrs_core::phases::time("Program: verify options", || p.verify_compiler_options());
+    let p = Box::new(Program { data: Arc::new(p), checker_pool: OnceLock::new() });
+    // Census builds: the pool enum is mostly uninitialized bytes when set; clear the stack they come from.
+    tsrs_core::census_scrub_stack();
+    p.init_checker_pool(opts.create_checker_pool);
+    Box::leak(p)
+}
+
+/// Frees a program made by `new_program` or `update_program` (language server; Go's GC).
+/// Shared processed files, redirects and resolution hosts drop when their final Rust owner drops.
+/// The program and its AST/type graph still use the legacy lifetime boundary.
+///
+/// # Safety
+/// `program` came from `new_program` / `update_program` and is not used afterwards:
+/// no checker of its pool is held, and no snapshot or language service refers to it.
+pub unsafe fn free_program(program: &'static Program) {
+    // SAFETY: both functions leak the program from a `Box`, and nothing uses it afterwards (this function's contract).
+    drop(unsafe { Box::from_raw(std::ptr::from_ref::<Program>(program).cast_mut()) });
+}
 
 impl Program {
+    // program.go:323
+    // Return an updated program for which it is known that only the file with the given path has changed.
+    // In addition to a new program, return a boolean indicating whether the data of the old program was reused.
+    // The returned *ast.SourceFile is the changed file as acquired through newHost; it is nil
+    // only if the host cannot locate the file (e.g. it was deleted). Callers that manage
+    // host-side parse caches must release this exact pointer when the old program could not be
+    // reused, since it was acquired speculatively before that decision was made.
+    pub fn update_program(
+        &'static self,
+        changed_file_path: &Path,
+        new_host: Arc<dyn CompilerHost>,
+        create_checker_pool: Option<CreateCheckerPool>,
+        create_module_resolver: Option<CreateModuleResolver>,
+    ) -> (&'static Program, Option<P<SourceFile>>, bool) {
+        let (result, new_file, reused) = self.reuse_program(changed_file_path, Arc::clone(&new_host), create_checker_pool.clone(), create_module_resolver.clone());
+        if reused {
+            (result.unwrap(), new_file, true)
+        } else {
+            (new_program(ProgramOptions::from_config(self.opts.clone(), new_host, create_checker_pool, create_module_resolver)), new_file, false)
+        }
+    }
+
+    // program.go:347
+    // ReuseProgram attempts to produce a new program by replacing only
+    // changedFilePath in place, reusing the rest of p. It returns
+    // (newProgram, newFile, true) on success, or (nil, newFile, false) when the
+    // file cannot be replaced in place. Unlike UpdateProgram, it never constructs a
+    // full fallback program, so callers that build their own fallback (e.g. with a
+    // different host) do not pay for a discarded program build.
+    pub fn reuse_program(
+        &'static self,
+        changed_file_path: &Path,
+        new_host: Arc<dyn CompilerHost>,
+        create_checker_pool: Option<CreateCheckerPool>,
+        _create_module_resolver: Option<CreateModuleResolver>,
+    ) -> (Option<&'static Program>, Option<P<SourceFile>>, bool) {
+        let old_file = self.files_by_path[changed_file_path];
+        // Content mappers are not ported: no file is content-mapped (`oldFile.ContentMapper() == ""`), so the
+        // supplemental file lists are always empty.
+        let old_supplemental_files: &[P<SourceFile>] = &[];
+        let new_supplemental_files: &[P<SourceFile>] = &[];
+        let new_file = new_host.get_source_file(old_file.parse_options().clone());
+
+        // If this file is part of a package redirect group (same package installed in multiple
+        // node_modules locations), we need to rebuild the program because the redirect targets
+        // might need recalculation.
+        let in_redirect_files = self.redirect_files_by_path.contains_key(changed_file_path);
+        let is_redirect_target = self.redirect_targets_map.contains_key(changed_file_path);
+        if in_redirect_files || is_redirect_target {
+            return (None, new_file, false);
+        }
+
+        if self.module_resolution_error.is_some() || !self.can_replace_file_in_program(old_file, new_file) {
+            return (None, new_file, false);
+        }
+        let new_file_some = new_file.unwrap();
+        // Cloning does not recompute synthetic helper or JSX-runtime import bookkeeping. Fall back to a full
+        // build whenever either version requires those imports.
+        if self.import_helpers_import_specifiers.contains_key(old_file.path()) || self.needs_import_helpers_import_specifier(new_file_some) {
+            return (None, new_file, false);
+        }
+        if self.jsx_runtime_import_specifiers.contains_key(old_file.path()) || !self.jsx_runtime_import_specifier(new_file_some).is_empty() {
+            return (None, new_file, false);
+        }
+        if old_supplemental_files.len() != new_supplemental_files.len() {
+            return (None, new_file, false);
+        }
+        for (i, &old_supplemental) in old_supplemental_files.iter().enumerate() {
+            let new_supplemental = new_supplemental_files[i];
+            if old_supplemental.path() != new_supplemental.path() || !self.can_replace_file_in_program(old_supplemental, Some(new_supplemental)) {
+                return (None, new_file, false);
+            }
+            if self.import_helpers_import_specifiers.contains_key(old_supplemental.path()) || self.needs_import_helpers_import_specifier(new_supplemental) {
+                return (None, new_file, false);
+            }
+            if self.jsx_runtime_import_specifiers.contains_key(old_supplemental.path()) || !self.jsx_runtime_import_specifier(new_supplemental).is_empty() {
+                return (None, new_file, false);
+            }
+        }
+        // TODO: reverify compiler options when config has changed?
+        let mut result = ProgramData {
+            opts: self.opts.clone(),
+            resolution_host: crate::projectreferencefilemapper::resolution_host_for(Arc::clone(&new_host)),
+            host: new_host,
+            resolution_data: self.resolution_data.clone_data(),
+            include_processor: includeProcessor::default(),
+            module_resolution_error: None,
+            compare_paths_options: self.compare_paths_options.clone(),
+            files: Arc::clone(&self.files),
+            files_by_path: FxHashMap::default(),
+            processed: Arc::clone(&self.processed),
+            project_reference_file_mapper: Arc::clone(&self.project_reference_file_mapper),
+            processing_diagnostics: Mutex::new(self.processing_diagnostics().clone()),
+            uses_uri_style_node_core_modules: self.uses_uri_style_node_core_modules,
+            common_source_directory: OnceLock::new(),
+            declaration_diagnostic_cache: Mutex::new(FxHashMap::default()),
+            program_diagnostics: self.program_diagnostics.clone(),
+            has_emit_blocking_diagnostics: self.has_emit_blocking_diagnostics.clone(),
+            unresolved_imports: OnceLock::new(),
+            known_symlinks: OnceLock::new(),
+            package_names: OnceLock::new(),
+            has_ts_file: OnceLock::new(),
+            packages_map: OnceLock::new(),
+            exports_module_name_cache: Default::default(),
+            // A reused program keeps the files of this one, so nothing of them may be freed.
+            leaf_files: crate::fileregions::LeafMode::Off,
+            leaf_pass_started: std::sync::atomic::AtomicBool::new(false),
+            leaf_referred: OnceLock::new(),
+        };
+        try_reuse(&result.unresolved_imports, &self.unresolved_imports);
+        try_reuse(&result.known_symlinks, &self.known_symlinks);
+        try_reuse(&result.package_names, &self.package_names);
+        let index = result.files.iter().position(|file| file.path() == new_file_some.path()).unwrap();
+        let mut files = result.files.to_vec();
+        files[index] = new_file_some;
+        result.files_by_path.clone_from(&self.files_by_path);
+        result.files_by_path.insert(new_file_some.path().clone(), new_file_some);
+        for (i, &old_supplemental) in old_supplemental_files.iter().enumerate() {
+            let new_supplemental = new_supplemental_files[i];
+            let supplemental_index = files.iter().position(|&file| file == old_supplemental).unwrap();
+            files[supplemental_index] = new_supplemental;
+            result.files_by_path.insert(new_supplemental.path().clone(), new_supplemental);
+        }
+        result.files = files.into();
+        let result = Box::new(Program { data: Arc::new(result), checker_pool: OnceLock::new() });
+        tsrs_core::census_scrub_stack();
+        result.init_checker_pool(create_checker_pool);
+        (Some(Box::leak(result)), new_file, true)
+    }
+
+    // program.go:443
+    fn init_checker_pool(&self, create: Option<CreateCheckerPool>) {
+        if !self.finished_processing {
+            panic!("Program must finish processing files before initializing checker pool");
+        }
+
+        let pool = match create {
+            Some(create) => programCheckerPool::External(create(Arc::clone(&self.data))),
+            None => programCheckerPool::Compiler(checkerPool::new(Arc::clone(&self.data))),
+        };
+        if self.checker_pool.set(pool).is_err() {
+            panic!("checker pool initialized twice");
+        }
+    }
+
+    // program.go:458
+    // GetCheckerPool returns the checker pool associated with this program.
+    pub fn get_checker_pool(&self) -> &dyn CheckerPool {
+        match self.checker_pool.get().unwrap() {
+            programCheckerPool::Compiler(pool) => pool,
+            programCheckerPool::External(pool) => &**pool,
+        }
+    }
+
+    // Go `p.compilerCheckerPool` (nil when the program was created with `CreateCheckerPool`).
+    pub(crate) fn compiler_checker_pool(&self) -> Option<&checkerPool> {
+        match self.checker_pool.get() {
+            Some(programCheckerPool::Compiler(pool)) => Some(pool),
+            _ => None,
+        }
+    }
+
+    // The built-in pool, for the CLI's statistics; panics on a program with an external pool.
+    pub(crate) fn pool(&self) -> &checkerPool {
+        self.compiler_checker_pool().expect("program uses an external checker pool")
+    }
+
+    pub fn checker_count(&self) -> usize {
+        self.pool().checker_count()
+    }
+
+    // TSRS_ASSIGNMENT_STATS report (checkerpool_stats.rs).
+    #[cfg(feature = "checker")]
+    pub fn checker_assignment_report(&'static self) -> String {
+        crate::checkerpool_stats::report(self, self.pool())
+    }
+
+    // program.go:598
+    // Return the type checker associated with the program.
+    pub fn get_type_checker(&self, ctx: &Context) -> CheckerHandle {
+        if let Some(pool) = self.compiler_checker_pool() {
+            return pool.get_checker_non_exclusive();
+        }
+        self.get_checker_pool().get_checker(ctx, None)
+    }
+
+    // program.go:605
+    pub fn for_each_checker_parallel(&self, cb: impl Fn(usize, &mut Checker) + Sync) {
+        if let Some(pool) = self.compiler_checker_pool() {
+            pool.for_each_checker_parallel(cb);
+        }
+    }
+
+    /// The index (as passed to `for_each_checker_parallel`) of the checker the pool assigned `file` to, i.e. the
+    /// checker `for_each_checker_group` runs it on. Creates the checkers on first use. None when the program has no
+    /// checker pool of its own or `file` is not one of its files.
+    pub fn checker_index_of_file(&self, file: P<SourceFile>) -> Option<usize> {
+        self.compiler_checker_pool()?.checker_index_of_file(file)
+    }
+
+    /// Runs `cb` for every file of `files` with the file's checker, one task per checker, each visiting its files in
+    /// the order of `files` under one lock acquisition (`checkerPool::for_each_checker_group_do`). False, without
+    /// calling `cb`, when the program has no checker pool of its own.
+    pub fn for_each_checker_group(&self, files: &[P<SourceFile>], cb: impl Fn(&mut Checker, usize, P<SourceFile>) + Sync) -> bool {
+        let Some(pool) = self.compiler_checker_pool() else { return false };
+        pool.for_each_checker_group_do(files, self.single_threaded(), cb);
+        true
+    }
+
+    // program.go:615
+    // Return a checker for the given file. We may have multiple checkers in concurrent scenarios and this
+    // method returns the checker that was tasked with checking the file. Note that it isn't possible to mix
+    // types obtained from different checkers, so only non-type data (such as diagnostics or string
+    // representations of types) should be obtained from checkers returned by this method.
+    pub fn get_type_checker_for_file(&self, ctx: &Context, file: P<SourceFile>) -> CheckerHandle {
+        if let Some(pool) = self.compiler_checker_pool() {
+            return pool.get_checker_for_file_non_exclusive(file);
+        }
+        self.get_checker_pool().get_checker(ctx, Some(file))
+    }
+
+    // program.go:624
+    // Return a checker for the given file, locked to the current thread to prevent data races from multiple threads
+    // accessing the same checker. The lock will be released when the `done` function is called.
+    pub fn get_type_checker_for_file_exclusive(&self, ctx: &Context, file: P<SourceFile>) -> CheckerHandle {
+        if let Some(pool) = self.compiler_checker_pool() {
+            return pool.get_checker_for_file_exclusive(file);
+        }
+        self.get_checker_pool().get_checker(ctx, Some(file))
+    }
+
+    // program.go:703
+    // collectCheckerDiagnostics collects diagnostics from a single file or all files,
+    // using a callback that receives the checker for each file. When the checker pool
+    // supports grouped iteration (compiler pool), files are grouped by checker and
+    // processed in parallel with one task per checker, reducing contention and improving
+    // cache locality. Otherwise, falls back to per-file concurrent collection.
+    fn collect_checker_diagnostics(
+        &'static self,
+        ctx: &Context,
+        source_file: Option<P<SourceFile>>,
+        collect: impl Fn(&Context, &mut Checker, P<SourceFile>) -> Vec<P<Diagnostic>> + Sync,
+    ) -> Vec<P<Diagnostic>> {
+        if let Some(source_file) = source_file {
+            crate::fileregions::assert_not_freed(source_file);
+            if self.skip_type_checking(source_file, false) {
+                return Vec::new();
+            }
+            let mut c = self.get_type_checker_for_file_exclusive(ctx, source_file);
+            let result = collect(ctx, &mut c, source_file);
+            drop(c);
+            return filter_and_sort_diagnostics(&result);
+        }
+        filter_and_sort_diagnostics(&self.collect_checker_diagnostics_from_files(ctx, &self.files, &collect).concat())
+    }
+
+    // program.go:728
+    // collectCheckerDiagnosticsFromFiles collects checker diagnostics for a list of files.
+    fn collect_checker_diagnostics_from_files(
+        &'static self,
+        ctx: &Context,
+        source_files: &[P<SourceFile>],
+        collect: &(impl Fn(&Context, &mut Checker, P<SourceFile>) -> Vec<P<Diagnostic>> + Sync),
+    ) -> Vec<Vec<P<Diagnostic>>> {
+        self.collect_checker_diagnostics_from_files_ex(ctx, source_files, false, collect)
+    }
+
+    // `allow_steal`: files may move between checkers while they are checked (checkerPool::for_each_checker_group_do_ex).
+    fn collect_checker_diagnostics_from_files_ex(
+        &'static self,
+        ctx: &Context,
+        source_files: &[P<SourceFile>],
+        allow_steal: bool,
+        collect: &(impl Fn(&Context, &mut Checker, P<SourceFile>) -> Vec<P<Diagnostic>> + Sync),
+    ) -> Vec<Vec<P<Diagnostic>>> {
+        let diagnostics: Vec<Mutex<Vec<P<Diagnostic>>>> = source_files.iter().map(|_| Mutex::new(Vec::new())).collect();
+        if let Some(pool) = self.compiler_checker_pool() {
+            pool.for_each_checker_group_do_ex(source_files, self.single_threaded(), allow_steal, allow_steal.then_some(ctx), |c, file_index, file| {
+                *diagnostics[file_index].lock().unwrap() = collect(ctx, c, file);
+            });
+        } else {
+            let run = |i: usize, file: P<SourceFile>| {
+                if self.skip_type_checking(file, false) {
+                    return;
+                }
+                let mut c = self.get_checker_pool().get_checker(ctx, Some(file));
+                *diagnostics[i].lock().unwrap() = collect(ctx, &mut c, file);
+                drop(c);
+            };
+            if self.single_threaded() {
+                // Go's single-threaded work group runs queued functions last-queued first.
+                source_files.iter().enumerate().rev().for_each(|(i, &file)| run(i, file));
+            } else {
+                worker_pool().install(|| source_files.par_iter().enumerate().for_each(|(i, &file)| run(i, file)));
+            }
+        }
+        diagnostics.into_iter().map(|d| d.into_inner().unwrap()).collect()
+    }
+
+    // program.go:806
+    pub fn get_semantic_diagnostics(&'static self, ctx: &Context, source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
+        let collect = |ctx: &Context, c: &mut Checker, file: P<SourceFile>| self.get_semantic_diagnostics_with_checker(ctx, c, file);
+        match source_file {
+            // All files: the type-check pass, the one that may move files between checkers.
+            None => {
+                // tsrs-only: the CLI's `--noEmit` check frees a leaf's tree and binder output once its diagnostics are
+                // collected (fileregions.rs).
+                let free_leaves = tsrs_core::phases::time("Checkers: leaf files", || crate::fileregions::classify(self));
+                #[cfg(feature = "ast-sizing")] // TOOL (notes/mem-compact-ast-sizing.md)
+                tsrs_ast::sizing::run("pre", &self.files, false);
+                let collect = |ctx: &Context, c: &mut Checker, file: P<SourceFile>| {
+                    let diagnostics = collect(ctx, c, file);
+                    if free_leaves && file.is_check_leaf() {
+                        crate::fileregions::free(file);
+                    }
+                    diagnostics
+                };
+                let diagnostics = self.collect_checker_diagnostics_from_files_ex(ctx, &self.files, true, &collect).concat();
+                if free_leaves {
+                    crate::fileregions::pass_done();
+                }
+                #[cfg(feature = "ast-sizing")] // TOOL (notes/mem-compact-ast-sizing.md)
+                tsrs_ast::sizing::run("post", &self.files, true);
+                filter_and_sort_diagnostics(&diagnostics)
+            }
+            Some(_) => self.collect_checker_diagnostics(ctx, source_file, collect),
+        }
+    }
+
+    // program.go:812
+    // GetSemanticDiagnosticsForIncremental includes newly discovered globals in each
+    // file's cached diagnostics and leaves noEmit filtering to the builder.
+    pub fn get_semantic_diagnostics_for_incremental(
+        &'static self,
+        ctx: &Context,
+        source_files: &[P<SourceFile>],
+    ) -> FxHashMap<P<SourceFile>, Vec<P<Diagnostic>>> {
+        let all_diags = self.collect_checker_diagnostics_from_files(ctx, source_files, &|ctx: &Context, c: &mut Checker, file: P<SourceFile>| {
+            self.get_bind_and_check_diagnostics_with_checker(ctx, c, file, true /*includeDeferredGlobals*/)
+        });
+        let mut result = FxHashMap::default();
+        for (i, diags) in all_diags.into_iter().enumerate() {
+            result.insert(source_files[i], filter_and_sort_diagnostics(&diags));
+        }
+        result
+    }
+
+    // program.go:823
+    pub fn get_suggestion_diagnostics(&'static self, ctx: &Context, source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
+        self.collect_checker_diagnostics(ctx, source_file, |ctx, c, file| self.get_suggestion_diagnostics_with_checker(ctx, c, file))
+    }
+
+    // program.go:1463
+    pub fn get_global_diagnostics(&'static self, _ctx: &Context) -> Vec<P<Diagnostic>> {
+        if self.files.is_empty() {
+            return Vec::new();
+        }
+        if let Some(pool) = self.compiler_checker_pool() {
+            return pool.get_global_diagnostics();
+        }
+        // For external pools (project system), global diagnostics are collected
+        // incrementally as checkers are used, not via a bulk query.
+        Vec::new()
+    }
+
+    // program.go:1475. Go's `collectDiagnostics(ctx, sourceFile, true /*concurrent*/, p.getDeclarationDiagnosticsForFile)`
+    // runs one task per file, each taking the file's checker from the pool; with the built-in pool the files run
+    // grouped by checker on the checker threads (in file order within a checker), like the other checker-backed
+    // diagnostics. With an external pool each file takes its checker from the pool, as in Go.
+    #[cfg(feature = "checker")]
+    pub fn get_declaration_diagnostics(&'static self, ctx: &Context, source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
+        let result = match (source_file, self.compiler_checker_pool()) {
+            (Some(file), _) => self.get_declaration_diagnostics_for_file(ctx, None, file),
+            (None, Some(pool)) => {
+                let diagnostics: Vec<Mutex<Vec<P<Diagnostic>>>> = self.files.iter().map(|_| Mutex::new(Vec::new())).collect();
+                pool.for_each_checker_group_do(&self.files, self.single_threaded(), |c, file_index, file| {
+                    *diagnostics[file_index].lock().unwrap() = self.get_declaration_diagnostics_for_file(ctx, Some(c), file);
+                });
+                diagnostics.into_iter().flat_map(|d| d.into_inner().unwrap()).collect()
+            }
+            (None, None) => {
+                self.collect_diagnostics_from_files(ctx, &self.files, true /*concurrent*/, &|ctx: &Context, file: P<SourceFile>| {
+                    self.get_declaration_diagnostics_for_file(ctx, None, file)
+                })
+                .concat()
+            }
+        };
+        filter_and_sort_diagnostics(&result)
+    }
+
+    // Declaration emit needs the checker; without it declaration diagnostics are empty.
+    #[cfg(not(feature = "checker"))]
+    pub fn get_declaration_diagnostics(&'static self, _ctx: &Context, _source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
+        Vec::new()
+    }
+
+    // program.go:1626. `c` is the file's checker when the caller already holds it (Go `newEmitHost` takes it from
+    // the pool); with `None` it is taken here.
+    #[cfg(feature = "checker")]
+    fn get_declaration_diagnostics_for_file(&'static self, ctx: &Context, c: Option<&mut Checker>, source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
+        crate::fileregions::assert_not_freed(source_file);
+        if source_file.is_declaration_file.get() {
+            return Vec::new();
+        }
+
+        if let Some(cached) = self.declaration_diagnostic_cache.lock().unwrap().get(&source_file) {
+            return cached.clone();
+        }
+
+        let mut guard;
+        let c = match c {
+            Some(c) => c,
+            None => {
+                guard = self.get_type_checker_for_file(ctx, source_file);
+                &mut *guard
+            }
+        };
+        // The declaration transform runs in a scratch region of its own, freed once its diagnostics are collected
+        // (notes/mem-emit-regions.md; the diagnostics themselves escape it).
+        let emit_resolver = c.get_emit_resolver();
+        let region = tsrs_core::arena::Region::new_scratch(64 << 10);
+        let diagnostics = {
+            let _scratch = region.enter_scratch();
+            let checker_slot = P::new(tsrs_checker::CheckerSlot::default());
+            let host = crate::emithost::new_emit_host(self, emit_resolver, checker_slot);
+            checker_slot.lend(c, || crate::emitter::get_declaration_diagnostics(host, self, source_file))
+        };
+        c.forget_scratch_keyed_caches();
+        drop(region);
+        self.declaration_diagnostic_cache.lock().unwrap().entry(source_file).or_insert(diagnostics).clone()
+    }
+
+    pub fn symbol_count(&'static self) -> usize {
+        let count: usize = self.files.iter().map(|f| f.symbol_count.get() as usize).sum();
+        let val = std::sync::atomic::AtomicUsize::new(count);
+        self.for_each_checker_parallel(|_, c| {
+            val.fetch_add(c.symbol_count as usize, std::sync::atomic::Ordering::Relaxed);
+        });
+        val.into_inner()
+    }
+
+    pub fn type_count(&'static self) -> usize {
+        let val = std::sync::atomic::AtomicUsize::new(0);
+        self.for_each_checker_parallel(|_, c| {
+            val.fetch_add(c.type_count as usize, std::sync::atomic::Ordering::Relaxed);
+        });
+        val.into_inner()
+    }
+
+    pub fn instantiation_count(&'static self) -> usize {
+        let val = std::sync::atomic::AtomicUsize::new(0);
+        self.for_each_checker_parallel(|_, c| {
+            val.fetch_add(c.total_instantiation_count as usize, std::sync::atomic::Ordering::Relaxed);
+        });
+        val.into_inner()
+    }
+
+    pub fn lazy_member_stats(&'static self) -> tsrs_core::lazymembers::LazyMemberStats {
+        let total = std::sync::Mutex::new(tsrs_core::lazymembers::LazyMemberStats::default());
+        self.for_each_checker_parallel(|_, c| {
+            total.lock().unwrap().add(&c.lazy_member_stats);
+        });
+        total.into_inner().unwrap()
+    }
+
+    // program.go:1743
+    pub fn program(&self) -> &Program {
+        self
+    }
+}
+
+impl ProgramData {
     pub fn file_exists(&self, path: &str) -> bool {
         self.host.fs().file_exists(path)
     }
@@ -342,267 +930,6 @@ impl Program {
         }
         None
     }
-}
-
-// Parsing and binding recurse deeply on large files; Go's goroutine stacks grow on demand, so the
-// worker threads get large stacks. The pool has at most PARSE_THREAD_CAP threads: with the heap on 4 KiB pages
-// (mimalloc `no_thp`, notes/mem-no-thp.md) the parallel parse is bound by page-fault contention, not threads (vscode
-// on 64 vCPUs: 0.124 s at 32 threads, 0.131 s at 64), and every allocating thread keeps its own partly filled
-// allocator pages and arena chunk tail (64 -> 32 threads: -0.09 GiB peak). RAYON_NUM_THREADS still sets the count
-// exactly, as before (bench/run.py's single-threaded counter uses 1).
-const PARSE_THREAD_CAP: usize = 32;
-
-/// `tsrs_core::NO_THREADS` targets: a one-thread pool on the calling thread (`use_current_thread`), on which
-/// `install`, `par_iter`, `broadcast` and nested scopes run inline. It must be the first rayon use on that thread:
-/// once rayon's global pool has started there, building it fails with "The current thread is already part of
-/// another thread pool", so an embedder calls `worker_pool()` before anything else.
-pub fn worker_pool() -> &'static rayon::ThreadPool {
-    static POOL: OnceLock<rayon::ThreadPool> = OnceLock::new();
-    POOL.get_or_init(|| {
-        if tsrs_core::NO_THREADS {
-            return rayon::ThreadPoolBuilder::new().num_threads(1).use_current_thread().build().unwrap();
-        }
-        let threads = std::env::var("RAYON_NUM_THREADS")
-            .ok()
-            .and_then(|v| v.parse::<usize>().ok())
-            .filter(|&n| n > 0)
-            .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get()).min(PARSE_THREAD_CAP));
-        rayon::ThreadPoolBuilder::new().num_threads(threads).stack_size(256 << 20).build().unwrap()
-    })
-}
-
-// program.go:305
-pub fn new_program(opts: ProgramOptions) -> &'static Program {
-    let single_threaded =
-        tsrs_core::NO_THREADS || opts.single_threaded.default_if_unknown(opts.config.compiler_options().unwrap().single_threaded).is_true();
-    let (mut processed, resolution_data, module_resolution_error) = process_all_program_files(&opts, single_threaded);
-    let project_reference_file_mapper: Arc<projectReferenceFileMapper> = processed.project_reference_file_mapper.take().unwrap();
-    let processing_diagnostics = std::mem::take(&mut processed.file_include_data.processing_diagnostics);
-    let files = std::mem::take(&mut processed.files);
-    let files_by_path = std::mem::take(&mut processed.files_by_path);
-    let host = Arc::clone(&opts.host);
-    let mut p = Program {
-        opts: opts.program_config(),
-        // Go's NewProgram never sets `comparePathsOptions`: it is the zero value (no current directory,
-        // case-insensitive), which e.g. makes IsGlobalTypingsFile false when no typings location is set.
-        compare_paths_options: ComparePathsOptions::default(),
-        resolution_host: crate::projectreferencefilemapper::resolution_host_for(Arc::clone(&host)),
-        host,
-        resolution_data,
-        checker_pool: OnceLock::new(),
-        include_processor: includeProcessor::default(),
-        module_resolution_error,
-        files,
-        files_by_path,
-        processed: Arc::new(processed),
-        project_reference_file_mapper,
-        processing_diagnostics: Mutex::new(processing_diagnostics),
-        uses_uri_style_node_core_modules: Tristate::Unknown,
-        common_source_directory: OnceLock::new(),
-        declaration_diagnostic_cache: Mutex::new(FxHashMap::default()),
-        program_diagnostics: Vec::new(),
-        has_emit_blocking_diagnostics: FxHashSet::default(),
-        unresolved_imports: OnceLock::new(),
-        known_symlinks: OnceLock::new(),
-        package_names: OnceLock::new(),
-        has_ts_file: OnceLock::new(),
-        packages_map: OnceLock::new(),
-        exports_module_name_cache: Default::default(),
-        leaf_files: opts.leaf_files,
-        leaf_pass_started: std::sync::atomic::AtomicBool::new(false),
-        leaf_referred: OnceLock::new(),
-    };
-    // Go initializes the checker pool before verifying options; the pool factory takes the program by
-    // `&'static`, so here it runs after verification, once the program is leaked. Neither pool reads anything
-    // verification writes (checkers are created lazily).
-    tsrs_core::phases::time("Program: verify options", || p.verify_compiler_options());
-    let p: &'static Program = Box::leak(Box::new(p));
-    // Census builds: the pool enum is mostly uninitialized bytes when set; clear the stack they come from.
-    tsrs_core::census_scrub_stack();
-    p.init_checker_pool(opts.create_checker_pool);
-    p
-}
-
-/// Frees a program made by `new_program` or `update_program` (language server; Go's GC).
-/// Shared processed files, redirects and resolution hosts drop when their final Rust owner drops.
-/// The program and its AST/type graph still use the legacy lifetime boundary.
-///
-/// # Safety
-/// `program` came from `new_program` / `update_program` and is not used afterwards:
-/// no checker of its pool is held, and no snapshot or language service refers to it.
-pub unsafe fn free_program(program: &'static Program) {
-    // SAFETY: both functions leak the program from a `Box`, and nothing uses it afterwards (this function's contract).
-    drop(unsafe { Box::from_raw(std::ptr::from_ref::<Program>(program).cast_mut()) });
-}
-
-impl Program {
-    // program.go:323
-    // Return an updated program for which it is known that only the file with the given path has changed.
-    // In addition to a new program, return a boolean indicating whether the data of the old program was reused.
-    // The returned *ast.SourceFile is the changed file as acquired through newHost; it is nil
-    // only if the host cannot locate the file (e.g. it was deleted). Callers that manage
-    // host-side parse caches must release this exact pointer when the old program could not be
-    // reused, since it was acquired speculatively before that decision was made.
-    pub fn update_program(
-        &'static self,
-        changed_file_path: &Path,
-        new_host: Arc<dyn CompilerHost>,
-        create_checker_pool: Option<CreateCheckerPool>,
-        create_module_resolver: Option<CreateModuleResolver>,
-    ) -> (&'static Program, Option<P<SourceFile>>, bool) {
-        let (result, new_file, reused) = self.reuse_program(changed_file_path, Arc::clone(&new_host), create_checker_pool.clone(), create_module_resolver.clone());
-        if reused {
-            (result.unwrap(), new_file, true)
-        } else {
-            (new_program(ProgramOptions::from_config(self.opts.clone(), new_host, create_checker_pool, create_module_resolver)), new_file, false)
-        }
-    }
-
-    // program.go:347
-    // ReuseProgram attempts to produce a new program by replacing only
-    // changedFilePath in place, reusing the rest of p. It returns
-    // (newProgram, newFile, true) on success, or (nil, newFile, false) when the
-    // file cannot be replaced in place. Unlike UpdateProgram, it never constructs a
-    // full fallback program, so callers that build their own fallback (e.g. with a
-    // different host) do not pay for a discarded program build.
-    pub fn reuse_program(
-        &'static self,
-        changed_file_path: &Path,
-        new_host: Arc<dyn CompilerHost>,
-        create_checker_pool: Option<CreateCheckerPool>,
-        _create_module_resolver: Option<CreateModuleResolver>,
-    ) -> (Option<&'static Program>, Option<P<SourceFile>>, bool) {
-        let old_file = self.files_by_path[changed_file_path];
-        // Content mappers are not ported: no file is content-mapped (`oldFile.ContentMapper() == ""`), so the
-        // supplemental file lists are always empty.
-        let old_supplemental_files: &[P<SourceFile>] = &[];
-        let new_supplemental_files: &[P<SourceFile>] = &[];
-        let new_file = new_host.get_source_file(old_file.parse_options().clone());
-
-        // If this file is part of a package redirect group (same package installed in multiple
-        // node_modules locations), we need to rebuild the program because the redirect targets
-        // might need recalculation.
-        let in_redirect_files = self.redirect_files_by_path.contains_key(changed_file_path);
-        let is_redirect_target = self.redirect_targets_map.contains_key(changed_file_path);
-        if in_redirect_files || is_redirect_target {
-            return (None, new_file, false);
-        }
-
-        if self.module_resolution_error.is_some() || !self.can_replace_file_in_program(old_file, new_file) {
-            return (None, new_file, false);
-        }
-        let new_file_some = new_file.unwrap();
-        // Cloning does not recompute synthetic helper or JSX-runtime import bookkeeping. Fall back to a full
-        // build whenever either version requires those imports.
-        if self.import_helpers_import_specifiers.contains_key(old_file.path()) || self.needs_import_helpers_import_specifier(new_file_some) {
-            return (None, new_file, false);
-        }
-        if self.jsx_runtime_import_specifiers.contains_key(old_file.path()) || !self.jsx_runtime_import_specifier(new_file_some).is_empty() {
-            return (None, new_file, false);
-        }
-        if old_supplemental_files.len() != new_supplemental_files.len() {
-            return (None, new_file, false);
-        }
-        for (i, &old_supplemental) in old_supplemental_files.iter().enumerate() {
-            let new_supplemental = new_supplemental_files[i];
-            if old_supplemental.path() != new_supplemental.path() || !self.can_replace_file_in_program(old_supplemental, Some(new_supplemental)) {
-                return (None, new_file, false);
-            }
-            if self.import_helpers_import_specifiers.contains_key(old_supplemental.path()) || self.needs_import_helpers_import_specifier(new_supplemental) {
-                return (None, new_file, false);
-            }
-            if self.jsx_runtime_import_specifiers.contains_key(old_supplemental.path()) || !self.jsx_runtime_import_specifier(new_supplemental).is_empty() {
-                return (None, new_file, false);
-            }
-        }
-        // TODO: reverify compiler options when config has changed?
-        let mut result = Program {
-            opts: self.opts.clone(),
-            resolution_host: crate::projectreferencefilemapper::resolution_host_for(Arc::clone(&new_host)),
-            host: new_host,
-            resolution_data: self.resolution_data.clone_data(),
-            checker_pool: OnceLock::new(),
-            include_processor: includeProcessor::default(),
-            module_resolution_error: None,
-            compare_paths_options: self.compare_paths_options.clone(),
-            files: self.files,
-            files_by_path: FxHashMap::default(),
-            processed: Arc::clone(&self.processed),
-            project_reference_file_mapper: Arc::clone(&self.project_reference_file_mapper),
-            processing_diagnostics: Mutex::new(self.processing_diagnostics().clone()),
-            uses_uri_style_node_core_modules: self.uses_uri_style_node_core_modules,
-            common_source_directory: OnceLock::new(),
-            declaration_diagnostic_cache: Mutex::new(FxHashMap::default()),
-            program_diagnostics: self.program_diagnostics.clone(),
-            has_emit_blocking_diagnostics: self.has_emit_blocking_diagnostics.clone(),
-            unresolved_imports: OnceLock::new(),
-            known_symlinks: OnceLock::new(),
-            package_names: OnceLock::new(),
-            has_ts_file: OnceLock::new(),
-            packages_map: OnceLock::new(),
-            exports_module_name_cache: Default::default(),
-            // A reused program keeps the files of this one, so nothing of them may be freed.
-            leaf_files: crate::fileregions::LeafMode::Off,
-            leaf_pass_started: std::sync::atomic::AtomicBool::new(false),
-            leaf_referred: OnceLock::new(),
-        };
-        try_reuse(&result.unresolved_imports, &self.unresolved_imports);
-        try_reuse(&result.known_symlinks, &self.known_symlinks);
-        try_reuse(&result.package_names, &self.package_names);
-        let index = result.files.iter().position(|file| file.path() == new_file_some.path()).unwrap();
-        let mut files = result.files.to_vec();
-        files[index] = new_file_some;
-        result.files_by_path.clone_from(&self.files_by_path);
-        result.files_by_path.insert(new_file_some.path().clone(), new_file_some);
-        for (i, &old_supplemental) in old_supplemental_files.iter().enumerate() {
-            let new_supplemental = new_supplemental_files[i];
-            let supplemental_index = files.iter().position(|&file| file == old_supplemental).unwrap();
-            files[supplemental_index] = new_supplemental;
-            result.files_by_path.insert(new_supplemental.path().clone(), new_supplemental);
-        }
-        result.files = tsrs_core::alloc_vec(files);
-        let result: &'static Program = Box::leak(Box::new(result));
-        tsrs_core::census_scrub_stack();
-        result.init_checker_pool(create_checker_pool);
-        (Some(result), new_file, true)
-    }
-
-    // program.go:443
-    fn init_checker_pool(&'static self, create: Option<CreateCheckerPool>) {
-        if !self.finished_processing {
-            panic!("Program must finish processing files before initializing checker pool");
-        }
-
-        let pool = match create {
-            Some(create) => programCheckerPool::External(create(self)),
-            None => programCheckerPool::Compiler(checkerPool::new(self)),
-        };
-        if self.checker_pool.set(pool).is_err() {
-            panic!("checker pool initialized twice");
-        }
-    }
-
-    // program.go:458
-    // GetCheckerPool returns the checker pool associated with this program.
-    pub fn get_checker_pool(&self) -> &dyn CheckerPool {
-        match self.checker_pool.get().unwrap() {
-            programCheckerPool::Compiler(pool) => pool,
-            programCheckerPool::External(pool) => &**pool,
-        }
-    }
-
-    // Go `p.compilerCheckerPool` (nil when the program was created with `CreateCheckerPool`).
-    pub(crate) fn compiler_checker_pool(&self) -> Option<&checkerPool> {
-        match self.checker_pool.get() {
-            Some(programCheckerPool::Compiler(pool)) => Some(pool),
-            _ => None,
-        }
-    }
-
-    // The built-in pool, for the CLI's statistics; panics on a program with an external pool.
-    pub(crate) fn pool(&self) -> &checkerPool {
-        self.compiler_checker_pool().expect("program uses an external checker pool")
-    }
 
     // program.go:462
     fn can_replace_file_in_program(&self, file1: P<SourceFile>, file2: Option<P<SourceFile>>) -> bool {
@@ -652,8 +979,8 @@ impl Program {
     }
 
     // program.go:519
-    pub fn source_files(&self) -> &'static [P<SourceFile>] {
-        self.files
+    pub fn source_files(&self) -> &[P<SourceFile>] {
+        &self.files
     }
 
     // program.go:520
@@ -697,7 +1024,7 @@ impl Program {
     fn extract_unresolved_imports(&self) -> Set<String> {
         let mut unresolved_set = Set::default();
 
-        for &source_file in self.files {
+        for &source_file in self.files.iter() {
             let unresolved_imports = self.extract_unresolved_imports_from_source_file(source_file);
             for imp in unresolved_imports {
                 unresolved_set.add(imp);
@@ -726,16 +1053,6 @@ impl Program {
         unresolved_imports
     }
 
-    pub fn checker_count(&self) -> usize {
-        self.pool().checker_count()
-    }
-
-    // TSRS_ASSIGNMENT_STATS report (checkerpool_stats.rs).
-    #[cfg(feature = "checker")]
-    pub fn checker_assignment_report(&'static self) -> String {
-        crate::checkerpool_stats::report(self, self.pool())
-    }
-
     pub(crate) fn processing_diagnostics(&self) -> std::sync::MutexGuard<'_, Vec<processingDiagnostic>> {
         self.processing_diagnostics.lock().unwrap()
     }
@@ -759,60 +1076,6 @@ impl Program {
         } else {
             worker_pool().install(|| unbound.into_par_iter().for_each(crate::fileregions::bind));
         }
-    }
-
-    // program.go:598
-    // Return the type checker associated with the program.
-    pub fn get_type_checker(&self, ctx: &Context) -> CheckerHandle {
-        if let Some(pool) = self.compiler_checker_pool() {
-            return pool.get_checker_non_exclusive();
-        }
-        self.get_checker_pool().get_checker(ctx, None)
-    }
-
-    // program.go:605
-    pub fn for_each_checker_parallel(&self, cb: impl Fn(usize, &mut Checker) + Sync) {
-        if let Some(pool) = self.compiler_checker_pool() {
-            pool.for_each_checker_parallel(cb);
-        }
-    }
-
-    /// The index (as passed to `for_each_checker_parallel`) of the checker the pool assigned `file` to, i.e. the
-    /// checker `for_each_checker_group` runs it on. Creates the checkers on first use. None when the program has no
-    /// checker pool of its own or `file` is not one of its files.
-    pub fn checker_index_of_file(&self, file: P<SourceFile>) -> Option<usize> {
-        self.compiler_checker_pool()?.checker_index_of_file(file)
-    }
-
-    /// Runs `cb` for every file of `files` with the file's checker, one task per checker, each visiting its files in
-    /// the order of `files` under one lock acquisition (`checkerPool::for_each_checker_group_do`). False, without
-    /// calling `cb`, when the program has no checker pool of its own.
-    pub fn for_each_checker_group(&self, files: &[P<SourceFile>], cb: impl Fn(&mut Checker, usize, P<SourceFile>) + Sync) -> bool {
-        let Some(pool) = self.compiler_checker_pool() else { return false };
-        pool.for_each_checker_group_do(files, self.single_threaded(), cb);
-        true
-    }
-
-    // program.go:615
-    // Return a checker for the given file. We may have multiple checkers in concurrent scenarios and this
-    // method returns the checker that was tasked with checking the file. Note that it isn't possible to mix
-    // types obtained from different checkers, so only non-type data (such as diagnostics or string
-    // representations of types) should be obtained from checkers returned by this method.
-    pub fn get_type_checker_for_file(&self, ctx: &Context, file: P<SourceFile>) -> CheckerHandle {
-        if let Some(pool) = self.compiler_checker_pool() {
-            return pool.get_checker_for_file_non_exclusive(file);
-        }
-        self.get_checker_pool().get_checker(ctx, Some(file))
-    }
-
-    // program.go:624
-    // Return a checker for the given file, locked to the current thread to prevent data races from multiple threads
-    // accessing the same checker. The lock will be released when the `done` function is called.
-    pub fn get_type_checker_for_file_exclusive(&self, ctx: &Context, file: P<SourceFile>) -> CheckerHandle {
-        if let Some(pool) = self.compiler_checker_pool() {
-            return pool.get_checker_for_file_exclusive(file);
-        }
-        self.get_checker_pool().get_checker(ctx, Some(file))
     }
 
     pub fn get_resolved_module(&self, file: P<SourceFile>, module_reference: &str, mode: ResolutionMode) -> Option<P<ResolvedModule>> {
@@ -875,7 +1138,7 @@ impl Program {
                 collect(ctx, file)
             }
             None => {
-                let diagnostics = self.collect_diagnostics_from_files(ctx, self.files, concurrent, &collect);
+                let diagnostics = self.collect_diagnostics_from_files(ctx, &self.files, concurrent, &collect);
                 diagnostics.concat()
             }
         };
@@ -895,74 +1158,6 @@ impl Program {
         } else {
             worker_pool().install(|| source_files.par_iter().map(|&f| collect(ctx, f)).collect())
         }
-    }
-
-    // program.go:703
-    // collectCheckerDiagnostics collects diagnostics from a single file or all files,
-    // using a callback that receives the checker for each file. When the checker pool
-    // supports grouped iteration (compiler pool), files are grouped by checker and
-    // processed in parallel with one task per checker, reducing contention and improving
-    // cache locality. Otherwise, falls back to per-file concurrent collection.
-    fn collect_checker_diagnostics(
-        &'static self,
-        ctx: &Context,
-        source_file: Option<P<SourceFile>>,
-        collect: impl Fn(&Context, &mut Checker, P<SourceFile>) -> Vec<P<Diagnostic>> + Sync,
-    ) -> Vec<P<Diagnostic>> {
-        if let Some(source_file) = source_file {
-            crate::fileregions::assert_not_freed(source_file);
-            if self.skip_type_checking(source_file, false) {
-                return Vec::new();
-            }
-            let mut c = self.get_type_checker_for_file_exclusive(ctx, source_file);
-            let result = collect(ctx, &mut c, source_file);
-            drop(c);
-            return filter_and_sort_diagnostics(&result);
-        }
-        filter_and_sort_diagnostics(&self.collect_checker_diagnostics_from_files(ctx, self.files, &collect).concat())
-    }
-
-    // program.go:728
-    // collectCheckerDiagnosticsFromFiles collects checker diagnostics for a list of files.
-    fn collect_checker_diagnostics_from_files(
-        &'static self,
-        ctx: &Context,
-        source_files: &[P<SourceFile>],
-        collect: &(impl Fn(&Context, &mut Checker, P<SourceFile>) -> Vec<P<Diagnostic>> + Sync),
-    ) -> Vec<Vec<P<Diagnostic>>> {
-        self.collect_checker_diagnostics_from_files_ex(ctx, source_files, false, collect)
-    }
-
-    // `allow_steal`: files may move between checkers while they are checked (checkerPool::for_each_checker_group_do_ex).
-    fn collect_checker_diagnostics_from_files_ex(
-        &'static self,
-        ctx: &Context,
-        source_files: &[P<SourceFile>],
-        allow_steal: bool,
-        collect: &(impl Fn(&Context, &mut Checker, P<SourceFile>) -> Vec<P<Diagnostic>> + Sync),
-    ) -> Vec<Vec<P<Diagnostic>>> {
-        let diagnostics: Vec<Mutex<Vec<P<Diagnostic>>>> = source_files.iter().map(|_| Mutex::new(Vec::new())).collect();
-        if let Some(pool) = self.compiler_checker_pool() {
-            pool.for_each_checker_group_do_ex(source_files, self.single_threaded(), allow_steal, allow_steal.then_some(ctx), |c, file_index, file| {
-                *diagnostics[file_index].lock().unwrap() = collect(ctx, c, file);
-            });
-        } else {
-            let run = |i: usize, file: P<SourceFile>| {
-                if self.skip_type_checking(file, false) {
-                    return;
-                }
-                let mut c = self.get_checker_pool().get_checker(ctx, Some(file));
-                *diagnostics[i].lock().unwrap() = collect(ctx, &mut c, file);
-                drop(c);
-            };
-            if self.single_threaded() {
-                // Go's single-threaded work group runs queued functions last-queued first.
-                source_files.iter().enumerate().rev().for_each(|(i, &file)| run(i, file));
-            } else {
-                worker_pool().install(|| source_files.par_iter().enumerate().for_each(|(i, &file)| run(i, file)));
-            }
-        }
-        diagnostics.into_iter().map(|d| d.into_inner().unwrap()).collect()
     }
 
     // program.go:751
@@ -989,67 +1184,14 @@ impl Program {
         self.collect_diagnostics(ctx, source_file, false /*concurrent*/, |_, file| file.bind_diagnostics().to_vec())
     }
 
-    // program.go:806
-    pub fn get_semantic_diagnostics(&'static self, ctx: &Context, source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
-        let collect = |ctx: &Context, c: &mut Checker, file: P<SourceFile>| self.get_semantic_diagnostics_with_checker(ctx, c, file);
-        match source_file {
-            // All files: the type-check pass, the one that may move files between checkers.
-            None => {
-                // tsrs-only: the CLI's `--noEmit` check frees a leaf's tree and binder output once its diagnostics are
-                // collected (fileregions.rs).
-                let free_leaves = tsrs_core::phases::time("Checkers: leaf files", || crate::fileregions::classify(self));
-                #[cfg(feature = "ast-sizing")] // TOOL (notes/mem-compact-ast-sizing.md)
-                tsrs_ast::sizing::run("pre", self.files, false);
-                let collect = |ctx: &Context, c: &mut Checker, file: P<SourceFile>| {
-                    let diagnostics = collect(ctx, c, file);
-                    if free_leaves && file.is_check_leaf() {
-                        crate::fileregions::free(file);
-                    }
-                    diagnostics
-                };
-                let diagnostics = self.collect_checker_diagnostics_from_files_ex(ctx, self.files, true, &collect).concat();
-                if free_leaves {
-                    crate::fileregions::pass_done();
-                }
-                #[cfg(feature = "ast-sizing")] // TOOL (notes/mem-compact-ast-sizing.md)
-                tsrs_ast::sizing::run("post", self.files, true);
-                filter_and_sort_diagnostics(&diagnostics)
-            }
-            Some(_) => self.collect_checker_diagnostics(ctx, source_file, collect),
-        }
-    }
-
-    // program.go:812
-    // GetSemanticDiagnosticsForIncremental includes newly discovered globals in each
-    // file's cached diagnostics and leaves noEmit filtering to the builder.
-    pub fn get_semantic_diagnostics_for_incremental(
-        &'static self,
-        ctx: &Context,
-        source_files: &[P<SourceFile>],
-    ) -> FxHashMap<P<SourceFile>, Vec<P<Diagnostic>>> {
-        let all_diags = self.collect_checker_diagnostics_from_files(ctx, source_files, &|ctx: &Context, c: &mut Checker, file: P<SourceFile>| {
-            self.get_bind_and_check_diagnostics_with_checker(ctx, c, file, true /*includeDeferredGlobals*/)
-        });
-        let mut result = FxHashMap::default();
-        for (i, diags) in all_diags.into_iter().enumerate() {
-            result.insert(source_files[i], filter_and_sort_diagnostics(&diags));
-        }
-        result
-    }
-
-    // program.go:823
-    pub fn get_suggestion_diagnostics(&'static self, ctx: &Context, source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
-        self.collect_checker_diagnostics(ctx, source_file, |ctx, c, file| self.get_suggestion_diagnostics_with_checker(ctx, c, file))
-    }
-
     // program.go:827
-    pub fn get_program_diagnostics(&'static self) -> Vec<P<Diagnostic>> {
+    pub fn get_program_diagnostics(&self) -> Vec<P<Diagnostic>> {
         let mut all = self.program_diagnostics.clone();
         all.extend(self.include_processor.get_diagnostics(self).lock().unwrap().get_global_diagnostics());
         sort_and_deduplicate_diagnostics(&all)
     }
 
-    pub fn get_include_processor_diagnostics(&'static self, source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
+    pub fn get_include_processor_diagnostics(&self, source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
         if self.skip_type_checking(source_file, false) {
             return Vec::new();
         }
@@ -1861,88 +2003,8 @@ impl Program {
         }
     }
 
-    // program.go:1463
-    pub fn get_global_diagnostics(&'static self, _ctx: &Context) -> Vec<P<Diagnostic>> {
-        if self.files.is_empty() {
-            return Vec::new();
-        }
-        if let Some(pool) = self.compiler_checker_pool() {
-            return pool.get_global_diagnostics();
-        }
-        // For external pools (project system), global diagnostics are collected
-        // incrementally as checkers are used, not via a bulk query.
-        Vec::new()
-    }
-
-    // program.go:1475. Go's `collectDiagnostics(ctx, sourceFile, true /*concurrent*/, p.getDeclarationDiagnosticsForFile)`
-    // runs one task per file, each taking the file's checker from the pool; with the built-in pool the files run
-    // grouped by checker on the checker threads (in file order within a checker), like the other checker-backed
-    // diagnostics. With an external pool each file takes its checker from the pool, as in Go.
-    #[cfg(feature = "checker")]
-    pub fn get_declaration_diagnostics(&'static self, ctx: &Context, source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
-        let result = match (source_file, self.compiler_checker_pool()) {
-            (Some(file), _) => self.get_declaration_diagnostics_for_file(ctx, None, file),
-            (None, Some(pool)) => {
-                let diagnostics: Vec<Mutex<Vec<P<Diagnostic>>>> = self.files.iter().map(|_| Mutex::new(Vec::new())).collect();
-                pool.for_each_checker_group_do(self.files, self.single_threaded(), |c, file_index, file| {
-                    *diagnostics[file_index].lock().unwrap() = self.get_declaration_diagnostics_for_file(ctx, Some(c), file);
-                });
-                diagnostics.into_iter().flat_map(|d| d.into_inner().unwrap()).collect()
-            }
-            (None, None) => {
-                self.collect_diagnostics_from_files(ctx, self.files, true /*concurrent*/, &|ctx: &Context, file: P<SourceFile>| {
-                    self.get_declaration_diagnostics_for_file(ctx, None, file)
-                })
-                .concat()
-            }
-        };
-        filter_and_sort_diagnostics(&result)
-    }
-
-    // Declaration emit needs the checker; without it declaration diagnostics are empty.
-    #[cfg(not(feature = "checker"))]
-    pub fn get_declaration_diagnostics(&'static self, _ctx: &Context, _source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
-        Vec::new()
-    }
-
-    // program.go:1626. `c` is the file's checker when the caller already holds it (Go `newEmitHost` takes it from
-    // the pool); with `None` it is taken here.
-    #[cfg(feature = "checker")]
-    fn get_declaration_diagnostics_for_file(&'static self, ctx: &Context, c: Option<&mut Checker>, source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
-        crate::fileregions::assert_not_freed(source_file);
-        if source_file.is_declaration_file.get() {
-            return Vec::new();
-        }
-
-        if let Some(cached) = self.declaration_diagnostic_cache.lock().unwrap().get(&source_file) {
-            return cached.clone();
-        }
-
-        let mut guard;
-        let c = match c {
-            Some(c) => c,
-            None => {
-                guard = self.get_type_checker_for_file(ctx, source_file);
-                &mut *guard
-            }
-        };
-        // The declaration transform runs in a scratch region of its own, freed once its diagnostics are collected
-        // (notes/mem-emit-regions.md; the diagnostics themselves escape it).
-        let emit_resolver = c.get_emit_resolver();
-        let region = tsrs_core::arena::Region::new_scratch(64 << 10);
-        let diagnostics = {
-            let _scratch = region.enter_scratch();
-            let checker_slot = P::new(tsrs_checker::CheckerSlot::default());
-            let host = crate::emithost::new_emit_host(self, emit_resolver, checker_slot);
-            checker_slot.lend(c, || crate::emitter::get_declaration_diagnostics(host, self, source_file))
-        };
-        c.forget_scratch_keyed_caches();
-        drop(region);
-        self.declaration_diagnostic_cache.lock().unwrap().entry(source_file).or_insert(diagnostics).clone()
-    }
-
     // program.go:1488
-    fn get_semantic_diagnostics_with_checker(&'static self, ctx: &Context, c: &mut Checker, source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
+    fn get_semantic_diagnostics_with_checker(&self, ctx: &Context, c: &mut Checker, source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
         let mut result = filter_no_emit_semantic_diagnostics(
             self.get_bind_and_check_diagnostics_with_checker(ctx, c, source_file, false /*includeDeferredGlobals*/),
             &self.options(),
@@ -2084,44 +2146,6 @@ impl Program {
 
     pub fn identifier_count(&self) -> usize {
         self.files.iter().map(|f| f.identifier_count.get() as usize).sum()
-    }
-
-    pub fn symbol_count(&'static self) -> usize {
-        let count: usize = self.files.iter().map(|f| f.symbol_count.get() as usize).sum();
-        let val = std::sync::atomic::AtomicUsize::new(count);
-        self.for_each_checker_parallel(|_, c| {
-            val.fetch_add(c.symbol_count as usize, std::sync::atomic::Ordering::Relaxed);
-        });
-        val.into_inner()
-    }
-
-    pub fn type_count(&'static self) -> usize {
-        let val = std::sync::atomic::AtomicUsize::new(0);
-        self.for_each_checker_parallel(|_, c| {
-            val.fetch_add(c.type_count as usize, std::sync::atomic::Ordering::Relaxed);
-        });
-        val.into_inner()
-    }
-
-    pub fn instantiation_count(&'static self) -> usize {
-        let val = std::sync::atomic::AtomicUsize::new(0);
-        self.for_each_checker_parallel(|_, c| {
-            val.fetch_add(c.total_instantiation_count as usize, std::sync::atomic::Ordering::Relaxed);
-        });
-        val.into_inner()
-    }
-
-    pub fn lazy_member_stats(&'static self) -> tsrs_core::lazymembers::LazyMemberStats {
-        let total = std::sync::Mutex::new(tsrs_core::lazymembers::LazyMemberStats::default());
-        self.for_each_checker_parallel(|_, c| {
-            total.lock().unwrap().add(&c.lazy_member_stats);
-        });
-        total.into_inner().unwrap()
-    }
-
-    // program.go:1743
-    pub fn program(&self) -> &Program {
-        self
     }
 
     /// Go returns the struct by value (sharing its strings); a reference here, so the hot callers (module mode
@@ -2297,8 +2321,8 @@ impl Program {
     }
 
     // program.go:2112
-    pub fn get_source_files(&self) -> &'static [P<SourceFile>] {
-        self.files
+    pub fn get_source_files(&self) -> &[P<SourceFile>] {
+        &self.files
     }
 
     // Testing only
@@ -2427,7 +2451,7 @@ impl Program {
         self.package_names.get_or_init(|| {
             let resolver = self.new_resolver();
             let mut package_names = packageNamesInfo { resolved: Set::default(), unresolved: Set::default(), deep_import_packages: Set::default() };
-            for &file in self.files {
+            for &file in self.files.iter() {
                 if self.is_source_file_default_library(file.path()) || self.is_source_file_from_external_library(file) || file.file_name().contains("/node_modules/") {
                     // Checking for /node_modules/ is a little imprecise, but ATA treats locally installed typings
                     // as root files, which would not pass IsSourceFileFromExternalLibrary.
@@ -2918,9 +2942,9 @@ fn plain_js_errors() -> &'static FxHashSet<i32> {
     })
 }
 
-impl tsoptions::outputpaths::OutputPathsHost for Program {
+impl tsoptions::outputpaths::OutputPathsHost for ProgramData {
     fn common_source_directory(&self) -> String {
-        Program::common_source_directory(self).to_string()
+        ProgramData::common_source_directory(self).to_string()
     }
 
     fn content_mapper_extensions(&self) -> Vec<String> {
@@ -2928,11 +2952,11 @@ impl tsoptions::outputpaths::OutputPathsHost for Program {
     }
 
     fn get_current_directory(&self) -> &str {
-        Program::get_current_directory(self)
+        ProgramData::get_current_directory(self)
     }
 
     fn use_case_sensitive_file_names(&self) -> bool {
-        Program::use_case_sensitive_file_names(self)
+        ProgramData::use_case_sensitive_file_names(self)
     }
 }
 
@@ -2982,5 +3006,62 @@ mod ownership_tests {
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| new_program(opts)));
         assert!(result.is_err());
         assert!(host.upgrade().is_none());
+    }
+
+    #[test]
+    fn failed_pool_construction_releases_inputs() {
+        let mut opts = options("export {};");
+        let host = Arc::downgrade(&opts.host);
+        opts.create_checker_pool = Some(Arc::new(|_| panic!("checker pool construction failed")));
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| new_program(opts)));
+        assert!(result.is_err());
+        assert!(host.upgrade().is_none());
+    }
+
+    #[test]
+    fn checker_inputs_and_file_list_have_independent_owners() {
+        let mut opts = options("export const value = 1;");
+        opts.single_threaded = Tristate::True;
+        let host = Arc::downgrade(&opts.host);
+        let program = new_program(opts);
+        let checker = program.get_type_checker(&Context::background());
+        let input = Arc::clone(&checker.program);
+        let weak_input = Arc::downgrade(&input);
+        let files = input.source_files();
+        let weak_files = Arc::downgrade(&files);
+        assert!(Arc::ptr_eq(&input, &(program.checker_data() as Arc<dyn tsrs_checker::Program>)));
+        assert!(Arc::ptr_eq(&files, &checker.files));
+        drop(checker);
+
+        // SAFETY: no handle borrows the outer program or its pool; the test keeps only independent input owners.
+        // Its legacy ASTs remain in the thread arena. This checks container/host ownership, not AST reclamation.
+        unsafe { free_program(program) };
+        assert!(input.file_exists("/index.ts"));
+        assert_eq!(files.len(), 1);
+        assert!(host.upgrade().is_some());
+        drop(input);
+        assert!(weak_input.upgrade().is_none(), "the checker input must not retain its pool");
+        assert!(host.upgrade().is_none());
+        assert!(weak_files.upgrade().is_some());
+        drop(files);
+        assert!(weak_files.upgrade().is_none());
+    }
+}
+
+impl tsoptions::outputpaths::OutputPathsHost for Program {
+    fn common_source_directory(&self) -> String {
+        ProgramData::common_source_directory(self).to_string()
+    }
+
+    fn content_mapper_extensions(&self) -> Vec<String> {
+        self.opts.config.content_mapper_extensions()
+    }
+
+    fn get_current_directory(&self) -> &str {
+        ProgramData::get_current_directory(self)
+    }
+
+    fn use_case_sensitive_file_names(&self) -> bool {
+        ProgramData::use_case_sensitive_file_names(self)
     }
 }
