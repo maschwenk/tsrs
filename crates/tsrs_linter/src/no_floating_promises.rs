@@ -692,6 +692,79 @@ fire();
     }
 
     #[test]
+    fn computed_bindings_do_not_match_safe_call_declaration_sources() {
+        let code = r#"
+declare const key: "fire";
+declare const api: { fire: () => Promise<void> };
+const { [key]: trusted } = api;
+trusted();
+"#;
+        assert_eq!(
+            ids(
+                code,
+                json!({ "allowForKnownSafeCalls": [{ "from": "file", "path": "/file.ts", "name": "trusted" }] }),
+            ),
+            ["floatingVoid"]
+        );
+        assert!(
+            ids(
+                code,
+                json!({ "allowForKnownSafeCalls": [{ "from": "file", "path": "/file.ts", "name": "trusted" }, "trusted"] }),
+            )
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn safe_call_package_sources_stop_at_named_modules_but_skip_namespaces() {
+        let files = [
+            (
+                "/file.ts",
+                "/// <reference path='./safe.d.ts' />\nimport { InnerModule, InnerNamespace } from 'safe-package';\nInnerModule.fire();\nInnerNamespace.fire();\n",
+            ),
+            (
+                "/safe.d.ts",
+                r#"
+declare module "safe-package" {
+    export module InnerModule { function fire(): Promise<void>; }
+    export namespace InnerNamespace { function fire(): Promise<void>; }
+}
+"#,
+            ),
+        ];
+        let options = json!({ "allowForKnownSafeCalls": [{ "from": "package", "name": "fire", "package": "safe-package" }] });
+        let diagnostics = lint_files(&files, options, false);
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].message.id, "floatingVoid");
+        let range = diagnostics[0].range;
+        assert_eq!(
+            &files[0].1[range.pos() as usize..range.end() as usize],
+            "InnerModule.fire()"
+        );
+    }
+
+    #[test]
+    fn safe_call_package_sources_fall_back_when_package_name_is_empty() {
+        let files = [
+            (
+                "/file.ts",
+                "import { fire } from 'safe-package';\nfire();\n",
+            ),
+            (
+                "/node_modules/safe-package/package.json",
+                r#"{ "name": "", "types": "index.d.ts" }"#,
+            ),
+            (
+                "/node_modules/safe-package/index.d.ts",
+                "export declare function fire(): Promise<void>;",
+            ),
+        ];
+        assert_eq!(lint_files(&files, Value::Null, false).len(), 1);
+        let options = json!({ "allowForKnownSafeCalls": [{ "from": "package", "name": "fire", "package": "safe-package" }] });
+        assert!(lint_files(&files, options, false).is_empty());
+    }
+
+    #[test]
     fn ignores_iifes_when_configured() {
         let code = "(async () => {})();";
         assert_eq!(ids(code, Value::Null), ["floatingVoid"]);

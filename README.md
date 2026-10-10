@@ -106,7 +106,7 @@ same diagnostics and emits the same 9,257 files byte for byte. [`docs/STATUS.md`
 | feature | status | evidence and notes |
 | --- | --- | --- |
 | Type checking (`--noEmit`) | yes | 13,458 of 13,462 error baselines and all 12,779 `.types` / `.symbols` baselines match; same diagnostics on the 38k-file codebase |
-| Oxlint type-aware lint backend (`tsrs headless`) | `typescript/no-floating-promises` | tsgolint payload v2, source overlays, compiler diagnostics, fixes/suggestions and timings; unsupported type-aware rules are skipped. Use `OXLINT_TSGOLINT_PATH=/path/to/tsrs oxlint --type-aware` (`docs/LINT.md`) |
+| Oxlint type-aware lint backend (`tsrs headless`) | `typescript/no-floating-promises` | tsgolint payload v2, source overlays, compiler diagnostics, fixes/suggestions and timings; 188 upstream rule cases and 112 diagnostic snapshots pass (1 upstream skip preserved), plus 12 local regressions. Unsupported type-aware rules are skipped. Use `OXLINT_TSGOLINT_PATH=/path/to/tsrs oxlint --type-aware` (`docs/LINT.md`) |
 | Multithreaded checking, `--singleThreaded`, `--pretty`, `--extendedDiagnostics`, `--listFiles`, `--listFilesOnly` | yes | |
 | Memory target (`--maxMemory <size>`) | `--noEmit` checks, opt-in | the 38k-file codebase at 8 checkers: peak 18.0 GB without it; `--maxMemory 12G` 12.9 GB (+11% instructions), `10G` 10.8 GB (+16%), `8G` 8.7 GB (+35%), same diagnostics; testdata/regressions identical with a checker retired after nearly every file, also in poison mode (notes/mem-recycle-checkers.md) |
 | Same output regardless of thread count | yes, with known exceptions (tsgo: no) | a few projects still depend on file order through tsgo's own logic (notes/open-history-dependence.md); `--checkerAssignment go` reproduces tsgo exactly |

@@ -101,6 +101,7 @@ fn package_name_from_nearest_package_json(
             if let Some(name) = serde_json::from_str::<serde_json::Value>(&contents)
                 .ok()
                 .and_then(|value| value.get("name")?.as_str().map(str::to_string))
+                .filter(|name| !name.is_empty())
             {
                 return Some(name);
             }
@@ -124,10 +125,9 @@ fn parent_ambient_module_name(mut node: P<Node>) -> Option<&'static str> {
         match node.kind() {
             Kind::ModuleDeclaration => {
                 let declaration = node.as_module_declaration();
-                if declaration.keyword() != Kind::NamespaceKeyword
-                    && ast::is_string_literal(declaration.name())
-                {
-                    return Some(declaration.name().text());
+                if declaration.keyword() != Kind::NamespaceKeyword {
+                    return ast::is_string_literal(declaration.name())
+                        .then(|| declaration.name().text());
                 }
             }
             Kind::SourceFile => return None,
@@ -301,16 +301,20 @@ pub fn value_matches_some_specifier(
                     .dot_dot_dot_token()
                     .is_none()
             {
-                if let Some(property_name) =
-                    declaration.property_name_or_name().and_then(static_name)
-                {
-                    let source_type = checker.get_type_at_location(declaration.parent().unwrap());
-                    if let Some(property_symbol) =
-                        checker.get_property_of_type(source_type, property_name)
-                    {
-                        symbol = property_symbol;
-                    }
+                let Some(property_name) = declaration.property_name_or_name().and_then(static_name)
+                else {
+                    continue;
+                };
+                if property_name.is_empty() {
+                    continue;
                 }
+                let source_type = checker.get_type_at_location(declaration.parent().unwrap());
+                let Some(property_symbol) =
+                    checker.get_property_of_type(source_type, property_name)
+                else {
+                    continue;
+                };
+                symbol = property_symbol;
             }
         }
         if symbol.flags().intersects(SymbolFlags::Alias) {
