@@ -60,7 +60,7 @@ NOTABLE_MEMORY = 4.0  # tsgo peak memory / tsrs peak memory at least this (a qua
 # --tsrs-build: how the measured tsrs binary was built, for the table header.
 TSRS_BUILDS = {
     "release": "`cargo build --release`",
-    "pgo-dist": "the PGO-optimized `dist` build, built like the npm release binaries",
+    "pgo-dist": "PGO-optimized `dist` build, built like the npm release binaries",
 }
 
 COUNTER_RE = re.compile(r"^(Files|Lines|Identifiers|Symbols|Types|Instantiations):\s+(\d+)\s*$")
@@ -396,9 +396,64 @@ def reps_text(result: dict, modes: list[str]) -> str:
                      f"table{'s' if len(names) > 1 else ''}" for counts, names in groups.items())
 
 
+def ratio_text(x: float | None, up: str, down: str, notable_from: float) -> str:
+    """`13.89x faster` / `1.92x slower` for a ratio `other / tsrs` (above 1: tsrs wins); bold when the win is at least
+    `notable_from` at the printed precision (NOTABLE_SPEEDUP, NOTABLE_MEMORY)."""
+    if x is None:
+        return "n/a"
+    if round(x, 2) >= 1:
+        return notable(f"{x:.2f}x {up}", x, lambda v: v >= notable_from)
+    return f"{1 / x:.2f}x {down}"
+
+
+def counts_text(s: dict) -> str:
+    """A compiler's error count (`/`-joined when its runs disagreed)."""
+    return "/".join(str(int(c)) for c in s["error_counts"])
+
+
+def errors_summary(result: dict, mode: str, with_bun: bool) -> list[str]:
+    """The errors paragraph of a mode. tsgo and tsrs must report the same errors; only the projects where they do not
+    are named, with the reason: a TypeScript 7.0 vs 7.1-dev difference the reference compiler confirms, or a tsrs bug."""
+    same, drift, mismatch, locations, bun_differs = [], [], [], [], []
+    for name, pr in result["projects"].items():
+        cell = pr.get(mode)
+        if not cell or not cell["tsgo"]["ok_runs"] or not cell["tsrs"]["ok_runs"]:
+            continue
+        g, t = counts_text(cell["tsgo"]), counts_text(cell["tsrs"])
+        ref = cell.get("reference")
+        if ref and ref["same_as_tsrs"]:
+            drift.append(f"{name} {g} / {t}")
+        elif cell["errors_match"] is False:
+            mismatch.append(f"{name}: tsgo {g}, tsrs {t}" + (f", 7.1-dev {ref['errors']}" if ref else ""))
+        elif cell["error_locations_match"] is False:
+            locations.append(f"{name} ({t})")
+        else:
+            same.append(name)
+        b = cell.get("bun") if with_bun else None
+        if b and b["ok_runs"] and counts_text(b) != g:
+            bun_differs.append(f"{name} ({counts_text(b)} errors, tsgo {g})")
+    total = len(same) + len(drift) + len(mismatch) + len(locations)
+    if not total:
+        return []
+    text = f"**Errors.** tsgo and tsrs report the same errors on {len(same)} of {total} project{'s' if total > 1 else ''}."
+    if drift:
+        ref = result["reference"]
+        rest = f"The other {len(drift)}" if len(same) + len(drift) == total else f"{len(drift)} others"
+        text += (f" {rest} differ only because TypeScript changed between {result['tsgo']['version']} and the "
+                 f"7.1-dev commit tsrs ports: `typescript@{ref['version']}`, built from that commit, reports exactly "
+                 f"tsrs's errors (tsgo / tsrs): {', '.join(drift)}.")
+    if mismatch:
+        text += f" **Mismatch (a tsrs bug):** {'; '.join(mismatch)}."
+    if locations:
+        text += f" **Same count, different locations (a tsrs bug):** {', '.join(locations)}."
+    if bun_differs:
+        text += f" bun check, which follows TypeScript 7.0 like tsgo, differs from tsgo on {', '.join(bun_differs)}."
+    return [text, ""]
+
+
 def markdown(result: dict, modes: list[str] | None = None) -> str:
-    """The results table; `modes` restricts it to some of the result's modes (the README shows only the wide machine's
-    default-mode table; bench/results/<...>.md has every mode)."""
+    """The results tables; `modes` restricts them to some of the result's modes (the README shows only the wide
+    machine's default-mode tables; bench/results/<...>.md has every mode)."""
     m = result["machine"]
     tv = result["tsgo"]["version"]
     commit = result["tsrs"]["commit"][:12]
@@ -407,113 +462,82 @@ def markdown(result: dict, modes: list[str] | None = None) -> str:
     bun = result.get("bun")
     has_bun = lambda mode: bun is not None and any("bun" in pr.get(mode, {}) for pr in result["projects"].values())
     mode_machine = lambda mode: whole.get(mode, m)  # the machine a mode's cells were measured on
-    # One machine for every rendered mode (the README's wide-only table, or a single-machine run) is named once; a
-    # table over two machines names the run's machine and the modes measured elsewhere.
+    # One machine for every rendered mode (the README's wide-only tables, or a single-machine run) is named once; tables
+    # over two machines name the run's machine and the modes measured elsewhere.
     one_machine = len({json.dumps(mode_machine(mode), sort_keys=True) for mode in modes}) == 1
     elsewhere: dict = {}  # machine label -> the rendered modes measured entirely on it
     for mode, mm in whole.items():
         if mode in modes and not one_machine:
             elsewhere.setdefault(mm["label"], []).append(MODE_NAMES[mode])
-    elsewhere_text = "".join(f"; the {' and '.join(names)} table{'s' if len(names) > 1 else ''} on {label}"
-                             for label, names in elsewhere.items())
+    elsewhere_text = "".join(f"; the {' and '.join(names)} tables on {label}" for label, names in elsewhere.items())
     suite_names = [n for n, pr in result["projects"].items() if pr.get("source") != "application"]
-    app_names = [n for n, pr in result["projects"].items() if pr.get("source") == "application"]
-    sources = []
-    if suite_names:
-        sources.append(f"[microsoft/typescript-benchmarking](https://github.com/microsoft/typescript-benchmarking), "
-                       f"the suite the TypeScript team benchmarks tsgo on ({', '.join(suite_names)})")
-    if app_names:
-        sources.append(f"a set of large open-source applications ({', '.join(app_names)})")
+    app_count = sum(pr.get("source") == "application" for pr in result["projects"].values())
     any_bun = any(has_bun(mode) for mode in modes)
-    bun_text = f" and with `bun check` from Bun {bun['version']} (one thread per core unless a `--threads` flag is named)" if any_bun else ""
-    machine_text = f"on {mode_machine(modes[0])['label']}" if one_machine and modes else f"on {m['label']}{elsewhere_text}"
+    machine_text = mode_machine(modes[0])["label"] if one_machine and modes else f"{m['label']}{elsewhere_text}"
+    reps = reps_text(result, modes)
+    if suite_names:
+        projects_text = (f"{', '.join(suite_names)} {'are' if len(suite_names) > 1 else 'is'} from [microsoft/typescript-benchmarking]"
+                         f"(https://github.com/microsoft/typescript-benchmarking), the suite the TypeScript team "
+                         f"benchmarks tsgo on" + (f"; the other {app_count} are large open-source applications." if app_count else "."))
+    else:
+        projects_text = "all are large open-source applications."
     lines = [
         f"## Benchmark: tsrs vs tsgo {tv}" + (" vs bun check" if any_bun else ""),
         "",
-        f"tsrs is a Rust port of the TypeScript 7 type checker (the Go compiler, \"tsgo\"). Each row type-checks one "
-        f"project from {', or from '.join(sources)}, with tsgo {tv} (npm `typescript@{tv}`), with tsrs "
-        f"at commit `{commit}` ({TSRS_BUILDS[result['tsrs'].get('build', 'release')]}){bun_text}: "
-        f"`tsc -p <project> --noEmit`, {reps_text(result, modes)}, {machine_text}. "
-        f"Walls on this shared machine move by a few percent between runs of the same code; "
-        f"the single-threaded instruction counts are the deterministic measure.",
+        f"Time and peak memory to type-check each project (`-p <project> --noEmit`) on {machine_text}. "
+        f"{reps[0].upper()}{reps[1:]}.",
         "",
+        f"- **tsrs**: commit `{commit}`, {TSRS_BUILDS[result['tsrs'].get('build', 'release')]}.",
+        f"- **tsgo**: npm `typescript@{tv}`, the official Go compiler"
+        + (f". tsrs ports a later 7.1-dev commit (`{result['reference']['commit'][:8]}`)." if result.get("reference") else "."),
     ]
-    drift = False
+    if any_bun:
+        lines.append(f"- **bun check**: Bun {bun['version']}.")
+    lines += ["", f"Projects: {projects_text}", ""]
     for mode in modes:
         mm = mode_machine(mode)
-        tsrs_default = tsrs_default_checkers(mm)
-        default_title = (f"no thread flag; tsgo uses 4 checker threads, tsrs every core up to 16, then half the cores, at most 32 ({tsrs_default} "
-                         f"here; tsrs also resolves members lazily, its default)" + (f", bun all {mm.get('cpus')} cores" if has_bun(mode) else ""))
-        titles = {"default": f"Default mode: {default_title}",
-                  "single": "`--singleThreaded`: one checker thread in both",
-                  "checkers8": "`--checkers 8`: 8 checker threads in both (how each compiler scales with more checkers)",
-                  "checkers16": "`--checkers 16`: 16 checker threads in both"
-                                + (", bun `--threads 16`" if has_bun(mode) else ""),
-                  "wide": f"Default mode on a {mm.get('cpus')}-vCPU machine: {default_title}",
-                  "checkers64": "`--checkers 64`: 64 checker threads in both (how each compiler scales on a wide machine)"
-                                + (", bun `--threads 64`" if has_bun(mode) else "")}
-        title = titles[mode] + (f", on {whole[mode]['label']}" if mode in whole and not one_machine else "")
         with_bun = has_bun(mode)
-        if with_bun:
-            header = ("| project | errors, tsgo / tsrs / bun | tsgo wall (s) | tsrs wall (s) | bun check wall (s) | "
-                      "speedup vs tsgo | speedup vs bun | tsgo peak memory | tsrs peak memory | bun check peak memory | "
-                      "memory efficiency vs tsgo | memory efficiency vs bun |")
-            rule = "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |"
-        else:
-            header = ("| project | errors, tsgo / tsrs | tsgo wall (s) | tsrs wall (s) | speedup | tsgo peak memory | "
-                      "tsrs peak memory | memory efficiency vs tsgo |")
-            rule = "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |"
-        lines += [f"**{title}**", "", header, rule]
-        for name, pr in sorted(result["projects"].items(), key=lambda item: speedup_sort_key(item[1], mode)):
-            if mode not in pr:
-                continue
-            g, t = pr[mode]["tsgo"], pr[mode]["tsrs"]
-            b = pr[mode].get("bun") if with_bun else None
-            if not g["ok_runs"] or not t["ok_runs"]:
-                failed = [c for c, s in (("tsgo", g), ("tsrs", t)) if not s["ok_runs"]]
-                lines.append(f"| {name} | **FAILED: {', '.join(failed)}** |" + " |" * (11 if with_bun else 7))
-                continue
-            ge, te = ("/".join(map(str, s["error_counts"])) for s in (g, t))
-            err = f"{ge} / {te}"
-            ref = pr[mode].get("reference")
-            if ref and ref["same_as_tsrs"]:
-                err = f"{err} (ref {ref['errors']})"
-                drift = True
-            elif pr[mode]["errors_match"] is False:
-                err = f"**MISMATCH {err}**" + (f" (ref {ref['errors']})" if ref else "")
-            elif pr[mode]["error_locations_match"] is False:
-                err = f"**{err} (locations differ)**"
-            speed = g["wall_s"] / t["wall_s"] if g["wall_s"] and t["wall_s"] else None
-            mem = g["peak_rss_bytes"] / t["peak_rss_bytes"] if g["peak_rss_bytes"] and t["peak_rss_bytes"] else None
-            speed_cell = notable(fmt_ratio(speed), speed, lambda x: x >= NOTABLE_SPEEDUP)
-            mem_cell = notable(fmt_ratio(mem), mem, lambda x: x >= NOTABLE_MEMORY)
-            if not with_bun:
-                lines.append(f"| {name} | {err} | {fmt_num(g['wall_s'])} | {fmt_num(t['wall_s'])} | {speed_cell} | "
-                             f"{fmt_mem(g['peak_rss_bytes'])} | {fmt_mem(t['peak_rss_bytes'])} | {mem_cell} |")
-                continue
-            if b and b["ok_runs"]:
-                be = "/".join(map(str, b["error_counts"]))
-                b_speed = b["wall_s"] / t["wall_s"] if b["wall_s"] and t["wall_s"] else None
-                b_mem = b["peak_rss_bytes"] / t["peak_rss_bytes"] if b["peak_rss_bytes"] and t["peak_rss_bytes"] else None
-                b_wall, b_peak = fmt_num(b["wall_s"]), fmt_mem(b["peak_rss_bytes"])
-            else:
-                be, b_speed, b_mem, b_wall, b_peak = "n/a", None, None, "n/a", "n/a"
-            lines.append(f"| {name} | {err} / {be} | {fmt_num(g['wall_s'])} | {fmt_num(t['wall_s'])} | {b_wall} | "
-                         f"{speed_cell} | {fmt_ratio(b_speed)} | {fmt_mem(g['peak_rss_bytes'])} | "
-                         f"{fmt_mem(t['peak_rss_bytes'])} | {b_peak} | {mem_cell} | {fmt_ratio(b_mem)} |")
-        lines.append("")
-    lines.append("errors: the number of type errors each compiler reports on the project; tsgo's and tsrs's must be equal "
-                 "(a bold errors cell is a disagreement, i.e. a correctness bug). wall: process wall-clock time. speedup: "
-                 f"tsgo wall / tsrs wall (above 1 = tsrs faster; bold from {NOTABLE_SPEEDUP:g}x). peak memory: maximum "
-                 "resident set size. memory efficiency vs tsgo: tsgo peak memory / tsrs peak memory (2x = tsrs uses half the "
-                 f"memory; below 1 = tsrs uses more; bold from {NOTABLE_MEMORY:g}x)."
-                 + (" speedup vs bun: bun check wall / tsrs wall; memory efficiency vs bun: bun check peak memory / tsrs peak memory. bun check "
-                    "follows TypeScript 7.0, tsrs the 7.1-dev commit it ports, so their error counts can differ where the "
-                    "two TypeScript versions do." if any_bun else ""))
+        default_flags = (f"No thread flags: tsgo runs 4 checker threads; tsrs runs {tsrs_default_checkers(mm)} (its "
+                         f"default: all cores up to 16, then half the cores, at most 32; fewer on small projects)"
+                         + ("; bun check runs one thread per core." if with_bun else "."))
+        n = {"checkers8": 8, "checkers16": 16, "checkers64": 64}.get(mode)
+        titles = {"default": ("Default settings", default_flags),
+                  "single": ("`--singleThreaded`", "One checker thread each."),
+                  "wide": (f"Default settings on {mm.get('cpus')} vCPUs", default_flags)}
+        if n:
+            titles[mode] = (f"`--checkers {n}`", f"{n} checker threads each" + (f"; bun check gets `--threads {n}`." if with_bun and n != 8 else "."))
+        title, flags = titles[mode]
+        title += f", on {whole[mode]['label']}" if mode in whole and not one_machine else ""
+        rows = sorted(((n, pr[mode]) for n, pr in result["projects"].items() if mode in pr),
+                      key=lambda item: speedup_sort_key({mode: item[1]}, mode))
+        lines += [f"### {title}", "", flags, ""]
+        for kind, key, fmt, up, down, notable_from in (
+                ("Wall time", "wall_s", fmt_s, "faster", "slower", NOTABLE_SPEEDUP),
+                ("Peak memory", "peak_rss_bytes", fmt_mem, "less", "more", NOTABLE_MEMORY)):
+            cols = ["tsgo", "tsrs"] + (["bun check"] if with_bun else []) + ["tsrs vs tsgo"] + (["tsrs vs bun"] if with_bun else [])
+            lines += [f"**{kind}**", "", f"| project | {' | '.join(cols)} |", "| --- |" + " ---: |" * len(cols)]
+            for name, cell in rows:
+                g, t = cell["tsgo"], cell["tsrs"]
+                if not g["ok_runs"] or not t["ok_runs"]:
+                    failed = [c for c, s in (("tsgo", g), ("tsrs", t)) if not s["ok_runs"]]
+                    lines.append(f"| {name} | **FAILED: {', '.join(failed)}** |" + " |" * (len(cols) - 1))
+                    continue
+                b = cell.get("bun") if with_bun else None
+                b = b if b and b["ok_runs"] else None
+                vs = lambda other: other[key] / t[key] if other and other[key] and t[key] else None
+                cells = [fmt(g[key]), fmt(t[key])] + ([fmt(b[key]) if b else "n/a"] if with_bun else [])
+                cells.append(ratio_text(vs(g), up, down, notable_from))
+                if with_bun:
+                    cells.append(ratio_text(vs(b), up, down, float("inf")))
+                lines.append(f"| {name} | {' | '.join(cells)} |")
+            lines.append("")
+        lines += errors_summary(result, mode, with_bun)
+    lines.append("Rows are sorted by speedup over tsgo. Wall time is the process's wall clock; peak memory is its maximum "
+                 f"resident set size. Bold marks a win over tsgo of at least {NOTABLE_SPEEDUP:g}x in time or "
+                 f"{NOTABLE_MEMORY:g}x in memory.")
     if {"single", "checkers8"} <= set(modes):
-        lines += ["", "**Scaling: wall time of `--singleThreaded` / wall time of `--checkers 8`, per compiler**", "",
-                  "| project | tsgo | tsrs | tsrs scaling / tsgo scaling | tsgo memory, 8 checkers / 1 | "
-                  "tsrs memory, 8 checkers / 1 |",
+        lines += ["", "### Scaling from 1 to 8 checker threads", "",
+                  "| project | tsgo speedup | tsrs speedup | tsrs / tsgo | tsgo memory growth | tsrs memory growth |",
                   "| --- | ---: | ---: | ---: | ---: | ---: |"]
         for name, pr in result["projects"].items():
             if "single" not in pr or "checkers8" not in pr:
@@ -525,28 +549,19 @@ def markdown(result: dict, modes: list[str] | None = None) -> str:
             lines.append(f"| {name} | {fmt_ratio(gs)} | {fmt_ratio(ts)} | {fmt_ratio(ts / gs)} | "
                          f"{fmt_ratio(eg['peak_rss_bytes'] / sg['peak_rss_bytes'])} | "
                          f"{fmt_ratio(et['peak_rss_bytes'] / st['peak_rss_bytes'])} |")
-        lines += ["", "scaling: how many times faster a compiler gets going from one checker thread to eight; "
-                      "memory: peak memory with 8 checkers divided by peak memory with one."]
-    if drift:
-        ref = result["reference"]
-        lines += ["", f"(ref N): tsgo {tv} and tsrs disagree, but `typescript@{ref['version']}`, built from the "
-                      f"TypeScript commit tsrs ports (`{ref['commit'][:8]}`), reports exactly tsrs's errors: a TypeScript "
-                      f"7.0 vs 7.1-dev difference, not a tsrs bug."]
+        lines += ["", "speedup: `--singleThreaded` wall / `--checkers 8` wall. memory growth: `--checkers 8` peak / "
+                      "`--singleThreaded` peak."]
     odd = [(name, mode, mm) for name, mode, mm in odd if mode in modes]
     if odd:
         by_project: dict = {}
         for name, mode, mm in odd:
             by_project.setdefault((name, mm["label"]), []).append(MODE_NAMES[mode])
-        lines += ["", "Not measured on the machine named below (a parallel run landed on more than one machine model): "
+        lines += ["", "Measured on another machine (a parallel run landed on more than one machine model): "
                       + "; ".join(f"{name} ({', '.join(modes)}) on {label}" for (name, label), modes in by_project.items())
                       + "."]
-    if one_machine and modes:
-        runners = mode_machine(modes[0])["label"]
-    else:
-        runners = m["label"] + "".join(f"; {' and '.join(names)}: {label}" for label, names in elsewhere.items())
-    lines += ["", f"Runner: {runners}. Date: {result['date']}. tsrs commit: `{commit}`. "
-                  + ("Numbers from shared CI machines are noisy; compare trends, not single runs. " if m.get("ci") else "")
-                  + "How it is measured: [`bench/README.md`](bench/README.md)."]
+    noise = ("Shared CI machines vary by a few percent between runs of the same code; the single-threaded instruction "
+             "counts in `bench/results/` are the exact measure. " if m.get("ci") else "")
+    lines += ["", f"{noise}Date: {result['date']}. tsrs commit: `{commit}`. Method: [`bench/README.md`](bench/README.md)."]
     return "\n".join(lines).rstrip() + "\n"
 
 

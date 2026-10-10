@@ -573,9 +573,9 @@ jobs:
 
   # Joins the per-project results into bench/results/<date>-<commit>.{json,md} and the README table, flags
   # regressions, and commits. Runs only when every fixed-spec measuring job succeeded: the regression flag reads them.
-  # README.md shows one table, the 16-vCPU machine's default mode (`wide`, with bun check); bench/results/<...>.md has
-  # every mode. If the wide job failed or was cancelled, the results file has no 16-vCPU sections and the README table
-  # is left as it was.
+  # README.md shows one mode, the 16-vCPU machine's default mode (`wide`, with bun check); bench/results/<...>.md has
+  # every mode. If the wide job failed or was cancelled, the results file has no 16-vCPU sections and the README tables
+  # are left as they were.
   merge:
     needs: [build, measure, measure-wide]
     if: ${{ !cancelled() && needs.build.result == 'success' && needs.measure.result == 'success' }}

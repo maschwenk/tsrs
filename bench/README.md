@@ -110,7 +110,7 @@ tsgo reports 727 errors instead of 136). Formbricks also gets the `next-env.d.ts
 matchers and untyped resolver modules). As with vscode and webpack, the count is a correctness signal between the two
 compilers. On 2026-10-06 (local, macOS arm64), tsgo 7.0.2 and tsrs reported identical errors on cal.diy (136) and
 Formbricks (0); on Supabase Studio (0 vs 9) and t3code (5 vs 6), `typescript@7.1.0-dev.20260930.4` reported exactly
-tsrs's errors (`(ref N)` in the table).
+tsrs's errors (the table's errors paragraph names such projects).
 
 ## What is measured
 
@@ -145,18 +145,20 @@ tsrs's errors (`(ref N)` in the table).
   prints). The JSON also has the `--extendedDiagnostics` check/total time, "Memory used", files, symbols, types and
   instantiations of every run. tsrs's default-mode counters are lower than tsgo's by design (lazy members); compare
   counters in `--singleThreaded` runs or with `--noLazyMembers`.
-- Rows are sorted by the speedup vs tsgo, biggest first (`speedup_sort_key` in `run.py`); a failed row goes last.
-- Bold in the speedup and memory columns marks a notable tsrs win: at least 5x faster, or at least 4x more memory
-  efficient (tsgo's peak memory / tsrs's; `NOTABLE_SPEEDUP`, `NOTABLE_MEMORY` in `run.py`; compared at the printed two
-  decimals). The memory columns are always `other tool's peak / tsrs's peak`, so above 1x is a tsrs win.
-- Errors: every `error TSxxxx` line is counted, and the (file, line, col, code) lists are compared. A differing count is
-  shown as **MISMATCH** in the table and a differing location set as "(locations differ)" — a correctness signal,
-  not a performance one.
+- Each mode gets two tables, wall time and peak memory, with the same rows in the same order: sorted by the speedup
+  vs tsgo, biggest first (`speedup_sort_key` in `run.py`); a failed row goes last. The comparison columns read
+  "Nx faster" / "Nx slower" and "Nx less" / "Nx more" (the other tool's value / tsrs's, or its inverse).
+- Bold in the "tsrs vs tsgo" columns marks a notable tsrs win: at least 5x faster, or at least 4x less memory
+  (`NOTABLE_SPEEDUP`, `NOTABLE_MEMORY` in `run.py`; compared at the printed two decimals).
+- Errors: every `error TSxxxx` line is counted, and the (file, line, col, code) lists are compared. Below each mode's
+  tables, an errors paragraph names only the projects where tsgo and tsrs disagree: a differing count is a
+  **Mismatch** and a differing location set "Same count, different locations", both bold. This is a correctness
+  signal, not a performance one.
 - tsrs ports a TypeScript 7.1-dev commit (`b85298b6`, `Cargo.toml`), not 7.0.2, so some differences are TypeScript
   version differences. When the two disagree, the harness also runs `typescript@7.1.0-dev.20260930.4` (the nightly
   built from `b85298b6` plus one CI-only commit; `reference` in `projects.json`) once: if it reports exactly tsrs's
-  errors the cell reads `tsgo / tsrs (ref N)` and is not flagged. On 2026-10-01 that explains both differences
-  (vscode 359 vs 371, webpack 848 vs 840: tsrs's lists equal the nightly's line for line). When the port moves to a
+  errors the project is listed as a TypeScript version difference and not flagged. On 2026-10-01 that explains both
+  differences (vscode 359 vs 371, webpack 848 vs 840: tsrs's lists equal the nightly's line for line). When the port moves to a
   newer TypeScript commit, update `reference` to the nightly built from it (the harness warns when they differ).
 
 ## Regression flag

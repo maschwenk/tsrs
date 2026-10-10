@@ -28,10 +28,10 @@ class ReportingTests(unittest.TestCase):
     def test_historical_and_new_results_name_their_own_hardware(self):
         old = run.markdown(self.historical, ['wide', 'checkers64'])
         new = run.markdown(self.resized(), ['wide', 'checkers16'])
-        self.assertIn('Default mode on a 64-vCPU machine', old)
+        self.assertIn('Default settings on 64 vCPUs', old)
         self.assertIn('`--checkers 64`', old)
-        self.assertIn('Default mode on a 16-vCPU machine', new)
-        self.assertIn('bun `--threads 16`', new)
+        self.assertIn('Default settings on 16 vCPUs', new)
+        self.assertIn('bun check gets `--threads 16`', new)
         self.assertNotIn('64-vCPU', new)
 
     def test_merge_keeps_fixed_and_wide_machine_provenance(self):
@@ -54,7 +54,7 @@ class ReportingTests(unittest.TestCase):
             merged = run.merge_results({'projects': [{'name': 'vscode'}]}, paths)
         self.assertEqual(8, merged['machine']['cpus'])
         self.assertEqual(16, merged['projects']['vscode']['wide']['machine']['cpus'])
-        self.assertIn('Default mode on a 16-vCPU machine', run.markdown(merged, ['wide']))
+        self.assertIn('Default settings on 16 vCPUs', run.markdown(merged, ['wide']))
 
     def test_history_starts_new_baseline_only_for_changed_hardware(self):
         new = self.resized()
