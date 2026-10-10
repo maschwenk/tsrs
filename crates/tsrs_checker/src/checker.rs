@@ -97,7 +97,7 @@ pub struct ContextualInfo {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct InferenceContextInfo {
     pub node: P<Node>,
-    pub context: Option<P<InferenceContext>>,
+    pub context: Option<InferenceContextKey>,
 }
 
 // WideningKind
@@ -311,9 +311,12 @@ bitflags! {
 // read through accessors that return the zero value when it is absent). Arrays and callbacks are owned;
 // this intermediate native record is 72 bytes.
 
+/// Qualified context edge; access borrows its checker.
+pub type InferenceContextKey = tsrs_core::arena_owner::ArenaKey<InferenceContext>;
+
 #[derive(Default)]
 pub struct InferenceContext {
-    pub inferences: ArrayCell<P<InferenceInfo>>, // Inferences made for each type parameter
+    pub inferences: ArrayCell<InferenceInfoKey>, // Inferences made for each type parameter
     pub flags: Cell<InferenceFlags>, // Inference flags
     pub signature: Cell<Option<SignatureKey>>, // Generic signature for which inferences are made (if any)
     pub compare_types: RefCell<Option<TypeComparer>>, // Type comparer function
@@ -339,7 +342,7 @@ pub(crate) struct InferenceContextRare {
 }
 
 impl InferenceContext {
-    pub(crate) fn new(inferences: &[P<InferenceInfo>], signature: Option<SignatureKey>, flags: InferenceFlags, compare_types: TypeComparer) -> InferenceContext {
+    pub(crate) fn new(inferences: &[InferenceInfoKey], signature: Option<SignatureKey>, flags: InferenceFlags, compare_types: TypeComparer) -> InferenceContext {
         InferenceContext {
             inferences: ArrayCell::new(inferences),
             signature: Cell::new(signature),
@@ -349,33 +352,8 @@ impl InferenceContext {
         }
     }
 
-    /// The arena handle of this context (contexts are only created in the arena and never moved).
-    fn as_p(&self) -> P<InferenceContext> {
-        // SAFETY: see above.
-        unsafe { P::from_arena(&*std::ptr::from_ref::<InferenceContext>(self)) }
-    }
-
     fn rare(&self) -> Option<&InferenceContextRare> {
         self.rare.get().map(Box::as_ref)
-    }
-
-    /// Go `context.mapper`, the mapper that fixes inferences. Go creates it with the context; here it may be created
-    /// on the first call (candidate B2), once, so every caller gets the same mapper.
-    pub fn mapper(&self) -> Option<P<TypeMapper>> {
-        if self.mapper.get().is_none() {
-            let m = new_inference_type_mapper(self.as_p(), true /*fixing*/);
-            self.mapper.set(Some(m));
-        }
-        self.mapper.get()
-    }
-
-    /// Go `context.nonFixingMapper` (created like `mapper()`).
-    pub fn non_fixing_mapper(&self) -> Option<P<TypeMapper>> {
-        if self.non_fixing_mapper.get().is_none() {
-            let m = new_inference_type_mapper(self.as_p(), false /*fixing*/);
-            self.non_fixing_mapper.set(Some(m));
-        }
-        self.non_fixing_mapper.get()
     }
 
     pub fn set_non_fixing_mapper(&self, mapper: P<TypeMapper>) {
@@ -469,6 +447,9 @@ impl<T: Copy + PartialEq> LazyVec<T> {
         }
     }
 }
+
+/// Qualified inference-candidate record edge.
+pub type InferenceInfoKey = tsrs_core::arena_owner::ArenaKey<InferenceInfo>;
 
 #[derive(Default)]
 pub struct InferenceInfo {
@@ -1104,7 +1085,10 @@ pub struct Checker {
     pub last_get_combined_node_flags_result: NodeFlags,
     pub last_get_combined_modifier_flags_node: Option<P<Node>>,
     pub last_get_combined_modifier_flags_result: ModifierFlags,
-    pub freeinference_state: Option<P<InferenceState>>,
+    pub(crate) inference_contexts: tsrs_core::arena_owner::ArenaBuilder<InferenceContext>,
+    pub(crate) inference_infos: tsrs_core::arena_owner::ArenaBuilder<InferenceInfo>,
+    pub(crate) inference_states: tsrs_core::arena_owner::ArenaBuilder<InferenceState>,
+    pub(crate) free_inference_states: Vec<InferenceStateKey>,
     pub free_flow_state: Option<P<FlowState>>,
     pub flow_loop_cache: FxHashMap<FlowLoopKey, P<Type>>,
     pub flow_loop_stack: Vec<FlowLoopInfo>,
@@ -1498,7 +1482,10 @@ pub fn new_checker(program: Arc<dyn Program>) -> Box<Checker> {
         last_get_combined_node_flags_result: NodeFlags::None,
         last_get_combined_modifier_flags_node: None,
         last_get_combined_modifier_flags_result: ModifierFlags::None,
-        freeinference_state: None,
+        inference_contexts: tsrs_core::arena_owner::ArenaBuilder::new(),
+        inference_infos: tsrs_core::arena_owner::ArenaBuilder::new(),
+        inference_states: tsrs_core::arena_owner::ArenaBuilder::new(),
+        free_inference_states: Vec::new(),
         free_flow_state: None,
         flow_loop_cache: FxHashMap::default(),
         flow_loop_stack: Vec::new(),
@@ -2392,3 +2379,43 @@ pub struct ObjectLiteralDiscriminator {
     pub members: Vec<P<Symbol>>,
 }
 
+
+impl Checker {
+    /// An inference-context reference cannot outlive its checker.
+    /// ```compile_fail
+    /// use tsrs_checker::{Checker, InferenceContext, InferenceContextKey};
+    /// fn escape(c: &Checker, key: InferenceContextKey) -> &'static InferenceContext {
+    ///     c.inference_context(key)
+    /// }
+    /// ```
+    pub fn inference_context(&self, key: InferenceContextKey) -> &InferenceContext {
+        self.inference_contexts.get(key).expect("inference context belongs to another checker")
+    }
+
+    pub fn inference_info(&self, key: InferenceInfoKey) -> &InferenceInfo {
+        self.inference_infos.get(key).expect("inference info belongs to another checker")
+    }
+
+    pub(crate) fn inference_state(&self, key: InferenceStateKey) -> &InferenceState {
+        self.inference_states.get(key).expect("inference state belongs to another checker")
+    }
+
+    /// Go `context.mapper`, created lazily once, with a key instead of a self pointer.
+    pub(crate) fn inference_mapper(&self, key: InferenceContextKey) -> Option<P<TypeMapper>> {
+        if self.inference_context(key).mapper.get().is_none() {
+            let mapper = new_inference_type_mapper(key, true /*fixing*/);
+            self.inference_context(key).mapper.set(Some(mapper));
+        }
+        self.inference_context(key).mapper.get()
+    }
+
+    /// Go `context.nonFixingMapper`, created lazily once.
+    pub(crate) fn inference_non_fixing_mapper(&self, key: InferenceContextKey) -> Option<P<TypeMapper>> {
+        if self.inference_context(key).non_fixing_mapper.get().is_none() {
+            let mapper = new_inference_type_mapper(key, false /*fixing*/);
+            self.inference_context(key).non_fixing_mapper.set(Some(mapper));
+        }
+        self.inference_context(key).non_fixing_mapper.get()
+    }
+
+}

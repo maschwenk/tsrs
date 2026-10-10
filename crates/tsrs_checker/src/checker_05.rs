@@ -553,7 +553,7 @@ impl Checker {
             if !self.has_correct_type_argument_arity(candidate, &type_arguments) || !self.has_correct_arity(node, &args, candidate, s.signature_help_trailing_comma) {
                 continue;
             }
-            let mut inference_context: Option<P<InferenceContext>> = None;
+            let mut inference_context: Option<InferenceContextKey> = None;
             let chosen = self.choose_overload_candidate(s, relation, node, &args, &type_arguments, candidate_index, &mut inference_context);
             if chosen.is_some() {
                 return chosen;
@@ -571,7 +571,7 @@ impl Checker {
         args: &[P<Node>],
         type_arguments: &[P<Node>],
         candidate_index: usize,
-        inference_context: &mut Option<P<InferenceContext>>,
+        inference_context: &mut Option<InferenceContextKey>,
     ) -> Option<SignatureKey> {
         {
             let candidate = s.candidates[candidate_index];
@@ -592,12 +592,12 @@ impl Checker {
                     let ctx = self.new_inference_context(&self.signature(candidate).type_parameters(), Some(candidate), inference_flags /*flags*/, None);
                     *inference_context = Some(ctx);
                     type_argument_types = self.infer_type_arguments(node, candidate, args, s.arg_check_mode | CheckMode::SkipGenericFunctions, ctx);
-                    if ctx.flags.get().intersects(InferenceFlags::SkippedGenericFunction) {
+                    if self.inference_context(ctx).flags.get().intersects(InferenceFlags::SkippedGenericFunction) {
                         s.arg_check_mode |= CheckMode::SkipGenericFunctions;
                     }
                 }
                 let inferred_type_parameters: &[P<Type>] = match *inference_context {
-                    Some(ctx) => &ctx.inferred_type_parameters(),
+                    Some(ctx) => &self.inference_context(ctx).inferred_type_parameters(),
                     None => &[],
                 };
                 check_candidate = self.get_signature_instantiation(candidate, &type_argument_types, is_in_js_file(self.signature(candidate).declaration()), inferred_type_parameters);
@@ -622,7 +622,7 @@ impl Checker {
                 s.arg_check_mode = CheckMode::Normal;
                 if let Some(ctx) = *inference_context {
                     let type_argument_types = self.infer_type_arguments(node, candidate, args, s.arg_check_mode, ctx);
-                    check_candidate = self.get_signature_instantiation(candidate, &type_argument_types, is_in_js_file(self.signature(candidate).declaration()), &ctx.inferred_type_parameters());
+                    check_candidate = self.get_signature_instantiation(candidate, &type_argument_types, is_in_js_file(self.signature(candidate).declaration()), &self.inference_context(ctx).inferred_type_parameters());
                     // If the original signature has a generic rest type, instantiation may produce a
                     // signature with different arity and we need to perform another arity check.
                     if self.get_non_array_rest_type(candidate).is_some() && !self.has_correct_arity(node, args, check_candidate, s.signature_help_trailing_comma) {
@@ -954,7 +954,7 @@ impl Checker {
 
     // checker.go:9582
     #[cfg_attr(not(feature = "work-census"), inline(always), expect(clippy::inline_always, reason = "without the census the wrapper is a forwarding call; inlined, callers call the body as before (notes/perf-checker-algorithms.md)"))]
-    pub(crate) fn infer_type_arguments(&mut self, node: P<Node>, signature: SignatureKey, args: &[P<Node>], check_mode: CheckMode, context: P<InferenceContext>) -> Vec<P<Type>> {
+    pub(crate) fn infer_type_arguments(&mut self, node: P<Node>, signature: SignatureKey, args: &[P<Node>], check_mode: CheckMode, context: InferenceContextKey) -> Vec<P<Type>> {
         if self.census_on() {
             let start = self.census.as_ref().unwrap().infer_args.len();
             let declaration = self.signature(signature).declaration();
@@ -981,7 +981,7 @@ impl Checker {
         self.infer_type_arguments_worker(node, signature, args, check_mode, context)
     }
 
-    fn infer_type_arguments_worker(&mut self, node: P<Node>, signature: SignatureKey, args: &[P<Node>], check_mode: CheckMode, context: P<InferenceContext>) -> Vec<P<Type>> {
+    fn infer_type_arguments_worker(&mut self, node: P<Node>, signature: SignatureKey, args: &[P<Node>], check_mode: CheckMode, context: InferenceContextKey) -> Vec<P<Type>> {
         if is_jsx_opening_like_element(node) {
             return self.infer_jsx_type_arguments(node, signature, check_mode, context);
         }
@@ -1039,7 +1039,7 @@ impl Checker {
                             _ => instantiated_type,
                         };
                         // Inferences made from return types have lower priority than all other inferences.
-                        self.infer_types(&context.inferences.get(), inference_source_type, inference_target_type, InferencePriority::ReturnType, false);
+                        self.infer_types(&self.inference_context(context).inferences.get(), inference_source_type, inference_target_type, InferencePriority::ReturnType, false);
                         }
                     // Create a type mapper for instantiating generic contextual types using the inferences made
                     // from the return type. We need a separate inference pass here because (a) instantiation of
@@ -1049,19 +1049,19 @@ impl Checker {
                     // replaced with inferences produced from the outer return type or preceding outer arguments.
                     // This protects against circular inferences, i.e. avoiding situations where inferences reference
                     // type parameters for which the inferences are being made.
-                    let return_context = self.new_inference_context(&self.signature(signature).type_parameters(), Some(signature), context.flags.get(), None);
+                    let return_context = self.new_inference_context(&self.signature(signature).type_parameters(), Some(signature), self.inference_context(context).flags.get(), None);
                     let mut outer_return_mapper: Option<P<TypeMapper>> = None;
                     if let Some(outer_context) = outer_context {
                         outer_return_mapper = Some(self.create_outer_return_mapper(outer_context));
                     }
                     let return_source_type = self.instantiate_type(contextual_type, outer_return_mapper);
-                    self.infer_types(&return_context.inferences.get(), return_source_type, inference_target_type, InferencePriority::None, false);
-                    if return_context.inferences.get().iter().any(|&info| has_inference_candidates(info)) {
+                    self.infer_types(&self.inference_context(return_context).inferences.get(), return_source_type, inference_target_type, InferencePriority::None, false);
+                    if self.inference_context(return_context).inferences.get().iter().any(|&info| has_inference_candidates(self, info)) {
                         let cloned = self.clone_inferred_part_of_context(return_context);
                         let return_mapper = self.get_mapper_from_context(cloned);
-                        context.set_return_mapper(return_mapper);
+                        self.inference_context(context).set_return_mapper(return_mapper);
                     } else {
-                        context.set_return_mapper(None);
+                        self.inference_context(context).set_return_mapper(None);
                     }
                     }
             }
@@ -1073,10 +1073,10 @@ impl Checker {
         }
         if let Some(rest_type) = rest_type {
             if rest_type.flags().intersects(TypeFlags::TypeParameter) {
-                let info = context.inferences.get().iter().copied().find(|info| info.type_parameter.get() == Some(rest_type));
+                let info = self.inference_context(context).inferences.get().iter().copied().find(|info| self.inference_info(*info).type_parameter.get() == Some(rest_type));
                 if let Some(info) = info {
                     if !args[arg_count as usize..].iter().any(|&arg| is_spread_argument(arg)) {
-                        info.implied_arity.set(args.len() as i32 - arg_count);
+                        self.inference_info(info).implied_arity.set(args.len() as i32 - arg_count);
                     }
                 }
             }
@@ -1086,7 +1086,7 @@ impl Checker {
             if self.could_contain_type_variables(this_type) {
                 let this_argument_node = self.get_this_argument_of_call(node);
                 let this_argument_type = self.get_this_argument_type(this_argument_node);
-                self.infer_types(&context.inferences.get(), this_argument_type, this_type, InferencePriority::None, false);
+                self.infer_types(&self.inference_context(context).inferences.get(), this_argument_type, this_type, InferencePriority::None, false);
             }
         }
         for i in 0..arg_count {
@@ -1098,14 +1098,14 @@ impl Checker {
                     if let Some(census) = self.census_mut() {
                         census.infer_args.push(arg_type.id.0);
                     }
-                    self.infer_types(&context.inferences.get(), arg_type, param_type, InferencePriority::None, false);
+                    self.infer_types(&self.inference_context(context).inferences.get(), arg_type, param_type, InferencePriority::None, false);
                 }
             }
         }
         if let Some(rest_type) = rest_type {
             if self.could_contain_type_variables(rest_type) {
                 let spread_type = self.get_spread_argument_type(args, arg_count, args.len() as i32, rest_type, Some(context), check_mode);
-                self.infer_types(&context.inferences.get(), spread_type, rest_type, InferencePriority::None, false);
+                self.infer_types(&self.inference_context(context).inferences.get(), spread_type, rest_type, InferencePriority::None, false);
             }
         }
         self.get_inferred_types(context)
@@ -1772,7 +1772,7 @@ impl Checker {
             // We have skipped a generic function during inferential typing. Obtain the inference context and
             // indicate this has occurred such that we know a second pass of inference is be needed.
             let context = self.get_inference_context(node).unwrap();
-            context.flags.set(context.flags.get() | InferenceFlags::SkippedGenericFunction);
+            self.inference_context(context).flags.set(self.inference_context(context).flags.get() | InferenceFlags::SkippedGenericFunction);
         }
     }
 
@@ -1935,14 +1935,14 @@ impl Checker {
                             let rest_type = self.get_effective_rest_type(contextual_signature);
                             if let Some(rest_type) = rest_type {
                                 if rest_type.flags().intersects(TypeFlags::TypeParameter) {
-                                    let non_fixing_mapper = inference_context.unwrap().non_fixing_mapper();
+                                    let non_fixing_mapper = self.inference_non_fixing_mapper(inference_context.unwrap());
                                     instantiated_contextual_signature = Some(self.instantiate_signature(contextual_signature, non_fixing_mapper));
                                 }
                             }
                         }
                         if instantiated_contextual_signature.is_none() {
                             if let Some(inference_context) = inference_context {
-                                let mapper = inference_context.mapper();
+                                let mapper = self.inference_mapper(inference_context);
                                 instantiated_contextual_signature = Some(self.instantiate_signature(contextual_signature, mapper));
                             } else {
                                 instantiated_contextual_signature = Some(contextual_signature);
@@ -2008,7 +2008,7 @@ impl Checker {
     }
 
     // checker.go:10436
-    pub(crate) fn infer_from_annotated_parameters_and_return(&mut self, sig: SignatureKey, context: SignatureKey, inference_context: Option<P<InferenceContext>>) {
+    pub(crate) fn infer_from_annotated_parameters_and_return(&mut self, sig: SignatureKey, context: SignatureKey, inference_context: Option<InferenceContextKey>) {
         let length = self.signature(sig).parameters().len() - if signature_has_rest_parameter(self, sig) { 1 } else { 0 };
         for i in 0..length {
             let declaration = self.signature(sig).parameters()[i].value_declaration().unwrap();
@@ -2017,14 +2017,14 @@ impl Checker {
                 let t = self.get_type_from_type_node(type_node);
                 let source = self.add_optionality_ex(t, false /*isProperty*/, is_optional_declaration(declaration));
                 let target = self.get_type_at_position(context, i as i32);
-                self.infer_types(&inference_context.unwrap().inferences.get(), source, target, InferencePriority::None, false);
+                self.infer_types(&self.inference_context(inference_context.unwrap()).inferences.get(), source, target, InferencePriority::None, false);
             }
         }
         if let Some(declaration) = self.signature(sig).declaration() {
             if let Some(return_type_node) = declaration.type_node() {
                 let source = self.get_type_from_type_node(return_type_node);
                 let target = self.get_return_type_of_signature(context);
-                self.infer_types(&inference_context.unwrap().inferences.get(), source, target, InferencePriority::None, false);
+                self.infer_types(&self.inference_context(inference_context.unwrap()).inferences.get(), source, target, InferencePriority::None, false);
             }
         }
     }

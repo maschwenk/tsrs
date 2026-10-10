@@ -143,6 +143,14 @@ checker and validate its identity before resolving a key. Public signature IDs s
 numbering independently of vector slots; type/symbol/AST edges inside records remain legacy
 (`notes/rust-typed-signature.md`).
 
+Inference contexts, candidate-info records and scratch states also live in checker-owned typed vectors. Retain
+`InferenceContextKey`, `InferenceInfoKey` and `InferenceStateKey`; resolve through the checker, including from
+mapper callbacks. A context never manufactures a pointer to itself. Lazy fixing/non-fixing mapper creation now
+receives the context key explicitly. Scratch reuse uses a Rust vector of keys in the same LIFO order as the old
+linked free list; records are cleared before returning their keys. Borrowed records cannot escape the checker;
+retained inference-array views own only key buffers. Candidate types and mapper records remain legacy graph
+edges (`notes/rust-typed-inference.md`).
+
 Build orchestrators and their hosts use `Arc`; the host's back-reference is weak. Returned build outcomes retain
 the actual orchestrator, including programs whose diagnostics they expose, through conversion to an API response.
 There is no manual orchestrator free or raw box reconstruction. Build tasks are Rust-owned records in a typed

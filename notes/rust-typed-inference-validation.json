@@ -1,0 +1,200 @@
+{
+  "targets": {
+    "sha256": "86c8000ac7f145a5185c50d6a73c79c78e69c697ad8d9d300e12289bb9d6bbb2",
+    "results": []
+  },
+  "features": {
+    "sha256": "cef1315f323b65b8f1daedf9d39afa36552e24833a4b0b31a2a6b2c77e1c8f92",
+    "results": []
+  },
+  "wasm": {
+    "sha256": "40b735b307bbe187f82a0c22f2a165500493d837dba59e855543e1e34ce28f8f",
+    "results": []
+  },
+  "units": {
+    "sha256": "f04ec37a9e47d45a32ceba3bff0b62d6a408eb86e4b2c79fedc3dbcd6eaed15d",
+    "results": [
+      "test result: ok. 36 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.28s",
+      "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s",
+      "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s",
+      "test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.90s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s",
+      "test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.77s",
+      "test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.45s",
+      "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.23s",
+      "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s",
+      "test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s",
+      "test result: ok. 104 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s",
+      "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 67 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.23s",
+      "test result: ok. 105 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 4.06s",
+      "test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.59s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s",
+      "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s",
+      "test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+    ]
+  },
+  "supported-cli-lsp": {
+    "sha256": "fe8e67f4c0bbd15524cfade036efe6e7a340a63c8beef81ef1cc1ab49934cb99",
+    "results": [
+      "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.65s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.57s",
+      "test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.35s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.13s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.95s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.44s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.71s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.35s",
+      "test result: ok. 41 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.66s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+    ]
+  },
+  "cli-lsp": {
+    "sha256": "3d9794c8530c02943c7e84a860b81fcc0807d1721f6347e95529b4e9c612f5bb",
+    "results": [
+      "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.52s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.00s",
+      "test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.70s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.02s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.29s",
+      "test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s"
+    ],
+    "known_failures": [
+      "freed_leaf_is_skipped_by_the_alternative_container_search",
+      "structurally_identical_instantiation_after_a_freed_leaf"
+    ]
+  },
+  "ratchet": {
+    "sha256": "d243f5f511795afe9287b8ca89591f7ab53b9beb8eae03dc994fdf35eebce0eb",
+    "results": [
+      "lint ratchet: ok (3 findings, none new)"
+    ]
+  },
+  "source": {
+    "sha256": "b67d4de32581dc43e7c1d5214b5e717781a81150b3d97910ed8cf918613eb90a",
+    "results": [
+      "source checks: ok (617 files, 24 Send/Sync impls, 74 uncommented orderings, no arena free of a reference parameter)"
+    ]
+  },
+  "release": {
+    "sha256": "62517b1a6112a73cdadf01c3751245f488f5cfaa881f1e5e9ea988ad05dae7be",
+    "results": []
+  },
+  "full": {
+    "sha256": "ad7af9d0687dac547120a70c6aad75d6855307cbf8c1161ae43421b53c134b13",
+    "results": []
+  },
+  "default": {
+    "sha256": "b9949b9e6e493858cc4e5240f474c167c3ef0e36fea64139356d31f916196ab0",
+    "results": []
+  },
+  "eager": {
+    "sha256": "6bb31749a30fe6b0b5541bebfd535ea019d438efdb7dad72513bcca7cba17348",
+    "results": []
+  },
+  "previous-eager": {
+    "sha256": "bc370e0682f26870e25b509854cf2cfdd0e20befa70fb80f17a256eefa3c6cb2",
+    "results": []
+  },
+  "fourslash": {
+    "sha256": "d21750a4785ec2898dd5547d952c71a38ae023c7d5197a07b547656b29ecf057",
+    "results": [
+      "fourslash: 4546 tests, 4066 passed, 63 failed, 417 skipped in 26.1s (results in target/arena-review/typed-inference-fourslash)"
+    ]
+  },
+  "tsctests": {
+    "sha256": "7945e806c779f2ed2d4105c5f0f9b9cefa5502dc4a38fa41b350856f3ae2ac1c",
+    "results": [
+      "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 10.65s"
+    ]
+  },
+  "emit": {
+    "sha256": "2290bca4ee9af0d89cd936b84f50da6479b9dc327809deb90a08179363550f73",
+    "results": []
+  },
+  "memo": {
+    "sha256": "b54994d94bf6cab6de87248e1d5a344a7790ffdafb5ababc137582e3352a42bd",
+    "results": []
+  },
+  "regressions": {
+    "sha256": "23af6e9de0e81cc98d84ba22c3f796b889b52c8d79b1a53cc1374eb69daafd60",
+    "results": [
+      "pass base-type-cycle-entry",
+      "pass conditional-discriminated-corners-loose",
+      "pass conditional-discriminated-corners",
+      "pass conditional-instantiation-limit-at",
+      "pass conditional-instantiation-limit-under",
+      "pass deferred-type-argument-check",
+      "pass derived-variance-annotation",
+      "pass derived-variance-any-conditional",
+      "pass derived-variance-any-keyof",
+      "pass derived-variance-any-template",
+      "pass derived-variance-expanding-elaboration",
+      "pass derived-variance-generic-rest",
+      "pass derived-variance-intersection",
+      "pass derived-variance-keyof-optional",
+      "pass derived-variance-mutual-conditional",
+      "pass derived-variance-this-conditional",
+      "pass derived-variance-this-type",
+      "pass derived-variance-void-arity",
+      "pass derived-variance-void-rest",
+      "pass infer-memo-repeated-walks",
+      "pass lazy-dts-members",
+      "pass leaf-alternative-containers",
+      "pass leaf-structural-instantiation",
+      "pass merged-interface-check-site",
+      "pass missing-props-head-suppression",
+      "pass union-too-complex-canonical-order",
+      "pass union-too-complex-cross-product",
+      "pass unique-symbol-name-truncation"
+    ]
+  },
+  "profile-build": {
+    "sha256": "331a1d876141a9dea8d96e757b9f812926e70ddcbf54738d205cbc921be26e19",
+    "results": []
+  },
+  "profile-units": {
+    "sha256": "0de2e3976190c3a2d6b6a8da8bc908fdb2362b866a429743e79dcb7433fc8e23",
+    "results": [
+      "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 104 filtered out; finished in 0.00s"
+    ]
+  },
+  "census": {
+    "sha256": "699e557db06ffaf1230e7f864a917eb7a215508cc9440000e47f629e32ea07f9",
+    "results": []
+  },
+  "extended": {
+    "sha256": "517f21e54edcb99c3e7e189008390540cfbe62892ab10158745399bfcae5784b",
+    "results": []
+  },
+  "measured_source_sha256": {
+    "crates/tsrs_checker/src/checker.rs": "a51cc6f19f2d7cdbea01b4c468173589e8d8b3b06759f26641448c3cea1731d7",
+    "crates/tsrs_checker/src/checker_04.rs": "92fbfcc7c77dcfb6b40f48b742f35a658babb6a2b6c56602be52201cdd86d119",
+    "crates/tsrs_checker/src/checker_05.rs": "987d9f60a57767caf1fabfd2c12dd95de5f53a4c9c40426743a5c0c449e19cc5",
+    "crates/tsrs_checker/src/checker_07.rs": "be41eb9b08ff5205be9f4556d2da1835ad4e9184e8f143bc8198c951cf8b7769",
+    "crates/tsrs_checker/src/checker_10.rs": "f6f5d42a027d7d3a2d2bbb40c08a38177b1b0ccd05f0fb2e5a8ac110d1edd0a8",
+    "crates/tsrs_checker/src/checker_12.rs": "11ddc05693185649f1c674cb16b4ec1f9ccbf58c75ae6c531fa7f5688dcc33aa",
+    "crates/tsrs_checker/src/checker_14.rs": "57f9b4daf74632247e390bb868a9006b10e9c03e142f1f5e36085e485c5a1e30",
+    "crates/tsrs_checker/src/checker_15.rs": "2ee93ad78adc5683510e48a11bfd12bf58b53766832903265bc350ed2dc8b191",
+    "crates/tsrs_checker/src/heapcensus.rs": "e91a61d90cbe34fc44594a3b3b0443fd76626929f31a0b5b166a21c9357fe267",
+    "crates/tsrs_checker/src/inference.rs": "638354cf82e6cb5fa5a62f0a7f04ae520fc856145c918ee2ed9df5d77b5ea0f8",
+    "crates/tsrs_checker/src/inference_types.rs": "01daa1b5ba24ae4a0f1501e3b00270a1912d921d93941766a25ad037f1356cd3",
+    "crates/tsrs_checker/src/infermemo.rs": "9d88e30b1d3b3dca718391d4b4d9bf70abf81d6f092ac64fee21358407ab7f4a",
+    "crates/tsrs_checker/src/jsx.rs": "09d5f6a74f266439a1c46e8ae97a711d050fa8ca802a0698f8ef355093fbd75e",
+    "crates/tsrs_checker/src/mapper.rs": "a5fedbfa0b4a9975908abc2caf2c51c980255bc0b3cb150440effdc8d1a9b8d3",
+    "crates/tsrs_checker/src/relater_2.rs": "8ffe1989db54929ee36e5b665fd2dfcd11b9978b8c3260157e278c94c5198446",
+    "crates/tsrs_checker/src/types.rs": "b1d731b718a71e41026fecb83b5f71b455b22b919a079786bba8dbe8136d9e5c"
+  },
+  "base_commit": "de874e597ff3753226492753189f84f0a028356f",
+  "scope": "unfinished inference ownership checkpoint; known leaf-retirement failures retained; no complete graph or Linux RSS audit"
+}

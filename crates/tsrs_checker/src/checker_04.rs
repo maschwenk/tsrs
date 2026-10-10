@@ -1429,7 +1429,7 @@ impl Checker {
 
     // checker.go:7656
     #[cfg_attr(not(feature = "work-census"), inline(always), expect(clippy::inline_always, reason = "without the census the wrapper is a forwarding call; inlined, callers call the body as before (notes/perf-checker-algorithms.md)"))]
-    pub(crate) fn check_expression_with_contextual_type(&mut self, node: P<Node>, contextual_type: P<Type>, inference_context: Option<P<InferenceContext>>, check_mode: CheckMode) -> P<Type> {
+    pub(crate) fn check_expression_with_contextual_type(&mut self, node: P<Node>, contextual_type: P<Type>, inference_context: Option<InferenceContextKey>, check_mode: CheckMode) -> P<Type> {
         if self.census_on() {
             let callee = self.census.as_ref().unwrap().call_stack.last().copied().flatten();
             let span = self.census_begin(crate::workcensus::Cat::CtxCheck, || crate::workcensus::CKey::OptNode(callee));
@@ -1441,7 +1441,7 @@ impl Checker {
         self.check_expression_with_contextual_type_worker(node, contextual_type, inference_context, check_mode)
     }
 
-    fn check_expression_with_contextual_type_worker(&mut self, node: P<Node>, contextual_type: P<Type>, inference_context: Option<P<InferenceContext>>, check_mode: CheckMode) -> P<Type> {
+    fn check_expression_with_contextual_type_worker(&mut self, node: P<Node>, contextual_type: P<Type>, inference_context: Option<InferenceContextKey>, check_mode: CheckMode) -> P<Type> {
         let context_node = self.get_context_node(node).unwrap();
         self.push_contextual_type(context_node, Some(contextual_type), false /*isCache*/);
         self.push_inference_context(context_node, inference_context);
@@ -1452,8 +1452,8 @@ impl Checker {
         // In CheckMode.Inferential we collect intra-expression inference sites to process before fixing any type
         // parameters. This information is no longer needed after the call to checkExpression.
         if let Some(inference_context) = inference_context {
-            if inference_context.has_intra_expression_inference_sites() {
-                inference_context.clear_intra_expression_inference_sites();
+            if self.inference_context(inference_context).has_intra_expression_inference_sites() {
+                self.inference_context(inference_context).clear_intra_expression_inference_sites();
             }
         }
         // We strip literal freshness when an appropriate contextual type is present such that contextually typed
@@ -1624,24 +1624,24 @@ impl Checker {
         // if some of the outer function type parameters have no inferences so far. If so, we can
         // potentially add inferred type parameters to the outer function return type.
         let mut return_signature: Option<SignatureKey> = None;
-        if let Some(context_signature) = context.signature.get() {
+        if let Some(context_signature) = self.inference_context(context).signature.get() {
             let return_type = self.get_return_type_of_signature(context_signature);
             return_signature = self.get_single_call_or_construct_signature(return_type);
         }
         if let Some(return_signature) = return_signature {
-            if self.signature(return_signature).type_parameters().is_empty() && !context.inferences.get().iter().all(|&info| has_inference_candidates(info)) {
+            if self.signature(return_signature).type_parameters().is_empty() && !self.inference_context(context).inferences.get().iter().all(|&info| has_inference_candidates(self, info)) {
                 // Instantiate the signature with its own type parameters as type arguments, possibly
                 // renaming the type parameters to ensure they have unique names.
                 let unique_type_parameters = self.get_unique_type_parameters(context, &self.signature(signature).type_parameters());
                 let instantiated_signature = self.get_signature_instantiation_without_filling_in_type_arguments(signature, &unique_type_parameters);
                 // Infer from the parameters of the instantiated signature to the parameters of the
                 // contextual signature starting with an empty set of inference candidates.
-                let inferences: Vec<P<InferenceInfo>> =
-                    context.inferences.get().iter().map(|info| new_inference_info(info.type_parameter.get().unwrap())).collect();
+                let inferences: Vec<InferenceInfoKey> =
+                    self.inference_context(context).inferences.get().iter().map(|info| new_inference_info(self, self.inference_info(*info).type_parameter.get().unwrap())).collect();
                 self.apply_to_parameter_types(instantiated_signature, contextual_signature, |c, source, target| {
                     c.infer_types(&inferences, source, target, InferencePriority::None, true /*contravariant*/);
                 });
-                if inferences.iter().any(|&info| has_inference_candidates(info)) {
+                if inferences.iter().any(|&info| has_inference_candidates(self, info)) {
                     // We have inference candidates, indicating that one or more type parameters are referenced
                     // in the parameter types of the contextual signature. Now also infer from the return type.
                     self.apply_to_return_types(instantiated_signature, contextual_signature, |c, source, target| {
@@ -1650,15 +1650,15 @@ impl Checker {
                     // If the type parameters for which we produced candidates do not have any inferences yet,
                     // we adopt the new inference candidates and add the type parameters of the expression type
                     // to the set of inferred type parameters for the outer function return type.
-                    if !has_overlapping_inferences(&context.inferences.get(), &inferences) {
+                    if !has_overlapping_inferences(self, &self.inference_context(context).inferences.get(), &inferences) {
                         // Go merges into context.inferences in place; the slice is immutable here, so merge a copy and
                         // store it back.
-                        let mut merged = context.inferences.get().to_vec();
+                        let mut merged = self.inference_context(context).inferences.get().to_vec();
                         self.merge_inferences(&mut merged, &inferences);
-                        context.inferences.set(alloc_vec(merged));
-                        let mut inferred_type_parameters = context.inferred_type_parameters().to_vec();
+                        self.inference_context(context).inferences.set(alloc_vec(merged));
+                        let mut inferred_type_parameters = self.inference_context(context).inferred_type_parameters().to_vec();
                         inferred_type_parameters.extend_from_slice(&unique_type_parameters);
-                        context.set_inferred_type_parameters(&inferred_type_parameters);
+                        self.inference_context(context).set_inferred_type_parameters(&inferred_type_parameters);
                         return self.get_or_create_type_from_signature(instantiated_signature);
                     }
                 }
@@ -1673,15 +1673,15 @@ impl Checker {
     }
 
     // checker.go:7856
-    pub(crate) fn get_unique_type_parameters(&mut self, context: P<InferenceContext>, type_parameters: &[P<Type>]) -> Vec<P<Type>> {
+    pub(crate) fn get_unique_type_parameters(&mut self, context: InferenceContextKey, type_parameters: &[P<Type>]) -> Vec<P<Type>> {
         let mut old_type_parameters: Vec<P<Type>> = Vec::new();
         let mut new_type_parameters: Vec<P<Type>> = Vec::new();
         let mut result: Vec<P<Type>> = Vec::with_capacity(type_parameters.len());
         for &tp in type_parameters {
             let name_owner = tp.symbol().unwrap();
             let name = name_owner.name();
-            if has_type_parameter_by_name(&context.inferred_type_parameters(), name) || has_type_parameter_by_name(&result, name) {
-                let mut all: Vec<P<Type>> = context.inferred_type_parameters().to_vec();
+            if has_type_parameter_by_name(&self.inference_context(context).inferred_type_parameters(), name) || has_type_parameter_by_name(&result, name) {
+                let mut all: Vec<P<Type>> = self.inference_context(context).inferred_type_parameters().to_vec();
                 all.extend_from_slice(&result);
                 let new_name = get_unique_type_parameter_name(&all, name);
                 let symbol = self.new_symbol(SymbolFlags::TypeParameter, &new_name);

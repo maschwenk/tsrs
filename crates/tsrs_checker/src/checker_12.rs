@@ -1086,24 +1086,24 @@ impl Checker {
                 //    * The mapper that maps the infer type parameter to its inference result (`context.mapper`)
                 let context = self.new_inference_context(&root.infer_type_parameters.get(), None /*signature*/, InferenceFlags::None, None);
                 if let Some(mapper) = mapper {
-                    let own = context.non_fixing_mapper().unwrap();
+                    let own = self.inference_non_fixing_mapper(context).unwrap();
                     let non_fixing_mapper = self.combine_type_mappers(Some(own), mapper);
-                    context.set_non_fixing_mapper(non_fixing_mapper);
+                    self.inference_context(context).set_non_fixing_mapper(non_fixing_mapper);
                     }
                 if !check_type_deferred {
                     // We don't want inferences from constraints as they may cause us to eagerly resolve the
                     // conditional type instead of deferring resolution. Also, we always want strict function
                     // types rules (i.e. proper contravariance) for inferences.
-                    self.infer_types(&context.inferences.get(), check_type, extends_type, InferencePriority::NoConstraints | InferencePriority::AlwaysStrict, false);
+                    self.infer_types(&self.inference_context(context).inferences.get(), check_type, extends_type, InferencePriority::NoConstraints | InferencePriority::AlwaysStrict, false);
                 }
                 // It's possible for 'infer T' type parameters to be given uninstantiated constraints when the
                 // those type parameters are used in type references (see getInferredTypeParameterConstraint). For
                 // that reason we need context.mapper to be first in the combined mapper. See #42636 for examples.
                 if let Some(mapper) = mapper {
-                    let combined = self.combine_type_mappers(context.mapper(), mapper);
+                    let combined = self.combine_type_mappers(self.inference_mapper(context), mapper);
                     combined_mapper = Some(combined);
                 } else {
-                    combined_mapper = context.mapper();
+                    combined_mapper = self.inference_mapper(context);
                 }
             }
             // Instantiate the extends type including inferences for 'infer T' type parameters

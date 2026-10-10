@@ -969,15 +969,15 @@ impl Checker {
                 // specify default types, nothing is gained from instantiating as type parameters would just be
                 // replaced with their constraints similar to the apparent type.
                 if let Some(inference_context) = inference_context {
-                    if context_flags.intersects(ContextFlags::Signature) && inference_context.inferences.get().iter().any(|&info| has_inference_candidates_or_default(info)) {
+                    if context_flags.intersects(ContextFlags::Signature) && self.inference_context(inference_context).inferences.get().iter().any(|&info| has_inference_candidates_or_default(self, info)) {
                         // For contextual signatures we incorporate all inferences made so far, e.g. from return
                         // types as well as arguments to the left in a function call.
-                        let t = self.instantiate_instantiable_types(contextual_type, inference_context.non_fixing_mapper().unwrap());
+                        let t = self.instantiate_instantiable_types(contextual_type, self.inference_non_fixing_mapper(inference_context).unwrap());
                         if !t.flags().intersects(TypeFlags::AnyOrUnknown) {
                             return Some(t);
                         }
                     }
-                    if let Some(return_mapper) = inference_context.return_mapper() {
+                    if let Some(return_mapper) = self.inference_context(inference_context).return_mapper() {
                         // For other purposes (e.g. determining whether to produce literal types) we only
                         // incorporate inferences made from the return type in a function call. We remove
                         // the 'boolean' type from the contextual type such that contextually typed boolean
@@ -1117,7 +1117,7 @@ impl Checker {
     }
 
     // checker.go:31444
-    pub(crate) fn push_inference_context(&mut self, node: P<Node>, context: Option<P<InferenceContext>>) {
+    pub(crate) fn push_inference_context(&mut self, node: P<Node>, context: Option<InferenceContextKey>) {
         self.inference_context_infos.push(InferenceContextInfo { node, context });
     }
 
@@ -1128,7 +1128,7 @@ impl Checker {
     }
 
     // checker.go:31454
-    pub(crate) fn get_inference_context(&mut self, node: P<Node>) -> Option<P<InferenceContext>> {
+    pub(crate) fn get_inference_context(&mut self, node: P<Node>) -> Option<InferenceContextKey> {
         for v in self.inference_context_infos.iter().rev() {
             if crate::is_node_descendant_of(Some(node), v.node) {
                 return v.context;

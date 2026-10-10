@@ -172,15 +172,15 @@ struct Effects {
     impure: u32,
 }
 
-fn info_outcomes(n: P<InferenceState>) -> Box<[InfoOutcome]> {
-    n.inferences
+fn info_outcomes(c: &Checker, n: InferenceStateKey) -> Box<[InfoOutcome]> {
+    c.inference_state(n).inferences
         .borrow()
         .iter()
         .map(|i| InfoOutcome {
-            candidates: i.candidates.to_vec().into_boxed_slice(),
-            contra_candidates: i.contra_candidates.to_vec().into_boxed_slice(),
-            priority: i.priority.get(),
-            top_level: i.top_level.get(),
+            candidates: c.inference_info(*i).candidates.to_vec().into_boxed_slice(),
+            contra_candidates: c.inference_info(*i).contra_candidates.to_vec().into_boxed_slice(),
+            priority: c.inference_info(*i).priority.get(),
+            top_level: c.inference_info(*i).top_level.get(),
         })
         .collect()
 }
@@ -198,7 +198,7 @@ impl Checker {
 
     /// `inferFromTypes(n, source, target)` for the walk at the top of `inferTypes`, through the memo.
     #[expect(clippy::set_contains_or_insert, reason = "a target is marked only after the walk to it turned out long")]
-    pub(crate) fn infer_from_types_memo(&mut self, n: P<InferenceState>, source: P<Type>, target: P<Type>) {
+    pub(crate) fn infer_from_types_memo(&mut self, n: InferenceStateKey, source: P<Type>, target: P<Type>) {
         if self.infer_memo.mode == InferMemoMode::Off {
             self.infer_from_types(n, source, target);
             return;
@@ -228,21 +228,21 @@ impl Checker {
             if self.infer_memo.mode == InferMemoMode::Shadow {
                 self.infer_memo_shadow(n, source, target, &key);
             } else {
-                let inferences = n.inferences.borrow();
+                let inferences = self.inference_state(n).inferences.borrow();
                 for (info, outcome) in inferences.iter().zip(entry.infos.iter()) {
-                    info.candidates.clear();
+                    self.inference_info(*info).candidates.clear();
                     for &t in outcome.candidates.iter() {
-                        info.candidates.push(t);
+                        self.inference_info(*info).candidates.push(t);
                     }
-                    info.contra_candidates.clear();
+                    self.inference_info(*info).contra_candidates.clear();
                     for &t in outcome.contra_candidates.iter() {
-                        info.contra_candidates.push(t);
+                        self.inference_info(*info).contra_candidates.push(t);
                     }
-                    info.priority.set(outcome.priority);
-                    info.top_level.set(outcome.top_level);
+                    self.inference_info(*info).priority.set(outcome.priority);
+                    self.inference_info(*info).top_level.set(outcome.top_level);
                 }
                 if entry.cleared {
-                    clear_cached_inferences(&inferences);
+                    clear_cached_inferences(self, &inferences);
                 }
             }
             self.infer_memo.key_pool.push(key);
@@ -255,7 +255,7 @@ impl Checker {
         let count_zero = self.instantiation_count == 0;
         let expression_checks = self.expression_checks;
         let serial_before = self.flow_memo.source_now();
-        n.cleared_inferences.set(false);
+        self.inference_state(n).cleared_inferences.set(false);
         // Inside an instantiation the walk can take instantiations from the active mappers' caches without counting
         // them; walked again outside it, it would count them (as for flow memo frames, FLAG_EFFECTS).
         let in_instantiation = !self.active_mappers.is_empty();
@@ -283,29 +283,29 @@ impl Checker {
         // walk did flow work.
         let flowed = self.flow_memo.source_now() != serial_before;
         let flags = if flowed { flags | crate::flowmemo::FLAG_COUNT_RESET } else { flags };
-        let entry = Entry { infos: info_outcomes(n), cleared: n.cleared_inferences.get(), height, flags, steps };
+        let entry = Entry { infos: info_outcomes(self, n), cleared: self.inference_state(n).cleared_inferences.get(), height, flags, steps };
         self.infer_memo.entries.insert(key.into_boxed_slice(), entry);
     }
 
     /// Builds the walk's key in `key`; false when the call is not memoized.
-    fn infer_memo_key(&self, key: &mut Vec<u32>, n: P<InferenceState>, source: P<Type>, target: P<Type>) -> bool {
+    fn infer_memo_key(&self, key: &mut Vec<u32>, n: InferenceStateKey, source: P<Type>, target: P<Type>) -> bool {
         if self.skip_direct_inference_nodes.len() != 0 {
             return false;
         }
-        let inferences = n.inferences.borrow();
+        let inferences = self.inference_state(n).inferences.borrow();
         if inferences.len() > MAX_INFOS {
             return false;
         }
         key.clear();
-        key.extend_from_slice(&[source.id.0, target.id.0, n.priority.get().bits() as u32, u32::from(n.contravariant.get()), inferences.len() as u32]);
+        key.extend_from_slice(&[source.id.0, target.id.0, self.inference_state(n).priority.get().bits() as u32, u32::from(self.inference_state(n).contravariant.get()), inferences.len() as u32]);
         for info in inferences.iter() {
             key.extend_from_slice(&[
-                info.type_parameter.get().map_or(0, |t| t.id.0),
-                info.priority.get().bits() as u32,
-                u32::from(info.top_level.get()) | u32::from(info.is_fixed.get()) << 1,
-                info.implied_arity.get() as u32,
+                self.inference_info(*info).type_parameter.get().map_or(0, |t| t.id.0),
+                self.inference_info(*info).priority.get().bits() as u32,
+                u32::from(self.inference_info(*info).top_level.get()) | u32::from(self.inference_info(*info).is_fixed.get()) << 1,
+                self.inference_info(*info).implied_arity.get() as u32,
             ]);
-            for list in [&info.candidates, &info.contra_candidates] {
+            for list in [&self.inference_info(*info).candidates, &self.inference_info(*info).contra_candidates] {
                 list.with_slice(|types| {
                     key.push(types.len() as u32);
                     key.extend(types.iter().map(|t| t.id.0));
@@ -317,8 +317,8 @@ impl Checker {
 
     /// Shadow mode: walks a hit for real and panics unless the walk has no effects and ends in the stored outcome.
     #[cold]
-    fn infer_memo_shadow(&mut self, n: P<InferenceState>, source: P<Type>, target: P<Type>, key: &[u32]) {
-        n.cleared_inferences.set(false);
+    fn infer_memo_shadow(&mut self, n: InferenceStateKey, source: P<Type>, target: P<Type>, key: &[u32]) {
+        self.inference_state(n).cleared_inferences.set(false);
         let before = self.infer_memo_effects();
         let lazy_before = self.lazy_member_stats.member_table_declared_instantiated;
         let frame = self.flow_frame_begin();
@@ -331,22 +331,22 @@ impl Checker {
         // creations it may make.
         let lazy_created = (self.lazy_member_stats.member_table_declared_instantiated - lazy_before) as u32;
         let effects = Effects { created: before.created.wrapping_add(lazy_created), ..before } != after;
-        let outcome = info_outcomes(n);
+        let outcome = info_outcomes(self, n);
         let entry = &self.infer_memo.entries[key];
         let flags_covered = flags & !entry.flags == 0 && (flags ^ entry.flags) & !crate::flowmemo::FLAG_COUNT_RESET == 0;
-        if effects || !taint.is_pure() || outcome != entry.infos || n.cleared_inferences.get() != entry.cleared || height != entry.height || !flags_covered {
+        if effects || !taint.is_pure() || outcome != entry.infos || self.inference_state(n).cleared_inferences.get() != entry.cleared || height != entry.height || !flags_covered {
             panic!(
                 "TSRS_INFER_MEMO=shadow: inferring from type {} to type {} (priority {:?}): the walk again has effects {effects} ({before:?} -> {after:?}; types/symbols/signatures now {}/{}/{}), pure {}, outcome {:?} (stored {:?}), cleared {} (stored {}), height {height} (stored {}), flags {flags} (stored {})",
                 source.id.0,
                 target.id.0,
-                n.priority.get(),
+                self.inference_state(n).priority.get(),
                 self.type_count,
                 self.symbol_count,
                 self.signature_count,
                 taint.is_pure(),
                 outcome,
                 entry.infos,
-                n.cleared_inferences.get(),
+                self.inference_state(n).cleared_inferences.get(),
                 entry.cleared,
                 entry.height,
                 entry.flags

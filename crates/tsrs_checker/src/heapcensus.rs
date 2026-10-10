@@ -218,6 +218,30 @@ impl Checker {
     #[expect(clippy::iter_over_hash_type, reason = "sums sizes: the order does not matter")]
     pub fn heap_census(&self) -> HeapCensus {
         let mut h = HeapCensus::default();
+        let slot = std::mem::size_of::<InferenceContext>() as u64;
+        h.row("inference_contexts (owned records)", HeapStat {
+            containers: 1,
+            len: self.inference_contexts.len() as u64,
+            cap: self.inference_contexts.capacity() as u64,
+            slot,
+            bytes: self.inference_contexts.capacity() as u64 * slot,
+        });
+        let slot = std::mem::size_of::<InferenceInfo>() as u64;
+        h.row("inference_infos (owned records)", HeapStat {
+            containers: 1,
+            len: self.inference_infos.len() as u64,
+            cap: self.inference_infos.capacity() as u64,
+            slot,
+            bytes: self.inference_infos.capacity() as u64 * slot,
+        });
+        let slot = std::mem::size_of::<InferenceState>() as u64;
+        h.row("inference_states (owned records)", HeapStat {
+            containers: 1,
+            len: self.inference_states.len() as u64,
+            cap: self.inference_states.capacity() as u64,
+            slot,
+            bytes: self.inference_states.capacity() as u64 * slot,
+        });
         let slot = std::mem::size_of::<Signature>() as u64;
         h.row("signatures (owned records)", HeapStat {
             containers: 1,
@@ -273,7 +297,7 @@ impl Checker {
             cached_arguments_referenced, module_import_attributes_types, flow_loop_cache, flow_node_reachable,
             flow_node_post_super, enum_relation, skip_direct_inference_nodes, active_mappers, free_type_lists, ambient_modules, reported_unreachable_nodes,
             non_existent_properties, exports_by_target_index, scratch_keyed_chain_cache, type_resolutions,
-            contextual_infos, inference_context_infos, shared_flows, antecedent_types,
+            contextual_infos, inference_context_infos, shared_flows, antecedent_types, free_inference_states,
         );
         // Values that own heap memory themselves.
         let mut arrays = HeapStat::default();

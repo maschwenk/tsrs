@@ -1840,7 +1840,7 @@ impl Checker {
     }
 
     // checker.go:29989
-    pub(crate) fn get_spread_argument_type(&mut self, args: &[P<Node>], index: i32, arg_count: i32, rest_type: P<Type>, context: Option<P<InferenceContext>>, check_mode: CheckMode) -> P<Type> {
+    pub(crate) fn get_spread_argument_type(&mut self, args: &[P<Node>], index: i32, arg_count: i32, rest_type: P<Type>, context: Option<InferenceContextKey>, check_mode: CheckMode) -> P<Type> {
         let in_const_context = self.is_const_type_variable(Some(rest_type), 0);
         if arg_count > 0 && index >= arg_count - 1 {
             let mut arg = args[(arg_count - 1) as usize];

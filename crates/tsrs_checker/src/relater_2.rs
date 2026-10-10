@@ -1534,9 +1534,9 @@ impl Relater {
                     // If the source has infer type parameters, we instantiate them in the context of the target
                     let r = self.as_p();
                     let ctx = c.new_inference_context(&source_params, None /*signature*/, InferenceFlags::None, Some(r.worker_comparer()));
-                    c.infer_types(&ctx.inferences.get(), target_conditional.extends_type.get().unwrap(), source_extends, InferencePriority::NoConstraints | InferencePriority::AlwaysStrict, false);
-                    source_extends = c.instantiate_type(source_extends, ctx.mapper());
-                    mapper = ctx.mapper();
+                    c.infer_types(&c.inference_context(ctx).inferences.get(), target_conditional.extends_type.get().unwrap(), source_extends, InferencePriority::NoConstraints | InferencePriority::AlwaysStrict, false);
+                    source_extends = c.instantiate_type(source_extends, c.inference_mapper(ctx));
+                    mapper = c.inference_mapper(ctx);
                 }
                 if c.is_type_identical_to(source_extends, target_conditional.extends_type.get().unwrap())
                     && (self.is_related_to(c, source_conditional.check_type.get().unwrap(), target_conditional.check_type.get().unwrap(), RecursionFlags::Both, false) != Ternary::False

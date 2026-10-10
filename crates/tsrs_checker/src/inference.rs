@@ -10,49 +10,43 @@ fn min_priority(a: InferencePriority, b: InferencePriority) -> InferencePriority
 
 impl Checker {
     // inference.go:32
-    pub(crate) fn get_inference_state(&mut self) -> P<InferenceState> {
-        let n = match self.freeinference_state {
-            Some(n) => n,
-            None => P::new(InferenceState::default()),
-        };
-        self.freeinference_state = n.next.get();
-        n
+    pub(crate) fn get_inference_state(&mut self) -> InferenceStateKey {
+        self.free_inference_states.pop().unwrap_or_else(|| self.inference_states.alloc(InferenceState::default()))
     }
 
     // inference.go:41
-    pub(crate) fn put_inference_state(&mut self, n: P<InferenceState>) {
-        n.visited.clear_scratch();
-        n.inferences.borrow_mut().clear();
-        tsrs_core::census_scrub_slack(&mut n.inferences.borrow_mut());
-        n.original_source.set(None);
-        n.original_target.set(None);
-        n.priority.set(InferencePriority::None);
-        n.inference_priority.set(InferencePriority::None);
-        n.contravariant.set(false);
-        n.bivariant.set(false);
-        n.expanding_flags.set(ExpandingFlags::None);
-        n.propagation_type.set(None);
-        n.source_stack.borrow_mut().clear();
-        n.target_stack.borrow_mut().clear();
-        n.next.set(self.freeinference_state);
-        self.freeinference_state = Some(n);
+    pub(crate) fn put_inference_state(&mut self, n: InferenceStateKey) {
+        self.inference_state(n).visited.clear_scratch();
+        self.inference_state(n).inferences.borrow_mut().clear();
+        tsrs_core::census_scrub_slack(&mut self.inference_state(n).inferences.borrow_mut());
+        self.inference_state(n).original_source.set(None);
+        self.inference_state(n).original_target.set(None);
+        self.inference_state(n).priority.set(InferencePriority::None);
+        self.inference_state(n).inference_priority.set(InferencePriority::None);
+        self.inference_state(n).contravariant.set(false);
+        self.inference_state(n).bivariant.set(false);
+        self.inference_state(n).expanding_flags.set(ExpandingFlags::None);
+        self.inference_state(n).propagation_type.set(None);
+        self.inference_state(n).source_stack.borrow_mut().clear();
+        self.inference_state(n).target_stack.borrow_mut().clear();
+        self.free_inference_states.push(n);
     }
 
     // inference.go:53
-    pub(crate) fn infer_types(&mut self, inferences: &[P<InferenceInfo>], original_source: P<Type>, original_target: P<Type>, priority: InferencePriority, contravariant: bool) {
+    pub(crate) fn infer_types(&mut self, inferences: &[InferenceInfoKey], original_source: P<Type>, original_target: P<Type>, priority: InferencePriority, contravariant: bool) {
         let n = self.get_inference_state();
-        n.inferences.borrow_mut().extend_from_slice(inferences);
-        n.original_source.set(Some(original_source));
-        n.original_target.set(Some(original_target));
-        n.priority.set(priority);
-        n.inference_priority.set(InferencePriority::MaxValue);
-        n.contravariant.set(contravariant);
+        self.inference_state(n).inferences.borrow_mut().extend_from_slice(inferences);
+        self.inference_state(n).original_source.set(Some(original_source));
+        self.inference_state(n).original_target.set(Some(original_target));
+        self.inference_state(n).priority.set(priority);
+        self.inference_state(n).inference_priority.set(InferencePriority::MaxValue);
+        self.inference_state(n).contravariant.set(contravariant);
         self.infer_from_types_memo(n, original_source, original_target);
         self.put_inference_state(n);
     }
 
     // inference.go:65
-    pub(crate) fn infer_from_types(&mut self, n: P<InferenceState>, source: P<Type>, target: P<Type>) {
+    pub(crate) fn infer_from_types(&mut self, n: InferenceStateKey, source: P<Type>, target: P<Type>) {
         self.infer_memo.steps = self.infer_memo.steps.wrapping_add(1);
         let mut source = source;
         let mut target = target;
@@ -63,10 +57,10 @@ impl Checker {
             // We are inferring from an 'any' type. We want to infer this type for every type parameter
             // referenced in the target type, so we record it as the propagation type and infer from the
             // target to itself. Then, as we find candidates we substitute the propagation type.
-            let save_propagation_type = n.propagation_type.get();
-            n.propagation_type.set(Some(source));
+            let save_propagation_type = self.inference_state(n).propagation_type.get();
+            self.inference_state(n).propagation_type.set(Some(source));
             self.infer_from_types(n, target, target);
-            n.propagation_type.set(save_propagation_type);
+            self.inference_state(n).propagation_type.set(save_propagation_type);
             return;
         }
         if let (Some(source_alias), Some(target_alias)) = (source.alias(), target.alias()) {
@@ -146,7 +140,7 @@ impl Checker {
             if self.is_from_inference_blocked_source(source) {
                 return;
             }
-            let inference = get_inference_info_for_type(n, target);
+            let inference = get_inference_info_for_type(self, n, target);
             if let Some(inference) = inference {
                 // If target is a type parameter, make an inference, unless the source type contains
                 // a "non-inferrable" type. Types with this flag set are markers used to prevent inference.
@@ -167,43 +161,43 @@ impl Checker {
                 if source.object_flags().intersects(ObjectFlags::NonInferrableType) || source == self.non_inferrable_any_type {
                     return;
                 }
-                if !inference.is_fixed.get() {
-                    let candidate = n.propagation_type.get().unwrap_or(source);
+                if !self.inference_info(inference).is_fixed.get() {
+                    let candidate = self.inference_state(n).propagation_type.get().unwrap_or(source);
                     if candidate == self.blocked_string_type {
                         return;
                     }
-                    if n.priority.get().bits() < inference.priority.get().bits() {
-                        inference.candidates.clear();
-                        inference.contra_candidates.clear();
-                        inference.top_level.set(true);
-                        inference.priority.set(n.priority.get());
+                    if self.inference_state(n).priority.get().bits() < self.inference_info(inference).priority.get().bits() {
+                        self.inference_info(inference).candidates.clear();
+                        self.inference_info(inference).contra_candidates.clear();
+                        self.inference_info(inference).top_level.set(true);
+                        self.inference_info(inference).priority.set(self.inference_state(n).priority.get());
                     }
-                    if n.priority.get() == inference.priority.get() {
+                    if self.inference_state(n).priority.get() == self.inference_info(inference).priority.get() {
                         // We make contravariant inferences only if we are in a pure contravariant position,
                         // i.e. only if we have not descended into a bivariant position.
-                        if n.contravariant.get() && !n.bivariant.get() {
-                            if !inference.contra_candidates.contains(&candidate) {
-                                inference.contra_candidates.push(candidate);
-                                clear_cached_inferences(&n.inferences.borrow());
-                                n.cleared_inferences.set(true);
+                        if self.inference_state(n).contravariant.get() && !self.inference_state(n).bivariant.get() {
+                            if !self.inference_info(inference).contra_candidates.contains(&candidate) {
+                                self.inference_info(inference).contra_candidates.push(candidate);
+                                clear_cached_inferences(self, &self.inference_state(n).inferences.borrow());
+                                self.inference_state(n).cleared_inferences.set(true);
                             }
-                        } else if !inference.candidates.contains(&candidate) {
-                            inference.candidates.push(candidate);
-                            clear_cached_inferences(&n.inferences.borrow());
-                            n.cleared_inferences.set(true);
+                        } else if !self.inference_info(inference).candidates.contains(&candidate) {
+                            self.inference_info(inference).candidates.push(candidate);
+                            clear_cached_inferences(self, &self.inference_state(n).inferences.borrow());
+                            self.inference_state(n).cleared_inferences.set(true);
                         }
                     }
-                    if !n.priority.get().intersects(InferencePriority::ReturnType)
+                    if !self.inference_state(n).priority.get().intersects(InferencePriority::ReturnType)
                         && target.flags().intersects(TypeFlags::TypeParameter)
-                        && inference.top_level.get()
-                        && !self.is_type_parameter_at_top_level(n.original_target.get().unwrap(), target, 0)
+                        && self.inference_info(inference).top_level.get()
+                        && !self.is_type_parameter_at_top_level(self.inference_state(n).original_target.get().unwrap(), target, 0)
                     {
-                        inference.top_level.set(false);
-                        clear_cached_inferences(&n.inferences.borrow());
-                        n.cleared_inferences.set(true);
+                        self.inference_info(inference).top_level.set(false);
+                        clear_cached_inferences(self, &self.inference_state(n).inferences.borrow());
+                        self.inference_state(n).cleared_inferences.set(true);
                     }
                 }
-                n.inference_priority.set(min_priority(n.inference_priority.get(), n.priority.get()));
+                self.inference_state(n).inference_priority.set(min_priority(self.inference_state(n).inference_priority.get(), self.inference_state(n).priority.get()));
                 return;
             }
             // Infer to the simplified version of an indexed access, if possible, to (hopefully) expose more bare type parameters to the inference engine
@@ -268,7 +262,7 @@ impl Checker {
             if self.is_generic_mapped_type(source) && self.is_generic_mapped_type(target) {
                 self.invoke_once(n, source, target, |c, n, s, t| c.infer_from_generic_mapped_types(n, s, t));
             }
-            if !(n.priority.get().intersects(InferencePriority::NoConstraints) && source.flags().intersects(TypeFlags::Intersection | TypeFlags::Instantiable)) {
+            if !(self.inference_state(n).priority.get().intersects(InferencePriority::NoConstraints) && source.flags().intersects(TypeFlags::Intersection | TypeFlags::Instantiable)) {
                 let apparent_source = self.get_apparent_type(source);
                 // getApparentType can return _any_ type, since an indexed access or conditional may simplify to any other type.
                 // If that occurs and it doesn't simplify to an object or intersection, we'll need to restart `inferFromTypes`
@@ -286,7 +280,7 @@ impl Checker {
     }
 
     // inference.go:284
-    pub(crate) fn infer_from_type_arguments(&mut self, n: P<InferenceState>, source_types: &[P<Type>], target_types: &[P<Type>], variances: &[VarianceFlags]) {
+    pub(crate) fn infer_from_type_arguments(&mut self, n: InferenceStateKey, source_types: &[P<Type>], target_types: &[P<Type>], variances: &[VarianceFlags]) {
         for i in 0..source_types.len().min(target_types.len()) {
             if i < variances.len() && (variances[i] & VarianceFlags::VarianceMask) == VarianceFlags::Contravariant {
                 self.infer_from_contravariant_types(n, source_types[i], target_types[i]);
@@ -297,31 +291,31 @@ impl Checker {
     }
 
     // inference.go:294
-    pub(crate) fn infer_with_priority(&mut self, n: P<InferenceState>, source: P<Type>, target: P<Type>, new_priority: InferencePriority) {
-        let save_priority = n.priority.get();
-        n.priority.set(n.priority.get() | new_priority);
+    pub(crate) fn infer_with_priority(&mut self, n: InferenceStateKey, source: P<Type>, target: P<Type>, new_priority: InferencePriority) {
+        let save_priority = self.inference_state(n).priority.get();
+        self.inference_state(n).priority.set(self.inference_state(n).priority.get() | new_priority);
         self.infer_from_types(n, source, target);
-        n.priority.set(save_priority);
+        self.inference_state(n).priority.set(save_priority);
     }
 
     // inference.go:301
-    pub(crate) fn infer_from_contravariant_types_with_priority(&mut self, n: P<InferenceState>, source: P<Type>, target: P<Type>, new_priority: InferencePriority) {
-        let save_priority = n.priority.get();
-        n.priority.set(n.priority.get() | new_priority);
+    pub(crate) fn infer_from_contravariant_types_with_priority(&mut self, n: InferenceStateKey, source: P<Type>, target: P<Type>, new_priority: InferencePriority) {
+        let save_priority = self.inference_state(n).priority.get();
+        self.inference_state(n).priority.set(self.inference_state(n).priority.get() | new_priority);
         self.infer_from_contravariant_types(n, source, target);
-        n.priority.set(save_priority);
+        self.inference_state(n).priority.set(save_priority);
     }
 
     // inference.go:308
-    pub(crate) fn infer_from_contravariant_types(&mut self, n: P<InferenceState>, source: P<Type>, target: P<Type>) {
-        n.contravariant.set(!n.contravariant.get());
+    pub(crate) fn infer_from_contravariant_types(&mut self, n: InferenceStateKey, source: P<Type>, target: P<Type>) {
+        self.inference_state(n).contravariant.set(!self.inference_state(n).contravariant.get());
         self.infer_from_types(n, source, target);
-        n.contravariant.set(!n.contravariant.get());
+        self.inference_state(n).contravariant.set(!self.inference_state(n).contravariant.get());
     }
 
     // inference.go:314
-    pub(crate) fn infer_from_contravariant_types_if_strict_function_types(&mut self, n: P<InferenceState>, source: P<Type>, target: P<Type>) {
-        if self.strict_function_types || n.priority.get().intersects(InferencePriority::AlwaysStrict) {
+    pub(crate) fn infer_from_contravariant_types_if_strict_function_types(&mut self, n: InferenceStateKey, source: P<Type>, target: P<Type>) {
+        if self.strict_function_types || self.inference_state(n).priority.get().intersects(InferencePriority::AlwaysStrict) {
             self.infer_from_contravariant_types(n, source, target);
         } else {
             self.infer_from_types(n, source, target);
@@ -342,44 +336,46 @@ impl Checker {
     // such that we would go on inferring forever, even though we would never infer
     // between the same pair of types.
     // inference.go:335
-    pub(crate) fn invoke_once(&mut self, n: P<InferenceState>, source: P<Type>, target: P<Type>, mut action: impl FnMut(&mut Checker, P<InferenceState>, P<Type>, P<Type>)) {
+    pub(crate) fn invoke_once(&mut self, n: InferenceStateKey, source: P<Type>, target: P<Type>, mut action: impl FnMut(&mut Checker, InferenceStateKey, P<Type>, P<Type>)) {
         let key = InferenceKey { s: source.id, t: target.id };
-        if let Some(status) = n.visited.get(&key) {
-            n.inference_priority.set(min_priority(n.inference_priority.get(), status));
+        if let Some(status) = self.inference_state(n).visited.get(&key) {
+            self.inference_state(n).inference_priority.set(min_priority(self.inference_state(n).inference_priority.get(), status));
             return;
         }
-        if n.visited.is_nil() {
-            n.visited.make();
+        if self.inference_state(n).visited.is_nil() {
+            self.inference_state(n).visited.make();
         }
-        n.visited.set(key, InferencePriority::Circularity);
-        let save_inference_priority = n.inference_priority.get();
-        n.inference_priority.set(InferencePriority::MaxValue);
+        self.inference_state(n).visited.set(key, InferencePriority::Circularity);
+        let save_inference_priority = self.inference_state(n).inference_priority.get();
+        self.inference_state(n).inference_priority.set(InferencePriority::MaxValue);
         // We stop inferring and report a circularity if we encounter duplicate recursion identities on both
         // the source side and the target side.
-        let save_expanding_flags = n.expanding_flags.get();
-        n.source_stack.borrow_mut().push(source);
-        n.target_stack.borrow_mut().push(target);
+        let save_expanding_flags = self.inference_state(n).expanding_flags.get();
+        self.inference_state(n).source_stack.borrow_mut().push(source);
+        self.inference_state(n).target_stack.borrow_mut().push(target);
         // The stack borrows are shared and isDeeplyNestedType never re-enters inference on this state.
-        if self.is_deeply_nested_type(source, &n.source_stack.borrow(), 2) {
-            n.expanding_flags.set(n.expanding_flags.get() | ExpandingFlags::Source);
+        let source_stack = self.inference_state(n).source_stack.borrow().clone();
+            if self.is_deeply_nested_type(source, &source_stack, 2) {
+            self.inference_state(n).expanding_flags.set(self.inference_state(n).expanding_flags.get() | ExpandingFlags::Source);
         }
-        if self.is_deeply_nested_type(target, &n.target_stack.borrow(), 2) {
-            n.expanding_flags.set(n.expanding_flags.get() | ExpandingFlags::Target);
+        let target_stack = self.inference_state(n).target_stack.borrow().clone();
+            if self.is_deeply_nested_type(target, &target_stack, 2) {
+            self.inference_state(n).expanding_flags.set(self.inference_state(n).expanding_flags.get() | ExpandingFlags::Target);
         }
-        if n.expanding_flags.get() != ExpandingFlags::Both {
+        if self.inference_state(n).expanding_flags.get() != ExpandingFlags::Both {
             action(self, n, source, target);
         } else {
-            n.inference_priority.set(InferencePriority::Circularity);
+            self.inference_state(n).inference_priority.set(InferencePriority::Circularity);
         }
-        n.target_stack.borrow_mut().pop();
-        n.source_stack.borrow_mut().pop();
-        n.expanding_flags.set(save_expanding_flags);
-        n.visited.set(key, n.inference_priority.get());
-        n.inference_priority.set(min_priority(n.inference_priority.get(), save_inference_priority));
+        self.inference_state(n).target_stack.borrow_mut().pop();
+        self.inference_state(n).source_stack.borrow_mut().pop();
+        self.inference_state(n).expanding_flags.set(save_expanding_flags);
+        self.inference_state(n).visited.set(key, self.inference_state(n).inference_priority.get());
+        self.inference_state(n).inference_priority.set(min_priority(self.inference_state(n).inference_priority.get(), save_inference_priority));
     }
 
     // inference.go:370
-    pub(crate) fn infer_from_matching_types(&mut self, n: P<InferenceState>, sources: &[P<Type>], targets: &[P<Type>], mut matches: impl FnMut(&mut Checker, P<Type>, P<Type>) -> bool, sort: bool) -> (Vec<P<Type>>, Vec<P<Type>>) {
+    pub(crate) fn infer_from_matching_types(&mut self, n: InferenceStateKey, sources: &[P<Type>], targets: &[P<Type>], mut matches: impl FnMut(&mut Checker, P<Type>, P<Type>) -> bool, sort: bool) -> (Vec<P<Type>>, Vec<P<Type>>) {
         let mut matched_sources: Vec<P<Type>> = Vec::new();
         let mut matched_targets: Vec<P<Type>> = Vec::new();
         for &t in targets {
@@ -472,7 +468,7 @@ pub(crate) fn get_type_list_depth(c: &mut Checker, types: &[P<Type>], max_depth:
 
 impl Checker {
     // inference.go:448
-    pub(crate) fn infer_to_multiple_types(&mut self, n: P<InferenceState>, source: P<Type>, targets: &[P<Type>], target_flags: TypeFlags) {
+    pub(crate) fn infer_to_multiple_types(&mut self, n: InferenceStateKey, source: P<Type>, targets: &[P<Type>], target_flags: TypeFlags) {
         let mut type_variable_count = 0;
         if target_flags.intersects(TypeFlags::Union) {
             let mut naked_type_variable: Option<P<Type>> = None;
@@ -484,19 +480,19 @@ impl Checker {
             // equal priority (i.e. of equal quality) to what we would infer for a naked type
             // parameter.
             for &t in targets {
-                if get_inference_info_for_type(n, t).is_some() {
+                if get_inference_info_for_type(self, n, t).is_some() {
                     naked_type_variable = Some(t);
                     type_variable_count += 1;
                 } else {
                     for i in 0..sources.len() {
-                        let save_inference_priority = n.inference_priority.get();
-                        n.inference_priority.set(InferencePriority::MaxValue);
+                        let save_inference_priority = self.inference_state(n).inference_priority.get();
+                        self.inference_state(n).inference_priority.set(InferencePriority::MaxValue);
                         self.infer_from_types(n, sources[i], t);
-                        if n.inference_priority.get() == n.priority.get() {
+                        if self.inference_state(n).inference_priority.get() == self.inference_state(n).priority.get() {
                             matched[i] = true;
                         }
-                        inference_circularity = inference_circularity || n.inference_priority.get() == InferencePriority::Circularity;
-                        n.inference_priority.set(min_priority(n.inference_priority.get(), save_inference_priority));
+                        inference_circularity = inference_circularity || self.inference_state(n).inference_priority.get() == InferencePriority::Circularity;
+                        self.inference_state(n).inference_priority.set(min_priority(self.inference_state(n).inference_priority.get(), save_inference_priority));
                     }
                 }
             }
@@ -504,7 +500,7 @@ impl Checker {
                 // If every target is an intersection of types containing a single naked type variable,
                 // make a lower priority inference to that type variable. This handles inferring from
                 // 'A | B' to 'T & (X | Y)' where we want to infer 'A | B' for T.
-                let intersection_type_variable = get_single_type_variable_from_intersection_types(n, targets);
+                let intersection_type_variable = get_single_type_variable_from_intersection_types(self, n, targets);
                 if let Some(intersection_type_variable) = intersection_type_variable {
                     self.infer_with_priority(n, source, intersection_type_variable, InferencePriority::NakedTypeVariable);
                 }
@@ -532,7 +528,7 @@ impl Checker {
             // make from nested naked type variables and given slightly higher priority by virtue
             // of being first in the candidates array.
             for &t in targets {
-                if get_inference_info_for_type(n, t).is_some() {
+                if get_inference_info_for_type(self, n, t).is_some() {
                     type_variable_count += 1;
                 } else {
                     self.infer_from_types(n, source, t);
@@ -545,7 +541,7 @@ impl Checker {
         // we only infer to single naked type variables.
         if target_flags.intersects(TypeFlags::Intersection) && type_variable_count == 1 || !target_flags.intersects(TypeFlags::Intersection) && type_variable_count > 0 {
             for &t in targets {
-                if get_inference_info_for_type(n, t).is_some() {
+                if get_inference_info_for_type(self, n, t).is_some() {
                     self.infer_with_priority(n, source, t, InferencePriority::NakedTypeVariable);
                 }
             }
@@ -554,13 +550,13 @@ impl Checker {
 }
 
 // inference.go:532
-pub(crate) fn get_single_type_variable_from_intersection_types(n: P<InferenceState>, types: &[P<Type>]) -> Option<P<Type>> {
+pub(crate) fn get_single_type_variable_from_intersection_types(c: &Checker, n: InferenceStateKey, types: &[P<Type>]) -> Option<P<Type>> {
     let mut type_variable: Option<P<Type>> = None;
     for &t in types {
         if !t.flags().intersects(TypeFlags::Intersection) {
             return None;
         }
-        let v = t.types().iter().copied().find(|&t| get_inference_info_for_type(n, t).is_some());
+        let v = t.types().iter().copied().find(|&t| get_inference_info_for_type(c, n, t).is_some());
         if v.is_none() || type_variable.is_some() && v != type_variable {
             return None;
         }
@@ -571,15 +567,15 @@ pub(crate) fn get_single_type_variable_from_intersection_types(n: P<InferenceSta
 
 impl Checker {
     // inference.go:547
-    pub(crate) fn infer_to_multiple_types_with_priority(&mut self, n: P<InferenceState>, source: P<Type>, targets: &[P<Type>], target_flags: TypeFlags, new_priority: InferencePriority) {
-        let save_priority = n.priority.get();
-        n.priority.set(n.priority.get() | new_priority);
+    pub(crate) fn infer_to_multiple_types_with_priority(&mut self, n: InferenceStateKey, source: P<Type>, targets: &[P<Type>], target_flags: TypeFlags, new_priority: InferencePriority) {
+        let save_priority = self.inference_state(n).priority.get();
+        self.inference_state(n).priority.set(self.inference_state(n).priority.get() | new_priority);
         self.infer_to_multiple_types(n, source, targets, target_flags);
-        n.priority.set(save_priority);
+        self.inference_state(n).priority.set(save_priority);
     }
 
     // inference.go:554
-    pub(crate) fn infer_to_conditional_type(&mut self, n: P<InferenceState>, source: P<Type>, target: P<Type>) {
+    pub(crate) fn infer_to_conditional_type(&mut self, n: InferenceStateKey, source: P<Type>, target: P<Type>) {
         if source.flags().intersects(TypeFlags::Conditional) {
             let source_check_type = get_non_distributed_type_parameter(source.as_conditional_type().check_type().unwrap()).unwrap();
             self.infer_from_types(n, source_check_type, target.as_conditional_type().check_type().unwrap());
@@ -595,13 +591,13 @@ impl Checker {
             self.infer_from_types(n, source_false_type, target_false_type);
         } else {
             let target_types = [self.get_true_type_from_conditional_type(target), self.get_false_type_from_conditional_type(target)];
-            let priority = if n.contravariant.get() { InferencePriority::ContravariantConditional } else { InferencePriority::None };
+            let priority = if self.inference_state(n).contravariant.get() { InferencePriority::ContravariantConditional } else { InferencePriority::None };
             self.infer_to_multiple_types_with_priority(n, source, &target_types, target.flags(), priority);
         }
     }
 
     // inference.go:566
-    pub(crate) fn infer_to_template_literal_type(&mut self, n: P<InferenceState>, source: P<Type>, target: &TemplateLiteralType) {
+    pub(crate) fn infer_to_template_literal_type(&mut self, n: InferenceStateKey, source: P<Type>, target: &TemplateLiteralType) {
         let comparer = self.compare_types_assignable_comparer();
         let matches = self.infer_types_from_template_literal_type(source, target, &comparer);
         let types = target.types();
@@ -617,8 +613,8 @@ impl Checker {
                 // If we are inferring from a string literal type to a type variable whose constraint includes one of the
                 // allowed template literal placeholder types, infer from a literal type corresponding to the constraint.
                 if source.flags().intersects(TypeFlags::StringLiteral) && target.flags().intersects(TypeFlags::TypeVariable) {
-                    if let Some(inference_context) = get_inference_info_for_type(n, target) {
-                        let constraint = self.get_base_constraint_of_type(inference_context.type_parameter.get().unwrap());
+                    if let Some(inference_context) = get_inference_info_for_type(self, n, target) {
+                        let constraint = self.get_base_constraint_of_type(self.inference_info(inference_context).type_parameter.get().unwrap());
                         if let Some(constraint) = constraint {
                             if !is_type_any(Some(constraint)) {
                                 let mut all_type_flags = TypeFlags::None;
@@ -725,7 +721,7 @@ fn infer_to_template_literal_type_choose(c: &mut Checker, left: P<Type>, right: 
 
 impl Checker {
     // inference.go:687
-    pub(crate) fn infer_from_generic_mapped_types(&mut self, n: P<InferenceState>, source: P<Type>, target: P<Type>) {
+    pub(crate) fn infer_from_generic_mapped_types(&mut self, n: InferenceStateKey, source: P<Type>, target: P<Type>) {
         // The source and target types are generic types { [P in S]: X } and { [P in T]: Y }, so we infer
         // from S to T and from X to Y.
         let source_constraint = self.get_constraint_type_from_mapped_type(source);
@@ -742,7 +738,7 @@ impl Checker {
     }
 
     // inference.go:699
-    pub(crate) fn infer_from_object_types(&mut self, n: P<InferenceState>, source: P<Type>, target: P<Type>) {
+    pub(crate) fn infer_from_object_types(&mut self, n: InferenceStateKey, source: P<Type>, target: P<Type>) {
         if source.object_flags().intersects(ObjectFlags::Reference)
             && target.object_flags().intersects(ObjectFlags::Reference)
             && (source.target() == target.target() || self.is_array_type(source) && self.is_array_type(target))
@@ -811,11 +807,11 @@ impl Checker {
                     if middle_length == 2 {
                         if (element_infos[sl].flags & element_infos[sl + 1].flags).intersects(ElementFlags::Variadic) {
                             // Middle of target is [...T, ...U] and source is tuple type
-                            let target_info = get_inference_info_for_type(n, element_types[sl]);
+                            let target_info = get_inference_info_for_type(self, n, element_types[sl]);
                             if let Some(target_info) = target_info {
-                                if target_info.implied_arity.get() >= 0 {
+                                if self.inference_info(target_info).implied_arity.get() >= 0 {
                                     // Infer slices from source based on implied arity of T.
-                                    let implied_arity = target_info.implied_arity.get();
+                                    let implied_arity = self.inference_info(target_info).implied_arity.get();
                                     let slice = self.slice_tuple_type(source, start_length, end_length + source_arity - implied_arity);
                                     self.infer_from_types(n, slice, element_types[sl]);
                                     let slice = self.slice_tuple_type(source, start_length + implied_arity, end_length);
@@ -825,8 +821,8 @@ impl Checker {
                         } else if element_infos[sl].flags.intersects(ElementFlags::Variadic) && element_infos[sl + 1].flags.intersects(ElementFlags::Rest) {
                             // Middle of target is [...T, ...rest] and source is tuple type
                             // if T is constrained by a fixed-size tuple we might be able to use its arity to infer T
-                            if let Some(info) = get_inference_info_for_type(n, element_types[sl]) {
-                                let constraint = self.get_base_constraint_of_type(info.type_parameter.get().unwrap());
+                            if let Some(info) = get_inference_info_for_type(self, n, element_types[sl]) {
+                                let constraint = self.get_base_constraint_of_type(self.inference_info(info).type_parameter.get().unwrap());
                                 if let Some(constraint) = constraint {
                                     if is_tuple_type(constraint) && !constraint.reference_target().as_tuple_type().combined_flags.get().intersects(ElementFlags::Variable) {
                                         let implied_arity = constraint.reference_target().as_tuple_type().fixed_length();
@@ -841,8 +837,8 @@ impl Checker {
                         } else if element_infos[sl].flags.intersects(ElementFlags::Rest) && element_infos[sl + 1].flags.intersects(ElementFlags::Variadic) {
                             // Middle of target is [...rest, ...T] and source is tuple type
                             // if T is constrained by a fixed-size tuple we might be able to use its arity to infer T
-                            if let Some(info) = get_inference_info_for_type(n, element_types[sl + 1]) {
-                                let constraint = self.get_base_constraint_of_type(info.type_parameter.get().unwrap());
+                            if let Some(info) = get_inference_info_for_type(self, n, element_types[sl + 1]) {
+                                let constraint = self.get_base_constraint_of_type(self.inference_info(info).type_parameter.get().unwrap());
                                 if let Some(constraint) = constraint {
                                     if is_tuple_type(constraint) && !constraint.reference_target().as_tuple_type().combined_flags.get().intersects(ElementFlags::Variable) {
                                         let implied_arity = constraint.reference_target().as_tuple_type().fixed_length();
@@ -897,7 +893,7 @@ impl Checker {
     }
 
     // inference.go:828
-    pub(crate) fn infer_from_properties(&mut self, n: P<InferenceState>, source: P<Type>, target: P<Type>) {
+    pub(crate) fn infer_from_properties(&mut self, n: InferenceStateKey, source: P<Type>, target: P<Type>) {
         let properties = self.get_properties_of_object_type(target);
         for target_prop in properties {
             let source_prop = self.get_property_of_type(source, target_prop.name.get());
@@ -915,7 +911,7 @@ impl Checker {
     }
 
     // inference.go:838
-    pub(crate) fn infer_from_signatures(&mut self, n: P<InferenceState>, source: P<Type>, target: P<Type>, kind: SignatureKind) {
+    pub(crate) fn infer_from_signatures(&mut self, n: InferenceStateKey, source: P<Type>, target: P<Type>, kind: SignatureKind) {
         let source_signatures = self.get_signatures_of_type(source, kind);
         let source_len = source_signatures.len() as i32;
         if source_len > 0 {
@@ -933,17 +929,17 @@ impl Checker {
     }
 
     // inference.go:853
-    pub(crate) fn infer_from_signature(&mut self, n: P<InferenceState>, source: SignatureKey, target: SignatureKey) {
+    pub(crate) fn infer_from_signature(&mut self, n: InferenceStateKey, source: SignatureKey, target: SignatureKey) {
         if !self.signature(source).flags().intersects(SignatureFlags::IsNonInferrable) {
-            let save_bivariant = n.bivariant.get();
+            let save_bivariant = self.inference_state(n).bivariant.get();
             let kind = match self.signature(target).declaration() {
                 Some(declaration) => declaration.kind(),
                 None => Kind::Unknown,
             };
             // Once we descend into a bivariant signature we remain bivariant for all nested inferences
-            n.bivariant.set(n.bivariant.get() || kind == Kind::MethodDeclaration || kind == Kind::MethodSignature || kind == Kind::Constructor);
+            self.inference_state(n).bivariant.set(self.inference_state(n).bivariant.get() || kind == Kind::MethodDeclaration || kind == Kind::MethodSignature || kind == Kind::Constructor);
             self.apply_to_parameter_types(source, target, |c, s, t| c.infer_from_contravariant_types_if_strict_function_types(n, s, t));
-            n.bivariant.set(save_bivariant);
+            self.inference_state(n).bivariant.set(save_bivariant);
         }
         self.apply_to_return_types(source, target, |c, s, t| c.infer_from_types(n, s, t));
     }
@@ -1003,7 +999,7 @@ impl Checker {
     }
 
     // inference.go:911
-    pub(crate) fn infer_from_index_types(&mut self, n: P<InferenceState>, source: P<Type>, target: P<Type>) {
+    pub(crate) fn infer_from_index_types(&mut self, n: InferenceStateKey, source: P<Type>, target: P<Type>) {
         // Inferences across mapped type index signatures are pretty much the same a inferences to homomorphic variables
         let mut priority = InferencePriority::None;
         if (source.object_flags() & target.object_flags()).intersects(ObjectFlags::Mapped) {
@@ -1043,7 +1039,7 @@ impl Checker {
     }
 
     // inference.go:948
-    pub(crate) fn infer_to_mapped_type(&mut self, n: P<InferenceState>, source: P<Type>, target: P<Type>, constraint_type: P<Type>) -> bool {
+    pub(crate) fn infer_to_mapped_type(&mut self, n: InferenceStateKey, source: P<Type>, target: P<Type>, constraint_type: P<Type>) -> bool {
         if constraint_type.flags().intersects(TypeFlags::Union) || constraint_type.flags().intersects(TypeFlags::Intersection) {
             let mut result = false;
             for t in constraint_type.types() {
@@ -1057,9 +1053,9 @@ impl Checker {
             // where T is a type variable. Use inferTypeForHomomorphicMappedType to infer a suitable source
             // type and then make a secondary inference from that type to T. We make a secondary inference
             // such that direct inferences to T get priority over inferences to Partial<T>, for example.
-            let inference = get_inference_info_for_type(n, constraint_type.as_index_type().target().unwrap());
+            let inference = get_inference_info_for_type(self, n, constraint_type.as_index_type().target().unwrap());
             if let Some(inference) = inference {
-                if !inference.is_fixed.get() && !self.is_from_inference_blocked_source(source) {
+                if !self.inference_info(inference).is_fixed.get() && !self.is_from_inference_blocked_source(source) {
                     let inferred_type = self.infer_type_for_homomorphic_mapped_type(source, target, constraint_type);
                     if let Some(inferred_type) = inferred_type {
                         // We assign a lower priority to inferences made from types containing non-inferrable
@@ -1070,7 +1066,7 @@ impl Checker {
                         } else {
                             InferencePriority::HomomorphicMappedType
                         };
-                        self.infer_with_priority(n, inferred_type, inference.type_parameter.get().unwrap(), priority);
+                        self.infer_with_priority(n, inferred_type, self.inference_info(inference).type_parameter.get().unwrap(), priority);
                     }
                 }
             }
@@ -1232,7 +1228,7 @@ impl Checker {
         let mapped_type_parameter = self.get_type_parameter_from_mapped_type(target);
         let type_parameter = self.get_indexed_access_type(constraint.as_index_type().target().unwrap(), mapped_type_parameter);
         let template_type = self.get_template_type_from_mapped_type(target);
-        let inference = new_inference_info(type_parameter);
+        let inference = new_inference_info(self, type_parameter);
         self.infer_types(&[inference], source, template_type, InferencePriority::None, false);
         let t = self.get_type_from_inference(inference).unwrap_or(self.unknown_type);
         self.get_widened_type(t)
@@ -1427,46 +1423,52 @@ impl Checker {
     }
 
     // inference.go:1251
-    pub(crate) fn new_inference_context(&mut self, type_parameters: &[P<Type>], signature: Option<SignatureKey>, flags: InferenceFlags, compare_types: Option<TypeComparer>) -> P<InferenceContext> {
+    pub(crate) fn new_inference_context(&mut self, type_parameters: &[P<Type>], signature: Option<SignatureKey>, flags: InferenceFlags, compare_types: Option<TypeComparer>) -> InferenceContextKey {
         let compare_types = match compare_types {
             Some(compare_types) => compare_types,
             None => self.compare_types_assignable_comparer(),
         };
-        let inferences: Vec<P<InferenceInfo>> = type_parameters.iter().map(|&tp| new_inference_info(tp)).collect();
+        let inferences: Vec<InferenceInfoKey> = type_parameters.iter().map(|&tp| new_inference_info(self, tp)).collect();
         self.new_inference_context_worker(&inferences, signature, flags, compare_types)
     }
 
     // inference.go:1258
     // n and the result are Option (Go checks n for nil; callers pass getInferenceContext results).
-    pub(crate) fn clone_inference_context(&mut self, n: Option<P<InferenceContext>>, extra_flags: InferenceFlags) -> Option<P<InferenceContext>> {
+    pub(crate) fn clone_inference_context(&mut self, n: Option<InferenceContextKey>, extra_flags: InferenceFlags) -> Option<InferenceContextKey> {
         let n = n?;
-        let inferences: Vec<P<InferenceInfo>> = n.inferences.get().iter().map(|&info| clone_inference_info(info)).collect();
-        Some(self.new_inference_context_worker(&inferences, n.signature.get(), n.flags.get() | extra_flags, std::sync::Arc::clone(n.compare_types.borrow().as_ref().unwrap())))
+        let inferences: Vec<InferenceInfoKey> = self.inference_context(n).inferences.get().iter().map(|&info| clone_inference_info(self, info)).collect();
+        let signature = self.inference_context(n).signature.get();
+        let flags = self.inference_context(n).flags.get() | extra_flags;
+        let compare_types = std::sync::Arc::clone(self.inference_context(n).compare_types.borrow().as_ref().unwrap());
+        Some(self.new_inference_context_worker(&inferences, signature, flags, compare_types))
     }
 
     // inference.go:1265
-    pub(crate) fn clone_inferred_part_of_context(&mut self, n: P<InferenceContext>) -> Option<P<InferenceContext>> {
-        let inferences: Vec<P<InferenceInfo>> = n.inferences.get().iter().copied().filter(|&info| has_inference_candidates(info)).collect();
+    pub(crate) fn clone_inferred_part_of_context(&mut self, n: InferenceContextKey) -> Option<InferenceContextKey> {
+        let inferences: Vec<InferenceInfoKey> = self.inference_context(n).inferences.get().iter().copied().filter(|&info| has_inference_candidates(self, info)).collect();
         if inferences.is_empty() {
             return None;
         }
-        let inferences: Vec<P<InferenceInfo>> = inferences.iter().map(|&info| clone_inference_info(info)).collect();
-        Some(self.new_inference_context_worker(&inferences, n.signature.get(), n.flags.get(), std::sync::Arc::clone(n.compare_types.borrow().as_ref().unwrap())))
+        let inferences: Vec<InferenceInfoKey> = inferences.iter().map(|&info| clone_inference_info(self, info)).collect();
+        let signature = self.inference_context(n).signature.get();
+        let flags = self.inference_context(n).flags.get();
+        let compare_types = std::sync::Arc::clone(self.inference_context(n).compare_types.borrow().as_ref().unwrap());
+        Some(self.new_inference_context_worker(&inferences, signature, flags, compare_types))
     }
 
     // inference.go:1273
-    pub(crate) fn new_inference_context_worker(&mut self, inferences: &[P<InferenceInfo>], signature: Option<SignatureKey>, flags: InferenceFlags, compare_types: TypeComparer) -> P<InferenceContext> {
-        let n = P::new(InferenceContext::new(inferences, signature, flags, compare_types));
+    pub(crate) fn new_inference_context_worker(&mut self, inferences: &[InferenceInfoKey], signature: Option<SignatureKey>, flags: InferenceFlags, compare_types: TypeComparer) -> InferenceContextKey {
+        let n = self.inference_contexts.alloc(InferenceContext::new(inferences, signature, flags, compare_types));
         if !tsrs_core::lazymembers::lazy_inference_mappers() {
-            n.mapper();
-            n.non_fixing_mapper();
+            self.inference_mapper(n);
+            self.inference_non_fixing_mapper(n);
         }
         n
     }
 
     // inference.go:1285
-    pub(crate) fn add_intra_expression_inference_site(&mut self, n: P<InferenceContext>, node: P<Node>, t: P<Type>) {
-        n.push_intra_expression_inference_site(IntraExpressionInferenceSite { node, t });
+    pub(crate) fn add_intra_expression_inference_site(&mut self, n: InferenceContextKey, node: P<Node>, t: P<Type>) {
+        self.inference_context(n).push_intra_expression_inference_site(IntraExpressionInferenceSite { node, t });
     }
 
     // We collect intra-expression inference sites within object and array literals to handle cases where
@@ -1483,8 +1485,8 @@ impl Checker {
     // infer from each argument before processing the next), but when the arrow functions are elements of an
     // object or array literal, we need to perform intra-expression inferences early.
     // inference.go:1302
-    pub(crate) fn infer_from_intra_expression_sites(&mut self, n: P<InferenceContext>) {
-        let sites = n.intra_expression_inference_sites();
+    pub(crate) fn infer_from_intra_expression_sites(&mut self, n: InferenceContextKey) {
+        let sites = self.inference_context(n).intra_expression_inference_sites();
         for site in sites {
             let contextual_type = if ast::is_method_declaration(site.node) {
                 self.get_contextual_type_for_object_literal_method(site.node, ContextFlags::NoConstraints)
@@ -1492,29 +1494,29 @@ impl Checker {
                 self.get_contextual_type(site.node, ContextFlags::NoConstraints)
             };
             if let Some(contextual_type) = contextual_type {
-                self.infer_types(&n.inferences.get(), site.t, contextual_type, InferencePriority::None, false);
+                self.infer_types(&self.inference_context(n).inferences.get(), site.t, contextual_type, InferencePriority::None, false);
             }
         }
-        n.clear_intra_expression_inference_sites();
+        self.inference_context(n).clear_intra_expression_inference_sites();
     }
 
     // inference.go:1317
-    pub(crate) fn get_inferred_type(&mut self, n: P<InferenceContext>, index: i32) -> P<Type> {
-        let inference = n.inferences.get()[index as usize];
-        if inference.inferred_type.get().is_none() {
-            if inference.type_parameter.get() == Some(self.error_type) {
-                return inference.type_parameter.get().unwrap();
+    pub(crate) fn get_inferred_type(&mut self, n: InferenceContextKey, index: i32) -> P<Type> {
+        let inference = self.inference_context(n).inferences.get()[index as usize];
+        if self.inference_info(inference).inferred_type.get().is_none() {
+            if self.inference_info(inference).type_parameter.get() == Some(self.error_type) {
+                return self.inference_info(inference).type_parameter.get().unwrap();
             }
-            let type_parameter = inference.type_parameter.get().unwrap();
+            let type_parameter = self.inference_info(inference).type_parameter.get().unwrap();
             let mut inferred_type: Option<P<Type>> = None;
             let mut fallback_type: Option<P<Type>> = None;
-            if let Some(signature) = n.signature.get() {
+            if let Some(signature) = self.inference_context(n).signature.get() {
                 let mut inferred_covariant_type: Option<P<Type>> = None;
-                if !inference.candidates.is_empty() {
+                if !self.inference_info(inference).candidates.is_empty() {
                     inferred_covariant_type = Some(self.get_covariant_inference(inference, signature));
                 }
                 let mut inferred_contravariant_type: Option<P<Type>> = None;
-                if !inference.contra_candidates.is_empty() {
+                if !self.inference_info(inference).contra_candidates.is_empty() {
                     inferred_contravariant_type = self.get_contravariant_inference(inference);
                 }
                 if inferred_covariant_type.is_some() || inferred_contravariant_type.is_some() {
@@ -1530,12 +1532,12 @@ impl Checker {
                             inferred_contravariant_type.is_none()
                                 || !covariant.flags().intersects(TypeFlags::Never | TypeFlags::Any)
                                     && {
-                                        let contra_candidates = inference.contra_candidates.to_vec();
+                                        let contra_candidates = self.inference_info(inference).contra_candidates.to_vec();
                                         contra_candidates.iter().any(|&t| self.is_type_assignable_to(covariant, t))
                                     }
-                                    && n.inferences.get().iter().all(|&other| {
-                                        other != inference && self.get_constraint_of_type_parameter(other.type_parameter.get().unwrap()) != inference.type_parameter.get() || {
-                                            let other_candidates = other.candidates.to_vec();
+                                    && self.inference_context(n).inferences.get().iter().all(|&other| {
+                                        other != inference && self.get_constraint_of_type_parameter(self.inference_info(other).type_parameter.get().unwrap()) != self.inference_info(inference).type_parameter.get() || {
+                                            let other_candidates = self.inference_info(other).candidates.to_vec();
                                             other_candidates.iter().all(|&t| self.is_type_assignable_to(t, covariant))
                                         }
                                     })
@@ -1548,7 +1550,7 @@ impl Checker {
                         inferred_type = inferred_contravariant_type;
                         fallback_type = inferred_covariant_type;
                     }
-                } else if n.flags.get().intersects(InferenceFlags::NoDefault) {
+                } else if self.inference_context(n).flags.get().intersects(InferenceFlags::NoDefault) {
                     // We use silentNeverType as the wildcard that signals no inferences.
                     inferred_type = Some(self.silent_never_type);
                 } else {
@@ -1562,27 +1564,27 @@ impl Checker {
                         // Instantiate the default type. Any forward reference to a type
                         // parameter should be instantiated to the empty object type.
                         let backreference_mapper = self.new_backreference_mapper(n, index);
-                        let mapper = merge_type_mappers(Some(backreference_mapper), n.non_fixing_mapper().unwrap());
+                        let mapper = merge_type_mappers(Some(backreference_mapper), self.inference_non_fixing_mapper(n).unwrap());
                         inferred_type = Some(self.instantiate_type(default_type, Some(mapper)));
                         }
                 }
             } else {
                 inferred_type = self.get_type_from_inference(inference);
             }
-            inference.inferred_type.set(inferred_type);
-            if inference.inferred_type.get().is_none() {
-                inference.inferred_type.set(Some(if n.flags.get().intersects(InferenceFlags::AnyDefault) { self.any_type } else { self.unknown_type }));
+            self.inference_info(inference).inferred_type.set(inferred_type);
+            if self.inference_info(inference).inferred_type.get().is_none() {
+                self.inference_info(inference).inferred_type.set(Some(if self.inference_context(n).flags.get().intersects(InferenceFlags::AnyDefault) { self.any_type } else { self.unknown_type }));
             }
             let constraint = self.get_constraint_of_type_parameter(type_parameter);
             if let Some(constraint) = constraint {
-                let instantiated_constraint = self.instantiate_type(constraint, n.non_fixing_mapper());
-                let compare_types = std::sync::Arc::clone(n.compare_types.borrow().as_ref().unwrap());
+                let instantiated_constraint = self.instantiate_type(constraint, self.inference_non_fixing_mapper(n));
+                let compare_types = std::sync::Arc::clone(self.inference_context(n).compare_types.borrow().as_ref().unwrap());
                 if let Some(inferred) = inferred_type {
-                    if !n.flags.get().intersects(InferenceFlags::NoConstraintChecks) {
+                    if !self.inference_context(n).flags.get().intersects(InferenceFlags::NoConstraintChecks) {
                         let constraint_with_this = self.get_type_with_this_argument(instantiated_constraint, Some(inferred), false);
                         if compare_types(self, inferred, constraint_with_this, false) == Ternary::False {
                             let mut filtered_by_constraint: Option<P<Type>> = None;
-                            if inference.priority.get() == InferencePriority::ReturnType {
+                            if self.inference_info(inference).priority.get() == InferencePriority::ReturnType {
                                 // If we have a pure return type inference, we may succeed by removing constituents of the inferred type
                                 // that aren't assignable to the constraint type (pure return type inferences are speculation anyway).
                                 filtered_by_constraint = self.map_type(inferred, |c, t| {
@@ -1609,16 +1611,16 @@ impl Checker {
                         _ => instantiated_constraint,
                     });
                 }
-                inference.inferred_type.set(inferred_type);
+                self.inference_info(inference).inferred_type.set(inferred_type);
             }
             self.clear_active_mapper_caches();
         }
-        inference.inferred_type.get().unwrap()
+        self.inference_info(inference).inferred_type.get().unwrap()
     }
 
     // inference.go:1406
-    pub(crate) fn get_inferred_types(&mut self, n: P<InferenceContext>) -> Vec<P<Type>> {
-        let len = n.inferences.get().len();
+    pub(crate) fn get_inferred_types(&mut self, n: InferenceContextKey) -> Vec<P<Type>> {
+        let len = self.inference_context(n).inferences.get().len();
         let mut result = Vec::with_capacity(len);
         for i in 0..len {
             result.push(self.get_inferred_type(n, i as i32));
@@ -1628,37 +1630,38 @@ impl Checker {
 
     // inference.go:1414
     // n and the result are Option (Go returns nil for a nil context; callers pass nil-able contexts).
-    pub(crate) fn get_mapper_from_context(&mut self, n: Option<P<InferenceContext>>) -> Option<P<TypeMapper>> {
+    pub(crate) fn get_mapper_from_context(&mut self, n: Option<InferenceContextKey>) -> Option<P<TypeMapper>> {
         let n = n?;
-        n.mapper()
+        self.inference_mapper(n)
     }
 
     // Return a type mapper that combines the context's return mapper with a mapper that erases any additional type parameters
     // to their inferences at the time of creation.
     // inference.go:1423
-    pub(crate) fn create_outer_return_mapper(&mut self, context: P<InferenceContext>) -> P<TypeMapper> {
-        if context.outer_return_mapper().is_none() {
-            let mut mapper = self.clone_inference_context(Some(context), InferenceFlags::None).unwrap().mapper().unwrap();
-            if let Some(return_mapper) = context.return_mapper() {
+    pub(crate) fn create_outer_return_mapper(&mut self, context: InferenceContextKey) -> P<TypeMapper> {
+        if self.inference_context(context).outer_return_mapper().is_none() {
+            let cloned_context = self.clone_inference_context(Some(context), InferenceFlags::None).unwrap();
+            let mut mapper = self.inference_mapper(cloned_context).unwrap();
+            if let Some(return_mapper) = self.inference_context(context).return_mapper() {
                 mapper = new_merged_type_mapper(return_mapper, mapper);
             }
-            context.set_outer_return_mapper(Some(mapper));
+            self.inference_context(context).set_outer_return_mapper(Some(mapper));
         }
-        context.outer_return_mapper().unwrap()
+        self.inference_context(context).outer_return_mapper().unwrap()
     }
 
     // inference.go:1434
-    pub(crate) fn get_covariant_inference(&mut self, inference: P<InferenceInfo>, signature: SignatureKey) -> P<Type> {
+    pub(crate) fn get_covariant_inference(&mut self, inference: InferenceInfoKey, signature: SignatureKey) -> P<Type> {
         // Extract all object and array literal types and replace them with a single widened and normalized type.
-        let inference_candidates = inference.candidates.to_vec();
+        let inference_candidates = self.inference_info(inference).candidates.to_vec();
         let candidates = self.union_object_and_array_literal_candidates(&inference_candidates);
         // We widen inferred literal types if
         // all inferences were made to top-level occurrences of the type parameter, and
         // the type parameter has no constraint or its constraint includes no primitive or literal types, and
         // the type parameter was fixed during inference or does not occur at top-level in the return type.
-        let type_parameter = inference.type_parameter.get().unwrap();
+        let type_parameter = self.inference_info(inference).type_parameter.get().unwrap();
         let primitive_constraint = self.has_primitive_constraint(type_parameter) || self.is_const_type_variable(Some(type_parameter), 0);
-        let widen_literal_types = !primitive_constraint && inference.top_level.get() && (inference.is_fixed.get() || !self.is_type_parameter_at_top_level_in_return_type(signature, type_parameter));
+        let widen_literal_types = !primitive_constraint && self.inference_info(inference).top_level.get() && (self.inference_info(inference).is_fixed.get() || !self.is_type_parameter_at_top_level_in_return_type(signature, type_parameter));
         let base_candidates: Vec<P<Type>> = if primitive_constraint {
             candidates.iter().map(|&t| self.get_regular_type_of_literal_type(t)).collect()
         } else if widen_literal_types {
@@ -1668,7 +1671,7 @@ impl Checker {
         };
         // If all inferences were made from a position that implies a combined result, infer a union type.
         // Otherwise, infer a common supertype.
-        let unwidened_type = if inference.priority.get().intersects(InferencePriority::PriorityImpliesCombination) {
+        let unwidened_type = if self.inference_info(inference).priority.get().intersects(InferencePriority::PriorityImpliesCombination) {
             self.get_union_type_ex(&base_candidates, UnionReduction::Subtype, AliasArg::None, None)
         } else {
             self.get_common_supertype(&base_candidates).unwrap()
@@ -1677,9 +1680,9 @@ impl Checker {
     }
 
     // inference.go:1463
-    pub(crate) fn get_contravariant_inference(&mut self, inference: P<InferenceInfo>) -> Option<P<Type>> {
-        let contra_candidates = inference.contra_candidates.to_vec();
-        if inference.priority.get().intersects(InferencePriority::PriorityImpliesCombination) {
+    pub(crate) fn get_contravariant_inference(&mut self, inference: InferenceInfoKey) -> Option<P<Type>> {
+        let contra_candidates = self.inference_info(inference).contra_candidates.to_vec();
+        if self.inference_info(inference).priority.get().intersects(InferencePriority::PriorityImpliesCombination) {
             return Some(self.get_intersection_type(&contra_candidates));
         }
         self.get_common_subtype(&contra_candidates)
@@ -1738,13 +1741,13 @@ impl Checker {
     }
 
     // inference.go:1509
-    pub(crate) fn get_type_from_inference(&mut self, inference: P<InferenceInfo>) -> Option<P<Type>> {
-        if !inference.candidates.is_empty() {
-            let candidates = inference.candidates.to_vec();
+    pub(crate) fn get_type_from_inference(&mut self, inference: InferenceInfoKey) -> Option<P<Type>> {
+        if !self.inference_info(inference).candidates.is_empty() {
+            let candidates = self.inference_info(inference).candidates.to_vec();
             return Some(self.get_union_type_ex(&candidates, UnionReduction::Subtype, AliasArg::None, None));
         }
-        if !inference.contra_candidates.is_empty() {
-            let contra_candidates = inference.contra_candidates.to_vec();
+        if !self.inference_info(inference).contra_candidates.is_empty() {
+            let contra_candidates = self.inference_info(inference).contra_candidates.to_vec();
             return Some(self.get_intersection_type(&contra_candidates));
         }
         None
@@ -1752,11 +1755,11 @@ impl Checker {
 }
 
 // inference.go:1519
-pub(crate) fn get_inference_info_for_type(n: P<InferenceState>, t: P<Type>) -> Option<P<InferenceInfo>> {
+pub(crate) fn get_inference_info_for_type(c: &Checker, n: InferenceStateKey, t: P<Type>) -> Option<InferenceInfoKey> {
     if t.flags().intersects(TypeFlags::TypeVariable) {
         let t = get_non_distributed_type_parameter(t);
-        for &inference in n.inferences.borrow().iter() {
-            if t == inference.type_parameter.get() {
+        for &inference in c.inference_state(n).inferences.borrow().iter() {
+            if t == c.inference_info(inference).type_parameter.get() {
                 return Some(inference);
             }
         }
@@ -1876,47 +1879,49 @@ impl Checker {
 }
 
 // inference.go:1626
-pub(crate) fn new_inference_info(type_parameter: P<Type>) -> P<InferenceInfo> {
-    P::new_recycled(InferenceInfo {
+pub(crate) fn new_inference_info(c: &mut Checker, type_parameter: P<Type>) -> InferenceInfoKey {
+    let record = InferenceInfo {
         type_parameter: Cell::new(Some(type_parameter)),
         priority: Cell::new(InferencePriority::MaxValue),
         top_level: Cell::new(true),
         implied_arity: Cell::new(-1),
         ..Default::default()
-    })
+    };
+    c.inference_infos.alloc(record)
 }
 
 // inference.go:1630
-pub(crate) fn clone_inference_info(info: P<InferenceInfo>) -> P<InferenceInfo> {
-    P::new_recycled(InferenceInfo {
-        type_parameter: Cell::new(info.type_parameter.get()),
-        candidates: LazyVec::from_vec(info.candidates.to_vec()),
-        contra_candidates: LazyVec::from_vec(info.contra_candidates.to_vec()),
-        inferred_type: Cell::new(info.inferred_type.get()),
-        priority: Cell::new(info.priority.get()),
-        top_level: Cell::new(info.top_level.get()),
-        is_fixed: Cell::new(info.is_fixed.get()),
-        implied_arity: Cell::new(info.implied_arity.get()),
-    })
+pub(crate) fn clone_inference_info(c: &mut Checker, info: InferenceInfoKey) -> InferenceInfoKey {
+    let record = InferenceInfo {
+        type_parameter: Cell::new(c.inference_info(info).type_parameter.get()),
+        candidates: LazyVec::from_vec(c.inference_info(info).candidates.to_vec()),
+        contra_candidates: LazyVec::from_vec(c.inference_info(info).contra_candidates.to_vec()),
+        inferred_type: Cell::new(c.inference_info(info).inferred_type.get()),
+        priority: Cell::new(c.inference_info(info).priority.get()),
+        top_level: Cell::new(c.inference_info(info).top_level.get()),
+        is_fixed: Cell::new(c.inference_info(info).is_fixed.get()),
+        implied_arity: Cell::new(c.inference_info(info).implied_arity.get()),
+    };
+    c.inference_infos.alloc(record)
 }
 
 // inference.go:1643
-pub(crate) fn clear_cached_inferences(inferences: &[P<InferenceInfo>]) {
+pub(crate) fn clear_cached_inferences(c: &Checker, inferences: &[InferenceInfoKey]) {
     for inference in inferences {
-        if !inference.is_fixed.get() {
-            inference.inferred_type.set(None);
+        if !c.inference_info(*inference).is_fixed.get() {
+            c.inference_info(*inference).inferred_type.set(None);
         }
     }
 }
 
 // inference.go:1651
-pub(crate) fn has_inference_candidates(info: P<InferenceInfo>) -> bool {
-    !info.candidates.is_empty() || !info.contra_candidates.is_empty()
+pub(crate) fn has_inference_candidates(c: &Checker, info: InferenceInfoKey) -> bool {
+    !c.inference_info(info).candidates.is_empty() || !c.inference_info(info).contra_candidates.is_empty()
 }
 
 // inference.go:1655
-pub(crate) fn has_inference_candidates_or_default(info: P<InferenceInfo>) -> bool {
-    has_inference_candidates(info) || has_type_parameter_default(info.type_parameter.get().unwrap())
+pub(crate) fn has_inference_candidates_or_default(c: &Checker, info: InferenceInfoKey) -> bool {
+    has_inference_candidates(c, info) || has_type_parameter_default(c.inference_info(info).type_parameter.get().unwrap())
 }
 
 // inference.go:1659
@@ -1932,9 +1937,9 @@ pub(crate) fn has_type_parameter_default(tp: P<Type>) -> bool {
 }
 
 // inference.go:1670
-pub(crate) fn has_overlapping_inferences(a: &[P<InferenceInfo>], b: &[P<InferenceInfo>]) -> bool {
+pub(crate) fn has_overlapping_inferences(c: &Checker, a: &[InferenceInfoKey], b: &[InferenceInfoKey]) -> bool {
     for i in 0..a.len() {
-        if has_inference_candidates(a[i]) && has_inference_candidates(b[i]) {
+        if has_inference_candidates(c, a[i]) && has_inference_candidates(c, b[i]) {
             return true;
         }
     }
@@ -1943,9 +1948,9 @@ pub(crate) fn has_overlapping_inferences(a: &[P<InferenceInfo>], b: &[P<Inferenc
 
 impl Checker {
     // inference.go:1679
-    pub(crate) fn merge_inferences(&mut self, target: &mut [P<InferenceInfo>], source: &[P<InferenceInfo>]) {
+    pub(crate) fn merge_inferences(&mut self, target: &mut [InferenceInfoKey], source: &[InferenceInfoKey]) {
         for i in 0..target.len() {
-            if !has_inference_candidates(target[i]) && has_inference_candidates(source[i]) {
+            if !has_inference_candidates(self, target[i]) && has_inference_candidates(self, source[i]) {
                 target[i] = source[i];
             }
         }

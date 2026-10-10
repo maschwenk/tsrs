@@ -200,10 +200,10 @@ impl Checker {
     }
 
     // jsx.go:198
-    pub(crate) fn infer_jsx_type_arguments(&mut self, node: P<Node>, signature: SignatureKey, check_mode: CheckMode, context: P<InferenceContext>) -> Vec<P<Type>> {
+    pub(crate) fn infer_jsx_type_arguments(&mut self, node: P<Node>, signature: SignatureKey, check_mode: CheckMode, context: InferenceContextKey) -> Vec<P<Type>> {
         let param_type = self.get_effective_first_argument_for_jsx_signature(signature, node).unwrap();
         let check_attr_type = self.check_expression_with_contextual_type(node.attributes().unwrap(), param_type, Some(context), check_mode);
-        self.infer_types(&context.inferences.get(), check_attr_type, param_type, InferencePriority::None, false);
+        self.infer_types(&self.inference_context(context).inferences.get(), check_attr_type, param_type, InferencePriority::None, false);
         self.get_inferred_types(context)
     }
 

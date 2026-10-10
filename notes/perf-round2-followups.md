@@ -107,6 +107,13 @@ pointer compression costs about +4.9% instructions and took back most of the che
 
 ## Measured and rejected (do not redo)
 
+- Treating typed inference-context/info/scratch records as enough to recover the complete migration gates
+  (`notes/rust-typed-inference.md`, 2026-10-11). The explicit complete ownership request is the changed constraint;
+  this migration-branch checkpoint removes context self-pointer casts and replaces the linked scratch free list
+  with a Rust vector of qualified keys. Single-thread instructions change -0.30% / -0.09%, default RSS
+  -2.31% / +0.47%, below the landing bar. Cumulative single instructions remain +15.87% / +14.66% against Oxc,
+  default RSS +113.13% / +108.33% against pre-Oxc. Raw type/mapper/symbol/AST edges/runtime remain; full ownership
+  and recovery of these gates are required before a performance landing.
 - Treating typed signature/composite records as enough to recover the complete migration gates
   (`notes/rust-typed-signature.md`, 2026-10-11). The changed constraint is the explicit complete ownership request;
   the migration-branch checkpoint removes record pointers and uses qualified keys through the checker/API/LS.

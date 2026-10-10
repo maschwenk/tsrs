@@ -259,7 +259,7 @@ impl Checker {
 
     // Instantiate a generic signature in the context of a non-generic signature (section 3.8.5 in TypeScript spec)
     // checker.go:19807
-    pub(crate) fn instantiate_signature_in_context_of(&mut self, signature: SignatureKey, contextual_signature: SignatureKey, inference_context: Option<P<InferenceContext>>, compare_types: Option<TypeComparer>) -> SignatureKey {
+    pub(crate) fn instantiate_signature_in_context_of(&mut self, signature: SignatureKey, contextual_signature: SignatureKey, inference_context: Option<InferenceContextKey>, compare_types: Option<TypeComparer>) -> SignatureKey {
         let type_parameters = self.get_type_parameters_for_mapper(signature);
         let context = self.new_inference_context(&type_parameters, Some(signature), InferenceFlags::None, compare_types);
         // We clone the inferenceContext to avoid fixing. For example, when the source signature is <T>(x: T) => T[] and
@@ -269,19 +269,19 @@ impl Checker {
         let mut mapper = None;
         if let Some(inference_context) = inference_context {
             if rest_type.is_some_and(|r| r.flags().intersects(TypeFlags::TypeParameter)) {
-                mapper = inference_context.non_fixing_mapper();
+                mapper = self.inference_non_fixing_mapper(inference_context);
             } else {
-                mapper = inference_context.mapper();
+                mapper = self.inference_mapper(inference_context);
             }
         }
         let source_signature = if mapper.is_some() { self.instantiate_signature(contextual_signature, mapper) } else { contextual_signature };
         self.apply_to_parameter_types(source_signature, signature, |c, source, target| {
             // Type parameters from outer context referenced by source type are fixed by instantiation of the source type
-            c.infer_types(&context.inferences.get(), source, target, InferencePriority::None, false);
+            c.infer_types(&c.inference_context(context).inferences.get(), source, target, InferencePriority::None, false);
         });
         if inference_context.is_none() {
             self.apply_to_return_types(contextual_signature, signature, |c, source, target| {
-                c.infer_types(&context.inferences.get(), source, target, InferencePriority::ReturnType, false);
+                c.infer_types(&c.inference_context(context).inferences.get(), source, target, InferencePriority::ReturnType, false);
             });
         }
         let inferred = self.get_inferred_types(context);

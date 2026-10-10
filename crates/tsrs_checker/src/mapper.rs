@@ -34,7 +34,7 @@ enum OwnedMapper {
         m2: P<TypeMapper>,
     },
     Inference {
-        n: P<InferenceContext>,
+        n: InferenceContextKey,
         fixing: bool,
     },
 }
@@ -77,7 +77,7 @@ pub enum TypeMapperData<'a> {
         m2: P<TypeMapper>,
     },
     Inference {
-        n: P<InferenceContext>,
+        n: InferenceContextKey,
         fixing: bool,
     },
 }
@@ -171,15 +171,15 @@ impl TypeMapper {
                 m2.map(c, t)
             }
             TypeMapperData::Inference { n, fixing } => {
-                let inferences = n.inferences.get();
+                let inferences = c.inference_context(n).inferences.get();
                 for (i, inference) in inferences.iter().enumerate() {
-                    if Some(t) == inference.type_parameter.get() {
-                        if fixing && !inference.is_fixed.get() {
+                    if Some(t) == c.inference_info(*inference).type_parameter.get() {
+                        if fixing && !c.inference_info(*inference).is_fixed.get() {
                             // Before we commit to a particular inference (and thus lock out any further inferences),
                             // we infer from any intra-expression inference sites we have collected.
                             c.infer_from_intra_expression_sites(n);
-                            clear_cached_inferences(&n.inferences.get());
-                            inference.is_fixed.set(true);
+                            clear_cached_inferences(c, &c.inference_context(n).inferences.get());
+                            c.inference_info(*inference).is_fixed.set(true);
                         }
                         return c.get_inferred_type(n, i as i32);
                     }
@@ -257,20 +257,20 @@ impl Checker {
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn new_backreference_mapper(
         &mut self,
-        context: P<InferenceContext>,
+        context: InferenceContextKey,
         index: i32,
     ) -> P<TypeMapper> {
-        let forward_inferences = &context.inferences.get()[index as usize..];
+        let forward_inferences = &self.inference_context(context).inferences.get()[index as usize..];
         let type_parameters: Vec<P<Type>> = forward_inferences
             .iter()
-            .map(|i| i.type_parameter.get().unwrap())
+            .map(|i| self.inference_info(*i).type_parameter.get().unwrap())
             .collect();
         new_array_to_single_type_mapper(&type_parameters, self.unknown_type)
     }
 }
 
 #[cfg_attr(feature = "site-counts", track_caller)]
-pub(crate) fn new_inference_type_mapper(n: P<InferenceContext>, fixing: bool) -> P<TypeMapper> {
+pub(crate) fn new_inference_type_mapper(n: InferenceContextKey, fixing: bool) -> P<TypeMapper> {
     tsrs_core::sitecount::hit("mapper", "inference");
     TypeMapper::alloc(OwnedMapper::Inference { n, fixing })
 }
@@ -382,7 +382,7 @@ pub(crate) fn new_composite_type_mapper(m1: P<TypeMapper>, m2: P<TypeMapper>) ->
     TypeMapper::alloc(OwnedMapper::Composite { m1, m2 })
 }
 
-/// The mapper enum uses its second payload word only for the three two-edge variants.
+/// Mapper keys and function addresses are scalars; only data-pointer variants contribute graph edges.
 pub(crate) fn census_layouts() {
     use std::mem::{align_of, offset_of, size_of};
     use tsrs_core::CensusField;
@@ -390,6 +390,11 @@ pub(crate) fn census_layouts() {
     let first = tag + align_of::<OwnedMapper>();
     let second = first + size_of::<usize>();
     let mut fields = CensusField::all_but(0, size_of::<TypeMapper>(), &[first, second]);
+    fields.push(CensusField::Variant {
+        ptr: first,
+        tag,
+        variants: (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 5) | (1 << 6),
+    });
     fields.push(CensusField::Variant {
         ptr: second,
         tag,

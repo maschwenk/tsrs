@@ -876,7 +876,7 @@ pub(crate) fn census_layouts() {
         crate::mapper::census_layouts();
         // OwnedTypeData is repr(C, u8): its discriminant precedes an aligned one-pointer variant payload.
         let pointer = offset_of!(Type, data) + std::mem::align_of::<Box<IntrinsicType>>();
-        let header = CensusField::all_but(0, size_of::<Type>(), &[offset_of!(Type, symbol), offset_of!(Type, alias), pointer]);
+        let header = CensusField::all_but(0, size_of::<Type>(), &[offset_of!(Type, symbol), pointer]);
         tsrs_core::census_layout(type_name::<Type>(), &header);
         let name = type_name::<LiteralType>();
         // Literal snapshots own their text; discriminants and numeric payload bytes are not graph edges.
@@ -931,7 +931,7 @@ pub(crate) fn census_layouts() {
         tsrs_core::census_layout(type_name::<StructuredMembers>(), &CensusField::all_but(0, size_of::<StructuredMembers>(), &pointers));
         let pointers = [
             offset_of!(Signature, declaration), offset_of!(Signature, type_parameters), offset_of!(Signature, parameters),
-            offset_of!(Signature, resolved_return_type), offset_of!(Signature, target), offset_of!(Signature, mapper),
+            offset_of!(Signature, resolved_return_type), offset_of!(Signature, mapper),
             offset_of!(Signature, rare),
         ];
         tsrs_core::census_layout(type_name::<Signature>(), &CensusField::all_but(0, size_of::<Signature>(), &pointers));
@@ -946,7 +946,8 @@ pub(crate) fn census_layouts() {
             offset_of!(ConditionalRoot, alias),
         ];
         let is_distributive = CensusField::scalar(0, offset_of!(ConditionalRoot, is_distributive), &offsets, size_of::<ConditionalRoot>());
-        tsrs_core::census_layout(type_name::<ConditionalRoot>(), &[is_distributive]);
+        let alias = CensusField::NoPointer { off: offset_of!(ConditionalRoot, alias), len: size_of::<Option<TypeAliasKey>>() };
+        tsrs_core::census_layout(type_name::<ConditionalRoot>(), &[is_distributive, alias]);
         let offsets = [
             offset_of!(InferenceInfo, type_parameter),
             offset_of!(InferenceInfo, candidates),
@@ -2930,18 +2931,42 @@ mod tests {
     }
 
     #[test]
-    fn inference_context_releases_owned_comparison_callback() {
+    fn inference_context_keys_and_callback_owners_survive_growth_and_release_with_the_store() {
         let capture = std::rc::Rc::new(());
         let weak = std::rc::Rc::downgrade(&capture);
         let comparer = type_comparer(move |_, _, _, _| {
             let _ = &capture;
             Ternary::True
         });
-        let context = InferenceContext::new(&[], None, InferenceFlags::None, std::sync::Arc::clone(&comparer));
+        let mut infos = tsrs_core::arena_owner::ArenaBuilder::with_capacity(1);
+        let info = infos.alloc(InferenceInfo::default());
+        let mut contexts = tsrs_core::arena_owner::ArenaBuilder::with_capacity(1);
+        let context = contexts.alloc(InferenceContext::new(&[info], None, InferenceFlags::NoDefault, std::sync::Arc::clone(&comparer)));
+        let snapshot = contexts.get(context).unwrap().inferences.get();
         drop(comparer);
+        for _ in 0..128 {
+            contexts.alloc(InferenceContext::default());
+            infos.alloc(InferenceInfo::default());
+        }
         assert!(weak.upgrade().is_some());
-        drop(context);
+        assert_eq!(contexts.get(context).unwrap().flags.get(), InferenceFlags::NoDefault);
+        assert_eq!(snapshot.as_ref(), &[info]);
+        contexts.get(context).unwrap().inferences.set(&[]);
+        assert_eq!(snapshot.as_ref(), &[info]);
+        let mut foreign_contexts = tsrs_core::arena_owner::ArenaBuilder::new();
+        let foreign_context = foreign_contexts.alloc(InferenceContext::default());
+        let mut foreign_infos = tsrs_core::arena_owner::ArenaBuilder::new();
+        let foreign_info = foreign_infos.alloc(InferenceInfo::default());
+        assert!(contexts.get(foreign_context).is_none());
+        assert!(foreign_contexts.get(context).is_none());
+        assert!(infos.get(foreign_info).is_none());
+        assert!(foreign_infos.get(info).is_none());
+        drop(contexts);
         assert!(weak.upgrade().is_none());
+        drop(infos);
+        // Retaining the array retains only keys, not the inference records or comparison callback.
+        assert_eq!(snapshot.as_ref(), &[info]);
+        assert!(foreign_infos.get(snapshot[0]).is_none());
     }
 
     #[test]

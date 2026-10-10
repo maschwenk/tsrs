@@ -1,0 +1,51 @@
+{
+  "reference_commit": "b85298b6a81f772d080b0455de0ca9d744cd6fd6",
+  "input_sha256": "af686d3096c77efbfbe858465a7c9e1be62cd6f15759958dfa1bad4e67da90a8",
+  "config_sha256": "05a803537bea38d08ec912e63bc473b9546075428ebff1a5a35e6fe67988520e",
+  "binaries": {
+    "go": "3c9ea207018ee4539c64711dabfc17b6905e0257f8e619648977ea9352bfcc33",
+    "rust": "45931b0157503960ff4752a336215007161047c5dc74e1302e23e1af1f4ad1bc"
+  },
+  "modes": {
+    "all": {
+      "statuses": {
+        "go": {
+          "exit": 0,
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "rust": {
+          "exit": 0,
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      },
+      "files": {
+        "input.d.ts": "6991777ebcbb62c1d92e2fd896f54aaea59214058c4f0aa69b3a0de7a4d313f7",
+        "input.d.ts.map": "53e4c772f38958cf2613cf34fc4e7b7471d6eed6d68754f83330c007efcd95e0",
+        "input.js": "4ba193b7bfd542e00d618460d69b14b7de444ca3a61556115ca935245d5cc9b1",
+        "input.js.map": "cad1605ca05eefcfc187625c73c5b3559db699aaee322f6511c987bb7f7bbce9",
+        "state.tsbuildinfo": "9873dc51c0f01ca3a0e55e53a3efc7293505546bb52e89cd397b2a2551690e2e"
+      }
+    },
+    "declarations": {
+      "statuses": {
+        "go": {
+          "exit": 0,
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "rust": {
+          "exit": 0,
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      },
+      "files": {
+        "input.d.ts": "6991777ebcbb62c1d92e2fd896f54aaea59214058c4f0aa69b3a0de7a4d313f7",
+        "input.d.ts.map": "53e4c772f38958cf2613cf34fc4e7b7471d6eed6d68754f83330c007efcd95e0",
+        "state.tsbuildinfo": "f45f56e31d44c131d83e4f0e5b3673b4a90aae7a888c79f8cfcd5889f99e8e3b"
+      }
+    }
+  }
+}

@@ -8,10 +8,13 @@ pub struct InferenceKey {
     pub t: TypeId,
 }
 
-/// Arena handle (`P<InferenceState>`), pooled through `Checker::freeinference_state` like Go.
+/// Qualified scratch-state edge; records belong to the checker.
+pub type InferenceStateKey = tsrs_core::arena_owner::ArenaKey<InferenceState>;
+
+/// Rust-owned scratch record, reused in LIFO order through a vector of keys.
 #[derive(Default)]
 pub struct InferenceState {
-    pub inferences: RefCell<Vec<P<InferenceInfo>>>,
+    pub inferences: RefCell<Vec<InferenceInfoKey>>,
     pub original_source: Cell<Option<P<Type>>>,
     pub original_target: Cell<Option<P<Type>>>,
     pub priority: Cell<InferencePriority>,
@@ -23,7 +26,6 @@ pub struct InferenceState {
     pub visited: OwnedMap<InferenceKey, InferencePriority>,
     pub source_stack: RefCell<Vec<P<Type>>>,
     pub target_stack: RefCell<Vec<P<Type>>>,
-    pub next: Cell<Option<P<InferenceState>>>,
     /// The walk called `clear_cached_inferences` (the inference memo, infermemo.rs).
     pub cleared_inferences: Cell<bool>,
 }
