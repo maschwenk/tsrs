@@ -1267,11 +1267,18 @@ fn merge_ascending_runs(c: &mut Checker, types: &mut Vec<P<Type>>, run_starts: &
 // Go's containsType/insertType call CompareTypes, which needs the checker (Type has no checker back pointer),
 // so they take `c` like `compare_types`.
 /// `maybe_type_of_kind` of any of `types`.
+/// A loop rather than `any` with a closure: the recursive closure was not inlined, a call per constituent.
 fn maybe_constituent_of_kind(types: &[P<Type>], kind: TypeFlags) -> bool {
-    types.iter().any(|&t| {
+    for &t in types {
         let flags = t.flags();
-        flags.intersects(kind) || flags.intersects(TypeFlags::UnionOrIntersection) && maybe_constituent_of_kind(t.types(), kind)
-    })
+        if flags.intersects(kind) {
+            return true;
+        }
+        if flags.intersects(TypeFlags::UnionOrIntersection) && maybe_constituent_of_kind(t.types(), kind) {
+            return true;
+        }
+    }
+    false
 }
 
 // checker.go:27086
