@@ -12,4 +12,3 @@ tsrs_core.workspace = true
 rustc-hash.workspace = true
 rayon.workspace = true
 bitflags.workspace = true
-simdutf8.workspace = true

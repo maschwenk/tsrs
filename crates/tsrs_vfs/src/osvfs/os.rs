@@ -407,7 +407,7 @@ pub(crate) fn clean(path: &str) -> String {
         return ".".to_string();
     }
 
-    String::from_utf8(out).unwrap()
+    tsrs_core::utf8::into_string(out).unwrap()
 }
 
 fn is_reparse_point(path: &str) -> bool {

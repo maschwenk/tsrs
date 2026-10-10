@@ -81,7 +81,7 @@ mod imp {
             for ip in chunk {
                 cmd.arg(format!("{:#x}", ip - 1));
             }
-            let text = cmd.output().map(|o| String::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default();
+            let text = cmd.output().map(|o| crate::utf8::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default();
             let mut lines = text.lines();
             for ip in chunk {
                 out.push(lines.next().map(str::to_string).unwrap_or_else(|| format!("{ip:#x}")));
@@ -99,7 +99,7 @@ mod imp {
     fn exe_mappings() -> (Vec<(usize, usize, String, usize)>, Vec<(usize, usize, String)>) {
         let exe = std::fs::read_link("/proc/self/exe").unwrap_or_default();
         let exe = exe.to_string_lossy().into_owned();
-        let maps = std::fs::read_to_string("/proc/self/maps").unwrap_or_default();
+        let maps = crate::utf8::read_to_string("/proc/self/maps").unwrap_or_default();
         let mut mine = Vec::new();
         let mut all = Vec::new();
         for line in maps.lines() {
@@ -171,7 +171,7 @@ mod imp {
             for ip in chunk {
                 cmd.arg(format!("{:#x}", ip.wrapping_sub(1).wrapping_sub(base)));
             }
-            let text = cmd.output().map(|o| String::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default();
+            let text = cmd.output().map(|o| crate::utf8::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default();
             // Output: per address a `0x...` line, then (function, file:line) pairs, innermost first.
             let mut groups: Vec<Vec<String>> = Vec::new();
             let mut lines = text.lines();

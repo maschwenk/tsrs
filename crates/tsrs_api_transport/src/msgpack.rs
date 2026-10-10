@@ -133,7 +133,7 @@ impl<R: Read + Send> ProtocolReader for MessagePackReader<R> {
     /// protocol_msgpack.go ReadMessage. The protocol has no request IDs: the method name is the ID.
     fn read_message(&mut self) -> Result<Message, TransportError> {
         let tuple = self.read_tuple()?;
-        let method = String::from_utf8_lossy(&tuple.method).into_owned();
+        let method = tsrs_core::utf8::from_utf8_lossy(&tuple.method).into_owned();
         let mut msg = Message::default();
         match tuple.msg_type {
             MessageType::Request => {
@@ -147,7 +147,7 @@ impl<R: Read + Send> ProtocolReader for MessagePackReader<R> {
             }
             MessageType::CallError => {
                 msg.id = Some(Id::Str(method));
-                msg.error = Some(ResponseError::internal(String::from_utf8_lossy(&tuple.payload).into_owned()));
+                msg.error = Some(ResponseError::internal(tsrs_core::utf8::from_utf8_lossy(&tuple.payload).into_owned()));
             }
             other => {
                 return Err(TransportError::Protocol(format!("unexpected message type: {}", other as u8)));

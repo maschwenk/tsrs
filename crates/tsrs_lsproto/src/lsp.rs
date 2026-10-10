@@ -285,13 +285,13 @@ fn unescape(s: &str, mode: Encoding) -> Result<String, String> {
             i += 1;
         }
     }
-    Ok(String::from_utf8_lossy(&t).into_owned())
+    Ok(tsrs_core::utf8::from_utf8_lossy(&t).into_owned())
 }
 
 // Go `strconv.Quote` (as `%q` formats a string or byte slice).
 pub(crate) fn go_quote(b: &[u8]) -> String {
     let mut out = String::from("\"");
-    let s = String::from_utf8_lossy(b);
+    let s = tsrs_core::utf8::from_utf8_lossy(b);
     for c in s.chars() {
         match c {
             '\x07' => out.push_str("\\a"),

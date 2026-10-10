@@ -32,6 +32,7 @@ pub mod semver;
 pub mod sitecount;
 pub mod stringutil;
 pub mod tspath;
+pub mod utf8;
 
 mod bfs;
 mod binarysearch;

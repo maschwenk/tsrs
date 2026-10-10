@@ -278,7 +278,7 @@ impl Diagnostic {
                 continue;
             }
             let result = result.get_or_insert_with(|| self.message_args.clone());
-            result[i] = String::from_utf8_lossy(original_name).into_owned();
+            result[i] = tsrs_core::utf8::from_utf8_lossy(original_name).into_owned();
         }
         match result {
             Some(result) => Cow::Owned(result),

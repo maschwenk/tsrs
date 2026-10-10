@@ -64,7 +64,7 @@ impl<R: Read> Reader<R> {
             let (key, value) = (&line[..colon], &line[colon + 1..]);
 
             if key == b"Content-Length" {
-                let value = String::from_utf8_lossy(value.trim_ascii()).into_owned();
+                let value = tsrs_core::utf8::from_utf8_lossy(value.trim_ascii()).into_owned();
                 content_length = match parse_int(&value) {
                     Ok(n) => n,
                     Err(err) => {

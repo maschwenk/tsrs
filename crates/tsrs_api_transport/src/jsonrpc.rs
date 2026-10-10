@@ -66,7 +66,7 @@ impl<R: Read> FrameReader<R> {
             };
             let (key, value) = (&line[..colon], &line[colon + 1..]);
             if key == b"Content-Length" {
-                let text = String::from_utf8_lossy(value.trim_ascii()).into_owned();
+                let text = tsrs_core::utf8::from_utf8_lossy(value.trim_ascii()).into_owned();
                 content_length = parse_go_int64(&text).map_err(|e| {
                     TransportError::Protocol(format!("{ERR_INVALID_CONTENT_LENGTH}: parse error: {e}"))
                 })?;
@@ -204,7 +204,7 @@ impl<W: Write> FrameWriter<W> {
 
 /// Validates that `bytes` is exactly one JSON value, as json.Marshal of a json.Value does.
 pub fn validate_json(bytes: &[u8]) -> Result<&str, String> {
-    let s = std::str::from_utf8(bytes).map_err(|e| format!("invalid UTF-8 in JSON result: {e}"))?;
+    let s = tsrs_core::utf8::compat::from_utf8(bytes).map_err(|e| format!("invalid UTF-8 in JSON result: {e}"))?;
     serde_json::from_str::<&RawValue>(s).map_err(|e| format!("invalid JSON result: {e}"))?;
     Ok(s.trim_matches(|c: char| c == ' ' || c == '\t' || c == '\n' || c == '\r'))
 }

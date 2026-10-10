@@ -97,7 +97,7 @@ pub(crate) fn unmarshal_params<T: ProtocolJson>(params: Option<&Value>) -> Resul
 // Go's `json.Value(spanmap.New(segments).Marshal())`: the span map's tuple-array JSON, as the value it is sent as.
 pub(crate) fn marshal_span_map(segments: &[Segment]) -> Result<Value, ipc::Error> {
     let data = tsrs_spanmap::new(segments).marshal().map_err(ipc::Error::new)?;
-    let text = String::from_utf8(data).map_err(|err| ipc::Error::new(err.to_string()))?;
+    let text = tsrs_core::utf8::into_string(data).map_err(|err| ipc::Error::new(err.to_string()))?;
     json::unmarshal(&text).map_err(ipc::Error::new)
 }
 

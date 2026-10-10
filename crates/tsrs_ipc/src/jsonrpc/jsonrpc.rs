@@ -220,7 +220,7 @@ impl Message {
     // Go `json.Unmarshal(data, &m)`. Unknown members are ignored and a JSON null decodes as the zero Message, as
     // json/v2 does.
     pub fn unmarshal(data: &[u8]) -> Result<Message, Error> {
-        let text = std::str::from_utf8(data).map_err(|_| Error::new("jsontext: invalid UTF-8 within message"))?;
+        let text = tsrs_core::utf8::basic::from_utf8(data).map_err(|_| Error::new("jsontext: invalid UTF-8 within message"))?;
         let mut m = Message::default();
         let members = match json::unmarshal(text).map_err(Error::new)? {
             Value::Object(members) => members,

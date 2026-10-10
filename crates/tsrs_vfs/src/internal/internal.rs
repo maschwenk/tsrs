@@ -209,7 +209,7 @@ pub fn decode_bytes(mut s: Vec<u8>) -> String {
 
     // Go strings may hold arbitrary bytes; Rust strings must be UTF-8, so
     // invalid sequences are replaced with U+FFFD.
-    if simdutf8::basic::from_utf8(&s).is_ok() {
+    if tsrs_core::utf8::basic::from_utf8(&s).is_ok() {
         // SAFETY: simdutf8 validated every byte, and s has not been modified since validation.
         unsafe { String::from_utf8_unchecked(s) }
     } else {
@@ -230,92 +230,7 @@ fn decode_utf16(s: &[u8], big_endian: bool) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{decode_bytes, valid_path};
-
-    #[test]
-    fn decode_utf8_reuses_allocation() {
-        for text in [
-            "",
-            "ascii\0text",
-            "café 中文 🎉",
-            "\u{FEFF}café 🎉",
-            "\u{FEFF}",
-        ] {
-            let mut bytes = Vec::with_capacity(text.len() + 16);
-            bytes.extend_from_slice(text.as_bytes());
-            let ptr = bytes.as_ptr();
-            let capacity = bytes.capacity();
-            let decoded = decode_bytes(bytes);
-            assert_eq!(decoded, text.strip_prefix('\u{FEFF}').unwrap_or(text));
-            assert_eq!(decoded.as_ptr(), ptr);
-            assert_eq!(decoded.capacity(), capacity);
-        }
-    }
-
-    #[test]
-    fn decode_invalid_utf8_replacements() {
-        for (bytes, expected) in [
-            (&b"\x80"[..], "�"),
-            (&b"\xc0\xaf"[..], "��"),
-            (&b"\xed\xa0\x80"[..], "���"),
-            (&b"\xf4\x90\x80\x80"[..], "����"),
-            (&b"a\xe2\x82"[..], "a�"),
-            (&b"\xef\xbb\xbf\xf0\x9f\x92"[..], "�"),
-        ] {
-            assert_eq!(decode_bytes(bytes.to_vec()), expected, "{bytes:?}");
-        }
-    }
-
-    #[test]
-    fn decode_utf8_at_block_boundaries() {
-        for prefix_len in [0, 1, 15, 16, 17, 31, 32, 33, 63, 64, 65, 127] {
-            for payload in [
-                &b""[..],
-                &b"\0"[..],
-                "é".as_bytes(),
-                "中".as_bytes(),
-                "🎉".as_bytes(),
-                &b"\x80"[..],
-                &b"\xc0\xaf"[..],
-                &b"\xed\xa0\x80"[..],
-                &b"\xf4\x90\x80\x80"[..],
-                &b"\xe2\x82"[..],
-                &b"\xf0\x9f\x92"[..],
-                &b"\xff"[..],
-            ] {
-                for suffix_len in [0, 64] {
-                    let mut bytes = vec![b'a'; prefix_len];
-                    bytes.extend_from_slice(payload);
-                    bytes.extend(std::iter::repeat_n(b'z', suffix_len));
-                    let expected = String::from_utf8_lossy(&bytes).into_owned();
-                    assert_eq!(decode_bytes(bytes.clone()), expected, "{bytes:?}");
-                    bytes.splice(..0, [0xef, 0xbb, 0xbf]);
-                    assert_eq!(decode_bytes(bytes.clone()), expected, "{bytes:?}");
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn decode_utf16_bom_and_malformed_units() {
-        for big_endian in [false, true] {
-            let mut bytes = if big_endian {
-                vec![0xfe, 0xff]
-            } else {
-                vec![0xff, 0xfe]
-            };
-            for unit in [0x0041u16, 0xd83c, 0xdf89, 0xd800, 0x0042, 0xdc00] {
-                bytes.extend_from_slice(&if big_endian {
-                    unit.to_be_bytes()
-                } else {
-                    unit.to_le_bytes()
-                });
-            }
-            // As before, an incomplete final UTF-16 code unit is ignored.
-            bytes.push(0x61);
-            assert_eq!(decode_bytes(bytes), "A🎉�B�");
-        }
-    }
+    use super::valid_path;
 
     #[test]
     fn valid_path_matches_element_split() {

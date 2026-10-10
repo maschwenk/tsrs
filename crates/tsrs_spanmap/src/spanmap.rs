@@ -985,7 +985,7 @@ pub fn unmarshal(data: &[u8]) -> Result<P<SpanMap>, String> {
 // Go `json.Unmarshal(data, &tuples)` with `tuples [][]int32` (encoding/json/v2): null decodes to an empty slice, a
 // null element of an inner slice to 0, and a number must be an integer literal in int32 range.
 fn unmarshal_int32_tuples(data: &[u8]) -> Result<Vec<Vec<i32>>, String> {
-    let text = std::str::from_utf8(data).map_err(|err| format!("jsontext: invalid UTF-8: {err}"))?;
+    let text = tsrs_core::utf8::compat::from_utf8(data).map_err(|err| format!("jsontext: invalid UTF-8: {err}"))?;
     // `json::unmarshal` keeps numbers as f64, so `1.0` and `1e2` would pass as integers. Go rejects a fraction or
     // exponent; any '.', 'e' or 'E' in an input that decodes into [][]int32 at all belongs to such a number
     // (strings and booleans are rejected anyway).
