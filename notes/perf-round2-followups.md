@@ -117,6 +117,11 @@ is type-checked, CI runs on pull requests, and the workspace is at 0.11.0. The i
 
 ## Measured and rejected (do not redo)
 
+- Within the flow-walk skip (notes/perf-flow-skip-unnarrowed.md, landed): computing an assertion candidate's effects
+  signature in the skip check instead of peeking at it (overflowed the 512 MB stack on vscode: it starts resolution
+  chains no walk does); condition aliases matched by name across the whole file (+41% bind instructions on vscode);
+  root names instead of reference paths (a quarter of the skips).
+
 - A tracing collector for checker data instead of retiring checkers (notes/mem-checker-gc.md): weak identity caches
   free 3% more than garbage at mid-run; even an upper bound with member tables and value-symbol links weak frees
   ~37% of the program's memory, about where `--maxMemory` already gets, for weeks of data-model changes.
