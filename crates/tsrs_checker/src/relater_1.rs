@@ -1135,7 +1135,8 @@ impl Checker {
 }
 
 // relater.go:797
-#[inline]
+#[expect(clippy::inline_always, reason = "measured: plain #[inline] lets it be outlined (notes/perf-icount-hillclimb.md, round 3)")]
+#[inline(always)]
 pub(crate) fn has_matching_recursion_identity(c: &mut Checker, t: P<Type>, identity: RecursionId) -> bool {
     let target = get_recursion_identity_target(c, t);
     if target.flags().intersects(TypeFlags::Intersection) {
@@ -1200,6 +1201,10 @@ fn get_recursion_identity_target_worker(c: &mut Checker, t: P<Type>) -> P<Type> 
 // instantiations of that type have the same recursion identity. The default recursion identity is the object
 // identity of the type, meaning that every type is unique. Generally, types with constituents that could circularly
 // reference the type have a recursion identity that differs from the object identity.
+// tsrs: inline, it is asked of every type on the relater's stack (and of each constituent of an intersection there)
+// for each deeply-nested test, 474M times on the 38k-file codebase.
+#[expect(clippy::inline_always, reason = "measured: #[inline] is ignored here (notes/perf-icount-hillclimb.md, round 3)")]
+#[inline(always)]
 pub(crate) fn get_recursion_identity_from_target(t: P<Type>) -> RecursionId {
     // Object and array literals are known not to contain recursive references and don't need a recursion identity.
     if t.flags().intersects(TypeFlags::Object) && !is_object_or_array_literal_type(t) {
