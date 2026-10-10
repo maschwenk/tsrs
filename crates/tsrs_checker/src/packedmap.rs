@@ -76,6 +76,7 @@ impl<K: PackedKey, V: Copy> PackedMap<K, V> {
     /// Like `HashMap::insert`: returns the value the key had.
     #[inline]
     pub fn insert(&mut self, key: K, value: V) -> Option<V> {
+        let _weak = tsrs_core::usebits::weak_scope();
         match self.table.entry(key.packed_hash(), |slot| ({ slot.key }) == key, |slot| ({ slot.key }).packed_hash()) {
             hashbrown::hash_table::Entry::Occupied(mut slot) => {
                 let old = slot.get().value;
@@ -195,6 +196,7 @@ impl StringLiteralTypes {
 
     /// Adds a string literal type whose value is not in the table yet.
     pub fn insert_new(&mut self, t: P<Type>) {
+        let _weak = tsrs_core::usebits::weak_scope();
         let value = Self::value_of(t);
         debug_assert!(self.get(value).is_none());
         self.table.insert_unique(Self::hash(value), t, |&t| Self::hash(Self::value_of(t)));

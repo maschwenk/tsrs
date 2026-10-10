@@ -2251,6 +2251,7 @@ impl ReferenceInstantiations {
 
     /// Go `m[getTypeListKey(reference's type arguments)] = reference` for a key that is not present yet.
     pub fn add(&self, reference: P<Type>) {
+        let _weak = tsrs_core::usebits::weak_scope();
         if self.0.get().is_none() {
             self.make();
         }

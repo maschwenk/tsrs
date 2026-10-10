@@ -61,7 +61,7 @@ mod imp {
         if !FROZEN.load(Ordering::Relaxed).is_null() {
             return;
         }
-        extern "C" {
+        unsafe extern "C" {
             fn mmap(addr: *mut std::ffi::c_void, len: usize, prot: i32, flags: i32, fd: i32, offset: i64) -> *mut std::ffi::c_void;
         }
         const PROT_READ: i32 = 1;
@@ -128,6 +128,9 @@ mod imp {
 
     #[inline(never)]
     fn mark_slow(off: usize) {
+        if EPOCH_ON.load(Ordering::Relaxed) {
+            epoch_note_read(off);
+        }
         let mut bm = LIVE.load(Ordering::Relaxed);
         if bm.is_null() {
             return;
@@ -147,6 +150,199 @@ mod imp {
         let w = unsafe { &*bm.add(off >> 7) };
         if w.load(Ordering::Relaxed) & bit == 0 && w.fetch_or(bit, Ordering::Relaxed) & bit == 0 && FIRST_READS.load(Ordering::Relaxed) {
             crate::alloc_profile::census::sample_first_read(BASE + off);
+        }
+    }
+
+    // ---- Epoch census (experiment, notes/mem-recycle-checkers.md) -----------------------------------------------
+    // Per 16-byte granule of the first 64 GiB of arena mappings: the allocating checker thread and its epoch (files
+    // that thread had finished; 0 = not a checker allocation), and the latest epoch at which the granule was read.
+    const E_SPAN: usize = 1 << 36;
+    const E_GRAN: usize = 16;
+    static EPOCH_ON: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    static ALLOC_MAP: AtomicPtr<AtomicU32> = AtomicPtr::new(std::ptr::null_mut());
+    static READ_MAP: AtomicPtr<AtomicU32> = AtomicPtr::new(std::ptr::null_mut());
+    static SITE_MAP: AtomicPtr<AtomicU32> = AtomicPtr::new(std::ptr::null_mut());
+    thread_local! {
+        static EPOCH: std::cell::Cell<(u32, u32)> = const { std::cell::Cell::new((0, 0)) };
+    }
+    const START: u32 = 1 << 31;
+    const EPOCH_BITS: u32 = 27;
+
+    pub fn epoch_init() {
+        unsafe extern "C" {
+            fn mmap(addr: *mut std::ffi::c_void, len: usize, prot: i32, flags: i32, fd: i32, offset: i64) -> *mut std::ffi::c_void;
+        }
+        #[cfg(target_os = "linux")]
+        const MAP_ANON: i32 = 0x20;
+        #[cfg(not(target_os = "linux"))]
+        const MAP_ANON: i32 = 0x1000;
+        let bytes = E_SPAN / E_GRAN * 4;
+        // SAFETY: anonymous private mappings, zero-filled on first touch.
+        let a = unsafe { mmap(std::ptr::null_mut(), bytes, 3, 2 | MAP_ANON, -1, 0) };
+        let r = unsafe { mmap(std::ptr::null_mut(), bytes, 3, 2 | MAP_ANON, -1, 0) };
+        assert!(a.addr() != usize::MAX && r.addr() != usize::MAX, "epoch census maps");
+        let st = unsafe { mmap(std::ptr::null_mut(), bytes, 3, 2 | MAP_ANON, -1, 0) };
+        assert!(st.addr() != usize::MAX);
+        SITE_MAP.store(st.cast(), Ordering::Relaxed);
+        ALLOC_MAP.store(a.cast(), Ordering::Relaxed);
+        READ_MAP.store(r.cast(), Ordering::Relaxed);
+        EPOCH_ON.store(true, Ordering::SeqCst);
+    }
+
+    /// The calling checker thread `thread` (1-based) has finished `epoch - 1` files.
+    pub fn epoch_set(thread: u32, epoch: u32) {
+        EPOCH.with(|e| e.set((thread, epoch)));
+    }
+
+    #[inline]
+    pub fn epoch_note_alloc(addr: usize, size: usize) {
+        if !EPOCH_ON.load(Ordering::Relaxed) {
+            return;
+        }
+        let (thread, epoch) = EPOCH.with(|e| e.get());
+        if epoch == 0 || size == 0 {
+            return;
+        }
+        let off = addr.wrapping_sub(BASE);
+        if off >= E_SPAN {
+            return;
+        }
+        let m = ALLOC_MAP.load(Ordering::Relaxed);
+        let first = off / E_GRAN;
+        let last = (off + size - 1).min(E_SPAN - 1) / E_GRAN;
+        let v = thread << EPOCH_BITS | epoch;
+        for g in first..=last {
+            // SAFETY: inside the mapping.
+            unsafe { (*m.add(g)).store(if g == first { v | START } else { v }, Ordering::Relaxed) };
+        }
+    }
+
+    #[inline]
+    pub fn epoch_note_site(addr: usize, site: u32) {
+        if !EPOCH_ON.load(Ordering::Relaxed) {
+            return;
+        }
+        let off = addr.wrapping_sub(BASE);
+        if off < E_SPAN {
+            // SAFETY: inside the mapping.
+            unsafe { (*SITE_MAP.load(Ordering::Relaxed).add(off / E_GRAN)).store(site, Ordering::Relaxed) };
+        }
+    }
+
+    #[inline]
+    fn epoch_note_read(off: usize) {
+        if off >= E_SPAN {
+            return;
+        }
+        let epoch = EPOCH.with(|e| e.get().1);
+        if epoch == 0 {
+            return;
+        }
+        // SAFETY: inside the mapping.
+        let w = unsafe { &*READ_MAP.load(Ordering::Relaxed).add(off / E_GRAN) };
+        if w.load(Ordering::Relaxed) < epoch {
+            w.fetch_max(epoch, Ordering::Relaxed);
+        }
+    }
+
+    /// Prints, per checker thread and for points t through its life (fractions of its final epoch), the bytes it had
+    /// allocated by t, and of those the bytes never read after t (or never read at all).
+    pub fn epoch_report(final_epochs: &[u32]) {
+        if !EPOCH_ON.load(Ordering::Relaxed) {
+            return;
+        }
+        let a = ALLOC_MAP.load(Ordering::Relaxed);
+        let r = READ_MAP.load(Ordering::Relaxed);
+        let used = crate::arena::census_mapped_end().saturating_sub(BASE).min(E_SPAN);
+        const POINTS: [f64; 9] = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9];
+        let n = final_epochs.len();
+        // [thread][point]: (allocated by t, never read after t)
+        let mut acc = vec![[(0u64, 0u64); 9]; n + 1];
+        let mut never = vec![0u64; n + 1];
+        let sm = SITE_MAP.load(Ordering::Relaxed);
+        let mut by_site: rustc_hash::FxHashMap<u32, (u64, u64)> = Default::default();
+        let mut total = vec![0u64; n + 1];
+        let granules = used / E_GRAN;
+        let mut g = 0;
+        while g < granules {
+            // SAFETY: inside the mapping.
+            let v = unsafe { (*a.add(g)).load(Ordering::Relaxed) };
+            if v & START == 0 {
+                g += 1;
+                continue;
+            }
+            let thread = ((v & !START) >> EPOCH_BITS) as usize;
+            let epoch = v & ((1 << EPOCH_BITS) - 1);
+            let mut last_read = unsafe { (*r.add(g)).load(Ordering::Relaxed) };
+            let mut h = g + 1;
+            while h < granules {
+                let w = unsafe { (*a.add(h)).load(Ordering::Relaxed) };
+                if w == 0 || w & START != 0 || w & !START != v & !START {
+                    break;
+                }
+                last_read = last_read.max(unsafe { (*r.add(h)).load(Ordering::Relaxed) });
+                h += 1;
+            }
+            let bytes = ((h - g) * E_GRAN) as u64;
+            if thread == 0 || thread > n {
+                g = h;
+                continue;
+            }
+            total[thread] += bytes;
+            if last_read == 0 {
+                never[thread] += bytes;
+            }
+            let fin = final_epochs[thread - 1].max(1);
+            for (k, f) in POINTS.iter().enumerate() {
+                let t = (f * fin as f64) as u32;
+                if epoch <= t {
+                    acc[thread][k].0 += bytes;
+                    if last_read <= t {
+                        acc[thread][k].1 += bytes;
+                    }
+                    if k == 4 {
+                        let site = unsafe { (*sm.add(g)).load(Ordering::Relaxed) };
+                        let e = by_site.entry(site).or_default();
+                        e.0 += bytes;
+                        if last_read <= t {
+                            e.1 += bytes;
+                        }
+                    }
+                }
+            }
+            g = h;
+        }
+        let mb = |b: u64| b as f64 / 1048576.0;
+        eprintln!("epoch census: per checker thread, at t = fraction of its files: MB allocated by t / of which never read after t (%)");
+        let mut sum = [(0u64, 0u64); 9];
+        for t in 1..=n {
+            let mut line = format!("  checker {} ({} files, {:.0} MB, never read {:.0}%):", t - 1, final_epochs[t - 1], mb(total[t]), 100.0 * never[t] as f64 / total[t].max(1) as f64);
+            for k in 0..9 {
+                let (al, dead) = acc[t][k];
+                sum[k].0 += al;
+                sum[k].1 += dead;
+                line += &format!(" {:.1}:{:.0}/{:.0}%", POINTS[k], mb(al), 100.0 * dead as f64 / al.max(1) as f64);
+            }
+            eprintln!("{line}");
+        }
+        let mut line = String::from("  all:");
+        for k in 0..9 {
+            line += &format!(" {:.1}:{:.0}/{:.0}({:.0}%)", POINTS[k], mb(sum[k].0), mb(sum[k].1), 100.0 * sum[k].1 as f64 / sum[k].0.max(1) as f64);
+        }
+        eprintln!("{line}");
+        let names = crate::alloc_profile::GLOBAL_SITES.lock().unwrap();
+        let mut agg: rustc_hash::FxHashMap<&str, (u64, u64)> = Default::default();
+        for (site, (al, dead)) in by_site {
+            let name = if site == 0 { "?" } else { names.get(site as usize - 1).map_or("?", |s| s.as_str()) };
+            let e = agg.entry(name).or_default();
+            e.0 += al;
+            e.1 += dead;
+        }
+        let mut v: Vec<_> = agg.into_iter().collect();
+        v.sort_by_key(|&(_, (_, dead))| std::cmp::Reverse(dead));
+        eprintln!("epoch census at t = 0.5, by allocation site: MB allocated by t, MB never read after t, share");
+        for (name, (al, dead)) in v.into_iter().take(40) {
+            eprintln!("  {:9.1} {:9.1} {:5.1}%  {}", mb(al), mb(dead), 100.0 * dead as f64 / al.max(1) as f64, name);
         }
     }
 
@@ -193,6 +389,8 @@ mod imp {
     }
 }
 
+#[cfg(feature = "alloc-profile")]
+pub use imp::{epoch_init, epoch_note_alloc, epoch_note_site, epoch_report, epoch_set};
 #[cfg(feature = "alloc-profile")]
 pub use imp::{builder, freeze, init, is_active, is_builder_read, is_read, is_written, mark, mark_write, recording, set_first_reads, Builder};
 
@@ -274,4 +472,37 @@ pub fn used<T>(s: &'static [T]) -> &'static [T] {
 #[inline(always)]
 pub fn mark_slice<T>(s: &[T]) {
     mark(s.as_ptr() as usize)
+}
+
+// ---- GC simulation (experiment, notes/mem-recycle-checkers.md) ------------------------------------------------
+// Heap blocks allocated inside a `weak_scope` (the storage of the checker's identity caches) are weak for the census:
+// marked if reached, but their words are not followed.
+#[cfg(feature = "alloc-profile")]
+thread_local! {
+    pub(crate) static WEAK_ALLOC: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+pub struct WeakScope(());
+
+impl Drop for WeakScope {
+    #[inline]
+    fn drop(&mut self) {
+        #[cfg(feature = "alloc-profile")]
+        let _ = WEAK_ALLOC.try_with(|c| c.set(c.get() - 1));
+    }
+}
+
+#[inline]
+pub fn weak_scope() -> WeakScope {
+    #[cfg(feature = "alloc-profile")]
+    let _ = WEAK_ALLOC.try_with(|c| c.set(c.get() + 1));
+    WeakScope(())
+}
+
+/// Runs the reachability census now (alloc-profile build with `TSRS_CENSUS=1`) from `roots`.
+pub fn gc_sim_census(roots: &[usize]) {
+    #[cfg(feature = "alloc-profile")]
+    crate::alloc_profile::census::run(roots);
+    #[cfg(not(feature = "alloc-profile"))]
+    let _ = roots;
 }

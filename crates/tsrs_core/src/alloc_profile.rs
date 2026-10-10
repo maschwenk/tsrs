@@ -439,6 +439,8 @@ type Key = (usize, usize);
 struct ThreadData {
     index: FxHashMap<Key, u32>,
     sites: Vec<(&'static Location<'static>, &'static str, Entry)>,
+    /// Epoch census: the global id (`GLOBAL_SITES`) of each entry of `sites`.
+    global: Vec<u32>,
     /// Census only: every arena block this thread allocated (address, size, index into `sites`), and the raw stack
     /// of every `census::ARENA_SAMPLE`-th one (address, stack id).
     blocks: Vec<(u64, u32, u32, u32)>, // address, size, site, census::next_seq()
@@ -446,10 +448,14 @@ struct ThreadData {
     /// Census only: blocks the arena was asked to free or rewind (address, size); see `census::run`.
     would_free: Vec<(u64, u32, u32)>, // address, size, census::next_seq() when freed
     countdown: u32,
+    /// GC simulation: the thread is a checker thread (`checker-N`).
+    pub(crate) is_checker: bool,
 }
 type Shared = Arc<Mutex<ThreadData>>;
 
 static THREADS: Mutex<Vec<Shared>> = Mutex::new(Vec::new());
+/// Epoch census: names of the (site, type) pairs, id = index + 1.
+pub(crate) static GLOBAL_SITES: Mutex<Vec<String>> = Mutex::new(Vec::new());
 static ARENAS: Mutex<Vec<usize>> = Mutex::new(Vec::new());
 /// The name of the thread that made each arena of `ARENAS` (same order).
 static ARENA_THREADS: Mutex<Vec<String>> = Mutex::new(Vec::new());
@@ -460,10 +466,12 @@ thread_local! {
         let data = Arc::new(Mutex::new(ThreadData {
             index: FxHashMap::default(),
             sites: Vec::new(),
+            global: Vec::new(),
             blocks: Vec::new(),
             samples: Vec::new(),
             would_free: Vec::new(),
             countdown: 0,
+            is_checker: std::thread::current().name().is_some_and(|n| n.starts_with("checker")),
         }));
         THREADS.lock().unwrap().push(data.clone());
         data
@@ -593,7 +601,11 @@ pub(crate) fn record(site: &'static Location<'static>, ty: &'static str, bytes: 
         let idx = *data.index.entry(key).or_insert(next);
         if idx == next {
             data.sites.push((site, ty, Entry::default()));
+            let mut g = GLOBAL_SITES.lock().unwrap();
+            g.push(format!("{}:{}  {}", site.file(), site.line(), short_type(ty)));
+            data.global.push(g.len() as u32);
         }
+        crate::usebits::epoch_note_site(addr, data.global[idx as usize]);
         let e = &mut data.sites[idx as usize].2;
         e.count += 1;
         e.bytes += bytes as u64;

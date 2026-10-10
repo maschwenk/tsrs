@@ -846,6 +846,15 @@ impl checkerPool {
         }
         let queues: Vec<FileQueue> = positions.into_iter().map(|p| FileQueue::new(p, weight)).collect();
         // TSRS_MEM_SPLIT: the type-check pass reports once every checker is done and before any thread exits.
+        // GC simulation (experiment): TSRS_GC_SIM_AT=<fraction>: every checker stops after that fraction of its queue,
+        // and the reachability census runs once all have (alloc-profile build, TSRS_CENSUS=1).
+        let gc_sim_at: Option<f64> = allow_steal.then(|| std::env::var("TSRS_GC_SIM_AT").ok().and_then(|v| v.parse().ok())).flatten();
+        let gc_barrier = gc_sim_at.map(|_| std::sync::Barrier::new(active.len()));
+        let initial_len: Vec<usize> = queues.iter().map(|q| q.remaining_count()).collect();
+        let final_epochs: Vec<std::sync::atomic::AtomicU32> = (0..n).map(|_| std::sync::atomic::AtomicU32::new(0)).collect();
+        if allow_steal && std::env::var_os("TSRS_EPOCH_CENSUS").is_some() {
+            tsrs_core::usebits::epoch_init();
+        }
         let mem_split = (allow_steal && tsrs_core::memsplit::enabled()).then(|| std::sync::Barrier::new(if single { 1 } else { active.len() }));
         let run = |checker_idx: usize| {
             let start = stats.then(std::time::Instant::now);
@@ -853,10 +862,15 @@ impl checkerPool {
             let mut count = 0;
             let mut file_cpu: Vec<(P<SourceFile>, f64)> = Vec::new();
             let mut guard = state.checkers[checker_idx].0.lock().unwrap();
+            let epochs = allow_steal && std::env::var_os("TSRS_EPOCH_CENSUS").is_some();
+            if epochs {
+                tsrs_core::usebits::epoch_set(checker_idx as u32 + 1, 1);
+            }
             let mut scope = guard.enter();
             let recycle = allow_steal && state.recycle;
             let budget = recycle_budget();
             let mut last_victim = usize::MAX;
+            let mut gc_arrived = false;
             while let Some((i, from_other)) = queues_next(&queues, checker_idx, steal, sticky.then_some(&mut last_victim)) {
                 if let Some(&(s, k, _)) = i.checked_sub(files.len()).map(|p| &split.piece_items[p]) {
                     let piece_start = file_times.then(std::time::Instant::now);
@@ -898,6 +912,18 @@ impl checkerPool {
                     file_cpu.push((file, thread_cpu_seconds() - cpu_start));
                 }
                 count += 1;
+                if let (Some(at), Some(barrier)) = (gc_sim_at, &gc_barrier) {
+                    if !gc_arrived && count as f64 >= at * initial_len[checker_idx] as f64 {
+                        gc_arrived = true;
+                        drop(scope);
+                        self.gc_sim_arrive(barrier);
+                        scope = guard.enter();
+                    }
+                }
+                if epochs {
+                    tsrs_core::usebits::epoch_set(checker_idx as u32 + 1, count as u32 + 1);
+                    final_epochs[checker_idx].store(count as u32 + 1, std::sync::atomic::Ordering::Relaxed);
+                }
                 if evict_relations() > 0 && guard.relation_cache_entries() > evict_relations() {
                     guard.clear_relation_caches();
                 }
@@ -908,6 +934,14 @@ impl checkerPool {
                 }
             }
             drop(scope);
+            if let Some(barrier) = &gc_barrier {
+                if !gc_arrived {
+                    self.gc_sim_arrive(barrier);
+                }
+            }
+            if epochs {
+                tsrs_core::usebits::epoch_set(0, 0);
+            }
             if cost_cache {
                 state.file_cpu.lock().unwrap().extend(file_cpu);
             }
@@ -934,6 +968,9 @@ impl checkerPool {
             }
         };
         run_work_group(single, active.len(), |k| run(active[k]));
+        if allow_steal && std::env::var_os("TSRS_EPOCH_CENSUS").is_some() {
+            tsrs_core::usebits::epoch_report(&final_epochs.iter().map(|e| e.load(std::sync::atomic::Ordering::Relaxed)).collect::<Vec<_>>());
+        }
         if allow_steal && state.recycle {
             tsrs_core::phases::count("Checkers: retired", state.retired.lock().unwrap().count as u64);
         }
@@ -967,6 +1004,22 @@ impl checkerPool {
             drop(old.checker);
         }
         drop(old.region);
+    }
+}
+
+impl checkerPool {
+    fn gc_sim_arrive(&self, barrier: &std::sync::Barrier) {
+        if barrier.wait().is_leader() {
+            tsrs_core::census_scrub_stack();
+            tsrs_ast::census_layouts();
+            eprintln!("gc sim: census at the barrier");
+            tsrs_core::usebits::gc_sim_census(&[std::ptr::from_ref(self.program) as usize]);
+            std::process::exit(0);
+        }
+        // The other threads wait for the exit.
+        loop {
+            std::thread::park();
+        }
     }
 }
 
@@ -1139,6 +1192,11 @@ impl FileQueue {
         }
         let len = positions.len() as u64;
         FileQueue { positions, prefix, range: std::sync::atomic::AtomicU64::new(len << 32) }
+    }
+
+    fn remaining_count(&self) -> usize {
+        let r = self.range.load(std::sync::atomic::Ordering::Relaxed);
+        ((r >> 32) as usize).saturating_sub((r & QUEUE_LOW) as usize)
     }
 
     fn remaining(&self) -> u64 {

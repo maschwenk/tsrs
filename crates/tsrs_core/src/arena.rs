@@ -207,6 +207,14 @@ impl Arena {
 
     #[inline]
     pub(crate) fn alloc_layout(&self, layout: Layout) -> NonNull<u8> {
+        let p = self.alloc_layout_inner(layout);
+        #[cfg(feature = "alloc-profile")]
+        crate::usebits::epoch_note_alloc(p.as_ptr().addr(), layout.size());
+        p
+    }
+
+    #[inline]
+    fn alloc_layout_inner(&self, layout: Layout) -> NonNull<u8> {
         // Profile builds: a zero-sized value (a closure without captures, e.g. a `TypeComparer`) would get the bump
         // position, which is the start of the previous block, and the census would count that word as a reference.
         #[cfg(feature = "alloc-profile")]
@@ -502,6 +510,13 @@ impl Arena {
 /// whose second half is 0x200 (a common flag value) "points" into it, which shows up as spurious would-free
 /// violations. Bytes 4-5 = 00 7c (NUL then `|`) are rare in numbers and text.
 #[cfg(feature = "alloc-profile")]
+static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0x7c00_0000_0000);
+
+/// The end of the profile build's arena mappings so far (`census_chunk`).
+pub fn census_mapped_end() -> usize {
+    NEXT.load(Ordering::Relaxed)
+}
+
 fn census_chunk(size: usize) -> *mut u8 {
     use std::sync::atomic::AtomicUsize;
     unsafe extern "C" {
@@ -514,7 +529,6 @@ fn census_chunk(size: usize) -> *mut u8 {
     const MAP_ANON: i32 = 0x20;
     #[cfg(not(target_os = "linux"))]
     const MAP_ANON: i32 = 0x1000;
-    static NEXT: AtomicUsize = AtomicUsize::new(0x7c00_0000_0000);
     let hint = NEXT.fetch_add(size.next_multiple_of(1 << 20) + (1 << 20), Ordering::Relaxed);
     // SAFETY: anonymous private mapping; the hint is only a hint.
     let p = unsafe { mmap(std::ptr::without_provenance_mut(hint), size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0) };

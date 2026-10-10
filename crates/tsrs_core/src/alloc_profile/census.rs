@@ -33,6 +33,8 @@ static MODE: AtomicU8 = AtomicU8::new(0);
 const SHARDS: usize = 64;
 type LiveMap = FxHashMap<usize, (usize, u32, u32)>;
 static LIVE: [Mutex<Option<LiveMap>>; SHARDS] = [const { Mutex::new(None) }; SHARDS];
+/// GC simulation: heap blocks allocated inside `usebits::weak_scope`.
+static WEAK_HEAP: [Mutex<Option<FxHashSet<usize>>>; SHARDS] = [const { Mutex::new(None) }; SHARDS];
 
 struct StackTable {
     index: FxHashMap<Stack, u32>,
@@ -161,6 +163,9 @@ pub(super) fn on_alloc(p: *mut u8, size: usize) {
         let id = intern(&capture());
         let a = p as usize;
         LIVE[shard(a)].lock().unwrap().get_or_insert_with(FxHashMap::default).insert(a, (size, id, next_seq()));
+        if crate::usebits::WEAK_ALLOC.try_with(|c| c.get()).unwrap_or(0) != 0 {
+            WEAK_HEAP[shard(a)].lock().unwrap().get_or_insert_with(FxHashSet::default).insert(a);
+        }
     });
 }
 
@@ -174,6 +179,9 @@ pub(super) fn on_free(p: *mut u8) {
         if let Some(m) = LIVE[shard(a)].lock().unwrap().as_mut() {
             m.remove(&a);
         }
+        if let Some(m) = WEAK_HEAP[shard(a)].lock().unwrap().as_mut() {
+            m.remove(&a);
+        }
     });
 }
 
@@ -182,6 +190,8 @@ struct Block {
     start: u64,
     size: u32,
     class: u32,
+    /// GC simulation: allocated by a checker thread.
+    checker: bool,
     /// Allocation order (`next_seq`).
     seq: u32,
 }
@@ -540,7 +550,8 @@ fn run_frozen(roots: &[usize]) {
             .collect();
         let own = std::mem::take(&mut data.blocks);
         blocks.reserve(own.len());
-        blocks.extend(own.iter().map(|&(start, size, site, seq)| Block { start, size, class: remap[site as usize], seq }));
+        let checker = data.is_checker;
+        blocks.extend(own.iter().map(|&(start, size, site, seq)| Block { start, size, class: remap[site as usize], seq, checker }));
         drop(own);
         samples.extend(std::mem::take(&mut data.samples));
         would_free.extend(std::mem::take(&mut data.would_free));
@@ -572,7 +583,7 @@ fn run_frozen(roots: &[usize]) {
                     oversized += 1;
                     u32::MAX
                 });
-                blocks.push(Block { start: a as u64, size, class: arena_classes + stack, seq });
+                blocks.push(Block { start: a as u64, size, class: arena_classes + stack, seq, checker: false });
             }
         }
     }
@@ -583,6 +594,23 @@ fn run_frozen(roots: &[usize]) {
             Class::Heap { .. } => true,
         })
         .collect();
+    // GC simulation: arena types whose blocks are weak (`TSRS_GC_WEAK_ARENA`: comma-separated substrings of the type).
+    let weak_arena: Vec<String> = std::env::var("TSRS_GC_WEAK_ARENA").unwrap_or_default().split(',').filter(|s| !s.is_empty()).map(String::from).collect();
+    let weak_class: Vec<bool> = classes
+        .iter()
+        .map(|c| match c {
+            Class::Arena { loc, ty } => {
+                let name = format!("{}:{} {}", loc.file(), loc.line(), ty);
+                weak_arena.iter().any(|w| w.split('&').all(|part| name.contains(part)))
+            }
+            Class::Heap { .. } => false,
+        })
+        .collect();
+    let weak_heap: FxHashSet<usize> = if std::env::var_os("TSRS_GC_WEAK_CACHES").is_some() {
+        WEAK_HEAP.iter().filter_map(|s| s.lock().unwrap().take()).flatten().collect()
+    } else {
+        FxHashSet::default()
+    };
     let t_collect = t0.elapsed();
     let mut table = Table::build(blocks);
     let mut overlaps = 0u64;
@@ -607,12 +635,19 @@ fn run_frozen(roots: &[usize]) {
         table.scan(start, len, &mut work);
     }
     let from_roots = work.len();
+    let mut weak_reached = (0u64, 0u64);
     while let Some(i) = work.pop() {
         let b = table.blocks[i as usize];
+        if (b.checker && weak_class.get(b.class as usize).copied().unwrap_or(false)) || (!weak_heap.is_empty() && weak_heap.contains(&(b.start as usize))) {
+            weak_reached.0 += 1;
+            weak_reached.1 += b.size as u64;
+            continue;
+        }
         if scan[b.class as usize] {
             table.scan(b.start as usize, b.size as usize, &mut work);
         }
     }
+    eprintln!("gc sim: {} weak heap blocks registered; weak blocks reached {} ({} MB, not followed)", weak_heap.len(), weak_reached.0, weak_reached.1 >> 20);
     let t_mark = t0.elapsed();
     check_would_free(&table, &classes, &stacks, &scan, roots, would_free);
     // `TSRS_CENSUS_SKIP_FREED=1`: the tables leave out blocks the arena freed or rewound (reused in normal builds), so
