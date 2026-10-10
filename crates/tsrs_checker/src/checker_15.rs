@@ -642,59 +642,128 @@ impl Checker {
 
     // checker.go:31044
     pub(crate) fn get_type_of_property_of_contextual_type_ex(&mut self, t: P<Type>, name: &str, name_type: Option<P<Type>>) -> Option<P<Type>> {
-        self.map_type_ex(
-            t,
-            |c, t| {
-                if t.flags().intersects(TypeFlags::Intersection) {
-                    let mut types: Vec<P<Type>> = Vec::new();
-                    let mut index_info_candidates: Vec<P<Type>> = Vec::new();
-                    let mut ignore_index_infos = false;
-                    for &constituent_type in t.types() {
-                        if !constituent_type.flags().intersects(TypeFlags::Object) {
-                            continue;
-                        }
-                        if c.is_generic_mapped_type(constituent_type) && c.get_mapped_type_name_type_kind(constituent_type) != MappedTypeNameTypeKind::Remapping {
-                            let substituted_type = c.get_indexed_mapped_type_substituted_type_of_contextual_type(constituent_type, name, name_type);
-                            c.append_contextual_property_type_constituent(&mut types, substituted_type);
-                            continue;
-                        }
-                        let property_type = c.get_type_of_concrete_property_of_contextual_type(constituent_type, name);
-                        if property_type.is_none() {
-                            if !ignore_index_infos {
-                                index_info_candidates.push(constituent_type);
-                            }
-                            continue;
-                        }
-                        ignore_index_infos = true;
-                        index_info_candidates = Vec::new();
-                        c.append_contextual_property_type_constituent(&mut types, property_type);
-                    }
-                    for candidate in index_info_candidates {
-                        let index_info_type = c.get_type_from_index_infos_of_contextual_type(candidate, name, name_type);
-                        c.append_contextual_property_type_constituent(&mut types, index_info_type);
-                    }
-                    if types.is_empty() {
-                        return None;
-                    }
-                    if types.len() == 1 {
-                        return Some(types[0]);
-                    }
-                    return Some(c.get_intersection_type(&types));
+        if t.flags().intersects(TypeFlags::Union)
+            && let Some(result) = self.contextual_property_type_of_large_union(t, name, name_type)
+        {
+            return result;
+        }
+        self.map_type_ex(t, |c, t| c.contextual_property_type_of_constituent(t, name, name_type), true /*noReductions*/)
+    }
+
+    /// The `mapType` callback of `getTypeOfPropertyOfContextualType`.
+    fn contextual_property_type_of_constituent(&mut self, t: P<Type>, name: &str, name_type: Option<P<Type>>) -> Option<P<Type>> {
+        if t.flags().intersects(TypeFlags::Intersection) {
+            let mut types: Vec<P<Type>> = Vec::new();
+            let mut index_info_candidates: Vec<P<Type>> = Vec::new();
+            let mut ignore_index_infos = false;
+            for &constituent_type in t.types() {
+                if !constituent_type.flags().intersects(TypeFlags::Object) {
+                    continue;
                 }
-                if !t.flags().intersects(TypeFlags::Object) {
+                if self.is_generic_mapped_type(constituent_type) && self.get_mapped_type_name_type_kind(constituent_type) != MappedTypeNameTypeKind::Remapping {
+                    let substituted_type = self.get_indexed_mapped_type_substituted_type_of_contextual_type(constituent_type, name, name_type);
+                    self.append_contextual_property_type_constituent(&mut types, substituted_type);
+                    continue;
+                }
+                let property_type = self.get_type_of_concrete_property_of_contextual_type(constituent_type, name);
+                if property_type.is_none() {
+                    if !ignore_index_infos {
+                        index_info_candidates.push(constituent_type);
+                    }
+                    continue;
+                }
+                ignore_index_infos = true;
+                index_info_candidates = Vec::new();
+                self.append_contextual_property_type_constituent(&mut types, property_type);
+            }
+            for candidate in index_info_candidates {
+                let index_info_type = self.get_type_from_index_infos_of_contextual_type(candidate, name, name_type);
+                self.append_contextual_property_type_constituent(&mut types, index_info_type);
+            }
+            if types.is_empty() {
+                return None;
+            }
+            if types.len() == 1 {
+                return Some(types[0]);
+            }
+            return Some(self.get_intersection_type(&types));
+        }
+        if !t.flags().intersects(TypeFlags::Object) {
+            return None;
+        }
+        if self.is_generic_mapped_type(t) && self.get_mapped_type_name_type_kind(t) != MappedTypeNameTypeKind::Remapping {
+            return self.get_indexed_mapped_type_substituted_type_of_contextual_type(t, name, name_type);
+        }
+        let result = self.get_type_of_concrete_property_of_contextual_type(t, name);
+        if result.is_some() {
+            return result;
+        }
+        self.get_type_from_index_infos_of_contextual_type(t, name, name_type)
+    }
+
+    /// tsrs-only: `get_type_of_property_of_contextual_type_ex` of a large union, visiting only the constituents
+    /// that can give a type (None when that is all of them, or the union is small). A contextual union of object
+    /// types is asked about each property of an object literal three or four times; on the 38k-file codebase such
+    /// unions average over 100 constituents, nearly all without the property, and most (union, name) pairs repeat.
+    /// A constituent is skipped when the callback returns None for it without side effects whenever it is asked:
+    /// a plain object type with resolved members, no such member, no index infos, and a name that no `Object` or
+    /// `Function` member has. That holds while those members stay resolved, so the positions are computed only
+    /// with no member resolution in progress and dropped when any type's members are reset. The visited
+    /// constituents are mapped in the same order and combined as `map_type_ex` does (a skipped one maps to None,
+    /// so the result is never the union itself).
+    fn contextual_property_type_of_large_union(&mut self, t: P<Type>, name: &str, name_type: Option<P<Type>>) -> Option<Option<P<Type>>> {
+        let u = t.as_union_type();
+        let types = match u.origin() {
+            Some(origin) if origin.flags().intersects(TypeFlags::Union) => origin.types(),
+            _ => u.types.get(),
+        };
+        if types.len() < 8 {
+            return None;
+        }
+        let key = HashedName::new(name);
+        let epoch = self.members_reset_epoch;
+        let cached = self.contextual_relevant.get(&(t, key.hash())).and_then(|entries| entries.iter().find(|e| e.0 == name)).map(|e| (e.1, std::rc::Rc::clone(&e.2)));
+        let relevant = match cached {
+            Some((e, relevant)) if e == epoch => relevant,
+            _ => {
+                if self.members_resolving != 0 {
                     return None;
                 }
-                if c.is_generic_mapped_type(t) && c.get_mapped_type_name_type_kind(t) != MappedTypeNameTypeKind::Remapping {
-                    return c.get_indexed_mapped_type_substituted_type_of_contextual_type(t, name, name_type);
-                }
-                let result = c.get_type_of_concrete_property_of_contextual_type(t, name);
-                if result.is_some() {
-                    return result;
-                }
-                c.get_type_from_index_infos_of_contextual_type(t, name, name_type)
-            },
-            true, /*noReductions*/
-        )
+                let relevant: std::rc::Rc<[u32]> = (0..types.len() as u32).filter(|&i| !self.is_skippable_contextual_constituent(types[i as usize], key)).collect();
+                let entries = self.contextual_relevant.entry((t, key.hash())).or_default();
+                entries.retain(|e| e.0 != name);
+                entries.push((alloc_str(name), epoch, std::rc::Rc::clone(&relevant)));
+                relevant
+            }
+        };
+        if relevant.len() == types.len() {
+            return None;
+        }
+        let mut mapped_types = self.free_type_lists.pop().unwrap_or_default();
+        for &i in relevant.iter() {
+            let s = types[i as usize];
+            let mapped = if s.flags().intersects(TypeFlags::Union) {
+                self.map_type_ex(s, |c, t| c.contextual_property_type_of_constituent(t, name, name_type), true /*noReductions*/)
+            } else {
+                self.contextual_property_type_of_constituent(s, name, name_type)
+            };
+            if let Some(mapped) = mapped {
+                mapped_types.push(mapped);
+            }
+        }
+        let result = if mapped_types.is_empty() { None } else { Some(self.get_union_type_ex(&mapped_types, UnionReduction::None, AliasArg::None, None)) };
+        self.free_type_list(mapped_types);
+        Some(result)
+    }
+
+    /// See `contextual_property_type_of_large_union`.
+    fn is_skippable_contextual_constituent(&mut self, t: P<Type>, key: HashedName<'_>) -> bool {
+        t.flags() == TypeFlags::Object
+            && t.object_flags_lazy() & (ObjectFlags::MembersResolved | ObjectFlags::Mapped) == ObjectFlags::MembersResolved
+            && !is_tuple_type(t)
+            && t.as_structured_type().members().is_none_or(|m| m.lookup_hashed(key).is_none())
+            && self.index_infos_of_structured_type(t).is_empty()
+            && !self.may_be_augment_member(key)
     }
 
     // checker.go:31096

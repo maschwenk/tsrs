@@ -2289,7 +2289,7 @@ impl Checker {
     /// built from their member tables, which do not change after resolution, and asking must not resolve them early.
     /// The base-type cycle resets that make a type resolve its members again drop the filter.
     #[inline]
-    fn may_be_augment_member(&mut self, key: HashedName<'_>) -> bool {
+    pub(crate) fn may_be_augment_member(&mut self, key: HashedName<'_>) -> bool {
         match &self.augment_filter {
             Some(filter) => filter.may_contain(key),
             None => self.build_augment_filter(key),
@@ -2553,6 +2553,7 @@ impl Checker {
     #[inline(never)]
     fn resolve_structured_type_members_worker(&mut self, t: P<Type>) -> Option<&'static StructuredType> {
         if !t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) {
+            self.members_resolving += 1;
             if t.flags().intersects(TypeFlags::Object) {
                 if t.object_flags().intersects(ObjectFlags::Reference) {
                     self.resolve_type_reference_members(t);
@@ -2574,6 +2575,7 @@ impl Checker {
             } else {
                 panic!("Unhandled case in resolveStructuredTypeMembers");
             }
+            self.members_resolving -= 1;
         }
         Some(t.as_structured_type())
     }
@@ -3113,6 +3115,7 @@ impl Checker {
             // members partially resolved. Here we ensure any such partial resolution is reset.
             // See https://github.com/microsoft/TypeScript/issues/16861 for an example.
             t.object_flags.set(t.object_flags.get_lazy() & !(ObjectFlags::MembersResolved | ObjectFlags::WeakTypeMemo));
+            self.members_reset_epoch += 1;
             self.augment_filter = None; // t may be one of the filter's four types: its members are resolved again
             data.base_types_resolved.set(true);
             if canonical {
@@ -3166,6 +3169,7 @@ impl Checker {
             data.resolved_base_types.set(&[]);
             r.object_flags.set(r.object_flags.get_lazy() & !(ObjectFlags::MembersResolved | ObjectFlags::WeakTypeMemo));
         }
+        self.members_reset_epoch += 1;
         self.augment_filter = None; // as in get_base_types
         // Each pass resolves `first` for good, so a later reset (another cycle) covers fewer types and this ends.
         self.get_base_types(first);

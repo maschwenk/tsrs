@@ -792,6 +792,12 @@ impl<'a> HashedName<'a> {
     pub fn new(name: &'a str) -> HashedName<'a> {
         HashedName { name, hash: hash_name(name) }
     }
+
+    /// The name's 32-bit hash (the one symbol tables use).
+    #[inline]
+    pub fn hash(&self) -> u32 {
+        self.hash
+    }
 }
 
 /// A 256-bit Bloom filter of the keys of a few tables taken together (two bits per key, other hash bits than a

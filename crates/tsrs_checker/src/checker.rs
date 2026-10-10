@@ -1126,6 +1126,13 @@ pub struct Checker {
     pub(crate) augment_filter: Option<tsrs_ast::NameFilter>,
     /// Reused buffers for `get_unmatched_property_recording` (relater_1.rs), one per nested `propertiesRelatedTo`.
     pub(crate) unmatched_found_pool: Vec<Vec<Option<Option<P<Symbol>>>>>,
+    /// `contextual_property_type_of_large_union` (checker_15.rs): per (union, name hash), the name, the
+    /// `members_reset_epoch` it was computed in and the positions of the constituents that can contribute.
+    pub(crate) contextual_relevant: FxHashMap<(P<Type>, u32), Vec<(&'static str, u32, std::rc::Rc<[u32]>)>>,
+    /// Bumped whenever a type's resolved members are reset (`get_base_types`, `canonicalize_base_type_cycles`).
+    pub(crate) members_reset_epoch: u32,
+    /// Structured type member resolutions in progress: while any is, a member table may be incomplete.
+    pub(crate) members_resolving: u32,
     /// The last `program.get_emit_module_format_of_file` answer (`emit_module_format_of_file`).
     pub(crate) last_emit_module_format: Option<(P<SourceFile>, ModuleKind)>,
     /// Instrumentation (feature `assignment-stats`): every type / symbol this checker created.
@@ -1530,6 +1537,9 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         lazy_member_stats: Default::default(),
         augment_filter: None,
         unmatched_found_pool: Vec::new(),
+        contextual_relevant: FxHashMap::default(),
+        members_reset_epoch: 0,
+        members_resolving: 0,
         last_emit_module_format: None,
         #[cfg(feature = "assignment-stats")]
         stats_created: Default::default(),
@@ -2017,6 +2027,9 @@ impl Checker {
             lazy_member_stats: base.lazy_member_stats.clone(),
             augment_filter: base.augment_filter.clone(),
             unmatched_found_pool: Vec::new(),
+            contextual_relevant: FxHashMap::default(),
+            members_reset_epoch: 0,
+            members_resolving: 0,
             #[cfg(feature = "assignment-stats")]
             stats_created: base.stats_created.clone(),
             context_free_types: base.context_free_types.clone(),
