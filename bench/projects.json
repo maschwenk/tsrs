@@ -93,7 +93,7 @@
       "repo": "https://github.com/mikro-orm/mikro-orm.git",
       "commit": "97fb2318067eae37ef52da57e2975eb7539ed729",
       "project": ".",
-      "install": "pnpm --pm-on-fail=ignore dlx @yarnpkg/cli-dist@4.18.1 install --mode=skip-build"
+      "install": "pnpm --pm-on-fail=ignore dlx --package=@yarnpkg/cli-dist@4.18.1 yarn install --mode=skip-build"
     },
     {
       "name": "next-packages-next",
@@ -114,7 +114,7 @@
       "repo": "https://github.com/storybookjs/storybook.git",
       "commit": "48dfcc6becd3ab813b9d1de7966ef7fd9c8c9bc0",
       "project": "scripts",
-      "install": "pnpm --pm-on-fail=ignore dlx @yarnpkg/cli-dist@4.18.0 install --mode=skip-build"
+      "install": "pnpm --pm-on-fail=ignore dlx --package=@yarnpkg/cli-dist@4.18.0 yarn install --mode=skip-build"
     },
     {
       "name": "nuxt",
