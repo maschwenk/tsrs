@@ -164,6 +164,32 @@ fn type_check_only_and_bad_tsconfig_emit_internal_diagnostics() {
             && diagnostic["message"]["id"] == "tsconfig-error"
             && diagnostic["message"]["description"] == "Invalid tsconfig"
     }));
+
+    std::fs::write(dir.join("tsconfig.json"), "{").unwrap();
+    for syntactic in [false, true] {
+        for semantic in [false, true] {
+            let mut payload = payload.clone();
+            payload["report_syntactic"] = syntactic.into();
+            payload["report_semantic"] = semantic.into();
+            let output = run(&dir, &[], &payload);
+            assert!(output.status.success(), "{:?}", output);
+            let parsed_frames = frames(&output.stdout);
+            assert_eq!(parsed_frames.len(), 1, "{parsed_frames:?}");
+            let (kind, diagnostic) = &parsed_frames[0];
+            assert_eq!(*kind, 1);
+            assert_eq!(diagnostic["kind"], 1);
+            assert_eq!(diagnostic["message"]["id"], "tsconfig-error");
+            assert_eq!(diagnostic["message"]["description"], "Invalid tsconfig");
+            assert_eq!(diagnostic["message"]["help"], "'}' expected.");
+            assert_eq!(diagnostic["range"], json!({"pos": 1, "end": 1}));
+            assert!(
+                diagnostic["file_path"]
+                    .as_str()
+                    .unwrap()
+                    .ends_with("/tsconfig.json")
+            );
+        }
+    }
     let _ = std::fs::remove_dir_all(dir);
 }
 

@@ -116,14 +116,15 @@ fn create_configured_program(
     let Some(parsed) = parsed else {
         return Err(format!("couldn't parse tsconfig at {config_name}"));
     };
-    if !parsed.errors.is_empty() && !suppress_program_diagnostics {
-        let errors = parsed
-            .errors
-            .iter()
-            .copied()
-            .map(|d| diagnostic_to_internal(d, Some(config_name), true))
-            .collect();
-        return Ok((None, errors));
+    let diagnostics = parsed.get_config_file_parsing_diagnostics();
+    if !diagnostics.is_empty() && !suppress_program_diagnostics {
+        return Ok((
+            None,
+            diagnostics
+                .into_iter()
+                .map(|d| diagnostic_to_internal(d, Some(config_name), true))
+                .collect(),
+        ));
     }
     let config = P::new(parsed);
     let host = new_cached_fs_compiler_host(&cwd, fs, &bundled::lib_path(), None, None);
