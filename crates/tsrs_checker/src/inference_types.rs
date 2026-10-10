@@ -20,7 +20,7 @@ pub struct InferenceState {
     pub bivariant: Cell<bool>,
     pub expanding_flags: Cell<ExpandingFlags>,
     pub propagation_type: Cell<Option<P<Type>>>,
-    pub visited: GoMap<InferenceKey, InferencePriority>,
+    pub visited: OwnedMap<InferenceKey, InferencePriority>,
     pub source_stack: RefCell<Vec<P<Type>>>,
     pub target_stack: RefCell<Vec<P<Type>>>,
     pub next: Cell<Option<P<InferenceState>>>,

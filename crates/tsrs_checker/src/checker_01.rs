@@ -329,11 +329,13 @@ impl Checker {
         }
         self.add_undefined_to_globals_or_error_on_redeclaration();
         self.value_symbol_links.get(self.undefined_symbol).resolved_type.set(Some(self.undefined_widening_type));
-        let links = self.value_symbol_links.get(self.arguments_symbol);
-        links.resolved_type.set(Some(self.get_global_type("IArguments", 0 /*arity*/, true /*reportErrors*/)));
+        let links = self.value_symbol_links.get_key(self.arguments_symbol);
+        let link_value = Some(self.get_global_type("IArguments", 0 /*arity*/, true /*reportErrors*/));
+        self.value_symbol_links.at(links).resolved_type.set(link_value);
         self.value_symbol_links.get(self.unknown_symbol).resolved_type.set(Some(self.error_type));
-        let links = self.value_symbol_links.get(self.global_this_symbol);
-        links.resolved_type.set(Some(self.new_object_type(ObjectFlags::Anonymous, Some(self.global_this_symbol))));
+        let links = self.value_symbol_links.get_key(self.global_this_symbol);
+        let link_value = Some(self.new_object_type(ObjectFlags::Anonymous, Some(self.global_this_symbol)));
+        self.value_symbol_links.at(links).resolved_type.set(link_value);
         // Initialize special types
         self.global_array_type = self.get_global_type("Array", 1 /*arity*/, true /*reportErrors*/);
         self.global_object_type = self.get_global_type("Object", 0 /*arity*/, true /*reportErrors*/);

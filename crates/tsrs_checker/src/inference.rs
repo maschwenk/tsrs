@@ -1299,15 +1299,15 @@ impl Checker {
     // inference.go:1145
     #[inline(never)] // out of get_type_of_symbol, which then needs no frame for its common cases
     pub(crate) fn get_type_of_reverse_mapped_symbol(&mut self, symbol: P<Symbol>) -> P<Type> {
-        let links = self.value_symbol_links.get(symbol);
-        if links.resolved_type.get().is_none() {
+        let links = self.value_symbol_links.get_key(symbol);
+        if self.value_symbol_links.at(links).resolved_type.get().is_none() {
             let reverse_links = self.reverse_mapped_symbol_links.get_key(symbol);
             let t = self
                 .infer_reverse_mapped_type(self.reverse_mapped_symbol_links.at(reverse_links).property_type.get().unwrap(), self.reverse_mapped_symbol_links.at(reverse_links).mapped_type.get().unwrap(), self.reverse_mapped_symbol_links.at(reverse_links).constraint_type.get().unwrap())
                 .unwrap_or(self.unknown_type);
-            links.resolved_type.set(Some(t));
+            self.value_symbol_links.at(links).resolved_type.set(Some(t));
         }
-        links.resolved_type.get().unwrap()
+        self.value_symbol_links.at(links).resolved_type.get().unwrap()
     }
 
     // If the original mapped type had an intersection constraint we extract its components,

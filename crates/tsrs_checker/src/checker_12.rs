@@ -997,7 +997,7 @@ impl Checker {
                 is_distributive: Cell::new(check_type.flags().intersects(TypeFlags::TypeParameter)),
                 infer_type_parameters: Cell::new(alloc_vec(infer_type_parameters)),
                 outer_type_parameters: Cell::new(outer_type_parameters),
-                instantiations: GoPackedMap::default(),
+                instantiations: OwnedPackedMap::default(),
                 alias: Cell::new(alias),
             });
             let resolved_type = self.get_conditional_type(root, None /*mapper*/, false /*forConstraint*/, None);

@@ -1806,12 +1806,12 @@ impl Checker {
 
     // checker.go:8018
     pub(crate) fn get_symbol_for_private_identifier_expression(&mut self, node: P<Node>) -> Option<P<Symbol>> {
-        let links = self.symbol_node_links.get(node);
-        if links.resolved_symbol.get().is_none() {
+        let links = self.symbol_node_links.get_key(node);
+        if self.symbol_node_links.at(links).resolved_symbol.get().is_none() {
             let symbol = self.lookup_symbol_for_private_identifier_declaration(node.text(), node);
-            links.resolved_symbol.set(symbol);
+            self.symbol_node_links.at(links).resolved_symbol.set(symbol);
         }
-        links.resolved_symbol.get()
+        self.symbol_node_links.at(links).resolved_symbol.get()
     }
 
     // checker.go:8026

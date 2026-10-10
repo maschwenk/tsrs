@@ -542,9 +542,9 @@ impl Checker {
                 } else {
                     self.new_symbol_ex(SymbolFlags::Property | member_symbol.flags(), member_symbol.name(), check_flags)
                 };
-                let links = self.value_symbol_links.get(prop);
+                let links = self.value_symbol_links.get_key(prop);
                 if name_type.is_some() {
-                    links.set_name_type(name_type);
+                    self.value_symbol_links.at(links).set_name_type(name_type);
                 }
                 if in_destructuring_pattern && self.has_default_value(member_decl) {
                     // If object literal is an assignment pattern and if the assignment pattern specifies a default value
@@ -569,8 +569,8 @@ impl Checker {
                 prop.set_declarations_static(member_symbol.declarations());
                 prop.set_parent(member_symbol.parent());
                 prop.set_value_declaration(member_symbol.value_declaration());
-                links.resolved_type.set(Some(t));
-                links.set_target(Some(member_symbol));
+                self.value_symbol_links.at(links).resolved_type.set(Some(t));
+                self.value_symbol_links.at(links).set_target(Some(member_symbol));
                 member = Some(prop);
                 if let Some(all_properties_table) = &all_properties_table {
                     all_properties_table.set(prop.name(), prop);
@@ -804,7 +804,7 @@ impl Checker {
                     declarations.extend(right_prop.declarations().iter().copied());
                     let flags = SymbolFlags::Property | (left_prop.flags() & SymbolFlags::Optional);
                     let result = self.new_symbol(flags, left_prop.name());
-                    let links = self.value_symbol_links.get(result);
+                    let links = self.value_symbol_links.get_key(result);
                     // Optimization: avoid calculating the union type if spreading into the exact same type.
                     // This is common, e.g. spreading one options bag into another where the bags have the
                     // same type, or have properties which overlap. If the unions are large, it may turn out
@@ -813,15 +813,16 @@ impl Checker {
                     let left_type_without_undefined = self.remove_missing_or_undefined_type(left_type);
                     let right_type_without_undefined = self.remove_missing_or_undefined_type(right_type);
                     if left_type_without_undefined == right_type_without_undefined {
-                        links.resolved_type.set(Some(left_type));
+                        self.value_symbol_links.at(links).resolved_type.set(Some(left_type));
                     } else {
                         let u = self.get_union_type_ex(&[left_type, right_type_without_undefined], UnionReduction::Subtype, AliasArg::None, None);
-                        links.resolved_type.set(Some(u));
+                        self.value_symbol_links.at(links).resolved_type.set(Some(u));
                     }
                     self.spread_links.get(result).left_spread.set(Some(left_prop));
                     self.spread_links.get(result).right_spread.set(Some(right_prop));
                     result.set_declarations(&declarations);
-                    links.set_name_type(self.value_symbol_links.get(left_prop).name_type());
+                    let link_value = self.value_symbol_links.get(left_prop).name_type();
+                    self.value_symbol_links.at(links).set_name_type(link_value);
                     members.set(left_prop.name(), result);
                 }
             } else {
@@ -907,15 +908,18 @@ impl Checker {
                     prop.name(),
                     prop.check_flags() & CheckFlags::Late | if readonly { CheckFlags::Readonly } else { CheckFlags::empty() },
                 );
-                let links = self.value_symbol_links.get(result);
+                let links = self.value_symbol_links.get_key(result);
                 if is_setonly_accessor {
-                    links.resolved_type.set(Some(self.undefined_type));
+                    let link_value = Some(self.undefined_type);
+                    self.value_symbol_links.at(links).resolved_type.set(link_value);
                 } else {
                     let prop_type = self.get_type_of_symbol(prop);
-                    links.resolved_type.set(Some(self.add_optionality_ex(prop_type, true /*isProperty*/, true /*isOptional*/)));
+                    let link_value = Some(self.add_optionality_ex(prop_type, true /*isProperty*/, true /*isOptional*/));
+                    self.value_symbol_links.at(links).resolved_type.set(link_value);
                 }
                 result.set_declarations_static(prop.declarations());
-                links.set_name_type(self.value_symbol_links.get(prop).name_type());
+                let link_value = self.value_symbol_links.get(prop).name_type();
+                self.value_symbol_links.at(links).set_name_type(link_value);
                 self.mapped_symbol_links.get(result).synthetic_origin.set(Some(prop));
                 members.set(prop.name(), result);
             }
@@ -947,14 +951,17 @@ impl Checker {
             prop.name(),
             prop.check_flags() & CheckFlags::Late | if readonly { CheckFlags::Readonly } else { CheckFlags::empty() },
         );
-        let links = self.value_symbol_links.get(result);
+        let links = self.value_symbol_links.get_key(result);
         if is_setonly_accessor {
-            links.resolved_type.set(Some(self.undefined_type));
+            let link_value = Some(self.undefined_type);
+            self.value_symbol_links.at(links).resolved_type.set(link_value);
         } else {
-            links.resolved_type.set(Some(self.get_type_of_symbol(prop)));
+            let link_value = Some(self.get_type_of_symbol(prop));
+            self.value_symbol_links.at(links).resolved_type.set(link_value);
         }
         result.set_declarations_static(prop.declarations());
-        links.set_name_type(self.value_symbol_links.get(prop).name_type());
+        let link_value = self.value_symbol_links.get(prop).name_type();
+        self.value_symbol_links.at(links).set_name_type(link_value);
         self.mapped_symbol_links.get(result).synthetic_origin.set(Some(prop));
         result
     }
@@ -1353,8 +1360,8 @@ impl Checker {
 
     // checker.go:14125
     pub fn get_resolved_symbol(&mut self, node: P<Node>) -> P<Symbol> {
-        let links = self.symbol_node_links.get(node);
-        if links.resolved_symbol.get().is_none() {
+        let links = self.symbol_node_links.get_key(node);
+        if self.symbol_node_links.at(links).resolved_symbol.get().is_none() {
             let mut symbol: Option<P<Symbol>> = None;
             if !ast::node_is_missing(node) {
                 let message = self.get_cannot_find_name_diagnostic_for_name(node);
@@ -1367,9 +1374,9 @@ impl Checker {
                     false, /*excludeGlobals*/
                 );
             }
-            links.resolved_symbol.set(Some(symbol.unwrap_or(self.unknown_symbol)));
+            self.symbol_node_links.at(links).resolved_symbol.set(Some(symbol.unwrap_or(self.unknown_symbol)));
         }
-        links.resolved_symbol.get().unwrap()
+        self.symbol_node_links.at(links).resolved_symbol.get().unwrap()
     }
 
     // checker.go:14138

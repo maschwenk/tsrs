@@ -919,8 +919,8 @@ pub struct WideningContext {
     pub property_name: Cell<&'static str>, // Name of property in parent
     pub siblings: Cell<Option<&'static [P<Type>]>>, // Types of siblings (nil = not computed)
     pub resolved_properties: Cell<Option<&'static [P<Symbol>]>>, // Properties occurring in sibling object literals (nil = not computed)
-    pub child_contexts: GoMap<String, P<WideningContext>>,
-    pub widened_types: GoMap<P<Type>, P<Type>>,
+    pub child_contexts: OwnedMap<String, P<WideningContext>>,
+    pub widened_types: OwnedMap<P<Type>, P<Type>>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

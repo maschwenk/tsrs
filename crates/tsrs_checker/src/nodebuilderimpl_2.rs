@@ -214,12 +214,12 @@ fn expand_signature_parameters_with_tuple_members(c: &mut Checker, sig: P<Signat
                 CheckFlags::None
             };
             let symbol = c.new_symbol_ex(SymbolFlags::FunctionScopedVariable, name, check_flags);
-            let links = c.value_symbol_links.get(symbol);
+            let links = c.value_symbol_links.get_key(symbol);
             if flags.intersects(ElementFlags::Rest) {
                 let array_type = c.create_array_type(t);
-                links.resolved_type.set(Some(array_type));
+                c.value_symbol_links.at(links).resolved_type.set(Some(array_type));
             } else {
-                links.resolved_type.set(Some(t));
+                c.value_symbol_links.at(links).resolved_type.set(Some(t));
             }
             symbol
         })
@@ -1522,8 +1522,8 @@ impl NodeBuilderImpl {
         // Don't rely on type cache if we're expanding a type, because we need to compute `canIncreaseExpansionDepth`.
         let can_use_cache = self.ctx().max_expansion_depth.get() < 0;
         if can_use_cache && self.ctx().enclosing_declaration.get().is_some() && self.links.has(self.ctx().enclosing_declaration.get().unwrap()) {
-            let links = self.links.get(self.ctx().enclosing_declaration.get().unwrap());
-            let cached_result = links.serialized_types.get(&key);
+            let links = self.links.get_key(self.ctx().enclosing_declaration.get().unwrap());
+            let cached_result = self.links.at(links).serialized_types.get(&key);
             if let Some(cached_result) = cached_result {
                 // TODO:: check if we instead store late painted statements associated with this?
                 for arg in cached_result.tracked_symbols.iter() {
@@ -1554,9 +1554,9 @@ impl NodeBuilderImpl {
             // Go also caches under a nil enclosing declaration; such entries are never read back (the lookup above
             // requires a non-nil enclosing declaration), so the Rust port skips them.
             if let Some(enclosing_declaration) = self.ctx().enclosing_declaration.get() {
-                let links = self.links.get(enclosing_declaration);
+                let links = self.links.get_key(enclosing_declaration);
                 let tracked_symbols = self.ctx().tracked_symbols.borrow().clone();
-                links.serialized_types.set(key, P::new_in(self.f.is_scratch(), SerializedTypeEntry { node: result, truncating: self.ctx().truncating.get(), added_length, tracked_symbols }));
+                self.links.at(links).serialized_types.set(key, P::new_in(self.f.is_scratch(), SerializedTypeEntry { node: result, truncating: self.ctx().truncating.get(), added_length, tracked_symbols }));
             }
         }
         self.ctx().visited_types.borrow_mut().delete(&type_id);

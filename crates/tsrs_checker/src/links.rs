@@ -1,5 +1,6 @@
 use crate::*;
-use tsrs_core::{PKey, PSlot};
+use tsrs_core::PKey;
+use tsrs_core::arena_owner::ArenaKey;
 
 pub use crate::owned_links::{KeyedLinkStore, LinkStore};
 
@@ -69,354 +70,47 @@ impl SymbolReferenceLinkStore {
     }
 }
 
-/// Links keyed by a node/symbol id (Go `PagedLinkStore`-backed stores). Like Go, the id is looked up by indexing,
-/// not hashing: a group of `ID_GROUP` consecutive ids holds 2 bytes per id (the slot's offset from the group's first
-/// slot, 0 = no links), found through a vector indexed by group number (one `Option<P<IdGroup>>` per group of the id
-/// space below the highest id seen). The groups and the values live in the arena (the values in fixed-size chunks,
-/// in first-access order). Stable addresses: chunks are never reallocated, freed or recycled, so a `P<V>` stays valid
-/// for the store's lifetime (`value_symbol_links` callers keep links across other accesses).
-///
-/// Node and symbol ids come from process-wide counters in per-thread blocks of 1,024, so with several checkers one
-/// checker's links are dense in its own blocks and spread thinly over the other checkers' (every checker touches
-/// most lib symbols, whichever checker numbered them). Groups are small (128 ids, 264 bytes) so that a thinly used
-/// block costs little: the 1,024-id pages they replace were 14% full on vscode at 64 checkers, and the ids-to-slots
-/// tables took 3.3 MB per checker (notes/mem-64.md). A group whose offsets outgrow 16 bits (a link made more than
-/// 65,535 links after the group's first) gets a 4-byte-per-id dense form, as the narrow pages did.
-pub struct IdLinkStore<V: 'static> {
-    index: Vec<Option<P<IdGroup>>>,
-    wide_slots: FxHashMap<u64, u32>, // ids >= 2^32 (long-running processes such as the test runner)
-    chunks: Vec<P<PSlot<V>>>,        // first slot of each chunk
-    len: u32,
-}
+// The semantic node/symbol IDs remain assigned by these wrappers. Storage identities and borrows are owned
+// by the safe stores; no record address escapes them.
+pub use crate::owned_id_links::{IdLinkStore, InlineIdKey, InlineIdStore};
 
-/// Slots as `slot - before` (0 = no links); `before` is one less than the first slot the group got (wrapping; slots
-/// only grow). When an offset does not fit, `dense` points at the 4-byte form (`slot + 1`, 0 = no links), which is
-/// read instead of `slots` from then on.
-#[repr(C)]
-struct IdGroup {
-    before: u32,
-    dense: Cell<Option<P<[Cell<u32>; ID_GROUP]>>>,
-    slots: [Cell<u16>; ID_GROUP],
-}
-
-#[cfg(target_pointer_width = "64")]
-const _: () = assert!(std::mem::size_of::<IdGroup>() == 272);
-#[cfg(target_pointer_width = "32")]
-const _: () = assert!(std::mem::size_of::<IdGroup>() == 264);
-
-/// Kept for embedders (tsrslint) and the pool, which chose sparse id pages for multi-checker runs: the groups above
-/// made the sparse form unnecessary, so these are inert and `TSRS_SPARSE_ID_PAGES` is ignored.
+/// Kept for embedders and the pool; owned compact groups support sparse checker ID blocks directly.
 pub fn set_multiple_checkers(_multiple: bool) {}
-
-/// See `set_multiple_checkers`.
 pub fn set_sparse_id_pages(_on: bool) {}
-
-const ID_LINK_CHUNK_SHIFT: u32 = 12;
-const ID_LINK_CHUNK: usize = 1 << ID_LINK_CHUNK_SHIFT;
-const ID_GROUP_SHIFT: u32 = 7;
-const ID_GROUP: usize = 1 << ID_GROUP_SHIFT;
-
-impl<V: 'static> Default for IdLinkStore<V> {
-    fn default() -> Self {
-        IdLinkStore { index: Vec::new(), wide_slots: FxHashMap::default(), chunks: Vec::new(), len: 0 }
-    }
-}
-
-impl<V: 'static> IdLinkStore<V> {
-    #[inline]
-    fn at(&self, slot: u32) -> P<V> {
-        debug_assert!(slot < self.len);
-        #[expect(clippy::disallowed_methods, reason = "measured with the other link-store lookups (see LinkStore::at)")]
-        // SAFETY: every stored slot is below `len`; chunks hold `ID_LINK_CHUNK` values per started chunk.
-        unsafe { PSlot::nth(*self.chunks.get_unchecked((slot >> ID_LINK_CHUNK_SHIFT) as usize), slot as usize & (ID_LINK_CHUNK - 1)) }
-    }
-
-    #[inline]
-    fn slot(&self, id: u64) -> Option<u32> {
-        match u32::try_from(id) {
-            Ok(id) => self.narrow_slot(id),
-            Err(_) => self.wide_slot(id),
-        }
-    }
-
-    #[inline]
-    fn narrow_slot(&self, id: u32) -> Option<u32> {
-        let group = (*self.index.get((id >> ID_GROUP_SHIFT) as usize)?)?;
-        let i = id as usize & (ID_GROUP - 1);
-        // Narrow groups first: nearly all groups are narrow.
-        if let Some(dense) = group.dense.get() {
-            return Self::dense_slot(dense, i);
-        }
-        match group.slots[i].get() {
-            0 => None,
-            offset => Some(group.before.wrapping_add(offset as u32)),
-        }
-    }
-
-    #[inline(never)]
-    fn dense_slot(dense: P<[Cell<u32>; ID_GROUP]>, i: usize) -> Option<u32> {
-        dense[i].get().checked_sub(1)
-    }
-
-    // Out of line: keeps the hash lookup out of every inlined `get`.
-    #[cold]
-    #[inline(never)]
-    fn wide_slot(&self, id: u64) -> Option<u32> {
-        self.wide_slots.get(&id).copied()
-    }
-
-    #[inline]
-    pub fn try_get(&self, id: u64) -> Option<P<V>> {
-        self.slot(id).map(|slot| self.at(slot))
-    }
-
-    #[inline]
-    pub fn has(&self, id: u64) -> bool {
-        self.slot(id).is_some()
-    }
-}
-
-impl<V: 'static> IdLinkStore<V> {
-    /// Heap census: the group index and the wide-id map (the groups and the values are in the arena; the groups are
-    /// reported with their arena bytes so that the id-to-slot cost stays visible).
-    pub fn heap_parts(&self) -> Vec<(&'static str, crate::heapcensus::HeapStat)> {
-        use crate::heapcensus::{HeapSize, HeapStat};
-        let mut narrow = HeapStat { slot: 2, ..HeapStat::default() };
-        let mut dense = HeapStat { slot: 4, ..HeapStat::default() };
-        for group in self.index.iter().flatten() {
-            narrow.containers += 1;
-            narrow.cap += ID_GROUP as u64;
-            narrow.bytes += std::mem::size_of::<IdGroup>() as u64;
-            if let Some(d) = group.dense.get() {
-                dense.containers += 1;
-                dense.cap += ID_GROUP as u64;
-                dense.bytes += std::mem::size_of::<[Cell<u32>; ID_GROUP]>() as u64;
-                dense.len += d.iter().filter(|s| s.get() != 0).count() as u64;
-            } else {
-                narrow.len += group.slots.iter().filter(|s| s.get() != 0).count() as u64;
-            }
-        }
-        vec![
-            ("group index", self.index.heap_stat()),
-            ("narrow groups (arena)", narrow),
-            ("dense groups (arena)", dense),
-            ("wide ids", self.wide_slots.heap_stat()),
-            ("chunk list", self.chunks.heap_stat()),
-        ]
-    }
-}
-
-impl<V: Default + 'static> IdLinkStore<V> {
-    #[inline]
-    #[cfg_attr(feature = "site-counts", track_caller)]
-    pub fn get(&mut self, id: u64) -> P<V> {
-        if let Some(slot) = self.slot(id) {
-            return self.at(slot);
-        }
-        self.create(id)
-    }
-
-    #[inline(never)]
-    #[cfg_attr(feature = "site-counts", track_caller)]
-    fn create(&mut self, id: u64) -> P<V> {
-        tsrs_core::sitecount::hit("links", std::any::type_name::<V>());
-        let slot = self.len;
-        if slot as usize % ID_LINK_CHUNK == 0 {
-            self.chunks.push(PSlot::first(alloc_vec((0..ID_LINK_CHUNK).map(|_| PSlot(V::default())).collect())));
-        }
-        self.len += 1;
-        if id <= u32::MAX as u64 {
-            let group_index = (id >> ID_GROUP_SHIFT) as usize;
-            if group_index >= self.index.len() {
-                // Grow by a quarter, not double: ids keep arriving in every checker's blocks for the whole run, so the
-                // index ends near the top of the id space in every checker (a checker's index is a few hundred KB).
-                let need = group_index + 1;
-                if need > self.index.capacity() {
-                    self.index.reserve_exact((need - self.index.len()).max(self.index.len() / 4));
-                }
-                self.index.resize(need, None);
-            }
-            let i = id as usize & (ID_GROUP - 1);
-            let group = *self.index[group_index].get_or_insert_with(|| {
-                P::new(IdGroup { before: slot.wrapping_sub(1), dense: Cell::new(None), slots: [const { Cell::new(0) }; ID_GROUP] })
-            });
-            if let Some(dense) = group.dense.get() {
-                dense[i].set(slot + 1);
-            } else {
-                match u16::try_from(slot.wrapping_sub(group.before)) {
-                    Ok(offset) if offset != 0 => group.slots[i].set(offset),
-                    _ => {
-                        let dense: [Cell<u32>; ID_GROUP] = std::array::from_fn(|j| {
-                            Cell::new(match group.slots[j].get() {
-                                0 => 0,
-                                offset => group.before.wrapping_add(offset as u32) + 1,
-                            })
-                        });
-                        dense[i].set(slot + 1);
-                        group.dense.set(Some(P::new(dense)));
-                    }
-                }
-            }
-        } else {
-            self.wide_slots.insert(id, slot);
-        }
-        self.at(slot)
-    }
-}
-
-/// Links keyed by a node or symbol id whose value is small (a 4-byte handle), stored in the table itself: no slot, no
-/// offset, no separate value chunk. Ids map through two levels that follow the per-thread id blocks of 1,024
-/// (`ast::use_id_blocks`): `blocks[id >> 10]` points at an arena table of 32 group pointers, and a group is an arena
-/// array of 32 values (`[V; 32]`, 128 bytes for a 4-byte `V`), allocated on the first access to one of its ids and
-/// default (unset) until written. A checker's own id blocks fill their groups; the blocks other checkers numbered get
-/// a 128-byte table and only the groups they touch (notes/mem-dense-link-tables.md: 0.98 / 0.67 of a group's ids have
-/// links at 1 / 32 checkers on vscode, against 0.98 / 0.41 for 128-id groups).
-///
-/// Stable addresses: groups and tables are arena objects that are never freed, moved or recycled (like `IdLinkStore`'s
-/// groups and chunks), so a value handed out stays where it is for the store's lifetime. Callers keep the reference
-/// across later accesses that create other links (`get_resolved_symbol` holds it across `resolve_name`). Values are
-/// handed out as `&'static V`, not `P<V>`: a cell of a 4-byte value is 4-aligned, and a `P` handle names 8-byte units.
-///
-/// Unlike `IdLinkStore`, the store cannot tell an id whose links were never created from one whose links are unset:
-/// both read as `V::default()`. That is the same answer for every reader of a value whose fields are all unset by
-/// default (`SymbolNodeLinks`).
-pub struct InlineIdStore<V: 'static> {
-    blocks: Vec<Option<P<InlineBlock<V>>>>,
-    wide: FxHashMap<u64, P<V>>, // ids >= 2^32 (long-running processes such as the test runner)
-}
-
-const INLINE_GROUP_SHIFT: u32 = 5;
-const INLINE_GROUP: usize = 1 << INLINE_GROUP_SHIFT;
-/// One second-level table per id block (`ast::use_id_blocks` takes 1,024 ids at a time).
-const INLINE_BLOCK_SHIFT: u32 = 10;
-const INLINE_BLOCK_GROUPS: usize = 1 << (INLINE_BLOCK_SHIFT - INLINE_GROUP_SHIFT);
-
-type InlineGroup<V> = [V; INLINE_GROUP];
-type InlineBlock<V> = [Cell<Option<P<InlineGroup<V>>>>; INLINE_BLOCK_GROUPS];
-
-impl<V: 'static> Default for InlineIdStore<V> {
-    fn default() -> Self {
-        InlineIdStore { blocks: Vec::new(), wide: FxHashMap::default() }
-    }
-}
-
-impl<V: 'static> InlineIdStore<V> {
-    #[inline]
-    fn narrow(&self, id: u32) -> Option<&'static V> {
-        let block = (*self.blocks.get((id >> INLINE_BLOCK_SHIFT) as usize)?)?;
-        let group = block.get()[(id >> INLINE_GROUP_SHIFT) as usize & (INLINE_BLOCK_GROUPS - 1)].get()?;
-        Some(&group.get()[id as usize & (INLINE_GROUP - 1)])
-    }
-
-    #[inline]
-    pub fn try_get(&self, id: u64) -> Option<&'static V> {
-        match u32::try_from(id) {
-            Ok(id) => self.narrow(id),
-            Err(_) => self.wide_get(id),
-        }
-    }
-
-    // Out of line: keeps the hash lookup out of every inlined `try_get`.
-    #[cold]
-    #[inline(never)]
-    fn wide_get(&self, id: u64) -> Option<&'static V> {
-        self.wide.get(&id).map(|v| v.get())
-    }
-
-    /// Heap census: the block index (the tables and groups are in the arena; reported with their arena bytes so that
-    /// the id-to-value cost stays visible).
-    pub fn heap_parts(&self) -> Vec<(&'static str, crate::heapcensus::HeapStat)> {
-        use crate::heapcensus::{HeapSize, HeapStat};
-        let mut tables = HeapStat { slot: 4, ..HeapStat::default() };
-        let mut groups = HeapStat { slot: std::mem::size_of::<V>() as u64, ..HeapStat::default() };
-        for block in self.blocks.iter().flatten() {
-            tables.containers += 1;
-            tables.cap += INLINE_BLOCK_GROUPS as u64;
-            tables.bytes += std::mem::size_of::<InlineBlock<V>>() as u64;
-            for group in block.get().iter().filter_map(|g| g.get()) {
-                tables.len += 1;
-                groups.containers += 1;
-                groups.len += INLINE_GROUP as u64;
-                groups.cap += INLINE_GROUP as u64;
-                groups.bytes += std::mem::size_of_val(group.get()) as u64;
-            }
-        }
-        vec![
-            ("block index", self.blocks.heap_stat()),
-            ("block tables (arena)", tables),
-            ("value groups (arena)", groups),
-            ("wide ids", self.wide.heap_stat()),
-        ]
-    }
-}
-
-impl<V: Default + 'static> InlineIdStore<V> {
-    #[inline]
-    #[cfg_attr(feature = "site-counts", track_caller)]
-    pub fn get(&mut self, id: u64) -> &'static V {
-        if let Ok(narrow) = u32::try_from(id) {
-            if let Some(value) = self.narrow(narrow) {
-                return value;
-            }
-        }
-        self.create(id)
-    }
-
-    /// The value of an id whose group does not exist yet (or a wide id): allocates the block table and the group.
-    #[inline(never)]
-    #[cfg_attr(feature = "site-counts", track_caller)]
-    fn create(&mut self, id: u64) -> &'static V {
-        tsrs_core::sitecount::hit("links", std::any::type_name::<V>());
-        let Ok(id) = u32::try_from(id) else {
-            return self.wide.entry(id).or_insert_with(|| P::new(V::default())).get();
-        };
-        let b = (id >> INLINE_BLOCK_SHIFT) as usize;
-        if b >= self.blocks.len() {
-            // Grow by a quarter, not double: ids keep arriving in every checker's blocks for the whole run, so the
-            // index ends near the top of the id space in every checker (4 bytes per 1,024 ids).
-            let need = b + 1;
-            if need > self.blocks.capacity() {
-                self.blocks.reserve_exact((need - self.blocks.len()).max(self.blocks.len() / 4));
-            }
-            self.blocks.resize(need, None);
-        }
-        let block = *self.blocks[b].get_or_insert_with(|| P::new(std::array::from_fn(|_| Cell::new(None))));
-        let cell = &block.get()[(id >> INLINE_GROUP_SHIFT) as usize & (INLINE_BLOCK_GROUPS - 1)];
-        let group = match cell.get() {
-            Some(group) => group,
-            None => {
-                let group = P::new(std::array::from_fn(|_| V::default()));
-                cell.set(Some(group));
-                group
-            }
-        };
-        &group.get()[id as usize & (INLINE_GROUP - 1)]
-    }
-}
 
 /// Go `nodeLinkStore`: keyed by the node id, so every access assigns the node its id (`ast.GetNodeId`) the way Go
 /// does. Ids are observable (e.g. in cache keys and internal names), so the assignment order must match. The values
-/// are stored inline (`InlineIdStore`): its one user, `symbol_node_links`, holds a 4-byte symbol handle per node.
-pub struct NodeLinkStore<V: 'static> {
+/// are stored in owned groups (`InlineIdStore`); its user is `symbol_node_links`.
+pub struct NodeLinkStore<V> {
     store: InlineIdStore<V>,
 }
 
-impl<V: 'static> Default for NodeLinkStore<V> {
+impl<V> Default for NodeLinkStore<V> {
     fn default() -> Self {
         NodeLinkStore { store: InlineIdStore::default() }
     }
 }
 
-impl<V: Default + 'static> NodeLinkStore<V> {
-    /// The node's links, created on first use. The reference stays valid for the store's lifetime (`InlineIdStore`).
+impl<V: Default> NodeLinkStore<V> {
+    /// Retain a key across recursive checker work, then borrow again with `at`.
+    #[inline]
+    pub fn get_key(&mut self, node: P<Node>) -> InlineIdKey<V> {
+        self.store.get_key(ast::get_node_id(node).0)
+    }
+    /// The node's links, created on first use. Access borrows this store.
     #[inline]
     #[cfg_attr(feature = "site-counts", track_caller)]
-    pub fn get(&mut self, node: P<Node>) -> &'static V {
+    pub fn get(&mut self, node: P<Node>) -> &V {
         self.store.get(ast::get_node_id(node).0)
     }
 }
 
-impl<V: 'static> NodeLinkStore<V> {
+impl<V> NodeLinkStore<V> {
+    #[inline]
+    pub fn at(&self, key: InlineIdKey<V>) -> &V {
+        self.store.at(key)
+    }
+
     pub fn heap_parts(&self) -> Vec<(&'static str, crate::heapcensus::HeapStat)> {
         self.store.heap_parts()
     }
@@ -424,14 +118,14 @@ impl<V: 'static> NodeLinkStore<V> {
     /// `None` if no id of the node's group of 32 has links yet; otherwise the node's value, unset if the node itself
     /// never had links (`InlineIdStore`). Assigns the node an id, as Go's `TryGet` does.
     #[inline]
-    pub fn try_get(&self, node: P<Node>) -> Option<&'static V> {
+    pub fn try_get(&self, node: P<Node>) -> Option<&V> {
         self.store.try_get(ast::get_node_id(node).0)
     }
 
     /// `try_get` that returns `None` for a node without an id instead of assigning one (no side effect).
     #[inline]
-    pub fn try_get_if_id_assigned(&self, node: P<Node>) -> Option<&'static V> {
-        self.store.narrow(ast::get_assigned_node_id(node)?)
+    pub fn try_get_if_id_assigned(&self, node: P<Node>) -> Option<&V> {
+        self.store.try_get(ast::get_assigned_node_id(node)? as u64)
     }
 }
 
@@ -439,40 +133,50 @@ impl<V: 'static> NodeLinkStore<V> {
 /// (`ast.GetSymbolId`) the way Go does. Symbol ids are observable (the internal names of unique-symbol-keyed
 /// properties embed them, and the node builder counts their length toward truncation), so the assignment order
 /// must match.
-pub struct SymbolArenaLinkStore<V: 'static> {
+pub struct SymbolArenaLinkStore<V> {
     store: IdLinkStore<V>,
 }
 
-impl<V: 'static> Default for SymbolArenaLinkStore<V> {
+impl<V> Default for SymbolArenaLinkStore<V> {
     fn default() -> Self {
         SymbolArenaLinkStore { store: IdLinkStore::default() }
     }
 }
 
-impl<V: Default + 'static> SymbolArenaLinkStore<V> {
+impl<V: Default> SymbolArenaLinkStore<V> {
+    #[inline]
+    pub fn get_key(&mut self, symbol: P<Symbol>) -> ArenaKey<V> {
+        self.store.get_key(ast::get_symbol_id(symbol).0)
+    }
+
     #[inline]
     #[cfg_attr(feature = "site-counts", track_caller)]
-    pub fn get(&mut self, symbol: P<Symbol>) -> P<V> {
+    pub fn get(&mut self, symbol: P<Symbol>) -> &V {
         self.store.get(ast::get_symbol_id(symbol).0)
     }
 }
 
-impl<V: 'static> SymbolArenaLinkStore<V> {
+impl<V> SymbolArenaLinkStore<V> {
+    #[inline]
+    pub fn at(&self, key: ArenaKey<V>) -> &V {
+        self.store.at(key)
+    }
+
     pub fn heap_parts(&self) -> Vec<(&'static str, crate::heapcensus::HeapStat)> {
         self.store.heap_parts()
     }
 
     #[inline]
-    pub fn try_get(&self, symbol: P<Symbol>) -> Option<P<V>> {
+    pub fn try_get(&self, symbol: P<Symbol>) -> Option<&V> {
         self.store.try_get(ast::get_symbol_id(symbol).0)
     }
 
     /// `try_get` that returns `None` for a symbol without an id instead of assigning one (no side effect, no call:
     /// for fast paths whose fallback does the `get`).
     #[inline]
-    pub fn try_get_if_id_assigned(&self, symbol: P<Symbol>) -> Option<P<V>> {
+    pub fn try_get_if_id_assigned(&self, symbol: P<Symbol>) -> Option<&V> {
         let id = ast::get_assigned_symbol_id(symbol)?;
-        self.store.narrow_slot(id).map(|slot| self.store.at(slot))
+        self.store.try_get(id as u64)
     }
 
     #[inline]
@@ -496,8 +200,8 @@ mod tests {
         for &id in &ids {
             store.get(id).set(id + 1);
         }
-        assert!(store.index[0].unwrap().dense.get().is_some());
-        assert!(store.index[1].unwrap().dense.get().is_none());
+        assert!(store.index[0].as_ref().unwrap().dense.as_ref().is_some());
+        assert!(store.index[1].as_ref().unwrap().dense.as_ref().is_none());
         for &id in &ids {
             assert_eq!(store.try_get(id).map(|v| (*v).get()), Some(id + 1), "id {id}");
         }
@@ -516,26 +220,26 @@ mod tests {
     }
 
     // Inline values: an id must reach its own cell through both levels wherever it falls in its group and block, and a
-    // cell must stay where it is while later ids allocate tables and groups and grow the block index (callers keep
-    // the reference across other accesses). An id outside every allocated group reads as absent.
+    // retained keys must keep selecting their values while later IDs grow the block index and value vectors.
+    // An ID outside every allocated group reads as absent.
     #[test]
-    fn inline_ids_reach_their_own_stable_cells() {
+    fn inline_ids_reach_their_own_owned_cells() {
         let mut store: InlineIdStore<Cell<u32>> = InlineIdStore::default();
         let mut ids: Vec<u64> = (0..4000u64).map(|i| (i * 7919) % 300_000).collect();
         ids.extend([0, 1, 31, 32, 33, 1023, 1024, 1025, 65_535, 65_536, 65_537, (1 << 20) - 1, 1 << 20, (1 << 24) + 5]);
         let ids = scrambled(ids, 12345);
         let mut expected: FxHashMap<u64, u32> = FxHashMap::default();
-        let mut held: Vec<(u64, *const Cell<u32>)> = Vec::new();
+        let mut held = Vec::new();
         for (n, &id) in ids.iter().enumerate() {
             let value = store.get(id);
             if value.get() == 0 {
                 value.set(n as u32 + 1);
                 expected.insert(id, n as u32 + 1);
             }
-            held.push((id, std::ptr::from_ref(value)));
+            held.push((id, store.get_key(id)));
         }
-        for &(id, address) in &held {
-            assert!(std::ptr::eq(store.get(id), address), "id {id} moved");
+        for &(id, key) in &held {
+            assert_eq!(store.at(key).get(), expected[&id], "id {id} changed identity");
         }
         for id in (0..300_000u64).chain([(1 << 20) - 1, 1 << 20, (1 << 24) + 5]) {
             assert_eq!(store.try_get(id).map_or(0, |v| v.get()), expected.get(&id).copied().unwrap_or(0), "id {id}");
@@ -573,8 +277,8 @@ mod tests {
         }
     }
 
-    // The table holds only indexes and finds a key in the value it points at: through ~15 rehashes (60,000 keys
-    // from an empty table, 59 chunks of values), every key must keep reaching its own value at its first address, a
+    // The table holds only indexes and finds a key in its record: through ~15 rehashes (60,000 keys
+    // from an empty table), every retained key must keep reaching its own record, a
     // key never inserted must miss (about one probe in 128 meets a matching 7-bit tag and must be rejected by the key
     // in the value), and the value must hold its key.
     #[test]
@@ -640,7 +344,7 @@ mod tests {
         let mut expected: FxHashMap<u64, u32> = FxHashMap::default();
         for (n, &id) in ids.iter().enumerate() {
             let links = store.get(id);
-            if links.get().get() == 0 {
+            if links.get() == 0 {
                 links.set(n as u32 + 1);
                 expected.insert(id, n as u32 + 1);
             }
@@ -648,7 +352,7 @@ mod tests {
         for id in 0..40_000u64 {
             assert_eq!(store.try_get(id).map(|v| (*v).get()), expected.get(&id).copied(), "id {id}");
         }
-        assert_eq!(store.try_get(1 << 40), None);
+        assert!(store.try_get(1 << 40).is_none());
         store.get(1 << 40).set(7);
         assert_eq!(store.try_get(1 << 40).map(|v| (*v).get()), Some(7));
     }

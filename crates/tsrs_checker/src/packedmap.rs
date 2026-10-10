@@ -115,56 +115,6 @@ impl<K: PackedKey, V: Copy> PackedMap<K, V> {
     }
 }
 
-/// `GoMap` (a nil-able shared map in the arena) over a `PackedMap`, for the `CacheHashKey`-keyed instantiation maps
-/// of arena objects (conditional roots, type aliases). Same `make` / `get` / `set` behavior as `GoMap`.
-pub struct GoPackedMap<K: 'static, V: 'static>(Cell<Option<P<RefCell<PackedMap<K, V>>>>>);
-
-impl<K: 'static, V: 'static> Default for GoPackedMap<K, V> {
-    fn default() -> Self {
-        GoPackedMap(Cell::new(None))
-    }
-}
-
-impl<K: PackedKey + 'static, V: Copy + 'static> GoPackedMap<K, V> {
-    /// Go `m = make(map[K]V)`.
-    pub fn make(&self) {
-        // As `GoMap::make`: the table lives where the map field does (emit scratch regions).
-        let scratch = tsrs_core::arena::scratch_contains(std::ptr::from_ref::<Self>(self) as usize);
-        self.0.set(Some(P::new_in(scratch, RefCell::new(PackedMap::default()))));
-    }
-
-    pub fn is_nil(&self) -> bool {
-        self.0.get().is_none()
-    }
-
-    /// Go `v, ok := m[k]` (reading a nil map is allowed).
-    #[inline]
-    pub fn get(&self, key: &K) -> Option<V> {
-        self.0.get().and_then(|m| m.borrow().get(key))
-    }
-
-    /// Go `m[k] = v`. Creates the map if it is nil, as `GoMap::set` does.
-    pub fn set(&self, key: K, value: V) {
-        let m = match self.0.get() {
-            Some(m) => m,
-            None => {
-                self.make();
-                self.0.get().unwrap()
-            }
-        };
-        m.borrow_mut().insert(key, value);
-    }
-
-    pub fn len(&self) -> usize {
-        self.0.get().map_or(0, |m| m.borrow().len())
-    }
-
-    #[cfg(feature = "assignment-stats")]
-    pub(crate) fn heap_stat(&self) -> Option<crate::heapcensus::HeapStat> {
-        self.0.get().map(|m| m.borrow().heap_stat())
-    }
-}
-
 /// Go `c.stringLiteralTypes` (`map[string]*Type`): the literal types by their value. The key was a heap `String`
 /// copy of the text the literal type already holds in the arena; the table now stores only the type and compares
 /// its value (one 4-byte slot instead of a 32-byte `(String, P<Type>)` slot plus the copied text).

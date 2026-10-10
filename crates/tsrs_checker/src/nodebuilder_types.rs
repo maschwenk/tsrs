@@ -58,14 +58,14 @@ pub struct CompositeTypeCacheIdentity {
 
 #[derive(Default)]
 pub struct NodeBuilderLinks {
-    pub serialized_types: GoMap<CompositeTypeCacheIdentity, P<SerializedTypeEntry>>, // Collection of types serialized at this location
+    pub serialized_types: OwnedMap<CompositeTypeCacheIdentity, P<SerializedTypeEntry>>, // Collection of types serialized at this location
     pub fake_scope_for_signature_declaration: Cell<Option<&'static str>>, // If present, this is a fake scope injected into an enclosing declaration chain.
 }
 
 /// Go `module.ModeAwareCache[moduleSpecifierResult]` is `map[ModeAwareCacheKey]moduleSpecifierResult`.
 #[derive(Default)]
 pub struct NodeBuilderSymbolLinks {
-    pub specifier_cache: GoMap<ModeAwareCacheKey, moduleSpecifierResult>,
+    pub specifier_cache: OwnedMap<ModeAwareCacheKey, moduleSpecifierResult>,
 }
 
 #[derive(Clone, Copy, Debug, Default)]

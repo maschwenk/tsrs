@@ -2196,8 +2196,8 @@ impl Checker {
 
     // checker.go:10601
     pub(crate) fn assign_parameter_type(&mut self, parameter: P<Symbol>, contextual_type: Option<P<Type>>) {
-        let links = self.value_symbol_links.get(parameter);
-        if links.resolved_type.get().is_some() {
+        let links = self.value_symbol_links.get_key(parameter);
+        if self.value_symbol_links.at(links).resolved_type.get().is_some() {
             return;
         }
         let declaration = parameter.value_declaration();
@@ -2209,15 +2209,17 @@ impl Checker {
             },
         };
         let is_optional = declaration.is_some_and(|declaration| declaration.initializer().is_none() && is_optional_declaration(declaration));
-        links.resolved_type.set(Some(self.add_optionality_ex(t, false, is_optional)));
+        let link_value = Some(self.add_optionality_ex(t, false, is_optional));
+        self.value_symbol_links.at(links).resolved_type.set(link_value);
         if let Some(declaration) = declaration {
             let name = declaration.name().unwrap();
             if !is_identifier(name) {
                 // if inference didn't come up with anything but unknown, fall back to the binding pattern if present.
-                if links.resolved_type.get() == Some(self.unknown_type) {
-                    links.resolved_type.set(Some(self.get_type_from_binding_pattern(name, false, false)));
+                if self.value_symbol_links.at(links).resolved_type.get() == Some(self.unknown_type) {
+                    let link_value = Some(self.get_type_from_binding_pattern(name, false, false));
+                    self.value_symbol_links.at(links).resolved_type.set(link_value);
                 }
-                self.assign_binding_element_types(name, links.resolved_type.get().unwrap());
+                self.assign_binding_element_types(name, self.value_symbol_links.at(links).resolved_type.get().unwrap());
             }
         }
     }

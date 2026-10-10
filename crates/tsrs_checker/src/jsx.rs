@@ -812,9 +812,9 @@ impl Checker {
                     if member.value_declaration().is_some() {
                         attribute_symbol.set_value_declaration(member.value_declaration());
                     }
-                    let links = self.value_symbol_links.get(attribute_symbol);
-                    links.resolved_type.set(Some(expr_type));
-                    links.set_target(Some(member));
+                    let links = self.value_symbol_links.get_key(attribute_symbol);
+                    self.value_symbol_links.at(links).resolved_type.set(Some(expr_type));
+                    self.value_symbol_links.at(links).set_target(Some(member));
                     attributes_table.set(attribute_symbol.name(), attribute_symbol);
                     if let Some(all_attributes_table) = &all_attributes_table {
                         all_attributes_table.set(attribute_symbol.name(), attribute_symbol);
@@ -903,16 +903,16 @@ impl Checker {
                 }
                 // If there are children in the body of JSX element, create dummy attribute "children" with the union of children types so that it will pass the attribute checking process
                 let children_prop_symbol = self.new_symbol(SymbolFlags::Property, alloc_str(&jsx_children_property_name));
-                let links = self.value_symbol_links.get(children_prop_symbol);
+                let links = self.value_symbol_links.get_key(children_prop_symbol);
                 if child_types.len() == 1 {
-                    links.resolved_type.set(Some(child_types[0]));
+                    self.value_symbol_links.at(links).resolved_type.set(Some(child_types[0]));
                 } else if children_contextual_type.is_some() && some_type(self, children_contextual_type.unwrap(), |c, t| c.is_tuple_like_type(t)) {
                     let t = self.create_tuple_type(&child_types);
-                    links.resolved_type.set(Some(t));
+                    self.value_symbol_links.at(links).resolved_type.set(Some(t));
                 } else {
                     let union = self.get_union_type(&child_types);
                     let t = self.create_array_type(union);
-                    links.resolved_type.set(Some(t));
+                    self.value_symbol_links.at(links).resolved_type.set(Some(t));
                 }
                 // Fake up a property declaration for the children
                 let name = self.factory.new_identifier(alloc_str(&jsx_children_property_name));
@@ -1327,9 +1327,9 @@ impl Checker {
     // string index signature (in which case nodeLinks.jsxFlags will be IntrinsicIndexedElement).
     // May also return unknownSymbol if both of these lookups fail.
     pub(crate) fn get_intrinsic_tag_symbol(&mut self, node: P<Node>) -> Option<P<Symbol>> {
-        let links = self.symbol_node_links.get(node);
-        if links.resolved_symbol.get().is_some() {
-            return links.resolved_symbol.get();
+        let links = self.symbol_node_links.get_key(node);
+        if self.symbol_node_links.at(links).resolved_symbol.get().is_some() {
+            return self.symbol_node_links.at(links).resolved_symbol.get();
         }
         let intrinsic_elements_type = self.get_jsx_type(JsxNames.intrinsic_elements, node);
         if !self.is_error_type(intrinsic_elements_type) {
@@ -1343,8 +1343,8 @@ impl Checker {
             if intrinsic_prop.is_some() {
                 let jsx_links = self.jsx_element_links.get_key(node);
                 self.jsx_element_links.at(jsx_links).jsx_flags.set(self.jsx_element_links.at(jsx_links).jsx_flags.get() | JsxFlags::IntrinsicNamedElement);
-                links.resolved_symbol.set(intrinsic_prop);
-                return links.resolved_symbol.get();
+                self.symbol_node_links.at(links).resolved_symbol.set(intrinsic_prop);
+                return self.symbol_node_links.at(links).resolved_symbol.get();
             }
             // Intrinsic string indexer case
             let prop_name_type = self.get_string_literal_type(prop_name);
@@ -1352,26 +1352,26 @@ impl Checker {
             if index_symbol.is_some() {
                 let jsx_links = self.jsx_element_links.get_key(node);
                 self.jsx_element_links.at(jsx_links).jsx_flags.set(self.jsx_element_links.at(jsx_links).jsx_flags.get() | JsxFlags::IntrinsicIndexedElement);
-                links.resolved_symbol.set(index_symbol);
-                return links.resolved_symbol.get();
+                self.symbol_node_links.at(links).resolved_symbol.set(index_symbol);
+                return self.symbol_node_links.at(links).resolved_symbol.get();
             }
             if self.get_type_of_property_or_index_signature_of_type(intrinsic_elements_type, prop_name).is_some() {
                 let jsx_links = self.jsx_element_links.get_key(node);
                 self.jsx_element_links.at(jsx_links).jsx_flags.set(self.jsx_element_links.at(jsx_links).jsx_flags.get() | JsxFlags::IntrinsicIndexedElement);
-                links.resolved_symbol.set(intrinsic_elements_type.symbol());
-                return links.resolved_symbol.get();
+                self.symbol_node_links.at(links).resolved_symbol.set(intrinsic_elements_type.symbol());
+                return self.symbol_node_links.at(links).resolved_symbol.get();
             }
             // Wasn't found
             let type_name = format!("JSX.{}", JsxNames.intrinsic_elements);
             self.error(Some(node), &diagnostics::Property_0_does_not_exist_on_type_1, &[&tag_name.text(), &type_name]);
-            links.resolved_symbol.set(Some(self.unknown_symbol));
-            return links.resolved_symbol.get();
+            self.symbol_node_links.at(links).resolved_symbol.set(Some(self.unknown_symbol));
+            return self.symbol_node_links.at(links).resolved_symbol.get();
         }
         if self.no_implicit_any {
             self.error(Some(node), &diagnostics::JSX_element_implicitly_has_type_any_because_no_interface_JSX_0_exists, &[&JsxNames.intrinsic_elements]);
         }
-        links.resolved_symbol.set(Some(self.unknown_symbol));
-        links.resolved_symbol.get()
+        self.symbol_node_links.at(links).resolved_symbol.set(Some(self.unknown_symbol));
+        self.symbol_node_links.at(links).resolved_symbol.get()
     }
 
     // jsx.go:1257

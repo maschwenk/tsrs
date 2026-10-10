@@ -1578,9 +1578,9 @@ impl Checker {
     // checker.go:3489
     pub(crate) fn check_function_or_constructor_symbol(&mut self, symbol: P<Symbol>) {
         // Only check the symbol once
-        let links = self.value_symbol_links.get(symbol);
-        if !links.function_or_constructor_checked() {
-            links.set_function_or_constructor_checked(true);
+        let links = self.value_symbol_links.get_key(symbol);
+        if !self.value_symbol_links.at(links).function_or_constructor_checked() {
+            self.value_symbol_links.at(links).set_function_or_constructor_checked(true);
             self.check_function_or_constructor_symbol_worker(symbol);
         }
     }

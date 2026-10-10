@@ -1719,18 +1719,18 @@ impl Checker {
 
     // checker.go:18847
     pub(crate) fn get_type_of_enum_member(&mut self, symbol: P<Symbol>) -> P<Type> {
-        let links = self.value_symbol_links.get(symbol);
-        if links.resolved_type.get().is_none() {
+        let links = self.value_symbol_links.get_key(symbol);
+        if self.value_symbol_links.at(links).resolved_type.get().is_none() {
             let t = self.get_declared_type_of_enum_member(symbol);
-            links.resolved_type.set(Some(t));
+            self.value_symbol_links.at(links).resolved_type.set(Some(t));
         }
-        links.resolved_type.get().unwrap()
+        self.value_symbol_links.at(links).resolved_type.get().unwrap()
     }
 
     // checker.go:18855
     pub(crate) fn get_type_of_accessors(&mut self, symbol: P<Symbol>) -> P<Type> {
-        let links = self.value_symbol_links.get(symbol);
-        if links.resolved_type.get().is_none() {
+        let links = self.value_symbol_links.get_key(symbol);
+        if self.value_symbol_links.at(links).resolved_type.get().is_none() {
             if !self.push_type_resolution(symbol.into(), TypeSystemPropertyName::Type) {
                 return self.error_type;
             }
@@ -1801,17 +1801,17 @@ impl Checker {
                 }
                 t = Some(self.any_type);
             }
-            if links.resolved_type.get().is_none() {
-                links.resolved_type.set(t);
+            if self.value_symbol_links.at(links).resolved_type.get().is_none() {
+                self.value_symbol_links.at(links).resolved_type.set(t);
             }
         }
-        links.resolved_type.get().unwrap()
+        self.value_symbol_links.at(links).resolved_type.get().unwrap()
     }
 
     // checker.go:18910
     pub(crate) fn get_write_type_of_accessors(&mut self, symbol: P<Symbol>) -> P<Type> {
-        let links = self.value_symbol_links.get(symbol);
-        if links.write_type().is_none() {
+        let links = self.value_symbol_links.get_key(symbol);
+        if self.value_symbol_links.at(links).write_type().is_none() {
             if !self.push_type_resolution(symbol.into(), TypeSystemPropertyName::WriteType) {
                 return self.error_type;
             }
@@ -1833,22 +1833,22 @@ impl Checker {
                 write_type = Some(self.any_type);
             }
             // Absent an explicit setter type annotation we use the read type of the accessor.
-            if links.write_type().is_none() {
+            if self.value_symbol_links.at(links).write_type().is_none() {
                 if write_type.is_some() {
-                    links.set_write_type(write_type);
+                    self.value_symbol_links.at(links).set_write_type(write_type);
                 } else {
                     let t = self.get_type_of_accessors(symbol);
-                    links.set_write_type(Some(t));
+                    self.value_symbol_links.at(links).set_write_type(Some(t));
                 }
             }
         }
-        links.write_type().unwrap()
+        self.value_symbol_links.at(links).write_type().unwrap()
     }
 
     // checker.go:18942
     pub(crate) fn get_type_of_alias(&mut self, symbol: P<Symbol>) -> P<Type> {
-        let links = self.value_symbol_links.get(symbol);
-        if links.resolved_type.get().is_none() {
+        let links = self.value_symbol_links.get_key(symbol);
+        if self.value_symbol_links.at(links).resolved_type.get().is_none() {
             if !self.push_type_resolution(symbol.into(), TypeSystemPropertyName::Type) {
                 return self.error_type;
             }
@@ -1860,23 +1860,25 @@ impl Checker {
             // type symbol, call getDeclaredTypeOfSymbol.
             // This check is important because without it, a call to getTypeOfSymbol could end
             // up recursively calling getTypeOfAlias, causing a stack overflow.
-            if links.resolved_type.get().is_none() {
+            if self.value_symbol_links.at(links).resolved_type.get().is_none() {
                 if self.get_symbol_flags(target_symbol).intersects(SymbolFlags::Value) {
                     let t = self.get_type_of_symbol(target_symbol);
-                    links.resolved_type.set(Some(t));
+                    self.value_symbol_links.at(links).resolved_type.set(Some(t));
                 } else {
-                    links.resolved_type.set(Some(self.error_type));
+                    let link_value = Some(self.error_type);
+                    self.value_symbol_links.at(links).resolved_type.set(link_value);
                 }
             }
             if !self.pop_type_resolution() {
                 self.report_circularity_error(export_symbol.unwrap_or(symbol));
-                if links.resolved_type.get().is_none() {
-                    links.resolved_type.set(Some(self.error_type));
+                if self.value_symbol_links.at(links).resolved_type.get().is_none() {
+                    let link_value = Some(self.error_type);
+                    self.value_symbol_links.at(links).resolved_type.set(link_value);
                 }
-                return links.resolved_type.get().unwrap();
+                return self.value_symbol_links.at(links).resolved_type.get().unwrap();
             }
         }
-        links.resolved_type.get().unwrap()
+        self.value_symbol_links.at(links).resolved_type.get().unwrap()
     }
 
     // checker.go:18973

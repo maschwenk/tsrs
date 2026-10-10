@@ -147,7 +147,7 @@ In place:
 | mimalloc as the global allocator | `notes/fix-perf-memory.md` | oxc, Rolldown, Turborepo, Bun |
 | Oxc arenas for fixed no-`Drop` data, one per allocation owner; resource-owning values in owner-paired heap sidecars that drop before the Oxc chunks | PORTING.md "Memory model", `notes/oxc-allocator-migration.md` | oxc (arena) |
 | Native identity pointers (`Option<P<T>>` is pointer-sized) | `notes/oxc-allocator-migration.md` | oxc AST references |
-| Rust-owned typed indexed records for the generic and keyed checker link tables; access borrows the store and recursive work retains keys | `notes/rust-owned-arenas.md`: partial ownership migration; remaining graph still uses `P` | |
+| Rust-owned typed indexed records for generic, keyed and ID-indexed checker link tables; borrowed core link stores, owned link maps and rare tails | `notes/rust-owned-arenas.md`, `notes/rust-owned-links.md`: partial ownership migration; remaining graph still uses `P` | |
 | Packed layouts with size assertions | `notes/mem-layout.md`, `mem-layout3.md`, `mem-round2.md`, `mem-round3.md`, `mem-small.md` | oxc, ty, rust-analyzer, Bun |
 | Fx hashing everywhere | `notes/perf-checker-cpu2.md` | oxc, Rolldown, Ruff, rust-analyzer |
 | Lazy members, line maps and rare-field tails | `notes/lazy-members.md`, `notes/mem-lazy.md` | |

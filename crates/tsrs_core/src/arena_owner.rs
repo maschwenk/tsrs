@@ -231,6 +231,18 @@ impl<T> ArenaBuilder<T> {
         self.values.get(key.index())
     }
 
+    /// Recover a qualified key from an owner-maintained numeric index (for compact paged indices).
+    /// The index is checked against this table; it does not carry a foreign owner's identity.
+    pub fn key_at(&self, index: usize) -> Option<ArenaKey<T>> {
+        self.values.get(index).map(|_| ArenaKey {
+            arena: self.id,
+            local: LocalKey {
+                slot: NonZeroU32::new(index as u32 + 1).expect("allocated arena slot"),
+                marker: PhantomData,
+            },
+        })
+    }
+
     /// Qualify an edge from this table's graph for use outside the owner.
     pub fn qualify(&self, key: LocalKey<T>) -> Option<ArenaKey<T>> {
         self.get_local(key).map(|_| ArenaKey {

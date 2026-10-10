@@ -6,101 +6,6 @@ use tsrs_core::{OptionThinSliceCell, StrCell, ThinSliceCell};
 
 use crate::*;
 
-// GoMap: a Go `map[K]V` field (a nil-able reference to a shared hash table), pointer-sized.
-
-pub struct GoMap<K: 'static, V: 'static>(Cell<Option<P<RefCell<FxHashMap<K, V>>>>>);
-
-impl<K: 'static, V: 'static> Default for GoMap<K, V> {
-    fn default() -> Self {
-        GoMap(Cell::new(None))
-    }
-}
-
-impl<K: Eq + Hash + 'static, V: Clone + 'static> GoMap<K, V> {
-    pub fn new_empty() -> Self {
-        let m = GoMap::default();
-        m.make();
-        m
-    }
-    /// Go `m = make(map[K]V)`.
-    pub fn make(&self) {
-        // The table lives where the map field does: a field in an emit scratch region (a node builder request's
-        // links, notes/mem-emit-regions.md) must not leave a table outside it that refers into it.
-        let scratch = tsrs_core::arena::scratch_contains(std::ptr::from_ref::<Self>(self) as usize);
-        self.0.set(Some(P::new_in(scratch, RefCell::new(FxHashMap::default()))));
-    }
-    pub fn is_nil(&self) -> bool {
-        self.0.get().is_none()
-    }
-    /// Go `v, ok := m[k]` (reading a nil map is allowed).
-    pub fn get<Q: ?Sized + Hash + Eq>(&self, key: &Q) -> Option<V>
-    where
-        K: std::borrow::Borrow<Q>,
-    {
-        self.0.get().and_then(|m| m.borrow().get(key).cloned())
-    }
-    pub fn has(&self, key: &K) -> bool {
-        self.0.get().is_some_and(|m| m.borrow().contains_key(key))
-    }
-    /// Go `m[k] = v`. Creates the map if it is nil (Go would panic; faithful code always `make`s first).
-    pub fn set(&self, key: K, value: V) {
-        let m = match self.0.get() {
-            Some(m) => m,
-            None => {
-                self.make();
-                self.0.get().unwrap()
-            }
-        };
-        m.borrow_mut().insert(key, value);
-    }
-    pub fn delete(&self, key: &K) {
-        if let Some(m) = self.0.get() {
-            m.borrow_mut().remove(key);
-        }
-    }
-    pub fn len(&self) -> usize {
-        self.0.get().map_or(0, |m| m.borrow().len())
-    }
-    pub fn clear(&self) {
-        if let Some(m) = self.0.get() {
-            m.borrow_mut().clear();
-        }
-    }
-    /// Go `clear(m)` for a map that is cleared after every use (a pooled scratch map). Clearing touches every
-    /// bucket, so a table that one large use grew would make every later small use pay for its capacity; such
-    /// a table is reallocated at the size of its last use instead. Unobservable: the map is empty either way.
-    pub fn clear_scratch(&self) {
-        if let Some(m) = self.0.get() {
-            let mut m = m.borrow_mut();
-            let len = m.len();
-            if m.capacity() > 64 && m.capacity() > 4 * len {
-                *m = FxHashMap::with_capacity_and_hasher(len, Default::default());
-            } else {
-                m.clear();
-            }
-        }
-    }
-    /// The shared table (Go map value), for aliasing assignments `a.m = b.m`.
-    pub fn get_ref(&self) -> Option<P<RefCell<FxHashMap<K, V>>>> {
-        self.0.get()
-    }
-    pub fn set_ref(&self, m: Option<P<RefCell<FxHashMap<K, V>>>>) {
-        self.0.set(m)
-    }
-    /// Go `a.m = someFreshlyBuiltMap`.
-    pub fn assign(&self, m: FxHashMap<K, V>) {
-        let scratch = tsrs_core::arena::scratch_contains(std::ptr::from_ref::<Self>(self) as usize);
-        self.0.set(Some(P::new_in(scratch, RefCell::new(m))))
-    }
-    /// Snapshot of the entries (Go `for k, v := range m`).
-    pub fn entries(&self) -> Vec<(K, V)>
-    where
-        K: Clone,
-    {
-        self.0.get().map_or_else(Vec::new, |m| m.borrow().iter().map(|(k, v)| (k.clone(), v.clone())).collect())
-    }
-}
-
 // ParseFlags
 
 bitflags! {
@@ -253,217 +158,7 @@ pub struct SignatureId(pub u32);
 // Links for referenced symbols: Go's `SymbolReferenceLinks` has one field, `referenceKinds` (the meanings the symbol
 // was referenced with), which `SymbolReferenceLinkStore` (links.rs) keeps in its slots.
 
-// Links for value symbols
-//
-// Go's `ValueSymbolLinks` holds seven fields inline (56 bytes). Here a record is three words, 24 bytes:
-// `resolved_type` and two words whose meaning depends on the record's mode, kept in the low two bits of `second`
-// (every stored pointer is 8-aligned):
-//
-// - plain (the common case: instantiated symbols and most others): `target`, `mapper`;
-// - synthetic: `containing_type`, `name_type`, for records that set those but never `target` / `mapper` (union and
-//   intersection properties, mapped type members: 2.15M of the 2.5M records on the private monorepo that set any of the four
-//   rare fields);
-// - tail: a pointer to `ValueSymbolLinksTail`, which holds all six other fields, for the remaining records (0.35M).
-//
-// A record starts plain and moves to synthetic or tail mode on the first write that its mode cannot hold; it never
-// moves back. Every getter returns what was last set (the zero value if never set), whatever the mode.
-
-#[derive(Default)]
-pub struct ValueSymbolLinks {
-    pub resolved_type: Cell<Option<P<Type>>>, // Type of value symbol
-    first: Cell<Option<P<()>>>,  // plain: target (P<Symbol>); synthetic: containing_type (P<Type>); tail: P<ValueSymbolLinksTail>
-    second: Cell<usize>,         // `P::to_bits` of: plain: mapper (P<TypeMapper>); synthetic: name_type (P<Type>) | SYNTHETIC; tail: TAIL
-}
-
-#[derive(Default)]
-struct ValueSymbolLinksTail {
-    target: Cell<Option<P<Symbol>>>,
-    mapper: MapperCell,
-    write_type: Cell<Option<P<Type>>>,
-    name_type: Cell<Option<P<Type>>>,
-    containing_type: Cell<Option<P<Type>>>, // Mapped type for mapped type property, containing union or intersection type for synthetic property
-    function_or_constructor_checked: Cell<bool>,
-}
-
-#[cfg(target_pointer_width = "64")]
-const _: () = assert!(std::mem::size_of::<ValueSymbolLinks>() == 24);
-#[cfg(target_pointer_width = "32")]
-const _: () = assert!(std::mem::size_of::<ValueSymbolLinks>() == 12);
-
-const MODE_MASK: usize = 3;
-const SYNTHETIC: usize = 1;
-const TAIL: usize = 2;
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum LinksMode {
-    Plain,
-    Synthetic,
-    Tail,
-}
-
-/// A pointer stored in a link word whose type depends on the mode.
-#[inline]
-fn erase<T>(p: Option<P<T>>) -> Option<P<()>> {
-    // SAFETY: a `()` is zero-sized; the word only keeps the object's position.
-    p.map(|p| unsafe { p.cast::<()>() })
-}
-
-/// SAFETY: `w` was stored by `erase` from a `P<T>` (arena values are never freed or moved).
-#[inline]
-unsafe fn restore<T: 'static>(w: Option<P<()>>) -> Option<P<T>> {
-    // SAFETY: this function's contract: `w` was a `P<T>`.
-    w.map(|w| unsafe { w.cast::<T>() })
-}
-
-/// SAFETY: `bits` is 0 or `P::to_bits` of a `P<T>` (mode bits cleared).
-#[inline]
-unsafe fn restore_bits<T: 'static>(bits: usize) -> Option<P<T>> {
-    // SAFETY: this function's contract: `bits` is 0 or the bits of a `P<T>`.
-    unsafe { P::from_bits_opt(bits) }
-}
-
-impl ValueSymbolLinks {
-    #[inline]
-    fn mode(&self) -> LinksMode {
-        match self.second.get() & MODE_MASK {
-            0 => LinksMode::Plain,
-            SYNTHETIC => LinksMode::Synthetic,
-            _ => LinksMode::Tail,
-        }
-    }
-
-    #[inline]
-    fn tail(&self) -> P<ValueSymbolLinksTail> {
-        debug_assert!(self.mode() == LinksMode::Tail);
-        // SAFETY: in tail mode `first` is an erased `P<ValueSymbolLinksTail>`.
-        unsafe { restore(self.first.get()) }.unwrap()
-    }
-
-    /// The tail, moving the record to tail mode first if needed.
-    fn tail_for_write(&self) -> P<ValueSymbolLinksTail> {
-        if self.mode() == LinksMode::Tail {
-            return self.tail();
-        }
-        let tail = P::new(ValueSymbolLinksTail::default());
-        tail.target.set(self.target());
-        tail.mapper.set(self.mapper());
-        tail.containing_type.set(self.containing_type());
-        tail.name_type.set(self.name_type());
-        self.first.set(erase(Some(tail)));
-        self.second.set(TAIL);
-        tail
-    }
-
-    /// Moves a plain record without target and mapper to synthetic mode, if it is one.
-    fn enter_synthetic_mode(&self) -> bool {
-        if self.mode() == LinksMode::Plain && self.first.get().is_none() && self.second.get() == 0 {
-            self.second.set(SYNTHETIC);
-            return true;
-        }
-        self.mode() == LinksMode::Synthetic
-    }
-
-    #[inline]
-    pub fn target(&self) -> Option<P<Symbol>> {
-        match self.mode() {
-            // SAFETY: in plain mode `first` is an erased `P<Symbol>` or nil.
-            LinksMode::Plain => unsafe { restore(self.first.get()) },
-            LinksMode::Synthetic => None,
-            LinksMode::Tail => self.tail().target.get(),
-        }
-    }
-    #[inline]
-    pub fn set_target(&self, target: Option<P<Symbol>>) {
-        match self.mode() {
-            LinksMode::Plain => self.first.set(erase(target)),
-            LinksMode::Synthetic if target.is_none() => {}
-            _ => self.tail_for_write().target.set(target),
-        }
-    }
-    #[inline]
-    pub fn mapper(&self) -> Option<P<TypeMapper>> {
-        match self.mode() {
-            // SAFETY: in plain mode `second` is an erased `P<TypeMapper>` or nil (no mode bits).
-            LinksMode::Plain => unsafe { restore_bits(self.second.get()) },
-            LinksMode::Synthetic => None,
-            LinksMode::Tail => self.tail().mapper.get(),
-        }
-    }
-    #[inline]
-    pub fn set_mapper(&self, mapper: Option<P<TypeMapper>>) {
-        if let Some(m) = mapper {
-            escape_mapper(m); // a symbol link outlives the call that made the mapper
-        }
-        match self.mode() {
-            LinksMode::Plain => self.second.set(P::to_bits_opt(mapper)),
-            LinksMode::Synthetic if mapper.is_none() => {}
-            _ => self.tail_for_write().mapper.set(mapper),
-        }
-    }
-    #[inline]
-    pub fn containing_type(&self) -> Option<P<Type>> {
-        match self.mode() {
-            LinksMode::Plain => None,
-            // SAFETY: in synthetic mode `first` is an erased `P<Type>` or nil.
-            LinksMode::Synthetic => unsafe { restore(self.first.get()) },
-            LinksMode::Tail => self.tail().containing_type.get(),
-        }
-    }
-    #[inline]
-    pub fn set_containing_type(&self, t: Option<P<Type>>) {
-        if t.is_none() && self.mode() == LinksMode::Plain {
-            return;
-        }
-        if self.enter_synthetic_mode() {
-            self.first.set(erase(t));
-        } else {
-            self.tail_for_write().containing_type.set(t);
-        }
-    }
-    #[inline]
-    pub fn name_type(&self) -> Option<P<Type>> {
-        match self.mode() {
-            LinksMode::Plain => None,
-            // SAFETY: in synthetic mode `second` is an erased `P<Type>` or nil plus the mode bits.
-            LinksMode::Synthetic => unsafe { restore_bits(self.second.get() & !MODE_MASK) },
-            LinksMode::Tail => self.tail().name_type.get(),
-        }
-    }
-    #[inline]
-    pub fn set_name_type(&self, t: Option<P<Type>>) {
-        if t.is_none() && self.mode() == LinksMode::Plain {
-            return;
-        }
-        if self.enter_synthetic_mode() {
-            self.second.set(P::to_bits_opt(t) | SYNTHETIC);
-        } else {
-            self.tail_for_write().name_type.set(t);
-        }
-    }
-    #[inline]
-    pub fn write_type(&self) -> Option<P<Type>> {
-        match self.mode() {
-            LinksMode::Tail => self.tail().write_type.get(),
-            _ => None,
-        }
-    }
-    #[inline]
-    pub fn set_write_type(&self, t: Option<P<Type>>) {
-        if t.is_some() || self.mode() == LinksMode::Tail {
-            self.tail_for_write().write_type.set(t);
-        }
-    }
-    #[inline]
-    pub fn function_or_constructor_checked(&self) -> bool {
-        self.mode() == LinksMode::Tail && self.tail().function_or_constructor_checked.get()
-    }
-    #[inline]
-    pub fn set_function_or_constructor_checked(&self, v: bool) {
-        if v || self.mode() == LinksMode::Tail {
-            self.tail_for_write().function_or_constructor_checked.set(v);
-        }
-    }
-}
+pub use crate::owned_value_links::ValueSymbolLinks;
 
 // Additional links for mapped symbols
 
@@ -497,7 +192,7 @@ pub struct AliasSymbolLinks {
 #[derive(Default)]
 pub struct ModuleSymbolLinks {
     pub resolved_exports: Cell<Option<P<SymbolTable>>>, // Resolved exports of module or combined early- and late-bound static members of a class.
-    pub type_only_export_star_map: GoMap<String, P<Node>>, // Set on a module symbol when some of its exports were resolved through a 'export type * from "mod"' declaration
+    pub type_only_export_star_map: OwnedMap<String, P<Node>>, // Set on a module symbol when some of its exports were resolved through a 'export type * from "mod"' declaration
     pub exports_checked: Cell<bool>,
 }
 
@@ -529,7 +224,7 @@ pub struct ExportTypeLinks {
 pub struct TypeAliasLinks {
     pub declared_type: Cell<Option<P<Type>>>,
     pub type_parameters: Cell<&'static [P<Type>]>, // Type parameters of type alias (undefined if non-generic)
-    pub instantiations: GoPackedMap<CacheHashKey, P<Type>>, // Instantiations of generic type alias (undefined if non-generic)
+    pub instantiations: OwnedPackedMap<CacheHashKey, P<Type>>, // Instantiations of generic type alias (undefined if non-generic)
     pub is_constructor_declared_property: Cell<bool>,
 }
 
@@ -2420,7 +2115,7 @@ struct UnionRare {
     regular_type: Cell<Option<P<Type>>>,
     origin: Cell<Option<P<Type>>>, // Denormalized union, intersection, or index type in which union originates
     key_property_name: StrCell,    // Property with unique unit type that exists in every object/intersection in union type
-    constituent_map: GoMap<P<Type>, P<Type>>, // Constituents keyed by unit type discriminants
+    constituent_map: OwnedMap<P<Type>, P<Type>>, // Constituents keyed by unit type discriminants
 }
 
 #[derive(Default)]
@@ -2553,11 +2248,11 @@ impl UnionType {
         }
     }
     /// Go `t.constituentMap` for reading (nil while there is no tail).
-    pub fn constituent_map(&self) -> Option<&'static GoMap<P<Type>, P<Type>>> {
+    pub fn constituent_map(&self) -> Option<&'static OwnedMap<P<Type>, P<Type>>> {
         self.union_rare().map(|r| &r.constituent_map)
     }
     /// Go `t.constituentMap` for writing.
-    pub fn constituent_map_for_write(&self) -> &'static GoMap<P<Type>, P<Type>> {
+    pub fn constituent_map_for_write(&self) -> &'static OwnedMap<P<Type>, P<Type>> {
         &self.union_rare_for_write().constituent_map
     }
 }
@@ -2737,7 +2432,7 @@ pub struct ConditionalRoot {
     pub is_distributive: Cell<bool>,
     pub infer_type_parameters: Cell<&'static [P<Type>]>,
     pub outer_type_parameters: Cell<&'static [P<Type>]>,
-    pub instantiations: GoPackedMap<CacheHashKey, P<Type>>,
+    pub instantiations: OwnedPackedMap<CacheHashKey, P<Type>>,
     pub alias: Cell<Option<P<TypeAlias>>>,
 }
 

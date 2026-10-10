@@ -62,9 +62,12 @@ owner-qualified keys. Access returns a reference borrowed from the store. Keep a
 then resolve it again; never extend that reference to `'static`. Records run normal Rust destructors, and shared
 sealed owners inherit thread-safety from their contents. The storage module forbids custom `unsafe`.
 
-The checker's generic `LinkStore` and compact `KeyedLinkStore` use this model. `get` returns a short borrow;
-`get_key` and `at` support recursion without retained pointers. Their lookup keys and record fields still refer
-to legacy AST/symbol/type objects. Preserve Go's semantic IDs and creation order independently of storage slots.
+The checker's generic, keyed, symbol-ID and node-ID link stores use this model. `get` returns a short borrow;
+`get_key` and `at` support recursion without retained pointers. The node builder and emit resolver use the core
+link store's `RefCell`-checked `Ref` borrows: retain keys across callbacks, and release each guard before adding
+or clearing records. Link maps and rare value-symbol tails own their heap data and drop with their record.
+Lookup keys and graph edges still refer to legacy AST/symbol/type objects. Preserve Go's semantic IDs and
+creation order independently of storage slots.
 
 The following describes the **remaining legacy graph**, not a rule for new stores. Go objects that are referenced
 by pointer, live long, reference each other cyclically and

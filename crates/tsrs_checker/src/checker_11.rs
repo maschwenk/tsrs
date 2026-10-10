@@ -214,19 +214,19 @@ impl Checker {
             let mut single_prop_type: Option<P<Type>> = None;
             let mut single_prop_mapper: Option<P<TypeMapper>> = None;
             if single_prop.flags().intersects(SymbolFlags::Transient) {
-                let links = self.value_symbol_links.get(single_prop);
-                single_prop_type = links.resolved_type.get();
-                single_prop_mapper = links.mapper();
+                let links = self.value_symbol_links.get_key(single_prop);
+                single_prop_type = self.value_symbol_links.at(links).resolved_type.get();
+                single_prop_mapper = self.value_symbol_links.at(links).mapper();
             }
             let clone = self.create_symbol_with_type(single_prop, single_prop_type);
             if let Some(value_declaration) = single_prop.value_declaration() {
                 clone.set_parent(value_declaration.symbol().unwrap().parent());
             }
-            let links = self.value_symbol_links.get(clone);
-            links.set_containing_type(Some(containing_type));
-            links.set_mapper(single_prop_mapper);
+            let links = self.value_symbol_links.get_key(clone);
+            self.value_symbol_links.at(links).set_containing_type(Some(containing_type));
+            self.value_symbol_links.at(links).set_mapper(single_prop_mapper);
             let write_type = self.get_write_type_of_symbol(single_prop);
-            links.set_write_type(write_type);
+            self.value_symbol_links.at(links).set_write_type(write_type);
             return Some(clone);
         }
         if prop_set.size() == 0 {
@@ -280,9 +280,9 @@ impl Checker {
                 result.set_parent(first_value_declaration.symbol().unwrap().parent());
             }
         }
-        let links = self.value_symbol_links.get(result);
-        links.set_containing_type(Some(containing_type));
-        links.set_name_type(name_type);
+        let links = self.value_symbol_links.get_key(result);
+        self.value_symbol_links.at(links).set_containing_type(Some(containing_type));
+        self.value_symbol_links.at(links).set_name_type(name_type);
         if prop_types.len() > 2 {
             // When `propTypes` has the potential to explode in size when normalized, defer normalization until absolutely needed
             result.check_flags.set(result.check_flags.get() | CheckFlags::DeferredType);
@@ -293,15 +293,19 @@ impl Checker {
             return Some(result);
         }
         if is_union {
-            links.resolved_type.set(Some(self.get_union_type(&prop_types)));
+            let link_value = Some(self.get_union_type(&prop_types));
+            self.value_symbol_links.at(links).resolved_type.set(link_value);
         } else {
-            links.resolved_type.set(Some(self.get_intersection_type(&prop_types)));
+            let link_value = Some(self.get_intersection_type(&prop_types));
+            self.value_symbol_links.at(links).resolved_type.set(link_value);
         }
         if let Some(write_types) = write_types {
             if is_union {
-                links.set_write_type(Some(self.get_union_type(&write_types)));
+                let link_value = Some(self.get_union_type(&write_types));
+                self.value_symbol_links.at(links).set_write_type(link_value);
             } else {
-                links.set_write_type(Some(self.get_intersection_type(&write_types)));
+                let link_value = Some(self.get_intersection_type(&write_types));
+                self.value_symbol_links.at(links).set_write_type(link_value);
             }
         }
         Some(result)
@@ -356,10 +360,11 @@ impl Checker {
         symbol.set_declarations_static(source.declarations());
         symbol.set_parent(source.parent());
         symbol.set_value_declaration(source.value_declaration());
-        let links = self.value_symbol_links.get(symbol);
-        links.resolved_type.set(t);
-        links.set_target(Some(source));
-        links.set_name_type(self.value_symbol_links.get(source).name_type());
+        let links = self.value_symbol_links.get_key(symbol);
+        self.value_symbol_links.at(links).resolved_type.set(t);
+        self.value_symbol_links.at(links).set_target(Some(source));
+        let link_value = self.value_symbol_links.get(source).name_type();
+        self.value_symbol_links.at(links).set_name_type(link_value);
         symbol
     }
 
@@ -2289,14 +2294,14 @@ impl Checker {
 
     // checker.go:23538
     pub(crate) fn get_symbol_from_type_reference(&mut self, node: P<Node>) -> P<Symbol> {
-        let links = self.symbol_node_links.get(node);
-        if links.resolved_symbol.get().is_none() {
+        let links = self.symbol_node_links.get_key(node);
+        if self.symbol_node_links.at(links).resolved_symbol.get().is_none() {
             // The `const` in a `const` assertion resolves to nothing; resolveName knows not to
             // report an error for it, so no special-casing is needed here.
             let symbol = self.resolve_type_reference_name(node, SymbolFlags::Type, false /*ignoreErrors*/);
-            links.resolved_symbol.set(Some(symbol));
+            self.symbol_node_links.at(links).resolved_symbol.set(Some(symbol));
         }
-        links.resolved_symbol.get().unwrap()
+        self.symbol_node_links.at(links).resolved_symbol.get().unwrap()
     }
 
     // checker.go:23548

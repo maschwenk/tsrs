@@ -1152,11 +1152,11 @@ impl Checker {
     pub(crate) fn late_bind_member(&mut self, parent: P<Symbol>, early_symbols: Option<P<SymbolTable>>, late_symbols: P<SymbolTable>, decl: P<Node>) -> Option<P<Symbol>> {
         assert!(decl.symbol().is_some(), "The member is expected to have a symbol.");
         let decl_symbol = decl.symbol().unwrap();
-        let links = self.symbol_node_links.get(decl);
-        if links.resolved_symbol.get().is_none() {
+        let links = self.symbol_node_links.get_key(decl);
+        if self.symbol_node_links.at(links).resolved_symbol.get().is_none() {
             // In the event we attempt to resolve the late-bound name of this member recursively,
             // fall back to the early-bound name of this member.
-            links.resolved_symbol.set(Some(decl_symbol));
+            self.symbol_node_links.at(links).resolved_symbol.set(Some(decl_symbol));
             let decl_name = if ast::is_binary_expression(decl) { decl.as_binary_expression().left() } else { decl.name().unwrap() };
             let t = if ast::is_element_access_expression(decl_name) {
                 self.check_expression_cached(decl_name.as_element_access_expression().argument_expression())
@@ -1205,10 +1205,10 @@ impl Checker {
                 if late_symbol.parent().is_none() {
                     late_symbol.set_parent(Some(parent));
                 }
-                links.resolved_symbol.set(Some(late_symbol));
+                self.symbol_node_links.at(links).resolved_symbol.set(Some(late_symbol));
             }
         }
-        links.resolved_symbol.get()
+        self.symbol_node_links.at(links).resolved_symbol.get()
     }
 
     // checker.go:16391
@@ -1613,23 +1613,23 @@ impl Checker {
 
     // checker.go:16724
     pub(crate) fn get_type_of_symbol_with_deferred_type(&mut self, symbol: P<Symbol>) -> P<Type> {
-        let links = self.value_symbol_links.get(symbol);
-        if links.resolved_type.get().is_none() {
+        let links = self.value_symbol_links.get_key(symbol);
+        if self.value_symbol_links.at(links).resolved_type.get().is_none() {
             let deferred = self.deferred_symbol_links.get_key(symbol);
             let t = if self.deferred_symbol_links.at(deferred).parent.get().unwrap().flags().intersects(TypeFlags::Union) {
                 self.get_union_type(self.deferred_symbol_links.at(deferred).constituents.get())
             } else {
                 self.get_intersection_type(self.deferred_symbol_links.at(deferred).constituents.get())
             };
-            links.resolved_type.set(Some(t));
+            self.value_symbol_links.at(links).resolved_type.set(Some(t));
         }
-        links.resolved_type.get().unwrap()
+        self.value_symbol_links.at(links).resolved_type.get().unwrap()
     }
 
     // checker.go:16737
     pub(crate) fn get_write_type_of_symbol_with_deferred_type(&mut self, symbol: P<Symbol>) -> P<Type> {
-        let links = self.value_symbol_links.get(symbol);
-        if links.write_type().is_none() {
+        let links = self.value_symbol_links.get_key(symbol);
+        if self.value_symbol_links.at(links).write_type().is_none() {
             let deferred = self.deferred_symbol_links.get_key(symbol);
             let t = if !self.deferred_symbol_links.at(deferred).write_constituents.get().is_empty() {
                 if self.deferred_symbol_links.at(deferred).parent.get().unwrap().flags().intersects(TypeFlags::Union) {
@@ -1640,9 +1640,9 @@ impl Checker {
             } else {
                 self.get_type_of_symbol_with_deferred_type(symbol)
             };
-            links.set_write_type(Some(t));
+            self.value_symbol_links.at(links).set_write_type(Some(t));
         }
-        links.write_type().unwrap()
+        self.value_symbol_links.at(links).write_type().unwrap()
     }
 
     // Distinct write types come only from set accessors, but synthetic union and intersection
@@ -1655,8 +1655,8 @@ impl Checker {
             if check_flags.intersects(CheckFlags::DeferredType) {
                 return Some(self.get_write_type_of_symbol_with_deferred_type(symbol));
             }
-            let links = self.value_symbol_links.get(symbol);
-            return links.write_type().or(links.resolved_type.get());
+            let links = self.value_symbol_links.get_key(symbol);
+            return self.value_symbol_links.at(links).write_type().or(self.value_symbol_links.at(links).resolved_type.get());
         }
         if symbol.flags().intersects(SymbolFlags::Property) {
             let t = self.get_type_of_symbol(symbol);
@@ -1775,47 +1775,47 @@ impl Checker {
     // checker.go:16851
     #[inline(never)]
     pub(crate) fn get_type_of_instantiated_symbol(&mut self, symbol: P<Symbol>) -> P<Type> {
-        let links = self.value_symbol_links.get(symbol);
-        if links.resolved_type.get().is_none() {
+        let links = self.value_symbol_links.get_key(symbol);
+        if self.value_symbol_links.at(links).resolved_type.get().is_none() {
             #[cfg(feature = "site-counts")]
             if let Some(loc) = self.inst_symbol_sites.remove(&symbol) {
                 tsrs_core::sitecount::hit_at("inst-symbol-type-resolved", "", loc);
             }
-            let target_type = self.get_type_of_symbol(links.target().unwrap());
-            let t = self.instantiate_type(target_type, links.mapper());
-            links.resolved_type.set(Some(t));
+            let target_type = self.get_type_of_symbol(self.value_symbol_links.at(links).target().unwrap());
+            let t = self.instantiate_type(target_type, self.value_symbol_links.at(links).mapper());
+            self.value_symbol_links.at(links).resolved_type.set(Some(t));
         }
-        links.resolved_type.get().unwrap()
+        self.value_symbol_links.at(links).resolved_type.get().unwrap()
     }
 
     // checker.go:16859
     pub(crate) fn get_write_type_of_instantiated_symbol(&mut self, symbol: P<Symbol>) -> P<Type> {
-        let links = self.value_symbol_links.get(symbol);
-        if links.write_type().is_none() {
-            let target_type = self.get_write_type_of_symbol(links.target().unwrap()).unwrap();
-            let t = self.instantiate_type(target_type, links.mapper());
-            links.set_write_type(Some(t));
+        let links = self.value_symbol_links.get_key(symbol);
+        if self.value_symbol_links.at(links).write_type().is_none() {
+            let target_type = self.get_write_type_of_symbol(self.value_symbol_links.at(links).target().unwrap()).unwrap();
+            let t = self.instantiate_type(target_type, self.value_symbol_links.at(links).mapper());
+            self.value_symbol_links.at(links).set_write_type(Some(t));
         }
-        links.write_type().unwrap()
+        self.value_symbol_links.at(links).write_type().unwrap()
     }
 
     // checker.go:16867
     #[inline(never)]
     pub(crate) fn get_type_of_variable_or_parameter_or_property(&mut self, symbol: P<Symbol>) -> P<Type> {
-        let links = self.value_symbol_links.get(symbol);
-        if links.resolved_type.get().is_none() {
+        let links = self.value_symbol_links.get_key(symbol);
+        if self.value_symbol_links.at(links).resolved_type.get().is_none() {
             let t = self.get_type_of_variable_or_parameter_or_property_worker(symbol);
             // For a contextually typed parameter it is possible that a type has already
             // been assigned (in assignTypeToParameterAndFixTypeParameters), and we want
             // to preserve this type. In fact, we need to _prefer_ that type, but it won't
             // be assigned until contextual typing is complete, so we need to defer in
             // cases where contextual typing may take place.
-            if links.resolved_type.get().is_none() && !self.is_parameter_of_context_sensitive_signature(symbol) {
-                links.resolved_type.set(Some(t));
+            if self.value_symbol_links.at(links).resolved_type.get().is_none() && !self.is_parameter_of_context_sensitive_signature(symbol) {
+                self.value_symbol_links.at(links).resolved_type.set(Some(t));
             }
             return t;
         }
-        links.resolved_type.get().unwrap()
+        self.value_symbol_links.at(links).resolved_type.get().unwrap()
     }
 
     // checker.go:16887
@@ -2201,12 +2201,12 @@ impl Checker {
 
     // checker.go:17228
     pub(crate) fn get_type_of_func_class_enum_module(&mut self, symbol: P<Symbol>) -> P<Type> {
-        let links = self.value_symbol_links.get(symbol);
-        if links.resolved_type.get().is_none() {
+        let links = self.value_symbol_links.get_key(symbol);
+        if self.value_symbol_links.at(links).resolved_type.get().is_none() {
             let t = self.get_type_of_func_class_enum_module_worker(symbol);
-            links.resolved_type.set(Some(t));
+            self.value_symbol_links.at(links).resolved_type.set(Some(t));
         }
-        links.resolved_type.get().unwrap()
+        self.value_symbol_links.at(links).resolved_type.get().unwrap()
     }
 
     // checker.go:17236

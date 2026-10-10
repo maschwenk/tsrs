@@ -770,8 +770,8 @@ impl Checker {
     // checker.go:31152
     pub(crate) fn is_circular_mapped_property(&mut self, symbol: P<Symbol>) -> bool {
         if symbol.check_flags.get().intersects(CheckFlags::Mapped) {
-            let links = self.value_symbol_links.get(symbol);
-            return links.resolved_type.get().is_none() && self.find_resolution_cycle_start_index(TypeSystemEntity::Symbol(symbol), TypeSystemPropertyName::Type) >= 0;
+            let links = self.value_symbol_links.get_key(symbol);
+            return self.value_symbol_links.at(links).resolved_type.get().is_none() && self.find_resolution_cycle_start_index(TypeSystemEntity::Symbol(symbol), TypeSystemPropertyName::Type) >= 0;
         }
         false
     }
@@ -2151,25 +2151,25 @@ impl Checker {
             } else if ast::is_private_identifier(name) {
                 return self.get_symbol_for_private_identifier_expression(name);
             } else if ast::is_property_access_expression(name) || ast::is_qualified_name(name) {
-                let links = self.symbol_node_links.get(name);
-                if links.resolved_symbol.get().is_some() {
-                    return links.resolved_symbol.get();
+                let links = self.symbol_node_links.get_key(name);
+                if self.symbol_node_links.at(links).resolved_symbol.get().is_some() {
+                    return self.symbol_node_links.at(links).resolved_symbol.get();
                 }
                 if ast::is_property_access_expression(name) {
                     self.check_property_access_expression(name, CheckMode::Normal, false /*writeOnly*/);
-                    if links.resolved_symbol.get().is_none() && !ast::is_private_identifier(name.name().unwrap()) {
+                    if self.symbol_node_links.at(links).resolved_symbol.get().is_none() && !ast::is_private_identifier(name.name().unwrap()) {
                         let expression_type = self.check_expression_cached(name.expression().unwrap());
                         let key_type = self.get_literal_type_from_property_name(name.name().unwrap());
                         let symbol = self.get_applicable_index_symbol(expression_type, key_type);
-                        links.resolved_symbol.set(symbol);
+                        self.symbol_node_links.at(links).resolved_symbol.set(symbol);
                     }
                 } else {
                     self.check_qualified_name(name, CheckMode::Normal);
                 }
-                if links.resolved_symbol.get().is_none() && is_jsdoc && ast::is_qualified_name(name) {
+                if self.symbol_node_links.at(links).resolved_symbol.get().is_none() && is_jsdoc && ast::is_qualified_name(name) {
                     return self.resolve_jsdoc_member_name(Some(name));
                 }
-                return links.resolved_symbol.get();
+                return self.symbol_node_links.at(links).resolved_symbol.get();
             }
         } else if ast::is_entity_name(name) && is_type_reference_identifier(name) {
             let meaning = if name.parent().unwrap().kind() == Kind::TypeReference { SymbolFlags::Type } else { SymbolFlags::Namespace };
@@ -2387,8 +2387,8 @@ impl Checker {
                         symbol.set_value_declaration(Some(declarations[0]));
                         symbol.set_declarations(&declarations);
                         symbol.set_parent(t.symbol());
-                        let links = self.value_symbol_links.get(symbol);
-                        links.resolved_type.set(info.value_type.get());
+                        let links = self.value_symbol_links.get_key(symbol);
+                        self.value_symbol_links.at(links).resolved_type.set(info.value_type.get());
                         info.index_symbol.set(Some(symbol));
                     }
                 }

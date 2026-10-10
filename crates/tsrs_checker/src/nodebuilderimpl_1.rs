@@ -34,8 +34,8 @@ pub(crate) fn new_node_builder_impl(ch: &mut Checker, e: P<EmitContext>, id_to_s
         f: e.factory.as_node_factory().clone(),
         e,
         pc: new_pseudo_checker(ch.strict_null_checks, ch.exact_optional_property_types),
-        links: tsrs_core::LinkStore::new_scratch(scratch),
-        symbol_links: tsrs_core::LinkStore::new_scratch(scratch),
+        links: tsrs_core::LinkStore::default(),
+        symbol_links: tsrs_core::LinkStore::default(),
         ctx: Cell::new(None),
         clone_binding_name_visitor: std::cell::OnceCell::new(),
         id_to_symbol,
@@ -1324,11 +1324,11 @@ impl NodeBuilderImpl {
             resolution_mode = c.program.get_default_resolution_mode_for_file(context_file);
         }
         let cache_key = tsrs_module::ModeAwareCacheKey { name: context_file.get().path().as_str(), mode: resolution_mode };
-        let links = self.symbol_links.get(symbol);
-        if links.specifier_cache.is_nil() {
-            links.specifier_cache.make();
+        let links = self.symbol_links.get_key(symbol);
+        if self.symbol_links.at(links).specifier_cache.is_nil() {
+            self.symbol_links.at(links).specifier_cache.make();
         }
-        if let Some(result) = links.specifier_cache.get(&cache_key) {
+        if let Some(result) = self.symbol_links.at(links).specifier_cache.get(&cache_key) {
             return self.module_specifier_result_for_symbol(c, result, original_import_attributes_type, symbol);
         }
         // For declaration bundles, we need to generate absolute paths relative to the common source dir for imports,
@@ -1357,7 +1357,7 @@ impl NodeBuilderImpl {
         if let Some(ambient_module_symbol) = module_specifiers_result.ambient_module_symbol {
             result.import_attributes_type = Some(c.get_type_of_module_import_attributes(ambient_module_symbol));
         }
-        links.specifier_cache.set(cache_key, result);
+        self.symbol_links.at(links).specifier_cache.set(cache_key, result);
         self.module_specifier_result_for_symbol(c, result, original_import_attributes_type, symbol)
     }
 

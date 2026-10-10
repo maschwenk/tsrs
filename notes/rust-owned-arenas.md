@@ -1,17 +1,18 @@
-# Rust-owned arena pilot (2026-10-10)
+# Rust-owned arena migration (2026-10-10)
 
 ## Status and boundary
 
-This is a measured first stage, **not the completed memory-model migration**. The worktree is based on
+This is an active migration, **not the completed memory-model migration**. The worktree is based on
 `codex/oxc-allocator-migration` at `3dac06d8`; the pre-migration comparison is `18175c0e`.
 
-The safe storage implementation and 24 checker link tables are migrated. The complete parse/bind/check pipeline
-runs through those tables, including recursive signature/type resolution and language-service cache restoration.
-The AST, binder symbols, types, signatures, specialized id link stores, parse caches, program owners, snapshots,
-emit scratch regions and API handles still use the legacy graph. No compatibility API or lifetime boundary has
-been deleted prematurely.
+The initial stage migrated the safe storage implementation and 24 checker link tables. The continuation in
+`rust-owned-links.md` also migrates the two specialized checker stores, core node-builder/emit link storage,
+checker map storage and value-symbol rare tails. The complete parse/bind/check pipeline runs through those
+tables, including recursive signature/type resolution and language-service cache restoration.
+The AST, binder symbols, types, signatures, parse caches, program owners, snapshots, emit scratch regions and
+API handles still use the legacy graph. No compatibility API or lifetime boundary has been deleted prematurely.
 
-The pilot meets the incremental regression limits against Oxc on the two measured projects. It does **not** meet
+The initial pilot meets the incremental regression limits against Oxc on the two measured projects. It does **not** meet
 the plan's overall memory requirement against the pre-Oxc implementation. Oxc already raises default-mode peak
 RSS by 75–85% there, and migrating these link tables does not recover that loss. Do not present this branch as a
 completed, performance-preserving migration or merge it on these results. This is not evidence that a fully
@@ -112,7 +113,7 @@ tables; it does not establish a result for AST/type payload lookup, file ownersh
 1. Resolve the inherited pre-Oxc memory regression before a broader rollout or landing. Measure on the larger
    pinned projects and Linux; choose a migration path that does not take the native-pointer compatibility
    backend's memory increase as an acceptable new baseline.
-2. Migrate the specialized id/inline stores, then generate safe per-kind AST/type payload tables. Convert the
+2. Generate safe per-kind AST/type payload tables. Convert the
    parser/binder/checker accessors and source-text/slice ownership; changing allocation alone is insufficient.
 3. Wire concrete file versions, lazy shared data, program snapshots, checker pools, LSP/API handles and
    incremental reuse to strong owners. The core snapshot tests demonstrate the storage contract, not completion

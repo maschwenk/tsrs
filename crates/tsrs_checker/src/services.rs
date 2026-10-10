@@ -401,17 +401,17 @@ impl Checker {
         let mut ancestor_node = ast::find_ancestor(node, ast::is_call_like_or_function_like_expression);
         if ancestor_node.is_some() {
             let mut cached_resolved_signatures = Vec::new();
-            let mut cached_types: Vec<(P<ValueSymbolLinks>, Option<P<Type>>)> = Vec::new();
+            let mut cached_types: Vec<(tsrs_core::arena_owner::ArenaKey<ValueSymbolLinks>, Option<P<Type>>)> = Vec::new();
             while let Some(an) = ancestor_node {
                 let signature_links = self.signature_links.get_key(an);
                 cached_resolved_signatures.push((signature_links, self.signature_links.at(signature_links).resolved_signature.get()));
                 self.signature_links.at(signature_links).resolved_signature.set(None);
                 if ast::is_function_expression_or_arrow_function(an) {
                     let symbol = self.get_symbol_of_declaration(an).unwrap();
-                    let symbol_links = self.value_symbol_links.get(symbol);
-                    let resolved_type = symbol_links.resolved_type.get();
+                    let symbol_links = self.value_symbol_links.get_key(symbol);
+                    let resolved_type = self.value_symbol_links.at(symbol_links).resolved_type.get();
                     cached_types.push((symbol_links, resolved_type));
-                    symbol_links.resolved_type.set(None);
+                    self.value_symbol_links.at(symbol_links).resolved_type.set(None);
                 }
                 ancestor_node = ast::find_ancestor(an.parent(), ast::is_call_like_or_function_like_expression);
             }
@@ -420,7 +420,7 @@ impl Checker {
                 self.signature_links.at(signature_links).resolved_signature.set(resolved_signature);
             }
             for (symbol_links, resolved_type) in cached_types {
-                symbol_links.resolved_type.set(resolved_type);
+                self.value_symbol_links.at(symbol_links).resolved_type.set(resolved_type);
             }
             return result;
         }

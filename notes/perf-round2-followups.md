@@ -107,6 +107,12 @@ pointer compression costs about +4.9% instructions and took back most of the che
 
 ## Measured and rejected (do not redo)
 
+- Treating the current owned-link continuation as performance-preserving (`notes/rust-owned-links.md`):
+  it removes legacy record storage, map ownership recovery and erased rare tails, but the cumulative local
+  Compiler comparison adds 1.12% single-threaded instructions; default peak RSS adds 1.5–1.65% and over 2 MiB
+  on both pinned workloads. Keep the full ownership migration active, but do not land this intermediate layout
+  as a performance change or call the memory gate passed. Revisit measurements after typed graph edges and
+  production owners replace the remaining pointer compatibility layer and recover the interim layout costs.
 - Treating the native-pointer Oxc compatibility backend as memory-neutral (`notes/rust-owned-arenas.md`):
   `3dac06d8` versus pre-migration `18175c0e` raises default peak RSS by 75–85% on the two pinned Compiler
   workloads on macOS. The safe indexed link-table pilot stays within the incremental regression limits, but

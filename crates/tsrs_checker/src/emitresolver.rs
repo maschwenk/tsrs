@@ -80,15 +80,15 @@ impl EmitResolver {
             return false;
         }
 
-        let links = self.declaration_links.get(node);
-        if links.is_visible.get() == Tristate::Unknown {
+        let links = self.declaration_links.get_key(node);
+        if self.declaration_links.at(links).is_visible.get() == Tristate::Unknown {
             if self.determine_if_declaration_is_visible(c, node) {
-                links.is_visible.set(Tristate::True);
+                self.declaration_links.at(links).is_visible.set(Tristate::True);
             } else {
-                links.is_visible.set(Tristate::False);
+                self.declaration_links.at(links).is_visible.set(Tristate::False);
             }
         }
-        links.is_visible.get() == Tristate::True
+        self.declaration_links.at(links).is_visible.get() == Tristate::True
     }
 
     // emitresolver.go:131

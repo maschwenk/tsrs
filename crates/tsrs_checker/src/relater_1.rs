@@ -1582,7 +1582,7 @@ impl Checker {
             // An empty map stands for Go's nil map (mapTypesByKeyProperty never returns an empty non-nil map).
             if constituent_map.is_empty() {
                 if let Some(m) = u.constituent_map() {
-                    m.set_ref(None);
+                    m.reset();
                 }
             } else {
                 u.constituent_map_for_write().assign(constituent_map);

@@ -1761,19 +1761,19 @@ impl Checker {
 
     // Can change from false to true once the type of the symbol is resolved.
     pub(crate) fn is_symbol_unaffected_by_instantiation(&mut self, symbol: P<Symbol>, m: Option<P<TypeMapper>>) -> bool {
-        let links = self.value_symbol_links.get(symbol);
+        let links = self.value_symbol_links.get_key(symbol);
         if m.is_some_and(|m| m.maps_this_only()) && is_thisless(symbol) {
             return true;
         }
         // If the type of the symbol is already resolved, and if that type could not possibly
         // be affected by instantiation, simply return the symbol itself.
-        if let Some(resolved_type) = links.resolved_type.get() {
+        if let Some(resolved_type) = self.value_symbol_links.at(links).resolved_type.get() {
             if !self.could_contain_type_variables(resolved_type) {
                 if !symbol.flags().intersects(SymbolFlags::SetAccessor) {
                     return true;
                 }
                 // If we're a setter, check writeType.
-                if let Some(write_type) = links.write_type() {
+                if let Some(write_type) = self.value_symbol_links.at(links).write_type() {
                     if !self.could_contain_type_variables(write_type) {
                         return true;
                     }
@@ -1787,13 +1787,13 @@ impl Checker {
     pub(crate) fn new_instantiated_symbol(&mut self, symbol: P<Symbol>, m: Option<P<TypeMapper>>) -> P<Symbol> {
         let mut symbol = symbol;
         let mut m = m;
-        let links = self.value_symbol_links.get(symbol);
+        let links = self.value_symbol_links.get_key(symbol);
         if symbol.check_flags().intersects(CheckFlags::Instantiated) {
             // If symbol being instantiated is itself a instantiation, fetch the original target and combine the
             // type mappers. This ensures that original type identities are properly preserved and that aliases
             // always reference a non-aliases.
-            symbol = links.target().unwrap();
-            m = Some(self.combine_type_mappers(links.mapper(), m.unwrap()));
+            symbol = self.value_symbol_links.at(links).target().unwrap();
+            m = Some(self.combine_type_mappers(self.value_symbol_links.at(links).mapper(), m.unwrap()));
         }
         // Keep the flags from the symbol we're instantiating.  Mark that is instantiated, and
         // also transient so that we can just store data on it directly.
@@ -1810,10 +1810,11 @@ impl Checker {
             self.inst_symbol_sites.insert(result, std::panic::Location::caller());
             tsrs_core::sitecount::hit("inst-symbol-created", "");
         }
-        let result_links = self.value_symbol_links.get(result);
-        result_links.set_target(Some(symbol));
-        result_links.set_mapper(m);
-        result_links.set_name_type(links.name_type());
+        let result_links = self.value_symbol_links.get_key(result);
+        self.value_symbol_links.at(result_links).set_target(Some(symbol));
+        self.value_symbol_links.at(result_links).set_mapper(m);
+        let link_value = self.value_symbol_links.at(links).name_type();
+        self.value_symbol_links.at(result_links).set_name_type(link_value);
         result
     }
 }
@@ -2058,9 +2059,9 @@ impl Checker {
                 | if is_readonly { CheckFlags::Readonly } else { CheckFlags::None }
                 | if strip_optional { CheckFlags::StripOptional } else { CheckFlags::None },
         );
-        let value_links = self.value_symbol_links.get(prop);
-        value_links.set_containing_type(Some(t));
-        value_links.set_name_type(Some(prop_name_type));
+        let value_links = self.value_symbol_links.get_key(prop);
+        self.value_symbol_links.at(value_links).set_containing_type(Some(t));
+        self.value_symbol_links.at(value_links).set_name_type(Some(prop_name_type));
         let mapped_links = self.mapped_symbol_links.get_key(prop);
         self.mapped_symbol_links.at(mapped_links).key_type.set(Some(key_type));
         if let Some(modifiers_prop) = modifiers_prop {
@@ -2234,9 +2235,9 @@ fn mapped_type_add_member_for_key_type_worker(c: &mut Checker, st: &mut MappedTy
         // are distinct types with the same property name. Make the resulting
         // property symbol's name type be the union of those enum member types.
         if let Some(existing_prop) = st.members.lookup(&prop_name) {
-            let value_links = c.value_symbol_links.get(existing_prop);
-            let name_type = c.get_union_type(&[value_links.name_type().unwrap(), prop_name_type]);
-            value_links.set_name_type(Some(name_type));
+            let value_links = c.value_symbol_links.get_key(existing_prop);
+            let name_type = c.get_union_type(&[c.value_symbol_links.at(value_links).name_type().unwrap(), prop_name_type]);
+            c.value_symbol_links.at(value_links).set_name_type(Some(name_type));
             let mapped_links = c.mapped_symbol_links.get_key(existing_prop);
             let key_type_union = c.get_union_type(&[c.mapped_symbol_links.at(mapped_links).key_type.get().unwrap(), key_type]);
             c.mapped_symbol_links.at(mapped_links).key_type.set(Some(key_type_union));
@@ -2276,12 +2277,13 @@ impl Checker {
     // checker.go:21325
     #[inline(never)] // out of get_type_of_symbol, which then needs no frame for its common cases
     pub(crate) fn get_type_of_mapped_symbol(&mut self, symbol: P<Symbol>) -> P<Type> {
-        let links = self.value_symbol_links.get(symbol);
-        if links.resolved_type.get().is_none() && self.census_on() {
-            let span = self.census_begin(crate::workcensus::Cat::MappedProp, || { let mt = links.containing_type().unwrap(); crate::workcensus::CKey::OptNode(mt.as_mapped_type().target.get().unwrap_or(mt).as_mapped_type().declaration.get()) });
+        let links = self.value_symbol_links.get_key(symbol);
+        if self.value_symbol_links.at(links).resolved_type.get().is_none() && self.census_on() {
+            let mt = self.value_symbol_links.at(links).containing_type().unwrap();
+            let span = self.census_begin(crate::workcensus::Cat::MappedProp, || crate::workcensus::CKey::OptNode(mt.as_mapped_type().target.get().unwrap_or(mt).as_mapped_type().declaration.get()));
             let r = self.get_type_of_mapped_symbol_worker(symbol);
             let timing = self.census_end(span).unwrap();
-            let mapped_type = links.containing_type().unwrap();
+            let mapped_type = self.value_symbol_links.at(links).containing_type().unwrap();
             let decl = mapped_type.as_mapped_type().target.get().unwrap_or(mapped_type).as_mapped_type().declaration.get();
             self.census.as_mut().unwrap().record(crate::workcensus::Cat::MappedProp, crate::workcensus::CKey::OptNode(decl), timing, 0, 0, 0);
             return r;
@@ -2290,9 +2292,9 @@ impl Checker {
     }
 
     fn get_type_of_mapped_symbol_worker(&mut self, symbol: P<Symbol>) -> P<Type> {
-        let links = self.value_symbol_links.get(symbol);
-        if links.resolved_type.get().is_none() {
-            let mapped_type = links.containing_type().unwrap();
+        let links = self.value_symbol_links.get_key(symbol);
+        if self.value_symbol_links.at(links).resolved_type.get().is_none() {
+            let mapped_type = self.value_symbol_links.at(links).containing_type().unwrap();
             if !self.push_type_resolution(symbol.into(), TypeSystemPropertyName::Type) {
                 mapped_type.as_mapped_type().contains_error.set(true);
                 return self.error_type;
@@ -2316,19 +2318,20 @@ impl Checker {
                 prop_type = self.remove_missing_or_undefined_type(prop_type);
             }
             if self.pop_type_resolution() {
-                if links.resolved_type.get().is_none() {
-                    links.resolved_type.set(Some(prop_type));
+                if self.value_symbol_links.at(links).resolved_type.get().is_none() {
+                    self.value_symbol_links.at(links).resolved_type.set(Some(prop_type));
                 }
             } else {
-                if links.resolved_type.get().is_none() {
-                    links.resolved_type.set(Some(self.error_type));
+                if self.value_symbol_links.at(links).resolved_type.get().is_none() {
+                    let link_value = Some(self.error_type);
+                    self.value_symbol_links.at(links).resolved_type.set(link_value);
                 }
                 let symbol_name = self.symbol_to_string(symbol);
                 let mapped_type_name = self.type_to_string_exported(mapped_type);
                 self.error(self.current_node, &diagnostics::Type_of_property_0_circularly_references_itself_in_mapped_type_1, &[&symbol_name, &mapped_type_name]);
             }
         }
-        links.resolved_type.get().unwrap()
+        self.value_symbol_links.at(links).resolved_type.get().unwrap()
     }
 
     // Return the lower bound of the key type in a mapped type. Intuitively, the lower
@@ -2619,21 +2622,24 @@ impl Checker {
                     CheckFlags::None
                 },
             );
-            let links = self.value_symbol_links.get(param_symbol);
+            let links = self.value_symbol_links.get_key(param_symbol);
             if is_rest_param {
-                links.resolved_type.set(Some(self.create_array_type(combined_param_type)));
+                let link_value = Some(self.create_array_type(combined_param_type));
+                self.value_symbol_links.at(links).resolved_type.set(link_value);
             } else {
-                links.resolved_type.set(Some(combined_param_type));
+                self.value_symbol_links.at(links).resolved_type.set(Some(combined_param_type));
             }
             params.push(param_symbol);
         }
         if needs_extra_rest_element {
             let rest_param_symbol = self.new_symbol_ex(SymbolFlags::FunctionScopedVariable, "args", CheckFlags::RestParameter);
-            let links = self.value_symbol_links.get(rest_param_symbol);
+            let links = self.value_symbol_links.get_key(rest_param_symbol);
             let type_at_position = self.get_type_at_position(shorter, longest_count);
-            links.resolved_type.set(Some(self.create_array_type(type_at_position)));
+            let link_value = Some(self.create_array_type(type_at_position));
+            self.value_symbol_links.at(links).resolved_type.set(link_value);
             if shorter == right {
-                links.resolved_type.set(Some(self.instantiate_type(links.resolved_type.get().unwrap(), mapper)));
+                let link_value = Some(self.instantiate_type(self.value_symbol_links.at(links).resolved_type.get().unwrap(), mapper));
+                self.value_symbol_links.at(links).resolved_type.set(link_value);
             }
             params.push(rest_param_symbol);
         }

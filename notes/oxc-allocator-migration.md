@@ -24,8 +24,9 @@ safe typed indexed storage. This API uses Rust-owned vectors rather than Oxc all
 - `OwnedRoot`, `OwnedGraph` and `ArenaGroup` keep roots and all contributing sealed owners together.
 
 The existing region, scratch and `P<T>` APIs remain as a compatibility layer while call sites move toward explicit
-owners. They still select an Oxc owner. The generic and keyed checker link tables have moved to the safe store;
-ASTs, symbols, types, specialized link stores, and program/file lifetime boundaries have not.
+owners. They still select an Oxc owner. Generic, keyed and specialized checker link tables, the core node-builder
+and emit link stores, their map storage and value-symbol rare tails have moved to owned Rust storage
+(`notes/rust-owned-links.md`). ASTs, symbols, types and program/file lifetime boundaries have not.
 
 ## Removed behavior
 
