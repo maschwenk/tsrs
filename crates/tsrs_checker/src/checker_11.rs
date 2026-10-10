@@ -383,7 +383,28 @@ impl Checker {
      * type itself.
      */
     // checker.go:22091
+    /// tsrs: the case that returns `t` itself (no flag below and not mapped: most object types) inline; called about
+    /// 1.8G times on the 38k-file codebase, where the out-of-line body spent most of its instructions on its frame.
+    #[inline]
     pub fn get_apparent_type(&mut self, t: P<Type>) -> P<Type> {
+        const SLOW: TypeFlags = TypeFlags::Instantiable
+            .union(TypeFlags::Intersection)
+            .union(TypeFlags::StringLike)
+            .union(TypeFlags::NumberLike)
+            .union(TypeFlags::BigIntLike)
+            .union(TypeFlags::BooleanLike)
+            .union(TypeFlags::ESSymbolLike)
+            .union(TypeFlags::NonPrimitive)
+            .union(TypeFlags::Index)
+            .union(TypeFlags::Unknown);
+        if !t.flags().intersects(SLOW) && !t.object_flags().intersects(ObjectFlags::Mapped) {
+            return t;
+        }
+        self.get_apparent_type_worker(t)
+    }
+
+    #[inline(never)]
+    fn get_apparent_type_worker(&mut self, t: P<Type>) -> P<Type> {
         let original_type = t;
         let mut t = t;
         if t.flags().intersects(TypeFlags::Instantiable) {

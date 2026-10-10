@@ -1066,6 +1066,11 @@ impl Checker {
         if t.flags().intersects(TypeFlags::TypeParameter) {
             return t.symbol().is_some_and(|symbol| symbol.declarations().iter().any(|&d| ast::has_syntactic_modifier(d, ModifierFlags::Const)));
         } else if t.flags().intersects(TypeFlags::UnionOrIntersection) {
+            // tsrs-only: a union of primitives (`PrimitiveUnion`: no object, intersection or instantiable constituent)
+            // has no constituent any branch here answers true for; `isConstContext` asks this of large literal unions.
+            if t.flags().intersects(TypeFlags::Union) && t.object_flags().intersects(ObjectFlags::PrimitiveUnion) {
+                return false;
+            }
             return t.types().iter().any(|&s| self.is_const_type_variable(Some(s), depth));
         } else if t.flags().intersects(TypeFlags::IndexedAccess) {
             return self.is_const_type_variable(t.as_indexed_access_type().object_type.get(), depth + 1);
