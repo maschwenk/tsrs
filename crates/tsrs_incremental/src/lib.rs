@@ -3,6 +3,7 @@
 
 mod affectedfileshandler;
 mod buildinfo;
+mod buildinfo_decode;
 mod buildinfotosnapshot;
 pub mod emit;
 mod emitfileshandler;

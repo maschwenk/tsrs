@@ -3,6 +3,7 @@
 // ES6 number formatting) and a strict RFC 8259 parser.
 
 use crate::collections::OrderedMap;
+use rustc_hash::FxHashSet;
 use std::fmt::Write;
 
 #[derive(Clone, Debug, PartialEq, Default)]
@@ -236,6 +237,209 @@ pub fn unmarshal(input: &str) -> Result<Value, String> {
     Ok(v)
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ValueKind {
+    Null,
+    Bool,
+    Number,
+    String,
+    Array,
+    Object,
+}
+
+/// Decodes one JSON document through a non-retaining typed reader.
+pub fn decode<T>(input: &str, f: impl FnOnce(&mut Decoder<'_>) -> Result<T, String>) -> Result<T, String> {
+    let mut decoder = Decoder { parser: JsonParser { s: input.as_bytes(), pos: 0 } };
+    decoder.parser.skip_ws();
+    let start = decoder.parser.pos;
+    let value = f(&mut decoder)?;
+    if decoder.parser.pos == start {
+        return decoder.parser.err(if start == decoder.parser.s.len() { "unexpected EOF" } else { "value was not consumed" });
+    }
+    decoder.parser.skip_ws();
+    if decoder.parser.pos != decoder.parser.s.len() {
+        return decoder.parser.err("invalid character after top-level value");
+    }
+    Ok(value)
+}
+
+/// A strict streaming JSON reader. Object readers reject duplicate names; skipped values are still fully validated.
+pub struct Decoder<'a> {
+    parser: JsonParser<'a>,
+}
+
+impl Decoder<'_> {
+    pub fn kind(&mut self) -> Result<ValueKind, String> {
+        self.parser.skip_ws();
+        match self.parser.s.get(self.parser.pos) {
+            Some(b'n') => Ok(ValueKind::Null),
+            Some(b't' | b'f') => Ok(ValueKind::Bool),
+            Some(b'-' | b'0'..=b'9') => Ok(ValueKind::Number),
+            Some(b'"') => Ok(ValueKind::String),
+            Some(b'[') => Ok(ValueKind::Array),
+            Some(b'{') => Ok(ValueKind::Object),
+            Some(_) => self.parser.err("invalid character at start of value"),
+            None => self.parser.err("unexpected EOF"),
+        }
+    }
+
+    /// Consumes `null` and returns true, or leaves any other value for a typed reader.
+    pub fn read_null(&mut self) -> Result<bool, String> {
+        self.parser.skip_ws();
+        if self.parser.s.get(self.parser.pos) != Some(&b'n') {
+            return Ok(false);
+        }
+        self.parser.literal("null", Value::Null)?;
+        Ok(true)
+    }
+
+    pub fn read_bool(&mut self) -> Result<bool, String> {
+        self.parser.skip_ws();
+        match self.parser.s.get(self.parser.pos) {
+            Some(b't') => {
+                self.parser.literal("true", Value::Bool(true))?;
+                Ok(true)
+            }
+            Some(b'f') => {
+                self.parser.literal("false", Value::Bool(false))?;
+                Ok(false)
+            }
+            _ => self.parser.err("expected boolean"),
+        }
+    }
+
+    pub fn read_string(&mut self) -> Result<String, String> {
+        self.parser.skip_ws();
+        if self.parser.s.get(self.parser.pos) != Some(&b'"') {
+            return self.parser.err("expected string");
+        }
+        self.parser.parse_string()
+    }
+
+    pub fn read_i32(&mut self) -> Result<i32, String> {
+        self.parser.skip_ws();
+        let negative = self.parser.s.get(self.parser.pos) == Some(&b'-');
+        if negative {
+            self.parser.pos += 1;
+        }
+        let limit = if negative { 2_147_483_648_u64 } else { 2_147_483_647_u64 };
+        let mut magnitude = 0_u64;
+        let mut digits = 0;
+        match self.parser.s.get(self.parser.pos) {
+            Some(b'0') => {
+                self.parser.pos += 1;
+                digits = 1;
+                if matches!(self.parser.s.get(self.parser.pos), Some(b'0'..=b'9')) {
+                    return self.parser.err("invalid number");
+                }
+            }
+            Some(b'1'..=b'9') => {
+                while let Some(&b @ b'0'..=b'9') = self.parser.s.get(self.parser.pos) {
+                    magnitude = magnitude * 10 + (b - b'0') as u64;
+                    if magnitude > limit {
+                        return self.parser.err("integer out of range");
+                    }
+                    self.parser.pos += 1;
+                    digits += 1;
+                }
+            }
+            _ => return self.parser.err("expected integer"),
+        }
+        if digits == 0 || matches!(self.parser.s.get(self.parser.pos), Some(b'.' | b'e' | b'E')) {
+            return self.parser.err("expected integer");
+        }
+        if negative {
+            Ok((-(magnitude as i64)) as i32)
+        } else {
+            Ok(magnitude as i32)
+        }
+    }
+
+    pub fn read_f64(&mut self) -> Result<f64, String> {
+        self.parser.skip_ws();
+        if !matches!(self.parser.s.get(self.parser.pos), Some(b'-' | b'0'..=b'9')) {
+            return self.parser.err("expected number");
+        }
+        let Value::Number(value) = self.parser.parse_number()? else { unreachable!() };
+        Ok(value)
+    }
+
+    pub fn read_array(&mut self, mut element: impl FnMut(&mut Self) -> Result<(), String>) -> Result<(), String> {
+        self.parser.skip_ws();
+        if self.parser.s.get(self.parser.pos) != Some(&b'[') {
+            return self.parser.err("expected array");
+        }
+        self.parser.pos += 1;
+        self.parser.skip_ws();
+        if self.parser.s.get(self.parser.pos) == Some(&b']') {
+            self.parser.pos += 1;
+            return Ok(());
+        }
+        loop {
+            element(self)?;
+            self.parser.skip_ws();
+            match self.parser.s.get(self.parser.pos) {
+                Some(b',') => self.parser.pos += 1,
+                Some(b']') => {
+                    self.parser.pos += 1;
+                    return Ok(());
+                }
+                _ => return self.parser.err("invalid character in array"),
+            }
+        }
+    }
+
+    pub fn read_object(&mut self, mut member: impl FnMut(&mut Self, &str) -> Result<(), String>) -> Result<(), String> {
+        self.parser.skip_ws();
+        if self.parser.s.get(self.parser.pos) != Some(&b'{') {
+            return self.parser.err("expected object");
+        }
+        self.parser.pos += 1;
+        let mut keys = FxHashSet::default();
+        self.parser.skip_ws();
+        if self.parser.s.get(self.parser.pos) == Some(&b'}') {
+            self.parser.pos += 1;
+            return Ok(());
+        }
+        loop {
+            self.parser.skip_ws();
+            if self.parser.s.get(self.parser.pos) != Some(&b'"') {
+                return self.parser.err("invalid character in object key");
+            }
+            let key = self.parser.parse_string()?;
+            self.parser.skip_ws();
+            if self.parser.s.get(self.parser.pos) != Some(&b':') {
+                return self.parser.err("missing colon after object key");
+            }
+            self.parser.pos += 1;
+            member(self, &key)?;
+            if keys.contains(&key) {
+                return self.parser.err(&format!("duplicate object member name {}", marshal_string(&key)));
+            }
+            keys.insert(key);
+            self.parser.skip_ws();
+            match self.parser.s.get(self.parser.pos) {
+                Some(b',') => self.parser.pos += 1,
+                Some(b'}') => {
+                    self.parser.pos += 1;
+                    return Ok(());
+                }
+                _ => return self.parser.err("invalid character in object"),
+            }
+        }
+    }
+
+    pub fn read_value(&mut self) -> Result<Value, String> {
+        self.parser.skip_ws();
+        self.parser.parse_value()
+    }
+
+    pub fn skip_value(&mut self) -> Result<(), String> {
+        self.parser.skip_ws();
+        self.parser.discard_value()
+    }
+}
+
 struct JsonParser<'a> {
     s: &'a [u8],
     pos: usize,
@@ -318,6 +522,75 @@ impl JsonParser<'_> {
                 }
             }
             Some(b'-' | b'0'..=b'9') => self.parse_number(),
+            Some(_) => self.err("invalid character at start of value"),
+        }
+    }
+
+    fn discard_value(&mut self) -> Result<(), String> {
+        match self.s.get(self.pos) {
+            None => self.err("unexpected EOF"),
+            Some(b'n') => self.literal("null", Value::Null).map(drop),
+            Some(b't') => self.literal("true", Value::Bool(true)).map(drop),
+            Some(b'f') => self.literal("false", Value::Bool(false)).map(drop),
+            Some(b'"') => self.parse_string().map(drop),
+            Some(b'[') => {
+                self.pos += 1;
+                self.skip_ws();
+                if self.s.get(self.pos) == Some(&b']') {
+                    self.pos += 1;
+                    return Ok(());
+                }
+                loop {
+                    self.skip_ws();
+                    self.discard_value()?;
+                    self.skip_ws();
+                    match self.s.get(self.pos) {
+                        Some(b',') => self.pos += 1,
+                        Some(b']') => {
+                            self.pos += 1;
+                            return Ok(());
+                        }
+                        _ => return self.err("invalid character in array"),
+                    }
+                }
+            }
+            Some(b'{') => {
+                self.pos += 1;
+                let mut keys = FxHashSet::default();
+                self.skip_ws();
+                if self.s.get(self.pos) == Some(&b'}') {
+                    self.pos += 1;
+                    return Ok(());
+                }
+                loop {
+                    self.skip_ws();
+                    if self.s.get(self.pos) != Some(&b'"') {
+                        return self.err("invalid character in object key");
+                    }
+                    let key = self.parse_string()?;
+                    self.skip_ws();
+                    if self.s.get(self.pos) != Some(&b':') {
+                        return self.err("missing colon after object key");
+                    }
+                    self.pos += 1;
+                    self.skip_ws();
+                    self.discard_value()?;
+                    if keys.contains(&key) {
+                        return self.err(&format!("duplicate object member name {}", marshal_string(&key)));
+                    }
+                    keys.insert(key);
+                    self.skip_ws();
+                    match self.s.get(self.pos) {
+                        Some(b',') => self.pos += 1,
+                        Some(b'}') => {
+                            self.pos += 1;
+                            return Ok(());
+                        }
+                        _ => return self.err("invalid character in object"),
+                    }
+                }
+            }
+            Some(b'-' | b'0'..=b'9') => self.parse_number().map(drop),
             Some(_) => self.err("invalid character at start of value"),
         }
     }
