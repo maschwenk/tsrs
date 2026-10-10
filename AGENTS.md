@@ -3,12 +3,6 @@
 `CONTRIBUTING.md` and `docs/PORTING.md` have the porting rules and the test workflow; `docs/RUST.md` has the Rust
 practices. This file adds the rules below.
 
-## Private code
-
-When you run tsrs on private code (to test performance, hill-climb or reproduce a bug), say only that it was run on a
-large private monorepo. Never divulge anything else about that repo: not its name, paths, package or file names, size,
-types or code. This holds in code, comments, notes, commit messages and pull requests.
-
 ## Lint
 
 Run `tools/lint/ratchet.py` and `tools/lint/source.py` before a change lands (`docs/RUST.md`).
@@ -46,3 +40,9 @@ has why). A finding below the bar is still worth keeping: land it as a note in `
 Update it in the same pull request when a change ports a subsystem or emit wave, adds a feature, makes a capability
 start or stop being supported, become the default or ship in an npm release, changes a pass count the table cites,
 or closes or finds a known gap. How to update it is in a comment above the table.
+
+## Private code
+
+When you run tsrs on private code (to test performance, hill-climb or reproduce a bug), say only that it was run on a
+large private monorepo. Never divulge anything else about that repo: not its name, paths, package or file names, size,
+types or code. This holds in code, comments, notes, commit messages and pull requests.
