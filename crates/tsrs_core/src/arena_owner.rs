@@ -1,112 +1,258 @@
-//! Explicit owners and scoped references for the `oxc_allocator` migration.
+//! Rust-owned indexed storage for persistent graphs.
 //!
-//! An [`ArenaBuilder`] is exclusive construction state. [`ArenaBuilder::seal`] permanently removes allocation
-//! access, after which the allocation may be shared through [`SealedArena`]. Values do not expose raw references:
-//! stored references are [`ArenaKey`]s, and resolving a key borrows the owner that keeps its allocation alive.
+//! Edges are typed keys, not pointers. Resolving a key borrows its owner; growing a builder needs an exclusive
+//! borrow. Values run their ordinary destructors. Sealed stores inherit `Send` and `Sync` from their values.
+//! One builder is one typed table; a graph owns a table for each record type. Slots are never reused.
+//! `LocalKey<T>` is a four-byte edge inside a table; `ArenaKey<T>` adds the table's identity for cross-owner edges.
+//! Neither key determines the compiler's semantic node/type numbering or iteration order.
+//!
+//! A reference cannot escape its owner:
+//! ```compile_fail
+//! use tsrs_core::arena_owner::ArenaBuilder;
+//! let value = {
+//!     let mut builder = ArenaBuilder::new();
+//!     let key = builder.alloc(42);
+//!     let owner = builder.seal();
+//!     owner.get(key).unwrap()
+//! };
+//! println!("{value}");
+//! ```
+//!
+//! Allocation cannot invalidate a live borrow:
+//! ```compile_fail
+//! use tsrs_core::arena_owner::ArenaBuilder;
+//! let mut builder = ArenaBuilder::new();
+//! let key = builder.alloc(42);
+//! let value = builder.get(key).unwrap();
+//! builder.alloc(43);
+//! println!("{value}");
+//! ```
+//!
+//! Non-`Sync` records cannot be shared between threads:
+//! ```compile_fail
+//! use std::cell::Cell;
+//! use tsrs_core::arena_owner::ArenaBuilder;
+//! let mut builder = ArenaBuilder::new();
+//! let key = builder.alloc(Cell::new(0));
+//! let owner = builder.seal();
+//! std::thread::spawn(move || owner.get(key).unwrap().set(1));
+//! ```
+//!
+//! Keys from different record types cannot be mixed:
+//! ```compile_fail
+//! use tsrs_core::arena_owner::ArenaBuilder;
+//! let mut strings = ArenaBuilder::new();
+//! let key = strings.alloc(String::from("text"));
+//! let numbers = ArenaBuilder::<u32>::new();
+//! numbers.get(key);
+//! ```
 
-use std::{
-    fmt,
-    hash::{Hash, Hasher},
-    marker::PhantomData,
-    num::NonZeroU64,
-    ops::Deref,
-    ptr::NonNull,
-    sync::{
-        Arc,
-        atomic::{AtomicU64, Ordering},
-    },
-};
+#![forbid(unsafe_code)]
 
-use oxc_allocator::Allocator;
+use std::fmt;
+use std::hash::{Hash, Hasher};
+use std::marker::PhantomData;
+use std::num::NonZeroU32;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU32, Ordering};
+
 use rustc_hash::FxHashMap;
 
-static NEXT_ARENA_ID: AtomicU64 = AtomicU64::new(1);
+static NEXT_ARENA_ID: AtomicU32 = AtomicU32::new(1);
 
-/// Process-unique identity of an arena owner. Identities are never reused, so a stale key cannot name a later arena.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct ArenaId(NonZeroU64);
+/// Process-unique table identity. Exhaustion permanently fails instead of reissuing old identities.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct ArenaId(NonZeroU32);
 
 impl ArenaId {
     fn fresh() -> Self {
-        // Relaxed: the counter only issues unique identities; it publishes no arena state.
-        let id = NEXT_ARENA_ID.fetch_add(1, Ordering::Relaxed);
-        let Some(id) = NonZeroU64::new(id) else {
-            panic!("arena owner identity space exhausted");
-        };
-        Self(id)
+        // Relaxed: the counter issues identities only; it does not publish graph data.
+        let id = NEXT_ARENA_ID
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |id| id.checked_add(1))
+            .expect("arena owner identity space exhausted");
+        Self(NonZeroU32::new(id).expect("arena identities start at one"))
     }
 
-    pub fn get(self) -> u64 {
+    pub fn get(self) -> u32 {
         self.0.get()
     }
 }
 
-impl fmt::Debug for ArenaId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("ArenaId").field(&self.get()).finish()
+/// A slot qualified by its owner. Copying a key neither keeps storage alive nor accesses its value.
+pub struct ArenaKey<T> {
+    arena: ArenaId,
+    local: LocalKey<T>,
+}
+
+// Eight bytes on all targets (native-pointer width on 64-bit), including optional edges.
+const _: () = assert!(std::mem::size_of::<ArenaKey<()>>() == 8);
+const _: () = assert!(std::mem::size_of::<Option<ArenaKey<()>>>() == 8);
+
+impl<T> ArenaKey<T> {
+    pub fn arena(self) -> ArenaId {
+        self.arena
+    }
+
+    /// An owner-relative edge. Keep this inside the graph owned by this key's table; use the qualified key
+    /// when an edge crosses an ownership boundary.
+    pub fn local(self) -> LocalKey<T> {
+        self.local
     }
 }
 
-/// Exclusive construction state for one Oxc allocation.
-pub struct ArenaBuilder {
-    id: ArenaId,
-    allocator: Allocator,
+impl<T> Clone for ArenaKey<T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<T> Copy for ArenaKey<T> {}
+impl<T> PartialEq for ArenaKey<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.arena == other.arena && self.local == other.local
+    }
+}
+impl<T> Eq for ArenaKey<T> {}
+impl<T> Hash for ArenaKey<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.arena.hash(state);
+        self.local.hash(state);
+    }
+}
+impl<T> fmt::Debug for ArenaKey<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ArenaKey")
+            .field("arena", &self.arena)
+            .field("slot", &self.local)
+            .finish()
+    }
 }
 
-impl ArenaBuilder {
+/// A compact edge within one typed table. Unlike `ArenaKey`, it carries no owner identity: resolving it against
+/// another table of the same type can select an unrelated record. Export qualified keys outside an owner.
+pub struct LocalKey<T> {
+    slot: NonZeroU32,
+    marker: PhantomData<fn() -> T>,
+}
+
+const _: () = assert!(std::mem::size_of::<LocalKey<()>>() == 4);
+const _: () = assert!(std::mem::size_of::<Option<LocalKey<()>>>() == 4);
+
+impl<T> LocalKey<T> {
+    fn index(self) -> usize {
+        self.slot.get() as usize - 1
+    }
+}
+impl<T> Copy for LocalKey<T> {}
+impl<T> Clone for LocalKey<T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+impl<T> PartialEq for LocalKey<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.slot == other.slot
+    }
+}
+impl<T> Eq for LocalKey<T> {}
+impl<T> Hash for LocalKey<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.slot.hash(state);
+    }
+}
+impl<T> fmt::Debug for LocalKey<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.slot.fmt(f)
+    }
+}
+
+/// Exclusive construction state for a typed graph table. Cycles use keys rather than references into the vector.
+pub struct ArenaBuilder<T> {
+    id: ArenaId,
+    values: Vec<T>,
+}
+
+impl<T> ArenaBuilder<T> {
     pub fn new() -> Self {
         Self {
             id: ArenaId::fresh(),
-            allocator: Allocator::new(),
+            values: Vec::new(),
         }
     }
 
+    /// Capacity is a number of records, not bytes.
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             id: ArenaId::fresh(),
-            allocator: Allocator::with_capacity(capacity),
+            values: Vec::with_capacity(capacity),
         }
     }
 
     pub fn id(&self) -> ArenaId {
         self.id
     }
-
-    /// Allocates a value that needs no destructor. `oxc_allocator` enforces the no-`Drop` rule at compile time.
-    pub fn alloc<T>(&self, value: T) -> ArenaKey<T> {
-        ArenaKey::new(self.id, NonNull::from(self.allocator.alloc(value)))
+    pub fn len(&self) -> usize {
+        self.values.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
     }
 
-    pub fn alloc_slice_copy<T: Copy>(&self, values: &[T]) -> ArenaSlice<T> {
-        let values = self.allocator.alloc_slice_copy(values);
-        ArenaSlice {
+    pub fn alloc(&mut self, value: T) -> ArenaKey<T> {
+        let index = u32::try_from(self.values.len()).expect("arena slot space exhausted");
+        let slot = index
+            .checked_add(1)
+            .and_then(NonZeroU32::new)
+            .expect("arena slot space exhausted");
+        self.values.push(value);
+        ArenaKey {
             arena: self.id,
-            ptr: NonNull::from(&mut *values).cast(),
-            len: values.len(),
-            marker: PhantomData,
+            local: LocalKey {
+                slot,
+                marker: PhantomData,
+            },
         }
     }
 
-    pub fn alloc_str(&self, value: &str) -> ArenaStr {
-        let value = self.allocator.alloc_str(value);
-        ArenaStr {
-            arena: self.id,
-            ptr: NonNull::from(value).cast(),
-            len: value.len(),
-        }
+    pub fn get(&self, key: ArenaKey<T>) -> Option<&T> {
+        (key.arena == self.id)
+            .then(|| self.get_local(key.local))
+            .flatten()
     }
 
-    /// Ends construction. The returned owner exposes no way to allocate or reset its allocator.
-    pub fn seal(self) -> Arc<SealedArena> {
-        Arc::new(SealedArena {
-            id: self.id,
-            allocator: self.allocator,
+    pub fn get_mut(&mut self, key: ArenaKey<T>) -> Option<&mut T> {
+        if key.arena != self.id {
+            return None;
+        }
+        self.values.get_mut(key.local.index())
+    }
+
+    /// Resolve an edge stored inside this table's graph.
+    pub fn get_local(&self, key: LocalKey<T>) -> Option<&T> {
+        self.values.get(key.index())
+    }
+
+    /// Qualify an edge from this table's graph for use outside the owner.
+    pub fn qualify(&self, key: LocalKey<T>) -> Option<ArenaKey<T>> {
+        self.get_local(key).map(|_| ArenaKey {
+            arena: self.id,
+            local: key,
         })
     }
 
-    /// Seals the arena together with a root allocated by this builder.
-    pub fn finish<T>(self, root: ArenaKey<T>) -> OwnedRoot<T> {
-        assert_eq!(root.arena, self.id, "root belongs to another arena");
+    pub fn capacity(&self) -> usize {
+        self.values.capacity()
+    }
+
+    /// Ends construction; no allocation or mutable record access is exposed by the sealed table.
+    pub fn seal(self) -> Arc<SealedArena<T>> {
+        Arc::new(SealedArena {
+            id: self.id,
+            values: self.values.into_boxed_slice(),
+        })
+    }
+
+    pub fn finish(self, root: ArenaKey<T>) -> OwnedRoot<T> {
+        assert!(self.get(root).is_some(), "root belongs to another arena");
         OwnedRoot {
             owner: self.seal(),
             root,
@@ -114,294 +260,67 @@ impl ArenaBuilder {
     }
 }
 
-impl Default for ArenaBuilder {
+impl<T> Default for ArenaBuilder<T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-/// An Oxc allocator after construction has ended.
-///
-/// No method returns `&Allocator`, so allocation and reset cannot race with readers. Its chunks stay at stable
-/// addresses until the last `Arc<SealedArena>` is dropped.
-pub struct SealedArena {
+/// Read-only owned storage. The last owner runs each record's destructor, including resource-owning fields.
+pub struct SealedArena<T> {
     id: ArenaId,
-    allocator: Allocator,
+    values: Box<[T]>,
 }
 
-// SAFETY: `Allocator` mutates cursor cells only while allocating or resetting. `SealedArena` is constructed by
-// consuming `ArenaBuilder`, exposes neither operation, and only performs read-only byte-count queries thereafter.
-unsafe impl Sync for SealedArena {}
-
-impl SealedArena {
+impl<T> SealedArena<T> {
     pub fn id(&self) -> ArenaId {
         self.id
     }
-
-    pub fn used_bytes(&self) -> usize {
-        self.allocator.used_bytes()
+    pub fn len(&self) -> usize {
+        self.values.len()
+    }
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
     }
 
-    pub fn capacity(&self) -> usize {
-        self.allocator.capacity()
+    /// Record storage only; allocations owned by fields of `T` are not included.
+    pub fn storage_bytes(&self) -> usize {
+        std::mem::size_of_val(&*self.values)
     }
 
-    pub fn scope(&self) -> ArenaScope<'_> {
-        ArenaScope { owner: self }
-    }
-}
-
-/// A typed address whose owner must be borrowed before it can be dereferenced.
-#[repr(C)]
-pub struct ArenaKey<T: ?Sized> {
-    arena: ArenaId,
-    ptr: NonNull<T>,
-    marker: PhantomData<fn() -> T>,
-}
-
-impl<T: ?Sized> ArenaKey<T> {
-    fn new(arena: ArenaId, ptr: NonNull<T>) -> Self {
-        Self {
-            arena,
-            ptr,
-            marker: PhantomData,
-        }
+    pub fn get(&self, key: ArenaKey<T>) -> Option<&T> {
+        (key.arena == self.id)
+            .then(|| self.get_local(key.local))
+            .flatten()
     }
 
-    pub fn arena(self) -> ArenaId {
-        self.arena
-    }
-
-    pub fn addr(self) -> usize {
-        self.ptr.as_ptr().cast::<()>() as usize
+    /// Resolve an edge stored inside this table's graph.
+    pub fn get_local(&self, key: LocalKey<T>) -> Option<&T> {
+        self.values.get(key.index())
     }
 }
 
-impl<T: ?Sized> Clone for ArenaKey<T> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<T: ?Sized> Copy for ArenaKey<T> {}
-
-impl<T: ?Sized> PartialEq for ArenaKey<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.arena == other.arena && std::ptr::addr_eq(self.ptr.as_ptr(), other.ptr.as_ptr())
-    }
-}
-
-impl<T: ?Sized> Eq for ArenaKey<T> {}
-
-impl<T: ?Sized> Hash for ArenaKey<T> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.arena.hash(state);
-        self.ptr.as_ptr().cast::<()>().hash(state);
-    }
-}
-
-impl<T: ?Sized> fmt::Debug for ArenaKey<T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ArenaKey")
-            .field("arena", &self.arena)
-            .field("ptr", &self.ptr)
-            .finish()
-    }
-}
-
-// SAFETY: an `ArenaKey` cannot dereference its pointer. Thread access requires an `ArenaScope`, whose owner keeps the
-// allocation live; normal `T: Send + Sync` bounds govern access to the resolved value.
-unsafe impl<T: ?Sized + Send + Sync> Send for ArenaKey<T> {}
-// SAFETY: as for `Send`; sharing the inert identity does not access `T`.
-unsafe impl<T: ?Sized + Send + Sync> Sync for ArenaKey<T> {}
-
-/// A slice stored in an arena. It is inert until resolved through a matching scope.
-#[derive(Clone, Copy)]
-pub struct ArenaSlice<T> {
-    arena: ArenaId,
-    ptr: NonNull<T>,
-    len: usize,
-    marker: PhantomData<fn() -> T>,
-}
-
-impl<T> ArenaSlice<T> {
-    pub fn arena(self) -> ArenaId {
-        self.arena
-    }
-
-    pub fn len(self) -> usize {
-        self.len
-    }
-
-    pub fn is_empty(self) -> bool {
-        self.len == 0
-    }
-}
-
-// SAFETY: `ArenaSlice` has the same inert-key and scoped-resolution contract as `ArenaKey`.
-unsafe impl<T: Send + Sync> Send for ArenaSlice<T> {}
-// SAFETY: as for `Send`.
-unsafe impl<T: Send + Sync> Sync for ArenaSlice<T> {}
-
-/// A UTF-8 string stored in an arena. It is inert until resolved through a matching scope.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct ArenaStr {
-    arena: ArenaId,
-    ptr: NonNull<u8>,
-    len: usize,
-}
-
-// SAFETY: bytes are initialized once and immutable after sealing; access requires a live matching scope.
-unsafe impl Send for ArenaStr {}
-// SAFETY: as for `Send`.
-unsafe impl Sync for ArenaStr {}
-
-/// Borrow of one sealed owner. Resolved references cannot outlive this value's borrow.
-#[derive(Clone, Copy)]
-pub struct ArenaScope<'a> {
-    owner: &'a SealedArena,
-}
-
-impl<'a> ArenaScope<'a> {
-    pub fn id(self) -> ArenaId {
-        self.owner.id
-    }
-
-    #[track_caller]
-    pub fn resolve<T: ?Sized>(self, key: ArenaKey<T>) -> ArenaRef<'a, T> {
-        assert_eq!(
-            key.arena, self.owner.id,
-            "arena key resolved by the wrong owner"
-        );
-        // SAFETY: `ArenaKey` constructors are private and only accept pointers returned by this owner's allocator.
-        // Matching process-unique ids prove this is that owner, whose borrow keeps every chunk alive for `'a`.
-        ArenaRef {
-            arena: key.arena,
-            value: unsafe {
-                // SAFETY: established above.
-                key.ptr.as_ref()
-            },
-        }
-    }
-
-    #[track_caller]
-    pub fn resolve_slice<T>(self, value: &ArenaSlice<T>) -> &'a [T] {
-        assert_eq!(
-            value.arena, self.owner.id,
-            "arena slice resolved by the wrong owner"
-        );
-        // SAFETY: the private constructor records a slice returned by this allocator; the owner is live for `'a`.
-        unsafe { std::slice::from_raw_parts(value.ptr.as_ptr(), value.len) }
-    }
-
-    #[track_caller]
-    pub fn resolve_str(self, value: ArenaStr) -> &'a str {
-        assert_eq!(
-            value.arena, self.owner.id,
-            "arena string resolved by the wrong owner"
-        );
-        // SAFETY: the private constructor records a `str` returned by this allocator, which is live for `'a`.
-        let bytes = unsafe { std::slice::from_raw_parts(value.ptr.as_ptr(), value.len) };
-        std::str::from_utf8(bytes).expect("arena string was allocated from valid UTF-8")
-    }
-}
-
-/// A resolved, owner-bounded arena reference with pointer-identity equality.
-#[derive(Clone, Copy)]
-pub struct ArenaRef<'a, T: ?Sized> {
-    arena: ArenaId,
-    value: &'a T,
-}
-
-impl<T: ?Sized> ArenaRef<'_, T> {
-    pub fn arena(self) -> ArenaId {
-        self.arena
-    }
-
-    pub fn addr(self) -> usize {
-        std::ptr::from_ref(self.value).cast::<()>() as usize
-    }
-}
-
-impl<T: ?Sized> Deref for ArenaRef<'_, T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        self.value
-    }
-}
-
-impl<T: ?Sized> PartialEq for ArenaRef<'_, T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.arena == other.arena && std::ptr::eq(self.value, other.value)
-    }
-}
-
-impl<T: ?Sized> Eq for ArenaRef<'_, T> {}
-
-impl<T: ?Sized> Hash for ArenaRef<'_, T> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.arena.hash(state);
-        std::ptr::from_ref(self.value).cast::<()>().hash(state);
-    }
-}
-
-impl<T: ?Sized + fmt::Debug> fmt::Debug for ArenaRef<'_, T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.value.fmt(f)
-    }
-}
-
-/// A root and the strong owner that keeps it alive.
-pub struct OwnedRoot<T: ?Sized> {
-    owner: Arc<SealedArena>,
+/// A root and the strong owner that keeps every record in its table alive.
+pub struct OwnedRoot<T> {
+    owner: Arc<SealedArena<T>>,
     root: ArenaKey<T>,
 }
 
-/// Heap state paired with an arena root. `state` is declared first so its destructors run while arena references
-/// are still valid; the root's strong owner is released afterwards.
-pub struct OwnedGraph<T: ?Sized, S> {
-    state: S,
-    root: OwnedRoot<T>,
-}
-
-impl<T: ?Sized, S> OwnedGraph<T, S> {
-    pub fn new(root: OwnedRoot<T>, state: S) -> Self {
-        Self { state, root }
-    }
-
-    pub fn state(&self) -> &S {
-        &self.state
-    }
-
-    pub fn state_mut(&mut self) -> &mut S {
-        &mut self.state
-    }
-
-    pub fn root(&self) -> &OwnedRoot<T> {
-        &self.root
-    }
-
-    pub fn with<R>(&self, f: impl for<'a> FnOnce(&S, ArenaRef<'a, T>) -> R) -> R {
-        self.root.with(|root| f(&self.state, root))
-    }
-}
-
-impl<T: ?Sized> OwnedRoot<T> {
-    pub fn owner(&self) -> &Arc<SealedArena> {
+impl<T> OwnedRoot<T> {
+    pub fn owner(&self) -> &Arc<SealedArena<T>> {
         &self.owner
     }
-
     pub fn key(&self) -> ArenaKey<T> {
         self.root
     }
-
-    pub fn with<R>(&self, f: impl for<'a> FnOnce(ArenaRef<'a, T>) -> R) -> R {
-        f(self.owner.scope().resolve(self.root))
+    pub fn get(&self) -> &T {
+        self.owner
+            .get(self.root)
+            .expect("owned root belongs to its arena")
     }
 }
 
-impl<T: ?Sized> Clone for OwnedRoot<T> {
+impl<T> Clone for OwnedRoot<T> {
     fn clone(&self) -> Self {
         Self {
             owner: Arc::clone(&self.owner),
@@ -410,99 +329,219 @@ impl<T: ?Sized> Clone for OwnedRoot<T> {
     }
 }
 
-/// Strong owners used by a program or checker to resolve keys from several arenas.
-#[derive(Default)]
-pub struct ArenaGroup {
-    owners: FxHashMap<ArenaId, Arc<SealedArena>>,
+/// Resource state paired with a root. State is dropped before the graph it may identify.
+pub struct OwnedGraph<T, S> {
+    state: S,
+    root: OwnedRoot<T>,
 }
 
-impl ArenaGroup {
+impl<T, S> OwnedGraph<T, S> {
+    pub fn new(root: OwnedRoot<T>, state: S) -> Self {
+        Self { state, root }
+    }
+    pub fn state(&self) -> &S {
+        &self.state
+    }
+    pub fn state_mut(&mut self) -> &mut S {
+        &mut self.state
+    }
+    pub fn root(&self) -> &OwnedRoot<T> {
+        &self.root
+    }
+}
+
+/// A snapshot's strong references to contributing tables of one record type.
+pub struct ArenaGroup<T> {
+    owners: FxHashMap<ArenaId, Arc<SealedArena<T>>>,
+}
+
+impl<T> ArenaGroup<T> {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            owners: FxHashMap::default(),
+        }
     }
 
-    pub fn insert(&mut self, owner: Arc<SealedArena>) {
+    pub fn insert(&mut self, owner: Arc<SealedArena<T>>) {
         self.owners.entry(owner.id).or_insert(owner);
     }
 
-    pub fn scope(&self) -> ArenaGroupScope<'_> {
-        ArenaGroupScope {
-            owners: &self.owners,
-        }
+    pub fn get(&self, key: ArenaKey<T>) -> Option<&T> {
+        self.owners.get(&key.arena)?.get(key)
     }
 }
 
-#[derive(Clone, Copy)]
-pub struct ArenaGroupScope<'a> {
-    owners: &'a FxHashMap<ArenaId, Arc<SealedArena>>,
-}
-
-impl<'a> ArenaGroupScope<'a> {
-    pub fn resolve<T: ?Sized>(self, key: ArenaKey<T>) -> Option<ArenaRef<'a, T>> {
-        let owner = self.owners.get(&key.arena)?;
-        Some(owner.scope().resolve(key))
+impl<T> Default for ArenaGroup<T> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::AtomicUsize;
+
+    struct Node {
+        text: String,
+        next: Option<ArenaKey<Node>>,
+    }
 
     #[test]
-    fn owner_bounded_values_and_slices() {
-        let builder = ArenaBuilder::new();
-        let text = builder.alloc_str("source");
-        let values = builder.alloc_slice_copy(&[1_u32, 2, 3]);
-        let root = builder.alloc(41_u64);
-        let root = builder.finish(root);
+    fn cycles_survive_growth_and_sealing() {
+        let mut builder = ArenaBuilder::with_capacity(1);
+        let first = builder.alloc(Node {
+            text: "first".into(),
+            next: None,
+        });
+        let second = builder.alloc(Node {
+            text: "second".into(),
+            next: Some(first),
+        });
+        builder.get_mut(first).unwrap().next = Some(second);
+        for _ in 0..1024 {
+            builder.alloc(Node {
+                text: String::new(),
+                next: Some(first),
+            });
+        }
+        let root = builder.finish(first);
+        let next = root.owner().get(root.get().next.unwrap()).unwrap();
+        assert_eq!(next.text, "second");
+        assert_eq!(next.next, Some(first));
+    }
 
-        root.with(|value| {
-            assert_eq!(*value, 41);
-            let scope = root.owner.scope();
-            assert_eq!(scope.resolve_str(text), "source");
-            assert_eq!(scope.resolve_slice(&values), &[1, 2, 3]);
+    #[test]
+    fn local_edges_are_compact_and_resolve_after_sealing() {
+        struct LocalNode {
+            next: Option<LocalKey<LocalNode>>,
+        }
+        let mut builder = ArenaBuilder::new();
+        let first = builder.alloc(LocalNode { next: None });
+        let second = builder.alloc(LocalNode {
+            next: Some(first.local()),
+        });
+        builder.get_mut(first).unwrap().next = Some(second.local());
+        assert_eq!(builder.qualify(second.local()), Some(second));
+        let root = builder.finish(first);
+        let next = root.owner().get_local(root.get().next.unwrap()).unwrap();
+        assert_eq!(next.next, Some(first.local()));
+    }
+
+    #[test]
+    fn foreign_and_expired_keys_cannot_resolve() {
+        let mut first = ArenaBuilder::new();
+        let key = first.alloc(1_u32);
+        let mut second = ArenaBuilder::new();
+        second.alloc(2_u32);
+        assert!(second.get(key).is_none());
+        assert!(second.get_mut(key).is_none());
+        drop(first);
+        assert!(second.seal().get(key).is_none());
+        assert!(ArenaGroup::<u32>::new().get(key).is_none());
+    }
+
+    struct Dropped(Arc<AtomicUsize>);
+    impl Drop for Dropped {
+        fn drop(&mut self) {
+            self.0.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    #[test]
+    fn snapshots_keep_shared_values_until_last_owner() {
+        let drops = Arc::new(AtomicUsize::new(0));
+        let mut builder = ArenaBuilder::new();
+        let key = builder.alloc(Dropped(Arc::clone(&drops)));
+        let owner = builder.seal();
+        let mut old = ArenaGroup::new();
+        old.insert(Arc::clone(&owner));
+        let mut new = ArenaGroup::new();
+        new.insert(owner);
+        drop(old);
+        assert!(new.get(key).is_some());
+        assert_eq!(drops.load(Ordering::SeqCst), 0);
+        drop(new);
+        assert_eq!(drops.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn abandoned_construction_drops_resources() {
+        let drops = Arc::new(AtomicUsize::new(0));
+        let result = std::panic::catch_unwind({
+            let drops = Arc::clone(&drops);
+            move || {
+                let mut builder = ArenaBuilder::new();
+                builder.alloc(Dropped(drops));
+                panic!("cancelled construction");
+            }
+        });
+        assert!(result.is_err());
+        assert_eq!(drops.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn concurrent_readers_need_no_custom_thread_traits() {
+        let mut builder = ArenaBuilder::new();
+        let key = builder.alloc(String::from("shared"));
+        let owner = builder.seal();
+        std::thread::scope(|scope| {
+            for _ in 0..4 {
+                let owner = &owner;
+                scope.spawn(move || assert_eq!(owner.get(key).unwrap(), "shared"));
+            }
         });
     }
 
     #[test]
-    #[should_panic(expected = "wrong owner")]
-    fn key_cannot_be_resolved_by_another_owner() {
-        let first = ArenaBuilder::new();
-        let key = first.alloc(1_u32);
-        let _first = first.seal();
-        let second = ArenaBuilder::new().seal();
-        let _ = second.scope().resolve(key);
+    fn lazy_graph_is_initialized_once_and_drops_with_its_retained_snapshot() {
+        struct File {
+            text: String,
+            members: std::sync::OnceLock<OwnedRoot<String>>,
+        }
+        let initializations = AtomicUsize::new(0);
+        let mut builder = ArenaBuilder::new();
+        let key = builder.alloc(File {
+            text: "member".into(),
+            members: std::sync::OnceLock::new(),
+        });
+        let old_snapshot = builder.finish(key);
+        let retained_snapshot = old_snapshot.clone();
+        let weak_file = Arc::downgrade(old_snapshot.owner());
+        drop(old_snapshot);
+        std::thread::scope(|scope| {
+            for _ in 0..4 {
+                let file = retained_snapshot.get();
+                let initializations = &initializations;
+                scope.spawn(move || {
+                    let members = file.members.get_or_init(|| {
+                        initializations.fetch_add(1, Ordering::SeqCst);
+                        let mut builder = ArenaBuilder::new();
+                        let key = builder.alloc(file.text.clone());
+                        builder.finish(key)
+                    });
+                    assert_eq!(members.get(), "member");
+                });
+            }
+        });
+        assert_eq!(initializations.load(Ordering::SeqCst), 1);
+        let weak_members = Arc::downgrade(retained_snapshot.get().members.get().unwrap().owner());
+        drop(retained_snapshot);
+        assert!(weak_file.upgrade().is_none());
+        assert!(weak_members.upgrade().is_none());
     }
 
     #[test]
-    fn group_keeps_foreign_owners_alive() {
-        let first = ArenaBuilder::new();
-        let key = first.alloc(7_u32);
-        let first = first.seal();
-        let weak = Arc::downgrade(&first);
-        let mut group = ArenaGroup::new();
-        group.insert(first);
-
-        assert_eq!(*group.scope().resolve(key).unwrap(), 7);
-        assert!(weak.upgrade().is_some());
-    }
-
-    #[test]
-    fn sidecar_drops_before_arena_owner() {
-        struct State(std::sync::Weak<SealedArena>);
-
+    fn sidecar_drops_before_graph() {
+        struct State(std::sync::Weak<SealedArena<u32>>);
         impl Drop for State {
             fn drop(&mut self) {
-                assert!(
-                    self.0.upgrade().is_some(),
-                    "arena dropped before its sidecar"
-                );
+                assert!(self.0.upgrade().is_some());
             }
         }
-
-        let builder = ArenaBuilder::new();
-        let root = builder.alloc(1_u32);
-        let root = builder.finish(root);
+        let mut builder = ArenaBuilder::new();
+        let key = builder.alloc(1_u32);
+        let root = builder.finish(key);
         let weak = Arc::downgrade(root.owner());
         drop(OwnedGraph::new(root, State(weak.clone())));
         assert!(weak.upgrade().is_none());

@@ -10,13 +10,6 @@ crates/tsrs_compiler/src/checkerpool.rs	Sync	PooledChecker
 crates/tsrs_core/src/arena.rs	Send	RegionInner
 crates/tsrs_core/src/arena.rs	Send	SpareArena
 crates/tsrs_core/src/arena.rs	Sync	RegionInner
-crates/tsrs_core/src/arena_owner.rs	Send	<T: ?Sized + Send + Sync> ArenaKey<T>
-crates/tsrs_core/src/arena_owner.rs	Send	<T: Send + Sync> ArenaSlice<T>
-crates/tsrs_core/src/arena_owner.rs	Send	ArenaStr
-crates/tsrs_core/src/arena_owner.rs	Sync	<T: ?Sized + Send + Sync> ArenaKey<T>
-crates/tsrs_core/src/arena_owner.rs	Sync	<T: Send + Sync> ArenaSlice<T>
-crates/tsrs_core/src/arena_owner.rs	Sync	ArenaStr
-crates/tsrs_core/src/arena_owner.rs	Sync	SealedArena
 crates/tsrs_core/src/frozen.rs	Send	<T: Send> FrozenCell<T>
 crates/tsrs_core/src/frozen.rs	Sync	<T: Send + Sync> FrozenCell<T>
 crates/tsrs_core/src/memsplit.rs	Send	ArenaRef

@@ -15,14 +15,17 @@ in reverse allocation order before the Oxc allocator releases its chunks. `Sourc
 split: fixed graph data stays in the arena and locks, maps, parse options, position maps and caches live in its
 owner-paired `SourceFileState` sidecar.
 
-`tsrs_core::arena_owner` supplies the explicit construction API for new ownership boundaries:
+The follow-up in `notes/rust-owned-arenas.md` replaces the original unused raw-pointer `arena_owner` API with
+safe typed indexed storage. This API uses Rust-owned vectors rather than Oxc allocations:
 
-- `ArenaBuilder` is exclusive allocation state and `seal` removes allocation access.
-- `ArenaKey`, `ArenaSlice` and `ArenaStr` carry an arena identity and resolve only while their owner is borrowed.
+- `ArenaBuilder<T>` is exclusive allocation state and `seal` removes allocation access.
+- `ArenaKey<T>` carries an arena identity and resolves only while its owner is borrowed; `LocalKey<T>` is an
+  owner-relative edge. Strings and collections are ordinary owned Rust fields.
 - `OwnedRoot`, `OwnedGraph` and `ArenaGroup` keep roots and all contributing sealed owners together.
 
 The existing region, scratch and `P<T>` APIs remain as a compatibility layer while call sites move toward explicit
-owners. They select an Oxc owner; they no longer implement a second allocator.
+owners. They still select an Oxc owner. The generic and keyed checker link tables have moved to the safe store;
+ASTs, symbols, types, specialized link stores, and program/file lifetime boundaries have not.
 
 ## Removed behavior
 
@@ -41,7 +44,9 @@ owners. They select an Oxc owner; they no longer implement a second allocator.
 The migration is validated with workspace checks, focused core/AST/compiler tests, the alloc-profile feature build,
 and the lint/source gates. No instruction, wall-time or peak-RSS measurement was collected because the owner
 explicitly requested migration without measurement. Consequently this note makes no performance or memory claim;
-the normal benchmark gates must characterize the new baseline before a later optimization relies on it.
+the normal benchmark gates must characterize the new baseline before a later optimization relies on it. The
+follow-up measurement now does that: default-mode peak RSS is 75–85% above the pre-Oxc build on the two pinned
+Compiler workloads. See `notes/rust-owned-arenas.md` for the before/after numbers and limitations.
 
 ## Follow-ups
 

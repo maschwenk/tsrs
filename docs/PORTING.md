@@ -56,7 +56,18 @@ contributing `impl` blocks to the same type.
 
 ## Memory model (the important part)
 
-Go objects that are referenced by pointer, live long, reference each other cyclically and
+The Rust ownership migration is staged (`notes/rust-owned-arenas.md`). New persistent graph stores use
+`tsrs_core::arena_owner::ArenaBuilder<T>`: an owned typed vector with four-byte local IDs and eight-byte
+owner-qualified keys. Access returns a reference borrowed from the store. Keep a key across recursive mutation,
+then resolve it again; never extend that reference to `'static`. Records run normal Rust destructors, and shared
+sealed owners inherit thread-safety from their contents. The storage module forbids custom `unsafe`.
+
+The checker's generic `LinkStore` and compact `KeyedLinkStore` use this model. `get` returns a short borrow;
+`get_key` and `at` support recursion without retained pointers. Their lookup keys and record fields still refer
+to legacy AST/symbol/type objects. Preserve Go's semantic IDs and creation order independently of storage slots.
+
+The following describes the **remaining legacy graph**, not a rule for new stores. Go objects that are referenced
+by pointer, live long, reference each other cyclically and
 are compared by identity — AST nodes, symbols, types, signatures, links, flow nodes,
 mappers, inference contexts … — are allocated through an Oxc-backed owner and
 referenced through `tsrs_core::P<T>`:
@@ -67,7 +78,8 @@ referenced through `tsrs_core::P<T>`:
   constructor for a value kept alive by an arena owner or sidecar. Packed words store `p.to_bits()` / `p.key()`.
 - Go `*T` that can be nil -> `Option<P<T>>`. Go `*T` that is never nil -> `P<T>`.
   Decide from the Go code (nil checks, `return nil`). When unsure, use `Option`.
-- There are **no lifetime parameters** anywhere in this codebase. Arena data is `'static`.
+- These legacy interfaces expose arena data as `'static`. This is the contract being removed; owner-borrowed
+  references in migrated stores must not be converted to it.
 - Fixed data with no destructor lives in `oxc_allocator::Allocator`. Values that need `Drop` live in heap sidecars
   owned by the same arena; sidecars are dropped in reverse allocation order before the Oxc chunks. Thread arenas
   remain process-lived. Explicit `Region` owners release all of their fixed data and sidecars together.

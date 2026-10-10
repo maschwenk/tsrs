@@ -674,8 +674,8 @@ impl Checker {
 
     // checker.go:11419
     pub(crate) fn parameter_initializer_contains_undefined(&mut self, declaration: P<Node>) -> bool {
-        let links = self.node_links.get(declaration);
-        if !links.flags.get().intersects(NodeCheckFlags::InitializerIsUndefinedComputed) {
+        let links = self.node_links.get_key(declaration);
+        if !self.node_links.at(links).flags.get().intersects(NodeCheckFlags::InitializerIsUndefinedComputed) {
             if !self.push_type_resolution(declaration.into(), TypeSystemPropertyName::InitializerIsUndefined) {
                 self.report_circularity_error(declaration.symbol().unwrap());
                 return true;
@@ -686,15 +686,15 @@ impl Checker {
                 self.report_circularity_error(declaration.symbol().unwrap());
                 return true;
             }
-            if !links.flags.get().intersects(NodeCheckFlags::InitializerIsUndefinedComputed) {
-                links.flags.set(
-                    links.flags.get()
+            if !self.node_links.at(links).flags.get().intersects(NodeCheckFlags::InitializerIsUndefinedComputed) {
+                self.node_links.at(links).flags.set(
+                    self.node_links.at(links).flags.get()
                         | NodeCheckFlags::InitializerIsUndefinedComputed
                         | if contains_undefined { NodeCheckFlags::InitializerIsUndefined } else { NodeCheckFlags::empty() },
                 );
             }
         }
-        links.flags.get().intersects(NodeCheckFlags::InitializerIsUndefined)
+        self.node_links.at(links).flags.get().intersects(NodeCheckFlags::InitializerIsUndefined)
     }
 
     // checker.go:11438
@@ -1063,11 +1063,11 @@ impl Checker {
             return;
         }
         self.non_existent_properties.add(key);
-        let links = self.node_links.get(prop_node);
-        if links.flags.get().intersects(NodeCheckFlags::TypeChecked) {
+        let links = self.node_links.get_key(prop_node);
+        if self.node_links.at(links).flags.get().intersects(NodeCheckFlags::TypeChecked) {
             return; // error already made/in progress
         }
-        links.flags.set(links.flags.get() | NodeCheckFlags::TypeChecked);
+        self.node_links.at(links).flags.set(self.node_links.at(links).flags.get() | NodeCheckFlags::TypeChecked);
         if ast::is_jsdoc_name_reference_context(prop_node) {
             return;
         }
@@ -1994,8 +1994,8 @@ impl Checker {
             }
             return self.get_regular_type_of_literal_type(expr_type);
         }
-        let links = self.assertion_links.get(node);
-        links.expr_type.set(Some(expr_type));
+        let links = self.assertion_links.get_key(node);
+        self.assertion_links.at(links).expr_type.set(Some(expr_type));
         self.check_node_deferred(node);
         self.get_type_from_type_node(type_node)
     }

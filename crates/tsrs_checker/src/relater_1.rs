@@ -489,10 +489,10 @@ impl Checker {
                 && source.symbol().is_some()
                 && self.export_type_links.has(source.symbol().unwrap())
             {
-                let links = self.export_type_links.get(source.symbol().unwrap());
-                if let Some(originating_import) = links.originating_import.get() {
+                let links = self.export_type_links.get_key(source.symbol().unwrap());
+                if let Some(originating_import) = self.export_type_links.at(links).originating_import.get() {
                     if !is_import_call(originating_import) {
-                        let t = self.get_type_of_symbol(links.target.get().unwrap());
+                        let t = self.get_type_of_symbol(self.export_type_links.at(links).target.get().unwrap());
                         let helpful_retry = self.check_type_related_to(t, target, relation /*errorNode*/, None);
                         if helpful_retry {
                             // Likely an incorrect import. Issue a helpful diagnostic to produce a quickfix to change the import
@@ -1840,9 +1840,9 @@ impl Checker {
     // instantiations of the generic type for type arguments with known relations. The function
     // returns an empty slice when invoked recursively for the given generic type.
     pub(crate) fn get_variances_worker(&mut self, symbol: P<Symbol>, type_parameters: &'static [P<Type>]) -> Vec<VarianceFlags> {
-        let links = self.variance_links.get(symbol);
-        let variances_len = |links: P<VarianceLinks>| links.variances.get().map_or(0, |v| v.len());
-        if links.variances.get().is_none() {
+        let links = self.variance_links.get_key(symbol);
+        let variances_len = |links: &VarianceLinks| links.variances.get().map_or(0, |v| v.len());
+        if self.variance_links.at(links).variances.get().is_none() {
             let stack_index = self.get_variance_stack_index(symbol);
             if stack_index < 0 {
                 let save_resolution_start = self.resolution_start;
@@ -1903,14 +1903,14 @@ impl Checker {
                     }
                     // If variance computation was restarted due to a circularity we may have already
                     // computed variances for this generic type. If so, we exit early.
-                    if variances_len(links) != 0 {
+                    if variances_len(self.variance_links.at(links)) != 0 {
                         break;
                     }
                     variances[i] = variance;
                 }
                 // Store the results unless a restarted computation has already stored them.
-                if variances_len(links) == 0 {
-                    links.variances.set(Some(alloc_vec(variances)));
+                if variances_len(self.variance_links.at(links)) == 0 {
+                    self.variance_links.at(links).variances.set(Some(alloc_vec(variances)));
                 }
                 self.variance_stack.pop();
                 if self.variance_stack.is_empty() {
@@ -1938,12 +1938,12 @@ impl Checker {
                 }
                 // Store an empty slice to mark that we can't compute variances for this type. We treat type
                 // parameters as co-variant in this case.
-                if variances_len(links) == 0 {
-                    links.variances.set(Some(&[]));
+                if variances_len(self.variance_links.at(links)) == 0 {
+                    self.variance_links.at(links).variances.set(Some(&[]));
                 }
             }
         }
-        links.variances.get().unwrap().to_vec()
+        self.variance_links.at(links).variances.get().unwrap().to_vec()
     }
 
     // relater.go:1437

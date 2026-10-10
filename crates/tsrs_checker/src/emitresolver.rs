@@ -754,11 +754,11 @@ impl EmitResolver {
 
         if ast::is_alias_symbol_declaration(node) {
             if let Some(symbol) = c.get_symbol_of_declaration(node) {
-                let alias_links = c.alias_symbol_links.get(symbol);
-                if alias_links.referenced.get() {
+                let alias_links = c.alias_symbol_links.get_key(symbol);
+                if c.alias_symbol_links.at(alias_links).referenced.get() {
                     return true;
                 }
-                let target = alias_links.alias_target.get();
+                let target = c.alias_symbol_links.at(alias_links).alias_target.get();
                 if let Some(target) = target {
                     if node.modifier_flags().intersects(ModifierFlags::Export)
                         && c.get_symbol_flags(target).intersects(SymbolFlags::Value)

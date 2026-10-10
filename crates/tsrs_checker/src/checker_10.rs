@@ -677,8 +677,8 @@ impl Checker {
 
     // checker.go:20177
     pub(crate) fn get_signature_from_declaration(&mut self, declaration: P<Node>) -> P<Signature> {
-        let links = self.signature_links.get(declaration);
-        if let Some(resolved_signature) = links.resolved_signature.get() {
+        let links = self.signature_links.get_key(declaration);
+        if let Some(resolved_signature) = self.signature_links.at(links).resolved_signature.get() {
             return resolved_signature;
         }
         let mut parameters: Vec<P<Symbol>> = Vec::new();
@@ -761,8 +761,8 @@ impl Checker {
             flags |= SignatureFlags::Abstract;
         }
         let sig = self.new_signature(flags, Some(declaration), &type_parameters, this_parameter, &parameters, None /*resolvedReturnType*/, None /*resolvedTypePredicate*/, min_argument_count);
-        links.resolved_signature.set(Some(sig));
-        links.resolved_signature.get().unwrap()
+        self.signature_links.at(links).resolved_signature.set(Some(sig));
+        self.signature_links.at(links).resolved_signature.get().unwrap()
     }
 
     // checker.go:20253
@@ -2061,10 +2061,10 @@ impl Checker {
         let value_links = self.value_symbol_links.get(prop);
         value_links.set_containing_type(Some(t));
         value_links.set_name_type(Some(prop_name_type));
-        let mapped_links = self.mapped_symbol_links.get(prop);
-        mapped_links.key_type.set(Some(key_type));
+        let mapped_links = self.mapped_symbol_links.get_key(prop);
+        self.mapped_symbol_links.at(mapped_links).key_type.set(Some(key_type));
         if let Some(modifiers_prop) = modifiers_prop {
-            mapped_links.synthetic_origin.set(Some(modifiers_prop));
+            self.mapped_symbol_links.at(mapped_links).synthetic_origin.set(Some(modifiers_prop));
             if should_link_prop_declarations {
                 prop.set_declarations_static(modifiers_prop.declarations());
             }
@@ -2237,9 +2237,9 @@ fn mapped_type_add_member_for_key_type_worker(c: &mut Checker, st: &mut MappedTy
             let value_links = c.value_symbol_links.get(existing_prop);
             let name_type = c.get_union_type(&[value_links.name_type().unwrap(), prop_name_type]);
             value_links.set_name_type(Some(name_type));
-            let mapped_links = c.mapped_symbol_links.get(existing_prop);
-            let key_type_union = c.get_union_type(&[mapped_links.key_type.get().unwrap(), key_type]);
-            mapped_links.key_type.set(Some(key_type_union));
+            let mapped_links = c.mapped_symbol_links.get_key(existing_prop);
+            let key_type_union = c.get_union_type(&[c.mapped_symbol_links.at(mapped_links).key_type.get().unwrap(), key_type]);
+            c.mapped_symbol_links.at(mapped_links).key_type.set(Some(key_type_union));
         } else if let Some(member) = st.lazy.as_ref().and_then(|lazy| lazy.members.borrow().get(&*prop_name).copied().flatten()) {
             st.members.set(member.name(), member);
         } else {

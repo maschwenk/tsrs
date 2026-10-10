@@ -1271,8 +1271,9 @@ impl Checker {
             inferred_prop.set_declarations_static(prop.declarations());
             let name_type = self.value_symbol_links.get(prop).name_type();
             self.value_symbol_links.get(inferred_prop).set_name_type(name_type);
-            let links = self.reverse_mapped_symbol_links.get(inferred_prop);
-            links.property_type.set(Some(self.get_type_of_symbol(prop)));
+            let links = self.reverse_mapped_symbol_links.get_key(inferred_prop);
+            let property_type = self.get_type_of_symbol(prop);
+            self.reverse_mapped_symbol_links.at(links).property_type.set(Some(property_type));
             let constraint_target = r_constraint_type.as_index_type().target().unwrap();
             if constraint_target.flags().intersects(TypeFlags::IndexedAccess)
                 && constraint_target.as_indexed_access_type().object_type().unwrap().flags().intersects(TypeFlags::TypeParameter)
@@ -1283,11 +1284,12 @@ impl Checker {
                 // type identities produced, we simplify such indexed access occurrences
                 let new_type_param = constraint_target.as_indexed_access_type().object_type().unwrap();
                 let new_mapped_type = self.replace_indexed_access(r_mapped_type, constraint_target, new_type_param);
-                links.mapped_type.set(Some(new_mapped_type));
-                links.constraint_type.set(Some(self.get_index_type(new_type_param)));
+                self.reverse_mapped_symbol_links.at(links).mapped_type.set(Some(new_mapped_type));
+                let constraint_type = self.get_index_type(new_type_param);
+                self.reverse_mapped_symbol_links.at(links).constraint_type.set(Some(constraint_type));
             } else {
-                links.mapped_type.set(Some(r_mapped_type));
-                links.constraint_type.set(Some(r_constraint_type));
+                self.reverse_mapped_symbol_links.at(links).mapped_type.set(Some(r_mapped_type));
+                self.reverse_mapped_symbol_links.at(links).constraint_type.set(Some(r_constraint_type));
             }
             members.set(prop.name.get(), inferred_prop);
         }
@@ -1299,9 +1301,9 @@ impl Checker {
     pub(crate) fn get_type_of_reverse_mapped_symbol(&mut self, symbol: P<Symbol>) -> P<Type> {
         let links = self.value_symbol_links.get(symbol);
         if links.resolved_type.get().is_none() {
-            let reverse_links = self.reverse_mapped_symbol_links.get(symbol);
+            let reverse_links = self.reverse_mapped_symbol_links.get_key(symbol);
             let t = self
-                .infer_reverse_mapped_type(reverse_links.property_type.get().unwrap(), reverse_links.mapped_type.get().unwrap(), reverse_links.constraint_type.get().unwrap())
+                .infer_reverse_mapped_type(self.reverse_mapped_symbol_links.at(reverse_links).property_type.get().unwrap(), self.reverse_mapped_symbol_links.at(reverse_links).mapped_type.get().unwrap(), self.reverse_mapped_symbol_links.at(reverse_links).constraint_type.get().unwrap())
                 .unwrap_or(self.unknown_type);
             links.resolved_type.set(Some(t));
         }

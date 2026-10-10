@@ -103,16 +103,16 @@ impl Checker {
         };
         // If the declaration itself is type-only, mark it and return. No need to check what it resolves to.
         let source_symbol = self.get_symbol_of_declaration(alias_declaration).unwrap();
-        let links = self.alias_symbol_links.get(source_symbol);
-        if links.type_only_declaration.get().is_none() && ast::is_type_only_import_or_export_declaration(alias_declaration) {
-            links.type_only_declaration.set(Some(alias_declaration));
+        let links = self.alias_symbol_links.get_key(source_symbol);
+        if self.alias_symbol_links.at(links).type_only_declaration.get().is_none() && ast::is_type_only_import_or_export_declaration(alias_declaration) {
+            self.alias_symbol_links.at(links).type_only_declaration.set(Some(alias_declaration));
             return true;
         }
-        if links.type_only_declaration.get().is_none() && export_star_declaration.is_some() {
-            links.type_only_declaration.set(export_star_declaration);
+        if self.alias_symbol_links.at(links).type_only_declaration.get().is_none() && export_star_declaration.is_some() {
+            self.alias_symbol_links.at(links).type_only_declaration.set(export_star_declaration);
             return true;
         }
-        links.type_only_declaration.get().is_some()
+        self.alias_symbol_links.at(links).type_only_declaration.get().is_some()
     }
 
     // checker.go:15344
@@ -864,9 +864,9 @@ impl Checker {
         result.set_members(symbol.members().map(|m| m.clone_table()));
         result.set_exports(symbol.exports().map(|e| e.clone_table()));
         result.set_parent(symbol.parent());
-        let links = self.export_type_links.get(result);
-        links.target.set(Some(symbol));
-        links.originating_import.set(Some(reference_parent));
+        let links = self.export_type_links.get_key(result);
+        self.export_type_links.at(links).target.set(Some(symbol));
+        self.export_type_links.at(links).originating_import.set(Some(reference_parent));
         let resolved_module_type = self.resolve_structured_type_members(module_type).unwrap();
         let t = self.new_anonymous_type(Some(result), resolved_module_type.members(), &[], &[], resolved_module_type.index_infos());
         self.value_symbol_links.get(result).resolved_type.set(Some(t));
@@ -1078,9 +1078,9 @@ impl Checker {
     // means "not yet resolved" in the links, so it must not be replaced by an empty table).
     // checker.go:16253
     pub(crate) fn get_resolved_members_or_exports_of_symbol(&mut self, symbol: P<Symbol>, resolution_kind: MembersOrExportsResolutionKind) -> Option<P<SymbolTable>> {
-        let links = self.members_and_exports_links.get(symbol);
+        let links = self.members_and_exports_links.get_key(symbol);
         let kind = resolution_kind as usize;
-        if links[kind].get().is_none() {
+        if self.members_and_exports_links.at(links)[kind].get().is_none() {
             let is_static = resolution_kind == MembersOrExportsResolutionKind::ResolvedExports;
             let mut early_symbols = symbol.exports();
             if !is_static {
@@ -1088,7 +1088,7 @@ impl Checker {
             } else if symbol.flags().intersects(SymbolFlags::Module) {
                 early_symbols = Some(self.get_exports_of_module_worker(Some(symbol)).0);
             }
-            links[kind].set(early_symbols);
+            self.members_and_exports_links.at(links)[kind].set(early_symbols);
             // fill in any as-yet-unresolved late-bound members.
             let mut late_symbols: Option<P<SymbolTable>> = None;
             let declarations = symbol.declarations();
@@ -1117,9 +1117,9 @@ impl Checker {
                 }
             }
             let combined = self.combine_symbol_tables(early_symbols, late_symbols);
-            links[kind].set(combined);
+            self.members_and_exports_links.at(links)[kind].set(combined);
         }
-        links[kind].get()
+        self.members_and_exports_links.at(links)[kind].get()
     }
 
     // Performs late-binding of a dynamic member. This performs the same function for
@@ -1292,16 +1292,16 @@ impl Checker {
 
     // checker.go:16454
     pub(crate) fn get_exports_of_module(&mut self, module_symbol: P<Symbol>) -> P<SymbolTable> {
-        let links = self.module_symbol_links.get(module_symbol);
-        if links.resolved_exports.get().is_none() {
+        let links = self.module_symbol_links.get_key(module_symbol);
+        if self.module_symbol_links.at(links).resolved_exports.get().is_none() {
             // A nested computation of the same table (export * cycles) caches its result, which this one then replaces.
             self.alias_cache_blockers += 1;
             let (exports, type_only_export_star_map) = self.get_exports_of_module_worker(Some(module_symbol));
-            links.resolved_exports.set(Some(exports));
-            links.type_only_export_star_map.assign(type_only_export_star_map);
+            self.module_symbol_links.at(links).resolved_exports.set(Some(exports));
+            self.module_symbol_links.at(links).type_only_export_star_map.assign(type_only_export_star_map);
             self.alias_cache_blockers -= 1;
         }
-        links.resolved_exports.get().unwrap()
+        self.module_symbol_links.at(links).resolved_exports.get().unwrap()
     }
 
     // checker.go:16471
@@ -1462,8 +1462,8 @@ impl Checker {
         if !symbol.flags().intersects(SymbolFlags::Alias) {
             panic!("Should only get alias here");
         }
-        let links = self.alias_symbol_links.get(symbol);
-        if links.alias_target.get().is_none() {
+        let links = self.alias_symbol_links.get_key(symbol);
+        if self.alias_symbol_links.at(links).alias_target.get().is_none() {
             // Counted until the target is final (the circularity report below prints with the provisional target).
             self.alias_cache_blockers += 1;
             if !self.push_type_resolution(symbol.into(), TypeSystemPropertyName::AliasTarget) {
@@ -1479,26 +1479,26 @@ impl Checker {
                 // When the target is a pure alias, we transitively resolve and propagate any typeOnlyDeclaration
                 target = Some(self.resolve_indirection_alias(symbol, target.unwrap()));
             }
-            links.alias_target.set(Some(target.unwrap_or(self.unknown_symbol)));
+            self.alias_symbol_links.at(links).alias_target.set(Some(target.unwrap_or(self.unknown_symbol)));
             if !self.pop_type_resolution() {
                 let name = self.symbol_to_string(symbol);
                 self.error(Some(node), &diagnostics::Circular_definition_of_import_alias_0, &[&name]);
-                links.alias_target.set(Some(self.unknown_symbol));
+                self.alias_symbol_links.at(links).alias_target.set(Some(self.unknown_symbol));
             }
             self.alias_cache_blockers -= 1;
         }
-        links.alias_target.get().unwrap()
+        self.alias_symbol_links.at(links).alias_target.get().unwrap()
     }
 
     // checker.go:16616
     pub(crate) fn resolve_indirection_alias(&mut self, source: P<Symbol>, target: P<Symbol>) -> P<Symbol> {
         let resolved = self.resolve_alias(target);
         let result = self.get_merged_symbol(resolved);
-        let target_links = self.alias_symbol_links.get(target);
-        if let Some(type_only_declaration) = target_links.type_only_declaration.get() {
-            let source_links = self.alias_symbol_links.get(source);
-            if source_links.type_only_declaration.get().is_none() {
-                source_links.type_only_declaration.set(Some(type_only_declaration));
+        let target_links = self.alias_symbol_links.get_key(target);
+        if let Some(type_only_declaration) = self.alias_symbol_links.at(target_links).type_only_declaration.get() {
+            let source_links = self.alias_symbol_links.get_key(source);
+            if self.alias_symbol_links.at(source_links).type_only_declaration.get().is_none() {
+                self.alias_symbol_links.at(source_links).type_only_declaration.set(Some(type_only_declaration));
             }
         }
         result
@@ -1506,8 +1506,8 @@ impl Checker {
 
     // checker.go:16626
     pub(crate) fn try_resolve_alias(&mut self, symbol: P<Symbol>) -> Option<P<Symbol>> {
-        let links = self.alias_symbol_links.get(symbol);
-        if links.alias_target.get().is_some() || self.find_resolution_cycle_start_index(symbol.into(), TypeSystemPropertyName::AliasTarget) < 0 {
+        let links = self.alias_symbol_links.get_key(symbol);
+        if self.alias_symbol_links.at(links).alias_target.get().is_some() || self.find_resolution_cycle_start_index(symbol.into(), TypeSystemPropertyName::AliasTarget) < 0 {
             return Some(self.resolve_alias(symbol));
         }
         None
@@ -1615,11 +1615,11 @@ impl Checker {
     pub(crate) fn get_type_of_symbol_with_deferred_type(&mut self, symbol: P<Symbol>) -> P<Type> {
         let links = self.value_symbol_links.get(symbol);
         if links.resolved_type.get().is_none() {
-            let deferred = self.deferred_symbol_links.get(symbol);
-            let t = if deferred.parent.get().unwrap().flags().intersects(TypeFlags::Union) {
-                self.get_union_type(deferred.constituents.get())
+            let deferred = self.deferred_symbol_links.get_key(symbol);
+            let t = if self.deferred_symbol_links.at(deferred).parent.get().unwrap().flags().intersects(TypeFlags::Union) {
+                self.get_union_type(self.deferred_symbol_links.at(deferred).constituents.get())
             } else {
-                self.get_intersection_type(deferred.constituents.get())
+                self.get_intersection_type(self.deferred_symbol_links.at(deferred).constituents.get())
             };
             links.resolved_type.set(Some(t));
         }
@@ -1630,12 +1630,12 @@ impl Checker {
     pub(crate) fn get_write_type_of_symbol_with_deferred_type(&mut self, symbol: P<Symbol>) -> P<Type> {
         let links = self.value_symbol_links.get(symbol);
         if links.write_type().is_none() {
-            let deferred = self.deferred_symbol_links.get(symbol);
-            let t = if !deferred.write_constituents.get().is_empty() {
-                if deferred.parent.get().unwrap().flags().intersects(TypeFlags::Union) {
-                    self.get_union_type(deferred.write_constituents.get())
+            let deferred = self.deferred_symbol_links.get_key(symbol);
+            let t = if !self.deferred_symbol_links.at(deferred).write_constituents.get().is_empty() {
+                if self.deferred_symbol_links.at(deferred).parent.get().unwrap().flags().intersects(TypeFlags::Union) {
+                    self.get_union_type(self.deferred_symbol_links.at(deferred).write_constituents.get())
                 } else {
-                    self.get_intersection_type(deferred.write_constituents.get())
+                    self.get_intersection_type(self.deferred_symbol_links.at(deferred).write_constituents.get())
                 }
             } else {
                 self.get_type_of_symbol_with_deferred_type(symbol)

@@ -1192,16 +1192,16 @@ impl Checker {
                     if ast::is_variable_declaration(root_declaration) && self.get_combined_node_flags_cached(root_declaration).intersects(NodeFlags::Constant)
                         || ast::is_parameter_declaration(root_declaration)
                     {
-                        let links = self.node_links.get(parent);
-                        if !links.flags.get().intersects(NodeCheckFlags::InCheckIdentifier) {
-                            links.flags.set(links.flags.get() | NodeCheckFlags::InCheckIdentifier);
+                        let links = self.node_links.get_key(parent);
+                        if !self.node_links.at(links).flags.get().intersects(NodeCheckFlags::InCheckIdentifier) {
+                            self.node_links.at(links).flags.set(self.node_links.at(links).flags.get() | NodeCheckFlags::InCheckIdentifier);
                             let parent_type = self.get_type_for_binding_element_parent(parent, CheckMode::Normal);
                             let mut parent_type_constraint: Option<P<Type>> = None;
                             if let Some(parent_type) = parent_type {
                                 parent_type_constraint = self.map_type(parent_type, |c, t| Some(c.get_base_constraint_or_type(t)));
                             }
                             // Guard parent-type resolution only; flow analysis should allow re-entrant narrowing
-                            links.flags.set(links.flags.get() & !NodeCheckFlags::InCheckIdentifier);
+                            self.node_links.at(links).flags.set(self.node_links.at(links).flags.get() & !NodeCheckFlags::InCheckIdentifier);
                             if let Some(parent_type_constraint) = parent_type_constraint {
                                 if parent_type_constraint.flags().intersects(TypeFlags::Union)
                                     && !(ast::is_parameter_declaration(root_declaration) && self.is_some_symbol_assigned(root_declaration))
@@ -2005,8 +2005,8 @@ impl Checker {
 
     #[inline(never)]
     fn get_late_bound_symbol_worker(&mut self, symbol: P<Symbol>) -> P<Symbol> {
-        let links = self.late_bound_links.get(symbol);
-        if links.late_symbol.get().is_none() && {
+        let links = self.late_bound_links.get_key(symbol);
+        if self.late_bound_links.at(links).late_symbol.get().is_none() && {
             let declarations = symbol.declarations();
             declarations.iter().any(|&d| self.has_late_bindable_name(d))
         } {
@@ -2019,10 +2019,10 @@ impl Checker {
                 self.get_members_of_symbol(parent);
             }
         }
-        if links.late_symbol.get().is_none() {
-            links.late_symbol.set(Some(symbol));
+        if self.late_bound_links.at(links).late_symbol.get().is_none() {
+            self.late_bound_links.at(links).late_symbol.set(Some(symbol));
         }
-        links.late_symbol.get().unwrap()
+        self.late_bound_links.at(links).late_symbol.get().unwrap()
     }
 
     // checker.go:14657

@@ -134,8 +134,8 @@ impl Checker {
 
     // checker.go:30612
     pub(crate) fn get_spread_indices(&mut self, node: P<Node>) -> (i32, i32) {
-        let links = self.array_literal_links.get(node);
-        if !links.indices_computed.get() {
+        let links = self.array_literal_links.get_key(node);
+        if !self.array_literal_links.at(links).indices_computed.get() {
             let (mut first, mut last) = (-1, -1);
             for (i, &element) in node.elements().iter().enumerate() {
                 if ast::is_spread_element(element) {
@@ -145,11 +145,11 @@ impl Checker {
                     last = i as i32;
                 }
             }
-            links.first_spread_index.set(first);
-            links.last_spread_index.set(last);
-            links.indices_computed.set(true);
+            self.array_literal_links.at(links).first_spread_index.set(first);
+            self.array_literal_links.at(links).last_spread_index.set(last);
+            self.array_literal_links.at(links).indices_computed.set(true);
         }
-        (links.first_spread_index.get(), links.last_spread_index.get())
+        (self.array_literal_links.at(links).first_spread_index.get(), self.array_literal_links.at(links).last_spread_index.get())
     }
 
     // Returns the synthetic argument list for a decorator invocation.
@@ -180,9 +180,9 @@ impl Checker {
     // checker.go:30651
     pub(crate) fn get_legacy_decorator_call_signature(&mut self, decorator: P<Node>) -> Option<P<Signature>> {
         let node = decorator.parent().unwrap();
-        let links = self.signature_links.get(node);
-        if links.decorator_signature.get().is_none() {
-            links.decorator_signature.set(Some(self.any_signature));
+        let links = self.signature_links.get_key(node);
+        if self.signature_links.at(links).decorator_signature.get().is_none() {
+            self.signature_links.at(links).decorator_signature.set(Some(self.any_signature));
             match node.kind() {
                 Kind::ClassDeclaration | Kind::ClassExpression => {
                     // For a class decorator, the `target` is the type of the class (e.g. the
@@ -193,7 +193,7 @@ impl Checker {
                     let void_type = self.void_type;
                     let return_type = self.get_union_type(&[target_type, void_type]);
                     let sig = self.new_call_signature(&[], None, &[target_param], return_type);
-                    links.decorator_signature.set(Some(sig));
+                    self.signature_links.at(links).decorator_signature.set(Some(sig));
                 }
                 Kind::Parameter => 'case: {
                     let parent = node.parent().unwrap();
@@ -223,7 +223,7 @@ impl Checker {
                     let index_param = self.new_parameter("parameterIndex", index_type);
                     let void_type = self.void_type;
                     let sig = self.new_call_signature(&[], None, &[target_param, key_param, index_param], void_type);
-                    links.decorator_signature.set(Some(sig));
+                    self.signature_links.at(links).decorator_signature.set(Some(sig));
                 }
                 Kind::MethodDeclaration | Kind::GetAccessor | Kind::SetAccessor | Kind::PropertyDeclaration => 'case: {
                     if !ast::is_class_like(node.parent().unwrap()) {
@@ -248,21 +248,21 @@ impl Checker {
                         let void_type = self.void_type;
                         let union = self.get_union_type(&[return_type, void_type]);
                         let sig = self.new_call_signature(&[], None, &[target_param, key_param, descriptor_param], union);
-                        links.decorator_signature.set(Some(sig));
+                        self.signature_links.at(links).decorator_signature.set(Some(sig));
                     } else {
                         let void_type = self.void_type;
                         let union = self.get_union_type(&[return_type, void_type]);
                         let sig = self.new_call_signature(&[], None, &[target_param, key_param], union);
-                        links.decorator_signature.set(Some(sig));
+                        self.signature_links.at(links).decorator_signature.set(Some(sig));
                     }
                 }
                 _ => {}
             }
         }
-        if links.decorator_signature.get() == Some(self.any_signature) {
+        if self.signature_links.at(links).decorator_signature.get() == Some(self.any_signature) {
             return None;
         }
-        links.decorator_signature.get()
+        self.signature_links.at(links).decorator_signature.get()
     }
 
     // checker.go:30718
@@ -348,9 +348,9 @@ impl Checker {
         // return value similarly corresponds to the "output type" (though if the "output type" is `void` or
         // `undefined` then the "output type" is the "input type").
         let node = decorator.parent().unwrap();
-        let links = self.signature_links.get(node);
-        if links.decorator_signature.get().is_none() {
-            links.decorator_signature.set(Some(self.any_signature));
+        let links = self.signature_links.get_key(node);
+        if self.signature_links.at(links).decorator_signature.get().is_none() {
+            self.signature_links.at(links).decorator_signature.set(Some(self.any_signature));
             match node.kind() {
                 Kind::ClassDeclaration | Kind::ClassExpression => {
                     // Class decorators have a `context` of `ClassDecoratorContext<Class>`, where the `Class` type
@@ -359,7 +359,7 @@ impl Checker {
                     let target_type = self.get_type_of_symbol(sym);
                     let context_type = self.new_class_decorator_context_type(target_type);
                     let sig = self.new_es_decorator_call_signature(target_type, context_type, target_type);
-                    links.decorator_signature.set(Some(sig));
+                    self.signature_links.at(links).decorator_signature.set(Some(sig));
                 }
                 Kind::MethodDeclaration | Kind::GetAccessor | Kind::SetAccessor => 'case: {
                     if !ast::is_class_like(node.parent().unwrap()) {
@@ -402,7 +402,7 @@ impl Checker {
                     };
                     let context_type = self.new_class_member_decorator_context_type_for_node(node, this_type, value_type);
                     let sig = self.new_es_decorator_call_signature(target_type, context_type, target_type);
-                    links.decorator_signature.set(Some(sig));
+                    self.signature_links.at(links).decorator_signature.set(Some(sig));
                 }
                 Kind::PropertyDeclaration => 'case: {
                     if !ast::is_class_like(node.parent().unwrap()) {
@@ -440,15 +440,15 @@ impl Checker {
                     };
                     let context_type = self.new_class_member_decorator_context_type_for_node(node, this_type, value_type);
                     let sig = self.new_es_decorator_call_signature(target_type, context_type, return_type);
-                    links.decorator_signature.set(Some(sig));
+                    self.signature_links.at(links).decorator_signature.set(Some(sig));
                 }
                 _ => {}
             }
         }
-        if links.decorator_signature.get() == Some(self.any_signature) {
+        if self.signature_links.at(links).decorator_signature.get() == Some(self.any_signature) {
             return None;
         }
-        links.decorator_signature.get()
+        self.signature_links.at(links).decorator_signature.get()
     }
 
     // checker.go:30896
@@ -2474,8 +2474,8 @@ impl Checker {
             resolver.jsx_links.clear();
         }
         for (symbol, key) in std::mem::take(&mut self.scratch_keyed_chain_cache) {
-            let links = self.symbol_container_links.get(symbol);
-            let mut cache = links.accessible_chain_cache.borrow_mut();
+            let links = self.symbol_container_links.get_key(symbol);
+            let mut cache = self.symbol_container_links.at(links).accessible_chain_cache.borrow_mut();
             cache.remove(&key);
             if tsrs_core::census_recording() {
                 // Census builds: a removed entry's words stay in the table's memory, which the census scans.

@@ -856,9 +856,9 @@ impl Checker {
         if helpers_module == self.unknown_symbol {
             return;
         }
-        let links = self.source_file_links.get(source_file);
-        if !links.requested_external_emit_helpers.get().contains(helpers) {
-            let unchecked_helpers = helpers & !links.requested_external_emit_helpers.get();
+        let links = self.source_file_links.get_key(source_file);
+        if !self.source_file_links.at(links).requested_external_emit_helpers.get().contains(helpers) {
+            let unchecked_helpers = helpers & !self.source_file_links.at(links).requested_external_emit_helpers.get();
             let mut helper = ExternalEmitHelpers::FirstEmitHelper;
             while helper.bits() <= ExternalEmitHelpers::LastEmitHelper.bits() {
                 if unchecked_helpers.intersects(helper) {
@@ -886,7 +886,7 @@ impl Checker {
                 helper = ExternalEmitHelpers::from_bits_retain(helper.bits() << 1);
             }
         }
-        links.requested_external_emit_helpers.set(links.requested_external_emit_helpers.get() | helpers);
+        self.source_file_links.at(links).requested_external_emit_helpers.set(self.source_file_links.at(links).requested_external_emit_helpers.get() | helpers);
     }
 
     // checker.go:29084
@@ -953,16 +953,16 @@ impl Checker {
 
     // checker.go:29143
     pub(crate) fn resolve_helpers_module(&mut self, file: P<SourceFile>, error_node: P<Node>) -> P<Symbol> {
-        let links = self.source_file_links.get(file);
-        if links.external_helpers_module.get().is_none() {
+        let links = self.source_file_links.get_key(file);
+        if self.source_file_links.at(links).external_helpers_module.get().is_none() {
             let location = self.program.get_import_helpers_import_specifier(file.path());
             let helpers_module = match self.resolve_external_module(location, externalHelpersModuleNameText, Some(&diagnostics::This_syntax_requires_an_imported_helper_but_module_0_cannot_be_found), Some(error_node), false /*isForAugmentation*/, None /*importAttributesType*/) {
                 Some(m) => m,
                 None => self.unknown_symbol,
             };
-            links.external_helpers_module.set(Some(helpers_module));
+            self.source_file_links.at(links).external_helpers_module.set(Some(helpers_module));
         }
-        links.external_helpers_module.get().unwrap()
+        self.source_file_links.at(links).external_helpers_module.get().unwrap()
     }
 
     // checker.go:29156
@@ -1117,9 +1117,9 @@ impl Checker {
     // the alias as an expression (which recursively takes us back here if the target references another alias).
     // checker.go:29294
     pub(crate) fn mark_alias_symbol_as_referenced(&mut self, symbol: P<Symbol>) {
-        let links = self.alias_symbol_links.get(symbol);
-        if !links.referenced.get() {
-            links.referenced.set(true);
+        let links = self.alias_symbol_links.get_key(symbol);
+        if !self.alias_symbol_links.at(links).referenced.get() {
+            self.alias_symbol_links.at(links).referenced.set(true);
             let Some(node) = self.get_declaration_of_alias_symbol(symbol) else {
                 panic!("Unexpected nil in markAliasSymbolAsReferenced");
             };
@@ -1814,9 +1814,9 @@ impl Checker {
                 let any_type = self.any_type;
                 return Some(self.get_spread_argument_type(&args, index_of_parameter, args.len() as i32, any_type, None /*context*/, CheckMode::Normal));
             }
-            let links = self.signature_links.get(iife);
-            let cached = links.resolved_signature.get();
-            links.resolved_signature.set(Some(self.any_signature));
+            let links = self.signature_links.get_key(iife);
+            let cached = self.signature_links.at(links).resolved_signature.get();
+            self.signature_links.at(links).resolved_signature.set(Some(self.any_signature));
             let t: Option<P<Type>>;
             if index_of_parameter < args.len() as i32 {
                 let arg_type = self.check_expression(args[index_of_parameter as usize]);
@@ -1826,7 +1826,7 @@ impl Checker {
             } else {
                 t = Some(self.undefined_widening_type);
             }
-            links.resolved_signature.set(cached);
+            self.signature_links.at(links).resolved_signature.set(cached);
             return t;
         }
         let contextual_signature = self.get_contextual_signature(fn_);

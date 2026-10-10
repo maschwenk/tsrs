@@ -1542,25 +1542,25 @@ pub(crate) fn is_invalid_computed_property_name(node: P<Node>) -> bool {
 impl Checker {
     // checker.go:27272
     pub(crate) fn check_computed_property_name(&mut self, node: P<Node>) -> P<Type> {
-        let links = self.type_node_links.get(node);
-        if links.resolved_type.get().is_none() {
-            links.resolved_type.set(Some(self.circular_constraint_type));
+        let links = self.type_node_links.get_key(node);
+        if self.type_node_links.at(links).resolved_type.get().is_none() {
+            self.type_node_links.at(links).resolved_type.set(Some(self.circular_constraint_type));
             if is_invalid_computed_property_name(node) {
-                links.resolved_type.set(Some(self.error_type));
-                return links.resolved_type.get().unwrap();
+                self.type_node_links.at(links).resolved_type.set(Some(self.error_type));
+                return self.type_node_links.at(links).resolved_type.get().unwrap();
             }
             let t = self.check_expression(node.expression().unwrap());
-            links.resolved_type.set(Some(t));
+            self.type_node_links.at(links).resolved_type.set(Some(t));
             // This will allow types number, string, symbol or any. It will also allow enums, the unknown
             // type, and any union of these types (like string | number).
-            if links.resolved_type.get().unwrap().flags().intersects(TypeFlags::Nullable)
-                || !self.is_type_assignable_to_kind(links.resolved_type.get().unwrap(), TypeFlags::StringLike | TypeFlags::NumberLike | TypeFlags::ESSymbolLike)
-                    && !self.is_type_assignable_to(links.resolved_type.get().unwrap(), self.string_number_symbol_type)
+            if self.type_node_links.at(links).resolved_type.get().unwrap().flags().intersects(TypeFlags::Nullable)
+                || !self.is_type_assignable_to_kind(self.type_node_links.at(links).resolved_type.get().unwrap(), TypeFlags::StringLike | TypeFlags::NumberLike | TypeFlags::ESSymbolLike)
+                    && !self.is_type_assignable_to(self.type_node_links.at(links).resolved_type.get().unwrap(), self.string_number_symbol_type)
             {
                 self.error(Some(node), &diagnostics::A_computed_property_name_must_be_of_type_string_number_symbol_or_any, &[]);
             }
         }
-        links.resolved_type.get().unwrap()
+        self.type_node_links.at(links).resolved_type.get().unwrap()
     }
 
     // checker.go:27292

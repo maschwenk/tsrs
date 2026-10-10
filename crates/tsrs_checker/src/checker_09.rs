@@ -276,11 +276,11 @@ impl Checker {
 
     // checker.go:17643
     pub(crate) fn get_declared_type_of_class_or_interface(&mut self, symbol: P<Symbol>) -> P<Type> {
-        let links = self.declared_type_links.get(symbol);
-        if links.declared_type.get().is_none() {
+        let links = self.declared_type_links.get_key(symbol);
+        if self.declared_type_links.at(links).declared_type.get().is_none() {
             let kind = if symbol.flags().intersects(SymbolFlags::Class) { ObjectFlags::Class } else { ObjectFlags::Interface };
             let t = self.new_object_type(kind, Some(symbol));
-            links.declared_type.set(Some(t));
+            self.declared_type_links.at(links).declared_type.set(Some(t));
             let outer_type_parameters = self.get_outer_type_parameters_of_class_or_interface(symbol);
             let outer_type_parameter_count = outer_type_parameters.len();
             let mut type_parameters = self.append_local_type_parameters_of_class_or_interface_or_type_alias(&outer_type_parameters, symbol);
@@ -305,7 +305,7 @@ impl Checker {
                 d.target.set(Some(t));
             }
         }
-        links.declared_type.get().unwrap()
+        self.declared_type_links.at(links).declared_type.get().unwrap()
     }
 
     // Returns true if the interface given by the symbol is free of "this" references.
@@ -1971,14 +1971,14 @@ impl Checker {
         }
         if is_computed_property_name(node) {
             // This is cached so `getTypeOfExpression` isn't constantly reinvoked for every property name lookup
-            let links = self.computed_name_links.get(node);
-            if let Some(has_name) = links.has_name.get() {
-                return (links.name.get().to_string(), has_name);
+            let links = self.computed_name_links.get_key(node);
+            if let Some(has_name) = self.computed_name_links.at(links).has_name.get() {
+                return (self.computed_name_links.at(links).name.get().to_string(), has_name);
             }
             let expr_type = self.get_type_of_expression(node.expression().unwrap());
             let (name, exists) = self.try_get_name_from_type(expr_type);
-            links.name.set(alloc_str(&name));
-            links.has_name.set(Some(exists));
+            self.computed_name_links.at(links).name.set(alloc_str(&name));
+            self.computed_name_links.at(links).has_name.set(Some(exists));
             return (name, exists);
         }
         (String::new(), false)

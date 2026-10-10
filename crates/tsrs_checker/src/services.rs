@@ -400,12 +400,12 @@ impl Checker {
     pub(crate) fn run_without_resolved_signature_caching<T>(&mut self, node: P<Node>, f: impl FnOnce(&mut Checker) -> T) -> T {
         let mut ancestor_node = ast::find_ancestor(node, ast::is_call_like_or_function_like_expression);
         if ancestor_node.is_some() {
-            let mut cached_resolved_signatures: Vec<(P<SignatureLinks>, Option<P<Signature>>)> = Vec::new();
+            let mut cached_resolved_signatures = Vec::new();
             let mut cached_types: Vec<(P<ValueSymbolLinks>, Option<P<Type>>)> = Vec::new();
             while let Some(an) = ancestor_node {
-                let signature_links = self.signature_links.get(an);
-                cached_resolved_signatures.push((signature_links, signature_links.resolved_signature.get()));
-                signature_links.resolved_signature.set(None);
+                let signature_links = self.signature_links.get_key(an);
+                cached_resolved_signatures.push((signature_links, self.signature_links.at(signature_links).resolved_signature.get()));
+                self.signature_links.at(signature_links).resolved_signature.set(None);
                 if ast::is_function_expression_or_arrow_function(an) {
                     let symbol = self.get_symbol_of_declaration(an).unwrap();
                     let symbol_links = self.value_symbol_links.get(symbol);
@@ -417,7 +417,7 @@ impl Checker {
             }
             let result = f(self);
             for (signature_links, resolved_signature) in cached_resolved_signatures {
-                signature_links.resolved_signature.set(resolved_signature);
+                self.signature_links.at(signature_links).resolved_signature.set(resolved_signature);
             }
             for (symbol_links, resolved_type) in cached_types {
                 symbol_links.resolved_type.set(resolved_type);

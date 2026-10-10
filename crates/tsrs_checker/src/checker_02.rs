@@ -27,8 +27,8 @@ impl Checker {
         let mut symbol = symbol;
         while symbol.flags().intersects(SymbolFlags::Alias) && !symbol.flags().intersects(meaning) {
             let resolved = self.resolve_alias(symbol);
-            let links = self.alias_symbol_links.get(symbol);
-            if let Some(type_only_declaration) = links.type_only_declaration.get() {
+            let links = self.alias_symbol_links.get_key(symbol);
+            if let Some(type_only_declaration) = self.alias_symbol_links.at(links).type_only_declaration.get() {
                 return Some(type_only_declaration);
             }
             symbol = resolved;
@@ -39,16 +39,16 @@ impl Checker {
     // checker.go:2196
     pub fn get_immediate_aliased_symbol(&mut self, symbol: P<Symbol>) -> Option<P<Symbol>> {
         assert!(symbol.flags().intersects(SymbolFlags::Alias), "Should only get Alias here.");
-        let links = self.alias_symbol_links.get(symbol);
-        if links.immediate_target.get().is_none() {
+        let links = self.alias_symbol_links.get_key(symbol);
+        if self.alias_symbol_links.at(links).immediate_target.get().is_none() {
             let node = self.get_declaration_of_alias_symbol(symbol);
             let Some(node) = node else {
                 panic!("Unexpected nil in getImmediateAliasedSymbol");
             };
             let target = self.get_target_of_alias_declaration(Some(node));
-            links.immediate_target.set(target);
+            self.alias_symbol_links.at(links).immediate_target.set(target);
         }
-        links.immediate_target.get()
+        self.alias_symbol_links.at(links).immediate_target.get()
     }
 
     // checker.go:2209
@@ -102,8 +102,8 @@ impl Checker {
 
     fn check_source_file_worker(&mut self, ctx: &Context, source_file: P<SourceFile>, check_unused: bool) {
         self.ctx = Some(ctx.clone());
-        let links = self.source_file_links.get(source_file);
-        if !links.type_checked.get() {
+        let links = self.source_file_links.get_key(source_file);
+        if !self.source_file_links.at(links).type_checked.get() {
             // tsrs-only: TSRS_TRACE_UNION_REDUCTION (uniontrace.rs) prints each checker's file order.
             if crate::uniontrace::enabled() {
                 crate::uniontrace::report_check_file(self, source_file, None);
@@ -125,15 +125,15 @@ impl Checker {
             }
             self.produce_deferred_diagnostics();
             self.reported_unreachable_nodes.clear();
-            links.type_checked.set(true);
+            self.source_file_links.at(links).type_checked.set(true);
         }
-        if check_unused && !links.unused_checked.get() {
+        if check_unused && !self.source_file_links.at(links).unused_checked.get() {
             // The unused identifiers check relies on a full type check having first been performed
             if !source_file.is_declaration_file() && !self.is_canceled() {
-                let identifier_check_nodes = links.identifier_check_nodes.borrow().clone();
+                let identifier_check_nodes = self.source_file_links.at(links).identifier_check_nodes.borrow().clone();
                 self.check_unused_identifiers(&identifier_check_nodes);
             }
-            links.unused_checked.set(true);
+            self.source_file_links.at(links).unused_checked.set(true);
         }
         if self.is_canceled() {
             self.was_canceled = true;
@@ -398,19 +398,19 @@ impl Checker {
     // checker.go:2525
     pub(crate) fn check_node_deferred(&mut self, node: P<Node>) {
         let enclosing_file = ast::get_source_file_of_node(node).unwrap();
-        let links = self.source_file_links.get(enclosing_file);
-        if !links.type_checked.get() {
-            links.deferred_nodes.borrow_mut().insert(node);
+        let links = self.source_file_links.get_key(enclosing_file);
+        if !self.source_file_links.at(links).type_checked.get() {
+            self.source_file_links.at(links).deferred_nodes.borrow_mut().insert(node);
         }
     }
 
     // checker.go:2533
     pub(crate) fn check_deferred_nodes(&mut self, context: P<SourceFile>) {
-        let links = self.source_file_links.get(context);
+        let links = self.source_file_links.get_key(context);
         // Go's OrderedSet.Values() enumerates items added during iteration.
         let mut i = 0;
         loop {
-            let node = match links.deferred_nodes.borrow().get_index(i) {
+            let node = match self.source_file_links.at(links).deferred_nodes.borrow().get_index(i) {
                 Some(&node) => node,
                 None => break,
             };
@@ -420,7 +420,7 @@ impl Checker {
             self.check_deferred_node(node);
             i += 1;
         }
-        *links.deferred_nodes.borrow_mut() = OrderedSet::default();
+        *self.source_file_links.at(links).deferred_nodes.borrow_mut() = OrderedSet::default();
     }
 
     // checker.go:2544
@@ -960,8 +960,8 @@ impl Checker {
             let setter = ast::get_declaration_of_kind(symbol, Kind::SetAccessor);
             if let (Some(getter), Some(setter)) = (getter, setter) {
                 if !self.node_links.get(getter).flags.get().intersects(NodeCheckFlags::TypeChecked) {
-                    let getter_links = self.node_links.get(getter);
-                    getter_links.flags.set(getter_links.flags.get() | NodeCheckFlags::TypeChecked);
+                    let getter_links = self.node_links.get_key(getter);
+                    self.node_links.at(getter_links).flags.set(self.node_links.at(getter_links).flags.get() | NodeCheckFlags::TypeChecked);
                     let getter_flags = getter.modifier_flags();
                     let setter_flags = setter.modifier_flags();
                     if (getter_flags & ModifierFlags::Abstract) != (setter_flags & ModifierFlags::Abstract) {
@@ -1403,9 +1403,9 @@ impl Checker {
         self.check_source_element(Some(type_parameter_declaration_node));
         let symbol = self.get_symbol_of_declaration(type_parameter_declaration_node).unwrap();
         if symbol.declarations().len() > 1 {
-            let links = self.declared_type_links.get(symbol);
-            if !links.type_parameters_checked.get() {
-                links.type_parameters_checked.set(true);
+            let links = self.declared_type_links.get_key(symbol);
+            if !self.declared_type_links.at(links).type_parameters_checked.get() {
+                self.declared_type_links.at(links).type_parameters_checked.set(true);
                 let type_parameter = self.get_declared_type_of_type_parameter(symbol);
                 let declarations = get_declarations_of_kind(symbol, Kind::TypeParameter);
                 if !self.are_type_parameters_identical(&declarations, &[type_parameter], |_, decl| vec![decl]) {

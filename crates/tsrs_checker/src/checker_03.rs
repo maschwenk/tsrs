@@ -186,9 +186,9 @@ impl Checker {
         if symbol.declarations().len() == 1 {
             return;
         }
-        let links = self.declared_type_links.get(symbol);
-        if !links.type_parameters_checked.get() {
-            links.type_parameters_checked.set(true);
+        let links = self.declared_type_links.get_key(symbol);
+        if !self.declared_type_links.at(links).type_parameters_checked.get() {
+            self.declared_type_links.at(links).type_parameters_checked.set(true);
             let declarations = self.get_class_or_interface_declarations_of_symbol(symbol);
             if declarations.len() <= 1 {
                 return;
@@ -811,9 +811,9 @@ impl Checker {
     pub(crate) fn check_class_or_interface_for_duplicate_index_signatures(&mut self, node: P<Node>) {
         // Only check the type once
         let symbol = self.get_symbol_of_declaration(node).unwrap();
-        let links = self.declared_type_links.get(symbol);
-        if !links.index_signatures_checked.get() {
-            links.index_signatures_checked.set(true);
+        let links = self.declared_type_links.get_key(symbol);
+        if !self.declared_type_links.at(links).index_signatures_checked.get() {
+            self.declared_type_links.at(links).index_signatures_checked.set(true);
             self.check_type_for_duplicate_index_signatures(node);
         }
     }
@@ -970,11 +970,11 @@ impl Checker {
     // checked it before. `go_compatible_history()` keeps Go's flag.
     fn is_interface_check_site(&mut self, symbol: P<Symbol>, node: P<Node>) -> bool {
         if tsrs_core::compat::go_compatible_history() {
-            let links = self.declared_type_links.get(symbol);
-            if links.interface_checked.get() {
+            let links = self.declared_type_links.get_key(symbol);
+            if self.declared_type_links.at(links).interface_checked.get() {
                 return false;
             }
-            links.interface_checked.set(true);
+            self.declared_type_links.at(links).interface_checked.set(true);
             return true;
         }
         let file = get_source_file_of_node(node);
@@ -1047,9 +1047,9 @@ impl Checker {
         //
         // Only perform this check once per symbol
         let enum_symbol = self.get_symbol_of_declaration(node).unwrap();
-        let links = self.declared_type_links.get(enum_symbol);
-        if !links.enum_checked.get() {
-            links.enum_checked.set(true);
+        let links = self.declared_type_links.get_key(enum_symbol);
+        if !self.declared_type_links.at(links).enum_checked.get() {
+            self.declared_type_links.at(links).enum_checked.set(true);
             let declarations = enum_symbol.declarations();
             if declarations.len() > 1 {
                 let enum_is_const = is_enum_const(node);
@@ -1487,8 +1487,8 @@ impl Checker {
 
     // checker.go:5579
     pub(crate) fn check_import_attributes_expression(&mut self, node: P<Node>) -> P<Type> {
-        let links = self.type_node_links.get(node);
-        if links.resolved_type.get().is_none() {
+        let links = self.type_node_links.get_key(node);
+        if self.type_node_links.at(links).resolved_type.get().is_none() {
             let symbol = self.new_symbol(SymbolFlags::ObjectLiteral, InternalSymbolNameImportAttributes);
             let members = SymbolTable::new();
             for &attribute in node.as_import_attributes().attributes.nodes() {
@@ -1500,9 +1500,9 @@ impl Checker {
             }
             let t = self.new_anonymous_type(Some(symbol), Some(members), &[], &[], &[]);
             t.object_flags.set(t.object_flags.get() | ObjectFlags::ObjectLiteral | ObjectFlags::NonInferrableType);
-            links.resolved_type.set(Some(t));
+            self.type_node_links.at(links).resolved_type.set(Some(t));
         }
-        links.resolved_type.get().unwrap()
+        self.type_node_links.at(links).resolved_type.get().unwrap()
     }
 
     // checker.go:5596
@@ -1816,8 +1816,8 @@ impl Checker {
     // checker.go:5858
     pub(crate) fn check_external_module_exports(&mut self, node: P<Node>) {
         let module_symbol = self.get_symbol_of_declaration(node).unwrap();
-        let links = self.module_symbol_links.get(module_symbol);
-        if !links.exports_checked.get() {
+        let links = self.module_symbol_links.get_key(module_symbol);
+        if !self.module_symbol_links.at(links).exports_checked.get() {
             let export_equals_symbol = module_symbol.exports().and_then(|e| e.lookup(InternalSymbolNameExportEquals));
             // An export assignment is in error if (a) the module exports value members or (b) if the module exports type or
             // namespace members and the exported entity also exports type or namespace members.
@@ -1857,7 +1857,7 @@ impl Checker {
                     }
                 }
             }
-            links.exports_checked.set(true);
+            self.module_symbol_links.at(links).exports_checked.set(true);
         }
     }
 

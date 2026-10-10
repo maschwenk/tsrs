@@ -1920,15 +1920,15 @@ impl Checker {
 
     // checker.go:10347
     pub(crate) fn contextually_check_function_expression_or_object_literal_method(&mut self, node: P<Node>, check_mode: CheckMode) {
-        let links = self.node_links.get(node);
+        let links = self.node_links.get_key(node);
         // Check if function expression is contextually typed and assign parameter types if so.
-        if !links.flags.get().intersects(NodeCheckFlags::ContextChecked) {
+        if !self.node_links.at(links).flags.get().intersects(NodeCheckFlags::ContextChecked) {
             let contextual_signature = self.get_contextual_signature(node);
             // If a type check is started at a function expression that is an argument of a function call, obtaining the
             // contextual type may recursively get back to here during overload resolution of the call. If so, we will have
             // already assigned contextual types.
-            if !links.flags.get().intersects(NodeCheckFlags::ContextChecked) {
-                links.flags.set(links.flags.get() | NodeCheckFlags::ContextChecked);
+            if !self.node_links.at(links).flags.get().intersects(NodeCheckFlags::ContextChecked) {
+                self.node_links.at(links).flags.set(self.node_links.at(links).flags.get() | NodeCheckFlags::ContextChecked);
                 let symbol = self.get_symbol_of_declaration(node).unwrap();
                 let symbol_type = self.get_type_of_symbol(symbol);
                 let signature = self.get_signatures_of_type(symbol_type, SignatureKind::Call).first().copied();
@@ -2348,8 +2348,8 @@ impl Checker {
             {
                 let mut lexical_scope = get_enclosing_block_scope_container(node);
                 while let Some(scope) = lexical_scope {
-                    let links = self.node_links.get(scope);
-                    links.flags.set(links.flags.get() | NodeCheckFlags::ContainsClassWithPrivateIdentifiers);
+                    let links = self.node_links.get_key(scope);
+                    self.node_links.at(links).flags.set(self.node_links.at(links).flags.get() | NodeCheckFlags::ContainsClassWithPrivateIdentifiers);
                     lexical_scope = get_enclosing_block_scope_container(scope);
                 }
             }

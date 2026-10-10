@@ -286,10 +286,10 @@ impl Checker {
         if prop_types.len() > 2 {
             // When `propTypes` has the potential to explode in size when normalized, defer normalization until absolutely needed
             result.check_flags.set(result.check_flags.get() | CheckFlags::DeferredType);
-            let deferred = self.deferred_symbol_links.get(result);
-            deferred.parent.set(Some(containing_type));
-            deferred.constituents.set(alloc_vec(prop_types));
-            deferred.write_constituents.set(write_types.map_or(&[][..], alloc_vec));
+            let deferred = self.deferred_symbol_links.get_key(result);
+            self.deferred_symbol_links.at(deferred).parent.set(Some(containing_type));
+            self.deferred_symbol_links.at(deferred).constituents.set(alloc_vec(prop_types));
+            self.deferred_symbol_links.at(deferred).write_constituents.set(write_types.map_or(&[][..], alloc_vec));
             return Some(result);
         }
         if is_union {
@@ -1255,16 +1255,16 @@ impl Checker {
         } else {
             t.symbol().unwrap().declarations()[0]
         };
-        let links = self.type_node_links.get(declaration);
+        let links = self.type_node_links.get_key(declaration);
         let target: P<Type> = if t.object_flags().intersects(ObjectFlags::Reference) {
             // Deferred type reference
-            links.resolved_type.get().unwrap()
+            self.type_node_links.at(links).resolved_type.get().unwrap()
         } else if t.object_flags().intersects(ObjectFlags::Instantiated) {
             t.target().unwrap()
         } else {
             t
         };
-        let type_parameters: &'static [P<Type>] = match links.outer_type_parameters.get() {
+        let type_parameters: &'static [P<Type>] = match self.type_node_links.at(links).outer_type_parameters.get() {
             Some(type_parameters) => type_parameters,
             None => {
                 // The first time an anonymous type is instantiated we compute and store a list of the type
@@ -1293,7 +1293,7 @@ impl Checker {
                     }
                 }
                 let type_parameters = alloc_vec(type_parameters);
-                links.outer_type_parameters.set(Some(type_parameters));
+                self.type_node_links.at(links).outer_type_parameters.set(Some(type_parameters));
                 type_parameters
             }
         };
@@ -2018,12 +2018,12 @@ impl Checker {
 
     // checker.go:23325
     pub(crate) fn get_type_from_this_type_node(&mut self, node: P<Node>) -> P<Type> {
-        let links = self.type_node_links.get(node);
-        if links.resolved_type.get().is_none() {
+        let links = self.type_node_links.get_key(node);
+        if self.type_node_links.at(links).resolved_type.get().is_none() {
             let t = self.get_this_type(node);
-            links.resolved_type.set(Some(t));
+            self.type_node_links.at(links).resolved_type.set(Some(t));
         }
-        links.resolved_type.get().unwrap()
+        self.type_node_links.at(links).resolved_type.get().unwrap()
     }
 
     // checker.go:23333
@@ -2047,19 +2047,19 @@ impl Checker {
         if node.as_literal_type_node().literal.kind() == Kind::NullKeyword {
             return self.null_type;
         }
-        let links = self.type_node_links.get(node);
-        if links.resolved_type.get().is_none() {
+        let links = self.type_node_links.get_key(node);
+        if self.type_node_links.at(links).resolved_type.get().is_none() {
             let t = self.check_expression(node.as_literal_type_node().literal);
             let regular = self.get_regular_type_of_literal_type(t);
-            links.resolved_type.set(Some(regular));
+            self.type_node_links.at(links).resolved_type.set(Some(regular));
         }
-        links.resolved_type.get().unwrap()
+        self.type_node_links.at(links).resolved_type.get().unwrap()
     }
 
     // checker.go:23358
     pub(crate) fn get_type_from_type_literal_or_function_or_constructor_type_node(&mut self, node: P<Node>) -> P<Type> {
-        let links = self.type_node_links.get(node);
-        if links.resolved_type.get().is_none() {
+        let links = self.type_node_links.get_key(node);
+        if self.type_node_links.at(links).resolved_type.get().is_none() {
             // Deferred resolution of members is handled by resolveObjectTypeMembers
             let alias = self.get_alias_for_type_node(node);
             let is_empty = match node.symbol() {
@@ -2067,56 +2067,56 @@ impl Checker {
                 Some(sym) => self.get_members_of_symbol(sym).map_or(0, |m| m.len()) == 0 && alias.is_none(),
             };
             if is_empty {
-                links.resolved_type.set(Some(self.empty_type_literal_type));
+                self.type_node_links.at(links).resolved_type.set(Some(self.empty_type_literal_type));
             } else {
                 let t = self.new_object_type(ObjectFlags::Anonymous, node.symbol());
                 t.set_alias(alias);
-                links.resolved_type.set(Some(t));
+                self.type_node_links.at(links).resolved_type.set(Some(t));
             }
         }
-        links.resolved_type.get().unwrap()
+        self.type_node_links.at(links).resolved_type.get().unwrap()
     }
 
     // checker.go:23374
     pub(crate) fn get_type_from_indexed_access_type_node(&mut self, node: P<Node>) -> P<Type> {
-        let links = self.type_node_links.get(node);
-        if links.resolved_type.get().is_none() {
+        let links = self.type_node_links.get_key(node);
+        if self.type_node_links.at(links).resolved_type.get().is_none() {
             let object_type = self.get_type_from_type_node(node.as_indexed_access_type_node().object_type);
             let index_type = self.get_type_from_type_node(node.as_indexed_access_type_node().index_type);
             let potential_alias = self.get_alias_for_type_node(node);
             let t = self.get_indexed_access_type_ex(object_type, index_type, AccessFlags::None, Some(node), potential_alias.into());
-            links.resolved_type.set(Some(t));
+            self.type_node_links.at(links).resolved_type.set(Some(t));
         }
-        links.resolved_type.get().unwrap()
+        self.type_node_links.at(links).resolved_type.get().unwrap()
     }
 
     // checker.go:23385
     pub(crate) fn get_type_from_type_operator_node(&mut self, node: P<Node>) -> P<Type> {
-        let links = self.type_node_links.get(node);
-        if links.resolved_type.get().is_none() {
+        let links = self.type_node_links.get_key(node);
+        if self.type_node_links.at(links).resolved_type.get().is_none() {
             let arg_type = node.type_node().unwrap();
             match node.as_type_operator_node().operator {
                 Kind::KeyOfKeyword => {
                     let t = self.get_type_from_type_node(arg_type);
                     let index_type = self.get_index_type(t);
-                    links.resolved_type.set(Some(index_type));
+                    self.type_node_links.at(links).resolved_type.set(Some(index_type));
                 }
                 Kind::UniqueKeyword => {
                     if arg_type.kind() == Kind::SymbolKeyword {
                         let t = self.get_es_symbol_like_type_for_node(walk_up_parenthesized_types(node.parent()).unwrap());
-                        links.resolved_type.set(Some(t));
+                        self.type_node_links.at(links).resolved_type.set(Some(t));
                     } else {
-                        links.resolved_type.set(Some(self.error_type));
+                        self.type_node_links.at(links).resolved_type.set(Some(self.error_type));
                     }
                 }
                 Kind::ReadonlyKeyword => {
                     let t = self.get_type_from_type_node(arg_type);
-                    links.resolved_type.set(Some(t));
+                    self.type_node_links.at(links).resolved_type.set(Some(t));
                 }
                 _ => panic!("Unhandled case in getTypeFromTypeOperatorNode"),
             }
         }
-        links.resolved_type.get().unwrap()
+        self.type_node_links.at(links).resolved_type.get().unwrap()
     }
 
     // checker.go:23407
@@ -2146,24 +2146,24 @@ impl Checker {
 
     // checker.go:23428
     pub(crate) fn get_type_from_type_reference(&mut self, node: P<Node>) -> P<Type> {
-        let links = self.type_node_links.get(node);
-        if links.resolved_type.get().is_none() {
+        let links = self.type_node_links.get_key(node);
+        if self.type_node_links.at(links).resolved_type.get().is_none() {
             // Cache both the resolved symbol and the resolved type. The resolved symbol is needed when we check the
             // type reference in checkTypeReferenceNode.
             // handle LS queries on the `const` in `x as const` by resolving to the type of `x`
             if crate::is_const_type_reference(node) && is_assertion_expression(node.parent().unwrap()) {
                 let t = self.check_expression_cached(node.parent().unwrap().expression().unwrap());
-                links.resolved_type.set(Some(t));
+                self.type_node_links.at(links).resolved_type.set(Some(t));
             } else if let Some(t) = self.get_intended_type_from_jsdoc_type_reference(node) {
-                links.resolved_type.set(Some(t));
+                self.type_node_links.at(links).resolved_type.set(Some(t));
             } else {
                 let symbol = self.get_symbol_from_type_reference(node);
                 let t = self.get_type_reference_type(node, symbol);
                 let t = self.get_distributed_type_parameter(node, t);
-                links.resolved_type.set(Some(t));
+                self.type_node_links.at(links).resolved_type.set(Some(t));
             }
         }
-        links.resolved_type.get().unwrap()
+        self.type_node_links.at(links).resolved_type.get().unwrap()
     }
 
     // checker.go:23445

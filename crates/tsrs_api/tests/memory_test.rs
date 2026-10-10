@@ -1,5 +1,8 @@
 // Memory ownership tests. RSS is process-wide, so these tests serialize on MEMORY and live in their own test
 // binary (other test files are separate processes).
+// The sampler requires glibc's malloc_trim and Linux /proc; other platforms cannot run these RSS assertions.
+#![cfg(all(target_os = "linux", target_env = "gnu"))]
+
 mod common;
 use common::*;
 use std::sync::Mutex;

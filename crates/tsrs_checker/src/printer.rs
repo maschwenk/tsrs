@@ -574,8 +574,8 @@ impl Checker {
         };
         let containing_file = ast::get_source_file_of_node(enclosing_declaration).unwrap();
         let id = ast::get_node_id(containing_file.as_node());
-        let links = self.symbol_container_links.get(symbol);
-        let existing = links.extended_containers_by_file.borrow().get(&id).copied();
+        let links = self.symbol_container_links.get_key(symbol);
+        let existing = self.symbol_container_links.at(links).extended_containers_by_file.borrow().get(&id).copied();
         if let Some(existing) = existing {
             return existing.to_vec();
         }
@@ -599,12 +599,12 @@ impl Checker {
                 results.push(resolved_module);
             }
             if !results.is_empty() {
-                links.extended_containers_by_file.borrow_mut().insert(id, alloc_slice(&results));
+                self.symbol_container_links.at(links).extended_containers_by_file.borrow_mut().insert(id, alloc_slice(&results));
                 return results;
             }
         }
 
-        if let Some(extended_containers) = links.extended_containers.get() {
+        if let Some(extended_containers) = self.symbol_container_links.at(links).extended_containers.get() {
             return extended_containers.to_vec();
         }
         // No results from files already being imported by this file - expand search (expensive, but not location-specific, so cached)
@@ -632,7 +632,7 @@ impl Checker {
                 }
             }
         }
-        links.extended_containers.set(Some(alloc_slice(&results)));
+        self.symbol_container_links.at(links).extended_containers.set(Some(alloc_slice(&results)));
         results
     }
 
@@ -1052,13 +1052,13 @@ impl Checker {
             first_relevant_location = node;
             true
         });
-        let links = self.symbol_container_links.get(symbol);
+        let links = self.symbol_container_links.get_key(symbol);
         let link_key = accessibleChainCacheKey {
             use_only_external_aliasing: ctx.use_only_external_aliasing,
             location: first_relevant_location,
             meaning: ctx.meaning,
         };
-        let existing = links.accessible_chain_cache.borrow().get(&link_key).copied();
+        let existing = self.symbol_container_links.at(links).accessible_chain_cache.borrow().get(&link_key).copied();
         if let Some(existing) = existing {
             return existing.to_vec();
         }
@@ -1073,7 +1073,7 @@ impl Checker {
             }
             false
         });
-        links.accessible_chain_cache.borrow_mut().insert(link_key, alloc_slice(&result));
+        self.symbol_container_links.at(links).accessible_chain_cache.borrow_mut().insert(link_key, alloc_slice(&result));
         // A location in a file's emit scratch region (a synthesized node) dies with it; its handle may then name a
         // new node, so the entry is forgotten when the file's transform ends (`forget_scratch_keyed_caches`).
         if let Some(location) = first_relevant_location {

@@ -870,8 +870,8 @@ impl Checker {
     // checker.go:7212
     pub(crate) fn register_for_unused_identifiers_check(&mut self, node: P<Node>) {
         let source_file = get_source_file_of_node(node).unwrap();
-        let links = self.source_file_links.get(source_file);
-        links.identifier_check_nodes.borrow_mut().push(node);
+        let links = self.source_file_links.get_key(source_file);
+        self.source_file_links.at(links).identifier_check_nodes.borrow_mut().push(node);
     }
 
     // checker.go:7218
@@ -1486,19 +1486,19 @@ impl Checker {
         if check_mode != CheckMode::Normal {
             return self.check_expression_ex(node, check_mode);
         }
-        let links = self.type_node_links.get(node);
-        if links.resolved_type.get().is_none() {
+        let links = self.type_node_links.get_key(node);
+        if self.type_node_links.at(links).resolved_type.get().is_none() {
             // When computing a type that we're going to cache, we need to ignore any ongoing control flow
             // analysis because variables may have transient types in indeterminable states. Moving flowLoopStart
             // to the top of the stack ensures all transient types are computed from a known point.
             let save_flow_loop_stack = std::mem::take(&mut self.flow_loop_stack);
             let save_flow_type_cache = self.take_flow_type_cache();
             let t = self.check_expression_ex(node, check_mode);
-            links.resolved_type.set(Some(t));
+            self.type_node_links.at(links).resolved_type.set(Some(t));
             self.restore_flow_type_cache(save_flow_type_cache);
             self.flow_loop_stack = save_flow_loop_stack;
         }
-        links.resolved_type.get().unwrap()
+        self.type_node_links.at(links).resolved_type.get().unwrap()
     }
 
     // Returns the type of an expression. Unlike checkExpression, this function is simply concerned
@@ -1936,8 +1936,8 @@ impl Checker {
                 let mut current = get_enclosing_block_scope_container(node.parent().unwrap());
                 while let Some(cur) = current {
                     if !is_source_file(cur) || is_external_or_common_js_module(cur.as_source_file_p()) {
-                        let links = self.node_links.get(cur);
-                        links.flags.set(links.flags.get() | NodeCheckFlags::ContainsSuperPropertyInStaticInitializer);
+                        let links = self.node_links.get_key(cur);
+                        self.node_links.at(links).flags.set(self.node_links.at(links).flags.get() | NodeCheckFlags::ContainsSuperPropertyInStaticInitializer);
                     }
                     current = get_enclosing_block_scope_container(cur);
                 }
@@ -2021,9 +2021,9 @@ impl Checker {
 
     // checker.go:8184
     pub(crate) fn check_regular_expression_literal(&mut self, node: P<Node>) -> P<Type> {
-        let node_links = self.node_links.get(node);
-        if !node_links.flags.get().intersects(NodeCheckFlags::TypeChecked) {
-            node_links.flags.set(node_links.flags.get() | NodeCheckFlags::TypeChecked);
+        let node_links = self.node_links.get_key(node);
+        if !self.node_links.at(node_links).flags.get().intersects(NodeCheckFlags::TypeChecked) {
+            self.node_links.at(node_links).flags.set(self.node_links.at(node_links).flags.get() | NodeCheckFlags::TypeChecked);
             self.check_grammar_regular_expression_literal(node);
         }
         self.global_reg_exp_type
@@ -2496,12 +2496,12 @@ impl Checker {
      */
     // checker.go:8581
     pub fn get_resolved_signature(&mut self, node: P<Node>, candidates_out_array: Option<&mut Vec<P<Signature>>>, check_mode: CheckMode) -> P<Signature> {
-        let links = self.signature_links.get(node);
+        let links = self.signature_links.get_key(node);
         // If getResolvedSignature has already been called, we will have cached the resolvedSignature.
         // However, it is possible that either candidatesOutArray was not passed in the first time,
         // or that a different candidatesOutArray was passed in. Therefore, we need to redo the work
         // to correctly fill the candidatesOutArray.
-        let cached = links.resolved_signature.get();
+        let cached = self.signature_links.at(links).resolved_signature.get();
         if let Some(cached) = cached {
             if cached != self.resolving_signature && candidates_out_array.is_none() {
                 return cached;
@@ -2521,7 +2521,7 @@ impl Checker {
             // the contextual type circularity.
             self.resolution_start = self.type_resolutions.len() as i32;
         }
-        links.resolved_signature.set(Some(self.resolving_signature));
+        self.signature_links.at(links).resolved_signature.set(Some(self.resolving_signature));
         let mut result = self.resolve_signature(node, candidates_out_array, check_mode);
         self.resolution_start = save_resolution_start;
         // When CheckMode.SkipGenericFunctions is set we use resolvingSignature to indicate that call
@@ -2532,16 +2532,16 @@ impl Checker {
             // since resolving such signature leads to resolving the potential outer signature, its arguments and thus the very same signature
             // it's possible that this inner resolution sets the resolvedSignature first.
             // In such a case we ignore the local result and reuse the correct one that was cached.
-            if links.resolved_signature.get() != Some(self.resolving_signature) {
-                result = links.resolved_signature.get().unwrap();
+            if self.signature_links.at(links).resolved_signature.get() != Some(self.resolving_signature) {
+                result = self.signature_links.at(links).resolved_signature.get().unwrap();
             }
             // If signature resolution originated in control flow type analysis (for example to compute the
             // assigned type in a flow assignment) we don't cache the result as it may be based on temporary
             // types from the control flow analysis.
             if self.flow_loop_stack.is_empty() {
-                links.resolved_signature.set(Some(result));
+                self.signature_links.at(links).resolved_signature.set(Some(result));
             } else {
-                links.resolved_signature.set(cached);
+                self.signature_links.at(links).resolved_signature.set(cached);
             }
         }
         result

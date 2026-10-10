@@ -620,8 +620,8 @@ impl Checker {
     // jsx.go:500
     pub(crate) fn get_jsx_fragment_type(&mut self, node: P<Node>) -> P<Type> {
         // An opening fragment is required in order for `getJsxNamespace` to give the fragment factory
-        let links = self.source_file_links.get(ast::get_source_file_of_node(node).unwrap());
-        if let Some(jsx_fragment_type) = links.jsx_fragment_type.get() {
+        let links = self.source_file_links.get_key(ast::get_source_file_of_node(node).unwrap());
+        if let Some(jsx_fragment_type) = self.source_file_links.at(links).jsx_fragment_type.get() {
             return jsx_fragment_type;
         }
         let jsx_fragment_factory_name = self.get_jsx_namespace(Some(node));
@@ -629,7 +629,7 @@ impl Checker {
         let should_resolve_factory_reference = (self.compiler_options.jsx == JsxEmit::React || !self.compiler_options.jsx_fragment_factory.is_empty())
             && jsx_fragment_factory_name != "null";
         if !should_resolve_factory_reference {
-            links.jsx_fragment_type.set(Some(self.any_type));
+            self.source_file_links.at(links).jsx_fragment_type.set(Some(self.any_type));
             return self.any_type;
         }
         let mut jsx_factory_symbol = self.get_jsx_namespace_container_for_implicit_import(node);
@@ -649,12 +649,12 @@ impl Checker {
             );
         }
         let Some(jsx_factory_symbol) = jsx_factory_symbol else {
-            links.jsx_fragment_type.set(Some(self.error_type));
+            self.source_file_links.at(links).jsx_fragment_type.set(Some(self.error_type));
             return self.error_type;
         };
         if jsx_factory_symbol.name() == ReactNames.fragment {
             let t = self.get_type_of_symbol(jsx_factory_symbol);
-            links.jsx_fragment_type.set(Some(t));
+            self.source_file_links.at(links).jsx_fragment_type.set(Some(t));
             return t;
         }
         let mut resolved_alias = jsx_factory_symbol;
@@ -666,11 +666,11 @@ impl Checker {
         let type_symbol = self.get_symbol(react_exports, ReactNames.fragment, SymbolFlags::BlockScopedVariable);
         if let Some(type_symbol) = type_symbol {
             let t = self.get_type_of_symbol(type_symbol);
-            links.jsx_fragment_type.set(Some(t));
+            self.source_file_links.at(links).jsx_fragment_type.set(Some(t));
         } else {
-            links.jsx_fragment_type.set(Some(self.error_type));
+            self.source_file_links.at(links).jsx_fragment_type.set(Some(self.error_type));
         }
-        links.jsx_fragment_type.get().unwrap()
+        self.source_file_links.at(links).jsx_fragment_type.get().unwrap()
     }
 
     // jsx.go:545
@@ -1299,26 +1299,26 @@ impl Checker {
     // @param node an intrinsic JSX opening-like element
     pub(crate) fn get_intrinsic_attributes_type_from_jsx_opening_like_element(&mut self, node: P<Node>) -> Option<P<Type>> {
         assert!(is_jsx_intrinsic_tag_name(node.tag_name()));
-        let links = self.jsx_element_links.get(node);
-        if links.resolved_jsx_element_attributes_type.get().is_some() {
-            return links.resolved_jsx_element_attributes_type.get();
+        let links = self.jsx_element_links.get_key(node);
+        if self.jsx_element_links.at(links).resolved_jsx_element_attributes_type.get().is_some() {
+            return self.jsx_element_links.at(links).resolved_jsx_element_attributes_type.get();
         }
         let symbol = self.get_intrinsic_tag_symbol(node);
-        if links.jsx_flags.get().intersects(JsxFlags::IntrinsicNamedElement) {
+        if self.jsx_element_links.at(links).jsx_flags.get().intersects(JsxFlags::IntrinsicNamedElement) {
             let t = self.get_type_of_symbol(symbol.unwrap());
-            links.resolved_jsx_element_attributes_type.set(Some(t));
-            return links.resolved_jsx_element_attributes_type.get();
+            self.jsx_element_links.at(links).resolved_jsx_element_attributes_type.set(Some(t));
+            return self.jsx_element_links.at(links).resolved_jsx_element_attributes_type.get();
         }
-        if links.jsx_flags.get().intersects(JsxFlags::IntrinsicIndexedElement) {
+        if self.jsx_element_links.at(links).jsx_flags.get().intersects(JsxFlags::IntrinsicIndexedElement) {
             let intrinsic_elements_type = self.get_jsx_type(JsxNames.intrinsic_elements, node);
             let index_info = self.get_applicable_index_info_for_name(intrinsic_elements_type, node.tag_name().text());
             if let Some(index_info) = index_info {
-                links.resolved_jsx_element_attributes_type.set(index_info.value_type.get());
-                return links.resolved_jsx_element_attributes_type.get();
+                self.jsx_element_links.at(links).resolved_jsx_element_attributes_type.set(index_info.value_type.get());
+                return self.jsx_element_links.at(links).resolved_jsx_element_attributes_type.get();
             }
         }
-        links.resolved_jsx_element_attributes_type.set(Some(self.error_type));
-        links.resolved_jsx_element_attributes_type.get()
+        self.jsx_element_links.at(links).resolved_jsx_element_attributes_type.set(Some(self.error_type));
+        self.jsx_element_links.at(links).resolved_jsx_element_attributes_type.get()
     }
 
     // jsx.go:1214
@@ -1341,8 +1341,8 @@ impl Checker {
             let prop_name = tag_name.text();
             let intrinsic_prop = self.get_property_of_type(intrinsic_elements_type, prop_name);
             if intrinsic_prop.is_some() {
-                let jsx_links = self.jsx_element_links.get(node);
-                jsx_links.jsx_flags.set(jsx_links.jsx_flags.get() | JsxFlags::IntrinsicNamedElement);
+                let jsx_links = self.jsx_element_links.get_key(node);
+                self.jsx_element_links.at(jsx_links).jsx_flags.set(self.jsx_element_links.at(jsx_links).jsx_flags.get() | JsxFlags::IntrinsicNamedElement);
                 links.resolved_symbol.set(intrinsic_prop);
                 return links.resolved_symbol.get();
             }
@@ -1350,14 +1350,14 @@ impl Checker {
             let prop_name_type = self.get_string_literal_type(prop_name);
             let index_symbol = self.get_applicable_index_symbol(intrinsic_elements_type, prop_name_type);
             if index_symbol.is_some() {
-                let jsx_links = self.jsx_element_links.get(node);
-                jsx_links.jsx_flags.set(jsx_links.jsx_flags.get() | JsxFlags::IntrinsicIndexedElement);
+                let jsx_links = self.jsx_element_links.get_key(node);
+                self.jsx_element_links.at(jsx_links).jsx_flags.set(self.jsx_element_links.at(jsx_links).jsx_flags.get() | JsxFlags::IntrinsicIndexedElement);
                 links.resolved_symbol.set(index_symbol);
                 return links.resolved_symbol.get();
             }
             if self.get_type_of_property_or_index_signature_of_type(intrinsic_elements_type, prop_name).is_some() {
-                let jsx_links = self.jsx_element_links.get(node);
-                jsx_links.jsx_flags.set(jsx_links.jsx_flags.get() | JsxFlags::IntrinsicIndexedElement);
+                let jsx_links = self.jsx_element_links.get_key(node);
+                self.jsx_element_links.at(jsx_links).jsx_flags.set(self.jsx_element_links.at(jsx_links).jsx_flags.get() | JsxFlags::IntrinsicIndexedElement);
                 links.resolved_symbol.set(intrinsic_elements_type.symbol());
                 return links.resolved_symbol.get();
             }
@@ -1424,18 +1424,18 @@ impl Checker {
 
     // jsx.go:1304
     pub(crate) fn get_jsx_namespace_at(&mut self, location: Option<P<Node>>) -> Option<P<Symbol>> {
-        let mut links: Option<P<JsxElementLinks>> = None;
+        let mut links = None;
         if let Some(location) = location {
-            links = Some(self.jsx_element_links.get(location));
+            links = Some(self.jsx_element_links.get_key(location));
         }
         if let Some(links) = links {
-            if let Some(jsx_namespace) = links.jsx_namespace.get() {
+            if let Some(jsx_namespace) = self.jsx_element_links.at(links).jsx_namespace.get() {
                 if jsx_namespace != self.unknown_symbol {
                     return Some(jsx_namespace);
                 }
             }
         }
-        if links.is_none() || links.unwrap().jsx_namespace.get() != Some(self.unknown_symbol) {
+        if links.is_none() || self.jsx_element_links.at(links.unwrap()).jsx_namespace.get() != Some(self.unknown_symbol) {
             // Go dereferences the source file of location here, so location is non-nil on this path.
             let mut resolved_namespace = self.get_jsx_namespace_container_for_implicit_import(location.unwrap());
             if resolved_namespace.is_none() || resolved_namespace == Some(self.unknown_symbol) {
@@ -1449,14 +1449,14 @@ impl Checker {
                 if let Some(candidate) = candidate {
                     if candidate != self.unknown_symbol {
                         if let Some(links) = links {
-                            links.jsx_namespace.set(Some(candidate));
+                            self.jsx_element_links.at(links).jsx_namespace.set(Some(candidate));
                         }
                         return Some(candidate);
                     }
                 }
             }
             if let Some(links) = links {
-                links.jsx_namespace.set(Some(self.unknown_symbol));
+                self.jsx_element_links.at(links).jsx_namespace.set(Some(self.unknown_symbol));
             }
         }
         // JSX global fallback
@@ -1472,31 +1472,31 @@ impl Checker {
         if let Some(location) = location {
             let file = ast::get_source_file_of_node(location);
             if let Some(file) = file {
-                let links = self.source_file_links.get(file);
+                let links = self.source_file_links.get_key(file);
                 if ast::is_jsx_opening_fragment(location) {
-                    if !links.local_jsx_fragment_namespace.get().is_empty() {
-                        return links.local_jsx_fragment_namespace.get().to_string();
+                    if !self.source_file_links.at(links).local_jsx_fragment_namespace.get().is_empty() {
+                        return self.source_file_links.at(links).local_jsx_fragment_namespace.get().to_string();
                     }
                     let jsx_fragment_pragma = ast::get_pragma_from_source_file(Some(file), "jsxfrag");
                     if let Some(jsx_fragment_pragma) = jsx_fragment_pragma {
                         let factory = self.parse_isolated_entity_name(pragma_factory_argument(jsx_fragment_pragma));
-                        links.local_jsx_fragment_factory.set(factory);
+                        self.source_file_links.at(links).local_jsx_fragment_factory.set(factory);
                         if let Some(factory) = factory {
-                            links.local_jsx_fragment_namespace.set(ast::get_first_identifier(factory).text());
-                            return links.local_jsx_fragment_namespace.get().to_string();
+                            self.source_file_links.at(links).local_jsx_fragment_namespace.set(ast::get_first_identifier(factory).text());
+                            return self.source_file_links.at(links).local_jsx_fragment_namespace.get().to_string();
                         }
                     }
                     let entity = self.get_jsx_fragment_factory_entity(Some(location));
                     if let Some(entity) = entity {
-                        links.local_jsx_fragment_factory.set(Some(entity));
-                        links.local_jsx_fragment_namespace.set(ast::get_first_identifier(entity).text());
-                        return links.local_jsx_fragment_namespace.get().to_string();
+                        self.source_file_links.at(links).local_jsx_fragment_factory.set(Some(entity));
+                        self.source_file_links.at(links).local_jsx_fragment_namespace.set(ast::get_first_identifier(entity).text());
+                        return self.source_file_links.at(links).local_jsx_fragment_namespace.get().to_string();
                     }
                 } else {
                     let local_jsx_namespace = self.get_local_jsx_namespace(file);
                     if !local_jsx_namespace.is_empty() {
-                        links.local_jsx_namespace.set(alloc_str(&local_jsx_namespace));
-                        return links.local_jsx_namespace.get().to_string();
+                        self.source_file_links.at(links).local_jsx_namespace.set(alloc_str(&local_jsx_namespace));
+                        return self.source_file_links.at(links).local_jsx_namespace.get().to_string();
                     }
                 }
             }
@@ -1523,17 +1523,17 @@ impl Checker {
 
     // jsx.go:1388
     pub(crate) fn get_local_jsx_namespace(&mut self, file: P<SourceFile>) -> String {
-        let links = self.source_file_links.get(file);
-        if !links.local_jsx_namespace.get().is_empty() {
-            return links.local_jsx_namespace.get().to_string();
+        let links = self.source_file_links.get_key(file);
+        if !self.source_file_links.at(links).local_jsx_namespace.get().is_empty() {
+            return self.source_file_links.at(links).local_jsx_namespace.get().to_string();
         }
         let jsx_pragma = ast::get_pragma_from_source_file(Some(file), "jsx");
         if let Some(jsx_pragma) = jsx_pragma {
             let factory = self.parse_isolated_entity_name(pragma_factory_argument(jsx_pragma));
-            links.local_jsx_factory.set(factory);
+            self.source_file_links.at(links).local_jsx_factory.set(factory);
             if let Some(factory) = factory {
-                links.local_jsx_namespace.set(ast::get_first_identifier(factory).text());
-                return links.local_jsx_namespace.get().to_string();
+                self.source_file_links.at(links).local_jsx_namespace.set(ast::get_first_identifier(factory).text());
+                return self.source_file_links.at(links).local_jsx_namespace.get().to_string();
             }
         }
         String::new()
@@ -1555,15 +1555,15 @@ impl Checker {
         if let Some(location) = location {
             let file = ast::get_source_file_of_node(location);
             if let Some(file) = file {
-                let links = self.source_file_links.get(file);
-                if let Some(local_jsx_fragment_factory) = links.local_jsx_fragment_factory.get() {
+                let links = self.source_file_links.get_key(file);
+                if let Some(local_jsx_fragment_factory) = self.source_file_links.at(links).local_jsx_fragment_factory.get() {
                     return Some(local_jsx_fragment_factory);
                 }
                 let jsx_frag_pragma = ast::get_pragma_from_source_file(Some(file), "jsxfrag");
                 if let Some(jsx_frag_pragma) = jsx_frag_pragma {
                     let factory = self.parse_isolated_entity_name(pragma_factory_argument(jsx_frag_pragma));
-                    links.local_jsx_fragment_factory.set(factory);
-                    return links.local_jsx_fragment_factory.get();
+                    self.source_file_links.at(links).local_jsx_fragment_factory.set(factory);
+                    return self.source_file_links.at(links).local_jsx_fragment_factory.get();
                 }
             }
         }
@@ -1601,13 +1601,13 @@ impl Checker {
     // jsx.go:1449
     pub(crate) fn get_jsx_namespace_container_for_implicit_import(&mut self, location: P<Node>) -> Option<P<Symbol>> {
         let file = ast::get_source_file_of_node(location).unwrap();
-        let links = self.jsx_element_links.get(file.as_node());
-        if let Some(jsx_implicit_import_container) = links.jsx_implicit_import_container.get() {
+        let links = self.jsx_element_links.get_key(file.as_node());
+        if let Some(jsx_implicit_import_container) = self.jsx_element_links.at(links).jsx_implicit_import_container.get() {
             return if jsx_implicit_import_container == self.unknown_symbol { None } else { Some(jsx_implicit_import_container) };
         }
-        let mut canonical_error_tag = links.first_jsx_tag_in_file.get();
+        let mut canonical_error_tag = self.jsx_element_links.at(links).first_jsx_tag_in_file.get();
         if canonical_error_tag.is_none() {
-            fn visit(links: P<JsxElementLinks>, node: P<Node>) -> bool {
+            fn visit(links: &JsxElementLinks, node: P<Node>) -> bool {
                 if ast::is_jsx_element(node) || ast::is_jsx_self_closing_element(node) {
                     links.first_jsx_tag_in_file.set(Some(node));
                     return true;
@@ -1618,8 +1618,8 @@ impl Checker {
                 }
                 node.for_each_child(&mut |child| visit(links, child))
             }
-            file.as_node().for_each_child(&mut |child| visit(links, child));
-            canonical_error_tag = links.first_jsx_tag_in_file.get();
+            file.as_node().for_each_child(&mut |child| visit(self.jsx_element_links.at(links), child));
+            canonical_error_tag = self.jsx_element_links.at(links).first_jsx_tag_in_file.get();
         }
         let (module_reference, specifier) = self.get_jsx_runtime_import_specifier(file);
         if module_reference.is_empty() {
@@ -1634,7 +1634,7 @@ impl Checker {
                 result = Some(self.get_merged_symbol(resolved));
             }
         }
-        links.jsx_implicit_import_container.set(Some(result.unwrap_or(self.unknown_symbol)));
+        self.jsx_element_links.at(links).jsx_implicit_import_container.set(Some(result.unwrap_or(self.unknown_symbol)));
         result
     }
 

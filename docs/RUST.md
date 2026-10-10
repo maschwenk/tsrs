@@ -147,6 +147,7 @@ In place:
 | mimalloc as the global allocator | `notes/fix-perf-memory.md` | oxc, Rolldown, Turborepo, Bun |
 | Oxc arenas for fixed no-`Drop` data, one per allocation owner; resource-owning values in owner-paired heap sidecars that drop before the Oxc chunks | PORTING.md "Memory model", `notes/oxc-allocator-migration.md` | oxc (arena) |
 | Native identity pointers (`Option<P<T>>` is pointer-sized) | `notes/oxc-allocator-migration.md` | oxc AST references |
+| Rust-owned typed indexed records for the generic and keyed checker link tables; access borrows the store and recursive work retains keys | `notes/rust-owned-arenas.md`: partial ownership migration; remaining graph still uses `P` | |
 | Packed layouts with size assertions | `notes/mem-layout.md`, `mem-layout3.md`, `mem-round2.md`, `mem-round3.md`, `mem-small.md` | oxc, ty, rust-analyzer, Bun |
 | Fx hashing everywhere | `notes/perf-checker-cpu2.md` | oxc, Rolldown, Ruff, rust-analyzer |
 | Lazy members, line maps and rare-field tails | `notes/lazy-members.md`, `notes/mem-lazy.md` | |
@@ -160,6 +161,8 @@ In place:
 The Oxc migration removed the custom 32 GiB reservation, compressed handles, per-block free lists, partial rewind,
 explicit huge-page arena chunks and never-reused leaf retirement. `TSRS_FREE_LEAVES` is disabled until every
 external address-keyed entry can be removed before an owner is released. See `notes/oxc-allocator-migration.md`.
+That backend is not memory-neutral: the pre-Oxc comparison in `notes/rust-owned-arenas.md` finds +75–85% default
+peak RSS on the pinned Compiler workloads. The safe link-table pilot does not resolve that overall regression.
 
 Measured and rejected (do not retry without new evidence): explicit huge pages on top of mimalloc's, pre-faulting and
 mmap'd arena chunks without advice (`notes/linux-perf.md`; the former compressed arena reservation was not mimalloc
@@ -200,6 +203,6 @@ Not pursued: a binary-size check (Bun fails a pull request that grows the binary
 goal here (owner decision, 2026-10-05).
 
 Does not transfer: nightly-only flags (Bun's `-Zbuild-std`, `-Zlocation-detail=none`, `-Zshare-generics`; the release
-toolchain is stable), lifetime-carrying arenas such as bumpalo's `&'a T` (PORTING.md: no lifetime parameters), thin
-LTO (fat LTO already covers it). Oxc's no-`Drop` constraint now applies to fixed arena data; resource-owning values
+toolchain is stable), thin LTO (fat LTO already covers it). Owner-borrowed references are now used in migrated
+indexed stores (`notes/rust-owned-arenas.md`). Oxc's no-`Drop` constraint applies to remaining legacy fixed arena data; resource-owning values
 are sidecars paired with the same owner (`notes/oxc-allocator-migration.md`).

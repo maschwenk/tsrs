@@ -2183,12 +2183,12 @@ impl Checker {
     pub(crate) fn check_grammar_statement_in_ambient_context(&mut self, node: P<Node>) -> bool {
         if node.flags().intersects(NodeFlags::Ambient) {
             // Find containing block which is either Block, ModuleBlock, SourceFile
-            let links = self.node_links.get(node);
+            let links = self.node_links.get_key(node);
             let parent = node.parent().unwrap();
-            if !links.has_reported_statement_in_ambient_context.get() && (ast::is_function_like(parent) || ast::is_accessor(parent)) {
+            if !self.node_links.at(links).has_reported_statement_in_ambient_context.get() && (ast::is_function_like(parent) || ast::is_accessor(parent)) {
                 let reported = self.grammar_error_on_first_token(node, &diagnostics::An_implementation_cannot_be_declared_in_ambient_contexts, &[]);
-                links.has_reported_statement_in_ambient_context.set(reported);
-                return links.has_reported_statement_in_ambient_context.get();
+                self.node_links.at(links).has_reported_statement_in_ambient_context.set(reported);
+                return self.node_links.at(links).has_reported_statement_in_ambient_context.get();
             }
 
             // We are either parented by another statement, or some sort of block.
@@ -2197,12 +2197,12 @@ impl Checker {
             // this has already been reported, and don't report if it has.
             //
             if parent.kind() == Kind::Block || parent.kind() == Kind::ModuleBlock || parent.kind() == Kind::SourceFile {
-                let links = self.node_links.get(parent);
+                let links = self.node_links.get_key(parent);
                 // Check if the containing block ever report this error
-                if !links.has_reported_statement_in_ambient_context.get() {
+                if !self.node_links.at(links).has_reported_statement_in_ambient_context.get() {
                     let reported = self.grammar_error_on_first_token(node, &diagnostics::Statements_are_not_allowed_in_ambient_contexts, &[]);
-                    links.has_reported_statement_in_ambient_context.set(reported);
-                    return links.has_reported_statement_in_ambient_context.get();
+                    self.node_links.at(links).has_reported_statement_in_ambient_context.set(reported);
+                    return self.node_links.at(links).has_reported_statement_in_ambient_context.get();
                 }
             } else {
                 // We must be parented by a statement.  If so, there's no need

@@ -2571,19 +2571,19 @@ pub(crate) fn is_coercible_under_double_equals(source: P<Type>, target: P<Type>)
 impl Checker {
     // flow.go:1933
     pub(crate) fn is_exhaustive_switch_statement(&mut self, node: P<Node>) -> bool {
-        let links = self.switch_statement_links.get(node);
-        if links.exhaustive_state.get() == ExhaustiveState::Unknown {
+        let links = self.switch_statement_links.get_key(node);
+        if self.switch_statement_links.at(links).exhaustive_state.get() == ExhaustiveState::Unknown {
             // Indicate resolution is in process
-            links.exhaustive_state.set(ExhaustiveState::Computing);
+            self.switch_statement_links.at(links).exhaustive_state.set(ExhaustiveState::Computing);
             let is_exhaustive = self.compute_exhaustive_switch_statement(node);
-            if links.exhaustive_state.get() == ExhaustiveState::Computing {
-                links.exhaustive_state.set(if is_exhaustive { ExhaustiveState::True } else { ExhaustiveState::False });
+            if self.switch_statement_links.at(links).exhaustive_state.get() == ExhaustiveState::Computing {
+                self.switch_statement_links.at(links).exhaustive_state.set(if is_exhaustive { ExhaustiveState::True } else { ExhaustiveState::False });
             }
-        } else if links.exhaustive_state.get() == ExhaustiveState::Computing {
+        } else if self.switch_statement_links.at(links).exhaustive_state.get() == ExhaustiveState::Computing {
             // Resolve circularity to false
-            links.exhaustive_state.set(ExhaustiveState::False);
+            self.switch_statement_links.at(links).exhaustive_state.set(ExhaustiveState::False);
         }
-        links.exhaustive_state.get() == ExhaustiveState::True
+        self.switch_statement_links.at(links).exhaustive_state.get() == ExhaustiveState::True
     }
 
     // flow.go:1949
@@ -2631,8 +2631,8 @@ impl Checker {
     // represented as empty strings. Return nil if one or more case clause expressions are not string literals.
     // flow.go:1989
     pub(crate) fn get_switch_clause_type_of_witnesses(&mut self, node: P<Node>) -> Option<&'static [&'static str]> {
-        let links = self.switch_statement_links.get(node);
-        if !links.witnesses_computed.get() {
+        let links = self.switch_statement_links.get_key(node);
+        if !self.switch_statement_links.at(links).witnesses_computed.get() {
             let clauses = node.as_switch_statement().case_block.as_case_block().clauses.nodes();
             let mut witnesses: Option<Vec<&'static str>> = Some(vec![""; clauses.len()]);
             for (i, &clause) in clauses.iter().enumerate() {
@@ -2649,10 +2649,10 @@ impl Checker {
                     }
                 }
             }
-            links.witnesses.set(witnesses.map(alloc_vec));
-            links.witnesses_computed.set(true);
+            self.switch_statement_links.at(links).witnesses.set(witnesses.map(alloc_vec));
+            self.switch_statement_links.at(links).witnesses_computed.set(true);
         }
-        links.witnesses.get()
+        self.switch_statement_links.at(links).witnesses.get()
     }
 
     // Return the combined not-equal type facts for all cases except those between the start and end indices.
@@ -2674,17 +2674,17 @@ impl Checker {
 
     // flow.go:2026
     pub(crate) fn get_switch_clause_types(&mut self, node: P<Node>) -> Vec<P<Type>> {
-        let links = self.switch_statement_links.get(node);
-        if !links.switch_types_computed.get() {
+        let links = self.switch_statement_links.get_key(node);
+        if !self.switch_statement_links.at(links).switch_types_computed.get() {
             let clauses = node.as_switch_statement().case_block.as_case_block().clauses.nodes();
             let mut types = Vec::with_capacity(clauses.len());
             for &clause in clauses {
                 types.push(self.get_type_of_switch_clause(clause));
             }
-            links.switch_types.set(alloc_vec(types));
-            links.switch_types_computed.set(true);
+            self.switch_statement_links.at(links).switch_types.set(alloc_vec(types));
+            self.switch_statement_links.at(links).switch_types_computed.set(true);
         }
-        links.switch_types.get().to_vec()
+        self.switch_statement_links.at(links).switch_types.get().to_vec()
     }
 
     // flow.go:2040
@@ -2698,8 +2698,8 @@ impl Checker {
 
     // flow.go:2047
     pub(crate) fn get_effects_signature(&mut self, node: P<Node>) -> Option<P<Signature>> {
-        let links = self.signature_links.get(node);
-        let mut signature = links.effects_signature.get();
+        let links = self.signature_links.get_key(node);
+        let mut signature = self.signature_links.at(links).effects_signature.get();
         if signature.is_none() {
             // A call expression parented by an expression statement is a potential assertion. Other call
             // expressions are potential type predicate function calls. In order to avoid triggering
@@ -2734,7 +2734,7 @@ impl Checker {
             if !(signature.is_some() && self.has_type_predicate_or_never_return_type(signature.unwrap())) {
                 signature = Some(self.unknown_signature);
             }
-            links.effects_signature.set(signature);
+            self.signature_links.at(links).effects_signature.set(signature);
         }
         if signature == Some(self.unknown_signature) {
             return None;
@@ -3410,9 +3410,9 @@ impl Checker {
             Some(parent) => parent,
             None => return,
         };
-        let links = self.node_links.get(parent);
-        if !links.flags.get().intersects(NodeCheckFlags::AssignmentsMarked) {
-            links.flags.set(links.flags.get() | NodeCheckFlags::AssignmentsMarked);
+        let links = self.node_links.get_key(parent);
+        if !self.node_links.at(links).flags.get().intersects(NodeCheckFlags::AssignmentsMarked) {
+            self.node_links.at(links).flags.set(self.node_links.at(links).flags.get() | NodeCheckFlags::AssignmentsMarked);
             if !self.has_parent_with_assignments_marked(parent) {
                 self.mark_node_assignments(parent);
             }
@@ -3438,19 +3438,20 @@ impl Checker {
                 if assignment_kind != AssignmentKind::None {
                     let symbol = self.get_resolved_symbol(node);
                     if self.is_parameter_or_mutable_local_variable(symbol) {
-                        let links = self.marked_assignment_symbol_links.get(symbol);
-                        let pos = links.last_assignment_pos.get();
+                        let links = self.marked_assignment_symbol_links.get_key(symbol);
+                        let pos = self.marked_assignment_symbol_links.at(links).last_assignment_pos.get();
                         if pos == 0 || pos != i32::MAX {
                             let referencing_function = ast::find_ancestor(node, ast::is_function_or_source_file);
                             let declaring_function = ast::find_ancestor(symbol.value_declaration(), ast::is_function_or_source_file);
                             if referencing_function == declaring_function {
-                                links.last_assignment_pos.set(self.extend_assignment_position(Some(node), symbol.value_declaration().unwrap()));
+                                let position = self.extend_assignment_position(Some(node), symbol.value_declaration().unwrap());
+                                self.marked_assignment_symbol_links.at(links).last_assignment_pos.set(position);
                             } else {
-                                links.last_assignment_pos.set(i32::MAX);
+                                self.marked_assignment_symbol_links.at(links).last_assignment_pos.set(i32::MAX);
                             }
                         }
                         if assignment_kind == AssignmentKind::Definite {
-                            links.has_definite_assignment.set(true);
+                            self.marked_assignment_symbol_links.at(links).has_definite_assignment.set(true);
                         }
                     }
                 }
@@ -3464,8 +3465,8 @@ impl Checker {
                     let symbol = self.resolve_entity_name(name, SymbolFlags::Value, true /*ignoreErrors*/, true /*dontResolveAlias*/, None);
                     if let Some(symbol) = symbol {
                         if self.is_parameter_or_mutable_local_variable(symbol) {
-                            let links = self.marked_assignment_symbol_links.get(symbol);
-                            links.last_assignment_pos.set(i32::MAX);
+                            let links = self.marked_assignment_symbol_links.get_key(symbol);
+                            self.marked_assignment_symbol_links.at(links).last_assignment_pos.set(i32::MAX);
                         }
                     }
                 }

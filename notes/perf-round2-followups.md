@@ -107,6 +107,12 @@ pointer compression costs about +4.9% instructions and took back most of the che
 
 ## Measured and rejected (do not redo)
 
+- Treating the native-pointer Oxc compatibility backend as memory-neutral (`notes/rust-owned-arenas.md`):
+  `3dac06d8` versus pre-migration `18175c0e` raises default peak RSS by 75–85% on the two pinned Compiler
+  workloads on macOS. The safe indexed link-table pilot stays within the incremental regression limits, but
+  does not recover that increase and is not a completed ownership migration. Revisit a broader rollout only
+  with a path that passes the pre-Oxc memory gate; do not infer that this rejects safe indexed AST/type stores,
+  which are still unimplemented.
 - `mimalloc-safe 0.1.67` without its `v3` feature (notes/perf-mimalloc-safe.md): the crate defaults to mimalloc
   v2.5.2, unlike the old crate's v3.3.2 default. On macOS arm64 it adds about 4% peak RSS at the default checker
   count on both Compiler workloads; the prior large Linux measurement found v2 3-14% slower. The migration enables
