@@ -275,9 +275,10 @@ pub struct Symbol {                                  // 32 bytes (40 with plain-
     pub name: OwnedTaggedStrCell,                    // pointer, length and tag bits in one word
     declarations: OwnedPSliceCell<P<Node>>,
     pub(crate) id: AtomicU32,
-    parent_or_tables: OwnedCell<PKey>,               // parent, or (tag bit) a tail {parent, members, exports,
-                                                     // export_symbol, value_declaration, lazy}; a tag bit: value
-                                                     // declaration = declarations[0]
+    parent_or_tables: OwnedCell<PKey>,               // `P::key` of the parent, or (name tag `TAG_TABLES`) of a
+                                                     // tail {parent, members, exports, export_symbol,
+                                                     // value_declaration, lazy}; name tag `TAG_VALUE_FIRST`:
+                                                     // value declaration = declarations[0]
 }
 ```
 
@@ -329,8 +330,8 @@ plus `pos()`/`end()`).
 Language service token cache: `SourceFile::get_or_create_token(kind, pos, end, parent, flags)` (Go `GetOrCreateToken`,
 keyed by `TokenCacheKey { parent, loc }` under a mutex; each call creates tokens with a fresh default factory).
 
-Not ported: `SourceFileDataKey`, `Hash`. `GetNameTable` and `GetDeclarationMap` are `SourceFile::get_name_table` /
-`get_declaration_map` (language service).
+Not ported: `SourceFileDataKey`. `Hash` is the `SourceFile.hash` field (the project parse cache key);
+`GetNameTable` and `GetDeclarationMap` are `SourceFile::get_name_table` / `get_declaration_map` (language service).
 
 ## Diagnostics
 

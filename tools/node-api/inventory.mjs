@@ -9,7 +9,7 @@
 //
 // Candidate status (never inferred from client exports or from methods.rs claims):
 //   unexercised    the oracle run never sent the method; the suites prove nothing about it
-//   not-sent       the oracle run sent it but the candidate run never did (an earlier failure stopped the tests first)
+//   not-sent       the oracle run sent it but the candidate run never did (usually an earlier failure stopped the tests first)
 //   unimplemented  the candidate only answered it with unsupported/unknown-method errors
 //   failing        some (non-todo) test that sent it failed, or it errored more often than on the oracle
 //   error-only-unverified  both servers only answered it with errors; equal counts are not proof of equal errors

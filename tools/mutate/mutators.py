@@ -626,7 +626,7 @@ def m_flip_optchain(ctx):
             if nt.kind == "punct" and nt.text in (".", "[", ")", ",", ";", "?."):
                 # skip definite assignment `x!: T` (never followed by these) - these are non-null assertions
                 res.append(Edit("flip_optchain", t.start, t.end, "", "remove non-null !"))
-    # rare reverse direction: a.b -> a?.b (any member access, 5% of sites)
+    # rare reverse direction: a.b -> a?.b (5% of `.name` accesses after an identifier, `)` or `]`)
     for i, t in enumerate(ctx.toks):
         if t.kind == "punct" and t.text == "." and ctx.rng.random() < 0.05:
             p = ctx.t(i - 1)

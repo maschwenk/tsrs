@@ -8,9 +8,9 @@ old variable no longer changes anything (regression test: `crates/tsrs_cli/tests
 counts are in the README capability table ("What it does and doesn't do": 13,392 `.js` baselines pass, 0 fail; 149 `.js.map` and 156
 `.sourcemap.txt` baselines pass; the `tsbuild`/`tsc` scenario counts).
 
-Sections 10, 10b, 12 and 14 are design notes that describe the current code. Sections 1 and 3–9 are the plan as
-written on 2026-10-03, while emit was opt-in and most transformers were missing, and section 13 is the per-wave log of
-that day; they are kept as history and do not describe the current state.
+Sections 2, 10, 10b and 12 describe the current code, except where a line says otherwise; sections 1, 3–9 and 11
+are the plan as written on 2026-10-03, while emit was opt-in and most transformers were missing, and section 13 is
+the per-wave log of that day; they are kept as history. Section 14 mixes current gaps with notes from that plan.
 
 Reference commit: the same as the rest of the port (`ts-ref/tsc` = microsoft/TypeScript b85298b6a81f, nightly
 7.1.0-dev.20260929). Reference binary: `$TSRS_WORK/bin/tsgo-ref`.
@@ -21,8 +21,9 @@ Reference commit: the same as the rest of the port (`ts-ref/tsc` = microsoft/Typ
   order, snake_case Go names, `// file.go:LINE` origin markers, Go quirks kept, no "improvements", never
   special-case a test. Signatures come from `tools/gosig` (section 9).
 - **tsrs emits by default, like tsc.** The `TSRS_EMIT=1` gate (section 6) was removed once the user signed off.
-  `--noEmit` (which the 38k-file codebase passes everywhere) keeps that codebase from writing files; `noEmitOnError`
-  and `emitDeclarationOnly` behave as in tsc. Nothing may change what `--noEmit` prints or writes (nothing).
+  `--noEmit` (which the 38k-file codebase passes everywhere) keeps that codebase from writing JavaScript and
+  declaration files (an incremental `--noEmit` run still writes its tsbuildinfo); `noEmitOnError` and
+  `emitDeclarationOnly` behave as in tsc. Nothing may change what `--noEmit` prints or writes (nothing).
 - Land on `main` in small commits (rebase, gates, `git push origin HEAD:main`, never force-push). Emit is additive,
   so partial waves can land as long as the gates hold:
   - conformance suite errors plus `--baselines types,symbols` byte-identical to the base binary, in the default
@@ -384,11 +385,10 @@ then-current main:
 
 ## 10. Design notes for E1 (decided and implemented on `emit/core`)
 
-- **Crates.** `tsrs_transformers` (new) holds transformer.go, chain.go, modifiervisitor.go, utilities.go (the 3
-  functions the declaration transformer uses so far), `Resolver` (moved from `tsrs_declarations`, plus wrappers for the
-  rest of `printer.EmitResolver`: `is_referenced_alias_declaration`, `mark_linked_references_recursively`,
-  `get_constant_value`, `get_type_reference_serialization_kind`, the JSX factory entities,
-  `set_referenced_import_declaration` and the embedded `binder.ReferenceResolver` methods), `ReferenceResolverRef`
+- **Crates.** `tsrs_transformers` (new) holds transformer.go, chain.go, modifiervisitor.go, utilities.go, `Resolver`
+  (moved from `tsrs_declarations`, plus wrappers for the rest of `printer.EmitResolver`:
+  `is_referenced_alias_declaration`, `mark_linked_references_recursively`, `get_constant_value`,
+  `get_type_reference_serialization_kind`, the JSX factory entities, `set_referenced_import_declaration` and the embedded `binder.ReferenceResolver` methods), `ReferenceResolverRef`
   (Go's `binder.ReferenceResolver` interface value: `Emit(Resolver)` or `Plain(P<ReferenceResolver<()>>)`, chosen in
   `getScriptTransformers`), `TransformOptions` and the `EmitHost` trait. Go keeps `EmitHost` in package `printer`, but
   its `GetEmitResolver` returns the `Resolver`, which needs the checker, so the trait lives in `tsrs_transformers`
@@ -434,8 +434,10 @@ then-current main:
 - **Writing files.** Go's `emitHost.WriteFile` is `program.Host().FS().WriteFile`. Rust: the compiler's
   `EmitHost::write_file` calls `program.host().fs().write_file` (`tsrs_vfs`): the CLI's cached FS over the OS FS,
   which creates missing directories (iovfs `write_file_ensuring_dir`); the harness's recorder FS over the
-  in-memory test FS. `Program::emit` is called by the CLI (unless the options turn emit off), by the Node API
-  (`emit`, `transpile`) and by the harness under `--baselines js`.
+  in-memory test FS. `Program::emit` is called by the CLI (`tsrs_execute::tsc::emit`, unless `--listFilesOnly`;
+  under `noEmit` it returns early in `handle_no_emit_options`), by the incremental builder for shape signatures
+  (`EmitOnlyBuilderSignature`, `tsrs_incremental`), by the Node API (`emit`, emit to string / selected files,
+  `transpile`) and by the harness under `--baselines js`.
 - **Source maps** (E7). `print_source_file` keeps Go's structure; the printer takes an
   `Option<&mut SourceMapGenerator>` (`tsrs_sourcemap::Generator`) in `write` and implements Go's source-map paths
   (printer_3.rs); `get_source_mapping_url`, `get_source_map_directory` and `get_source_root` are ported.
@@ -541,7 +543,9 @@ b85298b6 and lacks microsoft/TypeScript#64460 ("Fix declaration maps for export 
 2026-09-29), so its `.d.ts.map` for `export default <identifier>` differs from the Go source tsrs ports.
 
 The reference binary already emits, so no Go oracle program is needed (add one under `ts-ref/tsc/cmd/` only if
-`EmitResult` internals are needed). `tools/oracle/emit/run.py <tsconfig|dir> [--name N] [-- extra tsc flags]`:
+`EmitResult` internals are needed). The plan for `tools/oracle/emit/run.py <tsconfig|dir> [--name N] [-- extra tsc
+flags]` (the script's docstring describes what it does now; it does not pass `--incremental false`, writes to
+`<W>/ref/out` / `<W>/rs/out`, and has no `-b` mode):
 
 - runs `tsgo-ref -p <cfg> --noEmit false --incremental false --outDir <W>/ref [--declarationDir <W>/ref-dts]
   --tsBuildInfoFile <W>/ref.tsbuildinfo <extra>` and `tsrs -p <cfg>` with the same flags into

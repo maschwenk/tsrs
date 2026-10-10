@@ -3075,10 +3075,11 @@ impl Checker {
     // Go resolves a cycle of base types (`interface A extends B`, `interface B extends A`) from whichever member a
     // checker asks about first: that member drops its edge into the cycle (TS2310) and the others keep theirs, so the
     // inherited members, and the diagnostics that follow from them, depend on what the checker resolved before
-    // (notes/fix-history-dependent-diagnostics.md). By default tsrs enters every cycle of interfaces (a cycle through
-    // a class, or through a type without a symbol, is left as Go resolves it) at the member declared first in program
-    // order (`earliest_declaration`): when the outermost resolution `t` found a cycle entered elsewhere, the base
-    // types it resolved are reset and resolved again from that member. `go_compatible_history()` keeps Go's result.
+    // (notes/fix-history-dependent-diagnostics.md). By default tsrs enters every cycle of interfaces at the member
+    // declared first in program order (`earliest_declaration`): when the outermost resolution `t` found a cycle entered
+    // elsewhere, the base types it resolved are reset and resolved again from that member. If any circular type that
+    // resolution found is a class or has no symbol, nothing is reset (Go's result stands for all of its cycles).
+    // `go_compatible_history()` keeps Go's result.
     fn canonicalize_base_type_cycles(&mut self, t: P<Type>) {
         if self.base_types_circular.is_empty() {
             self.base_types_resolved_log.clear();

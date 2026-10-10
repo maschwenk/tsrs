@@ -255,9 +255,10 @@ pub struct SignatureId(pub u32);
 
 // Links for value symbols
 //
-// Go's `ValueSymbolLinks` holds seven fields inline (56 bytes). Here a record is three fields, 16 bytes with
-// compressed pointers (two 4-byte handles and a usize) and 24 with plain pointers: `resolved_type` and two fields
-// whose meaning depends on the record's mode, kept in the low two bits of `second` (every stored pointer is 8-aligned):
+// Go's `ValueSymbolLinks` holds seven fields inline (56 bytes). Here a record is three fields (`resolved_type`,
+// `first`, `second`): 16 bytes with compressed pointers (two 4-byte handles and a usize), 24 with plain pointers on
+// 64-bit targets, 12 on 32-bit. `resolved_type` and two fields whose meaning depends on the record's mode, kept in
+// the low two bits of `second` (every stored pointer is 8-aligned):
 //
 // - plain (the common case: instantiated symbols and most others): `target`, `mapper`;
 // - synthetic: `containing_type`, `name_type`, for records that set those but never `target` / `mapper` (union and

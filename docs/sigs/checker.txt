@@ -1,8 +1,8 @@
 # rust_name | signature | origin | receiver  (generated from the Rust sources by tools/sigs-from-rust.py)
 accepts_void | pub(crate) fn accepts_void(t: P<Type>) -> bool | checker.go:9371 | -
 active_mapper_cache_key | fn active_mapper_cache_key(t: P<Type>, alias: Option<P<TypeAlias>>) -> CacheHashKey | rust:checker_11.rs:1010 | -
-add | pub fn add(&mut self, other: HeapStat) | rust:heapcensus.rs:22 | HeapStat
-add | pub fn add(&self, reference: P<Type>) | rust:types.rs:2206 | ReferenceInstantiations
+add | pub fn add(&mut self, other: HeapStat) | rust:heapcensus.rs:23 | HeapStat
+add | pub fn add(&self, reference: P<Type>) | rust:types.rs:2207 | ReferenceInstantiations
 add | pub(crate) fn add(&mut self, c: &mut Checker, t: P<Type>, info: TupleElementInfo) | checker.go:23891 | TupleNormalizer
 add | pub(crate) fn add(&mut self, value: T) | utilities.go:892 | orderedSet
 add_approximate_length | fn add_approximate_length(b: &NodeBuilderImpl, n: i32) | rust:nodebuilderimpl_2.rs:14 | -
@@ -40,13 +40,13 @@ add_types_to_intersection | pub(crate) fn add_types_to_intersection(&mut self, t
 add_types_to_union | pub(crate) fn add_types_to_union(&mut self, source_types: &[P<Type>]) -> (Vec<P<Type>>, TypeFlags) | checker.go:26231 | Checker
 add_undefined_to_globals_or_error_on_redeclaration | pub(crate) fn add_undefined_to_globals_or_error_on_redeclaration(&mut self) | checker.go:1493 | Checker
 address | fn address(key: P<K>) -> PKey | rust:links.rs:52 | LinkStore
-alias | pub fn alias(self) -> Option<P<TypeAlias>> | rust:types.rs:1068 | AliasArg
-alias | pub fn alias(&self) -> Option<P<TypeAlias>> | rust:types.rs:1685 | Type
+alias | pub fn alias(self) -> Option<P<TypeAlias>> | rust:types.rs:1069 | AliasArg
+alias | pub fn alias(&self) -> Option<P<TypeAlias>> | rust:types.rs:1686 | Type
 alias_marking_visitor_worker | pub(crate) fn alias_marking_visitor_worker(&self, c: &mut Checker, node: P<Node>) -> bool | emitresolver.go:260 | EmitResolver
 all_declarations_in_same_source_file | pub(crate) fn all_declarations_in_same_source_file(symbol: P<Symbol>) -> bool | utilities.go:1633 | -
 all_types_assignable_to_kind | pub(crate) fn all_types_assignable_to_kind(&mut self, source: P<Type>, kind: TypeFlags) -> bool | checker.go:28098 | Checker
 all_types_assignable_to_kind_ex | pub(crate) fn all_types_assignable_to_kind_ex(&mut self, source: P<Type>, kind: TypeFlags, strict: bool) -> bool | checker.go:28102 | Checker
-alloc | pub(crate) fn alloc<T: TypePayload>(flags: TypeFlags, object_flags: ObjectFlags, id: TypeId, data: T) -> P<Type> | rust:types.rs:1396 | Type
+alloc | pub(crate) fn alloc<T: TypePayload>(flags: TypeFlags, object_flags: ObjectFlags, id: TypeId, data: T) -> P<Type> | rust:types.rs:1397 | Type
 alloc_rare | fn alloc_rare(rare: RareTypeMapper) -> P<TypeMapper> | rust:mapper.rs:214 | TypeMapper
 any_to_string | pub fn any_to_string(v: LiteralValue) -> String | rust:evaluator.rs:144 | -
 append_contextual_property_type_constituent | pub(crate) fn append_contextual_property_type_constituent(&mut self, types: &[P<Type>], t: Option<P<Type>>) -> Vec<P<Type>> | checker.go:31160 | Checker
@@ -68,42 +68,42 @@ are_declaration_flags_identical | pub(crate) fn are_declaration_flags_identical(
 are_properties_abstract_or_interface | pub(crate) fn are_properties_abstract_or_interface(&mut self, base: P<Symbol>, base_declaration_flags: ModifierFlags) -> bool | checker.go:4744 | Checker
 are_type_parameters_identical | pub(crate) fn are_type_parameters_identical(&mut self, declarations: &[P<Node>], target_parameters: &[P<Type>], get_type_parameter_declarations: impl FnMut(&mut Checker, P<Node>) -> Vec<P<Node>>) -> bool | checker.go:4501 | Checker
 are_types_comparable | pub(crate) fn are_types_comparable(&mut self, type1: P<Type>, type2: P<Type>) -> bool | relater.go:165 | Checker
-arguments_of | fn arguments_of(reference: P<Type>) -> &'static [P<Type>] | rust:types.rs:2189 | ReferenceInstantiations
+arguments_of | fn arguments_of(reference: P<Type>) -> &'static [P<Type>] | rust:types.rs:2190 | ReferenceInstantiations
 array_is_homogeneous | pub(crate) fn array_is_homogeneous<T: Clone>(array: &[T], comparer: impl FnMut(T, T) -> bool) -> bool | nodebuilderimpl.go:467 | -
 array_sources_targets | pub fn array_sources_targets(&self) -> Option<(&'static [P<Type>], &'static [P<Type>])> | rust:mapper.rs:136 | TypeMapperData
-as_conditional_type | pub fn as_conditional_type(&self) -> &'static ConditionalType | rust:types.rs:1572 | Type
-as_constrained_type | pub fn as_constrained_type(&self) -> &'static ConstrainedType | rust:types.rs:1581 | Type
-as_constrained_type | pub fn as_constrained_type(&self) -> Option<&'static ConstrainedType> | rust:types.rs:1804 | TypeData
-as_evolving_array_type | pub fn as_evolving_array_type(&self) -> &'static EvolvingArrayType | rust:types.rs:1509 | Type
-as_index_type | pub fn as_index_type(&self) -> &'static IndexType | rust:types.rs:1537 | Type
-as_indexed_access_type | pub fn as_indexed_access_type(&self) -> &'static IndexedAccessType | rust:types.rs:1544 | Type
-as_instantiation_expression_type | pub fn as_instantiation_expression_type(&self) -> &'static InstantiationExpressionType | rust:types.rs:1488 | Type
-as_interface_type | pub fn as_interface_type(&self) -> &'static InterfaceType | rust:types.rs:1593 | Type
-as_interface_type | pub fn as_interface_type(&self) -> Option<&'static InterfaceType> | rust:types.rs:1867 | TypeData
-as_intersection_type | pub fn as_intersection_type(&self) -> &'static IntersectionType | rust:types.rs:1530 | Type
-as_intrinsic_type | pub fn as_intrinsic_type(&self) -> &'static IntrinsicType | rust:types.rs:1460 | Type
-as_literal_type | pub fn as_literal_type(&self) -> &'static LiteralType | rust:types.rs:1467 | Type
-as_mapped_type | pub fn as_mapped_type(&self) -> &'static MappedType | rust:types.rs:1495 | Type
-as_object_type | pub fn as_object_type(&self) -> &'static ObjectType | rust:types.rs:1587 | Type
-as_object_type | pub fn as_object_type(&self) -> Option<&'static ObjectType> | rust:types.rs:1844 | TypeData
+as_conditional_type | pub fn as_conditional_type(&self) -> &'static ConditionalType | rust:types.rs:1573 | Type
+as_constrained_type | pub fn as_constrained_type(&self) -> &'static ConstrainedType | rust:types.rs:1582 | Type
+as_constrained_type | pub fn as_constrained_type(&self) -> Option<&'static ConstrainedType> | rust:types.rs:1805 | TypeData
+as_evolving_array_type | pub fn as_evolving_array_type(&self) -> &'static EvolvingArrayType | rust:types.rs:1510 | Type
+as_index_type | pub fn as_index_type(&self) -> &'static IndexType | rust:types.rs:1538 | Type
+as_indexed_access_type | pub fn as_indexed_access_type(&self) -> &'static IndexedAccessType | rust:types.rs:1545 | Type
+as_instantiation_expression_type | pub fn as_instantiation_expression_type(&self) -> &'static InstantiationExpressionType | rust:types.rs:1489 | Type
+as_interface_type | pub fn as_interface_type(&self) -> &'static InterfaceType | rust:types.rs:1594 | Type
+as_interface_type | pub fn as_interface_type(&self) -> Option<&'static InterfaceType> | rust:types.rs:1868 | TypeData
+as_intersection_type | pub fn as_intersection_type(&self) -> &'static IntersectionType | rust:types.rs:1531 | Type
+as_intrinsic_type | pub fn as_intrinsic_type(&self) -> &'static IntrinsicType | rust:types.rs:1461 | Type
+as_literal_type | pub fn as_literal_type(&self) -> &'static LiteralType | rust:types.rs:1468 | Type
+as_mapped_type | pub fn as_mapped_type(&self) -> &'static MappedType | rust:types.rs:1496 | Type
+as_object_type | pub fn as_object_type(&self) -> &'static ObjectType | rust:types.rs:1588 | Type
+as_object_type | pub fn as_object_type(&self) -> Option<&'static ObjectType> | rust:types.rs:1845 | TypeData
 as_p | fn as_p(&self) -> P<InferenceContext> | rust:checker.rs:356 | InferenceContext
 as_p | pub fn as_p(&self) -> P<NodeBuilderImpl> | rust:nodebuilder_types.rs:197 | NodeBuilderImpl
 as_p | pub fn as_p(&self) -> P<Relater> | rust:relater_types.rs:220 | Relater
 as_recursion_id | pub(crate) fn as_recursion_id<T: Into<RecursionId>>(value: T) -> RecursionId | relater.go:94 | -
-as_reverse_mapped_type | pub fn as_reverse_mapped_type(&self) -> &'static ReverseMappedType | rust:types.rs:1502 | Type
-as_string_mapping_type | pub fn as_string_mapping_type(&self) -> &'static StringMappingType | rust:types.rs:1558 | Type
-as_structured_type | pub fn as_structured_type(&self) -> &'static StructuredType | rust:types.rs:1584 | Type
-as_structured_type | pub fn as_structured_type(&self) -> Option<&'static StructuredType> | rust:types.rs:1828 | TypeData
-as_substitution_type | pub fn as_substitution_type(&self) -> &'static SubstitutionType | rust:types.rs:1565 | Type
-as_template_literal_type | pub fn as_template_literal_type(&self) -> &'static TemplateLiteralType | rust:types.rs:1551 | Type
-as_tuple_type | pub fn as_tuple_type(&self) -> &'static TupleType | rust:types.rs:1481 | Type
-as_type_parameter | pub fn as_type_parameter(&self) -> &'static TypeParameter | rust:types.rs:1516 | Type
-as_type_reference | pub fn as_type_reference(&self) -> &'static TypeReference | rust:types.rs:1590 | Type
-as_type_reference | pub fn as_type_reference(&self) -> Option<&'static TypeReference> | rust:types.rs:1858 | TypeData
-as_union_or_intersection_type | pub fn as_union_or_intersection_type(&self) -> &'static UnionOrIntersectionType | rust:types.rs:1596 | Type
-as_union_or_intersection_type | pub fn as_union_or_intersection_type(&self) -> Option<&'static UnionOrIntersectionType> | rust:types.rs:1875 | TypeData
-as_union_type | pub fn as_union_type(&self) -> &'static UnionType | rust:types.rs:1523 | Type
-as_unique_es_symbol_type | pub fn as_unique_es_symbol_type(&self) -> &'static UniqueESSymbolType | rust:types.rs:1474 | Type
+as_reverse_mapped_type | pub fn as_reverse_mapped_type(&self) -> &'static ReverseMappedType | rust:types.rs:1503 | Type
+as_string_mapping_type | pub fn as_string_mapping_type(&self) -> &'static StringMappingType | rust:types.rs:1559 | Type
+as_structured_type | pub fn as_structured_type(&self) -> &'static StructuredType | rust:types.rs:1585 | Type
+as_structured_type | pub fn as_structured_type(&self) -> Option<&'static StructuredType> | rust:types.rs:1829 | TypeData
+as_substitution_type | pub fn as_substitution_type(&self) -> &'static SubstitutionType | rust:types.rs:1566 | Type
+as_template_literal_type | pub fn as_template_literal_type(&self) -> &'static TemplateLiteralType | rust:types.rs:1552 | Type
+as_tuple_type | pub fn as_tuple_type(&self) -> &'static TupleType | rust:types.rs:1482 | Type
+as_type_parameter | pub fn as_type_parameter(&self) -> &'static TypeParameter | rust:types.rs:1517 | Type
+as_type_reference | pub fn as_type_reference(&self) -> &'static TypeReference | rust:types.rs:1591 | Type
+as_type_reference | pub fn as_type_reference(&self) -> Option<&'static TypeReference> | rust:types.rs:1859 | TypeData
+as_union_or_intersection_type | pub fn as_union_or_intersection_type(&self) -> &'static UnionOrIntersectionType | rust:types.rs:1597 | Type
+as_union_or_intersection_type | pub fn as_union_or_intersection_type(&self) -> Option<&'static UnionOrIntersectionType> | rust:types.rs:1876 | TypeData
+as_union_type | pub fn as_union_type(&self) -> &'static UnionType | rust:types.rs:1524 | Type
+as_unique_es_symbol_type | pub fn as_unique_es_symbol_type(&self) -> &'static UniqueESSymbolType | rust:types.rs:1475 | Type
 assign | pub fn assign(&self, m: FxHashMap<K, V>) | rust:types.rs:91 | GoMap
 assign_binding_element_types | pub(crate) fn assign_binding_element_types(&mut self, pattern: P<Node>, parent_type: P<Type>) | checker.go:10627 | Checker
 assign_contextual_parameter_types | pub(crate) fn assign_contextual_parameter_types(&mut self, sig: P<Signature>, context: P<Signature>) | checker.go:10546 | Checker
@@ -113,7 +113,7 @@ at | fn at(&self, slot: u32) -> P<V> | rust:links.rs:329 | IdLinkStore
 at | fn at(&self, index: u32) -> P<V> | rust:links.rs:57 | LinkStore
 attach_symbol_to_leftmost_identifier | fn attach_symbol_to_leftmost_identifier(self, c: &mut Checker, leftmost: P<Node>, node: P<Node>, sym: Option<P<Symbol>>) -> P<Node> | rust:nodecopy.rs:397 | ExistingNodeTree
 attach_symbol_visitor_func | fn attach_symbol_visitor_func(self, c: &mut Checker, vis: &mut NodeVisitor, leftmost: P<Node>, sym: Option<P<Symbol>>, node: P<Node>) -> P<Node> | rust:nodecopy.rs:405 | ExistingNodeTree
-base_type | pub fn base_type(&self) -> Option<P<Type>> | rust:types.rs:2725 | SubstitutionType
+base_type | pub fn base_type(&self) -> Option<P<Type>> | rust:types.rs:2726 | SubstitutionType
 begin | pub fn begin(&mut self, cat: Cat, key: CKey) -> Span | rust:workcensus.rs:241 | Census
 begin | fn begin(&mut self, instantiation_count: u32, total_instantiation_count: u32, created: u32, in_instantiation: bool) -> FlowFrame | rust:flowmemo.rs:241 | FlowMemo
 bind_element | fn bind_element(b: &NodeBuilderImpl, c: &mut Checker, e: P<Node>, add: AddSymbol) | rust:nodebuilderscopes.rs:239 | -
@@ -125,9 +125,9 @@ bucket_label | fn bucket_label(b: u32) -> String | rust:workcensus.rs:182 | -
 build_augment_filter | fn build_augment_filter(&mut self, key: HashedName<'_>) -> bool | rust:checker_09.rs:2276 | Checker
 build_feature_map | fn build_feature_map() -> FxHashMap<&'static str, Vec<FeatureMapEntry>> | rust:utilities_types.rs:45 | -
 call_like_expression_may_have_type_arguments | pub(crate) fn call_like_expression_may_have_type_arguments(&mut self, node: P<Node>) -> bool | utilities.go:1132 | Checker
-call_signature_count | fn call_signature_count(&self) -> i32 | rust:types.rs:2014 | CountOrIndexInfos
-call_signature_count | pub fn call_signature_count(&self) -> i32 | rust:types.rs:2081 | StructuredType
-call_signatures | pub fn call_signatures(&self) -> &'static [P<Signature>] | rust:types.rs:2096 | StructuredType
+call_signature_count | fn call_signature_count(&self) -> i32 | rust:types.rs:2015 | CountOrIndexInfos
+call_signature_count | pub fn call_signature_count(&self) -> i32 | rust:types.rs:2082 | StructuredType
+call_signatures | pub fn call_signatures(&self) -> &'static [P<Signature>] | rust:types.rs:2097 | StructuredType
 can_get_type_parameters_of_class_or_interface | pub(crate) fn can_get_type_parameters_of_class_or_interface(&mut self, symbol: P<Symbol>) -> bool | checker.go:24221 | Checker
 can_have_locals | pub(crate) fn can_have_locals(node: P<Node>) -> bool | utilities.go:183 | -
 can_have_module_specifier | pub(crate) fn can_have_module_specifier(node: Option<P<Node>>) -> bool | nodebuilderimpl.go:1172 | -
@@ -136,13 +136,13 @@ can_qualify_symbol | pub(crate) fn can_qualify_symbol(&mut self, ctx: &accessibl
 can_reuse_existing_js_type_node | pub(crate) fn can_reuse_existing_js_type_node(&self, c: &mut Checker, existing: P<Node>, t: P<Type>) -> bool | nodebuilderimpl.go:507 | NodeBuilderImpl
 can_use_property_access | pub(crate) fn can_use_property_access(name: &str) -> bool | nodebuilderimpl.go:912 | -
 candidates | fn candidates(&self, target: P<Symbol>) -> impl Iterator<Item = P<Symbol>> + '_ | rust:printer.rs:1720 | ExportsByTarget
-canonicalize_base_type_cycles | fn canonicalize_base_type_cycles(&mut self, t: P<Type>) | rust:checker_09.rs:3082 | Checker
+canonicalize_base_type_cycles | fn canonicalize_base_type_cycles(&mut self, t: P<Type>) | rust:checker_09.rs:3083 | Checker
 capacity | pub fn capacity(&self) -> usize | rust:packedmap.rs:100 | PackedMap
 census_begin | pub(crate) fn census_begin(&mut self, cat: Cat, key: impl FnOnce() -> CKey) -> Option<Span> | rust:workcensus.rs:517 | Checker
 census_collect | pub fn census_collect(&mut self) | rust:workcensus.rs:533 | Checker
 census_enabled | pub fn census_enabled() -> bool | rust:workcensus.rs:492 | Checker
 census_end | pub(crate) fn census_end(&mut self, span: Option<Span>) -> Option<Timing> | rust:workcensus.rs:525 | Checker
-census_layouts | pub(crate) fn census_layouts() | rust:types.rs:1161 | -
+census_layouts | pub(crate) fn census_layouts() | rust:types.rs:1162 | -
 census_mut | pub(crate) fn census_mut(&mut self) -> Option<&mut Census> | rust:workcensus.rs:508 | Checker
 census_on | pub(crate) fn census_on(&self) -> bool | rust:workcensus.rs:503 | Checker
 census_path | pub fn census_path() -> Option<&'static str> | rust:workcensus.rs:29 | -
@@ -447,7 +447,7 @@ check_truthiness_expression | pub(crate) fn check_truthiness_expression(&mut sel
 check_truthiness_of_type | pub(crate) fn check_truthiness_of_type(&mut self, t: P<Type>, node: P<Node>) -> P<Type> | checker.go:13073 | Checker
 check_try_statement | pub(crate) fn check_try_statement(&mut self, node: P<Node>) | checker.go:4263 | Checker
 check_tuple_type | pub(crate) fn check_tuple_type(&mut self, node: P<Node>) | checker.go:3281 | Checker
-check_type | pub fn check_type(&self) -> Option<P<Type>> | rust:types.rs:2762 | ConditionalType
+check_type | pub fn check_type(&self) -> Option<P<Type>> | rust:types.rs:2763 | ConditionalType
 check_type_alias_declaration | pub(crate) fn check_type_alias_declaration(&mut self, node: P<Node>) | checker.go:7048 | Checker
 check_type_argument_constraints | pub(crate) fn check_type_argument_constraints(&mut self, node: P<Node>, type_parameters: &[P<Type>]) -> bool | checker.go:3064 | Checker
 check_type_arguments | pub(crate) fn check_type_arguments(&mut self, signature: P<Signature>, type_argument_nodes: &[P<Node>], report_errors: bool, head_message: Option<&'static Message>) -> Vec<P<Type>> | checker.go:9414 | Checker
@@ -550,7 +550,7 @@ compare_types_equal | pub(crate) fn compare_types_equal(s: P<Type>, t: P<Type>) 
 compare_types_identical | pub(crate) fn compare_types_identical(&mut self, source: P<Type>, target: P<Type>) -> Ternary | relater.go:121 | Checker
 compare_types_same_flags | fn compare_types_same_flags(c: &mut Checker, t1: P<Type>, t2: P<Type>) -> i32 | rust:utilities.rs:532 | -
 compare_types_subtype_of | pub(crate) fn compare_types_subtype_of(&mut self, source: P<Type>, target: P<Type>) -> Ternary | relater.go:142 | Checker
-composite | pub fn composite(&self) -> Option<P<CompositeSignature>> | rust:types.rs:2921 | Signature
+composite | pub fn composite(&self) -> Option<P<CompositeSignature>> | rust:types.rs:2922 | Signature
 composite_mapper_m2 | fn composite_mapper_m2(m: P<TypeMapper>) -> P<TypeMapper> | rust:utilities.rs:773 | -
 compute_base_constraint | pub(crate) fn compute_base_constraint(&mut self, t: P<Type>, stack: &[RecursionId]) -> Option<P<Type>> | checker.go:27960 | Checker
 compute_constant_enum_member_value | pub(crate) fn compute_constant_enum_member_value(&mut self, member: P<Node>) -> evaluator::Result | checker.go:24465 | Checker
@@ -562,14 +562,14 @@ compute_hashed_flow_memo_key | fn compute_hashed_flow_memo_key(&mut self, f: P<F
 compute_is_uniform_union_type | pub(crate) fn compute_is_uniform_union_type(&mut self, types: &[P<Type>]) -> bool | checker.go:28300 | Checker
 compute_key_property_name_and_map | pub(crate) fn compute_key_property_name_and_map(&mut self, t: P<Type>) -> (String, FxHashMap<P<Type>, P<Type>>) | relater.go:1132 | Checker
 conditional_type_to_type_node | pub(crate) fn conditional_type_to_type_node(&self, c: &mut Checker, _t: P<Type>) -> P<Node> | nodebuilderimpl.go:3009 | NodeBuilderImpl
-constituent_map | pub fn constituent_map(&self) -> Option<&'static GoMap<P<Type>, P<Type>>> | rust:types.rs:2557 | UnionType
-constituent_map_for_write | pub fn constituent_map_for_write(&self) -> &'static GoMap<P<Type>, P<Type>> | rust:types.rs:2561 | UnionType
-constraint_type | pub fn constraint_type(&self) -> Option<P<Type>> | rust:types.rs:2353 | MappedType
-construct_signatures | pub fn construct_signatures(&self) -> &'static [P<Signature>] | rust:types.rs:2099 | StructuredType
+constituent_map | pub fn constituent_map(&self) -> Option<&'static GoMap<P<Type>, P<Type>>> | rust:types.rs:2558 | UnionType
+constituent_map_for_write | pub fn constituent_map_for_write(&self) -> &'static GoMap<P<Type>, P<Type>> | rust:types.rs:2562 | UnionType
+constraint_type | pub fn constraint_type(&self) -> Option<P<Type>> | rust:types.rs:2354 | MappedType
+construct_signatures | pub fn construct_signatures(&self) -> &'static [P<Signature>] | rust:types.rs:2100 | StructuredType
 constructor_visibilities_are_compatible | pub(crate) fn constructor_visibilities_are_compatible(&self, c: &mut Checker, source_signature: P<Signature>, target_signature: P<Signature>, report_errors: bool) -> bool | relater.go:4550 | Relater
 container_allows_block_scoped_variable | pub(crate) fn container_allows_block_scoped_variable(&mut self, parent: P<Node>) -> bool | grammarchecks.go:1796 | Checker
 container_seems_to_be_empty_dom_element | pub(crate) fn container_seems_to_be_empty_dom_element(&mut self, containing_type: P<Type>) -> bool | checker.go:11855 | Checker
-containing_type | pub fn containing_type(&self) -> Option<P<Type>> | rust:types.rs:404 | ValueSymbolLinks
+containing_type | pub fn containing_type(&self) -> Option<P<Type>> | rust:types.rs:405 | ValueSymbolLinks
 contains | pub fn contains(&self, item: &T) -> bool | rust:checker.rs:568 | LazyVec
 contains | pub(crate) fn contains(&self, value: T) -> bool | utilities.go:884 | orderedSet
 contains_arguments_reference | pub(crate) fn contains_arguments_reference(&mut self, node: P<Node>) -> bool | checker.go:32615 | Checker
@@ -673,11 +673,11 @@ create_union_signature | pub(crate) fn create_union_signature(&mut self, sig: P<
 create_unknown_union_type | pub(crate) fn create_unknown_union_type(&mut self) -> P<Type> | checker.go:25506 | Checker
 create_widening_type | pub(crate) fn create_widening_type(&mut self, non_widening_type: P<Type>) -> P<Type> | checker.go:25497 | Checker
 ctx | pub fn ctx(&self) -> P<NodeBuilderContext> | rust:nodebuilder_types.rs:191 | NodeBuilderImpl
-data | pub fn data(&self) -> TypeData | rust:types.rs:1413 | Type
+data | pub fn data(&self) -> TypeData | rust:types.rs:1414 | Type
 data | pub fn data(&self) -> TypeMapperData | rust:mapper.rs:220 | TypeMapper
-data_tag | pub fn data_tag(&self) -> TypeDataTag | rust:types.rs:1439 | Type
-declaration | pub fn declaration(&self) -> Option<P<Node>> | rust:types.rs:3001 | IndexInfo
-declaration | pub fn declaration(&self) -> Option<P<Node>> | rust:types.rs:2872 | Signature
+data_tag | pub fn data_tag(&self) -> TypeDataTag | rust:types.rs:1440 | Type
+declaration | pub fn declaration(&self) -> Option<P<Node>> | rust:types.rs:3002 | IndexInfo
+declaration | pub fn declaration(&self) -> Option<P<Node>> | rust:types.rs:2873 | Signature
 declaration_belongs_to_private_ambient_member | pub(crate) fn declaration_belongs_to_private_ambient_member(declaration: P<Node>) -> bool | utilities.go:333 | -
 declaration_belongs_to_private_ambient_member | pub(crate) fn declaration_belongs_to_private_ambient_member(&mut self, declaration: P<Node>) -> bool | checker.go:18373 | Checker
 declared | fn declared(&self) -> P<Type> | rust:flow.rs:22 | FlowState
@@ -699,7 +699,7 @@ each_type_contained_in | pub(crate) fn each_type_contained_in(&mut self, source:
 each_type_related_to_some_type | pub(crate) fn each_type_related_to_some_type(&self, c: &mut Checker, source: P<Type>, target: P<Type>) -> Ternary | relater.go:3076 | Relater
 each_type_related_to_type | pub(crate) fn each_type_related_to_type(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, intersection_state: IntersectionState) -> Ternary | relater.go:2965 | Relater
 each_union_contains | pub(crate) fn each_union_contains(&mut self, union_types: &[P<Type>], t: P<Type>) -> bool | checker.go:26866 | Checker
-earliest_declaration | fn earliest_declaration(&mut self, t: P<Type>) -> Option<P<Node>> | rust:checker_09.rs:3123 | Checker
+earliest_declaration | fn earliest_declaration(&mut self, t: P<Type>) -> Option<P<Node>> | rust:checker_09.rs:3124 | Checker
 elaborate_array_literal | pub(crate) fn elaborate_array_literal(&mut self, node: P<Node>, source: P<Type>, target: P<Type>, relation: P<Relation>, diagnostic_output: Option<&mut Vec<P<Diagnostic>>>) -> bool | relater.go:520 | Checker
 elaborate_arrow_function | pub(crate) fn elaborate_arrow_function(&mut self, node: P<Node>, source: P<Type>, target: P<Type>, relation: P<Relation>, diagnostic_output: Option<&mut Vec<P<Diagnostic>>>) -> bool | relater.go:639 | Checker
 elaborate_did_you_mean_to_call_or_construct | pub(crate) fn elaborate_did_you_mean_to_call_or_construct(&mut self, node: P<Node>, source: P<Type>, target: P<Type>, relation: P<Relation>, kind: SignatureKind, head_message: Option<&'static Message>, diagnostic_output: Option<&mut Vec<P<Diagnostic>>>) -> bool | relater.go:478 | Checker
@@ -709,8 +709,8 @@ elaborate_iterable_or_array_like_target_elementwise | pub(crate) fn elaborate_it
 elaborate_jsx_components | pub(crate) fn elaborate_jsx_components(&mut self, node: P<Node>, source: P<Type>, target: P<Type>, relation: P<Relation>, diagnostic_output: Option<&mut Vec<P<Diagnostic>>>) -> bool | jsx.go:296 | Checker
 elaborate_never_intersection | pub(crate) fn elaborate_never_intersection(&mut self, chain: Option<P<Diagnostic>>, node: P<Node>, t: P<Type>) -> Option<P<Diagnostic>> | checker.go:22264 | Checker
 elaborate_object_literal | pub(crate) fn elaborate_object_literal(&mut self, node: P<Node>, source: P<Type>, target: P<Type>, relation: P<Relation>, diagnostic_output: Option<&mut Vec<P<Diagnostic>>>) -> bool | relater.go:496 | Checker
-element_flags | pub fn element_flags(&self) -> Vec<ElementFlags> | rust:types.rs:2316 | TupleType
-element_infos | pub fn element_infos(&self) -> &'static [TupleElementInfo] | rust:types.rs:2319 | TupleType
+element_flags | pub fn element_flags(&self) -> Vec<ElementFlags> | rust:types.rs:2317 | TupleType
+element_infos | pub fn element_infos(&self) -> &'static [TupleElementInfo] | rust:types.rs:2320 | TupleType
 emit_context | pub fn emit_context(&self) -> P<EmitContext> | nodebuilder.go:29 | NodeBuilder
 enabled | pub(crate) fn enabled() -> bool | rust:uniontrace.rs:30 | -
 enclosing_declaration_name | fn enclosing_declaration_name(node: P<Node>) -> String | rust:workcensus.rs:410 | -
@@ -723,13 +723,13 @@ ensure_assignments_marked | pub(crate) fn ensure_assignments_marked(&mut self, s
 enter_context | pub(crate) fn enter_context(&self, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: Option<&'static dyn SymbolTracker>) | nodebuilder.go:33 | NodeBuilder
 enter_new_scope | pub(crate) fn enter_new_scope(&self, c: &mut Checker, declaration: Option<P<Node>>, expanded_params: &[P<Symbol>], type_parameters: &[P<Type>], original_parameters: Option<&[P<Symbol>]>, mapper: Option<P<TypeMapper>>) -> Box<dyn FnMut(&mut Checker)> | nodebuilderscopes.go:59 | NodeBuilderImpl
 enter_signature_scope | pub(crate) fn enter_signature_scope(&self, c: &mut Checker, signature: P<Signature>) -> (Vec<P<Symbol>>, Box<dyn FnMut(&mut Checker)>) | nodebuilderscopes.go:53 | NodeBuilderImpl
-enter_synthetic_mode | fn enter_synthetic_mode(&self) -> bool | rust:types.rs:358 | ValueSymbolLinks
+enter_synthetic_mode | fn enter_synthetic_mode(&self) -> bool | rust:types.rs:359 | ValueSymbolLinks
 entity_name_to_string | pub(crate) fn entity_name_to_string(name: P<Node>) -> String | utilities.go:217 | -
 entries | pub fn entries(&self) -> Vec<(K, V)> where K: Clone, | rust:types.rs:96 | GoMap
 enum_member_initializer | pub(crate) fn enum_member_initializer(&self, c: &mut Checker, p: P<Symbol>) -> Option<P<Node>> | nodebuilder_hover.go:92 | NodeBuilderImpl
 env_mode | fn env_mode() -> Option<InferMemoMode> | rust:infermemo.rs:64 | -
 env_mode | fn env_mode() -> Option<UnionCacheMode> | rust:unioncache.rs:48 | -
-erase | fn erase<T>(p: Option<P<T>>) -> Option<P<()>> | rust:types.rs:306 | -
+erase | fn erase<T>(p: Option<P<T>>) -> Option<P<()>> | rust:types.rs:307 | -
 error | pub(crate) fn error(&mut self, location: Option<P<Node>>, message: &'static Message, args: &[&dyn Display]) -> P<Diagnostic> | checker.go:14237 | Checker
 error_and_maybe_suggest_await | pub(crate) fn error_and_maybe_suggest_await(&mut self, location: Option<P<Node>>, maybe_missing_await: bool, message: &'static Message, args: &[&dyn Display]) -> P<Diagnostic> | checker.go:14251 | Checker
 error_if_writing_to_readonly_index | pub(crate) fn error_if_writing_to_readonly_index(&mut self, index_info: Option<P<IndexInfo>>, object_type: P<Type>, access_expression: Option<P<Node>>) | checker.go:27739 | Checker
@@ -768,7 +768,7 @@ exports_by_target | fn exports_by_target(&mut self, exports: P<SymbolTable>, sym
 expression_result_is_unused | pub(crate) fn expression_result_is_unused(node: P<Node>) -> bool | utilities.go:1203 | -
 extend_assignment_position | pub(crate) fn extend_assignment_position(&mut self, node: Option<P<Node>>, declaration: P<Node>) -> i32 | flow.go:2749 | Checker
 extend_export_symbols | pub(crate) fn extend_export_symbols(&mut self, target: P<SymbolTable>, source: Option<P<SymbolTable>>, lookup_table: Option<&mut ExportCollisionTable>, export_node: Option<P<Node>>) | checker.go:16558 | Checker
-extends_type | pub fn extends_type(&self) -> Option<P<Type>> | rust:types.rs:2765 | ConditionalType
+extends_type | pub fn extends_type(&self) -> Option<P<Type>> | rust:types.rs:2766 | ConditionalType
 extract_definitely_falsy_types | pub fn extract_definitely_falsy_types(&mut self, t: P<Type>) -> P<Type> | checker.go:29580 | Checker
 extract_redundant_template_literals | pub(crate) fn extract_redundant_template_literals(&mut self, types: &[P<Type>]) -> (Vec<P<Type>>, bool) | checker.go:26787 | Checker
 extract_types_of_kind | pub(crate) fn extract_types_of_kind(&mut self, t: P<Type>, kind: TypeFlags) -> P<Type> | checker.go:28625 | Checker
@@ -805,10 +805,10 @@ find_mixins | pub(crate) fn find_mixins(&mut self, types: &[P<Type>]) -> (Vec<bo
 find_most_overlappy_type | pub(crate) fn find_most_overlappy_type(&mut self, source: P<Type>, union_target: P<Type>) -> Option<P<Type>> | relater.go:916 | Checker
 find_resolution_cycle_start_index | pub(crate) fn find_resolution_cycle_start_index(&mut self, target: TypeSystemEntity, property_name: TypeSystemPropertyName) -> i32 | checker.go:19127 | Checker
 fingerprint | fn fingerprint<S: AsRef<str>>(items: &[S]) -> u64 | rust:uniontrace.rs:100 | -
-fixed_length | pub fn fixed_length(&self) -> i32 | rust:types.rs:2310 | TupleType
+fixed_length | pub fn fixed_length(&self) -> i32 | rust:types.rs:2311 | TupleType
 flags | pub fn flags(self) -> u8 | rust:flowmemo.rs:107 | MemoHit
-flags | pub fn flags(&self) -> SignatureFlags | rust:types.rs:2866 | Signature
-flags | pub fn flags(&self) -> TypeFlags | rust:types.rs:1449 | Type
+flags | pub fn flags(&self) -> SignatureFlags | rust:types.rs:2867 | Signature
+flags | pub fn flags(&self) -> TypeFlags | rust:types.rs:1450 | Type
 flow_frame_begin | pub(crate) fn flow_frame_begin(&mut self) -> FlowFrame | rust:flowmemo.rs:437 | Checker
 flow_frame_counters | fn flow_frame_counters(&mut self, frame: FlowFrame) | rust:flowmemo.rs:464 | Checker
 flow_frame_end | pub(crate) fn flow_frame_end(&mut self, frame: FlowFrame) -> (FrameTaint, u16) | rust:flowmemo.rs:445 | Checker
@@ -835,15 +835,15 @@ for_each_property_worker | fn for_each_property_worker(&mut self, prop: P<Symbol
 for_each_type | pub(crate) fn for_each_type(c: &mut Checker, t: P<Type>, f: impl FnMut(&mut Checker, P<Type>)) | checker.go:26997 | -
 for_each_yield_expression | pub(crate) fn for_each_yield_expression(body: P<Node>, visitor: impl FnMut(P<Node>) -> bool) -> bool | utilities.go:1264 | -
 forget_scratch_keyed_caches | pub fn forget_scratch_keyed_caches(&mut self) | rust:checker_15.rs:2473 | Checker
-format_type_flags | pub fn format_type_flags(flags: TypeFlags) -> Vec<&'static str> | rust:types.rs:894 | -
+format_type_flags | pub fn format_type_flags(flags: TypeFlags) -> Vec<&'static str> | rust:types.rs:895 | -
 format_union_types | pub(crate) fn format_union_types(&mut self, types: &[P<Type>], expanding_enum: bool) -> Vec<P<Type>> | printer.go:253 | Checker
 free_type_list | pub(crate) fn free_type_list(&mut self, list: Vec<P<Type>>) | rust:checker_11.rs:1899 | Checker
-fresh_type | pub fn fresh_type(&self) -> Option<P<Type>> | rust:types.rs:1932 | LiteralType
+fresh_type | pub fn fresh_type(&self) -> Option<P<Type>> | rust:types.rs:1933 | LiteralType
 from_one | pub fn from_one(key: K, value: V) -> Self | rust:packedmap.rs:59 | PackedMap
 from_u128 | pub const fn from_u128(v: u128) -> CacheHashKey | rust:checker.rs:2456 | CacheHashKey
 from_vec | pub fn from_vec(items: Vec<T>) -> Self | rust:checker.rs:562 | LazyVec
 function_has_implicit_return | pub(crate) fn function_has_implicit_return(&mut self, fn_: P<Node>) -> bool | checker.go:20648 | Checker
-function_or_constructor_checked | pub fn function_or_constructor_checked(&self) -> bool | rust:types.rs:457 | ValueSymbolLinks
+function_or_constructor_checked | pub fn function_or_constructor_checked(&self) -> bool | rust:types.rs:458 | ValueSymbolLinks
 generate_jsx_children | pub(crate) fn generate_jsx_children(&mut self, node: P<Node>, get_invalid_text_diagnostic: InvalidTextDiagnosticFn) -> impl FnMut(&mut Checker) -> Option<JsxElaborationElement> + 'static + use<> | jsx.go:376 | Checker
 get | pub fn get<Q: ?Sized + Hash + Eq>(&self, key: &Q) -> Option<V> where K: std::borrow::Borrow<Q>, | rust:types.rs:36 | GoMap
 get | pub fn get(&self, key: &K) -> Option<V> | rust:packedmap.rs:142 | GoPackedMap
@@ -854,7 +854,7 @@ get | pub fn get(&mut self, key: P<K>) -> P<V> | rust:links.rs:98 | LinkStore
 get | pub fn get(&self) -> Option<P<TypeMapper>> | rust:mapper.rs:417 | MapperCell
 get | pub fn get(&mut self, node: P<Node>) -> &'static V | rust:links.rs:616 | NodeLinkStore
 get | pub fn get(&self, key: &K) -> Option<V> | rust:packedmap.rs:66 | PackedMap
-get | pub fn get(&self, type_arguments: &[P<Type>]) -> Option<P<Type>> | rust:types.rs:2199 | ReferenceInstantiations
+get | pub fn get(&self, type_arguments: &[P<Type>]) -> Option<P<Type>> | rust:types.rs:2200 | ReferenceInstantiations
 get | pub fn get(&self, value: &str) -> Option<P<Type>> | rust:packedmap.rs:192 | StringLiteralTypes
 get | pub fn get(&mut self, symbol: P<Symbol>) -> P<V> | rust:links.rs:657 | SymbolArenaLinkStore
 get_access_stack | pub(crate) fn get_access_stack(ref_: P<Node>) -> Vec<P<Node>> | nodebuilderimpl.go:325 | -
@@ -1872,7 +1872,7 @@ get_write_type_of_instantiated_symbol | pub(crate) fn get_write_type_of_instanti
 get_write_type_of_symbol | pub(crate) fn get_write_type_of_symbol(&mut self, symbol: P<Symbol>) -> Option<P<Type>> | checker.go:16757 | Checker
 get_write_type_of_symbol_with_deferred_type | pub(crate) fn get_write_type_of_symbol_with_deferred_type(&mut self, symbol: P<Symbol>) -> P<Type> | checker.go:16737 | Checker
 get_yielded_type_of_yield_expression | pub(crate) fn get_yielded_type_of_yield_expression(&mut self, node: P<Node>, expression_type: P<Type>, sent_type: P<Type>, is_async: bool) -> Option<P<Type>> | checker.go:11218 | Checker
-given_or_pending | pub fn given_or_pending(alias: Option<P<TypeAlias>>, pending: &'a Option<PendingTypeAlias>) -> AliasArg<'a> | rust:types.rs:1055 | AliasArg
+given_or_pending | pub fn given_or_pending(alias: Option<P<TypeAlias>>, pending: &'a Option<PendingTypeAlias>) -> AliasArg<'a> | rust:types.rs:1056 | AliasArg
 grammar_error_at_pos | pub(crate) fn grammar_error_at_pos(&mut self, node_for_source_file: P<Node>, start: i32, length: i32, message: &'static Message, args: &[&dyn Display]) -> bool | grammarchecks.go:29 | Checker
 grammar_error_on_first_token | pub(crate) fn grammar_error_on_first_token(&mut self, node: P<Node>, message: &'static Message, args: &[&dyn Display]) -> bool | grammarchecks.go:19 | Checker
 grammar_error_on_node | pub(crate) fn grammar_error_on_node(&mut self, node: P<Node>, message: &'static Message, args: &[&dyn Display]) -> bool | grammarchecks.go:38 | Checker
@@ -1926,7 +1926,7 @@ has_properties_of_structured_type | pub(crate) fn has_properties_of_structured_t
 has_property_of_type | pub(crate) fn has_property_of_type(&mut self, t: P<Type>, name: &str) -> bool | rust:checker_09.rs:2194 | Checker
 has_readonly_modifier | pub(crate) fn has_readonly_modifier(node: P<Node>) -> bool | utilities.go:67 | -
 has_rest_parameter | pub(crate) fn has_rest_parameter(signature: P<Node>) -> bool | checker.go:28257 | -
-has_rest_parameter | pub fn has_rest_parameter(&self) -> bool | rust:types.rs:2932 | Signature
+has_rest_parameter | pub fn has_rest_parameter(&self) -> bool | rust:types.rs:2933 | Signature
 has_shadowed_namespace | pub(crate) fn has_shadowed_namespace(&mut self, symbol: P<Symbol>) -> bool | checker.go:5912 | Checker
 has_signature_with_arity_greater_than | pub(crate) fn has_signature_with_arity_greater_than(&mut self, symbol: P<Symbol>, arity: i32) -> bool | checker.go:29084 | Checker
 has_signatures | pub(crate) fn has_signatures(&mut self, t: P<Type>) -> bool | checker.go:15947 | Checker
@@ -1942,19 +1942,19 @@ has_types | pub(crate) fn has_types(&self) -> bool | checker.go:6574 | Iteration
 has_visible_declarations | pub(crate) fn has_visible_declarations(&self, c: &mut Checker, symbol: P<Symbol>, should_compute_alias_to_make_visible: bool) -> Option<P<SymbolAccessibilityResult>> | emitresolver.go:384 | EmitResolver
 hash | fn hash(key: PKey) -> u64 | rust:links.rs:161 | KeyedLinkStore
 hash | fn hash(key: PKey) -> u64 | rust:links.rs:46 | LinkStore
-hash | fn hash(type_arguments: &[P<Type>]) -> u64 | rust:types.rs:2179 | ReferenceInstantiations
+hash | fn hash(type_arguments: &[P<Type>]) -> u64 | rust:types.rs:2180 | ReferenceInstantiations
 hash | fn hash(value: &str) -> u64 | rust:packedmap.rs:178 | StringLiteralTypes
 hash | fn hash(key: PKey) -> u64 | rust:links.rs:239 | SymbolReferenceLinkStore
 hash | pub(crate) fn hash(&self) -> CacheHashKey | checker.go:17713 | keyBuilder
 hash_128 | pub fn hash_128(b: &[u8]) -> CacheHashKey | rust:checker.rs:2460 | CacheHashKey
 hash_spilled | fn hash_spilled(&self, overflow: &[u8]) -> CacheHashKey | rust:checker_09.rs:368 | keyBuilder
 hash_string_128 | pub const fn hash_string_128(s: &str) -> CacheHashKey | rust:checker.rs:2464 | CacheHashKey
-heap_census | pub fn heap_census(&self) -> HeapCensus | rust:heapcensus.rs:215 | Checker
-heap_census_enabled | pub fn heap_census_enabled() -> bool | rust:heapcensus.rs:124 | -
-heap_census_enabled | pub fn heap_census_enabled() -> bool | rust:heapcensus.rs:206 | Checker
-heap_census_min_bytes | pub fn heap_census_min_bytes() -> u64 | rust:heapcensus.rs:130 | -
-heap_census_min_bytes | pub fn heap_census_min_bytes() -> u64 | rust:heapcensus.rs:210 | Checker
-heap_census_objects | fn heap_census_objects(&self, h: &mut HeapCensus) | rust:heapcensus.rs:152 | Checker
+heap_census | pub fn heap_census(&self) -> HeapCensus | rust:heapcensus.rs:216 | Checker
+heap_census_enabled | pub fn heap_census_enabled() -> bool | rust:heapcensus.rs:125 | -
+heap_census_enabled | pub fn heap_census_enabled() -> bool | rust:heapcensus.rs:207 | Checker
+heap_census_min_bytes | pub fn heap_census_min_bytes() -> u64 | rust:heapcensus.rs:131 | -
+heap_census_min_bytes | pub fn heap_census_min_bytes() -> u64 | rust:heapcensus.rs:211 | Checker
+heap_census_objects | fn heap_census_objects(&self, h: &mut HeapCensus) | rust:heapcensus.rs:153 | Checker
 heap_parts | pub fn heap_parts(&self) -> Vec<(&'static str, crate::heapcensus::HeapStat)> | rust:links.rs:384 | IdLinkStore
 heap_parts | pub fn heap_parts(&self) -> Vec<(&'static str, crate::heapcensus::HeapStat)> | rust:links.rs:530 | InlineIdStore
 heap_parts | pub fn heap_parts(&self) -> Vec<(&'static str, crate::heapcensus::HeapStat)> | rust:links.rs:179 | KeyedLinkStore
@@ -1964,11 +1964,11 @@ heap_parts | pub fn heap_parts(&self) -> Vec<(&'static str, crate::heapcensus::H
 heap_parts | pub fn heap_parts(&self) -> Vec<(&'static str, crate::heapcensus::HeapStat)> | rust:links.rs:268 | SymbolReferenceLinkStore
 heap_stat | pub(crate) fn heap_stat(&self) -> Option<crate::heapcensus::HeapStat> | rust:packedmap.rs:163 | GoPackedMap
 heap_stat | pub(crate) fn heap_stat(&self) -> crate::heapcensus::HeapStat | rust:packedmap.rs:113 | PackedMap
-heap_stat | pub(crate) fn heap_stat(&self) -> Option<crate::heapcensus::HeapStat> | rust:types.rs:2173 | ReferenceInstantiations
+heap_stat | pub(crate) fn heap_stat(&self) -> Option<crate::heapcensus::HeapStat> | rust:types.rs:2174 | ReferenceInstantiations
 heap_stat | pub(crate) fn heap_stat(&self) -> crate::heapcensus::HeapStat | rust:packedmap.rs:211 | StringLiteralTypes
 hover_heritage_clauses | pub(crate) fn hover_heritage_clauses(&self, _c: &mut Checker, declarations: &[P<Node>]) -> Vec<P<Node>> | nodebuilder_hover.go:275 | NodeBuilderImpl
-id | pub fn id(&self) -> SignatureId | rust:types.rs:2863 | Signature
-id | pub fn id(&self) -> TypeId | rust:types.rs:1445 | Type
+id | pub fn id(&self) -> SignatureId | rust:types.rs:2864 | Signature
+id | pub fn id(&self) -> TypeId | rust:types.rs:1446 | Type
 import_clause_from_imported | pub(crate) fn import_clause_from_imported(node: P<Node>) -> Option<P<Node>> | checker.go:7443 | -
 include_mixin_type | pub(crate) fn include_mixin_type(&mut self, t: P<Type>, types: &[P<Type>], mixin_flags: &[bool], index: i32) -> P<Type> | checker.go:21728 | Checker
 include_undefined_in_index_signature | pub(crate) fn include_undefined_in_index_signature(&mut self, t: P<Type>) -> P<Type> | flow.go:2339 | Checker
@@ -1977,12 +1977,12 @@ index_info_related_to | pub(crate) fn index_info_related_to(&self, c: &mut Check
 index_info_to_index_signature_declaration | pub fn index_info_to_index_signature_declaration(&self, c: &mut Checker, info: P<IndexInfo>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: Option<&'static dyn SymbolTracker>) -> Option<P<Node>> | nodebuilder.go:111 | NodeBuilder
 index_info_to_index_signature_declaration_helper | pub(crate) fn index_info_to_index_signature_declaration_helper(&self, c: &mut Checker, index_info: P<IndexInfo>, type_node: Option<P<Node>>) -> P<Node> | nodebuilderimpl.go:2210 | NodeBuilderImpl
 index_info_to_object_computed_names_or_signature_declaration | pub(crate) fn index_info_to_object_computed_names_or_signature_declaration(&self, c: &mut Checker, index_info: P<IndexInfo>, type_node: Option<P<Node>>) -> Vec<P<Node>> | nodebuilderimpl.go:2159 | NodeBuilderImpl
-index_infos | fn index_infos(&self) -> &'static [P<IndexInfo>] | rust:types.rs:2028 | CountOrIndexInfos
-index_infos | pub fn index_infos(&self) -> &'static [P<IndexInfo>] | rust:types.rs:2089 | StructuredType
+index_infos | fn index_infos(&self) -> &'static [P<IndexInfo>] | rust:types.rs:2029 | CountOrIndexInfos
+index_infos | pub fn index_infos(&self) -> &'static [P<IndexInfo>] | rust:types.rs:2090 | StructuredType
 index_infos_of_structured_type | pub(crate) fn index_infos_of_structured_type(&mut self, t: P<Type>) -> &'static [P<IndexInfo>] | rust:checker_09.rs:2356 | Checker
 index_signatures_identical_to | pub(crate) fn index_signatures_identical_to(&self, c: &mut Checker, source: P<Type>, target: P<Type>) -> Ternary | relater.go:4722 | Relater
 index_signatures_related_to | pub(crate) fn index_signatures_related_to(&self, c: &mut Checker, source: P<Type>, target: P<Type>, source_is_primitive: bool, report_errors: bool, intersection_state: IntersectionState) -> Ternary | relater.go:4610 | Relater
-index_type | pub fn index_type(&self) -> Option<P<Type>> | rust:types.rs:2681 | IndexedAccessType
+index_type | pub fn index_type(&self) -> Option<P<Type>> | rust:types.rs:2682 | IndexedAccessType
 index_type_less_than | pub(crate) fn index_type_less_than(c: &mut Checker, index_type: P<Type>, limit: i32) -> bool | checker.go:27851 | -
 infer_from_annotated_parameters_and_return | pub(crate) fn infer_from_annotated_parameters_and_return(&mut self, sig: P<Signature>, context: P<Signature>, inference_context: Option<P<InferenceContext>>) | checker.go:10436 | Checker
 infer_from_contravariant_types | pub(crate) fn infer_from_contravariant_types(&mut self, n: P<InferenceState>, source: P<Type>, target: P<Type>) | inference.go:308 | Checker
@@ -2065,10 +2065,10 @@ instantiate_types_changed | pub(crate) fn instantiate_types_changed(&mut self, t
 intersect_types | pub(crate) fn intersect_types(&mut self, type1: Option<P<Type>>, type2: Option<P<Type>>) -> Option<P<Type>> | checker.go:26494 | Checker
 intersect_unions_of_primitive_types | pub(crate) fn intersect_unions_of_primitive_types(&mut self, types: &mut [P<Type>]) -> (Vec<P<Type>>, bool) | checker.go:26813 | Checker
 intersection_has_matching_recursion_identity | fn intersection_has_matching_recursion_identity(c: &mut Checker, target: P<Type>, identity: RecursionId) -> bool | rust:relater_1.rs:1112 | -
-intersection_rare | fn intersection_rare(&self) -> Option<&'static IntersectionRare> | rust:types.rs:2588 | IntersectionType
-intersection_rare_for_write | fn intersection_rare_for_write(&self) -> &'static IntersectionRare | rust:types.rs:2593 | IntersectionType
+intersection_rare | fn intersection_rare(&self) -> Option<&'static IntersectionRare> | rust:types.rs:2589 | IntersectionType
+intersection_rare_for_write | fn intersection_rare_for_write(&self) -> &'static IntersectionRare | rust:types.rs:2594 | IntersectionType
 intra_expression_inference_sites | pub fn intra_expression_inference_sites(&self) -> Vec<IntraExpressionInferenceSite> | rust:checker.rs:468 | InferenceContext
-intrinsic_name | pub fn intrinsic_name(&self) -> &'static str | rust:types.rs:1904 | IntrinsicType
+intrinsic_name | pub fn intrinsic_name(&self) -> &'static str | rust:types.rs:1905 | IntrinsicType
 introduces_arguments_exotic_object | pub(crate) fn introduces_arguments_exotic_object(node: P<Node>) -> bool | utilities.go:1681 | -
 invocation_error | pub(crate) fn invocation_error(&mut self, error_target: P<Node>, apparent_type: P<Type>, kind: SignatureKind, related_information: Option<P<Diagnostic>>) | checker.go:10188 | Checker
 invocation_error_details | pub(crate) fn invocation_error_details(&mut self, error_target: P<Node>, apparent_type: P<Type>, kind: SignatureKind) -> P<Diagnostic> | checker.go:10132 | Checker
@@ -2095,13 +2095,13 @@ is_assignment_to_readonly_entity | pub(crate) fn is_assignment_to_readonly_entit
 is_auto_typed_property | pub(crate) fn is_auto_typed_property(&mut self, symbol: P<Symbol>) -> bool | checker.go:27808 | Checker
 is_awaited_type_instantiation | pub(crate) fn is_awaited_type_instantiation(&mut self, t: P<Type>) -> bool | checker.go:31873 | Checker
 is_awaited_type_needed | pub(crate) fn is_awaited_type_needed(&mut self, t: P<Type>) -> bool | checker.go:31881 | Checker
-is_big_int_literal | pub fn is_big_int_literal(&self) -> bool | rust:types.rs:1721 | Type
+is_big_int_literal | pub fn is_big_int_literal(&self) -> bool | rust:types.rs:1722 | Type
 is_block_scoped_name_declared_before_use | pub(crate) fn is_block_scoped_name_declared_before_use(&mut self, declaration: P<Node>, usage: P<Node>) -> bool | checker.go:1963 | Checker
-is_boolean_like | pub fn is_boolean_like(&self) -> bool | rust:types.rs:1729 | Type
+is_boolean_like | pub fn is_boolean_like(&self) -> bool | rust:types.rs:1730 | Type
 is_call_chain | pub(crate) fn is_call_chain(node: P<Node>) -> bool | utilities.go:1128 | -
 is_canceled | pub(crate) fn is_canceled(&mut self) -> bool | utilities.go:1712 | Checker
 is_circular_mapped_property | pub(crate) fn is_circular_mapped_property(&mut self, symbol: P<Symbol>) -> bool | checker.go:31152 | Checker
-is_class | pub fn is_class(&self) -> bool | rust:types.rs:1737 | Type
+is_class | pub fn is_class(&self) -> bool | rust:types.rs:1738 | Type
 is_class_derived_from_declaring_classes | pub(crate) fn is_class_derived_from_declaring_classes(&mut self, check_class: P<Type>, prop: P<Symbol>, writing: bool) -> bool | checker.go:12181 | Checker
 is_class_instance_property | pub(crate) fn is_class_instance_property(node: P<Node>) -> bool | utilities.go:1060 | -
 is_class_instance_side | pub(crate) fn is_class_instance_side(c: &mut Checker, t: P<Type>) -> bool | nodebuilderimpl.go:337 | -
@@ -2164,7 +2164,7 @@ is_empty_resolved_type | pub(crate) fn is_empty_resolved_type(&mut self, t: &'st
 is_empty_structured_type | pub(crate) fn is_empty_structured_type(&mut self, t: P<Type>) -> bool | rust:checker_13.rs:1029 | Checker
 is_entity_name_visible | pub(crate) fn is_entity_name_visible(&self, c: &mut Checker, entity_name: P<Node>, enclosing_declaration: Option<P<Node>>, should_compute_alias_to_make_visible: bool) -> SymbolAccessibilityResult | emitresolver.go:340 | EmitResolver
 is_entity_name_visible_exported | pub fn is_entity_name_visible_exported(&self, c: &mut Checker, entity_name: P<Node>, enclosing_declaration: Option<P<Node>>) -> SymbolAccessibilityResult | emitresolver.go:334 | EmitResolver
-is_enum_literal | pub fn is_enum_literal(&self) -> bool | rust:types.rs:1725 | Type
+is_enum_literal | pub fn is_enum_literal(&self) -> bool | rust:types.rs:1726 | Type
 is_enum_type_related_to | pub(crate) fn is_enum_type_related_to(&mut self, source: P<Symbol>, target: P<Symbol>, error_reporter: Option<ErrorReporter<'_>>) -> bool | relater.go:281 | Checker
 is_error_type | pub(crate) fn is_error_type(&mut self, t: P<Type>) -> bool | checker.go:27108 | Checker
 is_es2015_or_later_constructor_name | pub(crate) fn is_es2015_or_later_constructor_name(s: &str) -> bool | checker.go:1745 | -
@@ -2228,7 +2228,7 @@ is_in_parameter_initializer_before_containing_function | pub(crate) fn is_in_par
 is_in_property_initializer_or_class_static_block | pub(crate) fn is_in_property_initializer_or_class_static_block(&mut self, node: P<Node>, ignore_arrow_functions: bool) -> bool | checker.go:13941 | Checker
 is_in_right_side_of_import_or_export_assignment | pub(crate) fn is_in_right_side_of_import_or_export_assignment(node: P<Node>) -> bool | utilities.go:1150 | -
 is_in_type_query | pub fn is_in_type_query(node: P<Node>) -> bool | utilities.go:168 | -
-is_index | pub fn is_index(&self) -> bool | rust:types.rs:1745 | Type
+is_index | pub fn is_index(&self) -> bool | rust:types.rs:1746 | Type
 is_indirect_call | pub(crate) fn is_indirect_call(&mut self, node: P<Node>) -> bool | checker.go:13247 | Checker
 is_initializer_big_int_literal_expression | pub(crate) fn is_initializer_big_int_literal_expression(expr: P<Node>) -> bool | grammarchecks.go:1965 | -
 is_initializer_simple_literal_enum_reference | pub(crate) fn is_initializer_simple_literal_enum_reference(&mut self, expr: P<Node>) -> bool | grammarchecks.go:1978 | Checker
@@ -2239,8 +2239,8 @@ is_instantiated_generic_parameter | pub(crate) fn is_instantiated_generic_parame
 is_instantiated_module | pub(crate) fn is_instantiated_module(node: P<Node>, preserve_const_enums: bool) -> bool | checker.go:5352 | -
 is_interface_check_site | fn is_interface_check_site(&mut self, symbol: P<Symbol>, node: P<Node>) -> bool | rust:checker_03.rs:972 | Checker
 is_internal_module_import_equals_declaration | pub(crate) fn is_internal_module_import_equals_declaration(node: P<Node>) -> bool | checker.go:28862 | -
-is_intersection | pub fn is_intersection(&self) -> bool | rust:types.rs:1709 | Type
-is_intersection_data | fn is_intersection_data(&self) -> bool | rust:types.rs:2456 | UnionOrIntersectionType
+is_intersection | pub fn is_intersection(&self) -> bool | rust:types.rs:1710 | Type
+is_intersection_data | fn is_intersection_data(&self) -> bool | rust:types.rs:2457 | UnionOrIntersectionType
 is_intersection_empty | pub(crate) fn is_intersection_empty(&mut self, type1: P<Type>, type2: P<Type>) -> bool | checker.go:28499 | Checker
 is_intersection_type | pub(crate) fn is_intersection_type(t: P<Type>) -> bool | checker.go:26703 | -
 is_invalid_computed_property_name | pub(crate) fn is_invalid_computed_property_name(node: P<Node>) -> bool | checker.go:27266 | -
@@ -2301,14 +2301,14 @@ is_non_generic_object_type | pub(crate) fn is_non_generic_object_type(&mut self,
 is_non_generic_top_level_type | pub(crate) fn is_non_generic_top_level_type(&mut self, t: P<Type>) -> bool | checker.go:22626 | Checker
 is_non_null_access | pub(crate) fn is_non_null_access(node: P<Node>) -> bool | utilities.go:1120 | -
 is_non_primitive_type | pub(crate) fn is_non_primitive_type(t: P<Type>) -> bool | relater.go:1266 | -
-is_none | pub fn is_none(self) -> bool | rust:types.rs:1063 | AliasArg
+is_none | pub fn is_none(self) -> bool | rust:types.rs:1064 | AliasArg
 is_not_null_type | pub(crate) fn is_not_null_type(t: P<Type>) -> bool | checker.go:26715 | -
 is_not_overload | pub(crate) fn is_not_overload(node: P<Node>) -> bool | checker.go:5921 | -
 is_not_replacable_by_method | pub(crate) fn is_not_replacable_by_method(decl: P<Node>) -> bool | checker.go:16412 | -
 is_not_undefined_type | pub(crate) fn is_not_undefined_type(t: P<Type>) -> bool | checker.go:26711 | -
 is_null_or_undefined | pub(crate) fn is_null_or_undefined(&mut self, node: P<Node>) -> bool | checker.go:18007 | Checker
 is_nullable_type | pub fn is_nullable_type(&mut self, t: P<Type>) -> bool | checker.go:19014 | Checker
-is_number_literal | pub fn is_number_literal(&self) -> bool | rust:types.rs:1717 | Type
+is_number_literal | pub fn is_number_literal(&self) -> bool | rust:types.rs:1718 | Type
 is_numeric_computed_name | pub(crate) fn is_numeric_computed_name(&mut self, name: P<Node>) -> bool | checker.go:20122 | Checker
 is_numeric_literal_name | pub(crate) fn is_numeric_literal_name(name: &str) -> bool | utilities.go:941 | -
 is_numeric_name | pub(crate) fn is_numeric_name(&mut self, name: P<Node>) -> bool | checker.go:20112 | Checker
@@ -2359,8 +2359,8 @@ is_prototype_property | pub(crate) fn is_prototype_property(symbol: P<Symbol>) -
 is_pure | pub fn is_pure(self) -> bool | rust:flowmemo.rs:148 | FrameTaint
 is_reachable_flow_node | pub(crate) fn is_reachable_flow_node(&mut self, flow: P<FlowNode>) -> bool | flow.go:2513 | Checker
 is_reachable_flow_node_worker | pub(crate) fn is_reachable_flow_node_worker(&mut self, f: P<FlowState>, flow: P<FlowNode>, no_cache_check: bool) -> bool | flow.go:2522 | Checker
-is_readonly | pub fn is_readonly(&self) -> bool | rust:types.rs:2998 | IndexInfo
-is_readonly | pub fn is_readonly(&self) -> bool | rust:types.rs:2313 | TupleType
+is_readonly | pub fn is_readonly(&self) -> bool | rust:types.rs:2999 | IndexInfo
+is_readonly | pub fn is_readonly(&self) -> bool | rust:types.rs:2314 | TupleType
 is_readonly_array_symbol | pub(crate) fn is_readonly_array_symbol(&mut self, symbol: Option<P<Symbol>>) -> bool | checker.go:21442 | Checker
 is_readonly_array_type | pub(crate) fn is_readonly_array_type(&mut self, t: P<Type>) -> bool | checker.go:23946 | Checker
 is_readonly_assignment_declaration | pub(crate) fn is_readonly_assignment_declaration(&mut self, node: P<Node>) -> bool | checker.go:14064 | Checker
@@ -2409,11 +2409,11 @@ is_spread_argument | pub(crate) fn is_spread_argument(arg: P<Node>) -> bool | ch
 is_spread_into_call_or_new | pub(crate) fn is_spread_into_call_or_new(node: P<Node>) -> bool | checker.go:8289 | -
 is_spreadable_property | pub fn is_spreadable_property(&mut self, prop: P<Symbol>) -> bool | checker.go:13798 | Checker
 is_static_private_identifier_property | pub(crate) fn is_static_private_identifier_property(s: P<Symbol>) -> bool | utilities.go:71 | -
-is_string | pub fn is_string(&self) -> bool | rust:types.rs:1705 | Type
+is_string | pub fn is_string(&self) -> bool | rust:types.rs:1706 | Type
 is_string_index_signature_only_type | pub(crate) fn is_string_index_signature_only_type(&mut self, t: P<Type>) -> bool | rust:checker.rs:1902 | Checker
 is_string_index_signature_only_type_worker | pub(crate) fn is_string_index_signature_only_type_worker(&mut self, t: P<Type>) -> bool | checker.go:27835 | Checker
-is_string_like | pub fn is_string_like(&self) -> bool | rust:types.rs:1733 | Type
-is_string_literal | pub fn is_string_literal(&self) -> bool | rust:types.rs:1713 | Type
+is_string_like | pub fn is_string_like(&self) -> bool | rust:types.rs:1734 | Type
+is_string_literal | pub fn is_string_literal(&self) -> bool | rust:types.rs:1714 | Type
 is_string_named | pub(crate) fn is_string_named(&self, c: &mut Checker, d: P<Node>) -> bool | nodebuilderimpl.go:2477 | NodeBuilderImpl
 is_structural_pseudo_type | pub(crate) fn is_structural_pseudo_type(t: P<PseudoType>) -> bool | pseudotypenodebuilder.go:632 | -
 is_super_call | pub(crate) fn is_super_call(n: P<Node>) -> bool | utilities.go:1136 | -
@@ -2441,7 +2441,7 @@ is_this_initialized_object_binding_expression | pub(crate) fn is_this_initialize
 is_this_property | pub(crate) fn is_this_property(node: P<Node>) -> bool | utilities.go:966 | -
 is_this_property_access_in_constructor | pub(crate) fn is_this_property_access_in_constructor(&mut self, node: P<Node>, prop: P<Symbol>) -> bool | checker.go:27798 | Checker
 is_this_property_assignment_declaration_redundant | pub fn is_this_property_assignment_declaration_redundant(&self, c: &mut Checker, node: Option<P<Node>>) -> bool | emitresolver.go:1292 | EmitResolver
-is_this_type | pub fn is_this_type(&self) -> bool | rust:types.rs:2633 | TypeParameter
+is_this_type | pub fn is_this_type(&self) -> bool | rust:types.rs:2634 | TypeParameter
 is_this_type_parameter | pub(crate) fn is_this_type_parameter(t: P<Type>) -> bool | utilities.go:1056 | -
 is_thisless | pub(crate) fn is_thisless(symbol: P<Symbol>) -> bool | checker.go:21139 | -
 is_thisless_function_like_declaration | pub(crate) fn is_thisless_function_like_declaration(node: P<Node>) -> bool | checker.go:21185 | -
@@ -2456,7 +2456,7 @@ is_trivially_serializable_computed_name | pub(crate) fn is_trivially_serializabl
 is_truthy | pub fn is_truthy(v: LiteralValue) -> bool | rust:evaluator.rs:153 | -
 is_tuple_like_type | pub(crate) fn is_tuple_like_type(&mut self, t: P<Type>) -> bool | checker.go:24005 | Checker
 is_tuple_type | pub fn is_tuple_type(t: P<Type>) -> bool | checker.go:23950 | -
-is_tuple_type | pub fn is_tuple_type(&self) -> bool | rust:types.rs:1750 | Type
+is_tuple_type | pub fn is_tuple_type(&self) -> bool | rust:types.rs:1751 | Type
 is_tuple_type_exported | pub fn is_tuple_type_exported(t: P<Type>) -> bool | exports.go:219 | -
 is_tuple_type_structure_matching | pub(crate) fn is_tuple_type_structure_matching(&mut self, t1: P<Type>, t2: P<Type>) -> bool | inference.go:1202 | Checker
 is_tuple_type_target | pub fn is_tuple_type_target(t: P<Type>) -> bool | exports.go:223 | -
@@ -2477,7 +2477,7 @@ is_type_matched_by_template_literal_or_string_mapping | pub(crate) fn is_type_ma
 is_type_matched_by_template_literal_type | pub(crate) fn is_type_matched_by_template_literal_type(&mut self, source: P<Type>, target: &'static TemplateLiteralType, compare_types: TypeComparer) -> bool | relater.go:2365 | Checker
 is_type_on_stack | pub(crate) fn is_type_on_stack(&self, _c: &mut Checker, t: P<Type>) -> bool | nodebuilderimpl.go:197 | NodeBuilderImpl
 is_type_or_base_identical_to | pub(crate) fn is_type_or_base_identical_to(&mut self, s: P<Type>, t: P<Type>) -> bool | inference.go:1214 | Checker
-is_type_parameter | pub fn is_type_parameter(&self) -> bool | rust:types.rs:1741 | Type
+is_type_parameter | pub fn is_type_parameter(&self) -> bool | rust:types.rs:1742 | Type
 is_type_parameter_at_top_level | pub(crate) fn is_type_parameter_at_top_level(&mut self, t: P<Type>, tp: P<Type>, depth: i32) -> bool | inference.go:1493 | Checker
 is_type_parameter_at_top_level_in_return_type | pub(crate) fn is_type_parameter_at_top_level_in_return_type(&mut self, signature: P<Signature>, type_parameter: P<Type>) -> bool | inference.go:1501 | Checker
 is_type_parameter_possibly_referenced | pub(crate) fn is_type_parameter_possibly_referenced(&mut self, tp: P<Type>, node: P<Node>) -> bool | checker.go:22828 | Checker
@@ -2499,7 +2499,7 @@ is_uncalled_function_reference | pub(crate) fn is_uncalled_function_reference(&m
 is_unchecked_js_suggestion | pub(crate) fn is_unchecked_js_suggestion(&mut self, node: Option<P<Node>>, suggestion: Option<P<Symbol>>, exclude_classes: bool) -> bool | utilities.go:1777 | Checker
 is_undefined_symbol | pub fn is_undefined_symbol(&mut self, symbol: P<Symbol>) -> bool | services.go:236 | Checker
 is_uniform_union_type | pub(crate) fn is_uniform_union_type(&mut self, t: P<Type>) -> bool | checker.go:28290 | Checker
-is_union | pub fn is_union(&self) -> bool | rust:types.rs:1701 | Type
+is_union | pub fn is_union(&self) -> bool | rust:types.rs:1702 | Type
 is_union_with_null | pub(crate) fn is_union_with_null(t: P<Type>) -> bool | checker.go:26699 | -
 is_union_with_undefined | pub(crate) fn is_union_with_undefined(t: P<Type>) -> bool | checker.go:26695 | -
 is_unit_like_type | pub(crate) fn is_unit_like_type(&mut self, t: P<Type>) -> bool | checker.go:25884 | Checker
@@ -2538,15 +2538,15 @@ is_weak_type | pub(crate) fn is_weak_type(&mut self, t: P<Type>) -> bool | relat
 is_yield_iterator_result | pub(crate) fn is_yield_iterator_result(&mut self, t: P<Type>) -> bool | checker.go:6852 | Checker
 is_zero | pub fn is_zero(self) -> bool | checker.go:17703 | CacheHashKey
 is_zero_big_int | pub(crate) fn is_zero_big_int(t: P<Type>) -> bool | checker.go:31625 | -
-isolated_signature_type | pub fn isolated_signature_type(&self) -> Option<P<Type>> | rust:types.rs:2913 | Signature
+isolated_signature_type | pub fn isolated_signature_type(&self) -> Option<P<Type>> | rust:types.rs:2914 | Signature
 issue_member_specific_error | pub(crate) fn issue_member_specific_error(&mut self, node: P<Node>, type_with_this: P<Type>, base_with_this: P<Type>, broad_diag: &'static Message) | checker.go:4546 | Checker
-key_property_name | pub fn key_property_name(&self) -> &'static str | rust:types.rs:2548 | UnionType
-key_type | pub fn key_type(&self) -> P<Type> | rust:types.rs:2992 | IndexInfo
+key_property_name | pub fn key_property_name(&self) -> &'static str | rust:types.rs:2549 | UnionType
+key_type | pub fn key_type(&self) -> P<Type> | rust:types.rs:2993 | IndexInfo
 keyed_at | fn keyed_at<V>(chunks: &[P<PSlot<V>>], index: u32) -> P<V> | rust:links.rs:151 | -
 kind | pub fn kind(&self) -> TypeMapperKind | rust:mapper.rs:316 | TypeMapper
-kind | pub fn kind(&self) -> TypePredicateKind | rust:types.rs:2968 | TypePredicate
+kind | pub fn kind(&self) -> TypePredicateKind | rust:types.rs:2969 | TypePredicate
 label | fn label(self) -> String | rust:workcensus.rs:439 | CKey
-labeled_declaration | pub fn labeled_declaration(self) -> Option<P<Node>> | rust:types.rs:2293 | TupleElementInfo
+labeled_declaration | pub fn labeled_declaration(self) -> Option<P<Node>> | rust:types.rs:2294 | TupleElementInfo
 late_bind_index_signature | pub(crate) fn late_bind_index_signature(&mut self, parent: P<Symbol>, early_symbols: Option<P<SymbolTable>>, late_symbols: P<SymbolTable>, decl: P<Node>) | checker.go:16391 | Checker
 late_bind_member | pub(crate) fn late_bind_member(&mut self, parent: P<Symbol>, early_symbols: Option<P<SymbolTable>>, late_symbols: P<SymbolTable>, decl: P<Node>) -> Option<P<Symbol>> | checker.go:16328 | Checker
 lazy_member_tables_heap | pub(crate) fn lazy_member_tables_heap(c: &Checker) -> Vec<(String, crate::heapcensus::HeapStat)> | rust:checker_09.rs:2667 | -
@@ -2562,7 +2562,7 @@ literal_number_value | fn literal_number_value(t: P<Type>) -> jsnum::Number | ru
 literal_string_value | fn literal_string_value(t: P<Type>) -> &'static str | rust:utilities.rs:781 | -
 literal_types_with_same_base_type | pub(crate) fn literal_types_with_same_base_type(&mut self, types: &[P<Type>]) -> bool | inference.go:1602 | Checker
 literal_value_to_string | fn literal_value_to_string(value: Option<LiteralValue>) -> String | rust:checker_13.rs:16 | -
-local_type_parameters | pub fn local_type_parameters(&self) -> &'static [P<Type>] | rust:types.rs:2245 | InterfaceType
+local_type_parameters | pub fn local_type_parameters(&self) -> &'static [P<Type>] | rust:types.rs:2246 | InterfaceType
 location | fn location(node: Option<P<Node>>) -> String | rust:uniontrace.rs:116 | -
 lookup | pub(crate) fn lookup(&self, flow: P<FlowNode>, key: u128) -> Option<MemoHit> | rust:flowmemo.rs:329 | FlowMemo
 lookup | pub(crate) fn lookup(&self, key: RelationKey) -> RelationComparisonResult | relater.go:102 | Relation
@@ -2576,7 +2576,7 @@ lookup_symbol_for_private_identifier_declaration | pub(crate) fn lookup_symbol_f
 lookup_type_parameter_nodes | pub(crate) fn lookup_type_parameter_nodes(&self, c: &mut Checker, chain: &[P<Symbol>], index: i32) -> Option<P<NodeList>> | nodebuilderimpl.go:1036 | NodeBuilderImpl
 make | pub fn make(&self) | rust:types.rs:26 | GoMap
 make | pub fn make(&self) | rust:packedmap.rs:130 | GoPackedMap
-make | pub fn make(&self) | rust:types.rs:2194 | ReferenceInstantiations
+make | pub fn make(&self) | rust:types.rs:2195 | ReferenceInstantiations
 make_key | fn make_key(types: &[P<Type>], reduction: UnionReduction, alias: AliasArg<'_>, shift: u32) -> Option<([PKey; MAX_WORDS], u16, usize)> | rust:unioncache.rs:145 | -
 map | pub fn map(&self, c: &mut Checker, t: P<Type>) -> P<Type> | rust:mapper.rs:253 | TypeMapper
 map_to_type_nodes | pub(crate) fn map_to_type_nodes(&self, c: &mut Checker, list: &[P<Type>], is_bare_list: bool) -> Option<P<NodeList>> | nodebuilderimpl.go:349 | NodeBuilderImpl
@@ -2590,8 +2590,8 @@ mapped_type_add_member_for_key_type | fn mapped_type_add_member_for_key_type(c: 
 mapped_type_add_member_for_key_type_worker | fn mapped_type_add_member_for_key_type_worker(c: &mut Checker, st: &mut MappedTypeMembersState, key_type: P<Type>, prop_name_type: P<Type>) | rust:checker_10.rs:2228 | -
 mapped_type_related_to | pub(crate) fn mapped_type_related_to(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool) -> Ternary | relater.go:4004 | Relater
 mapper | pub fn mapper(&self) -> Option<P<TypeMapper>> | rust:checker.rs:389 | InferenceContext
-mapper | pub fn mapper(&self) -> Option<P<TypeMapper>> | rust:types.rs:1637 | Type
-mapper | pub fn mapper(&self) -> Option<P<TypeMapper>> | rust:types.rs:384 | ValueSymbolLinks
+mapper | pub fn mapper(&self) -> Option<P<TypeMapper>> | rust:types.rs:1638 | Type
+mapper | pub fn mapper(&self) -> Option<P<TypeMapper>> | rust:types.rs:385 | ValueSymbolLinks
 maps_this_only | pub fn maps_this_only(&self) -> bool | rust:mapper.rs:325 | TypeMapper
 mark_alias_referenced | pub(crate) fn mark_alias_referenced(&mut self, symbol: P<Symbol>, location: P<Node>) | checker.go:29272 | Checker
 mark_alias_symbol_as_referenced | pub(crate) fn mark_alias_symbol_as_referenced(&mut self, symbol: P<Symbol>) | checker.go:29294 | Checker
@@ -2625,7 +2625,7 @@ maybe_add_missing_await_info | pub(crate) fn maybe_add_missing_await_info(&mut s
 maybe_mapped_type | pub(crate) fn maybe_mapped_type(&mut self, node: P<Node>, symbol: P<Symbol>) -> bool | checker.go:1749 | Checker
 maybe_type_of_kind | pub(crate) fn maybe_type_of_kind(&mut self, t: P<Type>, kind: TypeFlags) -> bool | checker.go:28076 | Checker
 maybe_type_of_kind_considering_base_constraint | pub(crate) fn maybe_type_of_kind_considering_base_constraint(&mut self, t: P<Type>, kind: TypeFlags) -> bool | checker.go:28090 | Checker
-members | pub fn members(&self) -> Option<P<SymbolTable>> | rust:types.rs:2056 | StructuredType
+members | pub fn members(&self) -> Option<P<SymbolTable>> | rust:types.rs:2057 | StructuredType
 members_related_to_index_info | pub(crate) fn members_related_to_index_info(&self, c: &mut Checker, source: P<Type>, target_info: P<IndexInfo>, report_errors: bool, intersection_state: IntersectionState) -> Ternary | relater.go:4666 | Relater
 members_resolved_like_go | pub fn members_resolved_like_go(&self, t: P<Type>) -> bool | rust:checker_09.rs:2748 | Checker
 merge_ascending_runs | fn merge_ascending_runs(c: &mut Checker, types: &mut Vec<P<Type>>, run_starts: &[usize]) | rust:checker_13.rs:1203 | -
@@ -2637,10 +2637,10 @@ merge_symbol | pub(crate) fn merge_symbol(&mut self, target: P<Symbol>, source: 
 merge_symbol_table | pub(crate) fn merge_symbol_table(&mut self, target: P<SymbolTable>, source: Option<P<SymbolTable>>, unidirectional: bool, merged_parent: Option<P<Symbol>>) | checker.go:14344 | Checker
 merge_type_mappers | pub(crate) fn merge_type_mappers(m1: Option<P<TypeMapper>>, m2: P<TypeMapper>) -> P<TypeMapper> | rust:mapper.rs:482 | -
 min_and_max | pub(crate) fn min_and_max<T: Copy>(slice: &[T], get_value: impl FnMut(T) -> i32) -> (i32, i32) | utilities.go:1316 | -
-min_argument_count | pub fn min_argument_count(&self) -> i32 | rust:types.rs:2935 | Signature
+min_argument_count | pub fn min_argument_count(&self) -> i32 | rust:types.rs:2936 | Signature
 min_priority | fn min_priority(a: InferencePriority, b: InferencePriority) -> InferencePriority | rust:inference.rs:7 | -
 min_steps | fn min_steps() -> u32 | rust:infermemo.rs:93 | -
-mode | fn mode(&self) -> LinksMode | rust:types.rs:327 | ValueSymbolLinks
+mode | fn mode(&self) -> LinksMode | rust:types.rs:328 | ValueSymbolLinks
 mode_from_env | fn mode_from_env() -> FlowMemoMode | rust:flowmemo.rs:51 | -
 module_specifier_resolves_to_symbol | pub(crate) fn module_specifier_resolves_to_symbol(&self, c: &mut Checker, specifier: &str, import_attributes_type: P<Type>, symbol: P<Symbol>) -> bool | nodebuilderimpl.go:1347 | NodeBuilderImpl
 module_specifier_result_for_symbol | pub(crate) fn module_specifier_result_for_symbol(&self, c: &mut Checker, result: moduleSpecifierResult, import_attributes_type: Option<P<Type>>, symbol: P<Symbol>) -> moduleSpecifierResult | nodebuilderimpl.go:1340 | NodeBuilderImpl
@@ -2649,8 +2649,8 @@ ms | fn ms(ns: u64) -> f64 | rust:workcensus.rs:614 | -
 name | fn name(self) -> &'static str | rust:workcensus.rs:62 | Cat
 name | pub(crate) fn name(&mut self, _c: &mut Checker, index: i32) -> String | checker.go:31212 | ObjectLiteralDiscriminator
 name | pub(crate) fn name(&mut self, c: &mut Checker, index: i32) -> String | relater.go:1040 | TypeDiscriminator
-name_type | pub fn name_type(&self) -> Option<P<Type>> | rust:types.rs:2356 | MappedType
-name_type | pub fn name_type(&self) -> Option<P<Type>> | rust:types.rs:424 | ValueSymbolLinks
+name_type | pub fn name_type(&self) -> Option<P<Type>> | rust:types.rs:2357 | MappedType
+name_type | pub fn name_type(&self) -> Option<P<Type>> | rust:types.rs:425 | ValueSymbolLinks
 narrow | fn narrow(&self, id: u32) -> Option<&'static V> | rust:links.rs:507 | InlineIdStore
 narrow_slot | fn narrow_slot(&self, id: u32) -> Option<u32> | rust:links.rs:345 | IdLinkStore
 narrow_type | pub(crate) fn narrow_type(&mut self, f: P<FlowState>, t: P<Type>, expr: P<Node>, assume_true: bool) -> P<Type> | flow.go:377 | Checker
@@ -2688,7 +2688,7 @@ new | pub(crate) fn new(inferences: &'static [P<InferenceInfo>], signature: Opti
 new | pub fn new(m: Option<P<TypeMapper>>) -> MapperCell | rust:mapper.rs:410 | MapperCell
 new | pub fn new(host: &'static dyn ModuleSpecifierGenerationHost) -> NodeBuilderContext | rust:nodebuilder_types.rs:119 | NodeBuilderContext
 new | pub fn new() -> Self | rust:packedmap.rs:54 | PackedMap
-new | pub fn new(symbol: Option<P<Symbol>>, type_arguments: Vec<P<Type>>) -> PendingTypeAlias | rust:types.rs:1042 | PendingTypeAlias
+new | pub fn new(symbol: Option<P<Symbol>>, type_arguments: Vec<P<Type>>) -> PendingTypeAlias | rust:types.rs:1043 | PendingTypeAlias
 new | pub(crate) fn new() -> Self | rust:unioncache.rs:109 | UnionFrontCache
 new_anonymous_type | pub(crate) fn new_anonymous_type(&mut self, symbol: Option<P<Symbol>>, members: Option<P<SymbolTable>>, call_signatures: &[P<Signature>], construct_signatures: &[P<Signature>], index_infos: &[P<IndexInfo>]) -> P<Type> | checker.go:25560 | Checker
 new_array_to_single_type_mapper | pub(crate) fn new_array_to_single_type_mapper(sources: &'static [P<Type>], target: P<Type>) -> P<TypeMapper> | rust:mapper.rs:521 | -
@@ -2760,7 +2760,7 @@ new_union_type | pub(crate) fn new_union_type(&mut self, object_flags: ObjectFla
 new_unique_es_symbol_type | pub(crate) fn new_unique_es_symbol_type(&mut self, symbol: P<Symbol>, name: &str) -> P<Type> | checker.go:25525 | Checker
 new_wrapping_tracker | pub(crate) fn new_wrapping_tracker(inner: &'static dyn SymbolTracker, bound: P<recoveryBoundary>) -> P<wrappingTracker> | nodecopy.go:188 | -
 next_serial | pub(crate) fn next_serial(&mut self) -> u32 | rust:flowmemo.rs:229 | FlowMemo
-no_type_predicate | fn no_type_predicate(&self) -> bool | rust:types.rs:2848 | SignatureRareWord
+no_type_predicate | fn no_type_predicate(&self) -> bool | rust:types.rs:2849 | SignatureRareWord
 node_immediately_references_super_or_this | pub(crate) fn node_immediately_references_super_or_this(node: P<Node>) -> bool | checker.go:2961 | -
 node_label | fn node_label(node: P<Node>) -> String | rust:workcensus.rs:434 | -
 node_starts_new_lexical_environment | pub(crate) fn node_starts_new_lexical_environment(node: P<Node>) -> bool | utilities.go:1763 | -
@@ -2769,16 +2769,16 @@ noop_add_visible_alias | pub(crate) fn noop_add_visible_alias(declaration: P<Nod
 normalize | pub(crate) fn normalize(&mut self, c: &mut Checker, element_types: &[P<Type>], element_infos: &[TupleElementInfo]) -> bool | checker.go:23825 | TupleNormalizer
 now | fn now(&self) -> u64 | rust:workcensus.rs:236 | Census
 now_ns | pub fn now_ns(&self) -> u64 | rust:workcensus.rs:304 | Census
-object_flags | pub fn object_flags(&self) -> ObjectFlags | rust:types.rs:1453 | Type
-object_type | pub fn object_type(&self) -> Option<P<Type>> | rust:types.rs:2678 | IndexedAccessType
+object_flags | pub fn object_flags(&self) -> ObjectFlags | rust:types.rs:1454 | Type
+object_type | pub fn object_type(&self) -> Option<P<Type>> | rust:types.rs:2679 | IndexedAccessType
 on_diagnostic_reported | pub(crate) fn on_diagnostic_reported(&self) | symboltracker.go:106 | SymbolTrackerImpl
 on_failed_to_resolve_symbol | pub(crate) fn on_failed_to_resolve_symbol(&mut self, error_location: Option<P<Node>>, name: &str, meaning: SymbolFlags, name_not_found_message: &'static Message) | checker.go:1605 | Checker
 on_reg_exp_scanner_errors | fn on_reg_exp_scanner_errors(c: &mut Checker, s: &mut Scanner, source_file: P<SourceFile>, last_error: &mut Option<P<Diagnostic>>) | rust:grammarchecks.rs:68 | -
 on_successfully_resolved_symbol | pub(crate) fn on_successfully_resolved_symbol(&mut self, error_location: Option<P<Node>>, result: P<Symbol>, meaning: SymbolFlags, last_location: Option<P<Node>>, associated_declaration_for_containing_initializer_or_binding_name: Option<P<Node>>, within_deferred_context: bool) | checker.go:1861 | Checker
 optional_chain_contains_reference | pub(crate) fn optional_chain_contains_reference(&mut self, source: P<Node>, target: P<Node>) -> bool | flow.go:1851 | Checker
-origin | pub fn origin(&self) -> Option<P<Type>> | rust:types.rs:2540 | UnionType
+origin | pub fn origin(&self) -> Option<P<Type>> | rust:types.rs:2541 | UnionType
 outer_return_mapper | pub fn outer_return_mapper(&self) -> Option<P<TypeMapper>> | rust:checker.rs:444 | InferenceContext
-outer_type_parameters | pub fn outer_type_parameters(&self) -> &'static [P<Type>] | rust:types.rs:2237 | InterfaceType
+outer_type_parameters | pub fn outer_type_parameters(&self) -> &'static [P<Type>] | rust:types.rs:2238 | InterfaceType
 own_mappers | pub(crate) fn own_mappers(&self) -> [Option<P<TypeMapper>>; 2] | rust:checker.rs:383 | InferenceContext
 pack_slice | fn pack_slice(s: &'static [P<Type>]) -> Option<usize> | rust:mapper.rs:147 | -
 pack_slice | fn pack_slice(s: &'static [P<Type>]) -> Option<u64> | rust:mapper.rs:180 | -
@@ -2786,14 +2786,14 @@ pad_object_literal_type | pub(crate) fn pad_object_literal_type(&mut self, t: P<
 pad_tuple_type | pub(crate) fn pad_tuple_type(&mut self, t: P<Type>, pattern: P<Node>) -> P<Type> | checker.go:17182 | Checker
 pair | pub(crate) fn pair(source: TypeId, target: TypeId, intersection_state: IntersectionState) -> Option<RelationKey> | rust:relater_types.rs:143 | RelationKey
 pair_slot_hash | fn pair_slot_hash(key: u64) -> u64 | rust:relater_1.rs:34 | -
-parameter_index | pub fn parameter_index(&self) -> i32 | rust:types.rs:2971 | TypePredicate
+parameter_index | pub fn parameter_index(&self) -> i32 | rust:types.rs:2972 | TypePredicate
 parameter_initializer_contains_undefined | pub(crate) fn parameter_initializer_contains_undefined(&mut self, declaration: P<Node>) -> bool | checker.go:11419 | Checker
-parameter_name | pub fn parameter_name(&self) -> &'static str | rust:types.rs:2974 | TypePredicate
+parameter_name | pub fn parameter_name(&self) -> &'static str | rust:types.rs:2975 | TypePredicate
 parameter_to_parameter_declaration_name | pub(crate) fn parameter_to_parameter_declaration_name(&self, c: &mut Checker, parameter_symbol: P<Symbol>, parameter_declaration: Option<P<Node>>) -> Option<P<Node>> | nodebuilderimpl.go:1763 | NodeBuilderImpl
-parameters | pub fn parameters(&self) -> &'static [P<Symbol>] | rust:types.rs:2929 | Signature
+parameters | pub fn parameters(&self) -> &'static [P<Symbol>] | rust:types.rs:2930 | Signature
 parse_big_int_literal_type | pub(crate) fn parse_big_int_literal_type(&mut self, text: &str) -> P<Type> | checker.go:25812 | Checker
 parse_isolated_entity_name | pub(crate) fn parse_isolated_entity_name(&mut self, name: &str) -> Option<P<Node>> | jsx.go:1435 | Checker
-payload | fn payload<T: TypePayload>(&self) -> &'static T | rust:types.rs:1404 | Type
+payload | fn payload<T: TypePayload>(&self) -> &'static T | rust:types.rs:1405 | Type
 permissive_mapper_worker | pub(crate) fn permissive_mapper_worker(&mut self, t: P<Type>) -> P<Type> | checker.go:25002 | Checker
 pick_longest_candidate_signature | pub(crate) fn pick_longest_candidate_signature(&mut self, node: P<Node>, candidates: &mut [P<Signature>], args: &[P<Node>], check_mode: CheckMode) -> P<Signature> | checker.go:9702 | Checker
 pop_active_mapper | pub(crate) fn pop_active_mapper(&mut self) | checker.go:22586 | Checker
@@ -2811,12 +2811,12 @@ primitive_type_alias_suggestions | pub fn primitive_type_alias_suggestions() -> 
 produce_deferred_diagnostics | pub(crate) fn produce_deferred_diagnostics(&mut self) | checker.go:14214 | Checker
 propagate_optional_type_marker | pub(crate) fn propagate_optional_type_marker(&mut self, t: P<Type>, node: P<Node>, was_optional: bool) -> P<Type> | checker.go:29552 | Checker
 propagate_verbosity_out | pub(crate) fn propagate_verbosity_out(&self) | nodebuilder.go:62 | NodeBuilder
-properties | pub fn properties(&self) -> &'static [P<Symbol>] | rust:types.rs:2064 | StructuredType
+properties | pub fn properties(&self) -> &'static [P<Symbol>] | rust:types.rs:2065 | StructuredType
 properties_identical_to | pub(crate) fn properties_identical_to(&self, c: &mut Checker, source: P<Type>, target: P<Type>, excluded_properties: &Set<String>) -> Ternary | relater.go:4449 | Relater
 properties_related_to | pub(crate) fn properties_related_to(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, excluded_properties: &Set<String>, optionals_only: bool, intersection_state: IntersectionState) -> Ternary | relater.go:4132 | Relater
 properties_table | fn properties_table(&self) -> P<SymbolTable> | rust:checker_07.rs:36 | ObjectLiteralState
-property_cache | pub fn property_cache(&self, skip_object_function_property_augment: bool) -> Option<P<SymbolTable>> | rust:types.rs:2484 | UnionOrIntersectionType
-property_cache_for_write | pub fn property_cache_for_write(&self, skip_object_function_property_augment: bool) -> P<SymbolTable> | rust:types.rs:2489 | UnionOrIntersectionType
+property_cache | pub fn property_cache(&self, skip_object_function_property_augment: bool) -> Option<P<SymbolTable>> | rust:types.rs:2485 | UnionOrIntersectionType
+property_cache_for_write | pub fn property_cache_for_write(&self, skip_object_function_property_augment: bool) -> P<SymbolTable> | rust:types.rs:2490 | UnionOrIntersectionType
 property_related_to | pub(crate) fn property_related_to(&self, c: &mut Checker, source: P<Type>, target: P<Type>, source_prop: P<Symbol>, target_prop: P<Symbol>, get_type_of_source_property: impl FnMut(&mut Checker, P<Symbol>) -> P<Type>, report_errors: bool, intersection_state: IntersectionState, skip_optional: bool) -> Ternary | relater.go:4302 | Relater
 pseudo_big_int_to_string | pub(crate) fn pseudo_big_int_to_string(value: PseudoBigInt) -> String | utilities.go:1228 | -
 pseudo_parameter_to_node | pub(crate) fn pseudo_parameter_to_node(&self, c: &mut Checker, p: P<PseudoParameter>) -> P<Node> | pseudotypenodebuilder.go:335 | NodeBuilderImpl
@@ -2845,14 +2845,14 @@ quoted_and_comma_separated | pub(crate) fn quoted_and_comma_separated(items: &[&
 raise_height | pub(crate) fn raise_height(&mut self, height: u16) | rust:flowmemo.rs:290 | FlowMemo
 range_of_type_parameters | pub(crate) fn range_of_type_parameters(source_file: P<SourceFile>, type_parameters: P<NodeList>) -> TextRange | utilities.go:1609 | -
 rare | fn rare(&self) -> Option<P<InferenceContextRare>> | rust:checker.rs:361 | InferenceContext
-rare | fn rare(&self) -> Option<&'static UnionOrIntersectionRare> | rust:types.rs:2451 | UnionOrIntersectionType
+rare | fn rare(&self) -> Option<&'static UnionOrIntersectionRare> | rust:types.rs:2452 | UnionOrIntersectionType
 rare_for_write | fn rare_for_write(&self) -> P<InferenceContextRare> | rust:checker.rs:419 | InferenceContext
-rare_for_write | fn rare_for_write(&self) -> P<SignatureRare> | rust:types.rs:2878 | Signature
-rare_for_write | fn rare_for_write(&self) -> &'static UnionOrIntersectionRare | rust:types.rs:2459 | UnionOrIntersectionType
+rare_for_write | fn rare_for_write(&self) -> P<SignatureRare> | rust:types.rs:2879 | Signature
+rare_for_write | fn rare_for_write(&self) -> &'static UnionOrIntersectionRare | rust:types.rs:2460 | UnionOrIntersectionType
 reborrow_reporter | fn reborrow_reporter<'b>(r: &'b mut Option<ErrorReporter<'_>>) -> Option<ErrorReporter<'b>> | rust:relater_1.rs:13 | -
 recombine_unknown_type | pub(crate) fn recombine_unknown_type(&mut self, t: P<Type>) -> P<Type> | checker.go:31690 | Checker
 record | pub fn record(&mut self, cat: Cat, key: CKey, t: Timing, a: u64, b: u64, c: u64) | rust:workcensus.rs:275 | Census
-record | fn record(self) -> Option<P<TypeSymbolAlias>> | rust:types.rs:1134 | TypeSymbolWord
+record | fn record(self) -> Option<P<TypeSymbolAlias>> | rust:types.rs:1135 | TypeSymbolWord
 record_merged_symbol | pub(crate) fn record_merged_symbol(&mut self, target: P<Symbol>, source: P<Symbol>) | checker.go:14601 | Checker
 record_potential_collision_with_reflect_in_generated_code | pub(crate) fn record_potential_collision_with_reflect_in_generated_code(&mut self, node: P<Node>, name: Option<P<Node>>) | checker.go:10771 | Checker
 record_potential_collision_with_weak_map_set_in_generated_code | pub(crate) fn record_potential_collision_with_weak_map_set_in_generated_code(&mut self, node: P<Node>, name: P<Node>) | checker.go:10736 | Checker
@@ -2867,8 +2867,8 @@ ref_node | fn ref_node(&self) -> P<Node> | rust:flow.rs:18 | FlowState
 reference_kinds | pub(crate) fn reference_kinds(&self, symbol: P<Symbol>) -> SymbolFlags | rust:checker_01.rs:573 | Checker
 reference_kinds | pub fn reference_kinds(&self, symbol: P<Symbol>) -> SymbolFlags | rust:links.rs:262 | SymbolReferenceLinkStore
 register_for_unused_identifiers_check | pub(crate) fn register_for_unused_identifiers_check(&mut self, node: P<Node>) | checker.go:7212 | Checker
-regular_type | pub fn regular_type(&self) -> Option<P<Type>> | rust:types.rs:1935 | LiteralType
-regular_type | pub fn regular_type(&self) -> Option<P<Type>> | rust:types.rs:2531 | UnionType
+regular_type | pub fn regular_type(&self) -> Option<P<Type>> | rust:types.rs:1936 | LiteralType
+regular_type | pub fn regular_type(&self) -> Option<P<Type>> | rust:types.rs:2532 | UnionType
 rel | pub(crate) fn rel(&self) -> P<Relation> | rust:relater_2.rs:60 | Relater
 rel_kind | pub(crate) fn rel_kind(c: &Checker, rel: P<crate::relater_types::Relation>) -> u8 | rust:workcensus.rs:326 | -
 relate_variances | fn relate_variances(&self, c: &mut Checker, source_type_arguments: &[P<Type>], target_type_arguments: &[P<Type>], variances: &[VarianceFlags], intersection_state: IntersectionState, report_errors: bool, save_error_state: &errorState, result: &mut Ternary, variance_check_failed: &mut bool, original_error_chain: &mut Option<P<ErrorChain>>) -> (Ternary, bool) | rust:relater_2.rs:993 | Relater
@@ -2892,7 +2892,7 @@ replace_indexed_access | pub(crate) fn replace_indexed_access(&mut self, instant
 replace_primitives_with_literals | pub(crate) fn replace_primitives_with_literals(&mut self, type_with_primitives: P<Type>, type_with_literals: P<Type>) -> P<Type> | flow.go:1907 | Checker
 report | pub(crate) fn report(c: &Checker, input: &[P<Type>], kept: &[P<Type>], verdict: &str, comparisons: Option<i64>, checkpoint: Option<Checkpoint>) | rust:uniontrace.rs:43 | -
 report | pub fn report(&self) -> Option<String> | rust:flowmemo.rs:362 | FlowMemo
-report | pub fn report(&self, title: &str, min_bytes: u64) -> String | rust:heapcensus.rs:98 | HeapCensus
+report | pub fn report(&self, title: &str, min_bytes: u64) -> String | rust:heapcensus.rs:99 | HeapCensus
 report_call_resolution_errors | pub(crate) fn report_call_resolution_errors(&mut self, node: P<Node>, s: &mut CallState, signatures: &[P<Signature>], head_message: Option<&'static Message>) | checker.go:9841 | Checker
 report_cannot_invoke_possibly_null_or_undefined_error | pub(crate) fn report_cannot_invoke_possibly_null_or_undefined_error(&mut self, node: P<Node>, facts: TypeFacts) | checker.go:10086 | Checker
 report_check_file | pub(crate) fn report_check_file(c: &Checker, file: P<SourceFile>, piece: Option<&std::ops::Range<usize>>) | rust:uniontrace.rs:89 | -
@@ -2966,7 +2966,7 @@ resolve_call | pub(crate) fn resolve_call(&mut self, node: P<Node>, signatures: 
 resolve_call_expression | pub(crate) fn resolve_call_expression(&mut self, node: P<Node>, candidates_out_array: Option<&mut Vec<P<Signature>>>, check_mode: CheckMode) -> P<Signature> | checker.go:8645 | Checker
 resolve_call_worker | fn resolve_call_worker(&mut self, node: P<Node>, signatures: &[P<Signature>], candidates_out_array: Option<&mut Vec<P<Signature>>>, check_mode: CheckMode, call_chain_flags: SignatureFlags, head_message: Option<&'static Message>) -> P<Signature> | rust:checker_05.rs:317 | Checker
 resolve_class_or_interface_members | pub(crate) fn resolve_class_or_interface_members(&mut self, t: P<Type>) | checker.go:19435 | Checker
-resolve_components | pub fn resolve_components(&self, c: &mut Checker, typ: P<Type>) | rust:types.rs:2362 | MappedType
+resolve_components | pub fn resolve_components(&self, c: &mut Checker, typ: P<Type>) | rust:types.rs:2363 | MappedType
 resolve_declared_members | pub(crate) fn resolve_declared_members(&mut self, t: P<Type>) -> Option<&'static InterfaceType> | checker.go:19953 | Checker
 resolve_decorator | pub(crate) fn resolve_decorator(&mut self, node: P<Node>, candidates_out_array: Option<&mut Vec<P<Signature>>>, check_mode: CheckMode) -> P<Signature> | checker.go:8927 | Checker
 resolve_entity_name | pub(crate) fn resolve_entity_name(&mut self, name: P<Node>, meaning: SymbolFlags, ignore_errors: bool, dont_resolve_alias: bool, location: Option<P<Node>>) -> Option<P<Symbol>> | checker.go:16095 | Checker
@@ -3007,15 +3007,15 @@ resolve_type_reference_members | pub(crate) fn resolve_type_reference_members(&m
 resolve_type_reference_name | pub(crate) fn resolve_type_reference_name(&mut self, type_reference: P<Node>, meaning: SymbolFlags, ignore_errors: bool) -> P<Symbol> | checker.go:23548 | Checker
 resolve_union_type_members | pub(crate) fn resolve_union_type_members(&mut self, t: P<Type>) | checker.go:21393 | Checker
 resolve_untyped_call | pub(crate) fn resolve_untyped_call(&mut self, node: P<Node>) -> P<Signature> | checker.go:10094 | Checker
-resolved_apparent_type | pub fn resolved_apparent_type(&self) -> Option<P<Type>> | rust:types.rs:2599 | IntersectionType
+resolved_apparent_type | pub fn resolved_apparent_type(&self) -> Option<P<Type>> | rust:types.rs:2600 | IntersectionType
 resolved_base_constraint_of | pub(crate) fn resolved_base_constraint_of(&self, t: P<Type>) -> Option<P<Type>> | rust:checker_13.rs:2369 | Checker
-resolved_for_write | fn resolved_for_write(&self) -> P<StructuredMembers> | rust:types.rs:2044 | StructuredType
-resolved_properties | pub fn resolved_properties(&self) -> Option<&'static [P<Symbol>]> | rust:types.rs:2473 | UnionOrIntersectionType
-resolved_reduced_type | pub fn resolved_reduced_type(&self) -> Option<P<Type>> | rust:types.rs:2522 | UnionType
+resolved_for_write | fn resolved_for_write(&self) -> P<StructuredMembers> | rust:types.rs:2045 | StructuredType
+resolved_properties | pub fn resolved_properties(&self) -> Option<&'static [P<Symbol>]> | rust:types.rs:2474 | UnionOrIntersectionType
+resolved_reduced_type | pub fn resolved_reduced_type(&self) -> Option<P<Type>> | rust:types.rs:2523 | UnionType
 resolved_type_of_value_symbol | fn resolved_type_of_value_symbol(&self, symbol: P<Symbol>) -> Option<P<Type>> | rust:checker_08.rs:1772 | Checker
-resolved_type_predicate | pub fn resolved_type_predicate(&self, no_type_predicate: P<TypePredicate>) -> Option<P<TypePredicate>> | rust:types.rs:2890 | Signature
-restore | unsafe fn restore<T: 'static>(w: Option<P<()>>) -> Option<P<T>> | rust:types.rs:313 | -
-restore_bits | unsafe fn restore_bits<T: 'static>(bits: usize) -> Option<P<T>> | rust:types.rs:320 | -
+resolved_type_predicate | pub fn resolved_type_predicate(&self, no_type_predicate: P<TypePredicate>) -> Option<P<TypePredicate>> | rust:types.rs:2891 | Signature
+restore | unsafe fn restore<T: 'static>(w: Option<P<()>>) -> Option<P<T>> | rust:types.rs:314 | -
+restore_bits | unsafe fn restore_bits<T: 'static>(bits: usize) -> Option<P<T>> | rust:types.rs:321 | -
 restore_error_state | pub(crate) fn restore_error_state(&self, _c: &mut Checker, e: errorState) | relater.go:3219 | Relater
 restore_flow_type_cache | pub(crate) fn restore_flow_type_cache(&mut self, saved: SavedFlowTypeCache) | rust:flowmemo.rs:614 | Checker
 restore_height | pub(crate) fn restore_height(&mut self, saved: u16) | rust:flowmemo.rs:305 | FlowMemo
@@ -3025,7 +3025,7 @@ reuse_name | pub(crate) fn reuse_name(&self, c: &mut Checker, node: P<Node>, is_
 reuse_node | pub(crate) fn reuse_node(&self, c: &mut Checker, node: P<Node>) -> Option<P<Node>> | nodecopy.go:12 | NodeBuilderImpl
 reuse_type_node | pub(crate) fn reuse_type_node(&self, c: &mut Checker, node: P<Node>) -> Option<P<Node>> | nodecopy.go:56 | NodeBuilderImpl
 rewrite_module_specifier | pub(crate) fn rewrite_module_specifier(&self, c: &mut Checker, parent: P<Node>, lit: P<Node>) -> P<Node> | nodecopy.go:270 | NodeBuilderImpl
-row | pub fn row(&mut self, name: &str, stat: HeapStat) | rust:heapcensus.rs:89 | HeapCensus
+row | pub fn row(&mut self, name: &str, stat: HeapStat) | rust:heapcensus.rs:90 | HeapCensus
 run_deferred_type_argument_checks | fn run_deferred_type_argument_checks(&mut self, source_file: P<SourceFile>) | rust:checker_02.rs:1062 | Checker
 run_with_inference_blocked_from_source_node | pub(crate) fn run_with_inference_blocked_from_source_node<T>(&mut self, node: P<Node>, f: impl FnOnce(&mut Checker) -> T) -> T | services.go:334 | Checker
 run_without_resolved_signature_caching | pub(crate) fn run_without_resolved_signature_caching<T>(&mut self, node: P<Node>, f: impl FnOnce(&mut Checker) -> T) -> T | services.go:367 | Checker
@@ -3050,49 +3050,49 @@ set | pub fn set(&self, key: K, value: V) | rust:types.rs:46 | GoMap
 set | pub fn set(&self, key: K, value: V) | rust:packedmap.rs:147 | GoPackedMap
 set | pub fn set(&self, m: Option<P<TypeMapper>>) | rust:mapper.rs:421 | MapperCell
 set | pub(crate) fn set(&self, key: RelationKey, result: RelationComparisonResult) | relater.go:106 | Relation
-set_alias | pub fn set_alias(&self, alias: Option<P<TypeAlias>>) | rust:types.rs:1689 | Type
-set_call_signature_count | fn set_call_signature_count(&self, count: i32) | rust:types.rs:2021 | CountOrIndexInfos
-set_call_signature_count | pub fn set_call_signature_count(&self, count: i32) | rust:types.rs:2085 | StructuredType
+set_alias | pub fn set_alias(&self, alias: Option<P<TypeAlias>>) | rust:types.rs:1690 | Type
+set_call_signature_count | fn set_call_signature_count(&self, count: i32) | rust:types.rs:2022 | CountOrIndexInfos
+set_call_signature_count | pub fn set_call_signature_count(&self, count: i32) | rust:types.rs:2086 | StructuredType
 set_comment_range | pub(crate) fn set_comment_range(&self, _c: &mut Checker, node: P<Node>, range_: Option<P<Node>>) | nodebuilderimpl.go:485 | NodeBuilderImpl
-set_composite | pub fn set_composite(&self, composite: Option<P<CompositeSignature>>) | rust:types.rs:2924 | Signature
-set_containing_type | pub fn set_containing_type(&self, t: Option<P<Type>>) | rust:types.rs:413 | ValueSymbolLinks
+set_composite | pub fn set_composite(&self, composite: Option<P<CompositeSignature>>) | rust:types.rs:2925 | Signature
+set_containing_type | pub fn set_containing_type(&self, t: Option<P<Type>>) | rust:types.rs:414 | ValueSymbolLinks
 set_escaped | fn set_escaped(&self) | rust:mapper.rs:249 | TypeMapper
-set_function_or_constructor_checked | pub fn set_function_or_constructor_checked(&self, v: bool) | rust:types.rs:461 | ValueSymbolLinks
-set_index_infos | fn set_index_infos(&self, index_infos: &'static [P<IndexInfo>]) | rust:types.rs:2031 | CountOrIndexInfos
-set_index_infos | pub fn set_index_infos(&self, index_infos: &'static [P<IndexInfo>]) | rust:types.rs:2093 | StructuredType
+set_function_or_constructor_checked | pub fn set_function_or_constructor_checked(&self, v: bool) | rust:types.rs:462 | ValueSymbolLinks
+set_index_infos | fn set_index_infos(&self, index_infos: &'static [P<IndexInfo>]) | rust:types.rs:2032 | CountOrIndexInfos
+set_index_infos | pub fn set_index_infos(&self, index_infos: &'static [P<IndexInfo>]) | rust:types.rs:2094 | StructuredType
 set_inferred_type_parameters | pub fn set_inferred_type_parameters(&self, type_parameters: &'static [P<Type>]) | rust:checker.rs:460 | InferenceContext
-set_isolated_signature_type | pub fn set_isolated_signature_type(&self, t: Option<P<Type>>) | rust:types.rs:2916 | Signature
-set_key_property_name | pub fn set_key_property_name(&self, name: &'static str) | rust:types.rs:2551 | UnionType
-set_mapper | pub fn set_mapper(&self, mapper: Option<P<TypeMapper>>) | rust:types.rs:393 | ValueSymbolLinks
-set_members | pub fn set_members(&self, members: Option<P<SymbolTable>>) | rust:types.rs:2060 | StructuredType
+set_isolated_signature_type | pub fn set_isolated_signature_type(&self, t: Option<P<Type>>) | rust:types.rs:2917 | Signature
+set_key_property_name | pub fn set_key_property_name(&self, name: &'static str) | rust:types.rs:2552 | UnionType
+set_mapper | pub fn set_mapper(&self, mapper: Option<P<TypeMapper>>) | rust:types.rs:394 | ValueSymbolLinks
+set_members | pub fn set_members(&self, members: Option<P<SymbolTable>>) | rust:types.rs:2061 | StructuredType
 set_multiple_checkers | pub fn set_multiple_checkers(_multiple: bool) | rust:links.rs:311 | -
-set_name_type | pub fn set_name_type(&self, t: Option<P<Type>>) | rust:types.rs:433 | ValueSymbolLinks
-set_no_type_predicate | fn set_no_type_predicate(&self, on: bool) | rust:types.rs:2857 | SignatureRareWord
+set_name_type | pub fn set_name_type(&self, t: Option<P<Type>>) | rust:types.rs:434 | ValueSymbolLinks
+set_no_type_predicate | fn set_no_type_predicate(&self, on: bool) | rust:types.rs:2858 | SignatureRareWord
 set_node_links_for_private_identifier_scope | pub(crate) fn set_node_links_for_private_identifier_scope(&mut self, node: P<Node>) | checker.go:10724 | Checker
 set_non_fixing_mapper | pub fn set_non_fixing_mapper(&self, mapper: P<TypeMapper>) | rust:checker.rs:412 | InferenceContext
-set_origin | pub fn set_origin(&self, t: Option<P<Type>>) | rust:types.rs:2543 | UnionType
+set_origin | pub fn set_origin(&self, t: Option<P<Type>>) | rust:types.rs:2544 | UnionType
 set_outer_return_mapper | pub fn set_outer_return_mapper(&self, mapper: Option<P<TypeMapper>>) | rust:checker.rs:447 | InferenceContext
-set_properties | pub fn set_properties(&self, properties: &'static [P<Symbol>]) | rust:types.rs:2068 | StructuredType
+set_properties | pub fn set_properties(&self, properties: &'static [P<Symbol>]) | rust:types.rs:2069 | StructuredType
 set_ref | pub fn set_ref(&self, m: Option<P<RefCell<FxHashMap<K, V>>>>) | rust:types.rs:87 | GoMap
 set_referenced_import_declaration | pub fn set_referenced_import_declaration(&self, _c: &mut Checker, node: P<Node>, ref_: P<Node>) | emitresolver.go:869 | EmitResolver
-set_regular_type | pub fn set_regular_type(&self, t: Option<P<Type>>) | rust:types.rs:2534 | UnionType
+set_regular_type | pub fn set_regular_type(&self, t: Option<P<Type>>) | rust:types.rs:2535 | UnionType
 set_requires_scope_change_cache | pub(crate) fn set_requires_scope_change_cache(&mut self, node: P<Node>, value: Tristate) | checker.go:1548 | Checker
-set_resolved_apparent_type | pub fn set_resolved_apparent_type(&self, t: Option<P<Type>>) | rust:types.rs:2602 | IntersectionType
-set_resolved_properties | pub fn set_resolved_properties(&self, properties: Option<&'static [P<Symbol>]>) | rust:types.rs:2476 | UnionOrIntersectionType
-set_resolved_reduced_type | pub fn set_resolved_reduced_type(&self, t: Option<P<Type>>) | rust:types.rs:2525 | UnionType
-set_resolved_type_predicate | pub fn set_resolved_type_predicate(&self, predicate: Option<P<TypePredicate>>, no_type_predicate: P<TypePredicate>) | rust:types.rs:2897 | Signature
+set_resolved_apparent_type | pub fn set_resolved_apparent_type(&self, t: Option<P<Type>>) | rust:types.rs:2603 | IntersectionType
+set_resolved_properties | pub fn set_resolved_properties(&self, properties: Option<&'static [P<Symbol>]>) | rust:types.rs:2477 | UnionOrIntersectionType
+set_resolved_reduced_type | pub fn set_resolved_reduced_type(&self, t: Option<P<Type>>) | rust:types.rs:2526 | UnionType
+set_resolved_type_predicate | pub fn set_resolved_type_predicate(&self, predicate: Option<P<TypePredicate>>, no_type_predicate: P<TypePredicate>) | rust:types.rs:2898 | Signature
 set_return_mapper | pub fn set_return_mapper(&self, mapper: Option<P<TypeMapper>>) | rust:checker.rs:434 | InferenceContext
-set_signatures | pub fn set_signatures(&self, signatures: &'static [P<Signature>]) | rust:types.rs:2077 | StructuredType
+set_signatures | pub fn set_signatures(&self, signatures: &'static [P<Signature>]) | rust:types.rs:2078 | StructuredType
 set_sparse_id_pages | pub fn set_sparse_id_pages(_on: bool) | rust:links.rs:314 | -
 set_structured_type_members | pub(crate) fn set_structured_type_members(&mut self, t: P<Type>, members: Option<P<SymbolTable>>, call_signatures: &[P<Signature>], construct_signatures: &[P<Signature>], index_infos: &[P<IndexInfo>]) | checker.go:25615 | Checker
-set_symbol | pub fn set_symbol(&self, symbol: Option<P<Symbol>>) | rust:types.rs:1676 | Type
-set_tail | fn set_tail(&self, tail: P<SignatureRare>) | rust:types.rs:2852 | SignatureRareWord
-set_target | pub fn set_target(&self, target: Option<P<Symbol>>) | rust:types.rs:376 | ValueSymbolLinks
+set_symbol | pub fn set_symbol(&self, symbol: Option<P<Symbol>>) | rust:types.rs:1677 | Type
+set_tail | fn set_tail(&self, tail: P<SignatureRare>) | rust:types.rs:2853 | SignatureRareWord
+set_target | pub fn set_target(&self, target: Option<P<Symbol>>) | rust:types.rs:377 | ValueSymbolLinks
 set_text_range | fn set_text_range(self, c: &mut Checker, range_: P<Node>, location: P<Node>) -> P<Node> | rust:nodecopy.rs:388 | ExistingNodeTree
 set_text_range | pub(crate) fn set_text_range(&self, _c: &mut Checker, range_: P<Node>, location: Option<P<Node>>) -> Option<P<Node>> | nodebuilderimpl.go:1434 | NodeBuilderImpl
-set_this_parameter | pub fn set_this_parameter(&self, this_parameter: Option<P<Symbol>>) | rust:types.rs:2908 | Signature
-set_unique_literal_filled_instantiation | pub fn set_unique_literal_filled_instantiation(&self, t: Option<P<Type>>) | rust:types.rs:2610 | IntersectionType
-set_write_type | pub fn set_write_type(&self, t: Option<P<Type>>) | rust:types.rs:451 | ValueSymbolLinks
+set_this_parameter | pub fn set_this_parameter(&self, this_parameter: Option<P<Symbol>>) | rust:types.rs:2909 | Signature
+set_unique_literal_filled_instantiation | pub fn set_unique_literal_filled_instantiation(&self, t: Option<P<Type>>) | rust:types.rs:2611 | IntersectionType
+set_write_type | pub fn set_write_type(&self, t: Option<P<Type>>) | rust:types.rs:452 | ValueSymbolLinks
 shadow_hit | pub(crate) fn shadow_hit(&self, flow: P<FlowNode>, key: u128, hit: MemoHit) -> ShadowHit | rust:flowmemo.rs:357 | FlowMemo
 should_check_as_excess_property | pub(crate) fn should_check_as_excess_property(prop: P<Symbol>, container: Option<P<Symbol>>) -> bool | relater.go:2855 | -
 should_check_erasable_syntax | pub(crate) fn should_check_erasable_syntax(&mut self, node: P<Node>) -> bool | checker.go:2693 | Checker
@@ -3117,7 +3117,7 @@ signature_to_signature_declaration_helper | pub(crate) fn signature_to_signature
 signature_to_string | pub(crate) fn signature_to_string(&mut self, signature: P<Signature>) -> String | printer.go:179 | Checker
 signature_to_string_ex | pub fn signature_to_string_ex(&mut self, signature: P<Signature>, enclosing_declaration: Option<P<Node>>, flags: TypeFormatFlags, vc: Option<P<VerbosityContext>>) -> String | printer.go:187 | Checker
 signature_to_string_ex_exported | pub fn signature_to_string_ex_exported(&mut self, signature: P<Signature>, enclosing_declaration: Option<P<Node>>, flags: TypeFormatFlags, vc: Option<P<VerbosityContext>>) -> String | printer.go:183 | Checker
-signatures | pub fn signatures(&self) -> &'static [P<Signature>] | rust:types.rs:2073 | StructuredType
+signatures | pub fn signatures(&self) -> &'static [P<Signature>] | rust:types.rs:2074 | StructuredType
 signatures_identical_to | pub(crate) fn signatures_identical_to(&self, c: &mut Checker, source: P<Type>, target: P<Type>, kind: SignatureKind) -> Ternary | relater.go:4593 | Relater
 signatures_of_structured_type | pub(crate) fn signatures_of_structured_type(&mut self, t: P<Type>, kind: SignatureKind) -> &'static [P<Signature>] | rust:checker_09.rs:2318 | Checker
 signatures_related_to | pub(crate) fn signatures_related_to(&self, c: &mut Checker, source: P<Type>, target: P<Type>, kind: SignatureKind, report_errors: bool, intersection_state: IntersectionState) -> Ternary | relater.go:4473 | Relater
@@ -3151,13 +3151,13 @@ string_args | fn string_args(args: &[String]) -> Vec<&dyn Display> | rust:relate
 structured_type_related_to | pub(crate) fn structured_type_related_to(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, intersection_state: IntersectionState) -> Ternary | relater.go:3224 | Relater
 structured_type_related_to_body | fn structured_type_related_to_body(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, intersection_state: IntersectionState) -> Ternary | rust:relater_2.rs:921 | Relater
 structured_type_related_to_worker | pub(crate) fn structured_type_related_to_worker(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, intersection_state: IntersectionState) -> Ternary | relater.go:3293 | Relater
-subst_constraint | pub fn subst_constraint(&self) -> Option<P<Type>> | rust:types.rs:2728 | SubstitutionType
+subst_constraint | pub fn subst_constraint(&self) -> Option<P<Type>> | rust:types.rs:2729 | SubstitutionType
 substitute_indexed_mapped_type | pub(crate) fn substitute_indexed_mapped_type(&mut self, object_type: P<Type>, index: P<Type>) -> P<Type> | checker.go:29780 | Checker
 summarize_module_exports | fn summarize_module_exports(&mut self, i: u32, sym: P<Symbol>) -> bool | rust:printer.rs:904 | Checker
 super_call_is_root_level_in_constructor | pub(crate) fn super_call_is_root_level_in_constructor(super_call: P<Node>, body: P<Node>) -> bool | checker.go:2956 | -
-symbol | pub fn symbol(&self) -> Option<P<Symbol>> | rust:types.rs:1671 | Type
-symbol | pub fn symbol(&self) -> Option<P<Symbol>> | rust:types.rs:1013 | TypeAlias
-symbol | fn symbol(self) -> Option<P<Symbol>> | rust:types.rs:1140 | TypeSymbolWord
+symbol | pub fn symbol(&self) -> Option<P<Symbol>> | rust:types.rs:1672 | Type
+symbol | pub fn symbol(&self) -> Option<P<Symbol>> | rust:types.rs:1014 | TypeAlias
+symbol | fn symbol(self) -> Option<P<Symbol>> | rust:types.rs:1141 | TypeSymbolWord
 symbol_has_non_method_declaration | pub(crate) fn symbol_has_non_method_declaration(&mut self, symbol: P<Symbol>) -> bool | checker.go:12103 | Checker
 symbol_is_value | pub(crate) fn symbol_is_value(&mut self, symbol: P<Symbol>) -> bool | checker.go:22487 | Checker
 symbol_is_value_ex | pub(crate) fn symbol_is_value_ex(&mut self, symbol: P<Symbol>, include_type_only_members: bool) -> bool | checker.go:22491 | Checker
@@ -3168,7 +3168,7 @@ symbol_table_id_from_globals | pub(crate) fn symbol_table_id_from_globals() -> s
 symbol_table_id_from_locals | pub(crate) fn symbol_table_id_from_locals(node: P<Node>) -> symbolTableID | symbolaccessibility.go:417 | -
 symbol_table_id_from_members | pub(crate) fn symbol_table_id_from_members(sym: P<Symbol>) -> symbolTableID | symbolaccessibility.go:433 | -
 symbol_table_id_from_resolved_exports | pub(crate) fn symbol_table_id_from_resolved_exports(sym: P<Symbol>) -> symbolTableID | symbolaccessibility.go:429 | -
-symbol_table_stat | fn symbol_table_stat(t: P<SymbolTable>) -> HeapStat | rust:heapcensus.rs:142 | -
+symbol_table_stat | fn symbol_table_stat(t: P<SymbolTable>) -> HeapStat | rust:heapcensus.rs:143 | -
 symbol_to_entity_name | pub fn symbol_to_entity_name(&self, c: &mut Checker, symbol: P<Symbol>, meaning: SymbolFlags, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: Option<&'static dyn SymbolTracker>) -> Option<P<Node>> | nodebuilder.go:225 | NodeBuilder
 symbol_to_entity_name_node | pub(crate) fn symbol_to_entity_name_node(&self, c: &mut Checker, symbol: P<Symbol>) -> P<Node> | nodebuilderimpl.go:642 | NodeBuilderImpl
 symbol_to_expression | pub fn symbol_to_expression(&self, c: &mut Checker, symbol: P<Symbol>, meaning: SymbolFlags, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: Option<&'static dyn SymbolTracker>) -> Option<P<Node>> | nodebuilder.go:231 | NodeBuilder
@@ -3187,33 +3187,33 @@ symbol_to_type_node | pub(crate) fn symbol_to_type_node(&self, c: &mut Checker, 
 symbol_to_type_parameter_declarations | pub fn symbol_to_type_parameter_declarations(&self, c: &mut Checker, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: Option<&'static dyn SymbolTracker>) -> Vec<P<Node>> | nodebuilder.go:249 | NodeBuilder
 symbol_to_type_parameter_declarations | pub(crate) fn symbol_to_type_parameter_declarations(&self, c: &mut Checker, symbol: P<Symbol>) -> Vec<P<Node>> | nodebuilderimpl.go:1692 | NodeBuilderImpl
 symbol_value_declaration_is_context_sensitive | pub(crate) fn symbol_value_declaration_is_context_sensitive(&mut self, symbol: Option<P<Symbol>>) -> bool | relater.go:1294 | Checker
-symbol_word | fn symbol_word(symbol: Option<P<Symbol>>) -> TypeSymbolWord | rust:types.rs:1129 | TypeSymbolWord
+symbol_word | fn symbol_word(symbol: Option<P<Symbol>>) -> TypeSymbolWord | rust:types.rs:1130 | TypeSymbolWord
 symbols_to_array | pub(crate) fn symbols_to_array(symbols: Option<P<SymbolTable>>) -> Vec<P<Symbol>> | utilities.go:1690 | -
 synthetic_expression_type | pub(crate) fn synthetic_expression_type(node: P<Node>) -> P<Type> | rust:checker_15.rs:123 | -
-table | pub fn table(len: usize, cap: usize, slot: usize) -> HeapStat | rust:heapcensus.rs:31 | HeapStat
+table | pub fn table(len: usize, cap: usize, slot: usize) -> HeapStat | rust:heapcensus.rs:32 | HeapStat
 table_bits | fn table_bits() -> u32 | rust:flowmemo.rs:66 | -
 tagged | fn tagged<T>(p: P<T>, tag: usize) -> usize | rust:mapper.rs:164 | -
 tagged | fn tagged<T>(p: P<T>, tag: u64) -> u64 | rust:mapper.rs:199 | -
-tail | fn tail(&self) -> Option<&'static IndexInfosTail> | rust:types.rs:2008 | CountOrIndexInfos
-tail | fn tail(&self) -> Option<P<SignatureRare>> | rust:types.rs:2842 | SignatureRareWord
-tail | fn tail(&self) -> P<ValueSymbolLinksTail> | rust:types.rs:336 | ValueSymbolLinks
-tail_for_write | fn tail_for_write(&self) -> P<ValueSymbolLinksTail> | rust:types.rs:343 | ValueSymbolLinks
+tail | fn tail(&self) -> Option<&'static IndexInfosTail> | rust:types.rs:2009 | CountOrIndexInfos
+tail | fn tail(&self) -> Option<P<SignatureRare>> | rust:types.rs:2843 | SignatureRareWord
+tail | fn tail(&self) -> P<ValueSymbolLinksTail> | rust:types.rs:337 | ValueSymbolLinks
+tail_for_write | fn tail_for_write(&self) -> P<ValueSymbolLinksTail> | rust:types.rs:344 | ValueSymbolLinks
 taint | pub(crate) fn taint(&mut self, source: u32) | rust:flowmemo.rs:310 | FlowMemo
 taint_reference | pub(crate) fn taint_reference(&mut self, source: u32) | rust:flowmemo.rs:317 | FlowMemo
 take_flow_type_cache | pub(crate) fn take_flow_type_cache(&mut self) -> SavedFlowTypeCache | rust:flowmemo.rs:608 | Checker
-target | pub fn target(&self) -> Option<P<Type>> | rust:types.rs:2661 | IndexType
-target | pub fn target(&self) -> Option<P<Signature>> | rust:types.rs:2875 | Signature
-target | pub fn target(&self) -> Option<P<Type>> | rust:types.rs:2711 | StringMappingType
-target | pub fn target(&self) -> Option<P<Type>> | rust:types.rs:1620 | Type
-target | pub fn target(&self) -> Option<P<Symbol>> | rust:types.rs:367 | ValueSymbolLinks
-target_interface_type | pub fn target_interface_type(&self) -> &'static InterfaceType | rust:types.rs:1662 | Type
-target_tuple_type | pub fn target_tuple_type(&self) -> &'static TupleType | rust:types.rs:1666 | Type
+target | pub fn target(&self) -> Option<P<Type>> | rust:types.rs:2662 | IndexType
+target | pub fn target(&self) -> Option<P<Signature>> | rust:types.rs:2876 | Signature
+target | pub fn target(&self) -> Option<P<Type>> | rust:types.rs:2712 | StringMappingType
+target | pub fn target(&self) -> Option<P<Type>> | rust:types.rs:1621 | Type
+target | pub fn target(&self) -> Option<P<Symbol>> | rust:types.rs:368 | ValueSymbolLinks
+target_interface_type | pub fn target_interface_type(&self) -> &'static InterfaceType | rust:types.rs:1663 | Type
+target_tuple_type | pub fn target_tuple_type(&self) -> &'static TupleType | rust:types.rs:1667 | Type
 targets | fn targets(&self) -> impl Iterator<Item = P<Symbol>> + '_ | rust:printer.rs:1727 | ExportsByTarget
 template_literal_types_definitely_unrelated | pub(crate) fn template_literal_types_definitely_unrelated(&mut self, source: &'static TemplateLiteralType, target: &'static TemplateLiteralType) -> bool | relater.go:2354 | Checker
-template_type | pub fn template_type(&self) -> Option<P<Type>> | rust:types.rs:2359 | MappedType
-texts | pub fn texts(&self) -> &'static [&'static str] | rust:types.rs:2695 | TemplateLiteralType
-this_parameter | pub fn this_parameter(&self) -> Option<P<Symbol>> | rust:types.rs:2905 | Signature
-this_type | pub fn this_type(&self) -> Option<P<Type>> | rust:types.rs:2261 | InterfaceType
+template_type | pub fn template_type(&self) -> Option<P<Type>> | rust:types.rs:2360 | MappedType
+texts | pub fn texts(&self) -> &'static [&'static str] | rust:types.rs:2696 | TemplateLiteralType
+this_parameter | pub fn this_parameter(&self) -> Option<P<Symbol>> | rust:types.rs:2906 | Signature
+this_type | pub fn this_type(&self) -> Option<P<Type>> | rust:types.rs:2262 | InterfaceType
 to_node_builder_flags | pub(crate) fn to_node_builder_flags(flags: TypeFormatFlags) -> Flags | printer.go:51 | -
 to_type_reference_node | pub fn to_type_reference_node(&self, c: &mut Checker, b: P<NodeBuilderImpl>) -> P<Node> | nodebuilderimpl.go:3639 | TypeAlias
 to_vec | pub fn to_vec(&self) -> Vec<T> | rust:checker.rs:582 | LazyVec
@@ -3221,7 +3221,7 @@ too_complex_key | pub(crate) fn too_complex_key<K: std::hash::Hash + ?Sized>(key
 too_complex_since | pub(crate) fn too_complex_since(&self, before: u32) -> bool | rust:checker_13.rs:1365 | Checker
 total | fn total(counter: &AtomicU64) -> u64 | rust:infermemo.rs:160 | -
 total | fn total(counter: &AtomicU64) -> u64 | rust:unioncache.rs:129 | -
-total | fn total(&self) -> u64 | rust:heapcensus.rs:93 | HeapCensus
+total | fn total(&self) -> u64 | rust:heapcensus.rs:94 | HeapCensus
 trace_unions_or_intersections_too_large | pub(crate) fn trace_unions_or_intersections_too_large(&self, _c: &mut Checker, _source: P<Type>, _target: P<Type>) | relater.go:5030 | Relater
 track_computed_name | pub(crate) fn track_computed_name(&self, c: &mut Checker, access_expression: P<Node>, enclosing_declaration: Option<P<Node>>) | nodebuilderimpl.go:2433 | NodeBuilderImpl
 track_existing_entity_name | fn track_existing_entity_name(self, c: &mut Checker, node: P<Node>, override_enclosing: Option<P<Node>>) -> (bool, P<Node>, Option<P<Symbol>>) | rust:nodecopy.rs:427 | ExistingNodeTree
@@ -3230,12 +3230,12 @@ track_symbol | pub fn track_symbol(&self, _c: &mut Checker, symbol: P<Symbol>, e
 tracker | fn tracker(self) -> &'static dyn SymbolTracker | rust:nodecopy.rs:392 | ExistingNodeTree
 tracker | pub(crate) fn tracker(&self) -> &'static dyn SymbolTracker | rust:nodebuilderimpl_1.rs:56 | NodeBuilderImpl
 transform_type_of_members | pub(crate) fn transform_type_of_members(&mut self, t: P<Type>, f: impl FnMut(&mut Checker, P<Type>) -> P<Type>) -> P<SymbolTable> | checker.go:28646 | Checker
-try_as_constrained_type | pub fn try_as_constrained_type(&self) -> Option<&'static ConstrainedType> | rust:types.rs:1599 | Type
-try_as_interface_type | pub fn try_as_interface_type(&self) -> Option<&'static InterfaceType> | rust:types.rs:1611 | Type
-try_as_object_type | pub fn try_as_object_type(&self) -> Option<&'static ObjectType> | rust:types.rs:1605 | Type
-try_as_structured_type | pub fn try_as_structured_type(&self) -> Option<&'static StructuredType> | rust:types.rs:1602 | Type
-try_as_type_reference | pub fn try_as_type_reference(&self) -> Option<&'static TypeReference> | rust:types.rs:1608 | Type
-try_as_union_or_intersection_type | pub fn try_as_union_or_intersection_type(&self) -> Option<&'static UnionOrIntersectionType> | rust:types.rs:1614 | Type
+try_as_constrained_type | pub fn try_as_constrained_type(&self) -> Option<&'static ConstrainedType> | rust:types.rs:1600 | Type
+try_as_interface_type | pub fn try_as_interface_type(&self) -> Option<&'static InterfaceType> | rust:types.rs:1612 | Type
+try_as_object_type | pub fn try_as_object_type(&self) -> Option<&'static ObjectType> | rust:types.rs:1606 | Type
+try_as_structured_type | pub fn try_as_structured_type(&self) -> Option<&'static StructuredType> | rust:types.rs:1603 | Type
+try_as_type_reference | pub fn try_as_type_reference(&self) -> Option<&'static TypeReference> | rust:types.rs:1609 | Type
+try_as_union_or_intersection_type | pub fn try_as_union_or_intersection_type(&self) -> Option<&'static UnionOrIntersectionType> | rust:types.rs:1615 | Type
 try_create_awaited_type | pub(crate) fn try_create_awaited_type(&mut self, t: P<Type>) -> Option<P<Type>> | checker.go:31916 | Checker
 try_create_type_reference | pub(crate) fn try_create_type_reference(&mut self, target: P<Type>, type_arguments: &[P<Type>]) -> P<Type> | checker.go:25566 | Checker
 try_elaborate_array_like_errors | pub(crate) fn try_elaborate_array_like_errors(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool) -> bool | relater.go:4411 | Relater
@@ -3284,12 +3284,12 @@ try_visit_key_of | fn try_visit_key_of(self, c: &mut Checker, v: &mut NodeVisito
 try_visit_simple_type_node | fn try_visit_simple_type_node(self, c: &mut Checker, v: &mut NodeVisitor, node: P<Node>) -> Option<P<Node>> | rust:nodecopy.rs:583 | ExistingNodeTree
 try_visit_type_query | fn try_visit_type_query(self, c: &mut Checker, v: &mut NodeVisitor, node: P<Node>) -> Option<P<Node>> | rust:nodecopy.rs:529 | ExistingNodeTree
 try_visit_type_reference | fn try_visit_type_reference(self, c: &mut Checker, v: &mut NodeVisitor, node: P<Node>) -> Option<P<Node>> | rust:nodecopy.rs:546 | ExistingNodeTree
-tuple_element_flags | pub fn tuple_element_flags(self) -> ElementFlags | rust:types.rs:2290 | TupleElementInfo
+tuple_element_flags | pub fn tuple_element_flags(self) -> ElementFlags | rust:types.rs:2291 | TupleElementInfo
 tuple_types_definitely_unrelated | pub(crate) fn tuple_types_definitely_unrelated(source: P<Type>, target: P<Type>) -> bool | inference.go:1195 | -
-type_ | pub fn type_(&self) -> Option<P<Type>> | rust:types.rs:2965 | TypePredicate
-type_arguments | pub fn type_arguments(&self) -> &'static [P<Type>] | rust:types.rs:1016 | TypeAlias
+type_ | pub fn type_(&self) -> Option<P<Type>> | rust:types.rs:2966 | TypePredicate
+type_arguments | pub fn type_arguments(&self) -> &'static [P<Type>] | rust:types.rs:1017 | TypeAlias
 type_arguments_related_to | pub(crate) fn type_arguments_related_to(&self, c: &mut Checker, sources: &[P<Type>], targets: &[P<Type>], variances: &[VarianceFlags], report_errors: bool, intersection_state: IntersectionState) -> Ternary | relater.go:3935 | Relater
-type_comparer | pub fn type_comparer(f: impl Fn(&mut Checker, P<Type>, P<Type>, bool) -> Ternary + 'static) -> TypeComparer | rust:types.rs:3049 | -
+type_comparer | pub fn type_comparer(f: impl Fn(&mut Checker, P<Type>, P<Type>, bool) -> Ternary + 'static) -> TypeComparer | rust:types.rs:3050 | -
 type_could_have_top_level_singleton_types | pub(crate) fn type_could_have_top_level_singleton_types(&mut self, t: P<Type>) -> bool | relater.go:1298 | Checker
 type_elements_to_class_elements | pub(crate) fn type_elements_to_class_elements(f: &NodeFactory, members: &mut [P<Node>]) -> Vec<P<Node>> | nodebuilder_hover.go:217 | -
 type_has_call_or_construct_signatures | pub fn type_has_call_or_construct_signatures(&mut self, t: P<Type>) -> bool | checker.go:28331 | Checker
@@ -3300,7 +3300,7 @@ type_identity | pub(crate) fn type_identity(t: P<Type>) -> (Option<P<Symbol>>, u
 type_kind_label | pub(crate) fn type_kind_label(flags: TypeFlags, object_flags: ObjectFlags) -> &'static str | rust:checker_12.rs:2690 | -
 type_maybe_assignable_to | pub(crate) fn type_maybe_assignable_to(&mut self, source: P<Type>, target: P<Type>) -> bool | flow.go:2434 | Checker
 type_node_is_equivalent_to_type | pub(crate) fn type_node_is_equivalent_to_type(&self, c: &mut Checker, annotated_declaration: Option<P<Node>>, t: P<Type>, type_from_type_node: P<Type>) -> bool | nodebuilderimpl.go:492 | NodeBuilderImpl
-type_parameter | pub fn type_parameter(&self) -> Option<P<Type>> | rust:types.rs:2350 | MappedType
+type_parameter | pub fn type_parameter(&self) -> Option<P<Type>> | rust:types.rs:2351 | MappedType
 type_parameter_contains_reference | pub(crate) fn type_parameter_contains_reference(&mut self, tp: P<Type>, node: P<Node>) -> bool | rust:checker_11.rs:1389 | Checker
 type_parameter_shadows_other_type_parameter_in_scope | pub(crate) fn type_parameter_shadows_other_type_parameter_in_scope(&self, c: &mut Checker, name: &str, type_parameter: P<Type>) -> bool | nodebuilderimpl.go:1468 | NodeBuilderImpl
 type_parameter_to_declaration | pub fn type_parameter_to_declaration(&self, c: &mut Checker, parameter: P<Type>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: Option<&'static dyn SymbolTracker>) -> Option<P<Node>> | nodebuilder.go:255 | NodeBuilder
@@ -3308,8 +3308,8 @@ type_parameter_to_declaration | pub(crate) fn type_parameter_to_declaration(&sel
 type_parameter_to_declaration_with_constraint | pub(crate) fn type_parameter_to_declaration_with_constraint(&self, c: &mut Checker, type_parameter: P<Type>, constraint_node: Option<P<Node>>) -> P<Node> | nodebuilderimpl.go:1401 | NodeBuilderImpl
 type_parameter_to_name | pub(crate) fn type_parameter_to_name(&self, c: &mut Checker, type_parameter: P<Type>) -> P<Node> | nodebuilderimpl.go:1476 | NodeBuilderImpl
 type_parameter_to_string_ex | pub fn type_parameter_to_string_ex(&mut self, t: P<Type>, enclosing_declaration: Option<P<Node>>, vc: Option<P<VerbosityContext>>) -> String | printer.go:328 | Checker
-type_parameters | pub fn type_parameters(&self) -> &'static [P<Type>] | rust:types.rs:2253 | InterfaceType
-type_parameters | pub fn type_parameters(&self) -> &'static [P<Type>] | rust:types.rs:2869 | Signature
+type_parameters | pub fn type_parameters(&self) -> &'static [P<Type>] | rust:types.rs:2254 | InterfaceType
+type_parameters | pub fn type_parameters(&self) -> &'static [P<Type>] | rust:types.rs:2870 | Signature
 type_parameters_to_type_parameter_declarations | pub(crate) fn type_parameters_to_type_parameter_declarations(&self, c: &mut Checker, symbol: P<Symbol>) -> Vec<P<Node>> | nodebuilderimpl.go:1696 | NodeBuilderImpl
 type_predicate_kinds_match | pub(crate) fn type_predicate_kinds_match(&mut self, a: P<TypePredicate>, b: P<TypePredicate>) -> bool | relater.go:2113 | Checker
 type_predicate_to_string | pub(crate) fn type_predicate_to_string(&mut self, type_predicate: P<TypePredicate>) -> String | printer.go:229 | Checker
@@ -3336,9 +3336,9 @@ type_to_type_node | pub(crate) fn type_to_type_node(&self, c: &mut Checker, t: O
 type_to_type_node_ex | pub fn type_to_type_node_ex(&mut self, t: P<Type>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, id_to_symbol: Option<P<RefCell<FxHashMap<P<Node>, P<Symbol>>>>>) -> Option<P<Node>> | printer.go:348 | Checker
 type_to_type_node_helper_with_possible_reusable_type_node | pub(crate) fn type_to_type_node_helper_with_possible_reusable_type_node(&self, c: &mut Checker, t: Option<P<Type>>, type_node: Option<P<Node>>) -> Option<P<Node>> | nodebuilderimpl.go:1669 | NodeBuilderImpl
 type_to_type_node_or_circularity_elision | pub(crate) fn type_to_type_node_or_circularity_elision(&self, c: &mut Checker, t: P<Type>) -> Option<P<Node>> | nodebuilderimpl.go:2995 | NodeBuilderImpl
-types | pub fn types(&self) -> &'static [P<Type>] | rust:types.rs:2698 | TemplateLiteralType
-types | pub fn types(&self) -> &'static [P<Type>] | rust:types.rs:1651 | Type
-types | pub fn types(&self) -> &'static [P<Type>] | rust:types.rs:2447 | UnionOrIntersectionType
+types | pub fn types(&self) -> &'static [P<Type>] | rust:types.rs:2699 | TemplateLiteralType
+types | pub fn types(&self) -> &'static [P<Type>] | rust:types.rs:1652 | Type
+types | pub fn types(&self) -> &'static [P<Type>] | rust:types.rs:2448 | UnionOrIntersectionType
 types_are_same_reference | pub(crate) fn types_are_same_reference(a: P<Type>, b: P<Type>) -> bool | nodebuilderimpl.go:481 | -
 types_definitely_unrelated | pub(crate) fn types_definitely_unrelated(&mut self, source: P<Type>, target: P<Type>) -> bool | inference.go:1185 | Checker
 union_cache_finish | pub fn union_cache_finish() | rust:unioncache.rs:234 | Checker
@@ -3346,10 +3346,10 @@ union_cache_mode | pub(crate) fn union_cache_mode() -> UnionCacheMode | rust:uni
 union_contains_type | pub(crate) fn union_contains_type(&mut self, union: P<Type>, t: P<Type>, match_symbol: bool) -> bool | checker.go:26875 | Checker
 union_object_and_array_literal_candidates | pub(crate) fn union_object_and_array_literal_candidates(&mut self, candidates: &[P<Type>]) -> Vec<P<Type>> | inference.go:1470 | Checker
 union_or_intersection_related_to | pub(crate) fn union_or_intersection_related_to(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, intersection_state: IntersectionState) -> Ternary | relater.go:2882 | Relater
-union_rare | fn union_rare(&self) -> Option<&'static UnionRare> | rust:types.rs:2511 | UnionType
-union_rare_for_write | fn union_rare_for_write(&self) -> &'static UnionRare | rust:types.rs:2516 | UnionType
+union_rare | fn union_rare(&self) -> Option<&'static UnionRare> | rust:types.rs:2512 | UnionType
+union_rare_for_write | fn union_rare_for_write(&self) -> &'static UnionRare | rust:types.rs:2517 | UnionType
 union_types | pub fn union_types(&mut self) -> Vec<P<Type>> | checker.go:26227 | Checker
-unique_literal_filled_instantiation | pub fn unique_literal_filled_instantiation(&self) -> Option<P<Type>> | rust:types.rs:2607 | IntersectionType
+unique_literal_filled_instantiation | pub fn unique_literal_filled_instantiation(&self) -> Option<P<Type>> | rust:types.rs:2608 | IntersectionType
 unpack_slice | unsafe fn unpack_slice(w: usize) -> &'static [P<Type>] | rust:mapper.rs:156 | -
 unpack_slice | unsafe fn unpack_slice(w: u64) -> &'static [P<Type>] | rust:mapper.rs:189 | -
 untagged | unsafe fn untagged<T>(w: usize) -> P<T> | rust:mapper.rs:172 | -
@@ -3357,13 +3357,13 @@ untagged | unsafe fn untagged<T>(w: u64) -> P<T> | rust:mapper.rs:207 | -
 unused_is_error | pub(crate) fn unused_is_error(&mut self, kind: UnusedKind) -> bool | checker.go:7276 | Checker
 unwrap_awaited_type | pub(crate) fn unwrap_awaited_type(&mut self, t: P<Type>) -> P<Type> | checker.go:31928 | Checker
 unwrap_return_type | pub(crate) fn unwrap_return_type(&mut self, return_type: P<Type>, function_flags: FunctionFlags) -> Option<P<Type>> | checker.go:20729 | Checker
-value | pub fn value(&self) -> Option<LiteralValue> | rust:types.rs:1929 | LiteralType
+value | pub fn value(&self) -> Option<LiteralValue> | rust:types.rs:1930 | LiteralType
 value_of | fn value_of(t: P<Type>) -> &'static str | rust:packedmap.rs:184 | StringLiteralTypes
 value_to_string | pub fn value_to_string(value: LiteralValue) -> String | utilities.go:1749 | -
 value_to_string | pub(crate) fn value_to_string(&mut self, value: LiteralValue) -> String | printer.go:249 | Checker
-value_type | pub fn value_type(&self) -> P<Type> | rust:types.rs:2995 | IndexInfo
+value_type | pub fn value_type(&self) -> P<Type> | rust:types.rs:2996 | IndexInfo
 values | pub fn values(&self) -> impl Iterator<Item = V> + '_ | rust:packedmap.rs:109 | PackedMap
-vec | pub fn vec<T>(v: &Vec<T>) -> HeapStat | rust:heapcensus.rs:40 | HeapStat
+vec | pub fn vec<T>(v: &Vec<T>) -> HeapStat | rust:heapcensus.rs:41 | HeapStat
 visibility_to_string | pub(crate) fn visibility_to_string(flags: ModifierFlags) -> String | relater.go:2559 | -
 visit | fn visit(self, c: &mut Checker, v: &mut NodeVisitor, node: P<Node>) -> Option<P<Node>> | rust:nodecopy.rs:922 | ExistingNodeTree
 visit_and_transform_type | pub(crate) fn visit_and_transform_type(&self, c: &mut Checker, t: P<Type>, transform: impl FnMut(&mut Checker, P<NodeBuilderImpl>, P<Type>) -> Option<P<Node>>) -> Option<P<Node>> | nodebuilderimpl.go:3212 | NodeBuilderImpl
@@ -3394,7 +3394,7 @@ write_node_id | pub(crate) fn write_node_id(&mut self, id: NodeId) | checker.go:
 write_some_alias_arg | fn write_some_alias_arg(&mut self, alias: AliasArg<'_>) | rust:checker_09.rs:478 | keyBuilder
 write_string | pub(crate) fn write_string(&mut self, s: &str) | checker.go:17735 | keyBuilder
 write_symbol | pub(crate) fn write_symbol(&mut self, s: P<Symbol>) | checker.go:17766 | keyBuilder
-write_type | pub fn write_type(&self) -> Option<P<Type>> | rust:types.rs:444 | ValueSymbolLinks
+write_type | pub fn write_type(&self) -> Option<P<Type>> | rust:types.rs:445 | ValueSymbolLinks
 write_type | pub(crate) fn write_type(&mut self, t: P<Type>) | checker.go:17770 | keyBuilder
 write_types | pub(crate) fn write_types(&mut self, types: &[P<Type>]) | checker.go:17774 | keyBuilder
 write_uint32 | pub(crate) fn write_uint32(&mut self, v: u32) | checker.go:17746 | keyBuilder

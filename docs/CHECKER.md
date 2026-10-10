@@ -296,9 +296,9 @@ exactly like Go: `t.as_interface_type().resolved_type_arguments.get()`, `t.as_ob
   `t.distributed()` via `trait TypeExt` on `P<Type>`; Go's nil-receiver `alias.Symbol()` works on
   `Option<P<TypeAlias>>` via `TypeAliasOptExt`. `TypeFlags`/`VarianceFlags` implement `Display` (Go `String()`),
   `format_type_flags(flags)`.
-- `TypeMapper { data: TypeMapperData }` with `enum TypeMapperData { Simple, Array, ArrayToSingle, Deferred { targets:
-  Vec<Box<dyn Fn(&mut Checker) -> P<Type>>> }, Function { f: fn(&mut Checker, P<Type>) -> P<Type> }, Merged, Composite,
-  Inference { n, fixing } }`. Go `m.Map(t)` -> `m.map(c, t)`, `m.Kind()`, `m.MapsThisOnly()`. mapper.go free functions
+- `TypeMapper` is two packed words (16 bytes, mapper.rs); `m.data()` decodes it to `enum TypeMapperData { Simple,
+  Array, ArrayToSingle, Deferred { data: &'static DeferredTypeMapper }, Function { f: fn(&mut Checker, P<Type>) ->
+  P<Type> }, Merged, Composite, Inference { n, fixing } }` (`DeferredTypeMapper` holds the sources and targets). Go `m.Map(t)` -> `m.map(c, t)`, `m.Kind()`, `m.MapsThisOnly()`. mapper.go free functions
   keep their names (`new_simple_type_mapper`, `new_array_type_mapper`, `new_array_to_single_type_mapper`,
   `new_deferred_type_mapper`, `new_function_type_mapper(|c, t| c.x(t))`, `new_merged_type_mapper`,
   `new_composite_type_mapper`, `new_type_mapper`, `merge_type_mappers`, `prepend_type_mapping`, `append_type_mapping`);
@@ -323,17 +323,20 @@ if links.resolved_type.get().is_none() {
 }
 ```
 
-Link stores are keyed by the arena object and create the links on first use. Most are `LinkStore<K, V>` (links.rs:
-`LinkStore<Node, NodeLinks>`, `LinkStore<Symbol, AliasSymbolLinks>`, …), whatever store flavor Go uses; a few use
-specialized stores with the same `get`/`try_get`/`has` API (`KeyedLinkStore`, `NodeLinkStore`, `SymbolArenaLinkStore`,
-`SymbolReferenceLinkStore`; see the field types in checker.rs).
+Link stores are keyed by the arena object. Most are `LinkStore<K, V>` (links.rs: `LinkStore<Node, NodeLinks>`,
+`LinkStore<Symbol, AliasSymbolLinks>`, …), whatever store flavor Go uses, with `get` (creates the links on first use),
+`try_get` and `has`. `KeyedLinkStore` and `SymbolArenaLinkStore` have the same API, `NodeLinkStore` has `get`/`try_get`
+only, and `SymbolReferenceLinkStore` stores reference kinds (`reference_kinds`/`add_reference_kinds`); see the field
+types in checker.rs.
 `MembersAndExportsLinks` derefs to `[Cell<Option<P<SymbolTable>>>; 2]`: `links[kind as usize].get()`.
 
 ## Name resolution in module files
 
-Every generated checker file starts with `use crate::*; use tsrs_ast::*; use tsrs_core::*;` plus explicit
-`use tsrs_ast as ast;` and `use tsrs_diagnostics as diagnostics;`. lib.rs re-exports the data model and every checker module (`pub(crate) use
-checker_01::*` …), so free functions of other checker files resolve unqualified. A few checker free functions have the
+The generated checker files started with gosig's prelude (`use crate::*; use tsrs_ast::*; use tsrs_core::*;` plus
+`use tsrs_ast as ast;` and `use tsrs_diagnostics as diagnostics;`); the unused ones have since been removed, so add back
+what a file needs. lib.rs re-exports the data model and most checker modules (`pub(crate) use checker_01::*` …), so
+free functions of those files resolve unqualified elsewhere; a module without the re-export (checker_02.rs,
+services.rs, …) keeps its free functions to itself. A few checker free functions have the
 same name as a tsrs_ast function (`is_binary_operator`, `is_assignment_operator_or_higher`, `is_type_assertion`,
 `entity_name_to_string`, `is_node_descendant_of`, `is_instantiated_module`, …); an unqualified call from another file is
 ambiguous (E0659): write `crate::name(..)` for the checker's (what Go's unqualified call means) or `ast::name(..)`.
@@ -369,4 +372,5 @@ Mapping used by the generator (deviations from PORTING.md are deliberate, for de
 - `string` parameter -> `&str`; `string` result -> `String`.
 - `func(...)` parameter of a `Checker` method -> `impl FnMut(&mut Checker, ...) -> R` (checker first); elsewhere `impl FnMut(...) -> R`.
 - `args ...any` -> `args: &[&dyn std::fmt::Display]`.
-- Each function carries a terse origin marker comment (`// checker.go:1234`); keep it.
+- Each function ported from Go carries a terse origin marker comment (`// checker.go:1234`); keep it. Hand-written
+  helpers have none.
