@@ -6,9 +6,10 @@ use std::sync::{Once, OnceLock, RwLock};
 use rustc_hash::FxHashMap;
 use tsrs_core::collections::Set;
 use tsrs_core::tspath::Path;
+use tsrs_core::nodetable;
 use tsrs_core::{
     alloc_slice, alloc_str, alloc_vec, compute_ecma_line_starts, undefined_text_range, LanguageVariant, ResolutionMode,
-    FrozenCell, OwnedCell, ScriptKind, TextPos, TextRange, ThinSlice, Tristate, P,
+    FrozenCell, OwnedCell, PKey, ScriptKind, TextPos, TextRange, ThinSlice, Tristate, P,
 };
 use tsrs_diagnostics as diagnostics;
 use tsrs_spanmap::SpanMap;
@@ -111,13 +112,19 @@ pub fn new_node_factory_ex(hooks: NodeFactoryHooks, scratch: bool) -> NodeFactor
     NodeFactory { hooks, node_count: Rc::default(), text_count: Rc::default(), scratch }
 }
 
-fn node_header(kind: Kind, data_tag: NodeDataTag) -> Node {
-    Node {
-        header: OwnedCell::new(NodeHeaderWord::new(kind, data_tag)),
-        flags: OwnedCell::new(NodeFlags::None),
-        id: AtomicU32::new(0),
-        loc: OwnedCell::new(undefined_text_range()),
-    }
+/// The `P<Node>` of the row at `idx` (`nodetable::key_of`).
+#[inline]
+pub(crate) fn node_at(idx: u32) -> P<Node> {
+    // SAFETY: `Node` is zero-sized, so any non-null 8-aligned address is a valid `&Node`; `key_of` gives the one
+    // that `Node::index` decodes back to `idx`.
+    unsafe { P::from_key(nodetable::key_of(idx)) }
+}
+
+/// Allocates the row of a node: its data struct `data` goes to the arena (the thread's current target, or the
+/// scratch region), its header fields to the columns.
+#[inline]
+fn new_row(kind: Kind, tag: NodeDataTag, data: PKey) -> P<Node> {
+    node_at(nodetable::alloc(kind as u16, tag as u8, data, undefined_text_range()))
 }
 
 /// Creates a node whose data struct is `data` (Go: the data struct embeds `NodeBase`, one allocation).
@@ -127,49 +134,17 @@ pub(crate) fn new_node<T: NodePayload>(kind: Kind, data: T, hooks: &NodeFactoryH
 
 #[inline]
 fn new_node_in<T: NodePayload>(kind: Kind, data: T, hooks: &NodeFactoryHooks, scratch: bool) -> P<Node> {
-    // SAFETY: `NodeAlloc` is `repr(C)` with the header first, so the pointer to the allocation is a pointer to
-    // its header; the header is never moved or freed (leak arena).
-    let n = unsafe { P::new_in(scratch, NodeAlloc { node: node_header(kind, T::TAG), data }).cast::<Node>() };
+    let d = P::new_in(scratch, data);
+    let n = new_row(kind, T::TAG, d.key());
     if let Some(on_create) = &hooks.on_create {
         on_create(n);
     }
     n
 }
 
-/// Creates a node whose data struct `data` is followed by its rare tail `rare` (`NodeAllocRare`; the header's
-/// rare bit says the tail is there). The factory uses it when one of the struct's rare fields is set.
-fn new_node_with_rare<T: NodeRareTail>(kind: Kind, data: T, rare: T::Rare, hooks: &NodeFactoryHooks, scratch: bool) -> P<Node> {
-    let () = T::SAME_OFFSET;
-    let mut header = node_header(kind, T::TAG);
-    header.header = OwnedCell::new(header.header.get().with_rare_tail());
-    // SAFETY: as in `new_node` (`NodeAllocRare` is `repr(C)` with the header first).
-    let n = unsafe { P::new_in(scratch, NodeAllocRare { node: header, data, rare }).cast::<Node>() };
-    if let Some(on_create) = &hooks.on_create {
-        on_create(n);
-    }
-    n
-}
-
-/// The rare tail of the node whose data struct is `data`, if it was allocated with one.
-#[inline]
-pub(crate) fn rare_tail<T: NodeRareTail>(data: &T) -> Option<&'static T::Rare> {
-    let () = T::SAME_OFFSET;
-    let at = std::ptr::from_ref::<T>(data).cast::<u8>();
-    // SAFETY: data structs are created only inside a `NodeAlloc<T>` or `NodeAllocRare<T, _>` (both `repr(C)`, header
-    // first, data at the same offset: asserted in `NodeRareTail`), which is never moved or freed while reachable.
-    #[expect(clippy::cast_ptr_alignment, reason = "the header starts the `NodeAlloc`, so it has the allocation's alignment")]
-    let node = unsafe { &*at.sub(std::mem::offset_of!(NodeAlloc<T>, data)).cast::<Node>() };
-    if !node.header.get().has_rare_tail() {
-        return None;
-    }
-    let off = std::mem::offset_of!(NodeAllocRare<T, T::Rare>, rare) - std::mem::offset_of!(NodeAllocRare<T, T::Rare>, data);
-    // SAFETY: the rare bit is set only by `new_node_with_rare`, which allocated the tail at this offset.
-    Some(unsafe { &*at.add(off).cast::<T::Rare>() })
-}
-
-/// Creates a node whose data struct has no fields (`Token`, `KeywordTypeNode`, ...): just the header.
-fn new_empty_node(kind: Kind, data_tag: NodeDataTag, hooks: &NodeFactoryHooks, scratch: bool) -> P<Node> {
-    let n = P::new_in(scratch, node_header(kind, data_tag));
+/// Creates a node whose data struct has no fields (`Token`, `KeywordTypeNode`, ...): just the row.
+fn new_empty_node(kind: Kind, data_tag: NodeDataTag, hooks: &NodeFactoryHooks, _scratch: bool) -> P<Node> {
+    let n = new_row(kind, data_tag, 0);
     if let Some(on_create) = &hooks.on_create {
         on_create(n);
     }
@@ -187,10 +162,10 @@ impl NodeFactory {
         new_node_in(kind, data, &self.hooks, self.scratch)
     }
 
+    /// The rare tail of a data struct (`NodeRareTail`): allocated like the node's data, only when a rare field is set.
     #[inline]
-    pub(crate) fn new_node_with_rare<T: NodeRareTail>(&self, kind: Kind, data: T, rare: T::Rare) -> P<Node> {
-        self.node_count.set(self.node_count.get() + 1);
-        new_node_with_rare(kind, data, rare, &self.hooks, self.scratch)
+    pub(crate) fn alloc_rare<R: 'static>(&self, rare: R) -> P<R> {
+        P::new_in(self.scratch, rare)
     }
 
     #[inline]
@@ -249,8 +224,8 @@ impl NodeFactory {
 
 pub(crate) fn update_node(updated: P<Node>, original: P<Node>, hooks: &NodeFactoryHooks) -> P<Node> {
     if updated != original {
-        updated.flags.set(original.flags.get());
-        updated.loc.set(original.loc.get());
+        updated.set_flags(original.flags());
+        updated.set_loc_raw(original.loc());
         if let Some(on_update) = &hooks.on_update {
             on_update(updated, original);
         }
@@ -417,38 +392,32 @@ impl ModifierList {
 
 // AST Node
 
-/// Go `ast.Node`. The node's data struct (Go: the struct that embeds `NodeBase`) is allocated together with the
-/// header, right after it (`NodeAlloc`); `data_tag()` says which struct it is. `node.data()` returns it as a
-/// `NodeData`, `as_*()` and the generated accessors read it in place. Data structs without fields (`Token`,
-/// `KeywordTypeNode`, ...) allocate only the header.
+/// Go `ast.Node`. A node is a dense `u32` row index into the node columns (`tsrs_core::nodetable`,
+/// notes/dod-ast-tables.md): kind, data tag, flags, id, parent, range and the handle of the node's data struct (Go:
+/// the struct that embeds `NodeBase`), which lives in the arena like before. `Node` itself is a zero-sized view: a
+/// `P<Node>` / `&Node` carries the index in its address (`nodetable::key_of`), so handles keep their identity, hashing
+/// and ordering, and every method here reads the columns. `data_tag()` says which struct the data handle points to;
+/// `node.data()` returns it as a `NodeData`, `as_*()` and the generated accessors read it in place. Data structs
+/// without fields (`Token`, `KeywordTypeNode`, ...) have no data allocation (handle 0).
 ///
-/// The header is 24 bytes: the kind, the data tag and the parent pointer share one word (`NodeHeaderWord`), and the
-/// id is stored in 32 bits (ids still come from a 64-bit counter and are returned as `NodeId`; more than
+/// Ids are stored in 32 bits (ids still come from a 64-bit counter and are returned as `NodeId`; more than
 /// `u32::MAX` node ids panic, like symbol ids). 23M nodes on the private monorepo.
 pub struct Node {
-    header: OwnedCell<NodeHeaderWord>,
-    pub flags: OwnedCell<NodeFlags>,
-    pub(crate) id: AtomicU32,
-    pub(crate) loc: OwnedCell<TextRange>, // set_loc() (compact identifiers derive their text from the end)
+    _opaque: [u8; 0],
 }
 
-const _: () = assert!(std::mem::size_of::<Node>() == 24);
+const _: () = assert!(std::mem::size_of::<Node>() == 0);
 
 /// Census builds (`TSRS_CENSUS=1`): registers the fields of AST arena types that the census's strong mark must not
-/// read as plain pointers (`tsrs_core::census_layout`), from the current layouts: node headers (flags, id and range;
-/// the parent word is not decoded), identifier words, symbol parent words, diagnostics' scalars. Once per process;
-/// nothing in other builds.
+/// read as plain pointers (`tsrs_core::census_layout`), from the current layouts: identifier words, symbol parent
+/// words, diagnostics' scalars (node rows live outside the arena, in the columns). Once per process; nothing in other
+/// builds.
 pub fn census_layouts() {
     if !tsrs_core::census_recording() {
         return;
     }
     static ONCE: std::sync::Once = std::sync::Once::new();
     ONCE.call_once(|| {
-        let header = tsrs_core::CensusField::all_but(0, std::mem::size_of::<Node>(), &[std::mem::offset_of!(Node, header)]);
-        tsrs_core::census_layout(std::any::type_name::<Node>(), &header);
-        for name in [std::any::type_name::<NodeAlloc<Node>>(), std::any::type_name::<NodeAllocRare<Node, Node>>()] {
-            tsrs_core::census_layout(&name[..=name.find('<').unwrap()], &header);
-        }
         let nodes = std::mem::offset_of!(NodeList, nodes);
         tsrs_core::census_layout(std::any::type_name::<NodeList>(), &[tsrs_core::CensusField::Thin { off: nodes }]);
         let nodes = std::mem::offset_of!(ModifierList, list) + nodes;
@@ -460,131 +429,61 @@ pub fn census_layouts() {
     });
 }
 
-/// A node's kind, data tag and parent in one word: the parent in the low 45 bits (`P::pack`), the kind in the next 9 bits, the data
-/// tag in the 8 above and then the rare bit (the data struct is followed by its rare tail, `NodeRareTail`). Only the
-/// parent changes after creation.
-#[derive(Clone, Copy)]
-struct NodeHeaderWord(u64);
+const _: () = assert!((Kind::Count as u64) < 1 << 16);
 
-impl NodeHeaderWord {
-    const PARENT_BITS: u32 = tsrs_core::PACK_BITS;
-    const PARENT_MASK: u64 = (1 << Self::PARENT_BITS) - 1;
-    const KIND_SHIFT: u32 = Self::PARENT_BITS;
-    const KIND_BITS: u32 = 9;
-    const TAG_SHIFT: u32 = Self::KIND_SHIFT + Self::KIND_BITS;
-    const RARE_BIT: u64 = 1 << (Self::TAG_SHIFT + 8);
-
-    #[inline]
-    fn new(kind: Kind, data_tag: NodeDataTag) -> NodeHeaderWord {
-        NodeHeaderWord((kind as u16 as u64) << Self::KIND_SHIFT | (data_tag as u8 as u64) << Self::TAG_SHIFT)
-    }
-
-    #[inline]
-    fn kind(self) -> Kind {
-        let v = (self.0 >> Self::KIND_SHIFT) as u16 & ((1 << Self::KIND_BITS) - 1);
-        // SAFETY: the bits were stored from a `Kind` (repr(i16), contiguous discriminants 0..=Count < 2^9).
-        unsafe { std::mem::transmute::<i16, Kind>(v as i16) }
-    }
-
-    #[inline]
-    fn with_rare_tail(self) -> NodeHeaderWord {
-        NodeHeaderWord(self.0 | Self::RARE_BIT)
-    }
-
-    #[inline]
-    fn has_rare_tail(self) -> bool {
-        self.0 & Self::RARE_BIT != 0
-    }
-
-    #[inline]
-    fn data_tag(self) -> NodeDataTag {
-        // SAFETY: the bits were stored from a `NodeDataTag` (repr(u8)).
-        unsafe { std::mem::transmute::<u8, NodeDataTag>((self.0 >> Self::TAG_SHIFT) as u8) }
-    }
-
-    #[inline]
-    fn parent(self) -> Option<P<Node>> {
-        // SAFETY: the low bits were stored by `with_parent` from a live `P<Node>` (arena nodes are never freed or moved).
-        unsafe { P::unpack_opt(self.0) }
-    }
-
-    #[inline]
-    fn with_parent(self, parent: Option<P<Node>>) -> NodeHeaderWord {
-        NodeHeaderWord(self.0 & !Self::PARENT_MASK | P::pack_opt(parent))
-    }
-}
-
-const _: () = assert!((Kind::Count as u64) < 1 << NodeHeaderWord::KIND_BITS);
-const _: () = assert!(NodeHeaderWord::TAG_SHIFT + 8 < 64);
-
-/// One arena allocation per node: the header, then the data struct. `repr(C)` puts the header at offset 0 and
-/// the data at `offset_of!(NodeAlloc<T>, data)` (24 for every data struct: none is aligned to more than 8).
-#[repr(C)]
-pub(crate) struct NodeAlloc<T> {
-    pub(crate) node: Node,
-    pub(crate) data: T,
-}
-
-/// A node data struct with fields, stored after the header of nodes tagged `TAG` (impls are generated).
+/// A node data struct with fields, the arena object a node row's data handle points to (impls are generated).
 pub(crate) trait NodePayload: Sized + 'static {
     const TAG: NodeDataTag;
-}
-
-/// `NodeAlloc` for a node with a rare tail: fields that are almost never set (on the private monorepo, e.g. 0.1%
-/// of call expressions have a `?.` token and 0.5% type arguments) live in `rare`, allocated only when one of them is
-/// set at construction, and read as `None` otherwise. Only fields that are never written after construction can be
-/// rare (tools/gen-ast/gen-ast.ts `RARE_FIELDS`).
-#[repr(C)]
-pub(crate) struct NodeAllocRare<T, R> {
-    pub(crate) node: Node,
-    pub(crate) data: T,
-    pub(crate) rare: R,
-}
-
-/// A node data struct with a rare tail (impls are generated).
-pub(crate) trait NodeRareTail: NodePayload {
-    type Rare: 'static;
-    /// Compile-time check that the data struct sits at the same offset in both allocations.
-    const SAME_OFFSET: () =
-        assert!(std::mem::offset_of!(NodeAlloc<Self>, data) == std::mem::offset_of!(NodeAllocRare<Self, Self::Rare>, data));
 }
 
 // Node accessors. Accessors that dispatch over the node data (name(), modifiers(), *_data(), as_*(),
 // for_each_child(), ...) are generated in generated.rs.
 
 impl Node {
+    /// The node's row index.
+    #[inline(always)]
+    #[expect(clippy::inline_always, reason = "every node field read goes through it")]
+    pub(crate) fn index(&self) -> u32 {
+        nodetable::index_of(std::ptr::from_ref::<Node>(self).addr())
+    }
+
     #[inline]
     pub fn kind(&self) -> Kind {
-        self.header.get().kind()
+        // SAFETY: the column was written from a `Kind` (repr(i16), contiguous discriminants 0..=Count).
+        unsafe { std::mem::transmute::<i16, Kind>(nodetable::kind(self.index()) as i16) }
     }
 
-    /// Which data struct follows this node's header.
+    /// Which data struct this node's data handle points to.
     #[inline]
     pub(crate) fn data_tag(&self) -> NodeDataTag {
-        self.header.get().data_tag()
+        // SAFETY: the column was written from a `NodeDataTag` (repr(u8)).
+        unsafe { std::mem::transmute::<u8, NodeDataTag>(nodetable::tag(self.index())) }
     }
 
-    /// TOOL (`--features ast-sizing` only): whether the node was allocated with its rare tail.
-    #[cfg(feature = "ast-sizing")]
-    pub(crate) fn has_rare_tail(&self) -> bool {
-        self.header.get().has_rare_tail()
-    }
-
-    /// The data struct after this node's header. Callers check `data_tag() == T::TAG` first.
+    /// The node's data struct. Callers check `data_tag() == T::TAG` first.
     #[inline]
     pub(crate) fn payload<T: NodePayload>(&self) -> &'static T {
         debug_assert!(self.data_tag() == T::TAG);
-        // SAFETY: a node tagged `T::TAG` was allocated by `new_node::<T>` as a `NodeAlloc<T>` whose header is
-        // `self`, so its data struct lives at this offset from the header, for the rest of the process.
-        unsafe { &*std::ptr::from_ref::<Node>(self).cast::<u8>().add(std::mem::offset_of!(NodeAlloc<T>, data)).cast::<T>() }
+        // SAFETY: a node tagged `T::TAG` was created by `new_node::<T>`, which stored the key of its arena-allocated
+        // `T` in the data column; arena objects are never moved or freed while the node is reachable.
+        unsafe { P::<T>::from_key(nodetable::data(self.index())).get() }
     }
 
-    /// The arena pointer for this node. Every `Node` is created by `NodeFactory`/`new_node` in the leak
-    /// arena (Node has a crate-private field, so it cannot be constructed elsewhere), so `&self` is
-    /// always a reference to a `'static` arena value.
+    /// The address of the node's data struct (0 without one): what decides which region owns the node.
+    #[inline]
+    pub fn data_addr(&self) -> usize {
+        let key = nodetable::data(self.index());
+        if key == 0 {
+            return 0;
+        }
+        // SAFETY: a nonzero data key names a live arena object (`payload`).
+        unsafe { P::<u8>::from_key(key).addr() }
+    }
+
+    /// The handle for this node (the row index in its address, see the type's doc).
     #[inline]
     pub fn as_p(&self) -> P<Node> {
-        // SAFETY: see above; nodes are never freed or moved.
+        // SAFETY: a `&Node` only ever comes from a `P<Node>` made by `node_at`, so its address decodes to a row.
         unsafe { P::from_arena(&*std::ptr::from_ref::<Node>(self)) }
     }
 
@@ -594,38 +493,77 @@ impl Node {
     }
     #[inline]
     pub fn pos(&self) -> i32 {
-        self.loc.get().pos()
+        self.loc().pos()
     }
     #[inline]
     pub fn end(&self) -> i32 {
-        self.loc.get().end()
+        self.loc().end()
     }
     #[inline]
     pub fn loc(&self) -> TextRange {
-        self.loc.get()
+        nodetable::loc(self.index())
     }
     #[inline]
     pub fn set_loc(&self, loc: TextRange) {
         if self.data_tag() == NodeDataTag::Identifier && loc.end() != self.end() {
             crate::identifier::check_source_identifier_loc(self, loc);
         }
-        self.loc.set(loc)
+        self.set_loc_raw(loc)
+    }
+    /// `set_loc` without the identifier check (the factory, setting the range of a node it just made).
+    #[inline]
+    pub(crate) fn set_loc_raw(&self, loc: TextRange) {
+        let i = self.index();
+        if tsrs_core::sharedgraph::any_frozen() && self.frozen_write(nodetable::loc_addr(i), loc) {
+            return;
+        }
+        nodetable::set_loc(i, loc)
     }
     #[inline]
     pub fn flags(&self) -> NodeFlags {
-        self.flags.get()
+        NodeFlags::from_bits_retain(nodetable::flags(self.index()))
     }
     #[inline]
     pub fn set_flags(&self, flags: NodeFlags) {
-        self.flags.set(flags)
+        let i = self.index();
+        if tsrs_core::sharedgraph::any_frozen() && self.frozen_write(nodetable::flags_addr(i), flags) {
+            return;
+        }
+        nodetable::set_flags(i, flags.bits())
     }
     #[inline]
     pub fn parent(&self) -> Option<P<Node>> {
-        self.header.get().parent()
+        // SAFETY: the column holds 0 or the key of a live node (`set_parent`).
+        unsafe { P::from_key_opt(nodetable::parent(self.index())) }
     }
     #[inline]
     pub fn set_parent(&self, parent: Option<P<Node>>) {
-        self.header.set(self.header.get().with_parent(parent))
+        let i = self.index();
+        if tsrs_core::sharedgraph::any_frozen() && self.frozen_write(nodetable::parent_addr(i), P::key_opt(parent)) {
+            return;
+        }
+        nodetable::set_parent(i, P::key_opt(parent))
+    }
+
+    /// The node's id cell: 0 until `get_node_id` assigns one.
+    #[inline]
+    pub(crate) fn id_cell(&self) -> &'static AtomicU32 {
+        nodetable::id(self.index())
+    }
+
+    /// Shared graph (`--features shared-graph`): a write to a row of a frozen node (its data struct lies in the
+    /// seed's frozen chunks) goes to the current checker's overlay, keyed by the column cell's address, as a write
+    /// to a frozen `OwnedCell` does. A payload-less node is never frozen here (nothing writes a token's row after the
+    /// seed is frozen).
+    #[cold]
+    #[inline(never)]
+    fn frozen_write<T: Copy + 'static>(&self, cell_addr: usize, value: T) -> bool {
+        let data = self.data_addr();
+        if data == 0 || !tsrs_core::sharedgraph::is_frozen_addr(data) {
+            return false;
+        }
+        tsrs_core::sharedgraph::current_overlay().set_cell(cell_addr, value);
+        true
     }
 
     /// Go `IterChildren`: the children in `for_each_child` order.
@@ -1307,7 +1245,7 @@ impl Node {
 
     // if you provide nil for file, this code will walk to the root of the tree to find the file
     pub fn jsdoc(&self, file: Option<&'static SourceFile>) -> &'static [P<Node>] {
-        if !self.flags.get().intersects(NodeFlags::HasJSDoc) {
+        if !self.flags().intersects(NodeFlags::HasJSDoc) {
             return &[];
         }
         let file = match file {
@@ -1326,7 +1264,7 @@ impl Node {
     // EagerJSDoc returns JSDoc nodes that have already been parsed and cached,
     // without triggering lazy JSDoc parsing.
     pub fn eager_jsdoc(&self, file: Option<&'static SourceFile>) -> &'static [P<Node>] {
-        if !self.flags.get().intersects(NodeFlags::HasJSDoc) {
+        if !self.flags().intersects(NodeFlags::HasJSDoc) {
             return &[];
         }
         let file = match file {
@@ -1420,7 +1358,7 @@ fn declaration_is_write_access(decl: Option<P<Node>>) -> bool {
         return false;
     };
     // Consider anything in an ambient declaration to be a write access since it may be coming from JS.
-    if decl.flags.get().intersects(NodeFlags::Ambient) {
+    if decl.flags().intersects(NodeFlags::Ambient) {
         return true;
     }
 
@@ -2170,7 +2108,7 @@ impl SourceFile {
         self.common_js_module_indicator.set(other.common_js_module_indicator.get());
         self.external_module_indicator.set(other.external_module_indicator.get());
         let node = self.as_node();
-        node.flags.set(node.flags.get() | other.as_node().flags.get());
+        node.set_flags(node.flags() | other.as_node().flags());
     }
 
     pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {

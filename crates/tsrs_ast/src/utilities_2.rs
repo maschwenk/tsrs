@@ -1193,7 +1193,7 @@ pub fn is_non_local_alias(symbol: impl Into<Option<P<Symbol>>>, excludes: Symbol
     let Some(symbol) = symbol.into() else {
         return false;
     };
-    let flags = symbol.flags.get();
+    let flags = symbol.flags();
     flags & (SymbolFlags::Alias | excludes) == SymbolFlags::Alias || flags.intersects(SymbolFlags::Alias) && flags.intersects(SymbolFlags::Assignment)
 }
 
@@ -1232,7 +1232,7 @@ pub fn is_alias_symbol_declaration(node: P<Node>) -> bool {
 }
 
 pub fn is_parse_tree_node(node: P<Node>) -> bool {
-    !node.flags.get().intersects(NodeFlags::Synthesized)
+    !node.flags().intersects(NodeFlags::Synthesized)
 }
 
 // Returns a token if position is in [start-of-leading-trivia, end), includes JSDoc only if requested

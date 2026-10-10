@@ -6,8 +6,8 @@ use crate::Dumper;
 
 pub(crate) fn dump_fields(n: &Node, d: &mut Dumper) {
     match n.data() {
-        NodeData::Identifier(x) => {
-            d.field_string("Text", x.text());
+        NodeData::Identifier(_) => {
+            d.field_string("Text", n.as_identifier().text());
         }
         NodeData::PrivateIdentifier(x) => {
             d.field_string("Text", x.text());

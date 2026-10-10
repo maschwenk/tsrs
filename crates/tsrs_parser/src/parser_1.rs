@@ -526,12 +526,15 @@ pub struct ParserState {
     // `rewind` does not truncate and that can receive nodes from inside a speculation (`reparse_list`,
     // `jsdoc_diagnostics`, the scanner's number caches) calls `tsrs_core::arena_pin`, which cancels that.
     pub(crate) arena: tsrs_core::arena::Checkpoint,
+    /// The node rows allocated since (`tsrs_core::nodetable`), given back with the arena memory.
+    pub(crate) nodes: tsrs_core::nodetable::Checkpoint,
 }
 
 impl Parser {
     pub(crate) fn mark(&mut self) -> ParserState {
         ParserState {
             arena: tsrs_core::arena_checkpoint(),
+            nodes: tsrs_core::nodetable::checkpoint(),
             scanner_state: self.scanner.mark(),
             context_flags: self.context_flags,
             diagnostics_len: self.diagnostics.len(),
@@ -546,7 +549,13 @@ impl Parser {
 
     pub(crate) fn rewind(&mut self, state: ParserState) {
         let arena = state.arena;
+        let nodes = state.nodes;
         self.rewind_keeping_nodes(state);
+        // The node rows go back under the arena's rule: only when nothing kept a pointer to what the speculation
+        // made (no pin, same chunk), which is when the arena memory goes back too.
+        if tsrs_core::arena_rewindable(&arena) {
+            tsrs_core::nodetable::rewind(nodes);
+        }
         tsrs_core::arena_rewind(arena);
     }
 
@@ -885,6 +894,7 @@ impl Parser {
         let parsing_contexts = self.parsing_contexts;
         let clean_start = !self.has_parse_error;
         let cp = tsrs_core::arena_checkpoint();
+        let ncp = tsrs_core::nodetable::checkpoint();
         let before = self.lazy_watch();
         let list = self.parse_list(kind, parse_element);
         let after = self.lazy_watch();
@@ -901,6 +911,7 @@ impl Parser {
         let loc = list.loc();
         debug_assert_eq!(loc.pos(), pos);
         self.lazy_lists.truncate(before.4);
+        tsrs_core::nodetable::rewind(ncp);
         tsrs_core::arena_rewind(cp);
         let record = P::new(tsrs_ast::lazylist::LazyNodeList::new(loc.pos(), loc.end(), kind as u8, context_flags, parsing_contexts as u32));
         self.lazy_lists.push(record);

@@ -100,7 +100,7 @@ fn is_an_external_module_indicator_node(node: P<Node>) -> bool {
 }
 
 fn get_import_meta_if_necessary(source_file: &SourceFile) -> Option<P<Node>> {
-    if source_file.as_node().flags.get().intersects(NodeFlags::PossiblyContainsImportMeta) {
+    if source_file.as_node().flags().intersects(NodeFlags::PossiblyContainsImportMeta) {
         return find_child_node(source_file.as_node(), is_import_meta);
     }
     None

@@ -415,7 +415,7 @@ impl EmitContext {
     }
 
     pub(crate) fn on_create(&self, node: P<Node>) {
-        node.flags.set(node.flags.get() | NodeFlags::Synthesized);
+        node.set_flags(node.flags() | NodeFlags::Synthesized);
     }
 
     pub(crate) fn on_update(&self, updated: P<Node>, original: P<Node>) {

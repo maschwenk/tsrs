@@ -1,4 +1,5 @@
 pub mod arena;
+pub mod nodetable;
 pub mod ptr;
 #[cfg(compressed_ptrs)]
 pub mod reserve;

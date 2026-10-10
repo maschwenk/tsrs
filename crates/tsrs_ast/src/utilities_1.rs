@@ -51,7 +51,7 @@ fn next_id(counter: &AtomicU64, block: &'static std::thread::LocalKey<Cell<(u64,
 
 #[inline]
 pub fn get_node_id(node: P<Node>) -> NodeId {
-    let id = node.id.load(Ordering::Relaxed);
+    let id = node.id_cell().load(Ordering::Relaxed);
     if id != 0 {
         return NodeId(id as u64);
     }
@@ -62,7 +62,7 @@ pub fn get_node_id(node: P<Node>) -> NodeId {
 #[inline]
 pub fn get_assigned_node_id(node: P<Node>) -> Option<u32> {
     // Relaxed, as in `get_node_id`: the id is the only data read, and it is written once.
-    let id = node.id.load(Ordering::Relaxed);
+    let id = node.id_cell().load(Ordering::Relaxed);
     (id != 0).then_some(id)
 }
 
@@ -72,8 +72,8 @@ fn assign_node_id(node: P<Node>) -> NodeId {
     let next = next_id(&NEXT_NODE_ID, &NODE_ID_BLOCK);
     // Nodes store their id in 32 bits (memory); Go's ids are 64-bit but no program gets near 2^32.
     let mut id = u32::try_from(next).expect("more than u32::MAX node ids");
-    if node.id.compare_exchange(0, id, Ordering::Relaxed, Ordering::Relaxed).is_err() {
-        id = node.id.load(Ordering::Relaxed);
+    if node.id_cell().compare_exchange(0, id, Ordering::Relaxed, Ordering::Relaxed).is_err() {
+        id = node.id_cell().load(Ordering::Relaxed);
     }
     NodeId(id as u64)
 }

@@ -71,7 +71,7 @@ rs.push("");
 rs.push("use crate::Dumper;");
 rs.push("");
 rs.push("pub(crate) fn dump_fields(n: &Node, d: &mut Dumper) {");
-rs.push("    match n.data {");
+rs.push("    match n.data() {");
 for (const n of api.nodes()) {
     const fields: [string, Cat][] = [];
     for (const m of n.members) {
@@ -82,7 +82,9 @@ for (const n of api.nodes()) {
     go.push(`\t${JSON.stringify(n.name)}: {${fields.map(([f, c]) => `{${JSON.stringify(f)}, ${JSON.stringify(c)}}`).join(", ")}},`);
     rs.push(`        NodeData::${n.name}(x) => {`);
     for (const [f, c] of fields) {
-        rs.push(`            d.field_${c}(${JSON.stringify(f)}, x.${ident(f)}());`);
+        // A compact identifier's text is derived from the node's end (crates/tsrs_ast/src/identifier.rs): read it through the node.
+        const value = n.name === "Identifier" && f === "Text" ? "n.as_identifier().text()" : `x.${ident(f)}()`;
+        rs.push(`            d.field_${c}(${JSON.stringify(f)}, ${value});`);
     }
     rs.push("        }");
 }

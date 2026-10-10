@@ -19,7 +19,7 @@ use std::sync::{LazyLock, Mutex};
 use rustc_hash::FxHashMap;
 use tsrs_core::{OwnedCell, PackedStr, TextRange, P};
 
-use crate::ast::{clone_node, Node, NodeAlloc, NodeFactory, NodePayload};
+use crate::ast::{clone_node, Node, NodeFactory, NodePayload};
 use crate::generated::NodeDataTag;
 use crate::flow::FlowNode;
 use crate::kind::Kind;
@@ -120,17 +120,17 @@ impl NodePayload for IdentifierWithText {
     const TAG: NodeDataTag = NodeDataTag::Identifier;
 }
 
-const _: () = assert!(std::mem::size_of::<NodeAlloc<Identifier>>() == 32);
+const _: () = assert!(std::mem::size_of::<Identifier>() == 8);
 
-/// TOOL (`--features ast-sizing` only): arena bytes of an identifier node with its text stored.
+/// TOOL (`--features ast-sizing` only): arena bytes of an identifier's data with its text stored.
 #[cfg(feature = "ast-sizing")]
-pub(crate) const IDENTIFIER_WITH_TEXT_SIZE: usize = std::mem::size_of::<NodeAlloc<IdentifierWithText>>();
+pub(crate) const IDENTIFIER_WITH_TEXT_SIZE: usize = std::mem::size_of::<IdentifierWithText>();
 
-/// TOOL (`--features ast-sizing` only): arena bytes of the identifier node `n`.
+/// TOOL (`--features ast-sizing` only): arena bytes of the data of the identifier node `n`.
 #[cfg(feature = "ast-sizing")]
 pub(crate) fn identifier_alloc_size(n: &Node) -> usize {
     if n.payload::<Identifier>().is_source_text() {
-        std::mem::size_of::<NodeAlloc<Identifier>>()
+        std::mem::size_of::<Identifier>()
     } else {
         IDENTIFIER_WITH_TEXT_SIZE
     }
@@ -142,9 +142,44 @@ pub(crate) fn census_layout() {
     use std::mem::offset_of;
     let word = offset_of!(Identifier, word);
     let field = |data: usize| tsrs_core::CensusField::X8 { off: data + word, modes: 1 << MODE_SOURCE_FLOW | 1 << MODE_TEXT };
-    tsrs_core::census_layout(std::any::type_name::<NodeAlloc<Identifier>>(), &[field(offset_of!(NodeAlloc<Identifier>, data))]);
-    let data = offset_of!(NodeAlloc<IdentifierWithText>, data) + offset_of!(IdentifierWithText, identifier);
-    tsrs_core::census_layout(std::any::type_name::<NodeAlloc<IdentifierWithText>>(), &[field(data)]);
+    tsrs_core::census_layout(std::any::type_name::<Identifier>(), &[field(0)]);
+    tsrs_core::census_layout(std::any::type_name::<IdentifierWithText>(), &[field(offset_of!(IdentifierWithText, identifier))]);
+}
+
+/// An identifier's data together with its node (`Node::as_identifier`): the text of a compact identifier is the
+/// slice of the file's text that ends at the node's end, and the node's range lives in the node columns, not in
+/// the data struct. Derefs to the data for everything else.
+#[derive(Clone, Copy)]
+pub struct IdentifierRef {
+    node: P<Node>,
+    data: &'static Identifier,
+}
+
+impl std::ops::Deref for IdentifierRef {
+    type Target = Identifier;
+    #[inline]
+    fn deref(&self) -> &Identifier {
+        self.data
+    }
+}
+
+impl IdentifierRef {
+    #[inline]
+    pub(crate) fn new(node: P<Node>, data: &'static Identifier) -> IdentifierRef {
+        IdentifierRef { node, data }
+    }
+
+    /// Go `Identifier.Text`.
+    #[inline]
+    pub fn text(&self) -> &'static str {
+        self.data.text_at(self.node.end())
+    }
+
+    /// The data struct (for code that keeps a `&'static Identifier`).
+    #[inline]
+    pub fn data(&self) -> &'static Identifier {
+        self.data
+    }
 }
 
 #[inline]
@@ -161,14 +196,6 @@ fn slot_flow(word: u64) -> Option<P<FlowNode>> {
 
 impl Identifier {
     #[inline]
-    #[expect(clippy::cast_ptr_alignment, reason = "the header starts the `NodeAlloc`, so it has the allocation's alignment")]
-    fn node(&self) -> &Node {
-        // SAFETY: identifiers are created only by `new_node` inside a `NodeAlloc` (`repr(C)`, header first), so the
-        // header lies at this offset before the data struct.
-        unsafe { &*std::ptr::from_ref::<Identifier>(self).cast::<u8>().sub(std::mem::offset_of!(NodeAlloc<Identifier>, data)).cast::<Node>() }
-    }
-
-    #[inline]
     fn mode(word: u64) -> u64 {
         word >> MODE_SHIFT
     }
@@ -183,15 +210,16 @@ impl Identifier {
         }
     }
 
+    /// The text of the identifier whose node ends at `end` (`IdentifierRef::text`).
     #[inline]
     #[expect(clippy::disallowed_methods, reason = "from_utf8 here: +1.6% instructions, one checker (notes/lint-paydown-compiler.md)")]
-    pub fn text(&self) -> &'static str {
+    pub(crate) fn text_at(&self, end: i32) -> &'static str {
         let word = self.word.get();
         if Self::mode(word) == MODE_TEXT {
             return self.stored_text();
         }
         let len = ((word >> LEN_SHIFT) & LEN_MAX) as usize;
-        let end = self.node().end() as usize;
+        let end = end as usize;
         debug_assert!(end <= source_text(Self::text_index(word)).len() && len <= end);
         // SAFETY: `new_source_identifier` checked that `end - len..end` is the token's text inside the registered
         // text (so in bounds and on char boundaries), and `Node::set_loc` keeps the end from changing (the range of a
@@ -255,7 +283,7 @@ impl Identifier {
     }
 
     pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
-        clone_node(f.new_identifier(self.text()), node, &f.hooks)
+        clone_node(f.new_identifier(node.as_identifier().text()), node, &f.hooks)
     }
 }
 
@@ -279,7 +307,7 @@ impl NodeFactory {
         };
         if !from_source {
             let node = self.new_identifier(text);
-            node.loc.set(loc);
+            node.set_loc_raw(loc);
             return node;
         }
         self.text_count.set(self.text_count.get() + 1);
@@ -287,7 +315,7 @@ impl NodeFactory {
             Kind::Identifier,
             Identifier { word: OwnedCell::new(MODE_SOURCE << MODE_SHIFT | (text.len() as u64) << LEN_SHIFT | text_index as u64) },
         );
-        node.loc.set(loc);
+        node.set_loc_raw(loc);
         node
     }
 }

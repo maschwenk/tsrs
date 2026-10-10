@@ -3,8 +3,9 @@
 //
 // Usage: node tools/gen-ast/gen-ast.ts
 //
-// Emits node data structs, base structs, the NodeData enum and its NodeDataTag (the data struct of a node is
-// co-allocated right after its header, see `NodeAlloc` in ast.rs), NodeFactory::new_*/update_* constructors,
+// Emits node data structs, base structs, the NodeData enum and its NodeDataTag (a node is a row of the node columns,
+// `tsrs_core::nodetable`, whose data column points at the data struct in the arena; see `Node` in ast.rs),
+// NodeFactory::new_*/update_* constructors,
 // Node::as_* casts, is_* predicates, for_each_child/visit_each_child/clone_node, per-struct field getters,
 // the Node-level base accessors (declaration_data(), name(), modifiers(), ...) and the kind alias guards.
 // Subtree facts, the encoder and TS output are intentionally not generated.
@@ -91,8 +92,9 @@ interface Field {
     member: MemberInfo;
 }
 
-// Own fields that are almost never set, stored in a tail allocated after the data struct only when one of them is set
-// at construction (`NodeAllocRare` in ast.rs; the getter reads None otherwise). Only nil-able fields that nothing
+// Own fields that are almost never set, stored in a `<Node>Rare` struct allocated only when one of them is set at
+// construction and pointed to by the struct's `rare` field (the getter reads None
+// otherwise). Only nil-able fields that nothing
 // writes after construction (not Cells, not Go-only bookkeeping). Occupancy on the private monorepo (notes/mem-frontend.md):
 // CallExpression ?. 0.1% and type arguments 0.5% of 1.24M, PropertyAccessExpression ?. 2.7% of 1.27M, Parameter
 // `...` 1.8% and initializer 1.4% of 374K, PropertySignature initializer 0% of 401K, VariableDeclaration `!` 0.02%
@@ -363,7 +365,7 @@ function header() {
     w();
     w("use crate::ast::*;");
     w("use crate::flow::*;");
-    w("use crate::identifier::Identifier;");
+    w("use crate::identifier::{Identifier, IdentifierRef};");
     w("use crate::kind::Kind;");
     w("use crate::nodeflags::NodeFlags;");
     w("use crate::symbol::{Symbol, SymbolTable};");
@@ -395,7 +397,7 @@ function genGetters(l: Layout) {
         const fnName = f.rust;
         w(`    #[inline]`);
         w(`    pub fn ${fnName}(&self) -> ${f.ty} {`);
-        if (f.rare) w(`        rare_tail(self).and_then(|r| r.${f.rust})`);
+        if (f.rare) w(`        self.rare.and_then(|r| r.${f.rust})`);
         else w(`        self.${f.path}${f.cell ? ".get()" : isPackedStr(f) ? ".as_str()" : ""}`);
         w(`    }`);
         if (f.cell) {
@@ -417,27 +419,25 @@ function genStruct(node: NodeType) {
         w();
         return;
     }
+    const rare = l.fields.filter(f => f.rare);
     w(`pub struct ${node.name} {`);
     for (const e of l.embeds) w(`    pub ${snake(e)}: ${e},`);
     for (const f of l.fields) if (!f.rare) w(`    pub ${f.rust}: ${fieldDecl(f)},`);
+    if (rare.length > 0) w(`    pub rare: Option<P<${node.name}Rare>>,`);
     w("}");
     w();
-    const rare = l.fields.filter(f => f.rare);
     if (rare.length > 0) {
-        w(`/// The rare tail of \`${node.name}\` (\`NodeAllocRare\`): allocated only when one of these is set.`);
+        w(`/// The rare tail of \`${node.name}\`: allocated only when one of these is set.`);
         w(`pub struct ${node.name}Rare {`);
         for (const f of rare) w(`    pub ${f.rust}: ${fieldDecl(f)},`);
-        w("}");
-        w();
-        w(`impl NodeRareTail for ${node.name} {`);
-        w(`    type Rare = ${node.name}Rare;`);
         w("}");
         w();
     }
     genGetters(l);
 }
 
-// Builds the struct literal for a layout, pulling values from factory params by Go field name.
+// Builds the struct literal for a layout, pulling values from factory params by Go field name. A node layout with
+// rare fields gets its `rare` field: the tail allocated when one of them is set (`NodeFactory::alloc_rare`).
 function structLiteral(l: Layout, values: Map<string, string>, indent: string): string {
     if (isEmptyLayout(l)) return l.name;
     const lines: string[] = [`${l.name} {`];
@@ -449,6 +449,8 @@ function structLiteral(l: Layout, values: Map<string, string>, indent: string): 
         const v = values.get(f.name) ?? defaultValue(f.ty);
         lines.push(`${indent}    ${f.rust}: ${f.cell ? `OwnedCell::new(${v})` : isPackedStr(f) ? `PackedStr::new(${v})` : v},`);
     }
+    const rare = rareLiteral(l, values, indent + "    ");
+    if (rare) lines.push(`${indent}    rare: if ${rare.cond} {\n${indent}        Some(self.alloc_rare(${rare.lit}))\n${indent}    } else {\n${indent}        None\n${indent}    },`);
     lines.push(`${indent}}`);
     return lines.join("\n");
 }
@@ -492,17 +494,14 @@ function genNewFactory(node: NodeType) {
         }
         if (hasTextContent(node)) w(`        self.text_count.set(self.text_count.get() + 1);`);
         const kindArg = kindMember ? "kind" : `Kind::${kindName}`;
-        const rare = rareLiteral(l, values, "            ");
         const newNode = isEmptyLayout(l)
             ? `self.new_empty_node(${kindArg}, NodeDataTag::${node.name})`
-            : rare
-            ? `if ${rare.cond} {\n            self.new_node_with_rare(${kindArg}, ${structLiteral(l, values, "            ")}, ${rare.lit})\n        } else {\n            self.new_node(${kindArg}, ${structLiteral(l, values, "            ")})\n        }`
             : `self.new_node(${kindArg}, ${structLiteral(l, values, "        ")})`;
         if (flagsMembers.length > 0) {
             w(`        let node = ${newNode};`);
             for (const f of flagsMembers) {
-                if (f.m.bitmask) w(`        node.flags.set(node.flags.get() | (${f.name} & ${flagConst(f.m.bitmask)}));`);
-                else w(`        node.flags.set(${f.name});`);
+                if (f.m.bitmask) w(`        node.set_flags(node.flags() | (${f.name} & ${flagConst(f.m.bitmask)}));`);
+                else w(`        node.set_flags(${f.name});`);
             }
             w(`        node`);
         }
@@ -525,7 +524,7 @@ function diffExpr(ty: string, a: string, b: string): string {
 // Value of a factory member read back from existing data (`recv` = data struct, `nodeVar` = the Node).
 function memberValue(l: Layout, m: MemberInfo, recv: string, nodeVar: string): string {
     if (m.isKindParam()) return `${nodeVar}.kind()`;
-    if (isNodeFlagsMember(m)) return `${nodeVar}.flags.get()`;
+    if (isNodeFlagsMember(m)) return `${nodeVar}.flags()`;
     return `${recv}.${findFlat(l, m.name).rust}()`;
 }
 
@@ -697,7 +696,7 @@ const EXTRA_DATA = ["FlowSwitchClauseData", "FlowReduceLabelData"];
 function genNodeDataEnum() {
     w("// ── NodeData ──────────────────────────────────────────────────────────────");
     w();
-    w("/// The node's data struct, as returned by `Node::data()` (the data itself lives right after the header).");
+    w("/// The node's data struct, as returned by `Node::data()` (the data itself lives in the arena, pointed to by the node's data column).");
     w("#[derive(Clone, Copy)]");
     w("pub enum NodeData {");
     for (const n of nodes) {
@@ -707,7 +706,7 @@ function genNodeDataEnum() {
     for (const e of EXTRA_DATA) w(`    ${e}(&'static ${e}),`);
     w("}");
     w();
-    w("/// Which data struct follows a node's header (one variant per `NodeData` variant).");
+    w("/// Which data struct a node's data column points to (one variant per `NodeData` variant).");
     w("#[repr(u8)]");
     w("#[derive(Clone, Copy, PartialEq, Eq, Debug)]");
     w("pub(crate) enum NodeDataTag {");
@@ -753,12 +752,14 @@ function genNodeImpl() {
     for (const n of nodes) {
         const fn = `as_${snake(n.name)}`;
         const empty = isEmptyLayout(layouts.get(n.name)!);
+        // Identifier: the text of a compact identifier needs the node's end, so the cast hands out the data with its node.
+        const ret = n.name === "Identifier" ? "IdentifierRef" : `&'static ${n.name}`;
         w(`    #[inline]`);
-        w(`    pub fn ${fn}(&self) -> &'static ${n.name} {`);
+        w(`    pub fn ${fn}(&self) -> ${ret} {`);
         w(`        if self.data_tag() != NodeDataTag::${n.name} {`);
         w(`            panic!("${fn} called on {:?}", self.kind());`);
         w(`        }`);
-        w(empty ? `        &${n.name}` : `        self.payload()`);
+        w(n.name === "Identifier" ? `        IdentifierRef::new(self.as_p(), self.payload())` : empty ? `        &${n.name}` : `        self.payload()`);
         w(`    }`);
     }
     for (const e of EXTRA_DATA) {
