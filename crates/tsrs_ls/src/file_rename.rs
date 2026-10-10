@@ -118,7 +118,7 @@ impl LanguageService {
     }
 
     // file_rename.go:109
-    fn update_tsconfig_files(&self, program: &'static Program, change_tracker: &mut change::Tracker, old_to_new: &pathUpdater, old_path: &str, new_path: &str) {
+    fn update_tsconfig_files(&self, program: &Program, change_tracker: &mut change::Tracker, old_to_new: &pathUpdater, old_path: &str, new_path: &str) {
         let command_line = program.command_line();
         let Some(config_file) = command_line.config_file else {
             return;
@@ -195,7 +195,7 @@ impl LanguageService {
     }
 
     // file_rename.go:221
-    fn update_imports_for_file_rename(&self, program: &'static Program, change_tracker: &mut change::Tracker, old_to_new: &pathUpdater) {
+    fn update_imports_for_file_rename(&self, program: &Program, change_tracker: &mut change::Tracker, old_to_new: &pathUpdater) {
         let all_files = program.get_source_files();
         let mut checker = program.get_type_checker(&Context::background());
         let module_specifier_preferences = self.user_preferences().module_specifier_preferences();
@@ -246,7 +246,7 @@ impl LanguageService {
     // We assume the source file did not move to a different program.
     fn get_updated_import_specifier(
         &self,
-        program: &'static Program,
+        program: &Program,
         checker: &mut Checker,
         source_file: P<SourceFile>, // old importing source file
         import_literal: P<Node>,
@@ -339,7 +339,7 @@ fn try_update_config_string(
 }
 
 // file_rename.go:310
-fn get_source_file_to_import(program: &'static Program, source_file: P<SourceFile>, import_literal: P<Node>, old_to_new: &pathUpdater) -> Option<toImport> {
+fn get_source_file_to_import(program: &Program, source_file: P<SourceFile>, import_literal: P<Node>, old_to_new: &pathUpdater) -> Option<toImport> {
     if let Some(resolved) = program.get_resolved_module_from_module_specifier(source_file, import_literal) {
         if !resolved.resolved_file_name.is_empty() {
             let old_file_name = resolved.resolved_file_name.to_string();
@@ -357,7 +357,7 @@ fn get_source_file_to_import(program: &'static Program, source_file: P<SourceFil
 // As a fall back for unresolved modules, we'll check every file affected by the rename to see if any of them would match
 // the import specifier, and if so, we'll obtain the updated specifier for that file.
 fn get_updated_import_specifier_from_moved_source_files(
-    program: &'static Program,
+    program: &Program,
     source_file: P<SourceFile>,
     import_literal: P<Node>,
     moved_files: &[movedFile],

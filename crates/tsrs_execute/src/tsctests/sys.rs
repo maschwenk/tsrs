@@ -6,7 +6,6 @@ use std::time::{Duration, Instant, SystemTime};
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_core::tspath::{self, ComparePathsOptions, Path};
-use tsrs_core::P;
 use tsrs_vfs::iovfs::IoVFS;
 use tsrs_vfs::vfstest::MapFS;
 use tsrs_vfs::{Entries, FileInfo, FileMode, FS};
@@ -195,7 +194,7 @@ impl TestSys {
         &self.fs.fs
     }
 
-    fn write_header_to_baseline(&self, builder: &mut String, program: P<tsrs_incremental::Program>) {
+    fn write_header_to_baseline(&self, builder: &mut String, program: &tsrs_incremental::Program) {
         if !builder.is_empty() {
             builder.push('\n');
         }
@@ -553,9 +552,9 @@ impl CommandLineTesting for TestSys {
     }
 
     // sys.go OnProgram
-    fn on_program(&self, program: P<tsrs_incremental::Program>) {
+    fn on_program(&self, program: std::sync::Arc<tsrs_incremental::Program>) {
         let mut b = self.program_baselines.lock().unwrap();
-        self.write_header_to_baseline(&mut b, program);
+        self.write_header_to_baseline(&mut b, &program);
 
         let p = program.get_program();
         b.push_str("SemanticDiagnostics::\n");
@@ -601,7 +600,7 @@ impl CommandLineTesting for TestSys {
         file_not_in_program_with_include_reason.sort();
         if !files_without_include_reason.is_empty() || !file_not_in_program_with_include_reason.is_empty() {
             let mut b = self.program_include_baselines.lock().unwrap();
-            self.write_header_to_baseline(&mut b, program);
+            self.write_header_to_baseline(&mut b, &program);
             b.push_str("!!! Expected all files to have include reasons\nfilesWithoutIncludeReason::\n");
             for file in &files_without_include_reason {
                 b.push_str("  ");

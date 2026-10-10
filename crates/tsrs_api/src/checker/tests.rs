@@ -103,7 +103,7 @@ impl TestHost {
         TestHost { snapshot_host, snapshot, registry: Arc::new(CheckerRegistry::new()), handle, project: id.0, clones: Default::default() }
     }
 
-    fn program(&self) -> &'static Program {
+    fn program(&self) -> std::sync::Arc<Program> {
         self.snapshot.project_collection.get_project(&tsrs_project::ID(self.project.clone())).unwrap().get_program().unwrap()
     }
 
@@ -199,7 +199,7 @@ impl CheckerHost for TestHost {
         Ok(format!("{}.{}.{}", idx + 1, node.kind() as i16, file.path().as_str()))
     }
 
-    fn resolve_node_handle(&self, program: &'static Program, handle: &str) -> CheckerResult<P<Node>> {
+    fn resolve_node_handle(&self, program: &Program, handle: &str) -> CheckerResult<P<Node>> {
         let mut parts = handle.splitn(3, '.');
         let (Some(idx), Some(_kind), Some(path)) = (parts.next(), parts.next(), parts.next()) else {
             return Err(CheckerError::client(format!("invalid node handle {handle:?}")));

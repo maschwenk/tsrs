@@ -167,7 +167,7 @@ fn get_symbol_of_call_hierarchy_declaration(c: &mut Checker, node: P<Node>) -> O
 
 // Gets the text and range for the name of a call hierarchy declaration.
 // callhierarchy.go:161
-fn get_call_hierarchy_item_name(program: &'static Program, node: P<Node>) -> (String, i32, i32) {
+fn get_call_hierarchy_item_name(program: &Program, node: P<Node>) -> (String, i32, i32) {
     if ast::is_source_file(node) {
         let source_file = node.as_source_file();
         return (source_file.file_name().to_string(), 0, 0);
@@ -223,7 +223,7 @@ fn get_call_hierarchy_item_name(program: &'static Program, node: P<Node>) -> (St
 }
 
 // callhierarchy.go:221
-fn get_text_of_call_hierarchy_name(program: &'static Program, source_node: P<Node>, name: P<Node>, print_node: P<Node>) -> String {
+fn get_text_of_call_hierarchy_name(program: &Program, source_node: P<Node>, name: P<Node>, print_node: P<Node>) -> String {
     if ast::is_identifier(name) || ast::is_string_or_numeric_literal_like(name) {
         return name.text().to_string();
     }
@@ -256,7 +256,7 @@ fn get_text_of_call_hierarchy_name(program: &'static Program, source_node: P<Nod
 }
 
 // callhierarchy.go:250
-fn get_call_hierarchy_item_container_name(program: &'static Program, node: P<Node>) -> String {
+fn get_call_hierarchy_item_container_name(program: &Program, node: P<Node>) -> String {
     if is_assigned_expression(Some(node)) {
         let parent = node.parent().unwrap();
         let parent_parent = parent.parent().unwrap();
@@ -423,7 +423,7 @@ fn find_implementation_or_all_initial_declarations(c: &mut Checker, node: P<Node
 
 // Resolves the call hierarchy declaration for a node.
 // callhierarchy.go:410
-pub(crate) fn resolve_call_hierarchy_declaration(program: &'static Program, location: P<Node>) -> Option<CallHierarchyDeclarations> {
+pub(crate) fn resolve_call_hierarchy_declaration(program: &Program, location: P<Node>) -> Option<CallHierarchyDeclarations> {
     // A call hierarchy item must refer to either a SourceFile, Module Declaration, Class Static Block, or something intrinsically callable that has a name:
     // - Class Declarations
     // - Class Expressions (with a name)
@@ -516,7 +516,7 @@ pub(crate) fn resolve_call_hierarchy_declaration(program: &'static Program, loca
 impl LanguageService {
     // Creates a `CallHierarchyItem` for a call hierarchy declaration.
     // callhierarchy.go:501
-    fn create_call_hierarchy_item(&self, program: &'static Program, node: P<Node>) -> Option<lsproto::CallHierarchyItem> {
+    fn create_call_hierarchy_item(&self, program: &Program, node: P<Node>) -> Option<lsproto::CallHierarchyItem> {
         let source_file = ast::get_source_file_of_node(node).unwrap();
         let (name_text, name_pos, name_end) = get_call_hierarchy_item_name(program, node);
         let container_name = get_call_hierarchy_item_container_name(program, node);
@@ -588,7 +588,7 @@ fn get_call_site_group_key(site: &callSite) -> NodeId {
 
 impl LanguageService {
     // callhierarchy.go:572
-    fn convert_call_site_group_to_incoming_call(&self, program: &'static Program, entries: &[callSite]) -> Option<lsproto::CallHierarchyIncomingCall> {
+    fn convert_call_site_group_to_incoming_call(&self, program: &Program, entries: &[callSite]) -> Option<lsproto::CallHierarchyIncomingCall> {
         let mut from_ranges: Vec<lsproto::Range> = Vec::with_capacity(entries.len());
         for entry in entries {
             let source_file = entry.source_file.as_source_file_p();
@@ -653,7 +653,7 @@ impl LanguageService {
     fn get_incoming_calls(
         &self,
         ctx: &Context,
-        _program: &'static Program,
+        _program: &Program,
         declaration: P<Node>,
         orchestrator: Option<&dyn CrossProjectOrchestrator>,
     ) -> Result<lsproto::CallHierarchyIncomingCallsResponse, lsproto::Error> {
@@ -745,12 +745,12 @@ impl LanguageService {
 }
 
 // callhierarchy.go:711
-struct callSiteCollector {
-    program: &'static Program,
+struct callSiteCollector<'a> {
+    program: &'a Program,
     call_sites: Vec<callSite>,
 }
 
-impl callSiteCollector {
+impl callSiteCollector<'_> {
     // callhierarchy.go:716
     fn record_call_site(&mut self, node: P<Node>) {
         let target: Option<P<Node>> = if ast::is_tagged_template_expression(node) {
@@ -897,7 +897,7 @@ impl callSiteCollector {
 }
 
 // callhierarchy.go:869
-fn collect_call_sites(program: &'static Program, c: &mut Checker, node: P<Node>) -> Vec<callSite> {
+fn collect_call_sites(program: &Program, c: &mut Checker, node: P<Node>) -> Vec<callSite> {
     let mut collector = callSiteCollector { program, call_sites: Vec::new() };
 
     match node.kind() {
@@ -975,7 +975,7 @@ fn collect_call_sites(program: &'static Program, c: &mut Checker, node: P<Node>)
 
 impl LanguageService {
     // callhierarchy.go:942
-    fn convert_call_site_group_to_outgoing_call(&self, program: &'static Program, entries: &[callSite]) -> Option<lsproto::CallHierarchyOutgoingCall> {
+    fn convert_call_site_group_to_outgoing_call(&self, program: &Program, entries: &[callSite]) -> Option<lsproto::CallHierarchyOutgoingCall> {
         let mut from_ranges: Vec<lsproto::Range> = Vec::with_capacity(entries.len());
         for entry in entries {
             let source_file = entry.source_file.as_source_file_p();
@@ -998,7 +998,7 @@ impl LanguageService {
     // Gets the call sites that call out of the provided call hierarchy declaration.
     // Go groups the call sites in a map keyed by node id (random iteration order); the port keeps first-seen order.
     // callhierarchy.go:964
-    fn get_outgoing_calls(&self, program: &'static Program, declaration: P<Node>) -> Vec<lsproto::CallHierarchyOutgoingCall> {
+    fn get_outgoing_calls(&self, program: &Program, declaration: P<Node>) -> Vec<lsproto::CallHierarchyOutgoingCall> {
         if declaration.flags().intersects(NodeFlags::Ambient) || ast::is_method_signature_declaration(declaration) {
             return Vec::new();
         }
@@ -1138,7 +1138,7 @@ impl LanguageService {
     }
 
     // callhierarchy.go:1105
-    fn call_hierarchy_declarations(&self, file: P<SourceFile>, position: lsproto::Position, program: &'static Program, allow_source_file: bool) -> Vec<P<Node>> {
+    fn call_hierarchy_declarations(&self, file: P<SourceFile>, position: lsproto::Position, program: &Program, allow_source_file: bool) -> Vec<P<Node>> {
         let positions = self.converters.from_lsp_position_for_source_file(file, position, Feature::CallHierarchy);
         let mut declarations: Vec<P<Node>> = Vec::new();
         let mut seen: FxHashSet<P<Node>> = FxHashSet::default();

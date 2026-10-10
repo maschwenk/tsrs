@@ -79,7 +79,7 @@ struct importAdder {
 // Go keeps the checker in the adder; the view built from the same checker already holds it (`View::checker`).
 pub fn new_import_adder(
     ctx: &Context,
-    _program: &'static Program,
+    _program: &Program,
     _checker: &mut Checker,
     _file: P<SourceFile>,
     view: View,

@@ -45,7 +45,7 @@ pub(crate) struct taskResult {
     pub(crate) diagnostic_reporter: Option<DiagnosticReporter<'static>>,
     pub(crate) exit_status: ExitStatus,
     pub(crate) statistics: Option<Statistics>,
-    pub(crate) program: Option<P<tsrs_incremental::Program>>,
+    pub(crate) program: Option<std::sync::Arc<tsrs_incremental::Program>>,
     pub(crate) build_kind: buildKind,
     pub(crate) files_to_delete: Vec<String>,
 }
@@ -321,13 +321,13 @@ impl BuildTask {
         compile_times.parse_time = sys.now() - parse_start;
         let changes_compute_start = sys.now();
         let incremental_program = tsrs_incremental::new_program(
-            program,
+            Arc::clone(&program),
             old_program,
             Box::new(incrementalHost(host)),
             Some(std::time::Instant::now),
             orchestrator.opts.testing.is_some(),
         );
-        self.result.lock().unwrap().as_mut().unwrap().program = Some(incremental_program);
+        self.result.lock().unwrap().as_mut().unwrap().program = Some(Arc::clone(&incremental_program));
         compile_times.changes_compute_time = sys.now() - changes_compute_start;
 
         let this: &'static BuildTask = self;
@@ -343,12 +343,12 @@ impl BuildTask {
         let testing_m_times_cache = host.m_times.lock().unwrap().clone();
         let (result, statistics) = emit_and_report_statistics(&EmitInput {
             sys,
-            program,
+            program: &program,
             config: self.resolved(),
             report_diagnostic: &report_diagnostic,
             report_error_summary: &report_error_summary,
             compile_times,
-            incremental: Some(incremental_program),
+            incremental: Some(&incremental_program),
             writer: Some(&writer),
             write_file: Some(&write_file),
             testing: orchestrator.opts.testing,
@@ -1004,7 +1004,7 @@ impl BuildTask {
             match data.build_info.clone() {
                 Some(build_info) => {
                     let build_info = build_info.downcast::<BuildInfo>().unwrap();
-                    let has_changed_dts_file = self.result.lock().unwrap().as_ref().unwrap().program.unwrap().has_changed_dts_file();
+                    let has_changed_dts_file = self.result.lock().unwrap().as_ref().unwrap().program.as_ref().unwrap().has_changed_dts_file();
                     self.on_build_info_emit(orchestrator, file_name, build_info, has_changed_dts_file);
                 }
                 _ => {

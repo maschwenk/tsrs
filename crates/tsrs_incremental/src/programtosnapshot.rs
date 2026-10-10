@@ -15,9 +15,9 @@ use crate::snapshot::{
 };
 
 // programtosnapshot.go:16
-pub(crate) fn program_to_snapshot(program: &'static CompilerProgram, old_program: Option<P<Program>>, hash_with_text: bool) -> P<Snapshot> {
+pub(crate) fn program_to_snapshot(program: &CompilerProgram, old_program: Option<&Program>, hash_with_text: bool) -> P<Snapshot> {
     if let Some(old_program) = old_program {
-        if old_program.program.is_some_and(|p| std::ptr::eq(p, program)) {
+        if old_program.program.as_deref().is_some_and(|p| std::ptr::eq(p, program)) {
             return old_program.snapshot;
         }
     }
@@ -45,14 +45,14 @@ struct fileChange {
     emit_signature: Option<EmitSignature>,
 }
 
-struct toProgramSnapshot {
-    program: &'static CompilerProgram,
-    old_program: Option<P<Program>>,
+struct toProgramSnapshot<'a> {
+    program: &'a CompilerProgram,
+    old_program: Option<&'a Program>,
     snapshot: P<Snapshot>,
     global_file_removed: bool,
 }
 
-impl toProgramSnapshot {
+impl toProgramSnapshot<'_> {
     // programtosnapshot.go:50
     fn reuse_from_old_program(&mut self) {
         if let Some(old_program) = self.old_program {
@@ -422,7 +422,7 @@ fn checker_references_of(file: P<SourceFile>, checker: &mut Checker, ambient_mod
 // an unchanged file then allocates nothing (on the 38k-file codebase every file references the ~390 files declaring
 // ambient modules, ~15 M paths in all).
 fn referenced_files_of(
-    program: &'static CompilerProgram,
+    program: &CompilerProgram,
     file: P<SourceFile>,
     checker_references: checkerReferences,
     old: Option<&std::sync::Arc<RefSet>>,
@@ -524,7 +524,7 @@ fn references_equal(
 // stale program state (e.g., resolved module alternate results, package.json scope).
 // This function recomputes those chains using the current program's state.
 // programtosnapshot.go:339
-fn repopulate_diagnostics_of_file(diags: &DiagnosticsCache, p: &'static CompilerProgram, file: P<SourceFile>) -> DiagnosticsCache {
+fn repopulate_diagnostics_of_file(diags: &DiagnosticsCache, p: &CompilerProgram, file: P<SourceFile>) -> DiagnosticsCache {
     if let Some(diagnostics) = diags.diagnostics() {
         let Some(repopulated) = repopulate_diagnostics_list(&diagnostics, p, file) else {
             return Arc::clone(diags);
@@ -538,7 +538,7 @@ fn repopulate_diagnostics_of_file(diags: &DiagnosticsCache, p: &'static Compiler
 // repopulateDiagnosticsList repopulates diagnostic chains in a list of diagnostics.
 // Returns nil if no diagnostics needed repopulation (i.e., no changes were made).
 // programtosnapshot.go:353
-fn repopulate_diagnostics_list(diags: &[P<Diagnostic>], p: &'static CompilerProgram, file: P<SourceFile>) -> Option<Vec<P<Diagnostic>>> {
+fn repopulate_diagnostics_list(diags: &[P<Diagnostic>], p: &CompilerProgram, file: P<SourceFile>) -> Option<Vec<P<Diagnostic>>> {
     let mut changed = false;
     let mut result = Vec::with_capacity(diags.len());
     for &d in diags {
@@ -561,7 +561,7 @@ fn repopulate_diagnostics_list(diags: &[P<Diagnostic>], p: &'static CompilerProg
 // repopulateDiagnosticMessageChain repopulates chains that have repopulate info.
 // Returns nil if no changes were made.
 // programtosnapshot.go:375
-fn repopulate_diagnostic_message_chain(chain: &[P<Diagnostic>], p: &'static CompilerProgram, file: P<SourceFile>) -> Option<Vec<P<Diagnostic>>> {
+fn repopulate_diagnostic_message_chain(chain: &[P<Diagnostic>], p: &CompilerProgram, file: P<SourceFile>) -> Option<Vec<P<Diagnostic>>> {
     if chain.is_empty() {
         return None;
     }

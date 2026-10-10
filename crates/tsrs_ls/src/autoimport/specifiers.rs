@@ -25,7 +25,7 @@ impl View {
                         let specifier = modulespecifiers::process_entrypoint_ending(
                             entrypoint,
                             user_preferences,
-                            self.program,
+                            self.program.as_ref(),
                             &self.program.options(),
                             self.importing_file,
                             self.get_allowed_endings(),
@@ -55,7 +55,7 @@ impl View {
             self.importing_file,
             &export.module_file_name,
             &self.program.options(),
-            self.program,
+            self.program.as_ref(),
             user_preferences.clone(),
             ModuleSpecifierOptions::default(),
             true,

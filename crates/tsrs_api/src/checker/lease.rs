@@ -51,14 +51,15 @@ fn lock_gates() -> std::sync::MutexGuard<'static, Option<FxHashMap<usize, Arc<Ga
 pub(crate) struct ApiCheckerLease {
     key: usize,
     gate: Arc<Gate>,
+    _program: Arc<Program>,
 }
 
 const RESOURCE: &str = "the program's API checker";
 
-pub(crate) fn acquire(program: &'static Program) -> CheckerResult<ApiCheckerLease> {
-    let key = std::ptr::from_ref::<Program>(program) as usize;
+pub(crate) fn acquire(program: &Arc<Program>) -> CheckerResult<ApiCheckerLease> {
+    let key = Arc::as_ptr(program) as usize;
     let gate = Arc::clone(lock_gates().get_or_insert_with(FxHashMap::default).entry(key).or_default());
-    let lease = |gate: Arc<Gate>| ApiCheckerLease { key, gate };
+    let lease = |gate: Arc<Gate>| ApiCheckerLease { key, gate, _program: Arc::clone(program) };
     let result = (|| {
         let mut st = gate.state.lock().unwrap_or_else(|e| e.into_inner());
         // One contention state per acquisition (created on first contention, dropped when this
@@ -118,6 +119,6 @@ impl Drop for ApiCheckerLease {
 }
 
 #[cfg(test)]
-pub(crate) fn is_tracked(program: &'static Program) -> bool {
+pub(crate) fn is_tracked(program: &Program) -> bool {
     lock_gates().as_ref().is_some_and(|m| m.contains_key(&(program as *const Program as usize)))
 }

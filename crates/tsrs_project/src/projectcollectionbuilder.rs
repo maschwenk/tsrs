@@ -458,7 +458,7 @@ impl ProjectCollectionBuilder {
         let mut module_resolution_error: Option<String> = None;
         self.for_each_project(|entry| {
             let project = self.value_of(entry).value().unwrap();
-            if let Some(program) = project.program {
+            if let Some(program) = project.program.as_deref() {
                 module_resolution_error = program.module_resolution_error().map(|e| e.to_string());
             }
             module_resolution_error.is_none()
@@ -887,7 +887,7 @@ impl ProjectCollectionBuilder {
             let Some(child_config) = child_config else {
                 continue;
             };
-            wg.borrow_mut().push(projectTreeWork::Child(program, child_config));
+            wg.borrow_mut().push(projectTreeWork::Child(Arc::clone(&program), child_config));
         }
     }
 
@@ -1458,7 +1458,7 @@ impl ProjectCollectionBuilder {
         if !logger.is_nil() {
             logger.log("Deleting inferred project");
         }
-        if let Some(program) = project.program {
+        if let Some(program) = project.program.as_deref() {
             program.range_resolved_project_reference(|reference_path, _, _, _| {
                 self.config_file_registry_builder.release_config_for_project(reference_path, &project.id());
                 true
@@ -1593,11 +1593,7 @@ impl ProjectCollectionBuilder {
             value.locked(&mut |entry: &dyn Value<Project>| {
                 entry.change(&mut |project: &mut Project| {
                     let old_host = project.host.clone();
-                    let old_program = project.program;
-                    // Keeps the old program alive until `release_dropped_project_references` below has read it:
-                    // replacing `program_owner` drops the last reference to a program built earlier in the same
-                    // snapshot build, which frees it (and its shared data). Found with AddressSanitizer.
-                    let _old_program_owner = project.program_owner.clone();
+                    let old_program = project.program.clone();
                     let old_checker_pool = project.checker_pool.clone();
                     project.host = Some(new_compiler_host(&project.current_directory.clone(), project, self, logger.fork("CompilerHost")));
                     let result = project.create_program();
@@ -1617,9 +1613,8 @@ impl ProjectCollectionBuilder {
                     }
                     project.content_mapper_watch = project.content_mapper_watch.as_ref().map(|w| w.clone_with(watched_files.clone()));
                     project.content_mapper_watched_files = Some(Arc::new(content_mapper_watched_files));
-                    project.program = Some(result.program);
+                    project.program = Some(Arc::clone(&result.program));
                     project.checker_pool.clone_from(&result.checker_pool);
-                    project.program_owner = Some(Arc::clone(&result.owner));
                     project.program_update_kind = result.update_kind;
                     project.program_last_update = self.new_snapshot_id;
                     if result.update_kind == ProgramUpdateKind::Cloned {
@@ -1631,7 +1626,7 @@ impl ProjectCollectionBuilder {
                     }
                     project.dirty = false;
                     project.dirty_file_path = Path::default();
-                    self.release_dropped_project_references(old_program, Some(result.program), &project.id());
+                    self.release_dropped_project_references(old_program.as_deref(), Some(&result.program), &project.id());
                     if let Some(old_checker_pool) = &old_checker_pool {
                         old_checker_pool.discard();
                     }
@@ -1716,7 +1711,7 @@ impl ProjectCollectionBuilder {
         if !logger.is_nil() {
             logger.logf(format_args!("Deleting {} project: {}", value.kind.string(), value.id()));
         }
-        if let Some(program) = value.program {
+        if let Some(program) = value.program.as_deref() {
             program.range_resolved_project_reference(|reference_path, _, _, _| {
                 self.config_file_registry_builder.release_config_for_project(reference_path, &project_id);
                 true
@@ -1733,7 +1728,7 @@ impl ProjectCollectionBuilder {
     // that were present in oldProgram but are no longer referenced by newProgram. Creating
     // newProgram already re-acquires the config for every reference it still resolves, so
     // only the dropped references need to be released here.
-    fn release_dropped_project_references(&self, old_program: Option<&'static Program>, new_program: Option<&'static Program>, project_id: &ID) {
+    fn release_dropped_project_references(&self, old_program: Option<&Program>, new_program: Option<&Program>, project_id: &ID) {
         let Some(old_program) = old_program else {
             return;
         };
@@ -1773,7 +1768,7 @@ fn log_change_file_result(result: &changeFileResult, logger: &LogTree) {
 // A function queued on `DidRequestProjectTrees`' work group.
 enum projectTreeWork {
     Project(ConfiguredProjectID),
-    Child(&'static Program, P<ParsedCommandLine>),
+    Child(Arc<Program>, P<ParsedCommandLine>),
 }
 
 #[derive(Clone)]

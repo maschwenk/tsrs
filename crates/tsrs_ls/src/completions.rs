@@ -79,7 +79,7 @@ impl LanguageService {
     // an import into synthesized virtual code with no counterpart in the original file). Surviving auto-imports carry
     // their additional edits directly so the client applies correct original-text positions on commit.
     // completions.go:78
-    fn filter_content_mapped_auto_imports(&self, ctx: &Context, program: &'static tsrs_compiler::Program, file: P<SourceFile>, list: Option<&mut lsproto::CompletionList>) {
+    fn filter_content_mapped_auto_imports(&self, ctx: &Context, program: &tsrs_compiler::Program, file: P<SourceFile>, list: Option<&mut lsproto::CompletionList>) {
         let Some(list) = list else {
             return;
         };

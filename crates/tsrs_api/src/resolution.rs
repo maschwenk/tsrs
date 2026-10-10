@@ -43,7 +43,7 @@ fn type_ref_response(r: Option<tsrs_core::P<ResolvedTypeReferenceDirective>>) ->
 }
 
 impl Session {
-    fn program_for(&self, p: Params) -> ApiResult<(std::sync::Arc<crate::session::SnapshotData>, &'static tsrs_compiler::Program)> {
+    fn program_for(&self, p: Params) -> ApiResult<(std::sync::Arc<crate::session::SnapshotData>, std::sync::Arc<tsrs_compiler::Program>)> {
         let sd = self.snapshot_data(p.u64("snapshot")?)?;
         let program = sd.get_program(&ProjectID(p.str("project")?.to_string()))?;
         Ok((sd, program))
@@ -51,8 +51,8 @@ impl Session {
 
     pub(crate) fn handle_get_mode_for_usage_location(&self, p: Params) -> ApiResult<Value> {
         let (_sd, program) = self.program_for(p)?;
-        let file = resolve_source_file(program, &p.document("file")?)?;
-        let usage = self.resolve_node_handle(program, p.str("usage")?)?;
+        let file = resolve_source_file(&program, &p.document("file")?)?;
+        let usage = self.resolve_node_handle(&program, p.str("usage")?)?;
         if !tsrs_ast::is_string_literal_like(usage) {
             return Err(ApiError::client("usage must be a StringLiteralLike node"));
         }
@@ -61,7 +61,7 @@ impl Session {
 
     pub(crate) fn handle_get_mode_for_resolution_at_index(&self, p: Params) -> ApiResult<Value> {
         let (_sd, program) = self.program_for(p)?;
-        let file = resolve_source_file(program, &p.document("file")?)?;
+        let file = resolve_source_file(&program, &p.document("file")?)?;
         let index = match p.get("index") {
             Value::Number(n) if n.fract() == 0.0 => *n as i64,
             Value::Null => 0,
@@ -76,20 +76,20 @@ impl Session {
 
     pub(crate) fn handle_get_resolved_module(&self, p: Params) -> ApiResult<Value> {
         let (_sd, program) = self.program_for(p)?;
-        let file = resolve_source_file(program, &p.document("file")?)?;
+        let file = resolve_source_file(&program, &p.document("file")?)?;
         let mode = mode_param(p, "mode")?;
         Ok(program.get_resolved_module(file, p.str("moduleName")?, mode).map(|r| resolved_module_response(&r)).unwrap_or(Value::Null))
     }
 
     pub(crate) fn handle_get_resolved_module_from_module_specifier(&self, p: Params) -> ApiResult<Value> {
         let (_sd, program) = self.program_for(p)?;
-        let node = self.resolve_node_handle(program, p.str("moduleSpecifier")?)?;
+        let node = self.resolve_node_handle(&program, p.str("moduleSpecifier")?)?;
         if !tsrs_ast::is_string_literal_like(node) {
             return Err(ApiError::client("moduleSpecifier must be a StringLiteralLike node"));
         }
         let mut file = tsrs_ast::get_source_file_of_node(node);
         if p.has("sourceFile") {
-            file = Some(resolve_source_file(program, &p.document("sourceFile")?)?);
+            file = Some(resolve_source_file(&program, &p.document("sourceFile")?)?);
         }
         let file = file.ok_or_else(|| ApiError::client("moduleSpecifier must have a SourceFile ancestor or sourceFile must be provided"))?;
         let mode = program.get_mode_for_usage_location(file, node);
@@ -98,14 +98,14 @@ impl Session {
 
     pub(crate) fn handle_get_resolved_type_reference_directive(&self, p: Params) -> ApiResult<Value> {
         let (_sd, program) = self.program_for(p)?;
-        let file = resolve_source_file(program, &p.document("file")?)?;
+        let file = resolve_source_file(&program, &p.document("file")?)?;
         let mode = mode_param(p, "mode")?;
         Ok(type_ref_response(program.get_resolved_type_reference_directive(file, p.str("typeDirectiveName")?, mode)))
     }
 
     pub(crate) fn handle_get_resolved_type_reference_directive_from_reference(&self, p: Params) -> ApiResult<Value> {
         let (_sd, program) = self.program_for(p)?;
-        let file = resolve_source_file(program, &p.document("sourceFile")?)?;
+        let file = resolve_source_file(&program, &p.document("sourceFile")?)?;
         let mut mode = mode_param(p, "resolutionMode")?;
         if mode == ModuleKind::None {
             mode = program.get_default_resolution_mode_for_file(file);

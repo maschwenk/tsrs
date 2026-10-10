@@ -216,7 +216,7 @@ fn key_of(key: &str) -> Key {
 
 impl buildInfoDiagnosticWithFileName {
     // snapshot.go:150
-    pub(crate) fn to_diagnostic(&self, p: &'static CompilerProgram, file: Option<P<SourceFile>>) -> P<Diagnostic> {
+    pub(crate) fn to_diagnostic(&self, p: &CompilerProgram, file: Option<P<SourceFile>>) -> P<Diagnostic> {
         let file_for_diagnostic = if !self.file.is_empty() {
             p.get_source_file_by_path(&self.file)
         } else if !self.no_file {
@@ -251,7 +251,7 @@ impl buildInfoDiagnosticWithFileName {
     }
 
     // snapshot.go:203
-    pub(crate) fn to_diagnostic_without_repopulate(&self, p: &'static CompilerProgram, file: Option<P<SourceFile>>) -> P<Diagnostic> {
+    pub(crate) fn to_diagnostic_without_repopulate(&self, p: &CompilerProgram, file: Option<P<SourceFile>>) -> P<Diagnostic> {
         let message_chain: Vec<P<Diagnostic>> = self.message_chain.iter().map(|msg| msg.to_diagnostic(p, file)).collect();
         let related_information: Vec<P<Diagnostic>> = self.related_information.iter().map(|info| info.to_diagnostic(p, file)).collect();
         ast::new_diagnostic_from_serialized(
@@ -273,7 +273,7 @@ impl buildInfoDiagnosticWithFileName {
 // repopulateDiagnosticChain recomputes a diagnostic chain entry that depends on
 // program state which may have changed between incremental builds.
 // snapshot.go:189
-pub(crate) fn repopulate_diagnostic_chain(b: &buildInfoDiagnosticWithFileName, p: &'static CompilerProgram, file: Option<P<SourceFile>>) -> P<Diagnostic> {
+pub(crate) fn repopulate_diagnostic_chain(b: &buildInfoDiagnosticWithFileName, p: &CompilerProgram, file: Option<P<SourceFile>>) -> P<Diagnostic> {
     let info = b.repopulate_info.as_ref().unwrap();
     match info.kind {
         RepopulateDiagnosticKind::ModeMismatch => repopulate_mode_mismatch_chain(b, p, file),
@@ -282,7 +282,7 @@ pub(crate) fn repopulate_diagnostic_chain(b: &buildInfoDiagnosticWithFileName, p
 }
 
 // snapshot.go:225
-fn repopulate_mode_mismatch_chain(b: &buildInfoDiagnosticWithFileName, p: &'static CompilerProgram, file: Option<P<SourceFile>>) -> P<Diagnostic> {
+fn repopulate_mode_mismatch_chain(b: &buildInfoDiagnosticWithFileName, p: &CompilerProgram, file: Option<P<SourceFile>>) -> P<Diagnostic> {
     let Some(file) = file else {
         return b.to_diagnostic_without_repopulate(p, file);
     };
@@ -309,7 +309,7 @@ fn repopulate_mode_mismatch_chain(b: &buildInfoDiagnosticWithFileName, p: &'stat
 // snapshot.go:252
 fn repopulate_module_not_found_chain(
     b: &buildInfoDiagnosticWithFileName,
-    p: &'static CompilerProgram,
+    p: &CompilerProgram,
     file: Option<P<SourceFile>>,
     info: &RepopulateDiagnosticInfo,
 ) -> P<Diagnostic> {
@@ -343,7 +343,7 @@ fn repopulate_module_not_found_chain(
 
 impl DiagnosticsOrBuildInfoDiagnosticsWithFileName {
     // snapshot.go:285
-    pub(crate) fn get_diagnostics(&self, p: &'static CompilerProgram, file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
+    pub(crate) fn get_diagnostics(&self, p: &CompilerProgram, file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
         if let Some(diagnostics) = self.diagnostics.lock().unwrap().as_ref() {
             return diagnostics.clone();
         }
@@ -428,7 +428,7 @@ impl Snapshot {
     // snapshot.go:365
     pub(crate) fn get_all_files_excluding_default_library_file(
         &self,
-        program: &'static CompilerProgram,
+        program: &CompilerProgram,
         first_source_file: Option<P<SourceFile>>,
     ) -> &[P<SourceFile>] {
         self.all_files_excluding_default_library_file.get_or_init(|| {

@@ -55,7 +55,7 @@ pub fn run(args: &DumpArgs) {
     let program = new_program(opts);
     let diags = get_diagnostics_of_any_program(
         &Context::default(),
-        program,
+        &program,
         None,
         false,
         &mut |ctx, file| program.get_bind_diagnostics(ctx, file),
@@ -91,7 +91,7 @@ pub fn run(args: &DumpArgs) {
             std::process::exit(2)
         }
     };
-    let mut walker = TypeWriterWalker::new(program, !diags.is_empty());
+    let mut walker = TypeWriterWalker::new(&program, !diags.is_empty());
     std::fs::create_dir_all(&args.out).unwrap();
     for &is_symbol in kinds {
         let kind = if is_symbol { "symbols" } else { "types" };

@@ -624,7 +624,7 @@ struct DeclarationInfo {
 // symbols.go:546
 pub fn provide_workspace_symbols(
     ctx: &Context,
-    programs: &[&'static Program],
+    programs: &[std::sync::Arc<Program>],
     converters: &Converters,
     preferences: &UserPreferences,
     query: &str,

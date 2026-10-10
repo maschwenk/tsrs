@@ -9,6 +9,6 @@ pub use tsrs_compiler::{
 };
 
 // Go `(*compiler.Program).Emit` (program.go:1875).
-pub fn compiler_program_emit(program: &'static CompilerProgram, ctx: &Context, options: &EmitOptions) -> Option<EmitResult> {
+pub fn compiler_program_emit(program: &CompilerProgram, ctx: &Context, options: &EmitOptions) -> Option<EmitResult> {
     Some(program.emit(ctx, options))
 }

@@ -140,7 +140,7 @@ fn run(s: &Value) -> Value {
                 file,
                 &to,
                 &options,
-                program,
+                program.as_ref(),
                 prefs,
                 modulespecifiers::ModuleSpecifierOptions { override_import_mode },
                 false,

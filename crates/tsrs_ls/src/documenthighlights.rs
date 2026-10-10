@@ -72,7 +72,7 @@ impl LanguageService {
         ctx: &Context,
         document_uri: &lsproto::DocumentUri,
         position: i32,
-        program: &'static Program,
+        program: &Program,
         source_file: P<SourceFile>,
         files_to_search: &[lsproto::DocumentUri],
     ) -> lsproto::MultiDocumentHighlightsOrNull {
@@ -173,7 +173,7 @@ impl LanguageService {
         ctx: &Context,
         position: i32,
         node: P<Node>,
-        program: &'static Program,
+        program: &Program,
         source_files: &[P<SourceFile>],
     ) -> Vec<lsproto::MultiDocumentHighlight> {
         let options = RefOptions { use_: ReferenceUse::None, ..Default::default() };

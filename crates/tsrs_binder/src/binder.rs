@@ -103,6 +103,8 @@ pub fn bind_source_file(file: P<SourceFile>) {
 }
 
 fn bind_source_file_worker(file: P<SourceFile>) {
+    // Bound symbols and flow nodes belong to the shared file, which can outlive the checker initiating binding.
+    let _owner = tsrs_core::arena::enter_owner(file.addr());
     file.bind_once(|| {
         let mut b = Binder::new(file);
         b.bind(file.as_node());

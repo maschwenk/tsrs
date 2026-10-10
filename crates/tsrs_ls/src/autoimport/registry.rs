@@ -623,8 +623,8 @@ pub struct RegistryChange {
 // registry.go:514 (Go embeds module.ResolutionHost and repeats its FS(); `ResolutionHost::fs` covers both)
 pub trait RegistryCloneHost: ResolutionHost {
     fn fs_owned(&self) -> Arc<dyn tsrs_vfs::FS>;
-    fn get_default_project(&self, path: &Path) -> (Option<ProjectID>, Option<&'static Program>);
-    fn get_program_for_project(&self, project_id: &ProjectID) -> Option<&'static Program>;
+    fn get_default_project(&self, path: &Path) -> (Option<ProjectID>, Option<std::sync::Arc<Program>>);
+    fn get_program_for_project(&self, project_id: &ProjectID) -> Option<std::sync::Arc<Program>>;
     fn get_package_json(&self, file_name: &str) -> P<InfoCacheEntry>;
     fn get_source_file(&self, file_name: &str, path: &Path) -> Option<P<SourceFile>>;
     fn dispose(&self);
@@ -998,8 +998,8 @@ impl registryBuilder<'_> {
         self.projects.range(|entry| {
             let program = host.get_program_for_project(&entry.key());
             if let Some(program) = program {
-                all_resolved_package_names.insert(entry.key(), Some(get_resolved_package_names(ctx, program)));
-                add_project_reference_output_mappings(program, &mut project_reference_outputs);
+                all_resolved_package_names.insert(entry.key(), Some(get_resolved_package_names(ctx, &program)));
+                add_project_reference_output_mappings(&program, &mut project_reference_outputs);
                 #[expect(clippy::iter_over_hash_type, reason = "pure set inserts; Go ranges the set too")]
                 for name in program.deep_import_package_names().keys() {
                     all_deep_import_packages.add(name.clone());
@@ -1223,7 +1223,7 @@ impl registryBuilder<'_> {
             let mut should_rebuild = project_value.state.has_dirty_file_besides(&change.requested_file)
                 || !project_value.state.build_preferences.equal(&bucket_build_preferences_from_user_preferences(&self.user_preferences));
             if !should_rebuild && project_value.state.new_program_structure > newProgramStructure::False {
-                if !set_equals(&project_value.resolved_package_names, &resolved_package_names) || has_new_non_node_modules_files(program, &project_value) {
+                if !set_equals(&project_value.resolved_package_names, &resolved_package_names) || has_new_non_node_modules_files(&program, &project_value) {
                     should_rebuild = true;
                 } else {
                     project.change(|b| b.state.new_program_structure = newProgramStructure::False);
@@ -1333,12 +1333,12 @@ impl registryBuilder<'_> {
 }
 
 // registry.go:1131
-fn has_new_non_node_modules_files(program: &'static Program, bucket: &RegistryBucket) -> bool {
+fn has_new_non_node_modules_files(program: &Program, bucket: &RegistryBucket) -> bool {
     if bucket.state.new_program_structure != newProgramStructure::DifferentFileNames {
         return false;
     }
     for &file in program.get_source_files() {
-        if file.is_content_mapper_supplemental() || file.file_name().contains("/node_modules/") || is_ignored_file(program, file) {
+        if file.is_content_mapper_supplemental() || file.file_name().contains("/node_modules/") || is_ignored_file(&program, file) {
             continue;
         }
         if !bucket.paths.contains_key(file.path()) {
@@ -1349,7 +1349,7 @@ fn has_new_non_node_modules_files(program: &'static Program, bucket: &RegistryBu
 }
 
 // registry.go:1146
-fn is_ignored_file(program: &'static Program, file: P<SourceFile>) -> bool {
+fn is_ignored_file(program: &Program, file: P<SourceFile>) -> bool {
     program.is_source_file_default_library(file.path()) || program.is_global_typings_file(file.file_name())
 }
 
@@ -1496,7 +1496,7 @@ impl registryBuilder<'_> {
         let mut combined_used_checker = 0;
 
         for &file in program.get_source_files() {
-            if file.is_content_mapper_supplemental() || is_ignored_file(program, file) {
+            if file.is_content_mapper_supplemental() || is_ignored_file(&program, file) {
                 continue;
             }
             if file_exclude_patterns.as_ref().is_some_and(|p| p.match_string(file.file_name())) {

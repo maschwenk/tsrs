@@ -25,7 +25,7 @@ pub struct View {
     pub(crate) registry: Option<Arc<Registry>>,
     pub(crate) importing_file: P<SourceFile>,
     pub(crate) importing_file_path: Path,
-    pub(crate) program: &'static Program,
+    pub(crate) program: Arc<Program>,
     // Go shares the `*checker.Checker` between the caller, the view and the import adder built from it. The caller
     // holds the checker's pool lease for the whole request and keeps using it while the view is alive, so the view
     // keeps the checker's address (see `checker()`).
@@ -45,7 +45,7 @@ pub fn new_view(
     registry: Option<Arc<Registry>>,
     importing_file: P<SourceFile>,
     project_id: ProjectID,
-    program: &'static Program,
+    program: Arc<Program>,
     type_checker: &mut Checker,
     preferences: modulespecifiers::UserPreferences,
 ) -> View {
@@ -53,6 +53,8 @@ pub fn new_view(
     if let Some(canonical) = importing_file.canonical_source_file() {
         importing_file_path = canonical.path().clone();
     }
+    let conditions = new_set_from_items(tsrs_module::get_conditions(&program.options(), program.get_default_resolution_mode_for_file(importing_file)));
+    let should_use_uri_style_node_core_modules = lsutil::should_use_uri_style_node_core_modules(importing_file, &program);
     View {
         registry,
         importing_file,
@@ -61,8 +63,8 @@ pub fn new_view(
         checker: NonNull::from(type_checker),
         project_id,
         preferences,
-        conditions: new_set_from_items(tsrs_module::get_conditions(&program.options(), program.get_default_resolution_mode_for_file(importing_file))),
-        should_use_uri_style_node_core_modules: lsutil::should_use_uri_style_node_core_modules(importing_file, program),
+        conditions,
+        should_use_uri_style_node_core_modules,
         allowed_endings: OnceCell::new(),
         existing_imports: OnceCell::new(),
         should_use_require_for_fixes: OnceCell::new(),
@@ -88,7 +90,7 @@ impl View {
     pub(crate) fn get_allowed_endings(&self) -> &[ModuleSpecifierEnding] {
         self.allowed_endings.get_or_init(|| {
             let resolution_mode = self.program.get_default_resolution_mode_for_file(self.importing_file);
-            modulespecifiers::get_allowed_endings_in_preferred_order(&self.preferences, self.program, &self.program.options(), self.importing_file, "", resolution_mode)
+            modulespecifiers::get_allowed_endings_in_preferred_order(&self.preferences, self.program.as_ref(), &self.program.options(), self.importing_file, "", resolution_mode)
         })
     }
 

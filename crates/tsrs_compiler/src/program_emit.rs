@@ -169,9 +169,9 @@ impl EmitTimes {
 
 impl Program {
     // program.go:1875
-    pub fn emit(&'static self, ctx: &Context, options: &EmitOptions) -> EmitResult {
+    pub fn emit(&self, ctx: &Context, options: &EmitOptions) -> EmitResult {
         if !options.force_emit && options.emit_only != EmitOnly::EmitOnlyBuilderSignature {
-            let result = handle_no_emit_options(ctx, &self, options.target_source_files.as_deref(), None);
+            let result = handle_no_emit_options(ctx, self, options.target_source_files.as_deref(), None);
             if let Some(result) = result {
                 return result;
             }
@@ -196,7 +196,7 @@ impl Program {
             let e = {
                 let _scratch = region.enter_scratch();
                 let checker_slot = P::new(tsrs_checker::CheckerSlot::default());
-                let host = crate::emithost::new_emit_host(self, emit_resolver, checker_slot);
+                let host = crate::emithost::new_emit_host(self.checker_data(), emit_resolver, checker_slot);
                 let paths = outputpaths::get_output_paths_for(
                     source_file,
                     &self.options(),

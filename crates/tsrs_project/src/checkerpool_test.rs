@@ -55,18 +55,15 @@ fn setup_checker_pool_session(opts: CheckerPoolOptions) -> (Arc<Session>, Arc<ch
     let snapshot = session.snapshot();
     let project = snapshot.project_collection.configured_project(&Path::from("/src/tsconfig.json")).expect("expected configured project");
     let pool = project.checker_pool.clone().expect("expected checker pool");
-    // Go's GC keeps the program alive through the pool's program pointer for as long as the test uses the pool; here
-    // the project values own it (memregions.rs), and the session may replace this project's snapshot meanwhile.
-    std::mem::forget(project.clone());
     (session, pool)
 }
 
-fn program_of(session: &Session) -> &'static Program {
-    session.get_language_service(&Context::background(), &lsproto::DocumentUri("file:///src/index.ts".to_string())).unwrap().get_program()
+fn program_of(session: &Session) -> Arc<Program> {
+    session.get_language_service(&Context::background(), &lsproto::DocumentUri("file:///src/index.ts".to_string())).unwrap().program_owner()
 }
 
 // checkerpool_test.go:55
-fn new_test_checker_pool(program: &'static Program, opts: CheckerPoolOptions) -> Arc<checkerPool> {
+fn new_test_checker_pool(program: &Program, opts: CheckerPoolOptions) -> Arc<checkerPool> {
     new_checker_pool(opts, program.checker_data(), Some(Box::new(|_: &str| {})))
 }
 
@@ -127,7 +124,7 @@ fn checker_pool_same_request_contention() {
     let (session, _) = setup_checker_pool_session(CheckerPoolOptions { max_checkers: 2, ..Default::default() });
     let program = program_of(&session);
     for lifetime in [CheckerLifetime::Diagnostics, CheckerLifetime::Temporary, CheckerLifetime::API] {
-        let pool = new_test_checker_pool(program, CheckerPoolOptions { max_checkers: 2, ..Default::default() });
+        let pool = new_test_checker_pool(&program, CheckerPoolOptions { max_checkers: 2, ..Default::default() });
         let (ctx, cancel) = Context::background().with_cancel();
         let ctx = with_checker_lifetime(&with_request_id(&ctx, "same-request"), lifetime);
 
@@ -171,7 +168,7 @@ fn checker_pool_same_request_concurrent_queries() {
 fn checker_pool_idle_cleanup() {
     let (session, _) = setup_checker_pool_session(CheckerPoolOptions { max_checkers: 2, idle_timeout: secs(10) });
     let program = program_of(&session);
-    let pool = new_test_checker_pool(program, CheckerPoolOptions { max_checkers: 4, idle_timeout: Duration::from_millis(200) });
+    let pool = new_test_checker_pool(&program, CheckerPoolOptions { max_checkers: 4, idle_timeout: Duration::from_millis(200) });
 
     // Create a checker via a diagnostics request.
     drop(pool.get_checker(&ctx_with("diag-cleanup", CheckerLifetime::Diagnostics), None));
@@ -200,7 +197,7 @@ fn checker_pool_file_association_cleanup() {
     let (session, _) = setup_checker_pool_session(CheckerPoolOptions { max_checkers: 2, idle_timeout: secs(10) });
     let program = program_of(&session);
     let source_file = program.get_source_file("/src/index.ts").unwrap();
-    let pool = new_test_checker_pool(program, CheckerPoolOptions { max_checkers: 4, idle_timeout: Duration::from_millis(200) });
+    let pool = new_test_checker_pool(&program, CheckerPoolOptions { max_checkers: 4, idle_timeout: Duration::from_millis(200) });
 
     // Create a query checker with file affinity.
     drop(pool.get_checker(&ctx_with("file-assoc-req", CheckerLifetime::Temporary), Some(source_file)));
@@ -238,7 +235,7 @@ fn checker_pool_canceled_checker_disposal() {
     let (session, _) = setup_checker_pool_session(CheckerPoolOptions { max_checkers: 2, idle_timeout: secs(10) });
     let program = program_of(&session);
     let source_file = program.get_source_file("/src/index.ts").expect("source file");
-    let pool = new_test_checker_pool(program, CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(30) });
+    let pool = new_test_checker_pool(&program, CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(30) });
 
     // Acquire a query checker and cancel it.
     let mut c = pool.get_checker(&ctx_with("cancel-test", CheckerLifetime::Temporary), None);
@@ -262,7 +259,7 @@ fn checker_pool_canceled_checker_disposal() {
 fn checker_pool_request_association_cleanup_on_disposal() {
     let (session, _) = setup_checker_pool_session(CheckerPoolOptions { max_checkers: 2, idle_timeout: secs(10) });
     let program = program_of(&session);
-    let pool = new_test_checker_pool(program, CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(5) });
+    let pool = new_test_checker_pool(&program, CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(5) });
 
     // Create a query checker with a request association.
     let (req_ctx, req_cancel) = Context::background().with_cancel();
@@ -290,7 +287,7 @@ fn checker_pool_request_association_cleanup_on_disposal() {
 #[test]
 fn checker_pool_request_association_cleanup_on_context_done() {
     let (session, _) = setup_checker_pool_session(CheckerPoolOptions { max_checkers: 2, idle_timeout: secs(10) });
-    let pool = new_test_checker_pool(program_of(&session), CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(30) });
+    let pool = new_test_checker_pool(&program_of(&session), CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(30) });
 
     // Create a cancellable context to simulate request lifecycle.
     let (req_ctx, req_cancel) = Context::background().with_cancel();
@@ -327,7 +324,7 @@ fn checker_pool_no_request_id() {
 #[test]
 fn checker_pool_diagnostics_cross_release_affinity() {
     let (session, _) = setup_checker_pool_session(CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(10) });
-    let pool = new_test_checker_pool(program_of(&session), CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(30) });
+    let pool = new_test_checker_pool(&program_of(&session), CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(30) });
 
     let (req_ctx, req_cancel) = Context::background().with_cancel();
     let ctx = with_checker_lifetime(&with_request_id(&req_ctx, "diag-affinity"), CheckerLifetime::Diagnostics);
@@ -348,7 +345,7 @@ fn checker_pool_diagnostics_cross_release_affinity() {
 #[test]
 fn checker_pool_discard_still_functional() {
     let (session, _) = setup_checker_pool_session(CheckerPoolOptions { max_checkers: 2, idle_timeout: secs(10) });
-    let pool = new_test_checker_pool(program_of(&session), CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(30) });
+    let pool = new_test_checker_pool(&program_of(&session), CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(30) });
     pool.discard();
 
     // Pool should still work — GetChecker should create a fresh checker.
@@ -372,7 +369,7 @@ fn checker_pool_discard_still_functional() {
 #[test]
 fn checker_pool_diagnostics_checker_stable_identity() {
     let (session, _) = setup_checker_pool_session(CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(10) });
-    let pool = new_test_checker_pool(program_of(&session), CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(30) });
+    let pool = new_test_checker_pool(&program_of(&session), CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(30) });
 
     let c1 = pool.get_checker(&ctx_with("diag-stable-1", CheckerLifetime::Diagnostics), None);
     let p1 = ptr(&c1);
@@ -387,7 +384,7 @@ fn checker_pool_diagnostics_checker_stable_identity() {
 #[test]
 fn checker_pool_diagnostics_checker_survives_discard() {
     let (session, _) = setup_checker_pool_session(CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(10) });
-    let pool = new_test_checker_pool(program_of(&session), CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(30) });
+    let pool = new_test_checker_pool(&program_of(&session), CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(30) });
 
     let c = pool.get_checker(&ctx_with("diag-discard", CheckerLifetime::Diagnostics), None);
     let p = ptr(&c);
@@ -407,7 +404,7 @@ fn checker_pool_diagnostics_checker_survives_discard() {
 #[test]
 fn checker_pool_diagnostics_checker_independent_from_query() {
     let (session, _) = setup_checker_pool_session(CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(10) });
-    let pool = new_test_checker_pool(program_of(&session), CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(30) });
+    let pool = new_test_checker_pool(&program_of(&session), CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(30) });
 
     let diag_c = pool.get_checker(&ctx_with("diag-indep", CheckerLifetime::Diagnostics), None);
     let query_c = pool.get_checker(&ctx_with("query-indep", CheckerLifetime::Temporary), None);
@@ -420,7 +417,7 @@ fn checker_pool_diagnostics_checker_independent_from_query() {
 #[test]
 fn checker_pool_api_checker_stable_identity() {
     let (session, _) = setup_checker_pool_session(CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(10) });
-    let pool = new_test_checker_pool(program_of(&session), CheckerPoolOptions { max_checkers: 4, idle_timeout: Duration::from_millis(100) });
+    let pool = new_test_checker_pool(&program_of(&session), CheckerPoolOptions { max_checkers: 4, idle_timeout: Duration::from_millis(100) });
 
     let ctx = with_checker_lifetime(&Context::background(), CheckerLifetime::API);
     let c1 = pool.get_checker(&ctx, None);
@@ -442,7 +439,7 @@ fn checker_pool_api_checker_stable_identity() {
 #[test]
 fn checker_pool_api_checker_survives_discard() {
     let (session, _) = setup_checker_pool_session(CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(10) });
-    let pool = new_test_checker_pool(program_of(&session), CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(30) });
+    let pool = new_test_checker_pool(&program_of(&session), CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(30) });
 
     let ctx = with_checker_lifetime(&Context::background(), CheckerLifetime::API);
     let c = pool.get_checker(&ctx, None);
@@ -461,7 +458,7 @@ fn checker_pool_api_checker_survives_discard() {
 #[test]
 fn checker_pool_all_three_independent() {
     let (session, _) = setup_checker_pool_session(CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(10) });
-    let pool = new_test_checker_pool(program_of(&session), CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(30) });
+    let pool = new_test_checker_pool(&program_of(&session), CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(30) });
 
     let ded_c = pool.get_checker(&ctx_with("ded-req", CheckerLifetime::Diagnostics), None);
     let tmp_c = pool.get_checker(&ctx_with("tmp-req", CheckerLifetime::Temporary), None);
@@ -478,7 +475,7 @@ fn checker_pool_file_affinity() {
     let (session, _) = setup_checker_pool_session(CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(10) });
     let program = program_of(&session);
     let source_file = program.get_source_file("/src/index.ts").unwrap();
-    let pool = new_test_checker_pool(program, CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(30) });
+    let pool = new_test_checker_pool(&program, CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(30) });
 
     // First query with a file should create a checker and associate it.
     let c1 = pool.get_checker(&ctx_with("file-aff-1", CheckerLifetime::Temporary), Some(source_file));
@@ -501,7 +498,7 @@ fn checker_pool_default_max_checkers() {
 #[test]
 fn checker_pool_discard_idempotent() {
     let (session, _) = setup_checker_pool_session(CheckerPoolOptions { max_checkers: 2, idle_timeout: secs(10) });
-    let pool = new_test_checker_pool(program_of(&session), CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(30) });
+    let pool = new_test_checker_pool(&program_of(&session), CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(30) });
     drop(pool.get_checker(&ctx_with("idem", CheckerLifetime::Temporary), None));
     pool.discard();
     pool.discard();
@@ -524,7 +521,7 @@ fn checker_pool_api_checker_disposed_on_cancel() {
     let (session, _) = setup_checker_pool_session(CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(10) });
     let program = program_of(&session);
     let source_file = program.get_source_file("/src/index.ts").expect("source file");
-    let pool = new_test_checker_pool(program, CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(30) });
+    let pool = new_test_checker_pool(&program, CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(30) });
 
     let ctx = with_checker_lifetime(&Context::background(), CheckerLifetime::API);
     let mut c = pool.get_checker(&ctx, None);
@@ -550,7 +547,7 @@ fn checker_pool_api_checker_disposed_on_cancel() {
 #[test]
 fn checker_pool_non_cancelable_context_no_affinity() {
     let (session, _) = setup_checker_pool_session(CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(10) });
-    let pool = new_test_checker_pool(program_of(&session), CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(30) });
+    let pool = new_test_checker_pool(&program_of(&session), CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(30) });
 
     // A context that can never be canceled must not record request affinity.
     drop(pool.get_checker(&ctx_with("never-canceled", CheckerLifetime::Temporary), None));
@@ -570,7 +567,7 @@ fn checker_region_release_observer(checker: &CheckerHandle) -> Arc<std::sync::at
 fn canceled_checker_keeps_its_region_until_the_pool_drops() {
     let (session, _) = setup_checker_pool_session(CheckerPoolOptions::default());
     let program = program_of(&session);
-    let pool = new_test_checker_pool(program, CheckerPoolOptions::default());
+    let pool = new_test_checker_pool(&program, CheckerPoolOptions::default());
     pool.discard();
     let mut checker = pool.get_checker(&ctx_with("owned-region", CheckerLifetime::Temporary), None);
     let dropped = checker_region_release_observer(&checker);
@@ -587,7 +584,7 @@ fn canceled_checker_keeps_its_region_until_the_pool_drops() {
 #[test]
 fn owned_lease_retains_the_project_pool_and_checker_region() {
     let (session, _) = setup_checker_pool_session(CheckerPoolOptions::default());
-    let pool = new_test_checker_pool(program_of(&session), CheckerPoolOptions::default());
+    let pool = new_test_checker_pool(&program_of(&session), CheckerPoolOptions::default());
     pool.discard();
     let weak = Arc::downgrade(&pool);
     let checker = pool.get_checker(&ctx_with("last-owner", CheckerLifetime::Temporary), None);

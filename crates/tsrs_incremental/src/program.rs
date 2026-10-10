@@ -1,6 +1,6 @@
 // Port of execute/incremental/program.go.
 
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use rustc_hash::FxHashMap;
@@ -34,7 +34,7 @@ struct nestedEmitState {
 
 pub struct Program {
     pub(crate) snapshot: P<Snapshot>,
-    pub(crate) program: Option<&'static CompilerProgram>,
+    pub(crate) program: Option<Arc<CompilerProgram>>,
     pub(crate) host: Option<Box<dyn Host + Send + Sync>>,
 
     // Testing data
@@ -42,30 +42,35 @@ pub struct Program {
 
     nested_emit_now: Option<fn() -> Instant>,
     nested_emit: Mutex<nestedEmitState>,
+    // Copied snapshot entries still have raw graph edges into the preceding version.
+    _old_program: Option<Arc<Program>>,
+    _graph_region: Option<tsrs_core::arena::Region>,
 }
 
 // program.go:46
 pub fn new_program(
-    program: &'static CompilerProgram,
-    old_program: Option<P<Program>>,
+    program: Arc<CompilerProgram>,
+    old_program: Option<std::sync::Arc<Program>>,
     host: Box<dyn Host + Send + Sync>,
     nested_emit_now: Option<fn() -> Instant>,
     testing: bool,
-) -> P<Program> {
-    let snapshot = program_to_snapshot(program, old_program, testing);
+) -> Arc<Program> {
+    let snapshot = program_to_snapshot(&program, old_program.as_deref(), testing);
     let testing_data = if testing {
-        let testing_data = TestingData { old_snapshot: old_program.map(|p| p.snapshot), updated_signature_kinds: FxHashMap::default() };
+        let testing_data = TestingData { old_snapshot: old_program.as_ref().map(|p| p.snapshot), updated_signature_kinds: FxHashMap::default() };
         Some(Mutex::new(testing_data))
     } else {
         None
     };
-    P::new(Program {
+    Arc::new(Program {
         snapshot,
         program: Some(program),
         host: Some(host),
         testing_data,
         nested_emit_now,
         nested_emit: Mutex::new(nestedEmitState::default()),
+        _old_program: old_program,
+        _graph_region: tsrs_core::arena::current_region(),
     })
 }
 
@@ -85,8 +90,8 @@ pub enum SemanticDiagnosticsState {
 }
 
 impl Program {
-    pub(crate) fn new_from_snapshot(snapshot: P<Snapshot>) -> P<Program> {
-        P::new(Program { snapshot, program: None, host: None, testing_data: None, nested_emit_now: None, nested_emit: Mutex::new(nestedEmitState::default()) })
+    pub(crate) fn new_from_snapshot(snapshot: P<Snapshot>) -> Arc<Program> {
+        Arc::new(Program { snapshot, program: None, host: None, testing_data: None, nested_emit_now: None, nested_emit: Mutex::new(nestedEmitState::default()), _old_program: None, _graph_region: tsrs_core::arena::current_region() })
     }
 
     pub fn get_testing_data(&self) -> Option<&Mutex<TestingData>> {
@@ -146,9 +151,9 @@ impl Program {
     }
 
     // program.go:119
-    pub fn get_program(&self) -> &'static CompilerProgram {
+    pub fn get_program(&self) -> &CompilerProgram {
         self.panic_if_no_program("GetProgram");
-        self.program.unwrap()
+        self.program.as_deref().unwrap()
     }
 
     // program.go:124
@@ -156,8 +161,8 @@ impl Program {
         self.snapshot.has_changed_dts_file.get()
     }
 
-    pub(crate) fn p(&self) -> &'static CompilerProgram {
-        self.program.unwrap()
+    pub(crate) fn p(&self) -> &CompilerProgram {
+        self.program.as_deref().unwrap()
     }
 
     // program.go:160
@@ -314,7 +319,7 @@ impl Program {
     }
 
     // program.go:368
-    fn ensure_has_errors_for_state(&self, ctx: &Context, program: &'static CompilerProgram) {
+    fn ensure_has_errors_for_state(&self, ctx: &Context, program: &CompilerProgram) {
         let mut has_include_processing_diagnostics: Option<bool> = None;
         let mut has_emit_diagnostics = false;
         let snapshot = &self.snapshot;
@@ -443,8 +448,8 @@ fn normalize_package_jsons(mut package_jsons: Vec<String>) -> Vec<String> {
     package_jsons
 }
 
-// `&'static Program` (not `P<Program>`: the orphan rule forbids a foreign trait on the foreign `P`).
-impl ProgramLike for &'static Program {
+// Borrowed operations never fabricate a static root or reconstruct one from a native address.
+impl ProgramLike for Program {
     // Options implements compiler.AnyProgram interface.
     fn options(&self) -> P<CompilerOptions> {
         self.snapshot.options()
@@ -498,7 +503,7 @@ impl ProgramLike for &'static Program {
     // GetDeclarationDiagnostics implements compiler.AnyProgram interface.
     fn get_declaration_diagnostics(&self, ctx: &Context, file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
         self.panic_if_no_program("GetDeclarationDiagnostics");
-        let result = emit_files(ctx, P::from_static(*self), &EmitOptions { target_source_files: file.map(|f| vec![f]), ..Default::default() }, true);
+        let result = emit_files(ctx, self, &EmitOptions { target_source_files: file.map(|f| vec![f]), ..Default::default() }, true);
         match result {
             Some(result) => result.diagnostics,
             None => Vec::new(),
@@ -536,7 +541,7 @@ impl ProgramLike for &'static Program {
             }
             return Some(result);
         }
-        emit_files(ctx, P::from_static(*self), &options, false)
+        emit_files(ctx, self, &options, false)
     }
 
     // CommonSourceDirectory implements compiler.AnyProgram interface.
@@ -552,12 +557,67 @@ impl ProgramLike for &'static Program {
     }
 
     // Program implements compiler.AnyProgram interface.
-    fn program(&self) -> &'static CompilerProgram {
+    fn program(&self) -> &CompilerProgram {
         self.panic_if_no_program("Program");
         self.p()
     }
 
     fn is_compiler_program(&self) -> bool {
         false
+    }
+}
+
+#[cfg(test)]
+mod ownership_tests {
+    use super::*;
+    use tsrs_compiler::{new_compiler_host, ProgramOptions};
+    use tsrs_core::arena::Region;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    fn build(region: &Region, old: Option<Arc<Program>>) -> Arc<Program> {
+        let _scope = region.enter();
+        let host = new_compiler_host("/", Arc::new(tsrs_vfs::vfstest::from_map([("/index.ts", "export const value = 1;")], true)), "", None, None);
+        let options = P::new(CompilerOptions { no_lib: Tristate::True, incremental: Tristate::True, ..Default::default() });
+        let config = P::new(tsrs_tsoptions::new_parsed_command_line(options, vec!["/index.ts".into()], Vec::new(), Default::default()));
+        let mut opts = ProgramOptions::new(config, host.clone());
+        opts.single_threaded = Tristate::True;
+        new_program(tsrs_compiler::new_program(opts), old, crate::create_host(host), None, true)
+    }
+
+    fn observe(region: &Region) -> Arc<AtomicUsize> {
+        let dropped = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&dropped);
+        region.on_free(Box::new(move || { observed.fetch_add(1, Ordering::SeqCst); }));
+        dropped
+    }
+
+    #[test]
+    fn owned_incremental_root_releases_its_compiler_and_snapshot_region() {
+        let region = Region::new(4096);
+        let dropped = observe(&region);
+        let program = build(&region, None);
+        let compiler = Arc::downgrade(program.program.as_ref().unwrap());
+        drop(region);
+        assert_eq!(program.get_program().source_files().len(), 1);
+        assert_eq!(dropped.load(Ordering::SeqCst), 0);
+        drop(program);
+        assert!(compiler.upgrade().is_none());
+        assert_eq!(dropped.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn copied_snapshot_retains_its_previous_graph_until_the_new_root_drops() {
+        let old_region = Region::new(4096);
+        let dropped = observe(&old_region);
+        let old = build(&old_region, None);
+        let weak = Arc::downgrade(&old);
+        let region = Region::new(4096);
+        let new = build(&region, Some(old));
+        drop(old_region);
+        assert!(weak.upgrade().is_some());
+        assert_eq!(dropped.load(Ordering::SeqCst), 0);
+        drop(new);
+        assert!(weak.upgrade().is_none());
+        assert_eq!(dropped.load(Ordering::SeqCst), 1);
     }
 }

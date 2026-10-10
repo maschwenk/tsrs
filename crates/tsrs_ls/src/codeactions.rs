@@ -26,7 +26,7 @@ pub struct CodeFixContext<'a> {
     pub source_file: P<SourceFile>,
     pub span: TextRange,
     pub error_code: i32,
-    pub program: &'static Program,
+    pub program: &'a Program,
     pub ls: &'a LanguageService,
     pub diagnostic: Option<&'a lsproto::Diagnostic>,
     pub params: Option<&'a lsproto::CodeActionParams>,
@@ -177,7 +177,7 @@ impl LanguageService {
     fn get_fix_all_quick_fixes(
         &self,
         ctx: &Context,
-        program: &'static Program,
+        program: &Program,
         file: P<SourceFile>,
         uri: &lsproto::DocumentUri,
         fix_id_seen: &OrderedMap<String, &'static CodeFixProvider>,
@@ -229,7 +229,7 @@ impl LanguageService {
     fn create_fix_all_action(
         &self,
         ctx: &Context,
-        program: &'static Program,
+        program: &Program,
         file: P<SourceFile>,
         uri: &lsproto::DocumentUri,
     ) -> Result<Option<lsproto::CommandOrCodeAction>, lsproto::Error> {
@@ -271,7 +271,7 @@ impl LanguageService {
     fn create_organize_imports_action(
         &self,
         ctx: &Context,
-        program: &'static Program,
+        program: &Program,
         file: P<SourceFile>,
         kind: lsproto::CodeActionKind,
     ) -> lsproto::CommandOrCodeAction {
@@ -311,7 +311,7 @@ impl LanguageService {
 // hasMultipleFixableDiagnostics returns true if the file has at least 2 diagnostics
 // matching the given error codes. Checks all diagnostic sources (semantic,
 // syntactic, suggestion, declaration) to match ProvideDiagnostics.
-fn has_multiple_fixable_diagnostics(ctx: &Context, program: &'static Program, file: P<SourceFile>, error_codes: &[i32]) -> bool {
+fn has_multiple_fixable_diagnostics(ctx: &Context, program: &Program, file: P<SourceFile>, error_codes: &[i32]) -> bool {
     let all_diags = get_all_diagnostics(ctx, program, file);
     let mut count = 0;
     for d in all_diags {

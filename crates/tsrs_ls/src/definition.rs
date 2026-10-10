@@ -48,7 +48,7 @@ impl LanguageService {
     pub(crate) fn provide_definition_at_position(
         &self,
         ctx: &Context,
-        program: &'static Program,
+        program: &Program,
         file: P<SourceFile>,
         text_pos: TextPos,
         client_supports_link: bool,
@@ -140,7 +140,7 @@ impl LanguageService {
     fn provide_type_definition_at_position(
         &self,
         ctx: &Context,
-        program: &'static Program,
+        program: &Program,
         file: P<SourceFile>,
         text_pos: TextPos,
         client_supports_link: bool,

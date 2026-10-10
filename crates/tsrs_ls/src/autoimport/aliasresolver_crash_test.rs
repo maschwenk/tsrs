@@ -30,10 +30,10 @@ impl RegistryCloneHost for fakeCloneHost {
     fn fs_owned(&self) -> Arc<dyn FS> {
         Arc::clone(&self.fs)
     }
-    fn get_default_project(&self, _path: &Path) -> (Option<ProjectID>, Option<&'static Program>) {
+    fn get_default_project(&self, _path: &Path) -> (Option<ProjectID>, Option<std::sync::Arc<Program>>) {
         (None, None)
     }
-    fn get_program_for_project(&self, _project_id: &ProjectID) -> Option<&'static Program> {
+    fn get_program_for_project(&self, _project_id: &ProjectID) -> Option<std::sync::Arc<Program>> {
         None
     }
     fn get_package_json(&self, _file_name: &str) -> P<InfoCacheEntry> {

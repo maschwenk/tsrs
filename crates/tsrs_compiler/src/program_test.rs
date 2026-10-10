@@ -160,7 +160,7 @@ fn external_checker_pool_diagnostics() {
     assert!(external.compiler_checker_pool().is_none());
 
     let ctx = Context::default();
-    let messages = |program: &'static Program| -> Vec<String> {
+    let messages = |program: &Program| -> Vec<String> {
         program
             .get_semantic_diagnostics(&ctx, None)
             .iter()
@@ -168,9 +168,9 @@ fn external_checker_pool_diagnostics() {
             .map(|d| format!("{}:{}:{}", d.file().unwrap().file_name(), d.pos(), d.code()))
             .collect()
     };
-    let expected = messages(builtin);
+    let expected = messages(&builtin);
     assert!(expected.len() >= 4, "{expected:?}");
-    assert_eq!(messages(external), expected);
+    assert_eq!(messages(&external), expected);
     let file = external.get_source_file("/src/b.ts").unwrap();
     let single: Vec<i32> = external.get_semantic_diagnostics(&ctx, Some(file)).iter().map(|d| d.code()).collect();
     assert_eq!(single, vec![2322, 2578]);

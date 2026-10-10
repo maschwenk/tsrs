@@ -105,8 +105,8 @@ pub fn compile_files_with_host_emit(
     host: Arc<dyn CompilerHost>,
     config: P<ParsedCommandLine>,
     harness_options: &HarnessOptions,
-    create_program: &dyn Fn(Arc<dyn CompilerHost>, P<ParsedCommandLine>) -> &'static dyn compiler::ProgramLike,
-) -> (Vec<P<tsrs_ast::Diagnostic>>, &'static compiler::Program, compiler::EmitResult) {
+    create_program: &dyn Fn(Arc<dyn CompilerHost>, P<ParsedCommandLine>) -> (Arc<compiler::Program>, Box<dyn compiler::ProgramLike>),
+) -> (Vec<P<tsrs_ast::Diagnostic>>, Arc<compiler::Program>, compiler::EmitResult, Arc<compiler::Program>) {
     let ctx = &compiler::Context::default();
 
     let mut pre_errors = Vec::new();
@@ -115,7 +115,7 @@ pub fn compile_files_with_host_emit(
     let mut pre_config = tsrs_tsoptions::new_parsed_command_line(P::new(pre_compiler_options), config.file_names().to_vec(), Vec::new(), ComparePathsOptions::default());
     pre_config.config_file = config.config_file;
     pre_config.errors.clone_from(&config.errors);
-    let pre_program = create_program(Arc::clone(&host), P::new(pre_config));
+    let (pre_root, pre_program) = create_program(Arc::clone(&host), P::new(pre_config));
     pre_errors.extend(pre_program.get_config_file_parsing_diagnostics());
     pre_errors.extend(pre_program.get_program_diagnostics());
     pre_errors.extend(pre_program.get_syntactic_diagnostics(ctx, None));
@@ -129,7 +129,7 @@ pub fn compile_files_with_host_emit(
     }
     let pre_errors = compiler::sort_and_deduplicate_diagnostics(&pre_errors);
 
-    let post_program = create_program(host, config);
+    let (post_root, post_program) = create_program(host, config);
     // Go `postProgram.Emit` returns nil only on cancellation.
     let emit_result = post_program.emit(ctx, compiler::EmitOptions::default()).unwrap_or_default();
     let mut post_errors = Vec::new();
@@ -166,11 +166,11 @@ pub fn compile_files_with_host_emit(
         errors.push(diag);
     }
 
-    (errors, post_program.program(), emit_result)
+    (errors, post_root, emit_result, pre_root)
 }
 
 // harnessutil.go:746 (the output part of newCompilationResult)
-pub fn new_emit_outputs(recorder: &OutputRecorderFS, program: &'static compiler::Program, options: &CompilerOptions, host: &dyn CompilerHost, emit_result: compiler::EmitResult) -> EmitOutputs {
+pub fn new_emit_outputs(recorder: &OutputRecorderFS, program: &compiler::Program, options: &CompilerOptions, host: &dyn CompilerHost, emit_result: compiler::EmitResult) -> EmitOutputs {
     let mut c = EmitOutputs { emit_result, ..Default::default() };
 
     // Corsa, unlike Strada, can use multiple threads for emit. As a result, the order of outputs is non-deterministic.
@@ -226,7 +226,7 @@ pub fn new_emit_outputs(recorder: &OutputRecorderFS, program: &'static compiler:
 }
 
 // harnessutil.go:836
-fn get_output_path(program: &'static compiler::Program, options: &CompilerOptions, host: &dyn CompilerHost, path: &str, ext: &str) -> String {
+fn get_output_path(program: &compiler::Program, options: &CompilerOptions, host: &dyn CompilerHost, path: &str, ext: &str) -> String {
     let mut path = tspath::resolve_path(host.get_current_directory(), &[path]);
     let out_dir = if ext == ".d.ts" || ext == ".d.mts" || ext == ".d.cts" || (ext.ends_with(".ts") && ext.contains(".d.")) {
         if options.declaration_dir.is_empty() {
@@ -401,7 +401,7 @@ fn prepare_declaration_compilation_context(
     options: &CompilerOptions,
 ) -> Result<Option<(Vec<TestFile>, Vec<TestFile>)>, String> {
     let outputs = result.emit.as_ref().unwrap();
-    let program = result.program;
+    let program = result.program.as_ref();
     if options.declaration.is_true() && result.diagnostics.is_empty() {
         if options.emit_declaration_only.is_true() {
             if !outputs.js.is_empty() {

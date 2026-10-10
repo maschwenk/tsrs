@@ -72,8 +72,8 @@ creation order independently of storage slots.
 Program versions share processed-file containers and project-reference redirects through `Arc`. Resolvers own
 their resolution hosts; cached DTS-faking hosts share redirect data without retaining the mapper that caches
 them. Auto-import builders and alias resolvers retain their hosts and filesystems with strong Rust owners.
-This removes manual frees for these containers, but not the `Program` root, parsed-config pointers or graph
-edges inside them (`notes/rust-owned-program-data.md`).
+The shared-container migration removes their manual frees; parsed-config pointers and graph edges still remain
+(`notes/rust-owned-program-data.md`).
 
 Checkers, node-builder hosts and both compiler/project checker pools retain `Arc<ProgramData>`, independently
 of the outer program's pool. Pool factories receive this owned data rather than a static program reference;
@@ -84,8 +84,16 @@ the legacy graph lifetime; retaining the array does not retain those referents (
 Checker leases own the checker exclusively and return it on drop. External pools use
 `CheckerHandle::new(PooledChecker, FnOnce(PooledChecker))`; there is no raw-pointer lease constructor. The
 built-in pool's slot array is shared Rust storage retained by each lease, with no leaked array or static mutex
-guard. A project `PooledChecker` owns its region directly; canceled/idle checkers remain parked because their
+guard. Each built-in/project `PooledChecker` owns its region directly; canceled/idle project checkers remain parked because their
 graph data can still be referenced by program caches (`notes/rust-owned-checker-leases.md`).
+
+Compiler and incremental program roots use `Arc`, with no leaked compiler root or `free_program` API. Retained
+values clone the root; helpers borrow it for their call. Program data retains its version/base/file/config regions
+without retaining a pool. Incremental roots retain their snapshot region and the preceding graph owner while
+snapshot/cache referents remain raw. Keep checker allocations in their own regions: allocating an input-owning
+node builder in the input region would create an ownership cycle (`notes/rust-owned-program-roots.md`).
+Binding selects the source file's allocation owner, because shared files can outlive the checker that first binds
+them. Returned compile/emit results retain their compiler or incremental owner while exposing raw diagnostics.
 
 The following describes the **remaining legacy graph**, not a rule for new stores. Go objects that are referenced
 by pointer, live long, reference each other cyclically and

@@ -332,7 +332,7 @@ fn perform_compilation(
     compile_times.parse_time = sys.now() - parse_start;
     let (result, _) = emit_and_report_statistics(&EmitInput {
         sys,
-        program,
+        program: &program,
         config,
         report_diagnostic,
         report_error_summary,
@@ -351,7 +351,7 @@ fn perform_compilation(
     }
     #[cfg(feature = "alloc-profile")]
     if let Some(census) = crate::CENSUS_HOOK.get() {
-        census(program, &[config.addr(), result.diagnostics.as_ptr() as usize]);
+        census(&program, &[config.addr(), result.diagnostics.as_ptr() as usize]);
     }
 
     CommandLineResult { status: result.status }
@@ -403,16 +403,16 @@ fn perform_incremental_compilation(
     compile_times.parse_time = parse_time;
     let changes_compute_start = sys.now();
     let incremental_program =
-        tsrs_incremental::new_program(program, old_program, tsrs_incremental::create_host(host), Some(std::time::Instant::now), testing.is_some());
+        tsrs_incremental::new_program(Arc::clone(&program), old_program, tsrs_incremental::create_host(host), Some(std::time::Instant::now), testing.is_some());
     compile_times.changes_compute_time = sys.now() - changes_compute_start;
     let (result, _) = emit_and_report_statistics(&EmitInput {
         sys,
-        program: incremental_program.get_program(),
+        program: &program,
         config,
         report_diagnostic,
         report_error_summary,
         compile_times,
-        incremental: Some(incremental_program),
+        incremental: Some(&incremental_program),
         writer: None,
         write_file: None,
         testing,

@@ -9,7 +9,7 @@
 
 use std::sync::Arc;
 
-use tsrs_compiler::{new_compiler_host, new_program, CompilerHost, Program, ProgramOptions};
+use tsrs_compiler::{new_compiler_host, new_program, CompilerHost, ProgramOptions};
 use tsrs_core::collections::OrderedMap;
 use tsrs_core::context::Context;
 use tsrs_core::json::{self, Value};
@@ -103,7 +103,7 @@ fn setup(spec: &Value) -> (LanguageService, Context, Vec<(String, String)>) {
     let (config, diagnostics) = tsoptions::get_parsed_command_line_of_config_file("/tsconfig.json", None, None, config_host, None);
     assert!(diagnostics.is_empty());
     let host: Arc<dyn CompilerHost> = new_compiler_host("/", fs.clone(), &bundled::lib_path(), None, None);
-    let program: &'static Program = new_program(ProgramOptions::new(P::new(config.unwrap()), host));
+    let program = new_program(ProgramOptions::new(P::new(config.unwrap()), host));
     let fs_for_lines = fs.clone();
     let converters = lsconv::new_converters(lsproto::PositionEncodingKind::UTF16, move |file_name| fs_for_lines.read_file(file_name).map(|text| compute_lsp_line_starts(&text)));
     // Go: lsutil.ParseUserPreferences(map[string]any{"js/ts": initializationOptions.userPreferences})

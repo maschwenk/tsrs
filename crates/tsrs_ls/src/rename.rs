@@ -190,7 +190,7 @@ impl LanguageService {
     // getRenameInfoForNode performs detailed validation for a rename operation on a specific node.
     // Go returns `(info, ok)`.
     // rename.go:168
-    pub(crate) fn get_rename_info_for_node(&self, ctx: &Context, new_name: &str, node: P<Node>, source_file: P<SourceFile>, program: &'static Program) -> Option<RenameInfo> {
+    pub(crate) fn get_rename_info_for_node(&self, ctx: &Context, new_name: &str, node: P<Node>, source_file: P<SourceFile>, program: &Program) -> Option<RenameInfo> {
         let mut ch = program.get_type_checker(ctx);
         let ch: &mut Checker = &mut ch;
 
@@ -247,7 +247,7 @@ impl LanguageService {
     // renameBlockedReason returns a non-nil diagnostic message if the rename should be blocked
     // because the symbol is a library definition, a default keyword, or would cross node_modules boundaries.
     // rename.go:229
-    fn rename_blocked_reason(&self, source_file: P<SourceFile>, node: P<Node>, symbol: P<Symbol>, ch: &mut Checker, program: &'static Program) -> Option<&'static Message> {
+    fn rename_blocked_reason(&self, source_file: P<SourceFile>, node: P<Node>, symbol: P<Symbol>, ch: &mut Checker, program: &Program) -> Option<&'static Message> {
         for &declaration in symbol.declarations() {
             if is_defined_in_library_file(program, declaration) {
                 return Some(&diagnostics::You_cannot_rename_elements_that_are_defined_in_the_standard_TypeScript_library);
@@ -269,7 +269,7 @@ impl LanguageService {
 
 // isDefinedInLibraryFile checks if a declaration is from a default library file (e.g., lib.d.ts).
 // rename.go:249
-fn is_defined_in_library_file(program: &'static Program, declaration: P<Node>) -> bool {
+fn is_defined_in_library_file(program: &Program, declaration: P<Node>) -> bool {
     let decl_source_file = ast::get_source_file_of_node(declaration).unwrap();
     program.is_source_file_default_library(decl_source_file.path()) && tspath::is_declaration_file_name(decl_source_file.file_name())
 }

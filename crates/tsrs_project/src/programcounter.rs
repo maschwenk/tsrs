@@ -9,7 +9,7 @@ pub(crate) struct programCounter {
     mu: Mutex<FxHashMap<usize, i32>>,
 }
 
-fn key(program: &'static Program) -> usize {
+fn key(program: &Program) -> usize {
     std::ptr::from_ref::<Program>(program) as usize
 }
 
@@ -17,12 +17,12 @@ impl programCounter {
     // programcounter.go:16
     // Ref increments the reference count for a program. If the program is not
     // yet tracked, it is added with a reference count of 1.
-    pub(crate) fn ref_(&self, program: &'static Program) {
+    pub(crate) fn ref_(&self, program: &Program) {
         *self.mu.lock().unwrap().entry(key(program)).or_insert(0) += 1;
     }
 
     // programcounter.go:25
-    pub(crate) fn deref(&self, program: &'static Program) -> bool {
+    pub(crate) fn deref(&self, program: &Program) -> bool {
         let mut refs = self.mu.lock().unwrap();
         let Some(&count) = refs.get(&key(program)) else {
             return false;

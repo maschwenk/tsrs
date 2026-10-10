@@ -171,7 +171,7 @@ impl Session {
     }
 
     /// Go `snapshotData.resolveNodeHandle`.
-    pub(crate) fn resolve_node_handle(&self, program: &'static Program, handle: &str) -> ApiResult<P<Node>> {
+    pub(crate) fn resolve_node_handle(&self, program: &Program, handle: &str) -> ApiResult<P<Node>> {
         let parsed = codec::parse_node_handle(handle).ok_or_else(|| ApiError::client(format!("invalid node handle {handle:?}")))?;
         let file = program
             .get_source_file_by_path(&tspath::Path::new(parsed.path))

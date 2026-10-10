@@ -2035,7 +2035,7 @@ impl Server {
     fn handle_workspace_symbol(self: &Arc<Self>, ctx: &Context, params: &lsproto::WorkspaceSymbolParams, req_msg: &RequestMessage) -> Result<lsproto::WorkspaceSymbolResponse, Error> {
         let mut resp = lsproto::WorkspaceSymbolResponse::default();
         let mut ls_err: Option<Error> = None;
-        let mut provide_symbols = |snapshot: &Arc<project::Snapshot>, programs: Vec<&'static tsrs_compiler::Program>| {
+        let mut provide_symbols = |snapshot: &Arc<project::Snapshot>, programs: Vec<Arc<tsrs_compiler::Program>>| {
             let _ = self.with_recover(req_msg, || {
                 match tsrs_ls::provide_workspace_symbols(ctx, &programs, &snapshot.converters(), snapshot.user_preferences(), &params.query) {
                     Ok(r) => resp = r,

@@ -7,9 +7,8 @@ use tsrs_compiler::{sort_and_deduplicate_diagnostics, CheckerHandle, CheckerPool
 #[cfg(test)]
 use tsrs_compiler::Checker;
 use tsrs_core::context::{get_checker_lifetime, get_request_id, CheckerLifetime, Context};
-use tsrs_core::arena::{Region, RegionScope};
+use tsrs_core::arena::Region;
 
-use crate::memregions::programOwner;
 use tsrs_core::P;
 
 use crate::background::{after_func, Timer};
@@ -81,10 +80,6 @@ pub struct checkerPool {
     // Disposed checkers retain their regions here: program-lifetime diagnostics can still refer into them.
     // Each PooledChecker owns its region directly, which drops after the checker.
     parked: Mutex<Vec<PooledChecker>>,
-    // The program's owner (memregions.rs), once the project system created it. A held checker keeps it alive, and
-    // a pool whose program was freed refuses to hand out checkers (Go's GC would keep the program alive through the
-    // pool's program pointer; here the project values own it).
-    owner: Mutex<Option<Weak<programOwner>>>,
 }
 
 struct checkerPoolState {
@@ -153,7 +148,6 @@ pub(crate) fn new_checker_pool(mut opts: CheckerPoolOptions, program: Arc<Progra
         log,
         self_ref: Weak::clone(self_ref),
         parked: Mutex::new(Vec::new()),
-        owner: Mutex::new(None),
     })
 }
 
@@ -189,42 +183,12 @@ impl checkerPool {
         PooledChecker::with_region(checker, region)
     }
 
-    // A held checker selects its owned region and retains the program's graph owner.
-    fn enter_checker_region(&self, checker: &PooledChecker) -> (Option<RegionScope>, Option<Arc<programOwner>>) {
-        (checker.enter_region(), self.live_owner())
-    }
-
-    pub(crate) fn set_owner(&self, owner: Weak<programOwner>) {
-        *self.owner.lock().unwrap() = Some(owner);
-    }
-
-    fn live_owner(&self) -> Option<Arc<programOwner>> {
-        match &*self.owner.lock().unwrap() {
-            None => None,
-            Some(w) => Some(w.upgrade().expect("checker pool used after its program was freed")),
-        }
-    }
-
-    // Region hook: frees every checker of the pool and their regions. Called when the program is freed (nothing
-    // holds a checker or refers to checker data any more).
-    pub(crate) fn free_checkers(&self) {
-        let mut checkers: Vec<PooledChecker> = std::mem::take(&mut *self.parked.lock().unwrap());
-        {
-            let mut st = self.mu.lock().unwrap();
-            checkers.extend(st.checkers.iter_mut().filter_map(Option::take));
-            checkers.extend(st.persistent_checker.take());
-            st.global_diag_accumulated.clear();
-        }
-        drop(checkers);
-    }
-
     fn arc(&self) -> Arc<checkerPool> {
         self.self_ref.upgrade().expect("checker pool used after it was dropped")
     }
 
     // checkerpool.go:123
     pub fn get_checker(&self, ctx: &Context, file: Option<P<SourceFile>>) -> CheckerHandle {
-        drop(self.live_owner());
         let lifetime = get_checker_lifetime(ctx);
         let mut request_id = get_request_id(ctx).to_string();
 
@@ -386,11 +350,10 @@ impl checkerPool {
         st.persistent_held = true;
         drop(st);
 
-        let (region_scope, owner) = self.enter_checker_region(&checker);
+        let region_scope = checker.enter_region();
         let p = self.arc();
         CheckerHandle::new(checker, move |mut checker| {
             drop(region_scope);
-            let _owner = owner;
             let mut st = p.mu.lock().unwrap();
             assert!(st.persistent_checker.is_none() && st.persistent_held);
             st.persistent_held = false;
@@ -409,12 +372,11 @@ impl checkerPool {
     // checkerpool.go:319
     fn create_release(&self, st: &mut checkerPoolState, request_id: &str, index: usize) -> CheckerHandle {
         let checker = st.checkers[index].take().expect("checker slot ready for acquisition");
-        let (region_scope, owner) = self.enter_checker_region(&checker);
+        let region_scope = checker.enter_region();
         let p = self.arc();
         let request_id = request_id.to_string();
         CheckerHandle::new(checker, move |mut checker| {
             drop(region_scope);
-            let _owner = owner;
             let mut st = p.mu.lock().unwrap();
             assert!(st.checkers[index].is_none() && !st.held_by[index].is_empty());
             let was_canceled = checker.was_canceled();

@@ -6,7 +6,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use tsrs_compiler::{new_compiler_host, new_program, CheckerHandle, CheckerPool, CompilerHost, PooledChecker, Program, ProgramData, ProgramOptions};
+use tsrs_compiler::{new_compiler_host, new_program, CheckerHandle, CheckerPool, CompilerHost, PooledChecker, ProgramData, ProgramOptions};
 use tsrs_core::context::Context;
 use tsrs_core::json::{self, Value};
 use tsrs_core::P;
@@ -139,7 +139,7 @@ fn setup(d: &dataset) -> (LanguageService, Context) {
         let state = Arc::new(testPoolState { program, slots: Mutex::new(Vec::new()) });
         Box::new(testPool(state)) as Box<dyn CheckerPool>
     }));
-    let program: &'static Program = new_program(options);
+    let program = new_program(options);
     program.bind_source_files();
     let fs_for_lines = fs.clone();
     // Cached like the project system's snapshot line maps (keyword references land thousands of times in the libs).

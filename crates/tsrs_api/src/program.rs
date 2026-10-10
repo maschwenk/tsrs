@@ -39,7 +39,7 @@ pub(crate) enum DiagnosticKind {
 }
 
 impl Session {
-    fn program_of(&self, p: Params) -> ApiResult<(std::sync::Arc<crate::session::SnapshotData>, &'static Program)> {
+    fn program_of(&self, p: Params) -> ApiResult<(std::sync::Arc<crate::session::SnapshotData>, std::sync::Arc<Program>)> {
         let sd = self.snapshot_data(p.u64("snapshot")?)?;
         let program = sd.get_program(&ProjectID(p.str("project")?.to_string()))?;
         Ok((sd, program))
@@ -61,7 +61,7 @@ impl Session {
         if p.has("files") {
             let mut all = Vec::new();
             for file in DocumentIdentifier::parse_list(p.array("files")?, "files")? {
-                let source_file = resolve_source_file(program, &file)?;
+                let source_file = resolve_source_file(&program, &file)?;
                 all.extend(get(Some(source_file)));
             }
             return Ok(nullable_diagnostics(&all));
@@ -140,7 +140,7 @@ impl Session {
     pub(crate) fn handle_emit_to_string(&self, p: Params) -> ApiResult<Value> {
         let (_sd, program) = self.program_of(p)?;
         let emit_only = Self::emit_only(p)?;
-        Ok(emit_to_output(program, None, emit_only, false))
+        Ok(emit_to_output(&program, None, emit_only, false))
     }
 
     pub(crate) fn handle_selected_files_emit(&self, p: Params, emit_only: EmitOnly) -> ApiResult<Value> {
@@ -150,14 +150,14 @@ impl Session {
         }
         let mut targets = Vec::new();
         for file in DocumentIdentifier::parse_list(p.array("files")?, "files")? {
-            targets.push(resolve_source_file(program, &file)?);
+            targets.push(resolve_source_file(&program, &file)?);
         }
-        Ok(emit_to_output(program, Some(targets), emit_only, true))
+        Ok(emit_to_output(&program, Some(targets), emit_only, true))
     }
 }
 
 /// Go `emitToOutput`: captures outputs in memory, sorted by file name.
-fn emit_to_output(program: &'static Program, targets: Option<Vec<P<SourceFile>>>, emit_only: EmitOnly, force_emit: bool) -> Value {
+fn emit_to_output(program: &Program, targets: Option<Vec<P<SourceFile>>>, emit_only: EmitOnly, force_emit: bool) -> Value {
     let outputs: Mutex<Vec<(String, String, Option<String>)>> = Mutex::new(Vec::new());
     let write = |file_name: &str, text: &str, data: &mut WriteFileData| -> Result<(), String> {
         let source = data.source_file.map(|f| f.file_name().to_string());

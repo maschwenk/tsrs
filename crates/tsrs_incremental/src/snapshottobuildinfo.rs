@@ -14,7 +14,7 @@ use crate::referencemap::RefSet;
 use crate::snapshot::{buildInfoDiagnosticWithFileName, get_file_emit_kind, DiagnosticsOrBuildInfoDiagnosticsWithFileName, Snapshot};
 
 // snapshottobuildinfo.go:18
-pub(crate) fn snapshot_to_build_info(snapshot: &Snapshot, program: &'static CompilerProgram, build_info_file_name: &str) -> Result<BuildInfo, String> {
+pub(crate) fn snapshot_to_build_info(snapshot: &Snapshot, program: &CompilerProgram, build_info_file_name: &str) -> Result<BuildInfo, String> {
     let content_mapper_identities = content_mapper_identities()?;
     let mut build_info = BuildInfo { version: tsrs_core::version().to_string(), content_mapper_identities, ..Default::default() };
     let mut to = toBuildInfo {
@@ -61,7 +61,7 @@ fn relative_to_build_info(build_info_directory: &str, compare_paths_options: &Co
 
 struct toBuildInfo<'a> {
     snapshot: &'a Snapshot,
-    program: &'static CompilerProgram,
+    program: &'a CompilerProgram,
     build_info: &'a mut BuildInfo,
     build_info_directory: String,
     compare_paths_options: ComparePathsOptions,

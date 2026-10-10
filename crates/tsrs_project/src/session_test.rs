@@ -331,8 +331,8 @@ fn open(session: &crate::session::Session, files: &[(&str, &str)], name: &str) {
     session.did_open_file(&ctx(), uri(&format!("file://{name}")), 1, file(files, name), lsproto::LanguageKind::TypeScript);
 }
 
-fn ls_program(session: &crate::session::Session, name: &str) -> &'static tsrs_compiler::Program {
-    session.get_language_service(&ctx(), &uri(&format!("file://{name}"))).unwrap().get_program()
+fn ls_program(session: &crate::session::Session, name: &str) -> Arc<tsrs_compiler::Program> {
+    session.get_language_service(&ctx(), &uri(&format!("file://{name}"))).unwrap().program_owner()
 }
 
 fn watch_changed(session: &crate::session::Session, name: &str, type_: lsproto::FileChangeType) {
@@ -490,7 +490,7 @@ fn did_change_watched_files_change_open_file() {
     watch_changed(&session, "/home/projects/TS/p1/src/x.ts", lsproto::FileChangeType::Changed);
 
     // Program should remain the same since the file is open and changes are handled through DidChangeTextDocument
-    assert!(std::ptr::eq(program_before, ls_program(&session, "/home/projects/TS/p1/src/index.ts")));
+    assert!(Arc::ptr_eq(&program_before, &ls_program(&session, "/home/projects/TS/p1/src/index.ts")));
 }
 
 // session_test.go:636 TestSession/DidChangeWatchedFiles/change closed program file
@@ -506,7 +506,7 @@ fn did_change_watched_files_change_closed_program_file() {
 
     watch_changed(&session, "/home/projects/TS/p1/src/x.ts", lsproto::FileChangeType::Changed);
 
-    assert!(!std::ptr::eq(program_before, ls_program(&session, "/home/projects/TS/p1/src/index.ts")));
+    assert!(!Arc::ptr_eq(&program_before, &ls_program(&session, "/home/projects/TS/p1/src/index.ts")));
 }
 
 // projecttestutil.go:281 WithRequestID(t.Context())
@@ -516,11 +516,11 @@ fn request_ctx() -> Context {
     tsrs_core::context::with_request_id(&ctx, "0")
 }
 
-fn semantic_diagnostics_count(program: &'static tsrs_compiler::Program, file_name: &str) -> usize {
+fn semantic_diagnostics_count(program: &tsrs_compiler::Program, file_name: &str) -> usize {
     program.get_semantic_diagnostics(&request_ctx(), program.get_source_file(file_name)).len()
 }
 
-fn root_file_names(program: &'static tsrs_compiler::Program) -> Vec<String> {
+fn root_file_names(program: &tsrs_compiler::Program) -> Vec<String> {
     program.command_line().parsed_config.file_names.clone()
 }
 
@@ -550,7 +550,7 @@ fn did_change_watched_files_change_config_file() {
     open(&session, files, "/home/projects/TS/p1/src/index.ts");
 
     let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
-    assert_eq!(semantic_diagnostics_count(program, "/home/projects/TS/p1/src/index.ts"), 0);
+    assert_eq!(semantic_diagnostics_count(&program, "/home/projects/TS/p1/src/index.ts"), 0);
 
     utils
         .fs()
@@ -568,7 +568,7 @@ fn did_change_watched_files_change_config_file() {
     watch_changed(&session, "/home/projects/TS/p1/tsconfig.json", lsproto::FileChangeType::Changed);
 
     let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
-    assert_eq!(semantic_diagnostics_count(program, "/home/projects/TS/p1/src/index.ts"), 1);
+    assert_eq!(semantic_diagnostics_count(&program, "/home/projects/TS/p1/src/index.ts"), 1);
 }
 
 // session_test.go:757 TestSession/DidChangeWatchedFiles/delete explicitly included file
@@ -591,8 +591,8 @@ fn did_change_watched_files_delete_explicitly_included_file() {
     open(&session, files, "/home/projects/TS/p1/src/index.ts");
 
     let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
-    assert!(root_file_names(program).contains(&"/home/projects/TS/p1/src/x.ts".to_string()));
-    assert_eq!(semantic_diagnostics_count(program, "/home/projects/TS/p1/src/index.ts"), 0);
+    assert!(root_file_names(&program).contains(&"/home/projects/TS/p1/src/x.ts".to_string()));
+    assert_eq!(semantic_diagnostics_count(&program, "/home/projects/TS/p1/src/index.ts"), 0);
 
     utils.fs().remove("/home/projects/TS/p1/src/x.ts").unwrap();
 
@@ -600,8 +600,8 @@ fn did_change_watched_files_delete_explicitly_included_file() {
 
     let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
     // File name is still in the command line, was explicitly included
-    assert!(root_file_names(program).contains(&"/home/projects/TS/p1/src/x.ts".to_string()));
-    assert_eq!(semantic_diagnostics_count(program, "/home/projects/TS/p1/src/index.ts"), 1);
+    assert!(root_file_names(&program).contains(&"/home/projects/TS/p1/src/x.ts".to_string()));
+    assert_eq!(semantic_diagnostics_count(&program, "/home/projects/TS/p1/src/index.ts"), 1);
     assert!(program.get_source_file("/home/projects/TS/p1/src/x.ts").is_none());
 
     // Open file to trigger cleanup
@@ -629,8 +629,8 @@ fn did_change_watched_files_delete_wildcard_included_file() {
     open(&session, files, "/home/projects/TS/p1/src/x.ts");
 
     let program = ls_program(&session, "/home/projects/TS/p1/src/x.ts");
-    assert!(root_file_names(program).contains(&"/home/projects/TS/p1/src/index.ts".to_string()));
-    assert_eq!(semantic_diagnostics_count(program, "/home/projects/TS/p1/src/x.ts"), 0);
+    assert!(root_file_names(&program).contains(&"/home/projects/TS/p1/src/index.ts".to_string()));
+    assert_eq!(semantic_diagnostics_count(&program, "/home/projects/TS/p1/src/x.ts"), 0);
 
     utils.fs().remove("/home/projects/TS/p1/src/index.ts").unwrap();
 
@@ -638,8 +638,8 @@ fn did_change_watched_files_delete_wildcard_included_file() {
 
     let program = ls_program(&session, "/home/projects/TS/p1/src/x.ts");
     // File name is gone from the command line, was originally included via wildcard
-    assert!(!root_file_names(program).contains(&"/home/projects/TS/p1/src/index.ts".to_string()));
-    assert_eq!(semantic_diagnostics_count(program, "/home/projects/TS/p1/src/x.ts"), 1);
+    assert!(!root_file_names(&program).contains(&"/home/projects/TS/p1/src/index.ts".to_string()));
+    assert_eq!(semantic_diagnostics_count(&program, "/home/projects/TS/p1/src/x.ts"), 1);
 
     // Open file to trigger cleanup
     session.did_open_file(&ctx(), uri("untitled:Untitled-1"), 1, String::new(), lsproto::LanguageKind::TypeScript);
@@ -657,13 +657,13 @@ fn delete_directory(files_spec: &str, check_root_names: bool) {
 
     let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
     if check_root_names {
-        assert!(root_file_names(program).contains(&"/home/projects/TS/p1/src/sub/x.ts".to_string()));
+        assert!(root_file_names(&program).contains(&"/home/projects/TS/p1/src/sub/x.ts".to_string()));
     } else {
-        assert!(root_file_names(program).contains(&"/home/projects/TS/p1/src/index.ts".to_string()));
+        assert!(root_file_names(&program).contains(&"/home/projects/TS/p1/src/index.ts".to_string()));
         // x.ts is not in "files" but is pulled in via the import.
         assert!(program.get_source_file("/home/projects/TS/p1/src/sub/x.ts").is_some());
     }
-    assert_eq!(semantic_diagnostics_count(program, "/home/projects/TS/p1/src/index.ts"), 0);
+    assert_eq!(semantic_diagnostics_count(&program, "/home/projects/TS/p1/src/index.ts"), 0);
 
     // Delete the entire subdirectory from the file system.
     utils.fs().remove("/home/projects/TS/p1/src/sub").unwrap();
@@ -674,13 +674,13 @@ fn delete_directory(files_spec: &str, check_root_names: bool) {
     let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
     if check_root_names {
         // The directory was deleted, so the file should no longer be in the program.
-        assert!(!root_file_names(program).contains(&"/home/projects/TS/p1/src/sub/x.ts".to_string()));
+        assert!(!root_file_names(&program).contains(&"/home/projects/TS/p1/src/sub/x.ts".to_string()));
     } else {
         // The directory was deleted, so the file should no longer be resolvable.
         assert!(program.get_source_file("/home/projects/TS/p1/src/sub/x.ts").is_none());
     }
     // The import should now be an error since the module is missing.
-    assert_eq!(semantic_diagnostics_count(program, "/home/projects/TS/p1/src/index.ts"), 1);
+    assert_eq!(semantic_diagnostics_count(&program, "/home/projects/TS/p1/src/index.ts"), 1);
 }
 
 // session_test.go:846 TestSession/DidChangeWatchedFiles/delete directory with wildcard included files
@@ -792,7 +792,7 @@ fn did_change_watched_files_create_explicitly_included_file() {
 
     // Initially should have an error because y.ts is missing
     let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
-    assert_eq!(semantic_diagnostics_count(program, "/home/projects/TS/p1/src/index.ts"), 1);
+    assert_eq!(semantic_diagnostics_count(&program, "/home/projects/TS/p1/src/index.ts"), 1);
 
     // Add the missing file
     utils.fs().write_file("/home/projects/TS/p1/src/y.ts", "export const y = 1;").unwrap();
@@ -801,7 +801,7 @@ fn did_change_watched_files_create_explicitly_included_file() {
 
     // Error should be resolved
     let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
-    assert_eq!(semantic_diagnostics_count(program, "/home/projects/TS/p1/src/index.ts"), 0);
+    assert_eq!(semantic_diagnostics_count(&program, "/home/projects/TS/p1/src/index.ts"), 0);
 }
 
 // session_test.go:1064 TestSession/DidChangeWatchedFiles/create failed lookup location
@@ -824,7 +824,7 @@ fn did_change_watched_files_create_failed_lookup_location() {
 
     // Initially should have an error because z.ts is missing
     let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
-    assert_eq!(semantic_diagnostics_count(program, "/home/projects/TS/p1/src/index.ts"), 1);
+    assert_eq!(semantic_diagnostics_count(&program, "/home/projects/TS/p1/src/index.ts"), 1);
 
     // Add a new file through failed lookup watch
     utils.fs().write_file("/home/projects/TS/p1/src/z.ts", "export const z = 1;").unwrap();
@@ -832,7 +832,7 @@ fn did_change_watched_files_create_failed_lookup_location() {
 
     // Error should be resolved and the new file should be included in the program
     let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
-    assert_eq!(semantic_diagnostics_count(program, "/home/projects/TS/p1/src/index.ts"), 0);
+    assert_eq!(semantic_diagnostics_count(&program, "/home/projects/TS/p1/src/index.ts"), 0);
     assert!(program.get_source_file("/home/projects/TS/p1/src/z.ts").is_some());
 }
 
@@ -856,7 +856,7 @@ fn did_change_watched_files_create_wildcard_included_file() {
 
     // Initially should have an error because declaration for 'a' is missing
     let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
-    assert_eq!(semantic_diagnostics_count(program, "/home/projects/TS/p1/src/index.ts"), 1);
+    assert_eq!(semantic_diagnostics_count(&program, "/home/projects/TS/p1/src/index.ts"), 1);
 
     // Add a new file through wildcard watch
     utils.fs().write_file("/home/projects/TS/p1/src/a.ts", "const a = 1;").unwrap();
@@ -864,7 +864,7 @@ fn did_change_watched_files_create_wildcard_included_file() {
 
     // Error should be resolved and the new file should be included in the program
     let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
-    assert_eq!(semantic_diagnostics_count(program, "/home/projects/TS/p1/src/index.ts"), 0);
+    assert_eq!(semantic_diagnostics_count(&program, "/home/projects/TS/p1/src/index.ts"), 0);
     assert!(program.get_source_file("/home/projects/TS/p1/src/a.ts").is_some());
 }
 
@@ -888,7 +888,7 @@ fn did_change_watched_files_irrelevant_extension_changes_are_filtered_out() {
     open(&session, files, "/home/projects/TS/p1/src/index.ts");
 
     let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
-    assert_eq!(semantic_diagnostics_count(program, "/home/projects/TS/p1/src/index.ts"), 0);
+    assert_eq!(semantic_diagnostics_count(&program, "/home/projects/TS/p1/src/index.ts"), 0);
     let old_program = program;
 
     // Modify an irrelevant file and send change/create events for files with
@@ -906,7 +906,7 @@ fn did_change_watched_files_irrelevant_extension_changes_are_filtered_out() {
 
     // The program should not have been rebuilt since all events had irrelevant extensions.
     let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
-    assert!(std::ptr::eq(program, old_program), "program should not be rebuilt for irrelevant extension changes");
+    assert!(Arc::ptr_eq(&program, &old_program), "program should not be rebuilt for irrelevant extension changes");
 }
 
 // session_test.go:1192 TestSession/DidChangeWatchedFiles/pnpm install links local package
@@ -936,7 +936,7 @@ fn did_change_watched_files_pnpm_install_links_local_package() {
 
     // Before pnpm install: the import is unresolved because node_modules/@repo/alpha doesn't exist.
     let program = ls_program(&session, "/home/projects/pnpm/packages/beta/index.ts");
-    assert_eq!(semantic_diagnostics_count(program, "/home/projects/pnpm/packages/beta/index.ts"), 1);
+    assert_eq!(semantic_diagnostics_count(&program, "/home/projects/pnpm/packages/beta/index.ts"), 1);
 
     // Simulate pnpm install: create a symlink from beta's node_modules/@repo/alpha to packages/alpha.
     utils.map_fs().mkdir_all("home/projects/pnpm/packages/beta/node_modules/@repo", tsrs_vfs::FileMode::Perm).unwrap();
@@ -958,7 +958,7 @@ fn did_change_watched_files_pnpm_install_links_local_package() {
 
     // After pnpm install: the import should resolve.
     let program = ls_program(&session, "/home/projects/pnpm/packages/beta/index.ts");
-    assert_eq!(semantic_diagnostics_count(program, "/home/projects/pnpm/packages/beta/index.ts"), 0);
+    assert_eq!(semantic_diagnostics_count(&program, "/home/projects/pnpm/packages/beta/index.ts"), 0);
 }
 
 // session_test.go:1244 TestSession/DidChangeWatchedFiles/symlinked node_modules package.json change invalidates resolution
@@ -1000,7 +1000,7 @@ fn did_change_watched_files_symlinked_node_modules_package_json_change_invalidat
     // Initial state: import resolves successfully via package.json main -> dist/index.d.ts
     let program = ls_program(&session, "/home/projects/myproject/src/index.ts");
     session.wait_for_background_tasks();
-    assert_eq!(semantic_diagnostics_count(program, "/home/projects/myproject/src/index.ts"), 0, "import should resolve initially");
+    assert_eq!(semantic_diagnostics_count(&program, "/home/projects/myproject/src/index.ts"), 0, "import should resolve initially");
 
     // Assert: watched file globs cover the realpath of package.json and dist/index.d.ts.
     assert!(utils.watches_file("/home/projects/mylib/package.json"), "realpath of package.json should be watched");
@@ -1014,7 +1014,7 @@ fn did_change_watched_files_symlinked_node_modules_package_json_change_invalidat
 
     // After removing "main" from package.json, the import should no longer resolve.
     let program = ls_program(&session, "/home/projects/myproject/src/index.ts");
-    assert!(semantic_diagnostics_count(program, "/home/projects/myproject/src/index.ts") > 0, "import should fail after removing main from package.json");
+    assert!(semantic_diagnostics_count(&program, "/home/projects/myproject/src/index.ts") > 0, "import should fail after removing main from package.json");
 }
 
 // session_test.go:1318 TestSession/DidChangeWatchedFiles/create file in non-existent directory
@@ -1038,7 +1038,7 @@ fn did_change_watched_files_create_file_in_non_existent_directory() {
     // Initially should have an error because lib/helper.ts doesn't exist
     // and src/lib/ directory doesn't exist either.
     let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
-    assert_eq!(semantic_diagnostics_count(program, "/home/projects/TS/p1/src/index.ts"), 1);
+    assert_eq!(semantic_diagnostics_count(&program, "/home/projects/TS/p1/src/index.ts"), 1);
 
     // Create the directory and file.
     utils.fs().write_file("/home/projects/TS/p1/src/lib/helper.ts", "export const helper = 1;").unwrap();
@@ -1046,7 +1046,7 @@ fn did_change_watched_files_create_file_in_non_existent_directory() {
 
     // Error should be resolved.
     let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
-    assert_eq!(semantic_diagnostics_count(program, "/home/projects/TS/p1/src/index.ts"), 0);
+    assert_eq!(semantic_diagnostics_count(&program, "/home/projects/TS/p1/src/index.ts"), 0);
     assert!(program.get_source_file("/home/projects/TS/p1/src/lib/helper.ts").is_some());
 }
 
@@ -1073,7 +1073,7 @@ fn did_change_watched_files_create_symlink_directory_matching_include_pattern() 
     let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
 
     // Initially, project only has the one file in src/.
-    let names = root_file_names(program);
+    let names = root_file_names(&program);
     assert!(names.contains(&"/home/projects/TS/p1/src/index.ts".to_string()));
     assert!(!names.contains(&"/home/projects/TS/p1/src/linked/utils.ts".to_string()));
     assert!(!names.contains(&"/home/projects/TS/p1/src/linked/helpers.ts".to_string()));
@@ -1087,7 +1087,7 @@ fn did_change_watched_files_create_symlink_directory_matching_include_pattern() 
     // After the symlink directory is created, the files inside it should be
     // picked up by the wildcard include pattern.
     let program = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
-    let names = root_file_names(program);
+    let names = root_file_names(&program);
     assert!(names.contains(&"/home/projects/TS/p1/src/index.ts".to_string()));
     assert!(names.contains(&"/home/projects/TS/p1/src/linked/utils.ts".to_string()));
     assert!(names.contains(&"/home/projects/TS/p1/src/linked/helpers.ts".to_string()));
@@ -1198,19 +1198,19 @@ fn locale_change_invalidates_programs() {
     let config_path = Path::from("/src/tsconfig.json");
     open(&session, files, "/src/index.ts");
     let _ = ls_program(&session, "/src/index.ts");
-    let program_of = || session.snapshot().project_collection.configured_project(&config_path).unwrap().program.unwrap();
+    let program_of = || session.snapshot().project_collection.configured_project(&config_path).unwrap().program.clone().unwrap();
     let initial_program = program_of();
 
     let mut preferences = session.config();
     preferences.code_lens.references_code_lens_enabled = tsrs_core::Tristate::True;
     session.configure(&preferences);
     let _ = ls_program(&session, "/src/index.ts");
-    assert!(std::ptr::eq(program_of(), initial_program));
+    assert!(Arc::ptr_eq(&program_of(), &initial_program));
 
     preferences.locale = "fr".to_string();
     session.configure(&preferences);
     let _ = ls_program(&session, "/src/index.ts");
-    assert!(!std::ptr::eq(program_of(), initial_program));
+    assert!(!Arc::ptr_eq(&program_of(), &initial_program));
     session.close();
 }
 
@@ -1388,6 +1388,6 @@ fn did_change_watched_files_change_program_file_not_in_tsconfig_root_files() {
 
         watch_changed(&session, "/home/projects/TS/x.ts", lsproto::FileChangeType::Changed);
 
-        assert!(!std::ptr::eq(ls_program(&session, "/home/projects/TS/p1/src/index.ts"), program_before), "workspaceDir={workspace_dir}");
+        assert!(!Arc::ptr_eq(&ls_program(&session, "/home/projects/TS/p1/src/index.ts"), &program_before), "workspaceDir={workspace_dir}");
     }
 }

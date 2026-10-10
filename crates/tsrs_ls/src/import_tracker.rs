@@ -82,7 +82,7 @@ pub(crate) struct ModuleReference {
 // importTracker.go:74
 pub(crate) fn create_import_tracker<'a>(
     ctx: &Context,
-    program: &'static Program,
+    program: &Program,
     source_files: &'a [P<SourceFile>],
     source_files_set: &'a Set<String>,
     checker: &mut Checker,
@@ -102,7 +102,7 @@ impl ImportTracker<'_> {
 
 // Returns a map from a module symbol to all import statements that directly reference the module
 // importTracker.go:84
-pub(crate) fn get_direct_imports_map(ctx: &Context, program: &'static Program, source_files: &[P<SourceFile>], checker: &mut Checker) -> FxHashMap<P<Symbol>, Vec<P<Node>>> {
+pub(crate) fn get_direct_imports_map(ctx: &Context, program: &Program, source_files: &[P<SourceFile>], checker: &mut Checker) -> FxHashMap<P<Symbol>, Vec<P<Node>>> {
     let mut result: FxHashMap<P<Symbol>, Vec<P<Node>>> = FxHashMap::default();
     for &source_file in source_files {
         if ctx.err().is_some() {
@@ -119,7 +119,7 @@ pub(crate) fn get_direct_imports_map(ctx: &Context, program: &'static Program, s
 
 // Calls `action` for each import, re-export, or require() in a file
 // importTracker.go:100
-pub(crate) fn for_each_import(program: &'static Program, source_file: P<SourceFile>, action: &mut dyn FnMut(P<Node> /*importStatement*/, P<Node> /*imported*/)) {
+pub(crate) fn for_each_import(program: &Program, source_file: P<SourceFile>, action: &mut dyn FnMut(P<Node> /*importStatement*/, P<Node> /*imported*/)) {
     let mut implicit_imports: Vec<P<Node>> = Vec::new();
     let (_, jsx_specifier) = program.get_jsx_runtime_import_specifier(source_file.path());
     if let Some(jsx_specifier) = jsx_specifier {
@@ -791,7 +791,7 @@ pub(crate) fn symbol_name_no_default(symbol: P<Symbol>) -> &'static str {
 // findModuleReferences finds all references to a module symbol across the given source files.
 // This includes import statements, <reference> directives, and implicit references (e.g., JSX runtime imports).
 // importTracker.go:716
-pub(crate) fn find_module_references(program: &'static Program, source_files: &[P<SourceFile>], search_module_symbol: P<Symbol>, checker: &mut Checker) -> Vec<ModuleReference> {
+pub(crate) fn find_module_references(program: &Program, source_files: &[P<SourceFile>], search_module_symbol: P<Symbol>, checker: &mut Checker) -> Vec<ModuleReference> {
     let mut refs: Vec<ModuleReference> = Vec::new();
 
     for &referencing_file in source_files {

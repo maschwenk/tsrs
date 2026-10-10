@@ -61,14 +61,14 @@ impl Ctl {
 }
 
 impl H {
-    fn program(&self, which: &str) -> &'static tsrs_compiler::Program {
+    fn program(&self, which: &str) -> Arc<tsrs_compiler::Program> {
         let sd = self.s.session.snapshot_data(self.s.snapshot as u64).unwrap();
         let project = if which == "q" { "/q/tsconfig.json".to_string() } else { self.s.project.clone() };
         sd.get_program(&tsrs_project::ID(project)).unwrap()
     }
 
     fn acquire(&self, which: &str) -> Result<lease::ApiCheckerLease, transport::ApiError> {
-        lease::acquire(self.program(which)).map_err(|e| transport::ApiError::internal(e.message))
+        lease::acquire(&self.program(which)).map_err(|e| transport::ApiError::internal(e.message))
     }
 }
 
@@ -414,8 +414,8 @@ fn gate_entries_are_dropped_once_unused() {
     let s = session_with(&[], &["/p/tsconfig.json"]);
     let sd = s.session.snapshot_data(s.snapshot as u64).unwrap();
     let program = sd.get_program(&tsrs_project::ID(s.project.clone())).unwrap();
-    drop(lease::acquire(program).unwrap());
-    assert!(!lease::is_tracked(program));
+    drop(lease::acquire(&program).unwrap());
+    assert!(!lease::is_tracked(&program));
 }
 
 #[test]

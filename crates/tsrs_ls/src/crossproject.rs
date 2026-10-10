@@ -14,7 +14,7 @@ use crate::languageservice::LanguageService;
 // crossproject.go:17
 pub trait Project: Send + Sync {
     fn id(&self) -> String;
-    fn get_program(&self) -> Option<&'static Program>;
+    fn get_program(&self) -> Option<std::sync::Arc<Program>>;
     fn has_file(&self, file_name: &str) -> bool;
 }
 

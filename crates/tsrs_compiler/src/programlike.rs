@@ -25,12 +25,12 @@ pub trait ProgramLike {
     fn emit(&self, ctx: &Context, options: EmitOptions) -> Option<EmitResult>;
     fn common_source_directory(&self) -> String;
     fn is_source_file_default_library(&self, path: &tsrs_core::tspath::Path) -> bool;
-    fn program(&self) -> &'static CompilerProgram;
+    fn program(&self) -> &CompilerProgram;
     // Go's `program.(*compiler.Program)` type assertion in GetDiagnosticsOfAnyProgram.
     fn is_compiler_program(&self) -> bool;
 }
 
-impl ProgramLike for &'static CompilerProgram {
+impl ProgramLike for CompilerProgram {
     fn options(&self) -> P<CompilerOptions> {
         ProgramData::options(self)
     }
@@ -73,11 +73,62 @@ impl ProgramLike for &'static CompilerProgram {
     fn is_source_file_default_library(&self, path: &tsrs_core::tspath::Path) -> bool {
         ProgramData::is_source_file_default_library(self, path)
     }
-    fn program(&self) -> &'static CompilerProgram {
+    fn program(&self) -> &CompilerProgram {
         self
     }
     fn is_compiler_program(&self) -> bool {
         true
+    }
+}
+
+impl<T: ProgramLike + ?Sized> ProgramLike for std::sync::Arc<T> {
+    fn options(&self) -> P<CompilerOptions> {
+        (**self).options()
+    }
+    fn get_source_file(&self, path: &str) -> Option<P<SourceFile>> {
+        (**self).get_source_file(path)
+    }
+    fn get_source_files(&self) -> &[P<SourceFile>] {
+        (**self).get_source_files()
+    }
+    fn get_config_file_parsing_diagnostics(&self) -> Vec<P<Diagnostic>> {
+        (**self).get_config_file_parsing_diagnostics()
+    }
+    fn get_syntactic_diagnostics(&self, ctx: &Context, file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
+        (**self).get_syntactic_diagnostics(ctx, file)
+    }
+    fn get_bind_diagnostics(&self, ctx: &Context, file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
+        (**self).get_bind_diagnostics(ctx, file)
+    }
+    fn get_program_diagnostics(&self) -> Vec<P<Diagnostic>> {
+        (**self).get_program_diagnostics()
+    }
+    fn get_global_diagnostics(&self, ctx: &Context) -> Vec<P<Diagnostic>> {
+        (**self).get_global_diagnostics(ctx)
+    }
+    fn get_semantic_diagnostics(&self, ctx: &Context, file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
+        (**self).get_semantic_diagnostics(ctx, file)
+    }
+    fn get_declaration_diagnostics(&self, ctx: &Context, file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
+        (**self).get_declaration_diagnostics(ctx, file)
+    }
+    fn get_suggestion_diagnostics(&self, ctx: &Context, file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
+        (**self).get_suggestion_diagnostics(ctx, file)
+    }
+    fn emit(&self, ctx: &Context, options: EmitOptions) -> Option<EmitResult> {
+        (**self).emit(ctx, options)
+    }
+    fn common_source_directory(&self) -> String {
+        (**self).common_source_directory()
+    }
+    fn is_source_file_default_library(&self, path: &tsrs_core::tspath::Path) -> bool {
+        (**self).is_source_file_default_library(path)
+    }
+    fn program(&self) -> &CompilerProgram {
+        (**self).program()
+    }
+    fn is_compiler_program(&self) -> bool {
+        (**self).is_compiler_program()
     }
 }
 

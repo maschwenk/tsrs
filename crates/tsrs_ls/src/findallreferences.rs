@@ -807,7 +807,7 @@ impl LanguageService {
     pub(crate) fn provide_symbols_and_entries_at_position(
         &self,
         ctx: &Context,
-        program: &'static Program,
+        program: &Program,
         source_file: P<SourceFile>,
         position: i32,
         is_rename: bool,
@@ -866,7 +866,7 @@ impl LanguageService {
         ctx: &Context,
         position: i32,
         node: P<Node>,
-        program: &'static Program,
+        program: &Program,
         is_rename: bool,
         implementations: bool,
     ) -> Vec<SymbolAndEntries> {
@@ -1303,7 +1303,7 @@ impl LanguageService {
 
     // Go's variadic `referencesToMerge ...[]*SymbolAndEntries` is a Vec of groups.
     // findallreferences.go:1149
-    pub(crate) fn merge_references(&self, program: &'static Program, references_to_merge: Vec<Vec<SymbolAndEntries>>) -> Vec<SymbolAndEntries> {
+    pub(crate) fn merge_references(&self, program: &Program, references_to_merge: Vec<Vec<SymbolAndEntries>>) -> Vec<SymbolAndEntries> {
         let mut result: Vec<SymbolAndEntries> = Vec::new();
         let get_source_file_index_of_entry = |entry: &ReferenceEntry| -> isize {
             self.resolve_entry_source(entry);
@@ -1433,7 +1433,7 @@ impl LanguageService {
         ctx: &Context,
         position: i32,
         node: P<Node>,
-        program: &'static Program,
+        program: &Program,
         source_files: &[P<SourceFile>],
         options: RefOptions,
     ) -> Vec<SymbolAndEntries> {
@@ -1594,7 +1594,7 @@ impl LanguageService {
         &self,
         ctx: &Context,
         symbol: Option<P<Symbol>>,
-        program: &'static Program,
+        program: &Program,
         source_files: &[P<SourceFile>],
         checker: &mut Checker,
         options: RefOptions,
@@ -1982,7 +1982,7 @@ pub(crate) fn find_first_jsx_node(root: P<Node>) -> Option<P<Node>> {
 }
 
 // findallreferences.go:1718
-pub(crate) fn get_references_for_non_module(_referenced_file: P<SourceFile>, _program: &'static Program) -> Vec<Rc<ReferenceEntry>> {
+pub(crate) fn get_references_for_non_module(_referenced_file: P<SourceFile>, _program: &Program) -> Vec<Rc<ReferenceEntry>> {
     // !!! not implemented
     Vec::new()
 }
@@ -2005,7 +2005,7 @@ impl LanguageService {
     pub(crate) fn get_referenced_symbols_for_module(
         &self,
         checker: &mut Checker,
-        program: &'static Program,
+        program: &Program,
         symbol: P<Symbol>,
         exclude_import_type_of_export_equals: bool,
         source_files: &[P<SourceFile>],
@@ -2142,7 +2142,7 @@ pub(crate) fn get_special_search_kind(node: Option<P<Node>>) -> &'static str {
 // findallreferences.go:1853
 pub(crate) fn get_referenced_symbols_for_symbol(
     ctx: &Context,
-    program: &'static Program,
+    program: &Program,
     original_symbol: P<Symbol>,
     node: Option<P<Node>>,
     source_files: &[P<SourceFile>],
@@ -2223,7 +2223,7 @@ pub(crate) struct RefState<'a> {
     pub(crate) special_search_kind: &'static str, // "none", "constructor", or "class"
     pub(crate) checker: &'a mut Checker,
     pub(crate) ctx: &'a Context,
-    pub(crate) program: &'static Program,
+    pub(crate) program: &'a Program,
     pub(crate) search_meaning: SemanticMeaning,
     pub(crate) options: RefOptions,
     pub(crate) result: Vec<SymbolAndEntries>,
@@ -2239,7 +2239,7 @@ pub(crate) struct RefState<'a> {
 // findallreferences.go:1926
 pub(crate) fn new_state<'a>(
     ctx: &'a Context,
-    program: &'static Program,
+    program: &'a Program,
     source_files: &'a [P<SourceFile>],
     source_files_set: &'a Set<String>,
     node: Option<P<Node>>,

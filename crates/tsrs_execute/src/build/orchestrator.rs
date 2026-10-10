@@ -609,15 +609,7 @@ impl Orchestrator {
         if self.opts.testing.is_none() {
             // The program is only needed by Testing.OnProgram at report time; drop it now so a task
             // that has finished but is not yet reported does not keep its program alive.
-            let program = task.result.lock().unwrap().as_mut().unwrap().program.take();
-            if let (true, Some(program)) = (self.use_regions.load(Ordering::SeqCst), program) {
-                // API builds free each project's program once it is built (its arenas go with the task region when
-                // the orchestrator is freed; this frees the heap side: program, checkers, processed data). It is a
-                // full build that shares nothing, and nothing reads it after its task (statistics and diagnostics are
-                // already taken).
-                // SAFETY: see above; no checker handle of it is held.
-                unsafe { tsrs_compiler::free_program(program.get_program()) };
-            }
+            task.result.lock().unwrap().as_mut().unwrap().program.take();
         }
         task.built.close();
     }
@@ -656,6 +648,12 @@ impl Orchestrator {
 pub unsafe fn free_api_orchestrator(o: &'static Orchestrator) {
     // The lock may be poisoned if the build unwound (`CliOrchestrator::build`); the list itself is intact.
     let regions = std::mem::take(&mut *o.regions.lock().unwrap_or_else(|e| e.into_inner()));
+    // A build that unwound before reporting may still retain its owned program in a task allocated in that
+    // program's version region. Release these roots while the orchestrator's region owners are still alive.
+    let retained_programs: Vec<_> = o.tasks.lock().unwrap_or_else(|e| e.into_inner()).values()
+        .filter_map(|task| task.result.lock().unwrap_or_else(|e| e.into_inner()).as_mut().and_then(|result| result.program.take()))
+        .collect();
+    drop(retained_programs);
     if std::env::var_os("TSRS_REGION_LOG").is_some() {
         eprintln!("regions: api orchestrator freed ({} regions, {} KiB)", regions.len(), regions.iter().map(|r| r.allocated_bytes()).sum::<usize>() >> 10);
     }

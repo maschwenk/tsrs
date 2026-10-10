@@ -501,9 +501,11 @@ then-current main:
   identical output and trees at `--builders 1/4/8` with and without `--stopBuildOnErrors` (`graph`: errors, a skipped
   dependency chain, a solution config; `cycle`), and with `--dry`, `--clean`, `--force`; 20 cold runs per builder
   count give one output each; temporary tracing (not committed) showed 4 of 5 independent projects of a wide graph
-  building at the same time at `--builders 4` and all 5 at `--builders 8`. Peak RSS on the `graph` fixture: tsrs 291 /
-  313 / 309 MB at 1 / 4 / 8 builders (tsgo 122 / 175 / 199 MB). The build mode does not free finished programs
-  (`free_program` is not called), so peak memory grows with the projects in flight on large graphs.
+  building at the same time at `--builders 4` and all 5 at `--builders 8`. The original peak RSS on the `graph`
+  fixture was tsrs 291 / 313 / 309 MB at 1 / 4 / 8 builders (tsgo 122 / 175 / 199 MB). Compiler/incremental roots
+  now use `Arc`, and finished tasks release their roots after reporting or when testing no longer needs them
+  (`notes/rust-owned-program-roots.md`). Legacy graph allocations in thread/task arenas remain; these builder
+  measurements have not been rerun for the ownership migration.
 - **Shape signatures** follow Go: `computeDtsSignature` prints the `.d.ts` through `Program::emit` with
   `EmitOnlyBuilderSignature`; files that were never shape-checked keep their version as signature (so the first edit
   of a file after a cold build rechecks its importers, exactly like tsgo).

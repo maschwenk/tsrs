@@ -138,10 +138,16 @@ enum programCheckerPool {
     External(Box<dyn CheckerPool>),
 }
 
+/// A shared program root. Borrowed access cannot outlive its owner.
+/// ```compile_fail
+/// fn root(program: std::sync::Arc<tsrs_compiler::Program>) -> &'static tsrs_compiler::Program {
+///     &program
+/// }
+/// ```
 pub struct Program {
     // Pools and checkers retain only the data, which never retains a pool.
-    data: Arc<ProgramData>,
     checker_pool: OnceLock<programCheckerPool>,
+    data: Arc<ProgramData>,
 }
 
 /// The checker input and program caches, independent of the checker pool.
@@ -203,6 +209,14 @@ pub struct ProgramData {
     pub(crate) leaf_pass_started: std::sync::atomic::AtomicBool,
     // tsrs-only: the files that can be leaves and that another file refers to (`fileregions::prepare`).
     pub(crate) leaf_referred: OnceLock<rustc_hash::FxHashSet<P<SourceFile>>>,
+    // Drop the input containers before releasing their remaining arena-backed graph referents.
+    graph_regions: OnceLock<programRegions>,
+}
+
+struct programRegions {
+    _version: Option<tsrs_core::arena::Region>,
+    base: Option<tsrs_core::arena::Region>,
+    _files_and_config: Vec<tsrs_core::arena::Region>,
 }
 
 impl std::ops::Deref for Program {
@@ -222,6 +236,25 @@ impl std::ops::Deref for ProgramData {
 impl Program {
     pub fn checker_data(&self) -> Arc<ProgramData> {
         Arc::clone(&self.data)
+    }
+
+    fn retain_graph_regions(&self, shared_base: Option<tsrs_core::arena::Region>, full_build: bool) {
+        use tsrs_core::arena::Region;
+        let version = tsrs_core::arena::current_region();
+        let base = if full_build { version.clone() } else { shared_base };
+        if full_build {
+            if let Some(base) = &base {
+                // Legacy lazy caches still route allocations by the shared processed-files container.
+                base.adopt_owner(std::ptr::from_ref(&**self.data).cast::<()>() as usize);
+            }
+        }
+        let files_and_config = Region::containing_all(
+            self.source_files().iter().map(|file| file.addr())
+                .chain(std::iter::once(self.command_line().addr())),
+        ).into_iter().flatten().collect();
+        if self.graph_regions.set(programRegions { _version: version, base, _files_and_config: files_and_config }).is_err() {
+            panic!("program graph regions initialized twice");
+        }
     }
 }
 
@@ -253,7 +286,7 @@ pub fn worker_pool() -> &'static rayon::ThreadPool {
 }
 
 // program.go:305
-pub fn new_program(opts: ProgramOptions) -> &'static Program {
+pub fn new_program(opts: ProgramOptions) -> Arc<Program> {
     let single_threaded =
         tsrs_core::NO_THREADS || opts.single_threaded.default_if_unknown(opts.config.compiler_options().unwrap().single_threaded).is_true();
     let (mut processed, resolution_data, module_resolution_error) = process_all_program_files(&opts, single_threaded);
@@ -291,28 +324,17 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
         leaf_files: opts.leaf_files,
         leaf_pass_started: std::sync::atomic::AtomicBool::new(false),
         leaf_referred: OnceLock::new(),
+        graph_regions: OnceLock::new(),
     };
     // Go initializes the pool before verification. Here the pool receives frozen, owned data after
     // verification; checkers are still created lazily, so this preserves what they observe.
     tsrs_core::phases::time("Program: verify options", || p.verify_compiler_options());
-    let p = Box::new(Program { data: Arc::new(p), checker_pool: OnceLock::new() });
+    let p = Arc::new(Program { data: Arc::new(p), checker_pool: OnceLock::new() });
+    p.retain_graph_regions(None, true);
     // Census builds: the pool enum is mostly uninitialized bytes when set; clear the stack they come from.
     tsrs_core::census_scrub_stack();
     p.init_checker_pool(opts.create_checker_pool);
-    Box::leak(p)
-}
-
-/// Frees a program made by `new_program` or `update_program` (language server; Go's GC).
-/// Shared processed files, redirects and resolution hosts drop when their final Rust owner drops.
-/// The program and its AST/type graph still use the legacy lifetime boundary.
-///
-/// # Safety
-/// `program` came from `new_program` / `update_program` and is not used afterwards:
-/// no snapshot or language service refers to the root. Any retained checker or input owner must keep its
-/// legacy AST/type/diagnostic referents alive separately; owning its Rust containers does not own that graph.
-pub unsafe fn free_program(program: &'static Program) {
-    // SAFETY: both functions leak the program from a `Box`, and nothing uses it afterwards (this function's contract).
-    drop(unsafe { Box::from_raw(std::ptr::from_ref::<Program>(program).cast_mut()) });
+    p
 }
 
 impl Program {
@@ -324,12 +346,12 @@ impl Program {
     // host-side parse caches must release this exact pointer when the old program could not be
     // reused, since it was acquired speculatively before that decision was made.
     pub fn update_program(
-        &'static self,
+        &self,
         changed_file_path: &Path,
         new_host: Arc<dyn CompilerHost>,
         create_checker_pool: Option<CreateCheckerPool>,
         create_module_resolver: Option<CreateModuleResolver>,
-    ) -> (&'static Program, Option<P<SourceFile>>, bool) {
+    ) -> (Arc<Program>, Option<P<SourceFile>>, bool) {
         let (result, new_file, reused) = self.reuse_program(changed_file_path, Arc::clone(&new_host), create_checker_pool.clone(), create_module_resolver.clone());
         if reused {
             (result.unwrap(), new_file, true)
@@ -346,12 +368,12 @@ impl Program {
     // full fallback program, so callers that build their own fallback (e.g. with a
     // different host) do not pay for a discarded program build.
     pub fn reuse_program(
-        &'static self,
+        &self,
         changed_file_path: &Path,
         new_host: Arc<dyn CompilerHost>,
         create_checker_pool: Option<CreateCheckerPool>,
         _create_module_resolver: Option<CreateModuleResolver>,
-    ) -> (Option<&'static Program>, Option<P<SourceFile>>, bool) {
+    ) -> (Option<Arc<Program>>, Option<P<SourceFile>>, bool) {
         let old_file = self.files_by_path[changed_file_path];
         // Content mappers are not ported: no file is content-mapped (`oldFile.ContentMapper() == ""`), so the
         // supplemental file lists are always empty.
@@ -424,6 +446,7 @@ impl Program {
             leaf_files: crate::fileregions::LeafMode::Off,
             leaf_pass_started: std::sync::atomic::AtomicBool::new(false),
             leaf_referred: OnceLock::new(),
+            graph_regions: OnceLock::new(),
         };
         try_reuse(&result.unresolved_imports, &self.unresolved_imports);
         try_reuse(&result.known_symlinks, &self.known_symlinks);
@@ -440,10 +463,11 @@ impl Program {
             result.files_by_path.insert(new_supplemental.path().clone(), new_supplemental);
         }
         result.files = files.into();
-        let result = Box::new(Program { data: Arc::new(result), checker_pool: OnceLock::new() });
+        let result = Arc::new(Program { data: Arc::new(result), checker_pool: OnceLock::new() });
+        result.retain_graph_regions(self.graph_regions.get().unwrap().base.clone(), false);
         tsrs_core::census_scrub_stack();
         result.init_checker_pool(create_checker_pool);
-        (Some(Box::leak(result)), new_file, true)
+        (Some(result), new_file, true)
     }
 
     // program.go:443
@@ -489,7 +513,7 @@ impl Program {
 
     // TSRS_ASSIGNMENT_STATS report (checkerpool_stats.rs).
     #[cfg(feature = "checker")]
-    pub fn checker_assignment_report(&'static self) -> String {
+    pub fn checker_assignment_report(&self) -> String {
         crate::checkerpool_stats::report(self, self.pool())
     }
 
@@ -554,7 +578,7 @@ impl Program {
     // processed in parallel with one task per checker, reducing contention and improving
     // cache locality. Otherwise, falls back to per-file concurrent collection.
     fn collect_checker_diagnostics(
-        &'static self,
+        &self,
         ctx: &Context,
         source_file: Option<P<SourceFile>>,
         collect: impl Fn(&Context, &mut Checker, P<SourceFile>) -> Vec<P<Diagnostic>> + Sync,
@@ -575,7 +599,7 @@ impl Program {
     // program.go:728
     // collectCheckerDiagnosticsFromFiles collects checker diagnostics for a list of files.
     fn collect_checker_diagnostics_from_files(
-        &'static self,
+        &self,
         ctx: &Context,
         source_files: &[P<SourceFile>],
         collect: &(impl Fn(&Context, &mut Checker, P<SourceFile>) -> Vec<P<Diagnostic>> + Sync),
@@ -585,7 +609,7 @@ impl Program {
 
     // `allow_steal`: files may move between checkers while they are checked (checkerPool::for_each_checker_group_do_ex).
     fn collect_checker_diagnostics_from_files_ex(
-        &'static self,
+        &self,
         ctx: &Context,
         source_files: &[P<SourceFile>],
         allow_steal: bool,
@@ -616,7 +640,7 @@ impl Program {
     }
 
     // program.go:806
-    pub fn get_semantic_diagnostics(&'static self, ctx: &Context, source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
+    pub fn get_semantic_diagnostics(&self, ctx: &Context, source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
         let collect = |ctx: &Context, c: &mut Checker, file: P<SourceFile>| self.get_semantic_diagnostics_with_checker(ctx, c, file);
         match source_file {
             // All files: the type-check pass, the one that may move files between checkers.
@@ -649,7 +673,7 @@ impl Program {
     // GetSemanticDiagnosticsForIncremental includes newly discovered globals in each
     // file's cached diagnostics and leaves noEmit filtering to the builder.
     pub fn get_semantic_diagnostics_for_incremental(
-        &'static self,
+        &self,
         ctx: &Context,
         source_files: &[P<SourceFile>],
     ) -> FxHashMap<P<SourceFile>, Vec<P<Diagnostic>>> {
@@ -664,12 +688,12 @@ impl Program {
     }
 
     // program.go:823
-    pub fn get_suggestion_diagnostics(&'static self, ctx: &Context, source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
+    pub fn get_suggestion_diagnostics(&self, ctx: &Context, source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
         self.collect_checker_diagnostics(ctx, source_file, |ctx, c, file| self.get_suggestion_diagnostics_with_checker(ctx, c, file))
     }
 
     // program.go:1463
-    pub fn get_global_diagnostics(&'static self, _ctx: &Context) -> Vec<P<Diagnostic>> {
+    pub fn get_global_diagnostics(&self, _ctx: &Context) -> Vec<P<Diagnostic>> {
         if self.files.is_empty() {
             return Vec::new();
         }
@@ -686,7 +710,7 @@ impl Program {
     // grouped by checker on the checker threads (in file order within a checker), like the other checker-backed
     // diagnostics. With an external pool each file takes its checker from the pool, as in Go.
     #[cfg(feature = "checker")]
-    pub fn get_declaration_diagnostics(&'static self, ctx: &Context, source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
+    pub fn get_declaration_diagnostics(&self, ctx: &Context, source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
         let result = match (source_file, self.compiler_checker_pool()) {
             (Some(file), _) => self.get_declaration_diagnostics_for_file(ctx, None, file),
             (None, Some(pool)) => {
@@ -708,14 +732,14 @@ impl Program {
 
     // Declaration emit needs the checker; without it declaration diagnostics are empty.
     #[cfg(not(feature = "checker"))]
-    pub fn get_declaration_diagnostics(&'static self, _ctx: &Context, _source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
+    pub fn get_declaration_diagnostics(&self, _ctx: &Context, _source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
         Vec::new()
     }
 
     // program.go:1626. `c` is the file's checker when the caller already holds it (Go `newEmitHost` takes it from
     // the pool); with `None` it is taken here.
     #[cfg(feature = "checker")]
-    fn get_declaration_diagnostics_for_file(&'static self, ctx: &Context, c: Option<&mut Checker>, source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
+    fn get_declaration_diagnostics_for_file(&self, ctx: &Context, c: Option<&mut Checker>, source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
         crate::fileregions::assert_not_freed(source_file);
         if source_file.is_declaration_file.get() {
             return Vec::new();
@@ -740,7 +764,7 @@ impl Program {
         let diagnostics = {
             let _scratch = region.enter_scratch();
             let checker_slot = P::new(tsrs_checker::CheckerSlot::default());
-            let host = crate::emithost::new_emit_host(self, emit_resolver, checker_slot);
+            let host = crate::emithost::new_emit_host(self.checker_data(), emit_resolver, checker_slot);
             checker_slot.lend(c, || crate::emitter::get_declaration_diagnostics(host, self, source_file))
         };
         c.forget_scratch_keyed_caches();
@@ -748,7 +772,7 @@ impl Program {
         self.declaration_diagnostic_cache.lock().unwrap().entry(source_file).or_insert(diagnostics).clone()
     }
 
-    pub fn symbol_count(&'static self) -> usize {
+    pub fn symbol_count(&self) -> usize {
         let count: usize = self.files.iter().map(|f| f.symbol_count.get() as usize).sum();
         let val = std::sync::atomic::AtomicUsize::new(count);
         self.for_each_checker_parallel(|_, c| {
@@ -757,7 +781,7 @@ impl Program {
         val.into_inner()
     }
 
-    pub fn type_count(&'static self) -> usize {
+    pub fn type_count(&self) -> usize {
         let val = std::sync::atomic::AtomicUsize::new(0);
         self.for_each_checker_parallel(|_, c| {
             val.fetch_add(c.type_count as usize, std::sync::atomic::Ordering::Relaxed);
@@ -765,7 +789,7 @@ impl Program {
         val.into_inner()
     }
 
-    pub fn instantiation_count(&'static self) -> usize {
+    pub fn instantiation_count(&self) -> usize {
         let val = std::sync::atomic::AtomicUsize::new(0);
         self.for_each_checker_parallel(|_, c| {
             val.fetch_add(c.total_instantiation_count as usize, std::sync::atomic::Ordering::Relaxed);
@@ -773,7 +797,7 @@ impl Program {
         val.into_inner()
     }
 
-    pub fn lazy_member_stats(&'static self) -> tsrs_core::lazymembers::LazyMemberStats {
+    pub fn lazy_member_stats(&self) -> tsrs_core::lazymembers::LazyMemberStats {
         let total = std::sync::Mutex::new(tsrs_core::lazymembers::LazyMemberStats::default());
         self.for_each_checker_parallel(|_, c| {
             total.lock().unwrap().add(&c.lazy_member_stats);
@@ -2780,7 +2804,7 @@ fn compact_and_merge_related_infos(diagnostics: Vec<P<Diagnostic>>) -> Vec<P<Dia
 // program.go:2018
 pub fn get_diagnostics_of_any_program(
     ctx: &Context,
-    program: &'static Program,
+    program: &Program,
     files: Option<&[P<SourceFile>]>,
     skip_no_emit_check_for_dts_diagnostics: bool,
     get_bind_diagnostics: &mut dyn FnMut(&Context, Option<P<SourceFile>>) -> Vec<P<Diagnostic>>,
@@ -2988,15 +3012,13 @@ mod ownership_tests {
         assert!(Arc::ptr_eq(&old.processed, &new.processed));
         assert!(Arc::ptr_eq(&old.project_reference_file_mapper, &new.project_reference_file_mapper));
 
-        // SAFETY: no checker handle is held and all later accesses use the distinct new version.
-        unsafe { free_program(old) };
+        drop(old);
         assert!(old_host.upgrade().is_none());
         assert!(processed.upgrade().is_some());
         assert!(mapper.upgrade().is_some());
         assert_eq!(new.source_files().len(), 1);
         assert!(new.get_source_file("/index.ts").is_some());
-        // SAFETY: nothing derived from this version is used after freeing it.
-        unsafe { free_program(new) };
+        drop(new);
         assert!(processed.upgrade().is_none());
         assert!(mapper.upgrade().is_none());
     }
@@ -3004,6 +3026,7 @@ mod ownership_tests {
     #[test]
     fn failed_resolver_construction_releases_host() {
         let mut opts = options("export {};");
+        opts.single_threaded = Tristate::True;
         let host = Arc::downgrade(&opts.host);
         opts.create_module_resolver = Some(Arc::new(|_| panic!("resolver construction failed")));
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| new_program(opts)));
@@ -3014,6 +3037,7 @@ mod ownership_tests {
     #[test]
     fn failed_pool_construction_releases_inputs() {
         let mut opts = options("export {};");
+        opts.single_threaded = Tristate::True;
         let host = Arc::downgrade(&opts.host);
         opts.create_checker_pool = Some(Arc::new(|_| panic!("checker pool construction failed")));
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| new_program(opts)));
@@ -3036,9 +3060,8 @@ mod ownership_tests {
         assert!(Arc::ptr_eq(&files, &checker.files));
         drop(checker);
 
-        // SAFETY: no handle borrows the outer program or its pool; the test keeps only independent input owners.
-        // Its legacy ASTs remain in the thread arena. This checks container/host ownership, not AST reclamation.
-        unsafe { free_program(program) };
+        // The test keeps only independent input owners. Its ASTs remain in the thread arena.
+        drop(program);
         assert!(input.file_exists("/index.ts"));
         assert_eq!(files.len(), 1);
         assert!(host.upgrade().is_some());
@@ -3059,15 +3082,90 @@ mod ownership_tests {
         let checker = program.get_type_checker(&Context::background());
         let input = Arc::downgrade(&checker.program);
         let checker_id = checker.id;
-        // SAFETY: the lease owns its checker and slot array, and retains no outer root reference.
         // The legacy graph stays in the thread arena; this case checks checker/container ownership only.
-        unsafe { free_program(program) };
+        drop(program);
         assert_eq!(checker.id, checker_id);
         assert!(checker.program.file_exists("/index.ts"));
         assert!(host.upgrade().is_some());
         drop(checker);
         assert!(input.upgrade().is_none());
         assert!(host.upgrade().is_none());
+    }
+
+    fn observe_region_drop(region: &tsrs_core::arena::Region) -> Arc<std::sync::atomic::AtomicUsize> {
+        let dropped = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let observed = Arc::clone(&dropped);
+        region.on_free(Box::new(move || { observed.fetch_add(1, std::sync::atomic::Ordering::SeqCst); }));
+        dropped
+    }
+
+    #[test]
+    fn binding_keeps_shared_symbols_with_the_file_owner() {
+        let file_region = tsrs_core::arena::Region::new(4096);
+        let file = {
+            let _scope = file_region.enter();
+            tsrs_parser::parse_source_file(
+                tsrs_ast::SourceFileParseOptions { file_name: "/shared.ts".into(), ..Default::default() },
+                "export const value = 1;",
+                tsrs_core::ScriptKind::TS,
+            )
+        };
+        let checker_region = tsrs_core::arena::Region::new(4096);
+        {
+            let _scope = checker_region.enter();
+            tsrs_binder::bind_source_file(file);
+        }
+        let symbol = file.locals().unwrap().get().get("value").unwrap();
+        let symbol_region = tsrs_core::arena::Region::containing(symbol.addr()).unwrap();
+        assert!(file_region.ptr_eq(&symbol_region));
+        drop(symbol_region);
+        drop(checker_region);
+        assert_eq!(symbol.name(), "value");
+    }
+
+    #[test]
+    fn shared_root_keeps_its_program_and_file_region_until_the_last_owner_drops() {
+        let region = tsrs_core::arena::Region::new(4096);
+        let dropped = observe_region_drop(&region);
+        let program = {
+            let _scope = region.enter();
+            let mut opts = options("export const value = 1;");
+            opts.single_threaded = Tristate::True;
+            new_program(opts)
+        };
+        let weak = Arc::downgrade(&program);
+        let retained = Arc::clone(&program);
+        drop(region);
+        drop(program);
+        assert!(weak.upgrade().is_some());
+        assert_eq!(retained.get_source_file("/index.ts").unwrap().text(), "export const value = 1;");
+        assert_eq!(dropped.load(std::sync::atomic::Ordering::SeqCst), 0);
+        drop(retained);
+        assert!(weak.upgrade().is_none());
+        assert_eq!(dropped.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn checker_serialization_does_not_retain_a_program_region_cycle() {
+        let region = tsrs_core::arena::Region::new(4096);
+        let dropped = observe_region_drop(&region);
+        let program = {
+            let _scope = region.enter();
+            let mut opts = options("export const value = 1;");
+            opts.single_threaded = Tristate::True;
+            new_program(opts)
+        };
+        let mut checker = program.get_type_checker(&Context::background());
+        let input = Arc::downgrade(&checker.program);
+        let any_type = checker.any_type;
+        assert_eq!(checker.type_to_string_exported(any_type), "any");
+        drop(region);
+        drop(program);
+        assert_eq!(checker.type_to_string_exported(any_type), "any");
+        assert_eq!(dropped.load(std::sync::atomic::Ordering::SeqCst), 0);
+        drop(checker);
+        assert!(input.upgrade().is_none());
+        assert_eq!(dropped.load(std::sync::atomic::Ordering::SeqCst), 1);
     }
 }
 

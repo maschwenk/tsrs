@@ -84,3 +84,7 @@ unchanged. This is result-set preservation, not a claim that every variant or fo
 Next, replace the remaining outer program ownership and its lifetime-fabricated host/root interfaces, then
 migrate the AST/type/symbol referents, static graph borrows and allocator compatibility boundaries. Completion
 still requires the complete runtime, oracle, lifecycle and memory/performance audit across the original scope.
+
+The following root stage (`rust-owned-program-roots.md`) replaces compiler/incremental root leaks and manual
+compiler freeing. Fidelity is preserved, but its instruction/RSS measurements regress. The full graph and allocator
+compatibility migration remains unfinished.

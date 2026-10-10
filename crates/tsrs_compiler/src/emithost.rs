@@ -5,6 +5,8 @@
 // holds the checker (`CheckerHandle`/`&mut Checker`) and lends it to `checker_slot` for the duration of the
 // transform, and the host's `Resolver` borrows it from there (see tsrs_declarations::Resolver).
 
+use std::sync::Arc;
+
 use tsrs_ast::{FileReference, ModifierFlags, Node, SourceFile};
 use tsrs_checker::CheckerSlot;
 use tsrs_core::tspath::Path;
@@ -15,102 +17,103 @@ use tsrs_module::{packagejson, ResolvedModule};
 use tsrs_tsoptions::outputpaths::{self, OutputPaths, OutputPathsHost};
 
 use crate::emitter;
-use crate::program::Program;
+
+use crate::program::ProgramData;
 
 // Every method that reaches the program escapes a scratch region (one file's emit, notes/mem-emit-regions.md): the
 // program's lazily filled caches (package.json entries, symlinks, module-name memos) outlive the file.
 
 pub(crate) struct EmitHost {
-    program: &'static Program,
+    program: Arc<ProgramData>,
     emit_resolver: Resolver,
 }
 
 // emitHost.go:38 (the checker acquisition is the caller's; see above)
-pub(crate) fn new_emit_host(program: &'static Program, emit_resolver: P<tsrs_checker::EmitResolver>, checker_slot: P<CheckerSlot>) -> &'static EmitHost {
+pub(crate) fn new_emit_host(program: Arc<ProgramData>, emit_resolver: P<tsrs_checker::EmitResolver>, checker_slot: P<CheckerSlot>) -> &'static EmitHost {
     P::new(EmitHost { program, emit_resolver: Resolver::new(emit_resolver, checker_slot) }).get()
 }
 
 impl OutputPathsHost for EmitHost {
     fn common_source_directory(&self) -> String {
         let _outer = tsrs_core::arena::escape_scratch();
-        OutputPathsHost::common_source_directory(self.program)
+        OutputPathsHost::common_source_directory(self.program.as_ref())
     }
 
     fn content_mapper_extensions(&self) -> Vec<String> {
         let _outer = tsrs_core::arena::escape_scratch();
-        OutputPathsHost::content_mapper_extensions(self.program)
+        OutputPathsHost::content_mapper_extensions(self.program.as_ref())
     }
 
     fn get_current_directory(&self) -> &str {
         let _outer = tsrs_core::arena::escape_scratch();
-        OutputPathsHost::get_current_directory(self.program)
+        OutputPathsHost::get_current_directory(self.program.as_ref())
     }
 
     fn use_case_sensitive_file_names(&self) -> bool {
         let _outer = tsrs_core::arena::escape_scratch();
-        OutputPathsHost::use_case_sensitive_file_names(self.program)
+        OutputPathsHost::use_case_sensitive_file_names(self.program.as_ref())
     }
 }
 
 impl tsrs_modulespecifiers::ModuleSpecifierGenerationHost for EmitHost {
     fn get_symlink_cache(&self) -> P<KnownSymlinks> {
         let _outer = tsrs_core::arena::escape_scratch();
-        tsrs_modulespecifiers::ModuleSpecifierGenerationHost::get_symlink_cache(self.program)
+        tsrs_modulespecifiers::ModuleSpecifierGenerationHost::get_symlink_cache(self.program.as_ref())
     }
 
     fn get_global_typings_cache_location(&self) -> String {
         let _outer = tsrs_core::arena::escape_scratch();
-        tsrs_modulespecifiers::ModuleSpecifierGenerationHost::get_global_typings_cache_location(self.program)
+        tsrs_modulespecifiers::ModuleSpecifierGenerationHost::get_global_typings_cache_location(self.program.as_ref())
     }
 
     fn get_project_reference_from_source(&self, path: &Path) -> Option<P<tsrs_tsoptions::SourceOutputAndProjectReference>> {
         let _outer = tsrs_core::arena::escape_scratch();
-        tsrs_modulespecifiers::ModuleSpecifierGenerationHost::get_project_reference_from_source(self.program, path)
+        tsrs_modulespecifiers::ModuleSpecifierGenerationHost::get_project_reference_from_source(self.program.as_ref(), path)
     }
 
     fn get_redirect_targets(&self, path: &Path) -> Vec<String> {
         let _outer = tsrs_core::arena::escape_scratch();
-        tsrs_modulespecifiers::ModuleSpecifierGenerationHost::get_redirect_targets(self.program, path)
+        tsrs_modulespecifiers::ModuleSpecifierGenerationHost::get_redirect_targets(self.program.as_ref(), path)
     }
 
     fn get_source_of_project_reference_if_output_included(&self, file: P<SourceFile>) -> String {
         let _outer = tsrs_core::arena::escape_scratch();
-        tsrs_modulespecifiers::ModuleSpecifierGenerationHost::get_source_of_project_reference_if_output_included(self.program, file)
+        tsrs_modulespecifiers::ModuleSpecifierGenerationHost::get_source_of_project_reference_if_output_included(self.program.as_ref(), file)
     }
 
     fn file_exists(&self, path: &str) -> bool {
         let _outer = tsrs_core::arena::escape_scratch();
-        tsrs_modulespecifiers::ModuleSpecifierGenerationHost::file_exists(self.program, path)
+        tsrs_modulespecifiers::ModuleSpecifierGenerationHost::file_exists(self.program.as_ref(), path)
     }
 
     fn get_nearest_ancestor_directory_with_package_json(&self, dirname: &str) -> String {
         let _outer = tsrs_core::arena::escape_scratch();
-        tsrs_modulespecifiers::ModuleSpecifierGenerationHost::get_nearest_ancestor_directory_with_package_json(self.program, dirname)
+        tsrs_modulespecifiers::ModuleSpecifierGenerationHost::get_nearest_ancestor_directory_with_package_json(self.program.as_ref(), dirname)
     }
 
     fn get_package_json_info(&self, pkg_json_path: &str) -> Option<P<packagejson::InfoCacheEntry>> {
         let _outer = tsrs_core::arena::escape_scratch();
-        tsrs_modulespecifiers::ModuleSpecifierGenerationHost::get_package_json_info(self.program, pkg_json_path)
+        tsrs_modulespecifiers::ModuleSpecifierGenerationHost::get_package_json_info(self.program.as_ref(), pkg_json_path)
     }
 
     fn exports_module_name_cache(&self, options: &tsrs_core::CompilerOptions) -> Option<&tsrs_modulespecifiers::ExportsModuleNameCache> {
         let _outer = tsrs_core::arena::escape_scratch();
-        tsrs_modulespecifiers::ModuleSpecifierGenerationHost::exports_module_name_cache(self.program, options)
+        tsrs_modulespecifiers::ModuleSpecifierGenerationHost::exports_module_name_cache(self.program.as_ref(), options)
     }
 
     fn get_default_resolution_mode_for_file(&self, file: P<SourceFile>) -> ResolutionMode {
         let _outer = tsrs_core::arena::escape_scratch();
-        tsrs_modulespecifiers::ModuleSpecifierGenerationHost::get_default_resolution_mode_for_file(self.program, file)
+        tsrs_modulespecifiers::ModuleSpecifierGenerationHost::get_default_resolution_mode_for_file(self.program.as_ref(), file)
     }
 
     fn get_resolved_module_from_module_specifier(&self, file: P<SourceFile>, module_specifier: P<Node>) -> Option<P<ResolvedModule>> {
         let _outer = tsrs_core::arena::escape_scratch();
-        tsrs_modulespecifiers::ModuleSpecifierGenerationHost::get_resolved_module_from_module_specifier(self.program, file, module_specifier)
+        tsrs_modulespecifiers::ModuleSpecifierGenerationHost::get_resolved_module_from_module_specifier(self.program.as_ref(), file, module_specifier)
     }
 
     fn get_mode_for_usage_location(&self, file: P<SourceFile>, module_specifier: P<Node>) -> ResolutionMode {
         let _outer = tsrs_core::arena::escape_scratch();
-        tsrs_modulespecifiers::ModuleSpecifierGenerationHost::get_mode_for_usage_location(self.program, file, module_specifier)
+        tsrs_modulespecifiers::ModuleSpecifierGenerationHost::get_mode_for_usage_location(self.program.as_ref(), file, module_specifier)
     }
 }
 
@@ -131,7 +134,7 @@ impl DeclarationEmitHost for EmitHost {
     // emitHost.go:99
     fn source_file_may_be_emitted(&self, file: P<SourceFile>, force_dts_emit: bool) -> bool {
         let _outer = tsrs_core::arena::escape_scratch();
-        emitter::source_file_may_be_emitted(file, self.program, force_dts_emit, false)
+        emitter::source_file_may_be_emitted(file, self.program.as_ref(), force_dts_emit, false)
     }
 
     // emitHost.go:90
@@ -174,7 +177,7 @@ impl tsrs_transformers::EmitHost for EmitHost {
     // emitHost.go:116
     fn common_source_directory(&self) -> String {
         let _outer = tsrs_core::arena::escape_scratch();
-        crate::program::ProgramData::common_source_directory(self.program).to_string()
+        crate::program::ProgramData::common_source_directory(self.program.as_ref()).to_string()
     }
 
     // emitHost.go:126

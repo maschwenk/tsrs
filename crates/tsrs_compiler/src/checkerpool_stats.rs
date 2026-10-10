@@ -76,7 +76,7 @@ fn file_work(c: &Checker, file: P<SourceFile>) -> (u64, u64) {
     (nodes, symbols)
 }
 
-pub(crate) fn report(program: &'static Program, pool: &crate::checkerpool::checkerPool) -> String {
+pub(crate) fn report(program: &Program, pool: &crate::checkerpool::checkerPool) -> String {
     let state = pool.state();
     let files = &program.files;
     let k = pool.checker_count();
@@ -229,7 +229,7 @@ pub(crate) fn report(program: &'static Program, pool: &crate::checkerpool::check
 type Created = (Vec<u64>, Vec<u64>, u64, u64);
 
 #[cfg(feature = "assignment-stats")]
-fn created_by_file(program: &'static Program, pool: &crate::checkerpool::checkerPool) -> Vec<Created> {
+fn created_by_file(program: &Program, pool: &crate::checkerpool::checkerPool) -> Vec<Created> {
     let files = &program.files;
     let index: rustc_hash::FxHashMap<P<SourceFile>, usize> = files.iter().enumerate().map(|(i, &f)| (f, i)).collect();
     let file_of = |symbol: Option<P<tsrs_ast::Symbol>>| -> Option<usize> {
@@ -281,7 +281,7 @@ fn package_of(name: &str, project_dir: &str) -> String {
 }
 
 #[cfg(feature = "assignment-stats")]
-fn report_created(out: &mut String, program: &'static Program, state: &crate::checkerpool::poolState, categories: &[Category], created: &[Created]) {
+fn report_created(out: &mut String, program: &Program, state: &crate::checkerpool::poolState, categories: &[Category], created: &[Created]) {
     let files = &program.files;
     let k = created.len();
     let project_dir = format!("{}/", program.get_current_directory().trim_end_matches('/'));

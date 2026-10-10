@@ -21,7 +21,7 @@ pub struct LanguageService {
     pub(crate) project_id: ProjectID,
     pub(crate) host: Arc<dyn Host>,
     active_config: UserPreferences,
-    program: &'static Program,
+    program: Arc<Program>,
     pub(crate) converters: Arc<Converters>,
     // Go mutates a plain map through the *LanguageService (one goroutine per service); a Mutex keeps the service
     // Sync so it can be shared like Go's pointer.
@@ -29,7 +29,7 @@ pub struct LanguageService {
 }
 
 // languageservice.go:25
-pub fn new_language_service(project_id: ProjectID, program: &'static Program, host: Arc<dyn Host>, active_file: &str) -> LanguageService {
+pub fn new_language_service(project_id: ProjectID, program: Arc<Program>, host: Arc<dyn Host>, active_file: &str) -> LanguageService {
     LanguageService {
         project_id,
         converters: host.converters(),
@@ -47,8 +47,12 @@ impl LanguageService {
     }
 
     // languageservice.go:45
-    pub fn get_program(&self) -> &'static Program {
-        self.program
+    pub fn get_program(&self) -> &Program {
+        &self.program
+    }
+
+    pub fn program_owner(&self) -> Arc<Program> {
+        Arc::clone(&self.program)
     }
 
     // languageservice.go:49
@@ -62,14 +66,14 @@ impl LanguageService {
     }
 
     // languageservice.go:57
-    pub(crate) fn try_get_program_and_file(&self, file_name: &str) -> (&'static Program, Option<P<SourceFile>>) {
+    pub(crate) fn try_get_program_and_file(&self, file_name: &str) -> (&Program, Option<P<SourceFile>>) {
         let program = self.get_program();
         let file = program.get_source_file(file_name);
         (program, file)
     }
 
     // languageservice.go:63
-    pub(crate) fn get_program_and_file(&self, document_uri: &lsproto::DocumentUri) -> (&'static Program, P<SourceFile>) {
+    pub(crate) fn get_program_and_file(&self, document_uri: &lsproto::DocumentUri) -> (&Program, P<SourceFile>) {
         let file_name = document_uri.file_name();
         let (program, file) = self.try_get_program_and_file(&file_name);
         let Some(file) = file else {
@@ -120,7 +124,7 @@ impl LanguageService {
             registry,
             from_file,
             self.project_id.clone(),
-            self.program,
+            Arc::clone(&self.program),
             type_checker,
             self.user_preferences().module_specifier_preferences(),
         );
@@ -135,7 +139,7 @@ impl LanguageService {
             self.host.auto_import_registry(),
             from_file,
             self.project_id.clone(),
-            self.program,
+            Arc::clone(&self.program),
             type_checker,
             self.user_preferences().module_specifier_preferences(),
         )

@@ -146,7 +146,7 @@ pub(crate) fn get_default_like_export_name_from_declaration(symbol: P<Symbol>) -
 }
 
 // util.go:146
-pub(crate) fn get_resolved_package_names(ctx: &Context, program: &'static Program) -> Set<String> {
+pub(crate) fn get_resolved_package_names(ctx: &Context, program: &Program) -> Set<String> {
     let raw_names = program.resolved_package_names();
     let unresolved_package_names = program.unresolved_package_names();
 
@@ -189,7 +189,7 @@ pub(crate) fn get_resolved_package_names(ctx: &Context, program: &'static Progra
 // from a program's project references to the provided map.
 // This is used during node_modules bucket building to redirect extraction
 // from output files to source files when the output is from a project reference.
-pub(crate) fn add_project_reference_output_mappings(program: &'static Program, result: &mut FxHashMap<Path, String>) {
+pub(crate) fn add_project_reference_output_mappings(program: &Program, result: &mut FxHashMap<Path, String>) {
     let refs = program.get_resolved_project_references();
     for r in refs {
         let Some(r) = r else {

@@ -1,7 +1,7 @@
 use std::fmt::Write as _;
 use std::sync::Arc;
 
-use tsrs_compiler::{new_compiler_host, new_program, CompilerHost, Program, ProgramOptions};
+use tsrs_compiler::{new_compiler_host, new_program, CompilerHost, ProgramOptions};
 use tsrs_core::context::Context;
 use tsrs_core::P;
 use tsrs_lsproto as lsproto;
@@ -95,7 +95,7 @@ fn test_implementations_worklist_does_not_blow_up() {
         let (parsed, errors) = tsoptions::get_parsed_command_line_of_config_file("/tsconfig.json", None, None, config_host, None);
         assert_eq!(errors.len(), 0);
         let host: Arc<dyn CompilerHost> = new_compiler_host("/", fs.clone(), &bundled::lib_path(), None, None);
-        let program: &'static Program = new_program(ProgramOptions::new(P::new(parsed.unwrap()), host));
+        let program = new_program(ProgramOptions::new(P::new(parsed.unwrap()), host));
         program.bind_source_files();
         let ctx = Context::background();
         program.get_semantic_diagnostics(&ctx, program.get_source_file("/repro.ts"));

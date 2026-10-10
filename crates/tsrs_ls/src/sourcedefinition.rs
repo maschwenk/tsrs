@@ -38,7 +38,7 @@ impl LanguageService {
     fn provide_source_definition_at_position(
         &self,
         ctx: &Context,
-        program: &'static Program,
+        program: &Program,
         file: P<SourceFile>,
         text_pos: TextPos,
     ) -> Result<lsproto::DefinitionResponse, lsproto::Error> {
@@ -162,9 +162,9 @@ impl ResolutionHost for compilerHostResolutionHost {
 // sourcedefinition.go:132
 struct SourceDefResolver<'a> {
     ls: &'a LanguageService,
-    fs: &'static dyn FS,
+    fs: &'a dyn FS,
     options: P<CompilerOptions>,
-    program: &'static Program, // Go `getSourceFile func(string) *ast.SourceFile` (program.GetSourceFile)
+    program: &'a Program, // Go `getSourceFile func(string) *ast.SourceFile` (program.GetSourceFile)
     resolve_from: String,
     resolver: module::DefaultResolver,
     parsed_files: RefCell<FxHashMap<String, Option<P<SourceFile>>>>,
@@ -172,11 +172,11 @@ struct SourceDefResolver<'a> {
 
 impl LanguageService {
     // sourcedefinition.go:142
-    fn new_source_def_resolver(&self, program: &'static Program, resolve_from: &str) -> SourceDefResolver<'_> {
+    fn new_source_def_resolver<'a>(&'a self, program: &'a Program, resolve_from: &str) -> SourceDefResolver<'a> {
         let options = program.options();
         let mut no_dts_options: CompilerOptions = (*options).clone();
         no_dts_options.no_dts_resolution = Tristate::True;
-        let host: &'static dyn CompilerHost = &**program.host();
+        let host: &dyn CompilerHost = &**program.host();
         let resolution_host = Arc::new(compilerHostResolutionHost(Arc::clone(program.host())));
         SourceDefResolver {
             ls: self,
@@ -238,7 +238,7 @@ impl SourceDefResolver<'_> {
 // returns the definition declarations for node along with the module specifier
 // of the import that brought the symbol into scope (empty if not applicable).
 // sourcedefinition.go:203
-fn get_source_def_checker_info(ctx: &Context, program: &'static Program, file: P<SourceFile>, node: P<Node>) -> (Vec<P<Node>>, String) {
+fn get_source_def_checker_info(ctx: &Context, program: &Program, file: P<SourceFile>, node: P<Node>) -> (Vec<P<Node>>, String) {
     let mut c = program.get_type_checker_for_file(ctx, file);
     let c: &mut Checker = &mut c;
 
@@ -296,7 +296,7 @@ impl SourceDefResolver<'_> {
     // For path references to .d.ts files or type references, it uses the NoDts
     // resolver to find the corresponding implementation file.
     // sourcedefinition.go:259
-    fn resolve_triple_slash_reference(&self, file: P<SourceFile>, pos: i32, program: &'static Program) -> (Vec<P<Node>>, Option<P<FileReference>>) {
+    fn resolve_triple_slash_reference(&self, file: P<SourceFile>, pos: i32, program: &Program) -> (Vec<P<Node>>, Option<P<FileReference>>) {
         let Some(ref_) = get_reference_at_position(file, pos, program) else {
             return (Vec::new(), None);
         };

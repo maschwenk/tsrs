@@ -108,7 +108,7 @@ impl RegistryCloneHost for autoImportRegistryCloneHost {
         Arc::clone(&self.fs) as Arc<dyn FS>
     }
     // autoimport.go:99
-    fn get_default_project(&self, path: &Path) -> (Option<ProjectID>, Option<&'static Program>) {
+    fn get_default_project(&self, path: &Path) -> (Option<ProjectID>, Option<std::sync::Arc<Program>>) {
         let Some(project) = self.project_collection.get_default_project(path) else {
             return (None, None);
         };
@@ -116,7 +116,7 @@ impl RegistryCloneHost for autoImportRegistryCloneHost {
     }
 
     // autoimport.go:139
-    fn get_program_for_project(&self, project_id: &ProjectID) -> Option<&'static Program> {
+    fn get_program_for_project(&self, project_id: &ProjectID) -> Option<std::sync::Arc<Program>> {
         let id = ID(project_id.0.clone());
         let project = self.project_collection.get_project(&id)?;
         project.get_program()

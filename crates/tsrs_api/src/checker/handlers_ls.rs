@@ -25,7 +25,7 @@ fn snapshot_ctx<'h>(host: &'h dyn CheckerHost, p: &Params) -> CheckerResult<Snap
     SnapshotCtx::new(host, p.u64("snapshot")?, p.project()?)
 }
 
-fn program_of(snapshot: &Snapshot, project: &str) -> CheckerResult<&'static Program> {
+fn program_of(snapshot: &Snapshot, project: &str) -> CheckerResult<Arc<Program>> {
     let proj = snapshot
         .project_collection
         .get_project(&tsrs_project::ID(project.to_string()))
@@ -34,19 +34,19 @@ fn program_of(snapshot: &Snapshot, project: &str) -> CheckerResult<&'static Prog
 }
 
 /// Go `setupLanguageService`.
-fn language_service(snapshot: &Arc<Snapshot>, program: &'static Program, project: &str, active_file: &str) -> CheckerResult<tsrs_ls::LanguageService> {
+fn language_service(snapshot: &Arc<Snapshot>, program: &Arc<Program>, project: &str, active_file: &str) -> CheckerResult<tsrs_ls::LanguageService> {
     if snapshot.project_collection.get_project(&tsrs_project::ID(project.to_string())).is_none() {
         return Err(CheckerError::client(format!("project {project} not found")));
     }
     let host: Arc<dyn tsrs_ls::Host> = Arc::<Snapshot>::clone(snapshot);
-    Ok(tsrs_ls::new_language_service(LsProjectID(project.to_string()), program, host, active_file))
+    Ok(tsrs_ls::new_language_service(LsProjectID(project.to_string()), Arc::clone(program), host, active_file))
 }
 
 pub(crate) fn get_signature_usages(host: &dyn CheckerHost, p: &Params) -> CheckerResult<Value> {
     let sd = snapshot_ctx(host, p)?;
     let program = sd.program()?;
-    let decl = host.resolve_node_handle(program, p.string("signatureDecl")?)?;
-    let ls = language_service(&sd.scope.snapshot, program, &sd.project, "")?;
+    let decl = host.resolve_node_handle(&program, p.string("signatureDecl")?)?;
+    let ls = language_service(&sd.scope.snapshot, &program, &sd.project, "")?;
     let usages = ls.get_signature_usages(&host.context(), decl);
     if usages.is_empty() {
         return Ok(Value::Array(Vec::new())); // Go nil slice: json/v2 encodes []
@@ -66,9 +66,9 @@ pub(crate) fn get_signature_usages(host: &dyn CheckerHost, p: &Params) -> Checke
 pub(crate) fn get_referenced_symbols_for_node(host: &dyn CheckerHost, p: &Params) -> CheckerResult<Value> {
     let sd = snapshot_ctx(host, p)?;
     let program = sd.program()?;
-    let node = host.resolve_node_handle(program, p.string("node")?)?;
+    let node = host.resolve_node_handle(&program, p.string("node")?)?;
     let position = p.i32("position")?;
-    let ls = language_service(&sd.scope.snapshot, program, &sd.project, "")?;
+    let ls = language_service(&sd.scope.snapshot, &program, &sd.project, "")?;
     let entries = ls.get_referenced_symbols_for_node_exported(&host.context(), position, node, program.get_source_files());
     if entries.is_empty() {
         return Ok(Value::Array(Vec::new())); // Go nil slice: json/v2 encodes []
@@ -112,7 +112,7 @@ pub(crate) fn get_completions_at_position(host: &dyn CheckerHost, p: &Params) ->
         Some(Value::String(s)) => Some(s.as_str()),
         Some(_) => return Err(CheckerError::invalid("field \"triggerCharacter\": expected a string")),
     };
-    let run = |snapshot: &Arc<Snapshot>, program: &'static Program, ctx: &Context| -> CheckerResult<Result<Option<tsrs_ls::CompletionList>, tsrs_lsproto::Error>> {
+    let run = |snapshot: &Arc<Snapshot>, program: &Arc<Program>, ctx: &Context| -> CheckerResult<Result<Option<tsrs_ls::CompletionList>, tsrs_lsproto::Error>> {
         let Some(source_file) = program.get_source_file(&file_name) else {
             return Ok(Ok(None));
         };
@@ -125,10 +125,10 @@ pub(crate) fn get_completions_at_position(host: &dyn CheckerHost, p: &Params) ->
 
     let program = sd.program()?;
     let mut prepared: Option<Arc<Snapshot>> = None;
-    let mut result = run(&sd.scope.snapshot, program, &ctx)?;
+    let mut result = run(&sd.scope.snapshot, &program, &ctx)?;
     if matches!(&result, Err(e) if tsrs_ls::is_err_needs_auto_imports(e)) {
         let snapshot = host.clone_snapshot_with_auto_imports(&sd.scope.snapshot, &file_name)?;
-        let outcome = program_of(&snapshot, &sd.project).and_then(|program| run(&snapshot, program, &ctx));
+        let outcome = program_of(&snapshot, &sd.project).and_then(|program| run(&snapshot, &program, &ctx));
         prepared = Some(snapshot);
         result = match outcome {
             Ok(r) => r,
@@ -236,7 +236,7 @@ pub(crate) fn get_import_adder_edits(host: &dyn CheckerHost, p: &Params) -> Chec
     }
     // Go `handleGetImportAdderEdits`: the per-action checks run inside the action loop, after the working
     // snapshot (possibly a fresh auto-import clone) exists.
-    let validate = |sd: &SnapshotCtx, program: &'static Program| -> CheckerResult<Vec<(P<Symbol>, bool)>> {
+    let validate = |sd: &SnapshotCtx, program: &Program| -> CheckerResult<Vec<(P<Symbol>, bool)>> {
         let mut out = Vec::with_capacity(actions.len());
         for (i, action) in actions.iter().enumerate() {
             match action.kind.as_str() {
@@ -244,7 +244,7 @@ pub(crate) fn get_import_adder_edits(host: &dyn CheckerHost, p: &Params) -> Chec
                     let Some(r) = &action.symbol else {
                         return Err(CheckerError::client(format!("import adder action {i} missing symbol")));
                     };
-                    out.push((resolve_symbol_for_program(sd, program, r)?, action.valid));
+                    out.push((resolve_symbol_for_program(sd, &program, r)?, action.valid));
                 }
                 kind => return Err(CheckerError::client(format!("unknown import adder action kind {kind:?}"))),
             }
@@ -284,17 +284,17 @@ pub(crate) fn get_import_adder_edits(host: &dyn CheckerHost, p: &Params) -> Chec
         }
     }
     let _release = Release(prepared);
-    import_adder_edits(host, &sd, &working, program, source_file, project_id, &validate)
+    import_adder_edits(host, &sd, &working, &program, source_file, project_id, &validate)
 }
 
 fn import_adder_edits(
     host: &dyn CheckerHost,
     sd: &SnapshotCtx,
     working: &Arc<Snapshot>,
-    program: &'static Program,
+    program: &Arc<Program>,
     source_file: P<tsrs_ast::SourceFile>,
     project_id: LsProjectID,
-    validate: &dyn Fn(&SnapshotCtx, &'static Program) -> CheckerResult<Vec<(P<Symbol>, bool)>>,
+    validate: &dyn Fn(&SnapshotCtx, &Program) -> CheckerResult<Vec<(P<Symbol>, bool)>>,
 ) -> CheckerResult<Value> {
     let Some(registry) = working.auto_import_registry() else {
         // Go returns before looking at the actions.
@@ -305,7 +305,7 @@ fn import_adder_edits(
     let ctx = host.context();
     let mut checker = program.get_type_checker(&ctx);
     let preferences = working.user_preferences().clone();
-    let view = tsrs_ls::autoimport::new_view(Some(registry), source_file, project_id, program, &mut checker, preferences.module_specifier_preferences());
+    let view = tsrs_ls::autoimport::new_view(Some(registry), source_file, project_id, Arc::clone(program), &mut checker, preferences.module_specifier_preferences());
     let format = tsrs_ls::Host::get_preferences(working.as_ref(), source_file.file_name()).format_code_settings;
     let mut adder = tsrs_ls::autoimport::new_import_adder(&ctx, program, &mut checker, source_file, view, format, working.converters(), preferences);
     for (symbol, valid) in symbols {

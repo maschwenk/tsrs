@@ -472,7 +472,7 @@ fn string_literal_completions_from_properties(t: P<Type>, type_checker: &mut Che
 
 impl LanguageService {
     // string_completions.go:587
-    fn get_string_literal_completions_from_module_names(&self, file: P<SourceFile>, node: P<Node>, program: &'static Program, checker: &mut Checker) -> Option<stringLiteralCompletions> {
+    fn get_string_literal_completions_from_module_names(&self, file: P<SourceFile>, node: P<Node>, program: &Program, checker: &mut Checker) -> Option<stringLiteralCompletions> {
         let text_start = astnav::get_start_of_node(node, file, false /*includeJSDoc*/) + 1;
         let replacement_span = self.path_completion_replacement_span(file, get_directory_fragment_range(node.text(), text_start))?;
         let name_and_kinds = self.get_string_literal_completions_from_module_names_worker(file, node, program, checker);
@@ -530,7 +530,7 @@ fn get_directory_fragment_range(text: &str, text_start: i32) -> Option<TextRange
 
 impl LanguageService {
     // string_completions.go:663
-    fn get_string_literal_completions_from_module_names_worker(&self, file: P<SourceFile>, node: P<Node>, program: &'static Program, checker: &mut Checker) -> Vec<moduleCompletionNameAndKind> {
+    fn get_string_literal_completions_from_module_names_worker(&self, file: P<SourceFile>, node: P<Node>, program: &Program, checker: &mut Checker) -> Vec<moduleCompletionNameAndKind> {
         let literal_value = tspath::normalize_slashes(node.text());
         let mut mode = RESOLUTION_MODE_NONE;
         if ast::is_string_literal_like(node) {
@@ -562,7 +562,7 @@ impl LanguageService {
         fragment: &str,
         script_path: &str,
         mode: ResolutionMode,
-        program: &'static Program,
+        program: &Program,
         type_checker: &mut Checker,
         extension_options: &extensionOptions,
     ) -> Vec<moduleCompletionNameAndKind> {
@@ -788,7 +788,7 @@ impl LanguageService {
     // string_completions.go:931
     fn get_completion_entries_from_typings(
         &self,
-        program: &'static Program,
+        program: &Program,
         script_path: &str,
         fragment_directory: &str,
         extension_options: &extensionOptions,
@@ -818,7 +818,7 @@ impl LanguageService {
         options: &CompilerOptions,
         fragment_directory: &str,
         extension_options: &extensionOptions,
-        program: &'static Program,
+        program: &Program,
         seen: &mut FxHashMap<String, bool>,
         result: &mut moduleCompletionNameAndKindSet,
     ) {
@@ -948,7 +948,7 @@ impl LanguageService {
         &self,
         literal_value: &str,
         script_directory: &str,
-        program: &'static Program,
+        program: &Program,
         script_path: &Path,
         extension_options: &extensionOptions,
     ) -> Vec<moduleCompletionNameAndKind> {
@@ -968,7 +968,7 @@ impl LanguageService {
         root_dirs: &[String],
         fragment: &str,
         script_directory: &str,
-        program: &'static Program,
+        program: &Program,
         exclude: &str,
         extension_options: &extensionOptions,
     ) -> Vec<moduleCompletionNameAndKind> {
@@ -1113,7 +1113,7 @@ impl LanguageService {
         fragment: &str,
         script_directory: &str,
         extension_options: &extensionOptions,
-        program: &'static Program,
+        program: &Program,
         module_specifier_is_relative: bool,
         exclude: &str,
         result: &mut moduleCompletionNameAndKindSet,
@@ -1195,7 +1195,7 @@ impl LanguageService {
     fn add_completion_entries_from_paths(
         &self,
         result: &mut moduleCompletionNameAndKindSet,
-        program: &'static Program,
+        program: &Program,
         fragment: &str,
         base_directory: &str,
         extension_options: &extensionOptions,
@@ -1240,7 +1240,7 @@ impl LanguageService {
     fn add_completion_entries_from_paths_or_exports_or_imports(
         &self,
         result: &mut moduleCompletionNameAndKindSet,
-        program: &'static Program,
+        program: &Program,
         is_exports: bool,
         is_imports: bool,
         fragment: &str,
@@ -1323,7 +1323,7 @@ impl LanguageService {
         is_exports: bool,
         is_imports: bool,
         extension_options: &extensionOptions,
-        program: &'static Program,
+        program: &Program,
     ) -> Vec<moduleCompletionNameAndKind> {
         let mut fragment_directory = get_fragment_directory(fragment);
         if !fragment_directory.is_empty() {
@@ -1417,7 +1417,7 @@ impl LanguageService {
         is_exports: bool,
         is_imports: bool,
         extension_options: &extensionOptions,
-        program: &'static Program,
+        program: &Program,
     ) -> Vec<moduleCompletionNameAndKind> {
         let parsed = try_parse_pattern(pattern);
         if !parsed.is_valid() || parsed.star_index == -1 {
@@ -1607,7 +1607,7 @@ fn get_possible_original_input_path_without_changing_ext(file_path: &str, ignore
 }
 
 // string_completions.go:1855
-fn get_filename_with_extension_option(name: &str, program: &'static Program, extension_options: &extensionOptions, is_exports_or_imports_wildcard: bool) -> (String, String) {
+fn get_filename_with_extension_option(name: &str, program: &Program, extension_options: &extensionOptions, is_exports_or_imports_wildcard: bool) -> (String, String) {
     let non_js_result = modulespecifiers::try_get_real_file_name_for_non_js_declaration_file_name(name);
     if !non_js_result.is_empty() {
         let ext = tspath::try_get_extension_from_path(&non_js_result).to_string();
@@ -1921,7 +1921,7 @@ fn parse_triple_slash_directive_fragment(text: &str) -> Option<(String, String, 
 
 impl LanguageService {
     // string_completions.go:2188
-    fn get_triple_slash_reference_completions(&self, file: P<SourceFile>, position: i32, program: &'static Program, _checker: &mut Checker) -> Option<pathCompletions> {
+    fn get_triple_slash_reference_completions(&self, file: P<SourceFile>, position: i32, program: &Program, _checker: &mut Checker) -> Option<pathCompletions> {
         let compiler_options = program.options();
         let token = astnav::get_token_at_position(file, position);
         let comment_ranges: Vec<ast::CommentRange> = scanner::get_leading_comment_ranges(file.text(), token.pos()).collect();

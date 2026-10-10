@@ -30,9 +30,6 @@ pub struct StateBaseline {
     pub(crate) is_initialized: bool,
 
     serialized_projects: HashMap<String, projectInfo>,
-    // Go's `*compiler.Program` keeps the program alive (GC); the project values that own the serialized programs
-    // (docs/LSP.md memory regions) are kept until the next diff.
-    serialized_programs_owner: Option<Box<dyn std::any::Any>>,
     serialized_open_files: HashMap<String, openFileInfo>,
     serialized_config_file_registry: Option<Arc<ConfigFileRegistry>>,
 }
@@ -45,7 +42,6 @@ pub(crate) fn new_state_baseline(fs_from_map: Arc<IoVFS<MapFS>>) -> StateBaselin
         fs_differ: FSDiffer::new(fs_from_map),
         is_initialized: false,
         serialized_projects: HashMap::new(),
-        serialized_programs_owner: None,
         serialized_open_files: HashMap::new(),
         serialized_config_file_registry: None,
     };
@@ -57,11 +53,11 @@ pub(crate) fn new_state_baseline(fs_from_map: Arc<IoVFS<MapFS>>) -> StateBaselin
 }
 
 // Go `projectInfo = *compiler.Program` (nil = no program).
-type projectInfo = Option<&'static Program>;
+type projectInfo = Option<std::sync::Arc<Program>>;
 
-fn same_program(a: projectInfo, b: projectInfo) -> bool {
+fn same_program(a: &projectInfo, b: &projectInfo) -> bool {
     match (a, b) {
-        (Some(a), Some(b)) => std::ptr::eq(a, b),
+        (Some(a), Some(b)) => Arc::ptr_eq(a, b),
         (None, None) => true,
         _ => false,
     }
@@ -311,11 +307,11 @@ impl FourslashTest {
             let program = project.get_program();
             let mut old_program: projectInfo = None;
             let id = project.id().0;
-            current_projects.insert(id.clone(), program);
+            current_projects.insert(id.clone(), program.clone());
             let project_change;
             if let Some(existing) = state_baseline.serialized_projects.get(&id) {
-                old_program = *existing;
-                if !same_program(old_program, program) {
+                old_program = existing.clone();
+                if !same_program(&old_program, &program) {
                     project_change = "*modified*";
                     projects_diff_table.set_has_change();
                 } else {
@@ -328,13 +324,13 @@ impl FourslashTest {
 
             let mut out = format!("  [{}] {}\n", id, project_change);
             let mut sub_diff = diffTable::new(options);
-            if let Some(program) = program {
+            if let Some(program) = &program {
                 for &file in program.get_source_files() {
                     let mut file_diff = "";
                     // No need to write "*new*" for files as its obvious
                     let file_name = file.file_name();
                     if project_change == "*modified*" {
-                        match old_program {
+                        match &old_program {
                             None => {
                                 if !is_lib_file(&file_name) {
                                     file_diff = "*new*";
@@ -352,10 +348,10 @@ impl FourslashTest {
                     }
                 }
             }
-            if !same_program(old_program, program) {
-                if let Some(old_program) = old_program {
+            if !same_program(&old_program, &program) {
+                if let Some(old_program) = &old_program {
                     for &file in old_program.get_source_files() {
-                        if program.is_none_or(|p| p.get_source_file_by_path(&file.path()).is_none()) {
+                        if program.as_deref().is_none_or(|p| p.get_source_file_by_path(&file.path()).is_none()) {
                             sub_diff.add(&file.file_name(), "*deleted*");
                         }
                     }
@@ -383,7 +379,6 @@ impl FourslashTest {
             }
         }
         state_baseline.serialized_projects = current_projects;
-        state_baseline.serialized_programs_owner = Some(Box::new(snapshot.project_collection.projects()));
         projects_diff_table.print(w);
     }
 

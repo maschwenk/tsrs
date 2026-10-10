@@ -78,7 +78,7 @@ impl<'h> SnapshotCtx<'h> {
         self.scope.registry.project_checker_id(&self.project)
     }
 
-    pub(crate) fn program(&self) -> CheckerResult<&'static Program> {
+    pub(crate) fn program(&self) -> CheckerResult<std::sync::Arc<Program>> {
         let project = self
             .scope
             .snapshot
@@ -95,7 +95,7 @@ pub(crate) struct Setup<'h> {
     // Dropped after `checker`: the gate is released only once the checker slot is free again.
     _lease: super::lease::ApiCheckerLease,
     pub(crate) checker_id: u32,
-    pub(crate) program: &'static Program,
+    pub(crate) program: std::sync::Arc<Program>,
     pub(crate) sd: SnapshotCtx<'h>,
 }
 
@@ -106,7 +106,7 @@ impl<'h> Setup<'h> {
     pub(crate) fn new(host: &'h dyn CheckerHost, snapshot: u64, project: &str) -> CheckerResult<Setup<'h>> {
         let sd = SnapshotCtx::new(host, snapshot, project)?;
         let program = sd.program()?;
-        let lease = super::lease::acquire(program)?;
+        let lease = super::lease::acquire(&program)?;
         let ctx = with_checker_lifetime(&host.context(), CheckerLifetime::API);
         let checker = program.get_type_checker(&ctx);
         let checker_id = checker.id;
@@ -216,7 +216,7 @@ impl<'h> Setup<'h> {
 
     /// Go `checkerSetup.resolveSymbolHandle`.
     pub(crate) fn resolve_symbol(&self, r: &SymbolReference) -> CheckerResult<P<Symbol>> {
-        resolve_symbol_for_program(&self.sd, self.program, r)
+        resolve_symbol_for_program(&self.sd, &self.program, r)
     }
 
     pub(crate) fn source_file(&self, file: &DocumentIdentifier) -> CheckerResult<P<SourceFile>> {
@@ -224,7 +224,7 @@ impl<'h> Setup<'h> {
     }
 
     pub(crate) fn resolve_node(&self, handle: &str) -> CheckerResult<P<Node>> {
-        self.sd.host.resolve_node_handle(self.program, handle)
+        self.sd.host.resolve_node_handle(&self.program, handle)
     }
 
     /// Go `checkerSetup.resolveLocation`: a node handle, or file + UTF-16 position, or nothing.
@@ -426,7 +426,7 @@ const TYPE_RESPONSE_FIELD_ORDER: &[&str] = &[
 
 /// Go `checkerSetup{sd, snapshot, program, projectID}.resolveSymbolHandle(ref)`: snapshot-owned references
 /// must name this snapshot; file-owned references must name a file of `program` with an identical descriptor.
-pub(crate) fn resolve_symbol_for_program(sd: &SnapshotCtx, program: &'static Program, r: &SymbolReference) -> CheckerResult<P<Symbol>> {
+pub(crate) fn resolve_symbol_for_program(sd: &SnapshotCtx, program: &Program, r: &SymbolReference) -> CheckerResult<P<Symbol>> {
     match r.kind {
         SYMBOL_OWNER_KIND_SNAPSHOT => {
             if r.snapshot != sd.scope.handle || r.file.is_some() {

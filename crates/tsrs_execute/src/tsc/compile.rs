@@ -81,7 +81,7 @@ pub trait CommandLineTesting: Sync {
     fn on_build_status_report_start(&self, _w: &dyn Fn(&str)) {}
     fn on_build_status_report_end(&self, _w: &dyn Fn(&str)) {}
     fn on_emitted_files(&self, _result: Option<&tsrs_compiler::EmitResult>, _m_times_cache: Option<&MTimesCache>) {}
-    fn on_program(&self, _program: P<tsrs_incremental::Program>) {}
+    fn on_program(&self, _program: std::sync::Arc<tsrs_incremental::Program>) {}
     // Go `GetTrace(w, locale)`: the trace function for a program's compiler host, writing to `w`.
     fn get_trace(&'static self, w: SyncWriter, is_sys_writer: bool) -> Box<tsrs_compiler::TraceFn>;
 }
@@ -124,4 +124,11 @@ pub struct CompileAndEmitResult {
     pub emitted_files: Vec<String>,
     pub status: ExitStatus,
     pub times: CompileTimes,
+    // Raw diagnostics can point into either the checker graph or an earlier incremental snapshot.
+    pub(crate) _owner: CompileResultOwner,
+}
+
+pub(crate) enum CompileResultOwner {
+    Compiler { _program: Arc<tsrs_compiler::Program> },
+    Incremental { _program: Arc<tsrs_incremental::Program> },
 }

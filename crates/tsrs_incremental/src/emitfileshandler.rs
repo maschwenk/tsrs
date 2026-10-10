@@ -23,7 +23,7 @@ struct emitUpdate {
 
 struct emitFilesHandler<'a> {
     ctx: &'a Context,
-    program: P<Program>,
+    program: &'a Program,
     is_for_dts_errors: bool,
     signatures: Mutex<FxHashMap<Path, String>>,
     emit_signatures: Mutex<FxHashMap<Path, EmitSignature>>,
@@ -372,7 +372,7 @@ impl<'a> emitFilesHandler<'a> {
 }
 
 // emitfileshandler.go:341
-pub(crate) fn emit_files(ctx: &Context, program: P<Program>, options: &EmitOptions, is_for_dts_errors: bool) -> Option<EmitResult> {
+pub(crate) fn emit_files(ctx: &Context, program: &Program, options: &EmitOptions, is_for_dts_errors: bool) -> Option<EmitResult> {
     let emit_handler = emitFilesHandler {
         ctx,
         program,

@@ -92,13 +92,16 @@ enum Compiled {
 pub struct CompilationResult {
     pub diagnostics: Vec<P<Diagnostic>>,
     pub options: &'static CompilerOptions,
-    pub program: &'static compiler::Program,
+    pub program: std::sync::Arc<compiler::Program>,
     pub harness_options: HarnessOptions,
     pub host: Arc<dyn CompilerHost>,
     pub tsconfig: Option<P<ParsedCommandLine>>,
     // The emit outputs, only under `--baselines js` (docs/EMIT.md section 8).
     #[cfg(feature = "checker")]
     pub emit: Option<crate::emit_harness::EmitOutputs>,
+    // A diagnostic-count mismatch can return pre-emit checker diagnostics.
+    #[cfg(feature = "checker")]
+    _pre_emit_program: Option<Arc<compiler::Program>>,
 }
 
 /// Dev metric for the option sweep (docs/EMIT.md section 13, wave E12): `TSRS_TEST_DTS_ONLY=1` with `--baselines js`
@@ -247,11 +250,11 @@ fn compile_files_ex(
     let host: Arc<dyn CompilerHost> = Arc::new(CachedCompilerHost { inner });
     #[cfg(feature = "checker")]
     if let Some(recorder) = recorder {
-        let (diagnostics, program, emit_result) =
+        let (diagnostics, program, emit_result, pre_program) =
             crate::emit_harness::compile_files_with_host_emit(Arc::clone(&host), config, harness_options, &|host, config| create_program_like(host, config));
         let options = program.options().get();
-        let emit = crate::emit_harness::new_emit_outputs(&recorder, program, options, &*host, emit_result);
-        return Ok(CompilationResult { diagnostics, options, program, harness_options: harness_options.clone(), host, tsconfig, emit: Some(emit) });
+        let emit = crate::emit_harness::new_emit_outputs(&recorder, &program, options, &*host, emit_result);
+        return Ok(CompilationResult { diagnostics, options, program, harness_options: harness_options.clone(), host, tsconfig, emit: Some(emit), _pre_emit_program: Some(pre_program) });
     }
     Ok(compile_files_with_host(host, config, harness_options, tsconfig))
 }
@@ -274,19 +277,19 @@ impl tsrs_incremental::BuildInfoReader for testBuildInfoReader {
 // harnessutil.go:970 (createProgram), used by the emit harness (`--baselines js`): an `incremental` program is
 // wrapped in `incremental.NewProgram` like Go's. The default mode (no emit baselines) keeps the plain program below.
 #[cfg(feature = "checker")]
-fn create_program_like(host: Arc<dyn CompilerHost>, config: P<ParsedCommandLine>) -> &'static dyn compiler::ProgramLike {
+fn create_program_like(host: Arc<dyn CompilerHost>, config: P<ParsedCommandLine>) -> (Arc<compiler::Program>, Box<dyn compiler::ProgramLike>) {
     let program = create_program(Arc::clone(&host), config);
     if config.compiler_options().unwrap().incremental.is_true() {
         let reader = testBuildInfoReader { inner: tsrs_incremental::new_build_info_reader(Arc::clone(&host)) };
         let old_program = tsrs_incremental::read_build_info_program(config, &reader, &*host);
-        let incremental_program = tsrs_incremental::new_program(program, old_program, tsrs_incremental::create_host(host), None, false);
-        return Box::leak(Box::new(incremental_program.get()));
+        let incremental_program = tsrs_incremental::new_program(Arc::clone(&program), old_program, tsrs_incremental::create_host(host), None, false);
+        return (program, Box::new(incremental_program));
     }
-    Box::leak(Box::new(program))
+    (Arc::clone(&program), Box::new(program))
 }
 
 // harnessutil.go:970 (createProgram) without the incremental wrapper: the default (type-check only) mode.
-fn create_program(host: Arc<dyn CompilerHost>, config: P<ParsedCommandLine>) -> &'static compiler::Program {
+fn create_program(host: Arc<dyn CompilerHost>, config: P<ParsedCommandLine>) -> Arc<compiler::Program> {
     let mut opts = compiler::ProgramOptions::new(config, host);
     if test_program_is_single_threaded() {
         opts.single_threaded = Tristate::True;
@@ -322,6 +325,8 @@ fn compile_files_with_host(host: Arc<dyn CompilerHost>, config: P<ParsedCommandL
         tsconfig,
         #[cfg(feature = "checker")]
         emit: None,
+        #[cfg(feature = "checker")]
+        _pre_emit_program: None,
     }
 }
 
@@ -447,7 +452,7 @@ fn verify_types_and_symbols(
     if crate::syntax_only() || crate::extra_baselines() == 0 || result.harness_options.no_types_and_symbols {
         return None;
     }
-    let program = result.program;
+    let program = &result.program;
     let all_files: Vec<TestFile> =
         to_be_compiled.iter().chain(other_files).filter(|f| program.get_source_file(&f.unit_name).is_some()).cloned().collect();
     let header_components =
@@ -466,7 +471,7 @@ fn verify_source_maps(result: &CompilationResult) -> Option<compiler_runner::Sou
         return None;
     }
     let outputs = result.emit.as_ref()?;
-    let program = result.program;
+    let program = &result.program;
     let get_program_source_text = |name: &str| program.get_source_file(name).map(|f| f.original_text().to_string());
     let get_source_map_record = || {
         let source_maps: Vec<crate::sourcemap_recorder::SourceMapRecordInput> = outputs

@@ -746,7 +746,7 @@ impl Snapshot {
         new_snapshot.created_programs = project_collection_builder.take_created_programs();
 
         for project in new_snapshot.project_collection.projects() {
-            if let Some(program) = project.program {
+            if let Some(program) = project.program.as_deref() {
                 store.program_counter.ref_(program);
                 if project.program_last_update == new_snapshot_id {
                     // If the program was updated during this clone, the project and its host are new
@@ -825,7 +825,7 @@ impl Snapshot {
     fn dispose(&self) {
         let store = &self.host;
         for project in self.project_collection.projects() {
-            let Some(program) = project.program else {
+            let Some(program) = project.program.as_deref() else {
                 continue;
             };
             if store.program_counter.deref(program) {

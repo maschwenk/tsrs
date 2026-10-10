@@ -1,20 +1,21 @@
 use std::cell::Cell;
+use std::sync::Arc;
 
 use tsrs_compiler::{get_diagnostics_of_any_program, sort_and_deduplicate_diagnostics, Program};
 use tsrs_core::P;
 use tsrs_tsoptions::ParsedCommandLine;
 
-use super::{statistics_from_program, CompileAndEmitResult, CompileTimes, DiagnosticReporter, DiagnosticsReporter, ExitStatus, Statistics, System};
+use super::{statistics_from_program, CompileAndEmitResult, CompileResultOwner, CompileTimes, DiagnosticReporter, DiagnosticsReporter, ExitStatus, Statistics, System};
 
 pub struct EmitInput<'a> {
     pub sys: &'a dyn System,
-    pub program: &'static Program,
+    pub program: &'a Arc<Program>,
     pub config: P<ParsedCommandLine>,
     pub report_diagnostic: &'a DiagnosticReporter<'a>,
     pub report_error_summary: &'a DiagnosticsReporter<'a>,
     pub compile_times: CompileTimes,
     // Go `EmitInput.ProgramLike` when it is an `*incremental.Program`.
-    pub incremental: Option<P<tsrs_incremental::Program>>,
+    pub incremental: Option<&'a Arc<tsrs_incremental::Program>>,
     // Go `EmitInput.Writer` (nil here means `sys.Writer()`), `EmitInput.WriteFile` and `EmitInput.Testing`.
     pub writer: Option<&'a (dyn Fn(&str) + 'a)>,
     pub write_file: Option<tsrs_compiler::WriteFile<'a>>,
@@ -143,7 +144,7 @@ pub fn emit_files_and_report_errors(input: &EmitInput) -> CompileAndEmitResult {
 
     tsrs_core::phases::time("Error summary", || (input.report_error_summary)(&all_diagnostics));
     let emitted_files = emit_result.emitted_files.clone();
-    CompileAndEmitResult { diagnostics: all_diagnostics, emit_skipped, emitted_files, status: ExitStatus::Success, times }
+    CompileAndEmitResult { diagnostics: all_diagnostics, emit_skipped, emitted_files, status: ExitStatus::Success, times, _owner: CompileResultOwner::Compiler { _program: Arc::clone(input.program) } }
 }
 
 // emit.go:142
@@ -183,8 +184,7 @@ fn list_files_worker(input: &EmitInput, emit_result: &tsrs_compiler::EmitResult)
 }
 
 // emit.go:72 EmitFilesAndReportErrors with an incremental program as the ProgramLike.
-fn emit_files_and_report_errors_incremental(input: &EmitInput, program_like: P<tsrs_incremental::Program>) -> CompileAndEmitResult {
-    let program_like: &'static tsrs_incremental::Program = program_like.get();
+fn emit_files_and_report_errors_incremental(input: &EmitInput, program_like: &Arc<tsrs_incremental::Program>) -> CompileAndEmitResult {
     use tsrs_incremental::emit::{get_diagnostics_of_any_program as get_diagnostics_of_any_program_like, EmitOptions, EmitResult, ProgramLike};
     let mut times = input.compile_times;
     let bind_time = Cell::new(times.bind_time);
@@ -194,7 +194,7 @@ fn emit_files_and_report_errors_incremental(input: &EmitInput, program_like: P<t
     let ctx = tsrs_compiler::Context::default();
     let mut all_diagnostics = get_diagnostics_of_any_program_like(
         &ctx,
-        &program_like,
+        program_like,
         None,
         false,
         &mut |ctx, file| {
@@ -248,5 +248,68 @@ fn emit_files_and_report_errors_incremental(input: &EmitInput, program_like: P<t
     // Go reads EmitResult.EmitSkipped through a nil result here only when the incremental program was cancelled.
     let emitted_files = emit_result.as_ref().map(|r| r.emitted_files.clone()).unwrap_or_default();
     let emit_skipped = emit_result.map(|r| r.emit_skipped).unwrap_or(false);
-    CompileAndEmitResult { diagnostics: all_diagnostics, emit_skipped, emitted_files, status: ExitStatus::Success, times }
+    CompileAndEmitResult { diagnostics: all_diagnostics, emit_skipped, emitted_files, status: ExitStatus::Success, times, _owner: CompileResultOwner::Incremental { _program: Arc::clone(program_like) } }
+}
+
+#[cfg(test)]
+mod ownership_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::time::{Duration, Instant};
+    use tsrs_core::{CompilerOptions, Tristate};
+    use tsrs_vfs::FS;
+
+    struct TestSystem(Arc<dyn FS>);
+
+    impl System for TestSystem {
+        fn fs(&self) -> Arc<dyn FS> { Arc::clone(&self.0) }
+        fn default_library_path(&self) -> &str { "" }
+        fn get_current_directory(&self) -> &str { "/" }
+        fn write(&self, _: &str) {}
+        fn flush(&self) {}
+        fn write_output_is_tty(&self) -> bool { false }
+        fn get_environment_variable(&self, _: &str) -> Option<String> { None }
+        fn now(&self) -> Instant { Instant::now() }
+        fn since_start(&self) -> Duration { Duration::ZERO }
+    }
+
+    #[test]
+    fn returned_diagnostics_keep_compiler_and_incremental_owners_alive() {
+        for incremental in [false, true] {
+            let sys = TestSystem(Arc::new(tsrs_vfs::vfstest::from_map([("/index.ts", "const value: string = 1;")], true)));
+            let region = tsrs_core::arena::Region::new(4096);
+            let dropped = Arc::new(AtomicUsize::new(0));
+            let observed = Arc::clone(&dropped);
+            region.on_free(Box::new(move || { observed.fetch_add(1, Ordering::SeqCst); }));
+            let (program, incremental_program, config) = {
+                let _scope = region.enter();
+                let options = P::new(CompilerOptions { no_lib: Tristate::True, no_emit: Tristate::True, ..Default::default() });
+                let config = P::new(tsrs_tsoptions::new_parsed_command_line(options, vec!["/index.ts".into()], Vec::new(), Default::default()));
+                let host = tsrs_compiler::new_compiler_host("/", sys.fs(), "", None, None);
+                let mut opts = tsrs_compiler::ProgramOptions::new(config, Arc::clone(&host));
+                opts.single_threaded = Tristate::True;
+                let program = tsrs_compiler::new_program(opts);
+                let incremental_program = incremental.then(|| tsrs_incremental::new_program(Arc::clone(&program), None, tsrs_incremental::create_host(host), None, false));
+                (program, incremental_program, config)
+            };
+            let weak_program = Arc::downgrade(&program);
+            let report_diagnostic: DiagnosticReporter = Box::new(|_| {});
+            let report_error_summary: DiagnosticsReporter = Box::new(|_| {});
+            let result = emit_files_and_report_errors(&EmitInput {
+                sys: &sys, program: &program, config, report_diagnostic: &report_diagnostic, report_error_summary: &report_error_summary,
+                compile_times: CompileTimes::default(), incremental: incremental_program.as_ref(), writer: None,
+                write_file: None, testing: None, testing_m_times_cache: None,
+            });
+            drop(incremental_program);
+            drop(program);
+            drop(region);
+            assert!(weak_program.upgrade().is_some());
+            assert_eq!(dropped.load(Ordering::SeqCst), 0);
+            let error = result.diagnostics.iter().find(|d| d.code() == 2318).unwrap();
+            assert!(!error.message_args()[0].is_empty());
+            drop(result);
+            assert!(weak_program.upgrade().is_none());
+            assert_eq!(dropped.load(Ordering::SeqCst), 1);
+        }
+    }
 }

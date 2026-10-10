@@ -107,6 +107,13 @@ pointer compression costs about +4.9% instructions and took back most of the che
 
 ## Measured and rejected (do not redo)
 
+- Calling the compiler/incremental root ownership stage completed or memory-preserving
+  (`notes/rust-owned-program-roots.md`): against `9500bf1e`, single-thread instructions add 5.17–9.91% and default
+  RSS adds 11.24–12.66%; cumulative default RSS is +98–109% against pre-Oxc. This is an unfinished branch
+  checkpoint, not a performance change ready to land. Keep the complete ownership goal active. Revisit landing
+  after typed graph owners replace the address-routing/thread-arena compatibility layer, fresh measurements
+  recover the gates, and the full runtime/oracle/lifecycle audit passes.
+
 - Calling the owned checker-lease/region stage a completed or memory-preserving migration
   (`notes/rust-owned-checker-leases.md`): this checkpoint is within local incremental limits, but cumulative
   Compiler single-thread instructions remain +1.075% against original Oxc and default RSS is +79–88% against

@@ -45,7 +45,7 @@ pub fn new_build_info_reader(host: Arc<dyn CompilerHost>) -> Box<dyn BuildInfoRe
 }
 
 // incremental.go:44
-pub fn read_build_info_program(config: P<ParsedCommandLine>, reader: &dyn BuildInfoReader, host: &dyn CompilerHost) -> Option<P<Program>> {
+pub fn read_build_info_program(config: P<ParsedCommandLine>, reader: &dyn BuildInfoReader, host: &dyn CompilerHost) -> Option<std::sync::Arc<Program>> {
     // Read buildInfo file
     let build_info = reader.read_build_info(&config)?;
     if !build_info.is_valid_version() || !build_info.is_incremental() {

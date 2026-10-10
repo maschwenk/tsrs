@@ -11,7 +11,7 @@ use tsrs_compiler::Program;
 use tsrs_core::alloc_profile::census;
 use tsrs_core::P;
 
-pub(crate) fn run(program: &'static Program, roots: &[usize]) {
+pub(crate) fn run(program: &Program, roots: &[usize]) {
     if !census::active() {
         return;
     }
@@ -40,14 +40,14 @@ pub(crate) fn run_lsp(server: &std::sync::Arc<tsrs_lsp::Server>) {
     tsrs_core::census_scrub_stack();
     let session = server.session();
     let snapshot = session.snapshot();
-    let programs: Vec<&'static Program> = snapshot.project_collection.projects().iter().filter_map(|p| p.program).collect();
+    let programs: Vec<std::sync::Arc<Program>> = snapshot.project_collection.projects().iter().filter_map(|p| p.program.clone()).collect();
     let roots = [std::sync::Arc::as_ptr(server) as usize, std::sync::Arc::as_ptr(session) as usize, std::sync::Arc::as_ptr(&snapshot) as usize];
     eprintln!("census (lsp): {} programs in the current snapshot", programs.len());
     tsrs_ast::census_layouts();
     census::run(&roots);
     if std::env::var_os("TSRS_CENSUS_VERIFY").is_some_and(|v| v == "1") {
         for program in programs {
-            verify(program);
+            verify(&program);
         }
     }
 }
@@ -123,7 +123,7 @@ fn flow_nodes_of(node: P<Node>) -> Vec<P<FlowNode>> {
     out
 }
 
-fn verify(program: &'static Program) {
+fn verify(program: &Program) {
     let (mut nodes, mut symbols) = (Tally::default(), Tally::default());
     let mut freed = FreedRefs::default();
     let mut seen_symbols: FxHashSet<P<Symbol>> = FxHashSet::default();

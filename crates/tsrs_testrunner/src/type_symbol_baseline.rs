@@ -24,7 +24,7 @@ static LINE_DELIMITER: LazyLock<Regex> = LazyLock::new(|| Regex::new("\r?\n").un
 // panic guard (Go's per-subtest RecoverAndFail); a panic is returned as `Err(message)`.
 pub fn do_type_and_symbol_baseline(
     header: &str,
-    program: &'static Program,
+    program: &Program,
     all_files: &[TestFile],
     has_error_baseline: bool,
 ) -> (Result<String, String>, Result<String, String>) {
@@ -128,8 +128,8 @@ pub(crate) fn project_file_baseline(walker: &mut TypeWriterWalker, source_file: 
     file_baseline(unit_name, source_file.text(), &results, is_symbol_baseline).unwrap_or_default()
 }
 
-pub(crate) struct TypeWriterWalker {
-    program: &'static Program,
+pub(crate) struct TypeWriterWalker<'a> {
+    program: &'a Program,
     had_error_baseline: bool,
     current_source_file: Option<P<SourceFile>>,
     // Go's printer.GetEmitContext pool: one context, reset before each use.
@@ -144,8 +144,8 @@ struct TypeWriterResult {
     underline: String, // !!!
 }
 
-impl TypeWriterWalker {
-    pub(crate) fn new(program: &'static Program, had_error_baseline: bool) -> TypeWriterWalker {
+impl<'a> TypeWriterWalker<'a> {
+    pub(crate) fn new(program: &'a Program, had_error_baseline: bool) -> TypeWriterWalker<'a> {
         TypeWriterWalker { program, had_error_baseline, current_source_file: None, emit_context: checker::new_emit_context() }
     }
 

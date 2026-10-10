@@ -26,7 +26,7 @@ bitflags::bitflags! {
 pub(crate) struct missingMemberFixer<'a> {
     change_tracker: &'a change::Tracker,
     type_checker: &'a mut Checker,
-    program: &'static Program,
+    program: &'a Program,
     preferences: UserPreferences,
     import_adder: Option<&'a mut (dyn ImportAdder + 'static)>,
     #[expect(dead_code, reason = "Go reads it for Method_not_implemented.Localize(f.locale); Message::localize has no locale parameter (English only)")]
@@ -36,7 +36,7 @@ pub(crate) struct missingMemberFixer<'a> {
 // codeactions_missingmemberfixer.go:35
 pub(crate) fn new_missing_member_fixer<'a>(
     change_tracker: &'a change::Tracker,
-    program: &'static Program,
+    program: &'a Program,
     type_checker: &'a mut Checker,
     preferences: UserPreferences,
     import_adder: Option<&'a mut (dyn ImportAdder + 'static)>,

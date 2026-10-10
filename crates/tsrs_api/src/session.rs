@@ -75,7 +75,7 @@ impl Drop for SnapshotData {
 
 impl SnapshotData {
     /// Go `snapshotData.getProject` / `getProgram`.
-    pub fn get_program(&self, project: &ProjectID) -> ApiResult<&'static Program> {
+    pub fn get_program(&self, project: &ProjectID) -> ApiResult<Arc<Program>> {
         let proj = self
             .snapshot
             .project_collection
@@ -92,7 +92,7 @@ pub struct CheckerSetup {
     pub sd: Arc<SnapshotData>,
     pub snapshot: SnapshotID,
     pub project: ProjectID,
-    pub program: &'static Program,
+    pub program: std::sync::Arc<Program>,
     pub checker: CheckerHandle,
 }
 

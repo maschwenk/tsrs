@@ -17,7 +17,6 @@ use crate::checkerpool::{checkerPool, checkerPoolHandle, new_checker_pool};
 use crate::compilerhost::compilerHost;
 use crate::dirty::Cloneable;
 use crate::logging::LogTree;
-use crate::memregions::programOwner;
 use tsrs_core::arena::Region;
 use crate::parsecache::{parse_cache_key_for_duplicate, parse_cache_key_for_file};
 use crate::projectcollectionbuilder::ProjectCollectionBuilder;
@@ -197,7 +196,7 @@ pub struct Project {
     pub command_line: Option<P<ParsedCommandLine>>,
     // Go: `commandLineWithTypingsFiles` + `commandLineWithTypingsFilesOnce`.
     pub(crate) command_line_with_typings_files: Arc<OnceLock<P<ParsedCommandLine>>>,
-    pub program: Option<&'static Program>,
+    pub program: Option<Arc<Program>>,
     // The kind of update that was performed on the program last time it was updated.
     pub program_update_kind: ProgramUpdateKind,
     // The ID of the snapshot that created the program stored in this project.
@@ -212,8 +211,6 @@ pub struct Project {
     pub(crate) content_mapper_watched_files: Option<Arc<Set<Path>>>,
 
     pub(crate) checker_pool: Option<Arc<checkerPool>>,
-    // Memory regions (not in Go): owns the program and what is freed with it (memregions.rs).
-    pub(crate) program_owner: Option<Arc<programOwner>>,
 
     pub(crate) module_resolver_factory: Option<Arc<dyn ModuleResolverFactory>>,
     pub(crate) module_resolver_id: u64,
@@ -372,7 +369,6 @@ pub fn new_project(id: ID, kind: Kind, current_directory: &str, builder: &Projec
         content_mapper_watch: Some(content_mapper_watch),
         content_mapper_watched_files: None,
         checker_pool: None,
-        program_owner: None,
         module_resolver_factory: None,
         module_resolver_id: 0,
         installed_typings_info: None,
@@ -382,12 +378,11 @@ pub fn new_project(id: ID, kind: Kind, current_directory: &str, builder: &Projec
 
 // The result of `CreateProgram`.
 pub struct CreateProgramResult {
-    pub program: &'static Program,
+    pub program: Arc<Program>,
     pub update_kind: ProgramUpdateKind,
     // Go reads the pool back with `program.GetCheckerPool().(*checkerPool)`; the program keeps the pool behind
     // `dyn CheckerPool`, so the factory hands the concrete pool out here.
     pub(crate) checker_pool: Option<Arc<checkerPool>>,
-    pub(crate) owner: Arc<programOwner>,
 }
 
 impl Project {
@@ -441,8 +436,8 @@ impl Project {
     }
 
     // project.go:357
-    pub fn get_program(&self) -> Option<&'static Program> {
-        self.program
+    pub fn get_program(&self) -> Option<Arc<Program>> {
+        self.program.clone()
     }
 
     // project.go:361
@@ -459,7 +454,7 @@ impl Project {
         if let Some(checker_pool) = &self.checker_pool {
             global_diags = checker_pool.get_global_diagnostics();
         }
-        let program = self.program.unwrap();
+        let program = self.program.as_deref().unwrap();
         let mut all = program.get_config_file_parsing_diagnostics();
         all.extend(program.get_program_diagnostics());
         all.extend(global_diags);
@@ -473,12 +468,12 @@ impl Project {
 
     // project.go:384
     pub(crate) fn contains_file(&self, path: &Path) -> bool {
-        self.program.is_some_and(|program| program.get_source_file_by_path(path).is_some())
+        self.program.as_deref().is_some_and(|program| program.get_source_file_by_path(path).is_some())
     }
 
     // project.go:388
     pub fn is_source_from_project_reference(&self, path: &Path) -> bool {
-        self.program.is_some_and(|program| program.is_source_from_project_reference(path))
+        self.program.as_deref().is_some_and(|program| program.is_source_from_project_reference(path))
     }
 
     // project.go:433
@@ -556,7 +551,7 @@ impl Project {
         let host = self.host.clone().unwrap();
         let mut update_kind = ProgramUpdateKind::NewFiles;
         let mut program_cloned = false;
-        let new_program_result: &'static Program;
+        let new_program_result: Arc<Program>;
 
         let pool_slot: Arc<Mutex<Option<Arc<checkerPool>>>> = Arc::new(Mutex::new(None));
         let create_checker_pool: CreateCheckerPool = {
@@ -590,9 +585,9 @@ impl Project {
         let region = Region::new(1 << 20);
         let region_scope = region.enter();
         tsrs_core::census_scrub_stack();
-        let reuse = !self.dirty_file_path.0.is_empty() && self.program.is_some_and(|program| Some(program.command_line()) == command_line);
+        let reuse = !self.dirty_file_path.0.is_empty() && self.program.as_deref().is_some_and(|program| Some(program.command_line()) == command_line);
         if reuse {
-            let old_program = self.program.unwrap();
+            let old_program = self.program.as_deref().unwrap();
             let (program, dirty_file, cloned) =
                 old_program.update_program(&self.dirty_file_path, Arc::<compilerHost>::clone(&host), Some(create_checker_pool), Some(create_module_resolver));
             new_program_result = program;
@@ -635,7 +630,7 @@ impl Project {
             cleanup();
         }
 
-        if !program_cloned && self.program.is_some_and(|program| program.has_same_file_names(new_program_result)) {
+        if !program_cloned && self.program.as_deref().is_some_and(|program| program.has_same_file_names(&new_program_result)) {
             update_kind = ProgramUpdateKind::SameFileNames;
         }
 
@@ -643,15 +638,7 @@ impl Project {
         drop(region_scope);
 
         let checker_pool = pool_slot.lock().unwrap().take();
-        let base = match (&self.program_owner, program_cloned) {
-            (Some(old), true) => old.base.clone(),
-            _ => region.clone(),
-        };
-        let owner = Arc::new(programOwner::new(new_program_result, checker_pool.clone(), region, base, !program_cloned));
-        if let Some(pool) = &checker_pool {
-            pool.set_owner(Arc::downgrade(&owner));
-        }
-        CreateProgramResult { program: new_program_result, update_kind, checker_pool, owner }
+        CreateProgramResult { program: new_program_result, update_kind, checker_pool }
     }
 
     // project.go:589
@@ -674,7 +661,7 @@ impl Project {
     // project.go:601
     pub(crate) fn print(&self, write_file_names: bool, _write_file_explanation: bool, builder: &mut String) -> String {
         let _ = write!(builder, "\nProject '{}'\n", self.id());
-        match self.program {
+        match self.program.as_deref() {
             None => builder.push_str("\tFiles (0) NoProgram\n"),
             Some(program) => {
                 let source_files = program.get_source_files();
@@ -712,7 +699,7 @@ impl Project {
     // project.go:642
     // GetUnresolvedImports extracts unresolved imports from this project's program.
     pub fn get_unresolved_imports(&self) -> Option<Arc<Set<String>>> {
-        let program = self.program?;
+        let program = self.program.as_deref()?;
         Some(Arc::new(program.get_unresolved_imports().clone()))
     }
 
@@ -771,7 +758,7 @@ impl Cloneable for Project {
                 }
                 Arc::new(once)
             },
-            program: self.program,
+            program: self.program.clone(),
             program_update_kind: ProgramUpdateKind::None,
             program_last_update: self.program_last_update,
             potential_project_references: self.potential_project_references.clone(),
@@ -782,7 +769,6 @@ impl Cloneable for Project {
             content_mapper_watched_files: self.content_mapper_watched_files.clone(),
 
             checker_pool: self.checker_pool.clone(),
-            program_owner: self.program_owner.clone(),
 
             module_resolver_factory: self.module_resolver_factory.clone(),
             module_resolver_id: self.module_resolver_id,
@@ -799,8 +785,8 @@ impl ls::Project for Project {
         self.id_string()
     }
 
-    fn get_program(&self) -> Option<&'static Program> {
-        self.program
+    fn get_program(&self) -> Option<Arc<Program>> {
+        self.program.clone()
     }
 
     fn has_file(&self, file_name: &str) -> bool {

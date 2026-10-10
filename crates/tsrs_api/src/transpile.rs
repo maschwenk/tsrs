@@ -208,8 +208,7 @@ fn transpile_in_current_region(input: &str, base: Option<&CompilerOptions>, file
     all.extend(result.diagnostics);
     let diagnostics: Vec<Value> = all.iter().map(|d| crate::diagnostics::diagnostic_response(d)).collect();
     drop(all);
-    // SAFETY: nothing derived from the program (diagnostics are serialized above) is used after this.
-    unsafe { tsrs_compiler::free_program(program) };
+    drop(program);
     let unexpected = fs.unexpected.lock().unwrap().take();
     if let Some(err) = unexpected {
         return Err(ApiError::internal(format!("transpile: {err}")));

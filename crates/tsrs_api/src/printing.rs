@@ -49,7 +49,7 @@ impl Session {
     pub(crate) fn handle_format_node_for_insertion(&self, p: Params) -> ApiResult<Value> {
         let sd = self.snapshot_data(p.u64("snapshot")?)?;
         let program = sd.get_program(&ProjectID(p.str("project")?.to_string()))?;
-        let target = resolve_source_file(program, &p.document("file")?)?;
+        let target = resolve_source_file(&program, &p.document("file")?)?;
         let decoded = decode(p.str("data")?)?;
         let position = p.u64("position")? as i32;
         let pos = target.get_position_map().utf16_to_utf8(position);

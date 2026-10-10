@@ -72,6 +72,7 @@ pub trait CheckerPool: Send + Sync {
 pub struct CheckerHandle {
     checker: Option<PooledChecker>,
     return_to: Option<checkerReturn>,
+    region_scope: Option<tsrs_core::arena::RegionScope>,
 }
 
 enum checkerReturn {
@@ -82,12 +83,13 @@ enum checkerReturn {
 impl CheckerHandle {
     /// Takes exclusive ownership of a checker; dropping the handle returns it through `release`.
     pub fn new(checker: PooledChecker, release: impl FnOnce(PooledChecker) + 'static) -> CheckerHandle {
-        CheckerHandle { checker: Some(checker), return_to: Some(checkerReturn::External(Box::new(release))) }
+        CheckerHandle { checker: Some(checker), return_to: Some(checkerReturn::External(Box::new(release))), region_scope: None }
     }
 
     fn from_slot(slots: &Arc<[CheckerSlot]>, index: usize) -> CheckerHandle {
         let checker = slots[index].take();
-        CheckerHandle { checker: Some(checker), return_to: Some(checkerReturn::Slots { slots: Arc::clone(slots), index }) }
+        let region_scope = checker.enter_region();
+        CheckerHandle { checker: Some(checker), return_to: Some(checkerReturn::Slots { slots: Arc::clone(slots), index }), region_scope }
     }
 
     // Go `done()`.
@@ -109,6 +111,8 @@ impl std::ops::DerefMut for CheckerHandle {
 
 impl Drop for CheckerHandle {
     fn drop(&mut self) {
+        // Release the allocation target before making the checker available to another thread.
+        drop(self.region_scope.take());
         if let Some(checker) = self.checker.take() {
             match self.return_to.take().expect("checker return owner") {
                 checkerReturn::Slots { slots, index } => slots[index].put(checker),
@@ -208,8 +212,8 @@ struct checkerSlotState {
 }
 
 impl CheckerSlot {
-    fn new(checker: Box<Checker>) -> CheckerSlot {
-        CheckerSlot { state: Mutex::new(checkerSlotState { checker: Some(PooledChecker::new(checker)), poisoned: false }), available: Condvar::new() }
+    fn new(checker: PooledChecker) -> CheckerSlot {
+        CheckerSlot { state: Mutex::new(checkerSlotState { checker: Some(checker), poisoned: false }), available: Condvar::new() }
     }
 
     fn take(&self) -> PooledChecker {
@@ -268,7 +272,7 @@ pub(crate) fn file_times_path() -> Option<&'static str> {
     PATH.get_or_init(|| std::env::var("TSRS_FILE_TIMES").ok().filter(|v| !v.is_empty())).as_deref()
 }
 
-pub(crate) fn write_file_times(program: &'static Program) {
+pub(crate) fn write_file_times(program: &Program) {
     use std::fmt::Write;
     let (Some(path), Some(state)) = (file_times_path(), program.compiler_checker_pool().and_then(|pool| pool.state.get())) else {
         return;
@@ -595,7 +599,12 @@ impl checkerPool {
                 tsrs_checker::links::set_multiple_checkers(self.checker_count > 1);
                 let slots: Vec<Mutex<Option<CheckerSlot>>> = (0..self.checker_count).map(|_| Mutex::new(None)).collect();
                 run_work_group(self.single_threaded, self.checker_count, |i| {
-                    *slots[i].lock().unwrap() = Some(CheckerSlot::new(new_checker(program)));
+                    let region = tsrs_core::arena::Region::new(1 << 20);
+                    let checker = {
+                        let _scope = region.enter();
+                        new_checker(program)
+                    };
+                    *slots[i].lock().unwrap() = Some(CheckerSlot::new(PooledChecker::with_region(checker, region)));
                 });
                 let checkers: Arc<[CheckerSlot]> = slots.into_iter().map(|s| s.into_inner().unwrap().unwrap()).collect::<Vec<_>>().into();
                 tsrs_core::phases::record("Checkers: create", create_start.elapsed());
@@ -1223,7 +1232,7 @@ fn read_cost_cache(path: &str) -> (FxHashMap<String, CostEntry>, usize) {
 
 // Writes the cost cache when it is enabled and more than one checker ran: per type-checked file, its thread CPU
 // seconds summed over the checker passes and its checker. Files of other runs are dropped.
-pub(crate) fn write_cost_cache(program: &'static Program) {
+pub(crate) fn write_cost_cache(program: &Program) {
     use std::fmt::Write;
     // Programs with an external checker pool (language server / API projects) have no cost state to write.
     let (Some(path), Some(state)) = (checker_cost_cache_path(), program.compiler_checker_pool().and_then(|pool| pool.state.get())) else {
