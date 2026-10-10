@@ -756,11 +756,14 @@ impl Checker {
                 return rest_type;
             }
         }
+        let index_infos = self.get_index_infos_of_structured_type(t);
+        if index_infos.is_empty() {
+            return None; // most contextual types: no index signature applies to any name
+        }
         let name_type = match name_type {
             Some(name_type) => name_type,
             None => self.get_string_literal_type(name),
         };
-        let index_infos = self.get_index_infos_of_structured_type(t);
         let index_info = self.find_applicable_index_info(&index_infos, name_type);
         let Some(index_info) = index_info else {
             return None;
