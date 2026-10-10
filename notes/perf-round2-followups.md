@@ -131,6 +131,11 @@ is type-checked, CI runs on pull requests, and the workspace is at 0.11.0. The i
   count on both Compiler workloads; the prior large Linux measurement found v2 3-14% slower. The migration enables
   `v3` (v3.5.2): on pinned vscode it is within +0.03-0.15% instructions and -0.69% to +0.46% peak RSS of the old
   build; the smaller Compiler workloads agree.
+- Huge pages for the mimalloc heap when the machine has 20 GiB or more available (notes/perf-heap-thp-by-memory.md,
+  branch `probe/heap-thp-by-memory`): exact, instructions flat, but about 1% wall across the 17 bench projects (-0.8%
+  at the 16-vCPU default, -0.9% on 64 vCPUs) for +44-66% peak (geomeans). The seven projects above 1.3 GiB gain 1-4% for
+  +17-37%; the small ones gain nothing for +43-128%. Revisit with a rule that can tell a large program before the
+  first arena is reserved.
 - A type graph shared by the checker threads (frozen seed + forks; notes/spike-shared-graph.md, branch
   `spike/shared-graph`, PR 213 closed): exact in every run, but on the 16-vCPU Linux runner peak -5..-10% at the
   default 8 checkers for +6..+18% wall (the serial seed). Revisit only with a seed that costs no wall time.
