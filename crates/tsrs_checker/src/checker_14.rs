@@ -291,6 +291,16 @@ impl Checker {
 
     // checker.go:28530
     pub(crate) fn should_normalize_intersection(&mut self, t: P<Type>) -> bool {
+        let flags = t.object_flags_lazy();
+        if flags.intersects(ObjectFlags::ShouldNormalizeComputed) {
+            return flags.intersects(ObjectFlags::ShouldNormalize);
+        }
+        let result = self.should_normalize_intersection_worker(t);
+        t.object_flags.set(t.object_flags_lazy() | ObjectFlags::ShouldNormalizeComputed | if result { ObjectFlags::ShouldNormalize } else { ObjectFlags::None });
+        result
+    }
+
+    fn should_normalize_intersection_worker(&mut self, t: P<Type>) -> bool {
         let mut has_instantiable = false;
         let mut has_nullable_or_empty = false;
         for &t in t.types() {

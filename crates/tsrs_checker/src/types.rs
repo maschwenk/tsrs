@@ -1028,6 +1028,9 @@ bitflags! {
         const IsNeverIntersectionComputed = 1 << 25; // IsNeverLike flag has been computed
         const IsNeverIntersection = 1 << 26; // Intersection reduces to never
         const IsConstrainedTypeVariable = 1 << 27; // T & C, where T's constraint and C are primitives, object, or {}
+        // tsrs-only, intersections: shouldNormalizeIntersection memoized (its answer depends only on the constituents).
+        const ShouldNormalizeComputed = 1 << 30;
+        const ShouldNormalize = 1 << 31;
     }
 }
 
