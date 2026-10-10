@@ -103,12 +103,92 @@ chunk -> record, instead of id -> group index -> group -> slot -> chunk -> recor
 
 ## 5. Numbers
 
-(filled in below)
+Interleaved base and new runs, same Mac, same session (`scripts/measure.sh 5`: 5 reps each, the rep order alternating
+base, new). Median, the spread (min-max), and the change new vs base. Instructions are the deterministic metric; the
+peak is the `peak memory footprint` line of `/usr/bin/time -l`; wall is `real`, noisy (it moves by more than the
+effect on every project).
+
+| project | mode | metric | base (median, spread) | new (median, spread) | delta |
+| --- | --- | --- | ---: | ---: | ---: |
+| vscode | single | instructions (G) | 97.173 (96.651-98.536) | 97.549 (96.898-97.917) | +0.39% |
+| vscode | single | peak (MiB) | 1602.3 (1597.5-1611.0) | 1609.5 (1606.7-1619.0) | +0.45% |
+| vscode | single | wall (s) | 7.36 (7.19-8.63) | 7.61 (7.16-7.73) | +3.4% (noise) |
+| vscode | default | peak (MiB) | 2096.9 (2087.8-2101.2) | 2113.4 (2110.1-2116.8) | +0.79% |
+| vscode | default | wall (s) | 0.89 (0.84-1.39) | 0.89 (0.87-0.90) | 0.0% |
+| t3code-server | single | instructions (G) | 46.560 (46.482-47.032) | 47.256 (47.099-47.397) | +1.50% |
+| t3code-server | single | peak (MiB) | 731.5 (728.8-734.3) | 739.0 (732.2-741.6) | +1.03% |
+| t3code-server | single | wall (s) | 3.32 (3.09-4.77) | 3.46 (3.26-5.31) | +4.2% (noise) |
+| t3code-server | default | peak (MiB) | 2151.0 (2143.4-2203.7) | 2172.1 (2139.3-2212.6) | +0.99% |
+| t3code-server | default | wall (s) | 1.50 (1.34-1.67) | 1.75 (1.38-1.92) | +16.7% (noise) |
+| webpack | single | instructions (G) | 13.041 (13.036-13.449) | 13.134 (13.131-13.312) | +0.72% |
+| webpack | single | peak (MiB) | 303.0 (302.4-303.3) | 304.4 (303.5-305.4) | +0.46% |
+| webpack | single | wall (s) | 0.92 (0.83-1.14) | 0.85 (0.83-1.05) | -7.6% (noise) |
+| webpack | default | peak (MiB) | 495.0 (490.5-507.0) | 502.8 (499.6-509.1) | +1.57% |
+| webpack | default | wall (s) | 0.14 (0.13-0.14) | 0.14 (0.13-0.14) | 0.0% |
+| formbricks-web | single | instructions (G) | 48.400 (48.283-50.708) | 48.862 (48.487-49.687) | +0.96% |
+| formbricks-web | single | peak (MiB) | 1093.9 (1091.9-1096.9) | 1099.2 (1095.9-1103.8) | +0.49% |
+| formbricks-web | single | wall (s) | 3.92 (3.36-5.35) | 3.74 (3.35-4.26) | -4.6% (noise) |
+| formbricks-web | default | peak (MiB) | 1986.0 (1962.1-2007.3) | 1998.5 (1990.6-2007.9) | +0.63% |
+| formbricks-web | default | wall (s) | 0.68 (0.65-1.01) | 0.68 (0.66-0.73) | 0.0% |
+| cal-diy | single | instructions (G) | 39.228 (38.769-40.420) | 39.121 (38.764-39.657) | -0.27% |
+| cal-diy | single | peak (MiB) | 760.6 (755.4-768.1) | 766.0 (764.1-767.0) | +0.72% |
+| cal-diy | single | wall (s) | 2.84 (2.55-4.18) | 2.86 (2.57-3.64) | +0.7% (noise) |
+| cal-diy | default | peak (MiB) | 1892.7 (1864.1-1899.0) | 1916.5 (1854.5-1921.4) | +1.26% |
+| cal-diy | default | wall (s) | 0.72 (0.71-0.78) | 0.71 (0.70-1.05) | -1.4% (noise) |
+
+Default-count instructions are not reported (the brief asks for single-threaded instructions, and default-count
+instructions vary with work stealing). Errors: 371 / 6 / 840 / 0 / 136 identical base and new in every run.
+
+Against the bar (AGENTS.md: 1% of single-threaded instructions on one project, 2% of wall, or 5% of peak at the
+default checker count): nothing clears it, and nothing is a win. The step-1 deltas are small but all positive for
+peak at the default count (+0.6% to +1.6%) and for instructions on four of five projects (+0.4% to +1.5%). The
+brief's stop rule (within +-0.5% everywhere) is not met, so the answer is a measured small loss, not a neutral result.
 
 ## 6. Fidelity
 
-(filled in below)
+- Diagnostics: byte-identical base vs new (`--pretty false`) for vscode, t3code-server, webpack, formbricks-web and
+  cal-diy in single-threaded, `--checkers 4`, default, and `--checkerAssignment go` (20 pairs; /tmp/dod-sem/ref).
+- `--extendedDiagnostics` counters (Files, Lines, Identifiers, Symbols, Types, Instantiations): identical in single
+  mode on all five projects.
+- Under `--checkerAssignment go`, Identifiers, Types, Instantiations and Lines are identical, but the Symbols counter
+  is not reproducible even on the base binary: repeated base runs of cal-diy give 5211353-5211723, and of t3code-server
+  give 6122987-6123008. New runs fall inside those spreads (cal-diy 5211403-5211546; t3code-server 6122987-6123012).
+  So the go-mode Symbols mismatch in the saved refs is base nondeterminism, not a change. The check cannot be exact
+  for that counter, and the note records it as such.
+- Determinism gate (tools/ci/determinism.sh, xstate-main, webpack, nuxt, drizzle-orm, 594 runs at 2 and 4 checkers
+  and random assignments): every run identical to the single-threaded output. Self-test passes.
+- Regressions (tools/regressions.sh): 29 of 29 pass.
+- Conformance: `.github/scripts/conformance-gate.sh` passes with pass=13458 (minimum 13458), .types 12779,
+  .symbols 12779, 0 crashes, 0 timeouts. The base pass list is a subset of the new pass list (0 tests lost).
+- Fourslash (`.github/scripts/fourslash-gate.sh`): 4066 pass, 63 fail, the documented main values.
+- `--maxMemory` (t3code-server at 1500 MB, webpack at 300 MB): diagnostics identical to base, exit status identical.
+
+A bug found and fixed during the gate run, in the record for the follow-up: an earlier build of this branch (before
+the transient-table blocks became process-wide, commit 0342f8ed has the final design) used a 127-slot static registry
+for the owner tables. The conformance run then panicked in 3110 tests with "more than 127 live transient symbol
+tables", because the pool leaks its checkers and the slots were never freed. The final design numbers blocks
+process-wide (`BLOCKS`, 20 bits), so no table needs a slot. The fidelity refs and measurements above were all taken
+on the final binary, rebuilt from HEAD.
+
+Free lists: the brief asks that the free lists recycling transient symbols keep working. The current source has no
+such recycling of `Symbol` objects: `free!` / `free_slice!` are called on mappers, inference lists, type lists and
+`LazyVec` cells only (grep of crates/tsrs_checker/src). So no row word is reused for a new symbol.
+
+Not run here: `cargo test --features shared-graph` (compiled with `cargo check --features shared-graph`, and the
+shared-graph fork path is covered only by the source reading in links.rs), and the wasm/plain-ptrs builds were checked
+with `cargo check` only.
 
 ## 7. What did not work / what a follow-up would do
 
-(filled in below)
+- The layout does not save memory (section 4, the arithmetic), and it did not pay for its CPU either: step 1 is
+  +0.4% to +1.5% instructions on four projects and +0.6% to +1.6% peak at the default count. The likely cost (not profiled)
+  is the extra dependent loads on a check-flags read (row word -> block -> cell instead of one field), and the arena
+  chunks, which hold 16 KiB of check flags for each 4,096 rows whether the rows use them or not.
+- Step 2 (TypeReference, `[P<Type>]`, Signature, TypeMapper as columns) is not done. The stop rule says to do it only
+  with a concrete reason it would change the result. Step 1 did not reduce the per-checker state (its columns are
+  per checker too), and the same loads would apply to types. No concrete reason to expect a different result, so it
+  was not started.
+- Untested idea for a follow-up: store a transient symbol's check flags next to its link record in one per-row record,
+  so both come from one cache line. Not measured, and it would need a new peak-memory estimate first.
+- The lazily assigned id column is still there (ids decide output, section 3). A table that dropped it would need the
+  audit of every id-sorted path (the API codec encoder orders handles by id) first.

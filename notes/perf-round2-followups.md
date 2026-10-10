@@ -339,6 +339,12 @@ is type-checked, CI runs on pull requests, and the workspace is at 0.11.0. The i
   declaration text (declaration emit is not total, import cycles, not identity-preserving), per-file check regions
   (types made in a body can enter long-lived caches), mmap of source files (SIGBUS on truncation).
 
+- Transient checker symbols as dense per-checker rows, with check flags and value-symbol links as columns of those
+  rows (notes/dod-semantic-tables.md, branch dod/semantic-tables): instructions +0.4% to +1.5% on four of five bench
+  projects and cal-diy -0.3% (single-threaded), peak +0.5% to +1.6% at the default checker count. Fidelity held (diagnostics
+  byte-identical, conformance and fourslash unchanged). Do not redo this layout: the per-checker columns cost more CPU
+  than the id-keyed stores they replace, and save no memory.
+
 ## The lint ratchet
 
 `tools/lint/baseline.tsv` went from 1,373 findings to 312 (#57-#59, #61, #63; notes/lint-paydown-compiler.md) and is
