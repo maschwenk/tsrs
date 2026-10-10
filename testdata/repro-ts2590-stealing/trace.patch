@@ -1,0 +1,53 @@
+diff --git a/crates/tsrs_checker/src/checker_13.rs b/crates/tsrs_checker/src/checker_13.rs
+index 0d1562bb..f158d91b 100644
+--- a/crates/tsrs_checker/src/checker_13.rs
++++ b/crates/tsrs_checker/src/checker_13.rs
+@@ -1174,6 +1174,9 @@ impl Checker {
+     // checker.go:27118
+     pub(crate) fn check_cross_product_union(&mut self, types: &[P<Type>]) -> bool {
+         let size = self.get_cross_product_union_size(types);
++        if crate::uniontrace::enabled() && size >= 1_000 {
++            crate::uniontrace::report_cross_product(self, types, size);
++        }
+         if size >= 100_000 {
+             self.error(self.current_node, &diagnostics::Expression_produces_a_union_type_that_is_too_complex_to_represent, &[]);
+             return false;
+diff --git a/crates/tsrs_checker/src/uniontrace.rs b/crates/tsrs_checker/src/uniontrace.rs
+index 1bbb2f49..7dfb9d88 100644
+--- a/crates/tsrs_checker/src/uniontrace.rs
++++ b/crates/tsrs_checker/src/uniontrace.rs
+@@ -143,3 +143,20 @@ fn describe_symbol(symbol: P<Symbol>, out: &mut String) {
+         }
+     }
+ }
++
++// TEMPORARY (local only): one line for every cross-product check whose size reaches 1,000.
++pub(crate) fn report_cross_product(c: &Checker, types: &[P<Type>], size: i32) {
++    let mut line = format!("tsrs cross product: checker {} at {} while checking {} | size {size} |", c.id, location(c.current_node), c.checking_file.map_or_else(|| "-".to_string(), |f| relative(f.file_name()).to_string()));
++    for &t in types {
++        if t.flags().intersects(TypeFlags::Union) {
++            let described: Vec<String> = t.types().iter().map(|&m| describe(m)).collect();
++            let mut sorted = described.clone();
++            sorted.sort_unstable();
++            let head: Vec<&str> = described.iter().take(2).map(String::as_str).collect();
++            let _ = write!(line, " union {} set {:016x} order {:016x} first [{}] |", described.len(), fingerprint(&sorted), fingerprint(&described), head.join("; "));
++        } else {
++            let _ = write!(line, " {} |", describe(t));
++        }
++    }
++    eprintln!("{line}");
++}
+diff --git a/crates/tsrs_checker/src/checker_02.rs b/crates/tsrs_checker/src/checker_02.rs
+index f520fcd3..2d8f687e 100644
+--- a/crates/tsrs_checker/src/checker_02.rs
++++ b/crates/tsrs_checker/src/checker_02.rs
+@@ -88,6 +88,9 @@ impl Checker {
+     // checker.go:2237
+     pub(crate) fn check_source_file(&mut self, ctx: &Context, source_file: P<SourceFile>, check_unused: bool) {
+         let saved_checking_file = self.checking_file.replace(source_file);
++        if crate::uniontrace::enabled() {
++            eprintln!("tsrs check file: checker {} begins {}", self.id, source_file.file_name());
++        }
+         if self.census_on() {
+             let span = self.census_begin(crate::workcensus::Cat::File, || crate::workcensus::CKey::None);
+             self.check_source_file_worker(ctx, source_file, check_unused);
