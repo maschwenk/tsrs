@@ -429,3 +429,15 @@ mod tests {
         assert_eq!(truncate_by_runes("héllo", 2), "hé");
     }
 }
+
+/// `n` in decimal, written into `buf` (Go's `strconv.Itoa`, for a caller that only reads the digits: Go returns a
+/// static string below 100 and allocates above, the port allocated every time).
+pub fn format_int(buf: &mut [u8; 20], n: i64) -> &str {
+    use std::io::Write;
+    let len = {
+        let mut w: &mut [u8] = &mut buf[..];
+        write!(w, "{n}").expect("20 bytes hold every i64");
+        20 - w.len()
+    };
+    std::str::from_utf8(&buf[..len]).expect("decimal digits")
+}
