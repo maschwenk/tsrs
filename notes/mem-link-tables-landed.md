@@ -1,5 +1,8 @@
 # mem-link-tables-landed: inline link values and 4-byte buckets in four link stores
 
+The later TypeScript PR 64711 port replaces change A's symbol-node store and the value-symbol ID store; see
+`notes/mem-dense-link-stores.md`. Changes B and C remain. This note records the earlier layout and measurements.
+
 The three changes that notes/mem-dense-link-tables.md (https://github.com/maschwenk/tsrs/pull/134) designed and
 prototyped, as production code. Base: origin/main 0b4d117. Machine: Apple M5 Max, 18 cores, 16 KiB pages,
 macOS 26.6. Peaks are `/usr/bin/time -l` peak memory footprint, MiB = 2^20 bytes; "main" is a release build of

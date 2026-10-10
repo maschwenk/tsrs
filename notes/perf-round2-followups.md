@@ -269,6 +269,9 @@ is type-checked, CI runs on pull requests, and the workspace is at 0.11.0. The i
 - Bun-style dense link tables over lazily committed pages, per-kind node numbering, symbol-id or type-id groups for
   the hashed link stores (notes/mem-dense-link-tables.md): pages cost 23-632 MB more than the landed 32/128-id groups
   at 4-32 checkers on vscode; node numbering saves at most 4-5 MB at one checker, for a parser and AST change.
+  TypeScript PR 64711 revisits ID pages with a changed allocation scheme: each link store assigns IDs from its own
+  reserved blocks and values are allocated individually. That upstream port is kept with the performance threshold
+  explicitly waived by the user; its measurements and bounded-ID adaptation are in `notes/mem-dense-link-stores.md`.
 - Sparse id pages by default (notes/mem-64.md, notes/mem-checker-heap.md): -0.15 GiB at 64 checkers for +2%
   instructions; the 128-id groups save the same at 64 and more at 4-16 for no instructions, and the sparse form is
   removed.

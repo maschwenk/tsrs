@@ -1,12 +1,13 @@
-use crate::{PSlot, P};
+use crate::P;
 use rustc_hash::FxHashMap;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
+use std::hash::Hash;
 
 // Links store
 //
 // Values are arena-allocated and returned as `P<V>`; callers mutate them through `Cell` fields.
 pub struct LinkStore<K: 'static, V: 'static> {
-    entries: RefCell<FxHashMap<P<K>, P<V>>>,
+    entries: RefCell<FxHashMap<K, P<V>>>,
     /// Values go to the thread's scratch region (`P::new_scratch`): the store of an object that dies with it.
     scratch: bool,
 }
@@ -27,10 +28,15 @@ impl<K, V> LinkStore<K, V> {
     pub fn clear(&self) {
         *self.entries.borrow_mut() = FxHashMap::default();
     }
+
+    pub fn storage_usage(&self) -> (usize, usize) {
+        let entries = self.entries.borrow();
+        (entries.len(), entries.capacity())
+    }
 }
 
-impl<K, V: Default> LinkStore<K, V> {
-    pub fn get(&self, key: P<K>) -> P<V> {
+impl<K: Copy + Eq + Hash, V: Default> LinkStore<K, V> {
+    pub fn get(&self, key: K) -> P<V> {
         if let Some(&value) = self.entries.borrow().get(&key) {
             return value;
         }
@@ -40,61 +46,53 @@ impl<K, V: Default> LinkStore<K, V> {
     }
 }
 
-impl<K, V> LinkStore<K, V> {
-    pub fn has(&self, key: P<K>) -> bool {
+impl<K: Copy + Eq + Hash, V> LinkStore<K, V> {
+    pub fn has(&self, key: K) -> bool {
         self.entries.borrow().contains_key(&key)
     }
 
-    pub fn try_get(&self, key: P<K>) -> Option<P<V>> {
+    pub fn try_get(&self, key: K) -> Option<P<V>> {
         self.entries.borrow().get(&key).copied()
     }
 }
 
-const PAGE_SHIFT: u64 = 8;
-const PAGE_SIZE: usize = 1 << PAGE_SHIFT;
-const PAGE_MASK: u64 = PAGE_SIZE as u64 - 1;
-const MAX_PAGE_COUNT: u64 = 65536;
+pub const LINK_PAGE_SHIFT: u64 = 8;
+pub const LINK_PAGE_SIZE: usize = 1 << LINK_PAGE_SHIFT;
+pub const LINK_PAGE_MASK: u64 = LINK_PAGE_SIZE as u64 - 1;
 
-// Implements a sparse-array-like structure for storing elements keyed by dense uint64 keys. Elements are
-// stored in fixed-size pages of 256 entries and an index of pages is maintained in an array for lower valued
-// page indices and a map for higher valued page indices.
+type LinkPage<V> = [Cell<Option<P<V>>>; LINK_PAGE_SIZE];
+
+// PagedLinkStore implements a sparse-array-like structure for storing elements keyed by dense uint64 keys.
+// Elements are allocated in an arena, element references are stored in fixed-size pages of 256 entries, and
+// an index of pages is maintained in a growable list.
 pub struct PagedLinkStore<V: 'static> {
-    page_map: RefCell<FxHashMap<u64, &'static [PSlot<V>]>>, // Page map for page indices above maxPageCount
-    page_list: RefCell<Vec<Option<&'static [PSlot<V>]>>>,  // Page table for page indices below maxPageCount
+    pages: RefCell<Vec<Option<P<LinkPage<V>>>>>,
 }
 
 impl<V> Default for PagedLinkStore<V> {
     fn default() -> Self {
-        PagedLinkStore { page_map: RefCell::new(FxHashMap::default()), page_list: RefCell::new(Vec::new()) }
+        PagedLinkStore { pages: RefCell::new(Vec::new()) }
     }
 }
 
 impl<V: Default> PagedLinkStore<V> {
-    fn new_page() -> &'static [PSlot<V>] {
-        crate::alloc_vec((0..PAGE_SIZE).map(|_| PSlot(V::default())).collect())
-    }
-
     pub fn get(&self, key: u64) -> P<V> {
-        let page_index = key >> PAGE_SHIFT;
-        let page = if page_index < MAX_PAGE_COUNT {
-            let mut list = self.page_list.borrow_mut();
-            if page_index as usize >= list.len() {
-                // Grow the length of the list to pageIndex+1
-                list.resize(page_index as usize + 1, None);
+        let page_index = (key >> LINK_PAGE_SHIFT) as usize;
+        let mut pages = self.pages.borrow_mut();
+        if page_index >= pages.len() {
+            // Grow the length of the list to pageIndex+1
+            pages.resize(page_index + 1, None);
+        }
+        let page = *pages[page_index].get_or_insert_with(|| P::new(std::array::from_fn(|_| Cell::new(None))));
+        let slot = &page[(key & LINK_PAGE_MASK) as usize];
+        match slot.get() {
+            Some(link) => link,
+            None => {
+                let link = P::new(V::default());
+                slot.set(Some(link));
+                link
             }
-            match list[page_index as usize] {
-                Some(page) => page,
-                None => {
-                    let page = Self::new_page();
-                    list[page_index as usize] = Some(page);
-                    page
-                }
-            }
-        } else {
-            let mut map = self.page_map.borrow_mut();
-            *map.entry(page_index).or_insert_with(Self::new_page)
-        };
-        page[(key & PAGE_MASK) as usize].as_p()
+        }
     }
 }
 
@@ -104,13 +102,14 @@ impl<V> PagedLinkStore<V> {
     }
 
     pub fn try_get(&self, key: u64) -> Option<P<V>> {
-        let page_index = key >> PAGE_SHIFT;
-        let page = if page_index < MAX_PAGE_COUNT {
-            self.page_list.borrow().get(page_index as usize).copied().flatten()
-        } else {
-            self.page_map.borrow().get(&page_index).copied()
-        };
-        page.map(|page| page[(key & PAGE_MASK) as usize].as_p())
+        let page_index = (key >> LINK_PAGE_SHIFT) as usize;
+        let page = (*self.pages.borrow().get(page_index)?)?;
+        page[(key & LINK_PAGE_MASK) as usize].get()
+    }
+
+    pub fn page_index_usage(&self) -> (usize, usize) {
+        let pages = self.pages.borrow();
+        (pages.len(), pages.capacity())
     }
 }
 
@@ -126,7 +125,7 @@ mod tests {
 
     #[test]
     fn link_store() {
-        let store: LinkStore<i32, Links> = LinkStore::default();
+        let store: LinkStore<P<i32>, Links> = LinkStore::default();
         let k = P::new(1);
         assert!(!store.has(k));
         store.get(k).n.set(5);
@@ -136,9 +135,17 @@ mod tests {
         let paged: PagedLinkStore<Links> = PagedLinkStore::default();
         assert!(!paged.has(3));
         paged.get(3).n.set(7);
-        assert!(paged.has(4)); // same page
+        assert!(!paged.has(4)); // same page, but no link has been allocated
         assert_eq!(paged.get(3).n.get(), 7);
-        paged.get(1 << 40).n.set(9);
-        assert_eq!(paged.try_get(1 << 40).unwrap().n.get(), 9);
+        let held = paged.get(3);
+        paged.get((1 << 24) - 1).n.set(9);
+        assert_eq!(paged.try_get((1 << 24) - 1).unwrap().n.get(), 9);
+        assert!(!paged.has((1 << 24) - 2));
+        assert!(!paged.has(1 << 24));
+        assert_eq!(paged.get(3), held);
+
+        let ids: LinkStore<u64, Links> = LinkStore::default();
+        ids.get(1 << 48).n.set(11);
+        assert_eq!(ids.try_get(1 << 48).unwrap().n.get(), 11);
     }
 }

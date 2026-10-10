@@ -31,7 +31,7 @@ pub struct Symbol {
     pub check_flags: OwnedCell<CheckFlags>, // Non-zero only in transient symbols created by Checker
     pub name: OwnedTaggedStrCell,
     declarations: OwnedPSliceCell<P<Node>>, // Go slice: shared by copies, replaced (not mutated) on append
-    pub(crate) id: AtomicU32,               // Go uint64; ids above u32::MAX panic in get_symbol_id
+    pub(crate) id: AtomicU32,               // Encoded ordinary or block id; get_symbol_id returns Go's uint64
     parent_or_tables: OwnedCell<PKey>,      // `P::key` of the parent or (with `TAG_TABLES`) of the tail; 0 = none
 }
 

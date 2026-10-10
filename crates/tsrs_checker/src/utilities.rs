@@ -456,7 +456,7 @@ impl Checker {
         }
         // Fall back to symbol IDs. This is a last resort that should happen only when symbols have
         // no declaration and duplicate names.
-        (ast::get_symbol_id(s1).0 as i64 - ast::get_symbol_id(s2).0 as i64) as i32
+        ast::get_symbol_id(s1).cmp(&ast::get_symbol_id(s2)) as i32
     }
 
     // utilities.go:392

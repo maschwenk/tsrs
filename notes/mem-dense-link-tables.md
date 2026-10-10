@@ -1,5 +1,8 @@
 # mem-dense-link-tables: dense id-indexed link tables (Bun's `ByNode` / `ById`), design and verified estimate
 
+The later TypeScript PR 64711 port replaces the symbol-node and value-symbol ID stores with reserved-range
+dense link stores; see `notes/mem-dense-link-stores.md`. The measurements below describe the previous layouts.
+
 Status (2026-10-10): changes A, B and C below landed (notes/mem-link-tables-landed.md): `symbol_node_links` is an
 `InlineIdStore`, `signature_links` and `type_node_links` are `KeyedLinkStore`s, `symbol_reference_links` is a
 `SymbolReferenceLinkStore` (crates/tsrs_checker/src/links.rs). D and E were not built. This note keeps the density

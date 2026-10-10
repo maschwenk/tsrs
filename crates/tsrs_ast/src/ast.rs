@@ -423,8 +423,8 @@ impl ModifierList {
 /// `KeywordTypeNode`, ...) allocate only the header.
 ///
 /// The header is 24 bytes: the kind, the data tag and the parent pointer share one word (`NodeHeaderWord`), and the
-/// id is stored in 32 bits (ids still come from a 64-bit counter and are returned as `NodeId`; more than
-/// `u32::MAX` node ids panic, like symbol ids). 23M nodes on the private monorepo.
+/// id is stored in 32 bits (the high bit represents the reserved block-id range; `NodeId` returns the full
+/// 64-bit id). Each range supports 2^31 ids. 23M nodes on the 38k-file codebase.
 pub struct Node {
     header: OwnedCell<NodeHeaderWord>,
     pub flags: OwnedCell<NodeFlags>,

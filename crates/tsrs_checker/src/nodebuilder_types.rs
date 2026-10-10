@@ -162,8 +162,8 @@ pub struct NodeBuilderImpl {
     pub pc: P<PseudoChecker>,
 
     // cache
-    pub links: tsrs_core::LinkStore<Node, NodeBuilderLinks>,
-    pub symbol_links: tsrs_core::LinkStore<Symbol, NodeBuilderSymbolLinks>,
+    pub links: tsrs_core::LinkStore<P<Node>, NodeBuilderLinks>,
+    pub symbol_links: tsrs_core::LinkStore<P<Symbol>, NodeBuilderSymbolLinks>,
 
     // state
     pub ctx: Cell<Option<P<NodeBuilderContext>>>,
@@ -382,7 +382,7 @@ pub struct DeclarationFileLinks {
 #[derive(Default)]
 pub struct EmitResolver {
     pub reference_resolver: std::cell::OnceCell<P<tsrs_binder::ReferenceResolver<Checker>>>,
-    pub jsx_links: tsrs_core::LinkStore<Node, JSXLinks>,
-    pub declaration_links: tsrs_core::LinkStore<Node, DeclarationLinks>,
-    pub declaration_file_links: tsrs_core::LinkStore<Node, DeclarationFileLinks>,
+    pub jsx_links: tsrs_core::LinkStore<P<Node>, JSXLinks>,
+    pub declaration_links: tsrs_core::LinkStore<P<Node>, DeclarationLinks>,
+    pub declaration_file_links: tsrs_core::LinkStore<P<Node>, DeclarationFileLinks>,
 }
