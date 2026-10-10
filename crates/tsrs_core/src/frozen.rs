@@ -191,21 +191,27 @@ impl<T> OwnedCell<T> {
     pub const fn new(value: T) -> OwnedCell<T> {
         OwnedCell(Cell::new(value))
     }
+}
 
+// Shared-graph prototype (`sharedgraph`): a checker-created symbol or node of the frozen seed is read through the
+// current checker's overlay, and its writes go there.
+impl<T: Copy> OwnedCell<T> {
     #[inline]
     pub fn set(&self, value: T) {
         crate::ptr::shared_check::assert_not_shared(self, "OwnedCell");
+        if crate::sharedgraph::any_frozen() && crate::sharedgraph::owned_set_if_frozen(self, value) {
+            return;
+        }
         self.0.set(value)
     }
 
     #[inline]
     pub fn replace(&self, value: T) -> T {
-        crate::ptr::shared_check::assert_not_shared(self, "OwnedCell");
-        self.0.replace(value)
+        let old = self.get();
+        self.set(value);
+        old
     }
-}
 
-impl<T: Copy> OwnedCell<T> {
     #[inline]
     pub fn get(&self) -> T {
         self.0.get()

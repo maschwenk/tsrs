@@ -2629,7 +2629,7 @@ impl Relater {
             if !c.is_error_type(intrinsic_attributes) && !c.is_error_type(intrinsic_class_attributes) && (target_types.contains(&intrinsic_attributes) || target_types.contains(&intrinsic_class_attributes)) {
                 return;
             }
-        } else if original_target.flags().intersects(TypeFlags::Intersection) && original_target.object_flags().intersects(ObjectFlags::IsNeverIntersection) {
+        } else if original_target.flags().intersects(TypeFlags::Intersection) && original_target.object_flags_lazy().intersects(ObjectFlags::IsNeverIntersection) {
             let mut message = &diagnostics::The_intersection_0_was_reduced_to_never_because_property_1_has_conflicting_types_in_some_constituents;
             let mut prop: Option<P<Symbol>> = None;
             for p in c.get_properties_of_union_or_intersection_type(original_target).iter().copied() {

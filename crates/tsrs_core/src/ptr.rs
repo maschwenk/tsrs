@@ -55,6 +55,13 @@ pub(crate) fn own_arena() -> &'static Arena {
     })
 }
 
+/// Shared-graph prototype (`sharedgraph`): gives the calling thread a brand-new own arena (never a spare one), so
+/// every chunk it allocates from now on holds only this thread's objects. Returns nothing; `arena::own_arena_chunks`
+/// lists the chunks.
+pub fn use_fresh_arena() {
+    ARENA.with(|c| c.set(Some(new_thread_arena())));
+}
+
 /// Hands the calling thread's own arena to the next thread that needs one, for a thread that is done allocating (a
 /// checker thread at the end of its task, a parse worker once the program is loaded). That thread continues in the
 /// arena's current chunk, whose unused end is resident when the chunk has transparent huge pages (the partly used
@@ -907,6 +914,22 @@ impl<T> Clone for ThinSlice<T> {
     }
 }
 impl<T> Copy for ThinSlice<T> {}
+
+/// Identity: the same pointer and length (the shared-graph overlay's "unset" test).
+impl<T> PartialEq for ThinSlice<T> {
+    fn eq(&self, other: &Self) -> bool {
+        #[cfg(target_pointer_width = "64")]
+        return self.0 == other.0;
+        #[cfg(target_pointer_width = "32")]
+        return self.0 == other.0 && self.1 == other.1;
+    }
+}
+
+impl<T> Default for ThinSlice<T> {
+    fn default() -> Self {
+        ThinSlice::new(&[])
+    }
+}
 
 #[cfg(target_pointer_width = "64")]
 impl<T> ThinSlice<T> {

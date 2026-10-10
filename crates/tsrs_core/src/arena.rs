@@ -1018,6 +1018,11 @@ impl Region {
         self.0.arena.trim();
     }
 
+    /// The region's chunks, (start, size) (shared-graph prototype: what to freeze).
+    pub fn chunks(&self) -> Vec<(usize, usize)> {
+        self.0.arena.chunks()
+    }
+
     /// Bytes in use in the region's chunks (call while no other thread has the region entered).
     pub fn used_bytes(&self) -> usize {
         self.0.arena.used_ranges().iter().map(|&(_, len)| len).sum()
@@ -1129,6 +1134,18 @@ pub fn trim_own_arena_tail() {
             unsafe { crate::reserve::discard(a.ptr.get().with_addr(lo), ptr - lo) };
         }
     }
+}
+
+/// Bytes in use in the calling thread's own arena (not regions or scratch scopes), for the shared-graph experiment's
+/// per-checker counters (`TSRS_SHARED_GRAPH_STATS`). Arenas move between threads (`release_own_arena`), so callers
+/// take differences.
+pub fn own_arena_used_bytes() -> usize {
+    crate::ptr::own_arena().residency().used
+}
+
+/// The chunks (start, size) of the calling thread's own arena (shared-graph prototype: what to freeze).
+pub fn own_arena_chunks() -> Vec<(usize, usize)> {
+    crate::ptr::own_arena().chunks()
 }
 
 /// The region that is the current thread's allocation target, if any (`None`: the thread's own arena).

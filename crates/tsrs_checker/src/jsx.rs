@@ -786,7 +786,7 @@ impl Checker {
         fn create_jsx_attributes_type(c: &mut Checker, object_flags: &mut ObjectFlags, attributes_symbol: Option<P<Symbol>>, attributes_table: P<SymbolTable>) -> P<Type> {
             *object_flags |= ObjectFlags::FreshLiteral;
             let result = c.new_anonymous_type(attributes_symbol, Some(attributes_table), &[], &[], &[]);
-            result.object_flags.set(result.object_flags.get() | *object_flags | ObjectFlags::ObjectLiteral | ObjectFlags::ContainsObjectOrArrayLiteral);
+            result.object_flags.set(result.object_flags.get_lazy() | *object_flags | ObjectFlags::ObjectLiteral | ObjectFlags::ContainsObjectOrArrayLiteral);
             result
         }
         let jsx_namespace = self.get_jsx_namespace_at(Some(opening_like_element));

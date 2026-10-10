@@ -42,6 +42,8 @@ ast-sizing = ["tsrs_compiler/ast-sizing"]
 alloc-profile = ["tsrs_core/alloc-profile", "tsrs_execute/alloc-profile"]
 # TSRS_ASSIGNMENT_STATS also attributes checker-created types/symbols to files (tsrs_compiler checkerpool_stats.rs).
 assignment-stats = ["tsrs_compiler/assignment-stats", "tsrs_execute/assignment-stats"]
+# The shared-graph research prototype (TSRS_SHARED_GRAPH=1; tsrs_core/shared-graph).
+shared-graph = ["tsrs_core/shared-graph"]
 
 [[bin]]
 name = "tsrs"

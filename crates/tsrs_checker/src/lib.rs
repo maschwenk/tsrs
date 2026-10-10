@@ -87,6 +87,7 @@ pub(crate) use flow::*;
 pub mod flowmemo;
 pub mod heapcensus;
 pub mod packedmap;
+pub mod basedmap;
 pub use packedmap::{GoPackedMap, PackedMap, StringLiteralTypes};
 mod inference;
 pub(crate) use inference::*;

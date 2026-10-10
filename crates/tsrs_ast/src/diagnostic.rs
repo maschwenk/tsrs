@@ -404,7 +404,7 @@ pub fn new_external_diagnostic(
 }
 
 // Go guards this with a mutex; in the port each owner holds the collection mutably.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct DiagnosticsCollection {
     count: usize,
     file_diagnostics: FxHashMap<Path, Vec<P<Diagnostic>>>,
