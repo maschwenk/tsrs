@@ -84,7 +84,9 @@ for v in "${variants[@]}"; do
     file "$d/tsrs.prebolt" "$d/tsrs" | sed "s|$out/||"
     ls -l "$d/tsrs.prebolt" "$d/tsrs" | awk '{print $5, $9}' | sed "s|$out/||"
     size -A "$d/tsrs.prebolt" | awk '$1 ~ /^\.(text|rodata|data\.rel\.ro|rela\.dyn|got|eh_frame|gcc_except_table)$/ {printf "  prebolt %-18s %10d\n", $1, $2}'
-    readelf -r "$d/tsrs.prebolt" 2>/dev/null | grep -c R_X86_64_RELATIVE | sed 's/^/  prebolt R_X86_64_RELATIVE dynamic relocations: /'
+    echo "  prebolt R_X86_64_RELATIVE dynamic relocations: $(readelf -r "$d/tsrs.prebolt" 2>/dev/null | grep -c R_X86_64_RELATIVE || true)"
   } | tee -a "$out/sizes.txt"
 done
+# The reference compiler's linking, for comparison (Go builds linux/amd64 executables without PIE by default).
+find "$work/tsgo" -path '*linux-x64*' -name tsgo -type f -exec file {} \; 2>/dev/null | sed "s|$work/||" | tee -a "$out/sizes.txt" || true
 cat "$out/times.txt"

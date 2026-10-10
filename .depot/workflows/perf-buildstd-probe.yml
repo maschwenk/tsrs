@@ -14,10 +14,10 @@ on:
     inputs:
       reps:
         description: timed rounds per binary, project and checker count
-        default: "3"
+        default: "5"
       bins:
         description: comma-separated variants of buildstd-build.sh to build and measure (the first is the baseline)
-        default: A,B,C,D,DA
+        default: A,DA
 
 permissions:
   contents: read
@@ -25,8 +25,8 @@ permissions:
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
-  REPS: ${{ inputs.reps || '3' }}
-  BINS: ${{ inputs.bins || 'A,B,C,D,DA' }}
+  REPS: ${{ inputs.reps || '5' }}
+  BINS: ${{ inputs.bins || 'A,DA' }}
   PROJECTS: vscode,xstate-main,webpack,mui-docs,cal-diy,formbricks-web,supabase-studio,t3code-server,drizzle-orm
 
 jobs:
