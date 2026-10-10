@@ -1063,6 +1063,11 @@ impl Checker {
         if depth >= 5 {
             return false;
         }
+        // tsrs-only: every branch below that can answer true reaches a type variable, so a type already known not to
+        // contain one (`couldContainTypeVariables` computed false; read only, never computed here) answers false.
+        if t.object_flags() & (ObjectFlags::CouldContainTypeVariablesComputed | ObjectFlags::CouldContainTypeVariables) == ObjectFlags::CouldContainTypeVariablesComputed {
+            return false;
+        }
         if t.flags().intersects(TypeFlags::TypeParameter) {
             return t.symbol().is_some_and(|symbol| symbol.declarations().iter().any(|&d| ast::has_syntactic_modifier(d, ModifierFlags::Const)));
         } else if t.flags().intersects(TypeFlags::UnionOrIntersection) {
