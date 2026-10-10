@@ -51,7 +51,7 @@ pub struct TestCaseContent {
 // return an array of named units of code to be added to an existing compiler instance.
 //
 // The tsconfig.json unit (if any) is split off here; parsing it into a ParsedCommandLine happens in
-// compiler_runner, where the tsoptions crate is available.
+// options.rs (parse_test_ts_config).
 pub fn make_units_from_test(code: &str, file_name: &str) -> TestCaseContent {
     let (mut test_units, symlinks, mut current_directory, global_options) =
         parse_test_files_and_symlinks(code, file_name, |filename, content, _| TestUnit { content: content.to_string(), name: filename.to_string() });

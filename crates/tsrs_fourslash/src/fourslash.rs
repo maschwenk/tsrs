@@ -1,7 +1,6 @@
 // Port of Go's fourslash/fourslash.go: the FourslashTest harness the generated tests drive. The tests talk to
 // the real language server (tsrs_lsp) in-process over framed byte pipes (tsrs_lsp::lsptestutil, Go's
-// testutil/lsptestutil). Methods for language-service features that are not ported yet fail the test through
-// `FourslashTest::server_unavailable` ("feature not ported: <name>").
+// testutil/lsptestutil). Unported features fail the test with "feature not ported: <name>".
 
 use std::sync::{Arc, LazyLock, Mutex, OnceLock, RwLock};
 
@@ -232,8 +231,9 @@ fn new_fourslash_impl(t: &T, content: &str, options: Option<FourslashOptions>, t
     harnessutil::set_options_from_test_config(t, &test_data.global_options, &mut compiler_options, &mut harness_options, ROOT_DIR, true /*allowUnknownOptions*/);
     if let Some(command_lines) = test_data.global_options.get("tsc") {
         if !command_lines.is_empty() {
-            // tsctests.GetFileMapWithBuild runs `tsc --build` into the test file system; emit is not ported.
-            t.fatal("feature not ported: @tsc command lines (tsctests.GetFileMapWithBuild needs emit)");
+            // tsctests.GetFileMapWithBuild runs `tsc --build` into the test file system; that helper is not ported to
+            // tsrs_execute::tsctests (emit and tsc -b themselves are).
+            t.fatal("feature not ported: @tsc command lines (tsctests.GetFileMapWithBuild)");
         }
     }
 
@@ -966,8 +966,9 @@ pub struct VerifyWorkspaceSymbolCase {
 }
 
 impl FourslashTest {
-    // The single place where a language-service feature that is not ported yet surfaces: the methods that need it
-    // fail the test with "feature not ported: <feature> (<Method>)".
+    // Helper for failing a test on a language-service feature that is not ported ("feature not ported: <feature>
+    // (<Method>)"). Currently unused: the remaining unported paths (@tsc command lines, content mappers) call t.fatal
+    // directly in new_fourslash_impl.
     pub fn server_unavailable(t: &T, reason: &str) -> ! {
         t.fatal(reason)
     }

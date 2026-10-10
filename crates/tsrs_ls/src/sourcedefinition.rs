@@ -362,7 +362,7 @@ fn is_default_import_name(node: Option<P<Node>>) -> bool {
     is_default_import(grand_parent)
 }
 
-// ast utilities.go:2592 IsDefaultImport (not in tsrs_ast yet; only this file uses it)
+// ast utilities.go:2592 IsDefaultImport (duplicate of tsrs_ast::is_default_import)
 fn is_default_import(node: P<Node>) -> bool {
     match node.kind() {
         Kind::ImportDeclaration | Kind::JSImportDeclaration => match node.import_clause() {

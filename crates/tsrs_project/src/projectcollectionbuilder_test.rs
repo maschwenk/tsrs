@@ -277,7 +277,6 @@ fn when_project_found_is_solution_referencing_default_project_indirectly_through
 
 // projectcollectionbuilder_test.go:216
 #[test]
-#[ignore = "needs project references in tsrs_compiler (not ported: programs never resolve references)"]
 fn when_project_found_is_project_with_own_files_referencing_the_file_from_referenced_project() {
     let mut files = files_for_solution_config_file(&["./tsconfig-src.json"], "", &[r#""./own/main.ts""#]);
     set(&mut files, "/user/username/projects/myproject/own/main.ts", "\n\t\t\timport { foo } from '../src/main';\n\t\t\tfoo;\n\t\t\texport function bar() {}\n\t\t");
@@ -389,7 +388,6 @@ fn when_file_is_not_part_of_first_config_tree_found_looks_into_ancestor_folder_a
 
 // projectcollectionbuilder_test.go:338
 #[test]
-#[ignore = "needs project references in tsrs_compiler (not ported: programs never resolve references)"]
 fn when_dts_file_is_next_to_ts_file_and_included_as_root_in_referenced_project() {
     let files: Files = [
         (

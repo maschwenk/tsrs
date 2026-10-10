@@ -4,7 +4,8 @@
 //! Public API (Go name -> Rust):
 //! - `PrinterOptions` (all Go fields, snake_case; `Default`), `PrintHandlers` (`Default`; hooks are
 //!   `Option<Box<dyn FnMut(Option<P<Node>>)>>` / `Option<Box<dyn FnMut(Option<P<NodeList>>)>>`, `has_global_name:
-//!   Option<Rc<dyn Fn(&str) -> bool>>`; Go's `MapSourcePosition` is not ported).
+//!   Option<Rc<dyn Fn(&str) -> bool>>`, `map_source_position: Option<Box<dyn Fn(SourceMapSource, i32) ->
+//!   Option<(SourceMapSource, i32)>>>` (Go `MapSourcePosition`)).
 //! - `new_printer(options: PrinterOptions, handlers: PrintHandlers, emit_context: Option<P<EmitContext>>) -> Printer`
 //!   (Go `NewPrinter`; `None` creates a fresh context). `Printer` is a `&mut self` state machine, returned by value.
 //!   - `Printer::write(&mut self, node: P<Node>, source_file: Option<P<SourceFile>>, writer: &mut (dyn EmitTextWriter + 'static),
@@ -56,8 +57,8 @@
 //!   declaration names); helpers_defs.rs the helper definitions of `helpers.go` (statics, `P::from_static`);
 //!   Go `printer.EmitHost` is `tsrs_transformers::EmitHost` (its `GetEmitResolver` returns the `Resolver` that lives there).
 //!
-//! Not ported: source map emit (guards kept, generator paths unreachable), `emitresolver.go` (the Rust form is
-//! `tsrs_transformers::Resolver`), JSDoc emit (`emitJSDocNode` panics like Go).
+//! Not ported: source-map name indices (Go's `emitPosName`/`emitSourcePosName` are commented out), `emitresolver.go`
+//! (the Rust form is `tsrs_transformers::Resolver`), JSDoc emit (`emitJSDocNode` panics like Go).
 
 mod changetrackerwriter;
 mod emitcontext;

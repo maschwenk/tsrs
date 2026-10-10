@@ -1,7 +1,7 @@
 use super::*;
 
-// commonjsmodule.go is split by line range: commonjsmodule.rs (1–560), commonjsmodule_2.rs (561–1240),
-// commonjsmodule_3.rs (1241–end).
+// commonjsmodule.go is split by line range: commonjsmodule.rs (1–559), commonjsmodule_2.rs (560–985),
+// commonjsmodule_3.rs (986–1339), commonjsmodule_4.rs (1340–end).
 
 // commonjsmodule.go:15
 pub struct CommonJSModuleTransformer {

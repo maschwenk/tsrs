@@ -38,7 +38,8 @@ pub struct SessionOptions {
     pub fs: Arc<dyn FS>,
     /// Go `UseBinaryResponses`: true for the sync MessagePack protocol, false for JSON-RPC.
     pub binary_responses: bool,
-    /// Go `RunExternalCode`. Content mappers are not ported; this stays false by default.
+    /// Go `RunExternalCode` (false by default). Forwarded to the project session, but API projects get no content
+    /// mapper project yet (see `Session::new`), so content-mapped files are not transformed.
     pub run_external_code: bool,
 }
 

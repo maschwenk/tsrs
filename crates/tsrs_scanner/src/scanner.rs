@@ -1,14 +1,16 @@
 //! Scanner API notes for consumers (parser, checker):
 //!
-//! Text and positions. The scanner scans a `&'static str` (the arena-allocated source text).
+//! Text and positions. The scanner scans a `&'static str` (the file's source text: leaked, embedded,
+//! or copied into the current arena or region).
 //! Positions are byte offsets (`i32`), exactly as in Go.
 //!
 //! Token values. `token_value()` returns `&'static str`. When the Go scanner would produce a
 //! substring of the source text (the overwhelmingly common case: identifiers, keywords, simple
 //! strings, numbers that are already canonical) this is a slice of the source text and costs
 //! nothing. When the value is computed (escape sequences, numeric separators, normalized numbers,
-//! template literals containing `\r`) it is allocated in the thread's leak arena. The parser can
-//! therefore store token values in nodes directly without copying.
+//! template literals containing `\r`) it is allocated with `alloc_str` in the current allocation
+//! target (the thread arena, or the entered region), where the parser also allocates nodes, so the
+//! parser can store token values in nodes directly without copying.
 //!
 //! Errors (Go `ErrorCallback` / `SetOnError`). Go's scanner calls a callback synchronously. In
 //! Rust the parser owns the scanner and is itself a `&mut self` state machine, so the scanner
@@ -21,9 +23,10 @@
 //! (`ScanError::args`); pass them on as `&[&dyn Display]`.
 //!
 //! Speculation (Go `Mark` / `Rewind`). `mark()` returns a `Copy` `ScannerState` snapshot
-//! (positions, token, token value, flags, JSDoc asterisk depth and the number of collected
-//! comment directives); `rewind(state)` restores it and truncates the comment directives to the
-//! recorded length, which is what Go's shared-backing-array slice restore amounts to. Buffered
+//! (positions, token, token value, flags, JSDoc asterisk depth and the slice of comment directives
+//! collected so far); `rewind(state)` restores it. Adding a directive copies the slice into a new
+//! arena slice, so a saved snapshot is never modified, which is what Go's shared-backing-array
+//! slice restore amounts to. Buffered
 //! errors are *not* part of the state (in Go they are the callback's business): an owner that
 //! drains after every call has nothing pending at `mark()` time and truncates its own diagnostics
 //! on rewind, as the Go parser does.

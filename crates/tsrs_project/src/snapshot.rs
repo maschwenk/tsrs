@@ -160,7 +160,8 @@ pub struct APIReconfigureProgramRequest {
     pub request: APICreateProgramRequest,
 }
 
-// The API is not ported (docs/LSP.md); the request type is kept because the snapshot and builder code take it.
+// API snapshot request, built by tsrs_api's standalone API server (`to_api_snapshot_request`). API sessions attached
+// to the language server are out of scope (docs/LSP.md).
 #[derive(Default)]
 pub struct APISnapshotRequest {
     pub open_projects: Option<Set<String>>,

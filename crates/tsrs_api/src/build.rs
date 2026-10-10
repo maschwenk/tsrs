@@ -1,9 +1,9 @@
 // session.go handleCreateBuildOrchestrator / handleDisposeBuildOrchestrator / handleBuild /
 // handleBuildReferences / handleCleanBuild / handleCleanReferences.
 //
-// The build orchestrator lives in the CLI crate (crates/tsrs_cli/src/build). It is injected through
-// `SessionOptions::build_backend` so the API reuses it in-process instead of spawning `tsrs -b` per call;
-// sessions without a backend report the build methods as unsupported.
+// The build orchestrator lives in tsrs_execute (crates/tsrs_execute/src/build). The CLI injects it with
+// `Session::set_build_backend` (tsrs_cli's `CliBuildBackend`) so the API reuses it in-process instead of spawning
+// `tsrs -b` per call; sessions without a backend report the build methods as unsupported.
 
 use rustc_hash::FxHashMap;
 use std::sync::atomic::{AtomicU64, Ordering};

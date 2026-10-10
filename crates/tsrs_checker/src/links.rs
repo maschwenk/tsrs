@@ -1,7 +1,9 @@
 use crate::*;
 use tsrs_core::{PKey, PSlot};
 
-/// All Go link stores (`core.LinkStore`, `nodeLinkStore`, `symbolArenaLinkStore`) map to this one type.
+/// Go `core.LinkStore` keyed by node or symbol identity. Most link stores use this type; `KeyedLinkStore`,
+/// `SymbolReferenceLinkStore`, `NodeLinkStore` (Go `nodeLinkStore`) and `SymbolArenaLinkStore` (Go
+/// `symbolArenaLinkStore`) below cover the rest.
 /// Values live in the arena, so `get` hands out a `Copy` pointer whose `Cell` fields are mutated in place.
 ///
 /// Keyed by the key's identity like Go's `map[K]*V`. A slot is the key (`P::key`: its handle with compressed pointers,

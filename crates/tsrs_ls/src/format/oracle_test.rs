@@ -1,6 +1,7 @@
 // Exact comparison of format_document against the Go formatter: tools/oracle/format prints the Go edits for each file
 // of a list; this test recomputes them and compares. Opt-in (needs the Go oracle output):
-//   TSRS_FORMAT_ORACLE=<oracle output> TSRS_FORMAT_ORACLE_PRESET=<default|api> cargo test -p tsrs_ls --lib format::oracle_test
+//   TSRS_FORMAT_ORACLE=<oracle output> TSRS_FORMAT_ORACLE_PRESET=<default|api|alt|insert|indent> \
+//     cargo test -p tsrs_ls --lib format::oracle_test
 use tsrs_core::{ScriptKind, Tristate};
 
 use super::api_test::settings;

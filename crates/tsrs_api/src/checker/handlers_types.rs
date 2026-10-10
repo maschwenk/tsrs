@@ -167,7 +167,7 @@ pub(crate) enum TypeArrayProperty {
     AliasTypeArguments,
 }
 
-/// Go `resolveTypeArrayPropertyOfType` (nil/empty → null).
+/// Go `resolveTypeArrayPropertyOfType` (nil/empty → `[]`, json/v2's encoding of a nil slice).
 pub(crate) fn resolve_type_array_property(host: &dyn CheckerHost, p: &Params, property: TypeArrayProperty) -> CheckerResult<Value> {
     let mut s = setup(host, p)?;
     let t = s.resolve_type(p.u32("objectId")?)?;
@@ -437,7 +437,7 @@ pub(crate) fn get_signature_from_declaration(host: &dyn CheckerHost, p: &Params)
 
 // --- Signatures ---
 
-/// Go `resolveTypeArrayPropertyOfSignature` (typeParameters; nil/empty → null).
+/// Go `resolveTypeArrayPropertyOfSignature` (typeParameters; nil/empty → `[]`).
 pub(crate) fn get_type_parameters_of_signature(host: &dyn CheckerHost, p: &Params) -> CheckerResult<Value> {
     let mut s = setup(host, p)?;
     let sig = s.resolve_signature(p.u64("objectId")?)?;

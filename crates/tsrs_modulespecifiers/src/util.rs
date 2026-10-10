@@ -10,7 +10,8 @@ use tsrs_core::tspath;
 //   type nodeModulesPathParseState (util.go:270)
 //   const (util.go:272): nodeModulesPathParseStateBeforeNodeModules, nodeModulesPathParseStateNodeModules,
 //     nodeModulesPathParseStateScope, nodeModulesPathParseStatePackageContent
-//   func ProcessEntrypointEnding util.go:388 (not generated)
+
+// func ProcessEntrypointEnding (util.go:388) is not generated; it is hand-ported below (process_entrypoint_ending).
 
 // util.go:29
 pub(crate) fn compare_paths_by_redirect(a: &ModulePath, b: &ModulePath, use_case_sensitive_file_names: bool) -> i32 {

@@ -646,8 +646,10 @@ impl filesParser {
         }
     }
 
-    // Parse (in parallel) every file that the given round will load. This only warms `task.file`;
-    // `load` falls back to parsing on the spot for anything not prefetched.
+    // Before a round's sequential load: in parallel, compute the metadata of every file the round will load, parse and
+    // bind it and (unless --traceResolution) resolve its references and imports; on the first parallel round also parse
+    // ahead the files those certainly load (the speculative walk). `load` falls back to doing the work on the spot for
+    // anything not prefetched.
     fn prefetch(loader: &mut fileLoader, round: &[queuedTask]) {
         let mut planned: FxHashSet<(DataId, std::sync::Arc<str>)> = FxHashSet::default();
         let mut to_parse: Vec<TaskId> = Vec::new();

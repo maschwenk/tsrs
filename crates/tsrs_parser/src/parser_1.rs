@@ -181,12 +181,13 @@ pub(crate) static viable_keyword_suggestions: LazyLock<Vec<&'static str>> = Lazy
 
 // MISSING_LIST_NODES is a sentinel backing array used to distinguish "missing" node lists
 // (where the expected opening token was not found) from ordinary empty node lists.
-// A pointer-sized static gives a unique, suitably aligned address for a zero-length slice.
+// A `usize` static gives a unique address, aligned for `P<Node>`, for a zero-length slice.
 static MISSING_LIST_NODES_BACKING: usize = 0;
 
 pub(crate) fn missing_list_nodes() -> &'static [P<Node>] {
-    // SAFETY: a zero-length slice needs only a non-null, aligned pointer; P<Node> has the size
-    // and alignment of a pointer, and nothing is ever read through this slice.
+    // SAFETY: a zero-length slice needs only a non-null pointer aligned for `P<Node>`; a `usize`
+    // static is at least as aligned as `P<Node>` (a reference, or a 4-byte handle with compressed
+    // pointers), and nothing is ever read through this slice.
     unsafe { std::slice::from_raw_parts(std::ptr::from_ref::<usize>(&MISSING_LIST_NODES_BACKING).cast::<P<Node>>(), 0) }
 }
 

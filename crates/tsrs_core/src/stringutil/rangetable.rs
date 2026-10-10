@@ -127,7 +127,8 @@ pub fn unicode_is(table: &RangeTable, r: Rune) -> bool {
     false
 }
 
-/// Go `unicode.ToLower` (simple one-rune case mapping).
+/// Go `unicode.ToLower` via Rust's full lowercase mapping; U+0130, the only rune with a multi-char full lowercase, is
+/// special-cased to 'i'.
 pub fn unicode_to_lower(r: Rune) -> Rune {
     if r < 0x80 {
         if (b'A' as Rune..=b'Z' as Rune).contains(&r) {
@@ -148,7 +149,9 @@ pub fn unicode_to_lower(r: Rune) -> Rune {
     }
 }
 
-/// Go `unicode.ToUpper` (simple one-rune case mapping).
+/// Approximates Go `unicode.ToUpper` with Rust's full uppercase mapping, keeping the rune when that mapping is not a
+/// single char. Differs from Go's simple mapping for runes whose full uppercase is multi-char but that have a simple
+/// mapping (e.g. U+1F80: Go gives U+1F88, this returns it unchanged). The Unicode version is the Rust toolchain's.
 pub fn unicode_to_upper(r: Rune) -> Rune {
     if r < 0x80 {
         if (b'a' as Rune..=b'z' as Rune).contains(&r) {

@@ -2,7 +2,7 @@ use tsrs_lsproto as lsproto;
 
 use crate::lsptestutil::{acknowledge_registrations, new_lsp_client, test_server_options};
 
-// server_flakydiagnostics_test.go:17. (Go emits between the two diagnostics requests; emit is not ported.)
+// server_flakydiagnostics_test.go:17. (Go emits between the two diagnostics requests; this server's handler does not.)
 #[test]
 fn test_flaky_diagnostic_tracking_parallel_emit() {
     if !tsrs_vfs::bundled::EMBEDDED {

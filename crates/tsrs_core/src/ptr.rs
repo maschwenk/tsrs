@@ -379,8 +379,9 @@ impl<T: ?Sized> P<T> {
     }
 
     /// Position-independent bits for packed words: the address here, the offset from the arena base in compressed
-    /// mode. 8-aligned and below 2^48 in both (the arena aligns every `P` target to 8; user-space addresses are below
-    /// 2^48 on every supported platform), so callers may keep tags in the low 3 and the high 16 bits.
+    /// mode. 8-aligned when `T` is (always with compressed pointers, where `p_layout` pads every target to 8), and below
+    /// 2^48 (user-space addresses are below 2^48 on every supported platform), so callers may keep tags in the low 3
+    /// bits of 8-aligned types and in the high 16 bits.
     #[inline]
     pub fn to_bits(self) -> usize {
         (self.0 as *const T as *const ()).expose_provenance()

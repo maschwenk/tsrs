@@ -19,8 +19,8 @@ pub enum FormatRequestKind {
 
 // api.go:25
 // Go keeps the formatter settings and the host newline as values of the request `context.Context`
-// (`formatOptionsKey`, `formatNewlineKey`). tsrs has no value-carrying context yet, so the two values travel in this
-// struct, which every Go `ctx` parameter of this package maps to.
+// (`formatOptionsKey`, `formatNewlineKey`). Here the two values are bundled in this struct, which callers carry inside
+// `tsrs_core::context::Context` via `with_value`.
 #[derive(Clone, Default)]
 pub struct FormatContext {
     format_options: Option<FormatCodeSettings>,

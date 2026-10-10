@@ -1,6 +1,6 @@
-// Isolated smoke tests for the jsx and legacy decorator transforms (before emit/core wires them into the emit
-// pipeline): build a program, lend the file's checker to a Resolver, run the transforms and print the result.
-// Inputs are .js/.jsx files so the missing type eraser does not matter.
+// Isolated smoke tests for the jsx and legacy decorator transforms: build a program, lend the file's checker to a
+// Resolver, run only the given transforms (no type eraser) and print the result. Inputs are .js/.jsx files so no
+// TypeScript syntax needs erasing.
 
 use std::sync::Arc;
 
