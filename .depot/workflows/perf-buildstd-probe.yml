@@ -27,7 +27,8 @@ env:
   CARGO_INCREMENTAL: "0"
   REPS: ${{ inputs.reps || '5' }}
   BINS: ${{ inputs.bins || 'A,E,F' }}
-  PROJECTS: vscode,xstate-main,webpack,mui-docs,cal-diy,formbricks-web,supabase-studio,t3code-server,drizzle-orm
+  UNWIND_ONLY: "1"
+  PROJECTS: xstate-main,webpack
 
 jobs:
   probe:
@@ -184,13 +185,22 @@ jobs:
           echo "$RUNNER_TEMP/llvm/bin" >> "$GITHUB_PATH"
           rustc -vV | tee probe-out/rustc.txt
 
+      - name: Unwinding of the non-PIE build (fourslash gate before and after BOLT)
+        run: |
+          mkdir -p probe-out
+          bash tools/perf/nopie-unwind.sh /tmp/unw bench/.work 2>&1 | tee probe-out/unwind.txt
+          cp /tmp/unw/summary.txt /tmp/unw/gate-*.txt probe-out/ || true
+          for d in /tmp/unw/fs-*; do [ -f "$d/fail.txt" ] && cp "$d/fail.txt" "probe-out/fail-$(basename "$d").txt"; done || true
+
       - name: Build the variants
+        if: env.UNWIND_ONLY != '1'
         run: |
           bash tools/perf/buildstd-build.sh /tmp/bstd bench/.work "$BINS" 2>&1 | tee probe-out/build.txt
           cp /tmp/bstd/times.txt /tmp/bstd/sizes.txt /tmp/bstd/profiles.txt probe-out/ || true
           mkdir -p probe-out/bin && for b in /tmp/bstd/bin/*; do cp "$b/tsrs" "probe-out/bin/$(basename "$b")"; done
 
       - name: Measure
+        if: env.UNWIND_ONLY != '1'
         run: |
           args=()
           IFS=, read -ra names <<< "$BINS"
@@ -204,7 +214,7 @@ jobs:
       # IC tag miss (PMCx18E, umask 0x18) and instruction-cache refills from L2 (PMCx082) and from beyond (PMCx083),
       # by name if perf knows them, else as raw events. Two `--singleThreaded` runs per project and binary.
       - name: Instruction-cache counters
-        if: always() && env.PERF != ''
+        if: always() && env.PERF != '' && env.UNWIND_ONLY != '1'
         run: |
           IFS=, read -ra names <<< "$BINS"
           ev="ic_tag_hit_miss.instruction_cache_miss,ic_cache_fill_l2,ic_cache_fill_sys,instructions,cycles"
@@ -227,7 +237,7 @@ jobs:
       # The bench's deterministic measure (bench/README.md "Regression flag"): user-space instructions of one
       # `--singleThreaded` run with RAYON_NUM_THREADS=1, and its peak RSS. Needs no perf tool.
       - name: Instruction counts (bench/count.py)
-        if: always()
+        if: always() && env.UNWIND_ONLY != '1'
         run: |
           IFS=, read -ra names <<< "$BINS"
           IFS=, read -ra projects <<< "$PROJECTS"
