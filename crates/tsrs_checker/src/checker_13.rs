@@ -2602,7 +2602,22 @@ impl Checker {
         if flags.intersects(kind) {
             return true;
         }
-        flags.intersects(TypeFlags::UnionOrIntersection) && maybe_constituent_of_kind(t.types(), kind)
+        if !flags.intersects(TypeFlags::UnionOrIntersection) {
+            return false;
+        }
+        // A union of primitives has no constituent of these kinds (`NotPrimitiveUnion` in getUnionType); `kind` is
+        // nearly always a constant, so this test folds away for the other kinds.
+        const NOT_IN_PRIMITIVE_UNION: TypeFlags = TypeFlags::Any
+            .union(TypeFlags::Unknown)
+            .union(TypeFlags::Void)
+            .union(TypeFlags::Never)
+            .union(TypeFlags::Object)
+            .union(TypeFlags::Intersection)
+            .union(TypeFlags::Instantiable);
+        if NOT_IN_PRIMITIVE_UNION.contains(kind) && t.object_flags().intersects(ObjectFlags::PrimitiveUnion) {
+            return false;
+        }
+        maybe_constituent_of_kind(t.types(), kind)
     }
 
     // checker.go:28090
