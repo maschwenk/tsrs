@@ -655,7 +655,7 @@ impl Checker {
                         }
                         if c.is_generic_mapped_type(constituent_type) && c.get_mapped_type_name_type_kind(constituent_type) != MappedTypeNameTypeKind::Remapping {
                             let substituted_type = c.get_indexed_mapped_type_substituted_type_of_contextual_type(constituent_type, name, name_type);
-                            types = c.append_contextual_property_type_constituent(&types, substituted_type);
+                            c.append_contextual_property_type_constituent(&mut types, substituted_type);
                             continue;
                         }
                         let property_type = c.get_type_of_concrete_property_of_contextual_type(constituent_type, name);
@@ -667,11 +667,11 @@ impl Checker {
                         }
                         ignore_index_infos = true;
                         index_info_candidates = Vec::new();
-                        types = c.append_contextual_property_type_constituent(&types, property_type);
+                        c.append_contextual_property_type_constituent(&mut types, property_type);
                     }
                     for candidate in index_info_candidates {
                         let index_info_type = c.get_type_from_index_infos_of_contextual_type(candidate, name, name_type);
-                        types = c.append_contextual_property_type_constituent(&types, index_info_type);
+                        c.append_contextual_property_type_constituent(&mut types, index_info_type);
                     }
                     if types.is_empty() {
                         return None;
@@ -781,20 +781,15 @@ impl Checker {
     }
 
     // checker.go:31160
-    pub(crate) fn append_contextual_property_type_constituent(&mut self, types: &[P<Type>], t: Option<P<Type>>) -> Vec<P<Type>> {
+    /// tsrs: appends to `types` in place (Go returns the appended slice).
+    pub(crate) fn append_contextual_property_type_constituent(&mut self, types: &mut Vec<P<Type>>, t: Option<P<Type>>) {
         // any doesn't provide any contextual information but could spoil the overall result by nullifying contextual information
         // provided by other intersection constituents so it gets replaced with `unknown` as `T & unknown` is just `T` and all
         // types computed based on the contextual information provided by other constituens are still assignable to any
         let Some(t) = t else {
-            return types.to_vec();
+            return;
         };
-        let mut result = types.to_vec();
-        if t.flags().intersects(TypeFlags::Any) {
-            result.push(self.unknown_type);
-            return result;
-        }
-        result.push(t);
-        result
+        types.push(if t.flags().intersects(TypeFlags::Any) { self.unknown_type } else { t });
     }
 
     // Return the contextual type for a given expression node. During overload resolution, a contextual type may temporarily
