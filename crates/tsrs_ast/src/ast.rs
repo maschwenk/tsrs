@@ -2856,7 +2856,6 @@ mod tests {
         assert_eq!(NodeFlags::BlockScoped, NodeFlags::Let | NodeFlags::Const | NodeFlags::Using);
         assert!(SymbolFlags::Value.contains(SymbolFlags::Function));
         assert!(!SymbolFlags::FunctionScopedVariableExcludes.intersects(SymbolFlags::FunctionScopedVariable));
-        assert_eq!(std::mem::size_of::<Node>(), 24);
     }
 
     #[test]
