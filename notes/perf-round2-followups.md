@@ -117,6 +117,11 @@ is type-checked, CI runs on pull requests, and the workspace is at 0.11.0. The i
 
 ## Measured and rejected (do not redo)
 
+- SIMD UTF-8 validation in VFS file loading (`notes/perf-simdutf8.md`): `simdutf8 0.1.5` with NEON changed
+  single-threaded instructions by -0.074% / -0.033% / +0.009% on Compiler / Compiler-Unions / vscode on macOS
+  arm64, with negligible peak-RSS changes. No supported wall-time gain; Linux's instruction gate was not run.
+  Keep `String::from_utf8`; revisit with profiling evidence or Linux measurements that meet the performance gate.
+
 - A tracing collector for checker data instead of retiring checkers (notes/mem-checker-gc.md): weak identity caches
   free 3% more than garbage at mid-run; even an upper bound with member tables and value-symbol links weak frees
   ~37% of the program's memory, about where `--maxMemory` already gets, for weeks of data-model changes.
