@@ -19,6 +19,40 @@ use crate::processing_diagnostic::{includeExplainingDiagnostic, processingDiagno
 pub(crate) type TaskId = usize;
 pub(crate) type DataId = usize;
 
+// The collect walk decides insertion order, including package redirects and later library overrides. In a
+// threaded program, keep those entries in order so each map can be built by one worker after the walk. A
+// single-threaded program inserts directly, without allocating an intermediate vector.
+enum CollectedFileMap<V> {
+    Direct(FxHashMap<Path, V>),
+    Deferred(Vec<(Path, V)>),
+}
+
+impl<V> CollectedFileMap<V> {
+    fn new(capacity: usize, parallel: bool) -> Self {
+        if parallel {
+            Self::Deferred(Vec::with_capacity(capacity))
+        } else {
+            Self::Direct(FxHashMap::with_capacity_and_hasher(capacity, Default::default()))
+        }
+    }
+
+    fn insert(&mut self, key: Path, value: V) {
+        match self {
+            Self::Direct(map) => {
+                map.insert(key, value);
+            }
+            Self::Deferred(entries) => entries.push((key, value)),
+        }
+    }
+
+    fn finish(self) -> FxHashMap<Path, V> {
+        match self {
+            Self::Direct(map) => map,
+            Self::Deferred(entries) => entries.into_iter().collect(),
+        }
+    }
+}
+
 pub(crate) struct parseTask {
     // Shared (like `path`) by the tasks of every reference to the same file name (`add_sub_task_normalized`).
     pub(crate) normalized_file_path: std::sync::Arc<str>,
@@ -837,6 +871,7 @@ impl filesParser {
     pub(crate) fn get_processed_files(loader: &mut fileLoader) -> processedFiles {
         let total_file_count = loader.total_file_count as usize;
         let lib_file_count = loader.lib_file_count as usize;
+        let parallel_maps = !loader.files_parser.single_threaded && total_file_count > 1;
 
         let mut missing_files: Vec<String> = Vec::new();
         let mut duplicate_source_files: Vec<DuplicateSourceFile> = Vec::new();
@@ -845,7 +880,7 @@ impl filesParser {
 
         // The per-file maps get one entry per file: sized once (vscode: 10.4k entries; a map's iteration order is never
         // relied on, see the `iter_over_hash_type` expectations of their readers).
-        let mut files_by_path: FxHashMap<Path, P<SourceFile>> = FxHashMap::with_capacity_and_hasher(total_file_count, Default::default());
+        let mut files_by_path = CollectedFileMap::new(total_file_count, parallel_maps);
         // stores 'filename -> file association' ignoring case
         // used to track cases when two file names differ only in casing
         let mut tasks_seen_by_name_ignore_case: Option<FxHashMap<String, TaskId>> =
@@ -854,9 +889,9 @@ impl filesParser {
         let mut include_data = fileIncludeData::default();
         let can_use_project_reference_source = loader.opts.can_use_project_reference_source();
         let mut output_file_to_project_reference_source: FxHashMap<Path, String> = FxHashMap::default();
-        let mut resolved_modules: FxHashMap<Path, ModeAwareCache<P<ResolvedModule>>> = FxHashMap::with_capacity_and_hasher(total_file_count, Default::default());
-        let mut type_resolutions_in_file: FxHashMap<Path, ModeAwareCache<P<ResolvedTypeReferenceDirective>>> = FxHashMap::with_capacity_and_hasher(total_file_count, Default::default());
-        let mut source_file_meta_datas: FxHashMap<Path, SourceFileMetaData> = FxHashMap::with_capacity_and_hasher(total_file_count, Default::default());
+        let mut resolved_modules = CollectedFileMap::new(total_file_count, parallel_maps);
+        let mut type_resolutions_in_file = CollectedFileMap::new(total_file_count, parallel_maps);
+        let mut source_file_meta_datas = CollectedFileMap::new(total_file_count, parallel_maps);
         let mut jsx_runtime_import_specifiers: FxHashMap<Path, P<jsxRuntimeImportSpecifier>> = FxHashMap::default();
         let mut import_helpers_import_specifiers: FxHashMap<Path, P<Node>> = FxHashMap::default();
         let mut source_files_found_searching_node_modules: FxHashSet<Path> = FxHashSet::default();
@@ -1119,6 +1154,20 @@ impl filesParser {
             }
         }
 
+        let ((files_by_path, resolved_modules), (type_resolutions_in_file, source_file_meta_datas)) =
+            tsrs_core::phases::time("Program: collect maps", || {
+                if parallel_maps {
+                    crate::program::worker_pool().install(|| {
+                        rayon::join(
+                            || rayon::join(|| files_by_path.finish(), || resolved_modules.finish()),
+                            || rayon::join(|| type_resolutions_in_file.finish(), || source_file_meta_datas.finish()),
+                        )
+                    })
+                } else {
+                    ((files_by_path.finish(), resolved_modules.finish()), (type_resolutions_in_file.finish(), source_file_meta_datas.finish()))
+                }
+            });
+
         processedFiles {
             finished_processing: true,
             files: tsrs_core::alloc_vec(all_files),
@@ -1184,4 +1233,26 @@ fn task_data(loader: &fileLoader, task: TaskId) -> DataId {
 
 fn trace_args(trace: &DiagAndArgs) -> Vec<&dyn std::fmt::Display> {
     trace.args.iter().map(|a| a as &dyn std::fmt::Display).collect()
+}
+
+#[cfg(test)]
+mod collected_map_tests {
+    use super::CollectedFileMap;
+    use tsrs_core::tspath::Path;
+
+    #[test]
+    fn deferred_maps_preserve_overwrites_and_empty_maps() {
+        for parallel in [false, true] {
+            let mut map = CollectedFileMap::new(2, parallel);
+            // Non-adjacent writes to the same path occur for redirects and library resolutions.
+            map.insert(Path::from("/a.ts"), 1);
+            map.insert(Path::from("/b.ts"), 2);
+            map.insert(Path::from("/a.ts"), 3);
+            let map = map.finish();
+            assert_eq!(map.len(), 2);
+            assert_eq!(map["/a.ts"], 3);
+            assert_eq!(map["/b.ts"], 2);
+            assert!(CollectedFileMap::<usize>::new(0, parallel).finish().is_empty());
+        }
+    }
 }
