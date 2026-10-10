@@ -1124,6 +1124,8 @@ pub struct Checker {
     /// The member names of `Function`, `CallableFunction`, `NewableFunction` and `Object`, once all four are
     /// resolved (`may_be_augment_member`).
     pub(crate) augment_filter: Option<tsrs_ast::NameFilter>,
+    /// Reused buffers for `get_unmatched_property_recording` (relater_1.rs), one per nested `propertiesRelatedTo`.
+    pub(crate) unmatched_found_pool: Vec<Vec<Option<Option<P<Symbol>>>>>,
     /// The last `program.get_emit_module_format_of_file` answer (`emit_module_format_of_file`).
     pub(crate) last_emit_module_format: Option<(P<SourceFile>, ModuleKind)>,
     /// Instrumentation (feature `assignment-stats`): every type / symbol this checker created.
@@ -1527,6 +1529,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         lazy_empty: tsrs_core::lazymembers::lazy_empty(),
         lazy_member_stats: Default::default(),
         augment_filter: None,
+        unmatched_found_pool: Vec::new(),
         last_emit_module_format: None,
         #[cfg(feature = "assignment-stats")]
         stats_created: Default::default(),
@@ -2013,6 +2016,7 @@ impl Checker {
             lazy_empty: base.lazy_empty.clone(),
             lazy_member_stats: base.lazy_member_stats.clone(),
             augment_filter: base.augment_filter.clone(),
+            unmatched_found_pool: Vec::new(),
             #[cfg(feature = "assignment-stats")]
             stats_created: base.stats_created.clone(),
             context_free_types: base.context_free_types.clone(),

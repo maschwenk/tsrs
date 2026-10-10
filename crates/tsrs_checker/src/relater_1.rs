@@ -1367,6 +1367,14 @@ impl Checker {
         self.get_unmatched_properties_worker(source, target, require_optional_properties, match_discriminant_properties, None)
     }
 
+    /// `get_unmatched_property(source, target, require_optional_properties, false)` that also records, for each
+    /// property of `get_properties_of_type(target)` by position, the source property it looked up (`Some(found)`)
+    /// or `None` where it looked nothing up. Nothing is recorded when it walks a lazy member table's declared members
+    /// instead (`found` is then left empty), or past an unmatched property.
+    pub(crate) fn get_unmatched_property_recording(&mut self, source: P<Type>, target: P<Type>, require_optional_properties: bool, found: &mut Vec<Option<Option<P<Symbol>>>>) -> Option<P<Symbol>> {
+        self.get_unmatched_properties_worker_ex(source, target, require_optional_properties, false, None, Some(found))
+    }
+
     // relater.go:971
     pub(crate) fn get_unmatched_properties(&mut self, source: P<Type>, target: P<Type>, require_optional_properties: bool, match_discriminant_properties: bool) -> Vec<P<Symbol>> {
         let mut props: Vec<P<Symbol>> = Vec::new();
@@ -1376,6 +1384,10 @@ impl Checker {
 
     // relater.go:977
     pub(crate) fn get_unmatched_properties_worker(&mut self, source: P<Type>, target: P<Type>, require_optional_properties: bool, match_discriminant_properties: bool, props_out: Option<&mut Vec<P<Symbol>>>) -> Option<P<Symbol>> {
+        self.get_unmatched_properties_worker_ex(source, target, require_optional_properties, match_discriminant_properties, props_out, None)
+    }
+
+    fn get_unmatched_properties_worker_ex(&mut self, source: P<Type>, target: P<Type>, require_optional_properties: bool, match_discriminant_properties: bool, props_out: Option<&mut Vec<P<Symbol>>>, found: Option<&mut Vec<Option<Option<P<Symbol>>>>>) -> Option<P<Symbol>> {
         let mut props_out = props_out;
         let lazy_properties = if self.lazy_unmatched { self.get_lazy_properties_in_order(target) } else { None };
         let lazy = lazy_properties.is_some();
@@ -1383,9 +1395,14 @@ impl Checker {
             Some(properties) => properties.into(),
             None => self.get_properties_of_type(target).into(),
         };
+        // Only full lookups are worth recording (has_property_of_type does not instantiate).
+        let mut found = found.filter(|_| !lazy && !self.lazy_has_prop);
         for &target_prop in properties.iter() {
             // TODO: remove this when we support static private identifier fields and find other solutions to get privateNamesAndStaticFields test to pass
             if is_static_private_identifier_property(target_prop) {
+                if let Some(found) = found.as_deref_mut() {
+                    found.push(None);
+                }
                 continue;
             }
             if require_optional_properties
@@ -1398,6 +1415,9 @@ impl Checker {
                 } else {
                     self.get_property_of_type(source, target_prop.name())
                 };
+                if let Some(found) = found.as_deref_mut() {
+                    found.push(Some(source_prop));
+                }
                 // notes/mem-lazy.md L10: a declared member stands in for the target property until the property
                 // itself is returned or its type is needed.
                 let mut target_prop = target_prop;
@@ -1433,6 +1453,8 @@ impl Checker {
                         }
                     }
                 }
+            } else if let Some(found) = found.as_deref_mut() {
+                found.push(None);
             }
         }
         None

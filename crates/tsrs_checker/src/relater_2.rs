@@ -2058,7 +2058,18 @@ impl Relater {
             }
         }
         let require_optional_properties = (self.rel() == c.subtype_relation || self.rel() == c.strict_subtype_relation) && !is_object_literal_type(source) && !c.is_empty_array_literal_type(source) && !is_tuple_type(source);
-        let unmatched_property = c.get_unmatched_property(source, target, require_optional_properties, false /*matchDiscriminantProperties*/);
+        // tsrs-only: the loop below looks up the same names in `source` again; the lookups recorded here answer it.
+        let mut found = c.unmatched_found_pool.pop().unwrap_or_default();
+        found.clear();
+        let unmatched_property = c.get_unmatched_property_recording(source, target, require_optional_properties, &mut found);
+        let result = self.properties_related_to_rest(c, source, target, report_errors, excluded_properties, optionals_only, intersection_state, require_optional_properties, unmatched_property, &found);
+        c.unmatched_found_pool.push(found);
+        result
+    }
+
+    #[expect(clippy::too_many_arguments, reason = "the tail of properties_related_to, split off to return its buffer to the pool")]
+    fn properties_related_to_rest(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, excluded_properties: &Set<String>, optionals_only: bool, intersection_state: IntersectionState, require_optional_properties: bool, unmatched_property: Option<P<Symbol>>, found: &[Option<Option<P<Symbol>>>]) -> Ternary {
+        let mut result = Ternary::True;
         if let Some(unmatched_property) = unmatched_property {
             if report_errors && c.should_report_unmatched_property_error(source, target) {
                 self.report_unmatched_property(c, source, target, unmatched_property, require_optional_properties);
@@ -2082,10 +2093,15 @@ impl Relater {
         // from the target union, across all members
         let properties = c.get_properties_of_type(target);
         let numeric_names_only = is_tuple_type(source) && is_tuple_type(target);
-        for target_prop in exclude_properties(&properties, excluded_properties).iter().copied() {
+        // `found` is by position in `properties` when it covers them all and nothing is excluded.
+        let found = if found.len() == properties.len() && excluded_properties.len() == 0 { found } else { &[] };
+        for (i, target_prop) in exclude_properties(&properties, excluded_properties).iter().copied().enumerate() {
             let name = target_prop.name();
             if !target_prop.flags().intersects(SymbolFlags::Prototype) && (!numeric_names_only || is_numeric_literal_name(name) || name == "length") && (!optionals_only || target_prop.flags().intersects(SymbolFlags::Optional)) {
-                let source_prop = c.get_property_of_type(source, name);
+                let source_prop = match found.get(i) {
+                    Some(&Some(source_prop)) => source_prop,
+                    _ => c.get_property_of_type(source, name),
+                };
                 if let Some(source_prop) = source_prop {
                     if source_prop != target_prop {
                         let skip_optional = self.rel() == c.comparable_relation;
