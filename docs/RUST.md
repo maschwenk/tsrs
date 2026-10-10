@@ -183,10 +183,6 @@ THP off for the whole process (`MIMALLOC_ALLOW_THP=0`, which also drops the aren
 `opt-level = "s"` for the language-server, API and emit crates (`.text` -6%, speed unchanged); adding vscode at eight
 checkers to the PGO training (-3% instructions, cycles unchanged).
 
-SIMD UTF-8 validation at the VFS boundary (`notes/perf-simdutf8.md`): at most 0.074% fewer single-threaded
-instructions on three macOS arm64 workloads, negligible memory change and no supported wall-time gain. The
-`simdutf8` experiment was removed; reconsider with profiling evidence or Linux measurements that meet the gate.
-
 Not tried. Each needs a measurement and a note before it is adopted; none is applied yet:
 
 | Candidate | Who does it | What it would give | What it needs |
