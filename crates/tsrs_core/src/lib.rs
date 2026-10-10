@@ -1,5 +1,6 @@
 pub mod arena;
 pub mod arena_owner;
+pub mod owned_array;
 pub mod ptr;
 
 /// True on targets that cannot start threads (wasm32 without atomics, such as `wasm32-wasip1`, where

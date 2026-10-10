@@ -107,6 +107,13 @@ pointer compression costs about +4.9% instructions and took back most of the che
 
 ## Measured and rejected (do not redo)
 
+- Calling owned type arrays, mappers and inference state a completed or memory-preserving migration
+  (`notes/rust-owned-type-arrays.md`): single-thread instructions rise +0.41% / +3.96%; default RSS changes
+  +0.51% / -0.90%, below the landing bar. Cumulative single-thread instructions are +8.53–12.59% against Oxc,
+  and default RSS remains +100–109% against pre-Oxc. Array/callback storage and tails use Rust ownership, but
+  their raw graph referents and the compatibility runtime remain. Revisit landing after typed graph/runtime
+  migration, complete oracle/API/LSP lifecycle validation and recovered instruction/RSS gates.
+
 - Calling owned type payloads a completed or memory-preserving type-graph migration
   (`notes/rust-owned-type-payloads.md`): local single-thread instructions change +1.47% / -0.98%, and default
   RSS rises +2.15% / +1.35%, with neither gain clearing the performance landing bar. Cumulative single-thread

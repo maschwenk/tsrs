@@ -103,8 +103,15 @@ Their packed symbol pointers and static key referents still require the legacy g
 Type records own a closed Rust enum of payload boxes. Payload views borrow the type record; no header-offset
 cast or static payload view remains. Resolved members, reference-instantiation tables and union/intersection
 tail records use owned lazy boxes. Symbol and alias edges are separate ordinary fields. The type header is still
-allocated through `P`, and payload graph edges and slices still require the legacy graph owner. This is not yet
+allocated through `P`, and payload graph edges still require the legacy graph owner. This is not yet
 a typed type arena (`notes/rust-owned-type-payloads.md`).
+
+Type argument/member arrays, signatures and inference lists own their storage through `ArrayCell` and retained
+`ArrayView` snapshots. Keep the snapshot across recursion and borrow its slice only for the call. A snapshot
+retains the array, not its legacy `P` referents. Mappers own a closed enum with owned array/deferred payloads;
+mapper views borrow their record. Signature/inference tails and candidate vectors have ordinary Rust owners,
+and comparison callbacks use `Arc`. Manual mapper/inference escape and recycling are removed. Static strings,
+template-text arrays and other link/cache arrays remain legacy (`notes/rust-owned-type-arrays.md`).
 
 Build orchestrators and their hosts use `Arc`; the host's back-reference is weak. Returned build outcomes retain
 the actual orchestrator, including programs whose diagnostics they expose, through conversion to an API response.

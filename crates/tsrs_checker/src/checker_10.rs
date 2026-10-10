@@ -37,8 +37,8 @@ impl Checker {
         let type_arg_count = type_argument_nodes.len() as i32;
         let signatures = self.get_signatures_of_type(t, SignatureKind::Construct);
         let mut result = Vec::new();
-        for &sig in signatures {
-            if type_arg_count >= self.get_min_type_argument_count(sig.type_parameters.get()) && type_arg_count <= sig.type_parameters.get().len() as i32 {
+        for sig in signatures {
+            if type_arg_count >= self.get_min_type_argument_count(&sig.type_parameters.get()) && type_arg_count <= sig.type_parameters.get().len() as i32 {
                 result.push(sig);
             }
         }
@@ -47,15 +47,15 @@ impl Checker {
 
     // checker.go:19634
     pub(crate) fn get_signature_instantiation(&mut self, sig: P<Signature>, type_arguments: &[P<Type>], is_java_script: bool, inferred_type_parameters: &[P<Type>]) -> P<Signature> {
-        let min_type_argument_count = self.get_min_type_argument_count(sig.type_parameters.get());
-        let filled = self.fill_missing_type_arguments(type_arguments, sig.type_parameters.get(), min_type_argument_count, is_java_script);
+        let min_type_argument_count = self.get_min_type_argument_count(&sig.type_parameters.get());
+        let filled = self.fill_missing_type_arguments(type_arguments, &sig.type_parameters.get(), min_type_argument_count, is_java_script);
         let instantiated_signature = self.get_signature_instantiation_without_filling_in_type_arguments(sig, &filled);
         if !inferred_type_parameters.is_empty() {
             let return_type = self.get_return_type_of_signature(instantiated_signature);
             let return_signature = self.get_single_call_or_construct_signature(return_type);
             if let Some(return_signature) = return_signature {
                 let new_return_signature = self.clone_signature(return_signature);
-                new_return_signature.type_parameters.set(alloc_slice(inferred_type_parameters));
+                new_return_signature.type_parameters.set(inferred_type_parameters);
                 let new_return_type = self.get_or_create_type_from_signature(new_return_signature);
                 new_return_type.as_object_type().mapper.set(instantiated_signature.mapper.get());
                 let new_instantiated_signature = self.clone_signature(instantiated_signature);
@@ -72,9 +72,9 @@ impl Checker {
         let result = self.new_signature(
             sig.flags.get() & SignatureFlags::PropagatingFlags,
             sig.declaration.get(),
-            sig.type_parameters.get(),
+            &sig.type_parameters.get(),
             sig.this_parameter(),
-            sig.parameters.get(),
+            &sig.parameters.get(),
             None,
             None,
             sig.min_argument_count.get(),
@@ -106,12 +106,12 @@ impl Checker {
     // checker.go:19673
     pub(crate) fn create_signature_type_mapper(&mut self, sig: P<Signature>, type_arguments: &[P<Type>]) -> P<TypeMapper> {
         let sources = self.get_type_parameters_for_mapper(sig);
-        new_type_mapper(alloc_vec(sources), alloc_slice(type_arguments))
+        new_type_mapper(&sources, type_arguments)
     }
 
     // checker.go:19677
     pub(crate) fn get_type_parameters_for_mapper(&mut self, sig: P<Signature>) -> Vec<P<Type>> {
-        same_map(sig.type_parameters.get(), |tp| self.instantiate_type(*tp, tp.mapper())).into_owned()
+        same_map(&sig.type_parameters.get(), |tp| self.instantiate_type(*tp, tp.mapper())).into_owned()
     }
 
     // If type has a single call signature and no other members, return that signature. Otherwise, return nil.
@@ -185,7 +185,7 @@ impl Checker {
         let key = CachedSignatureKey { sig: signature, key: SignatureKeyErased };
         let mut erased = self.cached_signatures.get(&key);
         if erased.is_none() {
-            let m = new_array_to_single_type_mapper(signature.type_parameters.get(), self.any_type);
+            let m = new_array_to_single_type_mapper(&signature.type_parameters.get(), self.any_type);
             let created = self.instantiate_signature_ex(signature, m, true /*eraseTypeParameters*/);
             self.cached_signatures.insert(key, created);
             erased = Some(created);
@@ -217,7 +217,7 @@ impl Checker {
         // identities, and potentially a lot of work comparing those identities, so here we create an instantiation
         // that uses the original type identities for all unconstrained type parameters.
         let mut type_arguments = Vec::with_capacity(signature.type_parameters.get().len());
-        for &tp in signature.type_parameters.get() {
+        for tp in signature.type_parameters.get() {
             if let Some(target) = tp.target() {
                 if self.get_constraint_of_type_parameter(target).is_none() {
                     type_arguments.push(target);
@@ -240,10 +240,10 @@ impl Checker {
             return cached;
         }
         let mut constraints = Vec::with_capacity(type_parameters.len());
-        for &tp in type_parameters {
+        for tp in type_parameters .iter().copied() {
             constraints.push(self.get_constraint_of_type_parameter(tp).unwrap_or(self.unknown_type));
         }
-        let base_constraint_mapper = new_type_mapper(type_parameters, alloc_vec(constraints));
+        let base_constraint_mapper = new_type_mapper(&type_parameters, &constraints);
         let mut base_constraints: Vec<P<Type>> = type_parameters.iter().map(|tp| self.instantiate_type(*tp, Some(base_constraint_mapper))).collect();
         // Run the immediate constraint mapper N-1 times so non-circular interdependent type parameters
         // resolve to their external dependencies without adding an extra expansion step for self-recursive constraints.
@@ -251,8 +251,8 @@ impl Checker {
             base_constraints = self.instantiate_types(&base_constraints, Some(base_constraint_mapper));
         }
         // and then apply a type eraser to remove any remaining circularly dependent type parameters
-        base_constraints = self.instantiate_types(&base_constraints, Some(new_array_to_single_type_mapper(type_parameters, self.any_type)));
-        let result = self.instantiate_signature_ex(signature, new_type_mapper(type_parameters, alloc_vec(base_constraints)), true /*eraseTypeParameters*/);
+        base_constraints = self.instantiate_types(&base_constraints, Some(new_array_to_single_type_mapper(&type_parameters, self.any_type)));
+        let result = self.instantiate_signature_ex(signature, new_type_mapper(&type_parameters, &base_constraints), true /*eraseTypeParameters*/);
         self.cached_signatures.insert(key, result);
         result
     }
@@ -277,11 +277,11 @@ impl Checker {
         let source_signature = if mapper.is_some() { self.instantiate_signature(contextual_signature, mapper) } else { contextual_signature };
         self.apply_to_parameter_types(source_signature, signature, |c, source, target| {
             // Type parameters from outer context referenced by source type are fixed by instantiation of the source type
-            c.infer_types(context.inferences.get(), source, target, InferencePriority::None, false);
+            c.infer_types(&context.inferences.get(), source, target, InferencePriority::None, false);
         });
         if inference_context.is_none() {
             self.apply_to_return_types(contextual_signature, signature, |c, source, target| {
-                c.infer_types(context.inferences.get(), source, target, InferencePriority::ReturnType, false);
+                c.infer_types(&context.inferences.get(), source, target, InferencePriority::ReturnType, false);
             });
         }
         let inferred = self.get_inferred_types(context);
@@ -302,7 +302,7 @@ impl Checker {
                             if t != base_type && !self.has_base_type(base_type, Some(t)) {
                                 let mut resolved = data.resolved_base_types.get().to_vec();
                                 resolved.push(base_type);
-                                data.resolved_base_types.set(alloc_vec(resolved));
+                                data.resolved_base_types.set_owned(resolved);
                             } else {
                                 self.report_circular_base_type(declaration, t);
                             }
@@ -391,14 +391,14 @@ impl Checker {
                     this_argument = target.as_interface_type().this_type.get();
                 }
                 let mut args = Vec::with_capacity(type_arguments.len() + 1);
-                args.extend_from_slice(type_arguments);
+                args.extend_from_slice(&type_arguments);
                 args.push(this_argument.unwrap());
                 return self.create_type_reference(target, &args);
             }
             return t;
         } else if t.flags().intersects(TypeFlags::Intersection) {
             let types = t.types();
-            let new_types = same_map(types, |t| self.get_type_with_this_argument(*t, this_argument, need_apparent_type));
+            let new_types = same_map(&types, |t| self.get_type_with_this_argument(*t, this_argument, need_apparent_type));
             if matches!(new_types, std::borrow::Cow::Borrowed(_)) {
                 return t;
             }
@@ -436,12 +436,12 @@ impl Checker {
             d.declared_members.set(members);
             let call_symbol = d.declared_members.get().and_then(|m| m.lookup(InternalSymbolNameCall));
             let call_signatures = self.get_signatures_of_symbol(call_symbol);
-            d.declared_call_signatures.set(alloc_vec(call_signatures));
+            d.declared_call_signatures.set_owned(call_signatures);
             let new_symbol = d.declared_members.get().and_then(|m| m.lookup(InternalSymbolNameNew));
             let construct_signatures = self.get_signatures_of_symbol(new_symbol);
-            d.declared_construct_signatures.set(alloc_vec(construct_signatures));
+            d.declared_construct_signatures.set_owned(construct_signatures);
             let index_infos = self.get_index_infos_of_symbol(t.symbol().unwrap());
-            d.declared_index_infos.set(alloc_vec(index_infos));
+            d.declared_index_infos.set_owned(index_infos);
         }
         Some(d)
     }
@@ -884,7 +884,7 @@ impl Checker {
             t = self.instantiate_type(target_return_type, sig.mapper.get());
         } else if let Some(composite) = sig.composite() {
             let mut return_types = Vec::with_capacity(composite.signatures.get().len());
-            for &s in composite.signatures.get() {
+            for s in composite.signatures.get() {
                 return_types.push(self.get_return_type_of_signature(s));
             }
             let combined = self.get_union_or_intersection_type(&return_types, composite.is_union.get(), UnionReduction::Subtype);
@@ -1449,12 +1449,12 @@ impl Checker {
                 if t.types().iter().any(|s| self.is_empty_object_type(*s)) {
                     error_reported = true;
                 } else {
-                    for &s in t.types() {
+                    for s in t.types() {
                         error_reported = error_reported || self.report_widening_errors_in_type(s);
                     }
                 }
             } else if self.is_array_or_tuple_type(t) {
-                for &s in self.get_type_arguments(t) {
+                for s in self.get_type_arguments(t) {
                     error_reported = error_reported || self.report_widening_errors_in_type(s);
                 }
             } else if is_object_literal_type(t) {
@@ -1590,7 +1590,7 @@ impl Checker {
             // new type parameters in the mapper function. Finally store this mapper in the new type
             // parameters such that we can use it when instantiating constraints.
             fresh_type_parameters = sig.type_parameters.get().iter().map(|tp| self.clone_type_parameter(*tp)).collect();
-            m = self.combine_type_mappers(Some(new_type_mapper(sig.type_parameters.get(), alloc_slice(&fresh_type_parameters))), m);
+            m = self.combine_type_mappers(Some(new_type_mapper(&sig.type_parameters.get(), &fresh_type_parameters)), m);
             for tp in &fresh_type_parameters {
                 tp.as_type_parameter().mapper.set(Some(m));
             }
@@ -1599,7 +1599,7 @@ impl Checker {
         // because using `mapper` now could trigger inferences to become fixed. (See `createInferenceContext`.)
         // See GH#17600.
         let this_parameter = sig.this_parameter().map(|s| self.instantiate_symbol(s, Some(m)));
-        let parameters = self.instantiate_symbols(sig.parameters.get(), m);
+        let parameters = self.instantiate_symbols(&sig.parameters.get(), m);
         let result = self.new_signature(
             sig.flags.get() & SignatureFlags::PropagatingFlags,
             sig.declaration.get(),
@@ -1621,7 +1621,7 @@ impl Checker {
         if new_value_type == info.value_type() {
             return info;
         }
-        self.new_index_info(info.key_type(), new_value_type, info.is_readonly.get(), info.declaration.get(), info.components.get())
+        self.new_index_info(info.key_type(), new_value_type, info.is_readonly.get(), info.declaration.get(), &info.components.get())
     }
 
     // checker.go:20991
@@ -1698,14 +1698,14 @@ impl Checker {
                 index_infos.push(self.enum_number_index_info);
             }
         }
-        d.set_index_infos(alloc_vec(index_infos));
+        d.set_index_infos(&index_infos);
         // We resolve the members before computing the signatures because a signature may use
         // typeof with a qualified name expression that circularly references the type we are
         // in the process of resolving (see issue #6072). The temporarily empty signature list
         // will never be observed because a qualified name can't reference signatures.
         if symbol.flags().intersects(SymbolFlags::Function | SymbolFlags::Method) {
             let signatures = self.get_signatures_of_symbol(Some(symbol));
-            d.set_signatures(alloc_vec(signatures));
+            d.set_signatures(&signatures);
             d.set_call_signature_count(d.signatures().len() as i32);
         }
         // And likewise for construct signatures for classes
@@ -1718,7 +1718,7 @@ impl Checker {
             }
             let mut signatures = d.signatures().to_vec();
             signatures.extend(construct_signatures);
-            d.set_signatures(alloc_vec(signatures));
+            d.set_signatures(&signatures);
         }
     }
 
@@ -1905,24 +1905,24 @@ impl Checker {
         if base_signatures.is_empty() {
             let flags = if is_abstract { SignatureFlags::Construct | SignatureFlags::Abstract } else { SignatureFlags::Construct };
             let local_type_parameters = class_type.as_interface_type().local_type_parameters();
-            return vec![self.new_signature(flags, None, local_type_parameters, None, &[], Some(class_type), None, 0)];
+            return vec![self.new_signature(flags, None, &local_type_parameters, None, &[], Some(class_type), None, 0)];
         }
         let base_type_node = get_base_type_node_of_class(class_type);
         let is_java_script = declaration.is_some_and(|d| ast::is_in_js_file(d));
         let type_arguments = self.get_type_arguments_from_node(base_type_node.unwrap());
         let type_arg_count = type_arguments.len() as i32;
         let mut result = Vec::new();
-        for &base_sig in base_signatures {
-            let min_type_argument_count = self.get_min_type_argument_count(base_sig.type_parameters.get());
+        for base_sig in base_signatures {
+            let min_type_argument_count = self.get_min_type_argument_count(&base_sig.type_parameters.get());
             let type_param_count = base_sig.type_parameters.get().len() as i32;
             if is_java_script || type_arg_count >= min_type_argument_count && type_arg_count <= type_param_count {
                 let sig = if type_param_count != 0 {
-                    let filled = self.fill_missing_type_arguments(&type_arguments, base_sig.type_parameters.get(), min_type_argument_count, is_java_script);
+                    let filled = self.fill_missing_type_arguments(&type_arguments, &base_sig.type_parameters.get(), min_type_argument_count, is_java_script);
                     self.create_signature_instantiation(base_sig, &filled)
                 } else {
                     self.clone_signature(base_sig)
                 };
-                sig.type_parameters.set(class_type.as_interface_type().local_type_parameters());
+                sig.type_parameters.set(&class_type.as_interface_type().local_type_parameters());
                 sig.resolved_return_type.set(Some(class_type));
                 if is_abstract {
                     sig.flags.set(sig.flags.get() | SignatureFlags::Abstract);
@@ -2021,7 +2021,6 @@ impl Checker {
         let mapper = append_type_mapping(t.as_mapped_type().mapper.get(), type_parameter, key_type);
         let prop_type = self.instantiate_type(template_type, Some(mapper));
         // SAFETY: made here for this one instantiation.
-        unsafe { recycle_mapping(mapper, true) };
         let modifiers_index_info = self.get_applicable_index_info(modifiers_type, prop_name_type);
         let is_readonly = template_modifiers.intersects(MappedTypeModifiers::IncludeReadonly)
             || !template_modifiers.intersects(MappedTypeModifiers::ExcludeReadonly) && modifiers_index_info.is_some_and(|i| i.is_readonly.get());
@@ -2083,7 +2082,7 @@ pub(crate) struct LazyMappedTable {
     pub(crate) template_modifiers: MappedTypeModifiers,
     pub(crate) should_link_prop_declarations: bool,
     pub(crate) members: RefCell<FxHashMap<String, Option<P<Symbol>>>>,
-    pub(crate) index_infos: Cell<&'static [P<IndexInfo>]>,
+    pub(crate) index_infos: ArrayCell<P<IndexInfo>>,
     pub(crate) index_infos_ready: Cell<bool>,
     pub(crate) resolving: Cell<bool>,
 }
@@ -2132,7 +2131,7 @@ impl Checker {
             template_modifiers: get_mapped_type_modifiers(t),
             should_link_prop_declarations,
             members: RefCell::new(FxHashMap::default()),
-            index_infos: Cell::new(&[]),
+            index_infos: ArrayCell::default(),
             index_infos_ready: Cell::new(false),
             resolving: Cell::new(false),
         });
@@ -2179,11 +2178,11 @@ impl Checker {
         Some(member)
     }
 
-    pub(crate) fn get_lazy_mapped_type_index_infos(&mut self, t: P<Type>, lazy: &std::rc::Rc<LazyMappedTable>) -> &'static [P<IndexInfo>] {
+    pub(crate) fn get_lazy_mapped_type_index_infos(&mut self, t: P<Type>, lazy: &std::rc::Rc<LazyMappedTable>) -> ArrayView<P<IndexInfo>> {
         if !lazy.index_infos_ready.get() {
             if lazy.resolving.get() {
                 // Recursive requests see no index infos, as they would while resolveMappedTypeMembers runs.
-                return &[];
+                return ArrayView::default();
             }
             lazy.resolving.set(true);
             let mut index_infos: Vec<P<IndexInfo>> = Vec::new();
@@ -2204,7 +2203,7 @@ impl Checker {
                 return t.as_structured_type().index_infos();
             }
             self.lazy_member_stats.mapped_index_info_queries += 1;
-            lazy.index_infos.set(alloc_vec(index_infos));
+            lazy.index_infos.set_owned(index_infos);
             lazy.index_infos_ready.set(true);
         }
         lazy.index_infos.get()
@@ -2268,8 +2267,7 @@ fn mapped_type_add_member_for_key_type(c: &mut Checker, st: &mut MappedTypeMembe
         let mapper = append_type_mapping(st.t.as_mapped_type().mapper.get(), st.type_parameter, key_type);
         prop_name_type = c.instantiate_type(name_type, Some(mapper));
         // SAFETY: made here for this one instantiation.
-        unsafe { recycle_mapping(mapper, true) };
-    }
+        }
     for_each_type(c, prop_name_type, |c, t| mapped_type_add_member_for_key_type_worker(c, st, key_type, t));
 }
 
@@ -2305,7 +2303,6 @@ impl Checker {
             let mapper = append_type_mapping(mapped_type.as_mapped_type().mapper.get(), type_parameter, key_type);
             let mut prop_type = self.instantiate_type(template_type, Some(mapper));
             // SAFETY: made here for this one instantiation.
-            unsafe { recycle_mapping(mapper, true) };
             // When creating an optional property in strictNullChecks mode, if 'undefined' isn't assignable to the
             // type, we include 'undefined' in the type. Similarly, when creating a non-optional property in strictNullChecks
             // mode, if the underlying property is optional we remove 'undefined' from the type.
@@ -2368,7 +2365,7 @@ impl Checker {
             {
                 return t;
             }
-            let new_types = same_map(t.types(), |t| self.get_lower_bound_of_key_type(*t));
+            let new_types = same_map(&types, |t| self.get_lower_bound_of_key_type(*t));
             return self.get_intersection_type(&new_types);
         }
         t
@@ -2379,7 +2376,7 @@ impl Checker {
         // The members and properties collections are empty for union types. To get all properties of a union
         // type use getPropertiesOfType (only the language service uses this).
         let mut call_signature_lists = Vec::with_capacity(t.types().len());
-        for &t in t.types() {
+        for t in t.types() {
             if t == self.global_function_type {
                 call_signature_lists.push(vec![self.unknown_signature]);
             } else {
@@ -2391,11 +2388,11 @@ impl Checker {
             call_signatures = self.get_array_member_call_signatures(t);
         }
         let mut construct_signature_lists = Vec::with_capacity(t.types().len());
-        for &t in t.types() {
+        for t in t.types() {
             construct_signature_lists.push(self.get_signatures_of_type(t, SignatureKind::Construct).to_vec());
         }
         let construct_signatures = self.get_union_signatures(&construct_signature_lists);
-        let index_infos = self.get_union_index_infos(t.types());
+        let index_infos = self.get_union_index_infos(&t.types());
         self.set_structured_type_members(t, None, &call_signatures, &construct_signatures, &index_infos);
     }
 
@@ -2515,7 +2512,7 @@ impl Checker {
                     let current = results.take().unwrap();
                     if !signature.type_parameters.get().is_empty()
                         && current.iter().any(|s| {
-                            !s.type_parameters.get().is_empty() && !self.compare_type_parameters_identical(signature.type_parameters.get(), s.type_parameters.get())
+                            !s.type_parameters.get().is_empty() && !self.compare_type_parameters_identical(&signature.type_parameters.get(), &s.type_parameters.get())
                         })
                     {
                         results = None;
@@ -2541,7 +2538,7 @@ impl Checker {
         let mut param_mapper = None;
         if !left.type_parameters.get().is_empty() && !right.type_parameters.get().is_empty() {
             // We just use the type parameter defaults from the first signature
-            param_mapper = Some(new_type_mapper(right.type_parameters.get(), left.type_parameters.get()));
+            param_mapper = Some(new_type_mapper(&right.type_parameters.get(), &left.type_parameters.get()));
         }
         let mut flags = (left.flags.get() | right.flags.get()) & (SignatureFlags::PropagatingFlags & !SignatureFlags::HasRestParameter);
         let declaration = left.declaration.get();
@@ -2552,14 +2549,14 @@ impl Checker {
         }
         let this_param = self.combine_union_or_intersection_this_param(left.this_parameter(), right.this_parameter(), param_mapper, is_union);
         let min_arg_count = left.min_argument_count.get().max(right.min_argument_count.get());
-        let result = self.new_signature(flags, declaration, type_params, this_param, &params, None, None, min_arg_count);
+        let result = self.new_signature(flags, declaration, &type_params, this_param, &params, None, None, min_arg_count);
         let mut left_signatures: Vec<P<Signature>> = if let Some(composite) = left.composite().filter(|c| c.is_union.get()) {
             composite.signatures.get().to_vec()
         } else {
             vec![left]
         };
         left_signatures.push(right);
-        result.set_composite(Some(P::new(CompositeSignature { is_union: Cell::new(is_union), signatures: Cell::new(alloc_vec(left_signatures)) })));
+        result.set_composite(Some(P::new(CompositeSignature { is_union: Cell::new(is_union), signatures: ArrayCell::new(&left_signatures) })));
         if let Some(param_mapper) = param_mapper {
             if left.composite().is_some_and(|c| c.is_union.get() == is_union) && left.mapper.get().is_some() {
                 result.mapper.set(Some(self.combine_type_mappers(left.mapper.get(), param_mapper)));
@@ -2672,7 +2669,7 @@ impl Checker {
         let mut construct_signatures: Vec<P<Signature>> = Vec::new();
         let mut index_infos: Vec<P<IndexInfo>> = Vec::new();
         let types = t.types();
-        let (mixin_flags, mixin_count) = self.find_mixins(types);
+        let (mixin_flags, mixin_count) = self.find_mixins(&types);
         for (i, &t) in types.iter().enumerate() {
             // When an intersection type contains mixin constructor types, the construct signatures from
             // those types are discarded and their return types are mixed into the return types of all
@@ -2687,7 +2684,7 @@ impl Checker {
                         .map(|&s| {
                             let clone = self.clone_signature(s);
                             let return_type = self.get_return_type_of_signature(s);
-                            clone.resolved_return_type.set(Some(self.include_mixin_type(return_type, types, &mixin_flags, i as i32)));
+                            clone.resolved_return_type.set(Some(self.include_mixin_type(return_type, &types, &mixin_flags, i as i32)));
                             clone
                         })
                         .collect();

@@ -1049,7 +1049,7 @@ fn get_apparent_properties(t: P<Type>, node: P<Node>, type_checker: &mut Checker
         return type_checker.get_apparent_properties(t);
     }
     let mut filtered: Vec<P<Type>> = Vec::new();
-    for &member_type in t.types() {
+    for member_type in t.types() {
         let excluded = member_type.flags().intersects(TypeFlags::Primitive)
             || type_checker.is_array_like_type_exported(member_type)
             || type_checker.is_type_invalid_due_to_union_discriminant(member_type, node)
@@ -1149,7 +1149,7 @@ fn set_member_declared_by_spread_assignment(declaration: P<Node>, members: &mut 
     if let Some(symbol) = symbol {
         t = type_checker.get_type_of_symbol_at_location(symbol, Some(expression));
     }
-    let mut properties: &[P<Symbol>] = &[];
+    let mut properties= tsrs_checker::ArrayView::default();
     if let Some(t) = t {
         if t.flags().intersects(TypeFlags::StructuredType) {
             properties = t.as_structured_type().properties();

@@ -171,7 +171,7 @@ pub(crate) enum TypeArrayProperty {
 pub(crate) fn resolve_type_array_property(host: &dyn CheckerHost, p: &Params, property: TypeArrayProperty) -> CheckerResult<Value> {
     let mut s = setup(host, p)?;
     let t = s.resolve_type(p.u32("objectId")?)?;
-    let types: &[P<Type>] = match property {
+    let types = match property {
         TypeArrayProperty::Types => {
             if !t.flags().intersects(TypeFlags::UnionOrIntersection | TypeFlags::TemplateLiteral) {
                 return Err(go_panic("Unhandled case in Type.Types"));
@@ -181,12 +181,12 @@ pub(crate) fn resolve_type_array_property(host: &dyn CheckerHost, p: &Params, pr
         TypeArrayProperty::TypeParameters => interface_of(&t)?.type_parameters(),
         TypeArrayProperty::OuterTypeParameters => interface_of(&t)?.outer_type_parameters(),
         TypeArrayProperty::LocalTypeParameters => interface_of(&t)?.local_type_parameters(),
-        TypeArrayProperty::AliasTypeArguments => t.alias().map_or(&[], |a| a.type_arguments()),
+        TypeArrayProperty::AliasTypeArguments => t.alias().map_or_else(tsrs_checker::ArrayView::default, |a| a.type_arguments()),
     };
     if types.is_empty() {
         return Ok(Value::Array(Vec::new())); // Go nil slice: json/v2 encodes []
     }
-    s.types_response(types)
+    s.types_response(&types)
 }
 
 #[derive(Clone, Copy)]
@@ -271,7 +271,7 @@ pub(crate) fn type_list_op(host: &dyn CheckerHost, p: &Params, op: TypeListOp) -
     if types.is_empty() {
         return Ok(Value::Array(Vec::new())); // Go nil slice: json/v2 encodes []
     }
-    s.types_response(types)
+    s.types_response(&types)
 }
 
 #[derive(Clone, Copy)]
@@ -303,7 +303,7 @@ pub(crate) fn get_properties_of_type(host: &dyn CheckerHost, p: &Params) -> Chec
     if props.is_empty() {
         return Ok(Value::Array(Vec::new())); // Go nil slice: json/v2 encodes []
     }
-    s.symbols_response(props)
+    s.symbols_response(&props)
 }
 
 pub(crate) fn get_apparent_properties_of_type(host: &dyn CheckerHost, p: &Params) -> CheckerResult<Value> {
@@ -336,7 +336,7 @@ pub(crate) fn get_index_infos_of_type(host: &dyn CheckerHost, p: &Params) -> Che
     }
     let mut out = Vec::with_capacity(infos.len());
     for info in infos {
-        out.push(s.index_info_response(*info)?);
+        out.push(s.index_info_response(info)?);
     }
     Ok(Value::Array(out))
 }
@@ -445,7 +445,7 @@ pub(crate) fn get_type_parameters_of_signature(host: &dyn CheckerHost, p: &Param
     if types.is_empty() {
         return Ok(Value::Array(Vec::new())); // Go nil slice: json/v2 encodes []
     }
-    s.types_response(types)
+    s.types_response(&types)
 }
 
 /// Go `resolveSymbolArrayPropertyOfSignature` / `resolveSymbolPropertyOfSignature` /

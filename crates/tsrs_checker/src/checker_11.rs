@@ -88,7 +88,7 @@ impl Checker {
         }
         let mut synthetic_flag = CheckFlags::SyntheticMethod;
         let mut merged_instantiations = false;
-        for &current in containing_type.types() {
+        for current in containing_type.types() {
             let t = self.get_apparent_type(current);
             if !self.is_error_type(t) && !t.flags().intersects(TypeFlags::Never) {
                 let prop = self.get_property_of_type_ex(t, name, skip_object_function_property_augment, false);
@@ -511,7 +511,7 @@ impl Checker {
         } else if t.flags().intersects(TypeFlags::Intersection) {
             if !t.object_flags().intersects(ObjectFlags::IsNeverIntersectionComputed) {
                 t.object_flags.set(t.object_flags() | ObjectFlags::IsNeverIntersectionComputed);
-                if !self.is_mapping_of_same_object_type(t.types()) && self.some_property_reduces_to_never(t) {
+                if !self.is_mapping_of_same_object_type(&t.types()) && self.some_property_reduces_to_never(t) {
                     t.object_flags.set(t.object_flags() | ObjectFlags::IsNeverIntersection);
                 }
             }
@@ -669,13 +669,13 @@ pub(crate) fn is_conflicting_private_property(prop: P<Symbol>) -> bool {
 
 impl Checker {
     // checker.go:22289
-    pub fn get_type_arguments(&mut self, t: P<Type>) -> &'static [P<Type>] {
+    pub fn get_type_arguments(&mut self, t: P<Type>) -> ArrayView<P<Type>> {
         let d = t.as_type_reference();
         if d.resolved_type_arguments.get().is_none() {
             let target = d.target.get().unwrap();
             let n = target.as_interface_type();
             if !self.push_type_resolution(t.into(), TypeSystemPropertyName::ResolvedTypeArguments) {
-                return alloc_vec(vec![self.error_type; n.type_parameters().len()]);
+                return ArrayView::from_vec(vec![self.error_type; n.type_parameters().len()]);
             }
             let mut type_arguments: Vec<P<Type>> = Vec::new();
             let node = t.as_type_reference().node.get();
@@ -683,7 +683,7 @@ impl Checker {
                 match node.kind() {
                     Kind::TypeReference => {
                         type_arguments = n.outer_type_parameters().to_vec();
-                        let effective = self.get_effective_type_arguments(node, n.local_type_parameters());
+                        let effective = self.get_effective_type_arguments(node, &n.local_type_parameters());
                         type_arguments.extend(effective);
                     }
                     Kind::ArrayType => {
@@ -698,11 +698,11 @@ impl Checker {
             if self.pop_type_resolution() {
                 if d.resolved_type_arguments.get().is_none() {
                     let instantiated = self.instantiate_types(&type_arguments, d.mapper.get());
-                    d.resolved_type_arguments.set(Some(alloc_vec(instantiated)));
+                    d.resolved_type_arguments.set_owned(Some(instantiated));
                 }
             } else {
                 if d.resolved_type_arguments.get().is_none() {
-                    d.resolved_type_arguments.set(Some(alloc_vec(vec![self.error_type; n.type_parameters().len()])));
+                    d.resolved_type_arguments.set_owned(Some(vec![self.error_type; n.type_parameters().len()]));
                 }
                 let error_node = if node.is_some() { node } else { self.current_node };
                 if let Some(target_symbol) = d.target.get().unwrap().symbol() {
@@ -775,7 +775,7 @@ impl Checker {
                 if let Some(default_type) = default_type {
                     // Go aliases `result` into the mapper (later writes to result are visible through it); the
                     // arena mapper holds a snapshot instead. See notes/checker-11.md.
-                    let mapper = new_type_mapper(alloc_slice(type_parameters), alloc_slice(&result));
+                    let mapper = new_type_mapper(type_parameters, &result);
                     result[i] = self.instantiate_type(default_type, Some(mapper));
                 } else {
                     result[i] = base_default_type;
@@ -1152,9 +1152,9 @@ impl Checker {
             let object_flags = t.object_flags();
             if object_flags.intersects(ObjectFlags::Reference | ObjectFlags::Anonymous | ObjectFlags::Mapped) {
                 if object_flags.intersects(ObjectFlags::Reference) && t.as_type_reference().node.get().is_none() {
-                    let resolved_type_arguments = t.as_type_reference().resolved_type_arguments.get().unwrap_or(&[]);
+                    let resolved_type_arguments = t.as_type_reference().resolved_type_arguments.get().unwrap_or_default();
                     // Go core.Same: instantiateList returns the input slice iff no element changed
-                    let Some(new_type_arguments) = self.instantiate_types_changed(resolved_type_arguments, m) else {
+                    let Some(new_type_arguments) = self.instantiate_types_changed(&resolved_type_arguments, m) else {
                         return t;
                     };
                     let result = self.create_normalized_type_reference(t.target().unwrap(), &new_type_arguments);
@@ -1178,11 +1178,11 @@ impl Checker {
             }
             let types = source.types();
             // Go core.Same: instantiateList returns the input slice iff no element changed
-            let changed = self.instantiate_types_changed(types, m);
+            let changed = self.instantiate_types_changed(&types, m);
             if changed.is_none() && alias.symbol() == t.alias().symbol() {
                 return t;
             }
-            let new_types = changed.as_deref().unwrap_or(types);
+            let new_types = changed.as_deref().unwrap_or(&types);
             let pending = if alias.is_none() { self.instantiate_type_alias_pending(t.alias(), Some(m)) } else { None };
             let alias = AliasArg::given_or_pending(alias, &pending);
             let result = if source.flags().intersects(TypeFlags::Intersection) {
@@ -1205,7 +1205,7 @@ impl Checker {
             let index_type = self.instantiate_type(d.index_type().unwrap(), Some(m));
             return self.get_indexed_access_type_ex(object_type, index_type, d.access_flags.get(), None /*accessNode*/, alias);
         } else if flags.intersects(TypeFlags::TemplateLiteral) {
-            let types = self.instantiate_types(t.as_template_literal_type().types(), Some(m));
+            let types = self.instantiate_types(&t.as_template_literal_type().types(), Some(m));
             return self.get_template_literal_type(t.as_template_literal_type().texts(), &types);
         } else if flags.intersects(TypeFlags::StringMapping) {
             let target = self.instantiate_type(t.as_string_mapping_type().target().unwrap(), Some(m));
@@ -1328,7 +1328,7 @@ impl Checker {
         if result.is_none() {
             let too_complex_before = self.too_complex_reports;
             let new_alias = new_alias.alias();
-            let mut new_mapper = new_type_mapper(type_parameters, alloc_slice(&type_arguments));
+            let mut new_mapper = new_type_mapper(type_parameters, &type_arguments);
             if target.object_flags().intersects(ObjectFlags::SingleSignatureType) && m.is_some() {
                 new_mapper = self.combine_type_mappers(Some(new_mapper), m.unwrap());
             }
@@ -1455,7 +1455,7 @@ impl Checker {
         result.set_alias(alias);
         if let Some(alias) = alias {
             if !alias.type_arguments().is_empty() {
-                let propagating = self.get_propagating_flags_of_types(result.alias().unwrap().type_arguments(), TypeFlags::None);
+                let propagating = self.get_propagating_flags_of_types(&result.alias().unwrap().type_arguments(), TypeFlags::None);
                 result.object_flags.set(result.object_flags() | propagating);
             }
         }
@@ -1501,8 +1501,8 @@ impl Checker {
                 let census_span = self.census_begin(crate::workcensus::Cat::CondInst, || crate::workcensus::CKey::Root(root));
                 let mut census_fan_out: Option<usize> = None;
                 let mut census_nevers = 0u64;
-                let type_argument_list = tsrs_core::alloc_slice_recycled(&type_arguments);
-                let new_mapper = new_type_mapper(outer_type_parameters, type_argument_list);
+                let type_argument_list = &type_arguments[..];
+                let new_mapper = new_type_mapper(&outer_type_parameters, type_argument_list);
                 let check_type = root.check_type.get().unwrap();
                 let mut distribution_type: Option<P<Type>> = None;
                 if root.is_distributive.get() {
@@ -1524,7 +1524,6 @@ impl Checker {
                                 let m = prepend_type_mapping(check_type, t, Some(new_mapper));
                                 let r = c.get_conditional_type(root, Some(m), for_constraint, None);
                                 // SAFETY: made here for this one call.
-                                unsafe { recycle_mapping(m, false) };
                                 if r == never_type {
                                     census_nevers += 1;
                                 }
@@ -1559,18 +1558,7 @@ impl Checker {
                     root.instantiations.set(key, r);
                 }
                 result = Some(r);
-                // The mapper and its type list are garbage unless the result kept the mapper (79%, notes/mem-census.md).
-                // SAFETY: made above; a single-type mapper does not keep the list, an array mapper keeps it only if
-                // it escaped.
-                unsafe {
-                    if !new_mapper.escaped() {
-                        recycle_mapper(new_mapper);
-                        tsrs_core::free_slice!(type_argument_list);
-                    } else if type_argument_list.len() == 1 {
-                        tsrs_core::free_slice!(type_argument_list);
-                    }
                 }
-            }
             return result.unwrap();
         }
         t
@@ -1863,15 +1851,15 @@ impl Checker {
     // checker.go:23185
     pub(crate) fn instantiate_type_alias(&mut self, alias: Option<P<TypeAlias>>, m: Option<P<TypeMapper>>) -> Option<P<TypeAlias>> {
         let alias = alias?;
-        let type_arguments = self.instantiate_types(alias.type_arguments(), m);
-        Some(P::new(TypeAlias { symbol: Cell::new(alias.symbol()), type_arguments: ThinSliceCell::new(alloc_vec(type_arguments)) }))
+        let type_arguments = self.instantiate_types(&alias.type_arguments(), m);
+        Some(P::new(TypeAlias { symbol: Cell::new(alias.symbol()), type_arguments: ArrayCell::new(&type_arguments) }))
     }
 
     /// `instantiate_type_alias` for the alias argument of a cached type constructor (`AliasArg::Pending`): the type
     /// arguments are instantiated here, like Go, the `TypeAlias` is allocated only if a type is created with it.
     pub(crate) fn instantiate_type_alias_pending(&mut self, alias: Option<P<TypeAlias>>, m: Option<P<TypeMapper>>) -> Option<PendingTypeAlias> {
         let alias = alias?;
-        let type_arguments = self.instantiate_types(alias.type_arguments(), m);
+        let type_arguments = self.instantiate_types(&alias.type_arguments(), m);
         Some(PendingTypeAlias::new(alias.symbol(), type_arguments))
     }
 
@@ -2399,7 +2387,7 @@ impl Checker {
         let type_parameters = d.local_type_parameters();
         if !type_parameters.is_empty() {
             let num_type_arguments = node.type_arguments().len() as i32;
-            let min_type_argument_count = self.get_min_type_argument_count(type_parameters);
+            let min_type_argument_count = self.get_min_type_argument_count(&type_parameters);
             let is_js = ast::is_in_js_file(node);
             let is_js_implicit_any = !self.no_implicit_any && is_js;
             if !is_js_implicit_any && (num_type_arguments < min_type_argument_count || num_type_arguments > type_parameters.len() as i32) {
@@ -2434,7 +2422,7 @@ impl Checker {
             // supplied as type arguments and the type reference only specifies arguments for the local type parameters
             // of the class or interface.
             let node_type_arguments = self.get_type_arguments_from_node(node);
-            let local_type_arguments = self.fill_missing_type_arguments(&node_type_arguments, type_parameters, min_type_argument_count, is_js);
+            let local_type_arguments = self.fill_missing_type_arguments(&node_type_arguments, &type_parameters, min_type_argument_count, is_js);
             let mut type_arguments = d.outer_type_parameters().to_vec();
             type_arguments.extend(local_type_arguments);
             return self.create_type_reference_ex(t, &type_arguments, ObjectFlags::FromTypeNode);
@@ -2569,7 +2557,7 @@ impl Checker {
         // Note that the element types may contain an extra 'this' type argument that we want to ignore during normalization
         // and then just append to the normalized element types.
         let mut n = TupleNormalizer::default();
-        if !n.normalize(self, &element_types[..element_infos.len()], element_infos) {
+        if !n.normalize(self, &element_types[..element_infos.len()], &element_infos) {
             return self.error_type;
         }
         if element_types.len() > element_infos.len() {
@@ -2708,13 +2696,13 @@ pub(crate) fn get_total_fixed_element_count(t: &TupleType) -> i32 {
 
 impl Checker {
     // checker.go:23929
-    pub(crate) fn get_element_types(&mut self, t: P<Type>) -> &'static [P<Type>] {
+    pub(crate) fn get_element_types(&mut self, t: P<Type>) -> ArrayView<P<Type>> {
         let type_arguments = self.get_type_arguments(t);
         let arity = self.get_type_reference_arity(t);
         if type_arguments.len() as i32 == arity {
             return type_arguments;
         }
-        &type_arguments[..(arity as usize).min(type_arguments.len())]
+        type_arguments.slice(..(arity as usize).min(type_arguments.len()))
     }
 
     // checker.go:23938

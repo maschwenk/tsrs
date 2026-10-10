@@ -205,7 +205,7 @@ impl NodeBuilderImpl {
         }
         // Recurse into type arguments (e.g., check Apple in Promise<Apple>).
         if t.object_flags().intersects(ObjectFlags::Reference) {
-            for &arg in c.get_type_arguments(t) {
+            for arg in c.get_type_arguments(t) {
                 self.check_type_expandability(c, Some(arg));
                 if self.ctx().can_increase_expansion_depth.get() {
                     return;
@@ -517,7 +517,7 @@ impl NodeBuilderImpl {
             return true;
         }
         let type_parameters = target.unwrap().as_interface_type().type_parameters();
-        existing.type_arguments().len() as i32 >= c.get_min_type_argument_count(type_parameters)
+        existing.type_arguments().len() as i32 >= c.get_min_type_argument_count(&type_parameters)
     }
 
     // nodebuilderimpl.go:548
@@ -557,7 +557,7 @@ impl NodeBuilderImpl {
             c.object_types_without_abstract_construct_signatures.insert(t, t);
             return t;
         }
-        let type_copy = c.new_anonymous_type(t.symbol(), st.members(), st.call_signatures(), &construct_signatures, st.index_infos());
+        let type_copy = c.new_anonymous_type(t.symbol(), st.members(), &st.call_signatures(), &construct_signatures, &st.index_infos());
         c.object_types_without_abstract_construct_signatures.insert(t, type_copy);
         c.object_types_without_abstract_construct_signatures.insert(type_copy, type_copy);
         type_copy
@@ -1629,7 +1629,7 @@ impl NodeBuilderImpl {
                 let target_template = c.get_template_type_from_mapped_type(target);
                 let target_type_parameter = c.get_type_parameter_from_mapped_type(target);
                 let target_modifiers = c.get_modifiers_type_from_mapped_type(target);
-                template_type = c.instantiate_type(target_template, Some(new_type_mapper(alloc_slice(&[target_type_parameter, target_modifiers]), alloc_slice(&[type_parameter, new_constraint_param]))));
+                template_type = c.instantiate_type(target_template, Some(new_type_mapper(&[target_type_parameter, target_modifiers], &[type_parameter, new_constraint_param])));
             }
             let mut index_target = new_type_variable;
             if index_target.is_none() {

@@ -287,7 +287,7 @@ impl LanguageService {
                     if let Some(t) = c.get_type_of_symbol_at_location(symbol, Some(node)) {
                         let call_signatures = c.get_call_signatures(t);
                         if !call_signatures.is_empty() {
-                            *result = l.create_signature_help_items(ctx, call_signatures, Some(call_signatures[0]), argument_info, source_file, c, true /*useFullPrefix*/);
+                            *result = l.create_signature_help_items(ctx, &call_signatures, Some(call_signatures[0]), argument_info, source_file, c, true /*useFullPrefix*/);
                             if result.is_some() {
                                 return true;
                             }
@@ -555,7 +555,7 @@ impl LanguageService {
         let emit_context = printer::new_emit_context();
         let mut p = printer::new_printer(PrinterOptions { new_line: NewLineKind::LF, ..Default::default() }, printer::PrintHandlers::default(), Some(emit_context));
 
-        let type_parameters: &[P<Type>] = if let Some(target) = candidate_signature.target() { target.type_parameters() } else { candidate_signature.type_parameters() };
+        let type_parameters: &[P<Type>] = if let Some(target) = candidate_signature.target() { &target.type_parameters() } else { &candidate_signature.type_parameters() };
         let mut signature_help_type_parameters: Vec<signatureHelpParameter> = Vec::with_capacity(type_parameters.len());
         for &type_parameter in type_parameters {
             signature_help_type_parameters.push(create_signature_help_parameter_for_type_parameter(type_parameter, source_file, enclosing_declaration, c, &mut p));
@@ -635,7 +635,7 @@ impl LanguageService {
 
         let mut signature_help_type_parameters: Vec<signatureHelpParameter> = Vec::with_capacity(candidate_signature.type_parameters().len());
         if !candidate_signature.type_parameters().is_empty() {
-            for &type_parameter in candidate_signature.type_parameters() {
+            for type_parameter in candidate_signature.type_parameters() {
                 signature_help_type_parameters.push(create_signature_help_parameter_for_type_parameter(type_parameter, source_file, enclosing_declaratipn, c, &mut p));
             }
         }

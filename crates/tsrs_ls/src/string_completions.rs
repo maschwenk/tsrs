@@ -1680,7 +1680,7 @@ fn get_string_literal_types(t: Option<P<Type>>, uniques: Option<&mut FxHashSet<S
     let t = skip_constraint(t, type_checker);
     if t.is_union() {
         let mut types: Vec<P<Type>> = Vec::new();
-        for &element_type in t.types() {
+        for element_type in t.types() {
             types.extend(get_string_literal_types(Some(element_type), Some(uniques), type_checker));
         }
         return types;

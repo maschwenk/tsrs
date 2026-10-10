@@ -266,8 +266,8 @@ impl Checker {
             // T[K] & {} | undefined & {} | T[K] & null | undefined & null ==>
             // T[K] & {} | T[K] & null
             let types = t.types();
-            let normalized_types = same_map(types, |&u| self.get_normalized_type(u, writing));
-            if !same(&normalized_types, types) {
+            let normalized_types = same_map(&types, |&u| self.get_normalized_type(u, writing));
+            if !same(&normalized_types, &types) {
                 return self.get_intersection_type(&normalized_types);
             }
         }
@@ -278,7 +278,7 @@ impl Checker {
     pub(crate) fn should_normalize_intersection(&mut self, t: P<Type>) -> bool {
         let mut has_instantiable = false;
         let mut has_nullable_or_empty = false;
-        for &t in t.types() {
+        for t in t.types() {
             has_instantiable = has_instantiable || t.flags().intersects(TypeFlags::Instantiable);
             has_nullable_or_empty = has_nullable_or_empty || t.flags().intersects(TypeFlags::Nullable) || self.is_empty_anonymous_object_type(t);
             if has_instantiable && has_nullable_or_empty {
@@ -340,7 +340,7 @@ impl Checker {
             instantiated_base = bases[0];
         } else {
             let type_arguments = self.get_type_arguments(t);
-            let mapper = new_type_mapper(type_parameters, alloc_slice(&type_arguments[..type_parameters.len()]));
+            let mapper = new_type_mapper(&type_parameters, &type_arguments[..type_parameters.len()]);
             instantiated_base = self.instantiate_type(bases[0], Some(mapper));
         }
         let type_arguments = self.get_type_arguments(t);
@@ -398,7 +398,7 @@ impl Checker {
         }
         let resolved = self.resolve_structured_type_members(&t).unwrap();
         let members = self.transform_type_of_members(t, |c, t| c.get_regular_type_of_object_literal(t));
-        let regular = self.new_anonymous_type(t.symbol(), Some(members), resolved.call_signatures(), resolved.construct_signatures(), resolved.index_infos());
+        let regular = self.new_anonymous_type(t.symbol(), Some(members), &resolved.call_signatures(), &resolved.construct_signatures(), &resolved.index_infos());
         // resolved is t's own structured data, so resolved.flags/objectFlags are t's header flags
         regular.flags.set(t.flags());
         regular.object_flags.set(regular.object_flags() | (t.object_flags() & !ObjectFlags::FreshLiteral));
@@ -1225,7 +1225,7 @@ impl Checker {
         if is_type_any(then_function) {
             return None;
         }
-        let mut then_signatures: &[P<Signature>] = &[];
+        let mut then_signatures= ArrayView::default();
         if let Some(then_function) = then_function {
             then_signatures = self.get_signatures_of_type(then_function, SignatureKind::Call);
         }
@@ -1237,7 +1237,7 @@ impl Checker {
         }
         let mut this_type_for_error: Option<P<Type>> = None;
         let mut candidates: Vec<P<Signature>> = Vec::new();
-        for &then_signature in then_signatures {
+        for then_signature in then_signatures {
             let this_type = self.get_this_type_of_signature(then_signature);
             if this_type.is_some_and(|this_type| this_type != self.void_type && {
                 let subtype_relation = self.subtype_relation;
@@ -1519,7 +1519,7 @@ impl Checker {
         } else if t.flags().intersects(TypeFlags::StringLiteral) {
             self.get_string_literal_type(&apply_string_mapping(symbol, &get_string_literal_value(t)))
         } else if t.flags().intersects(TypeFlags::TemplateLiteral) {
-            let (texts, types) = self.apply_template_string_mapping(symbol, t.as_template_literal_type().texts.get(), t.as_template_literal_type().types.get());
+            let (texts, types) = self.apply_template_string_mapping(symbol, t.as_template_literal_type().texts.get(), &t.as_template_literal_type().types.get());
             let text_refs: Vec<&str> = texts.iter().map(|s| s.as_str()).collect();
             self.get_template_literal_type(&text_refs, &types)
         } else if t.flags().intersects(TypeFlags::StringMapping) && Some(symbol) == t.symbol() {
@@ -1552,7 +1552,7 @@ fn add_template_spans(c: &mut Checker, state: &mut TemplateSpansState, texts: &[
             state.sb.push_str(texts[i + 1]);
         } else if t.flags().intersects(TypeFlags::TemplateLiteral) {
             state.sb.push_str(t.as_template_literal_type().texts.get()[0]);
-            if !add_template_spans(c, state, t.as_template_literal_type().texts.get(), t.as_template_literal_type().types.get()) {
+            if !add_template_spans(c, state, t.as_template_literal_type().texts.get(), &t.as_template_literal_type().types.get()) {
                 return false;
             }
             state.sb.push_str(texts[i + 1]);
@@ -1638,13 +1638,6 @@ impl Checker {
         let template_mapper = self.combine_type_mappers(object_type.as_mapped_type().mapper.get(), mapper);
         let template_type = self.get_template_type_from_mapped_type(object_type.as_mapped_type().target.get().unwrap_or(object_type));
         let instantiated_template_type = self.instantiate_type(template_type, Some(template_mapper));
-        // SAFETY: both made here for this one instantiation (the composite's children escape with it).
-        unsafe {
-            if template_mapper != mapper {
-                recycle_mapper(template_mapper);
-            }
-            recycle_mapper(mapper);
-        }
         let mut is_optional = get_mapped_type_optionality(object_type) > 0;
         if !is_optional {
             if self.is_generic_type(object_type) {
@@ -1933,7 +1926,7 @@ impl Checker {
         }
         if is_tuple_type(t) {
             let element_types = self.get_element_types(t);
-            return self.create_tuple_type_ex(&element_types, t.reference_target().as_tuple_type().element_infos.get(), false /*readonly*/);
+            return self.create_tuple_type_ex(&element_types, &t.reference_target().as_tuple_type().element_infos.get(), false /*readonly*/);
         }
         self.create_tuple_type_ex(&[t], &[TupleElementInfo { flags: ElementFlags::Variadic, labeled_declaration: None }], false)
     }

@@ -910,13 +910,13 @@ impl QuickInfoWriter {
                             }
                             self.write_symbol_classified(c, symbol, container, SymbolFlags::None, SYMBOL_FORMAT_FLAGS);
                             let params = c.get_declared_type_of_symbol_exported(symbol).as_interface_type().local_type_parameters();
-                            self.write_type_params(c, params);
+                            self.write_type_params(c, &params);
                         }
                     } else if !self.try_expand_symbol(c, symbol, flags) {
                         self.dpw.write_keyword("interface ");
                         self.write_symbol_classified(c, symbol, container, SymbolFlags::None, SYMBOL_FORMAT_FLAGS);
                         let params = c.get_declared_type_of_symbol_exported(symbol).as_interface_type().local_type_parameters();
-                        self.write_type_params(c, params);
+                        self.write_type_params(c, &params);
                     }
                 }
             }
@@ -974,7 +974,7 @@ impl QuickInfoWriter {
                 let parent_type = c.get_declared_type_of_symbol_exported(symbol_parent);
                 if let Some(parent_interface) = parent_type.try_as_interface_type() {
                     let parent_params = parent_interface.local_type_parameters();
-                    self.write_type_params(c, parent_params);
+                    self.write_type_params(c, &parent_params);
                 }
             } else {
                 // Method/function type parameter

@@ -1169,6 +1169,13 @@ pub enum CensusField {
     Thin { off: usize },
     /// The word at `off` keeps an address with tag bits `mask` (low bits of an aligned address) set.
     LowTag { off: usize, mask: u8 },
+    /// The pointer word at `ptr` is active only when the repr(u8) enum discriminant at `tag` has its bit set in
+    /// `variants`. Other variants leave this word scalar or uninitialized.
+    Variant {
+        ptr: usize,
+        tag: usize,
+        variants: u8,
+    },
 }
 
 impl CensusField {

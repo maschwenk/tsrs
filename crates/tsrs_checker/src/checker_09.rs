@@ -258,7 +258,6 @@ impl Checker {
                         let mapper = prepend_type_mapping(root.check_type.get().unwrap(), constraint, d.mapper.get());
                         let instantiated = self.get_conditional_type_instantiation(t, mapper, true /*forConstraint*/, None);
                         // SAFETY: made here for this one instantiation; kept if the result stored it.
-                        unsafe { recycle_mapping(mapper, false) };
                         if !instantiated.flags().intersects(TypeFlags::Never) {
                             d.resolved_constraint_of_distributive.set(Some(instantiated));
                             return Some(instantiated);
@@ -297,9 +296,9 @@ impl Checker {
                 this_type.as_type_parameter().is_this_type.set(true);
                 this_type.as_type_parameter().constraint.set(Some(t));
                 type_parameters.push(this_type);
-                d.all_type_parameters.set(alloc_vec(type_parameters));
+                d.all_type_parameters.set_owned(type_parameters);
                 d.outer_type_parameter_count.set(outer_type_parameter_count as i32);
-                d.resolved_type_arguments.set(Some(d.type_parameters()));
+                d.resolved_type_arguments.set(Some(&d.type_parameters()));
                 d.instantiations.make();
                 d.instantiations.add(t);
                 d.target.set(Some(t));
@@ -475,9 +474,13 @@ impl keyBuilder {
 
     #[inline(never)]
     fn write_some_alias_arg(&mut self, alias: AliasArg<'_>) {
+        let stored_arguments = match alias {
+            AliasArg::Some(alias) => Some(alias.type_arguments.get()),
+            _ => None,
+        };
         let (symbol, type_arguments) = match alias {
             AliasArg::None => unreachable!("write_alias_arg writes a missing alias"),
-            AliasArg::Some(alias) => (alias.symbol.get(), alias.type_arguments.get()),
+            AliasArg::Some(alias) => (alias.symbol.get(), stored_arguments.as_deref().unwrap()),
             AliasArg::Pending(pending) => (pending.symbol, pending.type_arguments.as_slice()),
         };
         self.write_byte(1);
@@ -499,7 +502,7 @@ impl keyBuilder {
             constrained: &mut bool,
         ) {
             b.write_type(ref_.target().unwrap());
-            for &t in ref_.as_type_reference().resolved_type_arguments.get().unwrap_or(&[]) {
+            for t in ref_.as_type_reference().resolved_type_arguments.get().unwrap_or_default() {
                 if t.flags().intersects(TypeFlags::TypeParameter) {
                     if ignore_constraints || c.get_constraint_of_type_parameter(t).is_none() {
                         let index = match type_parameters.iter().position(|&tp| tp == t) {
@@ -567,11 +570,11 @@ pub(crate) fn get_union_key(types: &[P<Type>], origin: Option<P<Type>>, alias: A
         None => b.write_types(types),
         Some(origin) if origin.flags().intersects(TypeFlags::Union) => {
             b.write_byte(b'|');
-            b.write_types(origin.types());
+            b.write_types(&origin.types());
         }
         Some(origin) if origin.flags().intersects(TypeFlags::Intersection) => {
             b.write_byte(b'&');
-            b.write_types(origin.types());
+            b.write_types(&origin.types());
         }
         Some(origin) if origin.flags().intersects(TypeFlags::Index) => {
             // origin type id alone is insufficient, as `keyof x` may resolve to multiple WIP values while `x` is still resolving
@@ -1600,7 +1603,7 @@ impl Checker {
             .into_iter()
             .map(|info| {
                 let value_type = self.get_widened_type(info.value_type());
-                self.new_index_info(info.key_type(), value_type, info.is_readonly(), info.declaration(), info.components.get())
+                self.new_index_info(info.key_type(), value_type, info.is_readonly(), info.declaration(), &info.components.get())
             })
             .collect();
         let result = self.new_anonymous_type(t.symbol(), Some(members), &[], &[], &index_infos);
@@ -2124,7 +2127,7 @@ impl Checker {
 
     // checker.go:19190
     #[cfg_attr(feature = "site-counts", track_caller)]
-    pub fn get_properties_of_type(&mut self, t: P<Type>) -> &'static [P<Symbol>] {
+    pub fn get_properties_of_type(&mut self, t: P<Type>) -> ArrayView<P<Symbol>> {
         let t = self.get_reduced_apparent_type(t);
         if t.flags().intersects(TypeFlags::UnionOrIntersection) {
             return self.get_properties_of_union_or_intersection_type(t);
@@ -2134,21 +2137,21 @@ impl Checker {
 
     // checker.go:19198
     #[cfg_attr(feature = "site-counts", track_caller)]
-    pub(crate) fn get_properties_of_object_type(&mut self, t: P<Type>) -> &'static [P<Symbol>] {
+    pub(crate) fn get_properties_of_object_type(&mut self, t: P<Type>) -> ArrayView<P<Symbol>> {
         if t.flags().intersects(TypeFlags::Object) {
             return self.resolve_structured_type_members(&t).unwrap().properties();
         }
-        &[]
+        ArrayView::default()
     }
 
     // checker.go:19205
-    pub(crate) fn get_properties_of_union_or_intersection_type(&mut self, t: P<Type>) -> &'static [P<Symbol>] {
+    pub(crate) fn get_properties_of_union_or_intersection_type(&mut self, t: P<Type>) -> ArrayView<P<Symbol>> {
         let d = t.as_union_or_intersection_type();
         if d.resolved_properties().is_none() {
             let mut checked: FxHashSet<&'static str> = FxHashSet::default();
             let mut props: Vec<P<Symbol>> = Vec::new();
-            for &current in d.types.get() {
-                for &prop in self.get_properties_of_type(current) {
+            for current in d.types.get() {
+                for prop in self.get_properties_of_type(current) {
                     if checked.insert(prop.name()) {
                         let combined_prop = self.get_property_of_union_or_intersection_type(
                             t,
@@ -2303,22 +2306,22 @@ impl Checker {
 
     // checker.go:19303
     #[cfg_attr(feature = "site-counts", track_caller)]
-    pub fn get_signatures_of_type(&mut self, t: P<Type>, kind: SignatureKind) -> &'static [P<Signature>] {
+    pub fn get_signatures_of_type(&mut self, t: P<Type>, kind: SignatureKind) -> ArrayView<P<Signature>> {
         let t = self.get_reduced_apparent_type(t);
         self.get_signatures_of_structured_type(t, kind)
     }
 
     // checker.go:19307
     #[cfg_attr(feature = "site-counts", track_caller)]
-    pub(crate) fn get_signatures_of_structured_type(&mut self, t: P<Type>, kind: SignatureKind) -> &'static [P<Signature>] {
+    pub(crate) fn get_signatures_of_structured_type(&mut self, t: P<Type>, kind: SignatureKind) -> ArrayView<P<Signature>> {
         self.signatures_of_structured_type(t, kind)
     }
 
     // Go's getSignaturesOfStructuredType returns the stored slice; this is it without the copy.
     #[cfg_attr(feature = "site-counts", track_caller)]
-    pub(crate) fn signatures_of_structured_type(&mut self, t: P<Type>, kind: SignatureKind) -> &'static [P<Signature>] {
+    pub(crate) fn signatures_of_structured_type(&mut self, t: P<Type>, kind: SignatureKind) -> ArrayView<P<Signature>> {
         if !t.flags().intersects(TypeFlags::StructuredType) {
-            return &[];
+            return ArrayView::default();
         }
         if let Some(lm) = self.get_ready_lazy_member_table(t) {
             self.lazy_member_stats.member_signature_queries += 1;
@@ -2333,7 +2336,7 @@ impl Checker {
                 self.lazy_member_stats.mapped_signature_early_returns += 1;
             }
             // Mapped types have no signatures.
-            return &[];
+            return ArrayView::default();
         }
         let resolved = self.resolve_structured_type_members(&t).unwrap();
         if kind == SignatureKind::Call {
@@ -2343,18 +2346,18 @@ impl Checker {
     }
 
     // checker.go:19318
-    pub fn get_index_infos_of_type(&mut self, t: P<Type>) -> &'static [P<IndexInfo>] {
+    pub fn get_index_infos_of_type(&mut self, t: P<Type>) -> ArrayView<P<IndexInfo>> {
         let t = self.get_reduced_apparent_type(t);
         self.get_index_infos_of_structured_type(t)
     }
 
     // checker.go:19322
-    pub(crate) fn get_index_infos_of_structured_type(&mut self, t: P<Type>) -> &'static [P<IndexInfo>] {
+    pub(crate) fn get_index_infos_of_structured_type(&mut self, t: P<Type>) -> ArrayView<P<IndexInfo>> {
         self.index_infos_of_structured_type(t)
     }
 
     // Go's getIndexInfosOfStructuredType returns the stored slice; this is it without the copy.
-    pub(crate) fn index_infos_of_structured_type(&mut self, t: P<Type>) -> &'static [P<IndexInfo>] {
+    pub(crate) fn index_infos_of_structured_type(&mut self, t: P<Type>) -> ArrayView<P<IndexInfo>> {
         if t.flags().intersects(TypeFlags::StructuredType) {
             if let Some(lm) = self.get_ready_lazy_member_table(t) {
                 self.lazy_member_stats.member_index_info_queries += 1;
@@ -2365,7 +2368,7 @@ impl Checker {
             }
             return self.resolve_structured_type_members(&t).unwrap().index_infos();
         }
-        &[]
+        ArrayView::default()
     }
 
     // Return the indexing info of the given kind in the given type. Creates synthetic union index types when necessary and
@@ -2562,7 +2565,7 @@ impl Checker {
         }
         let source = t.target().unwrap();
         let (type_parameters, padded_type_arguments) = self.get_reference_member_type_arguments(t, source);
-        self.resolve_object_type_members(t, source, type_parameters, &padded_type_arguments);
+        self.resolve_object_type_members(t, source, &type_parameters, &padded_type_arguments);
     }
 
     // checker.go:19450
@@ -2581,12 +2584,12 @@ impl Checker {
             index_infos = resolved.declared_index_infos.get().to_vec();
         } else {
             instantiated = true;
-            let m = new_type_mapper(alloc_slice(type_parameters), alloc_slice(type_arguments));
+            let m = new_type_mapper(type_parameters, type_arguments);
             mapper = Some(m);
             members = self.instantiate_symbol_table(resolved.declared_members.get(), m);
-            call_signatures = self.instantiate_signatures(resolved.declared_call_signatures.get(), m);
-            construct_signatures = self.instantiate_signatures(resolved.declared_construct_signatures.get(), m);
-            index_infos = self.instantiate_index_infos(resolved.declared_index_infos.get(), m);
+            call_signatures = self.instantiate_signatures(&resolved.declared_call_signatures.get(), m);
+            construct_signatures = self.instantiate_signatures(&resolved.declared_construct_signatures.get(), m);
+            index_infos = self.instantiate_index_infos(&resolved.declared_index_infos.get(), m);
         }
         let base_types = self.get_base_types(source);
         if !base_types.is_empty() {
@@ -2594,7 +2597,7 @@ impl Checker {
                 members = members.map(|m| m.clone_table());
             }
             let this_argument = type_arguments.last().copied();
-            for &base_type in base_types {
+            for base_type in base_types {
                 let mut instantiated_base_type = base_type;
                 if this_argument.is_some() {
                     let inst = self.instantiate_type(base_type, mapper);
@@ -2643,24 +2646,22 @@ impl Checker {
 // resolved members. It has the signatures and index infos, but only instantiates the
 // members that are looked up, and reuses them if the members are later resolved in full.
 
-/// One per instantiated reference whose members are answered lazily. In the arena (notes/mem-checker-heap.md):
-/// a table can be dropped from `lazy_member_tables` (resolved in full) while callers still hold it, which an `Rc`
-/// used to cover; the arena keeps it alive instead, and the one-word slices keep it at 80 bytes (an `Rc` box was
-/// 168, rounded up to 192 by mimalloc).
+/// One per instantiated reference whose members are answered lazily. The record stays in its checker region
+/// while graph handles refer to it; its ready payload and retained array fields have ordinary Rust owners.
 pub(crate) struct LazyMemberTable {
     pub(crate) mapper: P<TypeMapper>,
     // Go `ready` plus the fields prepareLazyMembers fills in before it sets `ready`.
-    pub(crate) ready: std::cell::OnceCell<LazyMembers>,
+    pub(crate) ready: std::cell::OnceCell<Box<LazyMembers>>,
     pub(crate) declared: SymbolTable, // keyed by the declared members' names
     // notes/mem-lazy.md L10: getPropertiesOfType order with declared members standing in (getLazyPropertiesInOrder).
-    pub(crate) ordered_properties: std::cell::OnceCell<ThinSlice<P<Symbol>>>,
+    pub(crate) ordered_properties: OptionArrayCell<P<Symbol>>,
 }
 
-// 80 bytes in release builds (the symbol table is 24; debug builds add a borrow flag to it).
+// Three owner/edge words beyond the symbol table.
 #[cfg(target_pointer_width = "64")]
-const _: () = assert!(std::mem::size_of::<LazyMemberTable>() == std::mem::size_of::<SymbolTable>() + 56);
+const _: () = assert!(std::mem::size_of::<LazyMemberTable>() == std::mem::size_of::<SymbolTable>() + 24);
 #[cfg(target_pointer_width = "32")]
-const _: () = assert!(std::mem::size_of::<LazyMemberTable>() == std::mem::size_of::<SymbolTable>() + 52);
+const _: () = assert!(std::mem::size_of::<LazyMemberTable>() == std::mem::size_of::<SymbolTable>() + 12);
 
 /// Heap census: what the lazy member and lazy mapped tables own (the `Rc` boxes, their symbol tables, name lists,
 /// ordered property lists and mapped-member maps with their string keys).
@@ -2671,7 +2672,7 @@ pub(crate) fn lazy_member_tables_heap(c: &Checker) -> Vec<(String, crate::heapce
     let mut boxes = HeapStat { slot: std::mem::size_of::<LazyMemberTable>() as u64, ..HeapStat::default() };
     let mut declared = HeapStat { slot: 8, ..HeapStat::default() };
     let mut unaffected = HeapStat { slot: 16, ..HeapStat::default() };
-    let mut ordered = HeapStat { slot: 4, ..HeapStat::default() };
+    let mut ordered = HeapStat { slot: std::mem::size_of::<P<Symbol>>() as u64, ..HeapStat::default() };
     for t in c.lazy_member_tables.values() {
         boxes.containers += 1;
         boxes.len += 1;
@@ -2683,13 +2684,17 @@ pub(crate) fn lazy_member_tables_heap(c: &Checker) -> Vec<(String, crate::heapce
         declared.bytes += bytes as u64;
         if let Some(ready) = t.ready.get() {
             unaffected.containers += 1;
-            unaffected.len += ready.unaffected.get().len() as u64;
-            unaffected.cap += ready.unaffected.get().len() as u64;
+            let (len, cap, bytes) = ready.unaffected.get().heap_usage();
+            unaffected.len += len as u64;
+            unaffected.cap += cap as u64;
+            unaffected.bytes += bytes as u64;
         }
         if let Some(v) = t.ordered_properties.get() {
             ordered.containers += 1;
-            ordered.len += v.get().len() as u64;
-            ordered.cap += v.get().len() as u64;
+            let (len, cap, bytes) = v.heap_usage();
+            ordered.len += len as u64;
+            ordered.cap += cap as u64;
+            ordered.bytes += bytes as u64;
         }
     }
     let mut mapped_boxes = HeapStat { slot: (rc + std::mem::size_of::<crate::checker_10::LazyMappedTable>()) as u64, ..HeapStat::default() };
@@ -2710,10 +2715,10 @@ pub(crate) fn lazy_member_tables_heap(c: &Checker) -> Vec<(String, crate::heapce
         }
     }
     vec![
-        ("lazy member tables (arena records, not heap)".to_string(), boxes),
+        ("lazy member table records".to_string(), boxes),
         ("lazy member tables (declared symbol tables)".to_string(), declared),
-        ("lazy member tables (unaffected names, arena)".to_string(), unaffected),
-        ("lazy member tables (ordered properties, arena)".to_string(), ordered),
+        ("lazy member tables (owned unaffected-name arrays)".to_string(), unaffected),
+        ("lazy member tables (owned ordered-property arrays)".to_string(), ordered),
         ("lazy mapped tables (Rc boxes)".to_string(), mapped_boxes),
         ("lazy mapped tables (members maps)".to_string(), mapped_members),
         ("lazy mapped tables (member name strings)".to_string(), mapped_keys),
@@ -2721,11 +2726,11 @@ pub(crate) fn lazy_member_tables_heap(c: &Checker) -> Vec<(String, crate::heapce
 }
 
 pub(crate) struct LazyMembers {
-    pub(crate) unaffected: ThinSlice<&'static str>, // sorted names of declared members that instantiate to themselves
-    pub(crate) call_signatures: ThinSlice<P<Signature>>,
-    pub(crate) construct_signatures: ThinSlice<P<Signature>>,
-    pub(crate) index_infos: ThinSlice<P<IndexInfo>>,
-    pub(crate) base_types: ThinSlice<P<Type>>,
+    pub(crate) unaffected: ArrayCell<&'static str>, // sorted names of declared members that instantiate to themselves
+    pub(crate) call_signatures: ArrayCell<P<Signature>>,
+    pub(crate) construct_signatures: ArrayCell<P<Signature>>,
+    pub(crate) index_infos: ArrayCell<P<IndexInfo>>,
+    pub(crate) base_types: ArrayCell<P<Type>>,
 }
 
 pub(crate) fn may_have_lazy_members(t: P<Type>) -> bool {
@@ -2733,7 +2738,7 @@ pub(crate) fn may_have_lazy_members(t: P<Type>) -> bool {
 }
 
 impl Checker {
-    pub(crate) fn get_reference_member_type_arguments(&mut self, t: P<Type>, source: P<Type>) -> (&'static [P<Type>], Vec<P<Type>>) {
+    pub(crate) fn get_reference_member_type_arguments(&mut self, t: P<Type>, source: P<Type>) -> (ArrayView<P<Type>>, Vec<P<Type>>) {
         let type_parameters = source.as_interface_type().all_type_parameters.get();
         let mut type_arguments = self.get_type_arguments(t).to_vec();
         if type_arguments.len() + 1 == type_parameters.len() {
@@ -2792,7 +2797,7 @@ impl Checker {
                 return None;
             }
             let mut padded = self.free_type_lists.pop().unwrap_or_default();
-            padded.extend_from_slice(arguments);
+            padded.extend_from_slice(&arguments);
             padded.push(t);
             let type_arguments = alloc_slice(&padded);
             self.free_type_list(padded);
@@ -2801,17 +2806,16 @@ impl Checker {
             if type_parameters == arguments {
                 return None;
             }
-            alloc_slice(arguments)
+            alloc_slice(&arguments)
         };
         let lm = P::new(LazyMemberTable {
             mapper: {
-                let m = new_type_mapper(type_parameters, type_arguments);
-                escape_mapper(m); // kept by the table
+                let m = new_type_mapper(&type_parameters, type_arguments);
                 m
             },
             ready: std::cell::OnceCell::new(),
             declared: SymbolTable::default(),
-            ordered_properties: std::cell::OnceCell::new(),
+            ordered_properties: OptionArrayCell::default(),
         });
         self.lazy_member_tables.insert(t, lm);
         self.lazy_member_stats.member_tables_created += 1;
@@ -2839,11 +2843,11 @@ impl Checker {
             }
         }
         unaffected.sort_unstable();
-        let mut call_signatures = self.instantiate_signatures(resolved.declared_call_signatures.get(), lm.mapper);
-        let mut construct_signatures = self.instantiate_signatures(resolved.declared_construct_signatures.get(), lm.mapper);
-        let mut index_infos = self.instantiate_index_infos(resolved.declared_index_infos.get(), lm.mapper);
+        let mut call_signatures = self.instantiate_signatures(&resolved.declared_call_signatures.get(), lm.mapper);
+        let mut construct_signatures = self.instantiate_signatures(&resolved.declared_construct_signatures.get(), lm.mapper);
+        let mut index_infos = self.instantiate_index_infos(&resolved.declared_index_infos.get(), lm.mapper);
         let mut base_types: Vec<P<Type>> = Vec::new();
-        for &base_type in self.get_base_types(source) {
+        for base_type in self.get_base_types(source) {
             let mut instantiated_base_type = base_type;
             if this_argument.is_some() {
                 let inst = self.instantiate_type(base_type, Some(lm.mapper));
@@ -2856,13 +2860,13 @@ impl Checker {
             }
             self.append_inherited_signatures_and_index_infos(&mut call_signatures, &mut construct_signatures, &mut index_infos, instantiated_base_type);
         }
-        let _ = lm.ready.set(LazyMembers {
-            unaffected: ThinSlice::new(alloc_vec(unaffected)),
-            call_signatures: ThinSlice::new(alloc_vec(call_signatures)),
-            construct_signatures: ThinSlice::new(alloc_vec(construct_signatures)),
-            index_infos: ThinSlice::new(alloc_vec(index_infos)),
-            base_types: ThinSlice::new(alloc_vec(base_types)),
-        });
+        let _ = lm.ready.set(owned_type_payload(LazyMembers {
+            unaffected: ArrayCell::from_vec(unaffected),
+            call_signatures: ArrayCell::new(&call_signatures),
+            construct_signatures: ArrayCell::new(&construct_signatures),
+            index_infos: ArrayCell::new(&index_infos),
+            base_types: ArrayCell::new(&base_types)}),
+        );
         if t.object_flags().intersects(ObjectFlags::MembersResolved) {
             // t was resolved while preparing; resolveObjectTypeMembers would now replace its members.
             self.resolve_lazy_members(t, lm);
@@ -2888,11 +2892,11 @@ impl Checker {
             members = Some(table);
         }
         let ready = lm.ready.get().unwrap();
-        for &base_type in ready.base_types.get() {
+        for base_type in ready.base_types.get() {
             let base_properties = self.get_properties_of_type(base_type);
             members = self.add_inherited_members(members, &base_properties);
         }
-        self.set_structured_type_members(t, members, ready.call_signatures.get(), ready.construct_signatures.get(), ready.index_infos.get());
+        self.set_structured_type_members(t, members, &ready.call_signatures.get(), &ready.construct_signatures.get(), &ready.index_infos.get());
         self.lazy_member_tables.remove(&t);
     }
 
@@ -2953,7 +2957,7 @@ impl Checker {
                 }
             }
         }
-        for &base_type in lm.ready.get().unwrap().base_types.get() {
+        for base_type in lm.ready.get().unwrap().base_types.get() {
             if result.is_some_and(|r| r.flags().intersects(SymbolFlags::Value)) {
                 break;
             }
@@ -2996,7 +3000,7 @@ impl Checker {
                 }
             }
         }
-        for &base_type in lm.ready.get().unwrap().base_types.get() {
+        for base_type in lm.ready.get().unwrap().base_types.get() {
             let reduced = self.get_reduced_apparent_type(base_type);
             if let Some(base_table) = self.get_ready_lazy_member_table(reduced) {
                 if !self.every_lazy_property(reduced, base_table, seen, f) {
@@ -3016,9 +3020,9 @@ impl Checker {
 
 impl Checker {
     // checker.go:19508
-    pub fn get_base_types(&mut self, t: P<Type>) -> &'static [P<Type>] {
+    pub fn get_base_types(&mut self, t: P<Type>) -> ArrayView<P<Type>> {
         if !t.object_flags().intersects(ObjectFlags::ClassOrInterface | ObjectFlags::Tuple) {
-            return &[];
+            return ArrayView::default();
         }
         let data = t.as_interface_type();
         if !data.base_types_resolved.get() {
@@ -3033,7 +3037,7 @@ impl Checker {
             let symbol = t.symbol();
             if t.object_flags().intersects(ObjectFlags::Tuple) {
                 let base = self.get_tuple_base_type(t);
-                data.resolved_base_types.set(alloc_vec(vec![base]));
+                data.resolved_base_types.set_owned(vec![base]);
             } else if symbol.unwrap().flags().intersects(SymbolFlags::Class | SymbolFlags::Interface) {
                 let symbol = symbol.unwrap();
                 if symbol.flags().intersects(SymbolFlags::Class) {
@@ -3207,6 +3211,6 @@ impl Checker {
             );
             return;
         }
-        t.as_interface_type().resolved_base_types.set(alloc_vec(vec![reduced_base_type]));
+        t.as_interface_type().resolved_base_types.set_owned(vec![reduced_base_type]);
     }
 }

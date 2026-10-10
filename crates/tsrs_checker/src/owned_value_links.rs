@@ -1,7 +1,7 @@
 //! Value-symbol link payloads use a typed state and an owned rare tail. Graph edges migrate with their graphs.
 #![forbid(unsafe_code)]
 
-use crate::{Symbol, Type, TypeMapper, escape_mapper};
+use crate::{Symbol, Type, TypeMapper};
 use std::cell::{Cell, RefCell};
 use tsrs_core::P;
 
@@ -98,9 +98,6 @@ impl ValueSymbolLinks {
     }
     #[inline]
     pub fn set_mapper(&self, mapper: Option<P<TypeMapper>>) {
-        if let Some(mapper) = mapper {
-            escape_mapper(mapper);
-        }
         let mut fields = self.fields.borrow_mut();
         match &mut *fields {
             Fields::Plain { mapper: stored, .. } => *stored = mapper,

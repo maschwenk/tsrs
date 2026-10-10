@@ -4,6 +4,7 @@
 
 // Common imports for all checker modules.
 pub(crate) use std::cell::{Cell, RefCell};
+pub use tsrs_core::owned_array::{ArrayCell, ArrayView, OptionArrayCell};
 
 pub(crate) use rustc_hash::{FxHashMap, FxHashSet};
 pub(crate) use tsrs_ast as ast;

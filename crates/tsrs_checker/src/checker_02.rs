@@ -1084,7 +1084,7 @@ impl Checker {
                 if type_arguments.is_none() {
                     let args = alloc_vec(self.get_effective_type_arguments(node, type_parameters));
                     type_arguments = Some(args);
-                    mapper = Some(new_type_mapper(alloc_slice(type_parameters), args));
+                    mapper = Some(new_type_mapper(type_parameters, args));
                 }
                 result = result && {
                     let instantiated = self.instantiate_type(constraint, mapper);

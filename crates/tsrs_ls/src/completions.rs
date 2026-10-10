@@ -1702,10 +1702,10 @@ impl getCompletionDataState {
                 if class_element_modifier_flags.intersects(ModifierFlags::Static) {
                     if let Some(t_symbol) = t.symbol() {
                         let type_of_symbol = type_checker.get_type_of_symbol_at_location(t_symbol, Some(decl)).unwrap();
-                        base_symbols.extend_from_slice(type_checker.get_properties_of_type_exported(type_of_symbol));
+                        base_symbols.extend_from_slice(&type_checker.get_properties_of_type_exported(type_of_symbol));
                     }
                 } else {
-                    base_symbols.extend_from_slice(type_checker.get_properties_of_type_exported(t));
+                    base_symbols.extend_from_slice(&type_checker.get_properties_of_type_exported(t));
                 }
             }
 

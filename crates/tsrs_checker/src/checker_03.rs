@@ -48,7 +48,7 @@ impl Checker {
                 if !base_type_node.type_arguments().is_empty() {
                     self.check_source_elements(base_type_node.type_arguments());
                     for constructor in self.get_constructors_for_type_arguments(static_base_type, base_type_node.type_arguments(), base_type_node) {
-                        if !self.check_type_argument_constraints(base_type_node, constructor.type_parameters()) {
+                        if !self.check_type_argument_constraints(base_type_node, &constructor.type_parameters()) {
                             break;
                         }
                     }
@@ -194,7 +194,7 @@ impl Checker {
                 return;
             }
             let t = self.get_declared_type_of_symbol(symbol);
-            if !self.are_type_parameters_identical(&declarations, t.as_interface_type().local_type_parameters(), |_, n| n.type_parameters().to_vec()) {
+            if !self.are_type_parameters_identical(&declarations, &t.as_interface_type().local_type_parameters(), |_, n| n.type_parameters().to_vec()) {
                 // Report an error on every conflicting declaration.
                 let name = self.symbol_to_string(symbol);
                 for declaration in declarations {
@@ -304,7 +304,7 @@ impl Checker {
                 let result = self.new_object_type(ObjectFlags::Anonymous, t.symbol());
                 result.object_flags.set(result.object_flags.get() | ObjectFlags::MembersResolved);
                 result.as_object_type().set_members(resolved.members());
-                result.as_object_type().set_properties(resolved.properties());
+                result.as_object_type().set_properties(&resolved.properties());
                 return result;
             }
         } else if t.flags().intersects(TypeFlags::Intersection) {
@@ -363,7 +363,7 @@ impl Checker {
                         // Searches other base types for a declaration that would satisfy the inherited abstract member.
                         // (The class may have more than one base type via declaration merging with an interface with the
                         // same name.)
-                        for &other_base_type in self.get_base_types(t) {
+                        for other_base_type in self.get_base_types(t) {
                             if other_base_type == base_type {
                                 continue;
                             }
@@ -682,7 +682,7 @@ impl Checker {
             }
         }
         if index_infos.len() > 1 {
-            for &info in index_infos {
+            for info in index_infos {
                 self.check_index_constraint_for_index_signature(t, info);
             }
         }
@@ -725,7 +725,7 @@ impl Checker {
             let mut error_node = local_prop_declaration.or(local_index_declaration);
             if error_node.is_none() && interface_declaration.is_some() {
                 let mut some = false;
-                for &base in self.get_base_types(t) {
+                for base in self.get_base_types(t) {
                     if self.get_property_of_object_type(base, prop.name()).is_some() && self.get_index_type_of_type(base, info.key_type()).is_some() {
                         some = true;
                         break;
@@ -787,7 +787,7 @@ impl Checker {
             let mut error_node = local_check_declaration.or(local_index_declaration);
             if error_node.is_none() && interface_declaration.is_some() {
                 let mut some = false;
-                for &base in self.get_base_types(t) {
+                for base in self.get_base_types(t) {
                     if self.get_index_info_of_type(base, check_info.key_type()).is_some() && self.get_index_type_of_type(base, info.key_type()).is_some() {
                         some = true;
                         break;
@@ -940,7 +940,7 @@ impl Checker {
             let type_with_this = self.get_type_with_this_argument(t, None, false);
             // run subsequent checks only if first set succeeded
             if self.check_inherited_properties_are_identical(t, node.name().unwrap()) {
-                for &base_type in self.get_base_types(t) {
+                for base_type in self.get_base_types(t) {
                     let base_with_this = self.get_type_with_this_argument(base_type, t.as_interface_type().this_type.get(), false);
                     self.check_type_assignable_to(type_with_this, base_with_this, node.name(), Some(&diagnostics::Interface_0_incorrectly_extends_interface_1));
                 }
@@ -997,10 +997,10 @@ impl Checker {
             }
         }
         let mut identical = true;
-        for &base in base_types {
+        for base in base_types {
             let base_with_this = self.get_type_with_this_argument(base, t.as_interface_type().this_type.get(), false);
             let properties = self.get_properties_of_type(base_with_this);
-            for &prop in properties {
+            for prop in properties {
                 match seen.get(prop.name()).map(|e| (e.prop, e.containing_type)) {
                     None => {
                         seen.insert(prop.name(), InheritanceInfo { prop, containing_type: base });
@@ -2447,7 +2447,7 @@ impl Checker {
     pub(crate) fn get_iteration_types_of_iterable_worker(&mut self, t: P<Type>, use_: IterationUse, error_node: Option<P<Node>>, no_cache: bool) -> IterationTypes {
         if t.flags().intersects(TypeFlags::Union) {
             let mut all_iteration_types: Vec<IterationTypes> = Vec::with_capacity(t.types().len());
-            for &constituent in t.types() {
+            for constituent in t.types() {
                 let iteration_types = self.get_iteration_types_of_iterable_worker(constituent, use_, None, no_cache);
                 if !iteration_types.has_types() {
                     if let Some(error_node) = error_node {

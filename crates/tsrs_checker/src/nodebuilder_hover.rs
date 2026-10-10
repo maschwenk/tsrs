@@ -128,7 +128,7 @@ impl NodeBuilderImpl {
         // Instance members via addPropertyToElementList (reusing existing serialization),
         // then convert TypeElements to ClassElements and add class-specific modifiers
         let all_props = c.get_properties_of_type(class_type);
-        let symbol_props = self.filter_inherited_properties(c, class_type, base_types, &all_props);
+        let symbol_props = self.filter_inherited_properties(c, class_type, &base_types, &all_props);
         let public_props: Vec<P<Symbol>> = symbol_props.iter().copied().filter(|&s| !is_hash_private(s)).collect();
         let has_private = symbol_props.iter().any(|&s| is_hash_private(s));
 
@@ -248,7 +248,7 @@ impl NodeBuilderImpl {
         let base_types = c.get_base_types(interface_type);
         let mut base_type: Option<P<Type>> = None;
         if !base_types.is_empty() {
-            base_type = Some(c.get_intersection_type(base_types));
+            base_type = Some(c.get_intersection_type(&base_types));
         }
 
         // Members: reuse existing serialization functions
@@ -258,18 +258,18 @@ impl NodeBuilderImpl {
         // Index signatures, filtering those identical to base
         members.extend(self.serialize_index_signatures_of_type(c, interface_type, base_type));
         // Construct signatures (skip abstract)
-        for &sig in resolved.construct_signatures() {
+        for sig in resolved.construct_signatures() {
             if sig.flags.get().intersects(SignatureFlags::Abstract) {
                 continue;
             }
             members.push(self.signature_to_signature_declaration_helper(c, sig, Kind::ConstructSignature, None));
         }
         // Call signatures
-        for &sig in resolved.call_signatures() {
+        for sig in resolved.call_signatures() {
             members.push(self.signature_to_signature_declaration_helper(c, sig, Kind::CallSignature, None));
         }
         // Properties, filtering inherited
-        let filtered_props = self.filter_inherited_properties(c, interface_type, base_types, resolved.properties());
+        let filtered_props = self.filter_inherited_properties(c, interface_type, &base_types, &resolved.properties());
         members = self.serialize_properties_with_truncation(c, &filtered_props, &members);
 
         // Heritage clauses
@@ -357,7 +357,7 @@ impl NodeBuilderImpl {
                 }
             }
             let mut private_protected = ModifierFlags::None;
-            for sig in signatures {
+            for sig in signatures .iter().copied() {
                 if let Some(declaration) = sig.declaration.get() {
                     private_protected |= declaration.modifier_flags() & (ModifierFlags::Private | ModifierFlags::Protected);
                 }
@@ -376,7 +376,7 @@ impl NodeBuilderImpl {
             return Vec::new();
         }
         let mut result: Vec<P<Node>> = Vec::new();
-        for &sig in signatures {
+        for sig in signatures .iter().copied() {
             let ctx = self.ctx();
             ctx.approximate_length.set(ctx.approximate_length.get() + 1);
             result.push(self.signature_to_signature_declaration_helper(c, sig, Kind::Constructor, None));
@@ -524,7 +524,7 @@ impl NodeBuilderImpl {
             if resolved.flags().intersects(SymbolFlags::Function | SymbolFlags::Method) {
                 let t = c.get_type_of_symbol(resolved);
                 let sigs = c.get_signatures_of_type(t, SignatureKind::Call);
-                for &sig in sigs {
+                for sig in sigs {
                     let ctx = self.ctx();
                     ctx.approximate_length.set(ctx.approximate_length.get() + 1);
                     let options = P::new(SignatureToSignatureDeclarationOptions { modifiers: &[], name: Some(self.f.new_identifier(m.name())), question_token: None });

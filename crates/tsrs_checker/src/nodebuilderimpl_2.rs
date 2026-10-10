@@ -35,7 +35,7 @@ impl NodeBuilderImpl {
         // Usually a signature contributes a few more characters than this, but 3 is the minimum
 
         if self.ctx().flags.get().intersects(Flags::WriteTypeArgumentsOfSignature) && signature.target().is_some() && signature.mapper.get().is_some() && !signature.target().unwrap().type_parameters().is_empty() {
-            for &parameter in signature.target().unwrap().type_parameters() {
+            for parameter in signature.target().unwrap().type_parameters() {
                 let t = c.instantiate_type(parameter, signature.mapper.get());
                 // Go appends a possibly-nil node; a nil element cannot be represented in a Rust node list.
                 if let Some(n) = self.type_to_type_node(c, Some(t)) {
@@ -43,7 +43,7 @@ impl NodeBuilderImpl {
                 }
             }
         } else {
-            for &parameter in signature.type_parameters() {
+            for parameter in signature.type_parameters() {
                 type_parameters.push(self.type_parameter_to_declaration(c, parameter));
             }
         }
@@ -890,7 +890,7 @@ impl NodeBuilderImpl {
         if property_symbol.flags().intersects(SymbolFlags::Function | SymbolFlags::Method) && c.get_properties_of_object_type(property_type).is_empty() && !c.is_readonly_symbol(property_symbol) {
             let filtered_type = c.filter_type(property_type, |_c, t| !t.flags().intersects(TypeFlags::Undefined));
             let signatures = c.get_signatures_of_type(filtered_type, SignatureKind::Call);
-            for &signature in signatures {
+            for signature in signatures .iter().copied() {
                 let method_declaration = self.signature_to_signature_declaration_helper(c, signature, Kind::MethodSignature, Some(P::new_scratch(SignatureToSignatureDeclarationOptions { name: property_name, question_token: optional_token, ..Default::default() })));
                 self.set_comment_range(c, method_declaration, signature.declaration().or(property_symbol.value_declaration()));
                 type_elements.push(method_declaration);
@@ -938,16 +938,16 @@ impl NodeBuilderImpl {
         }
         let structured_type = resolved_type.as_structured_type();
         let mut type_elements: Vec<P<Node>> = vec![];
-        for &signature in structured_type.call_signatures() {
+        for signature in structured_type.call_signatures() {
             type_elements.push(self.signature_to_signature_declaration_helper(c, signature, Kind::CallSignature, None));
         }
-        for &signature in structured_type.construct_signatures() {
+        for signature in structured_type.construct_signatures() {
             if signature.flags().intersects(SignatureFlags::Abstract) {
                 continue;
             }
             type_elements.push(self.signature_to_signature_declaration_helper(c, signature, Kind::ConstructSignature, None));
         }
-        for &info in structured_type.index_infos() {
+        for info in structured_type.index_infos() {
             // Go's core.IfElse evaluates both arms, so the placeholder (and its length accounting) is always created.
             let placeholder = self.create_elided_information_placeholder(c);
             let type_node = if resolved_type.object_flags().intersects(ObjectFlags::ReverseMapped) { Some(placeholder) } else { None };
@@ -960,7 +960,7 @@ impl NodeBuilderImpl {
         }
 
         let mut i: i32 = 0;
-        for &property_symbol in properties {
+        for property_symbol in properties .iter().copied() {
             if is_expanding(self.ctx()) && property_symbol.flags().intersects(SymbolFlags::Prototype) {
                 continue;
             }
@@ -1273,10 +1273,10 @@ impl NodeBuilderImpl {
             // 15 each for two added conditionals, 7 for an added infer type
             let new_mapper = prepend_type_mapping(root.check_type.get().unwrap(), new_param, t.mapper.get());
             let save_infer_type_parameters = self.ctx().infer_type_parameters.get();
-            self.ctx().infer_type_parameters.set(root.infer_type_parameters.get());
+            self.ctx().infer_type_parameters.set(&root.infer_type_parameters.get());
             let extends_type = c.instantiate_type(root.extends_type.get().unwrap(), Some(new_mapper));
             let extends_type_node = self.type_to_type_node(c, Some(extends_type));
-            self.ctx().infer_type_parameters.set(save_infer_type_parameters);
+            self.ctx().infer_type_parameters.set(&save_infer_type_parameters);
             let root_node = root.node.get().unwrap();
             let true_type_from_node = self.get_type_from_type_node(c, root_node.as_conditional_type_node().true_type, false).unwrap();
             let true_type = c.instantiate_type(true_type_from_node, Some(new_mapper));
@@ -1302,9 +1302,9 @@ impl NodeBuilderImpl {
             return self.f.new_conditional_type_node(check_type_node.unwrap(), synthetic_extends_node, synthetic_true_node, self.f.new_keyword_type_node(Kind::NeverKeyword));
         }
         let save_infer_type_parameters = self.ctx().infer_type_parameters.get();
-        self.ctx().infer_type_parameters.set(root.infer_type_parameters.get());
+        self.ctx().infer_type_parameters.set(&root.infer_type_parameters.get());
         let extends_type_node = self.type_to_type_node(c, t.extends_type.get());
-        self.ctx().infer_type_parameters.set(save_infer_type_parameters);
+        self.ctx().infer_type_parameters.set(&save_infer_type_parameters);
         let true_type = c.get_true_type_from_conditional_type(_t);
         let true_type_node = self.type_to_type_node_or_circularity_elision(c, true_type);
         let false_type = c.get_false_type_from_conditional_type(_t);
@@ -1763,7 +1763,7 @@ impl NodeBuilderImpl {
             // If we should expand this type alias, skip the alias and fall through to expand the underlying type
             if !self.should_expand_type(c, t, true /*isAlias*/) {
                 let sym = t.alias().symbol().unwrap();
-                let type_argument_nodes = self.map_to_type_nodes(c, t.alias().type_arguments(), false /*isBareList*/);
+                let type_argument_nodes = self.map_to_type_nodes(c, &t.alias().type_arguments(), false /*isBareList*/);
                 if is_reserved_member_name(sym.name()) && !sym.flags().intersects(SymbolFlags::Class) {
                     return Some(self.f.new_type_reference_node(self.f.new_identifier(""), type_argument_nodes));
                 }
@@ -1843,7 +1843,7 @@ impl NodeBuilderImpl {
         }
         if t.flags().intersects(TypeFlags::Union | TypeFlags::Intersection) {
             let types: Vec<P<Type>> = if t.flags().intersects(TypeFlags::Union) {
-                c.format_union_types(t.as_union_type().types.get(), expanding_enum)
+                c.format_union_types(&t.as_union_type().types.get(), expanding_enum)
             } else {
                 t.as_intersection_type().types.get().to_vec()
             };
@@ -1946,7 +1946,7 @@ impl TypeAlias {
     // nodebuilderimpl.go:3639
     pub fn to_type_reference_node(&self, c: &mut Checker, b: P<NodeBuilderImpl>) -> P<Node> {
         let type_name = b.symbol_to_entity_name_node(c, self.symbol().unwrap());
-        let type_arguments = b.map_to_type_nodes(c, self.type_arguments(), false /*isBareList*/);
+        let type_arguments = b.map_to_type_nodes(c, &self.type_arguments(), false /*isBareList*/);
         b.f.new_type_reference_node(type_name, type_arguments)
     }
 }

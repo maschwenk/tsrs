@@ -1,0 +1,102 @@
+{
+  "full": {
+    "entries": 15197,
+    "classifications": {
+      "class": {
+        "pass": 13462,
+        "skip": 1735
+      },
+      "types": {
+        "pass": 12779,
+        "skip": 2418
+      },
+      "symbols": {
+        "pass": 12779,
+        "skip": 2418
+      },
+      "js": {
+        "pass": 13392,
+        "skip": 1805
+      },
+      "js.map": {
+        "skip": 15048,
+        "pass": 149
+      },
+      "sourcemap.txt": {
+        "skip": 15041,
+        "pass": 156
+      }
+    },
+    "classification_sha256": "2cbef44f776082ed200f8d7dc53dbc513c7eac344b3f2639ce4087d071d6b4aa",
+    "source_sha256": "525110175adeee66c83ab0ecad2c8f701dca7488b8929e61b8a1201bdb5f2171",
+    "comparisons": {
+      "oxc": {
+        "differences": 0,
+        "source_sha256": "ee4d367884b20212b360fc071c200ac05b4bf9d35556fb773a73fed29d9a247c"
+      },
+      "owned-type-payloads": {
+        "differences": 0,
+        "source_sha256": "025b51fb621134d424e3f879f018d5364826a697bcbcd73121204c1124831745"
+      }
+    }
+  },
+  "default": {
+    "entries": 15197,
+    "classifications": {
+      "class": {
+        "pass": 13458,
+        "skip": 1735,
+        "codes": 2,
+        "fail": 2
+      },
+      "types": {
+        "pass": 12778,
+        "skip": 2418,
+        "fail": 1
+      },
+      "symbols": {
+        "pass": 12778,
+        "skip": 2418,
+        "fail": 1
+      },
+      "js": {
+        "null": 15197
+      },
+      "js.map": {
+        "null": 15197
+      },
+      "sourcemap.txt": {
+        "null": 15197
+      }
+    },
+    "classification_sha256": "cc0dfda4465228cabdc6509d4fea79975604b66ec983c4393048515c42fd6deb",
+    "source_sha256": "c752c4be98534792d2b8a83d8fe7ee28286d9d4f323f562742fee09391afe074",
+    "comparisons": {
+      "oxc": {
+        "differences": 0,
+        "source_sha256": "65e1256837673a8b99fdef693d6880d5b6af5675cb7647bab8073234829b6aa5"
+      },
+      "owned-type-payloads": {
+        "differences": 0,
+        "source_sha256": "aab16e82f849e937e324008f1d9ba001c52f5aa068715330feb87f5814427385"
+      }
+    }
+  },
+  "fourslash": {
+    "pass": {
+      "entries": 4066,
+      "differences_from_owned_type_payloads": 0,
+      "classification_sha256": "363f3fdbd73284b7f794fa954edbb09dd733540c9aba874547182871c9f87699"
+    },
+    "fail": {
+      "entries": 63,
+      "differences_from_owned_type_payloads": 0,
+      "classification_sha256": "d1adc0b00bc401555ac9ab3cfdd1f85ae825804c1472f1b71c1679c028066a7c"
+    },
+    "skip": {
+      "entries": 417,
+      "differences_from_owned_type_payloads": 0,
+      "classification_sha256": "5b738cedb67835ff664a0247177949e3b7dcb2639c592c29eec05571787e42e3"
+    }
+  }
+}

@@ -929,7 +929,7 @@ impl ExistingNodeTree {
         let introduces_new_scope = ast::is_function_like(node) || ast::is_mapped_type_node(node);
         let mut exit: Option<Box<dyn FnMut(&mut Checker)>> = None;
         if introduces_new_scope {
-            let mut params: &'static [P<Symbol>] = &[];
+            let mut params: ArrayView<P<Symbol>> = ArrayView::default();
             let mut type_params: Vec<P<Type>> = Vec::new();
             if ast::is_function_like(node) {
                 let sig = c.get_signature_from_declaration(node);
@@ -942,7 +942,7 @@ impl ExistingNodeTree {
                 let symbol = c.get_symbol_of_declaration(node.as_mapped_type_node().type_parameter).unwrap();
                 type_params = vec![c.get_declared_type_of_type_parameter(symbol)];
             }
-            exit = Some(b.enter_new_scope(c, Some(node), params, &type_params, None, None));
+            exit = Some(b.enter_new_scope(c, Some(node), &params, &type_params, None, None));
         }
         let mut result = self.visit_existing_node_tree_symbols_worker(c, v, node);
         if let Some(mut exit) = exit {

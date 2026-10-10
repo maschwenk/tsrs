@@ -1,5 +1,17 @@
 # Status
 
+## 2026-10-10: ownership migration branch, unfinished
+
+The ownership worktree has migrated persistent link/build stores, shared program/build roots, symbol-table
+buffers, type payloads, type/signature/inference arrays, mapper payloads and comparison callbacks to Rust owners.
+The complete compiler graph still uses raw `P` handles and static graph strings/slices; the allocation
+compatibility runtime and unchecked thread boundaries remain. This is not a released or completed memory model
+migration. Leaf-file retirement was disabled by the Oxc backend; `TSRS_FREE_LEAVES` currently has no effect.
+
+The latest checkpoint retains all conformance and fourslash classifications, with clean local compiler census
+runs at one/four checkers and eager members. Instruction/RSS gates still fail, so it is not ready to land as a
+performance change. `notes/rust-owned-type-arrays.md` records measurements, validation limits and remaining work.
+
 ## 2026-10-09: 0.9.2 release
 
 A determinism fix for TS2590 and faster union construction, with build and dependency changes from the same day; the

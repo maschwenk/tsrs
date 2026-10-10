@@ -277,7 +277,7 @@ impl isolatedDeclarationsFixer<'_> {
         let factory = self.factory();
 
         let mut new_properties: Vec<P<Node>> = Vec::new();
-        for &symbol in elements {
+        for symbol in elements {
             if !scanner::is_identifier_text(symbol.name(), LanguageVariant::Standard) {
                 continue;
             }
@@ -1239,7 +1239,7 @@ fn find_expando_function(ch: &mut Checker, node: P<Node>) -> Option<P<Node>> {
 
     let properties = ch.get_properties_of_type(target_type);
     let mut found = false;
-    for &p in properties {
+    for p in properties {
         if p.value_declaration() == Some(expando_declaration) || p.value_declaration() == expando_declaration.parent() {
             found = true;
             break;
@@ -1300,7 +1300,7 @@ fn end_of_required_type_parameters(ch: &mut Checker, t: P<Type>) -> usize {
         if local_idx < 0 || local_idx as usize >= local_type_params.len() || !type_param_has_default(local_type_params[local_idx as usize]) {
             continue;
         }
-        let filled_in = ch.fill_missing_type_arguments_exported(&type_args[..cutoff], type_params, cutoff as i32, false);
+        let filled_in = ch.fill_missing_type_arguments_exported(&type_args[..cutoff], &type_params, cutoff as i32, false);
         let mut all_match = true;
         for (i, &fill) in filled_in.iter().enumerate() {
             if fill != type_args[i] {

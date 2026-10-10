@@ -361,8 +361,8 @@ impl Checker {
     // relater.go:2867
     pub(crate) fn is_type_subset_of_union(&mut self, source: P<Type>, target: P<Type>) -> bool {
         if source.flags().intersects(TypeFlags::Union) {
-            for &t in source.types() {
-                if !contains_type(self, target.types(), t) {
+            for t in source.types() {
+                if !contains_type(self, &target.types(), t) {
                     return false;
                 }
             }
@@ -371,7 +371,7 @@ impl Checker {
         if source.flags().intersects(TypeFlags::EnumLike) && self.get_base_type_of_enum_like_type(source) == target {
             return true;
         }
-        contains_type(self, target.types(), source)
+        contains_type(self, &target.types(), source)
     }
 }
 
@@ -424,7 +424,7 @@ impl Relater {
             let source_types = source.types();
             let mut changed = false;
             let mut constraints: Vec<P<Type>> = Vec::with_capacity(source_types.len());
-            for &t in source_types {
+            for t in source_types {
                 let mapped = if t.flags().intersects(TypeFlags::Instantiable) {
                     let constraint = c.get_base_constraint_of_type(t);
                     match constraint {
@@ -463,7 +463,7 @@ impl Relater {
     // relater.go:2951
     pub(crate) fn some_type_related_to_type(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, intersection_state: IntersectionState) -> Ternary {
         let source_types = source.types();
-        if source.flags().intersects(TypeFlags::Union) && contains_type(c, source_types, target) {
+        if source.flags().intersects(TypeFlags::Union) && contains_type(c, &source_types, target) {
             return Ternary::True;
         }
         for (i, &t) in source_types.iter().enumerate() {
@@ -482,7 +482,7 @@ impl Relater {
         // We strip `undefined` from the target if the `source` trivially doesn't contain it for our correspondence-checking fastpath
         // since `undefined` is frequently added by optionality and would otherwise spoil a potentially useful correspondence
         let stripped_target = self.get_undefined_stripped_target_if_needed(c, source, target);
-        let mut stripped_types: &[P<Type>] = &[];
+        let mut stripped_types= ArrayView::default();
         if stripped_target.flags().intersects(TypeFlags::Union) {
             stripped_types = stripped_target.types();
         }
@@ -589,7 +589,7 @@ impl Relater {
     fn type_related_to_some_type_worker(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, intersection_state: IntersectionState, outcome: &mut (u8, u8, u32)) -> Ternary {
         let target_types = target.types();
         if target.flags().intersects(TypeFlags::Union) {
-            if contains_type(c, target_types, source) {
+            if contains_type(c, &target_types, source) {
                 outcome.0 = 0;
                 return Ternary::True;
             }
@@ -619,7 +619,7 @@ impl Relater {
                     primitive = Some(c.bigint_type);
                 }
                 outcome.0 = 1;
-                if primitive.is_some_and(|p| contains_type(c, target_types, p)) || alternate_form.is_some_and(|a| contains_type(c, target_types, a)) {
+                if primitive.is_some_and(|p| contains_type(c, &target_types, p)) || alternate_form.is_some_and(|a| contains_type(c, &target_types, a)) {
                     return Ternary::True;
                 }
                 return Ternary::False;
@@ -660,7 +660,7 @@ impl Relater {
                     let mut indexable = false;
                     if source.flags().intersects(TypeFlags::Object | TypeFlags::Intersection) {
                         let props = c.get_properties_of_type(source);
-                        for &p in props {
+                        for p in props {
                             let pt = c.get_type_of_symbol(p);
                             if !is_unit_type(pt) {
                                 continue;
@@ -717,7 +717,7 @@ impl Relater {
     pub(crate) fn type_related_to_each_type(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, intersection_state: IntersectionState) -> Ternary {
         let mut result = Ternary::True;
         let target_types = target.types();
-        for &target_type in target_types {
+        for target_type in target_types {
             let related = self.is_related_to_ex(c, source, target_type, RecursionFlags::Target, report_errors, None /*headMessage*/, intersection_state);
             if related == Ternary::False {
                 return Ternary::False;
@@ -731,7 +731,7 @@ impl Relater {
     pub(crate) fn each_type_related_to_some_type(&self, c: &mut Checker, source: P<Type>, target: P<Type>) -> Ternary {
         let mut result = Ternary::True;
         let source_types = source.types();
-        for &source_type in source_types {
+        for source_type in source_types {
             let related = self.type_related_to_some_type(c, source_type, target, false /*reportErrors*/, IntersectionState::None);
             if related == Ternary::False {
                 return Ternary::False;
@@ -1154,10 +1154,10 @@ impl Relater {
                 return Ternary::Unknown;
             }
             let params = c.type_alias_links.get(alias_symbol).type_parameters.get();
-            let min_params = c.get_min_type_argument_count(params);
+            let min_params = c.get_min_type_argument_count(&params);
             let node_is_in_js_file = is_in_js_file(alias_symbol.value_declaration());
-            let source_types = c.fill_missing_type_arguments(source.alias().unwrap().type_arguments(), params, min_params, node_is_in_js_file);
-            let target_types = c.fill_missing_type_arguments(target.alias().unwrap().type_arguments(), params, min_params, node_is_in_js_file);
+            let source_types = c.fill_missing_type_arguments(&source.alias().unwrap().type_arguments(), &params, min_params, node_is_in_js_file);
+            let target_types = c.fill_missing_type_arguments(&target.alias().unwrap().type_arguments(), &params, min_params, node_is_in_js_file);
             let (variance_result, ok) = self.relate_variances(c, &source_types, &target_types, &variances, intersection_state, report_errors, &save_error_state, &mut result, &mut variance_check_failed, &mut original_error_chain);
             if ok {
                 return variance_result;
@@ -1367,7 +1367,7 @@ impl Relater {
                 c.instantiate_type(source, Some(c.report_unreliable_mapper));
             }
             let r = self.as_p();
-            if c.is_type_matched_by_template_literal_type(source, target.as_template_literal_type(), r.worker_comparer()) {
+            if c.is_type_matched_by_template_literal_type(source, target.as_template_literal_type(), &r.worker_comparer()) {
                 return Ternary::True;
             }
         } else if target.flags().intersects(TypeFlags::StringMapping) {
@@ -1534,8 +1534,8 @@ impl Relater {
                 if !source_params.is_empty() {
                     // If the source has infer type parameters, we instantiate them in the context of the target
                     let r = self.as_p();
-                    let ctx = c.new_inference_context(source_params, None /*signature*/, InferenceFlags::None, Some(r.worker_comparer()));
-                    c.infer_types(ctx.inferences.get(), target_conditional.extends_type.get().unwrap(), source_extends, InferencePriority::NoConstraints | InferencePriority::AlwaysStrict, false);
+                    let ctx = c.new_inference_context(&source_params, None /*signature*/, InferenceFlags::None, Some(r.worker_comparer()));
+                    c.infer_types(&ctx.inferences.get(), target_conditional.extends_type.get().unwrap(), source_extends, InferencePriority::NoConstraints | InferencePriority::AlwaysStrict, false);
                     source_extends = c.instantiate_type(source_extends, ctx.mapper());
                     mapper = ctx.mapper();
                 }
@@ -1879,7 +1879,7 @@ impl Relater {
         let mut matching_types: Vec<P<Type>> = Vec::new();
         for combination in &discriminant_combinations {
             let mut has_match = false;
-            'outer: for &t in target.types() {
+            'outer: for t in target.types() {
                 for i in 0..source_properties_filtered.len() {
                     let source_property = source_properties_filtered[i];
                     let target_property = c.get_property_of_type(t, source_property.name());
@@ -2351,11 +2351,11 @@ impl Relater {
             let erase_generics = self.rel() == c.comparable_relation;
             result = self.signature_related_to(c, source_signatures[0], target_signatures[0], erase_generics, report_errors, intersection_state);
         } else {
-            'outer: for &t in target_signatures {
+            'outer: for t in target_signatures {
                 let save_error_state = self.get_error_state(c);
                 // Only elaborate errors from the first failure
                 let mut should_elaborate_errors = report_errors;
-                for &s in source_signatures {
+                for s in source_signatures .iter().copied() {
                     let related = self.signature_related_to(c, s, t, true /*erase*/, should_elaborate_errors, intersection_state);
                     if related != Ternary::False {
                         result &= related;
@@ -2417,18 +2417,18 @@ impl Relater {
             source = c.get_erased_signature(source);
             target = c.get_erased_signature(target);
         }
-        let cached = self.signature_comparers.borrow().iter().find(|e| e.0 == intersection_state).map(|e| e.1);
+        let cached = self.signature_comparers.borrow().iter().find(|e| e.0 == intersection_state).map(|e| std::sync::Arc::clone(&e.1));
         let is_related_to_worker = match cached {
             Some(f) => f,
             None => {
                 let r = self.as_p();
                 let f = type_comparer(move |c, source, target, report_errors| r.is_related_to_ex(c, source, target, RecursionFlags::Both, report_errors, None /*headMessage*/, intersection_state));
-                self.signature_comparers.borrow_mut().push((intersection_state, f));
+                self.signature_comparers.borrow_mut().push((intersection_state, std::sync::Arc::clone(&f)));
                 f
             }
         };
         let mut reporter = |c: &mut Checker, message: &'static Message, args: &[&dyn Display]| self.report_error(c, message, args);
-        c.compare_signatures_related(source, target, check_mode, report_errors, Some(&mut reporter), is_related_to_worker, Some(c.report_unreliable_mapper))
+        c.compare_signatures_related(source, target, check_mode, report_errors, Some(&mut reporter), &is_related_to_worker, Some(c.report_unreliable_mapper))
     }
 
     // relater.go:4593
@@ -2458,7 +2458,7 @@ impl Relater {
         let string_type = c.string_type;
         let target_has_string_index = index_infos.iter().any(|info| info.key_type() == string_type);
         let mut result = Ternary::True;
-        for &target_info in index_infos {
+        for target_info in index_infos {
             let related = if self.rel() != c.strict_subtype_relation && !source_is_primitive && target_has_string_index && target_info.value_type().flags().intersects(TypeFlags::Any) {
                 Ternary::True
             } else if c.is_generic_mapped_type(source) && target_has_string_index {
@@ -2507,7 +2507,7 @@ impl Checker {
     // relater.go:4656
     pub(crate) fn is_object_type_with_inferable_index(&mut self, t: P<Type>) -> bool {
         if t.flags().intersects(TypeFlags::Intersection) {
-            for &t in t.types() {
+            for t in t.types() {
                 if !self.is_object_type_with_inferable_index(t) {
                     return false;
                 }
@@ -2532,7 +2532,7 @@ impl Relater {
         } else {
             c.get_properties_of_object_type(source)
         };
-        for &prop in props {
+        for prop in props {
             // Skip over ignored JSX and symbol-named members
             if is_ignored_jsx_property(source, prop) {
                 continue;
@@ -2591,7 +2591,7 @@ impl Relater {
         if source_infos.len() != target_infos.len() {
             return Ternary::False;
         }
-        for &target_info in target_infos {
+        for target_info in target_infos {
             let source_info = c.get_index_info_of_type(source, target_info.key_type());
             if !(source_info.is_some()
                 && self.is_related_to(c, source_info.unwrap().value_type(), target_info.value_type(), RecursionFlags::Both, false) != Ternary::False
@@ -2908,21 +2908,21 @@ impl Checker {
     // relater.go:4995
     pub(crate) fn is_type_derived_from(&mut self, source: P<Type>, target: P<Type>) -> bool {
         if source.flags().intersects(TypeFlags::Union) {
-            for &t in source.as_union_type().types.get() {
+            for t in source.as_union_type().types.get() {
                 if !self.is_type_derived_from(t, target) {
                     return false;
                 }
             }
             true
         } else if target.flags().intersects(TypeFlags::Union) {
-            for &t in target.as_union_type().types.get() {
+            for t in target.as_union_type().types.get() {
                 if self.is_type_derived_from(source, t) {
                     return true;
                 }
             }
             false
         } else if source.flags().intersects(TypeFlags::Intersection) {
-            for &t in source.as_intersection_type().types.get() {
+            for t in source.as_intersection_type().types.get() {
                 if self.is_type_derived_from(t, target) {
                     return true;
                 }

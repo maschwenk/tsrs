@@ -98,7 +98,7 @@ impl Checker {
             let named_unions = self.add_named_unions(&[], types);
             let mut reduced_types: Vec<P<Type>> = Vec::new();
             for &t in &type_set {
-                if !named_unions.iter().any(|u| contains_type(self, u.types(), t)) {
+                if !named_unions.iter().any(|u| contains_type(self, &u.types(), t)) {
                     reduced_types.push(t);
                 }
             }
@@ -213,17 +213,17 @@ impl Checker {
             while let (Some(&l), Some(&r)) = (left.first(), right.first()) {
                 if l == r {
                     add_type(self, &mut types, &mut includes, l);
-                    left = &left[1..];
-                    right = &right[1..];
+                    left = left.slice(1..);
+                    right = right.slice(1..);
                 } else if compare_types(self, Some(l), Some(r)) < 0 {
                     add_type(self, &mut types, &mut includes, l);
-                    left = &left[1..];
+                    left = left.slice(1..);
                 } else {
                     add_type(self, &mut types, &mut includes, r);
-                    right = &right[1..];
+                    right = right.slice(1..);
                 }
             }
-            for &t in left.iter().chain(right) {
+            for &t in left.iter().chain(right.iter()) {
                 add_type(self, &mut types, &mut includes, t);
             }
             return (types, includes);
@@ -240,7 +240,7 @@ impl Checker {
                     if t.alias().is_some() || u.origin().is_some() {
                         includes |= TypeFlags::Union;
                     }
-                    for &s in u.types() {
+                    for s in u.types() {
                         add_type(self, &mut types, &mut includes, s);
                     }
                 } else {
@@ -282,7 +282,7 @@ impl Checker {
                 if t.alias().is_some() || origin.is_some_and(|o| !o.flags().intersects(TypeFlags::Union)) {
                     append_if_unique(&mut named_unions, t);
                 } else if let Some(origin) = origin.filter(|o| o.flags().intersects(TypeFlags::Union)) {
-                    named_unions = self.add_named_unions(&named_unions, origin.types());
+                    named_unions = self.add_named_unions(&named_unions, &origin.types());
                 }
             }
         }
@@ -338,7 +338,7 @@ impl Checker {
     pub(crate) fn is_type_matched_by_template_literal_or_string_mapping(&mut self, t: P<Type>, template: P<Type>) -> bool {
         if template.flags().intersects(TypeFlags::TemplateLiteral) {
             let comparer = self.compare_types_assignable_comparer();
-            return self.is_type_matched_by_template_literal_type(t, template.as_template_literal_type(), comparer);
+            return self.is_type_matched_by_template_literal_type(t, template.as_template_literal_type(), &comparer);
         }
         self.is_member_of_string_mapping(t, template)
     }
@@ -775,7 +775,7 @@ impl Checker {
         let mut t = t;
         let flags = t.flags();
         if flags.intersects(TypeFlags::Intersection) {
-            return self.add_types_to_intersection(type_set, includes, t.types());
+            return self.add_types_to_intersection(type_set, includes, &t.types());
         }
         if self.is_empty_anonymous_object_type(t) {
             if !includes.intersects(TypeFlags::IncludesEmptyObject) {
@@ -888,7 +888,7 @@ impl Checker {
         let mut checked: Vec<P<Type>> = Vec::new();
         let mut result: Vec<P<Type>> = Vec::new();
         for &u in &union_types {
-            for &t in u.types() {
+            for t in u.types() {
                 let inserted;
                 (checked, inserted) = insert_type(self, &checked, t);
                 if inserted {
@@ -927,16 +927,16 @@ impl Checker {
     // checker.go:26875
     pub(crate) fn union_contains_type(&mut self, union: P<Type>, t: P<Type>, match_symbol: bool) -> bool {
         let types = union.types();
-        if contains_type(self, types, t) {
+        if contains_type(self, &types, t) {
             return true;
         }
         if t == self.missing_type {
             let undefined_type = self.undefined_type;
-            return contains_type(self, types, undefined_type);
+            return contains_type(self, &types, undefined_type);
         }
         if t == self.undefined_type {
             let missing_type = self.missing_type;
-            return contains_type(self, types, missing_type);
+            return contains_type(self, &types, missing_type);
         }
         let mut primitive: Option<P<Type>> = None;
         if t.flags().intersects(TypeFlags::StringLiteral) {
@@ -949,7 +949,7 @@ impl Checker {
             primitive = Some(self.es_symbol_type);
         }
         match primitive {
-            Some(primitive) => contains_type(self, types, primitive),
+            Some(primitive) => contains_type(self, &types, primitive),
             None => false,
         }
     }
@@ -989,7 +989,7 @@ pub(crate) fn get_constituent_count(t: P<Type>) -> i32 {
             return get_constituent_count(origin);
         }
     }
-    get_constituent_count_of_types(t.types())
+    get_constituent_count_of_types(&t.types())
 }
 
 // checker.go:26932
@@ -1068,7 +1068,7 @@ impl Checker {
             // Return true if the intersection consists of one or more placeholders and zero or
             // more object type tags.
             let mut seen_placeholder = false;
-            for &s in t.types() {
+            for s in t.types() {
                 if s.flags().intersects(TypeFlags::Literal | TypeFlags::Nullable) || self.is_pattern_literal_placeholder_type(s) {
                     seen_placeholder = true;
                 } else if !s.flags().intersects(TypeFlags::Object) {
@@ -1099,7 +1099,7 @@ impl Checker {
 // capture `self`; `c` is only passed through.
 pub(crate) fn for_each_type(c: &mut Checker, t: P<Type>, mut f: impl FnMut(&mut Checker, P<Type>)) {
     if t.flags().intersects(TypeFlags::Union) {
-        for &u in t.types() {
+        for u in t.types() {
             f(c, u);
         }
     } else {
@@ -1177,12 +1177,12 @@ impl Checker {
             return t;
         }
         if let Some(origin) = t.as_union_type().origin() {
-            if origin.flags().intersects(TypeFlags::Union) && contains_type(self, origin.types(), target_type) {
+            if origin.flags().intersects(TypeFlags::Union) && contains_type(self, &origin.types(), target_type) {
                 return self.filter_type(t, |_, t| t != target_type);
             }
         }
         let types = t.types();
-        if let (i, true) = tsrs_core::goslices::binary_search_func(types, &target_type, |&probe, &target| compare_types(self, Some(probe), Some(target))) {
+        if let (i, true) = tsrs_core::goslices::binary_search_func(&types, &target_type, |&probe, &target| compare_types(self, Some(probe), Some(target))) {
             if types.len() == 2 {
                 return types[1 - i];
             }
@@ -1455,10 +1455,10 @@ impl Checker {
         let props = self.get_properties_of_type(t);
         let index_infos = self.get_index_infos_of_type(t);
         let mut types: Vec<P<Type>> = Vec::with_capacity(props.len() + index_infos.len());
-        for &prop in props {
+        for prop in props {
             types.push(self.get_literal_type_from_property(prop, include, false));
         }
-        for &info in index_infos {
+        for info in index_infos {
             if info != self.enum_number_index_info && self.is_key_type_included(info.key_type(), include) {
                 if info.key_type() == self.string_type && include.intersects(TypeFlags::Number) {
                     types.push(self.string_or_number_type);
@@ -1636,8 +1636,7 @@ impl Checker {
                 let mapper = append_type_mapping(t.as_mapped_type().mapper.get(), type_parameter, key_type);
                 prop_name_type = c.instantiate_type(name_type, Some(mapper));
                 // SAFETY: made here for this one instantiation.
-                unsafe { recycle_mapping(mapper, true) };
-            }
+                }
             // `keyof` currently always returns `string | number` for concrete `string` index signatures - the below ternary keeps that behavior for mapped types
             // See `getLiteralTypeFromProperties` where there's a similar ternary to cause the same behavior.
             key_types.push(if_else(prop_name_type == c.string_type, c.string_or_number_type, prop_name_type));
@@ -1676,7 +1675,7 @@ impl Checker {
         } else {
             result = self.get_union_type(&key_types);
         }
-        if result.flags().intersects(TypeFlags::Union) && constraint_type.flags().intersects(TypeFlags::Union) && get_type_list_key(result.types()) == get_type_list_key(constraint_type.types()) {
+        if result.flags().intersects(TypeFlags::Union) && constraint_type.flags().intersects(TypeFlags::Union) && get_type_list_key(&result.types()) == get_type_list_key(&constraint_type.types()) {
             return constraint_type;
         }
         result
@@ -1757,7 +1756,7 @@ impl Checker {
         if index_type.flags().intersects(TypeFlags::Union) && !index_type.flags().intersects(TypeFlags::Boolean) {
             let mut prop_types: Vec<P<Type>> = Vec::new();
             let mut was_missing_prop = false;
-            for &t in index_type.types() {
+            for t in index_type.types() {
                 let prop_type = self.get_property_type_for_index_type(
                     object_type,
                     apparent_object_type,
@@ -2090,7 +2089,7 @@ impl Checker {
 
     // checker.go:27722
     pub(crate) fn get_suggested_type_for_nonexistent_string_literal_type(&mut self, source: P<Type>, target: P<Type>) -> Option<P<Type>> {
-        let candidates = target.types().iter().copied().filter(|t| t.flags().intersects(TypeFlags::StringLiteral));
+        let candidates = target.types().into_iter().filter(|t| t.flags().intersects(TypeFlags::StringLiteral));
         get_spelling_suggestion_with_max_candidate_count(&get_string_literal_value(source), candidates, |t| get_string_literal_value(*t), |a, b| compare_types(self, Some(*a), Some(*b)), 1000)
     }
 }
@@ -2385,7 +2384,7 @@ impl Checker {
             let types = t.types();
             let mut constraints: Vec<P<Type>> = Vec::with_capacity(types.len());
             let mut different = false;
-            for &s in types {
+            for s in types .iter().copied() {
                 let constraint = self.get_next_base_constraint(Some(s), stack);
                 if let Some(constraint) = constraint {
                     if constraint != s {
@@ -2418,7 +2417,7 @@ impl Checker {
         } else if flags.intersects(TypeFlags::TemplateLiteral) {
             let types = t.types();
             let mut constraints: Vec<P<Type>> = Vec::with_capacity(types.len());
-            for &s in types {
+            for s in types .iter().copied() {
                 let constraint = self.get_next_base_constraint(Some(s), stack);
                 if let Some(constraint) = constraint {
                     constraints.push(constraint);
@@ -2479,7 +2478,7 @@ impl Checker {
                 }
                 new_elements.push(new_element);
             }
-            return Some(self.create_tuple_type_ex(&new_elements, element_infos, t.reference_target().as_tuple_type().readonly.get()));
+            return Some(self.create_tuple_type_ex(&new_elements, &element_infos, t.reference_target().as_tuple_type().readonly.get()));
         }
         Some(t)
     }
@@ -2503,7 +2502,7 @@ impl Checker {
             return true;
         }
         if t.flags().intersects(TypeFlags::UnionOrIntersection) {
-            for &t in t.types() {
+            for t in t.types() {
                 if self.maybe_type_of_kind(t, kind) {
                     return true;
                 }
@@ -2683,7 +2682,7 @@ impl Checker {
     pub(crate) fn is_uniform_union_type(&mut self, t: P<Type>) -> bool {
         if t.object_flags().intersects(ObjectFlags::PrimitiveUnion) {
             if !t.object_flags().intersects(ObjectFlags::IsUniformEnumComputed) {
-                let uniform = self.compute_is_uniform_union_type(t.types());
+                let uniform = self.compute_is_uniform_union_type(&t.types());
                 t.object_flags.set(t.object_flags() | ObjectFlags::IsUniformEnumComputed | if_else(uniform, ObjectFlags::IsUniformEnum, ObjectFlags::None));
             }
             return t.object_flags().intersects(ObjectFlags::IsUniformEnum);

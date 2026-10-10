@@ -288,12 +288,12 @@ impl Checker {
     }
 
     // services.go:261
-    pub fn get_call_signatures(&mut self, t: P<Type>) -> &'static [P<Signature>] {
+    pub fn get_call_signatures(&mut self, t: P<Type>) -> ArrayView<P<Signature>> {
         self.get_signatures_of_type(t, SignatureKind::Call)
     }
 
     // services.go:265
-    pub fn get_construct_signatures(&mut self, t: P<Type>) -> &'static [P<Signature>] {
+    pub fn get_construct_signatures(&mut self, t: P<Type>) -> ArrayView<P<Signature>> {
         self.get_signatures_of_type(t, SignatureKind::Construct)
     }
 
@@ -306,7 +306,7 @@ impl Checker {
     pub(crate) fn get_augmented_properties_of_type(&mut self, t: P<Type>) -> Vec<P<Symbol>> {
         let t = self.get_apparent_type(t);
         let props = self.get_properties_of_type(t);
-        let props_by_name = create_symbol_table(props);
+        let props_by_name = create_symbol_table(&props);
         let mut function_type = None;
         if !self.get_signatures_of_type(t, SignatureKind::Call).is_empty() {
             function_type = Some(self.global_callable_function_type);
@@ -316,7 +316,7 @@ impl Checker {
 
         let props_by_name = props_by_name.unwrap_or_else(SymbolTable::new);
         if let Some(function_type) = function_type {
-            for &p in self.get_properties_of_type(function_type) {
+            for p in self.get_properties_of_type(function_type) {
                 if !props_by_name.has(p.name()) {
                     props_by_name.set(p.name(), p);
                 }
@@ -774,7 +774,7 @@ impl Checker {
 
     // services.go:708
     // getUninstantiatedSignatures gets generic signatures from the function's/constructor's type.
-    pub(crate) fn get_uninstantiated_signatures(&mut self, node: P<Node>) -> &'static [P<Signature>] {
+    pub(crate) fn get_uninstantiated_signatures(&mut self, node: P<Node>) -> ArrayView<P<Signature>> {
         match node.kind() {
             Kind::CallExpression | Kind::Decorator => {
                 let t = self.get_type_of_expression(node.expression().unwrap());
@@ -786,7 +786,7 @@ impl Checker {
             }
             Kind::JsxSelfClosingElement | Kind::JsxOpeningElement => {
                 if is_jsx_intrinsic_tag_name(node.tag_name()) {
-                    return &[];
+                    return ArrayView::default();
                 }
                 let t = self.get_type_of_expression(node.tag_name());
                 self.get_signatures_of_type(t, SignatureKind::Call)
@@ -795,8 +795,8 @@ impl Checker {
                 let t = self.get_type_of_expression(node.as_tagged_template_expression().tag);
                 self.get_signatures_of_type(t, SignatureKind::Call)
             }
-            Kind::BinaryExpression | Kind::JsxOpeningFragment => &[],
-            _ => &[],
+            Kind::BinaryExpression | Kind::JsxOpeningFragment => ArrayView::default(),
+            _ => ArrayView::default(),
         }
     }
 
@@ -837,21 +837,21 @@ impl Checker {
 
             if ast::is_call_like_expression(parent) {
                 let signatures = self.get_uninstantiated_signatures(parent);
-                return Some(self.get_type_parameter_constraint_for_position_across_signatures(signatures, type_argument_position));
+                return Some(self.get_type_parameter_constraint_for_position_across_signatures(&signatures, type_argument_position));
             }
 
             if ast::is_decorator(parent.parent().unwrap()) {
                 let signatures = self.get_uninstantiated_signatures(parent.parent().unwrap());
-                return Some(self.get_type_parameter_constraint_for_position_across_signatures(signatures, type_argument_position));
+                return Some(self.get_type_parameter_constraint_for_position_across_signatures(&signatures, type_argument_position));
             }
 
             if ast::is_expression_with_type_arguments(parent) && ast::is_expression_statement(parent.parent().unwrap()) {
                 let uninstantiated_type = self.check_expression(parent.expression().unwrap());
 
                 let call_signatures = self.get_signatures_of_type(uninstantiated_type, SignatureKind::Call);
-                let call_constraint = self.get_type_parameter_constraint_for_position_across_signatures(call_signatures, type_argument_position);
+                let call_constraint = self.get_type_parameter_constraint_for_position_across_signatures(&call_signatures, type_argument_position);
                 let construct_signatures = self.get_signatures_of_type(uninstantiated_type, SignatureKind::Construct);
-                let construct_constraint = self.get_type_parameter_constraint_for_position_across_signatures(construct_signatures, type_argument_position);
+                let construct_constraint = self.get_type_parameter_constraint_for_position_across_signatures(&construct_signatures, type_argument_position);
 
                 // An instantiation expression instantiates both call and construct signatures, so
                 // if both exist type arguments must be assignable to both constraints.
@@ -876,7 +876,7 @@ impl Checker {
                 let constraint = self.get_constraint_of_type_parameter(relevant_type_parameter);
                 if let Some(constraint) = constraint {
                     let type_arguments = self.get_effective_type_arguments(parent, &type_parameters);
-                    return Some(self.instantiate_type(constraint, Some(new_type_mapper(alloc_vec(type_parameters), alloc_vec(type_arguments)))));
+                    return Some(self.instantiate_type(constraint, Some(new_type_mapper(&type_parameters, &type_arguments))));
                 }
             }
         }
@@ -927,7 +927,7 @@ impl Checker {
         if export_equals != module_symbol {
             let t = self.get_type_of_symbol(export_equals);
             if self.should_treat_properties_of_external_module_as_exports(t) {
-                exports.extend_from_slice(self.get_properties_of_type(t));
+                exports.extend_from_slice(&self.get_properties_of_type(t));
             }
         }
         exports
@@ -940,7 +940,7 @@ impl Checker {
 
     // services.go:858
     // Returns all the properties of the Jsx.IntrinsicElements interface.
-    pub fn get_jsx_intrinsic_tag_names_at(&mut self, location: P<Node>) -> &'static [P<Symbol>] {
+    pub fn get_jsx_intrinsic_tag_names_at(&mut self, location: P<Node>) -> ArrayView<P<Symbol>> {
         let intrinsics = self.get_jsx_type(JsxNames.intrinsic_elements, location);
         self.get_properties_of_type_exported(intrinsics)
     }

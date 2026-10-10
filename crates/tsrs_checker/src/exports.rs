@@ -169,7 +169,7 @@ impl Checker {
     }
 
     // exports.go:139
-    pub fn get_properties_of_type_exported(&mut self, t: P<Type>) -> &'static [P<Symbol>] {
+    pub fn get_properties_of_type_exported(&mut self, t: P<Type>) -> ArrayView<P<Symbol>> {
         self.get_properties_of_type(t)
     }
 
@@ -215,7 +215,7 @@ impl Checker {
     }
 
     // exports.go:175
-    pub fn get_signatures_of_type_exported(&mut self, t: P<Type>, kind: SignatureKind) -> &'static [P<Signature>] {
+    pub fn get_signatures_of_type_exported(&mut self, t: P<Type>, kind: SignatureKind) -> ArrayView<P<Signature>> {
         self.get_signatures_of_type(t, kind)
     }
 
@@ -379,7 +379,7 @@ impl Checker {
     }
 
     // exports.go:304
-    pub fn get_base_types_exported(&mut self, t: P<Type>) -> &'static [P<Type>] {
+    pub fn get_base_types_exported(&mut self, t: P<Type>) -> ArrayView<P<Type>> {
         self.get_base_types(t)
     }
 
@@ -416,7 +416,7 @@ impl Checker {
     }
 
     // exports.go:334
-    pub fn get_type_arguments_exported(&mut self, t: P<Type>) -> &'static [P<Type>] {
+    pub fn get_type_arguments_exported(&mut self, t: P<Type>) -> ArrayView<P<Type>> {
         self.get_type_arguments(t)
     }
 
@@ -431,7 +431,7 @@ impl Checker {
     }
 
     // exports.go:346
-    pub fn get_index_infos_of_type_exported(&mut self, t: P<Type>) -> &'static [P<IndexInfo>] {
+    pub fn get_index_infos_of_type_exported(&mut self, t: P<Type>) -> ArrayView<P<IndexInfo>> {
         self.get_index_infos_of_type(t)
     }
 

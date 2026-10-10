@@ -120,7 +120,7 @@ impl Checker {
         let type_arguments = node.type_arguments();
         if symbol.check_flags.get().intersects(CheckFlags::Unresolved) {
             let alias_type_arguments: Vec<P<Type>> = type_arguments.iter().map(|&n| self.get_type_from_type_node(n)).collect();
-            let alias = P::new(TypeAlias { symbol: Cell::new(Some(symbol)), type_arguments: ThinSliceCell::new(alloc_vec(alias_type_arguments)) });
+            let alias = P::new(TypeAlias { symbol: Cell::new(Some(symbol)), type_arguments: ArrayCell::new(&alias_type_arguments) });
             let key = get_alias_key(Some(alias).into());
             let mut error_type = self.error_types.get(&key);
             if error_type.is_none() {
@@ -135,7 +135,7 @@ impl Checker {
         let type_parameters = self.type_alias_links.get(symbol).type_parameters.get();
         if !type_parameters.is_empty() {
             let num_type_arguments = type_arguments.len() as i32;
-            let min_type_argument_count = self.get_min_type_argument_count(type_parameters);
+            let min_type_argument_count = self.get_min_type_argument_count(&type_parameters);
             if num_type_arguments < min_type_argument_count || num_type_arguments > type_parameters.len() as i32 {
                 let message = if min_type_argument_count == type_parameters.len() as i32 {
                     &diagnostics::Generic_type_0_requires_1_type_argument_s
@@ -174,7 +174,7 @@ impl Checker {
             }
             let mut new_alias = None;
             if new_alias_symbol.is_some() {
-                new_alias = Some(P::new(TypeAlias { symbol: Cell::new(new_alias_symbol), type_arguments: ThinSliceCell::new(alloc_vec(alias_type_arguments)) }));
+                new_alias = Some(P::new(TypeAlias { symbol: Cell::new(new_alias_symbol), type_arguments: ArrayCell::new(&alias_type_arguments) }));
             }
             let type_arguments_from_node = self.get_type_arguments_from_node(node);
             return self.get_type_alias_instantiation(symbol, &type_arguments_from_node, new_alias);
@@ -204,9 +204,9 @@ impl Checker {
         let mut instantiation = self.type_alias_links.at(links).instantiations.get(&key);
         if instantiation.is_none() {
             let too_complex_before = self.too_complex_reports;
-            let min_type_argument_count = self.get_min_type_argument_count(type_parameters);
-            let filled = self.fill_missing_type_arguments(type_arguments, type_parameters, min_type_argument_count, ast::is_in_js_file(symbol.value_declaration()));
-            let mapper = new_type_mapper(type_parameters, alloc_vec(filled));
+            let min_type_argument_count = self.get_min_type_argument_count(&type_parameters);
+            let filled = self.fill_missing_type_arguments(type_arguments, &type_parameters, min_type_argument_count, ast::is_in_js_file(symbol.value_declaration()));
+            let mapper = new_type_mapper(&type_parameters, &filled);
             let result = self.instantiate_type_with_alias(t, Some(mapper), alias);
             // tsrs-only: not cached when the instantiation reported TS2590 (`too_complex_since`).
             if !self.too_complex_since(too_complex_before) {
@@ -279,7 +279,7 @@ impl Checker {
         let symbol = self.get_alias_symbol_for_type_node(node);
         if symbol.is_some() {
             let type_arguments = self.get_type_arguments_for_alias_symbol(symbol);
-            return Some(P::new(TypeAlias { symbol: Cell::new(symbol), type_arguments: ThinSliceCell::new(alloc_vec(type_arguments)) }));
+            return Some(P::new(TypeAlias { symbol: Cell::new(symbol), type_arguments: ArrayCell::new(&type_arguments) }));
         }
         None
     }
@@ -368,7 +368,7 @@ impl Checker {
                         let signature = self.get_signatures_of_type(t, SignatureKind::Call).first().copied();
                         if let Some(signature) = signature {
                             if !signature.type_parameters().is_empty() {
-                                outer_type_parameters.extend_from_slice(signature.type_parameters());
+                                outer_type_parameters.extend_from_slice(&signature.type_parameters());
                                 return outer_type_parameters;
                             }
                         }
@@ -989,14 +989,13 @@ impl Checker {
             };
             let extends_type = self.get_type_from_type_node(node.as_conditional_type_node().extends_type);
             let infer_type_parameters = self.get_infer_type_parameters(node);
-            let outer_type_parameters = alloc_vec(outer_type_parameters);
             let root = P::new(ConditionalRoot {
                 node: Cell::new(Some(node)),
                 check_type: Cell::new(Some(check_type)),
                 extends_type: Cell::new(Some(extends_type)),
                 is_distributive: Cell::new(check_type.flags().intersects(TypeFlags::TypeParameter)),
-                infer_type_parameters: Cell::new(alloc_vec(infer_type_parameters)),
-                outer_type_parameters: Cell::new(outer_type_parameters),
+                infer_type_parameters: ArrayCell::new(&infer_type_parameters),
+                outer_type_parameters: ArrayCell::new(&outer_type_parameters),
                 instantiations: OwnedPackedMap::default(),
                 alias: Cell::new(alias),
             });
@@ -1004,7 +1003,7 @@ impl Checker {
             self.type_node_links.at(links).resolved_type.set(Some(resolved_type));
             if !outer_type_parameters.is_empty() {
                 root.instantiations.make();
-                root.instantiations.set(get_conditional_type_key(outer_type_parameters, None /*alias*/, false /*forConstraint*/), self.type_node_links.at(links).resolved_type.get().unwrap());
+                root.instantiations.set(get_conditional_type_key(&outer_type_parameters, None /*alias*/, false /*forConstraint*/), self.type_node_links.at(links).resolved_type.get().unwrap());
             }
         }
         self.type_node_links.at(links).resolved_type.get().unwrap()
@@ -1012,32 +1011,12 @@ impl Checker {
 
     // checker.go:24770
     pub(crate) fn get_conditional_type(&mut self, root: P<ConditionalRoot>, mapper: Option<P<TypeMapper>>, for_constraint: bool, alias: Option<P<TypeAlias>>) -> P<Type> {
-        let (mappers, contexts, lists) = (self.scratch_mappers.len(), self.scratch_contexts.len(), self.scratch_mapper_lists.len());
         let census_span = self.census_begin(crate::workcensus::Cat::Cond, || crate::workcensus::CKey::Root(root));
         let result = self.get_conditional_type_worker(root, mapper, for_constraint, alias);
         if let Some(t) = self.census_end(census_span) {
             let never = (result == self.never_type) as u64;
             self.census.as_mut().unwrap().record(crate::workcensus::Cat::Cond, crate::workcensus::CKey::Root(root), t, never, 0, 0);
         }
-        // The `infer` contexts and the composite mappers made for them are garbage unless one of their mappers was
-        // stored (74% / 61-88% are, notes/mem-census.md). Contexts first: recycling reads their mapper fields.
-        while self.scratch_contexts.len() > contexts {
-            let ctx = self.scratch_contexts.pop().unwrap();
-            InferenceContext::recycle(ctx);
-        }
-        while self.scratch_mappers.len() > mappers {
-            let m = self.scratch_mappers.pop().unwrap();
-            // SAFETY: made by this call (below), which is done; escaped mappers are kept.
-            unsafe { recycle_mapper(m) };
-        }
-        while self.scratch_mapper_lists.len() > lists {
-            let (m, targets) = self.scratch_mapper_lists.pop().unwrap();
-            // SAFETY: made by this call's `getTailRecursionRoot` with its list; escaped mappers keep theirs.
-            unsafe { recycle_mapper_with_targets(m, targets) };
-        }
-        tsrs_core::census_scrub_slack(&mut self.scratch_contexts);
-        tsrs_core::census_scrub_slack(&mut self.scratch_mappers);
-        tsrs_core::census_scrub_slack(&mut self.scratch_mapper_lists);
         result
     }
 
@@ -1093,28 +1072,23 @@ impl Checker {
                 // This means we have two mappers that need applying:
                 //    * The original `mapper` used to create this conditional
                 //    * The mapper that maps the infer type parameter to its inference result (`context.mapper`)
-                let context = self.new_inference_context(root.infer_type_parameters.get(), None /*signature*/, InferenceFlags::None, None);
-                self.scratch_contexts.push(context);
+                let context = self.new_inference_context(&root.infer_type_parameters.get(), None /*signature*/, InferenceFlags::None, None);
                 if let Some(mapper) = mapper {
                     let own = context.non_fixing_mapper().unwrap();
                     let non_fixing_mapper = self.combine_type_mappers(Some(own), mapper);
                     context.set_non_fixing_mapper(non_fixing_mapper);
-                    // The context no longer holds its own non-fixing mapper, so it is recycled from here.
-                    self.scratch_mappers.push(own);
-                    self.scratch_mappers.push(non_fixing_mapper);
-                }
+                    }
                 if !check_type_deferred {
                     // We don't want inferences from constraints as they may cause us to eagerly resolve the
                     // conditional type instead of deferring resolution. Also, we always want strict function
                     // types rules (i.e. proper contravariance) for inferences.
-                    self.infer_types(context.inferences.get(), check_type, extends_type, InferencePriority::NoConstraints | InferencePriority::AlwaysStrict, false);
+                    self.infer_types(&context.inferences.get(), check_type, extends_type, InferencePriority::NoConstraints | InferencePriority::AlwaysStrict, false);
                 }
                 // It's possible for 'infer T' type parameters to be given uninstantiated constraints when the
                 // those type parameters are used in type references (see getInferredTypeParameterConstraint). For
                 // that reason we need context.mapper to be first in the combined mapper. See #42636 for examples.
                 if let Some(mapper) = mapper {
                     let combined = self.combine_type_mappers(context.mapper(), mapper);
-                    self.scratch_mappers.push(combined);
                     combined_mapper = Some(combined);
                 } else {
                     combined_mapper = context.mapper();
@@ -1234,12 +1208,8 @@ impl Checker {
                     let conditional_mapper = new_type.as_conditional_type().mapper.get();
                     let type_param_mapper = self.combine_type_mappers(conditional_mapper, new_mapper);
                     let type_arguments: Vec<P<Type>> = new_root.outer_type_parameters.get().iter().map(|&t| type_param_mapper.map(self, t)).collect();
-                    if conditional_mapper.is_some() {
-                        // SAFETY: the composite made above, used only by those `map` calls.
-                        unsafe { recycle_mapper(type_param_mapper) };
-                    }
-                    let type_argument_list = tsrs_core::alloc_slice_recycled(&type_arguments);
-                    let new_root_mapper = new_type_mapper(new_root.outer_type_parameters.get(), type_argument_list);
+                    let type_argument_list = &type_arguments[..];
+                    let new_root_mapper = new_type_mapper(&new_root.outer_type_parameters.get(), type_argument_list);
                     let mut new_check_type = None;
                     if new_root.is_distributive.get() {
                         new_check_type = Some(self.get_mapped_type(new_root.check_type.get().unwrap(), new_root_mapper));
@@ -1250,12 +1220,10 @@ impl Checker {
                     {
                         // The caller's `getConditionalType` loops with this mapper and recycles it on return unless
                         // the result kept it (99% do not, notes/mem-scoped-arenas.md).
-                        self.scratch_mapper_lists.push((new_root_mapper, type_argument_list));
                         return (Some(new_root), Some(new_root_mapper));
                     }
                     // SAFETY: made above; mapping a type through it stores nothing.
-                    unsafe { recycle_mapper_with_targets(new_root_mapper, type_argument_list) };
-                }
+                    }
             }
         }
         (None, None)
@@ -1691,14 +1659,14 @@ impl Checker {
         this_type.as_type_parameter().is_this_type.set(true);
         this_type.as_type_parameter().constraint.set(Some(t));
         type_parameters.push(this_type);
-        d.all_type_parameters.set(alloc_vec(type_parameters));
+        d.all_type_parameters.set_owned(type_parameters);
         d.target.set(Some(t));
-        d.resolved_type_arguments.set(Some(d.type_parameters()));
+        d.resolved_type_arguments.set(Some(&d.type_parameters()));
         d.instantiations.make();
         d.instantiations.add(t);
         d.declared_members_resolved.set(true);
         d.declared_members.set(Some(members));
-        d.element_infos.set(alloc_slice(element_infos));
+        d.element_infos.set(element_infos);
         d.min_length.set(min_length);
         d.fixed_length.set(fixed_length);
         d.combined_flags.set(combined_flags);
@@ -1771,7 +1739,7 @@ impl Checker {
         if t.flags().intersects(TypeFlags::UnionOrIntersection | TypeFlags::Substitution) {
             if !t.object_flags().intersects(ObjectFlags::IsGenericTypeComputed) {
                 if t.flags().intersects(TypeFlags::UnionOrIntersection) {
-                    for &u in t.types() {
+                    for u in t.types() {
                         combined_flags |= self.get_generic_object_flags(u);
                     }
                 } else {
@@ -1812,7 +1780,6 @@ impl Checker {
                 let mapper = new_simple_type_mapper(type_parameter, constraint);
                 let instantiated = self.instantiate_type(name_type, Some(mapper));
                 // SAFETY: made here for this one instantiation; kept if the result stored it.
-                unsafe { recycle_mapper(mapper) };
                 if self.is_generic_index_type(instantiated) {
                     return true;
                 }
@@ -2059,7 +2026,7 @@ impl Checker {
         let t = self.new_object_type(ObjectFlags::Reference | object_flags | propagating_flags, target.symbol());
         let d = t.as_type_reference();
         d.target.set(Some(target));
-        d.resolved_type_arguments.set(Some(alloc_slice(type_arguments)));
+        d.resolved_type_arguments.set(Some(type_arguments));
         intf.instantiations.add(t);
         t
     }
@@ -2071,8 +2038,8 @@ impl Checker {
             alias = self.get_alias_for_type_node(node);
             if let Some(a) = alias {
                 if mapper.is_some() {
-                    let type_arguments = self.instantiate_types(a.type_arguments.get(), mapper);
-                    a.type_arguments.set(alloc_vec(type_arguments));
+                    let type_arguments = self.instantiate_types(&a.type_arguments.get(), mapper);
+                    a.type_arguments.set_owned(type_arguments);
                 }
             }
         }
@@ -2090,7 +2057,8 @@ impl Checker {
         let t = self.new_object_type(ObjectFlags::Reference, source.symbol());
         t.object_flags.set(source.object_flags() & !ObjectFlags::MembersResolved);
         t.as_type_reference().target.set(source.as_type_reference().target.get());
-        t.as_type_reference().resolved_type_arguments.set(source.as_type_reference().resolved_type_arguments.get());
+        t.as_type_reference().resolved_type_arguments.set(source.as_type_reference().resolved_type_arguments.get().as_deref(),
+        );
         t
     }
 
@@ -2107,23 +2075,23 @@ impl Checker {
         let data = t.as_structured_type();
         data.set_members(members);
         let properties = self.get_named_members(members, t.symbol());
-        data.set_properties(alloc_vec(properties));
+        data.set_properties(&properties);
         if !call_signatures.is_empty() {
             if !construct_signatures.is_empty() {
-                data.set_signatures(alloc_vec([call_signatures, construct_signatures].concat()));
+                data.set_signatures(&[call_signatures, construct_signatures].concat());
             } else {
-                data.set_signatures(alloc_slice(call_signatures));
+                data.set_signatures(call_signatures);
             }
             data.set_call_signature_count(call_signatures.len() as i32);
         } else {
             if !construct_signatures.is_empty() {
-                data.set_signatures(alloc_slice(construct_signatures));
+                data.set_signatures(construct_signatures);
             } else {
                 data.set_signatures(&[]);
             }
             data.set_call_signature_count(0);
         }
-        data.set_index_infos(alloc_slice(index_infos));
+        data.set_index_infos(index_infos);
     }
 
     // checker.go:25638
@@ -2152,7 +2120,7 @@ impl Checker {
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn new_union_type(&mut self, object_flags: ObjectFlags, types: &[P<Type>]) -> P<Type> {
         let data = UnionType::default();
-        data.types.set(alloc_slice(types));
+        data.types.set(types);
         self.new_type(TypeFlags::Union, object_flags, data)
     }
 
@@ -2160,7 +2128,7 @@ impl Checker {
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn new_intersection_type(&mut self, object_flags: ObjectFlags, types: &[P<Type>]) -> P<Type> {
         let data = IntersectionType::default();
-        data.types.set(alloc_slice(types));
+        data.types.set(types);
         self.new_type(TypeFlags::Intersection, object_flags, data)
     }
 
@@ -2185,7 +2153,7 @@ impl Checker {
     pub(crate) fn new_template_literal_type(&mut self, texts: &[&str], types: &[P<Type>]) -> P<Type> {
         let data = TemplateLiteralType::default();
         data.texts.set(alloc_vec(texts.iter().map(|s| alloc_str(s)).collect()));
-        data.types.set(alloc_slice(types));
+        data.types.set(types);
         self.new_type(TypeFlags::TemplateLiteral, ObjectFlags::None, data)
     }
 
@@ -2236,8 +2204,8 @@ impl Checker {
         sig.id.set(SignatureId(self.signature_count));
         sig.flags.set(flags);
         sig.declaration.set(declaration);
-        sig.type_parameters.set(alloc_slice(type_parameters));
-        sig.parameters.set(alloc_slice(parameters));
+        sig.type_parameters.set(type_parameters);
+        sig.parameters.set(parameters);
         sig.set_this_parameter(this_parameter);
         sig.resolved_return_type.set(resolved_return_type);
         sig.set_resolved_type_predicate(resolved_type_predicate, self.no_type_predicate);
@@ -2253,7 +2221,7 @@ impl Checker {
         info.value_type.set(Some(value_type));
         info.is_readonly.set(is_readonly);
         info.declaration.set(declaration);
-        info.components.set(alloc_slice(components));
+        info.components.set(components);
         info
     }
 
@@ -2623,7 +2591,7 @@ impl Checker {
         }
         let mut mapped_types = self.free_type_lists.pop().unwrap_or_default();
         let mut changed = false;
-        for &s in types {
+        for s in types {
             let mapped = if s.flags().intersects(TypeFlags::Union) { self.map_type_ex_worker(s, f, no_reductions) } else { f(self, s) };
             if mapped != Some(s) {
                 changed = true;

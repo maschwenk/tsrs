@@ -152,7 +152,7 @@ fn describe_into(t: P<Type>, depth: u32, out: &mut String) {
     if depth == 0 {
         return;
     }
-    let nested: Option<&[P<Type>]> = if t.flags().intersects(TypeFlags::Object) && t.object_flags().intersects(ObjectFlags::Reference) {
+    let nested: Option<ArrayView<P<Type>>> = if t.flags().intersects(TypeFlags::Object) && t.object_flags().intersects(ObjectFlags::Reference) {
         let reference = t.as_type_reference();
         if let Some(symbol) = reference.target.get().and_then(|target| target.symbol()) {
             out.push_str(" of ");

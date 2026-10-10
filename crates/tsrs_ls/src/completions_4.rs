@@ -1084,7 +1084,7 @@ impl LanguageService {
 
             let mut elements: Vec<P<Node>> = Vec::new();
             let factory = NodeFactory::new(NodeFactoryHooks::default());
-            for &t in switch_type.types() {
+            for t in switch_type.types() {
                 // Enums
                 if t.is_enum_literal() {
                     assert!(t.symbol().is_some(), "An enum member type should have a symbol");

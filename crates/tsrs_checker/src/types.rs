@@ -3,7 +3,8 @@ use std::fmt;
 use std::hash::Hash;
 
 use bitflags::bitflags;
-use tsrs_core::{OptionThinSliceCell, StrCell, ThinSliceCell};
+use tsrs_core::StrCell;
+use tsrs_core::owned_array::{ArrayCell, ArrayView, OptionArrayCell};
 
 use crate::*;
 
@@ -224,7 +225,7 @@ pub struct ExportTypeLinks {
 #[derive(Default)]
 pub struct TypeAliasLinks {
     pub declared_type: Cell<Option<P<Type>>>,
-    pub type_parameters: Cell<&'static [P<Type>]>, // Type parameters of type alias (undefined if non-generic)
+    pub type_parameters: ArrayCell<P<Type>>, // Type parameters of type alias (undefined if non-generic)
     pub instantiations: OwnedPackedMap<CacheHashKey, P<Type>>, // Instantiations of generic type alias (undefined if non-generic)
     pub is_constructor_declared_property: Cell<bool>,
 }
@@ -702,14 +703,14 @@ bitflags! {
 #[derive(Default)]
 pub struct TypeAlias {
     pub symbol: Cell<Option<P<Symbol>>>,
-    pub type_arguments: ThinSliceCell<P<Type>>,
+    pub type_arguments: ArrayCell<P<Type>>,
 }
 
 impl TypeAlias {
     pub fn symbol(&self) -> Option<P<Symbol>> {
         self.symbol.get()
     }
-    pub fn type_arguments(&self) -> &'static [P<Type>] {
+    pub fn type_arguments(&self) -> ArrayView<P<Type>> {
         self.type_arguments.get()
     }
 }
@@ -766,7 +767,7 @@ impl<'a> AliasArg<'a> {
             AliasArg::None => None,
             AliasArg::Some(a) => Some(a),
             AliasArg::Pending(p) => Some(p.alias.get().unwrap_or_else(|| {
-                let a = P::new(TypeAlias { symbol: Cell::new(p.symbol), type_arguments: ThinSliceCell::new(alloc_slice(&p.type_arguments)) });
+                let a = P::new(TypeAlias { symbol: Cell::new(p.symbol), type_arguments: ArrayCell::new(&p.type_arguments) });
                 p.alias.set(Some(a));
                 a
             })),
@@ -777,15 +778,15 @@ impl<'a> AliasArg<'a> {
 /// Go's nil-receiver `(*TypeAlias).Symbol()` / `TypeArguments()`: `t.alias().symbol()` works on `Option<P<TypeAlias>>`.
 pub trait TypeAliasOptExt {
     fn symbol(self) -> Option<P<Symbol>>;
-    fn type_arguments(self) -> &'static [P<Type>];
+    fn type_arguments(self) -> ArrayView<P<Type>>;
 }
 
 impl TypeAliasOptExt for Option<P<TypeAlias>> {
     fn symbol(self) -> Option<P<Symbol>> {
         self.and_then(|a| a.symbol.get())
     }
-    fn type_arguments(self) -> &'static [P<Type>] {
-        self.map_or(&[], |a| a.type_arguments.get())
+    fn type_arguments(self) -> ArrayView<P<Type>> {
+        self.map_or_else(ArrayView::default, |a| a.type_arguments.get())
     }
 }
 
@@ -843,6 +844,7 @@ pub(crate) fn census_layouts() {
     static ONCE: std::sync::Once = std::sync::Once::new();
     ONCE.call_once(|| {
         tsrs_ast::census_layouts();
+        crate::mapper::census_layouts();
         // OwnedTypeData is repr(C, u8): its discriminant precedes an aligned one-pointer variant payload.
         let pointer = offset_of!(Type, data) + std::mem::align_of::<Box<IntrinsicType>>();
         let header = CensusField::all_but(0, size_of::<Type>(), &[offset_of!(Type, symbol), offset_of!(Type, alias), pointer]);
@@ -885,60 +887,25 @@ pub(crate) fn census_layouts() {
         ];
         let contains_error = CensusField::scalar(d, offset_of!(MappedType, contains_error), &offsets, size_of::<MappedType>());
         tsrs_core::census_layout(type_name::<MappedType>(), &[contains_error]);
-        // One-word slices (`ThinSlice`) and bit-0-tagged tails (notes/mem-layout3.md).
-        let thin = |off: usize| CensusField::Thin { off };
-        let r = offset_of!(TypeReference, resolved_type_arguments);
-        tsrs_core::census_layout(type_name::<TypeReference>(), &[thin(r)]);
-        let r = offset_of!(InterfaceType, type_reference) + r;
-        tsrs_core::census_layout(type_name::<InterfaceType>(), &[thin(r)]);
-        let r = offset_of!(TupleType, interface_type) + r;
-        tsrs_core::census_layout(type_name::<TupleType>(), &[thin(r)]);
-        tsrs_core::census_layout(type_name::<TypeAlias>(), &[thin(offset_of!(TypeAlias, type_arguments))]);
+        // Owned array cells contain a nullable, thin Arc<Vec<T>> pointer. The mark follows the ordinary heap
+        // allocations, rather than interpreting the field as the former arena slice header.
         let u = |d: usize| {
             let base = d + offset_of!(UnionType, union_or_intersection_type);
             [
-                thin(base + offset_of!(UnionOrIntersectionType, types)),
                 CensusField::NoPointer { off: base + offset_of!(UnionOrIntersectionType, rare), len: std::mem::align_of::<Box<UnionRare>>() },
             ]
         };
         tsrs_core::census_layout(type_name::<UnionType>(), &u(0));
         const _: () = assert!(offset_of!(UnionType, union_or_intersection_type) == offset_of!(IntersectionType, union_or_intersection_type));
         tsrs_core::census_layout(type_name::<IntersectionType>(), &u(0));
-        let rp = offset_of!(UnionOrIntersectionRare, resolved_properties);
-        tsrs_core::census_layout(type_name::<UnionRare>(), &[thin(offset_of!(UnionRare, shared) + rp)]);
-        tsrs_core::census_layout(type_name::<IntersectionRare>(), &[thin(offset_of!(IntersectionRare, shared) + rp)]);
-        tsrs_core::census_layout(
-            type_name::<StructuredMembers>(),
-            &[thin(offset_of!(StructuredMembers, properties)), thin(offset_of!(StructuredMembers, signatures)), thin(offset_of!(StructuredMembers, count_or_index_infos) + offset_of!(CountOrIndexInfos, index_infos))],
-        );
         let pointers = [offset_of!(StructuredMembers, members), offset_of!(StructuredMembers, properties), offset_of!(StructuredMembers, signatures), offset_of!(StructuredMembers, count_or_index_infos) + offset_of!(CountOrIndexInfos, index_infos)];
         tsrs_core::census_layout(type_name::<StructuredMembers>(), &CensusField::all_but(0, size_of::<StructuredMembers>(), &pointers));
-        {
-            use crate::checker_09::{LazyMemberTable, LazyMembers};
-            // A `OnceCell` of a type with a niche is that type (checked here), so its fields are at their offsets.
-            const _: () = assert!(size_of::<std::cell::OnceCell<LazyMembers>>() == size_of::<LazyMembers>());
-            const _: () = assert!(size_of::<std::cell::OnceCell<tsrs_core::ThinSlice<P<Symbol>>>>() == 8);
-            let r = offset_of!(LazyMemberTable, ready);
-            tsrs_core::census_layout(
-                type_name::<LazyMemberTable>(),
-                &[
-                    thin(r + offset_of!(LazyMembers, unaffected)),
-                    thin(r + offset_of!(LazyMembers, call_signatures)),
-                    thin(r + offset_of!(LazyMembers, construct_signatures)),
-                    thin(r + offset_of!(LazyMembers, index_infos)),
-                    thin(r + offset_of!(LazyMembers, base_types)),
-                    thin(offset_of!(LazyMemberTable, ordered_properties)),
-                ],
-            );
-        }
-        tsrs_core::census_layout(
-            type_name::<Signature>(),
-            &[
-                thin(offset_of!(Signature, type_parameters)),
-                thin(offset_of!(Signature, parameters)),
-                CensusField::LowTag { off: offset_of!(Signature, rare), mask: SIGNATURE_NO_TYPE_PREDICATE as u8 },
-            ],
-        );
+        let pointers = [
+            offset_of!(Signature, declaration), offset_of!(Signature, type_parameters), offset_of!(Signature, parameters),
+            offset_of!(Signature, resolved_return_type), offset_of!(Signature, target), offset_of!(Signature, mapper),
+            offset_of!(Signature, rare),
+        ];
+        tsrs_core::census_layout(type_name::<Signature>(), &CensusField::all_but(0, size_of::<Signature>(), &pointers));
         let offsets = [
             offset_of!(ConditionalRoot, node),
             offset_of!(ConditionalRoot, check_type),
@@ -976,7 +943,7 @@ pub(crate) fn census_layouts() {
 }
 
 #[cfg_attr(feature = "alloc-profile", track_caller)]
-fn owned_type_payload<T>(value: T) -> Box<T> {
+pub(crate) fn owned_type_payload<T>(value: T) -> Box<T> {
     #[cfg(feature = "alloc-profile")]
     { tsrs_core::alloc_profile::owned_box(value) }
     #[cfg(not(feature = "alloc-profile"))]
@@ -1411,7 +1378,7 @@ impl Type {
         panic!("Unhandled case in Type.Mapper")
     }
 
-    pub fn types(&self) -> &[P<Type>] {
+    pub fn types(&self) -> ArrayView<P<Type>> {
         let flags = self.flags.get();
         if flags.intersects(TypeFlags::UnionOrIntersection) {
             return self.as_union_or_intersection_type().types.get();
@@ -1719,9 +1686,9 @@ pub struct StructuredType {
 #[derive(Default)]
 struct StructuredMembers {
     members: Cell<Option<P<SymbolTable>>>,
-    // `ThinSliceCell`s are one word each (`tsrs_core::ThinSlice`).
-    properties: ThinSliceCell<P<Symbol>>,
-    signatures: ThinSliceCell<P<Signature>>, // Signatures (call + construct)
+    // Each owned array field is a nullable Arc<Vec<T>> pointer.
+    properties: ArrayCell<P<Symbol>>,
+    signatures: ArrayCell<P<Signature>>, // Signatures (call + construct)
     // Count of call signatures, and index infos (2% of the resolved types on the private monorepo have any).
     count_or_index_infos: CountOrIndexInfos,
 }
@@ -1733,13 +1700,13 @@ const _: () = assert!(std::mem::size_of::<StructuredType>() == 4);
 #[cfg(target_pointer_width = "64")]
 const _: () = assert!(std::mem::size_of::<StructuredMembers>() == 40);
 #[cfg(target_pointer_width = "32")]
-const _: () = assert!(std::mem::size_of::<StructuredMembers>() == 32);
+const _: () = assert!(std::mem::size_of::<StructuredMembers>() == 20);
 
 /// Call signature count and optional index-info slice. Both fields are normal Rust values.
 #[derive(Default)]
 struct CountOrIndexInfos {
     call_signature_count: Cell<i32>,
-    index_infos: ThinSliceCell<P<IndexInfo>>,
+    index_infos: ArrayCell<P<IndexInfo>>,
 }
 
 impl CountOrIndexInfos {
@@ -1748,8 +1715,8 @@ impl CountOrIndexInfos {
     #[inline]
     fn set_call_signature_count(&self, count: i32) { self.call_signature_count.set(count); }
     #[inline]
-    fn index_infos(&self) -> &'static [P<IndexInfo>] { self.index_infos.get() }
-    fn set_index_infos(&self, index_infos: &'static [P<IndexInfo>]) { self.index_infos.set(index_infos); }
+    fn index_infos(&self) -> ArrayView<P<IndexInfo>> { self.index_infos.get() }
+    fn set_index_infos(&self, index_infos: &[P<IndexInfo>]) { self.index_infos.set(index_infos); }
 }
 
 impl StructuredType {
@@ -1767,20 +1734,20 @@ impl StructuredType {
         self.resolved_for_write().members.set(members);
     }
     #[inline]
-    pub fn properties(&self) -> &'static [P<Symbol>] {
-        self.resolved.get().map_or(&[], |r| r.properties.get())
+    pub fn properties(&self) -> ArrayView<P<Symbol>> {
+        self.resolved.get().map_or_else(ArrayView::default, |r| r.properties.get())
     }
     #[inline]
-    pub fn set_properties(&self, properties: &'static [P<Symbol>]) {
+    pub fn set_properties(&self, properties: &[P<Symbol>]) {
         self.resolved_for_write().properties.set(properties);
     }
     /// Call signatures followed by construct signatures.
     #[inline]
-    pub fn signatures(&self) -> &'static [P<Signature>] {
-        self.resolved.get().map_or(&[], |r| r.signatures.get())
+    pub fn signatures(&self) -> ArrayView<P<Signature>> {
+        self.resolved.get().map_or_else(ArrayView::default, |r| r.signatures.get())
     }
     #[inline]
-    pub fn set_signatures(&self, signatures: &'static [P<Signature>]) {
+    pub fn set_signatures(&self, signatures: &[P<Signature>]) {
         self.resolved_for_write().signatures.set(signatures);
     }
     #[inline]
@@ -1792,18 +1759,18 @@ impl StructuredType {
         self.resolved_for_write().count_or_index_infos.set_call_signature_count(count);
     }
     #[inline]
-    pub fn index_infos(&self) -> &'static [P<IndexInfo>] {
-        self.resolved.get().map_or(&[], |r| r.count_or_index_infos.index_infos())
+    pub fn index_infos(&self) -> ArrayView<P<IndexInfo>> {
+        self.resolved.get().map_or_else(ArrayView::default, |r| r.count_or_index_infos.index_infos())
     }
     #[inline]
-    pub fn set_index_infos(&self, index_infos: &'static [P<IndexInfo>]) {
+    pub fn set_index_infos(&self, index_infos: &[P<IndexInfo>]) {
         self.resolved_for_write().count_or_index_infos.set_index_infos(index_infos);
     }
-    pub fn call_signatures(&self) -> &'static [P<Signature>] {
-        &self.signatures()[..self.call_signature_count() as usize]
+    pub fn call_signatures(&self) -> ArrayView<P<Signature>> {
+        self.signatures().slice(..self.call_signature_count() as usize)
     }
-    pub fn construct_signatures(&self) -> &'static [P<Signature>] {
-        &self.signatures()[self.call_signature_count() as usize..]
+    pub fn construct_signatures(&self) -> ArrayView<P<Signature>> {
+        self.signatures().slice(self.call_signature_count() as usize..)
     }
 }
 
@@ -1858,7 +1825,7 @@ embeds!(ObjectType, structured_type, StructuredType);
 pub struct TypeReference {
     pub object_type: ObjectType,
     pub node: Cell<Option<P<Node>>>, // TypeReferenceNode | ArrayTypeNode | TupleTypeNode when deferred, else nil
-    pub resolved_type_arguments: OptionThinSliceCell<P<Type>>, // nil = not computed (Go tests against nil)
+    pub resolved_type_arguments: OptionArrayCell<P<Type>>, // nil = not computed (Go tests against nil)
 }
 embeds!(TypeReference, object_type, ObjectType);
 
@@ -1892,7 +1859,7 @@ impl ReferenceInstantiations {
         h.finish()
     }
 
-    fn arguments_of(reference: P<Type>) -> &'static [P<Type>] {
+    fn arguments_of(reference: P<Type>) -> ArrayView<P<Type>> {
         reference.as_type_reference().resolved_type_arguments.get().unwrap()
     }
 
@@ -1920,8 +1887,8 @@ impl ReferenceInstantiations {
         let cell = self.0.get().unwrap();
         let mut table = cell.borrow_mut();
         let arguments = Self::arguments_of(reference);
-        debug_assert!(table.find(Self::hash(arguments), |&t| Self::arguments_of(t) == arguments).is_none());
-        table.insert_unique(Self::hash(arguments), reference, |&t| Self::hash(Self::arguments_of(t)));
+        debug_assert!(table.find(Self::hash(&arguments), |&t| Self::arguments_of(t) == arguments).is_none());
+        table.insert_unique(Self::hash(&arguments), reference, |&t| Self::hash(&Self::arguments_of(t)));
     }
 }
 
@@ -1929,43 +1896,43 @@ impl ReferenceInstantiations {
 pub struct InterfaceType {
     pub type_reference: TypeReference,
     pub instantiations: ReferenceInstantiations, // Map of type instantiations (Go: in ObjectType)
-    pub all_type_parameters: Cell<&'static [P<Type>]>, // Type parameters (outer + local + thisType)
+    pub all_type_parameters: ArrayCell<P<Type>>, // Type parameters (outer + local + thisType)
     pub outer_type_parameter_count: Cell<i32>, // Count of outer type parameters
     pub this_type: Cell<Option<P<Type>>>, // The "this" type (nil if none)
     pub base_types_resolved: Cell<bool>,
     pub declared_members_resolved: Cell<bool>,
     pub resolved_base_constructor_type: Cell<Option<P<Type>>>,
-    pub resolved_base_types: Cell<&'static [P<Type>]>,
+    pub resolved_base_types: ArrayCell<P<Type>>,
     pub declared_members: Cell<Option<P<SymbolTable>>>, // Declared members
-    pub declared_call_signatures: Cell<&'static [P<Signature>]>, // Declared call signatures
-    pub declared_construct_signatures: Cell<&'static [P<Signature>]>, // Declared construct signatures
-    pub declared_index_infos: Cell<&'static [P<IndexInfo>]>, // Declared index signatures
+    pub declared_call_signatures: ArrayCell<P<Signature>>, // Declared call signatures
+    pub declared_construct_signatures: ArrayCell<P<Signature>>, // Declared construct signatures
+    pub declared_index_infos: ArrayCell<P<IndexInfo>>, // Declared index signatures
 }
 embeds!(InterfaceType, type_reference, TypeReference);
 
 impl InterfaceType {
-    pub fn outer_type_parameters(&self) -> &'static [P<Type>] {
+    pub fn outer_type_parameters(&self) -> ArrayView<P<Type>> {
         let all = self.all_type_parameters.get();
         if all.is_empty() {
-            return &[];
+            return ArrayView::default();
         }
-        &all[..self.outer_type_parameter_count.get() as usize]
+        all.slice(..self.outer_type_parameter_count.get() as usize)
     }
 
-    pub fn local_type_parameters(&self) -> &'static [P<Type>] {
+    pub fn local_type_parameters(&self) -> ArrayView<P<Type>> {
         let all = self.all_type_parameters.get();
         if all.is_empty() {
-            return &[];
+            return ArrayView::default();
         }
-        &all[self.outer_type_parameter_count.get() as usize..all.len() - 1]
+        all.slice(self.outer_type_parameter_count.get() as usize..all.len() - 1)
     }
 
-    pub fn type_parameters(&self) -> &'static [P<Type>] {
+    pub fn type_parameters(&self) -> ArrayView<P<Type>> {
         let all = self.all_type_parameters.get();
         if all.is_empty() {
-            return &[];
+            return ArrayView::default();
         }
-        &all[..all.len() - 1]
+        all.slice(..all.len() - 1)
     }
 
     pub fn this_type(&self) -> Option<P<Type>> {
@@ -2008,7 +1975,7 @@ impl TupleElementInfo {
 #[derive(Default)]
 pub struct TupleType {
     pub interface_type: InterfaceType,
-    pub element_infos: Cell<&'static [TupleElementInfo]>,
+    pub element_infos: ArrayCell<TupleElementInfo>,
     pub min_length: Cell<i32>, // Number of required or variadic elements
     pub fixed_length: Cell<i32>, // Number of initial required or optional elements
     pub combined_flags: Cell<ElementFlags>,
@@ -2026,7 +1993,7 @@ impl TupleType {
     pub fn element_flags(&self) -> Vec<ElementFlags> {
         self.element_infos.get().iter().map(|info| info.flags).collect()
     }
-    pub fn element_infos(&self) -> &'static [TupleElementInfo] {
+    pub fn element_infos(&self) -> ArrayView<TupleElementInfo> {
         self.element_infos.get()
     }
 }
@@ -2109,7 +2076,7 @@ embeds!(EvolvingArrayType, object_type, ObjectType);
 #[derive(Default)]
 pub struct UnionOrIntersectionType {
     pub structured_type: StructuredType,
-    pub types: ThinSliceCell<P<Type>>,
+    pub types: ArrayCell<P<Type>>,
     rare: UnionOrIntersectionRareState,
 }
 embeds!(UnionOrIntersectionType, structured_type, StructuredType);
@@ -2117,7 +2084,7 @@ embeds!(UnionOrIntersectionType, structured_type, StructuredType);
 #[derive(Default)]
 #[repr(C)]
 struct UnionOrIntersectionRare {
-    resolved_properties: OptionThinSliceCell<P<Symbol>>, // nil = not computed (Go tests against nil)
+    resolved_properties: OptionArrayCell<P<Symbol>>, // nil = not computed (Go tests against nil)
     property_cache: Cell<Option<P<SymbolTable>>>,
     property_cache_without_function_property_augment: Cell<Option<P<SymbolTable>>>,
 }
@@ -2152,7 +2119,7 @@ impl Default for UnionOrIntersectionRareState {
 }
 
 impl UnionOrIntersectionType {
-    pub fn types(&self) -> &'static [P<Type>] {
+    pub fn types(&self) -> ArrayView<P<Type>> {
         self.types.get()
     }
     #[inline]
@@ -2168,10 +2135,10 @@ impl UnionOrIntersectionType {
             UnionOrIntersectionRareState::Intersection(tail) => &tail.get_or_init(|| owned_type_payload(IntersectionRare::default())).shared,
         }
     }
-    pub fn resolved_properties(&self) -> Option<&'static [P<Symbol>]> {
+    pub fn resolved_properties(&self) -> Option<ArrayView<P<Symbol>>> {
         self.rare().and_then(|r| r.resolved_properties.get())
     }
-    pub fn set_resolved_properties(&self, properties: Option<&'static [P<Symbol>]>) {
+    pub fn set_resolved_properties(&self, properties: Option<&[P<Symbol>]>) {
         if properties.is_some() || self.rare().is_some() {
             self.rare_for_write().resolved_properties.set(properties);
         }
@@ -2202,7 +2169,7 @@ embeds!(UnionType, union_or_intersection_type, UnionOrIntersectionType);
 #[cfg(target_pointer_width = "64")]
 const _: () = assert!(std::mem::size_of::<UnionType>() == 32);
 #[cfg(target_pointer_width = "32")]
-const _: () = assert!(std::mem::size_of::<UnionType>() == 20);
+const _: () = assert!(std::mem::size_of::<UnionType>() == 16);
 
 impl UnionType {
     #[inline]
@@ -2273,7 +2240,7 @@ embeds!(IntersectionType, union_or_intersection_type, UnionOrIntersectionType);
 #[cfg(target_pointer_width = "64")]
 const _: () = assert!(std::mem::size_of::<IntersectionType>() == 32);
 #[cfg(target_pointer_width = "32")]
-const _: () = assert!(std::mem::size_of::<IntersectionType>() == 20);
+const _: () = assert!(std::mem::size_of::<IntersectionType>() == 16);
 
 impl Default for IntersectionType {
     fn default() -> Self {
@@ -2387,7 +2354,7 @@ impl IndexedAccessType {
 pub struct TemplateLiteralType {
     pub constrained_type: ConstrainedType,
     pub texts: Cell<&'static [&'static str]>, // Always one element longer than types
-    pub types: Cell<&'static [P<Type>]>, // Always at least one element
+    pub types: ArrayCell<P<Type>>, // Always at least one element
 }
 embeds!(TemplateLiteralType, constrained_type, ConstrainedType);
 
@@ -2395,7 +2362,7 @@ impl TemplateLiteralType {
     pub fn texts(&self) -> &'static [&'static str] {
         self.texts.get()
     }
-    pub fn types(&self) -> &'static [P<Type>] {
+    pub fn types(&self) -> ArrayView<P<Type>> {
         self.types.get()
     }
 }
@@ -2436,8 +2403,8 @@ pub struct ConditionalRoot {
     pub check_type: Cell<Option<P<Type>>>,
     pub extends_type: Cell<Option<P<Type>>>,
     pub is_distributive: Cell<bool>,
-    pub infer_type_parameters: Cell<&'static [P<Type>]>,
-    pub outer_type_parameters: Cell<&'static [P<Type>]>,
+    pub infer_type_parameters: ArrayCell<P<Type>>,
+    pub outer_type_parameters: ArrayCell<P<Type>>,
     pub instantiations: OwnedPackedMap<CacheHashKey, P<Type>>,
     pub alias: Cell<Option<P<TypeAlias>>>,
 }
@@ -2501,62 +2468,30 @@ pub struct Signature {
     pub min_argument_count: Cell<i32>,
     pub resolved_min_argument_count: Cell<i32>,
     pub declaration: Cell<Option<P<Node>>>,
-    pub type_parameters: ThinSliceCell<P<Type>>, // one word each (`tsrs_core::ThinSlice`)
-    pub parameters: ThinSliceCell<P<Symbol>>,
+    pub type_parameters: ArrayCell<P<Type>>,
+    pub parameters: ArrayCell<P<Symbol>>,
     pub resolved_return_type: Cell<Option<P<Type>>>,
     pub target: Cell<Option<P<Signature>>>,
     pub mapper: MapperCell,
     // `thisParameter`, `isolatedSignatureType`, `composite` and a resolved type predicate other than the checker's
     // `noTypePredicate` (few signatures have any) live in a tail allocated on the first non-nil write;
     // `this_parameter()` / `set_this_parameter()` & co. read nil when it is absent. `resolvedTypePredicate ==
-    // c.noTypePredicate` (every resolved signature without a predicate) is bit 0 of the same word.
-    rare: SignatureRareWord,
+    // c.noTypePredicate` is recorded separately as a boolean.
+    rare: OnceCell<Box<SignatureRare>>,
+    no_type_predicate: Cell<bool>,
 }
 
 #[cfg(target_pointer_width = "64")]
-const _: () = assert!(std::mem::size_of::<Signature>() == 72);
+const _: () = assert!(std::mem::size_of::<Signature>() == 80);
 #[cfg(target_pointer_width = "32")]
-const _: () = assert!(std::mem::size_of::<Signature>() == 52);
+const _: () = assert!(std::mem::size_of::<Signature>() == 48);
 
 #[derive(Default)]
 struct SignatureRare {
     this_parameter: Cell<Option<P<Symbol>>>,
     isolated_signature_type: Cell<Option<P<Type>>>,
     composite: Cell<Option<P<CompositeSignature>>>,
-    resolved_type_predicate: Cell<Option<P<TypePredicate>>>, // never the checker's `noTypePredicate` (that is the bit)
-}
-
-/// `Signature`'s tail pointer (8-aligned, null when absent) with the "no type predicate" bit in bit 0.
-struct SignatureRareWord(Cell<*const SignatureRare>);
-
-const SIGNATURE_NO_TYPE_PREDICATE: usize = 1;
-
-impl Default for SignatureRareWord {
-    fn default() -> Self {
-        SignatureRareWord(Cell::new(std::ptr::null()))
-    }
-}
-
-impl SignatureRareWord {
-    #[inline]
-    fn tail(&self) -> Option<P<SignatureRare>> {
-        let p = self.0.get().map_addr(|a| a & !SIGNATURE_NO_TYPE_PREDICATE);
-        // SAFETY: a non-null address is a `P<SignatureRare>` stored by `set_tail`.
-        (!p.is_null()).then(|| unsafe { P::from_arena(&*p) })
-    }
-    #[inline]
-    fn no_type_predicate(&self) -> bool {
-        self.0.get().addr() & SIGNATURE_NO_TYPE_PREDICATE != 0
-    }
-    #[inline]
-    fn set_tail(&self, tail: P<SignatureRare>) {
-        let bit = self.0.get().addr() & SIGNATURE_NO_TYPE_PREDICATE;
-        self.0.set(std::ptr::from_ref::<SignatureRare>(tail.get()).map_addr(|a| a | bit));
-    }
-    #[inline]
-    fn set_no_type_predicate(&self, on: bool) {
-        self.0.set(self.0.get().map_addr(|a| if on { a | SIGNATURE_NO_TYPE_PREDICATE } else { a & !SIGNATURE_NO_TYPE_PREDICATE }));
-    }
+    resolved_type_predicate: Cell<Option<P<TypePredicate>>>, // never the checker's `noTypePredicate` sentinel
 }
 
 impl Signature {
@@ -2566,7 +2501,7 @@ impl Signature {
     pub fn flags(&self) -> SignatureFlags {
         self.flags.get()
     }
-    pub fn type_parameters(&self) -> &'static [P<Type>] {
+    pub fn type_parameters(&self) -> ArrayView<P<Type>> {
         self.type_parameters.get()
     }
     pub fn declaration(&self) -> Option<P<Node>> {
@@ -2575,58 +2510,51 @@ impl Signature {
     pub fn target(&self) -> Option<P<Signature>> {
         self.target.get()
     }
-    fn rare_for_write(&self) -> P<SignatureRare> {
-        match self.rare.tail() {
-            Some(rare) => rare,
-            None => {
-                let rare = P::new(SignatureRare::default());
-                self.rare.set_tail(rare);
-                rare
-            }
-        }
+    fn rare_for_write(&self) -> &SignatureRare {
+        self.rare.get_or_init(|| owned_type_payload(SignatureRare::default()))
     }
     /// Go `sig.resolvedTypePredicate`; `no_type_predicate` is the checker's `noTypePredicate`.
     #[inline]
     pub fn resolved_type_predicate(&self, no_type_predicate: P<TypePredicate>) -> Option<P<TypePredicate>> {
-        if self.rare.no_type_predicate() {
+        if self.no_type_predicate.get() {
             return Some(no_type_predicate);
         }
-        self.rare.tail().and_then(|r| r.resolved_type_predicate.get())
+        self.rare.get().and_then(|r| r.resolved_type_predicate.get())
     }
     /// Go `sig.resolvedTypePredicate = predicate`; `no_type_predicate` is the checker's `noTypePredicate`.
     pub fn set_resolved_type_predicate(&self, predicate: Option<P<TypePredicate>>, no_type_predicate: P<TypePredicate>) {
         let none = predicate == Some(no_type_predicate);
-        self.rare.set_no_type_predicate(none);
+        self.no_type_predicate.set(none);
         let stored = if none { None } else { predicate };
-        if stored.is_some() || self.rare.tail().is_some() {
+        if stored.is_some() || self.rare.get().is_some() {
             self.rare_for_write().resolved_type_predicate.set(stored);
         }
     }
     pub fn this_parameter(&self) -> Option<P<Symbol>> {
-        self.rare.tail().and_then(|r| r.this_parameter.get())
+        self.rare.get().and_then(|r| r.this_parameter.get())
     }
     pub fn set_this_parameter(&self, this_parameter: Option<P<Symbol>>) {
-        if this_parameter.is_some() || self.rare.tail().is_some() {
+        if this_parameter.is_some() || self.rare.get().is_some() {
             self.rare_for_write().this_parameter.set(this_parameter);
         }
     }
     pub fn isolated_signature_type(&self) -> Option<P<Type>> {
-        self.rare.tail().and_then(|r| r.isolated_signature_type.get())
+        self.rare.get().and_then(|r| r.isolated_signature_type.get())
     }
     pub fn set_isolated_signature_type(&self, t: Option<P<Type>>) {
-        if t.is_some() || self.rare.tail().is_some() {
+        if t.is_some() || self.rare.get().is_some() {
             self.rare_for_write().isolated_signature_type.set(t);
         }
     }
     pub fn composite(&self) -> Option<P<CompositeSignature>> {
-        self.rare.tail().and_then(|r| r.composite.get())
+        self.rare.get().and_then(|r| r.composite.get())
     }
     pub fn set_composite(&self, composite: Option<P<CompositeSignature>>) {
-        if composite.is_some() || self.rare.tail().is_some() {
+        if composite.is_some() || self.rare.get().is_some() {
             self.rare_for_write().composite.set(composite);
         }
     }
-    pub fn parameters(&self) -> &'static [P<Symbol>] {
+    pub fn parameters(&self) -> ArrayView<P<Symbol>> {
         self.parameters.get()
     }
     pub fn has_rest_parameter(&self) -> bool {
@@ -2640,7 +2568,7 @@ impl Signature {
 #[derive(Default)]
 pub struct CompositeSignature {
     pub is_union: Cell<bool>, // True for union, false for intersection
-    pub signatures: Cell<&'static [P<Signature>]>, // Individual signatures
+    pub signatures: ArrayCell<P<Signature>>, // Individual signatures
 }
 
 #[repr(i32)]
@@ -2685,7 +2613,7 @@ pub struct IndexInfo {
     pub is_readonly: Cell<bool>,
     pub declaration: Cell<Option<P<Node>>>, // IndexSignatureDeclaration
     pub index_symbol: Cell<Option<P<Symbol>>>, // Synthetic property symbol for this index signature
-    pub components: Cell<&'static [P<Node>]>, // ElementWithComputedPropertyName
+    pub components: ArrayCell<P<Node>>, // ElementWithComputedPropertyName
 }
 
 impl IndexInfo {
@@ -2743,11 +2671,11 @@ impl std::ops::BitOrAssign for Ternary {
 }
 
 /// Go `type TypeComparer func(s *Type, t *Type, reportErrors bool) Ternary`. Stored in `InferenceContext` and the
-/// checker, so it is a `Copy` handle; build one with `type_comparer(|c, s, t, report_errors| ...)`.
-pub type TypeComparer = &'static dyn Fn(&mut Checker, P<Type>, P<Type>, bool) -> Ternary;
+/// checker, with shared ownership of the closure; build one with `type_comparer(|c, s, t, report_errors| ...)`.
+pub type TypeComparer = std::sync::Arc<dyn Fn(&mut Checker, P<Type>, P<Type>, bool) -> Ternary>;
 
 pub fn type_comparer(f: impl Fn(&mut Checker, P<Type>, P<Type>, bool) -> Ternary + 'static) -> TypeComparer {
-    alloc(f)
+    std::sync::Arc::new(f)
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -2803,6 +2731,21 @@ pub type StringLiteralType = Type;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn inference_context_releases_owned_comparison_callback() {
+        let capture = std::rc::Rc::new(());
+        let weak = std::rc::Rc::downgrade(&capture);
+        let comparer = type_comparer(move |_, _, _, _| {
+            let _ = &capture;
+            Ternary::True
+        });
+        let context = InferenceContext::new(&[], None, InferenceFlags::None, std::sync::Arc::clone(&comparer));
+        drop(comparer);
+        assert!(weak.upgrade().is_some());
+        drop(context);
+        assert!(weak.upgrade().is_none());
+    }
 
     #[test]
     fn value_symbol_links_synthetic_mode_keeps_every_field() {

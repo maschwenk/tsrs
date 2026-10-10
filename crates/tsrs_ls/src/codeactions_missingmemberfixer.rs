@@ -240,8 +240,8 @@ impl<'a> missingMemberFixer<'a> {
     fn get_call_signatures(&mut self, t: P<Type>) -> Vec<P<Signature>> {
         if t.is_union() {
             let mut result = Vec::new();
-            for &member in t.types() {
-                result.extend_from_slice(self.type_checker.get_call_signatures(member));
+            for member in t.types() {
+                result.extend_from_slice(&self.type_checker.get_call_signatures(member));
             }
             return result;
         }

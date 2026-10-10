@@ -807,6 +807,7 @@ pub fn register_layout(type_name: &'static str, fields: &[crate::CensusField]) {
 /// How the strong mark reads the words of one arena class (from the registered layouts).
 #[derive(Default)]
 struct ClassLayout {
+    variants: Vec<(u32, u32, u8)>,
     /// Scan offsets (4-byte steps) whose 8 bytes overlap a `NoPointer` range, or straddle a `Tagged` / `X8` word.
     skip: Vec<u32>,
     tagged: Vec<u32>,
@@ -854,6 +855,10 @@ fn class_layouts(classes: &[Class]) -> Vec<Option<ClassLayout>> {
                         crate::CensusField::LowTag { off, mask } => {
                             l.low_tag.push((off as u32, mask));
                             l.skip.extend([off.wrapping_sub(4) as u32, off as u32 + 4]);
+                        }
+                        crate::CensusField::Variant { ptr, tag, variants } => {
+                            l.variants.push((ptr as u32, tag as u32, variants));
+                            l.skip.extend([ptr.wrapping_sub(4) as u32, ptr as u32 + 4]);
                         }
                     }
                 }
@@ -924,8 +929,7 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
     // The conservative mark above counts every word that looks like a pointer, and freed blocks are exactly the
     // objects whose addresses linger in dead stack slots, struct padding and pooled vectors. So reachability is
     // recomputed with only the references the program actually stores ("strong" edges): a plain 48-bit pointer to
-    // the start of a block (mappers and inference contexts may carry tag bits; mapper slice words keep a length in
-    // the top 16 bits), read as the registered layout of the referrer's type says (`register_layout`: padding, scalar
+    // the start of a block, read as the registered layout of the referrer's type says (`register_layout`: padding, scalar
     // and header words are skipped, tagged and x8-encoded fields decoded, empty slices ignored), x8-encoded words
     // otherwise only for symbol table entries in heap blocks. An edge into a freed block must also come from a block
     // allocated before the free (later blocks can only hold stale copies) and not be 64 KiB-aligned (a stale pointer
@@ -955,11 +959,17 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
         let mut c = w & MASK48;
         // The word is a registered tagged / x8 field, whose high bits are flags.
         let mut flagged = false;
-        let (packed, tags, born, heap) = match from {
+        let (born, heap) = match from {
             Some(j) => {
                 let rb = table.blocks[j];
                 if let Some(l) = &layouts[rb.class as usize] {
                     let o = off as u32;
+                    if let Some(&(_, tag, variants)) = l.variants.iter().find(|v| v.0 == o) {
+                        let tag = read(rb.start as usize + tag as usize).to_ne_bytes()[0];
+                        if tag >= 8 || variants & (1 << tag) == 0 {
+                            return None;
+                        }
+                    }
                     if l.skip.binary_search(&o).is_ok() {
                         return None;
                     }
@@ -990,14 +1000,9 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
                         flagged = true;
                     }
                 }
-                let packed = class_is(rb.class, "TypeMapper");
-                if packed && w >> 48 != 0 {
-                    // An array mapper's list word: the address shifted left by one (`pack_slice` in mapper.rs).
-                    c = (w & MASK48 & !7) >> 1;
-                }
-                (packed, packed || class_is(rb.class, "InferenceContext"), Some(rb.seq), is_heap(rb.class))
+                (Some(rb.seq), is_heap(rb.class))
             }
-            None => (false, false, None, false),
+            None => (None, false),
         };
         // An `Option<Vec<_>>` / `Option<String>` that is `None` keeps the capacity niche (2^63, or 2^63 + k for
         // nested options) in its first word, and its pointer and length words are uninitialized bytes (copied from
@@ -1016,10 +1021,9 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
             // lists (8-byte elements).
             let slice = classes[b.class as usize].typed().is_some_and(|(_, ty)| ty.starts_with('['));
             let aimed = off_t == 0
-                || (tags && off_t < 8 && (class_is(b.class, "TypeMapper") || class_is(b.class, "InferenceContext") || class_is(b.class, "InferenceContextRare")))
                 || is_heap(b.class)
                 || (slice && off_t % 8 == 0);
-            if aimed && (w >> 48 == 0 || packed || flagged) {
+            if aimed && (w >> 48 == 0 || flagged) {
                 match wf_seq.get(&i) {
                     None => return Some(i),
                     Some(&freed) if c & 0xffff != 0 && born.is_none_or(|b| b <= freed) => return Some(i),
@@ -1115,9 +1119,7 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
             p += 4;
         }
     }
-    // Heap referrers are named only now. `Rc<LazyMemberTable>` blocks hold an empty `OnceCell<LazyMembers>` until
-    // the table is prepared, whose payload bytes are uninitialized (copied from the stack): weak. (The table's own
-    // mapper and type list are never recycled.)
+    // Heap referrers are named only now.
     let mut ips: Vec<usize> = Vec::new();
     let heap_stack = |r: &str| -> Option<usize> { r.strip_prefix("heap block (stack ")?.split(')').next()?.parse().ok() };
     for r in strong.values() {

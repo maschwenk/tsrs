@@ -167,6 +167,7 @@ against tsgo built from the same pinned commit.
 | feature | status | evidence and notes |
 | --- | --- | --- |
 | Type checking (`tsc --noEmit`) | yes | 13,458 of 13,462 error baselines and all 12,779 `.types` / `.symbols` baselines match; same diagnostics on the 38k-file codebase |
+| Rust ownership for the complete compiler graph | no | Partial migration: link/build stores, roots, type payloads, arrays and callbacks have Rust owners. Raw graph handles, static graph strings/slices and the allocation compatibility runtime remain; instruction/RSS gates still fail (`notes/rust-owned-type-arrays.md`) |
 | Checker threads, `--singleThreaded`, `--pretty`, `--extendedDiagnostics`, `--listFiles`, `--listFilesOnly` | yes | checkers steal unstarted files from the busiest checker: -11 to -17% wall at 4-8 checkers on the 38k-file codebase (notes/perf-checker-stealing.md). Default checker count since `0.5.0`: half the cores, 4 to 32 (was 4 to 8): vscode on a 64-vCPU machine 1.73 s -> 0.82 s for +0.9 GiB peak (notes/perf-checker-64.md) |
 | Output independent of the checker count and assignment | yes, three open cases and the residue of a fourth (tsgo: no) | diagnostics and `.d.ts` identical for `--checkers 1`-16 and 20 random assignments on the error-rich corpora; `--checkerAssignment go` keeps tsgo's history-dependent output for byte-identity (notes/perf-order-independence.md). Open: TanStack/router, sequelize and rxjs still print assignment-dependent output through tsgo's own history dependence (notes/open-history-dependence.md). The TS2590 of #218, which tsgo reports once per checker at the first evaluation, is reported by default once per file, at the first site; the forms that reach a use through a declaration's cached type (a declared constant, alias, constraint or member) are still assignment-dependent (section 4 there). Where that matters, a named assignment and a fixed count (`--checkerAssignment locality --checkers 8`) print the same output in every run |
 | Options TypeScript 7 removed (ES5 target, AMD/UMD/System modules, `node10`/`classic` resolution, `baseUrl`, …) | rejected, as in tsgo | same TS5102 / TS5108 errors |
@@ -193,9 +194,8 @@ Without `--checkers`, tsrs runs one checker thread per core up to 8 and half as 
 that, at least tsgo's 4 and at most 32 (8 on 8 cores and on 16, 9 on 18, 32 on 64; 4 for small programs and in `-b`
 build mode; up to 0.4.0 the cap was 8, and up to 0.6.0 an 8-core machine got 4); diagnostics do not depend on the
 count, the `--extendedDiagnostics` counters and peak memory do.
-In a `--noEmit` check, tsrs frees the syntax tree and binder output of a test, spec, story or mock file once it is
-checked, when the program gets at most 16 checkers (vscode: -13 to -16% peak memory; `TSRS_FREE_LEAVES=0` turns it
-off; notes/mem-free-leaf-files.md).
+Leaf-file retirement remains disabled during the ownership migration (`notes/oxc-allocator-migration.md`).
+Syntax trees and binder output stay with their graph owner; `TSRS_FREE_LEAVES` currently has no effect.
 In a CLI run that type-checks no declaration file (`skipLibCheck` or `noCheck`), the member lists of interfaces,
 classes and type literals in declaration files are parsed and bound the first time something reads them, and
 the lists of the global libraries (default libs, `types`, `/// <reference types>`) are forced in parallel before

@@ -230,7 +230,7 @@ pub(crate) fn get_jsdoc_or_tag(c: &mut Checker, node: Option<P<Node>>, seen_symb
                         }
                     }
                 } else {
-                    for &base_type in c.get_base_types_exported(class_type) {
+                    for base_type in c.get_base_types_exported(class_type) {
                         if let Some(prop) = c.get_property_of_type_exported(base_type, symbol.name()) {
                             if let Some(value_declaration) = prop.value_declaration() {
                                 if seen_symbols.insert(prop) {

@@ -1413,7 +1413,7 @@ impl Checker {
         let construct_signatures = self.get_signatures_of_type(constructor_type, SignatureKind::Construct);
         if !construct_signatures.is_empty() {
             let mut types = Vec::with_capacity(construct_signatures.len());
-            for &signature in construct_signatures {
+            for signature in construct_signatures {
                 let erased = self.get_erased_signature(signature);
                 types.push(self.get_return_type_of_signature(erased));
             }
@@ -2146,7 +2146,7 @@ impl Checker {
         if element_type.flags().intersects(TypeFlags::Never) {
             return self.auto_array_type;
         } else if element_type.flags().intersects(TypeFlags::Union) {
-            let union_type = self.get_union_type_ex(element_type.types(), UnionReduction::Subtype, AliasArg::None, None);
+            let union_type = self.get_union_type_ex(&element_type.types(), UnionReduction::Subtype, AliasArg::None, None);
             return self.create_array_type(union_type);
         }
         self.create_array_type(element_type)
@@ -3136,11 +3136,11 @@ impl Checker {
             return self.is_type_assignable_to(source, target);
         }
         // Quick exit when source union contains the target type
-        if contains_type(self, source.types(), target) {
+        if contains_type(self, &source.types(), target) {
             return true;
         }
         // Otherwise, check if any constituent type of the source union is assignable to the target type
-        for &t in source.types() {
+        for t in source.types() {
             if self.is_type_assignable_to(t, target) {
                 return true;
             }

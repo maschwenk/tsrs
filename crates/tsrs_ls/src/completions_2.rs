@@ -697,11 +697,11 @@ impl LanguageService {
         let type_of_symbol = type_checker.get_type_of_symbol_at_location(symbol, Some(enclosing_declaration)).unwrap();
         let mut effective_type = type_checker.get_widened_type_exported(type_of_symbol);
         if effective_type.flags().intersects(TypeFlags::Union) && effective_type.types().len() < 10 {
-            effective_type = type_checker.get_union_type_ex_exported(effective_type.types(), UnionReduction::Subtype);
+            effective_type = type_checker.get_union_type_ex_exported(&effective_type.types(), UnionReduction::Subtype);
         }
         if effective_type.flags().intersects(TypeFlags::Union) {
             let mut function_type: Option<P<Type>> = None;
-            for &union_type in effective_type.types() {
+            for union_type in effective_type.types() {
                 if type_checker.get_signatures_of_type_exported(union_type, SignatureKind::Call).is_empty() {
                     continue;
                 }
@@ -1643,7 +1643,7 @@ fn non_alias_can_be_referenced_at_type_location(symbol: P<Symbol>, type_checker:
 // completions.go:3398
 pub(crate) fn get_properties_for_completion(t: P<Type>, type_checker: &mut Checker) -> Vec<P<Symbol>> {
     if t.is_union() {
-        type_checker.get_all_possible_properties_of_types(t.types())
+        type_checker.get_all_possible_properties_of_types(&t.types())
     } else {
         type_checker.get_apparent_properties(t)
     }

@@ -230,7 +230,7 @@ fn get_missing_members(type_checker: &mut Checker, class_declaration: P<Node>, i
 
     let mut missing_members = Vec::new();
     for &implemented_type in implemented_types {
-        for &symbol in type_checker.get_properties_of_type(implemented_type) {
+        for symbol in type_checker.get_properties_of_type(implemented_type) {
             if class_members.is_some_and(|m| m.lookup(symbol.name()).is_some()) {
                 continue;
             }
@@ -256,7 +256,7 @@ fn get_inherited_members(type_checker: &mut Checker, class_declaration: P<Node>)
     let base_type = type_checker.get_type_at_location(type_node);
 
     let mut inherited_members = FxHashMap::default();
-    for &symbol in type_checker.get_properties_of_type(base_type) {
+    for symbol in type_checker.get_properties_of_type(base_type) {
         let flags = checker::get_declaration_modifier_flags_from_symbol_exported(symbol);
         if !flags.intersects(ModifierFlags::Private) {
             inherited_members.insert(symbol.name(), symbol);

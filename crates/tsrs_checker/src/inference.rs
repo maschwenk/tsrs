@@ -76,10 +76,10 @@ impl Checker {
                     // Simply infer from source type arguments to target type arguments, with defaults applied.
                     let alias_symbol = source_alias.symbol().unwrap();
                     let params = self.type_alias_links.get(alias_symbol).type_parameters.get();
-                    let min_params = self.get_min_type_argument_count(params);
+                    let min_params = self.get_min_type_argument_count(&params);
                     let node_is_in_js_file = ast::is_in_js_file(alias_symbol.value_declaration());
-                    let source_types = self.fill_missing_type_arguments(source_alias.type_arguments(), params, min_params, node_is_in_js_file);
-                    let target_types = self.fill_missing_type_arguments(target_alias.type_arguments(), params, min_params, node_is_in_js_file);
+                    let source_types = self.fill_missing_type_arguments(&source_alias.type_arguments(), &params, min_params, node_is_in_js_file);
+                    let target_types = self.fill_missing_type_arguments(&target_alias.type_arguments(), &params, min_params, node_is_in_js_file);
                     let variances = self.get_alias_variances(alias_symbol);
                     self.infer_from_type_arguments(n, &source_types, &target_types, &variances);
                 }
@@ -90,7 +90,7 @@ impl Checker {
         if source == target && source.flags().intersects(TypeFlags::UnionOrIntersection) {
             // When source and target are the same union or intersection type, just relate each constituent
             // type to itself.
-            for &t in source.types() {
+            for t in source.types() {
                 self.infer_from_types(n, t, t);
             }
             return;
@@ -99,7 +99,7 @@ impl Checker {
             let source_types: Vec<P<Type>> = if source.flags().intersects(TypeFlags::Union) { source.types().to_vec() } else { vec![source] };
             // First, infer between identically matching source and target constituents and remove the
             // matching types.
-            let (temp_sources, temp_targets) = self.infer_from_matching_types(n, &source_types, target.types(), |c, s, t| c.is_type_or_base_identical_to(s, t), false /*sort*/);
+            let (temp_sources, temp_targets) = self.infer_from_matching_types(n, &source_types, &target.types(), |c, s, t| c.is_type_or_base_identical_to(s, t), false /*sort*/);
             // Next, infer between closely matching source and target constituents and remove
             // the matching types. Types closely match when they are instantiations of the same
             // object type or instantiations of the same type alias.
@@ -126,7 +126,7 @@ impl Checker {
             if !source.flags().intersects(TypeFlags::Union) {
                 let source_types: Vec<P<Type>> = if source.flags().intersects(TypeFlags::Intersection) { source.types().to_vec() } else { vec![source] };
                 // Infer between identically matching source and target constituents and remove the matching types.
-                let (sources, targets) = self.infer_from_matching_types(n, &source_types, target.types(), |c, s, t| c.is_type_identical_to(s, t), false /*sort*/);
+                let (sources, targets) = self.infer_from_matching_types(n, &source_types, &target.types(), |c, s, t| c.is_type_identical_to(s, t), false /*sort*/);
                 if sources.is_empty() || targets.is_empty() {
                     return;
                 }
@@ -255,10 +255,10 @@ impl Checker {
         } else if target.flags().intersects(TypeFlags::Conditional) {
             self.invoke_once(n, source, target, |c, n, s, t| c.infer_to_conditional_type(n, s, t));
         } else if target.flags().intersects(TypeFlags::UnionOrIntersection) {
-            self.infer_to_multiple_types(n, source, target.types(), target.flags());
+            self.infer_to_multiple_types(n, source, &target.types(), target.flags());
         } else if source.flags().intersects(TypeFlags::Union) {
             // Source is a union or intersection type, infer from each constituent type
-            for &source_type in source.types() {
+            for source_type in source.types() {
                 self.infer_from_types(n, source_type, target);
             }
         } else if target.flags().intersects(TypeFlags::TemplateLiteral) {
@@ -445,7 +445,7 @@ pub(crate) fn get_type_depth(c: &mut Checker, t: P<Type>, max_depth: i32) -> i32
     if max_depth != 0 {
         if let Some(alias) = t.alias() {
             if !alias.type_arguments().is_empty() {
-                return get_type_list_depth(c, alias.type_arguments(), max_depth - 1) + 1;
+                return get_type_list_depth(c, &alias.type_arguments(), max_depth - 1) + 1;
             }
         }
         if t.object_flags().intersects(ObjectFlags::Reference) {
@@ -455,7 +455,7 @@ pub(crate) fn get_type_depth(c: &mut Checker, t: P<Type>, max_depth: i32) -> i32
             }
         }
         if t.flags().intersects(TypeFlags::UnionOrIntersection) {
-            return get_type_list_depth(c, t.types(), max_depth);
+            return get_type_list_depth(c, &t.types(), max_depth);
         }
     }
     0
@@ -603,7 +603,7 @@ impl Checker {
     // inference.go:566
     pub(crate) fn infer_to_template_literal_type(&mut self, n: P<InferenceState>, source: P<Type>, target: &TemplateLiteralType) {
         let comparer = self.compare_types_assignable_comparer();
-        let matches = self.infer_types_from_template_literal_type(source, target, comparer);
+        let matches = self.infer_types_from_template_literal_type(source, target, &comparer);
         let types = target.types();
         // When the target template literal contains only placeholders (meaning that inference is intended to extract
         // single characters and remainder strings) and inference fails to produce matches, we want to infer 'never' for
@@ -667,7 +667,7 @@ fn infer_to_template_literal_type_choose(c: &mut Checker, left: P<Type>, right: 
         left
     } else if right.flags().intersects(TypeFlags::TemplateLiteral) && {
         let comparer = c.compare_types_assignable_comparer();
-        c.is_type_matched_by_template_literal_type(source, right.as_template_literal_type(), comparer)
+        c.is_type_matched_by_template_literal_type(source, right.as_template_literal_type(), &comparer)
     } {
         source
     } else if left.flags().intersects(TypeFlags::StringMapping) {
@@ -899,7 +899,7 @@ impl Checker {
     // inference.go:828
     pub(crate) fn infer_from_properties(&mut self, n: P<InferenceState>, source: P<Type>, target: P<Type>) {
         let properties = self.get_properties_of_object_type(target);
-        for &target_prop in properties {
+        for target_prop in properties {
             let source_prop = self.get_property_of_type(source, target_prop.name.get());
             if let Some(source_prop) = source_prop {
                 let declarations = source_prop.declarations();
@@ -1011,7 +1011,7 @@ impl Checker {
         }
         let index_infos = self.get_index_infos_of_type(target);
         if self.is_object_type_with_inferable_index(source) {
-            for &target_info in index_infos {
+            for &target_info in &index_infos {
                 let mut prop_types: Vec<P<Type>> = Vec::new();
                 for prop in self.get_properties_of_type(source).iter().copied() {
                     let literal_type = self.get_literal_type_from_property(prop, TypeFlags::StringOrNumberLiteralOrUnique, false);
@@ -1034,7 +1034,7 @@ impl Checker {
                 }
             }
         }
-        for &target_info in index_infos {
+        for &target_info in &index_infos {
             let source_info = self.get_applicable_index_info(source, target_info.key_type());
             if let Some(source_info) = source_info {
                 self.infer_with_priority(n, source_info.value_type(), target_info.value_type(), priority);
@@ -1046,7 +1046,7 @@ impl Checker {
     pub(crate) fn infer_to_mapped_type(&mut self, n: P<InferenceState>, source: P<Type>, target: P<Type>, constraint_type: P<Type>) -> bool {
         if constraint_type.flags().intersects(TypeFlags::Union) || constraint_type.flags().intersects(TypeFlags::Intersection) {
             let mut result = false;
-            for &t in constraint_type.types() {
+            for t in constraint_type.types() {
                 let r = self.infer_to_mapped_type(n, source, target, t);
                 result = r || result;
             }
@@ -1148,7 +1148,7 @@ impl Checker {
         }
         if is_tuple_type(source) {
             let mut element_types: Vec<Option<P<Type>>> = Vec::new();
-            for &t in self.get_element_types(source) {
+            for t in self.get_element_types(source) {
                 element_types.push(self.infer_reverse_mapped_type(t, target, constraint));
             }
             if !element_types.iter().all(|t| t.is_some()) {
@@ -1441,7 +1441,7 @@ impl Checker {
     pub(crate) fn clone_inference_context(&mut self, n: Option<P<InferenceContext>>, extra_flags: InferenceFlags) -> Option<P<InferenceContext>> {
         let n = n?;
         let inferences: Vec<P<InferenceInfo>> = n.inferences.get().iter().map(|&info| clone_inference_info(info)).collect();
-        Some(self.new_inference_context_worker(&inferences, n.signature.get(), n.flags.get() | extra_flags, n.compare_types.get().unwrap()))
+        Some(self.new_inference_context_worker(&inferences, n.signature.get(), n.flags.get() | extra_flags, std::sync::Arc::clone(n.compare_types.borrow().as_ref().unwrap())))
     }
 
     // inference.go:1265
@@ -1451,12 +1451,12 @@ impl Checker {
             return None;
         }
         let inferences: Vec<P<InferenceInfo>> = inferences.iter().map(|&info| clone_inference_info(info)).collect();
-        Some(self.new_inference_context_worker(&inferences, n.signature.get(), n.flags.get(), n.compare_types.get().unwrap()))
+        Some(self.new_inference_context_worker(&inferences, n.signature.get(), n.flags.get(), std::sync::Arc::clone(n.compare_types.borrow().as_ref().unwrap())))
     }
 
     // inference.go:1273
     pub(crate) fn new_inference_context_worker(&mut self, inferences: &[P<InferenceInfo>], signature: Option<P<Signature>>, flags: InferenceFlags, compare_types: TypeComparer) -> P<InferenceContext> {
-        let n = P::new_recycled(InferenceContext::new(tsrs_core::alloc_slice_recycled(inferences), signature, flags, compare_types));
+        let n = P::new(InferenceContext::new(inferences, signature, flags, compare_types));
         if !tsrs_core::lazymembers::lazy_inference_mappers() {
             n.mapper();
             n.non_fixing_mapper();
@@ -1492,7 +1492,7 @@ impl Checker {
                 self.get_contextual_type(site.node, ContextFlags::NoConstraints)
             };
             if let Some(contextual_type) = contextual_type {
-                self.infer_types(n.inferences.get(), site.t, contextual_type, InferencePriority::None, false);
+                self.infer_types(&n.inferences.get(), site.t, contextual_type, InferencePriority::None, false);
             }
         }
         n.clear_intra_expression_inference_sites();
@@ -1564,20 +1564,7 @@ impl Checker {
                         let backreference_mapper = self.new_backreference_mapper(n, index);
                         let mapper = merge_type_mappers(Some(backreference_mapper), n.non_fixing_mapper().unwrap());
                         inferred_type = Some(self.instantiate_type(default_type, Some(mapper)));
-                        // SAFETY: both made here for this one instantiation (the list of the backreference mapper
-                        // is its own, `newBackreferenceMapper`).
-                        unsafe {
-                            if !mapper.escaped() {
-                                tsrs_core::free!(mapper);
-                                if !backreference_mapper.escaped() {
-                                    if let TypeMapperData::ArrayToSingle { sources, .. } = backreference_mapper.data() {
-                                        tsrs_core::free_slice!(sources);
-                                    }
-                                    tsrs_core::free!(backreference_mapper);
-                                }
-                            }
                         }
-                    }
                 }
             } else {
                 inferred_type = self.get_type_from_inference(inference);
@@ -1589,7 +1576,7 @@ impl Checker {
             let constraint = self.get_constraint_of_type_parameter(type_parameter);
             if let Some(constraint) = constraint {
                 let instantiated_constraint = self.instantiate_type(constraint, n.non_fixing_mapper());
-                let compare_types = n.compare_types.get().unwrap();
+                let compare_types = std::sync::Arc::clone(n.compare_types.borrow().as_ref().unwrap());
                 if let Some(inferred) = inferred_type {
                     if !n.flags.get().intersects(InferenceFlags::NoConstraintChecks) {
                         let constraint_with_this = self.get_type_with_this_argument(instantiated_constraint, Some(inferred), false);
@@ -1846,7 +1833,7 @@ impl Checker {
         let mut flags = TypeFlags::None;
         for &t in types {
             if t.flags().intersects(TypeFlags::Union) {
-                flags |= self.get_combined_type_flags(t.types());
+                flags |= self.get_combined_type_flags(&t.types());
             } else {
                 flags |= t.flags();
             }

@@ -97,7 +97,7 @@ pub struct NodeBuilderContext {
     pub enclosing_declaration: Cell<Option<P<Node>>>,
     pub enclosing_file: Cell<Option<P<SourceFile>>>,
     /// Go assigns whole slices (`t.root.inferTypeParameters`) and restores the saved one.
-    pub infer_type_parameters: Cell<&'static [P<Type>]>,
+    pub infer_type_parameters: ArrayCell<P<Type>>,
     pub visited_types: RefCell<Set<TypeId>>,
     pub symbol_depth: RefCell<FxHashMap<CompositeSymbolIdentity, i32>>,
     /// Go saves the slice, sets it to nil, and stores/restores it around `visitAndTransformType`.
@@ -135,7 +135,7 @@ impl NodeBuilderContext {
             expansion_truncated: Cell::new(false),
             enclosing_declaration: Cell::new(None),
             enclosing_file: Cell::new(None),
-            infer_type_parameters: Cell::new(&[]),
+            infer_type_parameters: ArrayCell::default(),
             visited_types: RefCell::default(),
             symbol_depth: RefCell::default(),
             tracked_symbols: RefCell::default(),

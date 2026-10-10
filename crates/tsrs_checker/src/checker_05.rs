@@ -137,7 +137,7 @@ impl Checker {
         let first_base = base_types[0];
         if first_base.flags().intersects(TypeFlags::Intersection) {
             let types = first_base.as_intersection_type().types.get();
-            let (mixin_flags, _) = self.find_mixins(types);
+            let (mixin_flags, _) = self.find_mixins(&types);
             for (i, &intersection_member) in first_base.types().iter().enumerate() {
                 // We want to ignore mixin ctors
                 if !mixin_flags[i] {
@@ -556,11 +556,6 @@ impl Checker {
             }
             let mut inference_context: Option<P<InferenceContext>> = None;
             let chosen = self.choose_overload_candidate(s, relation, node, &args, &type_arguments, candidate_index, &mut inference_context);
-            // 94% of these contexts are garbage once the candidate is decided (notes/mem-census.md); the inference
-            // context stack entries that referred to it were popped by `inferTypeArguments`.
-            if let Some(ctx) = inference_context {
-                InferenceContext::recycle(ctx);
-            }
             if chosen.is_some() {
                 return chosen;
             }
@@ -595,7 +590,7 @@ impl Checker {
                     // type inference to avoid circularity errors. For example, see #64192.
                     let inference_flags = (if s.recursive_resolution && s.candidates.len() == 1 { InferenceFlags::NoConstraintChecks } else { InferenceFlags::None })
                         | (if is_in_js_file(node) { InferenceFlags::AnyDefault } else { InferenceFlags::None });
-                    let ctx = self.new_inference_context(candidate.type_parameters(), Some(candidate), inference_flags /*flags*/, None);
+                    let ctx = self.new_inference_context(&candidate.type_parameters(), Some(candidate), inference_flags /*flags*/, None);
                     *inference_context = Some(ctx);
                     type_argument_types = self.infer_type_arguments(node, candidate, args, s.arg_check_mode | CheckMode::SkipGenericFunctions, ctx);
                     if ctx.flags.get().intersects(InferenceFlags::SkippedGenericFunction) {
@@ -603,7 +598,7 @@ impl Checker {
                     }
                 }
                 let inferred_type_parameters: &[P<Type>] = match *inference_context {
-                    Some(ctx) => ctx.inferred_type_parameters(),
+                    Some(ctx) => &ctx.inferred_type_parameters(),
                     None => &[],
                 };
                 check_candidate = self.get_signature_instantiation(candidate, &type_argument_types, is_in_js_file(candidate.declaration()), inferred_type_parameters);
@@ -628,7 +623,7 @@ impl Checker {
                 s.arg_check_mode = CheckMode::Normal;
                 if let Some(ctx) = *inference_context {
                     let type_argument_types = self.infer_type_arguments(node, candidate, args, s.arg_check_mode, ctx);
-                    check_candidate = self.get_signature_instantiation(candidate, &type_argument_types, is_in_js_file(candidate.declaration()), ctx.inferred_type_parameters());
+                    check_candidate = self.get_signature_instantiation(candidate, &type_argument_types, is_in_js_file(candidate.declaration()), &ctx.inferred_type_parameters());
                     // If the original signature has a generic rest type, instantiation may produce a
                     // signature with different arity and we need to perform another arity check.
                     if self.get_non_array_rest_type(candidate).is_some() && !self.has_correct_arity(node, args, check_candidate, s.signature_help_trailing_comma) {
@@ -766,7 +761,7 @@ impl Checker {
         // If the user supplied type arguments, but the number of type arguments does not match
         // the declared number of type parameters, the call has an incorrect arity.
         let num_type_parameters = signature.type_parameters().len() as i32;
-        let min_type_argument_count = self.get_min_type_argument_count(signature.type_parameters());
+        let min_type_argument_count = self.get_min_type_argument_count(&signature.type_parameters());
         let len = type_arguments.len() as i32;
         len == 0 || len >= min_type_argument_count && len <= num_type_parameters
     }
@@ -779,8 +774,8 @@ impl Checker {
         for &n in type_argument_nodes {
             type_argument_node_types.push(self.get_type_from_type_node(n));
         }
-        let min_type_argument_count = self.get_min_type_argument_count(type_parameters);
-        let type_argument_types = self.fill_missing_type_arguments(&type_argument_node_types, type_parameters, min_type_argument_count, is_java_script);
+        let min_type_argument_count = self.get_min_type_argument_count(&type_parameters);
+        let type_argument_types = self.fill_missing_type_arguments(&type_argument_node_types, &type_parameters, min_type_argument_count, is_java_script);
         let mut mapper: Option<P<TypeMapper>> = None;
         for i in 0..type_argument_nodes.len() {
             assert!(i < type_parameters.len(), "Should not call checkTypeArguments with too many type arguments");
@@ -788,7 +783,7 @@ impl Checker {
             if let Some(constraint) = constraint {
                 let type_argument_head_message = head_message.unwrap_or(&diagnostics::Type_0_does_not_satisfy_the_constraint_1);
                 if mapper.is_none() {
-                    mapper = Some(new_type_mapper(type_parameters, alloc_slice(&type_argument_types)));
+                    mapper = Some(new_type_mapper(&type_parameters, &type_argument_types));
                 }
                 let type_argument = type_argument_types[i];
                 let error_node = if report_errors { Some(type_argument_nodes[i]) } else { None };
@@ -994,7 +989,7 @@ impl Checker {
         // return type of 'wrap'.
         if !is_decorator(node) && !is_binary_expression(node) {
             let mut skip_binding_patterns = true;
-            for &p in signature.type_parameters() {
+            for p in signature.type_parameters() {
                 if self.get_default_from_type_parameter(p).is_none() {
                     skip_binding_patterns = false;
                     break;
@@ -1036,18 +1031,14 @@ impl Checker {
                         let contextual_signature = self.get_single_call_signature(instantiated_type);
                         let inference_source_type = match contextual_signature {
                             Some(contextual_signature) if !contextual_signature.type_parameters().is_empty() => {
-                                let instantiated = self.get_signature_instantiation_without_filling_in_type_arguments(contextual_signature, contextual_signature.type_parameters());
+                                let instantiated = self.get_signature_instantiation_without_filling_in_type_arguments(contextual_signature, &contextual_signature.type_parameters());
                                 self.get_or_create_type_from_signature(instantiated)
                             }
                             _ => instantiated_type,
                         };
                         // Inferences made from return types have lower priority than all other inferences.
-                        self.infer_types(context.inferences.get(), inference_source_type, inference_target_type, InferencePriority::ReturnType, false);
-                        // The snapshot is garbage now unless its mapper was stored (notes/mem-scoped-arenas.md).
-                        if let Some(cloned) = cloned {
-                            InferenceContext::recycle(cloned);
+                        self.infer_types(&context.inferences.get(), inference_source_type, inference_target_type, InferencePriority::ReturnType, false);
                         }
-                    }
                     // Create a type mapper for instantiating generic contextual types using the inferences made
                     // from the return type. We need a separate inference pass here because (a) instantiation of
                     // the source type uses the outer context's return mapper (which excludes inferences made from
@@ -1056,13 +1047,13 @@ impl Checker {
                     // replaced with inferences produced from the outer return type or preceding outer arguments.
                     // This protects against circular inferences, i.e. avoiding situations where inferences reference
                     // type parameters for which the inferences are being made.
-                    let return_context = self.new_inference_context(signature.type_parameters(), Some(signature), context.flags.get(), None);
+                    let return_context = self.new_inference_context(&signature.type_parameters(), Some(signature), context.flags.get(), None);
                     let mut outer_return_mapper: Option<P<TypeMapper>> = None;
                     if let Some(outer_context) = outer_context {
                         outer_return_mapper = Some(self.create_outer_return_mapper(outer_context));
                     }
                     let return_source_type = self.instantiate_type(contextual_type, outer_return_mapper);
-                    self.infer_types(return_context.inferences.get(), return_source_type, inference_target_type, InferencePriority::None, false);
+                    self.infer_types(&return_context.inferences.get(), return_source_type, inference_target_type, InferencePriority::None, false);
                     if return_context.inferences.get().iter().any(|&info| has_inference_candidates(info)) {
                         let cloned = self.clone_inferred_part_of_context(return_context);
                         let return_mapper = self.get_mapper_from_context(cloned);
@@ -1070,9 +1061,7 @@ impl Checker {
                     } else {
                         context.set_return_mapper(None);
                     }
-                    // Its inferred part was copied (`cloneInferredPartOfContext` clones the infos).
-                    InferenceContext::recycle(return_context);
-                }
+                    }
             }
         }
         let rest_type = self.get_non_array_rest_type(signature);
@@ -1095,7 +1084,7 @@ impl Checker {
             if self.could_contain_type_variables(this_type) {
                 let this_argument_node = self.get_this_argument_of_call(node);
                 let this_argument_type = self.get_this_argument_type(this_argument_node);
-                self.infer_types(context.inferences.get(), this_argument_type, this_type, InferencePriority::None, false);
+                self.infer_types(&context.inferences.get(), this_argument_type, this_type, InferencePriority::None, false);
             }
         }
         for i in 0..arg_count {
@@ -1107,14 +1096,14 @@ impl Checker {
                     if let Some(census) = self.census_mut() {
                         census.infer_args.push(arg_type.id.0);
                     }
-                    self.infer_types(context.inferences.get(), arg_type, param_type, InferencePriority::None, false);
+                    self.infer_types(&context.inferences.get(), arg_type, param_type, InferencePriority::None, false);
                 }
             }
         }
         if let Some(rest_type) = rest_type {
             if self.could_contain_type_variables(rest_type) {
                 let spread_type = self.get_spread_argument_type(args, arg_count, args.len() as i32, rest_type, Some(context), check_mode);
-                self.infer_types(context.inferences.get(), spread_type, rest_type, InferencePriority::None, false);
+                self.infer_types(&context.inferences.get(), spread_type, rest_type, InferencePriority::None, false);
             }
         }
         self.get_inferred_types(context)
@@ -1157,10 +1146,10 @@ impl Checker {
             type_argument_nodes = node.type_arguments();
         }
         let instantiated = if !type_argument_nodes.is_empty() {
-            let type_arguments = self.get_type_arguments_from_nodes(type_argument_nodes, type_parameters);
+            let type_arguments = self.get_type_arguments_from_nodes(type_argument_nodes, &type_parameters);
             self.create_signature_instantiation(candidate, &type_arguments)
         } else {
-            self.infer_signature_instantiation_for_overload_failure(node, type_parameters, candidate, args, check_mode)
+            self.infer_signature_instantiation_for_overload_failure(node, &type_parameters, candidate, args, check_mode)
         };
         candidates[best_index] = instantiated;
         instantiated
@@ -1559,7 +1548,7 @@ impl Checker {
         if signatures.len() == 1 {
             // No overloads exist
             let sig = signatures[0];
-            let min_count = self.get_min_type_argument_count(sig.type_parameters());
+            let min_count = self.get_min_type_argument_count(&sig.type_parameters());
             let max_count = sig.type_parameters().len() as i32;
             let mut expected = min_count.to_string();
             if min_count < max_count {
@@ -1571,7 +1560,7 @@ impl Checker {
             let mut below_arg_count = i64::MIN;
             let mut above_arg_count = i64::MAX;
             for &sig in signatures {
-                let min_count = self.get_min_type_argument_count(sig.type_parameters()) as i64;
+                let min_count = self.get_min_type_argument_count(&sig.type_parameters()) as i64;
                 let max_count = sig.type_parameters().len() as i64;
                 if min_count > arg_count {
                     above_arg_count = above_arg_count.min(min_count);
@@ -1675,7 +1664,7 @@ impl Checker {
         if apparent_type.flags().intersects(TypeFlags::Union) {
             let types = apparent_type.types();
             let mut has_signatures = false;
-            for &constituent in types {
+            for constituent in types {
                 let signatures = self.get_signatures_of_type(constituent, kind);
                 if !signatures.is_empty() {
                     has_signatures = true;
@@ -2026,14 +2015,14 @@ impl Checker {
                 let t = self.get_type_from_type_node(type_node);
                 let source = self.add_optionality_ex(t, false /*isProperty*/, is_optional_declaration(declaration));
                 let target = self.get_type_at_position(context, i as i32);
-                self.infer_types(inference_context.unwrap().inferences.get(), source, target, InferencePriority::None, false);
+                self.infer_types(&inference_context.unwrap().inferences.get(), source, target, InferencePriority::None, false);
             }
         }
         if let Some(declaration) = sig.declaration() {
             if let Some(return_type_node) = declaration.type_node() {
                 let source = self.get_type_from_type_node(return_type_node);
                 let target = self.get_return_type_of_signature(context);
-                self.infer_types(inference_context.unwrap().inferences.get(), source, target, InferencePriority::None, false);
+                self.infer_types(&inference_context.unwrap().inferences.get(), source, target, InferencePriority::None, false);
             }
         }
     }
@@ -2051,7 +2040,7 @@ impl Checker {
         }
         let mut signature_list: Vec<P<Signature>> = Vec::new();
         let types = t.types();
-        for &current in types {
+        for current in types {
             let signature = self.get_contextual_call_signature(current, node);
             if let Some(signature) = signature {
                 if !signature_list.is_empty() && self.compare_signatures_identical(signature_list[0], signature, false /*partialMatch*/, true /*ignoreThisTypes*/, true /*ignoreReturnTypes*/, |c, s, t| c.compare_types_identical(s, t)) == Ternary::False {
@@ -2074,7 +2063,7 @@ impl Checker {
     // checker.go:10492
     pub(crate) fn create_union_signature(&mut self, sig: P<Signature>, union_signatures: &[P<Signature>]) -> P<Signature> {
         let result = self.clone_signature(sig);
-        result.set_composite(Some(P::new(CompositeSignature { is_union: Cell::new(true), signatures: Cell::new(alloc_slice(union_signatures)) })));
+        result.set_composite(Some(P::new(CompositeSignature { is_union: Cell::new(true), signatures: ArrayCell::new(union_signatures) })));
         result.target.set(None);
         result.mapper.set(None);
         result
@@ -2086,7 +2075,7 @@ impl Checker {
     pub(crate) fn get_contextual_call_signature(&mut self, t: P<Type>, node: P<Node>) -> Option<P<Signature>> {
         let signatures = self.get_signatures_of_type(t, SignatureKind::Call);
         let mut applicable_by_arity = Vec::new();
-        for &s in signatures {
+        for s in signatures {
             if !self.is_arity_smaller(s, node) {
                 applicable_by_arity.push(s);
             }
@@ -2107,7 +2096,7 @@ impl Checker {
             match combined {
                 None => combined = Some(sig),
                 Some(c) if c == sig => combined = Some(sig),
-                Some(c) if self.compare_type_parameters_identical(c.type_parameters(), sig.type_parameters()) => {
+                Some(c) if self.compare_type_parameters_identical(&c.type_parameters(), &sig.type_parameters()) => {
                     combined = Some(self.combine_union_or_intersection_member_signatures(c, sig, false /*isUnion*/));
                 }
                 _ => return None,
@@ -2141,7 +2130,7 @@ impl Checker {
                 // This signature has already has a contextual inference performed and cached on it
                 return;
             }
-            sig.type_parameters.set(context.type_parameters());
+            sig.type_parameters.set(&context.type_parameters());
         }
         if let Some(context_this_parameter) = context.this_parameter() {
             let parameter = sig.this_parameter();
@@ -2189,7 +2178,7 @@ impl Checker {
         if let Some(this_parameter) = signature.this_parameter() {
             self.assign_parameter_type(this_parameter, None);
         }
-        for &parameter in signature.parameters() {
+        for parameter in signature.parameters() {
             self.assign_parameter_type(parameter, None);
         }
     }

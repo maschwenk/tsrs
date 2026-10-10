@@ -160,7 +160,7 @@ impl Checker {
         if let Some(signature) = signature {
             let params = signature.parameters.get();
             let mut args = Vec::with_capacity(params.len());
-            for &param in params {
+            for param in params {
                 let t = self.get_type_of_symbol(param);
                 args.push(self.create_synthetic_expression(expr, t, false, None));
             }
@@ -648,7 +648,7 @@ impl Checker {
                     let mut types: Vec<P<Type>> = Vec::new();
                     let mut index_info_candidates: Vec<P<Type>> = Vec::new();
                     let mut ignore_index_infos = false;
-                    for &constituent_type in t.types() {
+                    for constituent_type in t.types() {
                         if !constituent_type.flags().intersects(TypeFlags::Object) {
                             continue;
                         }
@@ -984,7 +984,7 @@ impl Checker {
                         // literals actually end up widening to 'boolean' (see #48363).
                         let t = self.instantiate_instantiable_types(contextual_type, return_mapper);
                         if !t.flags().intersects(TypeFlags::AnyOrUnknown) {
-                            if t.flags().intersects(TypeFlags::Union) && contains_type(self, t.types(), self.regular_false_type) && contains_type(self, t.types(), self.regular_true_type) {
+                            if t.flags().intersects(TypeFlags::Union) && contains_type(self, &t.types(), self.regular_false_type) && contains_type(self, &t.types(), self.regular_true_type) {
                                 return Some(self.filter_type(t, |c, t| t != c.regular_false_type && t != c.regular_true_type));
                             }
                             return Some(t);
@@ -1272,7 +1272,7 @@ impl Checker {
             return TypeFacts::None;
         } else if flags.intersects(TypeFlags::Union) {
             let mut facts = TypeFacts::None;
-            for &t in t.types() {
+            for t in t.types() {
                 facts |= self.get_type_facts_worker(t, caller_only_needs);
             }
             return facts;
@@ -1291,7 +1291,7 @@ impl Checker {
         // and others are computed as `or`.
         let mut ored_facts = TypeFacts::None;
         let mut anded_facts = TypeFacts::All;
-        for &t in t.types() {
+        for t in t.types() {
             if !(ignore_objects && t.flags().intersects(TypeFlags::Object)) {
                 let f = self.get_type_facts_worker(t, caller_only_needs);
                 ored_facts |= f;
@@ -2331,7 +2331,7 @@ impl Checker {
     pub(crate) fn get_this_type_from_contextual_type(&mut self, t: P<Type>) -> Option<P<Type>> {
         self.map_type(t, |c, t| {
             if t.flags().intersects(TypeFlags::Intersection) {
-                for &t in t.types() {
+                for t in t.types() {
                     let type_arg = c.get_this_type_argument(t);
                     if type_arg.is_some() {
                         return type_arg;
@@ -2356,7 +2356,7 @@ impl Checker {
     pub(crate) fn get_applicable_index_infos(&mut self, t: P<Type>, key_type: P<Type>) -> Vec<P<IndexInfo>> {
         let index_infos = self.get_index_infos_of_type(t);
         let mut result = Vec::new();
-        for &info in index_infos {
+        for info in index_infos {
             if self.is_applicable_index_type(key_type, info.key_type.get().unwrap()) {
                 result.push(info);
             }

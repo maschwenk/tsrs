@@ -145,7 +145,7 @@ fn count(on: bool, counter: &AtomicU64) {
 fn make_key(types: &[P<Type>], reduction: UnionReduction, alias: AliasArg<'_>, shift: u32) -> Option<([PKey; MAX_WORDS], u16, usize)> {
     let (symbol, type_arguments): (Option<P<Symbol>>, &[P<Type>]) = match alias {
         AliasArg::None => (None, &[]),
-        AliasArg::Some(alias) => (alias.symbol.get(), alias.type_arguments.get()),
+        AliasArg::Some(alias) => (alias.symbol.get(), &alias.type_arguments.get()),
         AliasArg::Pending(pending) => (pending.symbol, pending.type_arguments.as_slice()),
     };
     let has_alias = !alias.is_none();

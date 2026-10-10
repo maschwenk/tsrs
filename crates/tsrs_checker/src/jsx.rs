@@ -203,7 +203,7 @@ impl Checker {
     pub(crate) fn infer_jsx_type_arguments(&mut self, node: P<Node>, signature: P<Signature>, check_mode: CheckMode, context: P<InferenceContext>) -> Vec<P<Type>> {
         let param_type = self.get_effective_first_argument_for_jsx_signature(signature, node).unwrap();
         let check_attr_type = self.check_expression_with_contextual_type(node.attributes().unwrap(), param_type, Some(context), check_mode);
-        self.infer_types(context.inferences.get(), check_attr_type, param_type, InferencePriority::None, false);
+        self.infer_types(&context.inferences.get(), check_attr_type, param_type, InferencePriority::None, false);
         self.get_inferred_types(context)
     }
 
@@ -1060,7 +1060,7 @@ impl Checker {
                 // apply JSX.IntrinsicClassAttributes<hostClassType, ...>
                 let min_type_argument_count = self.get_min_type_argument_count(&type_params);
                 let inferred_args = self.fill_missing_type_arguments(&[host_class_type], &type_params, min_type_argument_count, ast::is_in_js_file(context));
-                let mapper = new_type_mapper(alloc_vec(type_params), alloc_vec(inferred_args));
+                let mapper = new_type_mapper(&type_params, &inferred_args);
                 library_managed_attribute_type = self.instantiate_type(intrinsic_class_attribs, Some(mapper));
             } else {
                 library_managed_attribute_type = intrinsic_class_attribs;
@@ -1083,7 +1083,7 @@ impl Checker {
             // for a union signature). It's an unfortunate quirk of looking in the output of the signature for the type we want to use for the input.
             // The default behavior of `getTypeOfFirstParameterOfSignatureWithFallback` when no `props` member name is defined is much more sane.
             let mut results: Vec<P<Type>> = Vec::new();
-            for &signature in composite.signatures.get() {
+            for signature in composite.signatures.get() {
                 let instance = self.get_return_type_of_signature(signature);
                 if is_type_any(Some(instance)) {
                     return Some(instance);
@@ -1122,7 +1122,7 @@ impl Checker {
         if managed_sym.flags().intersects(SymbolFlags::TypeAlias) {
             let params = self.type_alias_links.get(managed_sym).type_parameters.get();
             if params.len() >= type_arguments.len() {
-                let args = self.fill_missing_type_arguments(type_arguments, params, type_arguments.len() as i32, in_java_script);
+                let args = self.fill_missing_type_arguments(type_arguments, &params, type_arguments.len() as i32, in_java_script);
                 if args.is_empty() {
                     return Some(declared_managed_type);
                 }
@@ -1134,7 +1134,7 @@ impl Checker {
         {
             let args = self.fill_missing_type_arguments(
                 type_arguments,
-                declared_managed_type.as_interface_type().type_parameters(),
+                &declared_managed_type.as_interface_type().type_parameters(),
                 type_arguments.len() as i32,
                 in_java_script,
             );
@@ -1681,13 +1681,13 @@ fn check_tag_name_does_not_expect_too_many_arguments(c: &mut Checker, node: P<No
     let mut has_first_param_signatures = false;
     let mut max_param_count = 0;
     // Check that _some_ first parameter expects a FC-like thing, and that some overload of the SFC expects an acceptable number of arguments
-    for &sig in call_signatures {
+    for sig in call_signatures {
         let firstparam = c.get_type_at_position(sig, 0);
         let signatures_of_param = c.get_signatures_of_type(firstparam, SignatureKind::Call);
         if signatures_of_param.is_empty() {
             continue;
         }
-        for &param_sig in signatures_of_param {
+        for param_sig in signatures_of_param {
             has_first_param_signatures = true;
             if c.has_effective_rest_parameter(param_sig) {
                 return true; // some signature has a rest param, so function components can have an arbitrary number of arguments
@@ -1704,7 +1704,7 @@ fn check_tag_name_does_not_expect_too_many_arguments(c: &mut Checker, node: P<No
         return true;
     }
     let mut absolute_min_arg_count = i32::MAX;
-    for &tag_sig in tag_call_signatures {
+    for tag_sig in tag_call_signatures {
         let tag_required_arg_count = c.get_min_argument_count(tag_sig);
         if tag_required_arg_count < absolute_min_arg_count {
             absolute_min_arg_count = tag_required_arg_count;

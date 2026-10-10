@@ -167,7 +167,7 @@ impl Checker {
                 }
                 let all_signatures = self.get_signatures_of_type(method_type, SignatureKind::Call);
                 let mut valid_signatures: Vec<P<Signature>> = Vec::new();
-                for &sig in all_signatures {
+                for sig in all_signatures .iter().copied() {
                     if self.get_min_argument_count(sig) == 0 {
                         valid_signatures.push(sig);
                     }
@@ -284,7 +284,7 @@ impl Checker {
             return IterationTypes { yield_type: Some(self.any_type), return_type: Some(self.any_type), next_type: Some(self.any_type) };
         }
         // Both async and non-async iterators *must* have a `next` method.
-        let mut method_signatures: &[P<Signature>] = &[];
+        let mut method_signatures= ArrayView::default();
         if let Some(method_type) = method_type {
             method_signatures = self.get_signatures_of_type(method_type, SignatureKind::Call);
         }
@@ -328,7 +328,7 @@ impl Checker {
         // Extract the first parameter and return type of each signature.
         let mut method_parameter_types: Option<Vec<P<Type>>> = None;
         let mut method_return_types: Option<Vec<P<Type>>> = None;
-        for &signature in method_signatures {
+        for signature in method_signatures {
             if method_name != "throw" && !signature.parameters().is_empty() {
                 let ty = self.get_type_at_position(signature, 0);
                 method_parameter_types.get_or_insert_with(Vec::new).push(ty);
@@ -1629,7 +1629,7 @@ impl Checker {
             if return_signature.type_parameters().is_empty() && !context.inferences.get().iter().all(|&info| has_inference_candidates(info)) {
                 // Instantiate the signature with its own type parameters as type arguments, possibly
                 // renaming the type parameters to ensure they have unique names.
-                let unique_type_parameters = self.get_unique_type_parameters(context, signature.type_parameters());
+                let unique_type_parameters = self.get_unique_type_parameters(context, &signature.type_parameters());
                 let instantiated_signature = self.get_signature_instantiation_without_filling_in_type_arguments(signature, &unique_type_parameters);
                 // Infer from the parameters of the instantiated signature to the parameters of the
                 // contextual signature starting with an empty set of inference candidates.
@@ -1647,7 +1647,7 @@ impl Checker {
                     // If the type parameters for which we produced candidates do not have any inferences yet,
                     // we adopt the new inference candidates and add the type parameters of the expression type
                     // to the set of inferred type parameters for the outer function return type.
-                    if !has_overlapping_inferences(context.inferences.get(), &inferences) {
+                    if !has_overlapping_inferences(&context.inferences.get(), &inferences) {
                         // Go merges into context.inferences in place; the slice is immutable here, so merge a copy and
                         // store it back.
                         let mut merged = context.inferences.get().to_vec();
@@ -1655,7 +1655,7 @@ impl Checker {
                         context.inferences.set(alloc_vec(merged));
                         let mut inferred_type_parameters = context.inferred_type_parameters().to_vec();
                         inferred_type_parameters.extend_from_slice(&unique_type_parameters);
-                        context.set_inferred_type_parameters(alloc_vec(inferred_type_parameters));
+                        context.set_inferred_type_parameters(&inferred_type_parameters);
                         return self.get_or_create_type_from_signature(instantiated_signature);
                     }
                 }
@@ -1676,7 +1676,7 @@ impl Checker {
         let mut result: Vec<P<Type>> = Vec::with_capacity(type_parameters.len());
         for &tp in type_parameters {
             let name = tp.symbol().unwrap().name();
-            if has_type_parameter_by_name(context.inferred_type_parameters(), name) || has_type_parameter_by_name(&result, name) {
+            if has_type_parameter_by_name(&context.inferred_type_parameters(), name) || has_type_parameter_by_name(&result, name) {
                 let mut all: Vec<P<Type>> = context.inferred_type_parameters().to_vec();
                 all.extend_from_slice(&result);
                 let new_name = get_unique_type_parameter_name(&all, name);
@@ -1691,7 +1691,7 @@ impl Checker {
             }
         }
         if !new_type_parameters.is_empty() {
-            let mapper = new_type_mapper(alloc_vec(old_type_parameters), alloc_slice(&new_type_parameters));
+            let mapper = new_type_mapper(&old_type_parameters, &new_type_parameters);
             for tp in &new_type_parameters {
                 tp.as_type_parameter().mapper.set(Some(mapper));
             }

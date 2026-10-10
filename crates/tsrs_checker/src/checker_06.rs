@@ -14,7 +14,7 @@ struct InstantiationExpressionState {
     non_applicable_type: Option<P<Type>>,
 }
 
-fn get_instantiated_signatures(c: &mut Checker, st: &InstantiationExpressionState, signatures: &'static [P<Signature>]) -> Cow<'static, [P<Signature>]> {
+fn get_instantiated_signatures<'a>(c: &mut Checker, st: &InstantiationExpressionState, signatures: &'a [P<Signature>]) -> Cow<'a, [P<Signature>]> {
     let type_arguments = st.type_arguments;
     let applicable_signatures = tsrs_core::filter(signatures, |sig| !sig.type_parameters.get().is_empty() && c.has_correct_type_argument_arity(*sig, type_arguments));
     let mapped = tsrs_core::same_map(&applicable_signatures, |sig| {
@@ -46,16 +46,18 @@ fn get_instantiated_type(c: &mut Checker, st: &mut InstantiationExpressionState,
 fn get_instantiated_type_part(c: &mut Checker, st: &mut InstantiationExpressionState, has_signatures: &mut bool, has_applicable_signature: &mut bool, t: P<Type>) -> P<Type> {
     if t.flags().intersects(TypeFlags::Object) {
         let resolved = c.resolve_structured_type_members(&t).unwrap();
-        let call_signatures = get_instantiated_signatures(c, st, resolved.call_signatures());
-        let construct_signatures = get_instantiated_signatures(c, st, resolved.construct_signatures());
+        let declared_calls = resolved.call_signatures();
+        let call_signatures = get_instantiated_signatures(c, st, &declared_calls);
+        let declared_constructs = resolved.construct_signatures();
+        let construct_signatures = get_instantiated_signatures(c, st, &declared_constructs);
         *has_signatures = *has_signatures || !resolved.call_signatures().is_empty() || !resolved.construct_signatures().is_empty();
         *has_applicable_signature = *has_applicable_signature || !call_signatures.is_empty() || !construct_signatures.is_empty();
-        if !tsrs_core::same(&call_signatures, resolved.call_signatures()) || !tsrs_core::same(&construct_signatures, resolved.construct_signatures()) {
+        if !tsrs_core::same(&call_signatures, &resolved.call_signatures()) || !tsrs_core::same(&construct_signatures, &resolved.construct_signatures()) {
             let symbol = c.new_symbol(SymbolFlags::None, InternalSymbolNameInstantiationExpression);
             assert!(t.symbol().is_some(), "Instantiation expression source type must have a symbol");
             symbol.set_declarations_static(t.symbol().unwrap().declarations());
             let result = c.new_object_type(ObjectFlags::Anonymous | ObjectFlags::InstantiationExpressionType, Some(symbol));
-            c.set_structured_type_members(result, resolved.members(), &call_signatures, &construct_signatures, resolved.index_infos());
+            c.set_structured_type_members(result, resolved.members(), &call_signatures, &construct_signatures, &resolved.index_infos());
             result.as_instantiation_expression_type().node.set(Some(st.node));
             return result;
         }
@@ -71,7 +73,7 @@ fn get_instantiated_type_part(c: &mut Checker, st: &mut InstantiationExpressionS
         return c.map_type(t, |c, t| Some(get_instantiated_type(c, st, t))).unwrap();
     } else if t.flags().intersects(TypeFlags::Intersection) {
         let types = t.as_intersection_type().types.get();
-        let mapped = tsrs_core::same_map(types, |t| get_instantiated_type_part(c, st, has_signatures, has_applicable_signature, *t));
+        let mapped = tsrs_core::same_map(&types, |t| get_instantiated_type_part(c, st, has_signatures, has_applicable_signature, *t));
         return c.get_intersection_type(&mapped);
     }
     t
@@ -1016,7 +1018,7 @@ impl Checker {
         // Find a private identifier with the same description on the type.
         let properties = self.get_properties_of_type(left_type);
         let mut property_on_type: Option<P<Symbol>> = None;
-        for &symbol in properties {
+        for symbol in properties {
             let decl = symbol.value_declaration();
             if let Some(decl) = decl {
                 if decl.name().is_some_and(|n| ast::is_private_identifier(n) && n.text() == right.text()) {
@@ -1073,7 +1075,7 @@ impl Checker {
         }
         let mut diagnostic: Option<P<Diagnostic>> = None;
         if !ast::is_private_identifier(prop_node) && containing_type.flags().intersects(TypeFlags::Union) && !containing_type.flags().intersects(TypeFlags::Primitive) {
-            for &subtype in containing_type.types() {
+            for subtype in containing_type.types() {
                 if self.get_property_of_type(subtype, prop_node.text()).is_none() && self.get_applicable_index_info_for_name(subtype, prop_node.text()).is_none() {
                     let name = tsrs_scanner::declaration_name_to_string(Some(prop_node));
                     let type_string = self.type_to_string_exported(subtype);
@@ -1527,7 +1529,7 @@ impl Checker {
         }
         let containing_type = self.value_symbol_links.get(prop).containing_type().unwrap();
         let types = containing_type.types();
-        for &t in types {
+        for t in types {
             let p = self.get_property_of_type(t, prop.name());
             if let Some(p) = p {
                 if self.for_each_property_worker(p, callback) {

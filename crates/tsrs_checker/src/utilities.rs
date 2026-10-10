@@ -592,7 +592,7 @@ fn compare_types_same_flags(c: &mut Checker, t1: P<Type>, t2: P<Type>) -> i32 {
             // Here we know we have references to instantiations of the same type because we have matching targets.
             if r1.node.get().is_none() && r2.node.get().is_none() {
                 // Non-deferred type references with the same target are sorted by their type argument lists.
-                let r = compare_type_lists(c, t1.as_type_reference().resolved_type_arguments.get().unwrap_or(&[]), t2.as_type_reference().resolved_type_arguments.get().unwrap_or(&[]));
+                let r = compare_type_lists(c, &t1.as_type_reference().resolved_type_arguments.get().unwrap_or_default(), &t2.as_type_reference().resolved_type_arguments.get().unwrap_or_default());
                 if r != 0 {
                     return r;
                 }
@@ -657,7 +657,7 @@ fn compare_types_same_flags(c: &mut Checker, t1: P<Type>, t2: P<Type>) -> i32 {
         let o1 = t1.as_union_type().origin();
         let o2 = t2.as_union_type().origin();
         if o1.is_none() && o2.is_none() {
-            let r = compare_type_lists(c, t1.types(), t2.types());
+            let r = compare_type_lists(c, &t1.types(), &t2.types());
             if r != 0 {
                 return r;
             }
@@ -673,7 +673,7 @@ fn compare_types_same_flags(c: &mut Checker, t1: P<Type>, t2: P<Type>) -> i32 {
         }
     } else if flags.intersects(TypeFlags::Intersection) {
         // Intersections are ordered by their constituent type lists.
-        let r = compare_type_lists(c, t1.types(), t2.types());
+        let r = compare_type_lists(c, &t1.types(), &t2.types());
         if r != 0 {
             return r;
         }
@@ -755,7 +755,7 @@ fn compare_types_same_flags(c: &mut Checker, t1: P<Type>, t2: P<Type>) -> i32 {
         if r != 0 {
             return r;
         }
-        let r = compare_type_lists(c, t1.as_template_literal_type().types.get(), t2.as_template_literal_type().types.get());
+        let r = compare_type_lists(c, &t1.as_template_literal_type().types.get(), &t2.as_template_literal_type().types.get());
         if r != 0 {
             return r;
         }
@@ -817,7 +817,7 @@ pub(crate) fn compare_type_names(c: &mut Checker, t1: P<Type>, t2: P<Type>) -> i
         if t1.alias() == t2.alias() {
             return 0;
         }
-        return compare_type_lists(c, t1.alias().type_arguments(), t2.alias().type_arguments());
+        return compare_type_lists(c, &t1.alias().type_arguments(), &t2.alias().type_arguments());
     }
     let Some(s1) = s1 else {
         return 1;
