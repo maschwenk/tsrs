@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use tsrs_core::ucell::RefCell;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_ast::{self as ast, CheckFlags, Kind, ModifierFlags, Node, NodeFactory, NodeFlags, NodeList, SourceFile, Symbol, SymbolFlags, TokenFlags};

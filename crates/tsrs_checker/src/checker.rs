@@ -1352,6 +1352,7 @@ pub struct Checker {
 pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
     program.bind_source_files();
     crate::types::census_layouts();
+    tsrs_core::usebits::note_check_start();
 
     // Placeholders for pointer fields Go leaves nil until they are assigned below.
     let compiler_options = program.options();
@@ -1789,7 +1790,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
     c.empty_generic_type = c.new_anonymous_type(None /*symbol*/, None, &[], &[], &[]);
     c.object_type_instantiations.insert(c.empty_generic_type, PackedMap::default());
     c.any_function_type = c.new_anonymous_type(None /*symbol*/, None, &[], &[], &[]);
-    c.any_function_type.object_flags.set(c.any_function_type.object_flags.get() | ObjectFlags::NonInferrableType);
+    c.any_function_type.object_flags.set(c.any_function_type.object_flags.peek() | ObjectFlags::NonInferrableType);
     c.no_constraint_type = c.new_anonymous_type(None /*symbol*/, None, &[], &[], &[]);
     c.circular_constraint_type = c.new_anonymous_type(None /*symbol*/, None, &[], &[], &[]);
     c.resolving_default_type = c.new_anonymous_type(None /*symbol*/, None, &[], &[], &[]);

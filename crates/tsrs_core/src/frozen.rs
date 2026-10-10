@@ -46,6 +46,7 @@ impl<T> FrozenCell<T> {
 
     #[inline]
     pub fn borrow(&self) -> FrozenRef<'_, T> {
+        crate::usebits::mark_ptr(self);
         #[cfg(any(debug_assertions, feature = "checked-cells"))]
         {
             let prev = self.state.fetch_add(1, Ordering::Acquire);
@@ -208,6 +209,14 @@ impl<T> OwnedCell<T> {
 impl<T: Copy> OwnedCell<T> {
     #[inline]
     pub fn get(&self) -> T {
+        crate::usebits::mark_ptr(self);
+        let v = self.0.get();
+        crate::usebits::mark_value(&v);
+        v
+    }
+    /// `get` without recording a use (`usebits`).
+    #[inline]
+    pub fn peek(&self) -> T {
         self.0.get()
     }
 }
@@ -248,6 +257,12 @@ impl<T> OwnedSliceCell<T> {
         self.0.get()
     }
 
+    /// `get` without recording a use (`usebits`).
+    #[inline]
+    pub fn peek(&self) -> &'static [T] {
+        self.0.peek()
+    }
+
     #[inline]
     pub fn set(&self, value: &'static [T]) {
         crate::ptr::shared_check::assert_not_shared(self, "OwnedSliceCell");
@@ -266,6 +281,15 @@ impl OwnedStrCell {
 
     #[inline]
     pub fn get(&self) -> &'static str {
+        crate::usebits::mark_ptr(self);
+        let s = self.0.get().as_str();
+        crate::usebits::mark(s.as_ptr() as usize);
+        s
+    }
+
+    /// `get` without recording a use (`usebits`).
+    #[inline]
+    pub fn peek(&self) -> &'static str {
         self.0.get().as_str()
     }
 
@@ -323,11 +347,20 @@ impl OwnedTaggedStrCell {
     }
 
     #[inline]
+    pub fn get(&self) -> &'static str {
+        crate::usebits::mark_ptr(self);
+        let s = self.peek();
+        crate::usebits::mark(s.as_ptr() as usize);
+        s
+    }
+
+    /// `get` without recording a use (`usebits`): symbol tables compare keys with it.
+    #[inline]
     #[expect(
         clippy::disallowed_methods,
         reason = "from_utf8 here and in PackedStr::as_str: +5% instructions, one checker (notes/lint-paydown-compiler.md)"
     )]
-    pub fn get(&self) -> &'static str {
+    pub fn peek(&self) -> &'static str {
         let w = self.0.get();
         let p = std::ptr::with_exposed_provenance::<u8>((w & TAGGED_ADDR) as usize);
         let len = (w >> TAGGED_LEN_SHIFT) & TAGGED_LEN_MASK;
@@ -392,6 +425,12 @@ impl<T> OwnedPSliceCell<T> {
     #[inline]
     pub fn get(&self) -> &'static [T] {
         self.0.get()
+    }
+
+    /// `get` without recording a use (`usebits`).
+    #[inline]
+    pub fn peek(&self) -> &'static [T] {
+        self.0.peek()
     }
 
     #[inline]

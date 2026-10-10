@@ -31,6 +31,8 @@ pub mod festats;
 pub mod semver;
 pub mod sitecount;
 pub mod stringutil;
+pub mod ucell;
+pub mod usebits;
 pub mod tspath;
 
 mod bfs;

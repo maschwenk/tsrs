@@ -98,7 +98,7 @@ impl Symbol {
     pub fn set_declarations_static(&self, declarations: &'static [P<Node>]) {
         let tags = self.name.tags();
         if tags & TAG_VALUE_FIRST != 0 {
-            let value_declaration = self.declarations.get()[0];
+            let value_declaration = self.declarations.peek()[0];
             if declarations.first() != Some(&value_declaration) {
                 self.name.set_tags(tags & !TAG_VALUE_FIRST);
                 self.tables_for_write().value_declaration.set(Some(value_declaration));
@@ -111,8 +111,8 @@ impl Symbol {
         if declarations.is_empty() {
             return;
         }
-        let mut result = Vec::with_capacity(self.declarations.get().len() + declarations.len());
-        result.extend_from_slice(self.declarations.get());
+        let mut result = Vec::with_capacity(self.declarations.peek().len() + declarations.len());
+        result.extend_from_slice(self.declarations.peek());
         result.extend_from_slice(declarations);
         self.set_declarations_static(tsrs_core::alloc_vec(result))
     }
@@ -130,9 +130,9 @@ impl Symbol {
     }
     pub fn set_value_declaration(&self, value_declaration: Option<P<Node>>) {
         let tags = self.name.tags();
-        if value_declaration.is_some() && self.declarations.get().first().copied() == value_declaration {
+        if value_declaration.is_some() && self.declarations.peek().first().copied() == value_declaration {
             self.name.set_tags(tags | TAG_VALUE_FIRST);
-            if let Some(tables) = self.tables() {
+            if let Some(tables) = self.tables_peek() {
                 tables.value_declaration.set(None);
             }
             return;
@@ -147,9 +147,15 @@ impl Symbol {
         // SAFETY: with the tag, the field holds the key of the tail made by `tables_for_write` (never freed).
         (self.name.tags() & TAG_TABLES != 0).then(|| unsafe { P::from_key(self.parent_or_tables.get()) })
     }
+    /// `tables` without recording a use (`tsrs_core::usebits`), for setters.
+    #[inline]
+    fn tables_peek(&self) -> Option<P<SymbolTables>> {
+        // SAFETY: as in `tables`.
+        (self.name.tags() & TAG_TABLES != 0).then(|| unsafe { P::from_key(self.parent_or_tables.peek()) })
+    }
     #[inline]
     fn tables_for_write(&self) -> P<SymbolTables> {
-        match self.tables() {
+        match self.tables_peek() {
             Some(tables) => tables,
             None => {
                 let tables = P::new(SymbolTables { parent: OwnedCell::new(self.parent()), ..Default::default() });
@@ -169,7 +175,7 @@ impl Symbol {
     }
     #[inline]
     pub fn set_members(&self, members: Option<P<SymbolTable>>) {
-        if members.is_some() || self.tables().is_some() {
+        if members.is_some() || self.tables_peek().is_some() {
             self.tables_for_write().members.set(members);
         }
     }
@@ -198,7 +204,7 @@ impl Symbol {
     }
     #[inline]
     pub fn set_exports(&self, exports: Option<P<SymbolTable>>) {
-        if exports.is_some() || self.tables().is_some() {
+        if exports.is_some() || self.tables_peek().is_some() {
             self.tables_for_write().exports.set(exports);
         }
     }
@@ -212,7 +218,7 @@ impl Symbol {
     }
     #[inline]
     pub fn set_parent(&self, parent: Option<P<Symbol>>) {
-        match self.tables() {
+        match self.tables_peek() {
             Some(tables) => tables.parent.set(parent),
             None => self.parent_or_tables.set(P::key_opt(parent)),
         }
@@ -223,7 +229,7 @@ impl Symbol {
     }
     #[inline]
     pub fn set_export_symbol(&self, export_symbol: Option<P<Symbol>>) {
-        if export_symbol.is_some() || self.tables().is_some() {
+        if export_symbol.is_some() || self.tables_peek().is_some() {
             self.tables_for_write().export_symbol.set(export_symbol);
         }
     }
@@ -639,7 +645,7 @@ impl SymbolMap {
     fn key(&self, i: usize) -> &'static str {
         let e = self.entries[i];
         if !e.is_odd() {
-            return e.symbol().name();
+            return e.symbol().name.peek();
         }
         let odd_keys = &self.extra.get().unwrap().odd_keys;
         odd_keys.iter().find(|&&(j, _)| j as usize == i).unwrap().1
@@ -694,7 +700,7 @@ impl SymbolMap {
         if let Some(i) = if self.extra.may_contain(hash) { self.search(name, hash) } else { None } {
             // Go keeps the stored key; it is no longer the new symbol's name when that differs.
             self.entries[i].set_symbol(symbol);
-            if !self.entries[i].is_odd() && !same_text(symbol.name(), name) {
+            if !self.entries[i].is_odd() && !same_text(symbol.name.peek(), name) {
                 self.add_odd_key(i, name);
             }
             return;
@@ -711,7 +717,7 @@ impl SymbolMap {
         }
         self.entries.push(SymbolMapEntry::new(symbol, KeyPrint::of(name, hash)));
         self.extra.add_to_filter(hash);
-        if !same_text(symbol.name(), name) {
+        if !same_text(symbol.name.peek(), name) {
             self.add_odd_key(i, name);
         }
         let len = self.entries.len();

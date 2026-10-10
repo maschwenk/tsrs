@@ -1937,7 +1937,7 @@ impl Checker {
                 while let Some(cur) = current {
                     if !is_source_file(cur) || is_external_or_common_js_module(cur.as_source_file_p()) {
                         let links = self.node_links.get(cur);
-                        links.flags.set(links.flags.get() | NodeCheckFlags::ContainsSuperPropertyInStaticInitializer);
+                        links.flags.set(links.flags.peek() | NodeCheckFlags::ContainsSuperPropertyInStaticInitializer);
                     }
                     current = get_enclosing_block_scope_container(cur);
                 }
@@ -2023,7 +2023,7 @@ impl Checker {
     pub(crate) fn check_regular_expression_literal(&mut self, node: P<Node>) -> P<Type> {
         let node_links = self.node_links.get(node);
         if !node_links.flags.get().intersects(NodeCheckFlags::TypeChecked) {
-            node_links.flags.set(node_links.flags.get() | NodeCheckFlags::TypeChecked);
+            node_links.flags.set(node_links.flags.peek() | NodeCheckFlags::TypeChecked);
             self.check_grammar_regular_expression_literal(node);
         }
         self.global_reg_exp_type
@@ -2141,7 +2141,7 @@ impl Checker {
             return cached;
         }
         let literal_type = self.clone_type_reference(t);
-        literal_type.object_flags.set(literal_type.object_flags() | ObjectFlags::ArrayLiteral | ObjectFlags::ContainsObjectOrArrayLiteral);
+        literal_type.object_flags.set(literal_type.object_flags.peek() | ObjectFlags::ArrayLiteral | ObjectFlags::ContainsObjectOrArrayLiteral);
         self.cached_types.insert(key, literal_type);
         literal_type
     }

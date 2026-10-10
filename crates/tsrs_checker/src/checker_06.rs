@@ -1067,7 +1067,7 @@ impl Checker {
         if links.flags.get().intersects(NodeCheckFlags::TypeChecked) {
             return; // error already made/in progress
         }
-        links.flags.set(links.flags.get() | NodeCheckFlags::TypeChecked);
+        links.flags.set(links.flags.peek() | NodeCheckFlags::TypeChecked);
         if ast::is_jsdoc_name_reference_context(prop_node) {
             return;
         }

@@ -1,5 +1,5 @@
 use std::sync::Arc;
-use std::cell::RefCell;
+use tsrs_core::ucell::RefCell;
 
 use rustc_hash::FxHashMap;
 use tsrs_ast::{self as ast, Kind, ModifierFlags, ModifierList, Node, NodeFactory, NodeFlags, SourceFile, Symbol, TokenFlags};

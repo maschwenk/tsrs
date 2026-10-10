@@ -302,7 +302,7 @@ impl Checker {
             let resolved = self.resolve_structured_type_members(t).unwrap();
             if !resolved.signatures().is_empty() {
                 let result = self.new_object_type(ObjectFlags::Anonymous, t.symbol());
-                result.object_flags.set(result.object_flags.get() | ObjectFlags::MembersResolved);
+                result.object_flags.set(result.object_flags.peek() | ObjectFlags::MembersResolved);
                 result.as_object_type().set_members(resolved.members());
                 result.as_object_type().set_properties(resolved.properties());
                 return result;
@@ -1496,10 +1496,10 @@ impl Checker {
                 let value_type = self.check_expression_cached(attribute.as_import_attribute().value);
                 let resolved_type = self.get_regular_type_of_literal_type(value_type);
                 self.value_symbol_links.get(member).resolved_type.set(Some(resolved_type));
-                members.set(member.name(), member);
+                members.set(member.name.peek(), member);
             }
             let t = self.new_anonymous_type(Some(symbol), Some(members), &[], &[], &[]);
-            t.object_flags.set(t.object_flags.get() | ObjectFlags::ObjectLiteral | ObjectFlags::NonInferrableType);
+            t.object_flags.set(t.object_flags.peek() | ObjectFlags::ObjectLiteral | ObjectFlags::NonInferrableType);
             links.resolved_type.set(Some(t));
         }
         links.resolved_type.get().unwrap()

@@ -290,7 +290,7 @@ impl Checker {
             // to exhaustively analyze). We give interfaces a "this" type if we can't definitely determine that they are free of
             // "this" references.
             if !type_parameters.is_empty() || kind == ObjectFlags::Class || !self.is_thisless_interface(symbol) {
-                t.object_flags.set(t.object_flags.get() | ObjectFlags::Reference);
+                t.object_flags.set(t.object_flags.peek() | ObjectFlags::Reference);
                 let d = t.as_interface_type();
                 let this_type = self.new_type_parameter(Some(symbol));
                 d.this_type.set(Some(this_type));
@@ -911,7 +911,7 @@ impl Checker {
         }
         let index_infos = self.get_index_infos_of_type(source);
         let result = self.new_anonymous_type(symbol, Some(members), &[], &[], &index_infos);
-        result.object_flags.set(result.object_flags.get() | ObjectFlags::ObjectRestType);
+        result.object_flags.set(result.object_flags.peek() | ObjectFlags::ObjectRestType);
         result
     }
 
@@ -1023,17 +1023,17 @@ impl Checker {
             let symbol = self.new_symbol(flags, alloc_str(&text));
             let t = self.get_type_from_binding_element(e, include_pattern_in_type, report_errors);
             self.value_symbol_links.get(symbol).resolved_type.set(Some(t));
-            members.set(symbol.name(), symbol);
+            members.set(symbol.name.peek(), symbol);
         }
         let index_infos: Vec<P<IndexInfo>> = match string_index_info {
             Some(info) => vec![info],
             None => Vec::new(),
         };
         let result = self.new_anonymous_type(None, Some(members), &[], &[], &index_infos);
-        result.object_flags.set(result.object_flags.get() | object_flags);
+        result.object_flags.set(result.object_flags.peek() | object_flags);
         if include_pattern_in_type {
             self.pattern_for_type.insert(result, pattern);
-            result.object_flags.set(result.object_flags.get() | ObjectFlags::ContainsObjectOrArrayLiteral);
+            result.object_flags.set(result.object_flags.peek() | ObjectFlags::ContainsObjectOrArrayLiteral);
         }
         result
     }
@@ -1082,7 +1082,7 @@ impl Checker {
         if include_pattern_in_type {
             result = self.clone_type_reference(result);
             self.pattern_for_type.insert(result, pattern);
-            result.object_flags.set(result.object_flags.get() | ObjectFlags::ContainsObjectOrArrayLiteral);
+            result.object_flags.set(result.object_flags.peek() | ObjectFlags::ContainsObjectOrArrayLiteral);
         }
         result
     }
@@ -1605,7 +1605,7 @@ impl Checker {
             .collect();
         let result = self.new_anonymous_type(t.symbol(), Some(members), &[], &[], &index_infos);
         // Retain js literal flag through widening
-        result.object_flags.set(result.object_flags.get() | (t.object_flags() & (ObjectFlags::JSLiteral | ObjectFlags::NonInferrableType)));
+        result.object_flags.set(result.object_flags.peek() | (t.object_flags() & (ObjectFlags::JSLiteral | ObjectFlags::NonInferrableType)));
         // Only cache in child contexts since the root context never widens a particular object literal type more than once
         if let Some(context) = context {
             if context.parent.get().is_some() {
@@ -1708,7 +1708,7 @@ impl Checker {
             return cached;
         }
         let result = self.create_symbol_with_type(prop, Some(self.undefined_or_missing_type));
-        result.flags.set(result.flags.get() | SymbolFlags::Optional);
+        result.flags.set(result.flags.peek() | SymbolFlags::Optional);
         if go {
             self.undefined_properties.insert(prop.name().to_string(), result);
         } else {
@@ -2775,6 +2775,7 @@ impl Checker {
         if lm.ready.get().is_none() || t.object_flags().intersects(ObjectFlags::MembersResolved) {
             return None;
         }
+        tsrs_core::usebits::mark_ptr(lm.get()); // use census: the caller consults the table (fields are not cells)
         Some(lm)
     }
 
@@ -3058,7 +3059,7 @@ impl Checker {
             // for resolution of type parameter defaults to cause circularity errors, possibly leaving
             // members partially resolved. Here we ensure any such partial resolution is reset.
             // See https://github.com/microsoft/TypeScript/issues/16861 for an example.
-            t.object_flags.set(t.object_flags.get() & !ObjectFlags::MembersResolved);
+            t.object_flags.set(t.object_flags.peek() & !ObjectFlags::MembersResolved);
             self.augment_filter = None; // t may be one of the filter's four types: its members are resolved again
             data.base_types_resolved.set(true);
             if canonical {
