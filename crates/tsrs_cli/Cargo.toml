@@ -25,9 +25,9 @@ tsrs_incremental.workspace = true
 tsrs_api.workspace = true
 tsrs_api_transport.workspace = true
 tsrs_execute = { path = "../tsrs_execute", default-features = false }
-# no_thp: no MADV_HUGEPAGE on the mimalloc heap (huge-page amplification on Linux; see notes/mem-no-thp.md). mimalloc-safe
-# builds it as `allow_thp = 0`, which also turns THP off for the whole process; `main` turns it back on.
-mimalloc-safe = { workspace = true, features = ["no_thp"] }
+# Without `no_thp`: mimalloc-safe builds that as `allow_thp = 0`, which mimalloc reads before `main` and answers by
+# turning THP off for the whole process. `main` sets `allow_thp` itself, from the memory available (notes/perf-heap-thp-by-memory.md).
+mimalloc-safe.workspace = true
 libc = "0.2"
 [features]
 default = ["checker"]

@@ -361,3 +361,147 @@ fn read_process_memory() -> usize {
 fn read_process_memory() -> usize {
     0
 }
+
+/// tsrs-only (the heap huge-page rule in tsrs_cli `main`, notes/perf-heap-thp-by-memory.md): the memory the system
+/// could give this process now without paging, in bytes. Linux: `MemAvailable` of `/proc/meminfo`, lowered to what the
+/// tightest cgroup v2 `memory.max` of the process's cgroup and its ancestors leaves (a container's limit;
+/// `/proc/meminfo` shows the host's memory). macOS: free plus inactive pages (`host_statistics64`; free counts the
+/// speculative pages). None where it cannot be read. Allocates nothing: `main` calls it before the first allocation.
+pub fn available_memory() -> Option<usize> {
+    read_available_memory().filter(|&n| n > 0)
+}
+
+#[cfg(target_os = "macos")]
+fn read_available_memory() -> Option<usize> {
+    unsafe extern "C" {
+        fn mach_host_self() -> u32;
+        fn host_statistics64(host: u32, flavor: i32, info: *mut u32, count: *mut u32) -> i32;
+    }
+    const HOST_VM_INFO64: i32 = 4;
+    // `vm_statistics64_data_t`, 38 naturals: `free_count` is the first, `inactive_count` the third.
+    let mut info = [0u32; 38];
+    let mut count = info.len() as u32;
+    // SAFETY: `info` has room for `count` naturals; the kernel writes at most that many and updates `count`.
+    let kr = unsafe { host_statistics64(mach_host_self(), HOST_VM_INFO64, info.as_mut_ptr(), &raw mut count) };
+    if kr != 0 || count < 3 {
+        return None;
+    }
+    // SAFETY: sysconf has no preconditions.
+    let page = usize::try_from(unsafe { libc::sysconf(libc::_SC_PAGESIZE) }).ok()?;
+    Some((info[0] as usize + info[2] as usize) * page)
+}
+
+#[cfg(target_os = "linux")]
+fn read_available_memory() -> Option<usize> {
+    let mut buf = [0u8; 4096];
+    let available = field(read_file(c"/proc/meminfo", &mut buf)?, b"MemAvailable:")?.checked_mul(1024)?;
+    Some(cgroup_available().map_or(available, |cg| cg.min(available)))
+}
+
+// cgroup v2: for the process's cgroup and each ancestor with a numeric `memory.max`, that limit less what the cgroup
+// holds and cannot reclaim (`memory.current` minus `inactive_file` of `memory.stat`: the working set a Kubernetes
+// eviction counts); the smallest. cgroup v1 is not read. Paths are built in a stack buffer, so nothing allocates.
+#[cfg(target_os = "linux")]
+fn cgroup_available() -> Option<usize> {
+    const ROOT: &[u8] = b"/sys/fs/cgroup";
+    let mut buf = [0u8; 4096];
+    let cgroup = read_file(c"/proc/self/cgroup", &mut buf)?;
+    let rel = cgroup.split(|&b| b == b'\n').find_map(|l| l.strip_prefix(b"0::"))?.trim_ascii();
+    let rel = rel.strip_prefix(b"/").unwrap_or(rel);
+    let rel = rel.strip_suffix(b"/").unwrap_or(rel);
+    let mut path = [0u8; 4096];
+    let mut dir = ROOT.len();
+    if dir + 1 + rel.len() + b"/memory.current\0".len() > path.len() {
+        return None;
+    }
+    path[..dir].copy_from_slice(ROOT);
+    if !rel.is_empty() {
+        path[dir] = b'/';
+        path[dir + 1..dir + 1 + rel.len()].copy_from_slice(rel);
+        dir += 1 + rel.len();
+    }
+    let mut file = [0u8; 8192];
+    let mut tightest: Option<usize> = None;
+    loop {
+        if let Some(max) = read_file(cgroup_file(&mut path, dir, b"memory.max")?, &mut file).and_then(number) {
+            let current = read_file(cgroup_file(&mut path, dir, b"memory.current")?, &mut file).and_then(number).unwrap_or(0);
+            let inactive_file = read_file(cgroup_file(&mut path, dir, b"memory.stat")?, &mut file).and_then(|s| field(s, b"inactive_file ")).unwrap_or(0);
+            let left = max.saturating_sub(current.saturating_sub(inactive_file));
+            tightest = Some(tightest.map_or(left, |t| t.min(left)));
+        }
+        match path[..dir].iter().rposition(|&b| b == b'/') {
+            Some(parent) if parent >= ROOT.len() => dir = parent,
+            _ => break,
+        }
+    }
+    tightest
+}
+
+// `<dir>/<name>` with a NUL, written into `path` after its first `dir` bytes (the cgroup directory).
+#[cfg(target_os = "linux")]
+fn cgroup_file<'a>(path: &'a mut [u8], dir: usize, name: &[u8]) -> Option<&'a std::ffi::CStr> {
+    let end = dir + 1 + name.len();
+    path[dir] = b'/';
+    path[dir + 1..end].copy_from_slice(name);
+    path[end] = 0;
+    std::ffi::CStr::from_bytes_with_nul(&path[..=end]).ok()
+}
+
+// The start of a file, up to `buf.len()` bytes, read without allocating.
+#[cfg(target_os = "linux")]
+fn read_file<'a>(path: &std::ffi::CStr, buf: &'a mut [u8]) -> Option<&'a [u8]> {
+    // SAFETY: `path` is NUL-terminated.
+    let fd = unsafe { libc::open(path.as_ptr(), libc::O_RDONLY | libc::O_CLOEXEC) };
+    if fd < 0 {
+        return None;
+    }
+    let mut len = 0;
+    while len < buf.len() {
+        // SAFETY: the destination is the unread rest of `buf`, `buf.len() - len` bytes.
+        let n = unsafe { libc::read(fd, buf[len..].as_mut_ptr().cast(), buf.len() - len) };
+        if n <= 0 {
+            break;
+        }
+        len += n as usize;
+    }
+    // SAFETY: `fd` is open and closed once.
+    unsafe { libc::close(fd) };
+    Some(&buf[..len])
+}
+
+// The number after `key` on the line that starts with it (`MemAvailable:   123 kB`, `inactive_file 456`).
+#[cfg(any(target_os = "linux", test))]
+fn field(text: &[u8], key: &[u8]) -> Option<usize> {
+    let rest = text.split(|&b| b == b'\n').find_map(|l| l.strip_prefix(key))?.trim_ascii_start();
+    number(&rest[..rest.iter().position(|b| !b.is_ascii_digit()).unwrap_or(rest.len())])
+}
+
+// A decimal number with optional surrounding whitespace; None for `max` and anything else.
+#[cfg(any(target_os = "linux", test))]
+fn number(text: &[u8]) -> Option<usize> {
+    std::str::from_utf8(text.trim_ascii()).ok()?.parse().ok()
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+fn read_available_memory() -> Option<usize> {
+    None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{field, number};
+
+    // The Linux file formats the heap huge-page rule reads (notes/perf-heap-thp-by-memory.md). A parse that returned
+    // None here would leave huge pages off on every machine; one that read the wrong line could turn them on in a
+    // container whose cgroup limit leaves little memory.
+    #[test]
+    fn reads_meminfo_and_cgroup_files() {
+        let meminfo = b"MemTotal:       263921060 kB\nMemFree:        251245164 kB\nMemAvailable:   258466164 kB\nBuffers:  1 kB\n";
+        assert_eq!(field(meminfo, b"MemAvailable:"), Some(258_466_164));
+        assert_eq!(field(meminfo, b"Cached:"), None);
+        let stat = b"anon 1\nfile 2\ninactive_anon 3\nactive_anon 4\ninactive_file 5368709120\nactive_file 6\n";
+        assert_eq!(field(stat, b"inactive_file "), Some(5_368_709_120));
+        assert_eq!(number(b"8589934592\n"), Some(8_589_934_592));
+        assert_eq!(number(b"max\n"), None);
+    }
+}
