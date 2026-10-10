@@ -139,7 +139,7 @@ treats the identity caches as weak (section 5); a retirement drops all of it at 
 
 ## 5. What is left
 
-- A collector for checker data: identity caches weak, link stores and declared-symbol state strong, run between two
+- A collector for checker data (measured since: notes/mem-checker-gc.md, below the bar): identity caches weak, link stores and declared-symbol state strong, run between two
   files. The epoch census bounds what it could free (about 3/4 of a checker's arena at mid-life) without the 14-25%
   rebuild cost of retirements. Next step before building it: run the reachability census (`TSRS_CENSUS=1`, which
   already traces the checker) with the identity caches removed from its roots, to measure what such a collector
