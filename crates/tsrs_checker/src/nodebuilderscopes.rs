@@ -57,7 +57,7 @@ impl NodeBuilderImpl {
     }
 
     // nodebuilderscopes.go:59
-    pub(crate) fn enter_new_scope(&self, c: &mut Checker, declaration: Option<P<Node>>, expanded_params: &[P<Symbol>], type_parameters: &[P<Type>], original_parameters: Option<&[P<Symbol>]>, mapper: Option<P<TypeMapper>>) -> Box<dyn FnMut(&mut Checker)> {
+    pub(crate) fn enter_new_scope(&self, c: &mut Checker, declaration: Option<P<Node>>, expanded_params: &[P<Symbol>], type_parameters: &[P<Type>], original_parameters: Option<&[P<Symbol>]>, mapper: Option<TypeMapperKey>) -> Box<dyn FnMut(&mut Checker)> {
         let mut cleanup_context = clone_node_builder_context(self.ctx());
         // For regular function/method declarations, the enclosing declaration will already be signature.declaration,
         // so this is a no-op, but for arrow functions and function expressions, the enclosing declaration will be

@@ -876,7 +876,8 @@ impl Checker {
                 let constraint = self.get_constraint_of_type_parameter(relevant_type_parameter);
                 if let Some(constraint) = constraint {
                     let type_arguments = self.get_effective_type_arguments(parent, &type_parameters);
-                    return Some(self.instantiate_type(constraint, Some(new_type_mapper(&type_parameters, &type_arguments))));
+                    let mapper = self.new_type_mapper(&type_parameters, &type_arguments);
+                    return Some(self.instantiate_type(constraint, Some(mapper)));
                 }
             }
         }

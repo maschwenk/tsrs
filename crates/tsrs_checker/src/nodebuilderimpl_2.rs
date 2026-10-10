@@ -1271,7 +1271,7 @@ impl NodeBuilderImpl {
             let new_type_variable = self.f.new_type_reference_node(name, None);
             add_approximate_length(self, 37);
             // 15 each for two added conditionals, 7 for an added infer type
-            let new_mapper = prepend_type_mapping(root.check_type.get().unwrap(), new_param, t.mapper.get());
+            let new_mapper = c.prepend_type_mapping(root.check_type.get().unwrap(), new_param, t.mapper.get());
             let save_infer_type_parameters = self.ctx().infer_type_parameters.get();
             self.ctx().infer_type_parameters.set(&root.infer_type_parameters.get());
             let extends_type = c.instantiate_type(root.extends_type.get().unwrap(), Some(new_mapper));
@@ -2005,7 +2005,7 @@ impl NodeBuilderImpl {
             let mut params = self.get_type_parameters_of_class_or_interface(c, target_symbol);
             let target_mapper = c.value_symbol_links.get(next_symbol).mapper();
             if let Some(target_mapper) = target_mapper {
-                params = params.iter().map(|&p| target_mapper.map(c, p)).collect();
+                params = params.iter().map(|&p| c.apply_type_mapper(target_mapper, p)).collect();
             }
             return self.map_to_type_nodes(c, &params, false /*isBareList*/);
         }

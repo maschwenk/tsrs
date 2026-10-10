@@ -900,6 +900,7 @@ pub(crate) fn census_layouts() {
             &[
                 CensusField::scalar(d, offset_of!(TypeParameter, is_this_type), &offsets, size),
                 CensusField::scalar(d, offset_of!(TypeParameter, is_distributed), &offsets, size),
+                CensusField::NoPointer { off: offset_of!(TypeParameter, mapper), len: size_of::<MapperCell>() },
             ],
         );
         let d = 0;
@@ -915,7 +916,26 @@ pub(crate) fn census_layouts() {
             offset_of!(MappedType, contains_error),
         ];
         let contains_error = CensusField::scalar(d, offset_of!(MappedType, contains_error), &offsets, size_of::<MappedType>());
-        tsrs_core::census_layout(type_name::<MappedType>(), &[contains_error]);
+        let mapper = CensusField::NoPointer { off: offset_of!(MappedType, object_type) + offset_of!(ObjectType, mapper), len: size_of::<MapperCell>() };
+        tsrs_core::census_layout(type_name::<MappedType>(), &[contains_error, mapper]);
+        let object_mapper = offset_of!(ObjectType, mapper);
+        let reference_mapper = offset_of!(TypeReference, object_type) + object_mapper;
+        let interface_mapper = offset_of!(InterfaceType, type_reference) + reference_mapper;
+        for (name, off) in [
+            (type_name::<ObjectType>(), object_mapper),
+            (type_name::<TypeReference>(), reference_mapper),
+            (type_name::<InterfaceType>(), interface_mapper),
+            (type_name::<TupleType>(), offset_of!(TupleType, interface_type) + interface_mapper),
+            (type_name::<InstantiationExpressionType>(), offset_of!(InstantiationExpressionType, object_type) + object_mapper),
+            (type_name::<ReverseMappedType>(), offset_of!(ReverseMappedType, object_type) + object_mapper),
+            (type_name::<EvolvingArrayType>(), offset_of!(EvolvingArrayType, object_type) + object_mapper),
+        ] {
+            tsrs_core::census_layout(name, &[CensusField::NoPointer { off, len: size_of::<MapperCell>() }]);
+        }
+        tsrs_core::census_layout(type_name::<ConditionalType>(), &[
+            CensusField::NoPointer { off: offset_of!(ConditionalType, mapper), len: size_of::<MapperCell>() },
+            CensusField::NoPointer { off: offset_of!(ConditionalType, combined_mapper), len: size_of::<MapperCell>() },
+        ]);
         // Owned array cells contain a nullable, thin Arc<Vec<T>> pointer. The mark follows the ordinary heap
         // allocations, rather than interpreting the field as the former arena slice header.
         let u = |d: usize| {
@@ -931,7 +951,7 @@ pub(crate) fn census_layouts() {
         tsrs_core::census_layout(type_name::<StructuredMembers>(), &CensusField::all_but(0, size_of::<StructuredMembers>(), &pointers));
         let pointers = [
             offset_of!(Signature, declaration), offset_of!(Signature, type_parameters), offset_of!(Signature, parameters),
-            offset_of!(Signature, resolved_return_type), offset_of!(Signature, mapper),
+            offset_of!(Signature, resolved_return_type),
             offset_of!(Signature, rare),
         ];
         tsrs_core::census_layout(type_name::<Signature>(), &CensusField::all_but(0, size_of::<Signature>(), &pointers));
@@ -1394,7 +1414,7 @@ impl Type {
         panic!("Unhandled case in Type.Target")
     }
 
-    pub fn mapper(&self) -> Option<P<TypeMapper>> {
+    pub fn mapper(&self) -> Option<TypeMapperKey> {
         let flags = self.flags.get();
         if flags.intersects(TypeFlags::Object) {
             return self.as_object_type().mapper.get();
@@ -2519,7 +2539,7 @@ pub struct Signature {
 #[cfg(target_pointer_width = "64")]
 const _: () = assert!(std::mem::size_of::<Signature>() == 80);
 #[cfg(target_pointer_width = "32")]
-const _: () = assert!(std::mem::size_of::<Signature>() == 52);
+const _: () = assert!(std::mem::size_of::<Signature>() == 56);
 
 #[derive(Default)]
 struct SignatureRare {
@@ -2974,7 +2994,8 @@ mod tests {
         let t1 = Type::alloc(TypeFlags::Any, ObjectFlags::None, TypeId(1), IntrinsicType::default());
         let t2 = Type::alloc(TypeFlags::Any, ObjectFlags::None, TypeId(2), IntrinsicType::default());
         let s = Symbol::new(SymbolFlags::Property, "p");
-        let m = new_simple_type_mapper(t1, t2);
+        let mut mappers = tsrs_core::arena_owner::ArenaBuilder::new();
+        let m = allocate_simple_mapper(&mut mappers, t1, t2);
         let fields = |l: &ValueSymbolLinks| (l.target(), l.mapper(), l.containing_type(), l.name_type(), l.write_type(), l.function_or_constructor_checked());
 
         // A synthetic property: containing and name type in the words of target and mapper, then a target moves them.

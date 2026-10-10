@@ -1267,7 +1267,7 @@ impl Checker {
                     let contextual_signature = self.get_contextual_signature(fn_);
                     if let Some(contextual_signature) = contextual_signature {
                         if self.signature(contextual_signature).parameters.get().len() == 1 && signature_has_rest_parameter(self, contextual_signature) {
-                            let mut mapper: Option<P<TypeMapper>> = None;
+                            let mut mapper: Option<TypeMapperKey> = None;
                             let context = self.get_inference_context(fn_);
                             if let Some(context) = context {
                                 mapper = self.inference_non_fixing_mapper(context);

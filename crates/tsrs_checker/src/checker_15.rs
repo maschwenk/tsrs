@@ -972,7 +972,8 @@ impl Checker {
                     if context_flags.intersects(ContextFlags::Signature) && self.inference_context(inference_context).inferences.get().iter().any(|&info| has_inference_candidates_or_default(self, info)) {
                         // For contextual signatures we incorporate all inferences made so far, e.g. from return
                         // types as well as arguments to the left in a function call.
-                        let t = self.instantiate_instantiable_types(contextual_type, self.inference_non_fixing_mapper(inference_context).unwrap());
+                        let mapper = self.inference_non_fixing_mapper(inference_context).unwrap();
+                        let t = self.instantiate_instantiable_types(contextual_type, mapper);
                         if !t.flags().intersects(TypeFlags::AnyOrUnknown) {
                             return Some(t);
                         }
@@ -1000,7 +1001,7 @@ impl Checker {
     // are classified as instantiable (i.e. it doesn't instantiate object types), and (b) it performs
     // no reductions on instantiated union types.
     // checker.go:31344
-    pub(crate) fn instantiate_instantiable_types(&mut self, t: P<Type>, mapper: P<TypeMapper>) -> P<Type> {
+    pub(crate) fn instantiate_instantiable_types(&mut self, t: P<Type>, mapper: TypeMapperKey) -> P<Type> {
         if t.flags().intersects(TypeFlags::Instantiable) {
             return self.instantiate_type(t, Some(mapper));
         }

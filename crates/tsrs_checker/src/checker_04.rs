@@ -1695,7 +1695,7 @@ impl Checker {
             }
         }
         if !new_type_parameters.is_empty() {
-            let mapper = new_type_mapper(&old_type_parameters, &new_type_parameters);
+            let mapper = self.new_type_mapper(&old_type_parameters, &new_type_parameters);
             for tp in &new_type_parameters {
                 tp.as_type_parameter().mapper.set(Some(mapper));
             }

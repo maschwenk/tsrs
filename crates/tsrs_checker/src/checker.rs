@@ -322,8 +322,8 @@ pub struct InferenceContext {
     pub compare_types: RefCell<Option<TypeComparer>>, // Type comparer function
     // Mapper that fixes inferences / that doesn't: created on first use with `TSRS_LAZY_INFERENCE_MAPPERS` (`mapper()`,
     // `non_fixing_mapper()`), see notes/mem-round3.md.
-    mapper: Cell<Option<P<TypeMapper>>>,
-    non_fixing_mapper: Cell<Option<P<TypeMapper>>>,
+    mapper: Cell<Option<TypeMapperKey>>,
+    non_fixing_mapper: Cell<Option<TypeMapperKey>>,
     // Lazy owned tail; it is destroyed with this context.
     rare: std::cell::OnceCell<Box<InferenceContextRare>>,
 }
@@ -331,12 +331,12 @@ pub struct InferenceContext {
 #[cfg(target_pointer_width = "64")]
 const _: () = assert!(std::mem::size_of::<InferenceContext>() == 72);
 #[cfg(target_pointer_width = "32")]
-const _: () = assert!(std::mem::size_of::<InferenceContext>() == 40);
+const _: () = assert!(std::mem::size_of::<InferenceContext>() == 48);
 
 #[derive(Default)]
 pub(crate) struct InferenceContextRare {
-    return_mapper: Cell<Option<P<TypeMapper>>>, // Type mapper for inferences from return types (if any)
-    outer_return_mapper: Cell<Option<P<TypeMapper>>>, // Type mapper for inferences from return types of outer function (if any)
+    return_mapper: Cell<Option<TypeMapperKey>>, // Type mapper for inferences from return types (if any)
+    outer_return_mapper: Cell<Option<TypeMapperKey>>, // Type mapper for inferences from return types of outer function (if any)
     inferred_type_parameters: ArrayCell<P<Type>>, // Inferred type parameters for function result
     intra_expression_inference_sites: RefCell<Vec<IntraExpressionInferenceSite>>,
 }
@@ -356,26 +356,26 @@ impl InferenceContext {
         self.rare.get().map(Box::as_ref)
     }
 
-    pub fn set_non_fixing_mapper(&self, mapper: P<TypeMapper>) {
+    pub fn set_non_fixing_mapper(&self, mapper: TypeMapperKey) {
         self.non_fixing_mapper.set(Some(mapper));
     }
 
     fn rare_for_write(&self) -> &InferenceContextRare {
         self.rare.get_or_init(|| owned_type_payload(InferenceContextRare::default()))
     }
-    pub fn return_mapper(&self) -> Option<P<TypeMapper>> {
+    pub fn return_mapper(&self) -> Option<TypeMapperKey> {
         self.rare().and_then(|r| r.return_mapper.get())
     }
     // Mapper edges remain in the checker graph; this context owns the field storage.
-    pub fn set_return_mapper(&self, mapper: Option<P<TypeMapper>>) {
+    pub fn set_return_mapper(&self, mapper: Option<TypeMapperKey>) {
         if mapper.is_some() || self.rare().is_some() {
             self.rare_for_write().return_mapper.set(mapper);
         }
     }
-    pub fn outer_return_mapper(&self) -> Option<P<TypeMapper>> {
+    pub fn outer_return_mapper(&self) -> Option<TypeMapperKey> {
         self.rare().and_then(|r| r.outer_return_mapper.get())
     }
-    pub fn set_outer_return_mapper(&self, mapper: Option<P<TypeMapper>>) {
+    pub fn set_outer_return_mapper(&self, mapper: Option<TypeMapperKey>) {
         if mapper.is_some() || self.rare().is_some() {
             self.rare_for_write().outer_return_mapper.set(mapper);
         }
@@ -1012,12 +1012,13 @@ pub struct Checker {
     pub template_constraint_type: P<Type>,
     pub numeric_string_type: P<Type>,
     pub unique_literal_type: P<Type>,
-    pub unique_literal_mapper: P<TypeMapper>,
+    pub(crate) type_mappers: tsrs_core::arena_owner::ArenaBuilder<TypeMapper>,
+    pub unique_literal_mapper: TypeMapperKey,
     pub reliability_flags: RelationComparisonResult,
-    pub report_unreliable_mapper: P<TypeMapper>,
-    pub report_unmeasurable_mapper: P<TypeMapper>,
-    pub restrictive_mapper: P<TypeMapper>,
-    pub permissive_mapper: P<TypeMapper>,
+    pub report_unreliable_mapper: TypeMapperKey,
+    pub report_unmeasurable_mapper: TypeMapperKey,
+    pub restrictive_mapper: TypeMapperKey,
+    pub permissive_mapper: TypeMapperKey,
     pub empty_object_type: P<Type>,
     pub empty_jsx_object_type: P<Type>,
     pub empty_fresh_jsx_object_type: P<Type>,
@@ -1174,7 +1175,7 @@ pub struct Checker {
     pub _jsx_factory_entity: Option<P<Node>>,
     pub skip_direct_inference_nodes: Set<P<Node>>,
     pub ctx: Option<Context>, // Go nil until checkSourceFile
-    pub active_mappers: Vec<P<TypeMapper>>,
+    pub active_mappers: Vec<TypeMapperKey>,
     pub active_type_mappers_caches: Vec<PackedMap<CacheHashKey, P<Type>>>,
     pub free_type_mapper_caches: Vec<PackedMap<CacheHashKey, P<Type>>>, // Rust-only: cleared maps for reuse (Go keeps them in the slice capacity)
     pub free_type_lists: Vec<Vec<P<Type>>>, // Rust-only: empty buffers for `instantiate_types_changed`
@@ -1212,7 +1213,8 @@ pub fn new_checker(program: Arc<dyn Program>) -> Box<Checker> {
     let compiler_options = program.options();
     let dummy_type = Type::alloc(TypeFlags::None, ObjectFlags::None, TypeId(0), IntrinsicType::default());
     let dummy_symbol = P::new(Symbol::default());
-    let dummy_mapper = new_simple_type_mapper(dummy_type, dummy_type);
+    let mut type_mappers = tsrs_core::arena_owner::ArenaBuilder::new();
+    let dummy_mapper = allocate_simple_mapper(&mut type_mappers, dummy_type, dummy_type);
     let mut signatures = tsrs_core::arena_owner::ArenaBuilder::new();
     let dummy_signature = signatures.alloc(Signature::default());
     let mut index_infos = tsrs_core::arena_owner::ArenaBuilder::new();
@@ -1411,6 +1413,7 @@ pub fn new_checker(program: Arc<dyn Program>) -> Box<Checker> {
         template_constraint_type: dummy_type,
         numeric_string_type: dummy_type,
         unique_literal_type: dummy_type,
+        type_mappers,
         unique_literal_mapper: dummy_mapper,
         reliability_flags: RelationComparisonResult::None,
         report_unreliable_mapper: dummy_mapper,
@@ -1638,11 +1641,11 @@ pub fn new_checker(program: Arc<dyn Program>) -> Box<Checker> {
     c.numeric_string_type = c.get_template_literal_type(&["", ""], &[c.number_type]); // The `${number}` type
     c.template_constraint_type = c.get_union_type(&[c.string_type, c.number_type, c.boolean_type, c.bigint_type, c.null_type, c.undefined_type]);
     c.unique_literal_type = c.new_intrinsic_type(TypeFlags::Never, "never"); // Special `never` flagged by union reduction to behave as a literal
-    c.unique_literal_mapper = new_function_type_mapper(|c, t| c.get_unique_literal_type_for_type_parameter(t));
-    c.report_unreliable_mapper = new_function_type_mapper(|c, t| c.report_unreliable_worker(t));
-    c.report_unmeasurable_mapper = new_function_type_mapper(|c, t| c.report_unmeasurable_worker(t));
-    c.restrictive_mapper = new_function_type_mapper(|c, t| c.restrictive_mapper_worker(t));
-    c.permissive_mapper = new_function_type_mapper(|c, t| c.permissive_mapper_worker(t));
+    c.unique_literal_mapper = c.new_function_type_mapper(|c, t| c.get_unique_literal_type_for_type_parameter(t));
+    c.report_unreliable_mapper = c.new_function_type_mapper(|c, t| c.report_unreliable_worker(t));
+    c.report_unmeasurable_mapper = c.new_function_type_mapper(|c, t| c.report_unmeasurable_worker(t));
+    c.restrictive_mapper = c.new_function_type_mapper(|c, t| c.restrictive_mapper_worker(t));
+    c.permissive_mapper = c.new_function_type_mapper(|c, t| c.permissive_mapper_worker(t));
     c.empty_object_type = c.new_anonymous_type(None /*symbol*/, None, &[], &[], &[]);
     c.empty_jsx_object_type = c.new_anonymous_type(None /*symbol*/, None, &[], &[], &[]);
     c.empty_fresh_jsx_object_type = c.new_anonymous_type(None /*symbol*/, None, &[], &[], &[]);
@@ -2401,21 +2404,34 @@ impl Checker {
     }
 
     /// Go `context.mapper`, created lazily once, with a key instead of a self pointer.
-    pub(crate) fn inference_mapper(&self, key: InferenceContextKey) -> Option<P<TypeMapper>> {
+    pub(crate) fn inference_mapper(&mut self, key: InferenceContextKey) -> Option<TypeMapperKey> {
         if self.inference_context(key).mapper.get().is_none() {
-            let mapper = new_inference_type_mapper(key, true /*fixing*/);
+            let mapper = self.new_inference_type_mapper(key, true /*fixing*/);
             self.inference_context(key).mapper.set(Some(mapper));
         }
         self.inference_context(key).mapper.get()
     }
 
     /// Go `context.nonFixingMapper`, created lazily once.
-    pub(crate) fn inference_non_fixing_mapper(&self, key: InferenceContextKey) -> Option<P<TypeMapper>> {
+    pub(crate) fn inference_non_fixing_mapper(&mut self, key: InferenceContextKey) -> Option<TypeMapperKey> {
         if self.inference_context(key).non_fixing_mapper.get().is_none() {
-            let mapper = new_inference_type_mapper(key, false /*fixing*/);
+            let mapper = self.new_inference_type_mapper(key, false /*fixing*/);
             self.inference_context(key).non_fixing_mapper.set(Some(mapper));
         }
         self.inference_context(key).non_fixing_mapper.get()
     }
 
+}
+
+impl Checker {
+    /// A mapper reference cannot outlive its checker.
+    /// ```compile_fail
+    /// use tsrs_checker::{Checker, TypeMapper, TypeMapperKey};
+    /// fn escape(c: &Checker, key: TypeMapperKey) -> &'static TypeMapper {
+    ///     c.type_mapper(key)
+    /// }
+    /// ```
+    pub fn type_mapper(&self, key: TypeMapperKey) -> &TypeMapper {
+        self.type_mappers.get(key).expect("type mapper belongs to another checker")
+    }
 }

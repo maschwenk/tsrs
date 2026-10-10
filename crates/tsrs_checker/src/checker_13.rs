@@ -1633,7 +1633,7 @@ impl Checker {
         fn add_member_for_key_type(c: &mut Checker, key_types: &mut Vec<P<Type>>, t: P<Type>, name_type: Option<P<Type>>, type_parameter: P<Type>, key_type: P<Type>) {
             let mut prop_name_type = key_type;
             if let Some(name_type) = name_type {
-                let mapper = append_type_mapping(t.as_mapped_type().mapper.get(), type_parameter, key_type);
+                let mapper = c.append_type_mapping(t.as_mapped_type().mapper.get(), type_parameter, key_type);
                 prop_name_type = c.instantiate_type(name_type, Some(mapper));
                 // SAFETY: made here for this one instantiation.
                 }

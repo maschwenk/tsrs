@@ -214,7 +214,7 @@ impl Checker {
             let too_complex_before = self.too_complex_reports;
             let min_type_argument_count = self.get_min_type_argument_count(&type_parameters);
             let filled = self.fill_missing_type_arguments(type_arguments, &type_parameters, min_type_argument_count, ast::is_in_js_file(symbol.value_declaration()));
-            let mapper = new_type_mapper(&type_parameters, &filled);
+            let mapper = self.new_type_mapper(&type_parameters, &filled);
             let result = self.instantiate_type_with_alias(t, Some(mapper), alias);
             // tsrs-only: not cached when the instantiation reported TS2590 (`too_complex_since`).
             if !self.too_complex_since(too_complex_before) {
@@ -1022,7 +1022,7 @@ impl Checker {
     }
 
     // checker.go:24770
-    pub(crate) fn get_conditional_type(&mut self, root: P<ConditionalRoot>, mapper: Option<P<TypeMapper>>, for_constraint: bool, alias: Option<TypeAliasKey>) -> P<Type> {
+    pub(crate) fn get_conditional_type(&mut self, root: P<ConditionalRoot>, mapper: Option<TypeMapperKey>, for_constraint: bool, alias: Option<TypeAliasKey>) -> P<Type> {
         let census_span = self.census_begin(crate::workcensus::Cat::Cond, || crate::workcensus::CKey::Root(root));
         let result = self.get_conditional_type_worker(root, mapper, for_constraint, alias);
         if let Some(t) = self.census_end(census_span) {
@@ -1032,7 +1032,7 @@ impl Checker {
         result
     }
 
-    fn get_conditional_type_worker(&mut self, root: P<ConditionalRoot>, mapper: Option<P<TypeMapper>>, for_constraint: bool, alias: Option<TypeAliasKey>) -> P<Type> {
+    fn get_conditional_type_worker(&mut self, root: P<ConditionalRoot>, mapper: Option<TypeMapperKey>, for_constraint: bool, alias: Option<TypeAliasKey>) -> P<Type> {
         let mut root = root;
         let mut mapper = mapper;
         let mut alias = alias;
@@ -1068,7 +1068,7 @@ impl Checker {
                 && self.is_simple_tuple_type(extends_type_node)
                 && check_type_node.elements().len() == extends_type_node.elements().len();
             let check_type_deferred = self.is_deferred_type(check_type, check_tuples);
-            let mut combined_mapper: Option<P<TypeMapper>> = None;
+            let mut combined_mapper: Option<TypeMapperKey> = None;
             if !root.infer_type_parameters.get().is_empty() {
                 // When we're looking at making an inference for an infer type, when we get its constraint, it'll automagically be
                 // instantiated with the context, so it doesn't need the mapper for the inference context - however the constraint
@@ -1100,7 +1100,8 @@ impl Checker {
                 // those type parameters are used in type references (see getInferredTypeParameterConstraint). For
                 // that reason we need context.mapper to be first in the combined mapper. See #42636 for examples.
                 if let Some(mapper) = mapper {
-                    let combined = self.combine_type_mappers(self.inference_mapper(context), mapper);
+                    let inference_mapper = self.inference_mapper(context);
+                    let combined = self.combine_type_mappers(inference_mapper, mapper);
                     combined_mapper = Some(combined);
                 } else {
                     combined_mapper = self.inference_mapper(context);
@@ -1212,16 +1213,16 @@ impl Checker {
     // type. Note that recursion is possible only through aliased conditional types, so we only increment the tail
     // recursion counter for those.
     // checker.go:24920
-    pub(crate) fn get_tail_recursion_root(&mut self, new_type: P<Type>, new_mapper: Option<P<TypeMapper>>) -> (Option<P<ConditionalRoot>>, Option<P<TypeMapper>>) {
+    pub(crate) fn get_tail_recursion_root(&mut self, new_type: P<Type>, new_mapper: Option<TypeMapperKey>) -> (Option<P<ConditionalRoot>>, Option<TypeMapperKey>) {
         if new_type.flags().intersects(TypeFlags::Conditional) {
             if let Some(new_mapper) = new_mapper {
                 let new_root = new_type.as_conditional_type().root.get().unwrap();
                 if !new_root.outer_type_parameters.get().is_empty() {
                     let conditional_mapper = new_type.as_conditional_type().mapper.get();
                     let type_param_mapper = self.combine_type_mappers(conditional_mapper, new_mapper);
-                    let type_arguments: Vec<P<Type>> = new_root.outer_type_parameters.get().iter().map(|&t| type_param_mapper.map(self, t)).collect();
+                    let type_arguments: Vec<P<Type>> = new_root.outer_type_parameters.get().iter().map(|&t| self.apply_type_mapper(type_param_mapper, t)).collect();
                     let type_argument_list = &type_arguments[..];
-                    let new_root_mapper = new_type_mapper(&new_root.outer_type_parameters.get(), type_argument_list);
+                    let new_root_mapper = self.new_type_mapper(&new_root.outer_type_parameters.get(), type_argument_list);
                     let mut new_check_type = None;
                     if new_root.is_distributive.get() {
                         new_check_type = Some(self.get_mapped_type(new_root.check_type.get().unwrap(), new_root_mapper));
@@ -1789,7 +1790,7 @@ impl Checker {
             let name_type = self.get_name_type_from_mapped_type(t);
             if let Some(name_type) = name_type {
                 let type_parameter = self.get_type_parameter_from_mapped_type(t);
-                let mapper = new_simple_type_mapper(type_parameter, constraint);
+                let mapper = self.new_simple_type_mapper(type_parameter, constraint);
                 let instantiated = self.instantiate_type(name_type, Some(mapper));
                 // SAFETY: made here for this one instantiation; kept if the result stored it.
                 if self.is_generic_index_type(instantiated) {
@@ -2044,7 +2045,7 @@ impl Checker {
     }
 
     // checker.go:25591
-    pub(crate) fn create_deferred_type_reference(&mut self, target: P<Type>, node: P<Node>, mapper: Option<P<TypeMapper>>, alias: Option<TypeAliasKey>) -> P<Type> {
+    pub(crate) fn create_deferred_type_reference(&mut self, target: P<Type>, node: P<Node>, mapper: Option<TypeMapperKey>, alias: Option<TypeAliasKey>) -> P<Type> {
         let mut alias = alias;
         if alias.is_none() {
             alias = self.get_alias_for_type_node(node);
@@ -2179,7 +2180,7 @@ impl Checker {
     }
 
     // checker.go:25700
-    pub(crate) fn new_conditional_type(&mut self, root: P<ConditionalRoot>, mapper: Option<P<TypeMapper>>, combined_mapper: Option<P<TypeMapper>>) -> P<Type> {
+    pub(crate) fn new_conditional_type(&mut self, root: P<ConditionalRoot>, mapper: Option<TypeMapperKey>, combined_mapper: Option<TypeMapperKey>) -> P<Type> {
         let data = ConditionalType::default();
         data.root.set(Some(root));
         data.check_type.set(Some(self.instantiate_type(root.check_type.get().unwrap(), mapper)));

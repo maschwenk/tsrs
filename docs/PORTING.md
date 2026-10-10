@@ -151,6 +151,13 @@ linked free list; records are cleared before returning their keys. Borrowed reco
 retained inference-array views own only key buffers. Candidate types and mapper records remain legacy graph
 edges (`notes/rust-typed-inference.md`).
 
+Mapper records also live in a checker-owned typed vector. All mapper edges, including merged/composite pairs,
+carry `TypeMapperKey`. Factories receive the checker as their method owner. `Checker::type_mapper` borrows the
+record, and `apply_type_mapper` copies the relevant keys/function before recursive mutation. Deferred callbacks
+use `Arc` and retain the selected callback before borrowing the checker mutably; array comparison snapshots its
+immutable input/target lists before recursive type comparison. No mapper pointer or static record borrow crosses
+these boundaries. Type referents remain legacy graph edges (`notes/rust-typed-mapper.md`).
+
 Build orchestrators and their hosts use `Arc`; the host's back-reference is weak. Returned build outcomes retain
 the actual orchestrator, including programs whose diagnostics they expose, through conversion to an API response.
 There is no manual orchestrator free or raw box reconstruction. Build tasks are Rust-owned records in a typed

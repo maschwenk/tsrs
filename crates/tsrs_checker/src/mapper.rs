@@ -10,10 +10,18 @@ pub enum TypeMapperKind {
     Merged,
 }
 
-/// A mapper owns its concrete variant and array payloads. Graph edges still use legacy handles.
+/// Qualified mapper edge; resolving it borrows the checker that owns its record.
+pub type TypeMapperKey = tsrs_core::arena_owner::ArenaKey<TypeMapper>;
+
+/// A mapper owns its concrete variant and array payloads. Type edges still use legacy handles.
 pub struct TypeMapper {
     data: OwnedMapper,
 }
+
+#[cfg(target_pointer_width = "64")]
+const _: () = assert!(std::mem::size_of::<TypeMapper>() == 24);
+#[cfg(target_pointer_width = "32")]
+const _: () = assert!(std::mem::size_of::<TypeMapper>() == 20);
 
 #[repr(C, u8)]
 enum OwnedMapper {
@@ -26,12 +34,12 @@ enum OwnedMapper {
     Deferred(Box<DeferredTypeMapper>),
     Function(fn(&mut Checker, P<Type>) -> P<Type>),
     Merged {
-        m1: P<TypeMapper>,
-        m2: P<TypeMapper>,
+        m1: TypeMapperKey,
+        m2: TypeMapperKey,
     },
     Composite {
-        m1: P<TypeMapper>,
-        m2: P<TypeMapper>,
+        m1: TypeMapperKey,
+        m2: TypeMapperKey,
     },
     Inference {
         n: InferenceContextKey,
@@ -69,12 +77,12 @@ pub enum TypeMapperData<'a> {
         f: fn(&mut Checker, P<Type>) -> P<Type>,
     },
     Merged {
-        m1: P<TypeMapper>,
-        m2: P<TypeMapper>,
+        m1: TypeMapperKey,
+        m2: TypeMapperKey,
     },
     Composite {
-        m1: P<TypeMapper>,
-        m2: P<TypeMapper>,
+        m1: TypeMapperKey,
+        m2: TypeMapperKey,
     },
     Inference {
         n: InferenceContextKey,
@@ -84,7 +92,7 @@ pub enum TypeMapperData<'a> {
 
 pub struct DeferredTypeMapper {
     pub sources: Box<[P<Type>]>,
-    pub targets: Vec<Box<dyn Fn(&mut Checker) -> P<Type>>>,
+    pub targets: Vec<std::sync::Arc<dyn Fn(&mut Checker) -> P<Type>>>,
 }
 
 impl<'a> TypeMapperData<'a> {
@@ -97,8 +105,8 @@ impl<'a> TypeMapperData<'a> {
 }
 
 impl TypeMapper {
-    fn alloc(data: OwnedMapper) -> P<Self> {
-        P::new(Self { data })
+    fn alloc(store: &mut tsrs_core::arena_owner::ArenaBuilder<Self>, data: OwnedMapper) -> TypeMapperKey {
+        store.alloc(Self { data })
     }
 
     pub fn data(&self) -> TypeMapperData<'_> {
@@ -123,69 +131,6 @@ impl TypeMapper {
                 n: *n,
                 fixing: *fixing,
             },
-        }
-    }
-
-    pub fn map(&self, c: &mut Checker, t: P<Type>) -> P<Type> {
-        match self.data() {
-            TypeMapperData::Simple { source, target } => {
-                if t == source {
-                    target
-                } else {
-                    t
-                }
-            }
-            TypeMapperData::Array { sources, targets } => {
-                for (i, s) in sources.iter().enumerate() {
-                    if t == *s {
-                        return targets[i];
-                    }
-                }
-                t
-            }
-            TypeMapperData::ArrayToSingle { sources, target } => {
-                if sources.contains(&t) {
-                    target
-                } else {
-                    t
-                }
-            }
-            TypeMapperData::Deferred { data } => {
-                for (i, s) in data.sources.iter().enumerate() {
-                    if t == *s {
-                        return data.targets[i](c);
-                    }
-                }
-                t
-            }
-            TypeMapperData::Function { f } => f(c, t),
-            TypeMapperData::Merged { m1, m2 } => {
-                let t1 = m1.map(c, t);
-                m2.map(c, t1)
-            }
-            TypeMapperData::Composite { m1, m2 } => {
-                let t1 = m1.map(c, t);
-                if t1 != t {
-                    return c.instantiate_type(t1, Some(m2));
-                }
-                m2.map(c, t)
-            }
-            TypeMapperData::Inference { n, fixing } => {
-                let inferences = c.inference_context(n).inferences.get();
-                for (i, inference) in inferences.iter().enumerate() {
-                    if Some(t) == c.inference_info(*inference).type_parameter.get() {
-                        if fixing && !c.inference_info(*inference).is_fixed.get() {
-                            // Before we commit to a particular inference (and thus lock out any further inferences),
-                            // we infer from any intra-expression inference sites we have collected.
-                            c.infer_from_intra_expression_sites(n);
-                            clear_cached_inferences(c, &c.inference_context(n).inferences.get());
-                            c.inference_info(*inference).is_fixed.set(true);
-                        }
-                        return c.get_inferred_type(n, i as i32);
-                    }
-                }
-                t
-            }
         }
     }
 
@@ -214,24 +159,93 @@ impl TypeMapper {
 }
 
 /// A mapper edge stored in a checker-owned record.
-pub type MapperCell = Cell<Option<P<TypeMapper>>>;
+pub type MapperCell = Cell<Option<TypeMapperKey>>;
 
 // Factory functions
 
+#[cfg_attr(feature = "site-counts", track_caller)]
+pub(crate) fn allocate_simple_mapper(store: &mut tsrs_core::arena_owner::ArenaBuilder<TypeMapper>, source: P<Type>, target: P<Type>) -> TypeMapperKey {
+    tsrs_core::sitecount::hit("mapper", "simple");
+    TypeMapper::alloc(store, OwnedMapper::Simple { source, target })
+}
+
 impl Checker {
+    pub(crate) fn apply_type_mapper(&mut self, mapper: TypeMapperKey, t: P<Type>) -> P<Type> {
+        match self.type_mapper(mapper).data() {
+            TypeMapperData::Simple { source, target } => {
+                if t == source {
+                    target
+                } else {
+                    t
+                }
+            }
+            TypeMapperData::Array { sources, targets } => {
+                for (i, s) in sources.iter().enumerate() {
+                    if t == *s {
+                        return targets[i];
+                    }
+                }
+                t
+            }
+            TypeMapperData::ArrayToSingle { sources, target } => {
+                if sources.contains(&t) {
+                    target
+                } else {
+                    t
+                }
+            }
+            TypeMapperData::Deferred { data } => {
+                if let Some(i) = data.sources.iter().position(|s| t == *s) {
+                    // The callback may grow mapper storage. Retain its owner before borrowing the checker mutably.
+                    let target = std::sync::Arc::clone(&data.targets[i]);
+                    return target(self);
+                }
+                t
+            }
+            TypeMapperData::Function { f } => f(self, t),
+            TypeMapperData::Merged { m1, m2 } => {
+                let t1 = self.apply_type_mapper(m1, t);
+                self.apply_type_mapper(m2, t1)
+            }
+            TypeMapperData::Composite { m1, m2 } => {
+                let t1 = self.apply_type_mapper(m1, t);
+                if t1 != t {
+                    return self.instantiate_type(t1, Some(m2));
+                }
+                self.apply_type_mapper(m2, t)
+            }
+            TypeMapperData::Inference { n, fixing } => {
+                let inferences = self.inference_context(n).inferences.get();
+                for (i, inference) in inferences.iter().enumerate() {
+                    if Some(t) == self.inference_info(*inference).type_parameter.get() {
+                        if fixing && !self.inference_info(*inference).is_fixed.get() {
+                            // Before we commit to a particular inference (and thus lock out any further inferences),
+                            // we infer from any intra-expression inference sites we have collected.
+                            self.infer_from_intra_expression_sites(n);
+                            clear_cached_inferences(self, &self.inference_context(n).inferences.get());
+                            self.inference_info(*inference).is_fixed.set(true);
+                        }
+                        return self.get_inferred_type(n, i as i32);
+                    }
+                }
+                t
+            }
+        }
+    }
+
     /// Go free function `getMappedType(t, mapper)`; a method because mapping may need the checker.
-    pub(crate) fn get_mapped_type(&mut self, t: P<Type>, mapper: P<TypeMapper>) -> P<Type> {
-        mapper.map(self, get_non_distributed_type_parameter(t).unwrap())
+    pub(crate) fn get_mapped_type(&mut self, t: P<Type>, mapper: TypeMapperKey) -> P<Type> {
+        self.apply_type_mapper(mapper, get_non_distributed_type_parameter(t).unwrap())
     }
 
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn combine_type_mappers(
         &mut self,
-        m1: Option<P<TypeMapper>>,
-        m2: P<TypeMapper>,
-    ) -> P<TypeMapper> {
+        m1: Option<TypeMapperKey>,
+        m2: TypeMapperKey,
+    ) -> TypeMapperKey {
         if let Some(m1) = m1 {
-            return new_composite_type_mapper(m1, m2);
+            return self.new_composite_type_mapper(m1, m2);
         }
         m2
     }
@@ -239,8 +253,8 @@ impl Checker {
     pub(crate) fn map_type_with_composite_mapper(
         &mut self,
         t: P<Type>,
-        m1: Option<P<TypeMapper>>,
-        m2: P<TypeMapper>,
+        m1: Option<TypeMapperKey>,
+        m2: TypeMapperKey,
     ) -> P<Type> {
         let Some(m1) = m1 else {
             return self.get_mapped_type(t, m2);
@@ -259,127 +273,127 @@ impl Checker {
         &mut self,
         context: InferenceContextKey,
         index: i32,
-    ) -> P<TypeMapper> {
+    ) -> TypeMapperKey {
         let forward_inferences = &self.inference_context(context).inferences.get()[index as usize..];
         let type_parameters: Vec<P<Type>> = forward_inferences
             .iter()
             .map(|i| self.inference_info(*i).type_parameter.get().unwrap())
             .collect();
-        new_array_to_single_type_mapper(&type_parameters, self.unknown_type)
+        self.new_array_to_single_type_mapper(&type_parameters, self.unknown_type)
     }
-}
 
-#[cfg_attr(feature = "site-counts", track_caller)]
-pub(crate) fn new_inference_type_mapper(n: InferenceContextKey, fixing: bool) -> P<TypeMapper> {
-    tsrs_core::sitecount::hit("mapper", "inference");
-    TypeMapper::alloc(OwnedMapper::Inference { n, fixing })
-}
-
-#[cfg_attr(feature = "site-counts", track_caller)]
-pub(crate) fn new_type_mapper(sources: &[P<Type>], targets: &[P<Type>]) -> P<TypeMapper> {
-    if sources.len() == 1 {
-        return new_simple_type_mapper(sources[0], targets[0]);
+    #[cfg_attr(feature = "site-counts", track_caller)]
+    pub(crate) fn new_inference_type_mapper(&mut self, n: InferenceContextKey, fixing: bool) -> TypeMapperKey {
+        tsrs_core::sitecount::hit("mapper", "inference");
+        TypeMapper::alloc(&mut self.type_mappers, OwnedMapper::Inference { n, fixing })
     }
-    new_array_type_mapper(sources, targets)
-}
 
-#[cfg_attr(feature = "site-counts", track_caller)]
-pub(crate) fn merge_type_mappers(m1: Option<P<TypeMapper>>, m2: P<TypeMapper>) -> P<TypeMapper> {
-    if let Some(m1) = m1 {
-        return new_merged_type_mapper(m1, m2);
+    #[cfg_attr(feature = "site-counts", track_caller)]
+    pub(crate) fn new_type_mapper(&mut self, sources: &[P<Type>], targets: &[P<Type>]) -> TypeMapperKey {
+        if sources.len() == 1 {
+            return self.new_simple_type_mapper(sources[0], targets[0]);
+        }
+        self.new_array_type_mapper(sources, targets)
     }
-    m2
-}
 
-#[cfg_attr(feature = "site-counts", track_caller)]
-pub(crate) fn prepend_type_mapping(
-    source: P<Type>,
-    target: P<Type>,
-    mapper: Option<P<TypeMapper>>,
-) -> P<TypeMapper> {
-    let Some(mapper) = mapper else {
-        return new_simple_type_mapper(get_non_distributed_type_parameter(source).unwrap(), target);
-    };
-    new_merged_type_mapper(
-        new_simple_type_mapper(get_non_distributed_type_parameter(source).unwrap(), target),
-        mapper,
-    )
-}
+    #[cfg_attr(feature = "site-counts", track_caller)]
+    pub(crate) fn merge_type_mappers(&mut self, m1: Option<TypeMapperKey>, m2: TypeMapperKey) -> TypeMapperKey {
+        if let Some(m1) = m1 {
+            return self.new_merged_type_mapper(m1, m2);
+        }
+        m2
+    }
 
-#[cfg_attr(feature = "site-counts", track_caller)]
-pub(crate) fn append_type_mapping(
-    mapper: Option<P<TypeMapper>>,
-    source: P<Type>,
-    target: P<Type>,
-) -> P<TypeMapper> {
-    let Some(mapper) = mapper else {
-        return new_simple_type_mapper(get_non_distributed_type_parameter(source).unwrap(), target);
-    };
-    new_merged_type_mapper(
-        mapper,
-        new_simple_type_mapper(get_non_distributed_type_parameter(source).unwrap(), target),
-    )
-}
+    #[cfg_attr(feature = "site-counts", track_caller)]
+    pub(crate) fn prepend_type_mapping(
+        &mut self,
+        source: P<Type>,
+        target: P<Type>,
+        mapper: Option<TypeMapperKey>,
+    ) -> TypeMapperKey {
+        let Some(mapper) = mapper else {
+            return self.new_simple_type_mapper(get_non_distributed_type_parameter(source).unwrap(), target);
+        };
+        let mapping = self.new_simple_type_mapper(get_non_distributed_type_parameter(source).unwrap(), target);
+        self.new_merged_type_mapper(mapping, mapper)
+    }
 
-#[cfg_attr(feature = "site-counts", track_caller)]
-pub(crate) fn new_simple_type_mapper(source: P<Type>, target: P<Type>) -> P<TypeMapper> {
-    tsrs_core::sitecount::hit("mapper", "simple");
-    TypeMapper::alloc(OwnedMapper::Simple { source, target })
-}
+    #[cfg_attr(feature = "site-counts", track_caller)]
+    pub(crate) fn append_type_mapping(
+        &mut self,
+        mapper: Option<TypeMapperKey>,
+        source: P<Type>,
+        target: P<Type>,
+    ) -> TypeMapperKey {
+        let Some(mapper) = mapper else {
+            return self.new_simple_type_mapper(get_non_distributed_type_parameter(source).unwrap(), target);
+        };
+        let mapping = self.new_simple_type_mapper(get_non_distributed_type_parameter(source).unwrap(), target);
+        self.new_merged_type_mapper(mapper, mapping)
+    }
 
-#[cfg_attr(feature = "site-counts", track_caller)]
-pub(crate) fn new_array_type_mapper(sources: &[P<Type>], targets: &[P<Type>]) -> P<TypeMapper> {
-    tsrs_core::sitecount::hit("mapper", "array");
-    TypeMapper::alloc(OwnedMapper::Array(owned_type_payload(ArrayMapper {
-        sources: sources.to_vec().into_boxed_slice(),
-        targets: targets.to_vec().into_boxed_slice(),
-    })))
-}
+    #[cfg_attr(feature = "site-counts", track_caller)]
+    pub(crate) fn new_simple_type_mapper(&mut self, source: P<Type>, target: P<Type>) -> TypeMapperKey {
+        allocate_simple_mapper(&mut self.type_mappers, source, target)
+    }
 
-#[cfg_attr(feature = "site-counts", track_caller)]
-pub(crate) fn new_array_to_single_type_mapper(
-    sources: &[P<Type>],
-    target: P<Type>,
-) -> P<TypeMapper> {
-    tsrs_core::sitecount::hit("mapper", "array_to_single");
-    TypeMapper::alloc(OwnedMapper::ArrayToSingle(owned_type_payload(
-        ArrayToSingleMapper {
+    #[cfg_attr(feature = "site-counts", track_caller)]
+    pub(crate) fn new_array_type_mapper(&mut self, sources: &[P<Type>], targets: &[P<Type>]) -> TypeMapperKey {
+        tsrs_core::sitecount::hit("mapper", "array");
+        TypeMapper::alloc(&mut self.type_mappers, OwnedMapper::Array(owned_type_payload(ArrayMapper {
             sources: sources.to_vec().into_boxed_slice(),
-            target,
-        },
-    )))
-}
+            targets: targets.to_vec().into_boxed_slice(),
+        })))
+    }
 
-#[cfg_attr(feature = "site-counts", track_caller)]
-pub(crate) fn new_deferred_type_mapper(
-    sources: &[P<Type>],
-    targets: Vec<Box<dyn Fn(&mut Checker) -> P<Type>>>,
-) -> P<TypeMapper> {
-    tsrs_core::sitecount::hit("mapper", "deferred");
-    TypeMapper::alloc(OwnedMapper::Deferred(owned_type_payload(
-        DeferredTypeMapper {
-            sources: sources.to_vec().into_boxed_slice(),
-            targets,
-        },
-    )))
-}
+    #[cfg_attr(feature = "site-counts", track_caller)]
+    pub(crate) fn new_array_to_single_type_mapper(
+        &mut self,
+        sources: &[P<Type>],
+        target: P<Type>,
+    ) -> TypeMapperKey {
+        tsrs_core::sitecount::hit("mapper", "array_to_single");
+        TypeMapper::alloc(&mut self.type_mappers, OwnedMapper::ArrayToSingle(owned_type_payload(
+            ArrayToSingleMapper {
+                sources: sources.to_vec().into_boxed_slice(),
+                target,
+            },
+        )))
+    }
 
-#[cfg_attr(feature = "site-counts", track_caller)]
-pub(crate) fn new_function_type_mapper(f: fn(&mut Checker, P<Type>) -> P<Type>) -> P<TypeMapper> {
-    tsrs_core::sitecount::hit("mapper", "function");
-    TypeMapper::alloc(OwnedMapper::Function(f))
-}
+    #[cfg_attr(feature = "site-counts", track_caller)]
+    pub(crate) fn new_deferred_type_mapper(
+        &mut self,
+        sources: &[P<Type>],
+        targets: Vec<Box<dyn Fn(&mut Checker) -> P<Type>>>,
+    ) -> TypeMapperKey {
+        tsrs_core::sitecount::hit("mapper", "deferred");
+        TypeMapper::alloc(&mut self.type_mappers, OwnedMapper::Deferred(owned_type_payload(
+            DeferredTypeMapper {
+                sources: sources.to_vec().into_boxed_slice(),
+                targets: targets.into_iter().map(std::sync::Arc::from).collect(),
+            },
+        )))
+    }
 
-#[cfg_attr(feature = "site-counts", track_caller)]
-pub(crate) fn new_merged_type_mapper(m1: P<TypeMapper>, m2: P<TypeMapper>) -> P<TypeMapper> {
-    tsrs_core::sitecount::hit("mapper", "merged");
-    TypeMapper::alloc(OwnedMapper::Merged { m1, m2 })
-}
+    #[cfg_attr(feature = "site-counts", track_caller)]
+    pub(crate) fn new_function_type_mapper(&mut self, f: fn(&mut Checker, P<Type>) -> P<Type>) -> TypeMapperKey {
+        tsrs_core::sitecount::hit("mapper", "function");
+        TypeMapper::alloc(&mut self.type_mappers, OwnedMapper::Function(f))
+    }
 
-#[cfg_attr(feature = "site-counts", track_caller)]
-pub(crate) fn new_composite_type_mapper(m1: P<TypeMapper>, m2: P<TypeMapper>) -> P<TypeMapper> {
-    tsrs_core::sitecount::hit("mapper", "composite");
-    TypeMapper::alloc(OwnedMapper::Composite { m1, m2 })
+    #[cfg_attr(feature = "site-counts", track_caller)]
+    pub(crate) fn new_merged_type_mapper(&mut self, m1: TypeMapperKey, m2: TypeMapperKey) -> TypeMapperKey {
+        tsrs_core::sitecount::hit("mapper", "merged");
+        TypeMapper::alloc(&mut self.type_mappers, OwnedMapper::Merged { m1, m2 })
+    }
+
+    #[cfg_attr(feature = "site-counts", track_caller)]
+    pub(crate) fn new_composite_type_mapper(&mut self, m1: TypeMapperKey, m2: TypeMapperKey) -> TypeMapperKey {
+        tsrs_core::sitecount::hit("mapper", "composite");
+        TypeMapper::alloc(&mut self.type_mappers, OwnedMapper::Composite { m1, m2 })
+    }
+
 }
 
 /// Mapper keys and function addresses are scalars; only data-pointer variants contribute graph edges.
@@ -393,12 +407,12 @@ pub(crate) fn census_layouts() {
     fields.push(CensusField::Variant {
         ptr: first,
         tag,
-        variants: (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 5) | (1 << 6),
+        variants: (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3),
     });
     fields.push(CensusField::Variant {
         ptr: second,
         tag,
-        variants: (1 << 0) | (1 << 5) | (1 << 6),
+        variants: 1 << 0,
     });
     tsrs_core::census_layout(std::any::type_name::<TypeMapper>(), &fields);
 }
@@ -408,34 +422,35 @@ mod tests {
     use super::*;
 
     #[test]
-    fn deferred_mapper_owns_inputs_and_releases_callbacks_with_region() {
-        let region = tsrs_core::arena::Region::new(4096);
+    fn deferred_mapper_keys_own_inputs_and_release_callbacks_with_the_store() {
         let capture = std::rc::Rc::new(());
         let weak = std::rc::Rc::downgrade(&capture);
-        {
-            let _scope = region.enter();
-            let source = Type::alloc(
-                TypeFlags::Any,
-                ObjectFlags::None,
-                TypeId(1),
-                IntrinsicType::default(),
-            );
-            let sources = vec![source];
-            let mapper = new_deferred_type_mapper(
-                &sources,
-                vec![Box::new(move |_| {
-                    let _ = &capture;
-                    source
-                })],
-            );
-            drop(sources);
-            let TypeMapperData::Deferred { data } = mapper.data() else {
-                panic!("expected deferred mapper");
-            };
-            assert_eq!(&*data.sources, &[source]);
+        let source = Type::alloc(TypeFlags::Any, ObjectFlags::None, TypeId(1), IntrinsicType::default());
+        let sources = vec![source];
+        let mut mappers = tsrs_core::arena_owner::ArenaBuilder::with_capacity(1);
+        let mapper = TypeMapper::alloc(&mut mappers, OwnedMapper::Deferred(owned_type_payload(DeferredTypeMapper {
+            sources: sources.to_vec().into_boxed_slice(),
+            targets: vec![std::sync::Arc::new(move |_| {
+                let _ = &capture;
+                source
+            })],
+        })));
+        drop(sources);
+        for _ in 0..128 {
+            allocate_simple_mapper(&mut mappers, source, source);
         }
+        let TypeMapperData::Deferred { data } = mappers.get(mapper).unwrap().data() else {
+            panic!("expected deferred mapper");
+        };
+        assert_eq!(&*data.sources, &[source]);
+        let callback = std::sync::Arc::clone(&data.targets[0]);
+        let mut foreign = tsrs_core::arena_owner::ArenaBuilder::new();
+        let foreign_mapper = allocate_simple_mapper(&mut foreign, source, source);
+        assert!(mappers.get(foreign_mapper).is_none());
+        assert!(foreign.get(mapper).is_none());
+        drop(mappers);
         assert!(weak.upgrade().is_some());
-        drop(region);
+        drop(callback);
         assert!(weak.upgrade().is_none());
     }
 }

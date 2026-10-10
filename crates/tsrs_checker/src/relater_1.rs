@@ -1958,7 +1958,7 @@ impl Checker {
 
     // relater.go:1446
     pub(crate) fn create_marker_type(&mut self, symbol: P<Symbol>, source: P<Type>, target: P<Type>) -> P<Type> {
-        let mapper = new_simple_type_mapper(source, target);
+        let mapper = self.new_simple_type_mapper(source, target);
         let t = self.get_declared_type_of_symbol(symbol);
         if self.is_error_type(t) {
             return t;
@@ -2013,7 +2013,7 @@ impl Checker {
     }
 
     // relater.go:1491
-    pub(crate) fn compare_signatures_related(&mut self, source: SignatureKey, target: SignatureKey, check_mode: SignatureCheckMode, report_errors: bool, error_reporter: Option<ErrorReporter<'_>>, compare_types: &TypeComparer, report_unreliable_markers: Option<P<TypeMapper>>) -> Ternary {
+    pub(crate) fn compare_signatures_related(&mut self, source: SignatureKey, target: SignatureKey, check_mode: SignatureCheckMode, report_errors: bool, error_reporter: Option<ErrorReporter<'_>>, compare_types: &TypeComparer, report_unreliable_markers: Option<TypeMapperKey>) -> Ternary {
         let mut error_reporter = error_reporter;
         let mut source = source;
         let mut target = target;
@@ -2772,7 +2772,7 @@ impl Checker {
     }
 
     // relater.go:2133
-    pub(crate) fn instantiate_type_predicate(&mut self, predicate: TypePredicateKey, mapper: P<TypeMapper>) -> TypePredicateKey {
+    pub(crate) fn instantiate_type_predicate(&mut self, predicate: TypePredicateKey, mapper: TypeMapperKey) -> TypePredicateKey {
         // Go instantiateType returns nil for a nil type.
         let t = self.type_predicate(predicate).type_().map(|t| self.instantiate_type(t, Some(mapper)));
         if t == self.type_predicate(predicate).type_() {
@@ -2875,7 +2875,7 @@ impl Checker {
         // Check that type parameter constraints and defaults match. If they do, instantiate the source
         // signature with the type parameters of the target signature and continue the comparison.
         if !self.signature(target).type_parameters().is_empty() {
-            let mapper = new_type_mapper(&self.signature(source).type_parameters(), &self.signature(target).type_parameters());
+            let mapper = self.new_type_mapper(&self.signature(source).type_parameters(), &self.signature(target).type_parameters());
             for i in 0..self.signature(target).type_parameters().len() {
                 let s = self.signature(source).type_parameters()[i];
                 let t = self.signature(target).type_parameters()[i];
@@ -2962,7 +2962,7 @@ impl Checker {
         if source_params.len() != target_params.len() {
             return false;
         }
-        let mapper = new_type_mapper(target_params, source_params);
+        let mapper = self.new_type_mapper(target_params, source_params);
         for i in 0..source_params.len() {
             let source = source_params[i];
             let target = target_params[i];

@@ -1,0 +1,48 @@
+[
+  {
+    "project": "Compiler",
+    "runs": {
+      "typed-inference": {
+        "exit": 2,
+        "binary_sha256": "45931b0157503960ff4752a336215007161047c5dc74e1302e23e1af1f4ad1bc",
+        "stdout_sha256": "62733d5a8c21cf02442a0284f2c7eb33d5b244cd0be6a43d3975293921d406a7",
+        "log_sha256": "4bd0fafa0203ce24d95d711dabb2cb8408e55c3a2e3aa49cb67caa5bff73fcf5",
+        "stats": [
+          "tsrs: inference memo: 1351 lookups (walks with at most 8 infos), 255 hits (18.9%) skipping 48346 steps, 156 stores; walks of 16+ steps not stored: 46 had effects (46 created, 46 instantiated), 0 tainted"
+        ]
+      },
+      "typed-mapper": {
+        "exit": 2,
+        "binary_sha256": "bbf8b244d25f07dfd81bb6f5970390ed80559927af58e52fae2c5987144c752f",
+        "stdout_sha256": "62733d5a8c21cf02442a0284f2c7eb33d5b244cd0be6a43d3975293921d406a7",
+        "log_sha256": "4bd0fafa0203ce24d95d711dabb2cb8408e55c3a2e3aa49cb67caa5bff73fcf5",
+        "stats": [
+          "tsrs: inference memo: 1351 lookups (walks with at most 8 infos), 255 hits (18.9%) skipping 48346 steps, 156 stores; walks of 16+ steps not stored: 46 had effects (46 created, 46 instantiated), 0 tainted"
+        ]
+      }
+    }
+  },
+  {
+    "project": "Compiler-Unions",
+    "runs": {
+      "typed-inference": {
+        "exit": 2,
+        "binary_sha256": "45931b0157503960ff4752a336215007161047c5dc74e1302e23e1af1f4ad1bc",
+        "stdout_sha256": "2a8c0fe266505e79e48ab6eddd70d491531f6795afc596b548701396d47ee15e",
+        "log_sha256": "e238245359dd4941170a3ed8d5b15065141c39f9d0c5048cc7346c5468b092db",
+        "stats": [
+          "tsrs: inference memo: 1513 lookups (walks with at most 8 infos), 287 hits (19.0%) skipping 68613 steps, 307 stores; walks of 16+ steps not stored: 180 had effects (180 created, 44 instantiated), 0 tainted"
+        ]
+      },
+      "typed-mapper": {
+        "exit": 2,
+        "binary_sha256": "bbf8b244d25f07dfd81bb6f5970390ed80559927af58e52fae2c5987144c752f",
+        "stdout_sha256": "2a8c0fe266505e79e48ab6eddd70d491531f6795afc596b548701396d47ee15e",
+        "log_sha256": "e238245359dd4941170a3ed8d5b15065141c39f9d0c5048cc7346c5468b092db",
+        "stats": [
+          "tsrs: inference memo: 1513 lookups (walks with at most 8 infos), 287 hits (19.0%) skipping 68613 steps, 307 stores; walks of 16+ steps not stored: 180 had effects (180 created, 44 instantiated), 0 tainted"
+        ]
+      }
+    }
+  }
+]

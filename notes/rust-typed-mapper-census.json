@@ -1,0 +1,45 @@
+{
+  "workload": "Compiler",
+  "workload_commit": "41f652ab2df5077b1115f73eaeefc2fe9f674132",
+  "rows": [
+    {
+      "mode": "1",
+      "checkers": 1,
+      "lazy_members": true,
+      "diagnostic_exit": 2,
+      "profile_sha256": "62f3e0b28a61341f5e0a562e19c0cd5f01ae45f1fa0f5dedcadc497c3b8f6006",
+      "overlaps": 0,
+      "freed_violations": 0,
+      "references": 1027839,
+      "ast_nodes": 477367,
+      "binder_symbols": 38233,
+      "log_sha256": "9785d3807ed98d1965a0f2dabc9c81e34d53970ff2a5837323db267b76d4d70d"
+    },
+    {
+      "mode": "4",
+      "checkers": 4,
+      "lazy_members": true,
+      "diagnostic_exit": 2,
+      "profile_sha256": "62f3e0b28a61341f5e0a562e19c0cd5f01ae45f1fa0f5dedcadc497c3b8f6006",
+      "overlaps": 0,
+      "freed_violations": 0,
+      "references": 1027839,
+      "ast_nodes": 477367,
+      "binder_symbols": 38233,
+      "log_sha256": "8bd7be626412dff8df17794d0c4950cbd1436e7863064ee514ffe51ee349a0df"
+    },
+    {
+      "mode": "4-eager",
+      "checkers": 4,
+      "lazy_members": false,
+      "diagnostic_exit": 2,
+      "profile_sha256": "62f3e0b28a61341f5e0a562e19c0cd5f01ae45f1fa0f5dedcadc497c3b8f6006",
+      "overlaps": 0,
+      "freed_violations": 0,
+      "references": 1027839,
+      "ast_nodes": 477367,
+      "binder_symbols": 38233,
+      "log_sha256": "2303d4025b937b004d323ae68bb5eb9463cc70bd92d6e81015f0da95f3a504f2"
+    }
+  ]
+}

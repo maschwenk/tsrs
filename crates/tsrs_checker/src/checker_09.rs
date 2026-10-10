@@ -67,7 +67,7 @@ impl Checker {
                                                     f
                                                 })
                                                 .collect();
-                                            let mapper = new_deferred_type_mapper(&type_parameters, targets);
+                                            let mapper = self.new_deferred_type_mapper(&type_parameters, targets);
                                             let constraint = self.instantiate_type(declared_constraint, Some(mapper));
                                             if constraint != t {
                                                 inferences.push(constraint);
@@ -103,7 +103,7 @@ impl Checker {
                                 Some(constraint) => self.get_type_from_type_node(constraint),
                                 None => self.string_number_symbol_type,
                             };
-                            let mapper = new_simple_type_mapper(source, target);
+                            let mapper = self.new_simple_type_mapper(source, target);
                             let t = self.instantiate_type(node_type, Some(mapper));
                             inferences.push(t);
                         }
@@ -256,7 +256,7 @@ impl Checker {
                 }
                 if let Some(constraint) = constraint {
                     if constraint != check_type {
-                        let mapper = prepend_type_mapping(root.check_type.get().unwrap(), constraint, d.mapper.get());
+                        let mapper = self.prepend_type_mapping(root.check_type.get().unwrap(), constraint, d.mapper.get());
                         let instantiated = self.get_conditional_type_instantiation(t, mapper, true /*forConstraint*/, None);
                         // SAFETY: made here for this one instantiation; kept if the result stored it.
                         if !instantiated.flags().intersects(TypeFlags::Never) {
@@ -2571,7 +2571,7 @@ impl Checker {
 
     // checker.go:19450
     pub(crate) fn resolve_object_type_members(&mut self, t: P<Type>, source: P<Type>, type_parameters: &[P<Type>], type_arguments: &[P<Type>]) {
-        let mut mapper: Option<P<TypeMapper>> = None;
+        let mut mapper: Option<TypeMapperKey> = None;
         let mut members: Option<P<SymbolTable>>;
         let mut call_signatures: Vec<SignatureKey>;
         let mut construct_signatures: Vec<SignatureKey>;
@@ -2585,7 +2585,7 @@ impl Checker {
             index_infos = resolved.declared_index_infos.get().to_vec();
         } else {
             instantiated = true;
-            let m = new_type_mapper(type_parameters, type_arguments);
+            let m = self.new_type_mapper(type_parameters, type_arguments);
             mapper = Some(m);
             members = self.instantiate_symbol_table(resolved.declared_members.get(), m);
             call_signatures = self.instantiate_signatures(&resolved.declared_call_signatures.get(), m);
@@ -2650,7 +2650,7 @@ impl Checker {
 /// One per instantiated reference whose members are answered lazily. The record stays in its checker region
 /// while graph handles refer to it; its ready payload and retained array fields have ordinary Rust owners.
 pub(crate) struct LazyMemberTable {
-    pub(crate) mapper: P<TypeMapper>,
+    pub(crate) mapper: TypeMapperKey,
     // Go `ready` plus the fields prepareLazyMembers fills in before it sets `ready`.
     pub(crate) ready: std::cell::OnceCell<Box<LazyMembers>>,
     pub(crate) declared: SymbolTable, // keyed by the declared members' names
@@ -2658,11 +2658,11 @@ pub(crate) struct LazyMemberTable {
     pub(crate) ordered_properties: OptionArrayCell<P<Symbol>>,
 }
 
-// Three owner/edge words beyond the symbol table.
+// One qualified mapper key and two owner words beyond the symbol table.
 #[cfg(target_pointer_width = "64")]
 const _: () = assert!(std::mem::size_of::<LazyMemberTable>() == std::mem::size_of::<SymbolTable>() + 24);
 #[cfg(target_pointer_width = "32")]
-const _: () = assert!(std::mem::size_of::<LazyMemberTable>() == std::mem::size_of::<SymbolTable>() + 12);
+const _: () = assert!(std::mem::size_of::<LazyMemberTable>() == std::mem::size_of::<SymbolTable>() + 16);
 
 /// Heap census: what the lazy member and lazy mapped tables own (the `Rc` boxes, their symbol tables, name lists,
 /// ordered property lists and mapped-member maps with their string keys).
@@ -2811,7 +2811,7 @@ impl Checker {
         };
         let lm = P::new(LazyMemberTable {
             mapper: {
-                let m = new_type_mapper(&type_parameters, type_arguments);
+                let m = self.new_type_mapper(&type_parameters, type_arguments);
                 m
             },
             ready: std::cell::OnceCell::new(),

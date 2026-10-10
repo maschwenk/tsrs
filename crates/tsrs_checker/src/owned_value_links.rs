@@ -1,7 +1,7 @@
 //! Value-symbol link payloads use a typed state and an owned rare tail. Graph edges migrate with their graphs.
 #![forbid(unsafe_code)]
 
-use crate::{Symbol, Type, TypeMapper};
+use crate::{Symbol, Type, TypeMapperKey};
 use std::cell::{Cell, RefCell};
 use tsrs_core::P;
 
@@ -14,7 +14,7 @@ pub struct ValueSymbolLinks {
 // Common records retain two fields inline; only records that mix the two shapes or write additional fields
 // allocate a tail. Rust's enum discriminant replaces erased pointers and mode bits.
 enum Fields {
-    Plain { target: Option<P<Symbol>>, mapper: Option<P<TypeMapper>> },
+    Plain { target: Option<P<Symbol>>, mapper: Option<TypeMapperKey> },
     Synthetic { containing_type: Option<P<Type>>, name_type: Option<P<Type>> },
     Tail(Box<Tail>),
 }
@@ -28,7 +28,7 @@ impl Default for Fields {
 #[derive(Default)]
 struct Tail {
     target: Option<P<Symbol>>,
-    mapper: Option<P<TypeMapper>>,
+    mapper: Option<TypeMapperKey>,
     write_type: Option<P<Type>>,
     name_type: Option<P<Type>>,
     containing_type: Option<P<Type>>,
@@ -68,7 +68,7 @@ impl Fields {
 #[cfg(target_pointer_width = "64")]
 const _: () = assert!(std::mem::size_of::<ValueSymbolLinks>() == 40);
 #[cfg(target_pointer_width = "32")]
-const _: () = assert!(std::mem::size_of::<ValueSymbolLinks>() == 20);
+const _: () = assert!(std::mem::size_of::<ValueSymbolLinks>() == 24);
 
 impl ValueSymbolLinks {
     #[inline]
@@ -89,7 +89,7 @@ impl ValueSymbolLinks {
         }
     }
     #[inline]
-    pub fn mapper(&self) -> Option<P<TypeMapper>> {
+    pub fn mapper(&self) -> Option<TypeMapperKey> {
         match &*self.fields.borrow() {
             Fields::Plain { mapper, .. } => *mapper,
             Fields::Synthetic { .. } => None,
@@ -97,7 +97,7 @@ impl ValueSymbolLinks {
         }
     }
     #[inline]
-    pub fn set_mapper(&self, mapper: Option<P<TypeMapper>>) {
+    pub fn set_mapper(&self, mapper: Option<TypeMapperKey>) {
         let mut fields = self.fields.borrow_mut();
         match &mut *fields {
             Fields::Plain { mapper: stored, .. } => *stored = mapper,

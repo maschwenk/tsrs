@@ -340,7 +340,7 @@ impl Checker {
             instantiated_base = bases[0];
         } else {
             let type_arguments = self.get_type_arguments(t);
-            let mapper = new_type_mapper(&type_parameters, &type_arguments[..type_parameters.len()]);
+            let mapper = self.new_type_mapper(&type_parameters, &type_arguments[..type_parameters.len()]);
             instantiated_base = self.instantiate_type(bases[0], Some(mapper));
         }
         let type_arguments = self.get_type_arguments(t);
@@ -1635,7 +1635,7 @@ impl Checker {
     // checker.go:29780
     pub(crate) fn substitute_indexed_mapped_type(&mut self, object_type: P<Type>, index: P<Type>) -> P<Type> {
         let type_parameter = self.get_type_parameter_from_mapped_type(object_type);
-        let mapper = new_simple_type_mapper(type_parameter, index);
+        let mapper = self.new_simple_type_mapper(type_parameter, index);
         let template_mapper = self.combine_type_mappers(object_type.as_mapped_type().mapper.get(), mapper);
         let template_type = self.get_template_type_from_mapped_type(object_type.as_mapped_type().target.get().unwrap_or(object_type));
         let instantiated_template_type = self.instantiate_type(template_type, Some(template_mapper));

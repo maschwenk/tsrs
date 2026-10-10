@@ -218,6 +218,14 @@ impl Checker {
     #[expect(clippy::iter_over_hash_type, reason = "sums sizes: the order does not matter")]
     pub fn heap_census(&self) -> HeapCensus {
         let mut h = HeapCensus::default();
+        let slot = std::mem::size_of::<TypeMapper>() as u64;
+        h.row("type_mappers (owned records)", HeapStat {
+            containers: 1,
+            len: self.type_mappers.len() as u64,
+            cap: self.type_mappers.capacity() as u64,
+            slot,
+            bytes: self.type_mappers.capacity() as u64 * slot,
+        });
         let slot = std::mem::size_of::<InferenceContext>() as u64;
         h.row("inference_contexts (owned records)", HeapStat {
             containers: 1,

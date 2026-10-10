@@ -212,7 +212,7 @@ impl Checker {
             // Unless that parent is "reconstituted" from the "first value declaration" on the symbol (which is likely different than its instantiated parent!)
             // They also have a `.containingType` set, which affects some services endpoints behavior, like `getRootSymbol`
             let mut single_prop_type: Option<P<Type>> = None;
-            let mut single_prop_mapper: Option<P<TypeMapper>> = None;
+            let mut single_prop_mapper: Option<TypeMapperKey> = None;
             if single_prop.flags().intersects(SymbolFlags::Transient) {
                 let links = self.value_symbol_links.get_key(single_prop);
                 single_prop_type = self.value_symbol_links.at(links).resolved_type.get();
@@ -449,7 +449,7 @@ impl Checker {
                 };
                 if let Some(base_constraint) = base_constraint {
                     if every_type(self, base_constraint, |c, t| c.is_array_or_tuple_type(t) || c.is_array_or_tuple_or_intersection(t)) {
-                        let mapper = prepend_type_mapping(type_variable, base_constraint, t.as_mapped_type().mapper.get());
+                        let mapper = self.prepend_type_mapping(type_variable, base_constraint, t.as_mapped_type().mapper.get());
                         return self.instantiate_type(target, Some(mapper));
                     }
                 }
@@ -775,7 +775,7 @@ impl Checker {
                 if let Some(default_type) = default_type {
                     // Go aliases `result` into the mapper (later writes to result are visible through it); the
                     // arena mapper holds a snapshot instead. See notes/checker-11.md.
-                    let mapper = new_type_mapper(type_parameters, &result);
+                    let mapper = self.new_type_mapper(type_parameters, &result);
                     result[i] = self.instantiate_type(default_type, Some(mapper));
                 } else {
                     result[i] = base_default_type;
@@ -912,13 +912,13 @@ impl Checker {
     }
 
     // checker.go:22496
-    pub(crate) fn instantiate_type(&mut self, t: P<Type>, m: Option<P<TypeMapper>>) -> P<Type> {
+    pub(crate) fn instantiate_type(&mut self, t: P<Type>, m: Option<TypeMapperKey>) -> P<Type> {
         self.instantiate_type_with_alias(t, m, None /*alias*/)
     }
 
     // checker.go:22500
     #[inline]
-    pub(crate) fn instantiate_type_with_alias(&mut self, t: P<Type>, m: Option<P<TypeMapper>>, alias: Option<TypeAliasKey>) -> P<Type> {
+    pub(crate) fn instantiate_type_with_alias(&mut self, t: P<Type>, m: Option<TypeMapperKey>, alias: Option<TypeAliasKey>) -> P<Type> {
         // Check for type variables in the alias, so things like `type Brand<T> = number & {}` can potentially be copied with new alias type args, despite them being unreferenced.
         // This is the behavior most people using aliases expect, and prevents the cache from leaking type parameters outside their scope of validity.
         // tests/cases/compiler/declarationEmitArrowFunctionNoRenaming.ts contains an example of this, which previously only worked in strada via some input node reuse logic instead.
@@ -943,7 +943,7 @@ impl Checker {
     }
 
     #[inline(never)]
-    fn instantiate_type_with_alias_slow(&mut self, t: P<Type>, m: P<TypeMapper>, alias: Option<TypeAliasKey>) -> P<Type> {
+    fn instantiate_type_with_alias_slow(&mut self, t: P<Type>, m: TypeMapperKey, alias: Option<TypeAliasKey>) -> P<Type> {
         if !(self.could_contain_type_variables(t)
             || (t.alias().is_some() && !t.alias().type_arguments(self).is_empty() && t.alias().type_arguments(self).iter().any(|&a| self.could_contain_type_variables(a))))
         {
@@ -953,7 +953,7 @@ impl Checker {
     }
 
     #[inline(never)]
-    fn instantiate_type_with_alias_worker(&mut self, t: P<Type>, m: P<TypeMapper>, alias: Option<TypeAliasKey>) -> P<Type> {
+    fn instantiate_type_with_alias_worker(&mut self, t: P<Type>, m: TypeMapperKey, alias: Option<TypeAliasKey>) -> P<Type> {
         if self.instantiation_stack.len() == 100 || self.instantiation_count >= 5_000_000 {
             // We have reached 100 recursive type instantiations, or 5M type instantiations caused by the same statement
             // or expression. There is a very high likelihood we're dealing with a combination of infinite generic types
@@ -1052,7 +1052,7 @@ impl Checker {
     }
 
     // checker.go:22571
-    pub(crate) fn push_active_mapper(&mut self, mapper: P<TypeMapper>) {
+    pub(crate) fn push_active_mapper(&mut self, mapper: TypeMapperKey) {
         self.active_mappers.push(mapper);
         // Go reuses a cleared map left in the slice capacity by popActiveMapper (here: a pool of cleared maps).
         let cache = self.free_type_mapper_caches.pop().unwrap_or_default();
@@ -1075,7 +1075,7 @@ impl Checker {
     }
 
     // checker.go:22596
-    pub(crate) fn find_active_mapper(&mut self, mapper: P<TypeMapper>) -> i32 {
+    pub(crate) fn find_active_mapper(&mut self, mapper: TypeMapperKey) -> i32 {
         find_last_index(&self.active_mappers, |&m| m == mapper)
     }
 
@@ -1144,7 +1144,7 @@ impl Checker {
     }
 
     // checker.go:22645
-    pub(crate) fn instantiate_type_worker(&mut self, t: P<Type>, m: P<TypeMapper>, alias: Option<TypeAliasKey>) -> P<Type> {
+    pub(crate) fn instantiate_type_worker(&mut self, t: P<Type>, m: TypeMapperKey, alias: Option<TypeAliasKey>) -> P<Type> {
         let flags = t.flags();
         if flags.intersects(TypeFlags::TypeParameter) {
             return self.get_mapped_type(t, m);
@@ -1252,7 +1252,7 @@ impl Checker {
     // InstantiationExpressionType (ObjectFlagsInstantiationExpressionType)
     // MappedType (ObjectFlagsMapped)
     // checker.go:22729
-    pub(crate) fn get_object_type_instantiation(&mut self, t: P<Type>, m: Option<P<TypeMapper>>, alias: Option<TypeAliasKey>) -> P<Type> {
+    pub(crate) fn get_object_type_instantiation(&mut self, t: P<Type>, m: Option<TypeMapperKey>, alias: Option<TypeAliasKey>) -> P<Type> {
         let declaration: P<Node> = if t.object_flags().intersects(ObjectFlags::Reference) {
             // Deferred type reference
             t.as_type_reference().node.get().unwrap()
@@ -1328,7 +1328,7 @@ impl Checker {
         if result.is_none() {
             let too_complex_before = self.too_complex_reports;
             let new_alias = new_alias.alias(self);
-            let mut new_mapper = new_type_mapper(&type_parameters, &type_arguments);
+            let mut new_mapper = self.new_type_mapper(&type_parameters, &type_arguments);
             if target.object_flags().intersects(ObjectFlags::SingleSignatureType) && m.is_some() {
                 new_mapper = self.combine_type_mappers(Some(new_mapper), m.unwrap());
             }
@@ -1434,7 +1434,7 @@ impl Checker {
     }
 
     // checker.go:22883
-    pub(crate) fn instantiate_anonymous_type(&mut self, t: P<Type>, m: P<TypeMapper>, alias: Option<TypeAliasKey>) -> P<Type> {
+    pub(crate) fn instantiate_anonymous_type(&mut self, t: P<Type>, m: TypeMapperKey, alias: Option<TypeAliasKey>) -> P<Type> {
         let mut m = m;
         let mut alias = alias;
         let result = self.new_object_type((t.object_flags() & !(ObjectFlags::CouldContainTypeVariablesComputed | ObjectFlags::CouldContainTypeVariables)) | ObjectFlags::Instantiated, t.symbol());
@@ -1444,7 +1444,8 @@ impl Checker {
             let orig_type_parameter = self.get_type_parameter_from_mapped_type(t);
             let fresh_type_parameter = self.clone_type_parameter(orig_type_parameter);
             result.as_mapped_type().type_parameter.set(Some(fresh_type_parameter));
-            m = self.combine_type_mappers(Some(new_simple_type_mapper(orig_type_parameter, fresh_type_parameter)), m);
+            let mapper = self.new_simple_type_mapper(orig_type_parameter, fresh_type_parameter);
+            m = self.combine_type_mappers(Some(mapper), m);
             fresh_type_parameter.as_type_parameter().mapper.set(Some(m));
         } else if t.object_flags().intersects(ObjectFlags::InstantiationExpressionType) {
             result.as_instantiation_expression_type().node.set(t.as_instantiation_expression_type().node.get());
@@ -1466,13 +1467,13 @@ impl Checker {
     }
 
     // checker.go:22910
-    pub(crate) fn get_conditional_type_instantiation(&mut self, t: P<Type>, mapper: P<TypeMapper>, for_constraint: bool, alias: Option<TypeAliasKey>) -> P<Type> {
+    pub(crate) fn get_conditional_type_instantiation(&mut self, t: P<Type>, mapper: TypeMapperKey, for_constraint: bool, alias: Option<TypeAliasKey>) -> P<Type> {
         self.get_conditional_type_instantiation_ex(t, None, mapper, for_constraint, alias)
     }
 
     // notes/mem-lazy.md L5: the effective mapper is combineTypeMappers(m1, mapper), which is only used to compute the
     // type arguments, so it is applied in place instead of being allocated.
-    pub(crate) fn get_conditional_type_instantiation_ex(&mut self, t: P<Type>, m1: Option<P<TypeMapper>>, mapper: P<TypeMapper>, for_constraint: bool, alias: Option<TypeAliasKey>) -> P<Type> {
+    pub(crate) fn get_conditional_type_instantiation_ex(&mut self, t: P<Type>, m1: Option<TypeMapperKey>, mapper: TypeMapperKey, for_constraint: bool, alias: Option<TypeAliasKey>) -> P<Type> {
         let root = t.as_conditional_type().root.get().unwrap();
         if !root.outer_type_parameters.get().is_empty() {
             // We are instantiating a conditional type that has one or more type parameters in scope. Apply the
@@ -1484,14 +1485,14 @@ impl Checker {
                 .iter()
                 .map(|&tp| match m1 {
                     Some(m1) => {
-                        let t1 = m1.map(self, tp);
+                        let t1 = self.apply_type_mapper(m1, tp);
                         if t1 != tp {
                             self.instantiate_type(t1, Some(mapper))
                         } else {
-                            mapper.map(self, tp)
+                            self.apply_type_mapper(mapper, tp)
                         }
                     }
-                    None => mapper.map(self, tp),
+                    None => self.apply_type_mapper(mapper, tp),
                 })
                 .collect();
             let key = get_conditional_type_key(self, &type_arguments, alias, for_constraint);
@@ -1502,7 +1503,7 @@ impl Checker {
                 let mut census_fan_out: Option<usize> = None;
                 let mut census_nevers = 0u64;
                 let type_argument_list = &type_arguments[..];
-                let new_mapper = new_type_mapper(&outer_type_parameters, type_argument_list);
+                let new_mapper = self.new_type_mapper(&outer_type_parameters, type_argument_list);
                 let check_type = root.check_type.get().unwrap();
                 let mut distribution_type: Option<P<Type>> = None;
                 if root.is_distributive.get() {
@@ -1521,7 +1522,7 @@ impl Checker {
                         self.map_type_with_alias(
                             distribution_type,
                             |c, t| {
-                                let m = prepend_type_mapping(check_type, t, Some(new_mapper));
+                                let m = c.prepend_type_mapping(check_type, t, Some(new_mapper));
                                 let r = c.get_conditional_type(root, Some(m), for_constraint, None);
                                 // SAFETY: made here for this one call.
                                 if r == never_type {
@@ -1584,7 +1585,7 @@ impl Checker {
     }
 
     // checker.go:22960
-    pub(crate) fn instantiate_mapped_type(&mut self, t: P<Type>, m: P<TypeMapper>, alias: Option<TypeAliasKey>) -> P<Type> {
+    pub(crate) fn instantiate_mapped_type(&mut self, t: P<Type>, m: TypeMapperKey, alias: Option<TypeAliasKey>) -> P<Type> {
         // For a homomorphic mapped type { [P in keyof T]: X }, where T is some type variable, the mapping
         // operation depends on T as follows:
         // * If T is a primitive type no mapping is performed and the result is simply T.
@@ -1613,7 +1614,7 @@ impl Checker {
     }
 
     // The `instantiateConstituent` closure of instantiateMappedType (checker.go:22975).
-    fn instantiate_mapped_type_constituent(&mut self, t: P<Type>, type_variable: P<Type>, m: P<TypeMapper>, s: P<Type>) -> P<Type> {
+    fn instantiate_mapped_type_constituent(&mut self, t: P<Type>, type_variable: P<Type>, m: TypeMapperKey, s: P<Type>) -> P<Type> {
         let d = t.as_mapped_type();
         if !s.flags().intersects(TypeFlags::AnyOrUnknown | TypeFlags::InstantiableNonPrimitive | TypeFlags::Object | TypeFlags::Intersection) || s == self.wildcard_type || self.is_error_type(s) {
             return s;
@@ -1624,7 +1625,8 @@ impl Checker {
                     && self.find_resolution_cycle_start_index(type_variable.into(), TypeSystemPropertyName::ResolvedBaseConstraint) < 0
                     && self.has_array_or_type_type_constraint(type_variable)
             {
-                return self.instantiate_mapped_array_type(s, t, prepend_type_mapping(type_variable, s, Some(m)));
+                let mapper = self.prepend_type_mapping(type_variable, s, Some(m));
+                return self.instantiate_mapped_array_type(s, t, mapper);
             }
             if is_tuple_type(s) {
                 return self.instantiate_mapped_tuple_type(s, t, type_variable, m);
@@ -1634,7 +1636,8 @@ impl Checker {
                 return self.get_intersection_type(&types);
             }
         }
-        self.instantiate_anonymous_type(t, prepend_type_mapping(type_variable, s, Some(m)), None)
+        let mapper = self.prepend_type_mapping(type_variable, s, Some(m));
+        self.instantiate_anonymous_type(t, mapper, None)
     }
 
     // checker.go:23005
@@ -1647,7 +1650,7 @@ impl Checker {
     }
 
     // checker.go:23010
-    pub(crate) fn instantiate_mapped_array_type(&mut self, array_type: P<Type>, mapped_type: P<Type>, m: P<TypeMapper>) -> P<Type> {
+    pub(crate) fn instantiate_mapped_array_type(&mut self, array_type: P<Type>, mapped_type: P<Type>, m: TypeMapperKey) -> P<Type> {
         let element_type = self.instantiate_mapped_type_template(mapped_type, self.number_type, true /*isOptional*/, m);
         if self.is_error_type(element_type) {
             return self.error_type;
@@ -1657,7 +1660,7 @@ impl Checker {
     }
 
     // checker.go:23018
-    pub(crate) fn instantiate_mapped_tuple_type(&mut self, tuple_type: P<Type>, mapped_type: P<Type>, type_variable: P<Type>, m: P<TypeMapper>) -> P<Type> {
+    pub(crate) fn instantiate_mapped_tuple_type(&mut self, tuple_type: P<Type>, mapped_type: P<Type>, type_variable: P<Type>, m: TypeMapperKey) -> P<Type> {
         // We apply the mapped type's template type to each of the fixed part elements. For variadic elements, we
         // apply the mapped type itself to the variadic element type. For other elements in the variable part of the
         // tuple, we surround the element type with an array type and apply the mapped type to that. This ensures
@@ -1671,7 +1674,7 @@ impl Checker {
         let fixed_length = tuple_type.reference_target().as_tuple_type().fixed_length();
         let mut fixed_mapper = m;
         if fixed_length != 0 {
-            fixed_mapper = prepend_type_mapping(type_variable, tuple_type, Some(m));
+            fixed_mapper = self.prepend_type_mapping(type_variable, tuple_type, Some(m));
         }
         let modifiers = get_mapped_type_modifiers(mapped_type);
         let element_types = self.get_element_types(tuple_type);
@@ -1683,10 +1686,12 @@ impl Checker {
                 let key = self.get_string_literal_type(&i.to_string());
                 self.instantiate_mapped_type_template(mapped_type, key, flags.intersects(ElementFlags::Optional), fixed_mapper)
             } else if flags.intersects(ElementFlags::Variadic) {
-                self.instantiate_type(mapped_type, Some(prepend_type_mapping(type_variable, e, Some(m))))
+                let mapper = self.prepend_type_mapping(type_variable, e, Some(m));
+                self.instantiate_type(mapped_type, Some(mapper))
             } else {
                 let array_type = self.create_array_type(e);
-                let instantiated = self.instantiate_type(mapped_type, Some(prepend_type_mapping(type_variable, array_type, Some(m))));
+                let mapper = self.prepend_type_mapping(type_variable, array_type, Some(m));
+                let instantiated = self.instantiate_type(mapped_type, Some(mapper));
                 self.get_element_type_of_array_type(instantiated).unwrap_or(self.unknown_type)
             };
             if modifiers.intersects(MappedTypeModifiers::IncludeOptional) {
@@ -1708,9 +1713,9 @@ impl Checker {
     }
 
     // checker.go:23071
-    pub(crate) fn instantiate_mapped_type_template(&mut self, t: P<Type>, key: P<Type>, is_optional: bool, m: P<TypeMapper>) -> P<Type> {
+    pub(crate) fn instantiate_mapped_type_template(&mut self, t: P<Type>, key: P<Type>, is_optional: bool, m: TypeMapperKey) -> P<Type> {
         let type_parameter = self.get_type_parameter_from_mapped_type(t);
-        let template_mapper = append_type_mapping(Some(m), type_parameter, key);
+        let template_mapper = self.append_type_mapping(Some(m), type_parameter, key);
         let template_type = self.get_template_type_from_mapped_type(t.as_mapped_type().target.get().unwrap_or(t));
         let prop_type = self.instantiate_type(template_type, Some(template_mapper));
         let modifiers = get_mapped_type_modifiers(t);
@@ -1804,7 +1809,7 @@ impl Checker {
         self.for_each_mapped_type_property_key_type_and_index_signature_key_type(modifiers_type, TypeFlags::StringOrNumberLiteralOrUnique, false, |c, t| {
             let target_mapper = target_type.mapper();
             let type_parameter = c.get_type_parameter_from_mapped_type(target_type);
-            let mapper = append_type_mapping(target_mapper, type_parameter, t);
+            let mapper = c.append_type_mapping(target_mapper, type_parameter, t);
             mapped_keys.push(c.instantiate_type(name_type, Some(mapper)));
         });
         self.get_union_type(&mapped_keys)
@@ -1829,7 +1834,7 @@ impl Checker {
     }
 
     // checker.go:23167
-    pub(crate) fn instantiate_reverse_mapped_type(&mut self, t: P<Type>, m: P<TypeMapper>) -> P<Type> {
+    pub(crate) fn instantiate_reverse_mapped_type(&mut self, t: P<Type>, m: TypeMapperKey) -> P<Type> {
         let r = t.as_reverse_mapped_type();
         let inner_mapped_type = self.instantiate_type(r.mapped_type.get().unwrap(), Some(m));
         if !inner_mapped_type.object_flags().intersects(ObjectFlags::Mapped) {
@@ -1849,7 +1854,7 @@ impl Checker {
     }
 
     // checker.go:23185
-    pub(crate) fn instantiate_type_alias(&mut self, alias: Option<TypeAliasKey>, m: Option<P<TypeMapper>>) -> Option<TypeAliasKey> {
+    pub(crate) fn instantiate_type_alias(&mut self, alias: Option<TypeAliasKey>, m: Option<TypeMapperKey>) -> Option<TypeAliasKey> {
         let alias = alias?;
         let type_arguments = self.instantiate_types(&alias.type_arguments(self), m);
         Some(self.new_type_alias(alias.symbol(self), &type_arguments))
@@ -1857,21 +1862,21 @@ impl Checker {
 
     /// `instantiate_type_alias` for the alias argument of a cached type constructor (`AliasArg::Pending`): the type
     /// arguments are instantiated here, like Go, the `TypeAlias` is allocated only if a type is created with it.
-    pub(crate) fn instantiate_type_alias_pending(&mut self, alias: Option<TypeAliasKey>, m: Option<P<TypeMapper>>) -> Option<PendingTypeAlias> {
+    pub(crate) fn instantiate_type_alias_pending(&mut self, alias: Option<TypeAliasKey>, m: Option<TypeMapperKey>) -> Option<PendingTypeAlias> {
         let alias = alias?;
         let type_arguments = self.instantiate_types(&alias.type_arguments(self), m);
         Some(PendingTypeAlias::new(alias.symbol(self), type_arguments))
     }
 
     // checker.go:23192
-    pub(crate) fn instantiate_types(&mut self, types: &[P<Type>], m: Option<P<TypeMapper>>) -> Vec<P<Type>> {
+    pub(crate) fn instantiate_types(&mut self, types: &[P<Type>], m: Option<TypeMapperKey>) -> Vec<P<Type>> {
         self.instantiate_list(types, m, |c, t, m| c.instantiate_type(t, m))
     }
 
     /// `instantiate_types` for callers that only read the result: `None` when no element changed (where Go's
     /// `instantiateList` returns its input), else the new list in a buffer to hand back with `free_type_list`.
     /// Instantiates the same elements in the same order.
-    pub(crate) fn instantiate_types_changed(&mut self, types: &[P<Type>], m: P<TypeMapper>) -> Option<Vec<P<Type>>> {
+    pub(crate) fn instantiate_types_changed(&mut self, types: &[P<Type>], m: TypeMapperKey) -> Option<Vec<P<Type>>> {
         for (i, &t) in types.iter().enumerate() {
             let mapped = self.instantiate_type(t, Some(m));
             if mapped != t {
@@ -1897,18 +1902,18 @@ impl Checker {
     }
 
     // checker.go:23196
-    pub(crate) fn instantiate_symbols(&mut self, symbols: &[P<Symbol>], m: P<TypeMapper>) -> Vec<P<Symbol>> {
+    pub(crate) fn instantiate_symbols(&mut self, symbols: &[P<Symbol>], m: TypeMapperKey) -> Vec<P<Symbol>> {
         self.instantiate_list(symbols, Some(m), |c, s, m| c.instantiate_symbol(s, m))
     }
 
     // checker.go:23200
     #[cfg_attr(feature = "site-counts", track_caller)]
-    pub(crate) fn instantiate_signatures(&mut self, signatures: &[SignatureKey], m: P<TypeMapper>) -> Vec<SignatureKey> {
+    pub(crate) fn instantiate_signatures(&mut self, signatures: &[SignatureKey], m: TypeMapperKey) -> Vec<SignatureKey> {
         self.instantiate_list(signatures, Some(m), |c, s, m| c.instantiate_signature(s, m))
     }
 
     // checker.go:23204
-    pub(crate) fn instantiate_index_infos(&mut self, index_infos: &[IndexInfoKey], m: P<TypeMapper>) -> Vec<IndexInfoKey> {
+    pub(crate) fn instantiate_index_infos(&mut self, index_infos: &[IndexInfoKey], m: TypeMapperKey) -> Vec<IndexInfoKey> {
         self.instantiate_list(index_infos, Some(m), |c, info, m| c.instantiate_index_info(info, m))
     }
 
@@ -1916,7 +1921,7 @@ impl Checker {
     // `core.Same(result, values)` compare the elements, which is equivalent because a new slice is only built
     // when some element changed.
     // checker.go:23208
-    pub(crate) fn instantiate_list<T: Copy + Eq + std::hash::Hash>(&mut self, values: &[T], m: Option<P<TypeMapper>>, instantiator: impl FnMut(&mut Checker, T, Option<P<TypeMapper>>) -> T) -> Vec<T> {
+    pub(crate) fn instantiate_list<T: Copy + Eq + std::hash::Hash>(&mut self, values: &[T], m: Option<TypeMapperKey>, instantiator: impl FnMut(&mut Checker, T, Option<TypeMapperKey>) -> T) -> Vec<T> {
         let mut instantiator = instantiator;
         for (i, &value) in values.iter().enumerate() {
             let mapped = instantiator(self, value, m);

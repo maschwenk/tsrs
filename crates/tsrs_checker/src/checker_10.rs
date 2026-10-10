@@ -104,9 +104,9 @@ impl Checker {
     }
 
     // checker.go:19673
-    pub(crate) fn create_signature_type_mapper(&mut self, sig: SignatureKey, type_arguments: &[P<Type>]) -> P<TypeMapper> {
+    pub(crate) fn create_signature_type_mapper(&mut self, sig: SignatureKey, type_arguments: &[P<Type>]) -> TypeMapperKey {
         let sources = self.get_type_parameters_for_mapper(sig);
-        new_type_mapper(&sources, type_arguments)
+        self.new_type_mapper(&sources, type_arguments)
     }
 
     // checker.go:19677
@@ -185,7 +185,7 @@ impl Checker {
         let key = CachedSignatureKey { sig: signature, key: SignatureKeyErased };
         let mut erased = self.cached_signatures.get(&key);
         if erased.is_none() {
-            let m = new_array_to_single_type_mapper(&self.signature(signature).type_parameters.get(), self.any_type);
+            let m = self.new_array_to_single_type_mapper(&self.signature(signature).type_parameters.get(), self.any_type);
             let created = self.instantiate_signature_ex(signature, m, true /*eraseTypeParameters*/);
             self.cached_signatures.insert(key, created);
             erased = Some(created);
@@ -243,7 +243,7 @@ impl Checker {
         for tp in type_parameters .iter().copied() {
             constraints.push(self.get_constraint_of_type_parameter(tp).unwrap_or(self.unknown_type));
         }
-        let base_constraint_mapper = new_type_mapper(&type_parameters, &constraints);
+        let base_constraint_mapper = self.new_type_mapper(&type_parameters, &constraints);
         let mut base_constraints: Vec<P<Type>> = type_parameters.iter().map(|tp| self.instantiate_type(*tp, Some(base_constraint_mapper))).collect();
         // Run the immediate constraint mapper N-1 times so non-circular interdependent type parameters
         // resolve to their external dependencies without adding an extra expansion step for self-recursive constraints.
@@ -251,8 +251,10 @@ impl Checker {
             base_constraints = self.instantiate_types(&base_constraints, Some(base_constraint_mapper));
         }
         // and then apply a type eraser to remove any remaining circularly dependent type parameters
-        base_constraints = self.instantiate_types(&base_constraints, Some(new_array_to_single_type_mapper(&type_parameters, self.any_type)));
-        let result = self.instantiate_signature_ex(signature, new_type_mapper(&type_parameters, &base_constraints), true /*eraseTypeParameters*/);
+        let mapper = self.new_array_to_single_type_mapper(&type_parameters, self.any_type);
+        base_constraints = self.instantiate_types(&base_constraints, Some(mapper));
+        let mapper = self.new_type_mapper(&type_parameters, &base_constraints);
+        let result = self.instantiate_signature_ex(signature, mapper, true /*eraseTypeParameters*/);
         self.cached_signatures.insert(key, result);
         result
     }
@@ -1574,7 +1576,7 @@ impl Checker {
 
     // checker.go:20956
     #[cfg_attr(feature = "site-counts", track_caller)]
-    pub(crate) fn instantiate_signature(&mut self, sig: SignatureKey, m: Option<P<TypeMapper>>) -> SignatureKey {
+    pub(crate) fn instantiate_signature(&mut self, sig: SignatureKey, m: Option<TypeMapperKey>) -> SignatureKey {
         let erase_type_parameters = m == Some(self.permissive_mapper);
         // Go passes m through unchanged; instantiateSignatureEx requires a mapper.
         self.instantiate_signature_ex(sig, m.unwrap(), erase_type_parameters /*eraseTypeParameters*/)
@@ -1582,7 +1584,7 @@ impl Checker {
 
     // checker.go:20960
     #[cfg_attr(feature = "site-counts", track_caller)]
-    pub(crate) fn instantiate_signature_ex(&mut self, sig: SignatureKey, m: P<TypeMapper>, erase_type_parameters: bool) -> SignatureKey {
+    pub(crate) fn instantiate_signature_ex(&mut self, sig: SignatureKey, m: TypeMapperKey, erase_type_parameters: bool) -> SignatureKey {
         let mut m = m;
         let mut fresh_type_parameters: Vec<P<Type>> = Vec::new();
         if !self.signature(sig).type_parameters.get().is_empty() && !erase_type_parameters {
@@ -1590,7 +1592,8 @@ impl Checker {
             // new type parameters in the mapper function. Finally store this mapper in the new type
             // parameters such that we can use it when instantiating constraints.
             fresh_type_parameters = self.signature(sig).type_parameters.get().iter().map(|tp| self.clone_type_parameter(*tp)).collect();
-            m = self.combine_type_mappers(Some(new_type_mapper(&self.signature(sig).type_parameters.get(), &fresh_type_parameters)), m);
+            let mapper = self.new_type_mapper(&self.signature(sig).type_parameters.get(), &fresh_type_parameters);
+            m = self.combine_type_mappers(Some(mapper), m);
             for tp in &fresh_type_parameters {
                 tp.as_type_parameter().mapper.set(Some(m));
             }
@@ -1616,7 +1619,7 @@ impl Checker {
     }
 
     // checker.go:20983
-    pub(crate) fn instantiate_index_info(&mut self, info: IndexInfoKey, m: Option<P<TypeMapper>>) -> IndexInfoKey {
+    pub(crate) fn instantiate_index_info(&mut self, info: IndexInfoKey, m: Option<TypeMapperKey>) -> IndexInfoKey {
         let new_value_type = self.instantiate_type(self.index_info(info).value_type(), m);
         if new_value_type == self.index_info(info).value_type() {
             return info;
@@ -1723,7 +1726,7 @@ impl Checker {
     }
 
     // checker.go:21070
-    pub(crate) fn create_instantiated_symbol_table(&mut self, symbols: &[P<Symbol>], m: P<TypeMapper>) -> Option<P<SymbolTable>> {
+    pub(crate) fn create_instantiated_symbol_table(&mut self, symbols: &[P<Symbol>], m: TypeMapperKey) -> Option<P<SymbolTable>> {
         if symbols.is_empty() {
             return None;
         }
@@ -1736,7 +1739,7 @@ impl Checker {
     }
 
     // checker.go:21081
-    pub(crate) fn instantiate_symbol_table(&mut self, symbols: Option<P<SymbolTable>>, m: P<TypeMapper>) -> Option<P<SymbolTable>> {
+    pub(crate) fn instantiate_symbol_table(&mut self, symbols: Option<P<SymbolTable>>, m: TypeMapperKey) -> Option<P<SymbolTable>> {
         let Some(symbols) = symbols.filter(|s| !s.is_empty()) else {
             return None;
         };
@@ -1752,7 +1755,7 @@ impl Checker {
 
     // checker.go:21094
     #[cfg_attr(feature = "site-counts", track_caller)]
-    pub(crate) fn instantiate_symbol(&mut self, symbol: P<Symbol>, m: Option<P<TypeMapper>>) -> P<Symbol> {
+    pub(crate) fn instantiate_symbol(&mut self, symbol: P<Symbol>, m: Option<TypeMapperKey>) -> P<Symbol> {
         if self.is_symbol_unaffected_by_instantiation(symbol, m) {
             return symbol;
         }
@@ -1760,9 +1763,9 @@ impl Checker {
     }
 
     // Can change from false to true once the type of the symbol is resolved.
-    pub(crate) fn is_symbol_unaffected_by_instantiation(&mut self, symbol: P<Symbol>, m: Option<P<TypeMapper>>) -> bool {
+    pub(crate) fn is_symbol_unaffected_by_instantiation(&mut self, symbol: P<Symbol>, m: Option<TypeMapperKey>) -> bool {
         let links = self.value_symbol_links.get_key(symbol);
-        if m.is_some_and(|m| m.maps_this_only()) && is_thisless(symbol) {
+        if m.is_some_and(|m| self.type_mapper(m).maps_this_only()) && is_thisless(symbol) {
             return true;
         }
         // If the type of the symbol is already resolved, and if that type could not possibly
@@ -1784,7 +1787,7 @@ impl Checker {
     }
 
     #[cfg_attr(feature = "site-counts", track_caller)]
-    pub(crate) fn new_instantiated_symbol(&mut self, symbol: P<Symbol>, m: Option<P<TypeMapper>>) -> P<Symbol> {
+    pub(crate) fn new_instantiated_symbol(&mut self, symbol: P<Symbol>, m: Option<TypeMapperKey>) -> P<Symbol> {
         let mut symbol = symbol;
         let mut m = m;
         let links = self.value_symbol_links.get_key(symbol);
@@ -2018,7 +2021,7 @@ impl Checker {
         } else if prop_name_type.flags().intersects(TypeFlags::Number | TypeFlags::Enum) {
             index_key_type = self.number_type;
         }
-        let mapper = append_type_mapping(t.as_mapped_type().mapper.get(), type_parameter, key_type);
+        let mapper = self.append_type_mapping(t.as_mapped_type().mapper.get(), type_parameter, key_type);
         let prop_type = self.instantiate_type(template_type, Some(mapper));
         // SAFETY: made here for this one instantiation.
         let modifiers_index_info = self.get_applicable_index_info(modifiers_type, prop_name_type);
@@ -2264,7 +2267,7 @@ fn mapped_type_add_member_for_key_type_worker(c: &mut Checker, st: &mut MappedTy
 fn mapped_type_add_member_for_key_type(c: &mut Checker, st: &mut MappedTypeMembersState, key_type: P<Type>) {
     let mut prop_name_type = key_type;
     if let Some(name_type) = st.name_type {
-        let mapper = append_type_mapping(st.t.as_mapped_type().mapper.get(), st.type_parameter, key_type);
+        let mapper = c.append_type_mapping(st.t.as_mapped_type().mapper.get(), st.type_parameter, key_type);
         prop_name_type = c.instantiate_type(name_type, Some(mapper));
         // SAFETY: made here for this one instantiation.
         }
@@ -2300,7 +2303,7 @@ impl Checker {
             let template_type = self.get_template_type_from_mapped_type(mapped_type.as_mapped_type().target.get().unwrap_or(mapped_type));
             let type_parameter = self.get_type_parameter_from_mapped_type(mapped_type);
             let key_type = self.mapped_symbol_links.get(symbol).key_type.get().unwrap();
-            let mapper = append_type_mapping(mapped_type.as_mapped_type().mapper.get(), type_parameter, key_type);
+            let mapper = self.append_type_mapping(mapped_type.as_mapped_type().mapper.get(), type_parameter, key_type);
             let mut prop_type = self.instantiate_type(template_type, Some(mapper));
             // SAFETY: made here for this one instantiation.
             // When creating an optional property in strictNullChecks mode, if 'undefined' isn't assignable to the
@@ -2348,7 +2351,7 @@ impl Checker {
                 let check_type = t.as_conditional_type().check_type.get().unwrap();
                 let constraint = self.get_lower_bound_of_key_type(check_type);
                 if constraint != check_type {
-                    let mapper = prepend_type_mapping(root.check_type.get().unwrap(), constraint, t.as_conditional_type().mapper.get());
+                    let mapper = self.prepend_type_mapping(root.check_type.get().unwrap(), constraint, t.as_conditional_type().mapper.get());
                     return self.get_conditional_type_instantiation(t, mapper, false /*forConstraint*/, None);
                 }
             }
@@ -2538,7 +2541,7 @@ impl Checker {
         let mut param_mapper = None;
         if !self.signature(left).type_parameters.get().is_empty() && !self.signature(right).type_parameters.get().is_empty() {
             // We just use the type parameter defaults from the first signature
-            param_mapper = Some(new_type_mapper(&self.signature(right).type_parameters.get(), &self.signature(left).type_parameters.get()));
+            param_mapper = Some(self.new_type_mapper(&self.signature(right).type_parameters.get(), &self.signature(left).type_parameters.get()));
         }
         let mut flags = (self.signature(left).flags.get() | self.signature(right).flags.get()) & (SignatureFlags::PropagatingFlags & !SignatureFlags::HasRestParameter);
         let declaration = self.signature(left).declaration.get();
@@ -2572,7 +2575,7 @@ impl Checker {
     }
 
     // checker.go:21563
-    pub(crate) fn combine_union_or_intersection_parameters(&mut self, left: SignatureKey, right: SignatureKey, mapper: Option<P<TypeMapper>>, is_union: bool) -> Vec<P<Symbol>> {
+    pub(crate) fn combine_union_or_intersection_parameters(&mut self, left: SignatureKey, right: SignatureKey, mapper: Option<TypeMapperKey>, is_union: bool) -> Vec<P<Symbol>> {
         let left_count = self.get_parameter_count(left);
         let right_count = self.get_parameter_count(right);
         let (longest_count, longest, shorter) = if left_count >= right_count { (left_count, left, right) } else { (right_count, right, left) };
@@ -2646,7 +2649,7 @@ impl Checker {
     }
 
     // checker.go:21629
-    pub(crate) fn combine_union_or_intersection_this_param(&mut self, left: Option<P<Symbol>>, right: Option<P<Symbol>>, mapper: Option<P<TypeMapper>>, is_union: bool) -> Option<P<Symbol>> {
+    pub(crate) fn combine_union_or_intersection_this_param(&mut self, left: Option<P<Symbol>>, right: Option<P<Symbol>>, mapper: Option<TypeMapperKey>, is_union: bool) -> Option<P<Symbol>> {
         let Some(left) = left else {
             return right;
         };

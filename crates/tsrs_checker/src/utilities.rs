@@ -641,10 +641,10 @@ fn compare_types_same_flags(c: &mut Checker, t1: P<Type>, t2: P<Type>) -> i32 {
                 // instantiateAnonymousType prepends a fresh type parameter mapping.
                 // Compare the effective instantiation, not the identity of that fresh parameter.
                 if let Some(m) = m1 {
-                    m1 = Some(composite_mapper_m2(m));
+                    m1 = Some(composite_mapper_m2(c, m));
                 }
                 if let Some(m) = m2 {
-                    m2 = Some(composite_mapper_m2(m));
+                    m2 = Some(composite_mapper_m2(c, m));
                 }
             }
             let r = compare_type_mappers(c, m1, m2);
@@ -770,8 +770,8 @@ fn compare_types_same_flags(c: &mut Checker, t1: P<Type>, t2: P<Type>) -> i32 {
 }
 
 // Go `m.data.(*CompositeTypeMapper).m2` (panics like the Go type assertion on any other mapper kind).
-fn composite_mapper_m2(m: P<TypeMapper>) -> P<TypeMapper> {
-    match m.data() {
+fn composite_mapper_m2(c: &Checker, m: TypeMapperKey) -> TypeMapperKey {
+    match c.type_mapper(m).data() {
         TypeMapperData::Composite { m2, .. } => m2,
         _ => panic!("interface conversion: expected *CompositeTypeMapper"),
     }
@@ -913,7 +913,7 @@ pub(crate) fn compare_type_lists(c: &mut Checker, s1: &[P<Type>], s2: &[P<Type>]
 }
 
 // utilities.go:716
-pub(crate) fn compare_type_mappers(c: &mut Checker, m1: Option<P<TypeMapper>>, m2: Option<P<TypeMapper>>) -> i32 {
+pub(crate) fn compare_type_mappers(c: &mut Checker, m1: Option<TypeMapperKey>, m2: Option<TypeMapperKey>) -> i32 {
     if m1 == m2 {
         return 0;
     }
@@ -923,12 +923,12 @@ pub(crate) fn compare_type_mappers(c: &mut Checker, m1: Option<P<TypeMapper>>, m
     let Some(m2) = m2 else {
         return -1;
     };
-    let kind1 = m1.kind();
-    let kind2 = m2.kind();
+    let kind1 = c.type_mapper(m1).kind();
+    let kind2 = c.type_mapper(m2).kind();
     if kind1 != kind2 {
         return kind1 as i32 - kind2 as i32;
     }
-    match (m1.data(), m2.data()) {
+    match (c.type_mapper(m1).data(), c.type_mapper(m2).data()) {
         (TypeMapperData::Simple { source: source1, target: target1 }, TypeMapperData::Simple { source: source2, target: target2 }) => {
             let r = compare_types(c, Some(source1), Some(source2));
             if r != 0 {
@@ -938,11 +938,12 @@ pub(crate) fn compare_type_mappers(c: &mut Checker, m1: Option<P<TypeMapper>>, m
         }
         (d1, d2) if kind1 == TypeMapperKind::Array => {
             let ((sources1, targets1), (sources2, targets2)) = (d1.array_sources_targets().unwrap(), d2.array_sources_targets().unwrap());
-            let r = compare_type_lists(c, sources1, sources2);
+            let (sources1, targets1, sources2, targets2) = (sources1.to_vec(), targets1.to_vec(), sources2.to_vec(), targets2.to_vec());
+            let r = compare_type_lists(c, &sources1, &sources2);
             if r != 0 {
                 return r;
             }
-            compare_type_lists(c, targets1, targets2)
+            compare_type_lists(c, &targets1, &targets2)
         }
         (TypeMapperData::Merged { m1: m11, m2: m12 }, TypeMapperData::Merged { m1: m21, m2: m22 }) => {
             let r = compare_type_mappers(c, Some(m11), Some(m21));

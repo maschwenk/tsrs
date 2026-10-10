@@ -1,0 +1,34 @@
+[
+  {
+    "name": "fixture",
+    "exit": 0,
+    "profile_sha256": "62f3e0b28a61341f5e0a562e19c0cd5f01ae45f1fa0f5dedcadc497c3b8f6006",
+    "log_sha256": "043b3cde93f9c68fbdefc1f79cbcf76536721d73d087a1128d6c254a40e19abb",
+    "work_census_sha256": "0bbe7efc3120006a14d257ae4db06454f61dd3aa05b5ce99246a1a8bbf1a3f0d",
+    "heap_rows": [
+      "| type_mappers (owned records) | 1 | 18986 | 32768 | 24 | 0.58 | 0.8 |",
+      "| inference_contexts (owned records) | 1 | 42 | 64 | 72 | 0.66 | 0.0 |",
+      "| inference_infos (owned records) | 1 | 52 | 64 | 48 | 0.81 | 0.0 |",
+      "| inference_states (owned records) | 1 | 1 | 4 | 152 | 0.25 | 0.0 |",
+      "| inference_context_infos | 1 | 0 | 4 | 16 | 0.00 | 0.0 |",
+      "| free_inference_states | 1 | 1 | 4 | 8 | 0.25 | 0.0 |",
+      "| skip_direct_inference_nodes | 1 | 0 | 0 | 8 | 0.00 | 0.0 |"
+    ]
+  },
+  {
+    "name": "Compiler",
+    "exit": 2,
+    "profile_sha256": "62f3e0b28a61341f5e0a562e19c0cd5f01ae45f1fa0f5dedcadc497c3b8f6006",
+    "log_sha256": "5f8641221bba2c5eea508f9159a3e8b85098a888dc086d0aabcd283d797cc8c8",
+    "work_census_sha256": "2fd33f22edd9c8bac0089a14046027fc9def35760b67a88716ca4bcee0cf4aaf",
+    "heap_rows": [
+      "| inference_infos (owned records) | 1 | 8606 | 16384 | 48 | 0.53 | 0.8 |",
+      "| type_mappers (owned records) | 1 | 28746 | 32768 | 24 | 0.88 | 0.8 |",
+      "| inference_contexts (owned records) | 1 | 7963 | 8192 | 72 | 0.97 | 0.6 |",
+      "| inference_states (owned records) | 1 | 2 | 4 | 152 | 0.50 | 0.0 |",
+      "| inference_context_infos | 1 | 0 | 16 | 16 | 0.00 | 0.0 |",
+      "| free_inference_states | 1 | 2 | 4 | 8 | 0.50 | 0.0 |",
+      "| skip_direct_inference_nodes | 1 | 0 | 0 | 8 | 0.00 | 0.0 |"
+    ]
+  }
+]

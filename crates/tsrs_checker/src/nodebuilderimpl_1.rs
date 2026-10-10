@@ -1630,7 +1630,8 @@ impl NodeBuilderImpl {
                 let target_template = c.get_template_type_from_mapped_type(target);
                 let target_type_parameter = c.get_type_parameter_from_mapped_type(target);
                 let target_modifiers = c.get_modifiers_type_from_mapped_type(target);
-                template_type = c.instantiate_type(target_template, Some(new_type_mapper(&[target_type_parameter, target_modifiers], &[type_parameter, new_constraint_param])));
+                let mapper = c.new_type_mapper(&[target_type_parameter, target_modifiers], &[type_parameter, new_constraint_param]);
+                template_type = c.instantiate_type(target_template, Some(mapper));
             }
             let mut index_target = new_type_variable;
             if index_target.is_none() {

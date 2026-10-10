@@ -1060,7 +1060,7 @@ impl Checker {
                 // apply JSX.IntrinsicClassAttributes<hostClassType, ...>
                 let min_type_argument_count = self.get_min_type_argument_count(&type_params);
                 let inferred_args = self.fill_missing_type_arguments(&[host_class_type], &type_params, min_type_argument_count, ast::is_in_js_file(context));
-                let mapper = new_type_mapper(&type_params, &inferred_args);
+                let mapper = self.new_type_mapper(&type_params, &inferred_args);
                 library_managed_attribute_type = self.instantiate_type(intrinsic_class_attribs, Some(mapper));
             } else {
                 library_managed_attribute_type = intrinsic_class_attribs;

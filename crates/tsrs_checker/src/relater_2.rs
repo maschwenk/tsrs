@@ -16,7 +16,7 @@ fn is_message(message: Option<&'static Message>, target: &'static Message) -> bo
 }
 
 // Go's instantiateType returns nil for a nil type.
-fn instantiate_type_or_nil(c: &mut Checker, t: Option<P<Type>>, m: Option<P<TypeMapper>>) -> Option<P<Type>> {
+fn instantiate_type_or_nil(c: &mut Checker, t: Option<P<Type>>, m: Option<TypeMapperKey>) -> Option<P<Type>> {
     t.map(|t| c.instantiate_type(t, m))
 }
 
@@ -1529,13 +1529,14 @@ impl Relater {
                 let target_conditional = target.as_conditional_type();
                 let source_params = source_conditional.root.get().unwrap().infer_type_parameters.get();
                 let mut source_extends = source_conditional.extends_type.get().unwrap();
-                let mut mapper: Option<P<TypeMapper>> = None;
+                let mut mapper: Option<TypeMapperKey> = None;
                 if !source_params.is_empty() {
                     // If the source has infer type parameters, we instantiate them in the context of the target
                     let r = self.as_p();
                     let ctx = c.new_inference_context(&source_params, None /*signature*/, InferenceFlags::None, Some(r.worker_comparer()));
                     c.infer_types(&c.inference_context(ctx).inferences.get(), target_conditional.extends_type.get().unwrap(), source_extends, InferencePriority::NoConstraints | InferencePriority::AlwaysStrict, false);
-                    source_extends = c.instantiate_type(source_extends, c.inference_mapper(ctx));
+                    let inference_mapper = c.inference_mapper(ctx);
+                    source_extends = c.instantiate_type(source_extends, inference_mapper);
                     mapper = c.inference_mapper(ctx);
                 }
                 if c.is_type_identical_to(source_extends, target_conditional.extends_type.get().unwrap())
@@ -1805,7 +1806,7 @@ impl Relater {
             if result != Ternary::False {
                 let source_type_parameter = c.get_type_parameter_from_mapped_type(source);
                 let target_type_parameter = c.get_type_parameter_from_mapped_type(target);
-                let mapper = new_simple_type_mapper(source_type_parameter, target_type_parameter);
+                let mapper = c.new_simple_type_mapper(source_type_parameter, target_type_parameter);
                 let source_name_type = c.get_name_type_from_mapped_type(source);
                 let source_name_type = instantiate_type_or_nil(c, source_name_type, Some(mapper));
                 let target_name_type = c.get_name_type_from_mapped_type(target);
@@ -2651,7 +2652,8 @@ impl Relater {
         self.report_relation_error(c, head_message, source, target);
         if source.flags().intersects(TypeFlags::TypeParameter) && source.symbol().is_some_and(|s| !s.declarations().is_empty()) && c.get_constraint_of_type(source).is_none() {
             let synthetic_param = c.clone_type_parameter(source);
-            let constraint = c.instantiate_type(target, Some(new_simple_type_mapper(source, synthetic_param)));
+            let mapper = c.new_simple_type_mapper(source, synthetic_param);
+            let constraint = c.instantiate_type(target, Some(mapper));
             synthetic_param.as_type_parameter().constraint.set(Some(constraint));
             if c.has_non_circular_base_constraint(synthetic_param) {
                 let target_constraint_string = c.type_to_string_exported(target);

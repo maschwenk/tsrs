@@ -1,0 +1,90 @@
+{
+  "pass": {
+    "entries": 371,
+    "tsc": 184,
+    "tsbuild": 187,
+    "sha256": "c098f73f3d6b65efc8f424f818733f95001a4e375a13c876e0fe6f3e3b041f7c",
+    "comparisons": {
+      "typed-inference": {
+        "differences": 0,
+        "sha256": "c098f73f3d6b65efc8f424f818733f95001a4e375a13c876e0fe6f3e3b041f7c"
+      },
+      "oxc-owned-type-text": {
+        "differences": 0,
+        "sha256": "c098f73f3d6b65efc8f424f818733f95001a4e375a13c876e0fe6f3e3b041f7c"
+      }
+    }
+  },
+  "fail": {
+    "entries": 35,
+    "tsc": 32,
+    "tsbuild": 3,
+    "sha256": "6b37bec6778e170c9c46a56cae092936ab15a3a7597e945c48f0f307d8cd9d1f",
+    "comparisons": {
+      "typed-inference": {
+        "differences": 0,
+        "sha256": "6b37bec6778e170c9c46a56cae092936ab15a3a7597e945c48f0f307d8cd9d1f"
+      },
+      "oxc-owned-type-text": {
+        "differences": 0,
+        "sha256": "6b37bec6778e170c9c46a56cae092936ab15a3a7597e945c48f0f307d8cd9d1f"
+      }
+    }
+  },
+  "crash": {
+    "entries": 0,
+    "tsc": 0,
+    "tsbuild": 0,
+    "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "comparisons": {
+      "typed-inference": {
+        "differences": 0,
+        "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+      },
+      "oxc-owned-type-text": {
+        "differences": 0,
+        "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+      }
+    }
+  },
+  "local_output_differences_from_typed_inference": [
+    "tsc/incremental/internal-symbolname-in-tsbuildInfo.js"
+  ],
+  "local_output_sha256": {
+    "tsbuild/commandLine/bad-locale.js": "be20b9b99d73ad38b858612123944ae42dde88e885d4b818ae042a0116afcc23",
+    "tsbuild/commandLine/help.js": "384ad0110e81f6fbd9995b796c7b5ab703e4e35efcd5e3068228bd4d6f366533",
+    "tsbuild/commandLine/locale.js": "6e156a60c6dc00f53fd7d75563c3550a20ee45b40c5a3b450c0ec9d1e243a6e1",
+    "tsc/commandLine/Initialized-TSConfig-with---help.js": "d1c7d0aa676794cdbd0a22f351f5bc9bb79685b667e2b7c46a7675a88c1f85a5",
+    "tsc/commandLine/Initialized-TSConfig-with-advanced-options.js": "07e5f348d0fc310d8d244d4d65b9a55618b5b6d55fed90a4a437e2d6fc5920e1",
+    "tsc/commandLine/Initialized-TSConfig-with-boolean-value-compiler-options.js": "95023b934fcb0ea08cbbadbab0d068c84960b68aef57f8a3d6c575ebbb9156ba",
+    "tsc/commandLine/Initialized-TSConfig-with-enum-value-compiler-options.js": "440cd6f2f8163346afd41f09f60ce4730bd5c7a67bef8afd749c3ac0d2b85082",
+    "tsc/commandLine/Initialized-TSConfig-with-files-options.js": "41f8dd36d805e296f968507e5c391dff8e43418de5b1aedad72742543b31b24f",
+    "tsc/commandLine/Initialized-TSConfig-with-list-compiler-options-with-enum-value.js": "fe4872598398b4d5f4e609f0a3f12e091761e79fdb5f83906d44651719ac33d5",
+    "tsc/commandLine/Initialized-TSConfig-with-list-compiler-options.js": "acd9283954bc271d331ff094742f6fb693c45be5e1302c3d38d2ede477169e09",
+    "tsc/commandLine/Initialized-TSConfig-with-tsconfig.json.js": "3cfdb4f1ca7221b9bc520b95435fde4b619d4d71958b63c5f5e36b911743c031",
+    "tsc/commandLine/bad-locale.js": "a601ca1d661b3c184c75fba85c523b6878af8f251d564fe8e445a43c8ef7a851",
+    "tsc/commandLine/help-all.js": "95f116ba4425860c8df52beee46e0a2ecd7b1cbe6953220b1b85b740fb70ee04",
+    "tsc/commandLine/help.js": "92a5471ffaffe40ca6a0494ec8be314515561ad4c76b050315448a5105f2db67",
+    "tsc/commandLine/locale.js": "90858c5c01d6a567c25028e3a71c4fa892ba50309cdac914b7ee33e755558247",
+    "tsc/commandLine/show-help-with-ExitStatus.DiagnosticsPresent_OutputsSkipped-when-host-cannot-provide-terminal-width.js": "a1bddb231cf7ee4b13d61a85a9ba3e96513529ea762925b71987cb79445bbc8f",
+    "tsc/commandLine/show-help-with-ExitStatus.DiagnosticsPresent_OutputsSkipped.js": "a1bddb231cf7ee4b13d61a85a9ba3e96513529ea762925b71987cb79445bbc8f",
+    "tsc/extends/configDir-template-showConfig.js": "afca1b876c8ba536ef971b983dc45ef22ff6f99d105398a1a92284f4a01dbdbd",
+    "tsc/forceConsistentCasingInFileNames/two-files-exist-on-disk-that-differs-only-in-casing.js": "a1315ee3235cc39b24524598872bbf3ea859cd0b91938ca2a1ca1531c308304d",
+    "tsc/forceConsistentCasingInFileNames/when-file-is-included-from-multiple-places-with-different-casing.js": "f33a5992a55e572033874aef8ff200b442bcdabc4f83d7a2beed33b37e71d7e6",
+    "tsc/forceConsistentCasingInFileNames/with-triple-slash-ref-from-file.js": "9bb771b413582c823f91c02f0d149e7e73287c4e8691d499cab9254e946fd9b7",
+    "tsc/generateTrace/generateTrace-generates-types-file.js": "e2641b2dd2641d7eca9f27e57641a9a45dfd9afd08befc018b2b91ef3ca7a0b6",
+    "tsc/generateTrace/generateTrace-with-multiple-files-and-complex-types.js": "4caf4b04a16f0c60e8f9377b91f10c9d764873133859931ad2497d1890af6821",
+    "tsc/ignoreConfig/without-any-options-when-config-file-absent-with---ignoreConfig.js": "32c89608b1079197aefebc51a078b4d0de835b023fa92706f3836b83b1439bee",
+    "tsc/ignoreConfig/without-any-options-when-config-file-absent.js": "d12283375d4e0f9e96098f74699761365e8b11f52aeb4f448689d3ea5a04aea3",
+    "tsc/incremental/internal-symbolname-in-tsbuildInfo.js": "d8f57ba0e7d2e4d9aa53f12abc6c74733608484af78cb392af75b99df0983a75",
+    "tsc/showConfig/Show-TSConfig-with-compileOnSave-and-more.js": "1ec56f450c7e99b53fd0dbf30c4842375123a7855e954e971e50409ce80746f4",
+    "tsc/showConfig/Show-TSConfig-with-exclude-and-outDir.js": "107f890cb3b4eef922236e1a3acd5da83e241c9674c0768ab13237de69c56d03",
+    "tsc/showConfig/Show-TSConfig-with-exclude.js": "d4ed756cdcaa00e643687d7d60ce2d88fdc95a9d1c6c675c4c1bf1b04b67fb1b",
+    "tsc/showConfig/Show-TSConfig-with-files-and-include.js": "65877dfe1f14b416502097942a3765a2fb2f572399833b4db6693a137ece4e73",
+    "tsc/showConfig/Show-TSConfig-with-files-options.js": "a25028d6ccbd33ccc25e12ca1e0a9423146d8a6e0d7d6b455dc6e48d6e7f8054",
+    "tsc/showConfig/Show-TSConfig-with-include-filtering-files.js": "3c8b7b48f8de0935ab13f50a20f5eeafb58b140ba8a07350941840c4366d513e",
+    "tsc/showConfig/Show-TSConfig-with-paths-and-more.js": "0c01db2961a5edfeab97db1d725eb428f5d9df1f718151c58f8785aef3271887",
+    "tsc/showConfig/Show-TSConfig-with-references.js": "0ab559ba491e262abb03edd955ad04a0921fe36fbfe6735e375e4e29bbb239aa",
+    "tsc/showConfig/Show-TSConfig-with-transitively-implied-options.js": "f874fc44e2e91c4128680c18b8d7f622597dbcc358161bb89aec8ae6072426ca"
+  }
+}

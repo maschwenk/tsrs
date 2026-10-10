@@ -1342,7 +1342,8 @@ impl Checker {
         let zero = self.get_number_literal_type(jsnum::Number(0.0));
         let tuple = self.create_tuple_type(&[replacement]);
         let targets = alloc_vec(vec![zero, tuple]);
-        self.instantiate_type(instantiable, Some(new_type_mapper(sources, targets)))
+        let mapper = self.new_type_mapper(sources, targets);
+        self.instantiate_type(instantiable, Some(mapper))
     }
 
     // inference.go:1185
@@ -1564,7 +1565,8 @@ impl Checker {
                         // Instantiate the default type. Any forward reference to a type
                         // parameter should be instantiated to the empty object type.
                         let backreference_mapper = self.new_backreference_mapper(n, index);
-                        let mapper = merge_type_mappers(Some(backreference_mapper), self.inference_non_fixing_mapper(n).unwrap());
+                        let non_fixing_mapper = self.inference_non_fixing_mapper(n).unwrap();
+                        let mapper = self.merge_type_mappers(Some(backreference_mapper), non_fixing_mapper);
                         inferred_type = Some(self.instantiate_type(default_type, Some(mapper)));
                         }
                 }
@@ -1577,7 +1579,8 @@ impl Checker {
             }
             let constraint = self.get_constraint_of_type_parameter(type_parameter);
             if let Some(constraint) = constraint {
-                let instantiated_constraint = self.instantiate_type(constraint, self.inference_non_fixing_mapper(n));
+                let mapper = self.inference_non_fixing_mapper(n);
+                let instantiated_constraint = self.instantiate_type(constraint, mapper);
                 let compare_types = std::sync::Arc::clone(self.inference_context(n).compare_types.borrow().as_ref().unwrap());
                 if let Some(inferred) = inferred_type {
                     if !self.inference_context(n).flags.get().intersects(InferenceFlags::NoConstraintChecks) {
@@ -1630,7 +1633,7 @@ impl Checker {
 
     // inference.go:1414
     // n and the result are Option (Go returns nil for a nil context; callers pass nil-able contexts).
-    pub(crate) fn get_mapper_from_context(&mut self, n: Option<InferenceContextKey>) -> Option<P<TypeMapper>> {
+    pub(crate) fn get_mapper_from_context(&mut self, n: Option<InferenceContextKey>) -> Option<TypeMapperKey> {
         let n = n?;
         self.inference_mapper(n)
     }
@@ -1638,12 +1641,12 @@ impl Checker {
     // Return a type mapper that combines the context's return mapper with a mapper that erases any additional type parameters
     // to their inferences at the time of creation.
     // inference.go:1423
-    pub(crate) fn create_outer_return_mapper(&mut self, context: InferenceContextKey) -> P<TypeMapper> {
+    pub(crate) fn create_outer_return_mapper(&mut self, context: InferenceContextKey) -> TypeMapperKey {
         if self.inference_context(context).outer_return_mapper().is_none() {
             let cloned_context = self.clone_inference_context(Some(context), InferenceFlags::None).unwrap();
             let mut mapper = self.inference_mapper(cloned_context).unwrap();
             if let Some(return_mapper) = self.inference_context(context).return_mapper() {
-                mapper = new_merged_type_mapper(return_mapper, mapper);
+                mapper = self.new_merged_type_mapper(return_mapper, mapper);
             }
             self.inference_context(context).set_outer_return_mapper(Some(mapper));
         }

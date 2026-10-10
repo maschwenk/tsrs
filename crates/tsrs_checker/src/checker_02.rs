@@ -556,7 +556,8 @@ impl Checker {
         let constraint_type = self.get_constraint_of_type_parameter(type_parameter);
         let default_type = self.get_default_from_type_parameter(type_parameter);
         if let (Some(constraint_type), Some(default_type)) = (constraint_type, default_type) {
-            let instantiated = self.instantiate_type(constraint_type, Some(new_simple_type_mapper(type_parameter, default_type)));
+            let mapper = self.new_simple_type_mapper(type_parameter, default_type);
+            let instantiated = self.instantiate_type(constraint_type, Some(mapper));
             let target = self.get_type_with_this_argument(instantiated, Some(default_type), false);
             self.check_type_assignable_to(default_type, target, tp_node.default_type, Some(&diagnostics::Type_0_does_not_satisfy_the_constraint_1));
         }
@@ -1076,14 +1077,14 @@ impl Checker {
     // checker.go:3064
     pub(crate) fn check_type_argument_constraints(&mut self, node: P<Node>, type_parameters: &[P<Type>]) -> bool {
         let mut type_arguments: Option<Vec<P<Type>>> = None;
-        let mut mapper: Option<P<TypeMapper>> = None;
+        let mut mapper: Option<TypeMapperKey> = None;
         let mut result = true;
         for (i, &type_parameter) in type_parameters.iter().enumerate() {
             let constraint = self.get_constraint_of_type_parameter(type_parameter);
             if let Some(constraint) = constraint {
                 if type_arguments.is_none() {
                     let args = self.get_effective_type_arguments(node, type_parameters);
-                    mapper = Some(new_type_mapper(type_parameters, &args));
+                    mapper = Some(self.new_type_mapper(type_parameters, &args));
                     type_arguments = Some(args);
                 }
                 result = result && {

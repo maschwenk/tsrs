@@ -775,14 +775,14 @@ impl Checker {
         }
         let min_type_argument_count = self.get_min_type_argument_count(&type_parameters);
         let type_argument_types = self.fill_missing_type_arguments(&type_argument_node_types, &type_parameters, min_type_argument_count, is_java_script);
-        let mut mapper: Option<P<TypeMapper>> = None;
+        let mut mapper: Option<TypeMapperKey> = None;
         for i in 0..type_argument_nodes.len() {
             assert!(i < type_parameters.len(), "Should not call checkTypeArguments with too many type arguments");
             let constraint = self.get_constraint_of_type_parameter(type_parameters[i]);
             if let Some(constraint) = constraint {
                 let type_argument_head_message = head_message.unwrap_or(&diagnostics::Type_0_does_not_satisfy_the_constraint_1);
                 if mapper.is_none() {
-                    mapper = Some(new_type_mapper(&type_parameters, &type_argument_types));
+                    mapper = Some(self.new_type_mapper(&type_parameters, &type_argument_types));
                 }
                 let type_argument = type_argument_types[i];
                 let error_node = if report_errors { Some(type_argument_nodes[i]) } else { None };
@@ -1050,7 +1050,7 @@ impl Checker {
                     // This protects against circular inferences, i.e. avoiding situations where inferences reference
                     // type parameters for which the inferences are being made.
                     let return_context = self.new_inference_context(&self.signature(signature).type_parameters(), Some(signature), self.inference_context(context).flags.get(), None);
-                    let mut outer_return_mapper: Option<P<TypeMapper>> = None;
+                    let mut outer_return_mapper: Option<TypeMapperKey> = None;
                     if let Some(outer_context) = outer_context {
                         outer_return_mapper = Some(self.create_outer_return_mapper(outer_context));
                     }

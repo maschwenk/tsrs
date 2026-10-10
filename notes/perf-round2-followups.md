@@ -107,6 +107,14 @@ pointer compression costs about +4.9% instructions and took back most of the che
 
 ## Measured and rejected (do not redo)
 
+- Treating typed mapper records as enough to recover the complete migration gates
+  (`notes/rust-typed-mapper.md`, 2026-10-11). The explicit complete ownership request is the changed constraint;
+  this branch checkpoint replaces record/pair pointers with qualified keys and retains deferred callback owners
+  across recursive mutation. Single-thread instructions change -1.49% / -0.77% in local macOS samples, default
+  RSS -2.51% / -2.26%. Compiler clears the local instruction bar; the Linux deterministic workflow and headline
+  two-publish wall comparison remain required. Cumulative single instructions remain +13.87% / +13.73% against
+  Oxc, default RSS +111.58% / +100.69% against pre-Oxc. Raw type/symbol/AST/flow edges and the runtime remain;
+  full ownership and recovery of the cumulative gates are still required.
 - Treating typed inference-context/info/scratch records as enough to recover the complete migration gates
   (`notes/rust-typed-inference.md`, 2026-10-11). The explicit complete ownership request is the changed constraint;
   this migration-branch checkpoint removes context self-pointer casts and replaces the linked scratch free list
