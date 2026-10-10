@@ -16,6 +16,11 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 
 use rustc_hash::FxHashMap;
 
+fn page_size() -> usize {
+    // SAFETY: sysconf has no preconditions.
+    unsafe { libc::sysconf(libc::_SC_PAGESIZE) as usize }
+}
+
 /// Whether the prototype is compiled in (`--features shared-graph`). Without it every frozen-object test below is a
 /// constant false, so the switch-off build runs main's code paths.
 pub const COMPILED_IN: bool = cfg!(feature = "shared-graph");
@@ -151,7 +156,7 @@ pub fn freeze(ranges: &[(usize, usize)]) {
     #[cfg(unix)]
     if protect_mode() != 0 {
         install_fault_handler();
-        let page = crate::reserve::page_size();
+        let page = page_size();
         for &(start, len) in ranges {
             // Only whole system pages inside the chunk: a 16 KiB page may also hold the neighbouring chunk.
             let (lo, hi) = (start.next_multiple_of(page), (start + len) & !(page - 1));
@@ -174,7 +179,7 @@ fn log_site(msg: &[u8]) {
     }
     #[cfg(unix)]
     {
-        extern "C" {
+        unsafe extern "C" {
             fn backtrace(buf: *mut *mut libc::c_void, size: i32) -> i32;
             fn backtrace_symbols_fd(buf: *const *mut libc::c_void, size: i32, fd: i32);
         }
@@ -210,14 +215,55 @@ extern "C" fn fault_handler(sig: i32, info: *mut libc::siginfo_t, _ctx: *mut lib
     // SAFETY: the kernel passes a valid siginfo for SA_SIGINFO handlers.
     let addr = unsafe { (*info).si_addr() }.addr();
     if !is_frozen_addr_slow(addr) {
-        // Not ours: the default action (a crash) on return.
-        // SAFETY: resets the handler of this signal to the default.
-        unsafe { libc::signal(sig, libc::SIG_DFL) };
+        // Not ours: the frames, then the default action (a crash) on return.
+        unsafe extern "C" {
+            fn backtrace(buf: *mut *mut libc::c_void, size: i32) -> i32;
+            fn backtrace_symbols_fd(buf: *const *mut libc::c_void, size: i32, fd: i32);
+        }
+        let mut frames = [std::ptr::null_mut::<libc::c_void>(); 80];
+        let msg = b"tsrs shared graph: fault outside the frozen seed\n";
+        {
+            let mut name = [0u8; 64];
+            // SAFETY: a local buffer; pthread_self is always valid.
+            unsafe {
+                libc::pthread_getname_np(libc::pthread_self(), name.as_mut_ptr().cast(), name.len());
+                let len = name.iter().position(|&b| b == 0).unwrap_or(0);
+                libc::write(2, b"fault thread ".as_ptr().cast(), 13);
+                libc::write(2, name.as_ptr().cast(), len);
+                libc::write(2, b"\n".as_ptr().cast(), 1);
+            }
+        }
+        {
+            let mut buf = [0u8; 40];
+            let mut n = addr;
+            let mut i = buf.len();
+            loop {
+                i -= 1;
+                buf[i] = b"0123456789abcdef"[n & 15];
+                n >>= 4;
+                if n == 0 {
+                    break;
+                }
+            }
+            // SAFETY: writes a local buffer to stderr.
+            unsafe {
+                libc::write(2, b"fault addr 0x".as_ptr().cast(), 13);
+                libc::write(2, buf[i..].as_ptr().cast(), buf.len() - i);
+                libc::write(2, b"\n".as_ptr().cast(), 1);
+            }
+        }
+        // SAFETY: writes a static buffer to stderr; fills and prints a local frame buffer; resets the handler.
+        unsafe {
+            libc::write(2, msg.as_ptr().cast(), msg.len());
+            let n = backtrace(frames.as_mut_ptr(), 80);
+            backtrace_symbols_fd(frames.as_ptr(), n, 2);
+            libc::signal(sig, libc::SIG_DFL);
+        }
         return;
     }
     // Debugging aid: the raw frames (execinfo), symbolized by the system without allocating.
     {
-        extern "C" {
+        unsafe extern "C" {
             fn backtrace(buf: *mut *mut libc::c_void, size: i32) -> i32;
             fn backtrace_symbols_fd(buf: *const *mut libc::c_void, size: i32, fd: i32);
         }
@@ -232,9 +278,9 @@ extern "C" fn fault_handler(sig: i32, info: *mut libc::siginfo_t, _ctx: *mut lib
         let _ = addr;
     }
     if protect_mode() == 2 {
-        let page = addr & !(crate::reserve::page_size() - 1);
+        let page = addr & !(page_size() - 1);
         // SAFETY: a page of a frozen chunk; it becomes writable again so the faulting write can complete.
-        unsafe { libc::mprotect(std::ptr::with_exposed_provenance_mut::<libc::c_void>(page), crate::reserve::page_size(), libc::PROT_READ | libc::PROT_WRITE) };
+        unsafe { libc::mprotect(std::ptr::with_exposed_provenance_mut::<libc::c_void>(page), page_size(), libc::PROT_READ | libc::PROT_WRITE) };
         return;
     }
     std::process::abort();
@@ -614,7 +660,7 @@ pub fn log_owned_site() {
     }
     #[cfg(unix)]
     {
-        extern "C" {
+        unsafe extern "C" {
             fn backtrace(buf: *mut *mut libc::c_void, size: i32) -> i32;
             fn backtrace_symbols_fd(buf: *const *mut libc::c_void, size: i32, fd: i32);
         }

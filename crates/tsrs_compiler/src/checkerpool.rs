@@ -728,13 +728,9 @@ impl checkerPool {
                 #[cfg(feature = "checker")]
                 tsrs_checker::links::set_multiple_checkers(self.checker_count > 1);
                 let slots: Vec<Mutex<Option<CheckerSlot>>> = (0..self.checker_count).map(|_| Mutex::new(None)).collect();
-                // Shared-graph prototype (sharedgraph.rs): one seed checker checks the seed files in the background;
-                // in the type-check pass the pool's checkers (plain until then) become forks of its frozen graph.
-                #[cfg(feature = "checker")]
-                if shared {
-                    crate::sharedgraph::start_seed(program, checked_file_weights(program));
-                }
-                run_work_group(self.single_threaded, self.checker_count, |i| {
+                // Shared-graph prototype (sharedgraph.rs): the seed starts with the type-check pass (see
+                // `for_each_checker_group_do_ex`); the pool's checkers are plain until they become forks.
+                                run_work_group(self.single_threaded, self.checker_count, |i| {
                     let c = SlotChecker::new(program, recycle);
                     #[cfg(feature = "checker")]
                     if shared && i == 0 {
@@ -922,6 +918,15 @@ impl checkerPool {
                 }
             }
         }
+        // The shared-graph seed starts with the type-check pass, after the leaf files are classified
+        // (`fileregions::classify`): as for every checker, the leaf guard (`Checker::is_unreadable_check_leaf`) then
+        // keeps it from reading a leaf file, which may be freed while the seed runs or while a frozen object points into
+        // it.
+        #[cfg(feature = "checker")]
+        if allow_steal && state.shared_graph {
+            static SEED_STARTED: std::sync::Once = std::sync::Once::new();
+            SEED_STARTED.call_once(|| crate::sharedgraph::start_seed(self.program, state.weights.clone()));
+        }
         let queues: Vec<FileQueue> = positions.into_iter().map(|p| FileQueue::new(p, weight)).collect();
         // `--maxMemory`: each checker's region size after its last file, to retire the largest.
         let region_sizes: Vec<std::sync::atomic::AtomicUsize> = (0..n).map(|_| std::sync::atomic::AtomicUsize::new(0)).collect();
@@ -1063,6 +1068,8 @@ impl checkerPool {
         let mut old = std::mem::replace(slot, SlotChecker::new_replacement(self.program));
         {
             let _scope = old.enter();
+            // Making the replacement left the thread's overlay (sharedgraph.rs): the old checker reads its own again.
+            crate::sharedgraph::enter_checker(&old.checker);
             let globals = old.checker.get_global_diagnostics();
             let mut retired = state.retired.lock().unwrap();
             retired.count += 1;

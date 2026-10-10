@@ -370,7 +370,8 @@ impl InferenceContext {
 
     /// Marks the context escaped, with every mapper it holds (an escaped context's mappers may be used through it).
     pub(crate) fn escape(&self) {
-        if self.escaped() {
+        // As for mappers (`escape_mapper`): a frozen seed context is never recycled by a fork.
+        if self.escaped() || tsrs_core::sharedgraph::frozen(self) {
             return;
         }
         self.rare.set(self.rare.get() | RARE_ESCAPED);
@@ -1869,6 +1870,12 @@ impl Checker {
             census: crate::workcensus::census_path().map(|_| crate::workcensus::Census::new()),
             union_front_cache: crate::unioncache::UnionFrontCache::new(),
             infer_memo: crate::infermemo::InferMemo::new(),
+            // A fork's history is the seed's, then its own (`fork`): it continues the seed's TS2590 bookkeeping and
+            // shares its tuple element type parameters (frozen types).
+            too_complex_reports: base.too_complex_reports,
+            too_complex_nodes: base.too_complex_nodes.clone(),
+            too_complex_reported: base.too_complex_reported.clone(),
+            tuple_elements: base.tuple_elements.clone(),
             diagnostic_adds: base.diagnostic_adds.clone(),
             expression_checks: base.expression_checks.clone(),
             instantiation_stack: Vec::new(),

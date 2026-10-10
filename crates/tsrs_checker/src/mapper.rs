@@ -335,7 +335,9 @@ impl TypeMapper {
 /// Marks `m` escaped, with everything it references that could be recycled (see `ESCAPED`). Invariant: an escaped
 /// mapper's children are escaped, so the walk stops at the first escaped mapper.
 pub(crate) fn escape_mapper(m: P<TypeMapper>) {
-    if m.escaped() {
+    // A mapper of the frozen shared-graph seed is never recycled by a fork (it is not the fork's to free), so it counts
+    // as escaped; its escape bit cannot be written.
+    if m.escaped() || tsrs_core::sharedgraph::frozen(&*m) {
         return;
     }
     m.set_escaped();
@@ -355,7 +357,7 @@ pub(crate) fn escape_mapper(m: P<TypeMapper>) {
 /// The caller created `m` and is done with it; mappers that did not escape are referenced only by locals of finished
 /// calls, the active-mapper stack (popped by then) and other mappers that did not escape.
 pub(crate) unsafe fn recycle_mapper(m: P<TypeMapper>) {
-    if !m.escaped() {
+    if !m.escaped() && !tsrs_core::sharedgraph::frozen(&*m) {
         tsrs_core::free!(m);
     }
 }

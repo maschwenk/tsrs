@@ -338,3 +338,48 @@ Estimated cost on `depot-ubuntu-24.04-16`:
 That is about 25-30 runner-minutes on the 16-vCPU machine. Two dispatches, split by project, would build twice and
 cost about 40 minutes in total. The 32-vCPU runner is not needed: neither the scoreboard nor the bench runs more
 than 16 checkers now, and 8 -> 16 gives the per-checker slope.
+
+## 10. Update (2026-10-09): on top of `--maxMemory`, the 38k-file codebase
+
+Branch `spike/shared-graph-maxmemory`: this spike merged onto `mem-notion` (`--maxMemory`, PR 265; 55 commits of main
+since the spike). With both on, a checker that `--maxMemory` retires is replaced by a fork of the frozen seed instead
+of a fresh checker, so the replacement starts with the seed's graph instead of rebuilding it.
+
+What the merge needed:
+
+- Main's new `Checker` fields (`too_complex_*`, `tuple_elements`): a fork continues the seed's values.
+- `escape_mapper` / `recycle_mapper` / `InferenceContext::escape` (main's mapper recycling): a frozen mapper or context
+  counts as escaped, so a fork never writes its escape bit or frees it (a `mprotect` fault on the 38k-file codebase).
+- Seed files exclude every file with a region of its own (`fileregions::has_region`): the seed used to start before
+  the leaves were classified (`is_check_leaf` was false for all), so it could check a leaf and freeze objects that point
+  into its tree, which is freed once checked. The seed now starts with the type-check pass, after `classify`, so the
+  leaf guard (`is_unreadable_check_leaf`) also keeps it from reading other leaves.
+- A retired fork's overlay is entered again while the retirement collects its global diagnostics, and a new fork
+  leaves its own overlay current.
+- Tried and removed: starting the pool without waiting for the seed (plain checkers, switched to forks once the seed
+  is frozen, or replaced by forks when retired). It hid the serial seed (29.1 s against 33.6 s at 8G) but plain
+  checkers running beside forks after the freeze crashed in 1-3 of 10 runs (reads of retired regions) that this round
+  did not explain; entering the seed region as a scratch region (so that escaping data leaves it) made forks share
+  unfrozen seed data and crashed every run. The pool waits for the seed, as in the spike.
+
+Measured (Mac, 14 cores, 8 checkers, release build with `--features shared-graph`; diagnostics byte-identical in every
+run; 20 stress runs at 10 and 50 permille with `--maxMemory 8G`, 12 more over seeds 10-100 and targets 8-10G, and every
+testdata/regressions case with a 30% seed and a retirement after nearly every file: no failure):
+
+| | peak | instructions | user CPU | wall | serial seed |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| main (no feature), no target | 18.0 GB | 2.277 T | 187 s | 26.0 s | |
+| feature compiled in, switch off | 18.0 GB | 2.358 T (+3.6%) | 196 s | 27.8 s | |
+| seed 50 permille, no target | 16.5 GB | 2.290 T | 193 s | 32.5 s | 5.9 s |
+| `--maxMemory 8G`, no seed | 8.72 GB | 3.195 T | 242 s | 32.8 s | |
+| `--maxMemory 8G`, seed 10 permille | 8.84 GB | 2.687 T | 205 s | 30.8 s | 2.6 s |
+| `--maxMemory 8G`, seed 20 permille | 8.95 GB | 2.664 T | 206 s | 31.8 s | 3.9 s |
+| `--maxMemory 8G`, seed 50 permille | 8.87 GB | 2.524 T | 202 s | 33.0 s | 5.9 s |
+| `--maxMemory 9G`, seed 20 permille | 9.69 GB | 2.586 T | 200 s | 30.9 s | |
+| `--maxMemory 10G`, seed 20 permille | 10.83 GB | 2.520 T | 196 s | 30.4 s | |
+
+Under a memory target the seed removes most of the rebuild cost of retirements (-16 to -21% instructions, -15% user
+CPU at 8G) and costs its own size in memory (238-476 MiB, shared). Wall improves little (-6% at best) because the pool
+waits for the serial seed, 2.6-5.9 s on this program. The design is sound and was exact everywhere; a rewrite would
+need the same overlay, frozen-region and fork machinery. What is left: making the seed cost no wall time (seed while
+the front end finishes, or let the pool start safely before the freeze), and the +3.6% the feature costs compiled in.

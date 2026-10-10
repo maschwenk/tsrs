@@ -66,7 +66,9 @@ fn parse_permille(s: &str) -> u64 {
 pub(crate) fn seed_positions(program: &Program, files: &[P<SourceFile>], weight: &dyn Fn(u32) -> u64) -> Vec<u32> {
     let eligible = |i: usize| {
         let f = files[i];
-        !f.is_declaration_file() && !f.is_check_leaf() && !program.skip_type_checking(f, false) && weight(i as u32) > 0
+        // A file with a region of its own may be freed once checked, while a frozen object would still point into it
+        // (`is_check_leaf` alone is not enough for a seed started before the leaves are classified).
+        !f.is_declaration_file() && !f.is_check_leaf() && !crate::fileregions::has_region(f) && !program.skip_type_checking(f, false) && weight(i as u32) > 0
     };
     match seed_rule() {
         SeedRule::Files(path) => {
@@ -344,15 +346,29 @@ pub(crate) fn fork_into(slot: &mut Box<crate::checkerpool::Checker>) {
     if slot.is_fork || slot.type_count != FRESH_TYPES.load(std::sync::atomic::Ordering::Relaxed) {
         return;
     }
-    *slot = tsrs_checker::Checker::fork(wait_base().0);
+    *slot = fork_clean(wait_base());
 }
 
-/// A fork of the frozen seed if the shared graph is on and the seed is frozen (a replacement for a retired checker).
+/// A fork of the frozen seed, if the shared graph is on: the replacement for a checker `--maxMemory` retires. The pool's
+/// checkers became forks at the start of the pass (`fork_into`, which waits for the seed), so the seed is frozen.
 #[cfg(feature = "checker")]
 pub(crate) fn fresh_fork() -> Option<Box<crate::checkerpool::Checker>> {
-    (mode() == Mode::On).then(|| BASE.get().map(|b| tsrs_checker::Checker::fork(b.0))).flatten()
+    if mode() != Mode::On {
+        return None;
+    }
+    BASE.get().copied().map(fork_clean)
 }
 
+/// `Checker::fork`, leaving the fork's own overlay current (the thread's may still be that of a retired checker).
+#[cfg(feature = "checker")]
+fn fork_clean(base: Base) -> Box<crate::checkerpool::Checker> {
+    let c = tsrs_checker::Checker::fork(base.0);
+    tsrs_core::sharedgraph::enter_overlay(&c.overlay);
+    c
+}
+
+/// With `--maxMemory` the pool's checkers do not wait for the seed: they start as plain checkers, and each is
+/// retired for a fork at its first file boundary after the seed is frozen (`TSRS_SHARED_GRAPH_WAIT=1` waits instead).
 fn flag_name(bit: usize) -> String {
     #[cfg(feature = "checker")]
     return format!("{:?}", tsrs_checker::ObjectFlags::from_bits_retain(1 << bit));
