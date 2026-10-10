@@ -1721,7 +1721,48 @@ impl Checker {
             self.census.as_mut().unwrap().record(crate::workcensus::Cat::IndexedAccess, key, timing, n as u64, literal_index, 0);
             return r;
         }
+        if access_node.is_none() && alias.is_none() && index_type.flags().intersects(TypeFlags::Union) && !index_type.flags().intersects(TypeFlags::Boolean) {
+            return self.get_indexed_access_type_by_union_memoized(object_type, index_type, access_flags);
+        }
         self.get_indexed_access_type_or_undefined_inner(object_type, index_type, access_flags, access_node, alias)
+    }
+
+    /// tsrs-only: `getIndexedAccessTypeOrUndefined` for a union index without an access node or an alias, memoized
+    /// per checker. TypeScript resolves such a `T[K]` again at every request (only a deferred one is interned), one
+    /// property lookup per constituent of `K`; on the 38k-file codebase 92% of those lookups repeat an earlier call
+    /// with the same object type, index type and flags. The store rule is the union front cache's
+    /// (unioncache.rs): a call is stored only if it created no type but the one it returns, instantiated nothing,
+    /// took no impure union reduction, added no diagnostic and did not return `errorType`; such a call reads only
+    /// caches that grow, so a later identical call returns the same answer. `TSRS_IA_MEMO=0` turns it off, `=shadow`
+    /// computes every hit again and panics on a different answer.
+    fn get_indexed_access_type_by_union_memoized(&mut self, object_type: P<Type>, index_type: P<Type>, access_flags: AccessFlags) -> Option<P<Type>> {
+        let mode = crate::unioncache::indexed_access_memo_mode();
+        if mode == crate::unioncache::UnionCacheMode::Off {
+            return self.get_indexed_access_type_or_undefined_inner(object_type, index_type, access_flags, None, AliasArg::None);
+        }
+        let key = (object_type, index_type, access_flags.bits());
+        if let Some(&cached) = self.indexed_access_union_memo.get(&key) {
+            if mode == crate::unioncache::UnionCacheMode::Shadow {
+                let fresh = self.get_indexed_access_type_or_undefined_inner(object_type, index_type, access_flags, None, AliasArg::None);
+                assert!(fresh == cached, "TSRS_IA_MEMO=shadow: indexed access {} [{}]: cached {:?}, fresh {:?}", object_type.id.0, index_type.id.0, cached.map(|t| t.id.0), fresh.map(|t| t.id.0));
+            }
+            return cached;
+        }
+        let type_count = self.type_count;
+        let instantiation_count = self.instantiation_count;
+        let total_instantiation_count = self.total_instantiation_count;
+        let impure = self.union_front_cache.impure;
+        let diagnostic_count = self.diagnostics.count() + self.suggestion_diagnostics.count();
+        let too_complex_reports = self.too_complex_reports;
+        let result = self.get_indexed_access_type_or_undefined_inner(object_type, index_type, access_flags, None, AliasArg::None);
+        let created = type_count != self.type_count && !(self.type_count == type_count + 1 && result.is_some_and(|r| r.id.0 == self.type_count));
+        let instantiated = instantiation_count != self.instantiation_count || total_instantiation_count != self.total_instantiation_count;
+        let impure = impure != self.union_front_cache.impure;
+        let reported = diagnostic_count != self.diagnostics.count() + self.suggestion_diagnostics.count() || too_complex_reports != self.too_complex_reports;
+        if !(created || instantiated || impure || reported || result == Some(self.error_type)) {
+            self.indexed_access_union_memo.insert(key, result);
+        }
+        result
     }
 
     fn get_indexed_access_type_or_undefined_inner(&mut self, object_type: P<Type>, index_type: P<Type>, access_flags: AccessFlags, access_node: Option<P<Node>>, alias: AliasArg<'_>) -> Option<P<Type>> {

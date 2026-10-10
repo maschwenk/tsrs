@@ -416,6 +416,11 @@ pub struct DiagnosticsCollection {
 }
 
 impl DiagnosticsCollection {
+    /// The number of distinct diagnostics added so far.
+    pub fn count(&self) -> usize {
+        self.count
+    }
+
     pub fn add(&mut self, diagnostic: P<Diagnostic>) -> P<Diagnostic> {
         let key = get_diagnostic_location_key(diagnostic);
         if let Some(&existing) = self.diagnostic_index.get(&key) {
