@@ -1729,6 +1729,7 @@ impl Type {
 
     // Common accessors
 
+    #[inline]
     pub fn target(&self) -> Option<P<Type>> {
         let flags = self.flags.get();
         if flags.intersects(TypeFlags::Object) {

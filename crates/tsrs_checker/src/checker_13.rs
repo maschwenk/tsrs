@@ -1022,10 +1022,13 @@ impl Checker {
     }
 
     // checker.go:26946
+    #[inline]
     pub fn is_empty_anonymous_object_type(&mut self, t: P<Type>) -> bool {
-        if !t.object_flags().intersects(ObjectFlags::Anonymous) {
-            return false;
-        }
+        t.object_flags().intersects(ObjectFlags::Anonymous) && self.is_empty_anonymous_object_type_worker(t)
+    }
+
+    #[inline(never)]
+    fn is_empty_anonymous_object_type_worker(&mut self, t: P<Type>) -> bool {
         if t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) && self.is_empty_resolved_type(t.as_structured_type()) {
             return true;
         }
@@ -1263,6 +1266,14 @@ fn merge_ascending_runs(c: &mut Checker, types: &mut Vec<P<Type>>, run_starts: &
 
 // Go's containsType/insertType call CompareTypes, which needs the checker (Type has no checker back pointer),
 // so they take `c` like `compare_types`.
+/// `maybe_type_of_kind` of any of `types`.
+fn maybe_constituent_of_kind(types: &[P<Type>], kind: TypeFlags) -> bool {
+    types.iter().any(|&t| {
+        let flags = t.flags();
+        flags.intersects(kind) || flags.intersects(TypeFlags::UnionOrIntersection) && maybe_constituent_of_kind(t.types(), kind)
+    })
+}
+
 // checker.go:27086
 pub(crate) fn contains_type(c: &mut Checker, types: &[P<Type>], t: P<Type>) -> bool {
     // tsrs-only (can1357's 628f51ceb): small lists often hold the very type asked for, found without comparing
@@ -2576,18 +2587,15 @@ impl Checker {
     // Return true if type might be of the given kind. A union or intersection type might be of a given
     // kind if at least one constituent type is of the given kind.
     // checker.go:28076
+    /// tsrs: the constituents' flags are tested in the loop, so only nested unions and intersections recurse
+    /// (0.9G calls on the 38k-file codebase, most of them for constituents of large unions).
+    #[inline]
     pub(crate) fn maybe_type_of_kind(&mut self, t: P<Type>, kind: TypeFlags) -> bool {
-        if t.flags().intersects(kind) {
+        let flags = t.flags();
+        if flags.intersects(kind) {
             return true;
         }
-        if t.flags().intersects(TypeFlags::UnionOrIntersection) {
-            for &t in t.types() {
-                if self.maybe_type_of_kind(t, kind) {
-                    return true;
-                }
-            }
-        }
-        false
+        flags.intersects(TypeFlags::UnionOrIntersection) && maybe_constituent_of_kind(t.types(), kind)
     }
 
     // checker.go:28090

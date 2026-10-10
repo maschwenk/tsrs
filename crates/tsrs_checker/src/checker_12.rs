@@ -1772,30 +1772,35 @@ impl Checker {
     }
 
     // checker.go:25374
+    #[inline]
     pub(crate) fn is_generic_tuple_type(&mut self, t: P<Type>) -> bool {
         is_tuple_type(t) && t.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variadic)
     }
 
     // checker.go:25378
+    #[inline]
     pub(crate) fn is_generic_mapped_type(&mut self, t: P<Type>) -> bool {
-        if t.object_flags().intersects(ObjectFlags::Mapped) {
-            let constraint = self.get_constraint_type_from_mapped_type(t);
-            if self.is_generic_index_type(constraint) {
+        t.object_flags().intersects(ObjectFlags::Mapped) && self.is_generic_mapped_type_worker(t)
+    }
+
+    #[inline(never)]
+    fn is_generic_mapped_type_worker(&mut self, t: P<Type>) -> bool {
+        let constraint = self.get_constraint_type_from_mapped_type(t);
+        if self.is_generic_index_type(constraint) {
+            return true;
+        }
+        // A mapped type is generic if the 'as' clause references generic types other than the iteration type.
+        // To determine this, we substitute the constraint type (that we now know isn't generic) for the iteration
+        // type and check whether the resulting type is generic.
+        let name_type = self.get_name_type_from_mapped_type(t);
+        if let Some(name_type) = name_type {
+            let type_parameter = self.get_type_parameter_from_mapped_type(t);
+            let mapper = new_simple_type_mapper(type_parameter, constraint);
+            let instantiated = self.instantiate_type(name_type, Some(mapper));
+            // SAFETY: made here for this one instantiation; kept if the result stored it.
+            unsafe { recycle_mapper(mapper) };
+            if self.is_generic_index_type(instantiated) {
                 return true;
-            }
-            // A mapped type is generic if the 'as' clause references generic types other than the iteration type.
-            // To determine this, we substitute the constraint type (that we now know isn't generic) for the iteration
-            // type and check whether the resulting type is generic.
-            let name_type = self.get_name_type_from_mapped_type(t);
-            if let Some(name_type) = name_type {
-                let type_parameter = self.get_type_parameter_from_mapped_type(t);
-                let mapper = new_simple_type_mapper(type_parameter, constraint);
-                let instantiated = self.instantiate_type(name_type, Some(mapper));
-                // SAFETY: made here for this one instantiation; kept if the result stored it.
-                unsafe { recycle_mapper(mapper) };
-                if self.is_generic_index_type(instantiated) {
-                    return true;
-                }
             }
         }
         false

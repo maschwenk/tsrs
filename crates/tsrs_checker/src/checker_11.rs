@@ -511,6 +511,10 @@ impl Checker {
         if !flags.intersects(TypeFlags::UnionOrIntersection) || flags.intersects(TypeFlags::Union) && !t.object_flags().intersects(ObjectFlags::ContainsIntersections) {
             return t;
         }
+        // An intersection whose never-reduction is already known (the worker's answer without computing anything).
+        if flags.intersects(TypeFlags::Intersection) && t.object_flags().intersects(ObjectFlags::IsNeverIntersectionComputed) {
+            return if t.object_flags().intersects(ObjectFlags::IsNeverIntersection) { self.never_type } else { t };
+        }
         self.get_reduced_type_worker(t)
     }
 
