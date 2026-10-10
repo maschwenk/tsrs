@@ -662,3 +662,36 @@ fn test_ignore_case_paths_use_simple_fold() {
     assert_eq!(get_relative_path_from_directory("/dir/\u{FB05}", "/dir/\u{FB06}/a.ts", &ci), "a.ts");
     assert!(contains_path("/dir/\u{1F80}", "/dir/\u{1F88}/a.ts", &ci));
 }
+
+// `base_file_name` slices the caller's path at the offsets it found in the slash-normalized copy. A wrong offset shows
+// up as a base name with a separator in it, or cut short, for backslash paths and trailing separators.
+#[test]
+fn test_base_file_name() {
+    let tests = [
+        ("/path/to/file.ext", "file.ext"),
+        ("/path/to/", "to"),
+        ("/", ""),
+        ("c:/path/to/file.ext", "file.ext"),
+        ("c:/path/to/", "to"),
+        ("c:/", ""),
+        ("c:", ""),
+        ("http://typescriptlang.org/path/to/file.ext", "file.ext"),
+        ("http://typescriptlang.org/path/to/", "to"),
+        ("http://typescriptlang.org/", ""),
+        ("http://typescriptlang.org", ""),
+        ("c:\\path\\to\\file.ext", "file.ext"),
+        ("c:\\path\\to\\", "to"),
+        ("c:\\", ""),
+        ("\\\\server\\share\\file.d.json.ts", "file.d.json.ts"),
+        ("\\\\server", ""),
+        ("a\\b/c.ts", "c.ts"),
+        ("file.ts", "file.ts"),
+    ];
+    for (path, expected) in tests {
+        assert_eq!(base_file_name(path), expected, "{path}");
+        assert_eq!(get_base_file_name(path), expected, "{path}");
+    }
+    assert_eq!(get_declaration_file_extension("c:\\src\\data.d.json.ts"), ".d.json.ts");
+    assert_eq!(get_declaration_file_extension("/src/a.d.ts/"), ".d.ts");
+    assert_eq!(get_declaration_file_extension("/src.d.x/a.ts"), "");
+}
