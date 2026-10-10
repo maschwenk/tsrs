@@ -344,7 +344,9 @@ is type-checked, CI runs on pull requests, and the workspace is at 0.11.0. The i
   two `SmallVec`s. Do not redo those sites. Left, with the reason, in the note: `SymbolMap` growth (memory-tuned),
   `SymbolTable` snapshots (callees may mutate the table), results Go allocates too, `get_text_of_node`'s copy
   (58 callers). The heap profile's `TSRS_HEAP_PROFILE=count` names the caller's caller of each allocation as built
-  (the note has the fix used); check a site's attribution before trusting it.
+  (the note has the fix used); check a site's attribution before trusting it. Measured and not landed there:
+  `somePropertyReducesToNever`'s count map from a per-checker pool, -0.88% mui-docs / -0.83% mikro-orm instructions
+  (branch `perf/property-count-pool`).
 
 ## The lint ratchet
 

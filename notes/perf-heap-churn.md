@@ -6,8 +6,10 @@ at the same time), against main at e8c9f1f5 (the code of 15dd87f6; the branch is
 only bench results).
 
 Result: vscode's heap allocations 41.3M -> 22.3M (-46%), single-threaded instructions -2.0% to -4.0% on the five
-bench projects measured, output byte-identical everywhere it was compared. Eight commits, each a site or a family of
-sites where the port allocated and Go does not (or allocates once).
+bench projects measured on the Mac (-0.6% to -1.8% on the 17 projects of pr-verify on Linux, commits 1-8), output
+byte-identical everywhere it was compared. Nine commits, each a site or a family of sites where the port allocated
+and Go does not (or allocates once). Commit 9 and a measured-only 10th change came from Boshen's DHAT audit (#258
+section 3); both are below the gain bar on their own (below), and only 9 landed.
 
 ## Where the allocations were
 
@@ -60,6 +62,8 @@ order (`perf/heap-churn`):
 | 6 | `Symbol::append_declarations` (the binder's `append(symbol.Declarations, node)`) | 2.3M | built the concatenation in a heap `Vec`, then moved it into the arena -> `alloc_slice_concat` copies both parts into one arena slice (same arena bytes) |
 | 7 | `getTypeWithThisArgument` 1.2M, `reorderCandidates` 1.1M, `excludeProperties` 0.56M, `findApplicableIndexInfo` 0.6M, `getContextualCallSignature` 0.35M | 3.8M | fresh `Vec`s -> a buffer from `free_type_lists`, a new `free_signature_lists` pool, the input slice when nothing is excluded, `SmallVec<[_; 4]>` for the two lists that are almost always zero or one long |
 | 8 | `fillMissingTypeArguments` (from `getSignatureInstantiation`) | 0.4M | copied the arguments when none was missing -> `Cow` |
+| 9 | `insertType` | mikro-orm 0.3M, mui-docs 0.1M | copied the whole list on every call (`slices.Insert` in Go grows it in place) -> takes the caller's `Vec` |
+| (10, not landed) | `somePropertyReducesToNever` | mikro-orm 1.4M (0.5 GiB allocated), mui-docs 0.3M (0.6 GiB) | a fresh `OrderedMap` per call -> a pooled map, walked by index in insertion order (branch `perf/property-count-pool`) |
 
 `smallvec` is new as a dependency of `tsrs_checker` (docs/RUST.md "Techniques" moves it from "Not tried" to "In
 place"). Only the two lists above use it: for every other short list in the profile, returning the stored data or a
@@ -67,7 +71,7 @@ pooled buffer removed the allocation without it.
 
 ## Before and after
 
-Single-threaded, medians of 3 interleaved runs:
+Single-threaded, medians of 3 interleaved runs, at commit 8 (the rows marked "with 9" at commit 9):
 
 | project | instructions before | after | change | heap allocations before | after | change | max RSS change |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -78,6 +82,33 @@ Single-threaded, medians of 3 interleaved runs:
 | t3code-server | 46.87G | 45.91G | -2.06% | 21.9M | 16.2M | -26% | +0.06% |
 | formbricks-web | | | | 19.1M | 14.3M | -25% | |
 | supabase-studio | | | | 26.1M | 21.6M | -17% | |
+| mui-docs (with 9) | | | | 17.2M | 14.4M | -16% | |
+| mikro-orm (with 9) | | | | 41.1M | 38.1M | -7% | |
+
+pr-verify on Linux (x86-64, 32 vCPUs; `bench/count.py`, deterministic) for commits 1-8 against main: 102 of 102
+cells identical; single-threaded instructions vscode -1.83%, next-root -1.30%, nuxt -1.40%, drizzle-orm -1.55%,
+playwright -1.17%, xstate-main -1.17%, formbricks-web -1.14%, storybook -1.13%, t3code-server -1.12%, cal-diy -1.11%,
+next-packages-next -1.01%, Compiler -0.99%, supabase-studio -0.97%, webpack -0.91%, Compiler-Unions -0.75%,
+mui-docs -0.62%, mikro-orm -0.28%. The Mac counts come out larger; the Linux ones (user space only, exact run to
+run) are the ones to compare with the bench.
+
+Commit 9 and the measured-only 10th change, each against the commit before (dispatched pr-verify, 1 checker, 34 of 34
+cells identical each):
+
+| project | 9 `insertType` | 10 `somePropertyReducesToNever` (not landed) |
+| --- | ---: | ---: |
+| mui-docs | -0.043% | -0.880% |
+| mikro-orm | -0.016% | -0.830% |
+| cal-diy | -0.117% | -0.339% |
+| storybook | -0.029% | -0.328% |
+| nuxt | -0.062% | -0.326% |
+| vscode | -0.011% | -0.017% |
+
+Neither clears 1% alone. 9 landed anyway because it removes code instead of adding any (it is Go's in-place insert;
+#258: small wins land when they "combine without added complexity"). 10 adds a pool field and measured -0.88% on
+mui-docs and -0.83% on mikro-orm, inside the 0.5-1% that notes/perf-tsgo-can1357-speedups.md estimated for the map
+(106 of 871 ms of that function on mikro-orm), so it stays a measurement; the commit is on the branch
+`perf/property-count-pool` if the map ever grows more expensive.
 
 vscode in the default mode (18 cores): instructions 109.4G -> 106.4G (-2.8%, medians of 3), max RSS within the
 run-to-run noise (1981-1998 MiB before, 1965-1989 after). The +0.04-0.25% single-threaded max RSS is not in the live
@@ -88,7 +119,8 @@ Wall time was not measured on purpose: other agents were building on the machine
 ## Exactness
 
 - `--pretty false` output and exit status byte-identical, single-threaded, on vscode, webpack, xstate-main, cal-diy,
-  t3code-server, formbricks-web and supabase-studio; vscode also in the default multi-checker mode.
+  t3code-server, formbricks-web, supabase-studio, mui-docs and mikro-orm; vscode also in the default multi-checker
+  mode. pr-verify (Linux, 1/4/16/32 checkers and poisoned arenas): 102 of 102 cells identical.
 - `tools/regressions.sh`: 28/28.
 - Conformance, base and new built from the same tree state: `tsrs-test run --suite all --baselines types,symbols`
   (13,458 / 12,779 / 12,779, the gate's minimums) and the default mode
