@@ -7,8 +7,10 @@ static GLOBAL: mimalloc_safe::MiMalloc = mimalloc_safe::MiMalloc;
 mod census;
 mod api;
 mod lsp;
+mod headless;
+mod lint;
 
-use tsrs_execute::{build, execute, sys, tsc};
+use tsrs_execute::{build, sys, tsc};
 
 // TSRS_MEM_SPLIT (tsrs_core::memsplit): mimalloc's view of its heap, every page of every thread.
 #[cfg(not(feature = "alloc-profile"))]
@@ -91,6 +93,19 @@ fn main() {
         let status = std::thread::Builder::new().stack_size(512 << 20).spawn(move || api::run_api(&rest)).unwrap().join().unwrap_or(1);
         std::process::exit(status);
     }
+    if args.first().map(String::as_str) == Some("headless") {
+        let rest = args[1..].to_vec();
+        let status = std::thread::Builder::new()
+            .name("tsrs-headless".to_string())
+            .stack_size(512 << 20)
+            .spawn(move || headless::run(&rest))
+            .unwrap()
+            .join()
+            .unwrap_or(1);
+        let _ = std::io::Write::flush(&mut std::io::stdout());
+        let _ = std::io::Write::flush(&mut std::io::stderr());
+        std::process::exit(status);
+    }
     // Type checking recurses deeply; run on a thread with a large stack
     // (Go's goroutine stacks grow on demand).
     let status = std::thread::Builder::new()
@@ -98,7 +113,7 @@ fn main() {
         .stack_size(512 << 20)
         .spawn(move || {
             let sys: &'static sys::osSys = Box::leak(Box::new(sys::new_system()));
-            let result = execute::command_line(sys, args);
+            let result = lint::command_line(sys, args);
             tsc::System::flush(sys);
             tsrs_core::alloc_profile_dump();
             tsrs_core::sitecount::dump();

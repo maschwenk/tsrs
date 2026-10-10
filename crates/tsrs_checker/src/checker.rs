@@ -977,6 +977,8 @@ pub struct Checker {
     /// tsrs-only: the file `check_source_file` is checking. The one check leaf (`SourceFile::is_check_leaf`) whose tree
     /// this checker may read.
     pub(crate) checking_file: Option<P<SourceFile>>,
+    pub(crate) lint_config: Option<&'static crate::lint::LintConfig>,
+    pub(crate) lint_output: RefCell<FxHashMap<P<SourceFile>, crate::lint::FileLintOutput>>,
     /// tsrs-only: a file whose statements this checker and others already checked in pieces
     /// (`check_source_file_piece`); the next `check_source_file` of it runs only the file-level steps.
     pub(crate) statements_checked_in_pieces: Option<P<SourceFile>>,
@@ -1402,6 +1404,8 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         serialization_level: 0,
         current_node: None,
         checking_file: None,
+        lint_config: program.lint_config(),
+        lint_output: RefCell::new(FxHashMap::default()),
         statements_checked_in_pieces: None,
         tuple_elements: Vec::new(),
         deferred_type_argument_checks: FxHashMap::default(),
@@ -1884,6 +1888,9 @@ impl Checker {
             serialization_level: base.serialization_level.clone(),
             current_node: None,
             checking_file: None,
+            lint_config: base.lint_config,
+            // Node links retain the seed's lint-dispatch flags, so forks also need its pending output.
+            lint_output: base.lint_output.clone(),
             statements_checked_in_pieces: None,
             // The seed's history: its checks deferred to files it did not check run in the fork that checks them.
             deferred_type_argument_checks: base.deferred_type_argument_checks.clone(),

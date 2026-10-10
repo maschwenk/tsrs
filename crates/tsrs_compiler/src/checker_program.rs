@@ -11,6 +11,18 @@ use tsrs_module::{packagejson, ModeAwareCacheKey, ResolvedModule};
 use crate::program::Program;
 
 impl tsrs_checker::Program for Program {
+    fn lint_config(&self) -> Option<&tsrs_checker::lint::LintConfig> {
+        self.lint.as_deref()
+    }
+
+    fn read_file(&self, file_name: &str) -> Option<String> {
+        self.host().fs().read_file(file_name)
+    }
+
+    fn is_source_file_from_external_library(&self, file: P<SourceFile>) -> bool {
+        Program::is_source_file_from_external_library(self, file)
+    }
+
     fn options(&self) -> P<CompilerOptions> {
         Program::options(self)
     }

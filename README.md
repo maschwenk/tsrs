@@ -20,6 +20,10 @@ npx -y @maschwenk/tsrs -p path/to/project --noEmit   # type check only
 Or install it with `pnpm add -D @maschwenk/tsrs` and run `tsrs` in place of `tsc`. Prebuilt binaries are available for
 macOS arm64 and Linux x64/arm64. There is also a [WebAssembly build](#webassembly) for Node and browsers.
 
+`tsrs headless` also implements the tsgolint protocol used by Oxlint, currently for
+`typescript/no-floating-promises`, running rules during semantic checking. The compiler also accepts
+`--lint <headless-config.json>`. See [`docs/LINT.md`](docs/LINT.md).
+
 ## Performance
 
 Type-checking vscode (10,427 files) on a 64-core Linux machine, each tool with its default settings, averaged over 20
@@ -103,6 +107,7 @@ same diagnostics and emits the same 9,257 files byte for byte. [`docs/STATUS.md`
 | feature | status | evidence and notes |
 | --- | --- | --- |
 | Type checking (`--noEmit`) | yes | 13,458 of 13,462 error baselines and all 12,779 `.types` / `.symbols` baselines match; same diagnostics on the 38k-file codebase |
+| Oxlint type-aware lint backend (`tsrs headless`) | `typescript/no-floating-promises` | Mandatory checking with direct rule dispatch after checking each expression statement; no extra full AST walk. tsgolint payload v2, source overlays, compiler diagnostics, fixes/suggestions and timings; 188 upstream rule cases and 112 diagnostic snapshots pass (1 upstream skip preserved), plus 17 local checks (including inferred-project symlink aliases and forked checker output) and 8 CLI checks. `--lint <headless-config.json>` also enables lint in a non-incremental compilation. Unsupported type-aware rules are skipped. Use `OXLINT_TSGOLINT_PATH=/path/to/tsrs oxlint --type-aware` (`docs/LINT.md`) |
 | Multithreaded checking, `--singleThreaded`, `--pretty`, `--extendedDiagnostics`, `--listFiles`, `--listFilesOnly` | yes | |
 | Memory target (`--maxMemory <size>`) | `--noEmit` checks, opt-in | the 38k-file codebase at 8 checkers: peak 18.0 GB without it; `--maxMemory 12G` 12.9 GB (+11% instructions), `10G` 10.8 GB (+16%), `8G` 8.7 GB (+35%), same diagnostics; testdata/regressions identical with a checker retired after nearly every file, also in poison mode (notes/mem-recycle-checkers.md) |
 | Same output regardless of thread count | yes, with known exceptions (tsgo: no) | a few projects still depend on file order through tsgo's own logic (notes/open-history-dependence.md); `--checkerAssignment go` reproduces tsgo exactly |

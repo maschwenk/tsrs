@@ -2404,6 +2404,7 @@ impl Checker {
                 &[],
             );
         }
+        self.lint_unchecked_node(node.statement());
     }
 
     // checker.go:4199

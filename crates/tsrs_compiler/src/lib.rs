@@ -50,3 +50,5 @@ pub use program::{
     filter_no_emit_semantic_diagnostics, free_program, free_unshared_program, shared_program_data, SharedProgramData, get_diagnostics_of_any_program, new_program, sort_and_deduplicate_diagnostics, CreateCheckerPool,
     CreateModuleResolver, Program, ProgramConfig, ProgramOptions, worker_pool,
 };
+
+pub use checkerpool::LintConfig;

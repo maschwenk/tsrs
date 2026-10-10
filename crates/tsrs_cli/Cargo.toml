@@ -18,6 +18,11 @@ tsrs_lsp.workspace = true
 tsrs_api.workspace = true
 tsrs_api_transport.workspace = true
 tsrs_execute = { path = "../tsrs_execute", default-features = false }
+tsrs_linter.workspace = true
+tsrs_project.workspace = true
+tsrs_scanner.workspace = true
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 # no_thp: no MADV_HUGEPAGE on the mimalloc heap (huge-page amplification on Linux; see notes/mem-no-thp.md). mimalloc-safe
 # builds it as `allow_thp = 0`, which also turns THP off for the whole process; `main` turns it back on.
 mimalloc-safe = { workspace = true, features = ["no_thp"] }

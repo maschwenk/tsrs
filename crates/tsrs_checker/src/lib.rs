@@ -23,6 +23,7 @@ pub(crate) use tsrs_pseudochecker::{new_pseudo_checker, PseudoChecker, PseudoPar
 // Data model (checker-foundation).
 pub mod workcensus;
 pub mod checker;
+pub mod lint;
 pub mod evaluator;
 pub mod flow_types;
 pub mod inference_types;

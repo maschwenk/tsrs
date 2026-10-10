@@ -701,6 +701,8 @@ bitflags! {
         const InCheckIdentifier = 1 << 22;
         const InitializerIsUndefined = 1 << 24;
         const InitializerIsUndefinedComputed = 1 << 25;
+        // Native lint rules run once per statement in this checker, including deferred bodies.
+        const LintChecked = 1 << 26;
     }
 }
 

@@ -38,6 +38,7 @@ mod projectcollectionbuilder;
 mod session;
 mod snapshot;
 mod snapshothost;
+mod tsconfigresolver;
 
 pub use ata::*;
 pub use checkerpool::*;
@@ -48,6 +49,7 @@ pub use projectcollectionbuilder::ProjectCollectionBuilder;
 pub use session::*;
 pub use snapshot::*;
 pub use snapshothost::*;
+pub use tsconfigresolver::*;
 
 #[cfg(test)]
 mod projecttestutil;

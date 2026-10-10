@@ -1246,6 +1246,7 @@ impl Checker {
         // Grammar checking
         self.check_grammar_statement_in_ambient_context(node);
         self.check_expression(node.expression().unwrap());
+        self.lint_node(node);
     }
 
     // Returns the type of an expression. Unlike checkExpression, this function is simply concerned

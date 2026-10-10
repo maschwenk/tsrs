@@ -92,6 +92,7 @@ pub fn emit_files_and_report_errors(input: &EmitInput) -> CompileAndEmitResult {
     let mut times = input.compile_times.clone();
     let bind_time = Cell::new(times.bind_time);
     let check_time = Cell::new(times.check_time);
+    let checked = Cell::new(false);
     let program = input.program;
 
     let ctx = tsrs_compiler::Context::default();
@@ -111,11 +112,19 @@ pub fn emit_files_and_report_errors(input: &EmitInput) -> CompileAndEmitResult {
         },
         &mut |ctx, file| {
             let check_start = input.sys.now();
+            checked.set(true);
             let diags = program.get_semantic_diagnostics(ctx, file);
             check_time.set(input.sys.now() - check_start);
             diags
         },
     );
+    // Syntax/options errors stop tsc's diagnostic pipeline, but an explicit lint request still
+    // checks its files. Preserve tsc's diagnostic selection while dispatching lint rules during the check.
+    if input.sys.lint_config().is_some() && !checked.get() {
+        let check_start = input.sys.now();
+        program.get_semantic_diagnostics(&ctx, None);
+        check_time.set(input.sys.now() - check_start);
+    }
     times.bind_time = bind_time.get();
     times.check_time = check_time.get();
 

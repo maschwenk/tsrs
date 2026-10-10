@@ -26,6 +26,11 @@ pub trait System: Sync {
     fn now(&self) -> Instant;
     fn since_start(&self) -> Duration;
 
+    /// Native lint configuration, installed before the compiler creates any checkers.
+    fn lint_config(&self) -> Option<&Arc<tsrs_compiler::LintConfig>> {
+        None
+    }
+
     // Go `sys.Now()` as a wall-clock time (time stamps written by --build).
     fn now_time(&self) -> std::time::SystemTime {
         std::time::SystemTime::now()
