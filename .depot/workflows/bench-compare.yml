@@ -57,6 +57,9 @@ jobs:
         with:
           node-version: 24
 
+      - name: Set up pnpm
+        run: bash .github/scripts/setup-pnpm.sh
+
       - name: Install Bun (${{ env.BUN_VERSION }})
         run: |
           tag=$([ "$BUN_VERSION" = canary ] && echo canary || echo "bun-v$BUN_VERSION")

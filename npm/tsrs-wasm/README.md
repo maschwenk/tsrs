@@ -10,8 +10,8 @@ TypeScript `7.1.0-dev.20260929`.
 ## Command line (Node 22+)
 
 ```
-npx -y @ts-rs/wasm -p .             # or `npm i -D @ts-rs/wasm`, then `tsrs-wasm -p .`
-npx -y @ts-rs/wasm --version
+pnpm dlx @ts-rs/wasm -p .             # or `pnpm add -D @ts-rs/wasm`, then `tsrs-wasm -p .`
+pnpm dlx @ts-rs/wasm --version
 ```
 
 It reads and writes the real file system, prints what `tsc` prints and exits with its status. A crash (a panic, or a

@@ -65,6 +65,9 @@ jobs:
         with:
           node-version: 24
 
+      - name: Set up pnpm
+        run: bash .github/scripts/setup-pnpm.sh
+
       - name: Install Bun canary and perf
         run: |
           sudo apt-get install -y -qq strace >/dev/null 2>&1 || echo "strace not installed"

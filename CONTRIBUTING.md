@@ -15,7 +15,7 @@ The Go implementation at the commit in `Cargo.toml` (`[workspace.metadata.typesc
 
 ## Build
 
-Requirements: rustup (it installs the Rust version `rust-toolchain.toml` pins), Node.js (for `npm/build.mjs`) and git.
+Requirements: rustup (it installs the Rust version `rust-toolchain.toml` pins), Node.js, pnpm 12.10.1 (for `npm/build.mjs` and the JS tooling) and git.
 
 ```sh
 cargo build --release -p tsrs_cli -p tsrs_testrunner

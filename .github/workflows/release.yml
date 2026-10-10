@@ -6,9 +6,9 @@
 #
 # Setup before the first release:
 #   - npm trusted publishers for `tsrs`, `@ts-rs/wasm` and every platform package: GitHub Actions,
-#     repository maschwenk/tsrs, workflow release.yml, no environment, with direct `npm publish` allowed.
+#     repository maschwenk/tsrs, workflow release.yml, no environment, with direct publishing allowed.
 #   - tag pushes `v<workspace version>` or `v<npm version>` (node npm/build.mjs --print-version), e.g. v0.1.0.
-# Provenance (`npm publish --provenance`) is only possible from a public repository; it is enabled automatically
+# Provenance (`pnpm publish --provenance`) is only possible from a public repository; it is enabled automatically
 # when the repository is public and skipped while it is private.
 
 name: Release
@@ -19,7 +19,7 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "Build, test and pack, but run `npm publish --dry-run`"
+        description: "Build, test and pack, but run `pnpm publish --dry-run`"
         type: boolean
         default: true
 
@@ -87,10 +87,13 @@ jobs:
           fetch-depth: 1
           sparse-checkout: tsc/testdata
           persist-credentials: false
-      # The bench projects of the training workload install with npm/pnpm/yarn (bench/run.py --setup-only).
+      # The bench projects of the training workload install with their pinned package managers via pnpm (bench/run.py --setup-only).
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
+      - name: Set up pnpm
+        run: bash .github/scripts/setup-pnpm.sh
+
       - name: Read the pinned Rust toolchain (rust-toolchain.toml)
         id: rust
         shell: bash
@@ -179,7 +182,7 @@ jobs:
       - name: Installed-package smoke (CLI and Node API)
         shell: bash
         run: |
-          npm ci --prefix npm --no-audit --no-fund
+          pnpm --dir npm install --frozen-lockfile
           node npm/build.mjs --artifacts out --pack
           node npm/sdk/smoke-consumer.mjs
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -233,6 +236,9 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
+      - name: Set up pnpm
+        run: bash .github/scripts/setup-pnpm.sh
+
       # Same binaryen as ci.yml (the module sizes in notes/wasm-build.md come from version 133).
       - name: Install binaryen 133
         run: |
@@ -242,10 +248,10 @@ jobs:
           echo "$RUNNER_TEMP/binaryen-version_133/bin" >> "$GITHUB_PATH"
       - name: Build the module
         run: tools/wasm/build.sh
-      - name: Build native tsrs (npm test compares against it)
+      - name: Build native tsrs (pnpm test compares against it)
         run: cargo build --release --locked -p tsrs_cli
-      - name: npm test (npm/tsrs-wasm)
-        run: npm test --prefix npm/tsrs-wasm
+      - name: pnpm test (npm/tsrs-wasm)
+        run: pnpm --dir npm/tsrs-wasm test
       - name: Pack
         run: node npm/build.mjs --wasm npm/tsrs-wasm/tsrs.wasm --out wasm-dist --pack
       - name: Installed-package smoke
@@ -255,12 +261,12 @@ jobs:
           tarball=$(node -p 'require("./wasm-dist/packages.json").packages[0].tarball')
           smoke="$RUNNER_TEMP/wasm-smoke"
           mkdir -p "$smoke" && cd "$smoke"
-          npm init -y > /dev/null
-          npm install --no-audit --no-fund "$tarball"
-          npx --no-install tsrs-wasm --version | tee version.txt
+          printf '{"private":true}\n' > package.json
+          pnpm add --offline "$tarball"
+          pnpm exec tsrs-wasm --version | tee version.txt
           grep -qF "(tsrs $VERSION," version.txt || { echo "::error::tsrs-wasm --version does not name $VERSION"; exit 1; }
           printf 'const x: number = "no";\n' > bad.ts
-          set +e; npx --no-install tsrs-wasm bad.ts; status=$?; set -e
+          set +e; pnpm exec tsrs-wasm bad.ts; status=$?; set -e
           [ "$status" = 2 ] || { echo "expected exit 2 for a type error, got $status"; exit 1; }
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -287,8 +293,9 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
-      - name: Install npm for trusted publishing
-        run: npm install --global npm@12.2.0 --ignore-scripts --no-audit --no-fund
+      - name: Set up pnpm
+        run: bash .github/scripts/setup-pnpm.sh
+
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: bin-*
@@ -308,7 +315,7 @@ jobs:
       # prerequisite as ci.yml's packaging smoke test); branches without that manifest have nothing to install.
       - name: Assemble and pack
         run: |
-          if [ -f npm/package-lock.json ]; then npm ci --prefix npm --no-audit --no-fund; fi
+          if [ -f npm/pnpm-lock.yaml ]; then pnpm --dir npm install --frozen-lockfile; fi
           node npm/build.mjs --artifacts artifacts --pack
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -320,10 +327,10 @@ jobs:
           VERSION: ${{ needs.version.outputs.version }}
           PRIVATE_REPO: ${{ github.event.repository.private }}
         run: |
-          flags=(--access public --tag latest)
+          flags=(--access public --tag latest --no-git-checks)
           [ "$PRIVATE_REPO" = false ] && flags+=(--provenance)
           [ "$DRY_RUN" = true ] && flags+=(--dry-run)
-          # npm authenticates with this job's GitHub Actions OIDC identity and publishes directly.
+          # pnpm authenticates with this job's GitHub Actions OIDC identity and publishes directly.
           # The WebAssembly manifest comes from the wasm job, whose absolute paths are not this runner's: its tarball
           # is looked up next to the manifest. Both manifests must carry the version the skip check below asks for.
           # The list is written first so that a failure here fails the step (the default shell has no pipefail).
@@ -337,9 +344,9 @@ jobs:
           cat "$RUNNER_TEMP/publish.txt"
           while read -r name tarball; do
             # Re-running a partially published release skips what is already on the registry.
-            if [ "$DRY_RUN" != true ] && npm view "$name@$VERSION" version > /dev/null 2>&1; then
+            if [ "$DRY_RUN" != true ] && pnpm view "$name@$VERSION" version > /dev/null 2>&1; then
               echo "$name@$VERSION already published"
               continue
             fi
-            npm publish "$tarball" "${flags[@]}"
+            pnpm publish "$tarball" "${flags[@]}"
           done < "$RUNNER_TEMP/publish.txt"

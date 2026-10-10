@@ -59,9 +59,11 @@ commit, update `[workspace.metadata.typescript]`.
 
 ## Building packages locally
 
+Use pnpm 12.10.1, pinned in `npm/package.json`, for the build tooling, packing and publishing.
+
 ```sh
 cargo build --release -p tsrs_cli
-npm ci --prefix npm     # build-only compiler for the JS API
+pnpm --dir npm install --frozen-lockfile     # build-only compiler for the JS API
 node npm/build.mjs --binary aarch64-apple-darwin=target/release/tsrs --pack
 # -> npm/dist/ts-rs-darwin-arm64-<version>.tgz, npm/dist/tsrs-<version>.tgz, npm/dist/packages.json
 ```
@@ -90,7 +92,7 @@ After bumping `[workspace.metadata.typescript]`, check out that commit as `ts-re
 `node npm/sdk/sync-upstream.mjs --check` fails if the copy drifted.
 
 ```sh
-npm ci --prefix npm                        # build-only tools: typescript@7 (compiler), @types/node, tinybench
+pnpm --dir npm install --frozen-lockfile                        # build-only tools: typescript@7 (compiler), @types/node, tinybench
 node npm/build.mjs --sdk-only              # npm/tsrs/src -> npm/tsrs/dist (also part of every package build)
 cd npm/tsrs && TSRS_BINARY=/path/to/server node --conditions @typescript/source --test 'test/**/*.test.ts'
 node npm/sdk/smoke-consumer.mjs            # after build.mjs --pack: offline install into a temp consumer, typecheck, sync+async compile
@@ -139,7 +141,7 @@ Wire contract the server has to speak (from the pinned `tsc/cmd/tsc/api.go`, `ts
    x64 and arm64 (`ubuntu-22.04`); on Linux, BOLT-optimizes them and runs the conformance and fourslash gates on the
    BOLT-optimized binaries (`.github/scripts/bolt.sh`); smoke-runs the native ones (`--version`, exit code 2 on a type
    error) and the installed package (`npm/sdk/smoke-consumer.mjs`);
-3. builds the WebAssembly module (`tools/wasm/build.sh`, binaryen 133), runs `npm test` in `npm/tsrs-wasm`, packs
+3. builds the WebAssembly module (`tools/wasm/build.sh`, binaryen 133), runs `pnpm test` in `npm/tsrs-wasm`, packs
    `@ts-rs/wasm` with `npm/build.mjs --wasm`, installs that tarball and runs it (`--version` must name the
    release version, exit code 2 on a type error), and uploads it as the `npm-wasm` artifact;
 4. assembles and packs the native packages with `npm/build.mjs`, uploads the tarballs as the `npm-packages` artifact,
@@ -151,14 +153,14 @@ The conformance and fourslash gates run on the Linux release binaries (`bolt.sh`
 smoke tests; `ci.yml` (Linux) gates the source, and the WebAssembly differential gate (`tools/wasm/gate.sh`) runs only
 there.
 
-`workflow_dispatch` runs the same with `npm publish --dry-run` by default.
+`workflow_dispatch` runs the same with `pnpm publish --dry-run` by default.
 
 What maintainers must configure before the first release:
 
 - The `@ts-rs` npm org and each package must exist. Configure a GitHub Actions trusted publisher for `tsrs`,
   `@ts-rs/wasm` and each `@ts-rs/<os>-<arch>` platform package: owner `maschwenk`, repository `tsrs`, workflow
-  filename `release.yml`, no environment name, with direct `npm publish` allowed.
-- The publish job uses npm 12.2.0 and `id-token: write` to authenticate through GitHub Actions OIDC. No npm publish
+  filename `release.yml`, no environment name, with direct publishing allowed.
+- The publish job uses pnpm 12.10.1 and `id-token: write` to authenticate through GitHub Actions OIDC. No registry publish
   token or repository secret is required. See [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/)
   for configuration and first-publish validation requirements.
 - Provenance: npm only accepts `--provenance` from public repositories. The workflow adds `--provenance` automatically
@@ -168,7 +170,7 @@ What maintainers must configure before the first release:
 
 `.depot/workflows/ci.yml` (Depot CI; pushes to main, pull requests into main, manual dispatch): `cargo check
 --workspace` with warnings denied, `cargo test` for the fast crates, a release build, the conformance and fourslash
-gates, the determinism gate, an npm install smoke test of the packed tarballs, the WebAssembly build and differential
+gates, the determinism gate, a pnpm install smoke test of the packed tarballs, the WebAssembly build and differential
 gate, the lint ratchet, and the skip-marker, generated-code and arena-safety jobs.
 
 ## Adopting it in a pnpm workspace

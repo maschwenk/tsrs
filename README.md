@@ -13,8 +13,8 @@ On the vscode codebase it type-checks **18x faster than tsc 7** using about a th
 ## Quick start
 
 ```sh
-npx -y tsrs -p path/to/project            # compile, like tsc
-npx -y tsrs -p path/to/project --noEmit   # type check only
+pnpm dlx tsrs -p path/to/project           # compile, like tsc
+pnpm dlx tsrs -p path/to/project --noEmit   # type check only
 ```
 
 Or install it with `pnpm add -D tsrs` and run `tsrs` in place of `tsc`. Prebuilt binaries are available for
@@ -171,7 +171,7 @@ known gaps.
 `tsrs --singleThreaded` byte for byte.
 
 ```sh
-npx -y @ts-rs/wasm -p .
+pnpm dlx @ts-rs/wasm -p .
 ```
 
 ```js

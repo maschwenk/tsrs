@@ -1,7 +1,7 @@
 # Node programmatic API (`tsrs --api`, unstable/sync + unstable/async) validation on macOS. See
 # docs/NODE_API_VALIDATION.md. Parity and the Linux packages run on Depot CI (.depot/workflows/node-api.yml), which has
 # no macOS sandboxes and does not run pull requests from forks.
-# Security: read-only GITHUB_TOKEN, no secrets, nothing is published (no npm publish, no tags, no releases).
+# Security: read-only GITHUB_TOKEN, no secrets, nothing is published (no pnpm publish, no tags, no releases).
 # Triggers: pushes to main, manual dispatch (needs this file on the default branch), and pull requests into main
 # that touch the API surface. `pull_request` (never `pull_request_target`) runs with a read-only token and no
 # secrets; fork PRs additionally wait for the repository's approval setting. This lets the API branches be
@@ -76,10 +76,13 @@ jobs:
             with:
               toolchain: ${{ steps.rust.outputs.toolchain }}
 
+      - name: Set up pnpm
+        run: bash .github/scripts/setup-pnpm.sh
+
       # This install writes only npm/node_modules, so it can overlap the Rust cache restore and binary build.
-      - name: Install npm packaging dependencies
-        id: npm-dependencies
-        run: npm ci --prefix npm --no-audit --no-fund
+      - name: Install packaging dependencies
+        id: pnpm-dependencies
+        run: pnpm --dir npm install --frozen-lockfile
         background: true
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
@@ -109,7 +112,7 @@ jobs:
       - name: Stop build resource monitor
         cancel: resource-monitor
 
-      # `wait-all` always runs, so npm failures are reported even if the foreground Rust build failed first.
+      # `wait-all` always runs, so pnpm failures are reported even if the foreground Rust build failed first.
       - name: Wait for background setup
         wait-all:
 

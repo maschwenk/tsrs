@@ -51,6 +51,9 @@ jobs:
         with:
           node-version: 24
 
+      - name: Set up pnpm
+        run: bash .github/scripts/setup-pnpm.sh
+
       - name: Read TypeScript reference commit
         id: ts
         run: echo "commit=$(node npm/build.mjs --print-typescript-commit)" >> "$GITHUB_OUTPUT"

@@ -62,7 +62,8 @@ if (!pinned || refHead !== pinned) {
     process.exit(2);
 }
 const refPkg = path.join(opts.ref, "packages", "typescript");
-if (!fs.existsSync(path.join(opts.ref, "node_modules", "tinybench"))) {
+const refModules = path.join(refPkg, "node_modules");
+if (!fs.existsSync(path.join(refModules, "tinybench"))) {
     console.error("ts-ref node_modules missing; run tools/node-api/setup.sh");
     process.exit(2);
 }
@@ -81,12 +82,12 @@ fs.cpSync(path.join(here, "tests"), path.join(pkg, "test", "parity"), { recursiv
 // Upstream astnav tests read tsc/testdata (fixtures and baselines) relative to the repo root and silently
 // return zero tests when it is missing, so the tree links the pinned tsc/ in.
 fs.symlinkSync(path.join(opts.ref, "tsc"), path.join(tree, "tsc"), "junction");
-// node_modules: everything ts-ref installed except the workspace self-link, so the client resolves to this copy.
+// Link the upstream workspace's direct dependencies; pnpm keeps them beside that package.
 const nm = path.join(tree, "node_modules");
 fs.mkdirSync(nm);
-for (const entry of fs.readdirSync(path.join(opts.ref, "node_modules"))) {
+for (const entry of fs.readdirSync(refModules)) {
     if (entry === "@typescript" || entry.startsWith(".")) continue;
-    fs.symlinkSync(path.join(opts.ref, "node_modules", entry), path.join(nm, entry));
+    fs.symlinkSync(path.join(refModules, entry), path.join(nm, entry));
 }
 // The upstream client spawns built/local/tsc when run from source (lib/getExePath.js).
 const local = path.join(tree, "built", "local");

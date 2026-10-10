@@ -1,7 +1,7 @@
 # Node programmatic API (`tsrs --api`, unstable/sync + unstable/async) validation. See docs/NODE_API_VALIDATION.md.
 # Depot CI workflow: parity and the Linux packages. Depot CI has no macOS sandboxes and does not run pull requests from
 # forks, so .github/workflows/node-api.yml keeps the macOS package job.
-# Security: read-only token, no secrets, nothing is published (no npm publish, no tags, no releases).
+# Security: read-only token, no secrets, nothing is published (no pnpm publish, no tags, no releases).
 # Triggers: pushes to main, manual dispatch, and pull requests into main that touch the API surface. This lets the
 # API branches be validated before anything is merged.
 
@@ -69,6 +69,9 @@ jobs:
         with:
           node-version: 24
 
+      - name: Set up pnpm
+        run: bash .github/scripts/setup-pnpm.sh
+
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: ts-ref/tsc/go.mod
@@ -79,7 +82,7 @@ jobs:
           save-cache: true
           cache-key: node-api-parity
 
-      - name: Harness setup (npm ci in ts-ref, Go oracle from ts-ref/tsc)
+      - name: Harness setup (pnpm install in ts-ref, Go oracle from ts-ref/tsc)
         run: tools/node-api/setup.sh
 
       - name: Go oracle (must pass)
@@ -163,6 +166,9 @@ jobs:
         with:
           node-version: 24
 
+      - name: Set up pnpm
+        run: bash .github/scripts/setup-pnpm.sh
+
       - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
         with:
           save-cache: true
@@ -173,7 +179,7 @@ jobs:
 
       - name: Pack (no publish)
         run: |
-          npm ci --prefix npm --no-audit --no-fund
+          pnpm --dir npm install --frozen-lockfile
           node npm/build.mjs --binary ${{ matrix.target }}=target/release/tsrs --out "$RUNNER_TEMP/pack" --pack
 
       - name: Installed-package smoke (CLI, sync, async, declarations)

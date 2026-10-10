@@ -5,7 +5,7 @@
 The native compiler and JS API move to `tsrs`, the native binaries to `@ts-rs/darwin-arm64`, `@ts-rs/linux-x64`
 and `@ts-rs/linux-arm64`, and WebAssembly to `@ts-rs/wasm` (#288). All five packages use
 `0.12.0-ts7.1.0-dev.20260929`, published directly by the release workflow using npm trusted publishing (OIDC).
-Install with `npm install -D tsrs`; JS API consumers change imports from `@maschwenk/tsrs/unstable/*` to
+Install with `pnpm add -D tsrs`; JS API consumers change imports from `@maschwenk/tsrs/unstable/*` to
 `tsrs/unstable/*`. Earlier releases remain under `@maschwenk`. The TypeScript source pin remains
 `b85298b6a81f772d080b0455de0ca9d744cd6fd6` (7.1.0-dev.20260929).
 
@@ -175,7 +175,7 @@ error count as 0.8.0. The `--extendedDiagnostics` `Symbols` counter drops where 
 never bound (#202).
 
 WebAssembly (#203, notes/wasm-build.md): `crates/tsrs_wasm` builds tsc as a `wasm32-wasip1` module over a host file
-system, and `@maschwenk/tsrs-wasm` runs it in Node 22 or later (`npx -y @maschwenk/tsrs-wasm -p .` on the real file
+system, and `@maschwenk/tsrs-wasm` runs it in Node 22 or later (`pnpm dlx @maschwenk/tsrs-wasm -p .` on the real file
 system, or `tsc(args, { files })` over in-memory files with JSON diagnostics) and in browsers (a Web Worker over
 in-memory files). The module is 9.15 MB, 2.58 MB gzip, 1.74 MB brotli. It is single-threaded: `--checkers` is
 accepted and everything runs on one thread. Its output is byte-identical to native `tsrs --singleThreaded` on the

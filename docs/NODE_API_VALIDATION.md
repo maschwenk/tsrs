@@ -22,7 +22,7 @@ contract itself is `docs/NODE_API.md`; this file covers the independent evidence
 ## Running
 
 ```sh
-tools/node-api/setup.sh                       # ts-ref at the pin, npm ci, Go oracle -> tools/node-api/.work/oracle/tsc
+tools/node-api/setup.sh                       # ts-ref at the pin, pnpm install, Go oracle -> tools/node-api/.work/oracle/tsc
 node tools/node-api/run-upstream.mjs --binary tools/node-api/.work/oracle/tsc --label go-oracle
 cargo build --release -p tsrs_cli
 node tools/node-api/run-upstream.mjs --binary target/release/tsrs --label tsrs

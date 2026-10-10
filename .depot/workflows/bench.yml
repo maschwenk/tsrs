@@ -85,6 +85,9 @@ jobs:
         with:
           node-version: 24
 
+      - name: Set up pnpm
+        run: bash .github/scripts/setup-pnpm.sh
+
       # The conformance suite (part of the PGO training workload) reads its tests from ts-ref/tsc/testdata.
       - name: Read TypeScript reference commit
         id: ts
@@ -290,6 +293,9 @@ jobs:
         with:
           node-version: 24
 
+      - name: Set up pnpm
+        run: bash .github/scripts/setup-pnpm.sh
+
       # `shared` is the suite + compilers cache; `project` is this project's (none for the two suite-only projects,
       # Compiler and Compiler-Unions, which live in the suite checkout).
       - name: Cache keys
@@ -389,6 +395,9 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 24
+
+      - name: Set up pnpm
+        run: bash .github/scripts/setup-pnpm.sh
 
       - name: Cache keys
         id: keys

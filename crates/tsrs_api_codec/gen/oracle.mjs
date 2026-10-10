@@ -6,7 +6,7 @@
 //   (cd ts-ref/tsc && GOWORK=off go build -o /tmp/tsgo/tsc ./cmd/tsc)
 //   # client: the JavaScript API client of the same source (the npm build 7.1.0-dev.20260930.4 is the pinned
 //   # commit plus one commit that only touches tools/pipelines/*.yml, so its dist/api is the pinned source)
-//   npm install --prefix /tmp/tsoracle typescript@7.1.0-dev.20260930.4
+//   pnpm --dir /tmp/tsoracle add typescript@7.1.0-dev.20260930.4
 //   TSRS_CODEC_TSC=/tmp/tsgo/tsc TSRS_CODEC_ORACLE=/tmp/tsoracle/node_modules/typescript \
 //     node crates/tsrs_api_codec/gen/oracle.mjs
 //

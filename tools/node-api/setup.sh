@@ -2,7 +2,7 @@
 # Prepares the Node API parity harness:
 #   1. ts-ref/ at exactly the microsoft/TypeScript commit pinned in Cargo.toml ([workspace.metadata.typescript]),
 #      with packages/typescript (client + upstream tests) and tsc/ (Go server) checked out;
-#   2. the upstream client's dev dependencies (npm ci in ts-ref, packages/typescript workspace only);
+#   2. the upstream client's dev dependencies (pnpm, imported from the pinned upstream lockfile);
 #   3. the Go oracle server built from ts-ref/tsc (not from npm) at tools/node-api/.work/oracle/tsc.
 # An existing ts-ref at a different commit is an error; this script never moves someone else's checkout.
 set -euo pipefail
@@ -30,8 +30,12 @@ if [[ "$(git -C "$ref" config --get core.sparseCheckout || true)" == "true" ]]; 
     git -C "$ref" sparse-checkout add packages/typescript tsc go.work go.work.sum package.json package-lock.json
 fi
 
-if [[ ! -d "$ref/node_modules/tinybench" ]]; then
-    (cd "$ref" && npm ci --ignore-scripts --no-audit --no-fund -w packages/typescript --include-workspace-root=false)
+if [[ ! -d "$ref/packages/typescript/node_modules/tinybench" ]]; then
+    # Keep upstream's manifests and lockfile intact. This local workspace selects only the API package;
+    # --pm-on-fail=ignore lets pnpm use the checkout without enforcing upstream's npm packageManager pin.
+    printf 'packages:\n  - packages/typescript\n' > "$ref/pnpm-workspace.yaml"
+    pnpm --dir "$ref" --pm-on-fail=ignore import
+    pnpm --dir "$ref" --pm-on-fail=ignore --filter @typescript/typescript install --frozen-lockfile --ignore-scripts
 fi
 
 oracle="$here/.work/oracle"
