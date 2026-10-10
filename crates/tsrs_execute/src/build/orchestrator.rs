@@ -13,6 +13,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use rustc_hash::FxHashMap;
 use tsrs_ast::{new_compiler_diagnostic, Diagnostic};
 use tsrs_compiler::CompilerHost;
+use tsrs_core::arena_owner::{ArenaBuilder, ArenaKey};
 use tsrs_core::collections::Set;
 use tsrs_core::tspath::{self, ComparePathsOptions, Path};
 use tsrs_core::P;
@@ -23,14 +24,16 @@ use super::buildtask::{taskResult, BuildTask};
 use super::host::host;
 use super::parsecache::parseCache;
 use crate::tsc::{
-    self, create_builder_status_reporter, create_diagnostic_reporter_with_writer, create_report_error_summary, CommandLineResult, CommandLineTesting,
-    DiagnosticReporter, DiagnosticsReporter, ExitStatus, Statistics, System, Writer,
+    self, create_builder_status_reporter, create_diagnostic_reporter_with_writer, create_report_error_summary, CommandLineResult,
+    DiagnosticReporter, DiagnosticsReporter, ExitStatus, SharedSystem, SharedTesting, Statistics, Writer,
 };
 
+pub(crate) type TaskKey = ArenaKey<Arc<BuildTask>>;
+
 pub struct Options {
-    pub sys: &'static dyn System,
-    pub command: P<ParsedBuildCommandLine>,
-    pub testing: Option<&'static dyn CommandLineTesting>,
+    pub sys: SharedSystem,
+    pub command: Arc<ParsedBuildCommandLine>,
+    pub testing: Option<SharedTesting>,
 }
 
 #[derive(Default)]
@@ -72,8 +75,8 @@ impl OrchestratorResult {
             return;
         }
         self.statistics.set_total_time(o.opts.sys.since_start());
-        let sys = o.opts.sys;
-        self.statistics.report(&|t: &str| sys.write(t), o.opts.testing);
+        let sys = &o.opts.sys;
+        self.statistics.report(&|t: &str| sys.write(t), o.opts.testing.as_deref());
     }
 }
 
@@ -83,7 +86,10 @@ pub struct Orchestrator {
     host: OnceLock<Arc<host>>,
 
     // order generation result
-    tasks: Mutex<FxHashMap<Path, P<BuildTask>>>,
+    tasks: Mutex<FxHashMap<Path, TaskKey>>,
+    // Dependency edges are keys, so even a circular graph cannot keep task records alive. Clone a record
+    // under the short store lock before running callbacks, waiting on signals or growing the graph.
+    task_records: Mutex<ArenaBuilder<Arc<BuildTask>>>,
     order: Mutex<Vec<String>>,
     errors: Mutex<Vec<P<Diagnostic>>>,
     graph_generated: AtomicBool,
@@ -139,14 +145,15 @@ impl Orchestrator {
     fn compute_schedule_order(&self) -> Vec<String> {
         let order = self.order.lock().unwrap().clone();
         let mut entries: Vec<(String, usize)> = Vec::with_capacity(order.len());
-        let mut depths: FxHashMap<P<BuildTask>, usize> = FxHashMap::default();
+        let mut depths: FxHashMap<TaskKey, usize> = FxHashMap::default();
         for config in &order {
-            let task = self.get_task(&self.to_path(config));
+            let key = self.task_key(&self.to_path(config));
+            let task = self.task_record(key);
             let mut depth = 0;
             for upstream in task.up_stream.lock().unwrap().iter() {
                 depth = depth.max(depths.get(&upstream.task).copied().unwrap_or(0) + 1);
             }
-            depths.insert(task, depth);
+            depths.insert(key, depth);
             entries.push((config.clone(), depth));
         }
         entries.sort_by_key(|e| e.1);
@@ -158,41 +165,51 @@ impl Orchestrator {
     pub fn upstream(&self, config_name: &str) -> Vec<String> {
         let task = self.get_task(&self.to_path(config_name));
         let upstream = task.up_stream.lock().unwrap();
-        upstream.iter().map(|t| t.task.config.clone()).collect()
+        upstream.iter().map(|t| self.task_record(t.task).config.clone()).collect()
     }
 
     // orchestrator.go:171
-    pub(crate) fn get_task(&self, path: &Path) -> P<BuildTask> {
+    fn task_key(&self, path: &Path) -> TaskKey {
         match self.tasks.lock().unwrap().get(path) {
             Some(task) => *task,
             None => panic!("No build task found for {}", path.as_str()),
         }
     }
 
+    pub(crate) fn task_record(&self, key: TaskKey) -> Arc<BuildTask> {
+        Arc::clone(self.task_records.lock().unwrap().get(key).expect("task belongs to this orchestrator"))
+    }
+
+    pub(crate) fn get_task(&self, path: &Path) -> Arc<BuildTask> {
+        self.task_record(self.task_key(path))
+    }
+
     // orchestrator.go:179
-    fn create_build_tasks(&self, old_tasks: Option<&FxHashMap<Path, P<BuildTask>>>, configs: &[String]) {
+    fn create_build_tasks(&self, old_tasks: Option<&FxHashMap<Path, TaskKey>>, configs: &[String]) {
         for config in configs {
             let path = self.to_path(config);
             let mut task = None;
             let mut build_info = None;
-            if let Some(existing) = old_tasks.and_then(|old| old.get(&path)) {
+            if let Some(&key) = old_tasks.and_then(|old| old.get(&path)) {
+                let existing = self.task_record(key);
                 if !existing.dirty.load(Ordering::SeqCst) {
                     // Reuse existing task if config is same
-                    task = Some(*existing);
+                    task = Some(key);
                 } else {
                     build_info = existing.take_build_info_entry();
                 }
             }
             let task = task.unwrap_or_else(|| {
-                let task = P::new(BuildTask::new(config.clone(), old_tasks.is_none()));
+                let task = Arc::new(BuildTask::new(config.clone(), old_tasks.is_none()));
                 task.pending.store(true, Ordering::SeqCst);
                 task.set_build_info_entry(build_info);
-                task
+                self.task_records.lock().unwrap().alloc(task)
             });
             if self.tasks.lock().unwrap().contains_key(&path) {
                 continue;
             }
             self.tasks.lock().unwrap().insert(path.clone(), task);
+            let task = self.task_record(task);
             *task.resolved.lock().unwrap() = self.host().get_resolved_project_reference(config, path);
             task.up_stream.lock().unwrap().clear();
             if let Some(resolved) = task.resolved_opt() {
@@ -205,14 +222,15 @@ impl Orchestrator {
     fn setup_build_task(
         &self,
         config_name: &str,
-        _down_stream: Option<P<BuildTask>>,
+        _down_stream: Option<TaskKey>,
         in_circular_context: bool,
         completed: &mut Set<Path>,
         analyzing: &mut Set<Path>,
         circularity_stack: &mut Vec<String>,
-    ) -> Option<P<BuildTask>> {
+    ) -> Option<TaskKey> {
         let path = self.to_path(config_name);
-        let task = self.get_task(&path);
+        let key = self.task_key(&path);
+        let task = self.task_record(key);
         if !completed.has(&path) {
             if analyzing.has(&path) {
                 if !in_circular_context {
@@ -229,7 +247,7 @@ impl Orchestrator {
                 for (index, sub_reference) in resolved.resolved_project_reference_paths().iter().enumerate() {
                     let upstream = self.setup_build_task(
                         sub_reference,
-                        Some(task),
+                        Some(key),
                         in_circular_context || resolved.project_references()[index].circular,
                         completed,
                         analyzing,
@@ -247,7 +265,7 @@ impl Orchestrator {
             self.order.lock().unwrap().push(config_name.to_string());
         }
         // Watch mode only: downStream links.
-        Some(task)
+        Some(key)
     }
 
     // orchestrator.go:265
@@ -263,7 +281,7 @@ impl Orchestrator {
         self.generate_graph_with(Some(&old));
     }
 
-    fn generate_graph_with(&self, old_tasks: Option<&FxHashMap<Path, P<BuildTask>>>) {
+    fn generate_graph_with(&self, old_tasks: Option<&FxHashMap<Path, TaskKey>>) {
         let projects = self.opts.command.resolved_project_paths().to_vec();
         // Parse all config files (Go: in parallel)
         self.create_build_tasks(old_tasks, &projects);
@@ -307,7 +325,7 @@ impl Orchestrator {
     // tsc -b entrypoint
     // orchestrator.go:295
     pub fn start(&self) -> CommandLineResult {
-        CommandLineResult { status: self.start_worker("", false /*onlyReferences*/).status() }
+        CommandLineResult::new(self.start_worker("", false /*onlyReferences*/).status())
     }
 
     /// Makes this orchestrator allocate in collectable regions (API builds; see `regions`).
@@ -454,7 +472,8 @@ impl Orchestrator {
         let target = *self.tasks.lock().unwrap().get(&self.to_path(&config))?;
 
         let mut projects: Set<Path> = Set::default();
-        fn add_project_and_references(o: &Orchestrator, projects: &mut Set<Path>, task: P<BuildTask>) {
+        fn add_project_and_references(o: &Orchestrator, projects: &mut Set<Path>, key: TaskKey) {
+            let task = o.task_record(key);
             let path = o.to_path(&task.config);
             if projects.has(&path) {
                 return;
@@ -489,7 +508,7 @@ impl Orchestrator {
             for config in order {
                 let path = self.to_path(config);
                 let task = self.get_task(&path);
-                self.build_or_clean_project(task, &path);
+                self.build_or_clean_project(&task, &path);
             }
             for config in order {
                 let path = self.to_path(config);
@@ -503,7 +522,7 @@ impl Orchestrator {
             for config in order {
                 let path = self.to_path(config);
                 let task = self.get_task(&path);
-                self.build_or_clean_project(task, &path);
+                self.build_or_clean_project(&task, &path);
             }
             for config in order {
                 let path = self.to_path(config);
@@ -545,7 +564,7 @@ impl Orchestrator {
     }
 
     // orchestrator.go:925
-    fn range_tasks(&self, order: &[String], f: &(dyn Fn(&Path, P<BuildTask>) + Sync)) {
+    fn range_tasks(&self, order: &[String], f: &(dyn Fn(&Path, &BuildTask) + Sync)) {
         let mut num_routines = 4;
         if self.use_regions.load(Ordering::SeqCst) {
             // API builds: one task region is entered at a time. Concurrent tasks could each wait to enter the
@@ -559,7 +578,7 @@ impl Orchestrator {
         }
 
         let current_task_index = std::sync::atomic::AtomicUsize::new(0);
-        let get_next_task = || -> Option<(Path, P<BuildTask>)> {
+        let get_next_task = || -> Option<(Path, Arc<BuildTask>)> {
             let index = current_task_index.fetch_add(1, Ordering::SeqCst);
             let config = order.get(index)?;
             let path = self.to_path(config);
@@ -568,7 +587,7 @@ impl Orchestrator {
         };
         let run_task = || {
             while let Some((path, task)) = get_next_task() {
-                f(&path, task);
+                f(&path, &task);
             }
         };
 
@@ -601,14 +620,15 @@ impl Orchestrator {
     fn abort(&self) {
         self.aborted.store(true, Ordering::SeqCst);
         #[expect(clippy::iter_over_hash_type, reason = "wakes every waiter; the order does not matter")]
-        for task in self.tasks.lock().unwrap().values() {
+        for &key in self.tasks.lock().unwrap().values() {
+            let task = self.task_record(key);
             task.done.wake();
             task.built.wake();
         }
     }
 
     // orchestrator.go:888
-    fn build_or_clean_project(&self, task: P<BuildTask>, path: &Path) {
+    fn build_or_clean_project(&self, task: &BuildTask, path: &Path) {
         let builder: Arc<Mutex<String>> = Arc::new(Mutex::new(String::new()));
         *task.result.lock().unwrap() = Some(taskResult::new(builder));
         let report_status = self.create_builder_status_reporter(Some(task));
@@ -633,8 +653,8 @@ impl Orchestrator {
     }
 
     // orchestrator.go:906
-    pub(crate) fn get_writer(&self, task: Option<P<BuildTask>>) -> Writer<'static> {
-        let sys = self.opts.sys;
+    pub(crate) fn get_writer(&self, task: Option<&BuildTask>) -> Writer<'static> {
+        let sys = Arc::clone(&self.opts.sys);
         match task {
             None => std::sync::Arc::new(move |t: &str| sys.write(t)),
             Some(task) => {
@@ -648,25 +668,18 @@ impl Orchestrator {
     }
 
     // orchestrator.go:913
-    pub(crate) fn create_builder_status_reporter(&self, task: Option<P<BuildTask>>) -> DiagnosticReporter<'static> {
-        create_builder_status_reporter(self.opts.sys, self.get_writer(task), &self.opts.command.compiler_options, self.opts.testing)
+    pub(crate) fn create_builder_status_reporter(&self, task: Option<&BuildTask>) -> DiagnosticReporter<'static> {
+        create_builder_status_reporter(Arc::clone(&self.opts.sys), self.get_writer(task), &self.opts.command.compiler_options, self.opts.testing.as_ref().map(Arc::clone))
     }
 
     // orchestrator.go:917
-    pub(crate) fn create_diagnostic_reporter(&self, task: Option<P<BuildTask>>) -> DiagnosticReporter<'static> {
-        create_diagnostic_reporter_with_writer(self.opts.sys, self.get_writer(task), Some(&self.opts.command.compiler_options))
+    pub(crate) fn create_diagnostic_reporter(&self, task: Option<&BuildTask>) -> DiagnosticReporter<'static> {
+        create_diagnostic_reporter_with_writer(&*self.opts.sys, self.get_writer(task), Some(&self.opts.command.compiler_options))
     }
 }
 
 impl Drop for Orchestrator {
     fn drop(&mut self) {
-        // Tasks are still legacy region allocations. On unwind their results may retain programs that own
-        // those same regions; release the roots before dropping the regions to break that temporary cycle.
-        let retained_programs: Vec<_> = self.tasks.get_mut().unwrap_or_else(|e| e.into_inner()).values()
-            .filter_map(|task| task.result.lock().unwrap_or_else(|e| e.into_inner()).as_mut().and_then(|result| result.program.take()))
-            .collect();
-        drop(retained_programs);
-        self.retained_programs.get_mut().unwrap_or_else(|e| e.into_inner()).clear();
         if std::env::var_os("TSRS_REGION_LOG").is_some() {
             let regions = self.regions.get_mut().unwrap_or_else(|e| e.into_inner());
             eprintln!("regions: build orchestrator dropped ({} regions, {} KiB)", regions.len(), regions.iter().map(|r| r.allocated_bytes()).sum::<usize>() >> 10);
@@ -678,15 +691,16 @@ impl Drop for Orchestrator {
 pub fn new_orchestrator(opts: Options) -> Arc<Orchestrator> {
     // Several projects build at once; each project's pool keeps Go's checker count.
     tsrs_compiler::use_go_default_checker_count();
-    let sys = opts.sys;
+    let sys = Arc::clone(&opts.sys);
     let compare_paths_options =
         ComparePathsOptions { current_directory: sys.get_current_directory().to_string(), use_case_sensitive_file_names: sys.fs().use_case_sensitive_file_names() };
-    let error_summary_reporter = create_report_error_summary(sys, &opts.command.compiler_options);
+    let error_summary_reporter = create_report_error_summary(Arc::clone(&sys), &opts.command.compiler_options);
     let orchestrator = Arc::new(Orchestrator {
         opts,
         compare_paths_options,
         host: OnceLock::new(),
         tasks: Mutex::new(FxHashMap::default()),
+        task_records: Mutex::new(ArenaBuilder::new()),
         order: Mutex::new(Vec::new()),
         errors: Mutex::new(Vec::new()),
         graph_generated: AtomicBool::new(false),
@@ -713,4 +727,70 @@ pub fn new_orchestrator(opts: Options) -> Arc<Orchestrator> {
     });
     let _ = orchestrator.host.set(h);
     orchestrator
+}
+
+#[cfg(test)]
+mod ownership_tests {
+    use super::*;
+    use std::sync::atomic::AtomicUsize;
+    use tsrs_core::{CompilerOptions, Tristate};
+    use tsrs_tsoptions::ParseConfigHost;
+    use tsrs_vfs::FS;
+
+    struct ConfigHost(Arc<dyn FS>);
+
+    impl ParseConfigHost for ConfigHost {
+        fn fs(&self) -> &dyn FS { &*self.0 }
+        fn get_current_directory(&self) -> &str { "/" }
+    }
+
+    #[test]
+    fn task_graph_and_unreported_program_drop_after_unwind() {
+        let sys: SharedSystem = Arc::new(crate::sys::new_system());
+        let command = Arc::new(tsrs_tsoptions::parse_build_command_line(&[], &ConfigHost(sys.fs())));
+        let orchestrator = new_orchestrator(Options { sys, command, testing: None });
+        orchestrator.enable_api_regions();
+        let freed = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&freed);
+        let program = {
+            let scope = orchestrator.enter_api_region().unwrap();
+            orchestrator.regions.lock().unwrap().last().unwrap().on_free(Box::new(move || { observed.fetch_add(1, Ordering::SeqCst); }));
+            let options = P::new(CompilerOptions { no_lib: Tristate::True, no_emit: Tristate::True, ..Default::default() });
+            let config = P::new(tsrs_tsoptions::new_parsed_command_line(options, Vec::new(), Vec::new(), Default::default()));
+            let host = tsrs_compiler::new_compiler_host("/", orchestrator.opts.sys.fs(), "", None, None);
+            let mut options = tsrs_compiler::ProgramOptions::new(config, Arc::clone(&host));
+            options.single_threaded = Tristate::True;
+            let program = tsrs_compiler::new_program(options);
+            let program = tsrs_incremental::new_program(program, None, tsrs_incremental::create_host(host), None, false);
+            drop(scope);
+            program
+        };
+        let program_owner = Arc::downgrade(&program);
+        let task = Arc::new(BuildTask::new("/a/tsconfig.json".into(), true));
+        let upstream = Arc::new(BuildTask::new("/b/tsconfig.json".into(), true));
+        let task_owner = Arc::downgrade(&task);
+        let upstream_owner = Arc::downgrade(&upstream);
+        let (task_key, upstream_key) = {
+            let mut records = orchestrator.task_records.lock().unwrap();
+            (records.alloc(Arc::clone(&task)), records.alloc(Arc::clone(&upstream)))
+        };
+        task.up_stream.lock().unwrap().push(super::super::buildtask::upstreamTask { task: upstream_key, ref_index: 0 });
+        upstream.up_stream.lock().unwrap().push(super::super::buildtask::upstreamTask { task: task_key, ref_index: 0 });
+        let mut result = taskResult::new(Arc::new(Mutex::new(String::new())));
+        result.program = Some(program);
+        *task.result.lock().unwrap() = Some(result);
+        let unwound = std::panic::catch_unwind(|| {
+            let _result = task.result.lock().unwrap();
+            panic!("builder panicked before reporting");
+        });
+        assert!(unwound.is_err());
+        assert!(task.result.is_poisoned());
+        drop(task);
+        drop(upstream);
+        drop(orchestrator);
+        assert!(task_owner.upgrade().is_none());
+        assert!(upstream_owner.upgrade().is_none());
+        assert!(program_owner.upgrade().is_none());
+        assert_eq!(freed.load(Ordering::SeqCst), 1, "unreported task results retained their program region");
+    }
 }

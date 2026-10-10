@@ -5,6 +5,9 @@ use tsrs_ast::Diagnostic;
 use tsrs_core::P;
 use tsrs_vfs::FS;
 
+pub type SharedSystem = Arc<dyn System + Send>;
+pub type DiagnosticSink = Arc<dyn Fn(P<Diagnostic>) + Send + Sync>;
+
 pub trait System: Sync {
     fn fs(&self) -> Arc<dyn FS>;
     fn default_library_path(&self) -> &str;
@@ -30,9 +33,40 @@ pub trait System: Sync {
     /// tsrs-only: where diagnostics go instead of the text reporters (the WebAssembly build's JSON diagnostics).
     /// When it is set, the reporters pass each diagnostic to it, the error summary prints nothing, and `tsc -b` is
     /// refused. The CLI and the tsctests harness have none.
-    fn diagnostic_sink(&self) -> Option<&(dyn Fn(P<Diagnostic>) + Sync)> {
+    fn diagnostic_sink(&self) -> Option<DiagnosticSink> {
         None
     }
+}
+
+// Forward the complete system interface, including overridden clocks and diagnostic sinks.
+impl<T: System + ?Sized> System for &T {
+    fn fs(&self) -> Arc<dyn FS> { (**self).fs() }
+    fn default_library_path(&self) -> &str { (**self).default_library_path() }
+    fn get_current_directory(&self) -> &str { (**self).get_current_directory() }
+    fn write(&self, text: &str) { (**self).write(text) }
+    fn flush(&self) { (**self).flush() }
+    fn write_output_is_tty(&self) -> bool { (**self).write_output_is_tty() }
+    fn get_environment_variable(&self, name: &str) -> Option<String> { (**self).get_environment_variable(name) }
+    fn now(&self) -> Instant { (**self).now() }
+    fn since_start(&self) -> Duration { (**self).since_start() }
+    fn now_time(&self) -> std::time::SystemTime { (**self).now_time() }
+    fn format_time_now(&self) -> String { (**self).format_time_now() }
+    fn diagnostic_sink(&self) -> Option<DiagnosticSink> { (**self).diagnostic_sink() }
+}
+
+impl<T: System + Send + ?Sized> System for Arc<T> {
+    fn fs(&self) -> Arc<dyn FS> { (**self).fs() }
+    fn default_library_path(&self) -> &str { (**self).default_library_path() }
+    fn get_current_directory(&self) -> &str { (**self).get_current_directory() }
+    fn write(&self, text: &str) { (**self).write(text) }
+    fn flush(&self) { (**self).flush() }
+    fn write_output_is_tty(&self) -> bool { (**self).write_output_is_tty() }
+    fn get_environment_variable(&self, name: &str) -> Option<String> { (**self).get_environment_variable(name) }
+    fn now(&self) -> Instant { (**self).now() }
+    fn since_start(&self) -> Duration { (**self).since_start() }
+    fn now_time(&self) -> std::time::SystemTime { (**self).now_time() }
+    fn format_time_now(&self) -> String { (**self).format_time_now() }
+    fn diagnostic_sink(&self) -> Option<DiagnosticSink> { (**self).diagnostic_sink() }
 }
 
 #[cfg(unix)]
@@ -73,7 +107,7 @@ pub enum ExitStatus {
 }
 
 // Go `tsc.CommandLineTesting`: hooks of the tsctests harness (execute/tsctests); the CLI passes none.
-pub trait CommandLineTesting: Sync {
+pub trait CommandLineTesting: Send + Sync {
     fn on_list_files_start(&self, _w: &dyn Fn(&str)) {}
     fn on_list_files_end(&self, _w: &dyn Fn(&str)) {}
     fn on_statistics_start(&self, _w: &dyn Fn(&str)) {}
@@ -83,8 +117,10 @@ pub trait CommandLineTesting: Sync {
     fn on_emitted_files(&self, _result: Option<&tsrs_compiler::EmitResult>, _m_times_cache: Option<&MTimesCache>) {}
     fn on_program(&self, _program: std::sync::Arc<tsrs_incremental::Program>) {}
     // Go `GetTrace(w, locale)`: the trace function for a program's compiler host, writing to `w`.
-    fn get_trace(&'static self, w: SyncWriter, is_sys_writer: bool) -> Box<tsrs_compiler::TraceFn>;
+    fn get_trace(self: Arc<Self>, w: SyncWriter, is_sys_writer: bool) -> Box<tsrs_compiler::TraceFn>;
 }
+
+pub type SharedTesting = Arc<dyn CommandLineTesting>;
 
 pub type SyncWriter = std::sync::Arc<dyn Fn(&str) + Send + Sync>;
 
@@ -92,17 +128,31 @@ pub type SyncWriter = std::sync::Arc<dyn Fn(&str) + Send + Sync>;
 pub type MTimesCache = std::sync::Arc<std::sync::Mutex<rustc_hash::FxHashMap<tsrs_core::tspath::Path, Option<std::time::SystemTime>>>>;
 
 // emit.go:21 GetTraceWithWriterFromSys
-pub fn get_trace_with_writer_from_sys(w: SyncWriter, is_sys_writer: bool, testing: Option<&'static dyn CommandLineTesting>) -> Box<tsrs_compiler::TraceFn> {
+pub fn get_trace_with_writer_from_sys(w: SyncWriter, is_sys_writer: bool, testing: Option<&SharedTesting>) -> Box<tsrs_compiler::TraceFn> {
     match testing {
         None => Box::new(move |msg: &'static tsrs_diagnostics::Message, args: &[&dyn std::fmt::Display]| {
             w(&format!("{}\n", msg.localize(args)));
         }),
-        Some(testing) => testing.get_trace(w, is_sys_writer),
+        Some(testing) => Arc::clone(testing).get_trace(w, is_sys_writer),
     }
 }
 
 pub struct CommandLineResult {
     pub status: ExitStatus,
+    // A diagnostic sink can consume its collected diagnostics after the command returns (WASM JSON replies).
+    _owner: Option<CompileResultOwner>,
+}
+
+impl CommandLineResult {
+    pub fn new(status: ExitStatus) -> Self {
+        Self { status, _owner: None }
+    }
+}
+
+impl From<CompileAndEmitResult> for CommandLineResult {
+    fn from(result: CompileAndEmitResult) -> Self {
+        Self { status: result.status, _owner: Some(result._owner) }
+    }
 }
 
 #[derive(Default, Clone, Copy)]

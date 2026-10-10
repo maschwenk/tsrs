@@ -26,12 +26,12 @@ pub fn create_diagnostic_reporter<'a>(sys: &'a dyn System, options: Option<&Comp
 }
 
 // diagnostics.go:27 CreateDiagnosticReporter(sys, w, locale, options)
-pub fn create_diagnostic_reporter_with_writer<'a>(sys: &'a dyn System, w: Writer<'a>, options: Option<&CompilerOptions>) -> DiagnosticReporter<'a> {
+pub fn create_diagnostic_reporter_with_writer<'a>(sys: &dyn System, w: Writer<'a>, options: Option<&CompilerOptions>) -> DiagnosticReporter<'a> {
     if options.is_some_and(|o| o.quiet.is_true()) {
         return Box::new(|_| {});
     }
     if let Some(sink) = sys.diagnostic_sink() {
-        return Box::new(sink);
+        return Box::new(move |diagnostic| sink(diagnostic));
     }
     let format_opts = get_format_opts_of_sys(sys);
     if should_be_pretty(sys, options) {
@@ -51,19 +51,19 @@ pub fn create_diagnostic_reporter_with_writer<'a>(sys: &'a dyn System, w: Writer
 
 // diagnostics.go:155
 pub fn create_builder_status_reporter<'a>(
-    sys: &'a dyn System,
+    sys: impl System + Send + 'a,
     w: Writer<'a>,
     options: &CompilerOptions,
-    testing: Option<&'a dyn super::CommandLineTesting>,
+    testing: Option<super::SharedTesting>,
 ) -> DiagnosticReporter<'a> {
     if options.quiet.is_true() {
         return Box::new(|_| {});
     }
 
-    let format_opts = get_format_opts_of_sys(sys);
-    let pretty = should_be_pretty(sys, Some(options));
+    let format_opts = get_format_opts_of_sys(&sys);
+    let pretty = should_be_pretty(&sys, Some(options));
     Box::new(move |diagnostic| {
-        if let Some(testing) = testing {
+        if let Some(testing) = &testing {
             testing.on_build_status_report_start(&*w);
         }
         let mut out = Vec::new();
@@ -76,7 +76,7 @@ pub fn create_builder_status_reporter<'a>(
         out.extend_from_slice(format_opts.new_line.as_bytes());
         out.extend_from_slice(format_opts.new_line.as_bytes());
         w(&String::from_utf8_lossy(&out));
-        if let Some(testing) = testing {
+        if let Some(testing) = &testing {
             testing.on_build_status_report_end(&*w);
         }
     })
@@ -109,9 +109,9 @@ fn should_be_pretty(sys: &dyn System, options: Option<&CompilerOptions>) -> bool
 
 pub type DiagnosticsReporter<'a> = Box<dyn Fn(&[P<Diagnostic>]) + Send + Sync + 'a>;
 
-pub fn create_report_error_summary<'a>(sys: &'a dyn System, options: &CompilerOptions) -> DiagnosticsReporter<'a> {
-    if sys.diagnostic_sink().is_none() && should_be_pretty(sys, Some(options)) {
-        let format_opts = get_format_opts_of_sys(sys);
+pub fn create_report_error_summary<'a>(sys: impl System + Send + 'a, options: &CompilerOptions) -> DiagnosticsReporter<'a> {
+    if sys.diagnostic_sink().is_none() && should_be_pretty(&sys, Some(options)) {
+        let format_opts = get_format_opts_of_sys(&sys);
         return Box::new(move |diagnostics| {
             let mut out = Vec::new();
             diagnosticwriter::write_error_summary_text(&mut out, diagnostics, &format_opts);

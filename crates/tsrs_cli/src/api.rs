@@ -9,7 +9,6 @@ use tsrs_api::build::{BuildBackend, BuildOrchestrator, BuildOutcome, BuildReques
 use tsrs_api::{ClientConn, Handler as _, Session, SessionOptions};
 use tsrs_api_transport as transport;
 use tsrs_api_transport::{CallbackConfig, CallbackFs};
-use tsrs_core::P;
 use tsrs_tsoptions::ParseConfigHost;
 use tsrs_vfs::{bundled, osvfs, FS};
 
@@ -184,14 +183,14 @@ struct CliBuildBackend;
 /// recheck leaves) whose allocations live in collectable regions; it is kept for later cleans and freed when the
 /// next build replaces it or the handle is disposed, so memory stays bounded by one build.
 struct CliOrchestrator {
-    sys: &'static ApiBuildSystem,
-    command: P<tsrs_tsoptions::ParsedBuildCommandLine>,
+    sys: Arc<ApiBuildSystem>,
+    command: Arc<tsrs_tsoptions::ParsedBuildCommandLine>,
     orchestrator: Option<Arc<crate::build::Orchestrator>>,
 }
 
 impl CliOrchestrator {
     fn fresh(&self) -> Arc<crate::build::Orchestrator> {
-        let o = new_orchestrator(Options { sys: self.sys, command: self.command, testing: None });
+        let o = new_orchestrator(Options { sys: Arc::clone(&self.sys) as crate::tsc::SharedSystem, command: Arc::clone(&self.command), testing: None });
         o.enable_api_regions();
         o
     }
@@ -209,14 +208,13 @@ impl BuildBackend for CliBuildBackend {
 
 impl CliBuildBackend {
     fn create_orchestrator(&self, request: BuildRequest) -> CliOrchestrator {
-        // `&'static` system and command line: the CLI build module requires them (one small leak per orchestrator).
-        let sys: &'static ApiBuildSystem = Box::leak(Box::new(ApiBuildSystem {
+        let sys = Arc::new(ApiBuildSystem {
             fs: request.fs,
             default_library_path: request.default_library_path,
             current_directory: request.current_directory,
             start: Instant::now(),
-        }));
-        let mut command = tsrs_tsoptions::parse_build_command_line(&request.root_names, sys);
+        });
+        let mut command = tsrs_tsoptions::parse_build_command_line(&request.root_names, &*sys);
         if let Some(options) = request.compiler_options {
             command.compiler_options = options;
         }
@@ -226,7 +224,7 @@ impl CliBuildBackend {
         // API builds allocate in per-task regions (CliOrchestrator); program construction and checking must stay on
         // the task's thread so their allocations land there, not in the compiler worker pool's thread arenas.
         command.compiler_options.single_threaded = tsrs_core::Tristate::True;
-        CliOrchestrator { sys, command: P::new(command), orchestrator: None }
+        CliOrchestrator { sys, command: Arc::new(command), orchestrator: None }
     }
 }
 
@@ -289,6 +287,8 @@ mod tests {
             build_options: None,
             compiler_options: None,
         });
+        let system = Arc::downgrade(&backend.sys);
+        let command = Arc::downgrade(&backend.command);
         let result = backend.build("", false);
         let owner = Arc::downgrade(backend.orchestrator.as_ref().unwrap());
         std::fs::write(dir.join("index.ts"), "export const value = 2;\n").unwrap();
@@ -296,11 +296,15 @@ mod tests {
         drop(next);
         drop(backend);
         assert!(owner.upgrade().is_some(), "the returned diagnostics lost their graph owner");
+        assert!(system.upgrade().is_some(), "the returned build lost its system owner");
+        assert!(command.upgrade().is_some(), "the returned build lost its command owner");
         let diagnostic = result.diagnostics.iter().find(|d| d.code() == 2322).unwrap();
         assert_eq!(diagnostic.localize(), "Type 'number' is not assignable to type 'string'.");
         assert_eq!(diagnostic.file().unwrap().text(), "export const value: string = 1;\n");
         drop(result);
         assert!(owner.upgrade().is_none(), "the final build outcome leaked its graph owner");
+        assert!(system.upgrade().is_none(), "the final build outcome leaked its system owner");
+        assert!(command.upgrade().is_none(), "the final build outcome leaked its command owner");
         let _ = std::fs::remove_dir_all(dir);
     }
 

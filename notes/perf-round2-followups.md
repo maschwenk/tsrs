@@ -107,6 +107,14 @@ pointer compression costs about +4.9% instructions and took back most of the che
 
 ## Measured and rejected (do not redo)
 
+- Calling Rust-owned build tasks and command inputs a completed or memory-preserving migration
+  (`notes/rust-owned-build-tasks.md`): local single-thread instructions change -0.03% on both projects and default
+  RSS changes -1.44% / +0.19%, below the performance landing bar. Cumulative single-thread instructions remain
+  +5.49–10.60% against original Oxc and default RSS remains +98–106% against pre-Oxc. Task keys and input owners
+  remove another ownership cycle/leak, and command results fix collected WASM diagnostics, but the raw compiler
+  graph and allocation routing layer remain. Revisit landing after the full typed graph/runtime migration,
+  independent testing-program host audit, full oracle/lifecycle validation and recovered instruction/RSS gates.
+
 - Calling owned build roots and scoped config hosts a completed or memory-preserving migration
   (`notes/rust-owned-build-roots.md`): local single-thread instructions add 0.05–0.19%, and default RSS changes
   -1.73–-0.07%, below the performance-change threshold. Cumulative single-thread instructions remain +5.49–10.64%

@@ -7,12 +7,10 @@ use std::time::{Duration, Instant};
 
 use tsrs_ast::Diagnostic;
 use tsrs_core::{tspath, P};
-use tsrs_execute::tsc::System;
+use tsrs_execute::tsc::{DiagnosticSink, System};
 use tsrs_vfs::{bundled, FS};
 
 use crate::host::HostFs;
-
-type Sink = Box<dyn Fn(P<Diagnostic>) + Send + Sync>;
 
 pub struct WasmSys {
     writer: Mutex<Box<dyn Write + Send>>,
@@ -21,7 +19,7 @@ pub struct WasmSys {
     cwd: String,
     tty: bool,
     start: Instant,
-    sink: Option<Sink>,
+    sink: Option<DiagnosticSink>,
 }
 
 impl WasmSys {
@@ -35,7 +33,7 @@ impl WasmSys {
             cwd: tspath::normalize_path(cwd),
             tty,
             start: Instant::now(),
-            sink: diagnostics.map(|list| Box::new(move |d| list.lock().unwrap().push(d)) as Sink),
+            sink: diagnostics.map(|list| Arc::new(move |d| list.lock().unwrap().push(d)) as DiagnosticSink),
         }
     }
 }
@@ -77,8 +75,8 @@ impl System for WasmSys {
         self.start.elapsed()
     }
 
-    fn diagnostic_sink(&self) -> Option<&(dyn Fn(P<Diagnostic>) + Sync)> {
-        self.sink.as_deref().map(|f| f as &(dyn Fn(P<Diagnostic>) + Sync))
+    fn diagnostic_sink(&self) -> Option<DiagnosticSink> {
+        self.sink.clone()
     }
 }
 

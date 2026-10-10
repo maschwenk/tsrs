@@ -55,6 +55,24 @@ fn run_captured(cwd: &str, flags: u32, args: &[&str]) -> (i32, Vec<u8>, String) 
 
 const ERRORS: &str = "const s: string = 1;\n// é and 😀 move the UTF-16 offsets\nconst n: number = 'x';\nlet u = undefinedName;\n";
 
+#[test]
+fn command_result_keeps_collected_diagnostics_alive_until_encoding() {
+    let _guard = setup(&[("/p/a.ts", ERRORS)]);
+    let list = Arc::new(Mutex::new(Vec::<P<Diagnostic>>::new()));
+    let sys = Arc::new(sys::WasmSys::new("/p", true, false, Some(Arc::clone(&list)), Box::new(std::io::sink())));
+    let system_owner = Arc::downgrade(&sys);
+    let result = tsrs_execute::execute::command_line(sys, vec!["a.ts".into(), "--noEmit".into()]);
+    assert!(system_owner.upgrade().is_some(), "the returned command lost its compiler host");
+    let diagnostics = list.lock().unwrap();
+    assert!(diagnostics.iter().any(|d| d.code() == 2322));
+    let ours = json::encode(&diagnostics);
+    let api = tsrs_core::json::marshal(&tsrs_api::diagnostics::diagnostic_responses(&diagnostics)).unwrap();
+    assert_eq!(String::from_utf8(ours).unwrap(), api);
+    drop(diagnostics);
+    drop(result);
+    assert!(system_owner.upgrade().is_none(), "the completed command leaked its system");
+}
+
 // Regression: the module's JSON encoder drifts from the API's DiagnosticResponse wire format (field order, UTF-16
 // positions, source lines, file-less diagnostics), so `diagnostics: "json"` callers get a different shape than
 // the Node API returns.
@@ -62,8 +80,8 @@ const ERRORS: &str = "const s: string = 1;\n// é and 😀 move the UTF-16 offse
 fn json_reply_matches_the_api_encoder() {
     let _guard = setup(&[("/p/a.ts", ERRORS)]);
     let list = Arc::new(Mutex::new(Vec::<P<Diagnostic>>::new()));
-    let sys: &'static sys::WasmSys = Box::leak(Box::new(sys::WasmSys::new("/p", true, false, Some(Arc::clone(&list)), Box::new(std::io::sink()))));
-    let result = tsrs_execute::execute::command_line(sys, vec!["a.ts".into(), "--noEmit".into(), "--unknownOption".into()]);
+    let sys = Arc::new(sys::WasmSys::new("/p", true, false, Some(Arc::clone(&list)), Box::new(std::io::sink())));
+    let result = tsrs_execute::execute::command_line(Arc::clone(&sys) as tsrs_execute::tsc::SharedSystem, vec!["a.ts".into(), "--noEmit".into(), "--unknownOption".into()]);
     sys.flush();
     let diagnostics = list.lock().unwrap().clone();
     assert!(!diagnostics.is_empty(), "the bad option is reported");
@@ -100,13 +118,14 @@ fn emit_through_the_host_matches_native() {
         fs: Arc<dyn tsrs_vfs::FS>,
         cwd: String,
         start: std::time::Instant,
+        lib_path: String,
     }
     impl System for OsSys {
         fn fs(&self) -> Arc<dyn tsrs_vfs::FS> {
             Arc::clone(&self.fs)
         }
         fn default_library_path(&self) -> &str {
-            Box::leak(tsrs_vfs::bundled::lib_path().into_boxed_str())
+            &self.lib_path
         }
         fn get_current_directory(&self) -> &str {
             &self.cwd
@@ -127,7 +146,7 @@ fn emit_through_the_host_matches_native() {
         }
     }
     let _guard = setup(&[(&format!("{root}/tsconfig.json"), config), (&format!("{root}/src/a.ts"), a), (&format!("{root}/src/b.ts"), b)]);
-    let native: &'static OsSys = Box::leak(Box::new(OsSys { fs: Arc::new(tsrs_vfs::bundled::wrap_fs(tsrs_vfs::osvfs::fs())), cwd: root.clone(), start: std::time::Instant::now() }));
+    let native = Arc::new(OsSys { fs: Arc::new(tsrs_vfs::bundled::wrap_fs(tsrs_vfs::osvfs::fs())), cwd: root.clone(), start: std::time::Instant::now(), lib_path: tsrs_vfs::bundled::lib_path() });
     let native_status = tsrs_execute::execute::command_line(native, vec!["-p".into(), ".".into()]).status as i32;
     let (status, _, stdout) = run_captured(&root, 0, &["-p", "."]);
     let listing: Vec<_> = std::fs::read_dir(dir.join("out")).map(|r| r.map(|e| e.unwrap().file_name()).collect()).unwrap_or_default();

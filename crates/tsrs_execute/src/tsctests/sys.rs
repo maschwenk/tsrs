@@ -617,7 +617,7 @@ impl CommandLineTesting for TestSys {
     }
 
     // sys.go GetTrace
-    fn get_trace(&'static self, w: SyncWriter, is_sys_writer: bool) -> Box<tsrs_compiler::TraceFn> {
+    fn get_trace(self: Arc<Self>, w: SyncWriter, is_sys_writer: bool) -> Box<tsrs_compiler::TraceFn> {
         Box::new(move |msg: &'static tsrs_diagnostics::Message, args: &[&dyn std::fmt::Display]| {
             w(&format!("{TRACE_START}\n"));
             // With tsc -b building projects in parallel we cannot serialize the package.json lookup trace
@@ -627,4 +627,30 @@ impl CommandLineTesting for TestSys {
             w(&format!("{TRACE_END}\n"));
         })
     }
+}
+
+#[test]
+fn trace_owns_scoped_testing_host_and_preserves_clock_overrides() {
+    let fs = Arc::new(tsrs_vfs::vfstest::from_map(std::iter::empty::<(&str, &str)>(), true));
+    let sys = Arc::new(TestSys::new(fs, None, TestClock::new(), "/".into(), "".into(), FxHashMap::default(), false));
+    let owner = Arc::downgrade(&sys);
+    let first = sys.now_time();
+    let shared: crate::tsc::SharedSystem = Arc::clone(&sys) as crate::tsc::SharedSystem;
+    assert_eq!(shared.now_time().duration_since(first).unwrap(), Duration::from_secs(1));
+    let borrowed: &dyn System = &*shared;
+    let second = borrowed.now_time();
+    assert_eq!(System::now_time(&borrowed).duration_since(second).unwrap(), Duration::from_secs(1));
+    let output = Arc::new(Mutex::new(String::new()));
+    let writer_output = Arc::clone(&output);
+    let testing: crate::tsc::SharedTesting = Arc::clone(&sys) as crate::tsc::SharedTesting;
+    let trace = crate::tsc::get_trace_with_writer_from_sys(Arc::new(move |text| writer_output.lock().unwrap().push_str(text)), true, Some(&testing));
+    drop(testing);
+    drop(shared);
+    drop(sys);
+    assert!(owner.upgrade().is_some());
+    trace(&tsrs_diagnostics::File_0_does_not_exist, &[&"/package.json"]);
+    trace(&tsrs_diagnostics::File_0_does_not_exist, &[&"/package.json"]);
+    assert_eq!(&*output.lock().unwrap(), "!!! Trace start\nFile '/package.json' does not exist.\n!!! Trace end\n!!! Trace start\nFile '/package.json' does not exist according to earlier cached lookups.\n!!! Trace end\n");
+    drop(trace);
+    assert!(owner.upgrade().is_none(), "the released trace leaked its testing host");
 }

@@ -96,9 +96,9 @@ fn main() {
         .name("tsrs".to_string()) // the alloc profile's "main" thread group
         .stack_size(512 << 20)
         .spawn(move || {
-            let sys: &'static sys::osSys = Box::leak(Box::new(sys::new_system()));
-            let result = execute::command_line(sys, args);
-            tsc::System::flush(sys);
+            let sys = std::sync::Arc::new(sys::new_system());
+            let result = execute::command_line(std::sync::Arc::clone(&sys) as tsc::SharedSystem, args);
+            tsc::System::flush(&*sys);
             tsrs_core::alloc_profile_dump();
             tsrs_core::sitecount::dump();
             result.status

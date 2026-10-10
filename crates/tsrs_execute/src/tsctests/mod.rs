@@ -24,7 +24,7 @@ use tsrs_core::tspath;
 use tsrs_vfs::vfstest::{self, MapFile};
 use tsrs_vfs::FS;
 
-use crate::tsc::{CommandLineTesting, ExitStatus};
+use crate::tsc::ExitStatus;
 use sys::{TestClock, TestSys};
 
 const TSC_LIB_PATH: &str = "/home/src/tslibs/TS/Lib";
@@ -144,7 +144,7 @@ fn load_scenario(path: &FsPath) -> scenario {
 
 // sys.go newTestSys: the initial file system comes from the dump (it already contains the default libraries,
 // written after the test's own files like ensureLibPathExists does).
-fn new_test_sys(test: &scenario) -> &'static TestSys {
+fn new_test_sys(test: &scenario) -> Arc<TestSys> {
     let clock = TestClock::new();
     let libs: FxHashSet<String> = test.default_libs.iter().cloned().collect();
     let mut initial: Vec<(String, MapFile)> = Vec::new();
@@ -167,7 +167,7 @@ fn new_test_sys(test: &scenario) -> &'static TestSys {
     }
     let lib_path = if test.windows_style_root.is_empty() { TSC_LIB_PATH.to_string() } else { format!("{}{}", test.windows_style_root, &TSC_LIB_PATH[1..]) };
     let cwd = if test.cwd.is_empty() { "/home/src/workspaces/project".to_string() } else { test.cwd.clone() };
-    Box::leak(Box::new(TestSys::new(
+    Arc::new(TestSys::new(
         fs,
         if libs.is_empty() { None } else { Some(libs) },
         clock,
@@ -175,7 +175,7 @@ fn new_test_sys(test: &scenario) -> &'static TestSys {
         lib_path,
         test.env.clone(),
         test.output_is_tty.unwrap_or(true),
-    )))
+    ))
 }
 
 fn apply_ops(sys: &TestSys, ops: &[scenarioOp]) {
@@ -199,10 +199,13 @@ fn apply_ops(sys: &TestSys, ops: &[scenarioOp]) {
 }
 
 // runner.go executeCommand
-fn execute_command(sys: &'static TestSys, baseline: &mut String, args: &[String]) -> ExitStatus {
+fn execute_command(sys: &Arc<TestSys>, baseline: &mut String, args: &[String]) -> ExitStatus {
     baseline.push_str(&format!("tsgo {}\n", args.join(" ")));
-    let testing: &'static dyn CommandLineTesting = sys;
-    let result = crate::execute::command_line_with_testing(sys, args.to_vec(), Some(testing));
+    let result = crate::execute::command_line_with_testing(
+        Arc::clone(sys) as crate::tsc::SharedSystem,
+        args.to_vec(),
+        Some(Arc::clone(sys) as crate::tsc::SharedTesting),
+    );
     baseline.push_str(match result.status {
         ExitStatus::Success => "ExitStatus:: Success",
         ExitStatus::DiagnosticsPresent_OutputsSkipped => "ExitStatus:: DiagnosticsPresent_OutputsSkipped",
@@ -269,7 +272,7 @@ fn run_scenario(test: &scenario) -> String {
         sys.fs.use_case_sensitive_file_names()
     ));
     sys.baseline_fs_with_diff(&mut baseline);
-    execute_command(sys, &mut baseline, &test.args);
+    execute_command(&sys, &mut baseline, &test.args);
     sys.serialize_state(&mut baseline);
     sys.baseline_programs(&mut baseline, "Initial build");
 
@@ -277,19 +280,22 @@ fn run_scenario(test: &scenario) -> String {
         sys.clear_output();
         let args = edit.args.clone().unwrap_or_else(|| test.args.clone());
         baseline.push_str(&format!("\n\nEdit [{}]:: {}\n", index, edit.caption));
-        apply_ops(sys, &edit.ops);
+        apply_ops(&sys, &edit.ops);
         sys.baseline_fs_with_diff(&mut baseline);
-        execute_command(sys, &mut baseline, &args);
+        execute_command(&sys, &mut baseline, &args);
         sys.serialize_state(&mut baseline);
         sys.baseline_programs(&mut baseline, &format!("Edit [{}]:: {}\n", index, edit.caption));
 
         // Compute build with all the edits
         let non_incremental_sys = new_test_sys(test);
-        apply_ops(non_incremental_sys, &edit.fresh_ops);
-        let testing: &'static dyn CommandLineTesting = non_incremental_sys;
-        crate::execute::command_line_with_testing(non_incremental_sys, args.clone(), Some(testing));
+        apply_ops(&non_incremental_sys, &edit.fresh_ops);
+        crate::execute::command_line_with_testing(
+            Arc::clone(&non_incremental_sys) as crate::tsc::SharedSystem,
+            args.clone(),
+            Some(Arc::clone(&non_incremental_sys) as crate::tsc::SharedTesting),
+        );
 
-        let diff = get_diff_for_incremental(sys, non_incremental_sys);
+        let diff = get_diff_for_incremental(&sys, &non_incremental_sys);
         if !diff.is_empty() {
             baseline.push_str(&format!(
                 "\n\nDiff:: {}\n",
@@ -359,10 +365,9 @@ fn tsctests() {
             scope.spawn(|| loop {
                 let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 let Some(test) = scenarios.get(i) else { break };
-                let test_ref: &'static scenario = unsafe { &*(test as *const scenario) };
                 let outcome = std::thread::Builder::new()
                     .stack_size(512 << 20)
-                    .spawn(move || std::panic::catch_unwind(|| run_scenario(test_ref)))
+                    .spawn_scoped(scope, || std::panic::catch_unwind(|| run_scenario(test)))
                     .unwrap()
                     .join()
                     .unwrap();

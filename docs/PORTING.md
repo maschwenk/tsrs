@@ -102,9 +102,12 @@ Their packed symbol pointers and static key referents still require the legacy g
 
 Build orchestrators and their hosts use `Arc`; the host's back-reference is weak. Returned build outcomes retain
 the actual orchestrator, including programs whose diagnostics they expose, through conversion to an API response.
-There is no manual orchestrator free or raw box reconstruction. Tasks still live in legacy regions; destruction
-releases any unreported program roots before those regions. Build system/command inputs remain legacy
-(`notes/rust-owned-build-roots.md`).
+There is no manual orchestrator free or raw box reconstruction. Build tasks are Rust-owned records in a typed
+indexed store; dependency edges are qualified keys, and task records are borrowed through short-lived `Arc`
+leases. Ordinary destruction releases unreported programs, including after a poisoned task-result lock, without
+a task/program/region retention cycle. Build system/command inputs and testing hooks are shared Rust owners.
+CLI and WASM system entry points no longer leak a system. The command result retains the actual compile-result
+owner through diagnostic-sink consumption (`notes/rust-owned-build-tasks.md`). Graph referents remain legacy.
 
 Config parsing borrows its host and extended-config cache only during the call. Its synchronous package resolver
 may borrow the host; persistent compiler/project resolvers retain owned hosts. Session config hosts are ordinary

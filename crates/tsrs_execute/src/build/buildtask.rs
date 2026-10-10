@@ -15,7 +15,7 @@ use tsrs_tsoptions::ParsedCommandLine;
 
 use super::compilerhost::compilerHost;
 use super::host::incrementalHost;
-use super::orchestrator::{Orchestrator, OrchestratorResult};
+use super::orchestrator::{Orchestrator, OrchestratorResult, TaskKey};
 use super::uptodatestatus::*;
 use crate::tsc::{self, emit_and_report_statistics, CompileTimes, DiagnosticReporter, EmitInput, ExitStatus, Statistics};
 
@@ -28,7 +28,7 @@ pub(crate) enum buildKind {
 }
 
 pub(crate) struct upstreamTask {
-    pub(crate) task: P<BuildTask>,
+    pub(crate) task: TaskKey,
     pub(crate) ref_index: usize,
 }
 
@@ -195,8 +195,9 @@ impl BuildTask {
 
     // buildtask.go:109
     fn wait_on_upstream(&self, orchestrator: &Orchestrator) {
-        let upstream: Vec<P<BuildTask>> = self.up_stream.lock().unwrap().iter().map(|u| u.task).collect();
-        for task in upstream {
+        let upstream: Vec<TaskKey> = self.up_stream.lock().unwrap().iter().map(|u| u.task).collect();
+        for key in upstream {
+            let task = orchestrator.task_record(key);
             if !task.done.wait(&orchestrator.aborted) {
                 panic!("build aborted: a builder thread panicked");
             }
@@ -240,7 +241,7 @@ impl BuildTask {
         // delete files that are no longer needed
         match result.build_kind {
             buildKind::Program => {
-                if let (Some(testing), Some(program)) = (orchestrator.opts.testing, result.program) {
+                if let (Some(testing), Some(program)) = (orchestrator.opts.testing.as_ref(), result.program) {
                     testing.on_program(program);
                 }
                 build_result.statistics.projects_built += 1;
@@ -312,13 +313,13 @@ impl BuildTask {
         let mut compile_times = CompileTimes::default();
         let host = orchestrator.host();
         compile_times.config_time = host.config_times.lock().unwrap().get(path).copied().unwrap_or_default();
-        let sys = orchestrator.opts.sys;
+        let sys = &*orchestrator.opts.sys;
         let build_info_read_start = sys.now();
         let builder = Arc::clone(&self.result.lock().unwrap().as_ref().unwrap().builder);
         let trace_builder = Arc::clone(&builder);
         let compiler_host: Arc<dyn tsrs_compiler::CompilerHost> = Arc::new(compilerHost {
             host: Arc::clone(host),
-            trace: tsc::get_trace_with_writer_from_sys(Arc::new(move |t: &str| trace_builder.lock().unwrap().push_str(t)), false, orchestrator.opts.testing),
+            trace: tsc::get_trace_with_writer_from_sys(Arc::new(move |t: &str| trace_builder.lock().unwrap().push_str(t)), false, orchestrator.opts.testing.as_ref()),
         });
         let mut old_program = None;
         if !build_options.force.is_true() {
@@ -360,7 +361,7 @@ impl BuildTask {
             incremental: Some(&incremental_program),
             writer: Some(&writer),
             write_file: Some(&write_file),
-            testing: orchestrator.opts.testing,
+            testing: orchestrator.opts.testing.as_deref(),
             testing_m_times_cache: Some(testing_m_times_cache),
         });
         {
@@ -463,13 +464,14 @@ impl BuildTask {
 
         let build_options = &orchestrator.opts.command.build_options;
         for upstream in self.up_stream.lock().unwrap().iter() {
-            if build_options.stop_build_on_errors.is_true() && upstream.task.status().is_error() {
+            let upstream_task = orchestrator.task_record(upstream.task);
+            if build_options.stop_build_on_errors.is_true() && upstream_task.status().is_error() {
                 // Upstream project has errors, so we cannot build this project
                 return upToDateStatus::with(
                     upToDateStatusType::UpstreamErrors,
                     statusData::UpstreamErrors(upstreamErrors {
                         ref_: resolved.project_references()[upstream.ref_index].path.clone(),
-                        ref_has_upstream_errors: upstream.task.status().kind == upToDateStatusType::UpstreamErrors,
+                        ref_has_upstream_errors: upstream_task.status().kind == upToDateStatusType::UpstreamErrors,
                     }),
                 );
             }
@@ -670,7 +672,8 @@ impl BuildTask {
 
         let mut ref_dts_unchanged = false;
         for upstream in self.up_stream.lock().unwrap().iter() {
-            let upstream_status = upstream.task.status();
+            let upstream_task = orchestrator.task_record(upstream.task);
+            let upstream_status = upstream_task.status();
             if upstream_status.kind == upToDateStatusType::Solution {
                 // Not dependent on the status or this upstream project
                 // (eg: expected cycle was detected and hence skipped, or is solution)
@@ -690,7 +693,7 @@ impl BuildTask {
             }
 
             // Check if tsbuildinfo path is shared, then we need to rebuild
-            if self.has_conflicting_build_info(upstream.task) {
+            if self.has_conflicting_build_info(&upstream_task) {
                 // We have an output older than an upstream output - we are out of date
                 return upToDateStatus::with(
                     upToDateStatusType::InputFileNewer,
@@ -703,7 +706,7 @@ impl BuildTask {
 
             // If the upstream project has only change .d.ts files, and we've built
             // *after* those files, then we're "pseudo up to date" and eligible for a fast rebuild
-            let newest_dts_change_time = upstream.task.get_latest_changed_dts_m_time(orchestrator);
+            let newest_dts_change_time = upstream_task.get_latest_changed_dts_m_time(orchestrator);
             if newest_dts_change_time.is_some() && before(newest_dts_change_time, oldest_output_file_and_time.time) {
                 ref_dts_unchanged = true;
                 continue;
@@ -976,7 +979,7 @@ impl BuildTask {
     }
 
     // buildtask.go:870
-    fn has_conflicting_build_info(&self, upstream: P<BuildTask>) -> bool {
+    fn has_conflicting_build_info(&self, upstream: &BuildTask) -> bool {
         let a = self.build_info_entry.lock().unwrap();
         let b = upstream.build_info_entry.lock().unwrap();
         if let (Some(a), Some(b)) = (a.as_ref(), b.as_ref()) {

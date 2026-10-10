@@ -49,14 +49,14 @@ fn run_with_output(request: &[u8], out: Box<dyn Write + Send>) -> (i32, Vec<u8>)
     tsrs_compiler::worker_pool();
     let request = parse_request(request);
     let diagnostics = (request.flags & REQUEST_JSON_DIAGNOSTICS != 0).then(|| Arc::new(Mutex::new(Vec::new())));
-    let sys: &'static sys::WasmSys = Box::leak(Box::new(sys::WasmSys::new(
+    let sys = Arc::new(sys::WasmSys::new(
         &request.cwd,
         request.flags & REQUEST_CASE_INSENSITIVE == 0,
         request.flags & REQUEST_TTY != 0,
         diagnostics.clone(),
         out,
-    )));
-    let result = tsrs_execute::execute::command_line(sys, request.args);
+    ));
+    let result = tsrs_execute::execute::command_line(Arc::clone(&sys) as tsrs_execute::tsc::SharedSystem, request.args);
     sys.flush();
     let reply = match diagnostics {
         Some(list) => json::encode(&list.lock().unwrap()),

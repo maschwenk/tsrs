@@ -378,6 +378,9 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
   createSnapshot releases its root reference and an API build frees its fresh orchestrator, so repeated
   failures stay flat (codec d9be067 probe; `failed_program_builds_release_their_files`,
   `failed_builds_free_their_orchestrator`). Other state an arbitrary panic could leave is not audited.
+  Build task records use a typed Rust-owned store with dependency keys; build system/command inputs and testing
+  hooks have shared Rust owners. A poisoned unreported task result drops its program through ordinary field
+  destruction, without manual task-cycle teardown (`notes/rust-owned-build-tasks.md`).
 - Memory: snapshots free their programs, checkers, emit allocations and a full build's shared data
   (processed files, project-reference mapper, loader and dts-faking resolution hosts) with the build's base
   region (createSnapshot+release cycles stay flat; `tests/memory_test.rs`). The first attempt at freeing
@@ -386,9 +389,11 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
   (`inferred_project_rebuild_frees_safely`). Transpile frees its one-file program including the compiler
   checker pool's checkers (previously leaked; ~5 KiB/call of allocator retention remains), and config
   requests run in scratch regions. API builds allocate in per-task regions (one builder, tasks
-  run on the request thread, programs single-threaded and freed after each project) and each build handle
-  keeps only its last build (for cleans); 120 rebuilds retain no more than one (`memory_tests` in
-  `crates/tsrs_cli/src/api.rs`; ~19 MiB per rebuild before). File texts parsed inside a freeable region are
+  run on the request thread, programs single-threaded). Successful task programs are released promptly;
+  error outcomes retain the programs that own their diagnostics until those outcomes drop. Each build handle
+  keeps its last build for cleans; separately retained outcomes can retain earlier builds. The older Linux
+  measurement had 120 rebuilds retain no more than one (`memory_tests` in `crates/tsrs_cli/src/api.rs`;
+  ~19 MiB per rebuild before); it was not remeasured for this ownership checkpoint. File texts parsed inside a freeable region are
   copied into it and unregistered with it instead of leaked. Still retained: the request thread's arena use
   outside these paths. Unregistered
   source texts free their memory but not their registry slot; slots are never reused, so a very long-lived
