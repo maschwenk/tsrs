@@ -1,5 +1,5 @@
 use rustc_hash::{FxHashMap, FxHashSet};
-use tsrs_core::tspath;
+use tsrs_core::{stringutil, tspath};
 
 use crate::{Entries, FS};
 
@@ -425,7 +425,7 @@ impl GlobPattern {
             if seg.kind != SegmentKind::Literal {
                 continue;
             }
-            let lit = if !self.case_sensitive { to_lower(&seg.literal) } else { seg.literal.clone() };
+            let lit = if !self.case_sensitive { stringutil::go_strings_to_lower(&seg.literal) } else { seg.literal.clone() };
             if lit.contains(".min.js") || lit.contains(".min.") {
                 return true;
             }
@@ -619,19 +619,6 @@ fn equal_fold_unicode(mut s: &[u8], mut t: &[u8]) -> bool {
         return false;
     }
     t.is_empty()
-}
-
-// strings.ToLower with unicode.ToLower's one-rune-to-one-rune mapping.
-fn to_lower(s: &str) -> String {
-    s.chars()
-        .map(|c| {
-            let mut it = c.to_lowercase();
-            match (it.next(), it.next()) {
-                (Some(l), None) => l,
-                _ => c,
-            }
-        })
-        .collect()
 }
 
 // globMatcher combines include and exclude patterns for file matching.

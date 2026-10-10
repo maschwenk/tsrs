@@ -149,9 +149,11 @@ pub fn unicode_to_lower(r: Rune) -> Rune {
     }
 }
 
-/// Approximates Go `unicode.ToUpper` with Rust's full uppercase mapping, keeping the rune when that mapping is not a
-/// single char. Differs from Go's simple mapping for runes whose full uppercase is multi-char but that have a simple
-/// mapping (e.g. U+1F80: Go gives U+1F88, this returns it unchanged). The Unicode version is the Rust toolchain's.
+/// Go `unicode.ToUpper` (simple uppercase mapping) via Rust's full uppercase mapping, keeping the rune when that
+/// mapping is not a single char. The only runes whose full uppercase is multi-char but whose simple uppercase is
+/// another rune are the 27 Greek letters with ypogegrammeni, which map to their titlecase form (U+1F80 -> U+1F88,
+/// U+1FB3 -> U+1FBC); they are special-cased. Checked exhaustively against Go 1.27 (Unicode 17.0.0, the same version
+/// as the pinned Rust toolchain's `char::UNICODE_VERSION`).
 pub fn unicode_to_upper(r: Rune) -> Rune {
     if r < 0x80 {
         if (b'a' as Rune..=b'z' as Rune).contains(&r) {
@@ -162,6 +164,11 @@ pub fn unicode_to_upper(r: Rune) -> Rune {
     let Some(c) = char::from_u32(r as u32) else {
         return r;
     };
+    match r {
+        0x1F80..=0x1F87 | 0x1F90..=0x1F97 | 0x1FA0..=0x1FA7 => return r + 8,
+        0x1FB3 | 0x1FC3 | 0x1FF3 => return r + 9,
+        _ => {}
+    }
     let mut it = c.to_uppercase();
     match (it.next(), it.next()) {
         (Some(u), None) => u as Rune,
@@ -243,4 +250,48 @@ pub fn decode_last_rune(s: &[u8]) -> (Rune, usize) {
 /// Appends the UTF-8 encoding of `r` (Go `strings.Builder.WriteRune`; invalid runes become U+FFFD).
 pub fn push_rune(b: &mut String, r: Rune) {
     b.push(char::from_u32(r as u32).unwrap_or('\u{FFFD}'));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Expected values are Go 1.27's unicode.ToUpper / unicode.ToLower (Unicode 17.0.0). An exhaustive comparison over
+    // every rune found these 27 runes as the only difference between the simple mapping and Rust's full mapping.
+    #[test]
+    fn test_unicode_to_upper_simple_mapping() {
+        for (lo, hi) in [(0x1F80, 0x1F87), (0x1F90, 0x1F97), (0x1FA0, 0x1FA7)] {
+            for r in lo..=hi {
+                assert_eq!(unicode_to_upper(r), r + 8, "U+{r:04X}");
+            }
+        }
+        assert_eq!(unicode_to_upper(0x1FB3), 0x1FBC);
+        assert_eq!(unicode_to_upper(0x1FC3), 0x1FCC);
+        assert_eq!(unicode_to_upper(0x1FF3), 0x1FFC);
+        // No simple uppercase: unchanged.
+        for r in [0xDF, 0x149, 0x1F0, 0x1F50, 0x1F88, 0x1FB2, 0x1FB4, 0x1FBC, 0xFB00] {
+            assert_eq!(unicode_to_upper(r), r, "U+{r:04X}");
+        }
+        assert_eq!(unicode_to_upper(0x1C5), 0x1C4);
+        assert_eq!(unicode_to_upper('a' as Rune), 'A' as Rune);
+        assert_eq!(unicode_to_upper(0xFF), 0x178);
+        assert_eq!(unicode_to_upper(-1), -1);
+        assert_eq!(unicode_to_upper(0xD800), 0xD800);
+    }
+
+    // The special cases in unicode_to_upper / unicode_to_lower were derived for Unicode 17.0.0. A toolchain with
+    // another Unicode version needs the exhaustive comparison against Go's unicode.ToUpper / ToLower re-run.
+    #[test]
+    fn test_unicode_version_of_case_mappings() {
+        assert_eq!(char::UNICODE_VERSION, (17, 0, 0));
+    }
+
+    #[test]
+    fn test_unicode_to_lower_simple_mapping() {
+        assert_eq!(unicode_to_lower(0x130), 'i' as Rune);
+        assert_eq!(unicode_to_lower(0x1F88), 0x1F80);
+        assert_eq!(unicode_to_lower(0x1FBC), 0x1FB3);
+        assert_eq!(unicode_to_lower(0x1C5), 0x1C6);
+        assert_eq!(unicode_to_lower('A' as Rune), 'a' as Rune);
+    }
 }
