@@ -24,7 +24,7 @@
 // pass lengthens the assignment (vscode at 32 checkers: 17 ms with 3 passes, 24 ms with 10, against 6 ms to create the
 // checkers it overlaps).
 //
-// Only from MIN_CHECKERS checkers on. With fewer, each checker already holds most of the modules, so there is little to
+// Only from MIN_CHECKERS checkers on (LARGE_MIN_CHECKERS on large programs, `applies`). With fewer, each checker already holds most of the modules, so there is little to
 // save, while concentrating the costly files makes the checkers' real costs uneven and stealing moves more files: with
 // stealing, at 4 checkers t3code-server took 10.8% more instructions and cal-diy 4.5% (Mac), and at 8 on the 64-vCPU
 // runner mui-docs took 5.9% longer and cal-diy 3.8% more CPU, while 16 and 32 checkers were lower or equal on all but
@@ -43,6 +43,17 @@ const MU: f64 = 1.0;
 const GAMMA: f64 = 0.5;
 const MAX_PASSES: usize = 3;
 pub(crate) const MIN_CHECKERS: usize = 16;
+/// From LARGE_MIN_CHECKERS checkers on when at least LARGE_PROGRAM_FILES files are checked. On the 38k-file codebase
+/// at 8 checkers each checker holds a smaller share of the modules than on the ~10k-file projects the 8-checker
+/// regressions above were measured on: there the term lowers user-space instructions by 3.3%, CPU time by 4%, wall
+/// time by 4% and peak RSS by 3.6%.
+pub(crate) const LARGE_MIN_CHECKERS: usize = 8;
+pub(crate) const LARGE_PROGRAM_FILES: usize = 24_000;
+
+/// Whether the module affinity and the sticky thieves apply to `checker_count` checkers checking `files` files.
+pub(crate) fn applies(checker_count: usize, files: usize) -> bool {
+    checker_count >= MIN_CHECKERS || checker_count >= LARGE_MIN_CHECKERS && files >= LARGE_PROGRAM_FILES
+}
 
 struct Config {
     mu: f64,
@@ -81,7 +92,7 @@ pub(crate) struct ModuleAffinity {
 }
 
 impl ModuleAffinity {
-    // None when the term is off or there are fewer than MIN_CHECKERS checkers. `targets[i]` are the files program file `i` imports (resolved, in the program);
+    // None when the term is off or does not apply (`applies`). `targets[i]` are the files program file `i` imports (resolved, in the program);
     // `group_of_file[i]` is its locality group, usize::MAX for files outside the groups (unchecked ones);
     // `group_adjacency` is FENNEL's group graph.
     pub(crate) fn new(
@@ -92,7 +103,7 @@ impl ModuleAffinity {
         checker_count: usize,
     ) -> Option<ModuleAffinity> {
         let config = config();
-        if config.mu <= 0.0 || checker_count < MIN_CHECKERS {
+        if config.mu <= 0.0 || !applies(checker_count, group_of_file.iter().filter(|&&g| g != usize::MAX).count()) {
             return None;
         }
         let worth: Vec<f64> = files.iter().map(|f| (f.node_count.get().max(1) as f64).powf(config.gamma)).collect();

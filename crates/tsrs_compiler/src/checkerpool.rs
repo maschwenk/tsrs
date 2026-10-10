@@ -866,8 +866,8 @@ impl checkerPool {
         let active: Vec<usize> = (0..n).filter(|&c| !positions[c].is_empty()).collect();
         let single = single_threaded || self.single_threaded || active.len() <= 1;
         let steal = allow_steal && !single && stealing_enabled();
-        // Like the module affinity, from MIN_CHECKERS checkers on (affinity.rs; steal_sticky).
-        let sticky = steal && n >= crate::affinity::MIN_CHECKERS && steal_sticky();
+        // Like the module affinity (affinity.rs `applies`; steal_sticky).
+        let sticky = steal && crate::affinity::applies(n, files.len()) && steal_sticky();
         let file_weight = |i: u32| index_of[i as usize].map_or(1, |fi| state.weights.get(fi).copied().unwrap_or(1).max(0) as u64);
         // Positions from `files.len()` on are the queued pieces of split files (`piece_items`).
         let split = match split_ctx {
