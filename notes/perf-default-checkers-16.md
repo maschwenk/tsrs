@@ -20,7 +20,7 @@ More checkers cost memory, so the change comes with a default for `--maxMemory` 
 `--noEmit` check derives a target from the memory available at startup and applies it only where it can do something
 (section 3).
 
-## 1. Evidence: the 16-vCPU runner, 8 against 16 checkers
+## 1. Evidence: the 16-vCPU runner, 8 against 16 checkers (before the change)
 
 bench/results/2026-10-10-7e1b71a15874.md (Depot `depot-ubuntu-24.04-16`, 16 vCPU / 63 GB, PGO + BOLT `dist` build,
 median of 10; the 8-checker cells are its "Default mode on a 16-vCPU machine" table, the 16-checker cells its
@@ -37,6 +37,40 @@ median of 10; the 8-checker cells are its "Default mode on a 16-vCPU machine" ta
 | t3code-server | 1.69 | 1.42 | -16% | 1.77 | 2.13 | +20% | 2.70 | 1.12 |
 
 Every project gets 16-38% faster for 8-30% more peak memory.
+
+## 1b. The branch on the bench workflow
+
+`bench.yml` dispatched on this branch (Depot run `25p0w131bz`, commit 4afc2705, PGO + BOLT `dist` build, artifact
+`bench-result`, not published), against the published run of its base 9c905fb (bench/results/2026-10-10-9c905fb5ce10.md).
+The `wide` table (the README headline: each tool at its default on `depot-ubuntu-24.04-16`, median of 10) now runs
+tsrs at 16 checkers:
+
+| project | base wall (8) | branch wall (16) | wall | base peak | branch peak | peak | bun wall | bun peak | vs bun, wall | vs bun, peak |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| vscode | 1.48 s | 0.84 s | -43% | 1.93 GiB | 2.07 GiB | +8% | 1.53 s | 1.87 GiB | 1.82x faster | 1.11x |
+| mikro-orm | 1.15 | 0.78 | -32% | 1.61 | 1.94 | +20% | 1.78 | 1.41 | 2.28x | 1.37x |
+| next-packages-next | 0.30 | 0.21 | -31% | 617 MiB | 694 MiB | +13% | 0.37 | 740 MiB | 1.77x | 0.94x |
+| supabase-studio | 0.93 | 0.66 | -29% | 1.38 | 1.68 | +22% | 1.60 | 1.22 | 2.41x | 1.38x |
+| webpack | 0.19 | 0.14 | -25% | 456 MiB | 533 MiB | +17% | 0.28 | 496 MiB | 1.97x | 1.07x |
+| formbricks-web | 0.84 | 0.65 | -23% | 1.68 | 1.96 | +17% | 1.02 | 1.62 | 1.57x | 1.21x |
+| storybook | 0.21 | 0.16 | -23% | 460 MiB | 514 MiB | +12% | 0.28 | 613 MiB | 1.75x | 0.84x |
+| playwright | 0.17 | 0.13 | -23% | 413 MiB | 494 MiB | +20% | 0.22 | 477 MiB | 1.73x | 1.04x |
+| cal-diy | 0.85 | 0.66 | -22% | 1.44 | 1.86 | +29% | 1.50 | 1.30 | 2.27x | 1.43x |
+| mui-docs | 1.06 | 0.89 | -16% | 1.30 | 1.58 | +22% | 7.43 | 10.33 | 8.37x | 0.15x |
+| t3code-server | 1.70 | 1.45 | -15% | 1.77 | 2.13 | +20% | 2.78 | 1.12 | 1.92x | 1.91x |
+| nuxt | 0.21 | 0.18 | -15% | 442 MiB | 519 MiB | +17% | 0.44 | 542 MiB | 2.47x | 0.96x |
+| next-root | 0.21 | 0.19 | -11% | 438 MiB | 483 MiB | +10% | 0.30 | 568 MiB | 1.60x | 0.85x |
+| drizzle-orm | 0.21 | 0.19 | -8% | 594 MiB | 804 MiB | +35% | 0.41 | 733 MiB | 2.11x | 1.10x |
+| xstate-main | 0.13 | 0.13 | +4% | 280 MiB | 281 MiB | 0% | 0.16 | 395 MiB | 1.25x | 0.71x |
+| Compiler | 0.07 | 0.07 | +4% | 98 MiB | 99 MiB | +1% | 0.12 | 221 MiB | 1.59x | 0.45x |
+| Compiler-Unions | 0.13 | 0.13 | +4% | 99 MiB | 102 MiB | +4% | 0.21 | 232 MiB | 1.59x | 0.44x |
+
+Fourteen projects are 8-43% faster for 10-35% more peak memory; xstate-main, Compiler and Compiler-Unions keep their
+count (the file-count floor) and move by one rounding step. The 8-vCPU tables (8 checkers before and after) are
+unchanged: default-mode peaks within 11 MiB (0.7%), single-threaded instructions within -0.16..+0.07% (the
+regression flag compares those). All 280 tsrs runs of the 16-vCPU job print `Memory: default target applied: 0`
+(58.5 GB available, target ~43 GB). Their `Memory: at parse end` rows give the Linux check of the estimate: at 16
+checkers it is 1.5x (t3code-server) to 7x the measured RSS peak on every project.
 
 ## 2. This Mac (indicative only)
 
@@ -157,11 +191,9 @@ next publish on.
 
 ## 6. What remains
 
-- The Depot bench of the branch (see the pull request): pr-verify runs on 32 vCPU, where the count is 16 before and
-  after, so only bench.yml's `wide` table shows the change.
-- The estimate is fitted to macOS footprints; Linux RSS (with the arena's huge pages) is not checked. pr-verify's
-  `--extendedDiagnostics` logs now carry `Memory: at parse end` next to each run's peak, which is the data to check it
-  with.
+- pr-verify runs on 32 vCPU, where the count is 16 before and after, so only bench.yml's `wide` table shows the change.
+- The estimate is checked on Linux RSS only at 16 checkers (section 1b); pr-verify's logs (1/4/16/32 checkers) carry
+  `Memory: at parse end` next to each run's peak for the other counts.
 - The armed mode's own cost (per-checker regions and leaves-first order: +3-23% peak, up to +10% instructions when no
   checker is retired) is why the default target is gated. Arming the expensive parts only once the process first
   nears the target would let it apply earlier and on more programs.
