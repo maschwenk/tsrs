@@ -64,9 +64,9 @@ tsrs at 16 checkers:
 Fourteen projects are 8-43% faster for 10-35% more peak memory; xstate-main, Compiler and Compiler-Unions keep their
 count (the file-count floor) and move by one rounding step. The 8-vCPU tables (8 checkers before and after) are
 unchanged: default-mode peaks within 11 MiB (0.7%), single-threaded instructions within -0.16..+0.07% (the
-regression flag compares those). The run's binary also carried a default `--maxMemory` target, since moved to its
-own branch (`perf/default-max-memory`); all 280 tsrs runs of the 16-vCPU job print `Memory: default target applied: 0`,
-so these numbers are the count's alone.
+regression flag compares those). The run's binary also carried a default `--maxMemory` target, since split out
+(notes/perf-default-max-memory.md); all 280 tsrs runs of the 16-vCPU job print `Memory: default target applied: 0`, so
+these numbers are the count's alone.
 
 ## 2. This Mac (indicative only)
 
@@ -114,6 +114,6 @@ next publish on.
 
 - pr-verify runs on 32 vCPU, where the count is 16 before and after, so only bench.yml's `wide` table shows the change.
 - Nothing bounds the extra memory of 16 checkers on a machine short of it. The default `--maxMemory` target and its
-  open problems (fewer checkers when memory is short among them) moved to branch `perf/default-max-memory`.
+  open problems (fewer checkers when memory is short among them) are in notes/perf-default-max-memory.md.
 - t3code-server still pays for every extra checker re-resolving its Effect declarations (notes/perf-heavy-files.md);
   the per-project count of notes/mem-per-checker-duplication.md section 5 is not adopted.
