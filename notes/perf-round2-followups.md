@@ -107,6 +107,13 @@ pointer compression costs about +4.9% instructions and took back most of the che
 
 ## Measured and rejected (do not redo)
 
+- Calling the owned checker-lease/region stage a completed or memory-preserving migration
+  (`notes/rust-owned-checker-leases.md`): this checkpoint is within local incremental limits, but cumulative
+  Compiler single-thread instructions remain +1.075% against original Oxc and default RSS is +79–88% against
+  pre-Oxc. Keep the full ownership migration active; do not land this checkpoint as a performance change.
+  Revisit after outer program and graph ownership replace the remaining pointer/static compatibility model,
+  followed by fresh full-scope memory and instruction measurements.
+
 - Calling the checker-input/file-list ownership stage a completed or memory-preserving migration
   (`notes/rust-owned-checker-inputs.md`): default Compiler RSS adds 3 MiB against the previous checkpoint;
   cumulative Compiler single-thread instructions are +1.110% against original Oxc and default RSS is +79–88%

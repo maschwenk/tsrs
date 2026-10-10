@@ -150,6 +150,7 @@ In place:
 | Rust-owned typed indexed records for generic, keyed and ID-indexed checker link tables; borrowed core link stores, owned link maps and rare tails | `notes/rust-owned-arenas.md`, `notes/rust-owned-links.md`: partial ownership migration; remaining graph still uses `P` | |
 | Rust-owned shared processed-file and redirect containers, resolution hosts and auto-import host boundaries | `notes/rust-owned-program-data.md`: removes manual shared-container frees and host lifetime transmutation; program/file/type roots remain legacy | |
 | Shared checker input data independent of the program's pool; Rust-owned program and alias-resolver file-list containers | `notes/rust-owned-checker-inputs.md`: checkers, node builders and compiler/project pools retain input owners; array entries remain raw graph edges | |
+| Exclusive owned checker leases, retained built-in slot arrays and direct ownership of project checker regions | `notes/rust-owned-checker-leases.md`: removes raw lease dereferences, leaked arrays, the checker-address region map and three custom thread-trait implementations; graph referents remain legacy | |
 | Packed layouts with size assertions | `notes/mem-layout.md`, `mem-layout3.md`, `mem-round2.md`, `mem-round3.md`, `mem-small.md` | oxc, ty, rust-analyzer, Bun |
 | Fx hashing everywhere | `notes/perf-checker-cpu2.md` | oxc, Rolldown, Ruff, rust-analyzer |
 | Lazy members, line maps and rare-field tails | `notes/lazy-members.md`, `notes/mem-lazy.md` | |

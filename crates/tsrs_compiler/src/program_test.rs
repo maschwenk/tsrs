@@ -37,7 +37,7 @@ fn config_for(files: &[(&str, &str)]) -> P<tsoptions::ParsedCommandLine> {
     P::new(config.unwrap())
 }
 
-// A pool outside the built-in one: hands out checkers through `CheckerHandle::from_raw` and takes them back on
+// A pool outside the built-in one: hands out checkers through `CheckerHandle::new` and takes them back on
 // release, like the project system's pool.
 struct testPool {
     program: Arc<ProgramData>,
@@ -48,11 +48,9 @@ struct testPool {
 impl CheckerPool for testPool {
     fn get_checker(&self, _ctx: &Context, _file: Option<P<tsrs_ast::SourceFile>>) -> CheckerHandle {
         self.acquired.fetch_add(1, Ordering::Relaxed);
-        let mut checker = self.idle.lock().unwrap().pop().unwrap_or_else(|| PooledChecker::new(tsrs_checker::new_checker(Arc::clone(&self.program) as Arc<dyn tsrs_checker::Program>)));
-        let ptr = checker.as_non_null();
+        let checker = self.idle.lock().unwrap().pop().unwrap_or_else(|| PooledChecker::new(tsrs_checker::new_checker(Arc::clone(&self.program) as Arc<dyn tsrs_checker::Program>)));
         let idle = self.idle.clone();
-        // SAFETY: the checker is out of the idle list (held) until the release function puts it back.
-        unsafe { CheckerHandle::from_raw(ptr, move || idle.lock().unwrap().push(checker)) }
+        CheckerHandle::new(checker, move |checker| idle.lock().unwrap().push(checker))
     }
 }
 

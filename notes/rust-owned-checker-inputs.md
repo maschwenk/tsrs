@@ -80,3 +80,6 @@ Remaining completion work includes owning outer programs and checker leases, mig
 referents and allocation boundaries, removing the pointer/static compatibility layer, then verifying the complete
 CLI/LSP/API/incremental/emit/oracle and memory/performance scope. Full fourslash is now exercised, but it does not
 substitute for those remaining ownership and measurement requirements.
+
+The next checkpoint (`rust-owned-checker-leases.md`) removes the raw checker lease API, leaked built-in checker
+arrays and checker-address region map. It does not migrate outer program roots or the raw AST/type referents.

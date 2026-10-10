@@ -3,7 +3,9 @@ use std::time::{Duration, Instant};
 
 use rustc_hash::FxHashMap;
 use tsrs_ast::{Diagnostic, SourceFile};
-use tsrs_compiler::{sort_and_deduplicate_diagnostics, Checker, CheckerHandle, CheckerPool, PooledChecker, ProgramData};
+use tsrs_compiler::{sort_and_deduplicate_diagnostics, CheckerHandle, CheckerPool, PooledChecker, ProgramData};
+#[cfg(test)]
+use tsrs_compiler::Checker;
 use tsrs_core::context::{get_checker_lifetime, get_request_id, CheckerLifetime, Context};
 use tsrs_core::arena::{Region, RegionScope};
 
@@ -76,14 +78,9 @@ pub struct checkerPool {
     log: Box<dyn Fn(&str) + Send + Sync>,
     self_ref: Weak<checkerPool>,
 
-    // Memory regions (docs/LSP.md "Memory plan for a long-lived server"), not in Go. Each checker allocates in its
-    // own region (keyed by the checker's address): while it is created and while it is held, the region is the
-    // holding thread's allocation target. Disposed checkers are parked here with their regions, because data they
-    // made can still be referenced from pool- or program-lifetime structures (global diagnostics, the program's
-    // declaration diagnostics cache); checkers and regions are freed with the pool (`free_checkers`, called when the
-    // program is freed). Declared last: dropped after the checkers in `mu`.
+    // Disposed checkers retain their regions here: program-lifetime diagnostics can still refer into them.
+    // Each PooledChecker owns its region directly, which drops after the checker.
     parked: Mutex<Vec<PooledChecker>>,
-    regions: Mutex<FxHashMap<usize, Region>>,
     // The program's owner (memregions.rs), once the project system created it. A held checker keeps it alive, and
     // a pool whose program was freed refuses to hand out checkers (Go's GC would keep the program alive through the
     // pool's program pointer; here the project values own it).
@@ -156,7 +153,6 @@ pub(crate) fn new_checker_pool(mut opts: CheckerPoolOptions, program: Arc<Progra
         log,
         self_ref: Weak::clone(self_ref),
         parked: Mutex::new(Vec::new()),
-        regions: Mutex::new(FxHashMap::default()),
         owner: Mutex::new(None),
     })
 }
@@ -181,25 +177,21 @@ impl CheckerPool for checkerPoolHandle {
 }
 
 impl checkerPool {
-    // Region hook: a new checker is created inside its own region.
+    // A checker and its graph allocations share one owned region.
     fn new_pooled_checker(&self) -> PooledChecker {
         let region = Region::new(1 << 20);
-        let mut checker = {
+        let checker = {
             let _scope = region.enter();
-            // Census builds: the checker struct is built on the stack with unset fields (e.g. the length word of a
-            // `None` slice); clear the stale words they would copy.
+            // Census builds: clear stale words before constructing the checker's unset fields.
             tsrs_core::census_scrub_stack();
-            PooledChecker::new(tsrs_checker::new_checker(Arc::clone(&self.program) as Arc<dyn tsrs_checker::Program>))
+            tsrs_checker::new_checker(Arc::clone(&self.program) as Arc<dyn tsrs_checker::Program>)
         };
-        self.regions.lock().unwrap().insert(checker.as_non_null().as_ptr() as usize, region);
-        checker
+        PooledChecker::with_region(checker, region)
     }
 
-    // Region hook: while a checker is held, its region is the holder's allocation target and the program's owner
-    // is kept alive.
-    fn enter_checker_region(&self, c: std::ptr::NonNull<Checker>) -> (Option<RegionScope>, Option<Arc<programOwner>>) {
-        let region = self.regions.lock().unwrap().get(&(c.as_ptr() as usize)).cloned();
-        (region.map(|r| r.enter()), self.live_owner())
+    // A held checker selects its owned region and retains the program's graph owner.
+    fn enter_checker_region(&self, checker: &PooledChecker) -> (Option<RegionScope>, Option<Arc<programOwner>>) {
+        (checker.enter_region(), self.live_owner())
     }
 
     pub(crate) fn set_owner(&self, owner: Weak<programOwner>) {
@@ -224,8 +216,6 @@ impl checkerPool {
             st.global_diag_accumulated.clear();
         }
         drop(checkers);
-        let regions = std::mem::take(&mut *self.regions.lock().unwrap());
-        drop(regions);
     }
 
     fn arc(&self) -> Arc<checkerPool> {
@@ -283,17 +273,16 @@ impl checkerPool {
             return None;
         }
 
+        if !st.held_by[index].is_empty() {
+            return None;
+        }
         if st.checkers[index].is_none() {
             st.request_associations.remove(request_id);
             return None;
         }
 
-        if st.held_by[index].is_empty() {
-            st.held_by[index] = request_id.to_string();
-            return Some(self.create_release(&mut st, request_id, index));
-        }
-
-        None
+        st.held_by[index] = request_id.to_string();
+        Some(self.create_release(&mut st, request_id, index))
     }
 
     // checkerpool.go:194
@@ -376,7 +365,7 @@ impl checkerPool {
         }
         // Create in the first empty slot.
         for i in 1..st.checkers.len() {
-            if st.checkers[i].is_none() {
+            if st.checkers[i].is_none() && st.held_by[i].is_empty() {
                 (self.log)(&format!("checkerpool: Creating query checker {}", i));
                 st.checkers[i] = Some(self.new_pooled_checker());
                 return i;
@@ -390,55 +379,49 @@ impl checkerPool {
         self.persistent_sem.acquire();
         let mut st = self.mu.lock().unwrap();
 
-        if st.persistent_checker.is_none() {
+        let checker = st.persistent_checker.take().unwrap_or_else(|| {
             (self.log)("checkerpool: Creating persistent checker");
-            st.persistent_checker = Some(self.new_pooled_checker());
-        }
-
-        let c = st.persistent_checker.as_mut().unwrap().as_non_null();
+            self.new_pooled_checker()
+        });
         st.persistent_held = true;
         drop(st);
 
-        let (region_scope, owner) = self.enter_checker_region(c);
+        let (region_scope, owner) = self.enter_checker_region(&checker);
         let p = self.arc();
-        let release = move || {
+        CheckerHandle::new(checker, move |mut checker| {
             drop(region_scope);
             let _owner = owner;
             let mut st = p.mu.lock().unwrap();
+            assert!(st.persistent_checker.is_none() && st.persistent_held);
             st.persistent_held = false;
-            let canceled = st.persistent_checker.as_mut().is_some_and(|pc| pc.as_non_null() == c && pc.was_canceled());
-            if canceled {
-                // A canceled checker panics on reuse, so drop it; the next API
-                // acquisition will create a fresh persistent checker.
+            if checker.was_canceled() {
+                // Canceled checkers cannot be reused; park their graph until the pool drops.
                 (p.log)("checkerpool: Persistent checker was canceled, disposing");
-                if let Some(old) = st.persistent_checker.take() {
-                    p.dispose_checker(old);
-                }
+                p.dispose_checker(checker);
+            } else {
+                st.persistent_checker = Some(checker);
             }
             drop(st);
             p.persistent_sem.release();
-        };
-        // SAFETY: the persistent checker is held (`persistentHeld`, one semaphore slot) until `release` runs; the
-        // pool keeps it alive in `persistent_checker` (or leaks it when disposed).
-        unsafe { CheckerHandle::from_raw(c, release) }
+        })
     }
 
     // checkerpool.go:319
     fn create_release(&self, st: &mut checkerPoolState, request_id: &str, index: usize) -> CheckerHandle {
-        let c = st.checkers[index].as_mut().unwrap().as_non_null();
-        let (region_scope, owner) = self.enter_checker_region(c);
+        let checker = st.checkers[index].take().expect("checker slot ready for acquisition");
+        let (region_scope, owner) = self.enter_checker_region(&checker);
         let p = self.arc();
         let request_id = request_id.to_string();
-        let release = move || {
+        CheckerHandle::new(checker, move |mut checker| {
             drop(region_scope);
             let _owner = owner;
             let mut st = p.mu.lock().unwrap();
-
-            let was_canceled = st.checkers[index].as_mut().unwrap().was_canceled();
+            assert!(st.checkers[index].is_none() && !st.held_by[index].is_empty());
+            let was_canceled = checker.was_canceled();
+            st.checkers[index] = Some(checker);
             if was_canceled {
-                // Canceled checkers must be disposed.
                 (p.log)(&format!("checkerpool: Checker {} for request {} was canceled, disposing", index, hold_tag(&request_id)));
-                p.dispose_checker_locked(&mut st, index, c);
+                p.dispose_checker_locked(&mut st, index);
             } else {
                 // Query checkers can produce incidental errors while serializing types.
                 if index == 0 {
@@ -449,27 +432,17 @@ impl checkerPool {
                 if !st.discarded {
                     p.schedule_cleanup_locked(&mut st);
                 }
-                // If discarded, skip scheduling cleanup — checkers stay alive
-                // until the pool is garbage collected so that API clients can
-                // continue resolving type/symbol handles.
+                // Discarded pools preserve checkers so existing API handles keep their identity.
             }
 
-            // Unlock before releasing the semaphore slot. If we received from
-            // the channel while holding p.mu, a woken goroutine could immediately
-            // try to acquire p.mu, risking priority inversion or unnecessary
-            // contention.
+            // Unlock before releasing the semaphore slot, as in Go.
             drop(st);
-
-            // Release the semaphore slot.
             if index == 0 {
                 p.diag_sem.release();
             } else {
                 p.query_sem.release();
             }
-        };
-        // SAFETY: checker `index` is marked held (`heldBy[index]`) until `release` runs; held checkers are never
-        // disposed by anyone else, and a disposed checker is leaked, so the pointer stays valid.
-        unsafe { CheckerHandle::from_raw(c, release) }
+        })
     }
 
     // checkerpool.go:361
@@ -551,8 +524,7 @@ impl checkerPool {
             let idle = now.duration_since(last_released);
             if idle >= self.opts.idle_timeout {
                 (self.log)(&format!("checkerpool: Disposing idle checker {} (idle {:?})", i, idle));
-                let c = st.checkers[i].as_mut().unwrap().as_non_null();
-                self.dispose_checker_locked(&mut st, i, c);
+                self.dispose_checker_locked(&mut st, i);
             }
         }
         // Reschedule for any remaining idle-but-not-yet-expired checkers.
@@ -564,8 +536,7 @@ impl checkerPool {
     // checkerpool.go:437
     // disposeCheckerLocked removes a checker from the pool and clears all associations
     // (file and request) that reference it. Must be called with p.mu held.
-    fn dispose_checker_locked(&self, st: &mut checkerPoolState, index: usize, c: std::ptr::NonNull<Checker>) {
-        assert!(st.checkers[index].as_mut().is_some_and(|pc| pc.as_non_null() == c));
+    fn dispose_checker_locked(&self, st: &mut checkerPoolState, index: usize) {
         if let Some(old) = st.checkers[index].take() {
             self.dispose_checker(old);
         }
@@ -651,13 +622,13 @@ impl checkerPool {
     pub(crate) fn test_state<R>(&self, f: impl FnOnce(&checkerPoolTestView) -> R) -> R {
         let st = self.mu.lock().unwrap();
         let view = checkerPoolTestView {
-            checkers: st.checkers.iter().map(|c| c.is_some()).collect(),
+            checkers: st.checkers.iter().zip(&st.held_by).map(|(c, held)| c.is_some() || !held.is_empty()).collect(),
             held_by: st.held_by.clone(),
             file_associations: st.file_associations.clone(),
             request_associations: st.request_associations.clone(),
             has_cleanup_timer: st.cleanup_timer.is_some(),
             discarded: st.discarded,
-            persistent: st.persistent_checker.is_some(),
+            persistent: st.persistent_checker.is_some() || st.persistent_held,
             persistent_held: st.persistent_held,
         };
         f(&view)

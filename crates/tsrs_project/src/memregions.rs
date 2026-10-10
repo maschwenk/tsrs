@@ -76,8 +76,11 @@ mod tests {
 
     #[test]
     fn symlink_cache_uses_shared_base_after_program_data_split() {
-        let (processed_addr, cache_addr) = {
+        let dropped = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        {
             let base = Region::new(4096);
+            let observed = Arc::clone(&dropped);
+            base.on_free(Box::new(move || { observed.fetch_add(1, std::sync::atomic::Ordering::SeqCst); }));
             let host = |text: &str| {
                 new_compiler_host("/", Arc::new(tsrs_vfs::vfstest::from_map([("/index.ts", text)], true)), "", None, None)
             };
@@ -107,9 +110,10 @@ mod tests {
             drop(old_owner);
             assert_eq!(new.get_symlink_cache(), cache);
             assert!(Region::containing(cache.addr()).is_some());
-            (processed_addr, cache.addr())
-        };
-        assert!(Region::containing(processed_addr).is_none());
-        assert!(Region::containing(cache_addr).is_none());
+            assert_eq!(dropped.load(std::sync::atomic::Ordering::SeqCst), 0);
+        }
+        // Freed native addresses may already belong to another concurrently running test. Observe this owner's
+        // destruction directly rather than looking the old addresses up after their lifetime ends.
+        assert_eq!(dropped.load(std::sync::atomic::Ordering::SeqCst), 1);
     }
 }

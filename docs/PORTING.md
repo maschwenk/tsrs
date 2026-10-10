@@ -81,6 +81,12 @@ the data must not retain a pool. Program and alias-resolver file lists use share
 those arrays or clone their owner, never fabricate a static slice. The `P<SourceFile>` entries still depend on
 the legacy graph lifetime; retaining the array does not retain those referents (`notes/rust-owned-checker-inputs.md`).
 
+Checker leases own the checker exclusively and return it on drop. External pools use
+`CheckerHandle::new(PooledChecker, FnOnce(PooledChecker))`; there is no raw-pointer lease constructor. The
+built-in pool's slot array is shared Rust storage retained by each lease, with no leaked array or static mutex
+guard. A project `PooledChecker` owns its region directly; canceled/idle checkers remain parked because their
+graph data can still be referenced by program caches (`notes/rust-owned-checker-leases.md`).
+
 The following describes the **remaining legacy graph**, not a rule for new stores. Go objects that are referenced
 by pointer, live long, reference each other cyclically and
 are compared by identity — AST nodes, symbols, types, signatures, links, flow nodes,

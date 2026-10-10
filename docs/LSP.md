@@ -95,7 +95,7 @@ frees after an edit with **regions**: Oxc arena owners plus resource sidecars th
 | object | Go lifetime | tsrs (phase 4) |
 | --- | --- | --- |
 | a parsed file version (text, AST, symbols, flow nodes, and its lazily filled data) | until neither the parse cache nor a live program refers to it | **file region**: the parse cache's parse function runs parse + bind in a fresh region; the cache entry owns it until its final `Deref`, and so does every program owner whose program contains the file |
-| types, signatures, links, transient symbols, synthetic nodes of a program's checkers | until the program's pool is unreachable | **checker region** per pooled checker: the holder's allocation target while it is created and while it is held; freed with the pool when the program is freed (a disposed checker is parked until then, see below) |
+| checker records and the remaining type/signature/transient-symbol/synthetic-node graph | until the program's pool is unreachable | Rust-owned checker/link storage plus a **checker region** owned directly by each pooled checker; selected while it is created/held and released after its checker drops (a disposed checker is parked until pool teardown, see below) |
 | `Program` (file lists, maps, resolution data; cloned per edit by `ReuseProgram`) | GC | **program owner** (`tsrs_project` memregions.rs), held by every `Project` value that refers to the program; what `CreateProgram` allocates is in the version's region, the full build's region is shared by its clones (they share its processed-file data); dropping the owner frees the checkers, the `Program` (`tsrs_compiler::free_program`) and the regions |
 | auto-import registry update scratch (module and alias resolvers, extraction checkers, resolution caches) | GC | **scratch region** per `Registry::clone_registry`, freed before it returns; files the update acquired are released at the end of the snapshot clone as in Go (and freed when nothing else holds them) |
 | auto-import registry versions (buckets, indexes, entrypoints: heap; directories' package.json entries: arena) | GC | heap values by Rust ownership; the package.json entries an update reads for `directories` go to a **package.json region** of that update, held by every registry version whose directories still refer into it (`Registry::regions`) |
@@ -108,6 +108,12 @@ their dependencies without lifetime transmutation. Checkers and pools now retain
 the outer `Program`, and program/alias-resolver file-list containers use shared Rust arrays. Their AST/config/type
 referents and the `Program` root still depend on the region lifetime rules above
 (`notes/rust-owned-program-data.md`, `notes/rust-owned-checker-inputs.md`).
+
+Checker leases now transfer the owned checker out of its pool slot and return it on drop. A lease retains its
+slot array or project pool, and project checkers retain their regions directly rather than through an
+address-keyed map. The raw lease constructor, leaked built-in checker arrays and static lock guards are removed
+(`notes/rust-owned-checker-leases.md`). This preserves the graph lifetime rules above; it does not replace the
+remaining AST/type pointers or program-root ownership.
 
 Mechanism (`tsrs_core::arena`): `Region::enter` makes a region the thread's allocation target until the returned
 scope is dropped (scopes nest; `with_arena` reads one thread-local pointer, as before). A region is an `Arena` of its

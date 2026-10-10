@@ -29,7 +29,9 @@ and emit link stores, their map storage and value-symbol rare tails have moved t
 (`notes/rust-owned-links.md`). Shared processed-file and redirect containers and resolution hosts now have Rust
 owners (`notes/rust-owned-program-data.md`). Checkers, node-builder hosts and pools retain shared input data
 independently of the outer program, and file-list containers use shared Rust arrays
-(`notes/rust-owned-checker-inputs.md`). ASTs, symbols, types and program/file roots have not migrated.
+(`notes/rust-owned-checker-inputs.md`). Checker leases and built-in slot arrays now have Rust owners, and project
+checkers own their regions directly (`notes/rust-owned-checker-leases.md`). ASTs, symbols, types and program/file
+roots have not migrated.
 
 ## Removed behavior
 

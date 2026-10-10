@@ -81,7 +81,7 @@ fn checker_pool_diagnostics_routing() {
 
     // Diagnostics requests should get checker at index 0.
     let c = pool.get_checker(&ctx_with("diag-req-1", CheckerLifetime::Diagnostics), None);
-    assert_eq!(pool.checker_ptr(0), Some(ptr(&c)), "diagnostics should use checker index 0");
+    pool.test_state(|st| assert!(!st.held_by[0].is_empty(), "diagnostics should use checker index 0"));
     drop(c);
 }
 
@@ -94,7 +94,11 @@ fn checker_pool_query_routing() {
     let c = pool.get_checker(&ctx_with("query-req-1", CheckerLifetime::Temporary), None);
 
     // Verify it's not the diagnostics checker slot.
-    assert_ne!(pool.checker_ptr(0), Some(ptr(&c)), "query should not use checker index 0");
+    pool.test_state(|st| {
+        assert!(st.held_by[0].is_empty(), "query should not use checker index 0");
+        assert!(st.held_by[1..].iter().any(|held| !held.is_empty()));
+    });
+    drop(c);
 }
 
 // checkerpool_test.go:87
@@ -330,7 +334,7 @@ fn checker_pool_diagnostics_cross_release_affinity() {
 
     let c1 = pool.get_checker(&ctx, None);
     let p1 = ptr(&c1);
-    assert_eq!(pool.checker_ptr(0), Some(p1), "should be the diagnostics checker");
+    pool.test_state(|st| assert!(!st.held_by[0].is_empty(), "should be the diagnostics checker"));
     drop(c1);
 
     // Same request reacquiring diagnostics should get the same checker.
@@ -352,7 +356,7 @@ fn checker_pool_discard_still_functional() {
     let p = ptr(&c);
 
     // Find the slot.
-    let idx = (1..4).find(|&i| pool.checker_ptr(i) == Some(p)).unwrap_or(0);
+    let idx = pool.test_state(|st| (1..4).find(|&i| !st.held_by[i].is_empty()).unwrap_or(0));
     assert!(idx > 0, "checker should be in a query slot");
 
     // Release — checker should persist on discarded pool (no cleanup timer).
@@ -552,4 +556,46 @@ fn checker_pool_non_cancelable_context_no_affinity() {
     drop(pool.get_checker(&ctx_with("never-canceled", CheckerLifetime::Temporary), None));
     drop(pool.get_checker(&ctx_with("never-canceled", CheckerLifetime::Diagnostics), None));
     assert!(pool.test_state(|st| st.request_associations.is_empty()));
+}
+
+fn checker_region_release_observer(checker: &CheckerHandle) -> Arc<std::sync::atomic::AtomicUsize> {
+    let dropped = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let observed = Arc::clone(&dropped);
+    let region = tsrs_core::arena::Region::containing(checker.any_type.addr()).expect("checker owns its type allocation region");
+    region.on_free(Box::new(move || { observed.fetch_add(1, Ordering::SeqCst); }));
+    dropped
+}
+
+#[test]
+fn canceled_checker_keeps_its_region_until_the_pool_drops() {
+    let (session, _) = setup_checker_pool_session(CheckerPoolOptions::default());
+    let program = program_of(&session);
+    let pool = new_test_checker_pool(program, CheckerPoolOptions::default());
+    pool.discard();
+    let mut checker = pool.get_checker(&ctx_with("owned-region", CheckerLifetime::Temporary), None);
+    let dropped = checker_region_release_observer(&checker);
+    let (canceled_ctx, cancel) = Context::background().with_cancel();
+    cancel.call();
+    checker.get_diagnostics_exported(&canceled_ctx, program.get_source_file("/src/index.ts").unwrap());
+    assert!(checker.was_canceled());
+    drop(checker);
+    assert_eq!(dropped.load(Ordering::SeqCst), 0, "parked diagnostic/type data must remain alive");
+    drop(pool);
+    assert_eq!(dropped.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn owned_lease_retains_the_project_pool_and_checker_region() {
+    let (session, _) = setup_checker_pool_session(CheckerPoolOptions::default());
+    let pool = new_test_checker_pool(program_of(&session), CheckerPoolOptions::default());
+    pool.discard();
+    let weak = Arc::downgrade(&pool);
+    let checker = pool.get_checker(&ctx_with("last-owner", CheckerLifetime::Temporary), None);
+    let dropped = checker_region_release_observer(&checker);
+    drop(pool);
+    assert!(weak.upgrade().is_some());
+    assert_eq!(dropped.load(Ordering::SeqCst), 0);
+    drop(checker);
+    assert!(weak.upgrade().is_none());
+    assert_eq!(dropped.load(Ordering::SeqCst), 1);
 }

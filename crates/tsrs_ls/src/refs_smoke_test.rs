@@ -4,7 +4,6 @@
 // `tsgo-ref --lsp -stdio` with testdata/refs_smoke/drive.py (`python3 drive.py <dir with a.ts b.ts tsconfig.json>
 // reqs.json`), with the project directory replaced by `/`.
 
-use std::ptr::NonNull;
 use std::sync::{Arc, Mutex};
 
 use tsrs_compiler::{new_compiler_host, new_program, CheckerHandle, CheckerPool, CompilerHost, PooledChecker, Program, ProgramData, ProgramOptions};
@@ -103,7 +102,7 @@ impl ParseConfigHost for parseConfigHost {
 // gets another checker. Call hierarchy acquires checkers while holding one, as Go does.
 struct testPoolState {
     program: Arc<ProgramData>,
-    slots: Mutex<Vec<(PooledChecker, bool)>>,
+    slots: Mutex<Vec<Option<PooledChecker>>>,
 }
 
 struct testPool(Arc<testPoolState>);
@@ -112,23 +111,18 @@ impl CheckerPool for testPool {
     fn get_checker(&self, _ctx: &Context, _file: Option<P<tsrs_ast::SourceFile>>) -> CheckerHandle {
         let state = Arc::clone(&self.0);
         let mut slots = state.slots.lock().unwrap();
-        let index = match slots.iter().position(|(_, held)| !held) {
+        let index = match slots.iter().position(Option::is_some) {
             Some(index) => index,
             None => {
-                slots.push((PooledChecker::new(tsrs_checker::new_checker(Arc::clone(&state.program) as Arc<dyn tsrs_checker::Program>)), false));
+                slots.push(Some(PooledChecker::new(tsrs_checker::new_checker(Arc::clone(&state.program) as Arc<dyn tsrs_checker::Program>))));
                 slots.len() - 1
             }
         };
-        slots[index].1 = true;
-        let checker: NonNull<tsrs_compiler::Checker> = slots[index].0.as_non_null();
+        let checker = slots[index].take().unwrap();
         drop(slots);
-        // SAFETY: the checker is boxed (stable address), never removed from `slots`, and marked held until the
-        // release function runs, so nothing else hands it out meanwhile (single-threaded test).
-        unsafe {
-            CheckerHandle::from_raw(checker, move || {
-                state.slots.lock().unwrap()[index].1 = false;
-            })
-        }
+        CheckerHandle::new(checker, move |checker| {
+            state.slots.lock().unwrap()[index] = Some(checker);
+        })
     }
 }
 

@@ -308,7 +308,8 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
 ///
 /// # Safety
 /// `program` came from `new_program` / `update_program` and is not used afterwards:
-/// no checker of its pool is held, and no snapshot or language service refers to it.
+/// no snapshot or language service refers to the root. Any retained checker or input owner must keep its
+/// legacy AST/type/diagnostic referents alive separately; owning its Rust containers does not own that graph.
 pub unsafe fn free_program(program: &'static Program) {
     // SAFETY: both functions leak the program from a `Box`, and nothing uses it afterwards (this function's contract).
     drop(unsafe { Box::from_raw(std::ptr::from_ref::<Program>(program).cast_mut()) });
@@ -2973,7 +2974,9 @@ mod ownership_tests {
 
     #[test]
     fn reused_program_keeps_shared_data_until_last_version_drops() {
-        let opts = options("export const value = 1;");
+        let mut opts = options("export const value = 1;");
+        // Worker-held host clones are independent owners; keep this last-owner drop case single-threaded.
+        opts.single_threaded = Tristate::True;
         let old_host = Arc::downgrade(&opts.host);
         let old = new_program(opts);
         let processed = Arc::downgrade(&old.processed);
@@ -3045,6 +3048,26 @@ mod ownership_tests {
         assert!(weak_files.upgrade().is_some());
         drop(files);
         assert!(weak_files.upgrade().is_none());
+    }
+
+    #[test]
+    fn checker_lease_keeps_slots_and_inputs_after_root_drops() {
+        let mut opts = options("export const value = 1;");
+        opts.single_threaded = Tristate::True;
+        let host = Arc::downgrade(&opts.host);
+        let program = new_program(opts);
+        let checker = program.get_type_checker(&Context::background());
+        let input = Arc::downgrade(&checker.program);
+        let checker_id = checker.id;
+        // SAFETY: the lease owns its checker and slot array, and retains no outer root reference.
+        // The legacy graph stays in the thread arena; this case checks checker/container ownership only.
+        unsafe { free_program(program) };
+        assert_eq!(checker.id, checker_id);
+        assert!(checker.program.file_exists("/index.ts"));
+        assert!(host.upgrade().is_some());
+        drop(checker);
+        assert!(input.upgrade().is_none());
+        assert!(host.upgrade().is_none());
     }
 }
 
