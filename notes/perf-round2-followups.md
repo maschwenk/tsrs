@@ -117,6 +117,10 @@ is type-checked, CI runs on pull requests, and the workspace is at 0.11.0. The i
 
 ## Measured and rejected (do not redo)
 
+- Preserving decoded `char` values through Unicode identifier checks (draft #279, `notes/perf-unicode-identifiers.md`):
+  -4.56% instructions in a Unicode-heavy scanner probe, but Compiler/Compiler-Unions whole-project medians only
+  -0.02% to -0.22% on macOS; no qualifying memory gain. The performance landing threshold is unproven. Revisit
+  performance claims with a representative Unicode-heavy project and the prescribed gate measurement.
 - A tracing collector for checker data instead of retiring checkers (notes/mem-checker-gc.md): weak identity caches
   free 3% more than garbage at mid-run; even an upper bound with member tables and value-symbol links weak frees
   ~37% of the program's memory, about where `--maxMemory` already gets, for weeks of data-model changes.
