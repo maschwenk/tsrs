@@ -777,14 +777,23 @@ impl Checker {
             }
             return self.get_intersection_type(&[left, right]);
         }
-        let members = SymbolTable::new();
         let mut skipped_private_members: FxHashSet<&'static str> = FxHashSet::default();
         let index_infos = if left == self.empty_object_type {
             self.get_index_infos_of_type(right).to_vec()
         } else {
             self.get_union_index_infos(&[left, right])
         };
-        for right_prop in self.get_properties_of_type(right).iter().copied() {
+        let right_props = self.get_properties_of_type(right);
+        // tsrs: sized for the larger side (the spread nearly always has that many members): spreading a large object
+        // grew the table, and rebuilt its index, step by step. The left side counts only when already resolved, so
+        // that nothing is resolved earlier than below.
+        let left_len = if left.flags().intersects(TypeFlags::Object) && left.object_flags_lazy().intersects(ObjectFlags::MembersResolved) {
+            left.as_structured_type().properties().len()
+        } else {
+            0
+        };
+        let members = SymbolTable::with_capacity(right_props.len().max(left_len));
+        for right_prop in right_props.iter().copied() {
             if get_declaration_modifier_flags_from_symbol(right_prop).intersects(ModifierFlags::Private | ModifierFlags::Protected) {
                 skipped_private_members.insert(right_prop.name());
             } else if self.is_spreadable_property(right_prop) {
