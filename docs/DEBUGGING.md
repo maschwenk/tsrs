@@ -453,3 +453,49 @@ overlay JSON that maps *both* the symlinked and the real path of the file to the
   resolve). It is committed with your work and read by the other agents.
 - Do not stop at the first fix. Work through your cluster until it is done or what remains is blocked on something
   outside your scope — then say exactly what.
+
+### Exact heap-allocation counts per call site (macOS)
+
+The alloc-profile sampler above samples one allocation in 1024 and attributes it one frame too high. For an exact
+count per call site, build the CLI without a global allocator (feature `system-alloc`: every Rust allocation becomes a
+`malloc`/`realloc`/`free` call that a malloc interposer or Instruments can see) with symbols and line tables, in its
+own target directory, and run it single-threaded. Its output is byte-identical to the mimalloc build (checked on
+xstate-main, webpack, cal-diy, vscode).
+
+```sh
+CARGO_PROFILE_RELEASE_STRIP=none CARGO_PROFILE_RELEASE_DEBUG=line-tables-only CARGO_TARGET_DIR=target/sysalloc \
+  cargo build --release -p tsrs_cli --features system-alloc
+dsymutil target/sysalloc/release/tsrs -o /tmp/tsrs.dSYM
+clang -arch arm64 -O2 -dynamiclib -o /tmp/liballocstacks.dylib tools/perf/allocstacks.c
+cd <project> && DYLD_INSERT_LIBRARIES=/tmp/liballocstacks.dylib ALLOCSTACKS_OUT=/tmp/stacks.tsv RAYON_NUM_THREADS=1 \
+  <repo>/target/sysalloc/release/tsrs -p . --noEmit --incremental false --singleThreaded --pretty false
+python3 -I tools/perf/allocsites.py --binary /tmp/tsrs.dSYM/Contents/Resources/DWARF/tsrs --stacks /tmp/stacks.tsv --out /tmp/sites
+```
+
+`tools/perf/allocstacks.c` interposes `malloc`, `calloc`, `realloc`, `posix_memalign`, `aligned_alloc`, `valloc` and
+`free`, walks the frame-pointer chain (12 frames) on every call and counts (count, bytes) per distinct stack in a
+per-thread table; the totals line is the exact number of allocations (it agrees with Instruments' Allocations
+"Statistics" total to within 100 calls, the ones made before the interposer's constructor ran, and with mimalloc's
+`MIMALLOC_SHOW_STATS=1` bin totals, which are rounded to three digits, to within 1.5%). Launch the binary directly:
+SIP strips `DYLD_*` from the environment of restricted binaries such as `/usr/bin/time` and `env`, so a run started
+through them is not instrumented (the output file is simply not written). `allocsites.py` symbolicates with
+`atos -i -fullPath` (inlined frames carry their own file:line) and `rustfilt`, and prints three tables: the first
+frame inside a `tsrs_*` crate per file:line, the innermost frame outside the standard library/hashbrown/smallvec, and
+the per-function roll-up; the `.sites.tsv` files hold every row.
+
+Instruments (`xcrun xctrace record --template Allocations --launch -- <tsrs> ...`) sees the same calls on the
+`system-alloc` build, with two limits. Without Developer Mode (`DevToolsSecurity -status`), xctrace cannot attach to
+an ad-hoc-signed binary and the target hangs forever in `liboainject.dylib`'s initializer; re-sign the binary with the
+`com.apple.security.get-task-allow` entitlement (`codesign -s - -f --entitlements <plist> <binary>`, a plist with that
+one key set to true) and it records. And the trace's event archive cannot hold more than 2 GiB of allocation events
+(about 10 M allocations: cal-diy and vscode fail at save time with `data length ... too large to fit in non-keyed
+archive`; xstate-main and webpack record). `xcrun xctrace export --input X.trace --xpath
+'/trace-toc/run[@number="1"]/tracks/track[@name="Allocations"]/details/detail[@name="Statistics"]'` gives the exact
+total and per-size-class counts; the `Allocations List` detail exports only the allocations still live at exit
+(persistent), each with a symbolicated backtrace. The `--toc` data tables have no allocations table at all.
+
+The share of cycles the allocator itself costs is the ceiling on what removing allocations can buy: record the
+mimalloc build with the Time Profiler template (same re-signing), export the `time-profile` table and run
+`tools/perf/tpshare.py` on it; it classifies each sample's innermost frame (mimalloc, the Rust allocator shims,
+`memmove` inside a reallocation, hashbrown rehash, other). On vscode single-threaded on 2026-10-10 that was 2.0% of
+samples in mimalloc, 2.4% with the shims and realloc copies (notes/perf-alloc-sites.md has the per-site tables).
