@@ -26,6 +26,16 @@ pub trait System: Sync {
     fn now(&self) -> Instant;
     fn since_start(&self) -> Duration;
 
+    /// Native CLI extensions can prepare freshly parsed files before binding begins.
+    fn compiler_host(&self, host: Arc<dyn tsrs_compiler::CompilerHost>) -> Arc<dyn tsrs_compiler::CompilerHost> {
+        host
+    }
+
+    /// Attach an extension before semantic checking begins.
+    fn program_setup(&self) -> Option<&(dyn Fn(&'static tsrs_compiler::Program) -> Result<(), String> + Sync)> {
+        None
+    }
+
     // Go `sys.Now()` as a wall-clock time (time stamps written by --build).
     fn now_time(&self) -> std::time::SystemTime {
         std::time::SystemTime::now()

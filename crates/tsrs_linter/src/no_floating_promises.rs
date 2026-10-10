@@ -1,6 +1,6 @@
 use serde::Deserialize;
 use serde_json::Value;
-use tsrs_ast::{self as ast, Kind, Node, OperatorPrecedence, OperatorPrecedenceFlags, SourceFile};
+use tsrs_ast::{self as ast, Kind, Node, OperatorPrecedence, OperatorPrecedenceFlags};
 use tsrs_checker::{Checker, Type, is_tuple_type_exported};
 use tsrs_core::{P, TextRange};
 
@@ -452,19 +452,6 @@ fn check_statement(ctx: &mut RuleContext<'_>, opts: &Options, statement: P<Node>
     });
 }
 
-fn walk(ctx: &mut RuleContext<'_>, opts: &Options, node: P<Node>) -> u64 {
-    let mut calls = 0;
-    if ast::is_expression_statement(node) {
-        check_statement(ctx, opts, node);
-        calls += 1;
-    }
-    node.for_each_child(&mut |child| {
-        calls += walk(ctx, opts, child);
-        false
-    });
-    calls
-}
-
 fn run(ctx: &mut RuleContext<'_>, value: &Value) -> Result<u64, String> {
     let opts = if value.is_null() {
         Options::default()
@@ -479,12 +466,16 @@ fn run(ctx: &mut RuleContext<'_>, value: &Value) -> Result<u64, String> {
             ignore_void: raw.ignore_void.unwrap_or(true),
         }
     };
-    let root: P<SourceFile> = ctx.source_file;
+    let nodes = ctx
+        .source_file
+        .lint_nodes
+        .get()
+        .expect("lint nodes must be enabled before binding");
     let mut calls = 1;
-    root.as_node().for_each_child(&mut |node| {
-        calls += walk(ctx, &opts, node);
-        false
-    });
+    for &node in nodes.expression_statements.get() {
+        check_statement(ctx, &opts, node);
+        calls += 1;
+    }
     Ok(calls)
 }
 

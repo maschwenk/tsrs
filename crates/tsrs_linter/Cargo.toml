@@ -13,6 +13,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tsrs_core.workspace = true
 tsrs_ast.workspace = true
+tsrs_diagnostics.workspace = true
 tsrs_scanner.workspace = true
 tsrs_vfs.workspace = true
 tsrs_tsoptions.workspace = true

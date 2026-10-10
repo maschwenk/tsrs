@@ -1694,6 +1694,12 @@ pub trait HasFileName {
     fn path(&self) -> &Path;
 }
 
+/// tsrs-only: rule candidates recorded by the binder, in source order. Enabled before binding;
+/// the nodes have the same lifetime as the file's AST (including CLI leaf-file regions).
+pub struct LintNodes {
+    pub expression_statements: OwnedCell<&'static [P<Node>]>,
+}
+
 pub struct SourceFile {
     node: OwnedCell<Option<P<Node>>>, // back pointer to the SourceFile node, set by the factory
     pub declaration_base: DeclarationBase,
@@ -1752,6 +1758,7 @@ pub struct SourceFile {
     pub symbol_count: OwnedCell<usize>,
     pub pattern_ambient_modules: OwnedCell<&'static [P<PatternAmbientModule>]>,
     pub global_exports: OwnedCell<Option<P<SymbolTable>>>,
+    pub lint_nodes: OwnedCell<Option<P<LintNodes>>>,
 
     // tsrs-only: set before the type-check pass when the CLI frees this file's tree once it is checked
     // (`tsrs_compiler` fileregions.rs); see `is_check_leaf`.
@@ -1828,6 +1835,7 @@ impl NodeFactory {
             symbol_count: OwnedCell::new(0),
             pattern_ambient_modules: OwnedCell::new(&[]),
             global_exports: OwnedCell::new(None),
+            lint_nodes: OwnedCell::new(None),
             check_leaf: AtomicBool::new(false),
             ecma_line_map: OnceLock::new(),
             position_map: OnceLock::new(),

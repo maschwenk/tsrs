@@ -14,12 +14,12 @@ use tsrs_project::TsConfigResolver;
 use tsrs_vfs::{Entries, FS, FileInfo, FileMode, bundled, osvfs};
 
 #[derive(Deserialize)]
-struct Payload {
-    version: i32,
+pub(crate) struct Payload {
+    pub version: i32,
     #[serde(default)]
-    configs: Vec<Config>,
+    pub configs: Vec<Config>,
     #[serde(default)]
-    source_overrides: Option<FxHashMap<String, String>>,
+    pub source_overrides: Option<FxHashMap<String, String>>,
     #[serde(default)]
     report_syntactic: bool,
     #[serde(default)]
@@ -27,18 +27,18 @@ struct Payload {
 }
 
 #[derive(Deserialize)]
-struct Config {
+pub(crate) struct Config {
     #[serde(default)]
-    file_paths: Vec<String>,
+    pub file_paths: Vec<String>,
     #[serde(default)]
-    rules: Vec<RequestedRule>,
+    pub rules: Vec<RequestedRule>,
 }
 
 #[derive(Clone, Deserialize)]
-struct RequestedRule {
-    name: String,
+pub(crate) struct RequestedRule {
+    pub name: String,
     #[serde(default)]
-    options: Value,
+    pub options: Value,
 }
 
 #[derive(Clone, Copy, Default)]
@@ -70,13 +70,13 @@ fn parse_options(args: &[String]) -> Result<HeadlessOptions, String> {
     Ok(options)
 }
 
-struct OverlayFs {
+pub(crate) struct OverlayFs {
     base: Arc<dyn FS>,
     files: FxHashMap<String, String>,
 }
 
 impl OverlayFs {
-    fn new(base: Arc<dyn FS>, files: FxHashMap<String, String>) -> OverlayFs {
+    pub(crate) fn new(base: Arc<dyn FS>, files: FxHashMap<String, String>) -> OverlayFs {
         let case_sensitive = base.use_case_sensitive_file_names();
         OverlayFs {
             base,
@@ -388,7 +388,8 @@ pub fn run(args: &[String]) -> i32 {
     let file_configs = Arc::new(file_configs);
     let diagnostics = Arc::new(Mutex::new(Vec::new()));
     let rule_output = Arc::clone(&diagnostics);
-    let internal_output = Arc::clone(&diagnostics);
+    let internal_diagnostics = Arc::new(Mutex::new(Vec::new()));
+    let internal_output = Arc::clone(&internal_diagnostics);
     let fs_for_rules = Arc::clone(&fs);
     let cwd_for_rules = cwd.clone();
     let get_rules = Arc::new(move |file: tsrs_core::P<tsrs_ast::SourceFile>| {
@@ -449,7 +450,14 @@ pub fn run(args: &[String]) -> i32 {
         }
     };
     let mut stdout = std::io::BufWriter::new(std::io::stdout().lock());
-    for diagnostic in diagnostics.lock().unwrap().drain(..) {
+    // Preserve tsgolint's compiler-diagnostics-before-rule-diagnostics framing even though each
+    // file now runs both during the same checker task.
+    for diagnostic in internal_diagnostics
+        .lock()
+        .unwrap()
+        .drain(..)
+        .chain(diagnostics.lock().unwrap().drain(..))
+    {
         if let Err(error) = write_message(&mut stdout, 1, &diagnostic) {
             eprintln!("error writing diagnostic: {error}");
             return 1;

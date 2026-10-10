@@ -38,6 +38,13 @@ pub type CreateModuleResolver = Arc<dyn Fn(ResolverOptions) -> Box<dyn Resolver>
 // Go `ProgramFactories.CreateCheckerPool func(*Program) CheckerPool`.
 pub type CreateCheckerPool = Arc<dyn Fn(&'static Program) -> Box<dyn CheckerPool> + Send + Sync>;
 
+/// An opt-in extension of the semantic pass. Selected files are checked even when their TypeScript
+/// diagnostics are suppressed. The extension finishes on the owning checker before leaf AST reclamation.
+pub trait CheckFileHook: Send + Sync {
+    fn includes(&self, file: P<SourceFile>) -> bool;
+    fn after_check(&self, program: &'static Program, checker: &mut Checker, file: P<SourceFile>);
+}
+
 // Go `ProgramOptions` (= ProgramConfig + ProgramHosts + ProgramFactories, flattened; tracing is not ported).
 pub struct ProgramOptions {
     pub config: P<ParsedCommandLine>,
@@ -145,6 +152,7 @@ enum programCheckerPool {
 }
 
 pub struct Program {
+    check_file_hook: OnceLock<Arc<dyn CheckFileHook>>,
     pub(crate) opts: ProgramConfig,
     host: Arc<dyn CompilerHost>,
     resolution_host: &'static dyn ResolutionHost,
@@ -395,6 +403,7 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
     let files_by_path = std::mem::take(&mut processed.files_by_path);
     let host = Arc::clone(&opts.host);
     let mut p = Program {
+        check_file_hook: OnceLock::new(),
         opts: opts.program_config(),
         // Go's NewProgram never sets `comparePathsOptions`: it is the zero value (no current directory,
         // case-insensitive), which e.g. makes IsGlobalTypingsFile false when no typings location is set.
@@ -614,6 +623,7 @@ impl Program {
         }
         // TODO: reverify compiler options when config has changed?
         let mut result = Program {
+            check_file_hook: OnceLock::new(),
             opts: self.opts.clone(),
             resolution_host: crate::projectreferencefilemapper::resolution_host_for(Arc::clone(&new_host)),
             host: new_host,
@@ -2073,13 +2083,28 @@ impl Program {
     }
 
     // program.go:1488
-    fn get_semantic_diagnostics_with_checker(&'static self, ctx: &Context, c: &mut Checker, source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
+    pub fn get_semantic_diagnostics_with_checker(&'static self, ctx: &Context, c: &mut Checker, source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
+        let hook = self.check_file_hook.get().filter(|hook| hook.includes(source_file));
+        if hook.is_some() && self.skip_type_checking(source_file, false) {
+            // noCheck / @ts-nocheck / skipLibCheck suppress TypeScript reports, not the lint pass.
+            // Keep the normal diagnostic filtering below, but always populate the checker first.
+            c.get_diagnostics_exported(ctx, source_file);
+        }
         let mut result = filter_no_emit_semantic_diagnostics(
             self.get_bind_and_check_diagnostics_with_checker(ctx, c, source_file, false /*includeDeferredGlobals*/),
             &self.options(),
         );
         result.extend(self.get_include_processor_diagnostics(source_file));
+        if let Some(hook) = hook.filter(|_| !c.was_canceled()) {
+            c.with_source_file(source_file, |c| hook.after_check(self, c, source_file));
+        }
         result
+    }
+
+    /// Install before semantic checking begins.
+    /// A replacement program deliberately does not inherit the previous program's hook or state.
+    pub fn set_check_file_hook(&self, hook: Arc<dyn CheckFileHook>) {
+        assert!(self.check_file_hook.set(hook).is_ok(), "check-file hook already installed");
     }
 
     // getBindAndCheckDiagnosticsWithChecker gets semantic diagnostics for a single file using a

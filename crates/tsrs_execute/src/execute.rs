@@ -50,6 +50,9 @@ pub fn command_line_with_testing(
     if let Some(first) = command_line_args.first() {
         match first.to_lowercase().as_str() {
             "-b" | "--b" | "-build" | "--build" => {
+                if sys.program_setup().is_some() {
+                    return not_supported(sys, "--lint with build mode (--build)");
+                }
                 let host: &'static sysParseConfigHost = Box::leak(Box::new(sysParseConfigHost { sys, fs: sys.fs() }));
                 let mut command = tsoptions::parse_build_command_line(&command_line_args, host);
                 if tsrs_core::NO_THREADS {
@@ -261,6 +264,9 @@ fn tsc_compilation(
     }
     // tsc.go:245
     if config_for_compilation.compiler_options().unwrap().is_incremental() {
+        if sys.program_setup().is_some() {
+            return not_supported(sys, "--lint with incremental compilation (use --incremental false)");
+        }
         return perform_incremental_compilation(
             sys,
             config_for_compilation,
@@ -347,16 +353,22 @@ fn perform_compilation(
     }
     // tsrs-only (notes/mem-lazy-dts-members.md): when no declaration file is type-checked, the member lists of
     // interfaces, classes and type literals in declaration files are parsed and bound on first use.
-    if testing.is_none() && (options.skip_lib_check.is_true() || options.no_check.is_true()) && tsrs_compiler::lazy_dts_allowed() {
+    if testing.is_none() && sys.program_setup().is_none() && (options.skip_lib_check.is_true() || options.no_check.is_true()) && tsrs_compiler::lazy_dts_allowed() {
         tsrs_compiler::enable_lazy_dts();
     }
-    let mut program_options = ProgramOptions::new(config, host);
+    let mut program_options = ProgramOptions::new(config, sys.compiler_host(host));
     program_options.leaf_files = leaf_settings.mode;
     program_options.checker_recycling = leaf_freeing_allowed;
 
     start_tracing_if_needed(sys, &config);
     let parse_start = sys.now();
     let program = new_program(program_options);
+    if let Some(setup) = sys.program_setup() {
+        if let Err(error) = setup(program) {
+            sys.write(&format!("error: {error}\n"));
+            return CommandLineResult { status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
+        }
+    }
     compile_times.parse_time = sys.now() - parse_start;
     if let Some(content_mapper_host) = &content_mapper_host {
         compile_times.content_mapper_times = content_mapper_host.timings();

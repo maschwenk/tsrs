@@ -31,6 +31,10 @@ pub use tsrs_core::context::Context;
 
 #[cfg(not(feature = "checker"))]
 impl Checker {
+    pub fn with_source_file<T>(&mut self, _file: P<SourceFile>, run: impl FnOnce(&mut Self) -> T) -> T {
+        run(self)
+    }
+
     pub fn get_diagnostics_exported(&mut self, _ctx: &Context, _source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
         unimplemented!("tsrs_compiler was built without the `checker` feature")
     }
