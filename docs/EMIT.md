@@ -515,6 +515,9 @@ then-current main:
   harness (`crates/tsrs_execute/src/tsctests`, a `#[cfg(test)]` module of the driver crate because it drives
   `execute::command_line_with_testing`) replays them with a fake clock, the FS differ, the readable buildinfo and the
   output sanitizer of `tsctests/sys.go`. Watch and content-mapper scenarios are skipped.
+  Fresh audit on the ownership branch (2026-10-11): 184/216 tsc and 187/190 tsbuild passes, zero crashes, exact
+  classifications retained from original Oxc. Three existing casing cases report TS1149 instead of pinned tsgo
+  TS1261; the README's older 187/216 figure is corrected (`notes/rust-owned-type-text.md`).
 
 ## 11. Coordination with the LSP port
 

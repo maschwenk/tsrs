@@ -105,11 +105,11 @@ pub fn get_property_name_for_property_name_node(name: P<Node>) -> std::borrow::C
         | Kind::NoSubstitutionTemplateLiteral
         | Kind::NumericLiteral
         | Kind::BigIntLiteral
-        | Kind::JsxNamespacedName => name.text().into(),
+        | Kind::JsxNamespacedName => name.text().to_owned().into(),
         Kind::ComputedPropertyName => {
             let name_expression = name.expression().unwrap();
             if is_string_or_numeric_literal_like(name_expression) {
-                return name_expression.text().into();
+                return name_expression.text().to_owned().into();
             }
             if is_signed_numeric_literal(name_expression) {
                 let mut text = name_expression.as_prefix_unary_expression().operand.text().to_string();

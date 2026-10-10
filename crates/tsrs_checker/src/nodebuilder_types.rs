@@ -69,9 +69,9 @@ pub struct NodeBuilderSymbolLinks {
     pub specifier_cache: OwnedMap<ModeAwareCacheKey, moduleSpecifierResult>,
 }
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct moduleSpecifierResult {
-    pub specifier: &'static str,
+    pub specifier: TextView,
     pub import_attributes_type: Option<P<Type>>,
 }
 

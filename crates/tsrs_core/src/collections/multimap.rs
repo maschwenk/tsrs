@@ -29,7 +29,10 @@ impl<K: Hash + Eq, V> MultiMap<K, V> {
         self.m.contains_key(key)
     }
 
-    pub fn get(&self, key: &K) -> &[V] {
+    pub fn get<Q: Hash + Eq + ?Sized>(&self, key: &Q) -> &[V]
+    where
+        K: std::borrow::Borrow<Q>,
+    {
         self.m.get(key).map(|v| v.as_slice()).unwrap_or(&[])
     }
 

@@ -28,7 +28,7 @@ pub(crate) fn tracker_value(literal: &LiteralValue) -> TrackerValue {
     match literal {
         LiteralValue::String(s) => TrackerValue::String(s.to_string()),
         LiteralValue::Number(n) => TrackerValue::Number(*n),
-        LiteralValue::BigInt(b) => TrackerValue::BigInt(*b),
+        LiteralValue::BigInt(b) => TrackerValue::BigInt(b.clone()),
         LiteralValue::Boolean(_) => panic!("Unsupported type: bool"),
     }
 }

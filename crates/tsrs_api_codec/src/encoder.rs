@@ -389,7 +389,7 @@ fn encode_tree(root: P<Node>, source_file: Option<&'static SourceFile>) -> Resul
         let map = state.node_index_map.take().unwrap_or_default();
         let imports_offset = encode_node_index_array(sf.imports.get(), &map, &mut state.cx.structured_data);
         let augmentations_offset = encode_node_index_array(sf.module_augmentations.get(), &map, &mut state.cx.structured_data);
-        let ambient_offset = encode_string_array(sf.ambient_module_names.get(), &mut state.cx.structured_data);
+        let ambient_offset = encode_string_array(&sf.ambient_module_names(), &mut state.cx.structured_data);
         let ext = &mut state.cx.extended_data;
         ext[sf_extended_data_offset + 32..sf_extended_data_offset + 36].copy_from_slice(&imports_offset.to_le_bytes());
         ext[sf_extended_data_offset + 36..sf_extended_data_offset + 40].copy_from_slice(&augmentations_offset.to_le_bytes());
@@ -607,13 +607,14 @@ fn encode_node_index_array(nodes: &[P<Node>], map: &FxHashMap<P<Node>, u32>, buf
     offset
 }
 
-fn encode_string_array(strs: &[&str], buf: &mut Vec<u8>) -> u32 {
+fn encode_string_array(strs: &[impl AsRef<str>], buf: &mut Vec<u8>) -> u32 {
     if strs.is_empty() {
         return NO_STRUCTURED_DATA;
     }
     let offset = buf.len() as u32;
     msgpack::write_array_header(buf, strs.len());
-    for s in strs {
+    for text in strs {
+        let s = text.as_ref();
         msgpack::write_string(buf, s);
     }
     offset

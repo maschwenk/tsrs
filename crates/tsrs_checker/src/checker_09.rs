@@ -946,7 +946,7 @@ impl Checker {
             if get_flow_node_of_node(parent_access).is_some() {
                 let (prop_name, ok) = self.get_destructuring_property_name(node);
                 if ok {
-                    let literal = self.factory.new_string_literal(alloc_str(&prop_name), TokenFlags::None);
+                    let literal = self.factory.new_string_literal(&prop_name, TokenFlags::None);
                     literal.set_loc(node.loc());
                     let mut lhs_expr = parent_access;
                     if !is_left_hand_side_expression(parent_access) {
@@ -1024,7 +1024,7 @@ impl Checker {
             }
             let text = get_property_name_from_type(expr_type);
             let flags = SymbolFlags::Property | if e.initializer().is_some() { SymbolFlags::Optional } else { SymbolFlags::None };
-            let symbol = self.new_symbol(flags, alloc_str(&text));
+            let symbol = self.new_symbol(flags, &text);
             let t = self.get_type_from_binding_element(e, include_pattern_in_type, report_errors);
             self.value_symbol_links.get(symbol).resolved_type.set(Some(t));
             members.set(symbol.name(), symbol);
@@ -1652,7 +1652,7 @@ impl WideningContext {
         }
         let result = P::new(WideningContext {
             parent: Cell::new(Some(w)),
-            property_name: Cell::new(alloc_str(property_name)),
+            property_name: TextCell::new(property_name),
             ..Default::default()
         });
         if w.child_contexts.is_nil() {
@@ -1667,11 +1667,11 @@ impl Checker {
     // checker.go:18806
     pub(crate) fn get_properties_of_context(&mut self, context: P<WideningContext>) -> Vec<P<Symbol>> {
         if context.resolved_properties.get().is_none() {
-            let mut names: OrderedMap<&'static str, P<Symbol>> = OrderedMap::default();
+            let mut names: OrderedMap<String, P<Symbol>> = OrderedMap::default();
             for t in self.get_siblings_of_context(context) {
                 if is_object_literal_type(t) && !t.object_flags().intersects(ObjectFlags::ContainsSpread) {
                     for prop in self.get_properties_of_type(t).iter().copied() {
-                        names.insert(prop.name(), prop);
+                        names.insert(prop.name().to_owned(), prop);
                     }
                 }
             }
@@ -1687,7 +1687,7 @@ impl Checker {
             let mut siblings: Vec<P<Type>> = Vec::new();
             for t in self.get_siblings_of_context(context.parent.get().unwrap()) {
                 if is_object_literal_type(t) {
-                    let prop = self.get_property_of_object_type(t, context.property_name.get());
+                    let prop = self.get_property_of_object_type(t, &context.property_name.get());
                     if let Some(prop) = prop {
                         let prop_type = self.get_type_of_symbol(prop);
                         siblings.extend(prop_type.distributed());
@@ -1983,7 +1983,7 @@ impl Checker {
             }
             let expr_type = self.get_type_of_expression(node.expression().unwrap());
             let (name, exists) = self.try_get_name_from_type(expr_type);
-            self.computed_name_links.at(links).name.set(alloc_str(&name));
+            self.computed_name_links.at(links).name.set(&name);
             self.computed_name_links.at(links).has_name.set(Some(exists));
             return (name, exists);
         }
@@ -2149,11 +2149,11 @@ impl Checker {
     pub(crate) fn get_properties_of_union_or_intersection_type(&mut self, t: P<Type>) -> ArrayView<P<Symbol>> {
         let d = t.as_union_or_intersection_type();
         if d.resolved_properties().is_none() {
-            let mut checked: FxHashSet<&'static str> = FxHashSet::default();
+            let mut checked: FxHashSet<String> = FxHashSet::default();
             let mut props: Vec<P<Symbol>> = Vec::new();
             for current in d.types.get() {
                 for prop in self.get_properties_of_type(current) {
-                    if checked.insert(prop.name()) {
+                    if checked.insert(prop.name().to_owned()) {
                         let combined_prop = self.get_property_of_union_or_intersection_type(
                             t,
                             prop.name(),
@@ -2672,7 +2672,7 @@ pub(crate) fn lazy_member_tables_heap(c: &Checker) -> Vec<(String, crate::heapce
     let rc = 2 * std::mem::size_of::<usize>();
     let mut boxes = HeapStat { slot: std::mem::size_of::<LazyMemberTable>() as u64, ..HeapStat::default() };
     let mut declared = HeapStat { slot: 8, ..HeapStat::default() };
-    let mut unaffected = HeapStat { slot: 16, ..HeapStat::default() };
+    let mut unaffected = HeapStat { slot: std::mem::size_of::<TextView>() as u64, ..HeapStat::default() };
     let mut ordered = HeapStat { slot: std::mem::size_of::<P<Symbol>>() as u64, ..HeapStat::default() };
     for t in c.lazy_member_tables.values() {
         boxes.containers += 1;
@@ -2727,7 +2727,7 @@ pub(crate) fn lazy_member_tables_heap(c: &Checker) -> Vec<(String, crate::heapce
 }
 
 pub(crate) struct LazyMembers {
-    pub(crate) unaffected: ArrayCell<&'static str>, // sorted names of declared members that instantiate to themselves
+    pub(crate) unaffected: ArrayCell<TextView>, // sorted names of declared members that instantiate to themselves
     pub(crate) call_signatures: ArrayCell<P<Signature>>,
     pub(crate) construct_signatures: ArrayCell<P<Signature>>,
     pub(crate) index_infos: ArrayCell<P<IndexInfo>>,
@@ -2832,10 +2832,10 @@ impl Checker {
         let source = t.target().unwrap();
         let resolved = self.resolve_declared_members(&source).unwrap();
         // Whether instantiateSymbol returns a member itself depends on what is resolved now.
-        let mut unaffected: Vec<&'static str> = Vec::new();
+        let mut unaffected: Vec<TextView> = Vec::new();
         if let Some(declared_members) = resolved.declared_members.get() {
             for (id, symbol) in declared_members.entries() {
-                if self.is_named_member(symbol, id) {
+                if self.is_named_member(symbol, &id) {
                     self.lazy_member_stats.member_table_declared_members += 1;
                     if self.is_symbol_unaffected_by_instantiation(symbol, Some(lm.mapper)) {
                         unaffected.push(id);
@@ -2885,9 +2885,9 @@ impl Checker {
         if let Some(declared_members) = resolved.declared_members.get().filter(|m| !m.is_empty()) {
             let table = SymbolTable::with_capacity(declared_members.len());
             for (id, symbol) in declared_members.entries() {
-                if self.is_named_member(symbol, id) {
-                    let member = self.get_lazy_declared_member(lm, symbol, id);
-                    table.set(id, member);
+                if self.is_named_member(symbol, &id) {
+                    let member = self.get_lazy_declared_member(lm, symbol, &id);
+                    table.set(&id, member);
                 }
             }
             members = Some(table);
@@ -2902,13 +2902,13 @@ impl Checker {
     }
 
     #[cfg_attr(feature = "site-counts", track_caller)]
-    pub(crate) fn get_lazy_declared_member(&mut self, lm: P<LazyMemberTable>, symbol: P<Symbol>, name: &'static str) -> P<Symbol> {
+    pub(crate) fn get_lazy_declared_member(&mut self, lm: P<LazyMemberTable>, symbol: P<Symbol>, name: &str) -> P<Symbol> {
         let existing = lm.declared.lookup(name);
         if let Some(result) = existing {
             return result;
         }
         let mut result = symbol;
-        if lm.ready.get().unwrap().unaffected.get().binary_search(&name).is_err() {
+        if lm.ready.get().unwrap().unaffected.get().binary_search_by(|key| key.as_ref().cmp(name)).is_err() {
             self.lazy_member_stats.member_table_declared_instantiated += 1;
             result = self.new_instantiated_symbol(symbol, Some(lm.mapper));
         }
@@ -2949,12 +2949,12 @@ impl Checker {
         let mut result: Option<P<Symbol>> = None;
         let declared_members = self.resolve_declared_members(&t.target().unwrap()).unwrap().declared_members.get();
         if let Some((name, decl)) = declared_members.and_then(|m| m.lookup_entry(name)) {
-            if self.is_named_member(decl, name) {
+            if self.is_named_member(decl, &name) {
                 if instantiate {
-                    result = Some(self.get_lazy_declared_member(lm, decl, name));
+                    result = Some(self.get_lazy_declared_member(lm, decl, &name));
                 } else {
                     self.lazy_member_stats.has_prop_uninstantiated += 1;
-                    result = Some(lm.declared.lookup(name).unwrap_or(decl));
+                    result = Some(lm.declared.lookup(&name).unwrap_or(decl));
                 }
             }
         }
@@ -2975,7 +2975,7 @@ impl Checker {
     pub(crate) fn every_property_of_structured_type(&mut self, t: P<Type>, f: &mut dyn FnMut(&mut Checker, P<Symbol>) -> bool) -> bool {
         if let Some(lm) = self.get_ready_lazy_member_table(t) {
             self.lazy_member_stats.member_every_property_queries += 1;
-            let mut seen: FxHashSet<&'static str> = FxHashSet::default();
+            let mut seen: FxHashSet<String> = FxHashSet::default();
             return self.every_lazy_property(t, lm, &mut seen, f);
         }
         let properties = self.resolve_structured_type_members(&t).unwrap().properties();
@@ -2991,12 +2991,12 @@ impl Checker {
         &mut self,
         t: P<Type>,
         lm: P<LazyMemberTable>,
-        seen: &mut FxHashSet<&'static str>,
+        seen: &mut FxHashSet<String>,
         f: &mut dyn FnMut(&mut Checker, P<Symbol>) -> bool,
     ) -> bool {
         if let Some(declared_members) = self.resolve_declared_members(&t.target().unwrap()).unwrap().declared_members.get() {
             for (id, symbol) in declared_members.entries() {
-                if self.is_named_member(symbol, id) && seen.insert(id) && !f(self, symbol) {
+                if self.is_named_member(symbol, &id) && seen.insert(id.to_string()) && !f(self, symbol) {
                     return false;
                 }
             }
@@ -3010,7 +3010,7 @@ impl Checker {
                 continue;
             }
             for prop in self.get_properties_of_type(base_type).iter().copied() {
-                if !is_static_private_identifier_property(prop) && seen.insert(prop.name()) && !f(self, prop) {
+                if !is_static_private_identifier_property(prop) && seen.insert(prop.name().to_owned()) && !f(self, prop) {
                     return false;
                 }
             }

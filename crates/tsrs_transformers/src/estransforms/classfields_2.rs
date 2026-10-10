@@ -917,7 +917,7 @@ impl classFieldsTransformer {
         let name: P<Node> = if ast::is_computed_property_name(property_name) {
             property_name.expression().unwrap()
         } else if ast::is_identifier(property_name) {
-            self.factory().new_string_literal(alloc_str(property_name.text()), TokenFlags::None)
+            self.factory().new_string_literal(property_name.text(), TokenFlags::None)
         } else {
             property_name
         };

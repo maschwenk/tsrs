@@ -4,8 +4,8 @@ use super::*;
 pub struct usingDeclarationTransformer {
     pub base: Transformer,
 
-    export_bindings: RefCell<Option<FxHashMap<&'static str, P<Node>>>>,
-    export_binding_names: RefCell<Vec<&'static str>>,
+    export_bindings: RefCell<Option<FxHashMap<String, P<Node>>>>,
+    export_binding_names: RefCell<Vec<String>>,
     export_vars: RefCell<Vec<P<Node>>>,
     default_export_binding: Cell<Option<P<Node>>>,
     export_equals_binding: Cell<Option<P<Node>>>,
@@ -592,9 +592,9 @@ impl usingDeclarationTransformer {
             let mut bindings = self.export_bindings.borrow_mut();
             let bindings = bindings.get_or_insert_with(FxHashMap::default);
             if !bindings.contains_key(name.text()) {
-                self.export_binding_names.borrow_mut().push(name.text());
+                self.export_binding_names.borrow_mut().push(name.text().to_owned());
             }
-            bindings.insert(name.text(), specifier);
+            bindings.insert(name.text().to_owned(), specifier);
         }
         emit_context.add_variable_declaration(name);
     }

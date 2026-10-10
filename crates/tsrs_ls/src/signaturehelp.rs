@@ -246,7 +246,8 @@ impl LanguageService {
         if !ast::is_property_access_expression(expression) {
             return None;
         }
-        let name = expression.name().unwrap().text();
+        let name_owner = expression.name().unwrap();
+        let name = name_owner.text();
         if name.is_empty() {
             return None;
         }

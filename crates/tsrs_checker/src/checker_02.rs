@@ -611,10 +611,10 @@ impl Checker {
         self.check_grammar_modifiers(node);
         self.check_variable_like_declaration(node);
         let fn_ = ast::get_containing_function(node);
-        let mut param_name = "";
+        let mut param_name = String::new();
         if let Some(name) = node.name() {
             if ast::is_identifier(name) {
-                param_name = name.text();
+                name.text().clone_into(&mut param_name);
             }
         }
         if ast::has_syntactic_modifier(node, ModifierFlags::ParameterPropertyModifier) {
@@ -1156,7 +1156,7 @@ impl Checker {
                 for &param in parent.parameters() {
                     let name = param.name().unwrap();
                     if ast::is_binding_pattern(name)
-                        && self.check_if_type_predicate_variable_is_declared_in_binding_pattern(name, parameter_name, type_predicate.parameter_name.get())
+                        && self.check_if_type_predicate_variable_is_declared_in_binding_pattern(name, parameter_name, &type_predicate.parameter_name.get())
                     {
                         has_reported_error = true;
                         break;
@@ -2508,9 +2508,9 @@ impl Checker {
             } else {
                 let block_locals = node.as_catch_clause().block.locals();
                 if let Some(block_locals) = block_locals {
-                    let caught_names: Vec<&'static str> = node.locals().map(|locals| locals.keys()).unwrap_or_default();
+                    let caught_names: Vec<TextView> = node.locals().map(|locals| locals.keys()).unwrap_or_default();
                     for caught_name in caught_names {
-                        if let Some(block_local) = block_locals.lookup(caught_name) {
+                        if let Some(block_local) = block_locals.lookup(&caught_name) {
                             if let Some(value_declaration) = block_local.value_declaration() {
                                 if block_local.flags().intersects(SymbolFlags::BlockScopedVariable) {
                                     self.grammar_error_on_node(value_declaration, &diagnostics::Cannot_redeclare_identifier_0_in_catch_clause, &[&caught_name]);

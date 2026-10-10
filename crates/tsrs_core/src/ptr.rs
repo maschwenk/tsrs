@@ -1156,8 +1156,6 @@ pub enum CensusField {
     /// `len` bytes at `off` never hold a pointer: scalar fields, padding, header words, enum payload that some variants
     /// leave uninitialized (copied from the stack with stale words). No scan step that overlaps them is a reference.
     NoPointer { off: usize, len: usize },
-    /// The word at `off` keeps an address in its low 48 bits and flag bits above them.
-    Tagged { off: usize },
     /// The word at `off` keeps an address / 8 in its low 45 bits when bit `word >> 62` is set in `modes`, else none.
     X8 { off: usize, modes: u8 },
     /// A slice's pointer word at `ptr`: a reference only while the length word at `len` is non-zero (an empty slice's

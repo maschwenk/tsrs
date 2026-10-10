@@ -746,7 +746,7 @@ impl CommonJSModuleTransformer {
             }
             return bindings;
         } else if is_file_level_reserved_generated_identifier(emit_context, name) {
-            let export_specifiers = info.export_specifiers.get(&name.text());
+            let export_specifiers = info.export_specifiers.get(name.text());
             return export_specifiers.iter().map(|s| s.name().unwrap()).collect();
         }
         Vec::new()

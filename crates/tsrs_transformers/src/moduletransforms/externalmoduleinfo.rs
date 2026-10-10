@@ -3,7 +3,7 @@ use super::*;
 #[derive(Default)]
 pub(crate) struct externalModuleInfo {
     pub(crate) external_imports: Vec<P<Node>>,                    // ImportDeclaration | ImportEqualsDeclaration | ExportDeclaration. imports and reexports of other external modules
-    pub(crate) export_specifiers: MultiMap<&'static str, P<Node>>, // Maps local names to their associated export specifiers (excludes reexports)
+    pub(crate) export_specifiers: MultiMap<String, P<Node>>, // Maps local names to their associated export specifiers (excludes reexports)
     pub(crate) exported_bindings: MultiMap<P<Node>, P<Node>>,      // Maps local declarations to their associated export aliases
     pub(crate) exported_names: Vec<P<Node>>,                      // all exported names in the module, both local and re-exported, excluding the names of locally exported function declarations
     pub(crate) exported_functions: OrderedSet<P<Node>>,           // all of the top-level exported function declarations
@@ -15,7 +15,7 @@ struct externalModuleInfoCollector {
     source_file: P<SourceFile>,
     emit_context: P<EmitContext>,
     resolver: ReferenceResolverRef,
-    unique_exports: Set<&'static str>,
+    unique_exports: Set<String>,
     has_export_default: bool,
     output: externalModuleInfo,
 }
@@ -164,9 +164,9 @@ impl externalModuleInfoCollector {
     }
 
     // externalmoduleinfo.go:162
-    fn add_unique_export(&mut self, name: &'static str) -> bool {
-        if !self.unique_exports.has(&name) {
-            self.unique_exports.add(name);
+    fn add_unique_export(&mut self, name: &str) -> bool {
+        if !self.unique_exports.keys().contains(name) {
+            self.unique_exports.add(name.to_owned());
             return true;
         }
         false
@@ -191,12 +191,13 @@ impl externalModuleInfoCollector {
     fn add_exported_names_for_export_declaration(&mut self, node: P<Node>) {
         let n = node.as_export_declaration();
         for &specifier in n.export_clause.unwrap().elements() {
-            let specifier_name_text = specifier.name().unwrap().text();
+            let specifier_name_text_owner = specifier.name().unwrap();
+            let specifier_name_text = specifier_name_text_owner.text();
             if self.add_unique_export(specifier_name_text) {
                 let name = specifier.property_name_or_name().unwrap();
                 if name.kind() != Kind::StringLiteral {
                     if n.module_specifier.is_none() {
-                        self.output.export_specifiers.add(name.text(), specifier);
+                        self.output.export_specifiers.add(name.text().to_owned(), specifier);
                     }
 
                     let mut decl = self.resolver.get_referenced_import_declaration(self.emit_context.most_original(Some(name)).unwrap());
@@ -205,7 +206,7 @@ impl externalModuleInfoCollector {
                     }
                     if let Some(decl) = decl {
                         if decl.kind() == Kind::FunctionDeclaration {
-                            self.unique_exports.delete(&specifier_name_text);
+                            self.unique_exports.m.remove(specifier_name_text);
                             self.add_exported_function_declaration(decl, specifier.name(), ast::module_export_name_is_default(specifier.name().unwrap()));
                             continue;
                         }

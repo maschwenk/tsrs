@@ -97,8 +97,9 @@ them. Returned compile/emit results retain their compiler or incremental owner w
 
 Symbol-table entries use `Vec`, and their filter/extra-record state is a Rust enum with an owned `Box`. Container
 cloning and destruction use Rust's implementations, without raw buffer management or unchecked thread traits.
-Their packed symbol pointers and static key referents still require the legacy graph owner
-(`notes/rust-owned-symbol-storage.md`); owning a table does not establish ownership of those referents.
+Symbol names and exceptional keys now own their text, and returned key snapshots retain it independently of
+the graph. Packed symbol pointers still require the legacy graph owner; owning a table does not establish
+ownership of those referents (`notes/rust-owned-symbol-storage.md`, `notes/rust-owned-type-text.md`).
 
 Type records own a closed Rust enum of payload boxes. Payload views borrow the type record; no header-offset
 cast or static payload view remains. Resolved members, reference-instantiation tables and union/intersection
@@ -113,7 +114,13 @@ mapper views borrow their record. Signature/inference tails and candidate vector
 and comparison callbacks use `Arc`. Manual mapper/inference escape and recycling are removed
 (`notes/rust-owned-type-arrays.md`). Checker link/cache arrays and template-text lists now own their storage too;
 cache values that are copied before recursion use boxed slices. Deferred mapper closures retain their input lists.
-Their string and raw graph referents remain legacy (`notes/rust-owned-checker-arrays.md`).
+Raw graph referents remain legacy (`notes/rust-owned-checker-arrays.md`).
+
+Literal/bigint/template text, computed and intrinsic names, type-predicate parameter names and checker text caches
+use `TextView`/`TextCell` snapshots. Literal and evaluator values use `SnapshotCell`: borrow for a synchronous
+lookup, or retain a cloned value across mutation. AST literal and synthesized identifier factories accept short
+string borrows and own their stored text. Getters borrow the record. Source-file/compact-identifier text and
+joined JSDoc/JSX text still use legacy storage; no new static bridge is allowed (`notes/rust-owned-type-text.md`).
 
 Build orchestrators and their hosts use `Arc`; the host's back-reference is weak. Returned build outcomes retain
 the actual orchestrator, including programs whose diagnostics they expose, through conversion to an API response.

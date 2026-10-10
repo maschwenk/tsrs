@@ -216,17 +216,6 @@ impl NodeFactory {
         self.scratch
     }
 
-    /// Copies `s` for a node this factory creates (identifier and literal text): into the scratch region for a
-    /// scratch factory, like the node.
-    #[inline]
-    pub fn alloc_text(&self, s: &str) -> &'static str {
-        if self.scratch {
-            tsrs_core::alloc_str_scratch(s)
-        } else {
-            alloc_str(s)
-        }
-    }
-
     #[inline]
     fn alloc_nodes_vec(&self, nodes: Vec<P<Node>>) -> &'static [P<Node>] {
         if self.scratch {
@@ -729,7 +718,7 @@ impl Node {
     }
 
     /// Go `Text()`. Joined texts (JsxNamespacedName, JSDoc text) are allocated in the arena.
-    pub fn text(&self) -> &'static str {
+    pub fn text(&self) -> &str {
         match self.kind() {
             Kind::Identifier => self.as_identifier().text(),
             Kind::PrivateIdentifier => self.as_private_identifier().text(),
@@ -795,7 +784,7 @@ impl Node {
         }
     }
 
-    pub fn raw_text(&self) -> &'static str {
+    pub fn raw_text(&self) -> &str {
         match self.kind() {
             Kind::TemplateHead => self.as_template_head().raw_text(),
             Kind::TemplateMiddle => self.as_template_middle().raw_text(),
@@ -1716,7 +1705,6 @@ pub struct SourceFile {
     pub text_index: OwnedCell<u32>, // `register_source_text` index of `text` (compact identifiers, identifier.rs)
     pub imports: OwnedCell<&'static [P<Node>]>,              // []LiteralLikeNode
     pub module_augmentations: OwnedCell<&'static [P<Node>]>, // []ModuleName
-    pub ambient_module_names: OwnedCell<&'static [&'static str]>,
     pub comment_directives: OwnedCell<&'static [CommentDirective]>,
     // Written by the parser; with lazy JSDoc, also by any checker thread under `jsdoc_mu` (Go `jsdocMu`).
     pub(crate) has_lazy_jsdoc: OwnedCell<bool>,
@@ -1755,11 +1743,12 @@ pub struct SourceFile {
 /// transition this is a separately tracked arena allocation; the Oxc file owner will move it to its dropped sidecar.
 pub(crate) struct SourceFileState {
     parse_options: SourceFileParseOptions,
+    ambient_module_names: tsrs_core::owned_array::ArrayCell<tsrs_core::TextView>,
     pub(crate) jsdoc_cache: FrozenCell<FxHashMap<P<Node>, &'static [P<Node>]>>,
     jsdoc_mu: RwLock<()>,
-    identifiers: OnceLock<Set<&'static str>>,
+    identifiers: OnceLock<Set<String>>,
     // ast.go:2517 nameTableOnce/nameTable (Go map, random order; insertion order here)
-    name_table: OnceLock<tsrs_core::collections::OrderedMap<&'static str, i32>>,
+    name_table: OnceLock<tsrs_core::collections::OrderedMap<String, i32>>,
     // Fields set by ECMALineMap
     ecma_line_map: OnceLock<&'static [TextPos]>,
     // Fields for UTF-8 to UTF-16 position mapping
@@ -1787,6 +1776,7 @@ impl NodeFactory {
         }
         let state = P::new_in(self.scratch, SourceFileState {
             parse_options: opts,
+            ambient_module_names: tsrs_core::owned_array::ArrayCell::default(),
             jsdoc_cache: FrozenCell::new(FxHashMap::default()),
             jsdoc_mu: RwLock::new(()),
             identifiers: OnceLock::new(),
@@ -1815,7 +1805,6 @@ impl NodeFactory {
             text_index: OwnedCell::new(crate::identifier::NO_SOURCE_TEXT),
             imports: OwnedCell::new(&[]),
             module_augmentations: OwnedCell::new(&[]),
-            ambient_module_names: OwnedCell::new(&[]),
             comment_directives: OwnedCell::new(&[]),
             has_lazy_jsdoc: OwnedCell::new(false),
             reparsed_clones: OwnedCell::new(&[]),
@@ -1899,24 +1888,24 @@ impl SourceFile {
     // GetNameTable returns a map of all names in the file to their positions.
     // If the name appears more than once, the value is -1.
     // ast.go:2857
-    pub fn get_name_table(&self) -> &tsrs_core::collections::OrderedMap<&'static str, i32> {
+    pub fn get_name_table(&self) -> &tsrs_core::collections::OrderedMap<String, i32> {
         if let Some(t) = self.state.name_table.get() {
             return t;
         }
         let _region = self.owner_region();
         self.state.name_table.get_or_init(|| {
-            let mut name_table: tsrs_core::collections::OrderedMap<&'static str, i32> = Default::default();
+            let mut name_table: tsrs_core::collections::OrderedMap<String, i32> = Default::default();
             let file: &'static SourceFile = self.as_node().as_source_file();
-            fn walk(node: P<Node>, file: &'static SourceFile, name_table: &mut tsrs_core::collections::OrderedMap<&'static str, i32>) -> bool {
+            fn walk(node: P<Node>, file: &'static SourceFile, name_table: &mut tsrs_core::collections::OrderedMap<String, i32>) -> bool {
                 if is_identifier(node) && !is_tag_name(node) && !node.text().is_empty()
                     || is_string_or_numeric_literal_like(node) && literal_is_name(node)
                     || is_private_identifier(node)
                 {
                     let text = node.text();
                     if name_table.contains_key(text) {
-                        name_table.insert(text, -1);
+                        name_table.insert(text.to_owned(), -1);
                     } else {
-                        name_table.insert(text, node.pos());
+                        name_table.insert(text.to_owned(), node.pos());
                     }
                 }
 
@@ -2045,7 +2034,7 @@ impl SourceFile {
         self.uses_uri_style_node_core_modules.set(other.uses_uri_style_node_core_modules.get());
         self.imports.set(other.imports.get());
         self.module_augmentations.set(other.module_augmentations.get());
-        self.ambient_module_names.set(other.ambient_module_names.get());
+        self.state.ambient_module_names.set(&other.state.ambient_module_names.get());
         self.comment_directives.set(other.comment_directives.get());
         self.pragmas.set(other.pragmas.get());
         self.referenced_files.set(other.referenced_files.get());
@@ -2134,8 +2123,12 @@ impl SourceFile {
     pub fn module_augmentations(&self) -> &'static [P<Node>] {
         self.module_augmentations.get()
     }
-    pub fn ambient_module_names(&self) -> &'static [&'static str] {
-        self.ambient_module_names.get()
+    pub fn set_ambient_module_names_owned(&self, names: Vec<tsrs_core::TextView>) {
+        self.state.ambient_module_names.set_owned(names);
+    }
+
+    pub fn ambient_module_names(&self) -> tsrs_core::owned_array::ArrayView<tsrs_core::TextView> {
+        self.state.ambient_module_names.get()
     }
     pub fn comment_directives(&self) -> &'static [CommentDirective] {
         self.comment_directives.get()
@@ -2218,9 +2211,9 @@ impl Node {
     }
 }
 
-fn collect_identifiers_for_source_file(source_file: &SourceFile) -> Set<&'static str> {
-    let mut identifiers: Set<&'static str> = Set::default();
-    fn collect(node: P<Node>, identifiers: &mut Set<&'static str>) -> bool {
+fn collect_identifiers_for_source_file(source_file: &SourceFile) -> Set<String> {
+    let mut identifiers: Set<String> = Set::default();
+    fn collect(node: P<Node>, identifiers: &mut Set<String>) -> bool {
         match node.kind() {
             Kind::Identifier
             | Kind::PrivateIdentifier
@@ -2228,7 +2221,7 @@ fn collect_identifiers_for_source_file(source_file: &SourceFile) -> Set<&'static
             | Kind::NumericLiteral
             | Kind::BigIntLiteral
             | Kind::NoSubstitutionTemplateLiteral => {
-                identifiers.add(node.text());
+                identifiers.add(node.text().to_owned());
             }
             _ => {}
         }
@@ -2708,6 +2701,34 @@ mod tests {
     }
 
     #[test]
+    fn factory_text_and_table_keys_survive_input_and_region_destruction() {
+        let region = tsrs_core::arena::Region::new(4096);
+        let (literal_text, keys) = {
+            let _scope = region.enter();
+            let factory = NodeFactory::new(NodeFactoryHooks::default());
+            let mut input = String::from("owned λ text");
+            let literal = factory.new_string_literal(&input, TokenFlags::None);
+            let identifier = factory.new_identifier(&input);
+            let symbol = Symbol::new(SymbolFlags::Property, &input);
+            let table = SymbolTable::new();
+            table.set(&input, symbol);
+            table.set("alias", symbol);
+            input.clear();
+            drop(input);
+            assert_eq!(literal.text(), "owned λ text");
+            assert_eq!(identifier.text(), "owned λ text");
+            assert_eq!(symbol.name(), "owned λ text");
+            let keys = table.keys();
+            assert_eq!(keys[0].as_ptr(), symbol.name().as_ptr());
+            (literal.as_string_literal().literal_like_node_base.text.clone(),
+             keys)
+        };
+        drop(region);
+        assert_eq!(literal_text, "owned λ text");
+        assert_eq!(keys, vec!["owned λ text", "alias"]);
+    }
+
+    #[test]
     fn symbol_table_order_and_snapshot() {
         let table = SymbolTable::new();
         let s1 = Symbol::new(SymbolFlags::Variable, "b");
@@ -2732,19 +2753,19 @@ mod tests {
     // binder/checker miss or duplicate members).
     #[test]
     fn symbol_table_indexed_order_and_delete() {
-        let names: Vec<&'static str> = (0..20).map(|i| &*Box::leak(format!("n{i}").into_boxed_str())).collect();
+        let names: Vec<String> = (0..20).map(|i| format!("n{i}")).collect();
         let syms: Vec<P<Symbol>> = names.iter().map(|n| Symbol::new(SymbolFlags::Property, n)).collect();
         let table = SymbolTable::with_capacity(2);
         for (n, s) in names.iter().zip(&syms) {
             table.set(n, *s);
         }
-        table.set(names[3], syms[0]);
-        table.delete(names[5]);
+        table.set(&names[3], syms[0]);
+        table.delete(&names[5]);
         table.delete("missing");
-        let mut expected: Vec<&str> = names.clone();
+        let mut expected: Vec<&str> = names.iter().map(String::as_str).collect();
         expected.remove(5);
         assert_eq!(table.keys(), expected);
-        assert_eq!(table.lookup(names[3]), Some(syms[0]));
+        assert_eq!(table.lookup(&names[3]), Some(syms[0]));
         for (i, n) in names.iter().enumerate() {
             match i {
                 3 => {}
@@ -2756,19 +2777,19 @@ mod tests {
         copy.set("new", syms[1]);
         assert_eq!(copy.len(), 20);
         assert_eq!(table.len(), 19);
-        assert_eq!(copy.lookup(names[19]), Some(syms[19]));
+        assert_eq!(copy.lookup(&names[19]), Some(syms[19]));
         // Keys that are not their symbol's name ("n3" -> n0, "new" -> n1) survive deletes before them.
         assert_eq!(copy.lookup("new"), Some(syms[1]));
-        copy.delete(names[1]);
-        copy.delete(names[0]);
-        assert_eq!(copy.lookup_entry(names[3]), Some((names[3], syms[0])));
-        assert_eq!(copy.keys().last(), Some(&"new"));
+        copy.delete(&names[1]);
+        copy.delete(&names[0]);
+        assert_eq!(copy.lookup_entry(&names[3]), Some(((&names[3]).into(), syms[0])));
+        assert_eq!(copy.keys().last().map(AsRef::as_ref), Some("new"));
         assert_eq!(copy.lookup("new"), Some(syms[1]));
         let small = SymbolTable::new();
         small.set("alias", syms[2]);
-        small.set(names[4], syms[4]);
+        small.set(&names[4], syms[4]);
         small.delete("alias");
-        assert_eq!(small.entries(), vec![(names[4], syms[4])]);
+        assert_eq!(small.entries(), vec![((&names[4]).into(), syms[4])]);
     }
 
     #[test]

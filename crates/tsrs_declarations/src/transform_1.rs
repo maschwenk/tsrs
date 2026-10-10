@@ -1151,19 +1151,19 @@ impl DeclarationTransformer {
     // transform.go:1192
     pub(crate) fn try_get_name_of_assigned_expression(&self, unwrapped: P<Node>) -> Option<P<Node>> {
         let mut name_node: Option<P<Node>> = None;
-        let mut name_text: &'static str = "";
+        let mut name_text = String::new();
         if !ast::is_property_access_expression(unwrapped) && unwrapped.name().is_some() {
-            name_text = unwrapped.name().unwrap().text();
+            unwrapped.name().unwrap().text().clone_into(&mut name_text);
         } else if ast::is_identifier(unwrapped) {
-            name_text = unwrapped.text();
+            unwrapped.text().clone_into(&mut name_text);
         }
         if !name_text.is_empty() && name_text != "default" {
-            if self.resolver.is_name_resolvable(self.enclosing_declaration.get(), name_text) {
+            if self.resolver.is_name_resolvable(self.enclosing_declaration.get(), &name_text) {
                 // create a unique name that shares the same text as its' base
-                name_node = Some(self.factory().new_unique_name_ex(name_text, printer::AutoGenerateOptions { flags: printer::GeneratedIdentifierFlags::Optimistic, ..Default::default() }));
+                name_node = Some(self.factory().new_unique_name_ex(&name_text, printer::AutoGenerateOptions { flags: printer::GeneratedIdentifierFlags::Optimistic, ..Default::default() }));
             } else {
                 // use the node's name as-is, since it's not otherwise in-scope
-                name_node = Some(self.factory().new_identifier(name_text));
+                name_node = Some(self.factory().new_identifier(&name_text));
             }
         }
         name_node

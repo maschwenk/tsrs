@@ -166,7 +166,7 @@ impl LanguageService {
         let mut literal: Option<LiteralValue> = None;
         for l in &data.literals {
             if completion_name_for_literal(file, &preferences, l) == item_data.name {
-                literal = Some(*l);
+                literal = Some(l.clone());
                 break;
             }
         }
@@ -682,7 +682,8 @@ pub(crate) fn get_jsdoc_parameter_completions(
         if ast::is_identifier(param.name().unwrap()) {
             // Named parameter
             let mut tabstop_counter = 1;
-            let param_name = param.name().unwrap().text();
+            let param_name_owner = param.name().unwrap();
+            let param_name = param_name_owner.text();
             let mut display_text = get_jsdoc_param_annotation(
                 param_name,
                 param.initializer(),
@@ -1020,7 +1021,8 @@ pub(crate) fn get_jsdoc_parameter_name_completions(tag: P<Node>) -> Vec<Completi
     if !ast::is_identifier(tag.name().unwrap()) {
         return Vec::new();
     }
-    let name_thus_far = tag.name().unwrap().text();
+    let name_thus_far_owner = tag.name().unwrap();
+    let name_thus_far = name_thus_far_owner.text();
     let js_doc = tag.parent().unwrap();
     let fn_ = js_doc.parent().unwrap();
     if !ast::is_function_like(fn_) {
@@ -1038,7 +1040,8 @@ pub(crate) fn get_jsdoc_parameter_name_completions(tag: P<Node>) -> Vec<Completi
             continue;
         }
 
-        let name = param.name().unwrap().text();
+        let name_owner = param.name().unwrap();
+        let name = name_owner.text();
         if tags.iter().any(|&t| t != tag && ast::is_jsdoc_parameter_tag(t) && ast::is_identifier(t.name().unwrap()) && t.name().unwrap().text() == name)
             || !name_thus_far.is_empty() && !name.starts_with(name_thus_far)
         {
@@ -1130,7 +1133,7 @@ impl LanguageService {
                                 elements.push(number);
                             }
                             LiteralValue::String(v) => {
-                                let literal = factory.new_string_literal(v, if quote_preference == QuotePreference::Single { TokenFlags::SingleQuote } else { TokenFlags::None });
+                                let literal = factory.new_string_literal(&v, if quote_preference == QuotePreference::Single { TokenFlags::SingleQuote } else { TokenFlags::None });
                                 elements.push(literal);
                             }
                             LiteralValue::Boolean(_) => {}

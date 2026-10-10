@@ -526,7 +526,7 @@ pub(crate) fn get_type_predicate_of_signature(host: &dyn CheckerHost, p: &Params
     let mut o = obj();
     o.num("kind", pred.kind() as i32 as f64);
     o.num("parameterIndex", pred.parameter_index() as f64);
-    o.str_nonempty("parameterName", pred.parameter_name());
+    o.str_nonempty("parameterName", &pred.parameter_name());
     if let Some(t) = pred.type_() {
         o.set("type", s.type_response(t)?);
     }

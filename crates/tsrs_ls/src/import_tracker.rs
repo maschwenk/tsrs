@@ -773,19 +773,19 @@ pub(crate) fn get_export_equals_local_symbol(imported_symbol: P<Symbol>, checker
 }
 
 // importTracker.go:701
-pub(crate) fn symbol_name_no_default(symbol: P<Symbol>) -> &'static str {
+pub(crate) fn symbol_name_no_default(symbol: P<Symbol>) -> String {
     if symbol.name() != ast::InternalSymbolNameDefault {
-        return symbol.name();
+        return symbol.name().to_owned();
     }
     for &decl in symbol.declarations() {
         let name = ast::get_name_of_declaration(Some(decl));
         if let Some(name) = name {
             if ast::is_identifier(name) {
-                return name.text();
+                return name.text().to_owned();
             }
         }
     }
-    ""
+    String::new()
 }
 
 // findModuleReferences finds all references to a module symbol across the given source files.

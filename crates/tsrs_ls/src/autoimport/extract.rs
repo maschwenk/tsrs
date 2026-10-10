@@ -167,7 +167,7 @@ impl exportExtractor<'_> {
         let mut exports = Vec::with_capacity(file_exports.map_or(0, |e| e.len()) + augmentation_export_count);
         if let Some(file_exports) = file_exports {
             for (name, symbol) in file_exports.entries() {
-                self.symbol_extractor.extract_from_symbol(name, symbol, &module_id, file.file_name(), file, &mut exports);
+                self.symbol_extractor.extract_from_symbol(&name, symbol, &module_id, file.file_name(), file, &mut exports);
             }
         }
         for &decl in &module_augmentations {
@@ -194,7 +194,7 @@ impl exportExtractor<'_> {
     fn extract_from_module_declaration(&mut self, decl: P<Node>, file: P<SourceFile>, module_id: &ModuleID, module_file_name: &str, exports: &mut Vec<Arc<Export>>) {
         if let Some(decl_exports) = decl.symbol().unwrap().exports() {
             for (name, symbol) in decl_exports.entries() {
-                self.symbol_extractor.extract_from_symbol(name, symbol, module_id, module_file_name, file, exports);
+                self.symbol_extractor.extract_from_symbol(&name, symbol, module_id, module_file_name, file, exports);
             }
         }
     }
@@ -440,7 +440,7 @@ impl symbolExtractor<'_> {
         }
 
         let mut loc: Option<P<Node>> = None;
-        let mut name = "";
+        let mut name = String::new();
         let mut default_declaration = false;
         match syntax {
             ExportSyntax::Named => {
@@ -449,7 +449,7 @@ impl symbolExtractor<'_> {
                     let n = decl.name().or(decl.property_name()).unwrap();
                     if n.kind() == Kind::Identifier {
                         loc = Some(n);
-                        name = n.text();
+                        n.text().clone_into(&mut name);
                     }
                 }
             }
@@ -467,12 +467,12 @@ impl symbolExtractor<'_> {
             let expression = decl.expression().unwrap();
             if expression.kind() == Kind::Identifier {
                 loc = Some(expression);
-                name = expression.text();
+                expression.text().clone_into(&mut name);
             }
         }
 
         if let Some(loc) = loc {
-            let local = self.local_name_resolver.resolve(&mut (), Some(loc), name, SymbolFlags::All, None, false, false);
+            let local = self.local_name_resolver.resolve(&mut (), Some(loc), &name, SymbolFlags::All, None, false, false);
             if let Some(local) = local {
                 if !ast::is_non_local_alias(local, SymbolFlags::None) {
                     return Some(local);

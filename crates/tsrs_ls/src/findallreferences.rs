@@ -2299,7 +2299,7 @@ impl<'a> RefState<'a> {
         if text.is_empty() {
             let s = tsrs_binder::get_local_symbol_for_export_default(symbol).or_else(|| get_non_module_symbol_of_merged_module_symbol(symbol)).unwrap_or(symbol);
             let symbol_name = ast::symbol_name(s);
-            if let Some(module_name) = ast::try_get_ambient_module_name_from_symbol_name(symbol_name) {
+            if let Some(module_name) = ast::try_get_ambient_module_name_from_symbol_name(&symbol_name) {
                 text = module_name.to_string();
             } else {
                 text = symbol_name.to_string();

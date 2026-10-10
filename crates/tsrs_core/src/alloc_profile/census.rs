@@ -810,7 +810,6 @@ struct ClassLayout {
     variants: Vec<(u32, u32, u8)>,
     /// Scan offsets (4-byte steps) whose 8 bytes overlap a `NoPointer` range, or straddle a `Tagged` / `X8` word.
     skip: Vec<u32>,
-    tagged: Vec<u32>,
     x8: Vec<(u32, u8)>,
     /// (pointer offset, length offset)
     slices: Vec<(u32, u32)>,
@@ -838,10 +837,6 @@ fn class_layouts(classes: &[Class]) -> Vec<Option<ClassLayout>> {
                             // Every 4-byte step `o` with [o, o + 8) overlapping [off, off + len).
                             let first = (off + 1).saturating_sub(8).div_ceil(4) * 4;
                             l.skip.extend((first..off + len).step_by(4).map(|o| o as u32));
-                        }
-                        crate::CensusField::Tagged { off } => {
-                            l.tagged.push(off as u32);
-                            l.skip.extend([off.wrapping_sub(4) as u32, off as u32 + 4]);
                         }
                         crate::CensusField::X8 { off, modes } => {
                             l.x8.push((off as u32, modes));
@@ -930,7 +925,7 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
     // objects whose addresses linger in dead stack slots, struct padding and pooled vectors. So reachability is
     // recomputed with only the references the program actually stores ("strong" edges): a plain 48-bit pointer to
     // the start of a block, read as the registered layout of the referrer's type says (`register_layout`: padding, scalar
-    // and header words are skipped, tagged and x8-encoded fields decoded, empty slices ignored), x8-encoded words
+    // and header words are skipped, x8-encoded fields decoded, empty slices ignored), x8-encoded words
     // otherwise only for symbol table entries in heap blocks. An edge into a freed block must also come from a block
     // allocated before the free (later blocks can only hold stale copies) and not be 64 KiB-aligned (a stale pointer
     // whose low bytes a small field overwrote). A freed block reached this way is a violation.
@@ -957,7 +952,7 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
     // Decides whether `w` (at `off` in block `from`, or in a root) is a strong edge; returns the target.
     let edge = |from: Option<usize>, off: usize, w: u64| -> Option<usize> {
         let mut c = w & MASK48;
-        // The word is a registered tagged / x8 field, whose high bits are flags.
+        // The word is a registered x8 field, whose high bits are flags.
         let mut flagged = false;
         let (born, heap) = match from {
             Some(j) => {
@@ -977,9 +972,6 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
                         if len as usize + 8 <= rb.size as usize && read(rb.start as usize + len as usize) == 0 {
                             return None;
                         }
-                    }
-                    if l.tagged.contains(&o) {
-                        flagged = true;
                     }
                     if l.thin.contains(&o) {
                         if w & 1 != 0 {

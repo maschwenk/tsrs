@@ -218,7 +218,7 @@ impl crate::NodeFactory {
 
     // factory.go:375
     pub fn new_global_method_call(&self, global_object_name: &str, method_name: &str, arguments_list: Vec<P<Node>>) -> P<Node> {
-        self.new_method_call(self.new_identifier(alloc_str(global_object_name)), self.new_identifier(alloc_str(method_name)), arguments_list)
+        self.new_method_call(self.new_identifier(global_object_name), self.new_identifier(method_name), arguments_list)
     }
 
     // factory.go:379
@@ -235,7 +235,7 @@ impl crate::NodeFactory {
     pub fn new_array_slice_call(&self, array: P<Node>, start: i32) -> P<Node> {
         let mut args = Vec::new();
         if start != 0 {
-            args.push(self.new_numeric_literal(alloc_str(&start.to_string()), TokenFlags::None));
+            args.push(self.new_numeric_literal(&start.to_string(), TokenFlags::None));
         }
         self.new_method_call(array, self.new_identifier("slice"), args)
     }
@@ -439,7 +439,7 @@ impl crate::NodeFactory {
     // Allocates a new Identifier representing a reference to a helper function.
     // factory.go:593
     pub fn new_unscoped_helper_name(&self, name: &str) -> P<Node> {
-        let node = self.new_identifier(alloc_str(name));
+        let node = self.new_identifier(name);
         self.emit_context().set_emit_flags(node, EmitFlags::HelperName);
         node
     }
@@ -477,13 +477,13 @@ impl crate::NodeFactory {
     pub fn new_metadata_helper(&self, metadata_key: &str, metadata_value: P<Node>) -> P<Node> {
         self.emit_context().request_emit_helper(helper(&METADATA_HELPER));
 
-        self.new_helper_call("__metadata", vec![self.new_string_literal(alloc_str(metadata_key), TokenFlags::None), metadata_value])
+        self.new_helper_call("__metadata", vec![self.new_string_literal(metadata_key, TokenFlags::None), metadata_value])
     }
 
     // factory.go:638
     pub fn new_param_helper(&self, expression: P<Node>, parameter_offset: i32, location: TextRange) -> P<Node> {
         self.emit_context().request_emit_helper(helper(&PARAM_HELPER));
-        let helper = self.new_helper_call("__param", vec![self.new_numeric_literal(alloc_str(&parameter_offset.to_string()), TokenFlags::None), expression]);
+        let helper = self.new_helper_call("__param", vec![self.new_numeric_literal(&parameter_offset.to_string(), TokenFlags::None), expression]);
         helper.set_loc(location);
         helper
     }
@@ -873,7 +873,7 @@ impl crate::NodeFactory {
         let private_expr = if is_private { self.new_true_expression() } else { self.new_false_expression() };
 
         let props = vec![
-            self.new_property_assignment(None, self.new_identifier("kind"), None, None, self.new_string_literal(alloc_str(kind), TokenFlags::None)),
+            self.new_property_assignment(None, self.new_identifier("kind"), None, None, self.new_string_literal(kind, TokenFlags::None)),
             self.new_property_assignment(None, self.new_identifier("name"), None, None, name_value),
             self.new_property_assignment(None, self.new_identifier("static"), None, None, static_expr),
             self.new_property_assignment(None, self.new_identifier("private"), None, None, private_expr),
@@ -917,7 +917,7 @@ impl crate::NodeFactory {
     pub fn new_set_function_name_helper(&self, fn_: P<Node>, name: P<Node>, prefix: &str) -> P<Node> {
         self.emit_context().request_emit_helper(helper(&SET_FUNCTION_NAME_HELPER));
         let arguments = if !prefix.is_empty() {
-            vec![fn_, name, self.new_string_literal(alloc_str(prefix), TokenFlags::None)]
+            vec![fn_, name, self.new_string_literal(prefix, TokenFlags::None)]
         } else {
             vec![fn_, name]
         };

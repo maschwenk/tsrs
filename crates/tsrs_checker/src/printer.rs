@@ -1394,7 +1394,7 @@ impl Checker {
                                 if table.is_none() {
                                     table = Some(SymbolTable::new());
                                 }
-                                table.unwrap().set(key, member_symbol);
+                                table.unwrap().set(&key, member_symbol);
                             }
                         }
                     }
@@ -1434,7 +1434,8 @@ impl Checker {
             return Some(table);
         }
         let class_symbol = self.get_symbol_of_declaration(location);
-        let name_text = location.as_class_expression().name().unwrap().text();
+        let name_text_owner = location.as_class_expression().name().unwrap();
+        let name_text = name_text_owner.text();
         if name_text.is_empty() || class_symbol.is_none() {
             return None;
         }

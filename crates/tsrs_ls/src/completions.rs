@@ -1268,9 +1268,9 @@ impl getCompletionDataState {
         let members = get_properties_for_completion(container_expected_type, type_checker);
         let existing_members = get_properties_for_completion(container_actual_type, type_checker);
 
-        let mut existing_member_names: FxHashSet<&'static str> = FxHashSet::default();
+        let mut existing_member_names: FxHashSet<String> = FxHashSet::default();
         for member in existing_members {
-            existing_member_names.insert(member.name());
+            existing_member_names.insert(member.name().to_owned());
         }
 
         self.symbols.extend(members.into_iter().filter(|member| !existing_member_names.contains(member.name())));
@@ -1542,15 +1542,15 @@ impl getCompletionDataState {
         self.is_new_identifier_location = false;
         let exports = type_checker.get_exports_and_properties_of_module(module_specifier_symbol);
 
-        let mut existing: FxHashSet<&'static str> = FxHashSet::default();
+        let mut existing: FxHashSet<String> = FxHashSet::default();
         for &element in named_imports_or_exports.elements() {
             if is_currently_editing_node(element, self.file, self.position) {
                 continue;
             }
-            existing.insert(element.property_name_or_name().unwrap().text());
+            existing.insert(element.property_name_or_name().unwrap().text().to_owned());
         }
         let uniques: Vec<P<Symbol>> =
-            exports.into_iter().filter(|&symbol| ast::symbol_name(symbol) != ast::InternalSymbolNameDefault && !existing.contains(ast::symbol_name(symbol))).collect();
+            exports.into_iter().filter(|&symbol| ast::symbol_name(symbol) != ast::InternalSymbolNameDefault && !existing.contains(ast::symbol_name(symbol).as_ref())).collect();
 
         let uniques_is_empty = uniques.is_empty();
         self.symbols.extend(uniques);
@@ -1579,9 +1579,9 @@ impl getCompletionDataState {
 
         // Go checks the attribute list for nil; the parser always creates it.
         let elements: &'static [P<Node>] = import_attributes.as_import_attributes().attributes.nodes();
-        let existing: FxHashSet<&'static str> = elements.iter().map(|el| el.as_import_attribute().name.unwrap().text()).collect();
+        let existing: FxHashSet<String> = elements.iter().map(|el| el.as_import_attribute().name.unwrap().text().to_owned()).collect();
         let type_at_location = type_checker.get_type_at_location(import_attributes);
-        let uniques: Vec<P<Symbol>> = type_checker.get_apparent_properties(type_at_location).into_iter().filter(|&symbol| !existing.contains(ast::symbol_name(symbol))).collect();
+        let uniques: Vec<P<Symbol>> = type_checker.get_apparent_properties(type_at_location).into_iter().filter(|&symbol| !existing.contains(ast::symbol_name(symbol).as_ref())).collect();
         self.symbols.extend(uniques);
         Ok(globalsSearch::Success)
     }
@@ -1616,7 +1616,7 @@ impl getCompletionDataState {
         if let Some(locals) = locals_container.locals() {
             for (name, symbol) in locals.entries() {
                 self.symbols.push(symbol);
-                if local_exports.is_some_and(|e| e.has(name)) {
+                if local_exports.is_some_and(|e| e.has(&name)) {
                     let symbol_id = ast::get_symbol_id(symbol);
                     self.symbol_to_sort_text_map.insert(symbol_id, SORT_TEXT_OPTIONAL_MEMBER.to_string());
                 }
@@ -1747,7 +1747,7 @@ impl getCompletionDataState {
         // Set sort texts.
         for &symbol in &filtered_symbols {
             let symbol_id = ast::get_symbol_id(symbol);
-            if spread_member_names.contains(ast::symbol_name(symbol)) {
+            if spread_member_names.contains(ast::symbol_name(symbol).as_ref()) {
                 self.symbol_to_sort_text_map.insert(symbol_id, SORT_TEXT_MEMBER_DECLARED_BY_SPREAD_ASSIGNMENT.to_string());
             }
             if symbol.flags().intersects(SymbolFlags::Optional) {

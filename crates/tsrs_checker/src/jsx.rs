@@ -902,7 +902,7 @@ impl Checker {
                     }
                 }
                 // If there are children in the body of JSX element, create dummy attribute "children" with the union of children types so that it will pass the attribute checking process
-                let children_prop_symbol = self.new_symbol(SymbolFlags::Property, alloc_str(&jsx_children_property_name));
+                let children_prop_symbol = self.new_symbol(SymbolFlags::Property, &jsx_children_property_name);
                 let links = self.value_symbol_links.get_key(children_prop_symbol);
                 if child_types.len() == 1 {
                     self.value_symbol_links.at(links).resolved_type.set(Some(child_types[0]));
@@ -915,7 +915,7 @@ impl Checker {
                     self.value_symbol_links.at(links).resolved_type.set(Some(t));
                 }
                 // Fake up a property declaration for the children
-                let name = self.factory.new_identifier(alloc_str(&jsx_children_property_name));
+                let name = self.factory.new_identifier(&jsx_children_property_name);
                 let value_declaration = self.factory.new_property_signature_declaration(None, name, None /*postfixToken*/, None /*type*/, None /*initializer*/);
                 children_prop_symbol.set_value_declaration(Some(value_declaration));
                 value_declaration.set_parent(Some(attribute_parent));
@@ -1495,7 +1495,7 @@ impl Checker {
                 } else {
                     let local_jsx_namespace = self.get_local_jsx_namespace(file);
                     if !local_jsx_namespace.is_empty() {
-                        self.source_file_links.at(links).local_jsx_namespace.set(alloc_str(&local_jsx_namespace));
+                        self.source_file_links.at(links).local_jsx_namespace.set(&local_jsx_namespace);
                         return self.source_file_links.at(links).local_jsx_namespace.get().to_string();
                     }
                 }
@@ -1514,7 +1514,7 @@ impl Checker {
             }
         }
         if self._jsx_factory_entity.is_none() {
-            let left = self.factory.new_identifier(alloc_str(&self._jsx_namespace));
+            let left = self.factory.new_identifier(&self._jsx_namespace);
             let right = self.factory.new_identifier("createElement");
             self._jsx_factory_entity = Some(self.factory.new_qualified_name(left, right));
         }

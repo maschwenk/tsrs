@@ -380,9 +380,9 @@ impl EmitContext {
                 left = splice(&left, 0, 0, &declarations[..right_standard_prologue_end]).into_owned();
                 changed = true;
             } else {
-                let mut left_prologues: FxHashSet<&'static str> = FxHashSet::default();
+                let mut left_prologues: FxHashSet<String> = FxHashSet::default();
                 for &left_prologue in &statements[..left_standard_prologue_end] {
-                    left_prologues.insert(left_prologue.expression().unwrap().text());
+                    left_prologues.insert(left_prologue.expression().unwrap().text().to_owned());
                 }
                 for i in (0..right_standard_prologue_end).rev() {
                     let right_prologue = declarations[i];

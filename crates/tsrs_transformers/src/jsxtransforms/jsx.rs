@@ -62,7 +62,7 @@ impl JSXTransformer {
             f.new_unique_name_ex("_jsxFileName", printer::AutoGenerateOptions { flags: printer::GeneratedIdentifierFlags::Optimistic | printer::GeneratedIdentifierFlags::FileLevel, ..Default::default() }),
             None,
             None,
-            Some(f.new_string_literal(alloc_str(self.current_source_file().file_name()), TokenFlags::None)),
+            Some(f.new_string_literal(self.current_source_file().file_name(), TokenFlags::None)),
         );
         self.filename_declaration.set(Some(d));
         d.as_variable_declaration().name()
@@ -264,7 +264,7 @@ impl JSXTransformer {
                     let s = f.new_import_declaration(
                         None,
                         Some(f.new_import_clause(Kind::Unknown, None, Some(f.new_named_imports(f.new_node_list(get_sorted_specifiers(import_specifiers_map)))))),
-                        f.new_string_literal(alloc_str(import_source), TokenFlags::None),
+                        f.new_string_literal(import_source, TokenFlags::None),
                         None,
                     );
                     ast::set_parent_in_children(s);
@@ -289,7 +289,7 @@ impl JSXTransformer {
                                 f.new_binding_pattern(Kind::ObjectBindingPattern, f.new_node_list(as_binding_elems)),
                                 None,
                                 None,
-                                Some(f.new_call_expression(f.new_identifier("require"), None, None, f.new_node_list(vec![f.new_string_literal(alloc_str(import_source), TokenFlags::None)]), NodeFlags::None)),
+                                Some(f.new_call_expression(f.new_identifier("require"), None, None, f.new_node_list(vec![f.new_string_literal(import_source, TokenFlags::None)]), NodeFlags::None)),
                             )]),
                             NodeFlags::Const,
                         ),
@@ -397,7 +397,7 @@ impl JSXTransformer {
                 f.new_string_literal(tag_name.text(), TokenFlags::None)
             } else if ast::is_jsx_namespaced_name(tag_name) {
                 let nn = tag_name.as_jsx_namespaced_name();
-                f.new_string_literal(alloc_str(&format!("{}:{}", nn.namespace.text(), nn.name.text())), TokenFlags::None)
+                f.new_string_literal(&format!("{}:{}", nn.namespace.text(), nn.name.text()), TokenFlags::None)
             } else {
                 f.create_expression_from_entity_name(tag_name)
             }
@@ -573,7 +573,7 @@ impl JSXTransformer {
         }
         // must be jsx namespace
         let nn = name.as_jsx_namespaced_name();
-        self.factory().new_string_literal(alloc_str(&format!("{}:{}", nn.namespace.text(), nn.name.text())), TokenFlags::None)
+        self.factory().new_string_literal(&format!("{}:{}", nn.namespace.text(), nn.name.text()), TokenFlags::None)
     }
 
     // jsx.go:524
@@ -586,7 +586,7 @@ impl JSXTransformer {
             // Always recreate the literal to escape any escape sequences or newlines which may be in the original jsx string and which
             // Need to be escaped to be handled correctly in a normal string
             let token_flags = node.as_string_literal().literal_like_node_base.token_flags.get();
-            let res = f.new_string_literal(alloc_str(&decode_entities(node.text())), token_flags);
+            let res = f.new_string_literal(&decode_entities(node.text()), token_flags);
             res.set_loc(node.loc());
             // Preserve the original quote style (single vs double quotes)
             res.as_string_literal().literal_like_node_base.token_flags.set(token_flags);
@@ -640,8 +640,8 @@ impl JSXTransformer {
                 args.push(f.new_object_literal_expression(
                     f.new_node_list(vec![
                         f.new_property_assignment(None, f.new_identifier("fileName"), None, None, self.get_current_file_name_expression()),
-                        f.new_property_assignment(None, f.new_identifier("lineNumber"), None, None, f.new_numeric_literal(alloc_str(&(line as i64 + 1).to_string()), TokenFlags::None)),
-                        f.new_property_assignment(None, f.new_identifier("columnNumber"), None, None, f.new_numeric_literal(alloc_str(&(col as i64 + 1).to_string()), TokenFlags::None)),
+                        f.new_property_assignment(None, f.new_identifier("lineNumber"), None, None, f.new_numeric_literal(&(line as i64 + 1).to_string(), TokenFlags::None)),
+                        f.new_property_assignment(None, f.new_identifier("columnNumber"), None, None, f.new_numeric_literal(&(col as i64 + 1).to_string(), TokenFlags::None)),
                     ]),
                     false,
                 ));
@@ -685,7 +685,7 @@ impl JSXTransformer {
         // hardened aginast this, so long as the node retains original node pointers back to a parsed node
         let f = self.factory();
         let react_namespace = if react_namespace.is_empty() { "React" } else { react_namespace };
-        let react = f.new_identifier(alloc_str(react_namespace));
+        let react = f.new_identifier(react_namespace);
         react.set_flags(react.flags() & !NodeFlags::Synthesized);
 
         // Set the parent that is in parse tree
@@ -824,7 +824,7 @@ impl JSXTransformer {
         if fixed.is_empty() {
             return None;
         }
-        Some(self.factory().new_string_literal(alloc_str(&fixed), TokenFlags::None))
+        Some(self.factory().new_string_literal(&fixed, TokenFlags::None))
     }
 }
 

@@ -40,7 +40,7 @@ impl NodeBuilderImpl {
 
         let renamed = match kind {
             propertyNameNodeKind::Identifier => self.new_identifier(c, &text, None),
-            propertyNameNodeKind::StringLiteral => self.f.new_string_literal(self.f.alloc_text(&text), TokenFlags::None),
+            propertyNameNodeKind::StringLiteral => self.f.new_string_literal(&text, TokenFlags::None),
             _ => return Some(res),
         };
         self.e.set_original(renamed, res);
@@ -260,8 +260,8 @@ impl NodeBuilderImpl {
             if let Some(attributes) = parent.as_import_type_node().attributes {
                 mode = ast::get_resolution_mode_override(Some(attributes), None).unwrap_or(RESOLUTION_MODE_NONE);
             }
-            let mut name: &'static str = lit.text();
-            let original_name = name;
+            let mut name = TextView::from(lit.text());
+            let original_name = name.clone();
             let node_symbol = self.try_get_resolved_symbol_from_type_node(c, parent);
             let meaning = if parent.as_import_type_node().is_type_of { SymbolFlags::Value } else { SymbolFlags::Type };
             let mut parent_symbol: Option<P<Symbol>> = None;
@@ -280,7 +280,7 @@ impl NodeBuilderImpl {
             }
             if !name.is_empty() && name.contains("/node_modules/") {
                 ctx.encountered_error.set(true);
-                ctx.tracker.get().unwrap().report_likely_unsafe_import_required_error(name, "");
+                ctx.tracker.get().unwrap().report_likely_unsafe_import_required_error(&name, "");
             }
             if name != original_name {
                 return name.to_string();
@@ -295,7 +295,7 @@ impl NodeBuilderImpl {
         if new_name.is_empty() {
             return lit;
         }
-        let res = self.f.new_string_literal(self.f.alloc_text(&new_name), TokenFlags::None);
+        let res = self.f.new_string_literal(&new_name, TokenFlags::None);
         self.e.set_original(res, lit);
         res
     }

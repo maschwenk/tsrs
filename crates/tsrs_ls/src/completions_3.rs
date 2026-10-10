@@ -628,15 +628,15 @@ impl LanguageService {
         mut sorted_entries: Vec<CompletionItem>,
     ) -> Vec<CompletionItem> {
         let name_table = file.get_name_table();
-        for (&name, &pos) in name_table {
+        for (name, &pos) in name_table {
             // Skip identifiers produced only from the current location
             if pos == position {
                 continue;
             }
-            if !unique_names.contains(name) && scanner::is_identifier_text(name, LanguageVariant::Standard) {
-                unique_names.insert(name.to_string());
+            if !unique_names.contains(name) && scanner::is_identifier_text(&name, LanguageVariant::Standard) {
+                unique_names.insert(name.clone());
                 sorted_entries.push(CompletionItem::new(lsproto::CompletionItem {
-                    label: name.to_string(),
+                    label: name.clone(),
                     kind: Some(lsproto::CompletionItemKind::Text),
                     sort_text: Some(SORT_TEXT_JAVASCRIPT_IDENTIFIERS.to_string()),
                     commit_characters: Some(Vec::new()),
@@ -1342,7 +1342,7 @@ pub(crate) fn filter_class_members_list(
         .iter()
         .copied()
         .filter(|&property_symbol| {
-            !existing_member_names.contains(ast::symbol_name(property_symbol))
+            !existing_member_names.contains(ast::symbol_name(property_symbol).as_ref())
                 && !property_symbol.declarations().is_empty()
                 && !checker::get_declaration_modifier_flags_from_symbol_exported(property_symbol).intersects(ModifierFlags::Private)
                 && !(property_symbol.value_declaration().is_some() && ast::is_private_identifier_class_element_declaration(property_symbol.value_declaration().unwrap()))
@@ -1437,7 +1437,7 @@ pub(crate) fn filter_jsx_attributes(
     position: i32,
     type_checker: &mut Checker,
 ) -> (Vec<P<Symbol>>, FxHashSet<String>) {
-    let mut existing_names: FxHashSet<&'static str> = FxHashSet::default();
+    let mut existing_names: FxHashSet<String> = FxHashSet::default();
     let mut members_declared_by_spread_assignment: FxHashSet<String> = FxHashSet::default();
     for &attr in attributes {
         // If this is the item we are editing right now, do not filter it out.
@@ -1446,7 +1446,7 @@ pub(crate) fn filter_jsx_attributes(
         }
 
         if attr.kind() == Kind::JsxAttribute {
-            existing_names.insert(attr.name().unwrap().text());
+            existing_names.insert(attr.name().unwrap().text().to_owned());
         } else if ast::is_jsx_spread_attribute(attr) {
             set_member_declared_by_spread_assignment(attr, &mut members_declared_by_spread_assignment, type_checker);
         }
@@ -1726,7 +1726,7 @@ impl LanguageService {
 
     // completions.go:5146
     fn get_label_statement_completions(&self, ctx: &Context, node: P<Node>, file: P<SourceFile>, position: i32) -> Vec<CompletionItem> {
-        let mut uniques: FxHashSet<&'static str> = FxHashSet::default();
+        let mut uniques: FxHashSet<String> = FxHashSet::default();
         let mut items: Vec<CompletionItem> = Vec::new();
         let mut current = Some(node);
         while let Some(c) = current {
@@ -1734,8 +1734,9 @@ impl LanguageService {
                 break;
             }
             if ast::is_labeled_statement(c) {
-                let name = c.label().unwrap().text();
-                if uniques.insert(name) {
+                let name_owner = c.label().unwrap();
+                let name = name_owner.text();
+                if uniques.insert(name.to_owned()) {
                     let lsp_item = self.create_lsp_completion_item(
                         ctx,
                         name,

@@ -255,7 +255,7 @@ pub(crate) fn get_literal_text(node: P<Node>, source_file: Option<P<SourceFile>>
             // If a NoSubstitutionTemplateLiteral appears to have a substitution in it, the original text
             // had to include a backslash: `not \${a} substitution`.
             let text = node.text();
-            let raw_text = node.template_literal_like_data().unwrap().raw_text;
+            let raw_text = &node.template_literal_like_data().unwrap().raw_text;
             let raw = !raw_text.is_empty() || text.is_empty();
 
             let text_len = if raw { raw_text.len() } else { text.len() };
@@ -285,7 +285,7 @@ pub(crate) fn get_literal_text(node: P<Node>, source_file: Option<P<SourceFile>>
             // Write text
             if !raw_text.is_empty() || text.is_empty() {
                 // If rawText is set, it is expected to be valid.
-                b.push_str(raw_text);
+                b.push_str(&raw_text);
             } else {
                 escape_string_worker(text, QuoteChar::Backtick, flags, &mut b);
             }

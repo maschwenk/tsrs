@@ -5,7 +5,7 @@ use tsrs_checker::LiteralValue;
 
 /// Go `map[string]*ast.Node`: a reference type that `pushScope` saves and `popScope` restores by pointer, so a saved
 /// map and the current one may alias (mutations through one are visible through the other).
-type DeclarationsOfName = Option<Rc<RefCell<FxHashMap<&'static str, P<Node>>>>>;
+type DeclarationsOfName = Option<Rc<RefCell<FxHashMap<String, P<Node>>>>>;
 
 // Transforms TypeScript-specific runtime syntax into JavaScript-compatible syntax.
 pub struct RuntimeSyntaxTransformer {
@@ -186,7 +186,7 @@ impl RuntimeSyntaxTransformer {
                     Rc::clone(current.get_or_insert_with(|| Rc::new(RefCell::new(FxHashMap::default()))))
                 };
                 let text = name.text();
-                map.borrow_mut().entry(text).or_insert(node);
+                map.borrow_mut().entry(text.to_owned()).or_insert(node);
             } else if ast::is_binding_pattern(name) {
                 self.record_declaration_in_scope(name);
             }
@@ -430,7 +430,7 @@ impl RuntimeSyntaxTransformer {
                 use_explicit_reverse_mapping = true;
             }
             Some(LiteralValue::String(value)) => {
-                expression = constant_expression(ConstantValue::String(value), f).or(expression);
+                expression = constant_expression(ConstantValue::String(&value), f).or(expression);
                 use_explicit_reverse_mapping = false;
             }
             _ => {

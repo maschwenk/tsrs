@@ -2,32 +2,32 @@ use std::cmp::Ordering;
 use std::fmt;
 
 use super::big;
-use crate::alloc_str;
+use crate::owned_text::TextView;
 
 // PseudoBigInt represents a JS-like bigint. The zero state of the struct represents the value 0.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct PseudoBigInt {
     pub negative: bool,              // true if the value is a non-zero negative number.
-    pub base10_value: &'static str, // The absolute value in base 10 with no leading zeros. The value zero is represented as an empty string.
+    pub base10_value: TextView, // The absolute value in base 10 with no leading zeros. The value zero is represented as an empty string.
 }
 
 pub fn new_pseudo_big_int(value: &str, negative: bool) -> PseudoBigInt {
     let value = value.trim_start_matches('0');
-    PseudoBigInt { negative: negative && !value.is_empty(), base10_value: alloc_str(value) }
+    PseudoBigInt { negative: negative && !value.is_empty(), base10_value: value.into() }
 }
 
 impl PseudoBigInt {
-    pub fn string(self) -> String {
+    pub fn string(&self) -> String {
         if self.base10_value.is_empty() {
             return "0".to_string();
         }
         if self.negative {
-            return "-".to_string() + self.base10_value;
+            return "-".to_string() + &self.base10_value;
         }
         self.base10_value.to_string()
     }
 
-    pub fn sign(self) -> i32 {
+    pub fn sign(&self) -> i32 {
         if self.base10_value.is_empty() {
             return 0;
         }
@@ -37,14 +37,14 @@ impl PseudoBigInt {
         1
     }
 
-    pub fn compare(self, other: PseudoBigInt) -> i32 {
+    pub fn compare(&self, other: &PseudoBigInt) -> i32 {
         let c = self.sign().cmp(&other.sign()) as i32;
         if c != 0 {
             return c;
         }
         let mut c = self.base10_value.len().cmp(&other.base10_value.len());
         if c == Ordering::Equal {
-            c = self.base10_value.cmp(other.base10_value);
+            c = self.base10_value.cmp(&other.base10_value);
         }
         let mut c = c as i32;
         if self.negative {

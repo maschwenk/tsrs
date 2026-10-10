@@ -473,7 +473,7 @@ impl DeclarationTransformer {
 
         self.transform_expando_host(name, declaration);
 
-        let export_name = self.factory().new_identifier(alloc_str(&property));
+        let export_name = self.factory().new_identifier(&property);
         let mut local_name = self.try_get_name_of_assigned_expression(node);
         if local_name.is_none() && !self.resolver.is_name_resolvable(self.enclosing_declaration.get(), &property) && !ast::is_non_contextual_keyword(scanner::string_to_token(export_name.text())) {
             // use exportName as localName if there won't be any conflicts or keyword issues

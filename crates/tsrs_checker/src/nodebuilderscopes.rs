@@ -127,7 +127,8 @@ impl NodeBuilderImpl {
             if self.ctx().flags.get().intersects(Flags::GenerateNamesForShadowedTypeParams) && !type_parameters.is_empty() {
                 cleanup_type_params = push_fake_scope(self, c, "typeParams", &mut |b, c, add| {
                     for &type_param in type_parameters {
-                        let type_param_name = b.type_parameter_to_name(c, type_param).text();
+                        let type_param_name_owner = b.type_parameter_to_name(c, type_param);
+                        let type_param_name = type_param_name_owner.text();
                         add(type_param_name, type_param.symbol().unwrap());
                     }
                 });
@@ -149,7 +150,7 @@ impl NodeBuilderImpl {
     }
 }
 
-type AddSymbol<'a> = &'a mut dyn FnMut(&'static str, P<Symbol>);
+type AddSymbol<'a> = &'a mut dyn FnMut(&str, P<Symbol>);
 
 // Go's `pushFakeScope` closure in enterNewScope.
 fn push_fake_scope(b: &NodeBuilderImpl, c: &mut Checker, kind: &'static str, add_all: &mut dyn FnMut(&NodeBuilderImpl, &mut Checker, AddSymbol)) -> Option<Box<dyn FnMut()>> {
@@ -186,7 +187,7 @@ fn push_fake_scope(b: &NodeBuilderImpl, c: &mut Checker, kind: &'static str, add
     };
     let mut new_locals: Vec<String> = vec![];
     let mut old_locals: Vec<localsRecord> = vec![];
-    add_all(b, c, &mut |name: &'static str, symbol: P<Symbol>| {
+    add_all(b, c, &mut |name: &str, symbol: P<Symbol>| {
         // Add cleanup information only if we don't own the fake scope
         if existing_fake_scope.is_some() {
             match locals.lookup(name) {

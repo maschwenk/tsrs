@@ -305,8 +305,8 @@ impl Checker {
                 // Merge in UMD exports with first-in-wins semantics (see #9771)
                 if let Some(global_exports) = file.global_exports() {
                     for (name, symbol) in global_exports.entries() {
-                        if !self.globals.has(name) {
-                            self.globals.set(name, symbol);
+                        if !self.globals.has(&name) {
+                            self.globals.set(&name, symbol);
                         }
                     }
                 }
@@ -483,8 +483,8 @@ impl Checker {
                         // We may need to merge the module augmentation's exports into the target symbols of the resolved exports
                         let resolved_exports = self.get_resolved_members_or_exports_of_symbol(main_module, MembersOrExportsResolutionKind::ResolvedExports);
                         for (key, value) in augmentation_exports.unwrap().entries() {
-                            if let Some(resolved) = resolved_exports.and_then(|resolved_exports| resolved_exports.lookup(key)) {
-                                if main_module.exports().and_then(|exports| exports.lookup(key)).is_none() {
+                            if let Some(resolved) = resolved_exports.and_then(|resolved_exports| resolved_exports.lookup(&key)) {
+                                if main_module.exports().and_then(|exports| exports.lookup(&key)).is_none() {
                                     self.merge_symbol(resolved, value, false /*unidirectional*/);
                                 }
                             }
@@ -501,7 +501,8 @@ impl Checker {
 
     // checker.go:1493
     pub(crate) fn add_undefined_to_globals_or_error_on_redeclaration(&mut self) {
-        let name = self.undefined_symbol.name();
+        let undefined_symbol = self.undefined_symbol;
+        let name = undefined_symbol.name();
         let target_symbol = self.globals.lookup(name);
         if let Some(target_symbol) = target_symbol {
             let declarations = target_symbol.declarations();
@@ -948,14 +949,14 @@ impl Checker {
     pub(crate) fn get_spelling_suggestion_for_name(&mut self, name: &str, symbols: &[P<Symbol>], meaning: SymbolFlags) -> Option<P<Symbol>> {
         // Both callbacks need the checker; the suggestion worker never calls them re-entrantly.
         let c = RefCell::new(self);
-        let get_candidate_name = |candidate: &P<Symbol>| -> &'static str {
+        let get_candidate_name = |candidate: &P<Symbol>| -> TextView {
             let candidate = *candidate;
             let candidate_name = ast::symbol_name(candidate);
             if candidate_name.is_empty()
                 || candidate_name.as_bytes()[0] == b'"'
                 || candidate_name.as_bytes()[0] == ast::InternalSymbolNamePrefixByte
             {
-                return "";
+                return TextView::default();
             }
             if candidate.flags().intersects(meaning) {
                 return candidate_name;
@@ -966,7 +967,7 @@ impl Checker {
                     return candidate_name;
                 }
             }
-            ""
+            TextView::default()
         };
         tsrs_core::get_spelling_suggestion(name, symbols.iter().copied(), get_candidate_name, |a: &P<Symbol>, b: &P<Symbol>| {
             c.borrow_mut().compare_symbols(Some(*a), Some(*b))

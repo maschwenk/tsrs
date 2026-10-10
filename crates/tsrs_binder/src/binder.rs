@@ -83,7 +83,7 @@ pub struct Binder {
 pub struct ActiveLabel {
     break_target: Option<P<FlowNode>>,
     continue_target: Option<P<FlowNode>>,
-    name: &'static str,
+    name: String,
     referenced: bool,
 }
 
@@ -187,7 +187,7 @@ impl Binder {
         self.current_flow.unwrap()
     }
 
-    pub(crate) fn new_symbol(&mut self, flags: SymbolFlags, name: &'static str) -> P<Symbol> {
+    pub(crate) fn new_symbol(&mut self, flags: SymbolFlags, name: &str) -> P<Symbol> {
         self.symbol_count += 1;
         Symbol::new(flags, name)
     }
@@ -225,10 +225,10 @@ impl Binder {
         let is_default_export = ast::has_syntactic_modifier(node, ModifierFlags::Default)
             || ast::is_export_specifier(node) && ast::module_export_name_is_default(node.name().unwrap());
         // The exported symbol for an export default function/class node is always named "default"
-        let name: &'static str = if is_computed_name {
-            ast::InternalSymbolNameComputed
+        let name: tsrs_core::TextView = if is_computed_name {
+            ast::InternalSymbolNameComputed.into()
         } else if is_default_export && parent.is_some() {
-            ast::InternalSymbolNameDefault
+            ast::InternalSymbolNameDefault.into()
         } else {
             self.get_declaration_name(node)
         };
@@ -259,10 +259,10 @@ impl Binder {
             // Otherwise, we'll be merging into a compatible existing symbol (for example when
             // you have multiple 'vars' with the same name in the same container).  In this case
             // just add this node into the declarations list of the symbol.
-            match (*symbol_table).get(name) {
+            match (*symbol_table).get(&name) {
                 None => {
-                    symbol = self.new_symbol(SymbolFlags::None, name);
-                    symbol_table.set(name, symbol);
+                    symbol = self.new_symbol(SymbolFlags::None, &name);
+                    symbol_table.set(&name, symbol);
                     if is_replaceable_by_method {
                         symbol.flags.set(symbol.flags.get() | SymbolFlags::ReplaceableByMethod);
                     }
@@ -276,8 +276,8 @@ impl Binder {
                         if symbol.flags.get().intersects(SymbolFlags::ReplaceableByMethod) {
                             // Javascript constructor-declared symbols can be discarded in favor of
                             // prototype symbols like methods.
-                            symbol = self.new_symbol(SymbolFlags::None, name);
-                            symbol_table.set(name, symbol);
+                            symbol = self.new_symbol(SymbolFlags::None, &name);
+                            symbol_table.set(&name, symbol);
                         } else if !(includes.intersects(SymbolFlags::Variable) && symbol.flags.get().intersects(SymbolFlags::Assignment)
                             || includes.intersects(SymbolFlags::Assignment) && symbol.flags.get().intersects(SymbolFlags::Variable))
                         {
@@ -361,7 +361,7 @@ impl Binder {
                             {
                                 symbol.flags.set(symbol.flags.get() | SymbolFlags::Accessor);
                             }
-                            symbol = self.new_symbol(SymbolFlags::None, name);
+                            symbol = self.new_symbol(SymbolFlags::None, &name);
                         }
                     }
                 }
@@ -381,12 +381,12 @@ impl Binder {
 
     // Should not be called on a declaration with a computed property name,
     // unless it is a well known Symbol.
-    pub(crate) fn get_declaration_name(&self, node: P<Node>) -> &'static str {
+    pub(crate) fn get_declaration_name(&self, node: P<Node>) -> tsrs_core::TextView {
         if ast::is_export_assignment(node) {
             return if node.as_export_assignment().is_export_equals() {
-                ast::InternalSymbolNameExportEquals
+                ast::InternalSymbolNameExportEquals.into()
             } else {
-                ast::InternalSymbolNameDefault
+                ast::InternalSymbolNameDefault.into()
             };
         }
         let name = ast::get_name_of_declaration(Some(node));
@@ -394,12 +394,12 @@ impl Binder {
             if ast::is_ambient_module(node) {
                 let module_name = name.text();
                 if ast::is_global_scope_augmentation(node) {
-                    return ast::InternalSymbolNameGlobal;
+                    return ast::InternalSymbolNameGlobal.into();
                 }
                 let pattern = tsrs_core::try_parse_pattern(module_name);
                 if pattern.is_valid() && pattern.star_index >= 0 {
                     if let Some(attributes) = node.as_module_declaration().attributes() {
-                        return alloc_str(&format!(
+                        return tsrs_core::TextView::from(format!(
                             "{}\"{}\"pattern@{}",
                             ast::InternalSymbolNamePrefix,
                             module_name,
@@ -407,28 +407,28 @@ impl Binder {
                         ));
                     }
                 }
-                return alloc_str(&format!("\"{}\"", module_name));
+                return tsrs_core::TextView::from(format!("\"{}\"", module_name));
             }
             if ast::is_private_identifier(name) {
                 // containingClass exists because private names only allowed inside classes
                 let Some(containing_class) = ast::get_containing_class(node) else {
                     // we can get here in cases where there is already a parse error.
-                    return ast::InternalSymbolNameMissing;
+                    return ast::InternalSymbolNameMissing.into();
                 };
-                return alloc_str(&get_symbol_name_for_private_identifier(containing_class.symbol().unwrap(), name.text()));
+                return tsrs_core::TextView::from(get_symbol_name_for_private_identifier(containing_class.symbol().unwrap(), name.text()));
             }
             if ast::is_property_name_literal(name) || ast::is_jsx_namespaced_name(name) {
-                return name.text();
+                return name.text().into();
             }
             if ast::is_computed_property_name(name) {
                 let name_expression = name.expression().unwrap();
                 // treat computed property names where expression is string/numeric literal as just string/numeric literal
                 if ast::is_string_or_numeric_literal_like(name_expression) {
-                    return name_expression.text();
+                    return name_expression.text().into();
                 }
                 if ast::is_signed_numeric_literal(name_expression) {
                     let unary_expression = name_expression.as_prefix_unary_expression();
-                    return alloc_str(&format!(
+                    return tsrs_core::TextView::from(format!(
                         "{}{}",
                         scanner::token_to_string(unary_expression.operator()),
                         unary_expression.operand().text()
@@ -436,18 +436,18 @@ impl Binder {
                 }
                 panic!("Only computed properties with literal names have declaration names");
             }
-            return ast::InternalSymbolNameMissing;
+            return ast::InternalSymbolNameMissing.into();
         }
         match node.kind() {
-            Kind::Constructor => return ast::InternalSymbolNameConstructor,
-            Kind::FunctionType | Kind::CallSignature => return ast::InternalSymbolNameCall,
-            Kind::ConstructorType | Kind::ConstructSignature => return ast::InternalSymbolNameNew,
-            Kind::IndexSignature => return ast::InternalSymbolNameIndex,
-            Kind::ExportDeclaration => return ast::InternalSymbolNameExportStar,
-            Kind::SourceFile | Kind::BinaryExpression => return ast::InternalSymbolNameExportEquals,
+            Kind::Constructor => return ast::InternalSymbolNameConstructor.into(),
+            Kind::FunctionType | Kind::CallSignature => return ast::InternalSymbolNameCall.into(),
+            Kind::ConstructorType | Kind::ConstructSignature => return ast::InternalSymbolNameNew.into(),
+            Kind::IndexSignature => return ast::InternalSymbolNameIndex.into(),
+            Kind::ExportDeclaration => return ast::InternalSymbolNameExportStar.into(),
+            Kind::SourceFile | Kind::BinaryExpression => return ast::InternalSymbolNameExportEquals.into(),
             _ => {}
         }
-        ast::InternalSymbolNameMissing
+        ast::InternalSymbolNameMissing.into()
     }
 
     pub(crate) fn get_display_name(&self, node: P<Node>) -> String {
@@ -1022,7 +1022,7 @@ impl Binder {
             None => {
                 // Export * in some sort of block construct
                 let name = self.get_declaration_name(node);
-                self.bind_anonymous_declaration(node, SymbolFlags::ExportStar, name);
+                self.bind_anonymous_declaration(node, SymbolFlags::ExportStar, &name);
             }
             Some(container_symbol) => {
                 if let Some(export_clause) = decl.export_clause() {
@@ -1048,7 +1048,7 @@ impl Binder {
         if container.symbol().is_none() && ast::is_export_assignment(node) {
             // Incorrect export assignment in some sort of block construct
             let name = self.get_declaration_name(node);
-            self.bind_anonymous_declaration(node, SymbolFlags::Value, name);
+            self.bind_anonymous_declaration(node, SymbolFlags::Value, &name);
         } else {
             // If there is an `export default x;` alias declaration, can't `export default` anything else.
             // (In contrast, you can still have `export default function f() {}` and `export default interface I {}`.)
@@ -1102,14 +1102,14 @@ impl Binder {
             self.emit_flags |= NodeFlags::HasAsyncFunctions;
         }
         set_flow_node(node, self.current_flow);
-        let mut binding_name = ast::InternalSymbolNameFunction;
+        let mut binding_name = tsrs_core::TextView::from(ast::InternalSymbolNameFunction);
         if ast::is_function_expression(node) {
             if let Some(name) = node.name() {
                 self.check_strict_mode_function_name(node);
-                binding_name = name.text();
+                binding_name = name.text().into();
             }
         }
-        self.bind_anonymous_declaration(node, SymbolFlags::Function, binding_name);
+        self.bind_anonymous_declaration(node, SymbolFlags::Function, &binding_name);
     }
 
     pub(crate) fn bind_call_expression(&mut self, node: P<Node>) {
@@ -1143,10 +1143,10 @@ impl Binder {
             }
             Kind::ClassExpression => {
                 let name_text = match name {
-                    Some(name) => name.text(),
-                    None => ast::InternalSymbolNameClass,
+                    Some(name) => tsrs_core::TextView::from(name.text()),
+                    None => tsrs_core::TextView::from(ast::InternalSymbolNameClass),
                 };
-                self.bind_anonymous_declaration(node, SymbolFlags::Class, name_text);
+                self.bind_anonymous_declaration(node, SymbolFlags::Class, &name_text);
             }
             _ => {}
         }
@@ -1192,7 +1192,7 @@ impl Binder {
         // symbol as its sole member. To the rest of the system, this symbol will be indistinguishable
         // from an actual type literal symbol you would have gotten had you used the long form.
         let name = self.get_declaration_name(node);
-        let symbol = self.new_symbol(SymbolFlags::Signature, name);
+        let symbol = self.new_symbol(SymbolFlags::Signature, &name);
         self.add_declaration_to_symbol(symbol, node, SymbolFlags::Signature);
         let type_literal_symbol = self.new_symbol(SymbolFlags::TypeLiteral, ast::InternalSymbolNameType);
         self.add_declaration_to_symbol(type_literal_symbol, node, SymbolFlags::TypeLiteral);
@@ -1272,7 +1272,7 @@ impl Binder {
             } else {
                 // We declare expandos only when there are no non-expando declarations for that name.
                 let exports = ast::get_exports(symbol);
-                let existing = (*exports).get(self.get_declaration_name(node));
+                let existing = (*exports).get(&self.get_declaration_name(node));
                 if existing.is_none() || existing.unwrap().flags.get().intersects(SymbolFlags::Assignment) {
                     self.declare_symbol(exports, Some(symbol), node, SymbolFlags::Property | SymbolFlags::Assignment, SymbolFlags::PropertyExcludes);
                 }
@@ -1482,7 +1482,7 @@ impl Binder {
         extends_type.map(|e| e.parent().unwrap())
     }
 
-    pub(crate) fn bind_anonymous_declaration(&mut self, node: P<Node>, symbol_flags: SymbolFlags, name: &'static str) {
+    pub(crate) fn bind_anonymous_declaration(&mut self, node: P<Node>, symbol_flags: SymbolFlags, name: &str) {
         let symbol = self.new_symbol(symbol_flags, name);
         if symbol_flags.intersects(SymbolFlags::EnumMember | SymbolFlags::ClassMember) {
             symbol.set_parent(self.container().symbol());
@@ -1512,7 +1512,7 @@ impl Binder {
                 self.declare_symbol(ast::get_locals(container), None /*parent*/, node, SymbolFlags::TypeParameter, SymbolFlags::TypeParameterExcludes);
             } else {
                 let name = self.get_declaration_name(node);
-                self.bind_anonymous_declaration(node, SymbolFlags::TypeParameter, name);
+                self.bind_anonymous_declaration(node, SymbolFlags::TypeParameter, &name);
             }
         } else {
             self.declare_symbol_and_add_to_symbol_table(node, SymbolFlags::TypeParameter, SymbolFlags::TypeParameterExcludes);
@@ -1893,7 +1893,7 @@ impl Binder {
         self.block_scope_container = saved_block_scope_container;
     }
 
-    pub(crate) fn declare_common_js_variable(&mut self, name: &'static str) {
+    pub(crate) fn declare_common_js_variable(&mut self, name: &str) {
         let locals = ast::get_locals(self.file.as_node());
         if (*locals).get(name).is_none() {
             let symbol = self.new_symbol(SymbolFlags::FunctionScopedVariable | SymbolFlags::ModuleExports, name);
@@ -2580,7 +2580,7 @@ impl Binder {
         let stmt = node.as_labeled_statement();
         let post_statement_label = self.create_branch_label();
         self.active_label_list.push(ActiveLabel {
-            name: stmt.label().text(),
+            name: stmt.label().text().to_owned(),
             break_target: Some(post_statement_label),
             continue_target: None,
             referenced: false,

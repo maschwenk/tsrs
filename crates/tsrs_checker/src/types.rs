@@ -3,7 +3,6 @@ use std::fmt;
 use std::hash::Hash;
 
 use bitflags::bitflags;
-use tsrs_core::StrCell;
 use tsrs_core::owned_array::{ArrayCell, ArrayView, OptionArrayCell};
 
 use crate::*;
@@ -259,7 +258,7 @@ pub struct SwitchStatementLinks {
     pub switch_types_computed: Cell<bool>,
     pub witnesses_computed: Cell<bool>,
     pub switch_types: ArrayCell<P<Type>>,
-    pub witnesses: OptionArrayCell<&'static str>, // Go nil (non-literal case) vs empty
+    pub witnesses: OptionArrayCell<TextView>, // Go nil (non-literal case) vs empty
 }
 
 #[derive(Default)]
@@ -409,14 +408,14 @@ const _: () = assert!(std::mem::size_of::<TypeNodeLinks>() == 12);
 #[derive(Default)]
 pub struct ComputedNameNodeLinks {
     pub has_name: Cell<Option<bool>>, // If the node has a computable name (Go *bool: nil = not computed)
-    pub name: Cell<&'static str>, // Resolved name associated with the type of the node
+    pub name: TextCell, // Resolved name associated with the type of the node
 }
 
 // Links for enum members
 
 #[derive(Default)]
 pub struct EnumMemberLinks {
-    pub value: Cell<evaluator::Result>, // Constant value of enum member
+    pub value: SnapshotCell<evaluator::Result>, // Constant value of enum member
 }
 
 // Links for assertion expressions
@@ -436,8 +435,8 @@ pub struct SourceFileLinks {
     pub requested_external_emit_helpers: Cell<ExternalEmitHelpers>,
     pub deferred_nodes: RefCell<OrderedSet<P<Node>>>,
     pub identifier_check_nodes: RefCell<Vec<P<Node>>>,
-    pub local_jsx_namespace: Cell<&'static str>,
-    pub local_jsx_fragment_namespace: Cell<&'static str>,
+    pub local_jsx_namespace: TextCell,
+    pub local_jsx_fragment_namespace: TextCell,
     pub local_jsx_factory: Cell<Option<P<Node>>>,
     pub local_jsx_fragment_factory: Cell<Option<P<Node>>>,
     pub jsx_fragment_type: Cell<Option<P<Type>>>,
@@ -852,7 +851,7 @@ pub(crate) fn census_layouts() {
         let name = type_name::<LiteralType>();
         // The number and boolean variants leave the rest of the value uninitialized (its string edges remain legacy).
         let d = 0;
-        let value = CensusField::NoPointer { off: d + offset_of!(LiteralType, value), len: size_of::<Option<LiteralValue>>() };
+        let value = CensusField::NoPointer { off: d + offset_of!(LiteralType, value), len: size_of::<SnapshotCell<Option<LiteralValue>>>() };
         tsrs_core::census_layout(name, &[value]);
         let d = 0;
         let offsets = [
@@ -1612,11 +1611,11 @@ macro_rules! embeds {
 
 #[derive(Default)]
 pub struct IntrinsicType {
-    pub intrinsic_name: Cell<&'static str>,
+    pub intrinsic_name: TextCell,
 }
 
 impl IntrinsicType {
-    pub fn intrinsic_name(&self) -> &'static str {
+    pub fn intrinsic_name(&self) -> TextView {
         self.intrinsic_name.get()
     }
 }
@@ -1625,9 +1624,9 @@ impl IntrinsicType {
 
 /// Go `any` value of a literal type: `string | jsnum.Number | bool | PseudoBigInt`. Go's nil is `Option::None`
 /// (`Option<LiteralValue>`), matching how the generated signatures map a nil-able `any`.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub enum LiteralValue {
-    String(&'static str),
+    String(TextView),
     Number(jsnum::Number),
     Boolean(bool),
     BigInt(jsnum::PseudoBigInt),
@@ -1635,7 +1634,7 @@ pub enum LiteralValue {
 
 #[derive(Default)]
 pub struct LiteralType {
-    pub value: Cell<Option<LiteralValue>>, // string | jsnum.Number | bool | PseudoBigInt | nil (computed enum)
+    pub value: SnapshotCell<Option<LiteralValue>>, // string | jsnum.Number | bool | PseudoBigInt | nil (computed enum)
     pub fresh_type: Cell<Option<P<Type>>>, // Fresh version of type
     pub regular_type: Cell<Option<P<Type>>>, // Regular version of type
 }
@@ -1656,7 +1655,7 @@ impl LiteralType {
 
 #[derive(Default)]
 pub struct UniqueESSymbolType {
-    pub name: Cell<&'static str>,
+    pub name: TextCell,
 }
 
 // ConstrainedType (type with computed base constraint)
@@ -2096,7 +2095,7 @@ struct UnionRare {
     resolved_reduced_type: Cell<Option<P<Type>>>,
     regular_type: Cell<Option<P<Type>>>,
     origin: Cell<Option<P<Type>>>, // Denormalized union, intersection, or index type in which union originates
-    key_property_name: StrCell,    // Property with unique unit type that exists in every object/intersection in union type
+    key_property_name: TextCell,    // Property with unique unit type that exists in every object/intersection in union type
     constituent_map: OwnedMap<P<Type>, P<Type>>, // Constituents keyed by unit type discriminants
 }
 
@@ -2212,10 +2211,10 @@ impl UnionType {
             self.union_rare_for_write().origin.set(t);
         }
     }
-    pub fn key_property_name(&self) -> &'static str {
-        self.union_rare().map_or("", |r| r.key_property_name.get())
+    pub fn key_property_name(&self) -> TextView {
+        self.union_rare().map_or_else(TextView::default, |r| r.key_property_name.get())
     }
-    pub fn set_key_property_name(&self, name: &'static str) {
+    pub fn set_key_property_name(&self, name: &str) {
         if !name.is_empty() || self.union_rare().is_some() {
             self.union_rare_for_write().key_property_name.set(name);
         }
@@ -2353,13 +2352,13 @@ impl IndexedAccessType {
 #[derive(Default)]
 pub struct TemplateLiteralType {
     pub constrained_type: ConstrainedType,
-    pub texts: ArrayCell<&'static str>, // Always one element longer than types
+    pub texts: ArrayCell<TextView>, // Always one element longer than types
     pub types: ArrayCell<P<Type>>, // Always at least one element
 }
 embeds!(TemplateLiteralType, constrained_type, ConstrainedType);
 
 impl TemplateLiteralType {
-    pub fn texts(&self) -> ArrayView<&'static str> {
+    pub fn texts(&self) -> ArrayView<TextView> {
         self.texts.get()
     }
     pub fn types(&self) -> ArrayView<P<Type>> {
@@ -2585,7 +2584,7 @@ pub enum TypePredicateKind {
 pub struct TypePredicate {
     pub kind: Cell<TypePredicateKind>,
     pub parameter_index: Cell<i32>,
-    pub parameter_name: Cell<&'static str>,
+    pub parameter_name: TextCell,
     pub t: Cell<Option<P<Type>>>,
 }
 
@@ -2599,7 +2598,7 @@ impl TypePredicate {
     pub fn parameter_index(&self) -> i32 {
         self.parameter_index.get()
     }
-    pub fn parameter_name(&self) -> &'static str {
+    pub fn parameter_name(&self) -> TextView {
         self.parameter_name.get()
     }
 }
@@ -2731,6 +2730,22 @@ pub type StringLiteralType = Type;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn literal_snapshots_survive_replacement_and_type_owner_destruction() {
+        let region = tsrs_core::arena::Region::new(4096);
+        let snapshot = {
+            let _scope = region.enter();
+            let payload = LiteralType::default();
+            payload.value.set(Some(LiteralValue::String(String::from("retained λ literal").into())));
+            let ty = Type::alloc(TypeFlags::StringLiteral, ObjectFlags::None, TypeId(1), payload);
+            let snapshot = ty.as_literal_type().value();
+            ty.as_literal_type().value.set(Some(LiteralValue::String("replacement".into())));
+            snapshot
+        };
+        drop(region);
+        assert_eq!(snapshot, Some(LiteralValue::String("retained λ literal".into())));
+    }
 
     #[test]
     fn inference_context_releases_owned_comparison_callback() {

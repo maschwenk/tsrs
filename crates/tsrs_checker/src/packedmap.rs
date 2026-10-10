@@ -116,8 +116,7 @@ impl<K: PackedKey, V: Copy> PackedMap<K, V> {
 }
 
 /// Go `c.stringLiteralTypes` (`map[string]*Type`): the literal types by their value. The key was a heap `String`
-/// copy of the text the literal type already holds in the arena; the table now stores only the type and compares
-/// its value (one 4-byte slot instead of a 32-byte `(String, P<Type>)` slot plus the copied text).
+/// copy of the text the literal type already owns; the table stores only the type and compares its value.
 #[derive(Default)]
 pub struct StringLiteralTypes {
     table: hashbrown::HashTable<P<Type>>,
@@ -131,23 +130,23 @@ impl StringLiteralTypes {
     }
 
     #[inline]
-    fn value_of(t: P<Type>) -> &'static str {
-        match t.as_literal_type().value() {
-            Some(LiteralValue::String(s)) => s,
+    fn value_of(t: &Type) -> std::cell::Ref<'_, str> {
+        std::cell::Ref::map(t.as_literal_type().value.borrow(), |value| match value.as_ref() {
+            Some(LiteralValue::String(s)) => s.as_ref(),
             _ => unreachable!("string literal cache entry without a string value"),
-        }
+        })
     }
 
     #[inline]
     pub fn get(&self, value: &str) -> Option<P<Type>> {
-        self.table.find(Self::hash(value), |&t| Self::value_of(t) == value).copied()
+        self.table.find(Self::hash(value), |&t| &*Self::value_of(&t) == value).copied()
     }
 
     /// Adds a string literal type whose value is not in the table yet.
     pub fn insert_new(&mut self, t: P<Type>) {
-        let value = Self::value_of(t);
-        debug_assert!(self.get(value).is_none());
-        self.table.insert_unique(Self::hash(value), t, |&t| Self::hash(Self::value_of(t)));
+        let value = Self::value_of(&t);
+        debug_assert!(self.get(&value).is_none());
+        self.table.insert_unique(Self::hash(&value), t, |&t| Self::hash(&Self::value_of(&t)));
     }
 
     pub fn len(&self) -> usize {

@@ -20,7 +20,7 @@ pub(crate) fn rewrite_module_specifier(emit_context: P<EmitContext>, node: Optio
     }
     let updated_text = tspath::change_extension(node.text(), tsrs_tsoptions::outputpaths::get_output_extension(node.text(), compiler_options.jsx));
     if updated_text != node.text() {
-        let updated = emit_context.factory.new_string_literal(alloc_str(&updated_text), node.as_string_literal().token_flags());
+        let updated = emit_context.factory.new_string_literal(&updated_text, node.as_string_literal().token_flags());
         emit_context.set_original(updated, node);
         emit_context.assign_comment_and_source_map_ranges(updated, node);
         return Some(updated);

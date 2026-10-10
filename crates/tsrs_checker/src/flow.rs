@@ -1629,9 +1629,9 @@ impl Checker {
         // In the non-default cause we create a union of the type narrowed by each of the listed cases.
         let clause_witnesses = &witnesses[clause_start as usize..clause_end as usize];
         let mut types = Vec::with_capacity(clause_witnesses.len());
-        for &text in clause_witnesses {
+        for text in clause_witnesses {
             if !text.is_empty() {
-                types.push(self.narrow_type_by_type_name(t, text));
+                types.push(self.narrow_type_by_type_name(t, &text));
             } else {
                 types.push(self.never_type);
             }
@@ -2630,11 +2630,11 @@ impl Checker {
     // Get the type names from all cases in a switch on `typeof`. The default clause and/or duplicate type names are
     // represented as empty strings. Return nil if one or more case clause expressions are not string literals.
     // flow.go:1989
-    pub(crate) fn get_switch_clause_type_of_witnesses(&mut self, node: P<Node>) -> Option<ArrayView<&'static str>> {
+    pub(crate) fn get_switch_clause_type_of_witnesses(&mut self, node: P<Node>) -> Option<ArrayView<TextView>> {
         let links = self.switch_statement_links.get_key(node);
         if !self.switch_statement_links.at(links).witnesses_computed.get() {
             let clauses = node.as_switch_statement().case_block.as_case_block().clauses.nodes();
-            let mut witnesses: Option<Vec<&'static str>> = Some(vec![""; clauses.len()]);
+            let mut witnesses: Option<Vec<TextView>> = Some(vec![TextView::default(); clauses.len()]);
             for (i, &clause) in clauses.iter().enumerate() {
                 if clause.kind() == Kind::CaseClause {
                     let expression = clause.expression().unwrap();
@@ -2644,8 +2644,8 @@ impl Checker {
                     }
                     let text = expression.text();
                     let w = witnesses.as_mut().unwrap();
-                    if !w.contains(&text) {
-                        w[i] = text;
+                    if !w.iter().any(|w| w == text) {
+                        w[i] = text.into();
                     }
                 }
             }
@@ -2657,12 +2657,12 @@ impl Checker {
 
     // Return the combined not-equal type facts for all cases except those between the start and end indices.
     // flow.go:2012
-    pub(crate) fn get_not_equal_facts_from_typeof_switch(&mut self, start: i32, end: i32, witnesses: &[&str]) -> TypeFacts {
+    pub(crate) fn get_not_equal_facts_from_typeof_switch(&mut self, start: i32, end: i32, witnesses: &[TextView]) -> TypeFacts {
         let mut facts = TypeFacts::None;
-        for (i, &witness) in witnesses.iter().enumerate() {
+        for (i, witness) in witnesses.iter().enumerate() {
             let i = i as i32;
             if (i < start || i >= end) && !witness.is_empty() {
-                let f = match typeofNEFacts.get(witness) {
+                let f = match typeofNEFacts.get(witness.as_ref()) {
                     Some(&f) => f,
                     None => TypeFacts::TypeofNEHostObject,
                 };
@@ -3170,7 +3170,7 @@ impl Checker {
         let symbol_name = symbol.name();
         let access_name = if symbol_name.starts_with(&format!("{}#", ast::InternalSymbolNamePrefix)) {
             let start = symbol_name.find('@').map_or(0, |i| i + 1);
-            self.factory.new_private_identifier(alloc_str(&symbol_name[start..]))
+            self.factory.new_private_identifier(&symbol_name[start..])
         } else {
             self.factory.new_identifier(symbol_name)
         };
@@ -3197,7 +3197,7 @@ impl Checker {
         let symbol_name = symbol.name();
         let access_name = if symbol_name.starts_with(&format!("{}#", ast::InternalSymbolNamePrefix)) {
             let start = symbol_name.find('@').map_or(0, |i| i + 1);
-            self.factory.new_private_identifier(alloc_str(&symbol_name[start..]))
+            self.factory.new_private_identifier(&symbol_name[start..])
         } else {
             self.factory.new_identifier(symbol_name)
         };

@@ -650,7 +650,7 @@ impl Checker {
             self.ambient_modules_once = true;
             let mut seen: FxHashSet<P<Symbol>> = FxHashSet::default();
             for (sym, global) in self.globals.entries() {
-                if ast::is_ambient_module_symbol_name(sym) {
+                if ast::is_ambient_module_symbol_name(&sym) {
                     self.ambient_modules.push(global);
                     seen.insert(global);
                 }
@@ -1170,7 +1170,7 @@ impl Checker {
                 let mut late_symbol = match late_symbols.lookup(&member_name) {
                     Some(s) => s,
                     None => {
-                        let s = self.new_symbol_ex(SymbolFlags::None, alloc_str(&member_name), CheckFlags::Late);
+                        let s = self.new_symbol_ex(SymbolFlags::None, &member_name, CheckFlags::Late);
                         late_symbols.set(s.name(), s);
                         s
                     }
@@ -1198,7 +1198,7 @@ impl Checker {
                     if late_symbol.flags().intersects(SymbolFlags::Accessor) && late_symbol.flags() & SymbolFlags::Accessor != symbol_flags & SymbolFlags::Accessor {
                         late_symbol.flags.set(late_symbol.flags() | SymbolFlags::Accessor);
                     }
-                    late_symbol = self.new_symbol_ex(SymbolFlags::None, alloc_str(&member_name), CheckFlags::Late);
+                    late_symbol = self.new_symbol_ex(SymbolFlags::None, &member_name, CheckFlags::Late);
                 }
                 self.value_symbol_links.get(late_symbol).set_name_type(Some(t));
                 self.add_declaration_to_late_bound_symbol(late_symbol, decl, symbol_flags);
@@ -1421,10 +1421,10 @@ impl Checker {
             if id == InternalSymbolNameDefault {
                 continue;
             }
-            let target_symbol = target.lookup(id);
+            let target_symbol = target.lookup(&id);
             match target_symbol {
                 None => {
-                    target.set(id, source_symbol);
+                    target.set(&id, source_symbol);
                     if let (Some(lookup_table), Some(export_node)) = (lookup_table.as_deref_mut(), export_node) {
                         lookup_table.insert(
                             id.to_string(),
@@ -1437,7 +1437,7 @@ impl Checker {
                 }
                 Some(target_symbol) => {
                     if lookup_table.is_some() && export_node.is_some() && self.resolve_symbol(target_symbol) != self.resolve_symbol(source_symbol) {
-                        let s = lookup_table.as_deref_mut().unwrap().get_mut(id).unwrap();
+                        let s = lookup_table.as_deref_mut().unwrap().get_mut(id.as_ref()).unwrap();
                         s.exports_with_duplicate.push(export_node.unwrap());
                     }
                 }
@@ -2124,7 +2124,7 @@ impl Checker {
         }
         for e in missing_elements {
             let name = self.get_property_name_from_binding_element(e);
-            let symbol = self.new_symbol(SymbolFlags::Property | SymbolFlags::Optional, alloc_str(&name));
+            let symbol = self.new_symbol(SymbolFlags::Property | SymbolFlags::Optional, &name);
             let resolved_type = self.get_type_from_binding_element(e, false /*includePatternInType*/, true /*reportErrors*/);
             self.value_symbol_links.get(symbol).resolved_type.set(Some(resolved_type));
             members.set(symbol.name(), symbol);

@@ -696,7 +696,7 @@ fn infer_to_template_literal_type_choose(c: &mut Checker, left: P<Type>, right: 
         c.parse_big_int_literal_type(str)
     } else if left.flags().intersects(TypeFlags::BigIntLiteral) {
         left
-    } else if right.flags().intersects(TypeFlags::BigIntLiteral) && pseudo_big_int_to_string(get_big_int_literal_value(right)) == str {
+    } else if right.flags().intersects(TypeFlags::BigIntLiteral) && pseudo_big_int_to_string(&get_big_int_literal_value(right)) == str {
         right
     } else if left.flags().intersects(TypeFlags::Boolean) {
         left
@@ -1410,7 +1410,7 @@ impl Checker {
                 continue;
             }
             let name = get_string_literal_value(t);
-            let literal_prop = self.new_symbol(SymbolFlags::Property, alloc_str(&name));
+            let literal_prop = self.new_symbol(SymbolFlags::Property, &name);
             self.value_symbol_links.get(literal_prop).resolved_type.set(Some(self.any_type));
             if let Some(symbol) = t.symbol() {
                 literal_prop.set_declarations_static(symbol.declarations());

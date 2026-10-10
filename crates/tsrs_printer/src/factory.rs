@@ -74,7 +74,7 @@ impl NodeFactory {
             text = format_generated_name(false /*privateName*/, options.prefix, &text, options.suffix);
         }
 
-        let name = self.new_identifier(alloc_str(&text));
+        let name = self.new_identifier(&text);
         let auto_generate = AutoGenerateInfo {
             id,
             flags: kind | (options.flags & !GeneratedIdentifierFlags::KindMask),
@@ -150,7 +150,7 @@ impl NodeFactory {
             panic!("First character of private identifier must be #: {}", text);
         }
 
-        let name = self.new_private_identifier(alloc_str(&text));
+        let name = self.new_private_identifier(&text);
         let auto_generate = AutoGenerateInfo {
             id,
             flags: kind | (options.flags & !GeneratedIdentifierFlags::KindMask),
@@ -239,7 +239,7 @@ impl NodeFactory {
         } else if tag == "undefined" {
             self.new_strict_equality_expression(value, self.new_void_zero_expression())
         } else {
-            self.new_strict_equality_expression(self.new_type_of_expression(value), self.new_string_literal(alloc_str(tag), TokenFlags::None))
+            self.new_strict_equality_expression(self.new_type_of_expression(value), self.new_string_literal(tag, TokenFlags::None))
         }
     }
 }

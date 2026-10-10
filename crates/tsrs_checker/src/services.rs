@@ -137,8 +137,8 @@ impl Checker {
     // services.go:136
     pub fn for_each_export_and_property_of_module(&mut self, module_symbol: P<Symbol>, mut cb: impl FnMut(&mut Checker, P<Symbol>, &str)) {
         for (key, exported_symbol) in self.get_exports_of_module(module_symbol).entries() {
-            if !is_reserved_member_name(key) {
-                cb(self, exported_symbol, key);
+            if !is_reserved_member_name(&key) {
+                cb(self, exported_symbol, &key);
             }
         }
 
@@ -160,8 +160,8 @@ impl Checker {
         let members = self.resolve_structured_type_members(&reduced_type).unwrap().members();
         if let Some(members) = members {
             for (name, symbol) in members.entries() {
-                if self.is_named_member(symbol, name) {
-                    cb(self, symbol, name);
+                if self.is_named_member(symbol, &name) {
+                    cb(self, symbol, &name);
                 }
             }
         }

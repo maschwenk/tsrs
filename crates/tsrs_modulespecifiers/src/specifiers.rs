@@ -353,7 +353,7 @@ pub(crate) fn compute_module_specifiers(
     let info = get_info(importing_source_file.file_name(), host);
     let preferences = get_module_specifier_preferences(user_preferences, host, compiler_options, importing_source_file, "");
 
-    let mut existing_specifier = "";
+    let mut existing_specifier = String::new();
     for module_path in module_paths {
         let target_path = tspath::to_path(&module_path.file_name, host.get_current_directory(), info.use_case_sensitive_file_names);
         let mut existing_import: Option<P<Node>> = None;
@@ -380,13 +380,13 @@ pub(crate) fn compute_module_specifiers(
                 // If the candidate import mode doesn't match the mode we're generating for, don't consider it
                 continue;
             }
-            existing_specifier = existing_import.text();
+            existing_import.text().clone_into(&mut existing_specifier);
             break;
         }
     }
 
     if !existing_specifier.is_empty() {
-        return (vec![existing_specifier.to_string()], ResultKind::None);
+        return (vec![existing_specifier], ResultKind::None);
     }
 
     let imported_file_is_in_node_modules = module_paths.iter().any(|p| p.is_in_node_modules);

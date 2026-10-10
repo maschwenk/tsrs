@@ -127,10 +127,10 @@ pub(crate) fn force_shared_lists(program: &ProgramData) {
             lists.extend(file.lazy_lists.get().iter().copied().filter(|l| l.state() == tsrs_ast::lazylist::DEFERRED));
         }
     }
-    let mut by_name: FxHashMap<&'static str, Vec<P<tsrs_ast::Symbol>>> = FxHashMap::default();
+    let mut by_name: FxHashMap<String, Vec<P<tsrs_ast::Symbol>>> = FxHashMap::default();
     let mut add = |table: Option<P<tsrs_ast::SymbolTable>>| {
         if let Some(table) = table {
-            table.for_each(|name, symbol| by_name.entry(name).or_default().push(symbol));
+            table.for_each(|name, symbol| by_name.entry(name.to_owned()).or_default().push(symbol));
         }
     };
     for &file in program.files.iter() {
@@ -457,7 +457,7 @@ fn adds_nothing(program: &ProgramData, file: P<SourceFile>) -> bool {
         || !matches!(file.script_kind.get(), ScriptKind::TS | ScriptKind::TSX)
         || !ast::is_external_module(file)
         || !file.module_augmentations.get().is_empty()
-        || !file.ambient_module_names.get().is_empty()
+        || !file.ambient_module_names().is_empty()
         || !file.pattern_ambient_modules.get().is_empty()
         || file.global_exports.get().is_some_and(|g| !g.is_empty())
         || file.check_js_directive.get().is_some()
@@ -466,7 +466,7 @@ fn adds_nothing(program: &ProgramData, file: P<SourceFile>) -> bool {
     }
     let Some(symbol) = file.symbol() else { return false };
     let Some(exports) = symbol.exports() else { return true };
-    exports.entries().iter().all(|&(name, s)| {
+    exports.entries().iter().all(|&(ref name, s)| {
         name != ast::InternalSymbolNameExportEquals
             && name != ast::InternalSymbolNameExportStar
             && !s.flags().intersects(SymbolFlags::Alias | SymbolFlags::ExportStar)

@@ -2,7 +2,7 @@
 
 use crate::*;
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug, Default)]
 pub struct Result {
     pub value: Option<LiteralValue>,
     pub is_syntactically_string: bool,
@@ -95,13 +95,13 @@ pub fn evaluate<H>(host: &mut H, evaluate_entity: Evaluator<H>, outer_expression
                 };
                 match right_num {
                     Some(n) => s.push_str(&n.string()),
-                    None => s.push_str(right_str.unwrap()),
+                    None => s.push_str(&right_str.unwrap()),
                 }
-                return Result { value: Some(LiteralValue::String(alloc_str(&s))), is_syntactically_string, resolved_other_files, has_external_references };
+                return Result { value: Some(LiteralValue::String(s.into())), is_syntactically_string, resolved_other_files, has_external_references };
             }
         }
         Kind::StringLiteral | Kind::NoSubstitutionTemplateLiteral => {
-            return Result { value: Some(LiteralValue::String(expr.text())), is_syntactically_string: true, resolved_other_files: false, has_external_references: false };
+            return Result { value: Some(LiteralValue::String(expr.text().into())), is_syntactically_string: true, resolved_other_files: false, has_external_references: false };
         }
         Kind::TemplateExpression => {
             return evaluate_template_expression(host, evaluate_entity, outer_expressions_to_skip, expr, location);
@@ -138,7 +138,7 @@ fn evaluate_template_expression<H>(host: &mut H, evaluate_entity: Evaluator<H>, 
         resolved_other_files = resolved_other_files || span_result.resolved_other_files;
         has_external_references = has_external_references || span_result.has_external_references;
     }
-    Result { value: Some(LiteralValue::String(alloc_str(&sb))), is_syntactically_string: true, resolved_other_files, has_external_references }
+    Result { value: Some(LiteralValue::String(sb.into())), is_syntactically_string: true, resolved_other_files, has_external_references }
 }
 
 pub fn any_to_string(v: LiteralValue) -> String {

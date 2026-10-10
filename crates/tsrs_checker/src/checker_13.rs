@@ -1486,7 +1486,7 @@ impl Checker {
                         t = Some(self.get_literal_type_from_property_name(name));
                     }
                     if t.is_none() && !is_known_symbol(prop) {
-                        t = Some(self.get_string_literal_type(symbol_name(prop)));
+                        t = Some(self.get_string_literal_type(&symbol_name(prop)));
                     }
                 }
             }

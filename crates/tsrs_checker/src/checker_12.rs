@@ -573,8 +573,12 @@ impl Checker {
             let mut previous: Option<P<Node>> = None;
             for &member in node.members() {
                 let result = self.compute_enum_member_value(member, auto_value.as_mut(), previous);
+                let number = match result.value.as_ref() {
+                    Some(LiteralValue::Number(value)) => Some(*value),
+                    _ => None,
+                };
                 self.enum_member_links.get(member).value.set(result);
-                if let Some(LiteralValue::Number(value)) = result.value {
+                if let Some(value) = number {
                     let next_value = value + Number(1.0);
                     auto_value = Some(next_value);
                 } else {
@@ -1618,19 +1622,19 @@ impl Checker {
             // (`create_union_or_intersection_property`).
             while self.tuple_elements.len() < arity {
                 let type_parameter = self.new_type_parameter(None);
-                let name = alloc_str(&self.tuple_elements.len().to_string());
+                let name = TextView::from(self.tuple_elements.len().to_string());
                 self.tuple_elements.push((type_parameter, name));
             }
             type_parameters = Vec::with_capacity(arity + 1);
             for i in 0..arity {
-                let (type_parameter, name) = self.tuple_elements[i];
+                let (type_parameter, name) = self.tuple_elements[i].clone();
                 type_parameters.push(type_parameter);
                 let flags = element_infos[i].flags;
                 combined_flags |= flags;
                 if !combined_flags.intersects(ElementFlags::Variable) {
                     let property = self.new_symbol_ex(
                         SymbolFlags::Property | if flags.intersects(ElementFlags::Optional) { SymbolFlags::Optional } else { SymbolFlags::None },
-                        name,
+                        &name,
                         if readonly { CheckFlags::Readonly } else { CheckFlags::None },
                     );
                     self.value_symbol_links.get(property).resolved_type.set(Some(type_parameter));
@@ -1915,7 +1919,7 @@ impl Checker {
     // checker.go:25491
     pub(crate) fn new_intrinsic_type_ex(&mut self, flags: TypeFlags, intrinsic_name: &str, object_flags: ObjectFlags) -> P<Type> {
         let data = IntrinsicType::default();
-        data.intrinsic_name.set(alloc_str(intrinsic_name));
+        data.intrinsic_name.set(intrinsic_name);
         self.new_type(flags, object_flags, data)
     }
 
@@ -1924,7 +1928,7 @@ impl Checker {
         if self.strict_null_checks {
             return non_widening_type;
         }
-        let t = self.new_intrinsic_type(non_widening_type.flags(), non_widening_type.as_intrinsic_type().intrinsic_name());
+        let t = self.new_intrinsic_type(non_widening_type.flags(), &non_widening_type.as_intrinsic_type().intrinsic_name());
         t.object_flags.set(t.object_flags() | ObjectFlags::ContainsWideningType);
         t
     }
@@ -1954,7 +1958,7 @@ impl Checker {
     // checker.go:25525
     pub(crate) fn new_unique_es_symbol_type(&mut self, symbol: P<Symbol>, name: &str) -> P<Type> {
         let data = UniqueESSymbolType::default();
-        data.name.set(alloc_str(name));
+        data.name.set(name);
         let t = self.new_type(TypeFlags::UniqueESSymbol, ObjectFlags::None, data);
         t.set_symbol(Some(symbol));
         t
@@ -2152,7 +2156,7 @@ impl Checker {
     // checker.go:25685
     pub(crate) fn new_template_literal_type(&mut self, texts: &[&str], types: &[P<Type>]) -> P<Type> {
         let data = TemplateLiteralType::default();
-        data.texts.set_owned(texts.iter().map(|s| alloc_str(s)).collect());
+        data.texts.set_owned(texts.iter().map(|s| TextView::from(*s)).collect());
         data.types.set(types);
         self.new_type(TypeFlags::TemplateLiteral, ObjectFlags::None, data)
     }
@@ -2266,7 +2270,7 @@ impl Checker {
     pub(crate) fn get_string_literal_type(&mut self, value: &str) -> P<Type> {
         let mut t = self.string_literal_types.get(value);
         if t.is_none() {
-            let literal = self.new_literal_type(TypeFlags::StringLiteral, Some(LiteralValue::String(alloc_str(value))), None);
+            let literal = self.new_literal_type(TypeFlags::StringLiteral, Some(LiteralValue::String(value.into())), None);
             self.string_literal_types.insert_new(literal);
             t = Some(literal);
         }
@@ -2296,7 +2300,7 @@ impl Checker {
     pub(crate) fn get_big_int_literal_type(&mut self, value: PseudoBigInt) -> P<Type> {
         let mut t = self.bigint_literal_types.get(&value).copied();
         if t.is_none() {
-            let literal = self.new_literal_type(TypeFlags::BigIntLiteral, Some(LiteralValue::BigInt(value)), None);
+            let literal = self.new_literal_type(TypeFlags::BigIntLiteral, Some(LiteralValue::BigInt(value.clone())), None);
             self.bigint_literal_types.insert(value, literal);
             t = Some(literal);
         }
@@ -2312,7 +2316,7 @@ impl Checker {
 }
 
 // checker.go:25816
-pub(crate) fn get_string_literal_value(t: P<Type>) -> &'static str {
+pub(crate) fn get_string_literal_value(t: P<Type>) -> TextView {
     match t.as_literal_type().value.get() {
         Some(LiteralValue::String(s)) => s,
         _ => panic!("getStringLiteralValue: not a string literal"),
@@ -2366,7 +2370,7 @@ impl Checker {
             }
             _ => panic!("Unhandled case in getEnumLiteralType"),
         };
-        let key = EnumLiteralKey { enum_symbol, value };
+        let key = EnumLiteralKey { enum_symbol, value: value.clone() };
         let mut t = self.enum_literal_types.get(&key).copied();
         if t.is_none() {
             let literal = self.new_literal_type(flags, Some(value), None);

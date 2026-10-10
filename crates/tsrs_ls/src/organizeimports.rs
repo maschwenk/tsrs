@@ -217,20 +217,20 @@ fn organize_imports_worker(
 
 // organizeimports.go:215
 fn group_by_module_specifier(imports: &[P<Node>]) -> Vec<Vec<P<Node>>> {
-    let mut groups: FxHashMap<&'static str, Vec<P<Node>>> = FxHashMap::default();
-    let mut order: Vec<&'static str> = Vec::new();
+    let mut groups: FxHashMap<String, Vec<P<Node>>> = FxHashMap::default();
+    let mut order: Vec<String> = Vec::new();
 
     for &imp in imports {
         let specifier = lsutil::get_external_module_name(imp.module_specifier());
-        if !groups.contains_key(specifier) {
-            order.push(specifier);
+        if !groups.contains_key(&specifier) {
+            order.push(specifier.clone());
         }
         groups.entry(specifier).or_default().push(imp);
     }
 
     let mut result = Vec::with_capacity(order.len());
     for key in order {
-        result.push(groups.remove(key).unwrap());
+        result.push(groups.remove(&key).unwrap());
     }
     result
 }
@@ -387,8 +387,10 @@ fn get_import_attributes_key(attributes: Option<P<Node>>) -> String {
 
     let mut attr_nodes: Vec<P<Node>> = import_attrs.attributes.nodes().to_vec();
     goslices::sort_func(&mut attr_nodes, |a, b| {
-        let a_name = a.as_import_attribute().name().unwrap().text();
-        let b_name = b.as_import_attribute().name().unwrap().text();
+        let a_name_owner = a.as_import_attribute().name().unwrap();
+        let a_name = a_name_owner.text();
+        let b_name_owner = b.as_import_attribute().name().unwrap();
+        let b_name = b_name_owner.text();
         compare_strings_case_sensitive(a_name, b_name)
     });
 
@@ -720,7 +722,8 @@ fn get_new_import_specifiers(named_imports: &[P<Node>], factory: &NodeFactory) -
 
             if let Some(property_name) = spec.property_name() {
                 let property_text = property_name.text();
-                let name_text = spec.name().text();
+                let name_text_owner = spec.name();
+                let name_text = name_text_owner.text();
 
                 if property_text == name_text {
                     let normalized = factory.update_import_specifier(elem, spec.is_type_only, None, spec.name());
@@ -862,14 +865,14 @@ fn coalesce_exports_worker(
         return export_group.to_vec();
     }
 
-    let mut exports_by_module_specifier: FxHashMap<&'static str, Vec<P<Node>>> = FxHashMap::default();
-    let mut module_specifier_order: Vec<&'static str> = Vec::new();
+    let mut exports_by_module_specifier: FxHashMap<String, Vec<P<Node>>> = FxHashMap::default();
+    let mut module_specifier_order: Vec<String> = Vec::new();
 
     for &export_decl in export_group {
         let export = export_decl.as_export_declaration();
-        let module_specifier = export.module_specifier.map(|m| m.text()).unwrap_or("");
-        if !exports_by_module_specifier.contains_key(module_specifier) {
-            module_specifier_order.push(module_specifier);
+        let module_specifier = export.module_specifier.map(|m| m.text().to_owned()).unwrap_or_default();
+        if !exports_by_module_specifier.contains_key(&module_specifier) {
+            module_specifier_order.push(module_specifier.clone());
         }
         exports_by_module_specifier.entry(module_specifier).or_default().push(export_decl);
     }

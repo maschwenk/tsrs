@@ -1,5 +1,5 @@
 use tsrs_ast::{self as ast, ClassLikeBase, Kind, ModifierList, Node, NodeFlags, NodeList, TokenFlags};
-use tsrs_core::{alloc_slice, alloc_str, TextRange, P};
+use tsrs_core::{alloc_slice, TextRange, P};
 use tsrs_diagnostics as diagnostics;
 use tsrs_scanner as scanner;
 
@@ -247,7 +247,7 @@ impl Parser {
                         result.push('_');
                         result.push_str(&pi.to_string());
                     }
-                    let identifier = self.factory.new_identifier(alloc_str(&result));
+                    let identifier = self.factory.new_identifier(&result);
                     name = self.add_transformed_reparse(identifier, name);
                 } else {
                     name = self.add_deep_clone_reparse(Some(name)).unwrap();

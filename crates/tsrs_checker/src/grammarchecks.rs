@@ -1198,7 +1198,7 @@ impl Checker {
     pub(crate) fn check_grammar_jsx_element(&mut self, node: P<Node>) -> bool {
         self.check_grammar_jsx_name(node.tag_name());
         self.check_grammar_type_arguments(node, node.type_argument_list());
-        let mut seen: FxHashSet<&'static str> = FxHashSet::default();
+        let mut seen: FxHashSet<String> = FxHashSet::default();
         for &attr_node in node.attributes().unwrap().properties() {
             if attr_node.kind() == Kind::JsxSpreadAttribute {
                 continue;
@@ -1207,7 +1207,7 @@ impl Checker {
             let name = attr.name;
             let initializer = attr.initializer;
             let text_of_name = name.text();
-            if !seen.insert(text_of_name) {
+            if !seen.insert(text_of_name.to_owned()) {
                 return self.grammar_error_on_node(name, &diagnostics::JSX_elements_cannot_have_multiple_attributes_with_the_same_name, &[]);
             }
             if let Some(initializer) = initializer {

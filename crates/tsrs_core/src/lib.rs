@@ -1,6 +1,9 @@
 pub mod arena;
 pub mod arena_owner;
 pub mod owned_array;
+pub mod owned_text;
+pub use owned_text::{TextCell, TextView};
+pub mod snapshot_cell;
 pub mod ptr;
 
 /// True on targets that cannot start threads (wasm32 without atomics, such as `wasm32-wasip1`, where
@@ -14,7 +17,7 @@ pub mod alloc_profile;
 pub use ptr::{alloc, alloc_slice, alloc_slice_aligned4, alloc_slice_recycled, alloc_slice_scratch, alloc_str, alloc_str_scratch, alloc_vec, alloc_vec_scratch, alloc_profile_dump, arena_checkpoint, arena_pin, arena_rewindable, census_layout, census_recording, census_reset, census_scrub_none, census_scrub_slack, census_scrub_stack, CensusField, arena_rewind, free_raw, free_slice_ptr, OptionSliceCell, OptionThinSliceCell, PackedStr, PSliceCell, SliceCell, StrCell, SlicePair, StaticSlicePtr, ThinSlice, ThinSliceCell, PKey, PSlot, P, PACK_BITS, SP};
 
 mod frozen;
-pub use frozen::{FrozenCell, FrozenRef, FrozenRefMut, OwnedCell, OwnedPSliceCell, OwnedSliceCell, OwnedStrCell, OwnedTaggedStrCell};
+pub use frozen::{FrozenCell, FrozenRef, FrozenRefMut, OwnedCell, OwnedPSliceCell, OwnedSliceCell, OwnedStrCell};
 
 pub mod collections;
 pub mod compat;

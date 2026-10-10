@@ -301,16 +301,9 @@ function w(s = "") {
 // packs its flow node and its text into one word (crates/tsrs_ast/src/identifier.rs).
 const HAND_WRITTEN_DATA = new Set(["Identifier"]);
 
-// Identifier and literal text is stored as a `PackedStr` (8 bytes: pointer and length in one word, tsrs_core::ptr); the getter
-// and the factory parameter stay `&'static str`.
-const PACKED_STR_FIELDS = new Set(["Identifier.Text", "PrivateIdentifier.Text", "LiteralLikeNodeBase.Text"]);
-
-function isPackedStr(f: { owner: string; name: string; }): boolean {
-    return PACKED_STR_FIELDS.has(`${f.owner}.${f.name}`);
-}
-
+// Text fields own immutable Rust strings. Factories borrow their input and getters borrow the record.
 function fieldDecl(f: Field): string {
-    if (isPackedStr(f)) return "PackedStr";
+    if (f.ty === "&'static str") return "TextView";
     return f.cell ? `OwnedCell<${f.ty}>` : f.ty;
 }
 
@@ -359,7 +352,7 @@ function header() {
     w();
     w("use std::any::Any;");
     w();
-    w("use tsrs_core::{OwnedCell, PackedStr, P};");
+    w("use tsrs_core::{OwnedCell, TextView, P};");
     w();
     w("use crate::ast::*;");
     w("use crate::flow::*;");
@@ -394,9 +387,9 @@ function genGetters(l: Layout) {
     for (const f of fields) {
         const fnName = f.rust;
         w(`    #[inline]`);
-        w(`    pub fn ${fnName}(&self) -> ${f.ty} {`);
+        w(`    pub fn ${fnName}(&self) -> ${f.ty === "&'static str" ? "&str" : f.ty} {`);
         if (f.rare) w(`        rare_tail(self).and_then(|r| r.${f.rust})`);
-        else w(`        self.${f.path}${f.cell ? ".get()" : isPackedStr(f) ? ".as_str()" : ""}`);
+        else w(`        self.${f.path}${f.cell ? ".get()" : f.ty === "&'static str" ? ".as_ref()" : ""}`);
         w(`    }`);
         if (f.cell) {
             w(`    #[inline]`);
@@ -447,7 +440,7 @@ function structLiteral(l: Layout, values: Map<string, string>, indent: string): 
     for (const f of l.fields) {
         if (f.rare) continue;
         const v = values.get(f.name) ?? defaultValue(f.ty);
-        lines.push(`${indent}    ${f.rust}: ${f.cell ? `OwnedCell::new(${v})` : isPackedStr(f) ? `PackedStr::new(${v})` : v},`);
+        lines.push(`${indent}    ${f.rust}: ${f.cell ? `OwnedCell::new(${v})` : f.ty === "&'static str" ? `TextView::from(${v})` : v},`);
     }
     lines.push(`${indent}}`);
     return lines.join("\n");
@@ -469,7 +462,7 @@ function factoryParams(node: NodeType): { m: MemberInfo; name: string; ty: strin
     return schemaMembers(node).map(m => {
         if (m.isKindParam()) return { m, name: "kind", ty: "Kind" };
         if (isNodeFlagsMember(m)) return { m, name: paramName(m), ty: "NodeFlags" };
-        return { m, name: paramName(m), ty: findFlat(l, m.name).ty };
+        return { m, name: paramName(m), ty: findFlat(l, m.name).ty === "&'static str" ? "&str" : findFlat(l, m.name).ty };
     });
 }
 

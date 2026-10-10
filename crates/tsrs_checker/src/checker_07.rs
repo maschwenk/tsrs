@@ -538,7 +538,7 @@ impl Checker {
                 }
                 let member_symbol = member.unwrap();
                 let prop = if let Some(name_type) = name_type {
-                    self.new_symbol_ex(SymbolFlags::Property | member_symbol.flags(), alloc_str(&get_property_name_from_type(name_type)), check_flags | CheckFlags::Late)
+                    self.new_symbol_ex(SymbolFlags::Property | member_symbol.flags(), &get_property_name_from_type(name_type), check_flags | CheckFlags::Late)
                 } else {
                     self.new_symbol_ex(SymbolFlags::Property | member_symbol.flags(), member_symbol.name(), check_flags)
                 };
@@ -777,7 +777,7 @@ impl Checker {
             return self.get_intersection_type(&[left, right]);
         }
         let members = SymbolTable::new();
-        let mut skipped_private_members: FxHashSet<&'static str> = FxHashSet::default();
+        let mut skipped_private_members: FxHashSet<String> = FxHashSet::default();
         let index_infos = if left == self.empty_object_type {
             self.get_index_infos_of_type(right).to_vec()
         } else {
@@ -785,7 +785,7 @@ impl Checker {
         };
         for right_prop in self.get_properties_of_type(right).iter().copied() {
             if get_declaration_modifier_flags_from_symbol(right_prop).intersects(ModifierFlags::Private | ModifierFlags::Protected) {
-                skipped_private_members.insert(right_prop.name());
+                skipped_private_members.insert(right_prop.name().to_owned());
             } else if self.is_spreadable_property(right_prop) {
                 let s = self.get_spread_symbol(right_prop, readonly);
                 members.set(right_prop.name(), s);
@@ -1608,7 +1608,7 @@ impl Checker {
 
     // checker.go:14305
     #[cfg_attr(feature = "site-counts", track_caller)]
-    pub(crate) fn new_symbol(&mut self, flags: SymbolFlags, name: &'static str) -> P<Symbol> {
+    pub(crate) fn new_symbol(&mut self, flags: SymbolFlags, name: &str) -> P<Symbol> {
         self.symbol_count += 1;
         tsrs_core::sitecount::hit("symbol", "");
         let s = Symbol::new(flags | SymbolFlags::Transient, name);
@@ -1619,7 +1619,7 @@ impl Checker {
 
     // checker.go:14313
     #[cfg_attr(feature = "site-counts", track_caller)]
-    pub(crate) fn new_symbol_ex(&mut self, flags: SymbolFlags, name: &'static str, check_flags: CheckFlags) -> P<Symbol> {
+    pub(crate) fn new_symbol_ex(&mut self, flags: SymbolFlags, name: &str, check_flags: CheckFlags) -> P<Symbol> {
         let result = self.new_symbol(flags, name);
         result.check_flags.set(check_flags);
         result
@@ -1627,7 +1627,7 @@ impl Checker {
 
     // checker.go:14319
     #[cfg_attr(feature = "site-counts", track_caller)]
-    pub(crate) fn new_parameter(&mut self, name: &'static str, t: P<Type>) -> P<Symbol> {
+    pub(crate) fn new_parameter(&mut self, name: &str, t: P<Type>) -> P<Symbol> {
         let symbol = self.new_symbol(SymbolFlags::FunctionScopedVariable, name);
         self.value_symbol_links.get(symbol).resolved_type.set(Some(t));
         symbol
@@ -1635,7 +1635,7 @@ impl Checker {
 
     // checker.go:14325
     #[cfg_attr(feature = "site-counts", track_caller)]
-    pub(crate) fn new_property(&mut self, name: &'static str, t: P<Type>) -> P<Symbol> {
+    pub(crate) fn new_property(&mut self, name: &str, t: P<Type>) -> P<Symbol> {
         let symbol = self.new_symbol(SymbolFlags::Property, name);
         self.value_symbol_links.get(symbol).resolved_type.set(Some(t));
         symbol
@@ -1661,7 +1661,7 @@ impl Checker {
             return;
         };
         for (id, source_symbol) in source.entries() {
-            let target_symbol = target.lookup(id);
+            let target_symbol = target.lookup(&id);
             let merged = if let Some(target_symbol) = target_symbol {
                 self.merge_symbol(target_symbol, source_symbol, unidirectional)
             } else {
@@ -1687,7 +1687,7 @@ impl Checker {
                     merged.set_parent(merged_parent);
                 }
             }
-            target.set(id, merged);
+            target.set(&id, merged);
         }
     }
 
@@ -2128,9 +2128,9 @@ impl Checker {
                 };
                 let related_message: &'static Message = if is_export { &diagnostics::X_0_was_exported_here } else { &diagnostics::X_0_was_imported_here };
                 // TODO: how to get name for export *?
-                let mut name = "*";
+                let mut name = String::from("*");
                 if !ast::is_export_declaration(type_only_declaration) {
-                    name = type_only_declaration.name().unwrap().text();
+                    type_only_declaration.name().unwrap().text().clone_into(&mut name);
                 }
                 self.error(Some(decl.module_reference), message, &[])
                     .add_related_info(create_diagnostic_for_node(Some(type_only_declaration), related_message, &[&name]));

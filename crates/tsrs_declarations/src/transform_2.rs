@@ -653,9 +653,9 @@ impl DeclarationTransformer {
                 let extends_expression = extends_clause.as_expression_with_type_arguments().expression;
                 if !ast::is_entity_name_expression(extends_expression) && extends_expression.kind() != Kind::NullKeyword {
                     self.resolver.lock(|c| self.tracker.report_inference_fallback(c, extends_expression)); // Add an isolated declarations error on this extends clause
-                    let mut old_id = "default";
+                    let mut old_id = String::from("default");
                     if ast::node_is_present(decl.name()) && ast::is_identifier(decl.name().unwrap()) && !decl.name().unwrap().text().is_empty() {
-                        old_id = decl.name().unwrap().text();
+                        decl.name().unwrap().text().clone_into(&mut old_id);
                     }
                     let new_id = f.new_unique_name_ex(&format!("{old_id}_base"), optimistic());
                     let type_name = decl.name();
@@ -926,12 +926,12 @@ impl DeclarationTransformer {
                     } else if value.is_nan() {
                         Some(f.new_identifier("NaN"))
                     } else if value.0 >= 0.0 {
-                        Some(f.new_numeric_literal(alloc_str(&value.string()), TokenFlags::None))
+                        Some(f.new_numeric_literal(&value.string(), TokenFlags::None))
                     } else {
-                        Some(f.new_prefix_unary_expression(Kind::MinusToken, f.new_numeric_literal(alloc_str(&(-value).string()), TokenFlags::None)))
+                        Some(f.new_prefix_unary_expression(Kind::MinusToken, f.new_numeric_literal(&(-value).string(), TokenFlags::None)))
                     }
                 }
-                Some(checker::LiteralValue::String(value)) => Some(f.new_string_literal(value, TokenFlags::None)),
+                Some(checker::LiteralValue::String(value)) => Some(f.new_string_literal(&value, TokenFlags::None)),
                 // nil
                 _ => None,
             };

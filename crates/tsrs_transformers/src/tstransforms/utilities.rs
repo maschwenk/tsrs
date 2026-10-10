@@ -10,7 +10,7 @@ pub(crate) enum ConstantValue<'a> {
 // utilities.go:9
 pub(crate) fn constant_expression(value: ConstantValue, factory: &printer::NodeFactory) -> Option<P<Node>> {
     match value {
-        ConstantValue::String(value) => Some(factory.new_string_literal(alloc_str(value), TokenFlags::None)),
+        ConstantValue::String(value) => Some(factory.new_string_literal(value, TokenFlags::None)),
         ConstantValue::Number(value) => {
             if value.is_inf() {
                 if value.0 > 0.0 {
@@ -24,7 +24,7 @@ pub(crate) fn constant_expression(value: ConstantValue, factory: &printer::NodeF
             if value.0 < 0.0 {
                 return Some(factory.new_prefix_unary_expression(Kind::MinusToken, constant_expression(ConstantValue::Number(-value), factory).unwrap()));
             }
-            Some(factory.new_numeric_literal(alloc_str(&value.string()), TokenFlags::None))
+            Some(factory.new_numeric_literal(&value.string(), TokenFlags::None))
         }
     }
 }

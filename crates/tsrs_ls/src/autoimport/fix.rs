@@ -6,7 +6,7 @@ use tsrs_ast::{self as ast, Kind, Node, NodeFlags, SourceFile, TokenFlags};
 use tsrs_compiler::Program;
 use tsrs_core::context::Context;
 use tsrs_core::tspath;
-use tsrs_core::{alloc_str, CompilerOptions, ModuleDetectionKind, ModuleKind, TextRange, Tristate, P};
+use tsrs_core::{ CompilerOptions, ModuleDetectionKind, ModuleKind, TextRange, Tristate, P};
 use tsrs_diagnostics as diagnostics;
 use tsrs_lsproto as lsproto;
 use tsrs_modulespecifiers::{self as modulespecifiers, ImportModuleSpecifierPreference, ResultKind};
@@ -265,7 +265,7 @@ pub(crate) fn add_to_existing_import(
 
             if let Some(default_import) = default_import {
                 assert!(import_clause.name().is_none(), "Cannot add a default import to an import clause that already has one");
-                let id = ct.node_factory.new_identifier(alloc_str(&default_import.name));
+                let id = ct.node_factory.new_identifier(&default_import.name);
                 ct.insert_node_at(
                     file,
                     astnav::get_start_of_node(import_clause_or_binding_pattern, file, false),
@@ -282,12 +282,12 @@ pub(crate) fn add_to_existing_import(
                     .map(|named_import| {
                         let mut identifier: Option<P<Node>> = None;
                         if !named_import.property_name.is_empty() {
-                            identifier = Some(ct.node_factory.new_identifier(alloc_str(&named_import.property_name)));
+                            identifier = Some(ct.node_factory.new_identifier(&named_import.property_name));
                         }
                         ct.node_factory.new_import_specifier(
                             (!clause_is_type_only || promote_from_type_only) && should_use_type_only(named_import.add_as_type_only, preferences),
                             identifier,
-                            ct.node_factory.new_identifier(alloc_str(&named_import.name)),
+                            ct.node_factory.new_identifier(&named_import.name),
                         )
                     })
                     .collect();
@@ -370,8 +370,8 @@ fn get_type_keyword_of_type_only_import(import_clause: P<Node>, source_file: P<S
 
 // fix.go:338
 fn add_element_to_binding_pattern(ct: &mut change::Tracker, file: P<SourceFile>, binding_pattern: P<Node>, name: &str, property_name: &str) {
-    let property = if property_name.is_empty() { None } else { Some(ct.node_factory.new_identifier(alloc_str(property_name))) };
-    let element = ct.node_factory.new_binding_element(None, None, Some(ct.node_factory.new_identifier(alloc_str(name))), property);
+    let property = if property_name.is_empty() { None } else { Some(ct.node_factory.new_identifier(property_name)) };
+    let element = ct.node_factory.new_binding_element(None, None, Some(ct.node_factory.new_identifier(name)), property);
     let elements = binding_pattern.as_binding_pattern().elements;
     if !elements.nodes().is_empty() {
         ct.insert_node_in_list_after(file, elements.nodes()[elements.nodes().len() - 1], element, Some(elements));
@@ -393,7 +393,7 @@ pub(crate) fn get_new_imports(
     preferences: &UserPreferences,
 ) -> Vec<P<Node>> {
     let token_flags = if quote_preference == QuotePreference::Single { TokenFlags::SingleQuote } else { TokenFlags::None };
-    let module_specifier_string_literal = ct.node_factory.new_string_literal(alloc_str(module_specifier), token_flags);
+    let module_specifier_string_literal = ct.node_factory.new_string_literal(module_specifier, token_flags);
     let mut statements: Vec<P<Node>> = Vec::new();
     if default_import.is_some() || !named_imports.is_empty() {
         // `verbatimModuleSyntax` should prefer top-level `import type` -
@@ -404,17 +404,17 @@ pub(crate) fn get_new_imports(
                 && default_import.is_none_or(|d| d.add_as_type_only != lsproto::AddAsTypeOnly::NotAllowed)
                 && !named_imports.iter().any(|i| i.add_as_type_only == lsproto::AddAsTypeOnly::NotAllowed);
 
-        let default_import_node = default_import.map(|d| ct.node_factory.new_identifier(alloc_str(&d.name)));
+        let default_import_node = default_import.map(|d| ct.node_factory.new_identifier(&d.name));
 
         let specifiers: Vec<P<Node>> = named_imports
             .iter()
             .map(|named_import| {
                 let named_import_property_name =
-                    if named_import.property_name.is_empty() { None } else { Some(ct.node_factory.new_identifier(alloc_str(&named_import.property_name))) };
+                    if named_import.property_name.is_empty() { None } else { Some(ct.node_factory.new_identifier(&named_import.property_name)) };
                 ct.node_factory.new_import_specifier(
                     !top_level_type_only && should_use_type_only(named_import.add_as_type_only, preferences),
                     named_import_property_name,
-                    ct.node_factory.new_identifier(alloc_str(&named_import.name)),
+                    ct.node_factory.new_identifier(&named_import.name),
                 )
             })
             .collect();
@@ -426,7 +426,7 @@ pub(crate) fn get_new_imports(
             ct.node_factory.new_import_equals_declaration(
                 None, /*modifiers*/
                 should_use_type_only(namespace_like_import.add_as_type_only, preferences),
-                ct.node_factory.new_identifier(alloc_str(&namespace_like_import.name)),
+                ct.node_factory.new_identifier(&namespace_like_import.name),
                 ct.node_factory.new_external_module_reference(module_specifier_string_literal),
             )
         } else {
@@ -435,7 +435,7 @@ pub(crate) fn get_new_imports(
                 Some(ct.node_factory.new_import_clause(
                     /*phaseModifier*/ if should_use_type_only(namespace_like_import.add_as_type_only, preferences) { Kind::TypeKeyword } else { Kind::Unknown },
                     None, /*name*/
-                    Some(ct.node_factory.new_namespace_import(ct.node_factory.new_identifier(alloc_str(&namespace_like_import.name)))),
+                    Some(ct.node_factory.new_namespace_import(ct.node_factory.new_identifier(&namespace_like_import.name))),
                 )),
                 module_specifier_string_literal,
                 None, /*attributes*/
@@ -461,7 +461,7 @@ pub(crate) fn get_new_requires(
 ) -> Vec<P<Node>> {
     let f = &change_tracker.node_factory;
     let quoted_module_specifier = f.new_string_literal(
-        alloc_str(module_specifier),
+        module_specifier,
         if quote_preference == QuotePreference::Single { TokenFlags::SingleQuote } else { TokenFlags::None },
     );
     let mut statements: Vec<P<Node>> = Vec::new();
@@ -470,11 +470,11 @@ pub(crate) fn get_new_requires(
     if default_import.is_some() || !named_imports.is_empty() {
         let mut binding_elements: Vec<P<Node>> = Vec::new();
         for named_import in named_imports {
-            let property_name = if named_import.property_name.is_empty() { None } else { Some(f.new_identifier(alloc_str(&named_import.property_name))) };
+            let property_name = if named_import.property_name.is_empty() { None } else { Some(f.new_identifier(&named_import.property_name)) };
             binding_elements.push(f.new_binding_element(
                 None, /*dotDotDotToken*/
                 property_name,
-                Some(f.new_identifier(alloc_str(&named_import.name))),
+                Some(f.new_identifier(&named_import.name)),
                 None, /*initializer*/
             ));
         }
@@ -484,7 +484,7 @@ pub(crate) fn get_new_requires(
                 f.new_binding_element(
                     None, /*dotDotDotToken*/
                     Some(f.new_identifier("default")),
-                    Some(f.new_identifier(alloc_str(&default_import.name))),
+                    Some(f.new_identifier(&default_import.name)),
                     None, /*initializer*/
                 ),
             );
@@ -499,7 +499,7 @@ pub(crate) fn get_new_requires(
 
     // const foo = require('./mod');
     if let Some(namespace_like_import) = namespace_like_import {
-        let declaration = create_const_equals_require_declaration(change_tracker, f.new_identifier(alloc_str(&namespace_like_import.name)), quoted_module_specifier);
+        let declaration = create_const_equals_require_declaration(change_tracker, f.new_identifier(&namespace_like_import.name), quoted_module_specifier);
         statements.push(declaration);
     }
 

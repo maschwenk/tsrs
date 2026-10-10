@@ -319,13 +319,13 @@ fn get_module_specifier_expression(declaration: P<Node>) -> Option<P<Node>> {
 
 // organizeimports.go:299
 // GetExternalModuleName returns the module name from a module specifier expression.
-pub fn get_external_module_name(specifier: Option<P<Node>>) -> &'static str {
+pub fn get_external_module_name(specifier: Option<P<Node>>) -> String {
     if let Some(specifier) = specifier {
         if ast::is_string_literal_like(specifier) {
-            return specifier.text();
+            return specifier.text().to_owned();
         }
     }
-    ""
+    String::new()
 }
 
 // organizeimports.go:307
@@ -337,11 +337,11 @@ pub fn compare_module_specifiers(m1: Option<P<Node>>, m2: Option<P<Node>>, compa
     if cmp != 0 {
         return cmp;
     }
-    let cmp = compare_booleans(tspath::is_external_module_name_relative(name1), tspath::is_external_module_name_relative(name2));
+    let cmp = compare_booleans(tspath::is_external_module_name_relative(&name1), tspath::is_external_module_name_relative(&name2));
     if cmp != 0 {
         return cmp;
     }
-    comparer(name1, name2)
+    comparer(&name1, &name2)
 }
 
 // organizeimports.go:319
@@ -412,8 +412,10 @@ fn compare_import_or_export_specifiers(
 ) -> i32 {
     let type_order = preferences.organize_imports_type_order;
 
-    let s1_name = s1.name().unwrap().text();
-    let s2_name = s2.name().unwrap().text();
+    let s1_name_owner = s1.name().unwrap();
+    let s1_name = s1_name_owner.text();
+    let s2_name_owner = s2.name().unwrap();
+    let s2_name = s2_name_owner.text();
 
     match type_order {
         OrganizeImportsTypeOrder::First => {
@@ -647,7 +649,7 @@ pub fn detect_module_specifier_case_by_sort(
         let mut module_names: Vec<String> = Vec::with_capacity(import_group.len());
         for &decl in import_group {
             if let Some(expr) = get_module_specifier_expression(decl) {
-                module_names.push(get_external_module_name(Some(expr)).to_string());
+                module_names.push(get_external_module_name(Some(expr)));
             } else {
                 module_names.push(String::new());
             }

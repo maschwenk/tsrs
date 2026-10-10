@@ -796,7 +796,8 @@ impl Checker {
             let file = get_source_file_of_node(node).unwrap();
             let entity = self.get_jsx_factory_entity(Some(file.as_node()));
             if let Some(entity) = entity {
-                let local_jsx_namespace = get_first_identifier(entity).text();
+                let local_jsx_namespace_owner = get_first_identifier(entity);
+                let local_jsx_namespace = local_jsx_namespace_owner.text();
                 let mut flags = SymbolFlags::Value;
                 if !should_factory_ref_err {
                     flags &= !SymbolFlags::Enum;
@@ -1447,7 +1448,7 @@ impl Checker {
     }
 
     // checker.go:29623
-    pub(crate) fn get_template_literal_type(&mut self, texts: &[&str], types: &[P<Type>]) -> P<Type> {
+    pub(crate) fn get_template_literal_type(&mut self, texts: &[impl AsRef<str> + std::hash::Hash], types: &[P<Type>]) -> P<Type> {
         let union_index = find_index(types, |t| t.flags().intersects(TypeFlags::Never | TypeFlags::Union));
         if union_index >= 0 {
             if !self.check_cross_product_union(types, Self::too_complex_key(&(texts, types))) {
@@ -1462,7 +1463,7 @@ impl Checker {
             return self.wildcard_type;
         }
         let mut state = TemplateSpansState { new_types: Vec::new(), new_texts: Vec::new(), sb: String::new(), text_length: 0, too_large: false };
-        state.sb.push_str(texts[0]);
+        state.sb.push_str(texts[0].as_ref());
         if !add_template_spans(self, &mut state, texts, types) {
             if state.too_large {
                 let current_node = self.current_node;
@@ -1504,11 +1505,11 @@ impl Checker {
     pub(crate) fn push_template_string_for_type(&mut self, sb: &mut String, t: P<Type>) {
         if t.flags().intersects(TypeFlags::StringLiteral | TypeFlags::NumberLiteral | TypeFlags::BooleanLiteral | TypeFlags::BigIntLiteral) {
             match t.as_literal_type().value.get().unwrap() {
-                LiteralValue::String(s) => sb.push_str(s),
+                LiteralValue::String(s) => sb.push_str(&s),
                 v => sb.push_str(&evaluator::any_to_string(v)),
             }
         } else if t.flags().intersects(TypeFlags::Nullable) {
-            sb.push_str(t.as_intrinsic_type().intrinsic_name.get());
+            sb.push_str(&t.as_intrinsic_type().intrinsic_name.get());
         }
     }
 
@@ -1545,23 +1546,23 @@ struct TemplateSpansState {
 }
 
 // checker.go:29645 (addSpans closure of getTemplateLiteralType)
-fn add_template_spans(c: &mut Checker, state: &mut TemplateSpansState, texts: &[&str], types: &[P<Type>]) -> bool {
+fn add_template_spans(c: &mut Checker, state: &mut TemplateSpansState, texts: &[impl AsRef<str>], types: &[P<Type>]) -> bool {
     for (i, &t) in types.iter().enumerate() {
         if t.flags().intersects(TypeFlags::Literal | TypeFlags::Null | TypeFlags::Undefined) {
             c.push_template_string_for_type(&mut state.sb, t);
-            state.sb.push_str(texts[i + 1]);
+            state.sb.push_str(texts[i + 1].as_ref());
         } else if t.flags().intersects(TypeFlags::TemplateLiteral) {
-            state.sb.push_str(t.as_template_literal_type().texts.get()[0]);
+            state.sb.push_str(&t.as_template_literal_type().texts.get()[0]);
             if !add_template_spans(c, state, &t.as_template_literal_type().texts.get(), &t.as_template_literal_type().types.get()) {
                 return false;
             }
-            state.sb.push_str(texts[i + 1]);
+            state.sb.push_str(texts[i + 1].as_ref());
         } else if c.is_generic_index_type(t) || c.is_pattern_literal_placeholder_type(t) {
             state.new_types.push(t);
             state.new_texts.push(stringutil::combine_surrogate_pairs(&state.sb).into_owned());
             state.text_length += state.sb.len();
             state.sb.clear();
-            state.sb.push_str(texts[i + 1]);
+            state.sb.push_str(texts[i + 1].as_ref());
         } else {
             return false;
         }
@@ -1592,7 +1593,7 @@ pub(crate) fn apply_string_mapping(symbol: P<Symbol>, str: &str) -> String {
 
 impl Checker {
     // checker.go:29747
-    pub(crate) fn apply_template_string_mapping(&mut self, symbol: P<Symbol>, texts: &[&str], types: &[P<Type>]) -> (Vec<String>, Vec<P<Type>>) {
+    pub(crate) fn apply_template_string_mapping(&mut self, symbol: P<Symbol>, texts: &[TextView], types: &[P<Type>]) -> (Vec<String>, Vec<P<Type>>) {
         match intrinsicTypeKinds.get(symbol.name()).copied().unwrap_or_default() {
             IntrinsicTypeKind::Uppercase | IntrinsicTypeKind::Lowercase => {
                 let new_texts: Vec<String> = texts.iter().map(|t| apply_string_mapping(symbol, t)).collect();
@@ -1964,7 +1965,8 @@ impl Checker {
         let decl_parent = declaration.parent().unwrap();
         if is_expression(decl_parent) {
             if let Some(parent_type) = self.get_contextual_type(decl_parent, context_flags) {
-                let name = self.get_symbol_of_declaration(declaration).unwrap().name();
+                let name_owner = self.get_symbol_of_declaration(declaration).unwrap();
+                let name = name_owner.name();
                 return self.get_type_of_property_of_contextual_type(parent_type, name);
             }
         }

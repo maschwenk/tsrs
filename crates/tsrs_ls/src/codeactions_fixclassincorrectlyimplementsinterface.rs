@@ -224,7 +224,7 @@ fn get_constructor(class_declaration: Option<P<Node>>) -> Option<P<Node>> {
 // codeactions_fixclassincorrectlyimplementsinterface.go:185
 fn get_missing_members(type_checker: &mut Checker, class_declaration: P<Node>, implemented_types: &[P<Type>]) -> Vec<P<Symbol>> {
     let inherited_members = get_inherited_members(type_checker, class_declaration);
-    let mut seen_members: FxHashMap<&'static str, P<Symbol>> = FxHashMap::default();
+    let mut seen_members: FxHashMap<String, P<Symbol>> = FxHashMap::default();
 
     let class_members = class_declaration.symbol().and_then(|s| s.members());
 
@@ -239,7 +239,7 @@ fn get_missing_members(type_checker: &mut Checker, class_declaration: P<Node>, i
             }
             let flags = checker::get_declaration_modifier_flags_from_symbol_exported(symbol);
             if !flags.intersects(ModifierFlags::Private) {
-                seen_members.insert(symbol.name(), symbol);
+                seen_members.insert(symbol.name().to_owned(), symbol);
                 missing_members.push(symbol);
             }
         }
@@ -248,7 +248,7 @@ fn get_missing_members(type_checker: &mut Checker, class_declaration: P<Node>, i
 }
 
 // codeactions_fixclassincorrectlyimplementsinterface.go:216
-fn get_inherited_members(type_checker: &mut Checker, class_declaration: P<Node>) -> FxHashMap<&'static str, P<Symbol>> {
+fn get_inherited_members(type_checker: &mut Checker, class_declaration: P<Node>) -> FxHashMap<String, P<Symbol>> {
     let Some(type_node) = ast::get_class_extends_heritage_element(class_declaration) else {
         return FxHashMap::default();
     };
@@ -259,7 +259,7 @@ fn get_inherited_members(type_checker: &mut Checker, class_declaration: P<Node>)
     for symbol in type_checker.get_properties_of_type(base_type) {
         let flags = checker::get_declaration_modifier_flags_from_symbol_exported(symbol);
         if !flags.intersects(ModifierFlags::Private) {
-            inherited_members.insert(symbol.name(), symbol);
+            inherited_members.insert(symbol.name().to_owned(), symbol);
         }
     }
     inherited_members

@@ -2190,7 +2190,8 @@ impl Relater {
         // give specific error in case where private names have the same description
         if let Some(value_declaration) = unmatched_property.value_declaration() {
             if value_declaration.name().is_some_and(ast::is_private_identifier) && source.symbol().is_some_and(|s| s.flags().intersects(SymbolFlags::Class)) {
-                let private_identifier_description = value_declaration.name().unwrap().text();
+                let private_identifier_description_owner = value_declaration.name().unwrap();
+                let private_identifier_description = private_identifier_description_owner.text();
                 let symbol_table_key = tsrs_binder::get_symbol_name_for_private_identifier(source.symbol().unwrap(), private_identifier_description);
                 if c.get_property_of_type(source, &symbol_table_key).is_some() {
                     let source_symbol_string = c.symbol_to_string_exported(source.symbol().unwrap());

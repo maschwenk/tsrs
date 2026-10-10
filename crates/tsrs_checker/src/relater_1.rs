@@ -381,12 +381,12 @@ impl Checker {
                     .value;
                 if source_value != target_value {
                     // If we have 2 enums with *known* values that differ, they are incompatible.
-                    if let (Some(sv), Some(tv)) = (source_value, target_value) {
+                    if let (Some(sv), Some(tv)) = (source_value.as_ref(), target_value.as_ref()) {
                         if let Some(reporter) = error_reporter.as_mut() {
                             let a = self.symbol_to_string(target_symbol);
                             let b = self.symbol_to_string(target_property);
-                            let c = self.value_to_string(tv);
-                            let d = self.value_to_string(sv);
+                            let c = self.value_to_string(tv.clone());
+                            let d = self.value_to_string(sv.clone());
                             reporter(
                                 self,
                                 &diagnostics::Each_declaration_of_0_1_differs_in_its_value_where_2_was_expected_but_3_was_given,
@@ -1420,12 +1420,12 @@ impl Checker {
             return Some(properties);
         }
         let mut members: Vec<P<Symbol>> = Vec::new();
-        let mut seen: FxHashSet<&'static str> = FxHashSet::default();
+        let mut seen: FxHashSet<String> = FxHashSet::default();
         if let Some(declared_members) = self.resolve_declared_members(&reduced.target().unwrap()).unwrap().declared_members.get() {
             for (id, symbol) in declared_members.entries() {
-                if self.is_named_member(symbol, id) {
-                    seen.insert(id);
-                    members.push(lm.declared.lookup(id).unwrap_or(symbol));
+                if self.is_named_member(symbol, &id) {
+                    seen.insert(id.to_string());
+                    members.push(lm.declared.lookup(&id).unwrap_or(symbol));
                 }
             }
         }
@@ -1435,7 +1435,7 @@ impl Checker {
                 None => self.get_properties_of_type(base_type),
             };
             for &p in base_properties.iter() {
-                if !is_static_private_identifier_property(p) && seen.insert(p.name()) {
+                if !is_static_private_identifier_property(p) && seen.insert(p.name().to_owned()) {
                     members.push(p);
                 }
             }
@@ -1578,7 +1578,7 @@ impl Checker {
         let u = t.as_union_type();
         if u.key_property_name().is_empty() {
             let (key_property_name, constituent_map) = self.compute_key_property_name_and_map(t);
-            u.set_key_property_name(alloc_str(&key_property_name));
+            u.set_key_property_name(&key_property_name);
             // An empty map stands for Go's nil map (mapTypesByKeyProperty never returns an empty non-nil map).
             if constituent_map.is_empty() {
                 if let Some(m) = u.constituent_map() {
@@ -2606,7 +2606,7 @@ impl Checker {
                 }
             }
         }
-        let root_name = if let Some(rest_symbol) = rest_symbol { rest_symbol.name() } else { "arg" };
+        let root_name = rest_symbol.as_ref().map_or("arg", |symbol| symbol.name());
         format!("{}_{}", root_name, index)
     }
 
@@ -2742,7 +2742,7 @@ impl Checker {
         }
         let last = last?;
         let composite_type = self.get_union_or_intersection_type(&types, is_union, UnionReduction::Literal);
-        Some(self.new_type_predicate(last.kind(), last.parameter_name(), last.parameter_index(), Some(composite_type)))
+        Some(self.new_type_predicate(last.kind(), &last.parameter_name(), last.parameter_index(), Some(composite_type)))
     }
 
     // relater.go:2113
@@ -2778,7 +2778,7 @@ impl Checker {
         if t == predicate.type_() {
             return predicate;
         }
-        self.new_type_predicate(predicate.kind(), predicate.parameter_name(), predicate.parameter_index(), t)
+        self.new_type_predicate(predicate.kind(), &predicate.parameter_name(), predicate.parameter_index(), t)
     }
 
     // relater.go:2141
@@ -2786,7 +2786,7 @@ impl Checker {
         P::new(TypePredicate {
             kind: Cell::new(kind),
             parameter_index: Cell::new(parameter_index),
-            parameter_name: Cell::new(alloc_str(parameter_name)),
+            parameter_name: TextCell::new(parameter_name),
             t: Cell::new(t),
         })
     }
@@ -3124,14 +3124,14 @@ impl Checker {
     // the first inference is the template literal type `<${string}>`. The remainder of the source makes up the second
     // inference, the template literal type `<${number}-${number}>`.
     // (An empty result stands for Go's nil.)
-    pub(crate) fn infer_from_literal_parts_to_template_literal(&mut self, source_texts: &[&str], source_types: &[P<Type>], target: &TemplateLiteralType) -> Vec<P<Type>> {
+    pub(crate) fn infer_from_literal_parts_to_template_literal(&mut self, source_texts: &[TextView], source_types: &[P<Type>], target: &TemplateLiteralType) -> Vec<P<Type>> {
         let last_source_index = source_texts.len() - 1;
-        let source_start_text = source_texts[0];
-        let source_end_text = source_texts[last_source_index];
+        let source_start_text = source_texts[0].as_ref();
+        let source_end_text = source_texts[last_source_index].as_ref();
         let target_texts = target.texts();
         let last_target_index = target_texts.len() - 1;
-        let target_start_text = target_texts[0];
-        let target_end_text = target_texts[last_target_index];
+        let target_start_text = target_texts[0].as_ref();
+        let target_end_text = target_texts[last_target_index].as_ref();
         if last_source_index == 0 && source_start_text.len() < target_start_text.len() + target_end_text.len()
             || !source_start_text.starts_with(target_start_text)
             || !source_end_text.ends_with(target_end_text)
@@ -3144,7 +3144,7 @@ impl Checker {
         let mut matches: Vec<P<Type>> = Vec::new();
         let get_source_text = |index: usize| -> &str {
             if index < last_source_index {
-                return source_texts[index];
+                return &source_texts[index];
             }
             remaining_end_text
         };
@@ -3156,7 +3156,7 @@ impl Checker {
             } else {
                 let mut match_texts: Vec<&str> = Vec::with_capacity(s - *seg + 1);
                 match_texts.push(&source_texts[*seg][*pos..]);
-                match_texts.extend_from_slice(&source_texts[*seg + 1..s]);
+                match_texts.extend(source_texts[*seg + 1..s].iter().map(AsRef::as_ref));
                 match_texts.push(&get_source_text(s)[..p]);
                 match_type = c.get_template_literal_type(&match_texts, &source_types[*seg..s]);
             }
@@ -3165,7 +3165,7 @@ impl Checker {
             *pos = p;
         };
         for i in 1..last_target_index {
-            let delim = target_texts[i];
+            let delim = target_texts[i].as_ref();
             if !delim.is_empty() {
                 let mut s = seg;
                 let mut p = pos;

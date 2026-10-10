@@ -3,7 +3,7 @@ use std::sync::atomic::AtomicU32;
 
 use hashbrown::HashTable;
 use rustc_hash::FxBuildHasher;
-use tsrs_core::{FrozenCell, OwnedCell, OwnedPSliceCell, OwnedTaggedStrCell, PKey, P};
+use tsrs_core::{FrozenCell, OwnedCell, OwnedPSliceCell, TextView, PKey, P};
 
 use crate::ast::{Node, SourceFile};
 use crate::checkflags::CheckFlags;
@@ -22,14 +22,28 @@ use crate::*;
 // 10.88M / 2.31M of 13.2M; another node in 23K), so a bit says "the first declaration" and only another node is
 // kept in the tail (`value_declaration()` / `set_value_declaration()`; a declarations write that replaces the
 // first declaration moves it to the tail first). Both bits (`TAG_TABLES`, `TAG_VALUE_FIRST`) are the tag bits of
-// the name word (`OwnedTaggedStrCell`: pointer, length and tags in one word). `declarations` is an
-// `OwnedPSliceCell`: 40 bytes.
+// immutable owned name record. They are ordinary state bits, independent of the string address. `declarations`
+// remains an `OwnedPSliceCell`; the full graph migration is still in progress.
+
+/// An immutable owned symbol name and the symbol's independent state bits.
+#[derive(Default)]
+pub struct SymbolName {
+    text: TextView,
+    tags: OwnedCell<u8>,
+}
+
+impl SymbolName {
+    fn new(text: &str) -> Self { Self { text: text.into(), tags: OwnedCell::new(0) } }
+    pub fn get(&self) -> &str { &self.text }
+    fn tags(&self) -> u8 { self.tags.get() }
+    fn set_tags(&self, tags: u8) { self.tags.set(tags); }
+}
 
 #[derive(Default)]
 pub struct Symbol {
     pub flags: OwnedCell<SymbolFlags>,
     pub check_flags: OwnedCell<CheckFlags>, // Non-zero only in transient symbols created by Checker
-    pub name: OwnedTaggedStrCell,
+    pub name: SymbolName,
     declarations: OwnedPSliceCell<P<Node>>, // Go slice: shared by copies, replaced (not mutated) on append
     pub(crate) id: AtomicU32,               // Go uint64; ids above u32::MAX panic in get_symbol_id
     parent_or_tables: OwnedCell<PKey>,      // `P::key` of the parent or (with `TAG_TABLES`) of the tail; 0 = none
@@ -48,7 +62,7 @@ struct SymbolTables {
 }
 
 #[cfg(target_pointer_width = "64")]
-const _: () = assert!(std::mem::size_of::<Symbol>() == 40);
+const _: () = assert!(std::mem::size_of::<Symbol>() == 48);
 #[cfg(target_pointer_width = "32")]
 const _: () = assert!(std::mem::size_of::<Symbol>() == 32);
 
@@ -57,16 +71,16 @@ const TAG_TABLES: u8 = 1;
 /// The value declaration is the first declaration.
 const TAG_VALUE_FIRST: u8 = 2;
 
-/// Census builds: the name word keeps its length and tag bits above the address (`crate::census_layouts`).
+/// Owned text and scalar state bits do not encode arena graph edges.
 pub(crate) fn census_layout() {
     let off = std::mem::offset_of!(Symbol, name);
-    tsrs_core::census_layout(std::any::type_name::<Symbol>(), &[tsrs_core::CensusField::Tagged { off }]);
+    tsrs_core::census_layout(std::any::type_name::<Symbol>(), &[tsrs_core::CensusField::NoPointer { off, len: std::mem::size_of::<SymbolName>() }]);
 }
 
 impl Symbol {
     /// Allocates a fresh symbol (Go `&ast.Symbol{Flags: flags, Name: name}`).
-    pub fn new(flags: SymbolFlags, name: &'static str) -> P<Symbol> {
-        P::new(Symbol { flags: OwnedCell::new(flags), name: OwnedTaggedStrCell::new(name), ..Default::default() })
+    pub fn new(flags: SymbolFlags, name: &str) -> P<Symbol> {
+        P::new(Symbol { flags: OwnedCell::new(flags), name: SymbolName::new(name), ..Default::default() })
     }
 
     #[inline]
@@ -82,7 +96,7 @@ impl Symbol {
         self.check_flags.get()
     }
     #[inline]
-    pub fn name(&self) -> &'static str {
+    pub fn name(&self) -> &str {
         self.name.get()
     }
     #[inline]
@@ -387,7 +401,7 @@ impl SymbolMapEntry {
 #[derive(Default, Clone)]
 struct SymbolMapExtra {
     index: Option<HashTable<u32>>, // positions in `entries`; present once len > SYMBOL_TABLE_LINEAR_MAX
-    odd_keys: Vec<(u32, &'static str)>, // (position, key) of the entries whose key is not their symbol's name
+    odd_keys: Vec<(u32, TextView)>, // (position, key) of the entries whose key is not their symbol's name
 }
 
 /// An owned extra record, or a Bloom filter of key hashes in linear tables whose keys are their symbols' names.
@@ -505,25 +519,37 @@ impl SymbolMap {
 
     /// The stored key of entry `i`.
     #[inline]
-    fn key(&self, i: usize) -> &'static str {
+    fn key(&self, i: usize) -> TextView {
         let e = self.entries[i];
         if !e.is_odd() {
-            return e.symbol().name();
+            return e.symbol().name.text.clone();
         }
         let odd_keys = &self.extra.get().unwrap().odd_keys;
-        odd_keys.iter().find(|&&(j, _)| j as usize == i).unwrap().1
+        odd_keys.iter().find(|(j, _)| *j as usize == i).unwrap().1.clone()
+    }
+
+    /// Borrow a key only for this operation; snapshots returned to callers retain their text.
+    #[inline]
+    fn with_key<R>(&self, i: usize, f: impl FnOnce(&str) -> R) -> R {
+        let entry = self.entries[i];
+        if !entry.is_odd() {
+            let symbol = entry.symbol();
+            return f(symbol.name());
+        }
+        let text = &self.extra.get().unwrap().odd_keys.iter().find(|(j, _)| *j as usize == i).unwrap().1;
+        f(text)
     }
 
     /// Whether entry `i`'s key is `name` (whose fingerprint is `print`).
     #[inline]
     fn entry_matches(&self, i: usize, name: &str, print: KeyPrint) -> bool {
-        self.entries[i].print() == print && same_text(self.key(i), name)
+        self.entries[i].print() == print && self.with_key(i, |key| same_text(key, name))
     }
 
     /// The hash of entry `i`'s key (rehashing the index, removing from it).
     #[inline]
     fn entry_hash(&self, i: usize) -> u32 {
-        hash_name(self.key(i))
+        self.with_key(i, hash_name)
     }
 
     /// The position of `name`. Over half of all lookups end at the filter (a miss in a small table), so that test is
@@ -553,12 +579,12 @@ impl SymbolMap {
         }
     }
 
-    fn add_odd_key(&mut self, i: usize, key: &'static str) {
+    fn add_odd_key(&mut self, i: usize, key: &str) {
         self.entries[i].0 |= SymbolMapEntry::ODD_BIT;
-        self.extra.get_or_insert().odd_keys.push((i as u32, key));
+        self.extra.get_or_insert().odd_keys.push((i as u32, key.into()));
     }
 
-    fn insert(&mut self, name: &'static str, symbol: P<Symbol>) {
+    fn insert(&mut self, name: &str, symbol: P<Symbol>) {
         let hash = hash_name(name);
         if let Some(i) = if self.extra.may_contain(hash) { self.search(name, hash) } else { None } {
             // Go keeps the stored key; it is no longer the new symbol's name when that differs.
@@ -611,7 +637,7 @@ impl SymbolMap {
                     }
                 }
             }
-            extra.odd_keys.retain(|&(j, _)| j as usize != i);
+            extra.odd_keys.retain(|(j, _)| *j as usize != i);
             for (j, _) in extra.odd_keys.iter_mut() {
                 if *j as usize > i {
                     *j -= 1;
@@ -621,7 +647,7 @@ impl SymbolMap {
         self.entries.remove(i);
     }
 
-    fn pairs(&self) -> Vec<(&'static str, P<Symbol>)> {
+    fn pairs(&self) -> Vec<(TextView, P<Symbol>)> {
         (0..self.entries.len()).map(|i| (self.key(i), self.entries[i].symbol())).collect()
     }
 }
@@ -706,13 +732,13 @@ impl SymbolTable {
 
     /// `lookup` that also returns the stored key.
     #[inline]
-    pub fn lookup_entry(&self, name: &str) -> Option<(&'static str, P<Symbol>)> {
+    pub fn lookup_entry(&self, name: &str) -> Option<(TextView, P<Symbol>)> {
         let m = self.0.borrow();
         m.position(name).map(|i| (m.key(i), m.entries[i].symbol()))
     }
 
     #[inline]
-    pub fn set(&self, name: &'static str, symbol: P<Symbol>) {
+    pub fn set(&self, name: &str, symbol: P<Symbol>) {
         self.0.borrow_mut().insert(name, symbol);
     }
 
@@ -736,7 +762,7 @@ impl SymbolTable {
         let m = self.0.borrow();
         let mut bytes = m.entries.capacity() * std::mem::size_of::<SymbolMapEntry>();
         if let Some(extra) = m.extra.get() {
-            bytes += std::mem::size_of::<SymbolMapExtra>() + extra.odd_keys.capacity() * 24;
+            bytes += std::mem::size_of::<SymbolMapExtra>() + extra.odd_keys.capacity() * std::mem::size_of::<(u32, TextView)>();
             if let Some(index) = &extra.index {
                 let cap = index.capacity();
                 let buckets = if cap < 8 { (cap + 1).next_power_of_two() } else { cap / 7 * 8 };
@@ -752,17 +778,17 @@ impl SymbolTable {
     }
 
     /// Iterates over a snapshot, so `f` may mutate the table.
-    pub fn for_each(&self, mut f: impl FnMut(&'static str, P<Symbol>)) {
+    pub fn for_each(&self, mut f: impl FnMut(&str, P<Symbol>)) {
         for (name, symbol) in self.entries() {
-            f(name, symbol);
+            f(&name, symbol);
         }
     }
 
-    pub fn entries(&self) -> Vec<(&'static str, P<Symbol>)> {
+    pub fn entries(&self) -> Vec<(TextView, P<Symbol>)> {
         self.0.borrow().pairs()
     }
 
-    pub fn keys(&self) -> Vec<&'static str> {
+    pub fn keys(&self) -> Vec<TextView> {
         let m = self.0.borrow();
         (0..m.entries.len()).map(|i| m.key(i)).collect()
     }
@@ -800,13 +826,13 @@ pub const InternalSymbolNameDefault: &str = "default"; // Default export symbol 
 pub const InternalSymbolNameThis: &str = "this";
 pub const InternalSymbolNameModuleExports: &str = "module.exports";
 
-pub fn symbol_name(symbol: P<Symbol>) -> &'static str {
+pub fn symbol_name(symbol: P<Symbol>) -> TextView {
     if let Some(value_declaration) = symbol.value_declaration() {
         if is_private_identifier_class_element_declaration(value_declaration) {
-            return value_declaration.name().unwrap().text();
+            return value_declaration.name().unwrap().text().into();
         }
     }
-    symbol.name.get()
+    symbol.name.text.clone()
 }
 
 // EscapeAllInternalSymbolNames replaces internal symbol name markers with "__".

@@ -1804,7 +1804,7 @@ impl registryBuilder<'_> {
                 return None;
             }
             let file_exports = extractor.extract_from_file(entrypoint);
-            for &name in entrypoint.ambient_module_names() {
+            for name in entrypoint.ambient_module_names().iter() {
                 result.ambient_modules.entry(name.to_string()).or_default().push(entrypoint.file_name().to_string());
             }
             result.package_files.insert(entrypoint.path().clone(), entrypoint.file_name().to_string());

@@ -151,7 +151,7 @@ fn get_raw_literal(f: &printer::NodeFactory, node: P<Node>) -> P<Node> {
     // <CR><LF> and <CR> LineTerminatorSequences are normalized to <LF> for both TV and TRV.
     let text = newline_normalizer_replace(&text);
 
-    let result = f.new_string_literal(alloc_str(&text), TokenFlags::None);
+    let result = f.new_string_literal(&text, TokenFlags::None);
     result.set_loc(node.loc());
     result
 }

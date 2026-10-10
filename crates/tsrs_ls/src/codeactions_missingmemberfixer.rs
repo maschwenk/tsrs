@@ -5,7 +5,7 @@ use tsrs_ast::{self as ast, CheckFlags, Kind, ModifierFlags, Node, NodeFactory, 
 use tsrs_checker::{self as checker, Checker, Flags, IndexInfo, InternalFlags, NodeBuilder, Signature, Type};
 use tsrs_compiler::Program;
 use tsrs_core::context::Locale;
-use tsrs_core::{alloc_str, P};
+use tsrs_core::{ P};
 use tsrs_diagnostics as diagnostics;
 
 use crate::autoimport::{self, IdToSymbol, ImportAdder};
@@ -492,7 +492,7 @@ impl<'a> missingMemberFixer<'a> {
             parameter_nodes.push(factory.new_parameter_declaration(
                 None, /*modifiers*/
                 Some(factory.new_token(Kind::DotDotDotToken)),
-                factory.new_identifier(alloc_str(&rest_parameter_name)),
+                factory.new_identifier(&rest_parameter_name),
                 question_token,
                 Some(factory.new_array_type_node(factory.new_keyword_type_node(Kind::UnknownKeyword))),
                 None, /*initializer*/
@@ -611,7 +611,7 @@ impl<'a> missingMemberFixer<'a> {
             factory.new_node_list(vec![factory.new_throw_statement(factory.new_new_expression(
                 factory.new_identifier("Error"),
                 None, /*typeArguments*/
-                Some(factory.new_node_list(vec![factory.new_string_literal(alloc_str(&diagnostics::Method_not_implemented.localize(&[])), token_flags)])),
+                Some(factory.new_node_list(vec![factory.new_string_literal(&diagnostics::Method_not_implemented.localize(&[]), token_flags)])),
             ))]),
             true, /*multiLine*/
         )
@@ -648,7 +648,7 @@ pub(crate) fn create_dummy_parameters(factory: &NodeFactory, arg_count: i32, nam
         parameters.push(factory.new_parameter_declaration(
             None, /*modifiers*/
             None, /*dotDotDotToken*/
-            factory.new_identifier(alloc_str(&parameter_name)),
+            factory.new_identifier(&parameter_name),
             question_token,
             type_node,
             None, /*initializer*/
@@ -664,7 +664,7 @@ pub(crate) fn create_declaration_name(factory: &NodeFactory, type_checker: &mut 
             let name_type = type_checker.get_name_type_of_symbol(symbol);
             if let Some(name_type) = name_type {
                 if checker::is_type_usable_as_property_name_exported(name_type) {
-                    return Some(factory.new_identifier(alloc_str(&checker::get_property_name_from_type_exported(name_type))));
+                    return Some(factory.new_identifier(&checker::get_property_name_from_type_exported(name_type)));
                 }
             }
         }

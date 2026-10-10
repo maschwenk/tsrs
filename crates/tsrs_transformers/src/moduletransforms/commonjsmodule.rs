@@ -414,7 +414,7 @@ impl CommonJSModuleTransformer {
             return;
         };
 
-        let mut seen: Set<&'static str> = Set::default();
+        let mut seen: Set<String> = Set::default();
         if import_clause.name().is_some() {
             self.append_exports_of_declaration(statements, import_clause, Some(&mut seen), false /*liveBinding*/);
         }
@@ -481,7 +481,7 @@ impl CommonJSModuleTransformer {
         }
 
         let f = self.factory();
-        let mut seen: Set<&'static str> = Set::default();
+        let mut seen: Set<String> = Set::default();
         if ast::has_syntactic_modifier(decl, ModifierFlags::Export) {
             let export_name = if ast::has_syntactic_modifier(decl, ModifierFlags::Default) { f.new_identifier("default") } else { f.get_declaration_name(decl) };
 
@@ -496,13 +496,13 @@ impl CommonJSModuleTransformer {
 
     // Appends the exports of a declaration to a statement list, returning the statement list.
     // commonjsmodule.go:531
-    pub(crate) fn append_exports_of_declaration(&self, statements: &mut Vec<P<Node>>, decl: P<Node>, seen: Option<&mut Set<&'static str>>, live_binding: bool) {
+    pub(crate) fn append_exports_of_declaration(&self, statements: &mut Vec<P<Node>>, decl: P<Node>, seen: Option<&mut Set<String>>, live_binding: bool) {
         let info = self.module_info();
         if info.export_equals.is_some() {
             return;
         }
 
-        let mut own_seen: Set<&'static str> = Set::default();
+        let mut own_seen: Set<String> = Set::default();
         let seen = match seen {
             Some(seen) => seen,
             None => &mut own_seen,
@@ -511,7 +511,7 @@ impl CommonJSModuleTransformer {
         if let Some(name) = decl.name() {
             if !info.export_specifiers.m.is_empty() && ast::is_identifier(name) {
                 let name = self.factory().get_declaration_name(decl);
-                let export_specifiers = info.export_specifiers.get(&name.text());
+                let export_specifiers = info.export_specifiers.get(name.text());
                 if !export_specifiers.is_empty() {
                     let export_value = self.visit_expression_identifier(name);
                     for &export_specifier in export_specifiers {

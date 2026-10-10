@@ -5,7 +5,7 @@ use rustc_hash::FxHashMap;
 use tsrs_ast::{self as ast, Kind, ModifierFlags, ModifierList, Node, NodeFactory, NodeFlags, SourceFile, Symbol, TokenFlags};
 use tsrs_checker::{Checker, Flags, InternalFlags, ObjectFlags, Type, TypeFlags, UnionReduction};
 use tsrs_core::context::Context;
-use tsrs_core::{alloc_str, LanguageVariant, NewLineKind, TextRange, P};
+use tsrs_core::{ LanguageVariant, NewLineKind, TextRange, P};
 use tsrs_diagnostics as diagnostics;
 use tsrs_lsproto as lsproto;
 use tsrs_printer::{self as printer, AutoGenerateOptions, EmitFlags, GeneratedIdentifierFlags};
@@ -698,7 +698,7 @@ impl isolatedDeclarationsFixer<'_> {
                     continue;
                 };
 
-                let access_expr = factory.new_element_access_expression(base_expr, None, factory.new_numeric_literal(alloc_str(&i.to_string()), TokenFlags::None), NodeFlags::None);
+                let access_expr = factory.new_element_access_expression(base_expr, None, factory.new_numeric_literal(&i.to_string(), TokenFlags::None), NodeFlags::None);
 
                 if ast::is_binding_pattern(name) {
                     self.extract_binding_elements(name, access_expr, new_nodes, enclosing_var_stmt);
@@ -1034,23 +1034,23 @@ impl isolatedDeclarationsFixer<'_> {
         }
         if ast::is_array_literal_expression(node) {
             let var_decl = ast::find_ancestor_kind(node, Kind::VariableDeclaration);
-            let mut part_name = "";
+            let mut part_name = String::new();
             if let Some(var_decl) = var_decl {
                 if let Some(n) = var_decl.name().filter(|n| ast::is_identifier(*n)) {
-                    part_name = n.text();
+                    n.text().clone_into(&mut part_name);
                 }
             }
-            return self.type_from_array_spread_elements(node, part_name);
+            return self.type_from_array_spread_elements(node, &part_name);
         }
         if ast::is_object_literal_expression(node) {
             let var_decl = ast::find_ancestor_kind(node, Kind::VariableDeclaration);
-            let mut part_name = "";
+            let mut part_name = String::new();
             if let Some(var_decl) = var_decl {
                 if let Some(n) = var_decl.name().filter(|n| ast::is_identifier(*n)) {
-                    part_name = n.text();
+                    n.text().clone_into(&mut part_name);
                 }
             }
-            return self.type_from_object_spread_assignment(node, part_name);
+            return self.type_from_object_spread_assignment(node, &part_name);
         }
         if ast::is_variable_declaration(node) {
             if let Some(initializer) = node.initializer() {

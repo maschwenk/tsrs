@@ -7,7 +7,7 @@
 // with `end` from the node's range. The index sits in the bits of the flow node until the binder sets one; from then
 // on it is read from the flow node (`FlowNode::text_index`: the binder made that flow node for the same file). So
 // flow node and text fit one word, and the node is 32 bytes instead of 40. Every other identifier stores its text
-// after the word (`IdentifierWithText`, 40 bytes as before).
+// after the word as owned Rust text (`IdentifierWithText`, 40 bytes as before).
 //
 // `text()` returns exactly the slice the parser had (same pointer and length), so nothing observable changes. The
 // range end of a compact identifier is fixed when it is created: `Node::set_loc` panics if it would change.
@@ -17,7 +17,7 @@ use std::sync::atomic::{AtomicPtr, AtomicU32, AtomicUsize, Ordering::Relaxed};
 use std::sync::{LazyLock, Mutex};
 
 use rustc_hash::FxHashMap;
-use tsrs_core::{OwnedCell, PackedStr, TextRange, P};
+use tsrs_core::{OwnedCell, TextView, TextRange, P};
 
 use crate::ast::{clone_node, Node, NodeAlloc, NodeFactory, NodePayload};
 use crate::generated::NodeDataTag;
@@ -113,7 +113,7 @@ pub struct Identifier {
 #[repr(C)]
 struct IdentifierWithText {
     identifier: Identifier,
-    text: PackedStr,
+    text: TextView,
 }
 
 impl NodePayload for IdentifierWithText {
@@ -185,7 +185,7 @@ impl Identifier {
 
     #[inline]
     #[expect(clippy::disallowed_methods, reason = "from_utf8 here: +1.6% instructions, one checker (notes/lint-paydown-compiler.md)")]
-    pub fn text(&self) -> &'static str {
+    pub fn text(&self) -> &str {
         let word = self.word.get();
         if Self::mode(word) == MODE_TEXT {
             return self.stored_text();
@@ -200,9 +200,9 @@ impl Identifier {
     }
 
     #[cold]
-    fn stored_text(&self) -> &'static str {
+    fn stored_text(&self) -> &str {
         // SAFETY: identifiers in `MODE_TEXT` were allocated as `IdentifierWithText` (`repr(C)`, identifier first).
-        unsafe { &*std::ptr::from_ref::<Identifier>(self).cast::<IdentifierWithText>() }.text.as_str()
+        unsafe { &*std::ptr::from_ref::<Identifier>(self).cast::<IdentifierWithText>() }.text.as_ref()
     }
 
     #[inline]
@@ -260,11 +260,11 @@ impl Identifier {
 }
 
 impl NodeFactory {
-    pub fn new_identifier(&self, text: &'static str) -> P<Node> {
+    pub fn new_identifier(&self, text: &str) -> P<Node> {
         self.text_count.set(self.text_count.get() + 1);
         self.new_node(
             Kind::Identifier,
-            IdentifierWithText { identifier: Identifier { word: OwnedCell::new(MODE_TEXT << MODE_SHIFT) }, text: PackedStr::new(text) },
+            IdentifierWithText { identifier: Identifier { word: OwnedCell::new(MODE_TEXT << MODE_SHIFT) }, text: TextView::from(text) },
         )
     }
 

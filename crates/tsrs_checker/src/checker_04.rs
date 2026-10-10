@@ -538,10 +538,10 @@ impl Checker {
                 if is_identifier(error_node) {
                     identifier_text = error_node.text();
                 }
-                let mut specifier_text: &str = "...";
+                let mut specifier_text = String::from("...");
                 if let Some(import_declaration) = find_ancestor(node, |n| is_import_or_import_equals_declaration(n) || is_variable_declaration(n)) {
                     if let Some(module_specifier) = try_get_module_specifier_from_declaration(import_declaration) {
-                        specifier_text = module_specifier.text();
+                        module_specifier.text().clone_into(&mut specifier_text);
                     }
                 }
                 let mut import_text = format!("import(\"{}\")", specifier_text);
@@ -596,7 +596,8 @@ impl Checker {
                             } else {
                                 &diagnostics::X_0_resolves_to_a_type_only_declaration_and_must_be_imported_using_a_type_only_import_when_verbatimModuleSyntax_is_enabled
                             };
-                            let name = node.property_name_or_name().unwrap().text();
+                            let name_owner = node.property_name_or_name().unwrap();
+                            let name = name_owner.text();
                             let diag = self.error(Some(node), message, &[&name]);
                             self.add_type_only_declaration_related_info(diag, if is_type { None } else { type_only_alias }, name);
                         }
@@ -610,7 +611,8 @@ impl Checker {
                         // The exception is that `import type { A } from './a'; export { A }` is allowed
                         // because single-file analysis can determine that the export should be dropped.
                         if self.compiler_options.verbatim_module_syntax.is_true() || get_source_file_of_node(type_only_alias) != get_source_file_of_node(node) {
-                            let name = node.property_name_or_name().unwrap().text();
+                            let name_owner = node.property_name_or_name().unwrap();
+                            let name = name_owner.text();
                             let diagnostic = if is_type {
                                 let flag_name = self.get_isolated_modules_like_flag_name();
                                 self.error(Some(node), &diagnostics::Re_exporting_a_type_when_0_is_enabled_requires_using_export_type, &[&flag_name])
@@ -700,7 +702,8 @@ impl Checker {
         self.check_type_parameters(type_parameters);
         if let Some(type_node) = type_node {
             if type_node.kind() == Kind::IntrinsicKeyword {
-                let name = node.name().unwrap().text();
+                let name_owner = node.name().unwrap();
+                let name = name_owner.text();
                 if !(type_parameters.is_empty() && name == "BuiltinIteratorReturn"
                     || type_parameters.len() == 1 && intrinsicTypeKinds.get(name).copied().unwrap_or(IntrinsicTypeKind::Unknown) != IntrinsicTypeKind::Unknown)
                 {
@@ -1029,7 +1032,7 @@ impl Checker {
                         import_clauses.entry(import_clause).or_default().push(declaration);
                     }
                 } else if !is_type_parameter_declaration(declaration) && !is_ambient_module(declaration) {
-                    self.report_unused_local(declaration, symbol_name(local));
+                    self.report_unused_local(declaration, &symbol_name(local));
                 }
             }
         }
@@ -1675,12 +1678,13 @@ impl Checker {
         let mut new_type_parameters: Vec<P<Type>> = Vec::new();
         let mut result: Vec<P<Type>> = Vec::with_capacity(type_parameters.len());
         for &tp in type_parameters {
-            let name = tp.symbol().unwrap().name();
+            let name_owner = tp.symbol().unwrap();
+            let name = name_owner.name();
             if has_type_parameter_by_name(&context.inferred_type_parameters(), name) || has_type_parameter_by_name(&result, name) {
                 let mut all: Vec<P<Type>> = context.inferred_type_parameters().to_vec();
                 all.extend_from_slice(&result);
                 let new_name = get_unique_type_parameter_name(&all, name);
-                let symbol = self.new_symbol(SymbolFlags::TypeParameter, alloc_str(&new_name));
+                let symbol = self.new_symbol(SymbolFlags::TypeParameter, &new_name);
                 let new_type_parameter = self.new_type_parameter(Some(symbol));
                 new_type_parameter.as_type_parameter().target.set(Some(tp));
                 old_type_parameters.push(tp);
@@ -1991,7 +1995,7 @@ impl Checker {
             let LiteralValue::String(s) = evaluated else {
                 panic!("evaluated template expression is not a string");
             };
-            let t = self.get_string_literal_type(s);
+            let t = self.get_string_literal_type(&s);
             return self.get_fresh_type_of_literal_type(t);
         }
         if self.is_const_context(node) || self.is_template_literal_context(node) || {

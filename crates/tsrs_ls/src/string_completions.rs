@@ -56,7 +56,7 @@ pub(crate) struct stringLiteralCompletions {
 }
 
 // The string value of a checker StringLiteralType (Go `t.AsLiteralType().Value().(string)`).
-fn string_literal_value(t: P<Type>) -> &'static str {
+fn string_literal_value(t: P<Type>) -> tsrs_core::TextView {
     match t.as_literal_type().value() {
         Some(LiteralValue::String(s)) => s,
         _ => panic!("interface conversion: interface {{}} is not string"),
@@ -141,7 +141,7 @@ impl LanguageService {
                 .types
                 .iter()
                 .map(|&t| {
-                    let name = printer::escape_string(string_literal_value(t), quote_char);
+                    let name = printer::escape_string(&string_literal_value(t), quote_char);
                     let lsp_item = self.create_lsp_completion_item(
                         ctx,
                         &name,
@@ -329,7 +329,7 @@ impl LanguageService {
                 let module_specifier = module_specifier?;
                 let module_specifier_symbol = type_checker.get_symbol_at_location_exported(module_specifier)?;
                 let exports = type_checker.get_exports_and_properties_of_module(module_specifier_symbol);
-                let existing: FxHashSet<&'static str> = named_imports_or_exports.elements().iter().map(|n| n.property_name_or_name().unwrap().text()).collect();
+                let existing: FxHashSet<String> = named_imports_or_exports.elements().iter().map(|n| n.property_name_or_name().unwrap().text().to_owned()).collect();
                 let uniques: Vec<P<Symbol>> = exports.into_iter().filter(|e| e.name() != ast::InternalSymbolNameDefault && !existing.contains(e.name())).collect();
                 Some(stringLiteralCompletions { from_properties: Some(completionsFromProperties { symbols: uniques, has_index_signature: false }), ..Default::default() })
             }
@@ -429,7 +429,7 @@ fn from_unionable_literal_type(grandparent: P<Node>, parent: P<Node>, position: 
             } else if let Some(result) = result.from_types {
                 return Some(stringLiteralCompletions {
                     from_types: Some(completionsFromTypes {
-                        types: result.types.into_iter().filter(|&t| !already_used_types.iter().any(|u| u == string_literal_value(t))).collect(),
+                        types: result.types.into_iter().filter(|&t| !already_used_types.iter().any(|u| u.as_str() == string_literal_value(t).as_ref())).collect(),
                         is_new_identifier: false,
                     }),
                     ..Default::default()

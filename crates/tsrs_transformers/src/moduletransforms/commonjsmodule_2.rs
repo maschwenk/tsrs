@@ -3,12 +3,12 @@ use super::*;
 impl CommonJSModuleTransformer {
     // Appends the down-level representation of an export to a statement list, returning the statement list.
     // commonjsmodule.go:560
-    pub(crate) fn append_export_statement(&self, statements: &mut Vec<P<Node>>, seen: &mut Set<&'static str>, export_name: P<Node>, expression: P<Node>, location: Option<TextRange>, allow_comments: bool, live_binding: bool) {
+    pub(crate) fn append_export_statement(&self, statements: &mut Vec<P<Node>>, seen: &mut Set<String>, export_name: P<Node>, expression: P<Node>, location: Option<TextRange>, allow_comments: bool, live_binding: bool) {
         if export_name.kind() != Kind::StringLiteral {
-            if seen.has(&export_name.text()) {
+            if seen.keys().contains(export_name.text()) {
                 return;
             }
-            seen.add(export_name.text());
+            seen.add(export_name.text().to_owned());
         }
         statements.push(self.create_export_statement(export_name, expression, location, allow_comments, live_binding));
     }

@@ -1742,9 +1742,9 @@ impl Checker {
         };
         let result = SymbolTable::with_capacity(symbols.len());
         for (id, symbol) in symbols.entries() {
-            if self.is_named_member(symbol, id) {
+            if self.is_named_member(symbol, &id) {
                 let instantiated = self.instantiate_symbol(symbol, Some(m));
-                result.set(id, instantiated);
+                result.set(&id, instantiated);
             }
         }
         Some(result)
@@ -2051,7 +2051,7 @@ impl Checker {
         if let Some(modifiers_prop) = modifiers_prop {
             late_flag = modifiers_prop.check_flags() & CheckFlags::Late;
         }
-        let prop = self.new_symbol(SymbolFlags::Property | if is_optional { SymbolFlags::Optional } else { SymbolFlags::None }, alloc_str(prop_name));
+        let prop = self.new_symbol(SymbolFlags::Property | if is_optional { SymbolFlags::Optional } else { SymbolFlags::None }, prop_name);
         prop.check_flags.set(
             late_flag
                 | CheckFlags::Mapped
@@ -2399,7 +2399,7 @@ impl Checker {
     // checker.go:21412
     pub(crate) fn get_array_member_call_signatures(&mut self, t: P<Type>) -> Vec<P<Signature>> {
         // Check if union is exclusively instantiations of a member of the global Array or ReadonlyArray type.
-        let mut member_name: &'static str = "";
+        let mut member_name = String::new();
         for (i, &t) in t.types().iter().enumerate() {
             if !t.object_flags().intersects(ObjectFlags::Instantiated)
                 || t.symbol().is_none()
@@ -2409,7 +2409,7 @@ impl Checker {
                 return Vec::new();
             }
             if i == 0 {
-                member_name = t.symbol().unwrap().name();
+                t.symbol().unwrap().name().clone_into(&mut member_name);
             } else if member_name != t.symbol().unwrap().name() {
                 return Vec::new();
             }
@@ -2423,7 +2423,7 @@ impl Checker {
             .unwrap();
         let readonly = some_type(self, t, |c, t| c.is_readonly_array_symbol(t.symbol().unwrap().parent()));
         let array_type = self.create_array_type_ex(array_arg, readonly);
-        let member_type = self.get_type_of_property_of_type(array_type, member_name).unwrap();
+        let member_type = self.get_type_of_property_of_type(array_type, &member_name).unwrap();
         self.get_signatures_of_type(member_type, SignatureKind::Call).to_vec()
     }
 

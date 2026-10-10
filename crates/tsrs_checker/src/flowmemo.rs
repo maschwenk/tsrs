@@ -574,7 +574,8 @@ impl Checker {
                 if node.flags().intersects(NodeFlags::OptionalChain) || !self.write_flow_memo_reference(sink, node.expression().unwrap()) {
                     return false;
                 }
-                let name = node.name().unwrap().text();
+                let name_owner = node.name().unwrap();
+                let name = name_owner.text();
                 sink.put(b"P") && sink.put(&(name.len() as u32).to_le_bytes()) && sink.put(name.as_bytes())
             }
             _ => false,

@@ -547,14 +547,14 @@ impl LegacyDecoratorsTransformer {
         if !self.has_internal_static_reference(node) {
             return None;
         }
-        let mut name_text = "default";
+        let mut name_text = String::from("default");
         if let Some(name) = node.name() {
             if !is_generated_identifier(self.emit_context(), name) {
-                name_text = name.text();
+                name.text().clone_into(&mut name_text);
             }
         }
 
-        let class_alias = self.factory().new_unique_name(name_text);
+        let class_alias = self.factory().new_unique_name(&name_text);
         self.emit_context().add_variable_declaration(class_alias);
         self.class_aliases.borrow_mut().as_mut().unwrap().insert(node, class_alias);
 

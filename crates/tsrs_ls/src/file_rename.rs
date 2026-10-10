@@ -4,7 +4,7 @@ use tsrs_checker::Checker;
 use tsrs_compiler::Program;
 use tsrs_core::context::Context;
 use tsrs_core::tspath::{self, ComparePathsOptions};
-use tsrs_core::{alloc_str, TextRange, P};
+use tsrs_core::{ TextRange, P};
 use tsrs_lsproto as lsproto;
 use tsrs_modulespecifiers::{self as modulespecifiers, ModuleSpecifierOptions};
 use tsrs_scanner as scanner;
@@ -148,7 +148,7 @@ impl LanguageService {
                         if !elements.is_empty() {
                             let literal = change_tracker
                                 .node_factory
-                                .new_string_literal(alloc_str(&relative_path_from_directory(&config_dir, new_path, use_case_sensitive_file_names)), TokenFlags::None);
+                                .new_string_literal(&relative_path_from_directory(&config_dir, new_path, use_case_sensitive_file_names), TokenFlags::None);
                             change_tracker.insert_node_after(config_file, elements[elements.len() - 1], literal);
                         }
                     }

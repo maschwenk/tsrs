@@ -114,7 +114,7 @@ pub enum WideningKind {
 
 // EnumLiteralKey
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
 pub struct EnumLiteralKey {
     pub enum_symbol: P<Symbol>,
     pub value: LiteralValue,
@@ -787,7 +787,7 @@ impl IterationTypesResolver {
 #[derive(Default)]
 pub struct WideningContext {
     pub parent: Cell<Option<P<WideningContext>>>, // Parent context
-    pub property_name: Cell<&'static str>, // Name of property in parent
+    pub property_name: TextCell, // Name of property in parent
     pub siblings: RefCell<Option<Vec<P<Type>>>>, // Types of siblings (nil = not computed)
     pub resolved_properties: OptionArrayCell<P<Symbol>>, // Properties occurring in sibling object literals (nil = not computed)
     pub child_contexts: OwnedMap<String, P<WideningContext>>,
@@ -852,7 +852,7 @@ pub struct Checker {
     pub(crate) statements_checked_in_pieces: Option<P<SourceFile>>,
     /// tsrs-only: the type parameter and property name of element `i` of every tuple target
     /// (`create_tuple_target_type`).
-    pub(crate) tuple_elements: Vec<(P<Type>, &'static str)>,
+    pub(crate) tuple_elements: Vec<(P<Type>, TextView)>,
     /// tsrs-only: type references whose type-argument constraint check was reached while this checker computed a type
     /// in a file it had not started checking (`defer_type_argument_constraints`), by file. Run when this checker checks
     /// the file; dropped with the checker otherwise.
@@ -1666,7 +1666,7 @@ pub fn new_checker(program: Arc<dyn Program>) -> Box<Checker> {
     c.no_type_predicate = P::new(TypePredicate {
         kind: Cell::new(TypePredicateKind::Identifier),
         parameter_index: Cell::new(0),
-        parameter_name: Cell::new("<<unresolved>>"),
+        parameter_name: TextCell::new("<<unresolved>>"),
         t: Cell::new(Some(c.any_type)),
     });
     c.any_signature = c.new_signature(SignatureFlags::None, None, &[], None, &[], Some(c.any_type), None, 0);

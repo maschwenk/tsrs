@@ -691,8 +691,8 @@ impl NodeBuilderImpl {
     pub(crate) fn create_property_name_node_for_identifier_or_literal(&self, c: &mut Checker, name: &str, single_quote: bool, string_named: bool, is_method: bool, symbol: P<Symbol>) -> P<Node> {
         match classify_property_name(name, string_named, is_method) {
             propertyNameNodeKind::Identifier => self.new_identifier(c, name, Some(symbol)),
-            propertyNameNodeKind::NumericLiteral => self.f.new_numeric_literal(self.f.alloc_text(name), TokenFlags::None),
-            _ => self.f.new_string_literal(self.f.alloc_text(name), if single_quote { TokenFlags::SingleQuote } else { TokenFlags::None }),
+            propertyNameNodeKind::NumericLiteral => self.f.new_numeric_literal(name, TokenFlags::None),
+            _ => self.f.new_string_literal(name, if single_quote { TokenFlags::SingleQuote } else { TokenFlags::None }),
         }
     }
 
@@ -785,11 +785,11 @@ impl NodeBuilderImpl {
                 _ => String::new(),
             };
             if !tsrs_scanner::is_identifier_text(&name, LanguageVariant::Standard) && (string_named || !is_numeric_literal_name(&name)) {
-                let node = self.f.new_string_literal(self.f.alloc_text(&name), if single_quote { TokenFlags::SingleQuote } else { TokenFlags::None });
+                let node = self.f.new_string_literal(&name, if single_quote { TokenFlags::SingleQuote } else { TokenFlags::None });
                 return Some(node);
             }
             if is_numeric_literal_name(&name) && name.as_bytes()[0] == b'-' {
-                return Some(self.f.new_computed_property_name(self.f.new_prefix_unary_expression(Kind::MinusToken, self.f.new_numeric_literal(self.f.alloc_text(&name[1..]), TokenFlags::None))));
+                return Some(self.f.new_computed_property_name(self.f.new_prefix_unary_expression(Kind::MinusToken, self.f.new_numeric_literal(&name[1..], TokenFlags::None))));
             }
             return Some(self.create_property_name_node_for_identifier_or_literal(c, &name, single_quote, string_named, is_method, symbol));
         }
@@ -973,7 +973,7 @@ impl NodeBuilderImpl {
                     self.tracker().report_private_in_base_of_class_expression(property_symbol.name());
                 }
                 if is_private_identifier_symbol(Some(property_symbol)) {
-                    self.tracker().report_private_in_base_of_class_expression(ast::symbol_name(property_symbol));
+                    self.tracker().report_private_in_base_of_class_expression(&ast::symbol_name(property_symbol));
                 }
             }
             if self.check_truncation_length(c) && (i + 2 < properties.len() as i32 - 1) {
@@ -982,7 +982,7 @@ impl NodeBuilderImpl {
                     type_elements[last] = self.e.add_synthetic_trailing_comment(type_elements[last], Kind::MultiLineCommentTrivia, &format!("... {} more elided ...", properties.len() as i32 - i), false /*hasTrailingNewLine*/);
                 } else {
                     let text = format!("... {} more ...", properties.len() as i32 - i);
-                    type_elements.push(self.f.new_property_signature_declaration(None, self.f.new_identifier(self.f.alloc_text(&text)), None, None, None));
+                    type_elements.push(self.f.new_property_signature_declaration(None, self.f.new_identifier(&text), None, None, None));
                 }
                 type_elements = self.add_property_to_element_list(c, properties[properties.len() - 1], &type_elements);
                 break;
@@ -1654,8 +1654,8 @@ impl NodeBuilderImpl {
                 }
                 let parent_name = parent_name.unwrap();
                 let member_name = ast::symbol_name(t.symbol().unwrap());
-                if tsrs_scanner::is_identifier_text(member_name, LanguageVariant::Standard) {
-                    return self.append_reference_to_type(c, parent_name /* as TypeReference | ImportTypeNode */, self.f.new_type_reference_node(self.f.new_identifier(member_name), None /*typeArguments*/));
+                if tsrs_scanner::is_identifier_text(&member_name, LanguageVariant::Standard) {
+                    return self.append_reference_to_type(c, parent_name /* as TypeReference | ImportTypeNode */, self.f.new_type_reference_node(self.f.new_identifier(&member_name), None /*typeArguments*/));
                 }
                 if ast::is_import_type_node(parent_name) {
                     // Go sets `parentName.AsImportTypeNode().IsTypeOf = true` in place (the node is freshly
@@ -1663,9 +1663,9 @@ impl NodeBuilderImpl {
                     // children instead.
                     let import_type = parent_name.as_import_type_node();
                     let parent_name = self.f.new_import_type_node(true, import_type.argument, import_type.attributes, import_type.qualifier, parent_name.type_argument_list());
-                    return Some(self.f.new_indexed_access_type_node(parent_name, self.f.new_literal_type_node(self.new_string_literal(c, member_name))));
+                    return Some(self.f.new_indexed_access_type_node(parent_name, self.f.new_literal_type_node(self.new_string_literal(c, &member_name))));
                 } else if ast::is_type_reference_node(parent_name) {
-                    return Some(self.f.new_indexed_access_type_node(self.f.new_type_query_node(parent_name.as_type_reference_node().type_name, None), self.f.new_literal_type_node(self.new_string_literal(c, member_name))));
+                    return Some(self.f.new_indexed_access_type_node(self.f.new_type_query_node(parent_name.as_type_reference_node().type_name, None), self.f.new_literal_type_node(self.new_string_literal(c, &member_name))));
                 } else {
                     panic!("Unhandled type node kind returned from `symbolToTypeNode`.");
                 }
@@ -1681,7 +1681,7 @@ impl NodeBuilderImpl {
                 _ => panic!("string literal type without a string value"),
             };
             add_approximate_length(self, value.len() as i32 + 2);
-            let lit = self.new_string_literal(c, value);
+            let lit = self.new_string_literal(c, &value);
             self.e.add_emit_flags(lit, EmitFlags::NoAsciiEscaping);
             return Some(self.f.new_literal_type_node(lit));
         }
@@ -1693,14 +1693,14 @@ impl NodeBuilderImpl {
             let value_text = value.string();
             add_approximate_length(self, value_text.len() as i32);
             if value.0 < 0.0 {
-                return Some(self.f.new_literal_type_node(self.f.new_prefix_unary_expression(Kind::MinusToken, self.f.new_numeric_literal(self.f.alloc_text(&value_text[1..]), TokenFlags::None))));
+                return Some(self.f.new_literal_type_node(self.f.new_prefix_unary_expression(Kind::MinusToken, self.f.new_numeric_literal(&value_text[1..], TokenFlags::None))));
             } else {
-                return Some(self.f.new_literal_type_node(self.f.new_numeric_literal(self.f.alloc_text(&value_text), TokenFlags::None)));
+                return Some(self.f.new_literal_type_node(self.f.new_numeric_literal(&value_text, TokenFlags::None)));
             }
         }
         if t.flags().intersects(TypeFlags::BigIntLiteral) {
-            add_approximate_length(self, pseudo_big_int_to_string(get_big_int_literal_value(t)).len() as i32 + 1);
-            return Some(self.f.new_literal_type_node(self.f.new_big_int_literal(self.f.alloc_text(&(pseudo_big_int_to_string(get_big_int_literal_value(t)) + "n")), TokenFlags::None)));
+            add_approximate_length(self, pseudo_big_int_to_string(&get_big_int_literal_value(t)).len() as i32 + 1);
+            return Some(self.f.new_literal_type_node(self.f.new_big_int_literal(&(pseudo_big_int_to_string(&get_big_int_literal_value(t)) + "n"), TokenFlags::None)));
         }
         if t.flags().intersects(TypeFlags::BooleanLiteral) {
             let value = matches!(t.as_literal_type().value.get(), Some(LiteralValue::Boolean(true)));
@@ -1879,13 +1879,13 @@ impl NodeBuilderImpl {
         if t.flags().intersects(TypeFlags::TemplateLiteral) {
             let texts = t.as_template_literal_type().texts.get();
             let types = t.as_template_literal_type().types.get();
-            let template_head = self.f.new_template_head(texts[0], "", TokenFlags::None);
+            let template_head = self.f.new_template_head(&texts[0], "", TokenFlags::None);
             self.e.add_emit_flags(template_head, EmitFlags::NoAsciiEscaping);
             let spans: Vec<P<Node>> = types
                 .iter()
                 .enumerate()
                 .map(|(i, &t)| {
-                    let res = if i < types.len() - 1 { self.f.new_template_middle(texts[i + 1], "", TokenFlags::None) } else { self.f.new_template_tail(texts[i + 1], "", TokenFlags::None) };
+                    let res = if i < types.len() - 1 { self.f.new_template_middle(&texts[i + 1], "", TokenFlags::None) } else { self.f.new_template_tail(&texts[i + 1], "", TokenFlags::None) };
                     self.e.add_emit_flags(res, EmitFlags::NoAsciiEscaping);
                     let type_node = self.type_to_type_node(c, Some(t));
                     self.f.new_template_literal_type_span(type_node.unwrap(), res)
@@ -1935,7 +1935,7 @@ impl NodeBuilderImpl {
         if is_single_quote || self.ctx().flags.get().intersects(Flags::UseSingleQuotesForStringLiteralType) {
             flags |= TokenFlags::SingleQuote;
         }
-        let node = self.f.new_string_literal(self.f.alloc_text(text), flags);
+        let node = self.f.new_string_literal(text, flags);
         node
     }
 }
@@ -1954,7 +1954,7 @@ impl TypeAlias {
 impl NodeBuilderImpl {
     // nodebuilderimpl.go:3643
     pub(crate) fn new_identifier(&self, _c: &mut Checker, text: &str, symbol: Option<P<Symbol>>) -> P<Node> {
-        let id = self.f.new_identifier(self.f.alloc_text(text));
+        let id = self.f.new_identifier(text);
         if let Some(symbol) = symbol {
             self.id_to_symbol.borrow_mut().insert(id, symbol);
         }

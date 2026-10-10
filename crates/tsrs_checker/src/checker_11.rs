@@ -271,7 +271,7 @@ impl Checker {
             prop_types.push(t);
         }
         prop_types.extend_from_slice(&index_types);
-        let result = self.new_symbol_ex(prop_flags | optional_flag, alloc_str(name), check_flags | synthetic_flag);
+        let result = self.new_symbol_ex(prop_flags | optional_flag, name, check_flags | synthetic_flag);
         result.set_declarations(&declarations);
         if !has_non_uniform_value_declaration {
             if let Some(first_value_declaration) = first_value_declaration {
@@ -552,18 +552,18 @@ impl Checker {
         } else {
             None
         };
-        let mut counts: OrderedMap<&'static str, i32> = OrderedMap::default();
+        let mut counts: OrderedMap<String, i32> = OrderedMap::default();
         for (i, &t) in types.iter().enumerate() {
             if Some(i) != skipped {
                 for prop in self.get_properties_of_type(t) {
-                    *counts.entry(prop.name()).or_insert(0) += 1;
+                    *counts.entry(prop.name().to_owned()).or_insert(0) += 1;
                 }
             }
         }
         if let Some(skipped) = skipped {
             self.lazy_member_stats.some_property_skipped_constituents += 1;
             for i in 0..counts.len() {
-                let prop_name = *counts.get_index(i).unwrap().0;
+                let prop_name = counts.get_index(i).unwrap().0;
                 if self.get_property_of_type_ex(types[skipped], prop_name, true /*skipObjectFunctionPropertyAugment*/, false /*includeTypeOnlyMembers*/).is_some() {
                     *counts.get_index_mut(i).unwrap().1 += 1;
                 }
@@ -573,7 +573,7 @@ impl Checker {
         // Go in the order the properties were found so the combined properties are created in the same order every time.
         for (prop_name, count) in counts {
             if count > 1 {
-                if let Some(prop) = self.get_property_of_union_or_intersection_type(t, prop_name, true /*skipObjectFunctionPropertyAugment*/) {
+                if let Some(prop) = self.get_property_of_union_or_intersection_type(t, &prop_name, true /*skipObjectFunctionPropertyAugment*/) {
                     if self.is_never_reduced_property(prop) {
                         return true;
                     }
@@ -864,15 +864,15 @@ impl Checker {
         let is_class_or_interface_container = container.is_some_and(|c| c.flags().intersects(SymbolFlags::Class | SymbolFlags::Interface));
         if is_class_or_interface_container {
             let container = container.unwrap();
-            for &(id, symbol) in &entries {
-                if self.is_named_member(symbol, id) && self.is_declaration_contained_by(symbol, container) {
+            for &(ref id, symbol) in &entries {
+                if self.is_named_member(symbol, &id) && self.is_declaration_contained_by(symbol, container) {
                     result.push(symbol);
                 }
             }
             contained_count = result.len();
         }
-        for &(id, symbol) in &entries {
-            if self.is_named_member(symbol, id) && (!is_class_or_interface_container || !self.is_declaration_contained_by(symbol, container.unwrap())) {
+        for &(ref id, symbol) in &entries {
+            if self.is_named_member(symbol, &id) && (!is_class_or_interface_container || !self.is_declaration_contained_by(symbol, container.unwrap())) {
                 result.push(symbol);
             }
         }

@@ -22,7 +22,7 @@ pub(crate) use tsrs_ast::{self as ast, *};
 pub(crate) use tsrs_checker::{self as checker, Checker, SymbolAccessibility, SymbolAccessibilityResult, SymbolTracker};
 pub(crate) use tsrs_core::collections::Set;
 pub(crate) use tsrs_core::tspath;
-pub(crate) use tsrs_core::{alloc_str, alloc_vec, CompilerOptions, P};
+pub(crate) use tsrs_core::{alloc_vec, CompilerOptions, P};
 pub(crate) use tsrs_diagnostics::{self as diagnostics, Message};
 pub(crate) use tsrs_modulespecifiers::ModuleSpecifierGenerationHost;
 pub(crate) use tsrs_printer::{self as printer, EmitContext};

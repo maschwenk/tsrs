@@ -597,7 +597,7 @@ impl Checker {
 
             if prop.is_some() && base_prop.is_none() && member_has_override_modifier {
                 if error_node.is_some() {
-                    let suggestion = self.get_suggested_symbol_for_nonexistent_class_member(symbol_name(member), base_type);
+                    let suggestion = self.get_suggested_symbol_for_nonexistent_class_member(&symbol_name(member), base_type);
                     if let Some(suggestion) = suggestion {
                         let a0 = self.type_to_string(base_with_this, None);
                         let a1 = self.symbol_to_string(suggestion);
@@ -987,12 +987,12 @@ impl Checker {
         if base_types.len() < 2 {
             return true;
         }
-        let mut seen: FxHashMap<&'static str, InheritanceInfo> = FxHashMap::default();
+        let mut seen: FxHashMap<String, InheritanceInfo> = FxHashMap::default();
         let declared_members = self.resolve_declared_members(&t).unwrap().declared_members.get();
         if let Some(declared_members) = declared_members {
             for (id, p) in declared_members.entries() {
-                if self.is_named_member(p, id) {
-                    seen.insert(p.name(), InheritanceInfo { prop: p, containing_type: t });
+                if self.is_named_member(p, &id) {
+                    seen.insert(p.name().to_owned(), InheritanceInfo { prop: p, containing_type: t });
                 }
             }
         }
@@ -1003,7 +1003,7 @@ impl Checker {
             for prop in properties {
                 match seen.get(prop.name()).map(|e| (e.prop, e.containing_type)) {
                     None => {
-                        seen.insert(prop.name(), InheritanceInfo { prop, containing_type: base });
+                        seen.insert(prop.name().to_owned(), InheritanceInfo { prop, containing_type: base });
                     }
                     Some((existing_prop, existing_containing_type)) => {
                         let is_inherited_property = existing_containing_type != t;

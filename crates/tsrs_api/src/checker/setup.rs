@@ -370,7 +370,7 @@ fn type_response_base(t: P<Type>, id: u32) -> Obj {
     } else if flags.intersects(TypeFlags::TypeParameter) {
         late.set("isThisType", Value::Bool(t.as_type_parameter().is_this_type()));
     } else if flags.intersects(TypeFlags::Intrinsic) {
-        late.str_nonempty("intrinsicName", t.as_intrinsic_type().intrinsic_name());
+        late.str_nonempty("intrinsicName", &t.as_intrinsic_type().intrinsic_name());
     }
     // encoding/json v2 `omitempty` only drops empty JSON values (null, "", [], {}): uint32 0 and false
     // are emitted (pinned Go always sends objectFlags, isTupleType and isThisType).

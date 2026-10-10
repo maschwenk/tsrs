@@ -1075,7 +1075,7 @@ impl EmitResolver {
             return None; // non-literal type
         }
         match t.as_literal_type().value.get() {
-            Some(LiteralValue::String(value)) => Some(f.new_string_literal(value, TokenFlags::None)),
+            Some(LiteralValue::String(value)) => Some(f.new_string_literal(&value, TokenFlags::None)),
             Some(LiteralValue::Number(value)) => {
                 if value.is_inf() {
                     if value > Number(0.0) {
@@ -1088,11 +1088,11 @@ impl EmitResolver {
                 }
                 if value.abs() != value {
                     // negative
-                    return Some(f.new_prefix_unary_expression(Kind::MinusToken, f.new_numeric_literal(f.alloc_text(&value.string()[1..]), TokenFlags::None)));
+                    return Some(f.new_prefix_unary_expression(Kind::MinusToken, f.new_numeric_literal(&value.string()[1..], TokenFlags::None)));
                 }
-                Some(f.new_numeric_literal(f.alloc_text(&value.string()), TokenFlags::None))
+                Some(f.new_numeric_literal(&value.string(), TokenFlags::None))
             }
-            Some(LiteralValue::BigInt(value)) => Some(f.new_big_int_literal(f.alloc_text(&(pseudo_big_int_to_string(value) + "n")), TokenFlags::None)),
+            Some(LiteralValue::BigInt(value)) => Some(f.new_big_int_literal(&(pseudo_big_int_to_string(&value) + "n"), TokenFlags::None)),
             Some(LiteralValue::Boolean(value)) => {
                 let kind = if value { Kind::TrueKeyword } else { Kind::FalseKeyword };
                 Some(f.new_keyword_expression(kind))

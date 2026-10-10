@@ -107,6 +107,14 @@ pointer compression costs about +4.9% instructions and took back most of the che
 
 ## Measured and rejected (do not redo)
 
+- Treating owned compiler text/literal snapshots as a completed or memory-preserving migration
+  (`notes/rust-owned-type-text.md`): single-thread instructions rise +3.51% / +6.04%, and default peak RSS
+  +4.37% / +10.78% against the preceding checkpoint. Cumulative single-thread instructions are +15–17% versus
+  original Oxc; default peak RSS is +118% against pre-Oxc. The changed constraint is the explicitly requested
+  complete ownership migration. Text snapshots now have Rust owners and pinned-Go classifications are retained,
+  but source text/raw graph/runtime remain legacy. Keep this as unfinished branch work; revisit landing after
+  typed graph/runtime migration, full oracle/API/LSP lifetime coverage and recovered instruction/RSS gates.
+
 - Treating owned checker cache arrays as enough to recover the full migration gates
   (`notes/rust-owned-checker-arrays.md`): single-thread instructions fall only -0.11% / -0.13%, and default RSS
   -0.55% / -0.75%, below the landing bar. Cumulative single-thread instructions remain +8.41–12.49% against Oxc,

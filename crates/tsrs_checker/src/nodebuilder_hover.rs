@@ -51,7 +51,7 @@ impl NodeBuilderImpl {
         for (i, &p) in member_props.iter().enumerate() {
             if self.check_truncation_length_if_expanding(c) && (i as i32) + 3 < member_props.len() as i32 - 1 {
                 self.ctx().expansion_truncated.set(true);
-                members.push(self.f.new_enum_member(self.f.new_string_literal(alloc_str(&format!(" ... {} more ... ", member_props.len() - i - 1)), TokenFlags::None), None));
+                members.push(self.f.new_enum_member(self.f.new_string_literal(&format!(" ... {} more ... ", member_props.len() - i - 1), TokenFlags::None), None));
                 let last = member_props[member_props.len() - 1];
                 let last_name = self.f.new_identifier(last.name());
                 let last_initializer = self.enum_member_initializer(c, last);
@@ -81,7 +81,7 @@ impl NodeBuilderImpl {
         if !const_modifier.is_empty() {
             mods = Some(self.f.new_modifier_list(create_modifiers_from_modifier_flags(const_modifier, |k| self.f.new_modifier(k))));
         }
-        self.f.new_enum_declaration(mods, self.f.new_identifier(name), self.f.new_node_list(members))
+        self.f.new_enum_declaration(mods, self.f.new_identifier(&name), self.f.new_node_list(members))
     }
 
     // nodebuilder_hover.go:92
@@ -91,8 +91,8 @@ impl NodeBuilderImpl {
         let val = c.get_constant_value(member_decl);
         let val = val?;
         match val {
-            LiteralValue::String(v) => Some(self.f.new_string_literal(v, TokenFlags::None)),
-            LiteralValue::Number(v) => Some(self.f.new_numeric_literal(alloc_str(&v.string()), TokenFlags::None)),
+            LiteralValue::String(v) => Some(self.f.new_string_literal(&v, TokenFlags::None)),
+            LiteralValue::Number(v) => Some(self.f.new_numeric_literal(&v.string(), TokenFlags::None)),
             _ => None,
         }
     }
@@ -170,7 +170,7 @@ impl NodeBuilderImpl {
 
         let result = self.f.new_class_declaration(
             None,
-            Some(self.f.new_identifier(name)),
+            Some(self.f.new_identifier(&name)),
             Some(self.f.new_node_list(type_param_decls)),
             Some(self.f.new_node_list(heritage_clauses)),
             self.f.new_node_list(all_members),
@@ -277,7 +277,7 @@ impl NodeBuilderImpl {
 
         self.f.new_interface_declaration(
             None,
-            self.f.new_identifier(name),
+            self.f.new_identifier(&name),
             Some(self.f.new_node_list(type_param_decls)),
             Some(self.f.new_node_list(heritage_clauses)),
             self.f.new_node_list(members),
@@ -317,7 +317,7 @@ impl NodeBuilderImpl {
             if self.check_truncation_length_if_expanding(c) && ((i as i32) + 3 < properties.len() as i32 - 1) {
                 self.ctx().expansion_truncated.set(true);
                 let text = format!("... {} more ...", properties.len() - i - 1);
-                elements.push(self.f.new_property_signature_declaration(None, self.f.new_identifier(alloc_str(&text)), None, None, None));
+                elements.push(self.f.new_property_signature_declaration(None, self.f.new_identifier(&text), None, None, None));
                 elements = self.add_property_to_element_list(c, properties[properties.len() - 1], &elements);
                 break;
             }
@@ -422,7 +422,7 @@ impl NodeBuilderImpl {
             let t = c.get_widened_type(type_of_symbol);
             let ctx = self.ctx();
             ctx.approximate_length.set(ctx.approximate_length.get() + name.len() as i32 + 5);
-            let ident = self.f.new_identifier(alloc_str(name));
+            let ident = self.f.new_identifier(name);
             let type_node = self.serialize_type_for_declaration(c, None, Some(t), Some(resolved), true);
             self.f.new_variable_statement(
                 None,
@@ -472,7 +472,7 @@ impl NodeBuilderImpl {
             if self.check_truncation_length_if_expanding(c) && (i as i32) + 3 < members.len() as i32 - 1 {
                 self.ctx().expansion_truncated.set(true);
                 let text = format!("... ({} more) ...", members.len() - i - 1);
-                body_stmts.push(HoverStatement { node: self.f.new_expression_statement(self.f.new_identifier(alloc_str(&text))), is_local: false });
+                body_stmts.push(HoverStatement { node: self.f.new_expression_statement(self.f.new_identifier(&text)), is_local: false });
                 next = members.len() - 1; // skip to last member
                 continue;
             }
@@ -605,7 +605,7 @@ impl NodeBuilderImpl {
         restore_flags(c);
         let ctx = self.ctx();
         ctx.approximate_length.set(ctx.approximate_length.get() + 8 + name.len() as i32);
-        self.f.new_type_alias_declaration(None, self.f.new_identifier(alloc_str(name)), Some(self.f.new_node_list(type_param_decls)), type_node)
+        self.f.new_type_alias_declaration(None, self.f.new_identifier(name), Some(self.f.new_node_list(type_param_decls)), type_node)
     }
 
     // nodebuilder_hover.go:571
@@ -615,19 +615,19 @@ impl NodeBuilderImpl {
             return properties.to_vec();
         }
         // Build a lookup from property name to symbol for parent-identity comparison.
-        let mut props_by_name: FxHashMap<&'static str, P<Symbol>> = FxHashMap::default();
+        let mut props_by_name: FxHashMap<String, P<Symbol>> = FxHashMap::default();
         for &p in properties {
-            props_by_name.insert(p.name(), p);
+            props_by_name.insert(p.name().to_owned(), p);
         }
         // Collect names of properties inherited unchanged from base types.
-        let mut inherited: Set<&'static str> = Set::new();
+        let mut inherited: Set<String> = Set::new();
         for &base in base_types {
             let this_type = c.get_target_type(t).unwrap().as_interface_type().this_type.get();
             let base_with_this = c.get_type_with_this_argument(base, this_type, false);
             for prop in c.get_properties_of_type(base_with_this) {
                 if let Some(existing) = props_by_name.get(prop.name()) {
                     if prop.parent() == existing.parent() {
-                        inherited.add(prop.name());
+                        inherited.add(prop.name().to_owned());
                     }
                 }
             }
@@ -635,7 +635,7 @@ impl NodeBuilderImpl {
         if inherited.len() == 0 {
             return properties.to_vec();
         }
-        properties.iter().copied().filter(|p| !inherited.has(&p.name())).collect()
+        properties.iter().copied().filter(|p| !inherited.keys().contains(p.name())).collect()
     }
 
     // nodebuilder_hover.go:598

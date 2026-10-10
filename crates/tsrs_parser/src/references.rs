@@ -7,7 +7,7 @@ use tsrs_core::{self as core, alloc_vec, tspath, Tristate, P};
 struct References {
     imports: Vec<P<Node>>,
     module_augmentations: Vec<P<Node>>,
-    ambient_module_names: Vec<&'static str>,
+    ambient_module_names: Vec<tsrs_core::TextView>,
 }
 
 pub(crate) fn collect_external_module_references(file: P<SourceFile>) {
@@ -33,7 +33,7 @@ pub(crate) fn collect_external_module_references(file: P<SourceFile>) {
     }
     set_imports_of_source_file(file, refs.imports);
     file.module_augmentations.set(alloc_vec(refs.module_augmentations));
-    file.ambient_module_names.set(alloc_vec(refs.ambient_module_names));
+    file.set_ambient_module_names_owned(refs.ambient_module_names);
 }
 
 fn collect_module_references(file: P<SourceFile>, refs: &mut References, node: P<Node>, in_ambient_module: bool) {
@@ -66,7 +66,8 @@ fn collect_module_references(file: P<SourceFile>, refs: &mut References, node: P
         && ast::is_ambient_module(node)
         && (in_ambient_module || ast::has_syntactic_modifier(node, ModifierFlags::Ambient) || file.is_declaration_file())
     {
-        let name_text = node.as_module_declaration().name().text();
+        let name_node = node.as_module_declaration().name();
+        let name_text = name_node.text();
         // Ambient module declarations can be interpreted as augmentations for some existing external modules.
         // This will happen in two cases:
         // - if current file is external module then module augmentation is a ambient module declaration defined in the top level scope
@@ -75,7 +76,7 @@ fn collect_module_references(file: P<SourceFile>, refs: &mut References, node: P
         if ast::is_external_module(file) || (in_ambient_module && !tspath::is_external_module_name_relative(name_text)) {
             refs.module_augmentations.push(node.as_module_declaration().name());
         } else if !in_ambient_module {
-            refs.ambient_module_names.push(name_text);
+            refs.ambient_module_names.push(name_text.into());
             // An AmbientExternalModuleDeclaration declares an external module.
             // This type of declaration is permitted only in the global module.
             // The StringLiteral must specify a top - level external module name.

@@ -685,7 +685,7 @@ fn compare_types_same_flags(c: &mut Checker, t1: P<Type>, t2: P<Type>) -> i32 {
         }
     } else if flags.intersects(TypeFlags::StringLiteral) {
         // String literal types are ordered by their values.
-        let r = literal_string_value(t1).cmp(literal_string_value(t2)) as i32;
+        let r = literal_string_value(t1).cmp(&literal_string_value(t2)) as i32;
         if r != 0 {
             return r;
         }
@@ -696,7 +696,7 @@ fn compare_types_same_flags(c: &mut Checker, t1: P<Type>, t2: P<Type>) -> i32 {
             return r;
         }
     } else if flags.intersects(TypeFlags::BigIntLiteral) {
-        let r = get_big_int_literal_value(t1).compare(get_big_int_literal_value(t2));
+        let r = get_big_int_literal_value(t1).compare(&get_big_int_literal_value(t2));
         if r != 0 {
             return r;
         }
@@ -778,7 +778,7 @@ fn composite_mapper_m2(m: P<TypeMapper>) -> P<TypeMapper> {
 }
 
 // Go `t.AsLiteralType().value.(string)` and friends.
-fn literal_string_value(t: P<Type>) -> &'static str {
+fn literal_string_value(t: P<Type>) -> TextView {
     match t.as_literal_type().value.get() {
         Some(LiteralValue::String(s)) => s,
         _ => panic!("interface conversion: literal value is not a string"),
@@ -1104,13 +1104,13 @@ pub fn is_type_usable_as_property_name(t: P<Type>) -> bool {
 // utilities.go:929
 pub fn get_property_name_from_type(t: P<Type>) -> std::borrow::Cow<'static, str> {
     if t.flags().intersects(TypeFlags::StringLiteral) {
-        return literal_string_value(t).into();
+        return literal_string_value(t).to_string().into();
     }
     if t.flags().intersects(TypeFlags::NumberLiteral) {
         return literal_number_value(t).string().into();
     }
     if t.flags().intersects(TypeFlags::UniqueESSymbol) {
-        return t.as_unique_es_symbol_type().name.get().into();
+        return t.as_unique_es_symbol_type().name.get().to_string().into();
     }
     panic!("Unhandled case in getPropertyNameFromType")
 }
@@ -1182,7 +1182,7 @@ pub(crate) fn is_valid_big_int_string(s: &str, round_trip_only: bool) -> bool {
         && scanner.token_end() == s.len() as i32 + 1
         && !flags.intersects(TokenFlags::ContainsSeparator)
         && (!round_trip_only
-            || s == pseudo_big_int_to_string(jsnum::new_pseudo_big_int(&jsnum::parse_pseudo_big_int(scanner.token_value()), negative)))
+            || s == pseudo_big_int_to_string(&jsnum::new_pseudo_big_int(&jsnum::parse_pseudo_big_int(scanner.token_value()), negative)))
 }
 
 // utilities.go:1004
@@ -1452,7 +1452,7 @@ pub(crate) fn expression_result_is_unused(node: P<Node>) -> bool {
 }
 
 // utilities.go:1228
-pub(crate) fn pseudo_big_int_to_string(value: PseudoBigInt) -> String {
+pub(crate) fn pseudo_big_int_to_string(value: &PseudoBigInt) -> String {
     value.string()
 }
 
@@ -1663,7 +1663,7 @@ pub(crate) fn symbols_to_array(symbols: Option<P<SymbolTable>>) -> Vec<P<Symbol>
     let mut result = Vec::new();
     if let Some(symbols) = symbols {
         for (id, symbol) in symbols.entries() {
-            if !is_reserved_member_name(id) {
+            if !is_reserved_member_name(&id) {
                 result.push(symbol);
             }
         }
@@ -1702,7 +1702,7 @@ impl Checker {
 // utilities.go:1749
 pub fn value_to_string(value: LiteralValue) -> String {
     match value {
-        LiteralValue::String(value) => format!("\"{}\"", escape_string(value, QuoteChar::DoubleQuote)),
+        LiteralValue::String(value) => format!("\"{}\"", escape_string(&value, QuoteChar::DoubleQuote)),
         LiteralValue::Number(value) => value.string(),
         LiteralValue::Boolean(value) => if value { "true" } else { "false" }.to_string(),
         LiteralValue::BigInt(value) => value.string() + "n",

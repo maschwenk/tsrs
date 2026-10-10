@@ -329,7 +329,7 @@ impl NodeBuilderImpl {
                     )
                 } else {
                     let text = format!("... {} more ...", list.len() - 2);
-                    self.f.new_type_reference_node(self.f.new_identifier(self.f.alloc_text(&text)), None /*typeArguments*/)
+                    self.f.new_type_reference_node(self.f.new_identifier(&text), None /*typeArguments*/)
                 };
                 return Some(self.f.new_node_list(vec![first.unwrap(), middle, last.unwrap()]));
             }
@@ -360,7 +360,7 @@ impl NodeBuilderImpl {
                     ));
                 } else {
                     let text = format!("... {} more ...", list.len() - display_index);
-                    result.push(self.f.new_type_reference_node(self.f.new_identifier(self.f.alloc_text(&text)), None /*typeArguments*/));
+                    result.push(self.f.new_type_reference_node(self.f.new_identifier(&text), None /*typeArguments*/));
                 }
                 let type_node = self.type_to_type_node(c, Some(list[list.len() - 1]));
                 if let Some(type_node) = type_node {
@@ -671,7 +671,7 @@ impl NodeBuilderImpl {
                 specifier_result = self.get_specifier_for_module_symbol(c, chain[0], RESOLUTION_MODE_NONE);
             }
             if !self.ctx().flags.get().intersects(Flags::AllowNodeModulesRelativePaths) /* && b.ch.compilerOptions.GetModuleResolutionKind() != core.ModuleResolutionKindClassic */ && specifier_result.specifier.contains("/node_modules/") {
-                let old_specifier_result = specifier_result;
+                let old_specifier_result = specifier_result.clone();
 
                 let module_resolution_kind = c.compiler_options.get_module_resolution_kind();
                 if module_resolution_kind == ModuleResolutionKind::Node16 || module_resolution_kind == ModuleResolutionKind::NodeNext {
@@ -684,7 +684,7 @@ impl NodeBuilderImpl {
 
                     if specifier_result.specifier.contains("/node_modules/") {
                         // Still unreachable :(
-                        specifier_result = old_specifier_result;
+                        specifier_result = old_specifier_result.clone();
                     } else {
                         import_mode_override = swapped_mode;
                     }
@@ -694,12 +694,12 @@ impl NodeBuilderImpl {
                     // If ultimately we can only name the symbol with a reference that dives into a `node_modules` folder, we should error
                     // since declaration files with these kinds of references are liable to fail when published :(
                     self.ctx().encountered_error.set(true);
-                    self.tracker().report_likely_unsafe_import_required_error(old_specifier_result.specifier, symbol.name());
+                    self.tracker().report_likely_unsafe_import_required_error(&old_specifier_result.specifier, symbol.name());
                 }
             }
 
-            let attributes = self.create_import_attributes_for_module_specifier(c, specifier_result, import_mode_override);
-            let lit = self.f.new_literal_type_node(self.new_string_literal(c, specifier_result.specifier));
+            let attributes = self.create_import_attributes_for_module_specifier(c, &specifier_result, import_mode_override);
+            let lit = self.f.new_literal_type_node(self.new_string_literal(c, &specifier_result.specifier));
             let ctx = self.ctx();
             ctx.approximate_length.set(ctx.approximate_length.get() + specifier_result.specifier.len() as i32 + 10); // specifier + import("")
             if non_root_parts.is_none() || is_entity_name(non_root_parts.unwrap()) {
@@ -774,9 +774,9 @@ impl NodeBuilderImpl {
                     if symbol.name() != ast::InternalSymbolNameExportEquals && !is_late_bound_name(symbol.name()) && res.is_some() && c.get_symbol_if_same_reference(res.unwrap(), symbol).is_some() {
                         symbol_name = symbol.name().to_string();
                     } else {
-                        let mut results: FxHashMap<P<Symbol>, &'static str> = FxHashMap::default();
+                        let mut results: FxHashMap<P<Symbol>, TextView> = FxHashMap::default();
                         for (name, ex) in exports.entries() {
-                            if c.get_symbol_if_same_reference(ex, symbol).is_some() && !is_late_bound_name(name) && name != ast::InternalSymbolNameExportEquals {
+                            if c.get_symbol_if_same_reference(ex, symbol).is_some() && !is_late_bound_name(&name) && name != ast::InternalSymbolNameExportEquals {
                                 results.insert(ex, name);
                                 // break // must collect all results and sort them - exports are randomly iterated
                             }
@@ -877,7 +877,7 @@ impl NodeBuilderImpl {
             let specifier_result = self.get_specifier_for_module_symbol(c, symbol, RESOLUTION_MODE_NONE);
             let ctx = self.ctx();
             ctx.approximate_length.set(ctx.approximate_length.get() + 2 + specifier_result.specifier.len() as i32);
-            return self.new_string_literal(c, specifier_result.specifier);
+            return self.new_string_literal(c, &specifier_result.specifier);
         }
 
         if index == 0 || can_use_property_access(&symbol_name) {
@@ -908,7 +908,7 @@ impl NodeBuilderImpl {
             // Moreover, what's even guaranteeing the name *isn't* -1 here anyway? Needs double-checking.
             let ctx = self.ctx();
             ctx.approximate_length.set(ctx.approximate_length.get() + symbol_name.len() as i32);
-            expression = Some(self.f.new_numeric_literal(self.f.alloc_text(&symbol_name), TokenFlags::None));
+            expression = Some(self.f.new_numeric_literal(&symbol_name, TokenFlags::None));
         }
         if expression.is_none() {
             let ctx = self.ctx();
@@ -962,7 +962,7 @@ impl NodeBuilderImpl {
             if name_type.flags().intersects(TypeFlags::StringOrNumberLiteral) {
                 let value = name_type.as_literal_type().value.get();
                 let name = match value {
-                    Some(LiteralValue::String(v)) => v.to_string(),
+                    Some(LiteralValue::String(ref v)) => v.to_string(),
                     Some(LiteralValue::Number(v)) => v.string(),
                     _ => String::new(),
                 };
@@ -1299,21 +1299,21 @@ impl NodeBuilderImpl {
         if file.is_none() {
             let declaration = symbol.declarations().iter().copied().find(|&d| is_module_with_string_literal_name(d));
             if let Some(declaration) = declaration {
-                let specifier = declaration.name().unwrap().text();
-                if original_import_attributes_type.is_some() && self.module_specifier_resolves_to_symbol(c, specifier, original_import_attributes_type.unwrap(), symbol) {
+                let specifier = TextView::from(declaration.name().unwrap().text());
+                if original_import_attributes_type.is_some() && self.module_specifier_resolves_to_symbol(c, &specifier, original_import_attributes_type.unwrap(), symbol) {
                     return moduleSpecifierResult { specifier, import_attributes_type: original_import_attributes_type };
                 }
                 return moduleSpecifierResult { specifier, import_attributes_type: Some(c.get_type_of_module_import_attributes(symbol)) };
             }
             if let Some(specifier) = try_get_ambient_module_name_from_symbol_name(symbol.name()) {
-                return moduleSpecifierResult { specifier, import_attributes_type: None };
+                return moduleSpecifierResult { specifier: specifier.into(), import_attributes_type: None };
             }
         }
         if self.ctx().enclosing_file.get().is_none() {
             if let Some(specifier) = try_get_ambient_module_name_from_symbol_name(symbol.name()) {
-                return moduleSpecifierResult { specifier, import_attributes_type: None };
+                return moduleSpecifierResult { specifier: specifier.into(), import_attributes_type: None };
             }
-            return moduleSpecifierResult { specifier: get_source_file_of_module(symbol).unwrap().get().file_name(), import_attributes_type: None };
+            return moduleSpecifierResult { specifier: get_source_file_of_module(symbol).unwrap().file_name().into(), import_attributes_type: None };
         }
 
         let context_file = self.ctx().enclosing_file.get().unwrap();
@@ -1353,11 +1353,11 @@ impl NodeBuilderImpl {
             false, /*forAutoImports*/
         );
         assert!(!module_specifiers_result.specifiers.is_empty());
-        let mut result = moduleSpecifierResult { specifier: self.f.alloc_text(&module_specifiers_result.specifiers[0]), import_attributes_type: None };
+        let mut result = moduleSpecifierResult { specifier: (&module_specifiers_result.specifiers[0]).into(), import_attributes_type: None };
         if let Some(ambient_module_symbol) = module_specifiers_result.ambient_module_symbol {
             result.import_attributes_type = Some(c.get_type_of_module_import_attributes(ambient_module_symbol));
         }
-        self.symbol_links.at(links).specifier_cache.set(cache_key, result);
+        self.symbol_links.at(links).specifier_cache.set(cache_key, result.clone());
         self.module_specifier_result_for_symbol(c, result, original_import_attributes_type, symbol)
     }
 
@@ -1365,7 +1365,7 @@ impl NodeBuilderImpl {
     pub(crate) fn module_specifier_result_for_symbol(&self, c: &mut Checker, result: moduleSpecifierResult, import_attributes_type: Option<P<Type>>, symbol: P<Symbol>) -> moduleSpecifierResult {
         let mut result = result;
         if let Some(import_attributes_type) = import_attributes_type {
-            if self.module_specifier_resolves_to_symbol(c, result.specifier, import_attributes_type, symbol) {
+            if self.module_specifier_resolves_to_symbol(c, &result.specifier, import_attributes_type, symbol) {
                 result.import_attributes_type = Some(import_attributes_type);
             }
         }
@@ -1391,7 +1391,7 @@ impl NodeBuilderImpl {
     }
 
     // nodebuilderimpl.go:1359
-    pub(crate) fn create_import_attributes_for_module_specifier(&self, c: &mut Checker, result: moduleSpecifierResult, import_mode_override: ModuleKind) -> Option<P<Node>> {
+    pub(crate) fn create_import_attributes_for_module_specifier(&self, c: &mut Checker, result: &moduleSpecifierResult, import_mode_override: ModuleKind) -> Option<P<Node>> {
         let is_empty_attributes_type = result.import_attributes_type.is_none() || c.is_empty_object_type(result.import_attributes_type.unwrap());
         if is_empty_attributes_type && import_mode_override == RESOLUTION_MODE_NONE {
             return None;
@@ -1547,7 +1547,8 @@ impl NodeBuilderImpl {
             }
         }
         if self.ctx().flags.get().intersects(Flags::GenerateNamesForShadowedTypeParams) {
-            let raw_text = result.text();
+            let raw_text_owner = result;
+            let raw_text = raw_text_owner.text();
             let mut i = self.ctx().type_parameter_names_by_text_next_name_count.borrow().get(&raw_text.to_string()).copied().unwrap_or(0);
             let mut text = raw_text.to_string();
 
@@ -1725,7 +1726,7 @@ impl NodeBuilderImpl {
         }
         let parameter_name: P<Node>;
         if kind == TypePredicateKind::Identifier || kind == TypePredicateKind::AssertsIdentifier {
-            parameter_name = self.f.new_identifier(predicate.parameter_name.get());
+            parameter_name = self.f.new_identifier(&predicate.parameter_name.get());
             self.e.add_emit_flags(parameter_name, EmitFlags::NoAsciiEscaping);
         } else {
             parameter_name = self.f.new_this_type_node();
@@ -1917,7 +1918,7 @@ impl NodeBuilderImpl {
         let asserts_modifier: Option<P<Node>> = if kind == TypePredicateKind::AssertsThis || kind == TypePredicateKind::AssertsIdentifier { Some(self.f.new_token(Kind::AssertsKeyword)) } else { None };
         let parameter_name: P<Node>;
         if kind == TypePredicateKind::Identifier || kind == TypePredicateKind::AssertsIdentifier {
-            parameter_name = self.new_identifier(c, type_predicate.parameter_name.get(), None /*symbol*/);
+            parameter_name = self.new_identifier(c, &type_predicate.parameter_name.get(), None /*symbol*/);
             self.e.set_emit_flags(parameter_name, EmitFlags::NoAsciiEscaping);
         } else {
             parameter_name = self.f.new_this_type_node();
