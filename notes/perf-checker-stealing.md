@@ -55,7 +55,9 @@ Linux (x86-64, 18 vCPU, main with transparent huge pages, the 40k-error corpus, 
 Per-checker thread CPU at 8 checkers on the 38k-file codebase goes from 3.3-5.1 s to 4.22-4.49 s: balanced. The cost is
 first touches. A stolen file is checked by a checker that has not built its neighbourhood, so instructions grow with N
 (+0-1% at 4, +2-5% at 8, +9-18% at 16), and so does memory (+0.04 to +1.2 GiB). At the default count (4-8) the gain is
-11-17%. At 16 most of it goes into duplicated work. That is one reason the default stays `clamp(cores/2, 4, 8)`.
+11-17%. At 16 most of it goes into duplicated work. That is one reason the default stays `clamp(cores/2, 4, 8)`. (Status 2026-10-10: the default is now
+`max(cores/2, min(cores, 8))` clamped to 4..32, and no more than one checker per
+`MIN_CHECKED_FILES_PER_DEFAULT_CHECKER` (32) type-checked files (notes/perf-default-checkers-small-machines.md; `default_checkers_for_parallelism` in checkerpool.rs).)
 
 mui-docs is left out: its program reports option diagnostics, so the CLI never type-checks it.
 

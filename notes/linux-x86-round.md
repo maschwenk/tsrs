@@ -323,3 +323,6 @@ RUSTFLAGS="-C target-cpu=x86-64-v3" cargo build --profile dist -p tsrs_cli      
 MIMALLOC_PURGE_DELAY=-1 tsrs ... ; TSRS_SPARSE_ID_PAGES=1 tsrs ...
 # PGO as released: .github/workflows/release.yml (instrumented build, .github/scripts/pgo-train.sh, llvm-profdata merge)
 ```
+
+Status (2026-10-10): `TSRS_SPARSE_ID_PAGES` no longer does anything: notes/mem-64.md replaced the id pages with
+128-id groups and removed the sparse form; the switch is ignored (crates/tsrs_checker/src/links.rs).

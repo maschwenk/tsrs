@@ -42,7 +42,10 @@ for `b.ts` when `a.ts` is in the program and `{ status: string; user?: undefined
   (`undefined_properties_by_prop`). The property then always sorts by the declaration it represents, so output is a
   function of the program alone.
 - **`--checkerAssignment go` / `TSRS_CHECKER_ASSIGNMENT=go`:** Go's per-name cache, bug for bug. Every such
-  two-behaviour place asks `tsrs_core::compat::go_compatible_history()`; this cache is the only one.
+  two-behaviour place asks `tsrs_core::compat::go_compatible_history()`; this cache was the only one when this was
+  written. Status (2026-10-10): there are now 10 call sites outside compat.rs (checker_02/03/09/13, unioncache.rs,
+  infermemo.rs, checkerpool.rs, execute.rs); among them the TS2590 deferral, the union front cache, the inference memo
+  and the interface check site switch on it.
 - The tsgo-baseline harnesses (`tsrs-test`, `tsrs-fourslash`, tsctests) call `use_go_history_for_tsgo_baselines()`.
   Their baselines are tsgo's output with one checker in program order, so they compare in Go's mode unless
   `TSRS_CHECKER_ASSIGNMENT` names another assignment. `tools/oracle/emit/monorepo.sh` already defaults to `go`.

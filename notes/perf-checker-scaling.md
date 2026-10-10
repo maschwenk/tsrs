@@ -171,7 +171,8 @@ files decide the slowest checker.
   vscode 5,177,105 / 3,099,826).
 
 Work stealing would balance at run time but makes the assignment, and with it the counters, vary from run to run.
-Not pursued.
+Not pursued. (Status 2026-10-10: stealing landed for the type-check pass, made safe by output that does not depend on
+the assignment; notes/perf-checker-stealing.md, notes/perf-order-independence.md.)
 
 ### (d) serial sections around the check
 

@@ -1,7 +1,7 @@
 # fuzz-derived-variance: attacking TSRS_DERIVED_VARIANCE
 
-> Removed on 2026-10-07: the mechanism shipped switched off and, guarded, saved nothing (the judgement in
-> notes/fuzz-derived-variance.md), so `relater_derived.rs`, its seven `TSRS_DERIVED_VARIANCE*` switches, the fuzzers under
+> Removed on 2026-10-07: the mechanism shipped switched off and, guarded, saved nothing (the judgement is
+> in this note), so `relater_derived.rs`, its seven `TSRS_DERIVED_VARIANCE*` switches, the fuzzers under
 > tools/fuzz and the `derived_variance` CLI test were deleted. The `testdata/regressions/derived-variance-*` cases stay:
 > they are tsgo's output on the shapes the fuzzer found.
 

@@ -2,7 +2,8 @@
 
 Goal: shorten the serial steps on the program thread around a CLI run's parallel phases on the 64-vCPU runner
 (`depot-ubuntu-24.04-64`), from the "what remains" list of notes/perf-front-end-fixed-costs.md. vscode `-p src`
-(10,427 files), the default 32 checkers. This note collects what was measured, what landed and what did not.
+(10,427 files), the default 32 checkers. This note collects what was measured, what landed, what was reverted and
+what did not land.
 
 ## Method
 
@@ -18,19 +19,40 @@ Goal: shorten the serial steps on the program thread around a CLI run's parallel
   separator between addresses and the lines cannot be matched to them.
 - The probe scripts (an A/B driver, the attribution and the line mapping) are not committed, as before.
 
-## What landed
+## Status (2026-10-10)
 
-| PR | step | row before -> after (median, min-max) | run |
-| --- | --- | --- | --- |
-| #162 | file assignment while the checkers are created | Diagnostics: global (first) 15 (14-16) -> 11 (11-11) ms | dkp6ztszxg |
-| #164 | program diagnostics on a helper beside checker creation | program + global (first) 18 (17-21) -> global (first) 15 (15-17) ms | jc50scgs6q |
-| #166 | fewer `Arc` refcount updates in the collect walk | Program: collect files 10 (10-11) -> 8 (8-9) ms | 0btsrwdd7k |
-| #167 (open) | fewer `Arc` refcount updates per import edge in the sequential load | Program: sequential load 15 (14-15) -> 13 (13-14) ms | p0085wt4dt |
+#166 and #167 landed and are in the code (filesparser.rs: the collect walk at line 876 and `parseTask::with_path` at
+line 77 cite their notes). #162 and #164 were reverted in https://github.com/maschwenk/tsrs/pull/190 (2026-10-07):
+each bought 3-4 ms at 32 checkers by adding a thread or an overlap around checker creation, below the bar in AGENTS.md
+("A performance change must pay for its complexity"). `checkerPool::create_checkers` again creates the checkers and
+then runs `compute_associations` on the program thread, and "Diagnostics: program" runs on the program thread before
+binding. Their measurements are kept below; do not re-land the mechanisms for this gain. (Checked in the code; the
+local clone is shallow, so the merge and revert commits themselves were not inspected.)
 
-Each has its own note: notes/perf-serial-assign-overlap.md, notes/perf-serial-program-diagnostics.md,
-notes/perf-serial-collect.md, notes/perf-serial-load.md (in #167). pr-verify: 102/102 cells identical for #162, #164
-and #166 (runs 6b4t7jwl3v, 993rh7tk30, sm03fhlsqm); #167's run is s452czrqsh. Each was measured against the main of
-its day, so the sum is an estimate: about 4 + 2-3 + 2 + 2 = 10 ms less serial time in vscode's run.
+## Results
+
+| PR | step | row before -> after (median, min-max) | run | state |
+| --- | --- | --- | --- | --- |
+| #162 | file assignment while the checkers are created | Diagnostics: global (first) 15 (14-16) -> 11 (11-11) ms | dkp6ztszxg | reverted in #190 |
+| #164 | program diagnostics on a helper beside checker creation | program + global (first) 18 (17-21) -> global (first) 15 (15-17) ms | jc50scgs6q | reverted in #190 |
+| #166 | fewer `Arc` refcount updates in the collect walk | Program: collect files 10 (10-11) -> 8 (8-9) ms | 0btsrwdd7k | landed |
+| #167 | fewer `Arc` refcount updates per import edge in the sequential load | Program: sequential load 15 (14-15) -> 13 (13-14) ms | p0085wt4dt | landed |
+
+The landed two have their own notes: notes/perf-serial-collect.md, notes/perf-serial-load.md. pr-verify: 102/102
+cells identical for #162, #164 and #166 (runs 6b4t7jwl3v, 993rh7tk30, sm03fhlsqm); #167's run is s452czrqsh. Each was
+measured against the main of its day. Before #190 the four together were estimated at about 4 + 2-3 + 2 + 2 = 10 ms
+less serial time in vscode's run; what remains landed is the two `Arc` changes, about 2 + 2 ms.
+
+### The reverted two (base main 025b496, 11 interleaved `--profile dist` runs each)
+
+- #162: `create_checkers` created the checkers from a scoped helper thread while the program thread computed the
+  assignment, which reads only the loaded program. "Checkers: create" 4 ms and "Checkers: assign files" 10 ms were
+  unchanged; "Diagnostics: global (first)" went 15 (14-16) -> 11 (11-11) ms. Check time 456 -> 463 ms, peak RSS 2805
+  -> 2807 MiB, single-threaded instructions 102.558 G both, output identical.
+- #164: a scoped helper thread computed "Diagnostics: program" (2 ms: the processing diagnostics and a walk over the
+  ~110k resolutions in `includeProcessor::get_diagnostics`) while the program thread bound and created the checkers;
+  the result kept Go's order. Serial time 18 (17-21) -> 15 (15-17) ms. Check time 454 -> 456 ms, peak RSS 2809 ->
+  2808 MiB, single-threaded instructions 102.558 G -> 102.557 G, output identical.
 
 The two `Arc` changes have one cause in common: a locked refcount update on x86 waits for the thread's earlier stores
 to drain, so a clone or drop between stores that miss the cache (inserts into large maps, pushes into a growing task
@@ -46,8 +68,8 @@ Program-thread timeline before the changes (a perf-slowed run, run hff3trj7fc):
 | sequential load | 14-15 | `run_queued` and `add_prepared_sub_task`: one new task per import edge (110k); placeholder paths and name clones (#167) |
 | collect files | 10 | 58% `Arc<str>` clones and drops of paths and names (#166) |
 | verify options | 2 | most of it `common_source_directory` (vscode has `outDir`): a serial filter over the files and a `to_string` per file, then a parallel `contains_path` |
-| Diagnostics: program | 2 | the include processor's diagnostics: a walk over 110k resolutions (#164 hides it) |
-| checker creation, 4-5 ms, then file assignment, 10 ms | 15 | the row "Diagnostics: global (first)": the sweep itself is under 1 ms (#162 overlaps the two) |
+| Diagnostics: program | 2 | the include processor's diagnostics: a walk over 110k resolutions (#164 hid it; reverted) |
+| checker creation, 4-5 ms, then file assignment, 10 ms | 15 | the row "Diagnostics: global (first)": the sweep itself is under 1 ms (#162 overlapped the two; reverted) |
 | setup of the check pass | ~2.5 (profile) | 1.2 ms in `plan_splits` (below), 0.2 ms mapping `files` to program indices |
 | Diagnostics: report | 2 | |
 | kernel exit | ~15 | not re-measured |
@@ -66,18 +88,17 @@ Program-thread timeline before the changes (a perf-slowed run, run hff3trj7fc):
 - One more clone and drop per file in the collect walk (moving the path into the last insert): below the row's
   resolution, not measured.
 
-## For the assignment and splitting work (not changed here)
+## For the assignment and splitting work
 
 - `plan_splits` calls `program.is_source_file_default_library(file.path())` for every file of every active checker
-  before it tests `!file.is_declaration_file()`. That is a hash of each file's ~100-byte path into the lib-files map,
-  10.4k times, on the program thread at the start of the check pass: 1.2 ms of the setup in the profile (the symbol
-  shows up as a `HashMap<Path, P<jsxRuntimeImportSpecifier>>` lookup, folded with the identical lib-files one). Testing
-  the declaration flag and the weight first and the default library last would skip nearly all of the hashes. Not
-  changed here because `plan_splits` belongs to the other agent's work.
-- With #162 the file assignment (10 ms, `compute_associations`) is the critical path before the check pass; checker
-  creation (4-5 ms) finishes inside it. Anything that shortens the assignment now shortens the serial time one for
-  one, up to the creation's 4-5 ms. The assignment reads only the loaded program, so it could also start earlier, for
-  example beside "Diagnostics: program" or the end of program construction, if the pool were created there.
+  before it tests `!file.is_declaration_file()` (still so on 2026-10-10, checkerpool.rs:1113, where the result now
+  picks `LIB_MIN_SHARE_PERCENT`). That is a hash of each file's ~100-byte path into the lib-files map, 10.4k times, on
+  the program thread at the start of the check pass: 1.2 ms of the setup in the profile (the symbol shows up as a
+  `HashMap<Path, P<jsxRuntimeImportSpecifier>>` lookup, folded with the identical lib-files one). Testing the
+  declaration flag and the weight first and the default library last would skip nearly all of the hashes. Not changed.
+- With the checkers created before the assignment (as on main since #190), "Diagnostics: global (first)" is checker
+  creation (4-5 ms) plus the assignment (10 ms, `compute_associations`). Overlapping the two was #162: 3-4 ms, below
+  the bar. Shortening `compute_associations` itself shortens the serial time one for one, with no new thread.
 
 ## The two global sweeps
 

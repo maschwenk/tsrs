@@ -836,6 +836,8 @@ impl Checker {
                 } else {
                     assert!(attribute_decl.kind() == Kind::JsxSpreadAttribute);
                     if attributes_table.len() != 0 {
+                        // Go passes `objectFlags` in the same call as `createJsxAttributesType()`, which mutates it; gc
+                        // reads the plain variable after the call, so `object_flags` is read after it here too (also below).
                         let t = create_jsx_attributes_type(self, &mut object_flags, attributes_symbol, attributes_table);
                         spread = self.get_spread_type(spread, t, attributes_symbol, object_flags, false /*readonly*/);
                         attributes_table = SymbolTable::new();

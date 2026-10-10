@@ -5,38 +5,28 @@
 > tools/fuzz and the `derived_variance` CLI test were deleted. The `testdata/regressions/derived-variance-*` cases stay:
 > they are tsgo's output on the shapes the fuzzer found.
 
-> Update: an adversarial generator found nine more kinds of disagreement; guards 4-6 close them and remove the
-> savings below. notes/fuzz-derived-variance.md has the findings, the guards, the new numbers and the judgement.
+Status (2026-10-10): removed in #194 (docs/STATUS.md); condensed to the measured results. The savings below are for guards 1-3 only. An adversarial
+generator later found nine more kinds of disagreement; guards 4-6 closed them and removed the savings (guarded:
+-1.8% / -0.3% check time at 1 / 8 checkers). notes/fuzz-derived-variance.md has those findings, numbers and the
+verdict. The switches and the shadow mode named below no longer exist.
 
 Row 2 of the work census (notes/perf-checker-algorithms.md): on the 38k-file codebase 10-17% of check time is
 structural comparison of derived generic instances against references to their generic bases (`ZodObject<...>`,
 `ZodString` against `ZodType<any, any, any>`; ORM repositories against `EntityRepository<T>`). TypeScript relates two
 references to the same generic by the generic's variances, but never across a derivation, so these are compared
 member by member: every method of the base, with generic signatures and `this` types, for every derived instance.
-`TSRS_DERIVED_VARIANCE` (off by default, `crates/tsrs_checker/src/relater_derived.rs`, docs/DEBUGGING.md) tries the
-variance route across the derivation. It is not provably identical to TypeScript, so it ships switched off, with a
-shadow mode that audits it.
+`TSRS_DERIVED_VARIANCE` tried the variance route across the derivation.
 
-## What it does
+## What it did
 
-When `structuredTypeRelatedTo(source, target)` runs (any relation but identity, without error reporting) with a target
-that is a reference to a generic class or interface `G` and a source that is a reference to a different class or
-interface:
-
-1. find the reference `R` to `G` in the source's base-type chain, instantiated the way `resolveObjectTypeMembers`
-   builds inherited members (type arguments substituted, the source as `this` argument);
-2. relate `R`'s type arguments to the target's with `typeArgumentsRelatedTo` and `G`'s variances; continue only on
-   True;
-3. require the variance of `G`'s `this` type to be covariant, bivariant or independent (guard 1, below);
-4. require every required target property to exist in the source (`getUnmatchedProperty`);
-5. for each target property: if the source's property is the very symbol `R` has (inherited unchanged), count it as
-   related; otherwise run `propertyRelatedTo` on it;
-6. relate call signatures, construct signatures and index signatures structurally.
-
-All True: the relation is True without the member-by-member comparison of the inherited members. Anything else: the
-normal comparison runs. So it only ever adds True answers, and what it trusts is that "R's arguments relate by G's
-variances" implies "each inherited member of R relates to the same member of the target", which TypeScript itself
-assumes whenever both sides are references to `G`, but never applies across a derivation.
+In `structuredTypeRelatedTo(source, target)` (any relation but identity, no error reporting), with a target that is a
+reference to a generic class or interface `G` and a source that is a reference to a different class or interface: find
+the reference `R` to `G` in the source's base-type chain (instantiated as `resolveObjectTypeMembers` builds inherited
+members), relate `R`'s type arguments to the target's by `G`'s variances, require the guards below, then count each
+inherited-unchanged member as related and compare only the members the source declares, plus call, construct and index
+signatures. It only ever added True answers. What it trusted is that "R's arguments relate by G's variances" implies
+"each inherited member of R relates to the same member of the target", which TypeScript assumes whenever both sides are
+references to `G`, but never applies across a derivation.
 
 ## The guards, each found by a shadow-mode disagreement
 
@@ -46,14 +36,9 @@ assumes whenever both sides are references to `G`, but never applies across a de
 | no decisions while a variance computation runs | mui-docs (DataGrid column definitions): comparisons inside a variance measurement, with marker type arguments; the variance answer and the structural one differed for 6 pairs (no diagnostic changed) | covered by the mui-docs shadow run |
 | an `any` argument of `R` falls back when its parameter reaches the check type of a conditional type in `G`'s declarations (directly, through a conditional type alias, or through a base type's argument) | playwright's `JSHandle<T>.asElement(): T extends Node ? ElementHandle<T> : null`: `any` takes both branches where the measuring markers kept the conditional deferred. tsgo accepts `JSHandle<any>` -> `JSHandle<unknown>` by variances but rejects `ElementHandle<any>` -> `JSHandle<unknown>` structurally; with the switch on that error was lost | `testdata/regressions/derived-variance-any-conditional` |
 
-`cargo test -p tsrs_cli --test derived_variance` runs both cases with the switch off, on and in shadow mode and
-compares them with tsgo-ref's output; with either guard removed the `on` run loses the error and shadow mode exits 7.
+## Shadow mode: decisions and disagreements (guards 1-3)
 
-## Shadow mode: decisions and disagreements
-
-`TSRS_DERIVED_VARIANCE=shadow` computes the experiment's answer and the normal one for every eligible pair, prints
-each disagreement on stderr (base, source, target, the members that do not relate), continues, prints the totals and
-makes the CLI exit with status 7 if there was any. With the three guards:
+Shadow mode computed both answers for every eligible pair and reported disagreements (exit 7).
 
 | run | decisions | disagreements | normal-comparison time of the decided pairs (outermost) |
 | --- | --- | --- | --- |
@@ -104,7 +89,12 @@ families (schema libraries built from classes, ORM repositories), not to ordinar
 The other four corpora have no such hierarchies: with the switch on, instructions move by -1.4% to +0.8% (paired
 medians, inside their run-to-run spread), and their diagnostics are byte-identical.
 
-## What it changes beyond answers
+The `=params` restriction bought no measured safety: for a True answer TypeScript itself accepts the variance result
+for two references to the same generic whatever the reliability flags (the flags only allow a structural fallback
+after a False), so "type-parameter variances reliable" is not a trust boundary TypeScript draws for True answers; it
+gave up `EntityRepository` (Invariant|Unreliable) and half the 8-checker win, and both variants had 0 disagreements.
+
+## What it changed beyond answers (applies to any relation shortcut)
 
 - **Counters and budgets.** Fewer relation checks run, so fewer types and instantiations are created and fewer
   relation-cache entries are recorded. The instantiation count of a statement (TS2589 at 5M) and the relation-cache
@@ -116,33 +106,7 @@ medians, inside their run-to-run spread), and their diagnostics are byte-identic
   checkers.
 - **Answers.** Budget exhaustion is not the only possible difference: the switch extends TypeScript's trust in its
   variance digest across a derivation, and the digest is an approximation (markers instead of real arguments). The
-  guards close every disagreement found, on 81,000 decisions; a digest error not covered by them would answer True
+  guards close every disagreement found, on 81,000 decisions (the fuzzer later found nine more kinds; see
+  notes/fuzz-derived-variance.md); a digest error not covered by them would answer True
   where the member-by-member comparison answers False, so tsrs would miss an error that Go reports. It would never
   report an error that Go does not.
-
-## Recommendation
-
-If it is enabled: **all bases, with the 16-property threshold and the three guards.** For a True answer TypeScript
-itself accepts the variance result for two references to the same generic whatever the reliability flags (the flags
-only allow a structural fallback after a False), so "type-parameter variances reliable" is not a trust boundary
-TypeScript draws for True answers; it gave up `EntityRepository` (Invariant|Unreliable) and half the 8-checker win for
-no measured safety: both variants had 0 disagreements. A per-base allowlist would make results codebase-specific; a
-denylist (`TSRS_DERIVED_VARIANCE_BASES=-Name`) is useful as a safety valve where shadow mode finds a disagreement.
-Shadow mode costs 0.4-1.3% instructions, so CI could run it permanently (it reports, continues, exits 7) while
-developer machines run `on`.
-
-Undecided (the owner's call): whether `on` may become the default outside `--checkerAssignment go`. Not done: the
-three guards are empirical; a proof that the variance digest plus the guards implies the structural answer does not
-exist, and a fourth kind of digest error is possible.
-
-## Reproduce
-
-```sh
-cd <project>
-TSRS_DERIVED_VARIANCE=shadow tsrs -p . --noEmit --incremental false          # audit: disagreements on stderr, exit 7 if any
-TSRS_DERIVED_VARIANCE=shadow TSRS_DERIVED_VARIANCE_LOG=/tmp/dv.log tsrs ...   # plus one line per decision with timings
-TSRS_DERIVED_VARIANCE=on TSRS_DERIVED_VARIANCE_RELIABLE=params tsrs ...      # the restricted variant
-TSRS_DERIVED_VARIANCE=on TSRS_DERIVED_VARIANCE_BASES=ZodType tsrs ...         # one base only
-# the suite with the switch on (the harness otherwise uses Go history, which forces it off):
-TSRS_CHECKER_ASSIGNMENT=locality TSRS_DERIVED_VARIANCE=on tsrs-test run --suite all --baselines types,symbols
-```

@@ -283,3 +283,7 @@ the user-space difference is probably the PGO profile shifting (the training run
 region paths). The same commits also carried #143 and #146, which measured within noise. Until the per-page cost is
 gone (reusing a freed region's range instead of returning it, or batching the returns), freeing stays opt-in:
 `TSRS_FREE_LEAVES=1`.
+
+Status (2026-10-10): that opt-in period is over. notes/mem-leaf-regions-cost.md re-measured with one binary and
+put the default back: freeing is on up to 16 checkers (`MAX_DEFAULT_CHECKERS = 16` in
+crates/tsrs_compiler/src/fileregions.rs), as the Mechanism section says.

@@ -73,6 +73,9 @@ called exactly as often (getPropertyOfTypeEx 67,608,533 both, recursiveTypeRelat
   163,512,190; the remaining 4K come from `sortSymbols` and `compareTypesAndDepth`, which Go sorts with
   `slices.SortFunc` (pdqsort; insertion sort only up to 12 elements) and tsrs with `sort_by`. Not ported (pdqsort
   is ~300 lines; these sites are cold).
+  Status (2026-10-10): pdqsort is now ported (`tsrs_core::goslices::sort_func`); `sort_symbols` uses it only when
+  the program is incomplete (utilities.rs, where the order is not total), and the complete-program path and
+  `compare_types_and_depth` (inference.rs) still use `sort_by`.
 - `getSignaturesOfStructuredType` 77.5M vs 21.8M and `getIndexInfosOfStructuredType` 21.2M vs 16.2M: where Go
   reads `resolved.CallSignatures()` after `resolveStructuredTypeMembers`, tsrs calls the function again (it has to
   in the lazy-member mode, where the type may be unresolved). Same answers; in the default mode each call costs a
@@ -123,4 +126,5 @@ instructions.
 - Allocation churn: 204M heap allocations single; the long tail is temporary `Vec`s that Go also allocates
   (instantiation type-argument lists, `SymbolTable::entries` snapshots in `getNamedMembers` / lazy members).
 - `sortSymbols` / `compareTypesAndDepth` still use Rust's sort (comparison sequence differs from Go's pdqsort).
+  Status (2026-10-10): still true for complete programs; incomplete programs sort symbols with the pdqsort port.
 - Wall-time confirmation on a quiet machine.

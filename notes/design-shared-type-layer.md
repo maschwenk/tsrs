@@ -446,7 +446,7 @@ the sample with their own checker, then merge equal records and number them by (
 
 - Critical path: step 1 is a single task, then 8, then 64, then the rest (bun driver/lib.rs:261-273). bun check was
   slower than tsrs on all 17 projects on the 64-vCPU board and on all six of today's memory losses on the 16-vCPU
-  board (mem-round4.md, introduction and section 7).
+  board (mem-round4.md, introduction, and section 7 on branch `notes/discarded-work`, 81b504bc).
 - Memory: Bun's.
 - Not tsgo's numbering, by construction:
   - unions fall back to the creation step and are re-sorted at barriers (check/unions.rs:2295-2310,
@@ -480,7 +480,7 @@ closure.
 - Critical path, estimated: the floor plus the rebuild of the freed pre-switch graphs. The estimate is FA's paired
   wall less `on0`'s (both measured, spike section 10.1), less what late freeze saves over FA: the seed checker going
   on with its queue (B, predicted 11-16 ms, spike section 10.3) and no ninth thread beside eight throwaways (10-30 ms,
-  notes/spike-shared-graph-seed.md), i.e. 21-46 ms, 1-5 points of these walls:
+  notes/spike-shared-graph-seed.md on the spike branch), i.e. 21-46 ms, 1-5 points of these walls:
 
   | project | FA - `on0`, from measured medians | late freeze, estimated |
   | --- | ---: | ---: |

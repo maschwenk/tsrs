@@ -234,7 +234,8 @@ most of their front end, but each run is tens of milliseconds:
 
 A CI that runs one process per package would repeat the `node_modules` parse in each one. The in-process answer
 already exists: the `--build` orchestrator shares `.d.ts` / `.json` `SourceFile`s between projects
-(`tsrs_cli/src/build/host.rs` `get_source_file`, Go `execute/build/host.go:55`).
+(`tsrs_execute/src/build/host.rs` `get_source_file`, Go `execute/build/host.go:55`; the path was
+`tsrs_cli/src/build/host.rs` when this note was written).
 
 ## Reproducing
 

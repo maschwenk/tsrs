@@ -4,6 +4,12 @@ Update (2026-10-05): pointer compression later moved the arena chunks out of mim
 ask for huge pages, which cost 2-6% wall time on Linux until the reservation advised its chunks itself
 (notes/linux-x86-round.md). The measurements below are from before that, with mimalloc-backed chunks.
 
+Status (2026-10-10): "the default build already gets [THP]" and `MIMALLOC_ALLOW_THP=0` as the off switch describe the
+build of that time. The CLI now builds mimalloc with `no_thp` (crates/tsrs_cli/Cargo.toml, notes/mem-no-thp.md), so
+the mimalloc heap is not advised; the arena advises its own chunks (crates/tsrs_core/src/reserve.rs); and because
+`no_thp` also disables THP for the whole process, `main` re-enables it with `prctl(PR_SET_THP_DISABLE, 0)` unless
+`MIMALLOC_ALLOW_THP` is set (crates/tsrs_cli/src/main.rs, `allow_transparent_huge_pages`).
+
 All earlier performance work was measured on an 18-core Apple Silicon Mac, where kernel time is a large share
 (the private monorepo: ~15 s user + ~8 s sys with one checker). The users run Linux (x86_64 cloud sandbox VMs,
 arm64 dev VMs, x86_64 CI). This is the first measurement there, and an A/B of transparent huge pages (THP) and

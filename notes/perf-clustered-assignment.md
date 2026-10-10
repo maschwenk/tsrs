@@ -193,8 +193,9 @@ mui-docs -73 / -92, vscode -60 / -117 (16 / 32 checkers). Capping the refinement
   experiments. The cost cache path (`--checkerCostCache`) keeps its own placement.
 
 The assignment is on the critical path (notes/perf-front-end-fixed-costs.md), and the new work costs 2-13 ms. So the
-branch also computed the assignment on its own thread while the checkers are created; main has since done the same
-(#162, notes/perf-serial-assign-overlap.md), and the branch now uses main's version. What remains here: the import graph
+branch also computed the assignment on its own thread while the checkers are created; main did the same for a while
+(#162), then reverted it in #190 as below the AGENTS.md bar (notes/perf-serial-steps.md, "Status" and "Results"); main
+creates the checkers and then computes the assignment. What remains here: the import graph
 is built while the groups are formed (they do not depend on each other), and the paths are sorted in parallel (a total
 order, ties by index). `Checkers: create` and `Checkers: assign files`, ms, medians on the runner (round 2, section 5):
 the measured main (3540ffa, before #162) runs them in sequence, the branch side by side, so the larger one gates the

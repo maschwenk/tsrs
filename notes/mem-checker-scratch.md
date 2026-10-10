@@ -247,6 +247,9 @@ depot ci dispatch --repo maschwenk/tsrs --workflow perf-probe.yml --ref <branch>
   --input probe_args='--reps 5 --checkers 1,4,32'
 ```
 
+Status (2026-10-10): `tools/perf/scratchprobe.sh` is not on main; it is on branch `mem/export-star-tables` (origin,
+0384607), so fetch that branch to re-run the section 2 prototype.
+
 The grouping of the census TSV rows into causes is a short script over the "arena by type and allocating function
 <- callers" and "heap by allocating function <- caller" tables: per row, (unreachable at 16 - unreachable at 1) / 15,
 classed by the first matching frame (`get_exports_of_module_worker`, `append_declarations`, widening, inference types,
