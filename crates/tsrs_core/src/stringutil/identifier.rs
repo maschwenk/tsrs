@@ -1,16 +1,15 @@
-use super::identifier_parts_generated::{UNICODE_ESNEXT_IDENTIFIER_PART, UNICODE_ESNEXT_IDENTIFIER_START};
-use super::rangetable::{unicode_is, AsRune};
+use super::rangetable::AsRune;
 
 // IsUnicodeIdentifierStart reports whether ch may begin an ECMAScript
 // identifier, i.e. whether it has the Unicode ID_Start (or Other_ID_Start)
-// property. The range table is generated; see generate-unicode-data.mts.
+// property. unicode-id-start is pinned to Unicode 15.1.0 to match Go's tables.
 pub fn is_unicode_identifier_start(ch: impl AsRune) -> bool {
-    unicode_is(&UNICODE_ESNEXT_IDENTIFIER_START, ch.as_rune())
+    ch.as_char().is_some_and(unicode_id_start::is_id_start)
 }
 
 // IsUnicodeIdentifierPart reports whether ch may appear after the first
 // character of an ECMAScript identifier, i.e. whether it has the Unicode
 // ID_Continue (or Other_ID_Continue) property, which also includes ID_Start.
 pub fn is_unicode_identifier_part(ch: impl AsRune) -> bool {
-    unicode_is(&UNICODE_ESNEXT_IDENTIFIER_PART, ch.as_rune())
+    ch.as_char().is_some_and(unicode_id_start::is_id_continue)
 }

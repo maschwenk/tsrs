@@ -472,6 +472,7 @@ dependencies = [
  "memchr",
  "mimalloc-safe",
  "rustc-hash",
+ "unicode-id-start",
 ]
 
 [[package]]
@@ -826,6 +827,12 @@ dependencies = [
  "tsrs_scanner",
  "tsrs_vfs",
 ]
+
+[[package]]
+name = "unicode-id-start"
+version = "1.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b8f73150333cb58412db36f2aca8f2875b013049705cc77b94ded70a1ab1f5da"
 
 [[package]]
 name = "unicode-ident"

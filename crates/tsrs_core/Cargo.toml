@@ -26,6 +26,7 @@ rustc-hash.workspace = true
 hashbrown.workspace = true
 indexmap.workspace = true
 memchr.workspace = true
+unicode-id-start.workspace = true
 mimalloc-safe = { workspace = true, optional = true }
 
 [target.'cfg(unix)'.dependencies]

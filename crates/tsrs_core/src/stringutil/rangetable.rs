@@ -5,12 +5,23 @@ pub type Rune = i32;
 /// Anything usable where Go takes a `rune`: `char`, `i32` or `u32`.
 pub trait AsRune: Copy {
     fn as_rune(self) -> Rune;
+
+    /// Preserve a decoded character, or validate an integer rune before converting it.
+    #[inline]
+    fn as_char(self) -> Option<char> {
+        char::from_u32(self.as_rune() as u32)
+    }
 }
 
 impl AsRune for char {
     #[inline]
     fn as_rune(self) -> Rune {
         self as Rune
+    }
+
+    #[inline]
+    fn as_char(self) -> Option<char> {
+        Some(self)
     }
 }
 

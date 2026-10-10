@@ -336,17 +336,24 @@ pub(crate) const RUNE_ERROR: i32 = 0xFFFD;
 /// `(RuneError, 1)` for an invalid encoding.
 #[inline]
 pub(crate) fn decode_rune(b: &[u8]) -> (i32, usize) {
+    let (ch, size) = decode_char(b);
+    (ch as i32, size)
+}
+
+/// Decode UTF-8 while preserving scalar validity in the return type.
+#[inline]
+pub(crate) fn decode_char(b: &[u8]) -> (char, usize) {
     let Some(&b0) = b.first() else {
-        return (RUNE_ERROR, 0);
+        return ('\u{FFFD}', 0);
     };
     if b0 < 0x80 {
-        return (b0 as i32, 1);
+        return (b0 as char, 1);
     }
-    decode_rune_slow(b)
+    decode_char_slow(b)
 }
 
 #[cold]
-fn decode_rune_slow(b: &[u8]) -> (i32, usize) {
+fn decode_char_slow(b: &[u8]) -> (char, usize) {
     let b0 = b[0] as u32;
     let cont = |i: usize, lo: u8, hi: u8| -> Option<u32> {
         let c = *b.get(i)?;
@@ -355,7 +362,7 @@ fn decode_rune_slow(b: &[u8]) -> (i32, usize) {
         }
         Some((c & 0x3F) as u32)
     };
-    match b0 {
+    let (r, size) = match b0 {
         0xC2..=0xDF => match cont(1, 0x80, 0xBF) {
             Some(c1) => ((((b0 & 0x1F) << 6) | c1) as i32, 2),
             None => (RUNE_ERROR, 1),
@@ -383,7 +390,11 @@ fn decode_rune_slow(b: &[u8]) -> (i32, usize) {
             }
         }
         _ => (RUNE_ERROR, 1),
-    }
+    };
+    debug_assert!(char::from_u32(r as u32).is_some());
+    // SAFETY: the lead/continuation byte bounds above exclude overlong encodings, surrogates (ED),
+    // and values above U+10FFFF (F4). Every invalid encoding returns the valid scalar U+FFFD.
+    (unsafe { char::from_u32_unchecked(r as u32) }, size)
 }
 
 /// Go `utf8.DecodeLastRuneInString`.
@@ -653,14 +664,20 @@ impl Scanner {
 
     #[inline]
     pub(crate) fn char_and_size(&self) -> (i32, i32) {
+        let (ch, size) = self.decoded_char_and_size();
+        (ch as i32, size)
+    }
+
+    #[inline]
+    fn decoded_char_and_size(&self) -> (char, i32) {
         // Fast path: a single ASCII byte.
         if self.state.pos < self.end {
             let b = self.text.as_bytes()[self.state.pos as usize];
             if b < 0x80 {
-                return (b as i32, 1);
+                return (b as char, 1);
             }
         }
-        let (r, size) = decode_rune(&self.text.as_bytes()[(self.state.pos as usize).min(self.text.len())..]);
+        let (r, size) = decode_char(&self.text.as_bytes()[(self.state.pos as usize).min(self.text.len())..]);
         (r, size as i32)
     }
 
@@ -1776,24 +1793,24 @@ impl Scanner {
             }
             self.state.pos = identifier_start;
         }
-        let (mut ch, mut size) = self.char_and_size();
+        let (mut ch, mut size) = self.decoded_char_and_size();
         if is_identifier_start(ch) {
             let language_variant = if variant == IdentifierVariant::JSX { LanguageVariant::JSX } else { LanguageVariant::Standard };
             loop {
                 self.state.pos += size;
-                (ch, size) = self.char_and_size();
+                (ch, size) = self.decoded_char_and_size();
                 if !is_identifier_part_ex(ch, language_variant) {
                     break;
                 }
             }
             self.state.token_value = self.slice(start, self.state.pos);
-            if ch == '\\' as i32 {
+            if ch == '\\' {
                 let parts = self.scan_identifier_parts(variant);
                 self.state.token_value = self.concat_value(self.state.token_value, parts);
             }
             return true;
         }
-        if ch == '\\' as i32 {
+        if ch == '\\' {
             if let Some(escaped) =
                 self.scan_identifier_escape(|ch| is_identifier_start(ch), variant == IdentifierVariant::RegExpGroupName)
             {
@@ -1813,12 +1830,12 @@ impl Scanner {
         let mut start = self.state.pos;
         let language_variant = if variant == IdentifierVariant::JSX { LanguageVariant::JSX } else { LanguageVariant::Standard };
         loop {
-            let (ch, size) = self.char_and_size();
+            let (ch, size) = self.decoded_char_and_size();
             if is_identifier_part_ex(ch, language_variant) {
                 self.state.pos += size;
                 continue;
             }
-            if ch == '\\' as i32 {
+            if ch == '\\' {
                 let escape_start = self.state.pos;
                 if let Some(escaped) = self.scan_identifier_escape(
                     |ch| is_identifier_part_ex(ch, language_variant),
@@ -2632,7 +2649,6 @@ pub fn is_valid_identifier(s: &str) -> bool {
         return false;
     }
     for (i, ch) in s.char_indices() {
-        let ch = ch as i32;
         if i == 0 && !is_identifier_start(ch) || i != 0 && !is_identifier_part(ch) {
             return false;
         }
@@ -2646,21 +2662,23 @@ pub(crate) fn is_word_character(ch: i32) -> bool {
 }
 
 #[inline]
-pub fn is_identifier_start(ch: i32) -> bool {
-    stringutil::is_ascii_letter(ch) || ch == '_' as i32 || ch == '$' as i32 || ch >= RUNE_SELF && stringutil::is_unicode_identifier_start(ch)
+pub fn is_identifier_start(ch: impl stringutil::AsRune) -> bool {
+    let rune = ch.as_rune();
+    stringutil::is_ascii_letter(ch) || rune == '_' as i32 || rune == '$' as i32 || rune >= RUNE_SELF && stringutil::is_unicode_identifier_start(ch)
 }
 
 #[inline]
-pub fn is_identifier_part(ch: i32) -> bool {
+pub fn is_identifier_part(ch: impl stringutil::AsRune) -> bool {
     is_identifier_part_ex(ch, LanguageVariant::Standard)
 }
 
 #[inline]
-pub fn is_identifier_part_ex(ch: i32, language_variant: LanguageVariant) -> bool {
-    is_word_character(ch)
-        || ch == '$' as i32
-        || ch >= RUNE_SELF && stringutil::is_unicode_identifier_part(ch)
-        || language_variant == LanguageVariant::JSX && ch == '-' as i32 // ":" is part of JSXNamespacedName, but not JSXIdentifier.
+pub fn is_identifier_part_ex(ch: impl stringutil::AsRune, language_variant: LanguageVariant) -> bool {
+    let rune = ch.as_rune();
+    is_word_character(rune)
+        || rune == '$' as i32
+        || rune >= RUNE_SELF && stringutil::is_unicode_identifier_part(ch)
+        || language_variant == LanguageVariant::JSX && rune == '-' as i32 // ":" is part of JSXNamespacedName, but not JSXIdentifier.
 }
 
 fn token_to_text() -> &'static [&'static str] {
