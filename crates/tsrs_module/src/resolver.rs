@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt;
 
 use tsrs_ast::Diagnostic;
@@ -11,16 +12,22 @@ use crate::cache::{
     get_redirect_config_name, new_resolution_data, ModuleResolutionCache, ModuleResolutionCacheKey, ParsedPatternsCache, ResolutionData,
     TypeRefDirectiveResolutionCache, TypeRefDirectiveResolutionCacheKey,
 };
-use crate::packagejson::{self, with_package_directory, InfoCache, InfoCacheEntry, InfoCacheEntryExt, JSONValueType, PackageJson, TypeValidatedField, VersionPaths};
+use crate::packagejson::{
+    self, with_package_directory, InfoCache, InfoCacheEntry, InfoCacheEntryExt, JSONValueType, PackageJson, TypeValidatedField, VersionPaths,
+};
+use crate::scratch::{with_path_buffer, PathBuffer};
 use crate::types::{
     Extensions, NodeResolutionFeatures, PackageId, ResolutionHost, ResolvedModule, ResolvedProjectReference, ResolvedTypeReferenceDirective, Resolver,
 };
-use crate::util::{is_applicable_versioned_types_key, mangle_scoped_package_name, parse_node_module_from_path, parse_package_name, compare_pattern_keys, INFERRED_TYPES_CONTAINING_FILE};
+use crate::util::{
+    compare_pattern_keys, is_applicable_versioned_types_key, mangle_scoped_package_name, parse_node_module_from_path, parse_package_name,
+    INFERRED_TYPES_CONTAINING_FILE,
+};
 
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Resolved {
     path: String,
-    extension: String,
+    extension: Cow<'static, str>,
     package_id: PackageId,
     original_path: String,
     resolved_using_ts_extension: bool,
@@ -97,12 +104,12 @@ pub(crate) struct ResolutionState<'r> {
     tracer: Option<Tracer>,
 
     // request fields
-    name: String,
-    containing_directory: String,
+    name: Cow<'r, str>,
+    containing_directory: Cow<'r, str>,
     is_config_lookup: bool,
     features: NodeResolutionFeatures,
     esm_mode: bool,
-    conditions: Vec<String>,
+    conditions: Conditions,
     extensions: Extensions,
     compiler_options: P<CompilerOptions>,
     resolve_package_directory_only: bool,
@@ -118,8 +125,8 @@ pub(crate) struct ResolutionState<'r> {
 }
 
 fn new_resolution_state<'r>(
-    name: &str,
-    containing_directory: &str,
+    name: &'r str,
+    containing_directory: &'r str,
     is_type_reference_directive: bool,
     resolution_mode: ResolutionMode,
     compiler_options: P<CompilerOptions>,
@@ -128,15 +135,15 @@ fn new_resolution_state<'r>(
     trace_builder: Option<Tracer>,
 ) -> ResolutionState<'r> {
     let mut state = ResolutionState {
-        name: name.to_string(),
-        containing_directory: containing_directory.to_string(),
+        name: Cow::Borrowed(name),
+        containing_directory: Cow::Borrowed(containing_directory),
         compiler_options: get_compiler_options_with_redirect(compiler_options, redirected_reference),
         resolver,
         tracer: trace_builder,
         is_config_lookup: false,
         features: NodeResolutionFeatures::None,
         esm_mode: false,
-        conditions: Vec::new(),
+        conditions: Conditions::default(),
         extensions: Extensions::empty(),
         resolve_package_directory_only: false,
         candidate_ending_is_from_config: false,
@@ -160,16 +167,16 @@ fn new_resolution_state<'r>(
         ModuleResolutionKind::Node16 => {
             state.features = NodeResolutionFeatures::Node16Default;
             state.esm_mode = resolution_mode == ModuleKind::ESNext;
-            state.conditions = get_conditions(&compiler_options, resolution_mode);
+            state.conditions = Conditions::new(compiler_options, resolution_mode);
         }
         ModuleResolutionKind::NodeNext => {
             state.features = NodeResolutionFeatures::NodeNextDefault;
             state.esm_mode = resolution_mode == ModuleKind::ESNext;
-            state.conditions = get_conditions(&compiler_options, resolution_mode);
+            state.conditions = Conditions::new(compiler_options, resolution_mode);
         }
         ModuleResolutionKind::Bundler => {
             state.features = get_node_resolution_features(&compiler_options);
-            state.conditions = get_conditions(&compiler_options, resolution_mode);
+            state.conditions = Conditions::new(compiler_options, resolution_mode);
         }
         _ => {}
     }
@@ -272,21 +279,21 @@ impl DefaultResolver {
         resolution_mode: ResolutionMode,
         redirected_reference: Option<&dyn ResolvedProjectReference>,
     ) -> (P<ResolvedTypeReferenceDirective>, Vec<DiagAndArgs>) {
-        let containing_directory = tspath::get_directory_path(containing_file);
+        let containing_directory = tspath::get_directory_path_cow(containing_file);
         let mut trace_builder = self.new_trace_builder();
 
         let from_inferred_types_containing_file = containing_file.ends_with(INFERRED_TYPES_CONTAINING_FILE);
 
-        let cache_key = TypeRefDirectiveResolutionCacheKey {
-            containing_directory: containing_directory.clone(),
-            type_reference_name: type_reference_directive_name.to_string(),
+        let cache_key = (
+            containing_directory.as_ref(),
+            type_reference_directive_name,
             resolution_mode,
-            redirect_config_name: get_redirect_config_name(redirected_reference),
+            get_redirect_config_name(redirected_reference),
             from_inferred_types_containing_file,
-        };
+        );
 
         if trace_builder.is_none() {
-            if let Some(cached) = self.type_ref_directive_resolution_cache.get(&cache_key) {
+            if let Some(cached) = self.type_ref_directive_resolution_cache.get(cache_key) {
                 return (cached, Vec::new());
             }
         }
@@ -319,7 +326,16 @@ impl DefaultResolver {
             t.trace_type_reference_directive_result(type_reference_directive_name, &result);
         }
 
-        self.type_ref_directive_resolution_cache.set(cache_key, result);
+        self.type_ref_directive_resolution_cache.set(
+            TypeRefDirectiveResolutionCacheKey {
+                containing_directory: cache_key.0.to_string(),
+                type_reference_name: cache_key.1.to_string(),
+                resolution_mode: cache_key.2,
+                redirect_config_name: cache_key.3.to_string(),
+                from_inferred_types_containing_file: cache_key.4,
+            },
+            result,
+        );
 
         (result, get_traces(trace_builder))
     }
@@ -331,8 +347,13 @@ impl DefaultResolver {
         resolution_mode: ResolutionMode,
         redirected_reference: Option<&dyn ResolvedProjectReference>,
     ) -> Result<(P<ResolvedModule>, Vec<DiagAndArgs>), String> {
-        let (result, trace) =
-            self.resolve_module_name_worker(module_name, containing_file, &tspath::get_directory_path(containing_file), resolution_mode, redirected_reference);
+        let (result, trace) = self.resolve_module_name_worker(
+            module_name,
+            containing_file,
+            &tspath::get_directory_path_cow(containing_file),
+            resolution_mode,
+            redirected_reference,
+        );
         Ok((result, trace))
     }
 
@@ -357,15 +378,10 @@ impl DefaultResolver {
     ) -> (P<ResolvedModule>, Vec<DiagAndArgs>) {
         let mut trace_builder = self.new_trace_builder();
 
-        let cache_key = ModuleResolutionCacheKey {
-            containing_directory: containing_directory.to_string(),
-            module_name: module_name.to_string(),
-            resolution_mode,
-            redirect_config_name: get_redirect_config_name(redirected_reference),
-        };
+        let cache_key = (containing_directory, module_name, resolution_mode, get_redirect_config_name(redirected_reference));
 
         if trace_builder.is_none() {
-            if let Some(cached) = self.module_resolution_cache.get(&cache_key) {
+            if let Some(cached) = self.module_resolution_cache.get(cache_key) {
                 return (cached, Vec::new());
             }
         }
@@ -418,7 +434,15 @@ impl DefaultResolver {
         }
 
         let final_result = P::new(self.try_resolve_from_typings_location(module_name, containing_directory, result, &mut trace_builder));
-        self.module_resolution_cache.set(cache_key, final_result);
+        self.module_resolution_cache.set(
+            ModuleResolutionCacheKey {
+                containing_directory: cache_key.0.to_string(),
+                module_name: cache_key.1.to_string(),
+                resolution_mode: cache_key.2,
+                redirect_config_name: cache_key.3.to_string(),
+            },
+            final_result,
+        );
 
         (final_result, get_traces(trace_builder))
     }
@@ -431,7 +455,7 @@ impl DefaultResolver {
         redirected_reference: Option<&dyn ResolvedProjectReference>,
     ) -> Option<P<ResolvedModule>> {
         let compiler_options = get_compiler_options_with_redirect(self.compiler_options, redirected_reference);
-        let containing_directory = tspath::get_directory_path(containing_file);
+        let containing_directory = tspath::get_directory_path_cow(containing_file);
         let mut state = new_resolution_state(
             module_name,
             &containing_directory,
@@ -496,7 +520,7 @@ impl DefaultResolver {
     }
 
     fn resolve_config(&self, module_name: &str, containing_file: &str) -> ResolvedModule {
-        let containing_directory = tspath::get_directory_path(containing_file);
+        let containing_directory = tspath::get_directory_path_cow(containing_file);
         let mut state = new_resolution_state(
             module_name,
             &containing_directory,
@@ -572,12 +596,12 @@ impl<'r> ResolutionState<'r> {
         ResolutionState {
             resolver,
             tracer: None,
-            name: String::new(),
-            containing_directory: String::new(),
+            name: Cow::Borrowed(""),
+            containing_directory: Cow::Borrowed(""),
             is_config_lookup: false,
             features: NodeResolutionFeatures::None,
             esm_mode: false,
-            conditions: Vec::new(),
+            conditions: Conditions::default(),
             extensions: Extensions::empty(),
             compiler_options,
             resolve_package_directory_only: false,
@@ -647,7 +671,7 @@ impl<'r> ResolutionState<'r> {
         let mut name_for_lookup = self.name.clone();
         if type_root.ends_with("/node_modules/@types") || type_root.ends_with("/node_modules/@types/") {
             let name = self.name.clone();
-            name_for_lookup = self.mangle_scoped_package_name(&name);
+            name_for_lookup = Cow::Owned(self.mangle_scoped_package_name(&name));
         }
         tspath::combine_paths(type_root, &[&name_for_lookup])
     }
@@ -882,7 +906,16 @@ impl<'r> ResolutionState<'r> {
             }
             if let Some(main_export) = main_export {
                 if main_export.type_() != JSONValueType::NotPresent {
-                    return self.load_module_from_target_export_or_import(ext, subpath, package_info, false /*isImports*/, main_export, "", false /*isPattern*/, ".");
+                    return self.load_module_from_target_export_or_import(
+                        ext,
+                        subpath,
+                        package_info,
+                        false, /*isImports*/
+                        main_export,
+                        "",
+                        false, /*isPattern*/
+                        ".",
+                    );
                 }
             }
         } else if exports.type_() == JSONValueType::Object && exports.is_subpaths() {
@@ -906,7 +939,16 @@ impl<'r> ResolutionState<'r> {
     ) -> Option<Resolved> {
         if !module_name.ends_with('/') && !module_name.contains('*') {
             if let Some(target) = lookup_table.get(module_name) {
-                return self.load_module_from_target_export_or_import(extensions, module_name, scope, is_imports, target, "", false /*isPattern*/, module_name);
+                return self.load_module_from_target_export_or_import(
+                    extensions,
+                    module_name,
+                    scope,
+                    is_imports,
+                    target,
+                    "",
+                    false, /*isPattern*/
+                    module_name,
+                );
             }
         }
 
@@ -964,15 +1006,15 @@ impl<'r> ResolutionState<'r> {
                             t.write(&diagnostics::Using_0_subpath_1_with_target_2, &[&"imports", &key, &combined_lookup]);
                             t.write(&diagnostics::Resolving_module_0_from_1, &[&combined_lookup, &scope_containing_directory]);
                         }
-                        let name = std::mem::replace(&mut self.name, combined_lookup);
-                        let containing_directory = std::mem::replace(&mut self.containing_directory, scope_containing_directory);
+                        let name = std::mem::replace(&mut self.name, Cow::Owned(combined_lookup));
+                        let containing_directory = std::mem::replace(&mut self.containing_directory, Cow::Owned(scope_containing_directory));
                         let result = self.resolve_node_like();
                         self.name = name;
                         self.containing_directory = containing_directory;
                         if result.is_resolved() {
                             return Some(Resolved {
                                 path: result.resolved_file_name.to_string(),
-                                extension: result.extension.to_string(),
+                                extension: Cow::Borrowed(result.extension),
                                 package_id: result.package_id,
                                 original_path: result.original_path.to_string(),
                                 resolved_using_ts_extension: result.resolved_using_ts_extension,
@@ -1221,32 +1263,34 @@ impl<'r> ResolutionState<'r> {
     }
 
     fn load_module_from_immediate_node_modules_directory(&mut self, extensions: Extensions, directory: &str, types_scope_only: bool) -> Option<Resolved> {
-        let node_modules_folder = tspath::combine_paths(directory, &["node_modules"]);
-        if !self.fs().directory_exists(&node_modules_folder) {
-            trace!(self.tracer, diagnostics::Directory_0_does_not_exist_skipping_all_lookups_in_it, node_modules_folder);
-            return continue_searching();
-        }
-
-        if !types_scope_only {
-            let name = self.name.clone();
-            let package_result = self.load_module_from_specific_node_modules_directory(extensions, &name, &node_modules_folder);
-            if !package_result.should_continue_searching() {
-                return package_result;
-            }
-        }
-
-        if extensions.intersects(Extensions::Declaration) {
-            let node_modules_at_types = tspath::combine_paths(&node_modules_folder, &["@types"]);
-            if !self.fs().directory_exists(&node_modules_at_types) {
-                trace!(self.tracer, diagnostics::Directory_0_does_not_exist_skipping_all_lookups_in_it, node_modules_at_types);
+        with_path_buffer(PathBuffer::NodeModules, |node_modules_folder| {
+            tspath::combine_paths_into(node_modules_folder, directory, &["node_modules"]);
+            if !self.fs().directory_exists(&node_modules_folder) {
+                trace!(self.tracer, diagnostics::Directory_0_does_not_exist_skipping_all_lookups_in_it, node_modules_folder);
                 return continue_searching();
             }
-            let name = self.name.clone();
-            let mangled = self.mangle_scoped_package_name(&name);
-            return self.load_module_from_specific_node_modules_directory(Extensions::Declaration, &mangled, &node_modules_at_types);
-        }
 
-        continue_searching()
+            if !types_scope_only {
+                let name = self.name.clone();
+                let package_result = self.load_module_from_specific_node_modules_directory(extensions, &name, &node_modules_folder);
+                if !package_result.should_continue_searching() {
+                    return package_result;
+                }
+            }
+
+            if extensions.intersects(Extensions::Declaration) {
+                let node_modules_at_types = tspath::combine_paths(&node_modules_folder, &["@types"]);
+                if !self.fs().directory_exists(&node_modules_at_types) {
+                    trace!(self.tracer, diagnostics::Directory_0_does_not_exist_skipping_all_lookups_in_it, node_modules_at_types);
+                    return continue_searching();
+                }
+                let name = self.name.clone();
+                let mangled = self.mangle_scoped_package_name(&name);
+                return self.load_module_from_specific_node_modules_directory(Extensions::Declaration, &mangled, &node_modules_at_types);
+            }
+
+            continue_searching()
+        })
     }
 
     fn load_module_from_specific_node_modules_directory(&mut self, ext: Extensions, module_name: &str, node_modules_directory: &str) -> Option<Resolved> {
@@ -1258,10 +1302,9 @@ impl<'r> ResolutionState<'r> {
         // causing `loadNodeModuleFromDirectoryWorker`'s `ComparePaths(candidate, ...)`
         // check to fail and skip loading the package's `main`/`types` entry.
         // https://github.com/microsoft/TypeScript/tsc/issues/3526
-        let candidate =
-            tspath::remove_trailing_directory_separator(&tspath::normalize_path(&tspath::combine_paths(node_modules_directory, &[module_name]))).to_string();
+        let mut candidate = normalized_join(node_modules_directory, &[module_name]);
+        candidate.truncate(tspath::remove_trailing_directory_separator(&candidate).len());
         let (package_name, rest) = parse_package_name(module_name);
-        let rest = rest.to_string();
         let mut package_directory = tspath::combine_paths(node_modules_directory, &[package_name]);
         if package_name.is_empty() {
             package_directory.clone_from(&candidate);
@@ -1388,7 +1431,10 @@ impl<'r> ResolutionState<'r> {
             resolved_module.is_external_library_import = is_external_library_import;
             resolved_module.resolved_using_ts_extension = resolved.resolved_using_ts_extension;
             resolved_module.resolved_using_extra_extensions = resolved.resolved_using_extra_extensions;
-            resolved_module.extension = static_extension(&resolved.extension);
+            resolved_module.extension = match resolved.extension {
+                Cow::Borrowed(extension) => extension,
+                Cow::Owned(extension) => alloc_string(&extension),
+            };
             resolved_module.package_id = resolved.package_id;
         }
         resolved_module
@@ -1487,13 +1533,13 @@ impl<'r> ResolutionState<'r> {
             let empty = Vec::new();
             for subst in paths.get(matched_pattern.text.as_str()).unwrap_or(&empty) {
                 let path = subst.replacen('*', &matched_star, 1);
-                let candidate = tspath::normalize_path(&tspath::combine_paths(containing_directory, &[&path]));
+                let candidate = normalized_join(containing_directory, &[&path]);
                 trace!(self.tracer, diagnostics::Trying_substitution_0_candidate_module_location_Colon_1, subst, path);
                 // A path mapping may have an extension
                 let extension_from_subst = tspath::try_get_extension_from_path(subst);
                 if !extension_from_subst.is_empty() {
                     if let Some(path) = self.try_file(&candidate) {
-                        return Some(Resolved { path, extension: extension_from_subst.to_string(), ..Default::default() });
+                        return Some(Resolved { path, extension: Cow::Borrowed(extension_from_subst), ..Default::default() });
                     }
                 }
                 // When the substitution path has an explicit extension, the extension came from the
@@ -1521,7 +1567,7 @@ impl<'r> ResolutionState<'r> {
 
         trace!(self.tracer, diagnostics::X_rootDirs_option_is_set_using_it_to_resolve_relative_module_name_0, self.name);
 
-        let candidate = tspath::normalize_path(&tspath::combine_paths(&self.containing_directory, &[&self.name]));
+        let candidate = normalized_join(&self.containing_directory, &[&self.name]);
 
         let mut matched_root_dir: Option<&String> = None;
         let mut matched_normalized_prefix = String::new();
@@ -1550,7 +1596,9 @@ impl<'r> ResolutionState<'r> {
 
             // first - try to load from a initial location
             trace!(self.tracer, diagnostics::Loading_0_from_the_root_dir_1_candidate_location_2, suffix, matched_normalized_prefix, candidate);
-            let loader = |r: &mut Self, extensions: Extensions, candidate: &str| r.node_load_module_by_relative_name(extensions, candidate, true /*considerPackageJson*/);
+            let loader = |r: &mut Self, extensions: Extensions, candidate: &str| {
+                r.node_load_module_by_relative_name(extensions, candidate, true /*considerPackageJson*/)
+            };
             let extensions = self.extensions;
             let resolved_file_name = loader(self, extensions, &candidate);
             if !resolved_file_name.should_continue_searching() {
@@ -1579,7 +1627,7 @@ impl<'r> ResolutionState<'r> {
     fn node_load_module_by_relative_name(&mut self, extensions: Extensions, candidate: &str, consider_package_json: bool) -> Option<Resolved> {
         trace!(self.tracer, diagnostics::Loading_module_as_file_Slash_folder_candidate_module_location_0_target_file_types_Colon_1, candidate, extensions);
         if !tspath::has_trailing_directory_separator(candidate) {
-            let parent_of_candidate = tspath::get_directory_path(candidate);
+            let parent_of_candidate = tspath::get_directory_path_cow(candidate);
             if !self.fs().directory_exists(&parent_of_candidate) {
                 trace!(self.tracer, diagnostics::Directory_0_does_not_exist_skipping_all_lookups_in_it, parent_of_candidate);
                 return continue_searching();
@@ -1625,17 +1673,16 @@ impl<'r> ResolutionState<'r> {
     }
 
     fn load_module_from_file_no_implicit_extensions(&mut self, extensions: Extensions, candidate: &str) -> Option<Resolved> {
-        let base = tspath::get_base_file_name(candidate);
+        let base = tspath::get_base_file_name_cow(candidate);
         if !base.contains('.') {
             return continue_searching(); // extensionless import, no lookups performed, since we don't support extensionless files
         }
         let mut extensionless = tspath::remove_file_extension(candidate);
         if extensionless == candidate {
             // Once TS native extensions are handled, handle arbitrary extensions for declaration file mapping
-            let extra_extensions: Vec<&str> = self.resolver.extra_extensions.iter().map(|s| s.as_str()).collect();
-            let mut extension = tspath::get_longest_extension_from_path(candidate, &extra_extensions, false);
+            let mut extension = tspath::get_longest_extension_from_path_iter(candidate, self.resolver.extra_extensions.iter().map(String::as_str), false);
             if extension.is_empty() {
-                extension = candidate[candidate.rfind('.').unwrap()..].to_string();
+                extension = &candidate[candidate.rfind('.').unwrap()..];
             }
             extensionless = tspath::remove_extension(candidate, &extension);
         }
@@ -1646,7 +1693,7 @@ impl<'r> ResolutionState<'r> {
     }
 
     fn try_adding_extensions(&mut self, extensionless: &str, extensions: Extensions, original_extension: &str) -> Option<Resolved> {
-        let directory = tspath::get_directory_path(extensionless);
+        let directory = tspath::get_directory_path_cow(extensionless);
         if !directory.is_empty() && !self.fs().directory_exists(&directory) {
             return continue_searching();
         }
@@ -1825,11 +1872,15 @@ impl<'r> ResolutionState<'r> {
     }
 
     fn try_extension(&mut self, extension: &str, extensionless: &str, resolved_using_ts_extension: bool) -> Option<Resolved> {
-        let file_name = format!("{}{}", extensionless, extension);
-        if let Some(path) = self.try_file(&file_name) {
+        let path = with_path_buffer(PathBuffer::Extension, |file_name| {
+            file_name.push_str(extensionless);
+            file_name.push_str(extension);
+            self.try_file(file_name)
+        });
+        if let Some(path) = path {
             return Some(Resolved {
                 path,
-                extension: extension.to_string(),
+                extension: extension_text(extension),
                 resolved_using_ts_extension: !self.candidate_ending_is_from_config && resolved_using_ts_extension,
                 ..Default::default()
             });
@@ -1850,13 +1901,18 @@ impl<'r> ResolutionState<'r> {
 
         let ext = tspath::try_get_extension_from_path(file_name);
         let file_name_no_extension = tspath::remove_extension(file_name, ext);
-        for suffix in module_suffixes {
-            let path = format!("{}{}{}", file_name_no_extension, suffix, ext);
-            if self.try_file_lookup(&path) {
-                return Some(path);
+        with_path_buffer(PathBuffer::Suffix, |path| {
+            for suffix in module_suffixes {
+                path.clear();
+                path.push_str(file_name_no_extension);
+                path.push_str(suffix);
+                path.push_str(ext);
+                if self.try_file_lookup(path) {
+                    return Some(path.clone());
+                }
             }
-        }
-        None
+            None
+        })
     }
 
     fn try_file_lookup(&mut self, file_name: &str) -> bool {
@@ -1994,14 +2050,14 @@ impl<'r> ResolutionState<'r> {
                 // - import "pkg/foo.ts.omg" with pattern "./*.omg" -> true (star matched .ts)
                 // - import "pkg/foo" with pattern "./*.ts" -> false (extension in pattern, not specifier)
                 let resolved_using_ts_extension = package_json_value.ends_with('*') && !extension.is_empty();
-                return Some(Resolved { path, extension: extension.to_string(), resolved_using_ts_extension, ..Default::default() });
+                return Some(Resolved { path, extension: extension_text(extension), resolved_using_ts_extension, ..Default::default() });
             }
             return continue_searching();
         }
 
         if self.is_config_lookup && extensions.intersects(Extensions::Json) && tspath::file_extension_is(candidate, tspath::EXTENSION_JSON) {
             if let Some(path) = self.try_file(candidate) {
-                return Some(Resolved { path, extension: tspath::EXTENSION_JSON.to_string(), ..Default::default() });
+                return Some(Resolved { path, extension: Cow::Borrowed(tspath::EXTENSION_JSON), ..Default::default() });
             }
         }
 
@@ -2033,46 +2089,48 @@ impl<'r> ResolutionState<'r> {
     }
 
     fn get_package_json_info(&mut self, package_directory: &str) -> Option<P<InfoCacheEntry>> {
-        let package_json_path = tspath::combine_paths(package_directory, &["package.json"]);
+        with_path_buffer(PathBuffer::PackageJson, |package_json_path| {
+            tspath::combine_paths_into(package_json_path, package_directory, &["package.json"]);
 
-        if let Some(existing) = InfoCache::get(&self.resolver.package_json_info_cache, &package_json_path) {
-            if existing.contents.is_some() {
-                trace!(self.tracer, diagnostics::File_0_exists_according_to_earlier_cached_lookups, package_json_path);
-                return Some(with_package_directory(existing, package_directory));
-            } else {
-                if existing.directory_exists {
-                    trace!(self.tracer, diagnostics::File_0_does_not_exist_according_to_earlier_cached_lookups, package_json_path);
+            if let Some(existing) = InfoCache::get(&self.resolver.package_json_info_cache, &package_json_path) {
+                if existing.contents.is_some() {
+                    trace!(self.tracer, diagnostics::File_0_exists_according_to_earlier_cached_lookups, package_json_path);
+                    return Some(with_package_directory(existing, package_directory));
+                } else {
+                    if existing.directory_exists {
+                        trace!(self.tracer, diagnostics::File_0_does_not_exist_according_to_earlier_cached_lookups, package_json_path);
+                    }
+                    return None;
                 }
-                return None;
             }
-        }
 
-        let directory_exists = self.fs().directory_exists(package_directory);
-        if directory_exists && self.fs().file_exists(&package_json_path) {
-            // Ignore error
-            let contents = self.fs().read_file(&package_json_path).unwrap_or_default();
-            let parsed = packagejson::parse(&contents);
-            trace!(self.tracer, diagnostics::Found_package_json_at_0, package_json_path);
-            let parseable = parsed.is_ok();
-            let owner = tsrs_core::arena::enter_table_owner(self.resolver.package_json_info_cache.owner_addr());
-            let result = P::new(InfoCacheEntry {
-                package_directory: tsrs_core::alloc_str(package_directory),
-                directory_exists: true,
-                contents: Some(P::new(PackageJson::new(parsed.unwrap_or_default(), parseable))),
-            });
-            drop(owner);
-            let result = self.resolver.package_json_info_cache.set(&package_json_path, result);
-            return Some(with_package_directory(result, package_directory));
-        } else {
-            if directory_exists {
-                trace!(self.tracer, diagnostics::File_0_does_not_exist, package_json_path);
+            let directory_exists = self.fs().directory_exists(package_directory);
+            if directory_exists && self.fs().file_exists(&package_json_path) {
+                // Ignore error
+                let contents = self.fs().read_file(&package_json_path).unwrap_or_default();
+                let parsed = packagejson::parse(&contents);
+                trace!(self.tracer, diagnostics::Found_package_json_at_0, package_json_path);
+                let parseable = parsed.is_ok();
+                let owner = tsrs_core::arena::enter_table_owner(self.resolver.package_json_info_cache.owner_addr());
+                let result = P::new(InfoCacheEntry {
+                    package_directory: tsrs_core::alloc_str(package_directory),
+                    directory_exists: true,
+                    contents: Some(P::new(PackageJson::new(parsed.unwrap_or_default(), parseable))),
+                });
+                drop(owner);
+                let result = self.resolver.package_json_info_cache.set(&package_json_path, result);
+                return Some(with_package_directory(result, package_directory));
+            } else {
+                if directory_exists {
+                    trace!(self.tracer, diagnostics::File_0_does_not_exist, package_json_path);
+                }
+                let owner = tsrs_core::arena::enter_table_owner(self.resolver.package_json_info_cache.owner_addr());
+                let entry = P::new(InfoCacheEntry { package_directory: tsrs_core::alloc_str(package_directory), directory_exists, contents: None });
+                drop(owner);
+                self.resolver.package_json_info_cache.set(&package_json_path, entry);
             }
-            let owner = tsrs_core::arena::enter_table_owner(self.resolver.package_json_info_cache.owner_addr());
-            let entry = P::new(InfoCacheEntry { package_directory: tsrs_core::alloc_str(package_directory), directory_exists, contents: None });
-            drop(owner);
-            self.resolver.package_json_info_cache.set(&package_json_path, entry);
-        }
-        None
+            None
+        })
     }
 
     fn get_package_id(&mut self, resolved_file_name: &str, package_info: Option<P<InfoCacheEntry>>) -> PackageId {
@@ -2154,7 +2212,7 @@ impl<'r> ResolutionState<'r> {
             trace!(self.tracer, diagnostics::X_package_json_had_a_falsy_0_field, field_name);
             return None;
         }
-        let path = tspath::normalize_path(&tspath::combine_paths(directory, &[&field.value]));
+        let path = normalized_join(directory, &[&field.value]);
         trace!(self.tracer, diagnostics::X_package_json_has_0_field_1_that_references_2, field_name, field.value, path);
         Some(path)
     }
@@ -2181,28 +2239,44 @@ impl<'r> ResolutionState<'r> {
     }
 }
 
-pub fn get_conditions(options: &CompilerOptions, resolution_mode: ResolutionMode) -> Vec<String> {
+// The built-ins and custom conditions are immutable for a resolution (including recursive imports targets).
+// Keep their original sequence without allocating a vector and three strings on every cache miss.
+#[derive(Default)]
+struct Conditions {
+    builtins: [Option<&'static str>; 3],
+    custom: &'static [String],
+}
+
+impl Conditions {
+    fn new(options: P<CompilerOptions>, resolution_mode: ResolutionMode) -> Self {
+        Self { builtins: builtin_conditions(&options, resolution_mode), custom: options.get().custom_conditions.as_deref().unwrap_or(&[]) }
+    }
+
+    fn iter(&self) -> impl Iterator<Item = &str> {
+        self.builtins.iter().flatten().copied().chain(self.custom.iter().map(String::as_str))
+    }
+}
+
+fn builtin_conditions(options: &CompilerOptions, resolution_mode: ResolutionMode) -> [Option<&'static str>; 3] {
     let module_resolution = options.get_module_resolution_kind();
     let mut resolution_mode = resolution_mode;
     if resolution_mode == ModuleKind::None && module_resolution == ModuleResolutionKind::Bundler {
         resolution_mode = ModuleKind::ESNext;
     }
-    let custom_conditions: &[String] = options.custom_conditions.as_deref().unwrap_or(&[]);
-    let mut conditions = Vec::with_capacity(3 + custom_conditions.len());
-    if resolution_mode == ModuleKind::ESNext {
-        conditions.push("import".to_string());
-    } else {
-        conditions.push("require".to_string());
-    }
+    [
+        Some(if resolution_mode == ModuleKind::ESNext { "import" } else { "require" }),
+        (options.no_dts_resolution != Tristate::True).then_some("types"),
+        (module_resolution != ModuleResolutionKind::Bundler).then_some("node"),
+    ]
+}
 
-    if options.no_dts_resolution != Tristate::True {
-        conditions.push("types".to_string());
-    }
-    if module_resolution != ModuleResolutionKind::Bundler {
-        conditions.push("node".to_string());
-    }
-    conditions.extend(custom_conditions.iter().cloned());
-    conditions
+pub fn get_conditions(options: &CompilerOptions, resolution_mode: ResolutionMode) -> Vec<String> {
+    builtin_conditions(options, resolution_mode)
+        .into_iter()
+        .flatten()
+        .chain(options.custom_conditions.as_deref().unwrap_or(&[]).iter().map(String::as_str))
+        .map(str::to_string)
+        .collect()
 }
 
 fn get_node_resolution_features(options: &CompilerOptions) -> NodeResolutionFeatures {
@@ -2298,13 +2372,26 @@ pub fn try_parse_patterns(path_mappings: Option<&OrderedMap<String, Vec<String>>
 }
 
 pub fn match_pattern_or_exact(patterns: &ParsedPatterns, candidate: &str) -> Pattern {
-    if patterns.matchable_string_set.has(&candidate.to_string()) {
+    if patterns.matchable_string_set.m.contains(candidate) {
         return Pattern { text: candidate.to_string(), star_index: -1 };
     }
     if patterns.patterns.is_empty() {
         return Pattern::default();
     }
-    tsrs_core::find_best_pattern_match(&patterns.patterns, |p| p.clone(), candidate).unwrap_or_default()
+    let mut best: Option<&Pattern> = None;
+    for pattern in &patterns.patterns {
+        if best.is_none_or(|p| pattern.star_index > p.star_index) && pattern.matches(candidate) {
+            best = Some(pattern);
+        }
+    }
+    best.cloned().unwrap_or_default()
+}
+
+fn normalized_join(directory: &str, paths: &[&str]) -> String {
+    with_path_buffer(PathBuffer::Join, |combined| {
+        tspath::combine_paths_into(combined, directory, paths);
+        tspath::normalize_path_cow(combined).into_owned()
+    })
 }
 
 // If you import from "." inside a containing directory "/foo", the result of `tspath.NormalizePath`
@@ -2313,12 +2400,14 @@ pub fn match_pattern_or_exact(patterns: &ParsedPatterns, candidate: &str) -> Pat
 // (https://nodejs.org/api/modules.html#all-together), but it seems that module paths ending
 // in `.` are actually normalized to `./` before proceeding with the resolution algorithm.
 fn normalize_path_for_cjs_resolution(containing_directory: &str, module_name: &str) -> String {
-    let combined = tspath::combine_paths(containing_directory, &[module_name]);
-    let last_part = last_path_component(&combined);
-    if last_part == "." || last_part == ".." {
-        return tspath::ensure_trailing_directory_separator(&tspath::normalize_path(&combined));
-    }
-    tspath::normalize_path(&combined)
+    with_path_buffer(PathBuffer::Join, |combined| {
+        tspath::combine_paths_into(combined, containing_directory, &[module_name]);
+        let last_part = last_path_component(&combined);
+        if last_part == "." || last_part == ".." {
+            return tspath::ensure_trailing_directory_separator(&tspath::normalize_path(&combined));
+        }
+        tspath::normalize_path_cow(combined).into_owned()
+    })
 }
 
 // tsrs-only: the last element of `tspath::get_path_components(path, "")` for a path with forward slashes (as
@@ -2418,7 +2507,7 @@ fn alloc_string(s: &str) -> &'static str {
 }
 
 // Extensions are nearly always one of the well-known constants; avoid leaking a copy for those.
-fn static_extension(extension: &str) -> &'static str {
+fn extension_text(extension: &str) -> Cow<'static, str> {
     const KNOWN: &[&str] = &[
         tspath::EXTENSION_TS,
         tspath::EXTENSION_TSX,
@@ -2435,10 +2524,10 @@ fn static_extension(extension: &str) -> &'static str {
     ];
     for known in KNOWN {
         if *known == extension {
-            return known;
+            return Cow::Borrowed(known);
         }
     }
-    alloc_string(extension)
+    Cow::Owned(extension.to_string())
 }
 
 // resolver.go:2126

@@ -24,7 +24,7 @@ pub struct ExportsOrImports {
 }
 
 impl ExportsOrImports {
-    pub(crate) fn from_json(value: &Json) -> ExportsOrImports {
+    pub(crate) fn from_json(value: Json) -> ExportsOrImports {
         let mut e = ExportsOrImports { data: JSONData::from_json(value, ExportsOrImports::from_json), object_kind: ObjectKind::Unknown };
         e.init_object_kind();
         e

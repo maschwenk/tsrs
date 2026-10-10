@@ -662,3 +662,45 @@ fn test_ignore_case_paths_use_simple_fold() {
     assert_eq!(get_relative_path_from_directory("/dir/\u{FB05}", "/dir/\u{FB06}/a.ts", &ci), "a.ts");
     assert!(contains_path("/dir/\u{1F80}", "/dir/\u{1F88}/a.ts", &ci));
 }
+
+#[test]
+fn test_borrowed_path_views_and_reused_joins() {
+    use std::borrow::Cow;
+    for (path, directory, base) in [
+        ("", "", ""),
+        ("/", "/", ""),
+        ("/é/file.ts/", "/é", "file.ts"),
+        ("c:/src/file.ts", "c:/src", "file.ts"),
+        ("c:", "c:", ""),
+        ("//server/share/file.ts", "//server/share", "file.ts"),
+        ("file:///src/file.ts", "file:///src", "file.ts"),
+        ("file:///", "file:///", ""),
+    ] {
+        assert!(matches!(get_directory_path_cow(path), Cow::Borrowed(_)));
+        assert_eq!(get_directory_path_cow(path), directory);
+        assert!(matches!(get_base_file_name_cow(path), Cow::Borrowed(_)));
+        assert_eq!(get_base_file_name_cow(path), base);
+    }
+    assert_eq!(get_directory_path_cow(r"c:\src\file.ts"), "c:/src");
+    assert_eq!(get_base_file_name_cow(r"c:\src\file.ts"), "file.ts");
+    assert!(matches!(normalize_path_cow("/é/src/file.ts"), Cow::Borrowed(_)));
+    assert!(matches!(to_path_cow("/src/file.ts", "/", false), Cow::Borrowed(_)));
+    assert_eq!(to_path_cow("/SRC/É.ts", "/", false), "/src/é.ts");
+    assert_eq!(normalize_path_cow(r"c:\src\..\é.ts"), "c:/é.ts");
+    let mut buffer = String::with_capacity(256);
+    for (directory, parts, expected) in [
+        ("/stale", &["first", "c:\\src", "é.ts"][..], "c:/src/é.ts"),
+        ("", &["", "relative", "file.ts"][..], "relative/file.ts"),
+        ("ignored", &[r"\\server\share", "file.ts"][..], "//server/share/file.ts"),
+        ("file:///", &["src", "file.ts"][..], "file:///src/file.ts"),
+    ] {
+        combine_paths_into(&mut buffer, directory, parts);
+        assert_eq!(buffer, expected);
+    }
+    let mut visited = Vec::new();
+    for_each_ancestor_directory("/é/src/", |p| {
+        visited.push(p.to_string());
+        None::<()>
+    });
+    assert_eq!(visited, ["/é/src/", "/é", "/"]);
+}

@@ -1,4 +1,5 @@
 use hashbrown::hash_table::Entry;
+pub use hashbrown::Equivalent;
 use hashbrown::HashTable;
 use rustc_hash::{FxHashMap, FxHasher};
 use std::borrow::Borrow;
@@ -59,6 +60,14 @@ impl<K: Hash + Eq + Clone, V: Clone> SyncMap<K, V> {
         let hash = hash_of(key);
         let m = read(self.shard(hash));
         m.find(hash, |(k, _)| k.borrow() == key).map(|(_, v)| v.clone())
+    }
+
+    /// Probe a composite owned key without constructing its strings. As with `HashMap`, equivalent keys must
+    /// hash identically; `Equivalent` supplies equality when `Borrow` cannot express a composite borrowed view.
+    pub fn load_equivalent<Q: Hash + Equivalent<K> + ?Sized>(&self, key: &Q) -> Option<V> {
+        let hash = hash_of(key);
+        let m = read(self.shard(hash));
+        m.find(hash, |(k, _)| key.equivalent(k)).map(|(_, v)| v.clone())
     }
 
     pub fn store(&self, key: K, value: V) {

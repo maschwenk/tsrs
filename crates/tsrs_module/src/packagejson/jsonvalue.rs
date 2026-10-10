@@ -96,21 +96,21 @@ impl<T> JSONData<T> {
         }
     }
 
-    pub(crate) fn from_json(value: &Json, element: impl Fn(&Json) -> T + Copy) -> JSONData<T> {
+    pub(crate) fn from_json(value: Json, element: impl Fn(Json) -> T + Copy) -> JSONData<T> {
         match value {
             Json::Null => JSONData::Null,
-            Json::String(s) => JSONData::String(s.clone()),
-            Json::Array(elements) => JSONData::Array(elements.iter().map(element).collect()),
+            Json::String(s) => JSONData::String(s),
+            Json::Array(elements) => JSONData::Array(elements.into_iter().map(element).collect()),
             Json::Object(members) => {
                 let mut object = new_ordered_map_with_size_hint(members.len());
                 for (name, member) in members {
                     // OrderedMap.Set keeps the first position of a repeated name and takes the last value.
-                    object.insert(name.clone(), element(member));
+                    object.insert(name, element(member));
                 }
                 JSONData::Object(object)
             }
-            Json::Bool(b) => JSONData::Boolean(*b),
-            Json::Number(n) => JSONData::Number(*n),
+            Json::Bool(b) => JSONData::Boolean(b),
+            Json::Number(n) => JSONData::Number(n),
         }
     }
 }
@@ -121,7 +121,7 @@ pub struct JSONValue {
 }
 
 impl JSONValue {
-    pub(crate) fn from_json(value: &Json) -> JSONValue {
+    pub(crate) fn from_json(value: Json) -> JSONValue {
         JSONValue { data: JSONData::from_json(value, JSONValue::from_json) }
     }
 }

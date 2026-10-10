@@ -1,7 +1,7 @@
 use std::ops::Deref;
 
 use rustc_hash::FxHashMap;
-use tsrs_core::collections::{OrderedMap, SyncMap};
+use tsrs_core::collections::{Equivalent, OrderedMap, SyncMap};
 use tsrs_core::tspath::Path;
 use tsrs_core::{CompilerOptions, ResolutionMode, P};
 
@@ -19,6 +19,12 @@ pub(crate) struct ModuleResolutionCacheKey {
     pub(crate) redirect_config_name: String,
 }
 
+impl Equivalent<ModuleResolutionCacheKey> for (&str, &str, ResolutionMode, &str) {
+    fn equivalent(&self, key: &ModuleResolutionCacheKey) -> bool {
+        self.0 == key.containing_directory && self.1 == key.module_name && self.2 == key.resolution_mode && self.3 == key.redirect_config_name
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct ModuleResolutionCache {
     cache: SyncMap<ModuleResolutionCacheKey, P<ResolvedModule>>,
@@ -30,8 +36,8 @@ impl ModuleResolutionCache {
         self.cache.size()
     }
 
-    pub(crate) fn get(&self, key: &ModuleResolutionCacheKey) -> Option<P<ResolvedModule>> {
-        self.cache.load(key)
+    pub(crate) fn get(&self, key: (&str, &str, ResolutionMode, &str)) -> Option<P<ResolvedModule>> {
+        self.cache.load_equivalent(&key)
     }
 
     pub(crate) fn set(&self, key: ModuleResolutionCacheKey, value: P<ResolvedModule>) {
@@ -48,6 +54,16 @@ pub(crate) struct TypeRefDirectiveResolutionCacheKey {
     pub(crate) from_inferred_types_containing_file: bool,
 }
 
+impl Equivalent<TypeRefDirectiveResolutionCacheKey> for (&str, &str, ResolutionMode, &str, bool) {
+    fn equivalent(&self, key: &TypeRefDirectiveResolutionCacheKey) -> bool {
+        self.0 == key.containing_directory
+            && self.1 == key.type_reference_name
+            && self.2 == key.resolution_mode
+            && self.3 == key.redirect_config_name
+            && self.4 == key.from_inferred_types_containing_file
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct TypeRefDirectiveResolutionCache {
     cache: SyncMap<TypeRefDirectiveResolutionCacheKey, P<ResolvedTypeReferenceDirective>>,
@@ -59,8 +75,8 @@ impl TypeRefDirectiveResolutionCache {
         self.cache.size()
     }
 
-    pub(crate) fn get(&self, key: &TypeRefDirectiveResolutionCacheKey) -> Option<P<ResolvedTypeReferenceDirective>> {
-        self.cache.load(key)
+    pub(crate) fn get(&self, key: (&str, &str, ResolutionMode, &str, bool)) -> Option<P<ResolvedTypeReferenceDirective>> {
+        self.cache.load_equivalent(&key)
     }
 
     pub(crate) fn set(&self, key: TypeRefDirectiveResolutionCacheKey, value: P<ResolvedTypeReferenceDirective>) {
@@ -133,10 +149,10 @@ impl ResolutionData {
     }
 }
 
-pub(crate) fn get_redirect_config_name(redirect: Option<&dyn ResolvedProjectReference>) -> String {
+pub(crate) fn get_redirect_config_name(redirect: Option<&dyn ResolvedProjectReference>) -> &str {
     match redirect {
-        None => String::new(),
-        Some(redirect) => redirect.config_name().to_string(),
+        None => "",
+        Some(redirect) => redirect.config_name(),
     }
 }
 
@@ -144,5 +160,57 @@ impl Deref for DefaultResolver {
     type Target = ResolutionData;
     fn deref(&self) -> &ResolutionData {
         &self.resolution_data
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tsrs_core::ModuleKind;
+
+    #[test]
+    fn borrowed_queries_keep_all_cache_key_fields() {
+        let modules = ModuleResolutionCache::default();
+        let result = P::new(ResolvedModule::default());
+        modules.set(
+            ModuleResolutionCacheKey {
+                containing_directory: "/é/src".into(),
+                module_name: "pkg".into(),
+                resolution_mode: ModuleKind::ESNext,
+                redirect_config_name: "/config.json".into(),
+            },
+            result,
+        );
+        assert_eq!(modules.get(("/é/src", "pkg", ModuleKind::ESNext, "/config.json")), Some(result));
+        for query in [
+            ("/other", "pkg", ModuleKind::ESNext, "/config.json"),
+            ("/é/src", "other", ModuleKind::ESNext, "/config.json"),
+            ("/é/src", "pkg", ModuleKind::CommonJS, "/config.json"),
+            ("/é/src", "pkg", ModuleKind::ESNext, "/other.json"),
+        ] {
+            assert!(modules.get(query).is_none());
+        }
+        let types = TypeRefDirectiveResolutionCache::default();
+        let result = P::new(ResolvedTypeReferenceDirective::default());
+        types.set(
+            TypeRefDirectiveResolutionCacheKey {
+                containing_directory: "/src".into(),
+                type_reference_name: "pkg".into(),
+                resolution_mode: ModuleKind::CommonJS,
+                redirect_config_name: "/config.json".into(),
+                from_inferred_types_containing_file: true,
+            },
+            result,
+        );
+        assert_eq!(types.get(("/src", "pkg", ModuleKind::CommonJS, "/config.json", true)), Some(result));
+        for query in [
+            ("/other", "pkg", ModuleKind::CommonJS, "/config.json", true),
+            ("/src", "other", ModuleKind::CommonJS, "/config.json", true),
+            ("/src", "pkg", ModuleKind::ESNext, "/config.json", true),
+            ("/src", "pkg", ModuleKind::CommonJS, "/other.json", true),
+            ("/src", "pkg", ModuleKind::CommonJS, "/config.json", false),
+        ] {
+            assert!(types.get(query).is_none());
+        }
     }
 }

@@ -31,6 +31,15 @@ is type-checked, CI runs on pull requests, and the workspace is at 0.11.0. The i
   indexed-access chain (see "Measured and rejected"). Not tried: redesigning `getResolvedBaseConstraint` to resolve
   each type from the top (the note's option 3).
 
+## Pending review
+
+- **Resolver allocation reduction** (`notes/perf-resolver-allocations.md`, `codex/resolver-allocations`): retained
+  for review at the owner's explicit request on 2026-10-11. TLS scratch strings, borrowed cache/path/condition
+  views and consuming package.json decode remove 54-61% of allocation calls in resolver probes (JSON -21%).
+  Whole-project macOS single-threaded instructions improve 0.27% on xstate / 0.19% on VS Code; default peak RSS
+  +0.15% / +0.46%. These native measurements are below the usual landing thresholds and include kernel work;
+  deterministic Linux verification remains outstanding.
+
 ## Not verified yet
 
 - **The 32 GiB reservation outside macOS and GitHub runners: verified.** main ran in a Linux x86-64 dev sandbox
