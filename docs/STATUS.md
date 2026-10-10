@@ -286,9 +286,9 @@ now runs them at the first declaration of the symbol in each file (#165, notes/f
 
 Front end and start-up: the config is parsed on the worker pool and a CLI run creates no rayon global pool (#156, -64
 threads and -50 MB peak on vscode); checkers are created while files are assigned (#162) and program diagnostics are
-computed beside checker creation (#164); the file loader and collect walk make fewer refcount updates (#154, #166,
+computed beside checker creation (#164) (both reverted in #190); the file loader and collect walk make fewer refcount updates (#154, #166,
 #167); include-glob listings are matched on the prefetch pool (#141); checker threads survive between work groups
-(#150); the CLI ends with `_exit` once its output is written (#143); `--extendedDiagnostics` statistics no longer
+(#150); the CLI ends with `_exit` once its output is written (#143, reverted in #191); `--extendedDiagnostics` statistics no longer
 spawn `ps` (#140). #143's `_exit` skipped the PGO and BOLT training profiles; #153 and #155 write them again, so this
 release is built with both (+1.8-3.5% instructions in the README bench otherwise).
 
@@ -346,7 +346,7 @@ flow-analysis results are remembered across walks (#97; -2 to -5% instructions o
 for small union constructions (#100), and checker threads take node and symbol ids in blocks (#94). Relating derived
 generics to their generic base by variances landed behind `TSRS_DERIVED_VARIANCE` (#96); differential fuzzing found
 nine disagreements and added guards 4-6, and the verdict is to keep it **off** by default (#98,
-notes/fuzz-derived-variance.md).
+notes/fuzz-derived-variance.md; removed in #194).
 
 Memory: compressed 32-bit pointers on unix and scoped arenas (perf round 2, #37-#51; cold 1-checker peak -16% on the
 38k-file codebase), transparent huge pages for the compressed arena's thread chunks on Linux (#89; sys time
@@ -364,7 +364,7 @@ text huge pages, panic=abort, allocators, opt-level, PGO training, #102). CI and
 Depot CI, macOS stays on GitHub; nightly differential parser fuzzing against tsgo (#76); the bench flags instruction
 and peak-memory regressions on main (#74); Rust is pinned at 1.99.0 (#78); the clippy ratchet and the unused-code
 ratchet were paid down across the workspace (#53, #57-#72, #79-#87) and generated code is checked against its
-generators. notes/perf-round3.md indexes what landed, what was rejected and what is open.
+generators. notes/perf-round3.md indexes what landed, what was rejected and what is open (2026-10-10: with a dated status of each open item).
 
 ## 2026-10-03: 0.3.0 release
 
@@ -425,9 +425,10 @@ Of the 67 fails: 59 are declaration diagnostics (TS2883/TS4xxx/TS9xxx… from th
 diagnostics (the `tsgo` CLI itself reports what we report).
 
 The private monorepo error injection (same 15 errors appended to 3 files in a clone): identical (file, line, col, code) sets and
-exit code versus the reference. A mutation-testing campaign is in progress (`tools/mutate`, `notes/fix-mutation.md`).
+exit code versus the reference. A mutation-testing campaign is in progress (`tools/mutate`, `notes/fix-mutation.md`). (2026-10-10: finished, 16 batches,
+4,379 mutated sites, 0 full-text diagnostic diffs.)
 
-In flight: node-builder body wave (branches `body/nb-1..6`) replacing the placeholder type printer.
+In flight: node-builder body wave (branches `body/nb-1..6`) replacing the placeholder type printer (2026-10-10: landed).
 
 ## 2026-09-30 (later): parallel checking on by default
 
@@ -498,7 +499,7 @@ environment tracking and visitor hooks in `tsrs_printer`, and the compiler glue 
 with Go's per-file cache, `emithost.rs`, `emitter::get_declaration_diagnostics`). The harness and the CLI already
 called it at Go's points (harness: after semantic/global/suggestion diagnostics when `GetEmitDeclarations()`; CLI:
 `GetDiagnosticsOfAnyProgram` under `--noEmit`, only when no earlier diagnostics were found). Design notes:
-`crates/tsrs_declarations/src/lib.rs`, `resolver.rs` (the checker is lent to the transformer through a `CheckerSlot`;
+`crates/tsrs_declarations/src/lib.rs`, `crates/tsrs_transformers/src/resolver.rs` (the checker is lent to the transformer through a `CheckerSlot`;
 Go's `checkerMu`-locking resolver methods borrow it per call), `notes/fix-decl-diagnostics.md`.
 
 Conformance: **13,458 pass / 2 codes / 2 fail / 0 timeout / 0 crash** (was 13,398 / 2 / 62; all 60 declaration-

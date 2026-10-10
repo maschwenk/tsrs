@@ -404,6 +404,8 @@ impl Checker {
             // when inferring from string[] | string[][] to T[] | T[][], the inference of string we make from
             // relating string[][] to T[][] is of higher quality than the inference of string[] we make relating
             // string[][] to T[].
+            // Go sorts with `slices.SortFunc` (pdqsort, not stable). The stable sort gives the same order as long as
+            // `compare_types_and_depth` returns 0 for no two distinct types (`matched_targets` has no duplicates).
             matched_targets.sort_by(|&t1, &t2| compare_types_and_depth(self, t1, t2).cmp(&0));
             for &t in &matched_targets {
                 for &s in &matched_sources {

@@ -48,7 +48,8 @@ B_MAX = B_EXT + ["decl_name", "type_ref_name", "import_binding", "qualified_othe
                  "type_predicate_param", "jsdoc"]
 
 # Interner cost per distinct text: an id -> text entry (8 B, PackedStr into the source) and a hash slot (4 B id + 1 control
-# byte at hashbrown's 7/8 load, ~6 B). An estimate; the parse-time cost is separate (notes/mem-round2.md:203-212).
+# byte at hashbrown's 7/8 load, ~6 B). An estimate; the parse-time cost is separate
+# (notes/mem-round2.md "Global identifier interner (step 9, rejected)").
 INTERN_ENTRY = 14
 LITERALS_WITH_FLAGS = ["StringLiteral", "NumericLiteral", "BigIntLiteral", "RegularExpressionLiteral"]
 

@@ -704,7 +704,8 @@ pub(crate) fn is_inside_node_modules(file_name: &str) -> bool {
     file_name.contains("/node_modules/")
 }
 
-// Go unicode.IsUpper (ASCII fast path, then the Unicode upper-case property).
+// Go `unicode.IsUpper` (category Lu). ASCII is exact; outside ASCII `char::is_uppercase` (the Uppercase property: Lu
+// plus Other_Uppercase, e.g. circled letters) stands in.
 fn go_is_upper(r: char) -> bool {
     if r.is_ascii() {
         return r.is_ascii_uppercase();

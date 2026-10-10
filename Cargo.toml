@@ -75,7 +75,8 @@ debug = false # set to `true` for debug information
 panic = "unwind"
 
 # Release binaries (.github/workflows/release.yml) build with this profile twice, for PGO: -Cprofile-generate,
-# training run, -Cprofile-use (notes/perf-pgo.md). `cargo build --release` stays the development build.
+# training run, -Cprofile-use (notes/perf-pgo.md). `release` has the same LTO and codegen units; the release
+# workflow's `dist` builds add only the PGO profile (and, on Linux, BOLT through .github/scripts/bolt.sh).
 [profile.dist]
 inherits = "release"
 lto = "fat"

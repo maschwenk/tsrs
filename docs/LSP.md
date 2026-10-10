@@ -166,8 +166,7 @@ completion requests on xstate and on the private monorepo (registry updates incl
 
 16,875 responses, all JSON-identical (1,440 + 2,308 non-null hovers; 67 + 12 diagnostic reports with items). Conformance
 suite unchanged in both lazy modes (13,458 pass / 2 codes / 2 fail; `.types` / `.symbols` 12,779 / 12,779, pass lists
-identical). Unit tests: `tsrs_lsproto` 33 (+ 6,869-case Go codec oracle), `tsrs_ls` 87, `tsrs_project` 105, `tsrs_lsp`
-(see notes/lsp-server.md).
+identical). Unit tests: `tsrs_lsproto` 33 (+ 6,869-case Go codec oracle), `tsrs_ls` 87, `tsrs_project` 105, `tsrs_lsp` 26.
 
 ### Watched files (phase 4, robust wave)
 
@@ -198,17 +197,17 @@ against Go's `ParseTestData`, `tools/oracle/fourslash-parser`). Run with
 `target/fourslash-results/{pass,fail,skip}.txt`, full failure messages in `failures/<name>.txt`, baseline actuals in `target/fourslash-results/local/`). Tests run
 in worker processes (`tsrs-fourslash worker`, replaced after a crash, a 120 s timeout or 200 tests): the server ends
 the process on an unrecovered panic in one of its threads, like a Go program, and programs are never freed. Mapping
-rules and deviations: notes/lsp-fsgen.md, notes/lsp-fswire.md.
+rules and deviations: notes/lsp-fsgen.md.
 
 | date | total | pass | fail | skip |
 | --- | --- | --- | --- | --- |
 | 2026-10-01 (no server yet) | 4,559 | 0 | 4,173 | 386 |
 | 2026-10-02 (in-process server; hover, definition, diagnostics, formatting, edits) | 4,546 | 1,172 | 2,957 | 417 |
-| 2026-10-02 (+ refs wave; completions, signature help, linked editing, closing tags; notes/lsp-compl.md) | 4,546 | 3,037 | 1,092 | 417 |
-| 2026-10-02 (+ fix1: compiler project references; notes/lsp-fix1.md) | 4,546 | 3,040 | 1,089 | 417 |
-| 2026-10-02 (+ document/workspace symbols, semantic tokens, folding, selection ranges, inlay hints, code lens; notes/lsp-misc.md) | 4,546 | 3,321 | 808 | 417 |
+| 2026-10-02 (+ refs wave; completions, signature help, linked editing, closing tags) | 4,546 | 3,037 | 1,092 | 417 |
+| 2026-10-02 (+ fix1: compiler project references) | 4,546 | 3,040 | 1,089 | 417 |
+| 2026-10-02 (+ document/workspace symbols, semantic tokens, folding, selection ranges, inlay hints, code lens) | 4,546 | 3,321 | 808 | 417 |
 | 2026-10-02 (merged: refs + compl + misc + fix1) | 4,546 | 3,325 | 804 | 417 |
-| 2026-10-02 (+ change tracker, organize imports, auto-import registry, code actions, file rename; notes/lsp-actions.md) | 4,546 | 4,048 | 81 | 417 |
+| 2026-10-02 (+ change tracker, organize imports, auto-import registry, code actions, file rename) | 4,546 | 4,048 | 81 | 417 |
 | 2026-10-02 (+ robust: state baselines; notes/lsp-robust.md; alone on the 3,325 base) | 4,546 | 3,342 | 787 | 417 |
 | 2026-10-02 (merged: + actions + robust) | 4,546 | 4,066 | 63 | 417 |
 
@@ -279,7 +278,7 @@ JS files a missing auto-import entry also lets the name-table entry of the same 
 Full failure messages: `target/fourslash-results/failures/<test>.txt`. The symbol / folding / selection / inlay hint /
 code lens failures not counted as passing are content-mapper, state-baseline or Go-skipped tests.
 
-After the actions wave (2026-10-02, notes/lsp-actions.md): every one of the 81 failures stops at an out-of-scope
+After the actions wave (2026-10-02): every one of the 81 failures stops at an out-of-scope
 feature (55 content mappers, 20 state baselines, 6 `@tsc` command lines); every non-passing test of the code action,
 organize imports, auto-import and file rename families above is skipped in Go or a content-mapper test. The real
 auto-import registry also fixed the 152 auto-import divergences listed above, and `Program.comparePathsOptions` is now
@@ -370,3 +369,24 @@ checkers and old file versions are freed).
   latency differs on multi-project workspaces. Revisit in phase 4 (worker pool).
 - `project/dirty` and `project/logging` live in crate `tsrs_projectutil` (re-exported by `tsrs_project`), because
   `ls/autoimport` imports them and `tsrs_ls` sits below `tsrs_project`.
+
+## Deviations from Go
+
+Checked in the code on 2026-10-10; collected from the porting waves' notes.
+
+- Go maps the language service iterates (change tracker `changes`, code-fix `fixIdSeen`, import adder `addToExisting`
+  / `newImports`, rename `changes`) are `OrderedMap`s (insertion order) here, so the output order is fixed where Go's
+  can vary.
+- Unicode classes outside ASCII: Go's `unicode.IsLower` / `IsUpper` / `IsDigit` (categories Ll / Lu / Nd) are
+  approximated by Rust's `char::is_lowercase` / `is_uppercase` (the Lowercase / Uppercase properties) and
+  `is_numeric` (Nd, Nl, No). They differ for a few modifier letters, circled letters and non-decimal digits
+  (`autoimport/util.rs` `go_unicode_is_lower`, `symbols.rs` `go_is_upper`, `completions_3.rs` `unicode_is_digit`).
+- `typeToStringForDiag` truncation (codeactions_fixmissingtypeannotation.rs) replaces each byte of a cut multi-byte
+  character with U+FFFD, as Go's byte slice does once the description is serialized.
+- The class-implements-interface fix creates a missing-member fixer per member where Go keeps one; the fixer has no
+  state of its own, so creations and insertions happen in Go's order.
+- Document symbols: `mergeExpandos` / `mergeChildren` mutate symbols that several parents' child lists share; the
+  port keeps the sharing with an `Rc<RefCell<…>>` tree (`DocSym`, symbols.rs). No test has a child shared by two
+  expando targets, so that path is not verified against Go.
+- Code lens resolve after a recovered panic returns an empty `CodeLens` where Go returns nil (the Rust response type
+  is not nullable); the request was already answered with the recover's error.

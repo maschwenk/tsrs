@@ -430,6 +430,15 @@ on a `--release` build with symbols (`CARGO_PROFILE_RELEASE_STRIP=none`), then
 `callgrind_annotate --inclusive=no --tree=none cg.out` (`--tree=none`, or call-graph lines are counted twice). The
 bench flags regressions on main by itself (`bench/README.md`, "Regression flag").
 
+## Where Go reports an error: an instrumented reference with `go build -overlay`
+
+Build the Go reference with a patched copy of one Go file, without editing `ts-ref`: copy the file (e.g.
+`internal/checker/checker.go`) to scratch and patch it (e.g. print `runtime/debug.Stack()` at the error site). Write an
+overlay JSON that maps *both* the symlinked and the real path of the file to the copy. Then, in `ts-ref/tsc`, run
+`GOTOOLCHAIN=auto go build -overlay <overlay.json> -o <bin> ./cmd/tsrs-oracle-testrunner` (the copy of
+`tools/oracle/testrunner/main.go`, placed as docs/PORTING.md "Reference tooling" describes) and `<bin> diags <regexp>`
+(one JSON line per variant of each test whose file name matches). notes/fix-compiler.md has an example.
+
 ## How to fix
 
 - The Go source (`ts-ref/tsc/internal/…`) is the specification. Find the Go function behind the wrong behavior, read it

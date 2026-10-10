@@ -147,7 +147,7 @@ In place:
 | --- | --- | --- |
 | Fat LTO, one codegen unit, PGO for release binaries | `notes/perf-pgo.md`: -13.5% instructions with PGO; fat LTO alone about -2% | oxc, Rolldown, swc (fat); Ruff (fat, PGO); Turborepo, rust-analyzer (thin) |
 | BOLT on top of PGO for the Linux release binaries (`.github/scripts/bolt.sh`, gates run on the BOLT-optimized binaries) | `notes/perf-build-level.md`: -2.7% / -3.2% / -1.0% wall at 1 / 4 / 8 checkers on the 38k-file codebase, -3.4 to -4.0% on vscode; instruction-cache misses -20% | rustc (its Linux toolchain builds), CPython (`--enable-bolt`) |
-| mimalloc as the global allocator | `notes/fix-perf-memory.md` | oxc, Rolldown, Turborepo, Bun |
+| mimalloc as the global allocator | `notes/perf-build-level.md`: mimalloc v3 beats mimalloc v2, jemalloc and glibc by 3-14% wall; `notes/perf-mimalloc-safe.md` | oxc, Rolldown, Turborepo, Bun |
 | Leak arenas, one per thread; exact frees of provably dead objects | PORTING.md "Memory model", `notes/mem-recycle.md` | oxc and Bun (arenas with no `Drop`) |
 | 32-bit handles with a niche (`Option<P<T>>` is 4 bytes) | `notes/mem-pointer-compression.md`: -14 to -15% peak memory, +6.5% instructions | oxc and Ruff (`NonMax`/`NonZero` u32 ids), Bun (`StoreRef`) |
 | Packed layouts with size assertions | `notes/mem-layout.md`, `mem-layout3.md`, `mem-round2.md`, `mem-round3.md`, `mem-small.md` | oxc, ty, rust-analyzer, Bun |

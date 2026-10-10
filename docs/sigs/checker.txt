@@ -429,7 +429,7 @@ check_spread_prop_overrides | pub(crate) fn check_spread_prop_overrides(&mut sel
 check_super_expression | pub(crate) fn check_super_expression(&mut self, node: P<Node>) -> P<Type> | checker.go:8026 | Checker
 check_switch_statement | pub(crate) fn check_switch_statement(&mut self, node: P<Node>) | checker.go:4199 | Checker
 check_synthetic_expression | pub(crate) fn check_synthetic_expression(&mut self, node: P<Node>) -> P<Type> | checker.go:11234 | Checker
-check_tag_name_does_not_expect_too_many_arguments | fn check_tag_name_does_not_expect_too_many_arguments(c: &mut Checker, node: P<Node>, report_errors: bool, diagnostic_output: Option<&mut Vec<P<Diagnostic>>>) -> bool | rust:jsx.rs:1650 | -
+check_tag_name_does_not_expect_too_many_arguments | fn check_tag_name_does_not_expect_too_many_arguments(c: &mut Checker, node: P<Node>, report_errors: bool, diagnostic_output: Option<&mut Vec<P<Diagnostic>>>) -> bool | rust:jsx.rs:1652 | -
 check_tagged_template_expression | pub(crate) fn check_tagged_template_expression(&mut self, node: P<Node>) -> P<Type> | checker.go:10226 | Checker
 check_template_expression | pub(crate) fn check_template_expression(&mut self, node: P<Node>) -> P<Type> | checker.go:8148 | Checker
 check_template_literal_type | pub(crate) fn check_template_literal_type(&mut self, node: P<Node>) | checker.go:3363 | Checker
@@ -2016,7 +2016,7 @@ infer_to_mapped_type | pub(crate) fn infer_to_mapped_type(&mut self, n: P<Infere
 infer_to_multiple_types | pub(crate) fn infer_to_multiple_types(&mut self, n: P<InferenceState>, source: P<Type>, targets: &[P<Type>], target_flags: TypeFlags) | inference.go:448 | Checker
 infer_to_multiple_types_with_priority | pub(crate) fn infer_to_multiple_types_with_priority(&mut self, n: P<InferenceState>, source: P<Type>, targets: &[P<Type>], target_flags: TypeFlags, new_priority: InferencePriority) | inference.go:547 | Checker
 infer_to_template_literal_type | pub(crate) fn infer_to_template_literal_type(&mut self, n: P<InferenceState>, source: P<Type>, target: &'static TemplateLiteralType) | inference.go:566 | Checker
-infer_to_template_literal_type_choose | fn infer_to_template_literal_type_choose(c: &mut Checker, left: P<Type>, right: P<Type>, all_type_flags: TypeFlags, source: P<Type>, str: &str) -> P<Type> | rust:inference.rs:659 | -
+infer_to_template_literal_type_choose | fn infer_to_template_literal_type_choose(c: &mut Checker, left: P<Type>, right: P<Type>, all_type_flags: TypeFlags, source: P<Type>, str: &str) -> P<Type> | rust:inference.rs:661 | -
 infer_type_arguments | pub(crate) fn infer_type_arguments(&mut self, node: P<Node>, signature: P<Signature>, args: &[P<Node>], check_mode: CheckMode, context: P<InferenceContext>) -> Vec<P<Type>> | checker.go:9582 | Checker
 infer_type_arguments_worker | fn infer_type_arguments_worker(&mut self, node: P<Node>, signature: P<Signature>, args: &[P<Node>], check_mode: CheckMode, context: P<InferenceContext>) -> Vec<P<Type>> | rust:checker_05.rs:988 | Checker
 infer_type_for_homomorphic_mapped_type | pub(crate) fn infer_type_for_homomorphic_mapped_type(&mut self, source: P<Type>, target: P<Type>, constraint: P<Type>) -> Option<P<Type>> | inference.go:1004 | Checker
@@ -2805,7 +2805,7 @@ pop_error_fallback_node | pub fn pop_error_fallback_node(&self) | symboltracker.
 pop_error_fallback_node | pub fn pop_error_fallback_node(&self) | nodecopy.go:139 | wrappingTracker
 pop_inference_context | pub(crate) fn pop_inference_context(&mut self) | checker.go:31448 | Checker
 pop_type_resolution | pub(crate) fn pop_type_resolution(&mut self) -> bool | checker.go:19119 | Checker
-pragma_factory_argument | fn pragma_factory_argument(pragma: &'static Pragma) -> &'static str | rust:jsx.rs:1589 | -
+pragma_factory_argument | fn pragma_factory_argument(pragma: &'static Pragma) -> &'static str | rust:jsx.rs:1591 | -
 precalculate_declaration_emit_visibility | pub fn precalculate_declaration_emit_visibility(&self, c: &mut Checker, file: P<SourceFile>) | emitresolver.go:236 | EmitResolver
 prepare_lazy_members | pub(crate) fn prepare_lazy_members(&mut self, t: P<Type>, lm: P<LazyMemberTable>, this_argument: Option<P<Type>>) | rust:checker_09.rs:2825 | Checker
 prepend_type_mapping | pub(crate) fn prepend_type_mapping(source: P<Type>, target: P<Type>, mapper: Option<P<TypeMapper>>) -> P<TypeMapper> | rust:mapper.rs:490 | -
