@@ -1915,10 +1915,11 @@ const MERGED_SYMBOLS_FILTER_BITS: u32 = 16;
 const MERGED_SYMBOLS_FILTER_WORDS: usize = 1 << (MERGED_SYMBOLS_FILTER_BITS - 6);
 
 impl MergedSymbolFilter {
-    // Fibonacci hashing: the top bits of the product depend on every bit of the handle.
+    // Fibonacci hashing: the top bits of the product depend on every bit of the handle (of the low 32 bits of the
+    // address without compressed pointers, which is as good for a filter).
     #[inline]
     fn bit(symbol: P<Symbol>) -> usize {
-        ((symbol.key() as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> (64 - MERGED_SYMBOLS_FILTER_BITS)) as usize
+        ((symbol.key() as u32).wrapping_mul(0x9E37_79B1) >> (32 - MERGED_SYMBOLS_FILTER_BITS)) as usize
     }
 
     #[inline]
@@ -1960,10 +1961,17 @@ impl Checker {
     }
 
     // checker.go:14584
+    #[inline]
     pub fn get_merged_symbol(&mut self, symbol: P<Symbol>) -> P<Symbol> {
         if !self.merged_symbols_filter.may_contain(symbol) {
             return symbol;
         }
+        self.get_merged_symbol_from_map(symbol)
+    }
+
+    // The map probe, out of line so that callers inline only the filter test.
+    #[inline(never)]
+    fn get_merged_symbol_from_map(&self, symbol: P<Symbol>) -> P<Symbol> {
         if let Some(&merged) = self.merged_symbols.get(&symbol) {
             return merged;
         }
