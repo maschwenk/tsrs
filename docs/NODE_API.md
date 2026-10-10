@@ -106,8 +106,8 @@ Core provides (stable API for the checker lane):
   `sd`, `snapshot`, `project`, `program: &'static Program`, `checker: CheckerHandle`; the setup keeps the
   snapshot alive and holds the API-lifetime checker until dropped (not reentrant);
 - `SnapshotData::get_program`, `SnapshotData::checker_state`;
-- `session::parse_params`, `session::json_response`, and the codec's node-handle helpers (`node_handle`,
-  `resolve_node_index`).
+- `session::parse_params`, `session::json_response`; node handles through `CheckerHost::node_handle` /
+  `resolve_node_handle` (core wraps the codec's `node_handle` / `resolve_node_index`).
 
 `handle` receives every method whose `methods::METHODS` owner is `Checker` (115 methods). `None` means
 "not recognized" and becomes `ApiError::unsupported`.
@@ -132,8 +132,8 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
 | 4 | `getCachedSourceFile` | core | partial | via upstream suites only |
 | 5 | `batchRequests` | core | supported | batch_test (nesting error, pagination with continuation tokens); binary-in-batch base64 path untested |
 | 6 | `initialize` | core | supported | config_test |
-| 7 | `createSnapshot` | core | supported | program_test, module_resolution_test, requestfs_test (full/layer request filesystems, removedPaths, fileNotifications expanded to request-symlink aliases) |
-| 8 | `updateSnapshot` | core | supported | program_test, requestfs_test (layers compacted over full, retained base, release of base) |
+| 7 | `createSnapshot` | core | supported | program_test, module_resolution_test, requestfs_test (full/layer request filesystems, removedPaths) |
+| 8 | `updateSnapshot` | core | supported | program_test, requestfs_test (layers compacted over full, retained base, release of base, fileNotifications expanded to request-symlink aliases) |
 | 9 | `getCurrentLanguageServerSnapshot` | core | partial | returns Go's standalone-session client error; LSP-attached sessions not ported |
 | 10 | `createBuildOrchestrator` | core | supported | tsrs_cli api::tests (in-process CLI build backend; fresh orchestrator per call instead of Go's recheckAllProjects reuse) |
 | 11 | `disposeBuildOrchestrator` | core | supported | tsrs_cli api::tests |

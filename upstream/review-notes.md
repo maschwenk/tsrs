@@ -131,6 +131,6 @@ counters) were the same idea at other sites:
 - **"No heap change, why bother?"** -4.34M allocations single-threaded (-2.9%), -8.8M with 4 checkers (-3.5%), all
   of them 40-byte objects that were dropped immediately. The port's count of avoided composites (4,340,555) and the Go
   malloc delta on the stack on main 82f0546163 (4,340,793, the number in the PR) agree to within 250; the earlier
-  edf7da4e93 runs gave 4,340,505 and 4,340,242.
+  edf7da4e93 stack gave 4,340,242 (and an earlier run 4,340,505).
 - **"Why not `mapTypeWithCompositeMapper`?"** It goes through `getMappedType`, which substitutes a distributed type
   parameter's constraint; `CompositeTypeMapper.Map` doesn't, so it would change type arguments in some cases.

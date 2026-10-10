@@ -10,9 +10,11 @@ That workflow is finished: every body is ported and no `todo!()` stubs remain. `
 modulespecifiers,pseudochecker}.txt` are now generated from the Rust sources by `tools/sigs-from-rust.py`.
 
 Do not run gosig with a config's default output. It rewrites every Rust file listed in the config's `files` (in its
-`outDir`, e.g. `crates/tsrs_checker/src`) with `todo!()` stubs, which would overwrite the ported code, and it rewrites
-`docs/sigs/*.txt`. The ported checker files no longer carry the stub marker line, so gosig now reads their functions
-as hand-written, but it still rewrites every listed file. Use `-dry`, or `-out` to a scratch directory (the sigs files then go to `<out>/sigs/`).
+`outDir`, e.g. `crates/tsrs_checker/src`), which would erase the ported code: the ported files no longer carry the
+stub marker line, so gosig reads their functions as hand-written and leaves them out, and each rewritten file holds
+only the prelude, comments and `todo!()` stubs for functions it does not find. It also rewrites the config's
+`sigsFile` and `advisorySigsFile` in `docs/sigs/`. Use `-dry`, or `-out` to a scratch directory (the sigs files then
+go to `<out>/sigs/`).
 
 ## Running (reference only)
 

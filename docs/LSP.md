@@ -15,7 +15,7 @@ crate map, progress table and list of known gaps.
 | `project` (+ `background`) | `tsrs_project` | session, snapshots, overlays, project collection builder, config file registry, parse cache, checker pool, auto-import registry host and cache warming; `ata` is out of scope for now |
 | `project/dirty`, `project/logging` | `tsrs_projectutil` (re-exported as `tsrs_project::{dirty, logging}`) | leaf packages that `ls/autoimport` imports too |
 | `ls` (+ `lsconv`, `lsutil`, `change`, `autoimport`) | `tsrs_ls` (`tsrs_ls::lsconv`, `::lsutil`, `::change`, `::autoimport`, …) | one Rust file per Go file, same base names |
-| `astnav`, `format`, `sourcemap` | `tsrs_astnav` and `tsrs_sourcemap` (crates of their own, re-exported as `tsrs_ls::astnav` / `::sourcemap`), `tsrs_ls::format` | `tsrs_astnav` is also used by the checker and the API, `tsrs_sourcemap` by emit; `format` is only used by the language service |
+| `astnav`, `format`, `sourcemap` | `tsrs_astnav` and `tsrs_sourcemap` (crates of their own, re-exported as `tsrs_ls::astnav` / `::sourcemap`), `tsrs_ls::format` | `tsrs_astnav` is also used by the checker and the API, `tsrs_sourcemap` by emit; `format` is used by the language service and by the API's `formatNodeForInsertion` (`tsrs_api/src/printing.rs`) |
 | `fourslash` (+ the tests in `fourslash/tests`) | `tsrs_fourslash` | phase 2: harness + tests generated from the Go test files by `tools/gen-fourslash` |
 | `checker/services.go`, `checker/exports.go` | `tsrs_checker` (`services.rs`, `exports.rs`) | the checker API the language service calls; the batch port skipped most of it |
 | `compiler` (program reuse, pluggable checker pool) | `tsrs_compiler` | `UpdateProgram` / `ReuseProgram`, `ProgramOptions.CreateCheckerPool`, the `CheckerPool` interface |
@@ -151,7 +151,7 @@ completion requests on xstate and on the private monorepo (registry updates incl
 | --- | --- | --- |
 | 1 | transport, protocol types, session skeleton, document sync, project discovery, program update, push + pull diagnostics, hover, definition; LSP oracle | done (2026-10-02, below) |
 | 2 | fourslash harness + generated tests | done: all 4,546 Go tests generated and run on the in-process server (below) |
-| 3 | references, rename, completions, signature help, symbols, semantic tokens, folding, selection ranges, inlay hints, code actions, formatting | done: fourslash 4,066 / 4,546 pass; the 63 failures are 55 content-mapper + 8 `@tsc` tests, both out of scope (Known gaps) |
+| 3 | references, rename, completions, signature help, symbols, semantic tokens, folding, selection ranges, inlay hints, code actions, formatting | done: fourslash 4,066 / 4,546 pass; the 63 failures are 55 content-mapper tests (out of scope) and 8 `@tsc` tests (harness helper not ported yet), see Known gaps |
 | 4 | watchers, multi-project, program reuse, cancellation, memory regions, editor setup | cancellation, builtin watcher, watched-file invalidation and state baselines done (robust wave, notes/lsp-robust.md); memory regions done (mem + memfix waves: RSS flat under edits, census 0 violations); watched-file / multi-project oracle sessions identical; exit behavior identical (`exit_check.py`); editor setup documented, Neovim verified headless |
 
 ### Phase 1 gates (2026-10-02, `lsp` 3c95d59+)
@@ -214,8 +214,9 @@ rules and deviations: notes/lsp-fsgen.md, notes/lsp-fswire.md.
 
 Skips: 386 known failing in Go (registry) + 31 `SkipUnsupportedCompilerOptions` (module UMD/System, moduleResolution
 node10/classic, `esModuleInterop`/`allowSyntheticDefaultImports` false, `baseUrl`, ES5 target, `alwaysStrict` false).
-Failures (63, the CI gate's maximum in `.github/scripts/fourslash-gate.sh`): 55 content-mapper tests and 8 tests
-with `@tsc` command lines, both out of scope (see Known gaps). No failure is a divergence in a ported feature.
+Failures (63, the CI gate's maximum in `.github/scripts/fourslash-gate.sh`): 55 content-mapper tests (out of scope)
+and 8 tests with `@tsc` command lines (not ported yet), see Known gaps. These 63 fail before the session starts, so
+with the gate green no failure is a divergence in a ported feature.
 
 Passing tests per verify family (tests that call the method and pass / tests that call it):
 
@@ -264,7 +265,7 @@ Passing tests per verify family (tests that call the method and pass / tests tha
 | VerifyApplyCodeActionFromCompletion | 56 / 70 |
 | VerifyWillRenameFilesEdits / VerifyRename | 31 / 33, 4 / 7 |
 
-(Counts are from the wave that ported each family. In the current run every calling test that does not pass is
+(These counts are historical and understate the current run, in which every calling test that does not pass is
 skipped, a content-mapper test or an `@tsc` test.) Earlier divergences in ported features:
 `TestRewriteRelativeImportExtensionsProjectReferences{1,2,3}` (diagnostic baselines) were tsrs_compiler not resolving
 project references; fixed by porting them (fix1).

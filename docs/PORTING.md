@@ -4,8 +4,9 @@
 `ts-ref/tsc/internal/`, a symlink to a checkout of microsoft/TypeScript at commit
 b85298b6a81f, = nightly 7.1.0-dev.20260929) to Rust. Scope: the `tsc` command line (type checking, JavaScript and
 declaration emit, source maps, incremental builds, `--build`), the language server (`--lsp`) and the API server
-(`--api`). Not ported: watch mode for the CLI, tracing (`--generateTrace`), pprof and localized messages (English
-only); the README capability table has the current list.
+(`--api`). Not ported: watch mode for the CLI, `--init`, `--showConfig`, tracing (`--generateTrace`), pprof, localized
+messages (English only), and in the language server automatic type acquisition and telemetry; the README capability
+table has the full, current list.
 
 The port is **mechanical and faithful**: same algorithms, same function decomposition,
 same order of operations, same diagnostics (code, position, message, order). Behavior
@@ -100,9 +101,9 @@ referenced through `tsrs_core::P<T>`:
 ### Threading
 
 Parsing and binding run per file (in parallel) and finish before checking. Checking runs on N checkers
-(`--checkers N`, `--singleThreaded` = 1; Go's default is 4, tsrs's default is every core up to 8 and half the cores
-above that, at least 4 and at most 32, capped at one checker per 32 type-checked files, and 4 in build mode:
-`default_checker_count`), each on its own OS thread with a 512 MB stack (`tsrs_compiler::checkerpool`). Files are assigned to checkers by directory
+(`--checkers N`, `--singleThreaded` = 1; Go's default is 4, tsrs's default is max(cores/2, min(cores, 8)), clamped to
+4..32, then capped at one checker per 32 type-checked files (but not below 4), then at most the file count; 4 in build
+mode: `default_checker_count`), each on its own OS thread with a 512 MB stack (`tsrs_compiler::checkerpool`). Files are assigned to checkers by directory
 locality; in the type-check pass a checker that runs out steals unstarted files from the busiest one
 (notes/perf-checker-stealing.md), which is safe because output does not depend on which checker checks a file
 (notes/perf-order-independence.md; `--checkerAssignment go` keeps Go's assignment and history). Each thread allocates in its own leak arena;
@@ -203,7 +204,8 @@ callback, even when the closure does not need it.
 
 ## What not to port
 
-Watch mode for the CLI, tracing, pprof and message localization are not ported. If a function only serves one of
+Watch mode for the CLI, `--init`/`--showConfig`, tracing, pprof, message localization, and the language server's
+automatic type acquisition and telemetry are not ported (README capability table). If a function only serves one of
 those, leave it out; if a needed function has a branch that only serves one, keep the branch structure and mark only
 the truly unreachable part.
 

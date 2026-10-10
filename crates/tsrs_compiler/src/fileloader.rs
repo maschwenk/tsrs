@@ -709,8 +709,9 @@ fn content_mapper_mapping_diagnostic(file: P<SourceFile>, label: &str, problem: 
 }
 
 impl sourceFileParser<'_> {
-    // The mapper's transform identity: the content mapper project's answer, else the mapper's static identity as 32
-    // hex digits.
+    // The mapper's transform identity: the content mapper project's answer when it gives one, else
+    // `Mapper::transform_identity` (an xxh3-128 fingerprint of the mapper's identity, its definition's options and the
+    // compiler options it declared) as 32 hex digits.
     // fileloader.go:590
     fn get_content_mapper_transform_identity(&self, mapper: &Mapper) -> String {
         if let Some(project) = self.host.content_mapper_project() {
