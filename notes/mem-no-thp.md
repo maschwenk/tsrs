@@ -198,3 +198,10 @@ compiled the way each crate compiles it and a C program that reads `/proc/self/s
 | 3.3.2, `libmimalloc-sys` `no_thp` (before #248) | on | 8,192 KiB huge | 0 KiB huge |
 | 3.5.2, `libmimalloc-sys2` `no_thp` (#248) | off (`THP_enabled: 0`) | 0 KiB huge | not run |
 | 3.5.2, then `prctl(PR_SET_THP_DISABLE, 0)` (this fix) | on, also after a new thread allocates 3 GiB | 8,192 KiB huge | 0 KiB huge |
+
+## 2026-10-10: the trade re-measured
+
+With the parse pool capped at 32 threads, the advice no longer changes the parse time; what it buys is check time,
+1-4% on the projects above 1.3 GiB and nothing on the smaller ones, about 1% across the 17 bench projects, for
++17-37% and +43-128% peak. A rule that turns it on when 20 GiB or more is available was built and not adopted:
+notes/perf-heap-thp-by-memory.md.
