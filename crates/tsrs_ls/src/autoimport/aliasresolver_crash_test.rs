@@ -14,7 +14,7 @@ use super::registry::{ProjectID, RegistryCloneHost};
 
 // aliasresolver_crash_test.go:20
 struct fakeCloneHost {
-    fs: Box<dyn FS>,
+    fs: Arc<dyn FS>,
 }
 
 impl ResolutionHost for fakeCloneHost {
@@ -27,6 +27,9 @@ impl ResolutionHost for fakeCloneHost {
 }
 
 impl RegistryCloneHost for fakeCloneHost {
+    fn fs_owned(&self) -> Arc<dyn FS> {
+        Arc::clone(&self.fs)
+    }
     fn get_default_project(&self, _path: &Path) -> (Option<ProjectID>, Option<&'static Program>) {
         (None, None)
     }
@@ -55,7 +58,7 @@ fn test_alias_resolver_get_diagnostics_does_not_panic() {
     let text = "declare function f(arg: { a: string }): () => void;\nexport const x = f({ a: 1 });\n";
 
     let fs = vfstest::from_map([(file_name, text)], true /*useCaseSensitiveFileNames*/);
-    let host: &'static fakeCloneHost = Box::leak(Box::new(fakeCloneHost { fs: Box::new(fs) }));
+    let host: Arc<dyn RegistryCloneHost> = Arc::new(fakeCloneHost { fs: Arc::new(fs) });
 
     let source_file = tsrs_parser::parse_source_file(
         SourceFileParseOptions { file_name: file_name.to_string(), path: Path::new(file_name.to_string()), ..Default::default() },
@@ -64,7 +67,7 @@ fn test_alias_resolver_get_diagnostics_does_not_panic() {
     );
     tsrs_binder::bind_source_file(source_file);
 
-    let resolver = Box::leak(Box::new(tsrs_module::new_resolver(ResolverOptions::new(host, tsrs_core::empty_compiler_options()))));
+    let resolver = Arc::new(tsrs_module::new_resolver(ResolverOptions::new(Arc::clone(&host) as Arc<dyn ResolutionHost>, tsrs_core::empty_compiler_options())));
     let r = new_alias_resolver(vec![source_file], Default::default(), host, resolver, Arc::new(|f: &str| Path::from(f)), Box::new(|_, _| {}));
     let r = Box::leak(Box::new(r));
 

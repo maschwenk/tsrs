@@ -12,7 +12,7 @@ use tsrs_core::{Tristate, P};
 use tsrs_lsproto as lsproto;
 use tsrs_module::packagejson::InfoCacheEntry;
 use tsrs_module::symlinks::KnownSymlinks;
-use tsrs_module::{self as module, DefaultResolver, ResolutionHost, ResolvedEntrypoint, ResolverOptions};
+use tsrs_module::{self as module, ResolutionHost, ResolvedEntrypoint, ResolverOptions};
 use tsrs_projectutil::dirty::{self, Cloneable, Shared, SharedMap};
 use tsrs_projectutil::logging::LogTree;
 use tsrs_vfs::vfsmatch::SpecMatcher;
@@ -482,13 +482,13 @@ impl Registry {
     }
 
     // registry.go:407
-    // Go's `Clone` (`clone` is taken by Rust). The host only lives for the duration of the call.
+    // Go's `Clone` (`clone` is taken by Rust). Temporary resolvers retain the host while building.
     //
     // Memory regions (not in Go, where the GC collects an update's garbage): everything the update allocates in
     // the arena (module and alias resolvers, the extraction checkers' types and symbols, resolution caches) goes
     // to a scratch region freed before this returns; the finished registry holds no reference into it. The
     // package.json entries the new version keeps in `directories` go to a region of their own (`regions`).
-    pub fn clone_registry(&self, ctx: &Context, change: &RegistryChange, host: &dyn RegistryCloneHost, logger: LogTree) -> Result<Arc<Registry>, String> {
+    pub fn clone_registry(&self, ctx: &Context, change: &RegistryChange, host: Arc<dyn RegistryCloneHost>, logger: LogTree) -> Result<Arc<Registry>, String> {
         let scratch = Region::new(SCRATCH_REGION_FIRST_CHUNK);
         let scratch_scope = scratch.enter();
         let registry = self.clone_registry_in_scratch(ctx, change, host, logger);
@@ -497,13 +497,13 @@ impl Registry {
         registry
     }
 
-    fn clone_registry_in_scratch(&self, ctx: &Context, change: &RegistryChange, host: &dyn RegistryCloneHost, logger: LogTree) -> Result<Arc<Registry>, String> {
+    fn clone_registry_in_scratch(&self, ctx: &Context, change: &RegistryChange, host: Arc<dyn RegistryCloneHost>, logger: LogTree) -> Result<Arc<Registry>, String> {
         let start = Instant::now();
         let mut logger = logger;
         if !logger.is_nil() {
             logger = logger.fork("Building autoimport registry");
         }
-        let mut builder = new_registry_builder(self, assume_static(host));
+        let mut builder = new_registry_builder(self, host);
         if let Some(user_preferences) = &change.user_preferences {
             builder.user_preferences = user_preferences.clone();
             if !tsrs_core::unordered_equal(
@@ -587,14 +587,6 @@ fn regions_of_directories(directories: &SharedMap<Path, directory>) -> Vec<Regio
     regions
 }
 
-// The registry builder keeps the clone host for the duration of `clone_registry` only (see there).
-fn assume_static(host: &dyn RegistryCloneHost) -> &'static dyn RegistryCloneHost {
-    // SAFETY: every value built from the host (resolvers, alias resolvers, checkers, extractors) lives in the
-    // update's scratch region or on the stack of `clone_registry`, which frees them before it returns, before the
-    // caller's host goes away; the finished registry holds no reference to any of them.
-    unsafe { std::mem::transmute::<&dyn RegistryCloneHost, &'static dyn RegistryCloneHost>(host) }
-}
-
 // registry.go:433
 pub struct BucketStats {
     pub name: String,
@@ -630,6 +622,7 @@ pub struct RegistryChange {
 
 // registry.go:514 (Go embeds module.ResolutionHost and repeats its FS(); `ResolutionHost::fs` covers both)
 pub trait RegistryCloneHost: ResolutionHost {
+    fn fs_owned(&self) -> Arc<dyn tsrs_vfs::FS>;
     fn get_default_project(&self, path: &Path) -> (Option<ProjectID>, Option<&'static Program>);
     fn get_program_for_project(&self, project_id: &ProjectID) -> Option<&'static Program>;
     fn get_package_json(&self, file_name: &str) -> P<InfoCacheEntry>;
@@ -642,7 +635,7 @@ type EntrypointsBuilder = dirty::MapBuilder<Path, Vec<Arc<ResolvedEntrypoint>>, 
 
 // registry.go:524
 struct registryBuilder<'r> {
-    host: &'static dyn RegistryCloneHost,
+    host: Arc<dyn RegistryCloneHost>,
     base: &'r Registry,
 
     user_preferences: UserPreferences,
@@ -660,7 +653,7 @@ struct registryBuilder<'r> {
 }
 
 // registry.go:539
-fn new_registry_builder<'r>(registry: &'r Registry, host: &'static dyn RegistryCloneHost) -> registryBuilder<'r> {
+fn new_registry_builder<'r>(registry: &'r Registry, host: Arc<dyn RegistryCloneHost>) -> registryBuilder<'r> {
     registryBuilder {
         host,
         base: registry,
@@ -797,7 +790,7 @@ impl registryBuilder<'_> {
             }
         }
 
-        let host = self.host;
+        let host = Arc::clone(&self.host);
         let update_directory = |b: &mut registryBuilder, dir_path: &Path, dir_name: &str, package_json_changed: bool| {
             let package_json_file_name = tspath::combine_paths(dir_name, &["package.json"]);
             let has_node_modules = host.fs().directory_exists(&tspath::combine_paths(dir_name, &["node_modules"]));
@@ -1001,7 +994,7 @@ impl registryBuilder<'_> {
         // without exports). These packages need recursive directory search to discover
         // all auto-importable files, even when the preference is disabled.
         let mut all_deep_import_packages: Set<String> = Set::new();
-        let host = self.host;
+        let host = Arc::clone(&self.host);
         self.projects.range(|entry| {
             let program = host.get_program_for_project(&entry.key());
             if let Some(program) = program {
@@ -1290,15 +1283,14 @@ impl registryBuilder<'_> {
                 }
             }
             if !root_files.is_empty() {
-                let module_resolver: &'static DefaultResolver =
-                    tsrs_core::alloc(module::new_resolver(ResolverOptions::new(self.host, tsrs_core::empty_compiler_options())));
+                let module_resolver = Arc::new(module::new_resolver(ResolverOptions::new(Arc::clone(&self.host) as Arc<dyn ResolutionHost>, tsrs_core::empty_compiler_options())));
                 // Go collects `maps.Values(rootFiles)` (random order, nil files included; the checker skips nothing).
                 let files: Vec<P<SourceFile>> = root_file_order.iter().filter_map(|f| root_files[f]).collect();
                 let alias_resolver = new_alias_resolver(
                     files,
                     FxHashMap::default(),
-                    self.host,
-                    module_resolver,
+                    Arc::clone(&self.host),
+                    Arc::clone(&module_resolver),
                     Arc::clone(&self.base.to_path),
                     Box::new(|_, _| {
                         // no-op
@@ -1316,9 +1308,9 @@ impl registryBuilder<'_> {
                         (s.file_name.clone(), s.package_name.clone())
                     };
                     let source_file = alias_resolver.get_source_file(&file_name).expect("nil source file");
-                    let fs = self.host.fs();
+                    let fs = self.host.fs_owned();
                     let realpath: PathFunc = Arc::new(move |s: &str| fs.realpath(s));
-                    let mut extractor = new_export_extractor(&package_name, &mut ch, module_resolver, Arc::clone(&self.base.to_path), Some(realpath));
+                    let mut extractor = new_export_extractor(&package_name, &mut ch, &module_resolver, Arc::clone(&self.base.to_path), Some(realpath));
                     let file_exports = extractor.extract_from_file(source_file);
                     for exp in file_exports {
                         index.insert_as_words(exp);
@@ -1492,8 +1484,7 @@ impl registryBuilder<'_> {
         let start = Instant::now();
         let file_exclude_patterns = self.user_preferences.parsed_auto_import_file_exclude_patterns(self.host.fs().use_case_sensitive_file_names());
         result.bucket = Some(RegistryBucket::default());
-        let module_resolver: &'static DefaultResolver =
-            tsrs_core::alloc(module::new_resolver(ResolverOptions::new(self.host, tsrs_core::empty_compiler_options())));
+        let module_resolver = module::new_resolver(ResolverOptions::new(Arc::clone(&self.host) as Arc<dyn ResolutionHost>, tsrs_core::empty_compiler_options()));
         let program = self.host.get_program_for_project(project_id).unwrap();
         let project_root_path = (self.base.to_path)(program.get_current_directory());
         let symlink_cache = Some(program.get_symlink_cache());
@@ -1521,7 +1512,7 @@ impl registryBuilder<'_> {
             }
             if ctx.err().is_none() {
                 let checker = pool.get_checker();
-                let mut extractor = new_export_extractor("", checker, module_resolver, Arc::clone(&self.base.to_path), None);
+                let mut extractor = new_export_extractor("", checker, &module_resolver, Arc::clone(&self.base.to_path), None);
                 let file_exports = extractor.extract_from_file(file);
                 exports.insert(file.path().clone(), file_exports);
                 let stats = extractor.stats();
@@ -1718,8 +1709,8 @@ impl registryBuilder<'_> {
         if !package_json.directory_exists {
             return None;
         }
-        let (to_realpath, to_symlink) = get_package_realpath_funcs(self.host.fs(), package_json.package_directory);
-        let resolver: &'static DefaultResolver = tsrs_core::alloc(get_module_resolver(self.host, Arc::clone(&to_realpath)));
+        let (to_realpath, to_symlink) = get_package_realpath_funcs(self.host.fs_owned(), package_json.package_directory);
+        let resolver = Arc::new(get_module_resolver(&*self.host, Arc::clone(&to_realpath)));
         let mut package_entrypoints = resolver.get_entrypoints_from_package_json_info(package_json, package_name, enable_directory_search)?;
 
         let mut skipped_entrypoints = 0;
@@ -1792,8 +1783,8 @@ impl registryBuilder<'_> {
         let alias_resolver = new_alias_resolver(
             root_files,
             symlinks,
-            self.host,
-            resolver,
+            Arc::clone(&self.host),
+            Arc::clone(&resolver),
             Arc::clone(&self.base.to_path),
             Box::new(move |source: P<SourceFile>, module_name: &str| {
                 on_failed_targets.lock().unwrap().add(module_name.to_string());
@@ -1805,7 +1796,7 @@ impl registryBuilder<'_> {
         let alias_resolver: &'static super::aliasresolver::aliasResolver = tsrs_core::alloc(alias_resolver);
 
         let mut ch = tsrs_checker::new_checker(alias_resolver);
-        let mut extractor = new_export_extractor(package_name, &mut ch, resolver, Arc::clone(&self.base.to_path), Some(to_realpath));
+        let mut extractor = new_export_extractor(package_name, &mut ch, &resolver, Arc::clone(&self.base.to_path), Some(to_realpath));
 
         let mut non_module_files: Set<Path> = Set::new();
         for &entrypoint in &alias_resolver.root_files {

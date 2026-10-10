@@ -107,6 +107,12 @@ pointer compression costs about +4.9% instructions and took back most of the che
 
 ## Measured and rejected (do not redo)
 
+- Calling the shared program-data/host ownership stage a completed or memory-preserving migration
+  (`notes/rust-owned-program-data.md`): this boundary is within local incremental limits against the owned-link
+  stage, but the cumulative branch still adds 1.075% single-threaded Compiler instructions against original Oxc
+  and 77–83% default RSS against pre-Oxc. The rejected claim does not reject strong Rust owners. Revisit landing
+  after the program/file/type roots migrate and fresh measurements recover the full memory/instruction gates.
+
 - Treating the current owned-link continuation as performance-preserving (`notes/rust-owned-links.md`):
   it removes legacy record storage, map ownership recovery and erased rare tails, but the cumulative local
   Compiler comparison adds 1.12% single-threaded instructions; default peak RSS adds 1.5–1.65% and over 2 MiB

@@ -691,7 +691,7 @@ impl Snapshot {
 
         let project_collection = Arc::new(project_collection);
         let auto_import_host =
-            new_auto_import_registry_clone_host(Arc::clone(&project_collection), Arc::clone(&store.parse_cache), Arc::clone(&fs), &store.options.current_directory, Arc::clone(&store.to_path));
+            Arc::new(new_auto_import_registry_clone_host(Arc::clone(&project_collection), Arc::clone(&store.parse_cache), Arc::clone(&fs), &store.options.current_directory, Arc::clone(&store.to_path)));
         let mut open_files: FxHashMap<Path, String> = FxHashMap::default();
         #[expect(clippy::iter_over_hash_type, reason = "pure map inserts; Go ranges the map too")]
         for (path, overlay) in overlays.iter() {
@@ -717,7 +717,7 @@ impl Snapshot {
                 rebuilt_programs: projects_with_new_program_structure,
                 user_preferences: change.new_config.clone(),
             },
-            &auto_import_host,
+            Arc::clone(&auto_import_host) as Arc<dyn RegistryCloneHost>,
             logger.fork("UpdateAutoImports"),
         );
         if let Ok(auto_imports) = &auto_imports {

@@ -1,3 +1,6 @@
+#![forbid(unsafe_code)]
+
+use std::ops::Deref;
 use std::sync::{Arc, OnceLock};
 
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -12,6 +15,12 @@ use crate::host::CompilerHost;
 use crate::projectreferencedtsfakinghost::new_project_reference_dts_faking_host;
 
 pub(crate) struct projectReferenceFileMapper {
+    data: Arc<projectReferenceRedirects>,
+    // The host owns only redirect data, so caching it does not form an Arc cycle.
+    dts_faking_host: OnceLock<Arc<dyn ResolutionHost>>,
+}
+
+pub(crate) struct projectReferenceRedirects {
     pub(crate) config: P<ParsedCommandLine>,
     pub(crate) use_source_of_project_reference: bool,
     pub(crate) dts_directories: FxHashSet<Path>,
@@ -23,19 +32,12 @@ pub(crate) struct projectReferenceFileMapper {
 
     // Store all the realpath from dts in node_modules to source file from project reference needed during parsing so it can be used later
     pub(crate) realpath_dts_to_source: SyncMap<Path, Option<P<SourceOutputAndProjectReference>>>,
-
-    // Go builds a new dts-faking host on every `resolutionHost` call; the mapper is immutable once built, so the
-    // host is built once (its caches only memoize file system queries).
-    pub(crate) dts_faking_host: OnceLock<&'static dyn ResolutionHost>,
-    // The leaked `resolution_host_for` host the file loader created for this mapper's program build
-    // (it keeps the compiler host, and with it the build's file system, alive). Freed with the mapper
-    // (`SharedProgramData::free`).
-    pub(crate) loader_host: Option<&'static dyn ResolutionHost>,
 }
 
+
 pub(crate) struct projectReferenceFileMapperBuilder {
-    pub(crate) mapper: &'static projectReferenceFileMapper,
-    pub(crate) host: &'static dyn ResolutionHost,
+    pub(crate) mapper: Arc<projectReferenceFileMapper>,
+    pub(crate) host: Arc<dyn ResolutionHost>,
 }
 
 struct compilerResolutionHost(Arc<dyn CompilerHost>);
@@ -50,8 +52,8 @@ impl ResolutionHost for compilerResolutionHost {
     }
 }
 
-pub(crate) fn resolution_host_for(host: Arc<dyn CompilerHost>) -> &'static dyn ResolutionHost {
-    Box::leak(Box::new(compilerResolutionHost(host)))
+pub(crate) fn resolution_host_for(host: Arc<dyn CompilerHost>) -> Arc<dyn ResolutionHost> {
+    Arc::new(compilerResolutionHost(host))
 }
 
 pub(crate) fn as_resolved_project_reference(config: P<ParsedCommandLine>) -> &'static dyn ResolvedProjectReference {
@@ -59,8 +61,30 @@ pub(crate) fn as_resolved_project_reference(config: P<ParsedCommandLine>) -> &'s
 }
 
 impl projectReferenceFileMapper {
-    pub(crate) fn new(config: P<ParsedCommandLine>, use_source_of_project_reference: bool) -> projectReferenceFileMapper {
-        projectReferenceFileMapper {
+    pub(crate) fn new(data: projectReferenceRedirects) -> Self {
+        Self { data: Arc::new(data), dts_faking_host: OnceLock::new() }
+    }
+
+    // projectreferencefilemapper.go:30
+    pub(crate) fn resolution_host(&self, host: Arc<dyn ResolutionHost>) -> Arc<dyn ResolutionHost> {
+        if self.use_source_of_project_reference && !self.output_dts_to_project_reference.is_empty() {
+            return Arc::clone(self.dts_faking_host.get_or_init(|| new_project_reference_dts_faking_host(host, Arc::clone(&self.data))));
+        }
+        host
+    }
+}
+
+impl Deref for projectReferenceFileMapper {
+    type Target = projectReferenceRedirects;
+
+    fn deref(&self) -> &Self::Target {
+        &self.data
+    }
+}
+
+impl projectReferenceRedirects {
+    pub(crate) fn new(config: P<ParsedCommandLine>, use_source_of_project_reference: bool) -> Self {
+        Self {
             config,
             use_source_of_project_reference,
             dts_directories: FxHashSet::default(),
@@ -69,17 +93,7 @@ impl projectReferenceFileMapper {
             source_to_project_reference: FxHashMap::default(),
             output_dts_to_project_reference: FxHashMap::default(),
             realpath_dts_to_source: SyncMap::default(),
-            dts_faking_host: OnceLock::new(),
-            loader_host: None,
         }
-    }
-
-    // projectreferencefilemapper.go:30
-    pub(crate) fn resolution_host(&'static self, host: &'static dyn ResolutionHost) -> &'static dyn ResolutionHost {
-        if self.use_source_of_project_reference && !self.output_dts_to_project_reference.is_empty() {
-            return *self.dts_faking_host.get_or_init(|| new_project_reference_dts_faking_host(host, self));
-        }
-        host
     }
 
     // projectreferencefilemapper.go:37
@@ -250,8 +264,8 @@ impl projectReferenceFileMapper {
 }
 
 impl projectReferenceFileMapperBuilder {
-    pub(crate) fn take_mapper(&self) -> &'static projectReferenceFileMapper {
-        self.mapper
+    pub(crate) fn take_mapper(&self) -> Arc<projectReferenceFileMapper> {
+        Arc::clone(&self.mapper)
     }
 
     // projectreferencefilemapper.go:174
@@ -322,5 +336,36 @@ impl projectReferenceFileMapperBuilder {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod ownership_tests {
+    use super::*;
+
+    #[test]
+    fn cached_host_retains_redirects_without_retaining_mapper() {
+        let config = P::new(tsrs_tsoptions::new_parsed_command_line(tsrs_core::empty_compiler_options(), Vec::new(), Vec::new(), Default::default()));
+        let mut data = projectReferenceRedirects::new(config, true);
+        let source = P::new(SourceOutputAndProjectReference { source: "/src/ref.ts".into(), output_dts: "/out/ref.d.ts".into(), resolved: config });
+        data.output_dts_to_project_reference.insert(Path::from("/out/ref.d.ts"), source);
+        let mapper = Arc::new(projectReferenceFileMapper::new(data));
+        let mapper_weak = Arc::downgrade(&mapper);
+        let data_weak = Arc::downgrade(&mapper.data);
+        let compiler_host = crate::new_compiler_host("/", Arc::new(tsrs_vfs::vfstest::from_map([("/src/ref.ts", "export {}; ")], true)), "", None, None);
+        let compiler_host_weak = Arc::downgrade(&compiler_host);
+        let host = mapper.resolution_host(resolution_host_for(compiler_host));
+        let host_weak = Arc::downgrade(&host);
+        let other_host = crate::new_compiler_host("/", Arc::new(tsrs_vfs::vfstest::from_map(Vec::<(&str, &str)>::new(), true)), "", None, None);
+        assert!(Arc::ptr_eq(&host, &mapper.resolution_host(resolution_host_for(other_host))));
+
+        drop(mapper);
+        assert!(mapper_weak.upgrade().is_none());
+        assert!(data_weak.upgrade().is_some());
+        assert!(host.fs().file_exists("/out/ref.d.ts"));
+        drop(host);
+        assert!(host_weak.upgrade().is_none());
+        assert!(data_weak.upgrade().is_none());
+        assert!(compiler_host_weak.upgrade().is_none());
     }
 }

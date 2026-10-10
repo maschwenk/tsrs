@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::sync::Arc;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_ast::{self as ast, FileReference, JSDeclarationKind, Kind, ModifierFlags, Node, SourceFile, SourceFileParseOptions};
@@ -142,7 +143,7 @@ impl LanguageService {
 
 // Go passes `program.Host()` (a compiler.CompilerHost, which has the FS/GetCurrentDirectory methods of
 // module.ResolutionHost) to module.NewResolver; Rust needs the explicit adapter.
-struct compilerHostResolutionHost(&'static dyn CompilerHost);
+struct compilerHostResolutionHost(Arc<dyn CompilerHost>);
 
 impl ResolutionHost for compilerHostResolutionHost {
     fn fs(&self) -> &dyn FS {
@@ -176,7 +177,7 @@ impl LanguageService {
         let mut no_dts_options: CompilerOptions = (*options).clone();
         no_dts_options.no_dts_resolution = Tristate::True;
         let host: &'static dyn CompilerHost = &**program.host();
-        let resolution_host: &'static compilerHostResolutionHost = tsrs_core::alloc(compilerHostResolutionHost(host));
+        let resolution_host = Arc::new(compilerHostResolutionHost(Arc::clone(program.host())));
         SourceDefResolver {
             ls: self,
             fs: host.fs(),

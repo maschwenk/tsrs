@@ -1,4 +1,5 @@
 use std::ops::Deref;
+use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
 use tsrs_core::collections::{OrderedMap, SyncMap};
@@ -128,7 +129,7 @@ impl ResolutionData {
         self.package_json_info_cache.range(f);
     }
 
-    pub fn new_resolver(&'static self, host: &'static dyn ResolutionHost) -> DefaultResolver {
+    pub fn new_resolver(&'static self, host: Arc<dyn ResolutionHost>) -> DefaultResolver {
         DefaultResolver::new_from_resolution_data(P::from_static(self), host)
     }
 }

@@ -616,7 +616,7 @@ impl Orchestrator {
                 // full build that shares nothing, and nothing reads it after its task (statistics and diagnostics are
                 // already taken).
                 // SAFETY: see above; no checker handle of it is held.
-                unsafe { tsrs_compiler::free_unshared_program(program.get_program()) };
+                unsafe { tsrs_compiler::free_program(program.get_program()) };
             }
         }
         task.built.close();

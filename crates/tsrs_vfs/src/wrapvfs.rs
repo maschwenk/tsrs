@@ -1,5 +1,6 @@
 // Go internal/vfs/wrapvfs.
 
+use std::sync::Arc;
 use std::time::SystemTime;
 
 use crate::{Entries, FileInfo, FS};
@@ -23,12 +24,12 @@ pub struct Replacements {
 }
 
 // wrapvfs.go:23
-pub fn wrap(fs: &'static dyn FS, replacements: Replacements) -> wrappedFS {
+pub fn wrap(fs: Arc<dyn FS>, replacements: Replacements) -> wrappedFS {
     wrappedFS { fs, replacements }
 }
 
 pub struct wrappedFS {
-    fs: &'static dyn FS,
+    fs: Arc<dyn FS>,
     replacements: Replacements,
 }
 

@@ -67,7 +67,7 @@ impl FileSource for autoImportBuilderFS {
 pub(crate) struct autoImportRegistryCloneHost {
     project_collection: Arc<ProjectCollection>,
     parse_cache: Arc<ParseCache>,
-    fs: sourceFS,
+    fs: Arc<sourceFS>,
     current_directory: String,
 
     // Go: filesMu + files.
@@ -85,7 +85,7 @@ pub(crate) fn new_auto_import_registry_clone_host(
     autoImportRegistryCloneHost {
         project_collection,
         parse_cache,
-        fs: new_source_fs(false, Arc::new(autoImportBuilderFS { snapshot_fs_builder, untracked_files: SyncMap::default() }), to_path),
+        fs: Arc::new(new_source_fs(false, Arc::new(autoImportBuilderFS { snapshot_fs_builder, untracked_files: SyncMap::default() }), to_path)),
         current_directory: current_directory.to_string(),
         files: Mutex::new(Vec::new()),
     }
@@ -94,7 +94,7 @@ pub(crate) fn new_auto_import_registry_clone_host(
 impl ResolutionHost for autoImportRegistryCloneHost {
     // autoimport.go:89
     fn fs(&self) -> &dyn FS {
-        &self.fs
+        &*self.fs
     }
 
     // autoimport.go:94
@@ -104,6 +104,9 @@ impl ResolutionHost for autoImportRegistryCloneHost {
 }
 
 impl RegistryCloneHost for autoImportRegistryCloneHost {
+    fn fs_owned(&self) -> Arc<dyn FS> {
+        Arc::clone(&self.fs) as Arc<dyn FS>
+    }
     // autoimport.go:99
     fn get_default_project(&self, path: &Path) -> (Option<ProjectID>, Option<&'static Program>) {
         let Some(project) = self.project_collection.get_default_project(path) else {

@@ -1,5 +1,5 @@
 use std::sync::atomic::{AtomicI32, Ordering};
-use std::sync::{mpsc, Condvar, Mutex};
+use std::sync::{mpsc, Arc, Condvar, Mutex};
 use std::time::{Duration, SystemTime};
 
 use tsrs_core::collections::{new_ordered_map_with_size_hint, OrderedMapExt};
@@ -23,8 +23,8 @@ impl ResolutionHost for ResolutionHostStub {
     }
 }
 
-fn host(fs: impl FS + 'static, cwd: &str) -> &'static ResolutionHostStub {
-    Box::leak(Box::new(ResolutionHostStub { fs: Box::new(fs), cwd: cwd.to_string() }))
+fn host(fs: impl FS + 'static, cwd: &str) -> Arc<dyn ResolutionHost> {
+    Arc::new(ResolutionHostStub { fs: Box::new(fs), cwd: cwd.to_string() })
 }
 
 fn bundler_options() -> P<CompilerOptions> {
@@ -80,7 +80,7 @@ fn test_resolution_data_caches() {
         ),
         "/",
     );
-    let resolver = new_resolver(ResolverOptions::new(old_host, P::new(CompilerOptions { module: ModuleKind::NodeNext, ..Default::default() })));
+    let resolver = new_resolver(ResolverOptions::new(Arc::clone(&old_host), P::new(CompilerOptions { module: ModuleKind::NodeNext, ..Default::default() })));
     let (resolved, _) = resolver.resolve_module_name("pkg", "/src/index.ts", ModuleKind::CommonJS, None).unwrap();
     assert!(resolved.is_resolved());
     let (cached, _) = resolver.resolve_module_name("pkg", "/src/index.ts", ModuleKind::CommonJS, None).unwrap();

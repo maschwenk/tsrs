@@ -258,7 +258,7 @@ pub(crate) type PathFunc = Arc<dyn Fn(&str) -> String + Send + Sync>;
 // dependencies reached through node_modules symlinks), it resolves the file's directory realpath once,
 // finds the symlink boundary (the package root where the symlink lives), and caches that prefix mapping.
 // All subsequent files under the same symlinked package directory use prefix substitution with no syscalls.
-pub(crate) fn get_package_realpath_funcs(fs: &'static dyn FS, package_dir: &str) -> (PathFunc, PathFunc) {
+pub(crate) fn get_package_realpath_funcs(fs: Arc<dyn FS>, package_dir: &str) -> (PathFunc, PathFunc) {
     let real_package_dir = fs.realpath(package_dir);
     let is_symlinked = real_package_dir != package_dir;
     // Cache of package-directory-level symlink→realpath prefix mappings for
@@ -330,11 +330,9 @@ impl ResolutionHost for resolutionHost {
 }
 
 // util.go:333
-// The resolver keeps its host for its whole life (module.ResolverOptions.Host is 'static); the host lives in the
-// current arena, which is the registry update's scratch region (registry.go `Clone`), like the resolver.
-pub(crate) fn get_module_resolver(host: &'static dyn RegistryCloneHost, realpath: PathFunc) -> DefaultResolver {
-    let rh: &'static resolutionHost = tsrs_core::alloc(resolutionHost {
-        fs: wrapvfs::wrap(host.fs(), wrapvfs::Replacements { realpath: Some(Box::new(move |s: &str| realpath(s))), ..Default::default() }),
+pub(crate) fn get_module_resolver(host: &dyn RegistryCloneHost, realpath: PathFunc) -> DefaultResolver {
+    let rh = Arc::new(resolutionHost {
+        fs: wrapvfs::wrap(host.fs_owned(), wrapvfs::Replacements { realpath: Some(Box::new(move |s: &str| realpath(s))), ..Default::default() }),
         current_directory: host.get_current_directory().to_string(),
     });
     let opts = ResolverOptions::new(rh, tsrs_core::empty_compiler_options());

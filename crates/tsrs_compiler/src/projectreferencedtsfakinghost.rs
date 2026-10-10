@@ -1,3 +1,6 @@
+#![forbid(unsafe_code)]
+
+use std::sync::Arc;
 use std::time::SystemTime;
 
 use tsrs_core::tspath::{self, Path};
@@ -6,7 +9,7 @@ use tsrs_module::symlinks::{KnownDirectoryLink, KnownSymlinks};
 use tsrs_module::{self as module, ResolutionHost};
 use tsrs_vfs::{cachedvfs, Entries, FileInfo, FS};
 
-use crate::projectreferencefilemapper::projectReferenceFileMapper;
+use crate::projectreferencefilemapper::projectReferenceRedirects;
 
 struct projectReferenceDtsFakingHost {
     current_directory: String,
@@ -15,18 +18,18 @@ struct projectReferenceDtsFakingHost {
 
 // projectreferencedtsfakinghost.go:22
 pub(crate) fn new_project_reference_dts_faking_host(
-    host: &'static dyn ResolutionHost,
-    references: &'static projectReferenceFileMapper,
-) -> &'static dyn ResolutionHost {
+    host: Arc<dyn ResolutionHost>,
+    references: Arc<projectReferenceRedirects>,
+) -> Arc<dyn ResolutionHost> {
     // Create a new host that will fake the dts files
-    Box::leak(Box::new(projectReferenceDtsFakingHost {
+    Arc::new(projectReferenceDtsFakingHost {
         current_directory: host.get_current_directory().to_string(),
         fs: cachedvfs::from(projectReferenceDtsFakingVfs {
             host,
             project_reference_file_mapper: references,
             known_symlinks: KnownSymlinks::default(),
         }),
-    }))
+    })
 }
 
 impl ResolutionHost for projectReferenceDtsFakingHost {
@@ -42,8 +45,8 @@ impl ResolutionHost for projectReferenceDtsFakingHost {
 }
 
 struct projectReferenceDtsFakingVfs {
-    host: &'static dyn ResolutionHost,
-    project_reference_file_mapper: &'static projectReferenceFileMapper,
+    host: Arc<dyn ResolutionHost>,
+    project_reference_file_mapper: Arc<projectReferenceRedirects>,
     known_symlinks: KnownSymlinks,
 }
 

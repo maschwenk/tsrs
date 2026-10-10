@@ -219,7 +219,7 @@ unsafe impl Send for CheckerSlot {}
 // SAFETY: every access to the checker holds its mutex, and no reference outlives the guard (see above).
 unsafe impl Sync for CheckerSlot {}
 
-// A pool is dropped only with its program (`free_program` / `free_unshared_program`: no checker handle is held
+// A pool is dropped only with its program (`free_program`: no checker handle is held
 // any more), so the leaked checkers can be freed with it. Programs that are never freed (the CLI) never get here.
 impl Drop for poolState {
     fn drop(&mut self) {

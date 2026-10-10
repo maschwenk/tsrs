@@ -1,4 +1,5 @@
 use std::fmt;
+use std::sync::Arc;
 
 use tsrs_ast::Diagnostic;
 use tsrs_core::collections::{new_set_with_size_hint, OrderedMap, Set};
@@ -188,7 +189,7 @@ pub fn get_compiler_options_with_redirect(compiler_options: P<CompilerOptions>, 
 
 pub struct DefaultResolver {
     pub(crate) resolution_data: P<ResolutionData>,
-    host: &'static dyn ResolutionHost,
+    host: Arc<dyn ResolutionHost>,
     // reportDiagnostic: DiagnosticReporter
     pub(crate) module_resolution_cache: ModuleResolutionCache,
     pub(crate) type_ref_directive_resolution_cache: TypeRefDirectiveResolutionCache,
@@ -200,7 +201,7 @@ pub struct DefaultResolver {
 }
 
 pub struct ResolverOptions {
-    pub host: &'static dyn ResolutionHost,
+    pub host: Arc<dyn ResolutionHost>,
     pub compiler_options: P<CompilerOptions>,
     pub typings_location: String,
     pub project_name: String,
@@ -209,7 +210,7 @@ pub struct ResolverOptions {
 }
 
 impl ResolverOptions {
-    pub fn new(host: &'static dyn ResolutionHost, compiler_options: P<CompilerOptions>) -> ResolverOptions {
+    pub fn new(host: Arc<dyn ResolutionHost>, compiler_options: P<CompilerOptions>) -> ResolverOptions {
         ResolverOptions {
             host,
             compiler_options,
@@ -222,13 +223,13 @@ impl ResolverOptions {
 }
 
 pub fn new_resolver(opts: ResolverOptions) -> DefaultResolver {
-    let host = opts.host;
+    let host = Arc::clone(&opts.host);
     DefaultResolver::new_from_resolution_data(new_resolution_data(opts), host)
 }
 
 impl DefaultResolver {
     // Go's `(*ResolutionData).NewResolver`.
-    pub fn new_from_resolution_data(d: P<ResolutionData>, host: &'static dyn ResolutionHost) -> DefaultResolver {
+    pub fn new_from_resolution_data(d: P<ResolutionData>, host: Arc<dyn ResolutionHost>) -> DefaultResolver {
         DefaultResolver {
             resolution_data: d,
             host,
@@ -2355,7 +2356,7 @@ fn extension_is_ok(extensions: Extensions, extension: &str) -> bool {
         || (extensions.intersects(Extensions::Json) && extension == tspath::EXTENSION_JSON)
 }
 
-pub fn resolve_config(module_name: &str, containing_file: &str, host: &'static dyn ResolutionHost) -> P<ResolvedModule> {
+pub fn resolve_config(module_name: &str, containing_file: &str, host: Arc<dyn ResolutionHost>) -> P<ResolvedModule> {
     let resolver = new_resolver(ResolverOptions::new(
         host,
         P::new(CompilerOptions { module_resolution: ModuleResolutionKind::NodeNext, ..Default::default() }),

@@ -1,6 +1,6 @@
 use std::fmt::Write as _;
 use std::fmt::Display;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_ast::{new_compiler_diagnostic, new_diagnostic, Diagnostic, Kind, Node, NodeFactory, SourceFile, SourceFileParseOptions};
@@ -703,7 +703,7 @@ fn get_extends_config_path(
         return (extended_config_path, errors);
     }
     // If the path isn't a rooted or relative path, resolve like a module
-    let resolver_host: &'static ResolverHost = P::new(ResolverHost { host }).get();
+    let resolver_host = Arc::new(ResolverHost { host });
     let resolved = tsrs_module::resolve_config(&extended_config, &tspath::combine_paths(base_path, &["tsconfig.json"]), resolver_host);
     if resolved.is_resolved() {
         return (resolved.resolved_file_name.to_string(), errors);

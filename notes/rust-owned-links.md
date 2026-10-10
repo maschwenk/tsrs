@@ -86,6 +86,8 @@ that path and the interim layout costs recovered.
 
 Completion remains contradicted by `ptr.rs` (raw `P` and unchecked thread traits), `arena.rs` (implicit/thread
 owners and address registry), AST/type payload access (fabricated static borrows and raw casts), and
-`program.rs` (`Box::leak`, `free_program`/`free_unshared_program`). Once their callers migrate, remove the
+`program.rs` (`Box::leak` and `free_program`). The following stage in `rust-owned-program-data.md` removes
+`SharedProgramData`, `free_unshared_program` and host manual frees; the program root still needs migration.
+Once the remaining callers migrate, remove the
 compatibility free/recycle/checkpoint APIs and allocation ownership recovery, then verify the complete CLI,
 LSP/API, incremental, emit, fourslash, conformance and performance scope.

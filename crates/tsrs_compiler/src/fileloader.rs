@@ -13,7 +13,7 @@ use crate::filesparser::{filesParser, parseTask, resolvedRef, TaskId};
 use crate::host::CompilerHost;
 use crate::processing_diagnostic::{includeExplainingDiagnostic, processingDiagnostic};
 use crate::program::{ProgramConfig, ProgramOptions};
-use crate::projectreferencefilemapper::{projectReferenceFileMapper, projectReferenceFileMapperBuilder, resolution_host_for};
+use crate::projectreferencefilemapper::{projectReferenceFileMapper, projectReferenceFileMapperBuilder, projectReferenceRedirects, resolution_host_for};
 use crate::projectreferenceparser::projectReferenceParser;
 use crate::includeprocessor::fileIncludeData;
 
@@ -86,7 +86,7 @@ pub struct processedFiles {
     // the program is disposed.
     pub(crate) duplicate_source_files: Vec<DuplicateSourceFile>,
     pub(crate) files_by_path: FxHashMap<Path, P<SourceFile>>,
-    pub(crate) project_reference_file_mapper: Option<&'static projectReferenceFileMapper>,
+    pub(crate) project_reference_file_mapper: Option<Arc<projectReferenceFileMapper>>,
     pub(crate) missing_files: Vec<String>,
     pub(crate) resolved_modules: FxHashMap<Path, ModeAwareCache<P<ResolvedModule>>>,
     pub(crate) type_resolutions_in_file: FxHashMap<Path, ModeAwareCache<P<ResolvedTypeReferenceDirective>>>,
@@ -115,19 +115,17 @@ pub(crate) struct jsxRuntimeImportSpecifier {
 // fileloader.go:337 (Go runs it on the loader before creating the resolver; it only needs the options and the host,
 // and returns the builder the loader keeps)
 fn add_project_reference_tasks(opts: &ProgramConfig, host: &Arc<dyn CompilerHost>, _single_threaded: bool) -> projectReferenceFileMapperBuilder {
-    let mut mapper = projectReferenceFileMapper::new(opts.config, opts.can_use_project_reference_source());
+    let mut redirects = projectReferenceRedirects::new(opts.config, opts.can_use_project_reference_source());
     let resolution_host = resolution_host_for(Arc::clone(host));
-    mapper.loader_host = Some(resolution_host);
     let project_references = opts.config.resolved_project_reference_paths();
-    if project_references.is_empty() {
-        return projectReferenceFileMapperBuilder { mapper: Box::leak(Box::new(mapper)), host: resolution_host };
+    if !project_references.is_empty() {
+        let mut parser = projectReferenceParser::new(&**host);
+        let mut root_tasks = parser.create_project_reference_parse_tasks(project_references);
+        parser.parse(&mut root_tasks, &mut redirects);
     }
-
-    let mut parser = projectReferenceParser::new(&**host);
-    let mut root_tasks = parser.create_project_reference_parse_tasks(project_references);
-    parser.parse(&mut root_tasks, &mut mapper);
-    let mapper: &'static projectReferenceFileMapper = Box::leak(Box::new(mapper));
-    projectReferenceFileMapperBuilder { mapper, host: mapper.resolution_host(resolution_host) }
+    let mapper = Arc::new(projectReferenceFileMapper::new(redirects));
+    let host = mapper.resolution_host(resolution_host);
+    projectReferenceFileMapperBuilder { mapper, host }
 }
 
 pub(crate) fn process_all_program_files(opts: &ProgramOptions, single_threaded: bool) -> (processedFiles, P<module::ResolutionData>, Option<String>) {
@@ -141,23 +139,8 @@ pub(crate) fn process_all_program_files(opts: &ProgramOptions, single_threaded: 
     let max_node_module_js_depth = compiler_options.max_node_module_js_depth.unwrap_or(0).clamp(i32::MIN as i64, i32::MAX as i64) as i32;
     let host = Arc::clone(&opts.host);
     let project_references = add_project_reference_tasks(&opts.program_config(), &host, single_threaded);
-    // The mapper (with its resolution hosts) is leaked for the program to own (`SharedProgramData`). If loading
-    // unwinds (a panic while loading, e.g. the module resolver's `Unexpected moduleResolution`, which the API turns
-    // into an error), no program will own it: free it then. Declared before the resolver and loader, so it is
-    // dropped after them.
-    struct FreeMapperOnUnwind(&'static projectReferenceFileMapper);
-    impl Drop for FreeMapperOnUnwind {
-        fn drop(&mut self) {
-            if std::thread::panicking() {
-                // SAFETY: loading unwound, so no program was created from this mapper; the resolver and loader that
-                // referred to it were dropped first.
-                unsafe { crate::program::free_project_reference_file_mapper(std::ptr::from_ref::<projectReferenceFileMapper>(self.0).cast_mut()) };
-            }
-        }
-    }
-    let _free_mapper_on_unwind = FreeMapperOnUnwind(project_references.mapper);
     let resolver_options = module::ResolverOptions {
-        host: project_references.host,
+        host: Arc::clone(&project_references.host),
         compiler_options,
         typings_location: opts.typings_location.clone(),
         project_name: opts.project_name.clone(),
@@ -337,7 +320,7 @@ impl fileLoader {
         let mut type_resolutions_trace = Vec::new();
         let mut p_diagnostics = Vec::new();
         let automatic_type_directive_names =
-            module::get_automatic_type_directive_names(&self.opts.config.compiler_options().unwrap(), self.project_references.host);
+            module::get_automatic_type_directive_names(&self.opts.config.compiler_options().unwrap(), &*self.project_references.host);
         for name in automatic_type_directive_names {
             // Under node16/nodenext module resolution, load `types`/ata include names as cjs resolution results by passing an `undefined` mode.
             // Under bundler module resolution, this also triggers the "import" condition to be used.
@@ -429,7 +412,7 @@ pub(crate) fn source_file_meta_data(
     let package_json_scope = resolver
         .get_resolution_data()
         .get()
-        .new_resolver(project_references.host)
+        .new_resolver(Arc::clone(&project_references.host))
         .get_package_scope_for_path(&tspath::get_directory_path(file_name));
     let module_resolution_kind = opts.config.compiler_options().unwrap().get_module_resolution_kind();
 

@@ -125,7 +125,7 @@ pub(crate) struct ProgramResolutionContext {
 /// The parts of `module.ResolverOptions` needed to build another resolver for the same program.
 #[derive(Clone)]
 struct ResolverOptionsTemplate {
-    host: &'static dyn ResolutionHost,
+    host: Arc<dyn ResolutionHost>,
     typings_location: String,
     project_name: String,
     extra_extensions: Vec<String>,
@@ -133,10 +133,10 @@ struct ResolverOptionsTemplate {
 
 impl ResolverOptionsTemplate {
     fn from(o: &ResolverOptions) -> Self {
-        ResolverOptionsTemplate { host: o.host, typings_location: o.typings_location.clone(), project_name: o.project_name.clone(), extra_extensions: o.extra_extensions.clone() }
+        ResolverOptionsTemplate { host: Arc::clone(&o.host), typings_location: o.typings_location.clone(), project_name: o.project_name.clone(), extra_extensions: o.extra_extensions.clone() }
     }
     fn with_options(&self, compiler_options: P<CompilerOptions>) -> ResolverOptions {
-        let mut o = ResolverOptions::new(self.host, compiler_options);
+        let mut o = ResolverOptions::new(Arc::clone(&self.host), compiler_options);
         o.typings_location.clone_from(&self.typings_location);
         o.project_name.clone_from(&self.project_name);
         o.extra_extensions.clone_from(&self.extra_extensions);
@@ -471,9 +471,7 @@ impl Session {
             return Err(ApiError::client("snapshot and inProgressSnapshot are mutually exclusive"));
         }
 
-        // Resolver host: leaked for the duration of the call only (module::ResolverOptions requires
-        // `&'static`); reclaimed after every resolver built on it has been dropped.
-        let mut owned_host: Option<*mut FsHost> = None;
+        // Each resolver retains its host and filesystem through strong Rust owners.
         let _sd_pin;
         let mut resolver: Box<dyn Resolver> = if in_progress != 0 {
             let ctx = self.module_resolvers.contexts.lock().unwrap().get(&in_progress).cloned();
@@ -492,11 +490,8 @@ impl Session {
             } else {
                 self.snapshot_host_fs()
             };
-            let host = Box::into_raw(Box::new(FsHost { fs, cwd: cwd.clone() }));
-            owned_host = Some(host);
-            // SAFETY: `host` stays alive until reclaimed below, after the resolver is dropped.
-            let host_ref: &'static FsHost = unsafe { &*host };
-            Box::new(tsrs_module::new_resolver(ResolverOptions::new(host_ref, data.compiler_options)))
+            let host = Arc::new(FsHost { fs, cwd: cwd.clone() });
+            Box::new(tsrs_module::new_resolver(ResolverOptions::new(host, data.compiler_options)))
         };
         if !data.callback.is_empty() {
             let conn = self.connection().ok_or_else(|| ApiError::client("API connection is not initialized"))?;
@@ -507,10 +502,6 @@ impl Session {
         }
         let result = resolver.resolve_module_name_from_directory(module_name, &containing_directory, mode);
         drop(resolver);
-        if let Some(host) = owned_host {
-            // SAFETY: allocated above; the only resolver referencing it was dropped.
-            drop(unsafe { Box::from_raw(host) });
-        }
         let (resolved, trace) = result.map_err(ApiError::internal)?;
         let trace: Vec<String> = trace.iter().map(|t| tsrs_diagnostics::localize(Some(t.message), Default::default(), &t.args)).collect();
         Ok(Obj::new().set("resolvedModule", resolved_module_response(&resolved)).set_opt("trace", (!trace.is_empty()).then(|| strings(trace))).build())

@@ -1,3 +1,4 @@
+use std::sync::Arc;
 // Differential test against the Go resolver (tools/oracle/module). Generate the inputs with
 //   python3 tools/oracle/module/gen.py > target/scratch/module/scenarios.jsonl
 //   bin/tsrs-oracle-module < target/scratch/module/scenarios.jsonl > target/scratch/module/expected.jsonl
@@ -120,10 +121,10 @@ fn run(scenario: &Json) -> Vec<(String, String, String)> {
             }
         }
     }
-    let host: &'static Host = Box::leak(Box::new(Host {
+    let host = Arc::new(Host {
         fs: Box::new(vfstest::from_map(files, bool_of(get(scenario, "caseSensitive")))),
         cwd: str_of(get(scenario, "cwd")),
-    }));
+    });
     let o = get(scenario, "options").unwrap();
     let mut options = CompilerOptions {
         module: module_kind(num_of(get(o, "module"))),
@@ -158,7 +159,7 @@ fn run(scenario: &Json) -> Vec<(String, String, String)> {
         options.paths = Some(paths);
     }
     let options = P::new(options);
-    let resolver = new_resolver(ResolverOptions::new(host, options));
+    let resolver = new_resolver(ResolverOptions::new(Arc::clone(&host) as Arc<dyn ResolutionHost>, options));
     let expected_results = match get(scenario, "expected").and_then(|e| get(e, "results")) {
         Some(Json::Array(results)) => results.clone(),
         _ => Vec::new(),
@@ -226,7 +227,7 @@ fn run(scenario: &Json) -> Vec<(String, String, String)> {
         Some(Json::Array(items)) => items.iter().map(|i| str_of(Some(i))).collect(),
         _ => Vec::new(),
     };
-    let mut got_types = get_automatic_type_directive_names(&options, host);
+    let mut got_types = get_automatic_type_directive_names(&options, &*host);
     got_types.sort();
     if want_types != got_types {
         mismatches.push(("automaticTypes".to_string(), "automaticTypes".to_string(), format!("want {want_types:?}, got {got_types:?}")));

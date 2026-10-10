@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use tsrs_vfs::vfstest;
 use tsrs_vfs::FS;
 
@@ -41,8 +42,8 @@ fn test_word_indices() {
     }
 }
 
-fn leak_fs(fs: impl FS + 'static) -> &'static dyn FS {
-    Box::leak(Box::new(fs))
+fn owned_fs(fs: impl FS + 'static) -> Arc<dyn FS> {
+    Arc::new(fs)
 }
 
 // util_test.go:99
@@ -50,7 +51,7 @@ fn leak_fs(fs: impl FS + 'static) -> &'static dyn FS {
 // follows symlinks for files outside the package directory (e.g. node_modules entries).
 #[test]
 fn test_get_package_realpath_funcs_follows_node_modules_symlinks() {
-    let fs = leak_fs(vfstest::from_map(
+    let fs = owned_fs(vfstest::from_map(
         [
             ("/symlink-bin/pkg", vfstest::symlink("/real/bin/pkg")),
             ("/real/bin/pkg/index.d.ts", "export declare const a: number;".into()),
@@ -61,7 +62,7 @@ fn test_get_package_realpath_funcs_follows_node_modules_symlinks() {
         true,
     ));
 
-    let (to_realpath, _) = get_package_realpath_funcs(fs, "/symlink-bin/pkg");
+    let (to_realpath, _) = get_package_realpath_funcs(Arc::clone(&fs), "/symlink-bin/pkg");
 
     // Files inside the package should be converted via string replacement (fast path).
     assert_eq!(to_realpath("/symlink-bin/pkg/index.d.ts"), "/real/bin/pkg/index.d.ts", "package files should be converted via prefix replacement");
@@ -86,7 +87,7 @@ fn test_get_package_realpath_funcs_follows_node_modules_symlinks() {
 // util_test.go:153
 #[test]
 fn test_get_package_realpath_funcs_duplicate_cache_keys() {
-    let fs = leak_fs(vfstest::from_map(
+    let fs = owned_fs(vfstest::from_map(
         [
             ("/workspace/packages/app-a", vfstest::symlink("/store/app-a")),
             ("/workspace/packages/app-b", vfstest::symlink("/store/app-b")),
@@ -99,8 +100,8 @@ fn test_get_package_realpath_funcs_duplicate_cache_keys() {
         true,
     ));
 
-    let (to_realpath_a, _) = get_package_realpath_funcs(fs, "/workspace/packages/app-a");
-    let (to_realpath_b, _) = get_package_realpath_funcs(fs, "/workspace/packages/app-b");
+    let (to_realpath_a, _) = get_package_realpath_funcs(Arc::clone(&fs), "/workspace/packages/app-a");
+    let (to_realpath_b, _) = get_package_realpath_funcs(Arc::clone(&fs), "/workspace/packages/app-b");
 
     let resolved_a = to_realpath_a("/store/app-a/node_modules/shared-lib/index.d.ts");
     let resolved_b = to_realpath_b("/store/app-b/node_modules/shared-lib/index.d.ts");
@@ -115,7 +116,7 @@ fn test_get_package_realpath_funcs_duplicate_cache_keys() {
 // util_test.go:192
 #[test]
 fn test_get_package_realpath_funcs_non_symlinked_package_with_symlinked_deps() {
-    let fs = leak_fs(vfstest::from_map(
+    let fs = owned_fs(vfstest::from_map(
         [
             ("/real/my-pkg/index.d.ts", "export declare const a: number;".into()),
             ("/real/my-pkg/node_modules/dep", vfstest::symlink("/real/dep")),
@@ -124,7 +125,7 @@ fn test_get_package_realpath_funcs_non_symlinked_package_with_symlinked_deps() {
         true,
     ));
 
-    let (to_realpath, _) = get_package_realpath_funcs(fs, "/real/my-pkg");
+    let (to_realpath, _) = get_package_realpath_funcs(Arc::clone(&fs), "/real/my-pkg");
 
     // Files inside the (non-symlinked) package should be returned unchanged.
     assert_eq!(to_realpath("/real/my-pkg/index.d.ts"), "/real/my-pkg/index.d.ts");

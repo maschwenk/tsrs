@@ -141,7 +141,7 @@ enum programCheckerPool {
 pub struct Program {
     pub(crate) opts: ProgramConfig,
     host: Arc<dyn CompilerHost>,
-    resolution_host: &'static dyn ResolutionHost,
+    resolution_host: Arc<dyn ResolutionHost>,
     pub(crate) resolution_data: P<module::ResolutionData>,
     // Always set once the program is constructed (see `init_checker_pool`).
     checker_pool: OnceLock<programCheckerPool>,
@@ -154,8 +154,8 @@ pub struct Program {
     // the rest is shared by the programs ReuseProgram derives from this one, as Go's shallow struct copy shares it.
     pub(crate) files: &'static [P<SourceFile>],
     pub(crate) files_by_path: FxHashMap<Path, P<SourceFile>>,
-    processed: &'static processedFiles,
-    project_reference_file_mapper: &'static projectReferenceFileMapper,
+    processed: Arc<processedFiles>,
+    project_reference_file_mapper: Arc<projectReferenceFileMapper>,
     processing_diagnostics: Mutex<Vec<processingDiagnostic>>,
 
     uses_uri_style_node_core_modules: Tristate,
@@ -193,9 +193,10 @@ pub struct Program {
 impl std::ops::Deref for Program {
     type Target = processedFiles;
     fn deref(&self) -> &processedFiles {
-        self.processed
+        &self.processed
     }
 }
+
 
 impl Program {
     pub fn file_exists(&self, path: &str) -> bool {
@@ -226,7 +227,7 @@ impl Program {
     }
 
     fn new_resolver(&self) -> module::DefaultResolver {
-        self.resolution_data.get().new_resolver(self.project_reference_file_mapper.resolution_host(self.resolution_host))
+        self.resolution_data.get().new_resolver(self.project_reference_file_mapper.resolution_host(Arc::clone(&self.resolution_host)))
     }
 
     // GetRedirectTargets returns the list of file paths that redirect to the given path.
@@ -375,7 +376,7 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
     let single_threaded =
         tsrs_core::NO_THREADS || opts.single_threaded.default_if_unknown(opts.config.compiler_options().unwrap().single_threaded).is_true();
     let (mut processed, resolution_data, module_resolution_error) = process_all_program_files(&opts, single_threaded);
-    let project_reference_file_mapper: &'static projectReferenceFileMapper = processed.project_reference_file_mapper.take().unwrap();
+    let project_reference_file_mapper: Arc<projectReferenceFileMapper> = processed.project_reference_file_mapper.take().unwrap();
     let processing_diagnostics = std::mem::take(&mut processed.file_include_data.processing_diagnostics);
     let files = std::mem::take(&mut processed.files);
     let files_by_path = std::mem::take(&mut processed.files_by_path);
@@ -393,7 +394,7 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
         module_resolution_error,
         files,
         files_by_path,
-        processed: Box::leak(Box::new(processed)),
+        processed: Arc::new(processed),
         project_reference_file_mapper,
         processing_diagnostics: Mutex::new(processing_diagnostics),
         uses_uri_style_node_core_modules: Tristate::Unknown,
@@ -422,80 +423,16 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
     p
 }
 
-/// Frees a program made by `new_program` or `update_program` (language server; Go's GC). The caller guarantees that
-/// nothing uses it any more: no checker of its pool is held, and no snapshot or language service refers to it. What
-/// it shares with other versions (`processed`, the project reference file mapper) stays.
+/// Frees a program made by `new_program` or `update_program` (language server; Go's GC).
+/// Shared processed files, redirects and resolution hosts drop when their final Rust owner drops.
+/// The program and its AST/type graph still use the legacy lifetime boundary.
 ///
 /// # Safety
-/// `program` came from `new_program` / `update_program` and is not used afterwards.
+/// `program` came from `new_program` / `update_program` and is not used afterwards:
+/// no checker of its pool is held, and no snapshot or language service refers to it.
 pub unsafe fn free_program(program: &'static Program) {
-    let resolution_host: *const dyn ResolutionHost = program.resolution_host;
     // SAFETY: both functions leak the program from a `Box`, and nothing uses it afterwards (this function's contract).
     drop(unsafe { Box::from_raw(std::ptr::from_ref::<Program>(program).cast_mut()) });
-    // Per program (`resolution_host_for`); it keeps the compiler host alive.
-    // SAFETY: `resolution_host_for` leaked it from a `Box` for this program alone, which is gone.
-    drop(unsafe { Box::from_raw(resolution_host as *mut dyn ResolutionHost) });
-}
-
-/// Frees a program from `new_program` that never shared data with another version (it was not the source or the
-/// result of `update_program`), including its processed-file data and project reference file mapper, which
-/// `free_program` keeps because language-server program versions share them. Used for one-shot programs (the
-/// native API's transpileModule / transpileDeclaration).
-///
-/// # Safety
-/// As `free_program`, and additionally: no other program refers to `program`'s processed files or mapper.
-pub unsafe fn free_unshared_program(program: &'static Program) {
-    let shared = shared_program_data(program);
-    // SAFETY: this function's contract includes `free_program`'s.
-    unsafe { free_program(program) };
-    // SAFETY: the only program that shared this data was just freed (this function's contract).
-    unsafe { shared.free() };
-}
-
-/// The data program versions share (`processed`, the project reference file mapper, the file loader's
-/// resolution host and the mapper's dts-faking host), as an address pair that can be moved into a region's
-/// `on_free` hook.
-pub struct SharedProgramData {
-    processed: usize,
-    mapper: usize,
-}
-
-/// See `SharedProgramData`.
-pub fn shared_program_data(program: &'static Program) -> SharedProgramData {
-    SharedProgramData {
-        processed: std::ptr::from_ref::<processedFiles>(program.processed) as usize,
-        mapper: std::ptr::from_ref::<projectReferenceFileMapper>(program.project_reference_file_mapper) as usize,
-    }
-}
-
-impl SharedProgramData {
-    /// # Safety
-    /// Every program that shares this data has been freed, and nothing else refers to it.
-    pub unsafe fn free(self) {
-        // SAFETY: the file loader leaked the mapper from a `Box`, and nothing refers to it (this function's contract).
-        unsafe { free_project_reference_file_mapper(self.mapper as *mut projectReferenceFileMapper) };
-        // SAFETY: `new_program` leaked `processed` from a `Box`, and nothing refers to it (this function's contract).
-        drop(unsafe { Box::from_raw(self.processed as *mut processedFiles) });
-    }
-}
-
-/// Frees a leaked project reference file mapper with its loader and dts-faking resolution hosts.
-///
-/// # Safety
-/// `mapper` came from `Box::leak` in the file loader, and nothing refers to it or its hosts any more.
-pub(crate) unsafe fn free_project_reference_file_mapper(mapper: *mut projectReferenceFileMapper) {
-    // SAFETY: `mapper` is a live leaked `Box` (this function's contract).
-    let (dts_faking_host, loader_host) = unsafe { ((*mapper).dts_faking_host.get().copied(), (*mapper).loader_host) };
-    // SAFETY: it came from `Box::leak`, and nothing refers to it any more (this function's contract).
-    drop(unsafe { Box::from_raw(mapper) });
-    if let Some(h) = dts_faking_host {
-        // SAFETY: `new_project_reference_dts_faking_host` leaked it from a `Box` for this mapper, which is gone.
-        drop(unsafe { Box::from_raw(std::ptr::from_ref::<dyn ResolutionHost>(h) as *mut dyn ResolutionHost) });
-    }
-    if let Some(h) = loader_host {
-        // SAFETY: `resolution_host_for` leaked it from a `Box` for this mapper's loader, which is gone.
-        drop(unsafe { Box::from_raw(std::ptr::from_ref::<dyn ResolutionHost>(h) as *mut dyn ResolutionHost) });
-    }
 }
 
 impl Program {
@@ -590,8 +527,8 @@ impl Program {
             compare_paths_options: self.compare_paths_options.clone(),
             files: self.files,
             files_by_path: FxHashMap::default(),
-            processed: self.processed,
-            project_reference_file_mapper: self.project_reference_file_mapper,
+            processed: Arc::clone(&self.processed),
+            project_reference_file_mapper: Arc::clone(&self.project_reference_file_mapper),
             processing_diagnostics: Mutex::new(self.processing_diagnostics().clone()),
             uses_uri_style_node_core_modules: self.uses_uri_style_node_core_modules,
             common_source_directory: OnceLock::new(),
@@ -2563,7 +2500,7 @@ impl Program {
         }
         // `UpdateProgram` hands the cache to the next program version, which shares `processed`: in the language
         // server it lives in the region that owns `processed` (the full build's), not in this version's.
-        let _region = tsrs_core::arena::enter_owner(std::ptr::from_ref::<processedFiles>(self.processed) as usize);
+        let _region = tsrs_core::arena::enter_owner(Arc::as_ptr(&self.processed) as usize);
         *self.known_symlinks.get_or_init(|| {
             let resolver = self.new_resolver();
             let known_symlinks = symlinks::new_known_symlink(self.get_current_directory(), self.use_case_sensitive_file_names());
@@ -2996,5 +2933,54 @@ impl tsoptions::outputpaths::OutputPathsHost for Program {
 
     fn use_case_sensitive_file_names(&self) -> bool {
         Program::use_case_sensitive_file_names(self)
+    }
+}
+
+#[cfg(all(test, feature = "checker"))]
+mod ownership_tests {
+    use super::*;
+
+    fn options(text: &str) -> ProgramOptions {
+        let compiler_options = P::new(CompilerOptions { no_lib: Tristate::True, ..Default::default() });
+        let config = P::new(tsrs_tsoptions::new_parsed_command_line(compiler_options, vec!["/index.ts".into()], Vec::new(), Default::default()));
+        let host = crate::new_compiler_host("/", Arc::new(tsrs_vfs::vfstest::from_map([("/index.ts", text)], true)), "", None, None);
+        ProgramOptions::new(config, host)
+    }
+
+    #[test]
+    fn reused_program_keeps_shared_data_until_last_version_drops() {
+        let opts = options("export const value = 1;");
+        let old_host = Arc::downgrade(&opts.host);
+        let old = new_program(opts);
+        let processed = Arc::downgrade(&old.processed);
+        let mapper = Arc::downgrade(&old.project_reference_file_mapper);
+        let new_opts = options("export const value = 2;");
+        let (new, _, reused) = old.reuse_program(&Path::from("/index.ts"), new_opts.host, None, None);
+        assert!(reused);
+        let new = new.unwrap();
+        assert!(Arc::ptr_eq(&old.processed, &new.processed));
+        assert!(Arc::ptr_eq(&old.project_reference_file_mapper, &new.project_reference_file_mapper));
+
+        // SAFETY: no checker handle is held and all later accesses use the distinct new version.
+        unsafe { free_program(old) };
+        assert!(old_host.upgrade().is_none());
+        assert!(processed.upgrade().is_some());
+        assert!(mapper.upgrade().is_some());
+        assert_eq!(new.source_files().len(), 1);
+        assert!(new.get_source_file("/index.ts").is_some());
+        // SAFETY: nothing derived from this version is used after freeing it.
+        unsafe { free_program(new) };
+        assert!(processed.upgrade().is_none());
+        assert!(mapper.upgrade().is_none());
+    }
+
+    #[test]
+    fn failed_resolver_construction_releases_host() {
+        let mut opts = options("export {};");
+        let host = Arc::downgrade(&opts.host);
+        opts.create_module_resolver = Some(Arc::new(|_| panic!("resolver construction failed")));
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| new_program(opts)));
+        assert!(result.is_err());
+        assert!(host.upgrade().is_none());
     }
 }

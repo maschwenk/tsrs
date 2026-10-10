@@ -69,6 +69,12 @@ or clearing records. Link maps and rare value-symbol tails own their heap data a
 Lookup keys and graph edges still refer to legacy AST/symbol/type objects. Preserve Go's semantic IDs and
 creation order independently of storage slots.
 
+Program versions share processed-file containers and project-reference redirects through `Arc`. Resolvers own
+their resolution hosts; cached DTS-faking hosts share redirect data without retaining the mapper that caches
+them. Auto-import builders and alias resolvers retain their hosts and filesystems with strong Rust owners.
+This removes manual frees for these containers, but not the `Program` root, parsed-config pointers or graph
+edges inside them (`notes/rust-owned-program-data.md`).
+
 The following describes the **remaining legacy graph**, not a rule for new stores. Go objects that are referenced
 by pointer, live long, reference each other cyclically and
 are compared by identity — AST nodes, symbols, types, signatures, links, flow nodes,

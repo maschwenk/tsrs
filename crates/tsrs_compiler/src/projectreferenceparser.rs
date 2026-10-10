@@ -4,7 +4,7 @@ use tsrs_core::P;
 use tsrs_tsoptions::ParsedCommandLine;
 
 use crate::host::CompilerHost;
-use crate::projectreferencefilemapper::projectReferenceFileMapper;
+use crate::projectreferencefilemapper::projectReferenceRedirects;
 
 // Go's tasks are shared pointers (a deduplicated task appears in several subTasks lists); here they live in
 // `projectReferenceParser.tasks` and are referenced by index.
@@ -61,7 +61,7 @@ impl<'a> projectReferenceParser<'a> {
 
     // projectreferenceparser.go:48 (Go parses the tasks on a work group; here they are parsed in queue order on the
     // calling thread, which gives the same deduplication and mapper contents)
-    pub(crate) fn parse(&mut self, tasks: &mut [taskId], mapper: &mut projectReferenceFileMapper) {
+    pub(crate) fn parse(&mut self, tasks: &mut [taskId], mapper: &mut projectReferenceRedirects) {
         self.start(tasks);
         self.init_mapper(tasks, mapper);
     }
@@ -85,7 +85,7 @@ impl<'a> projectReferenceParser<'a> {
     }
 
     // projectreferenceparser.go:68
-    fn init_mapper(&self, tasks: &[taskId], mapper: &mut projectReferenceFileMapper) {
+    fn init_mapper(&self, tasks: &[taskId], mapper: &mut projectReferenceRedirects) {
         let total_references = self.tasks_by_file_name.len() + 1;
         mapper.config_to_project_reference = FxHashMap::with_capacity_and_hasher(total_references, Default::default());
         mapper.references_in_config_file = FxHashMap::with_capacity_and_hasher(total_references, Default::default());
@@ -96,7 +96,7 @@ impl<'a> projectReferenceParser<'a> {
     }
 
     // projectreferenceparser.go:78
-    fn init_mapper_worker(&self, tasks: &[taskId], seen: &mut FxHashSet<taskId>, mapper: &mut projectReferenceFileMapper) -> Vec<Path> {
+    fn init_mapper_worker(&self, tasks: &[taskId], seen: &mut FxHashSet<taskId>, mapper: &mut projectReferenceRedirects) -> Vec<Path> {
         if tasks.is_empty() {
             return Vec::new();
         }

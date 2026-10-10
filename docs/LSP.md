@@ -102,6 +102,11 @@ frees after an edit with **regions**: Oxc arena owners plus resource sidecars th
 | package.json cache entries of a program's resolution data (copied to its clones) | GC | the original cache's region when added while that region is the allocation target (the full build); otherwise the thread arena (`arena::enter_table_owner`) |
 | request-scoped results (lsproto values, strings) | GC | ordinary Rust ownership |
 
+The ownership migration now gives shared processed-file containers, project-reference redirect data and
+resolution hosts strong Rust owners. Auto-import hosts, module resolvers and wrapped filesystems also retain
+their dependencies without lifetime transmutation. Their AST/config/type edges, alias-resolver roots and the
+`Program` itself still depend on the region lifetime rules above (`notes/rust-owned-program-data.md`).
+
 Mechanism (`tsrs_core::arena`): `Region::enter` makes a region the thread's allocation target until the returned
 scope is dropped (scopes nest; `with_arena` reads one thread-local pointer, as before). A region is an `Arena` of its
 own. Fixed no-`Drop` data lives in its Oxc allocator; values needing destruction use sidecars paired with that

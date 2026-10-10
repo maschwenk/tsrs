@@ -26,7 +26,8 @@ safe typed indexed storage. This API uses Rust-owned vectors rather than Oxc all
 The existing region, scratch and `P<T>` APIs remain as a compatibility layer while call sites move toward explicit
 owners. They still select an Oxc owner. Generic, keyed and specialized checker link tables, the core node-builder
 and emit link stores, their map storage and value-symbol rare tails have moved to owned Rust storage
-(`notes/rust-owned-links.md`). ASTs, symbols, types and program/file lifetime boundaries have not.
+(`notes/rust-owned-links.md`). Shared processed-file and redirect containers and resolution hosts now have Rust
+owners (`notes/rust-owned-program-data.md`). ASTs, symbols, types and program/file roots have not migrated.
 
 ## Removed behavior
 
