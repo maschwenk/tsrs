@@ -155,6 +155,10 @@ is type-checked, CI runs on pull requests, and the workspace is at 0.11.0. The i
   2 MiB of RSS per checker.
 - A full unit-property index for relations to union targets: would skip at most 0.2% (big) / 0.1% (vscode) of failed
   constituent checks; the rest is inherent (notes/perf-checker-algorithms.md, "Row 1").
+- A per-checker Bloom filter in front of `merged_symbols` (notes/perf-merged-symbols-filter.md): 99% of the 32M
+  `get_merged_symbol` calls on vscode miss, but the filter saves 0.13-0.62% of single-threaded instructions on the
+  17 bench projects, and even a free "never merged" test would stay under 1% (about 0.8-0.9% on vscode and
+  t3code-server). Branch `probe/merged-symbols-filter-inline` has the code.
 
 - Zero-based handles on Linux (reserve 4-32 GiB so a dereference needs no base; #62, notes/mem-pointer-compression.md
   section 6 on that branch): removes 2.7 of the 7 points of extra x86 instructions, but wall and cycles move by 0.7-2%,

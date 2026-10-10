@@ -242,7 +242,7 @@ probe's own timer calls, so they are upper bounds; shares are of the run's Check
 | `get_named_members` incl. sorting (ba343defd, 6d557d0e3) | 2-4% of check (formbricks-web 99 ms, cal-diy 72, webpack 25, vscode 140); `sort_symbols` alone 1-2.5% | the member-order candidate below |
 | `is_type_reference_with_generic_arguments` (57a6a9a62) | 3.4M top-level calls and 5.0M steps on vscode; mostly the timer's cost | < 0.3% |
 | maybe-stack lookups (57a6a9a62) | ~1.5M per run, nearly all with <= 8 entries | negligible |
-| `get_merged_symbol` (728ae2e5f) | 32M calls on vscode, 12M on t3code-server, each an Fx lookup | not measured; a candidate for a later probe |
+| `get_merged_symbol` (728ae2e5f) | 32M calls on vscode, 12M on t3code-server, each an Fx lookup | measured later: a filter in front of the map saves at most 0.62% (notes/perf-merged-symbols-filter.md) |
 
 ## Every commit, classified
 
@@ -278,7 +278,7 @@ the probe above; "Ported and measured" below has the measured ones.
 | 6a71d31de | three FENNEL streaming passes for the checker partition | scheduling | history | tsrs: work stealing; locality assignment is `--checkerAssignment locality` (notes/perf-clustered-assignment.md). No. |
 | c3c9d329a | node and symbol ids from per-checker blocks | runtime/memory | same | In tsrs (#94, notes/perf-round3.md). |
 | e2c650f28 | instantiate members of generic instances on first use | checker | same (his new test) | In tsrs (lazy members, #64475 port, on by default). |
-| 728ae2e5f | merged-symbol table and 12 symbol link stores indexed by symbol id | checker (data structure) | same | tsrs keeps `merged_symbols` in an `FxHashMap` (32M lookups on vscode single-threaded). Not measured; Fx lookups are a few ns. Candidate for a later probe. |
+| 728ae2e5f | merged-symbol table and 12 symbol link stores indexed by symbol id | checker (data structure) | same | tsrs keeps `merged_symbols` in an `FxHashMap` (32M lookups on vscode single-threaded, 99% misses). Measured in notes/perf-merged-symbols-filter.md: a negative filter saves 0.13-0.62% of instructions; the whole miss path is under 1%. No. |
 | 7ff2c357d | GOGC=300 under a soft memory limit (applies on macOS too) | runtime | same | No collector in tsrs. |
 | d062dbeca | collector off until the program is bound, then 4x heap-in-use | runtime | same | No collector in tsrs. |
 | 9288c4aaf | MADV_HUGEPAGE for the Go heap (Linux) | runtime (Linux) | same | tsrs: THP for the arena on Linux (#89); the mimalloc heap deliberately not advised (notes/mem-no-thp.md). |
@@ -337,8 +337,9 @@ This is the "lazy formatting of error arguments" item of notes/perf-round2-follo
 **Not attempted (estimated under the bar):** `some_property_reduces_to_never` without the count map (7749d0760;
 needs resolved member tables, conflicts with lazy members; map part 0.5-1.9% on mikro-orm), the generic-arguments memo
 and inline maybe stack (57a6a9a62; < 0.3%), id-indexed link stores and merged symbols (6e48288d9, 728ae2e5f; Fx
-lookups; `get_merged_symbol` runs 32M times on vscode and is worth its own probe), template literal buffers, relater
-resets and the apparent-type fast paths (Go allocation and write-barrier costs).
+lookups; `get_merged_symbol` runs 32M times on vscode; its own probe, notes/perf-merged-symbols-filter.md, found
+under 1%), template literal buffers, relater resets and the apparent-type fast paths (Go allocation and write-barrier
+costs).
 
 ## Output-changing changes, for when the pin moves
 
