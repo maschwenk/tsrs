@@ -98,7 +98,7 @@ impl Checker {
         if origin.is_none() && includes.intersects(TypeFlags::Union) {
             let named_unions = self.add_named_unions(&[], types);
             let mut reduced_types: Vec<P<Type>> = Vec::new();
-            if named_unions.len() > 1 && self.program.source_files_complete() {
+            if (named_unions.len() > 1 || type_set.len() > 8) && self.program.source_files_complete() {
                 // tsrs-only: under a total order `contains_type` finds exactly the identical type, so one set of the
                 // named unions' constituents answers every constituent's question; the binary searches, one per
                 // named union per constituent, were most of the `compare_types` calls on the 38k-file codebase.
@@ -314,7 +314,7 @@ impl Checker {
                 || flags.intersects(TypeFlags::BigIntLiteral) && includes.intersects(TypeFlags::BigInt)
                 || flags.intersects(TypeFlags::UniqueESSymbol) && includes.intersects(TypeFlags::ESSymbol)
                 || reduce_void_undefined && flags.intersects(TypeFlags::Undefined) && includes.intersects(TypeFlags::Void)
-                || is_fresh_literal_type(t) && contains_type(self, &types, t.as_literal_type().regular_type().unwrap());
+                || is_fresh_literal_type(t) && contains_regular_literal_type(self, &types, i, t.as_literal_type().regular_type().unwrap());
             if remove {
                 types.remove(i);
             }
@@ -1271,6 +1271,31 @@ pub(crate) fn contains_type(c: &mut Checker, types: &[P<Type>], t: P<Type>) -> b
         return true;
     }
     tsrs_core::goslices::binary_search_func(types, &t, |&probe, &t| compare_types(c, Some(probe), Some(t))).1
+}
+
+/// `contains_type(types, regular)` for the regular type of the fresh literal `types[i]`. tsrs-only: the two differ
+/// only in their ids, so in the sorted list the regular type, when present, is a neighbor; the binary search runs
+/// only when neither neighbor is it. Same answers as `contains_type` (a neighbor that is the type is in the list).
+fn contains_regular_literal_type(c: &mut Checker, types: &[P<Type>], i: usize, regular: P<Type>) -> bool {
+    if (i > 0 && types[i - 1] == regular) || types.get(i + 1) == Some(&regular) {
+        return true;
+    }
+    contains_type(c, types, regular)
+}
+
+/// Whether every type of the sorted, unique `source` is in the sorted, unique `target`, under a total order
+/// (`Program::source_files_complete`). tsrs-only: `contains_type` for each source type binary-searches the target
+/// with `compare_types`; in sorted lists each source type can only be found after the previous one's position, so a
+/// forward scan by identity answers the same with no comparisons. Used when the scan is the cheaper of the two.
+pub(crate) fn is_sorted_subset(source: &[P<Type>], target: &[P<Type>]) -> bool {
+    let mut rest = target;
+    for &t in source {
+        match rest.iter().position(|&u| u == t) {
+            Some(k) => rest = &rest[k + 1..],
+            None => return false,
+        }
+    }
+    true
 }
 
 // checker.go:27091

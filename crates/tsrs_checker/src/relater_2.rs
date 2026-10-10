@@ -362,6 +362,12 @@ impl Checker {
     // relater.go:2867
     pub(crate) fn is_type_subset_of_union(&mut self, source: P<Type>, target: P<Type>) -> bool {
         if source.flags().intersects(TypeFlags::Union) {
+            let (n, m) = (source.types().len(), target.types().len());
+            // A scan touches each target type at most once; the searches cost about log2(m) comparisons per source
+            // type, each far more than an identity test.
+            if n * (usize::BITS - m.leading_zeros()) as usize * 8 >= m && self.program.source_files_complete() {
+                return crate::checker_13::is_sorted_subset(source.types(), target.types());
+            }
             for &t in source.types() {
                 if !contains_type(self, target.types(), t) {
                     return false;
