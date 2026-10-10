@@ -10,7 +10,7 @@ pnpm add -D @maschwenk/tsrs
 pnpm exec tsrs -p path/to/project              # like `tsc -p path/to/project` (emits)
 pnpm exec tsrs -p path/to/project --noEmit     # like `tsc --noEmit -p path/to/project`
 pnpm exec tsrs -p . --extendedDiagnostics      # counters and timings, like tsc
-pnpm exec tsrs --checkers 8                    # checker threads (default: one per core up to 8, then half the cores, 4-32; fewer, down to 4, for small projects; 4 per --build project); --singleThreaded = 1
+pnpm exec tsrs --checkers 8                    # checker threads (default: one per core up to 16, then half the cores, 4-32; fewer, down to 4, for small projects; 4 per --build project); --singleThreaded = 1
 pnpm exec tsrs --version
 pnpm exec tsrs --lsp -stdio                    # language server; editor setup: docs/LSP.md in the repository
 ```

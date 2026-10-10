@@ -1567,12 +1567,14 @@ const GO_DEFAULT_CHECKERS: i64 = 4;
 const MAX_DEFAULT_CHECKERS: i64 = 32;
 // A checker beyond Go's 4 needs at least this many type-checked files to be worth its creation and duplicated work.
 const MIN_CHECKED_FILES_PER_DEFAULT_CHECKER: i64 = 32;
-// Up to this many cores every core gets a checker: on the 8-vCPU README bench, 8 checkers instead of 4 cut vscode's wall
-// from 2.73 to 1.61 s, formbricks-web's from 1.41 to 0.96 and mikro-orm's from 2.16 to 1.26 for 8-28% more peak memory
-// (t3code-server alone is 6% slower, its Effect declarations being re-resolved by every checker;
-// notes/perf-default-checkers-small-machines.md). Above it, half the cores: the other half parse, and each checker's
-// memory and duplicated work grow with the program (notes/perf-checker-64.md).
-const SMALL_MACHINE_CHECKERS: i64 = 8;
+// Up to this many cores every core gets a checker. Parsing and checking are sequential phases, so a checker takes no
+// core from the parser; what it costs is memory and the library types it resolves again. On the 16-vCPU README bench,
+// 16 checkers instead of 8 cut vscode's wall from 1.38 to 0.85 s, supabase-studio's from 0.95 to 0.68 and t3code-server's
+// from 1.69 to 1.42 for 8-30% more peak memory (notes/perf-default-checkers-16.md); on the 8-vCPU bench, 8 instead of
+// 4 cut 14-42% (notes/perf-default-checkers-small-machines.md). Above it, half the cores: from 16 to 32 checkers the
+// app projects gain 6-23% wall (vscode 32%) for 24-34% more memory (notes/mem-round4.md section 3), and leaf freeing
+// stops at 16 (fileregions.rs `MAX_DEFAULT_CHECKERS`).
+const SMALL_MACHINE_CHECKERS: i64 = 16;
 
 static GO_DEFAULT_CHECKER_COUNT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
@@ -1585,7 +1587,7 @@ pub fn use_go_default_checker_count() {
 // tsrs-only: the checker count when neither --checkers nor --singleThreaded is given. Go always uses 4. Here: half the
 // available parallelism but every core up to SMALL_MACHINE_CHECKERS, at least Go's 4 and at most MAX_DEFAULT_CHECKERS,
 // and no more than one checker per MIN_CHECKED_FILES_PER_DEFAULT_CHECKER type-checked files, so small programs keep
-// Go's 4: 4 checkers on 4 cores, 8 on 8 and on 16, 9 on 18, 32 on 64 or more. Diagnostics do not depend on the count
+// Go's 4: 4 checkers on 4 cores, 8 on 8, 16 on 16 to 33, 32 on 64 or more. Diagnostics do not depend on the count
 // (except for the known file-order cases in README.md's capability table); the --extendedDiagnostics Types / Symbols /
 // Instantiations counters do (each checker counts what it creates), so they depend on the machine unless --checkers
 // is given.
@@ -1618,11 +1620,12 @@ fn default_checkers_for_parallelism(parallelism: i64) -> i64 {
 mod default_checker_tests {
     use super::default_checkers_for_parallelism;
 
-    /// The default is every core up to 8, half the cores above that, never below Go's 4 or above 32: a 9-16 core
-    /// machine keeps 8 (half its cores rounds below the small-machine count), 18 cores get 9, 64 or more get 32.
+    /// The default is every core up to 16, half the cores above that, never below Go's 4 or above 32: a 17-33 core
+    /// machine keeps 16 (half its cores rounds below the small-machine count), 34 cores get 17, 64 or more get 32.
     #[test]
-    fn every_core_up_to_eight_then_half_the_cores() {
-        let table = [(1, 4), (2, 4), (4, 4), (6, 6), (8, 8), (9, 8), (12, 8), (16, 8), (18, 9), (32, 16), (64, 32), (128, 32)];
+    fn every_core_up_to_sixteen_then_half_the_cores() {
+        let table =
+            [(1, 4), (2, 4), (4, 4), (6, 6), (8, 8), (9, 9), (12, 12), (16, 16), (18, 16), (32, 16), (33, 16), (34, 17), (48, 24), (64, 32), (128, 32)];
         for (cores, checkers) in table {
             assert_eq!(default_checkers_for_parallelism(cores), checkers, "{cores} cores");
         }
