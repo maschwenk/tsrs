@@ -65,6 +65,11 @@ is type-checked, CI runs on pull requests, and the workspace is at 0.11.0. The i
 
 ## Ideas, by expected value
 
+- **ThinLTO for the PGO instrumented build: measured** (notes/perf-pgo.md, 2026-10-10): recording build
+   186.4 -> 116.5 s (-37.5%) on 18-core macOS arm64, paired PGO comparison pipeline -18.5%; no consistent runtime
+   regression observed, identical test outcomes. Use a rustc flag in RUSTFLAGS; changing Cargo's profile changes
+   the symbols PGO matches. The final build uses fat LTO.
+
 0. **BOLT for the Linux release binaries: landed** (notes/perf-build-level.md): -2.7% / -3.2% / -1.0% wall at 1 / 4 /
    8 checkers on the 38k-file codebase, -3.4% to -4.0% on vscode, identical output and gates. `release.yml` and
    `.depot/workflows/bench.yml` both run `.github/scripts/bolt.sh`, so the bench measures what ships.

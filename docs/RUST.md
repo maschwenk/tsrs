@@ -146,6 +146,7 @@ In place:
 | Technique | Evidence here | Also in |
 | --- | --- | --- |
 | Fat LTO, one codegen unit, PGO for release binaries | `notes/perf-pgo.md`: -13.5% instructions with PGO; fat LTO alone about -2% | oxc, Rolldown, swc (fat); Ruff (fat, PGO); Turborepo, rust-analyzer (thin) |
+| ThinLTO for the PGO instrumented build, through RUSTFLAGS so Cargo's profile and symbol metadata stay identical to the final fat-LTO build | `notes/perf-pgo.md`, 2026-10-10: recording build -37.5%, paired PGO comparison pipeline -18.5%; matching metadata and test outcomes, no consistent runtime regression observed | Charlie Marsh's PGO training-build experiment |
 | BOLT on top of PGO for the Linux release binaries (`.github/scripts/bolt.sh`, gates run on the BOLT-optimized binaries) | `notes/perf-build-level.md`: -2.7% / -3.2% / -1.0% wall at 1 / 4 / 8 checkers on the 38k-file codebase, -3.4 to -4.0% on vscode; instruction-cache misses -20% | rustc (its Linux toolchain builds), CPython (`--enable-bolt`) |
 | mimalloc as the global allocator | `notes/perf-build-level.md`: mimalloc v3 beats mimalloc v2, jemalloc and glibc by 3-14% wall; `notes/perf-mimalloc-safe.md` | oxc, Rolldown, Turborepo, Bun |
 | Leak arenas, one per thread; exact frees of provably dead objects | PORTING.md "Memory model", `notes/mem-recycle.md` | oxc and Bun (arenas with no `Drop`) |
@@ -201,5 +202,4 @@ goal here (owner decision, 2026-10-05).
 
 Does not transfer: nightly-only flags (Bun's `-Zbuild-std`, `-Zlocation-detail=none`, `-Zshare-generics`; the release
 toolchain is stable), lifetime-carrying arenas such as bumpalo's `&'a T` (PORTING.md: no lifetime parameters), oxc's
-compile-time ban on `Drop` types in the arena (arena objects here own `Vec`s and maps on purpose), thin LTO (fat LTO
-already covers it).
+compile-time ban on `Drop` types in the arena (arena objects here own `Vec`s and maps on purpose).
