@@ -2,7 +2,6 @@ use std::fmt;
 
 use super::big;
 use super::jsnum::*;
-use crate::stringutil;
 
 impl Number {
     // https://tc39.es/ecma262/2024/multipage/ecmascript-data-types-and-values.html#sec-numeric-types-number-tostring
@@ -233,8 +232,8 @@ pub fn from_string(s: &str) -> Number {
         _ => {}
     }
 
-    for r in s.chars() {
-        if !is_number_rune(r) {
+    for b in s.bytes() {
+        if !is_number_byte(b) {
             return nan();
         }
     }
@@ -250,8 +249,7 @@ pub fn from_string(s: &str) -> Number {
         (s, _) = cut_prefix(s, "+");
     }
 
-    let first = s.chars().next().unwrap_or(char::REPLACEMENT_CHARACTER);
-    if !stringutil::is_digit(first) && first != '.' {
+    if !s.as_bytes().first().is_some_and(|b| b.is_ascii_digit() || *b == b'.') {
         return nan();
     }
 
@@ -433,6 +431,13 @@ pub(crate) fn parse_float_string(s: &str) -> f64 {
 }
 
 pub(crate) fn cut_any<'a>(s: &'a str, cutset: &str) -> (&'a str, &'a str, bool) {
+    if cutset == "eE" {
+        // An ASCII match is always a UTF-8 boundary and occupies one byte.
+        return match s.bytes().position(|b| matches!(b, b'e' | b'E')) {
+            Some(i) => (&s[..i], &s[i + 1..], true),
+            None => (s, "", false),
+        };
+    }
     if let Some(i) = s.find(|r: char| cutset.contains(r)) {
         let before = &s[..i];
         let after_and_found = &s[i..];
@@ -474,53 +479,33 @@ pub(crate) fn string_to_float64(s: &str) -> f64 {
 }
 
 pub(crate) fn is_all_digits(s: &str) -> bool {
-    for r in s.chars() {
-        if !stringutil::is_digit(r) {
-            return false;
-        }
-    }
-    true
+    s.bytes().all(|b| b.is_ascii_digit())
 }
 
 pub(crate) fn is_all_binary_digits(s: &str) -> bool {
-    for r in s.chars() {
-        if r != '0' && r != '1' {
-            return false;
-        }
-    }
-    true
+    s.bytes().all(|b| matches!(b, b'0' | b'1'))
 }
 
 pub(crate) fn is_all_octal_digits(s: &str) -> bool {
-    for r in s.chars() {
-        if !stringutil::is_octal_digit(r) {
-            return false;
-        }
-    }
-    true
+    s.bytes().all(|b| matches!(b, b'0'..=b'7'))
 }
 
 pub(crate) fn is_all_hex_digits(s: &str) -> bool {
-    for r in s.chars() {
-        if !stringutil::is_hex_digit(r) {
-            return false;
-        }
-    }
-    true
+    s.bytes().all(|b| b.is_ascii_hexdigit())
 }
 
-pub(crate) fn is_number_rune(r: char) -> bool {
-    if stringutil::is_digit(r) {
+pub(crate) fn is_number_byte(b: u8) -> bool {
+    if b.is_ascii_digit() {
         return true;
     }
 
-    if ('a'..='f').contains(&r) {
+    if (b'a'..=b'f').contains(&b) {
         return true;
     }
 
-    if ('A'..='F').contains(&r) {
+    if (b'A'..=b'F').contains(&b) {
         return true;
     }
 
-    matches!(r, '.' | '-' | '+' | 'x' | 'X' | 'o' | 'O')
+    matches!(b, b'.' | b'-' | b'+' | b'x' | b'X' | b'o' | b'O')
 }
