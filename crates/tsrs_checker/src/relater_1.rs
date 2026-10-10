@@ -1398,16 +1398,13 @@ impl Checker {
         // Only full lookups are worth recording (has_property_of_type does not instantiate).
         let mut found = found.filter(|_| !lazy && !self.lazy_has_prop);
         for &target_prop in properties.iter() {
+            // tsrs: the flag test first, the declaration-reading test only for a property that is looked up (both
+            // only skip it).
             // TODO: remove this when we support static private identifier fields and find other solutions to get privateNamesAndStaticFields test to pass
-            if is_static_private_identifier_property(target_prop) {
-                if let Some(found) = found.as_deref_mut() {
-                    found.push(None);
-                }
-                continue;
-            }
-            if require_optional_properties
+            if (require_optional_properties
                 || !target_prop.flags().intersects(SymbolFlags::Optional)
-                    && !target_prop.check_flags.get().intersects(CheckFlags::Partial)
+                    && !target_prop.check_flags.get().intersects(CheckFlags::Partial))
+                && !is_static_private_identifier_property(target_prop)
             {
                 let source_prop = if (lazy || self.lazy_has_prop) && !match_discriminant_properties {
                     // notes/mem-lazy.md L9/L10: only whether the source has the property matters below.
