@@ -357,6 +357,19 @@ impl Arena {
 
     #[inline]
     #[expect(clippy::mut_from_ref, reason = "a fresh block, as in alloc_with")]
+    pub(crate) fn alloc_slice_concat_copy<T: Copy>(&self, a: &[T], b: &[T]) -> &mut [T] {
+        let len = a.len() + b.len();
+        let p = self.alloc_layout(Layout::array::<T>(len).expect("arena slice layout")).cast::<T>();
+        // SAFETY: fresh memory for `a.len() + b.len()` items; `T: Copy`.
+        unsafe {
+            std::ptr::copy_nonoverlapping(a.as_ptr(), p.as_ptr(), a.len());
+            std::ptr::copy_nonoverlapping(b.as_ptr(), p.as_ptr().add(a.len()), b.len());
+            std::slice::from_raw_parts_mut(p.as_ptr(), len)
+        }
+    }
+
+    #[inline]
+    #[expect(clippy::mut_from_ref, reason = "a fresh block, as in alloc_with")]
     pub(crate) fn alloc_vec<T>(&self, items: Vec<T>) -> &mut [T] {
         let len = items.len();
         let p = self.alloc_layout(Layout::array::<T>(len).expect("arena slice layout")).cast::<T>();
