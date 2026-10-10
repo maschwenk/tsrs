@@ -933,8 +933,8 @@ impl ExistingNodeTree {
             let mut type_params: Vec<P<Type>> = Vec::new();
             if ast::is_function_like(node) {
                 let sig = c.get_signature_from_declaration(node);
-                params = sig.parameters.get();
-                type_params = sig.type_parameters.get().to_vec();
+                params = c.signature(sig).parameters.get();
+                type_params = c.signature(sig).type_parameters.get().to_vec();
             } else if ast::is_conditional_type_node(node) {
                 // !!! TODO: impossible in combination with the scope start check???
                 type_params = c.get_infer_type_parameters(node);

@@ -1266,13 +1266,13 @@ impl Checker {
                 if fn_.parameters().len() >= 2 && self.is_context_sensitive_function_or_object_literal_method(fn_) {
                     let contextual_signature = self.get_contextual_signature(fn_);
                     if let Some(contextual_signature) = contextual_signature {
-                        if contextual_signature.parameters.get().len() == 1 && signature_has_rest_parameter(contextual_signature) {
+                        if self.signature(contextual_signature).parameters.get().len() == 1 && signature_has_rest_parameter(self, contextual_signature) {
                             let mut mapper: Option<P<TypeMapper>> = None;
                             let context = self.get_inference_context(fn_);
                             if let Some(context) = context {
                                 mapper = context.non_fixing_mapper();
                             }
-                            let rest_param_type = self.get_type_of_symbol(contextual_signature.parameters.get()[0]);
+                            let rest_param_type = self.get_type_of_symbol(self.signature(contextual_signature).parameters.get()[0]);
                             let instantiated = self.instantiate_type(rest_param_type, mapper);
                             let rest_type = self.get_reduced_apparent_type(instantiated);
                             if rest_type.flags().intersects(TypeFlags::Union)

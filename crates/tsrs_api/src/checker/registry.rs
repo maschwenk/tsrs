@@ -7,14 +7,15 @@
 // handle produced by the old checker becomes a stale-handle client error instead of silently resolving
 // against a different checker.
 //
-// Raw pointers in here are only valid while the owning snapshot is retained. Core calls `release()`
+// Signature keys require the owning API checker to be acquired before record access. Legacy symbol/type
+// pointers are only valid while the owning snapshot is retained. Core calls `release()`
 // before dropping the last API reference of the snapshot; after that every lookup fails.
 
 use std::sync::Mutex;
 
 use rustc_hash::FxHashMap;
 use tsrs_ast::Symbol;
-use tsrs_checker::{Signature, Type};
+use tsrs_checker::{SignatureId, SignatureKey, Type};
 use tsrs_core::P;
 
 use super::host::{CheckerError, CheckerResult};
@@ -23,7 +24,7 @@ use super::host::{CheckerError, CheckerResult};
 struct ProjectRegistry {
     checker_id: u32,
     types: FxHashMap<u32, P<Type>>,
-    signatures: FxHashMap<u64, P<Signature>>,
+    signatures: FxHashMap<u64, SignatureKey>,
 }
 
 #[derive(Default)]
@@ -49,7 +50,7 @@ impl CheckerRegistry {
         CheckerRegistry::default()
     }
 
-    /// Drops every registered pointer. Must run before the snapshot's last API reference is released.
+    /// Drops every registered handle. Must run before the snapshot's last API reference is released.
     pub fn release(&self) {
         let mut st = self.lock();
         st.released = true;
@@ -164,9 +165,9 @@ impl CheckerRegistry {
     }
 
     /// Go `registerSignature`.
-    pub fn register_signature(&self, project: &str, checker_id: u32, sig: P<Signature>) -> CheckerResult<u64> {
+    pub fn register_signature(&self, project: &str, checker_id: u32, semantic_id: SignatureId, sig: SignatureKey) -> CheckerResult<u64> {
         assert!(!project.is_empty(), "registerSignature: empty project ID");
-        let id = sig.id().0 as u64;
+        let id = semantic_id.0 as u64;
         let mut st = self.lock();
         Self::check_live(&st)?;
         let reg = Self::project_for_checker(&mut st, project, checker_id);
@@ -180,7 +181,7 @@ impl CheckerRegistry {
     }
 
     /// Go `resolveSignatureHandle`.
-    pub fn resolve_signature(&self, project: &str, id: u64, checker_id: Option<u32>) -> CheckerResult<P<Signature>> {
+    pub fn resolve_signature(&self, project: &str, id: u64, checker_id: Option<u32>) -> CheckerResult<SignatureKey> {
         if id == 0 {
             return Err(CheckerError::client("empty signature handle"));
         }
@@ -199,6 +200,7 @@ impl CheckerRegistry {
     }
 
     /// Checker that produced the project's registered types/signatures (0 if none yet).
+    #[cfg(test)]
     pub fn project_checker_id(&self, project: &str) -> u32 {
         self.lock().projects.get(project).map_or(0, |r| r.checker_id)
     }

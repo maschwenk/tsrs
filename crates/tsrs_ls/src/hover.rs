@@ -2,7 +2,7 @@ use std::cell::{Cell, RefCell};
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_ast::{self as ast, CheckFlags, Kind, Node, NodeFlags, SemanticMeaning, SourceFile, Symbol, SymbolFlags};
-use tsrs_checker::{self as checker, Checker, ContextFlags, Flags, InternalFlags, Signature, SignatureFlags, SignatureKind, SymbolFormatFlags, Type, TypeFlags, TypeFormatFlags, VerbosityContext};
+use tsrs_checker::{self as checker, Checker, ContextFlags, Flags, InternalFlags, SignatureKey, SignatureFlags, SignatureKind, SymbolFormatFlags, Type, TypeFlags, TypeFormatFlags, VerbosityContext};
 use tsrs_core::context::Context;
 use tsrs_core::{NewLineKind, TextRange, P};
 use tsrs_lsproto as lsproto;
@@ -275,7 +275,7 @@ fn documentation_from_signature(
         return String::new();
     };
     let signature = c.get_resolved_signature_exported(node);
-    let Some(declaration) = signature.declaration() else {
+    let Some(declaration) = c.signature(signature).declaration() else {
         return String::new();
     };
     if ast::is_call_signature_declaration(declaration) || ast::is_construct_signature_declaration(declaration) {
@@ -542,14 +542,14 @@ impl QuickInfoWriter {
 
     // writeSignatureClassified writes a signature to dpw with proper classification.
     // hover.go:466
-    fn write_signature_classified(&mut self, c: &mut Checker, sig: P<Signature>, enclosing: Option<P<Node>>, mut flags: TypeFormatFlags) {
+    fn write_signature_classified(&mut self, c: &mut Checker, sig: SignatureKey, enclosing: Option<P<Node>>, mut flags: TypeFormatFlags) {
         flags |= TypeFormatFlags::MultilineObjectLiterals;
         if !self.vs_capability {
             let s = c.signature_to_string_ex(sig, enclosing, flags, Some(self.vc));
             self.dpw.write(&s);
             return;
         }
-        let is_constructor = sig.flags().intersects(SignatureFlags::Construct) && !flags.intersects(TypeFormatFlags::WriteCallStyleSignature);
+        let is_constructor = c.signature(sig).flags().intersects(SignatureFlags::Construct) && !flags.intersects(TypeFormatFlags::WriteCallStyleSignature);
         let sig_output = if flags.intersects(TypeFormatFlags::WriteArrowStyleSignature) {
             if is_constructor {
                 Kind::ConstructorType
@@ -630,7 +630,7 @@ impl QuickInfoWriter {
     }
 
     // hover.go:565
-    fn write_signatures(&mut self, c: &mut Checker, signatures: &[P<Signature>], prefix: &str, parenthesized: bool, symbol: P<Symbol>) {
+    fn write_signatures(&mut self, c: &mut Checker, signatures: &[SignatureKey], prefix: &str, parenthesized: bool, symbol: P<Symbol>) {
         for (i, &sig) in signatures.iter().enumerate() {
             self.write_new_line();
             if i == 3 && signatures.len() >= 5 {
@@ -857,7 +857,7 @@ impl QuickInfoWriter {
             } else {
                 let signatures = get_signatures_at_location(c, symbol, SignatureKind::Call, node);
                 if signatures.len() == 1 {
-                    if let Some(d) = signatures[0].declaration() {
+                    if let Some(d) = c.signature(signatures[0]).declaration() {
                         if !d.flags().intersects(NodeFlags::JSDoc) {
                             self.set_declaration(Some(d));
                         }
@@ -880,12 +880,12 @@ impl QuickInfoWriter {
                 let signatures = vec![c.get_signature_from_declaration_exported(parent)];
                 self.write_signatures(c, &signatures, "constructor ", false, symbol);
             } else {
-                let mut signatures: Vec<P<Signature>> = Vec::new();
+                let mut signatures: Vec<SignatureKey> = Vec::new();
                 if flags.intersects(SymbolFlags::Class) && get_call_or_new_expression(node).is_some() {
                     signatures = get_signatures_at_location(c, symbol, SignatureKind::Construct, node);
                 }
                 if signatures.len() == 1 {
-                    if let Some(d) = signatures[0].declaration() {
+                    if let Some(d) = c.signature(signatures[0]).declaration() {
                         if !d.flags().intersects(NodeFlags::JSDoc) {
                             self.set_declaration(Some(d));
                         }
@@ -1115,11 +1115,11 @@ fn get_symbol_at_location_for_quick_info(c: &mut Checker, node: P<Node>) -> Opti
 }
 
 // hover.go:985
-fn get_signatures_at_location(c: &mut Checker, symbol: P<Symbol>, kind: SignatureKind, node: P<Node>) -> Vec<P<Signature>> {
+fn get_signatures_at_location(c: &mut Checker, symbol: P<Symbol>, kind: SignatureKind, node: P<Node>) -> Vec<SignatureKey> {
     let t = c.get_type_of_symbol_exported(symbol);
     let t = c.remove_missing_or_undefined_type_exported(t);
     let signatures = c.get_signatures_of_type_exported(t, kind);
-    if signatures.len() > 1 || signatures.len() == 1 && !signatures[0].type_parameters().is_empty() {
+    if signatures.len() > 1 || signatures.len() == 1 && !c.signature(signatures[0]).type_parameters().is_empty() {
         if let Some(call_node) = get_call_or_new_expression(node) {
             // We have a call or new expression, return the resolved signature
             return vec![c.get_resolved_signature_exported(call_node)];

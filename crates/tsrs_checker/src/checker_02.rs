@@ -1139,12 +1139,12 @@ impl Checker {
         let parameter_name = node.as_type_predicate_node().parameter_name;
         if self.type_predicate(type_predicate).kind() != TypePredicateKind::This && self.type_predicate(type_predicate).kind() != TypePredicateKind::AssertsThis {
             if self.type_predicate(type_predicate).parameter_index() >= 0 {
-                if signature_has_rest_parameter(signature) && self.type_predicate(type_predicate).parameter_index() as usize == signature.parameters.get().len() - 1 {
+                if signature_has_rest_parameter(self, signature) && self.type_predicate(type_predicate).parameter_index() as usize == self.signature(signature).parameters.get().len() - 1 {
                     self.error(Some(parameter_name), &diagnostics::A_type_predicate_cannot_reference_a_rest_parameter, &[]);
                 } else {
                     if let Some(predicate_type) = self.type_predicate(type_predicate).type_() {
                         let mut diags: Vec<P<Diagnostic>> = Vec::new();
-                        let parameter_type = self.get_type_of_symbol(signature.parameters.get()[self.type_predicate(type_predicate).parameter_index() as usize]);
+                        let parameter_type = self.get_type_of_symbol(self.signature(signature).parameters.get()[self.type_predicate(type_predicate).parameter_index() as usize]);
                         if !self.check_type_assignable_to_ex(predicate_type, parameter_type, node.type_node(), None /*headMessage*/, &mut diags) {
                             self.add_diagnostic(ast::new_diagnostic_chain(diags[0], &diagnostics::A_type_predicate_s_type_must_be_assignable_to_its_parameter_s_type, &[]));
                         }
@@ -1838,7 +1838,7 @@ impl Checker {
                 let body_signature = self.get_signature_from_declaration(body_declaration);
                 for &signature in &signatures {
                     if !self.is_implementation_compatible_with_overload(body_signature, signature) {
-                        let error_node = signature.declaration.get();
+                        let error_node = self.signature(signature).declaration.get();
                         self.error(error_node, &diagnostics::This_overload_signature_is_not_compatible_with_its_implementation_signature, &[])
                             .add_related_info(create_diagnostic_for_node(Some(body_declaration), &diagnostics::The_implementation_signature_is_declared_here, &[]));
                         break;
@@ -1869,7 +1869,7 @@ impl Checker {
     }
 
     // checker.go:3744
-    pub(crate) fn is_implementation_compatible_with_overload(&mut self, implementation: P<Signature>, overload: P<Signature>) -> bool {
+    pub(crate) fn is_implementation_compatible_with_overload(&mut self, implementation: SignatureKey, overload: SignatureKey) -> bool {
         let erased_source = self.get_erased_signature(implementation);
         let erased_target = self.get_erased_signature(overload);
         // First see if the return types are compatible in either direction.

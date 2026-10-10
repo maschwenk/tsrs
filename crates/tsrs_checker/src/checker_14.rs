@@ -1237,7 +1237,7 @@ impl Checker {
             return None;
         }
         let mut this_type_for_error: Option<P<Type>> = None;
-        let mut candidates: Vec<P<Signature>> = Vec::new();
+        let mut candidates: Vec<SignatureKey> = Vec::new();
         for then_signature in then_signatures {
             let this_type = self.get_this_type_of_signature(then_signature);
             if this_type.is_some_and(|this_type| this_type != self.void_type && {
@@ -1282,14 +1282,14 @@ impl Checker {
     }
 
     // checker.go:29471
-    pub(crate) fn get_type_of_first_parameter_of_signature(&mut self, signature: P<Signature>) -> P<Type> {
+    pub(crate) fn get_type_of_first_parameter_of_signature(&mut self, signature: SignatureKey) -> P<Type> {
         let never_type = self.never_type;
         self.get_type_of_first_parameter_of_signature_with_fallback(signature, never_type)
     }
 
     // checker.go:29475
-    pub(crate) fn get_type_of_first_parameter_of_signature_with_fallback(&mut self, signature: P<Signature>, fallback_type: P<Type>) -> P<Type> {
-        if !signature.parameters.get().is_empty() {
+    pub(crate) fn get_type_of_first_parameter_of_signature_with_fallback(&mut self, signature: SignatureKey, fallback_type: P<Type>) -> P<Type> {
+        if !self.signature(signature).parameters.get().is_empty() {
             return self.get_type_at_position(signature, 0);
         }
         fallback_type
@@ -2074,7 +2074,7 @@ impl Checker {
     }
 
     // checker.go:30200
-    pub(crate) fn get_contextual_signature_for_function_like_declaration(&mut self, node: P<Node>) -> Option<P<Signature>> {
+    pub(crate) fn get_contextual_signature_for_function_like_declaration(&mut self, node: P<Node>) -> Option<SignatureKey> {
         // Only function expressions, arrow functions, and object literal methods are contextually typed.
         if is_function_expression_or_arrow_function(node) || is_object_literal_method(node) {
             return self.get_contextual_signature(node);
@@ -2163,9 +2163,9 @@ impl Checker {
         if is_jsx_opening_like_element(call_target) && arg_index == 0 {
             return self.get_effective_first_argument_for_jsx_signature(signature, call_target);
         }
-        let rest_index = signature.parameters.get().len() as i32 - 1;
-        if signature_has_rest_parameter(signature) && arg_index >= rest_index {
-            let rest_type = self.get_type_of_symbol(signature.parameters.get()[rest_index as usize]);
+        let rest_index = self.signature(signature).parameters.get().len() as i32 - 1;
+        if signature_has_rest_parameter(self, signature) && arg_index >= rest_index {
+            let rest_type = self.get_type_of_symbol(self.signature(signature).parameters.get()[rest_index as usize]);
             let index_type = self.get_number_literal_type(jsnum::Number((arg_index - rest_index) as f64));
             return Some(self.get_indexed_access_type_ex(rest_type, index_type, AccessFlags::Contextual, None, AliasArg::None));
         }

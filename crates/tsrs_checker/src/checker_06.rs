@@ -14,13 +14,13 @@ struct InstantiationExpressionState<'a> {
     non_applicable_type: Option<P<Type>>,
 }
 
-fn get_instantiated_signatures<'a>(c: &mut Checker, st: &InstantiationExpressionState<'_>, signatures: &'a [P<Signature>]) -> Cow<'a, [P<Signature>]> {
+fn get_instantiated_signatures<'a>(c: &mut Checker, st: &InstantiationExpressionState<'_>, signatures: &'a [SignatureKey]) -> Cow<'a, [SignatureKey]> {
     let type_arguments = st.type_arguments;
-    let applicable_signatures = tsrs_core::filter(signatures, |sig| !sig.type_parameters.get().is_empty() && c.has_correct_type_argument_arity(*sig, type_arguments));
+    let applicable_signatures = tsrs_core::filter(signatures, |sig| !c.signature(*sig).type_parameters.get().is_empty() && c.has_correct_type_argument_arity(*sig, type_arguments));
     let mapped = tsrs_core::same_map(&applicable_signatures, |sig| {
         let type_argument_types = c.check_type_arguments(*sig, type_arguments, true /*reportErrors*/, None);
         if !type_argument_types.is_empty() {
-            return c.get_signature_instantiation(*sig, &type_argument_types, ast::is_in_js_file(sig.declaration.get()), &[]);
+            return c.get_signature_instantiation(*sig, &type_argument_types, ast::is_in_js_file(c.signature(*sig).declaration.get()), &[]);
         }
         *sig
     });
@@ -1670,7 +1670,7 @@ impl Checker {
         if self.is_context_sensitive_function_or_object_literal_method(fn_) {
             let contextual_signature = self.get_contextual_signature(fn_);
             if let Some(contextual_signature) = contextual_signature {
-                let this_parameter = contextual_signature.this_parameter();
+                let this_parameter = self.signature(contextual_signature).this_parameter();
                 if let Some(this_parameter) = this_parameter {
                     return Some(self.get_type_of_symbol(this_parameter));
                 }

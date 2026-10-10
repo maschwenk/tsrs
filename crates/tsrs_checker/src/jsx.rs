@@ -200,7 +200,7 @@ impl Checker {
     }
 
     // jsx.go:198
-    pub(crate) fn infer_jsx_type_arguments(&mut self, node: P<Node>, signature: P<Signature>, check_mode: CheckMode, context: P<InferenceContext>) -> Vec<P<Type>> {
+    pub(crate) fn infer_jsx_type_arguments(&mut self, node: P<Node>, signature: SignatureKey, check_mode: CheckMode, context: P<InferenceContext>) -> Vec<P<Type>> {
         let param_type = self.get_effective_first_argument_for_jsx_signature(signature, node).unwrap();
         let check_attr_type = self.check_expression_with_contextual_type(node.attributes().unwrap(), param_type, Some(context), check_mode);
         self.infer_types(&context.inferences.get(), check_attr_type, param_type, InferencePriority::None, false);
@@ -674,7 +674,7 @@ impl Checker {
     }
 
     // jsx.go:545
-    pub(crate) fn resolve_jsx_opening_like_element(&mut self, node: P<Node>, candidates_out_array: Option<&mut Vec<P<Signature>>>, check_mode: CheckMode) -> P<Signature> {
+    pub(crate) fn resolve_jsx_opening_like_element(&mut self, node: P<Node>, candidates_out_array: Option<&mut Vec<SignatureKey>>, check_mode: CheckMode) -> SignatureKey {
         let is_jsx_open_fragment = ast::is_jsx_opening_fragment(node);
         let expr_types;
         if !is_jsx_open_fragment {
@@ -731,7 +731,7 @@ impl Checker {
     // @param node a JSX opening-like element we are trying to figure its call signature
     // @param signature a candidate signature we are trying whether it is a call signature
     // @param relation a relationship to check parameter and argument type
-    pub(crate) fn check_applicable_signature_for_jsx_call_like_element(&mut self, node: P<Node>, signature: P<Signature>, relation: P<Relation>, check_mode: CheckMode, report_errors: bool, mut diagnostic_output: Option<&mut Vec<P<Diagnostic>>>) -> bool {
+    pub(crate) fn check_applicable_signature_for_jsx_call_like_element(&mut self, node: P<Node>, signature: SignatureKey, relation: P<Relation>, check_mode: CheckMode, report_errors: bool, mut diagnostic_output: Option<&mut Vec<P<Diagnostic>>>) -> bool {
         // Stateless function components can have maximum of three arguments: "props", "context", and "updater".
         // However "context" and "updater" are implicit and can't be specify by users. Only the first parameter, props,
         // can be specified by users through attributes property.
@@ -972,7 +972,7 @@ impl Checker {
     }
 
     // jsx.go:896
-    pub(crate) fn get_uninstantiated_jsx_signatures_of_type(&mut self, element_type: P<Type>, caller: P<Node>) -> Vec<P<Signature>> {
+    pub(crate) fn get_uninstantiated_jsx_signatures_of_type(&mut self, element_type: P<Type>, caller: P<Node>) -> Vec<SignatureKey> {
         if element_type.flags().intersects(TypeFlags::String) {
             return vec![self.any_signature];
         }
@@ -996,7 +996,7 @@ impl Checker {
         }
         if signatures.is_empty() && apparent_elem_type.flags().intersects(TypeFlags::Union) {
             // If each member has some combination of new/call signatures; make a union signature list for those
-            let signature_lists: Vec<Vec<P<Signature>>> =
+            let signature_lists: Vec<Vec<SignatureKey>> =
                 apparent_elem_type.types().iter().map(|&t| self.get_uninstantiated_jsx_signatures_of_type(t, caller)).collect();
             signatures = self.get_union_signatures(&signature_lists);
         }
@@ -1004,7 +1004,7 @@ impl Checker {
     }
 
     // jsx.go:925
-    pub(crate) fn get_effective_first_argument_for_jsx_signature(&mut self, signature: P<Signature>, node: P<Node>) -> Option<P<Type>> {
+    pub(crate) fn get_effective_first_argument_for_jsx_signature(&mut self, signature: SignatureKey, node: P<Node>) -> Option<P<Type>> {
         if ast::is_jsx_opening_fragment(node) || self.get_jsx_reference_kind(node) != JsxReferenceKind::Component {
             return self.get_jsx_props_type_from_call_signature(signature, node);
         }
@@ -1012,7 +1012,7 @@ impl Checker {
     }
 
     // jsx.go:932
-    pub(crate) fn get_jsx_props_type_from_call_signature(&mut self, sig: P<Signature>, context: P<Node>) -> Option<P<Type>> {
+    pub(crate) fn get_jsx_props_type_from_call_signature(&mut self, sig: SignatureKey, context: P<Node>) -> Option<P<Type>> {
         let unknown_type = self.unknown_type;
         let mut props_type = self.get_type_of_first_parameter_of_signature_with_fallback(sig, unknown_type);
         let jsx_namespace = self.get_jsx_namespace_at(Some(context));
@@ -1025,7 +1025,7 @@ impl Checker {
     }
 
     // jsx.go:942
-    pub(crate) fn get_jsx_props_type_from_class_type(&mut self, sig: P<Signature>, context: P<Node>) -> Option<P<Type>> {
+    pub(crate) fn get_jsx_props_type_from_class_type(&mut self, sig: SignatureKey, context: P<Node>) -> Option<P<Type>> {
         let ns = self.get_jsx_namespace_at(Some(context));
         let forced_lookup_location = self.get_jsx_element_properties_name(ns);
         let attributes_type: Option<P<Type>>;
@@ -1075,15 +1075,15 @@ impl Checker {
     }
 
     // jsx.go:989
-    pub(crate) fn get_jsx_props_type_for_signature_from_member(&mut self, sig: P<Signature>, forced_lookup_location: &str) -> Option<P<Type>> {
-        if let Some(composite) = sig.composite() {
+    pub(crate) fn get_jsx_props_type_for_signature_from_member(&mut self, sig: SignatureKey, forced_lookup_location: &str) -> Option<P<Type>> {
+        if let Some(composite) = self.signature(sig).composite() {
             // JSX Elements using the legacy `props`-field based lookup (eg, react class components) need to treat the `props` member as an input
             // instead of an output position when resolving the signature. We need to go back to the input signatures of the composite signature,
             // get the type of `props` on each return type individually, and then _intersect them_, rather than union them (as would normally occur
             // for a union signature). It's an unfortunate quirk of looking in the output of the signature for the type we want to use for the input.
             // The default behavior of `getTypeOfFirstParameterOfSignatureWithFallback` when no `props` member name is defined is much more sane.
             let mut results: Vec<P<Type>> = Vec::new();
-            for signature in composite.signatures.get() {
+            for signature in self.composite_signature(composite).signatures.get() {
                 let instance = self.get_return_type_of_signature(signature);
                 if is_type_any(Some(instance)) {
                     return Some(instance);
@@ -1278,7 +1278,7 @@ impl Checker {
     }
 
     // jsx.go:1171
-    pub(crate) fn create_signature_for_jsx_intrinsic(&mut self, node: P<Node>, result: P<Type>) -> P<Signature> {
+    pub(crate) fn create_signature_for_jsx_intrinsic(&mut self, node: P<Node>, result: P<Type>) -> SignatureKey {
         let mut element_type = self.error_type;
         if let Some(namespace) = self.get_jsx_namespace_at(Some(node)) {
             let exports = self.get_exports_of_symbol(namespace);

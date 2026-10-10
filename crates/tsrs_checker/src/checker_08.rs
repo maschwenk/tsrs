@@ -1999,7 +1999,7 @@ impl Checker {
                     if this_parameter.is_some() && Some(declaration) == this_parameter {
                         // Use the type from the *getter*
                         assert!(this_parameter.unwrap().type_node().is_none());
-                        return Some(self.get_type_of_symbol(getter_signature.this_parameter().unwrap()));
+                        return Some(self.get_type_of_symbol(self.signature(getter_signature).this_parameter().unwrap()));
                     }
                     return Some(self.get_return_type_of_signature(getter_signature));
                 }
@@ -2338,8 +2338,8 @@ impl Checker {
         let signatures = self.get_signatures_of_type(t, SignatureKind::Construct);
         if signatures.len() == 1 {
             let s = signatures[0];
-            if s.type_parameters.get().is_empty() && s.parameters.get().len() == 1 && signature_has_rest_parameter(s) {
-                let param_type = self.get_type_of_parameter(s.parameters.get()[0]);
+            if self.signature(s).type_parameters.get().is_empty() && self.signature(s).parameters.get().len() == 1 && signature_has_rest_parameter(self, s) {
+                let param_type = self.get_type_of_parameter(self.signature(s).parameters.get()[0]);
                 return is_type_any(Some(param_type)) || self.get_element_type_of_array_type(param_type) == Some(self.any_type);
             }
         }
@@ -2348,8 +2348,8 @@ impl Checker {
 }
 
 // checker.go:17362
-pub(crate) fn signature_has_rest_parameter(sig: P<Signature>) -> bool {
-    sig.flags().intersects(SignatureFlags::HasRestParameter)
+pub(crate) fn signature_has_rest_parameter(c: &Checker, sig: SignatureKey) -> bool {
+    c.signature(sig).flags().intersects(SignatureFlags::HasRestParameter)
 }
 
 impl Checker {

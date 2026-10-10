@@ -1903,7 +1903,7 @@ impl Checker {
 
     // checker.go:23200
     #[cfg_attr(feature = "site-counts", track_caller)]
-    pub(crate) fn instantiate_signatures(&mut self, signatures: &[P<Signature>], m: P<TypeMapper>) -> Vec<P<Signature>> {
+    pub(crate) fn instantiate_signatures(&mut self, signatures: &[SignatureKey], m: P<TypeMapper>) -> Vec<SignatureKey> {
         self.instantiate_list(signatures, Some(m), |c, s, m| c.instantiate_signature(s, m))
     }
 

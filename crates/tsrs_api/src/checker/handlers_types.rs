@@ -443,7 +443,7 @@ pub(crate) fn get_signature_from_declaration(host: &dyn CheckerHost, p: &Params)
 pub(crate) fn get_type_parameters_of_signature(host: &dyn CheckerHost, p: &Params) -> CheckerResult<Value> {
     let mut s = setup(host, p)?;
     let sig = s.resolve_signature(p.u64("objectId")?)?;
-    let types = sig.type_parameters();
+    let types = s.c().signature(sig).type_parameters();
     if types.is_empty() {
         return Ok(Value::Array(Vec::new())); // Go nil slice: json/v2 encodes []
     }
@@ -451,7 +451,7 @@ pub(crate) fn get_type_parameters_of_signature(host: &dyn CheckerHost, p: &Param
 }
 
 /// Go `resolveSymbolArrayPropertyOfSignature` / `resolveSymbolPropertyOfSignature` /
-/// `resolveSignaturePropertyOfSignature` (no checker).
+/// `resolveSignaturePropertyOfSignature`. Rust resolves stored keys through the owning checker.
 #[derive(Clone, Copy)]
 pub(crate) enum SignatureProperty {
     Parameters,
@@ -460,22 +460,22 @@ pub(crate) enum SignatureProperty {
 }
 
 pub(crate) fn signature_property(host: &dyn CheckerHost, p: &Params, property: SignatureProperty) -> CheckerResult<Value> {
-    let sd = SnapshotCtx::new(host, p.u64("snapshot")?, p.project()?)?;
-    let sig = sd.resolve_signature(p.u64("objectId")?, None)?;
+    let mut s = setup(host, p)?;
+    let sig = s.resolve_signature(p.u64("objectId")?)?;
     match property {
         SignatureProperty::Parameters => {
-            let params = sig.parameters();
+            let params = s.c().signature(sig).parameters();
             if params.is_empty() {
                 return Ok(Value::Array(Vec::new())); // Go nil slice: json/v2 encodes []
             }
-            Ok(Value::Array(params.iter().map(|sym| sd.symbol_response(*sym, &sd.project)).collect::<CheckerResult<_>>()?))
+            Ok(Value::Array(params.iter().map(|sym| s.symbol_response(*sym)).collect::<CheckerResult<_>>()?))
         }
-        SignatureProperty::ThisParameter => match sig.this_parameter() {
-            Some(sym) => sd.symbol_response(sym, &sd.project),
+        SignatureProperty::ThisParameter => match s.c().signature(sig).this_parameter() {
+            Some(sym) => s.symbol_response(sym),
             None => Ok(Value::Null),
         },
-        SignatureProperty::Target => match sig.target() {
-            Some(target) => sd.signature_response(sd.registered_checker_id(), target),
+        SignatureProperty::Target => match s.c().signature(sig).target() {
+            Some(target) => s.signature_response(target),
             None => Ok(Value::Null),
         },
     }
@@ -590,7 +590,7 @@ pub(crate) fn get_well_known_symbols(host: &dyn CheckerHost, p: &Params) -> Chec
 pub(crate) fn get_well_known_signatures(host: &dyn CheckerHost, p: &Params) -> CheckerResult<Value> {
     let mut s = setup(host, p)?;
     let unknown = s.c().get_unknown_signature();
-    let id = s.sd.scope.registry.register_signature(&s.sd.project, s.checker_id, unknown)?;
+    let id = s.sd.scope.registry.register_signature(&s.sd.project, s.checker_id, s.checker.signature(unknown).id(), unknown)?;
     let mut o = obj();
     o.num("unknown", id as f64);
     Ok(o.build())

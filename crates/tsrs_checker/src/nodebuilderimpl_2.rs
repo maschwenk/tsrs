@@ -27,23 +27,23 @@ impl Drop for Defer {
 
 impl NodeBuilderImpl {
     // nodebuilderimpl.go:1864
-    pub(crate) fn signature_to_signature_declaration_helper(&self, c: &mut Checker, signature: P<Signature>, kind: Kind, options: Option<P<SignatureToSignatureDeclarationOptions>>) -> P<Node> {
+    pub(crate) fn signature_to_signature_declaration_helper(&self, c: &mut Checker, signature: SignatureKey, kind: Kind, options: Option<P<SignatureToSignatureDeclarationOptions>>) -> P<Node> {
         let mut type_parameters: Vec<P<Node>> = vec![];
 
         let (expanded_params, mut cleanup) = self.enter_signature_scope(c, signature);
         add_approximate_length(self, 3);
         // Usually a signature contributes a few more characters than this, but 3 is the minimum
 
-        if self.ctx().flags.get().intersects(Flags::WriteTypeArgumentsOfSignature) && signature.target().is_some() && signature.mapper.get().is_some() && !signature.target().unwrap().type_parameters().is_empty() {
-            for parameter in signature.target().unwrap().type_parameters() {
-                let t = c.instantiate_type(parameter, signature.mapper.get());
+        if self.ctx().flags.get().intersects(Flags::WriteTypeArgumentsOfSignature) && c.signature(signature).target().is_some() && c.signature(signature).mapper.get().is_some() && !c.signature(c.signature(signature).target().unwrap()).type_parameters().is_empty() {
+            for parameter in c.signature(c.signature(signature).target().unwrap()).type_parameters() {
+                let t = c.instantiate_type(parameter, c.signature(signature).mapper.get());
                 // Go appends a possibly-nil node; a nil element cannot be represented in a Rust node list.
                 if let Some(n) = self.type_to_type_node(c, Some(t)) {
                     type_parameters.push(n);
                 }
             }
         } else {
-            for parameter in signature.type_parameters() {
+            for parameter in c.signature(signature).type_parameters() {
                 type_parameters.push(self.type_parameter_to_declaration(c, parameter));
             }
         }
@@ -53,7 +53,7 @@ impl NodeBuilderImpl {
         // If the expanded parameter list had a variadic in a non-trailing position, don't expand it
         let last_expanded_param = expanded_params.last().copied();
         let has_non_trailing_rest = expanded_params.iter().any(|&p| Some(p) != last_expanded_param && p.check_flags.get().intersects(CheckFlags::RestParameter));
-        let parameter_symbols: Vec<P<Symbol>> = if has_non_trailing_rest { signature.parameters().to_vec() } else { expanded_params };
+        let parameter_symbols: Vec<P<Symbol>> = if has_non_trailing_rest { c.signature(signature).parameters().to_vec() } else { expanded_params };
         let mut parameters: Vec<P<Node>> = parameter_symbols.iter().map(|&parameter| self.symbol_to_parameter_declaration(c, parameter, kind == Kind::Constructor)).collect();
         let this_parameter = if self.ctx().flags.get().intersects(Flags::OmitThisParameter) {
             None
@@ -71,7 +71,7 @@ impl NodeBuilderImpl {
         if let Some(options) = options {
             modifiers = options.modifiers.to_vec();
         }
-        if (kind == Kind::ConstructorType) && signature.flags().intersects(SignatureFlags::Abstract) {
+        if (kind == Kind::ConstructorType) && c.signature(signature).flags().intersects(SignatureFlags::Abstract) {
             let flags = ast::modifiers_to_flags(&modifiers);
             modifiers = create_modifiers_from_modifier_flags(flags | ModifierFlags::Abstract, |k| self.f.new_modifier(k));
         }
@@ -189,7 +189,7 @@ fn get_uniq_associated_names_from_tuple_type(c: &mut Checker, t: P<Type>, rest_s
 }
 
 // Go's `expandSignatureParametersWithTupleMembers` closure in getExpandedParameters.
-fn expand_signature_parameters_with_tuple_members(c: &mut Checker, sig: P<Signature>, rest_type: P<Type>, rest_index: usize, rest_symbol: P<Symbol>) -> Vec<P<Symbol>> {
+fn expand_signature_parameters_with_tuple_members(c: &mut Checker, sig: SignatureKey, rest_type: P<Type>, rest_index: usize, rest_symbol: P<Symbol>) -> Vec<P<Symbol>> {
     let element_types = c.get_type_arguments(rest_type);
     let associated_names = get_uniq_associated_names_from_tuple_type(c, rest_type, rest_symbol);
     let rest_params: Vec<P<Symbol>> = element_types
@@ -224,17 +224,17 @@ fn expand_signature_parameters_with_tuple_members(c: &mut Checker, sig: P<Signat
             symbol
         })
         .collect();
-    let mut result = sig.parameters()[0..rest_index].to_vec();
+    let mut result = c.signature(sig).parameters()[0..rest_index].to_vec();
     result.extend(rest_params);
     result
 }
 
 impl Checker {
     // nodebuilderimpl.go:1984
-    pub(crate) fn get_expanded_parameters(&mut self, sig: P<Signature>, skip_union_expanding: bool) -> Vec<Vec<P<Symbol>>> {
-        if signature_has_rest_parameter(sig) {
-            let rest_index = sig.parameters().len() - 1;
-            let rest_symbol = sig.parameters()[rest_index];
+    pub(crate) fn get_expanded_parameters(&mut self, sig: SignatureKey, skip_union_expanding: bool) -> Vec<Vec<P<Symbol>>> {
+        if signature_has_rest_parameter(self, sig) {
+            let rest_index = self.signature(sig).parameters().len() - 1;
+            let rest_symbol = self.signature(sig).parameters()[rest_index];
             let rest_type = self.get_type_of_symbol(rest_symbol);
             if is_tuple_type(rest_type) {
                 return vec![expand_signature_parameters_with_tuple_members(self, sig, rest_type, rest_index, rest_symbol)];
@@ -242,17 +242,17 @@ impl Checker {
                 return rest_type.as_union_type().types.get().iter().map(|&t| expand_signature_parameters_with_tuple_members(self, sig, t, rest_index, rest_symbol)).collect();
             }
         }
-        vec![sig.parameters().to_vec()]
+        vec![self.signature(sig).parameters().to_vec()]
     }
 }
 
 impl NodeBuilderImpl {
     // nodebuilderimpl.go:2072
-    pub(crate) fn try_get_this_parameter_declaration(&self, c: &mut Checker, signature: P<Signature>) -> Option<P<Node>> {
-        if let Some(this_parameter) = signature.this_parameter() {
+    pub(crate) fn try_get_this_parameter_declaration(&self, c: &mut Checker, signature: SignatureKey) -> Option<P<Node>> {
+        if let Some(this_parameter) = c.signature(signature).this_parameter() {
             return Some(self.symbol_to_parameter_declaration(c, this_parameter, false));
         }
-        if signature.declaration().is_some() && ast::is_in_js_file(signature.declaration()) {
+        if c.signature(signature).declaration().is_some() && ast::is_in_js_file(c.signature(signature).declaration()) {
             // !!! JSDoc Support
             // thisTag := getJSDocThisTag(signature.declaration)
             // if (thisTag && thisTag.typeExpression) {
@@ -272,7 +272,7 @@ impl NodeBuilderImpl {
      * Serializes the return type of the signature by first trying to use the syntactic printer if possible and falling back to the checker type if not.
      */
     // nodebuilderimpl.go:2095
-    pub(crate) fn serialize_return_type_for_signature(&self, c: &mut Checker, signature: P<Signature>, try_reuse: bool) -> Option<P<Node>> {
+    pub(crate) fn serialize_return_type_for_signature(&self, c: &mut Checker, signature: SignatureKey, try_reuse: bool) -> Option<P<Node>> {
         let suppress_any = self.ctx().flags.get().intersects(Flags::SuppressAnyReturnType);
         let mut restore_flags = self.save_restore_flags(c);
         if suppress_any {
@@ -281,7 +281,7 @@ impl NodeBuilderImpl {
         let mut return_type_node: Option<P<Node>> = None;
 
         let return_type: P<Type>;
-        let declaration = signature.declaration();
+        let declaration = c.signature(signature).declaration();
         if declaration.is_some() && !ast::node_is_synthesized(declaration.unwrap()) {
             let symbol = c.get_symbol_of_declaration(declaration.unwrap());
             let enclosing_symbol_type = self.ctx().enclosing_symbol_types.borrow().get(&ast::get_symbol_id(symbol.unwrap())).copied();
@@ -892,7 +892,7 @@ impl NodeBuilderImpl {
             let signatures = c.get_signatures_of_type(filtered_type, SignatureKind::Call);
             for signature in signatures .iter().copied() {
                 let method_declaration = self.signature_to_signature_declaration_helper(c, signature, Kind::MethodSignature, Some(P::new_scratch(SignatureToSignatureDeclarationOptions { name: property_name, question_token: optional_token, ..Default::default() })));
-                self.set_comment_range(c, method_declaration, signature.declaration().or(property_symbol.value_declaration()));
+                self.set_comment_range(c, method_declaration, c.signature(signature).declaration().or(property_symbol.value_declaration()));
                 type_elements.push(method_declaration);
             }
             if !signatures.is_empty() || optional_token.is_none() {
@@ -942,7 +942,7 @@ impl NodeBuilderImpl {
             type_elements.push(self.signature_to_signature_declaration_helper(c, signature, Kind::CallSignature, None));
         }
         for signature in structured_type.construct_signatures() {
-            if signature.flags().intersects(SignatureFlags::Abstract) {
+            if c.signature(signature).flags().intersects(SignatureFlags::Abstract) {
                 continue;
             }
             type_elements.push(self.signature_to_signature_declaration_helper(c, signature, Kind::ConstructSignature, None));
@@ -1026,7 +1026,7 @@ impl NodeBuilderImpl {
             }
         }
 
-        let abstract_signatures: Vec<P<Signature>> = ctor_sigs.iter().copied().filter(|signature| signature.flags().intersects(SignatureFlags::Abstract)).collect();
+        let abstract_signatures: Vec<SignatureKey> = ctor_sigs.iter().copied().filter(|signature| c.signature(*signature).flags().intersects(SignatureFlags::Abstract)).collect();
         if !abstract_signatures.is_empty() {
             let mut types: Vec<P<Type>> = abstract_signatures.iter().map(|&s| c.get_or_create_type_from_signature(s)).collect();
             // count the number of type elements excluding abstract constructors

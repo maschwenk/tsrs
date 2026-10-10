@@ -552,7 +552,7 @@ impl NodeBuilderImpl {
         if let Some(&existing) = c.object_types_without_abstract_construct_signatures.get(&t) {
             return existing;
         }
-        let construct_signatures: Vec<P<Signature>> = st.construct_signatures().iter().copied().filter(|signature| !signature.flags.get().intersects(SignatureFlags::Abstract)).collect();
+        let construct_signatures: Vec<SignatureKey> = st.construct_signatures().iter().copied().filter(|signature| !c.signature(*signature).flags.get().intersects(SignatureFlags::Abstract)).collect();
         if construct_signatures.len() == st.construct_signatures().len() {
             c.object_types_without_abstract_construct_signatures.insert(t, t);
             return t;
@@ -1897,7 +1897,7 @@ impl NodeBuilderImpl {
     }
 
     // nodebuilderimpl.go:1817
-    pub(crate) fn serialize_inferred_return_type_for_signature(&self, c: &mut Checker, signature: P<Signature>, return_type: P<Type>) -> Option<P<Node>> {
+    pub(crate) fn serialize_inferred_return_type_for_signature(&self, c: &mut Checker, signature: SignatureKey, return_type: P<Type>) -> Option<P<Node>> {
         let old_suppress_report_inference_fallback = self.ctx().suppress_report_inference_fallback.get();
         self.ctx().suppress_report_inference_fallback.set(true);
         let type_predicate = c.get_type_predicate_of_signature(signature);

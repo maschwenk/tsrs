@@ -107,6 +107,15 @@ pointer compression costs about +4.9% instructions and took back most of the che
 
 ## Measured and rejected (do not redo)
 
+- Treating typed signature/composite records as enough to recover the complete migration gates
+  (`notes/rust-typed-signature.md`, 2026-10-11). The changed constraint is the explicit complete ownership request;
+  the migration-branch checkpoint removes record pointers and uses qualified keys through the checker/API/LS.
+  Single-thread instructions change -0.26% / -0.15%, default RSS -0.42% / -3.05%, below the landing bar.
+  Cumulative single-thread instructions remain +16.28% / +14.74% versus Oxc and default RSS +117.92% /
+  +108.11% versus pre-Oxc. Record ownership is progress, not completion or a performance landing. The remaining
+  graph, source-storage and runtime work are recorded in that note. Revisit the complete landing only with recovered
+  instruction/RSS gates and ownership audits of the remaining boundaries.
+
 - Treating typed alias records as enough to recover the complete migration gates
   (`notes/rust-typed-alias.md`): single-thread instructions change -0.03% / -0.05%, default RSS
   -1.42% / -1.89%, below the landing bar. Cumulative single-thread instructions remain +15–17% versus

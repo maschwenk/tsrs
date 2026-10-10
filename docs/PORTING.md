@@ -135,6 +135,14 @@ only when a type is created. Deferred references may replace an alias's argument
 before recursive mutation. The API alias-symbol property acquires the persistent checker before resolving the
 key. Alias symbol/type referents remain legacy (`notes/rust-typed-alias.md`).
 
+Signature and composite-signature records live in checker-owned typed vectors. Member arrays, inference state,
+links, signature targets, caches and API registries retain `SignatureKey` / `CompositeSignatureKey`. Resolve through
+`Checker::signature` / `composite_signature`; retain keys or array snapshots across recursive mutation. The record
+vectors, rare tails and array buffers run ordinary Rust destructors. API property readers acquire the persistent
+checker and validate its identity before resolving a key. Public signature IDs still follow Go's sequential
+numbering independently of vector slots; type/symbol/AST edges inside records remain legacy
+(`notes/rust-typed-signature.md`).
+
 Build orchestrators and their hosts use `Arc`; the host's back-reference is weak. Returned build outcomes retain
 the actual orchestrator, including programs whose diagnostics they expose, through conversion to an API response.
 There is no manual orchestrator free or raw box reconstruction. Build tasks are Rust-owned records in a typed

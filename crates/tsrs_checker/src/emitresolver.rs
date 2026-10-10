@@ -535,7 +535,7 @@ impl EmitResolver {
                 if Some(signature) == c.get_signature_of_full_signature_type(node) {
                     return false;
                 }
-                let declaration = signature.declaration();
+                let declaration = c.signature(signature).declaration();
                 if declaration != Some(node) && !declaration.unwrap().flags().intersects(NodeFlags::JSDoc) {
                     return true;
                 }

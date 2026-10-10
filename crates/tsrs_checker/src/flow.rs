@@ -2697,7 +2697,7 @@ impl Checker {
     }
 
     // flow.go:2047
-    pub(crate) fn get_effects_signature(&mut self, node: P<Node>) -> Option<P<Signature>> {
+    pub(crate) fn get_effects_signature(&mut self, node: P<Node>) -> Option<SignatureKey> {
         let links = self.signature_links.get_key(node);
         let mut signature = self.signature_links.at(links).effects_signature.get();
         if signature.is_none() {
@@ -2726,7 +2726,7 @@ impl Checker {
                 apparent_type = Some(self.get_apparent_type(func_type));
             }
             let signatures = self.get_signatures_of_type(apparent_type.unwrap_or(self.unknown_type), SignatureKind::Call);
-            if signatures.len() == 1 && signatures[0].type_parameters.get().is_empty() {
+            if signatures.len() == 1 && self.signature(signatures[0]).type_parameters.get().is_empty() {
                 signature = Some(signatures[0]);
             } else if signatures.iter().any(|&s| self.has_type_predicate_or_never_return_type(s)) {
                 signature = Some(self.get_resolved_signature(node, None, CheckMode::Normal));
@@ -2887,11 +2887,11 @@ impl Checker {
     }
 
     // flow.go:2211
-    pub(crate) fn has_type_predicate_or_never_return_type(&mut self, sig: P<Signature>) -> bool {
+    pub(crate) fn has_type_predicate_or_never_return_type(&mut self, sig: SignatureKey) -> bool {
         if self.get_type_predicate_of_signature(sig).is_some() {
             return true;
         }
-        match sig.declaration.get() {
+        match self.signature(sig).declaration.get() {
             Some(declaration) => {
                 let return_type = self.get_return_type_from_annotation(declaration).unwrap_or(self.unknown_type);
                 return_type.flags().intersects(TypeFlags::Never)
@@ -2905,7 +2905,7 @@ impl Checker {
         let container = ast::get_this_container(node, false /*includeArrowFunctions*/, false /*includeClassComputedPropertyName*/);
         if ast::is_function_like(container) {
             let signature = self.get_signature_from_declaration(container);
-            if let Some(this_parameter) = signature.this_parameter() {
+            if let Some(this_parameter) = self.signature(signature).this_parameter() {
                 return self.get_explicit_type_of_symbol(this_parameter, None);
             }
         }

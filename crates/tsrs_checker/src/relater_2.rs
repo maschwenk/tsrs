@@ -2311,8 +2311,8 @@ impl Relater {
         let source_signatures = c.get_signatures_of_type(source, kind);
         let target_signatures = c.get_signatures_of_type(target, kind);
         if kind == SignatureKind::Construct && !source_signatures.is_empty() && !target_signatures.is_empty() {
-            let source_is_abstract = source_signatures[0].flags.get().intersects(SignatureFlags::Abstract);
-            let target_is_abstract = target_signatures[0].flags.get().intersects(SignatureFlags::Abstract);
+            let source_is_abstract = c.signature(source_signatures[0]).flags.get().intersects(SignatureFlags::Abstract);
+            let target_is_abstract = c.signature(target_signatures[0]).flags.get().intersects(SignatureFlags::Abstract);
             if source_is_abstract && !target_is_abstract {
                 // An abstract constructor type is not assignable to a non-abstract constructor type
                 // as it would otherwise be possible to new an abstract class. Note that the assignability
@@ -2376,8 +2376,8 @@ impl Relater {
     }
 
     // relater.go:4550
-    pub(crate) fn constructor_visibilities_are_compatible(&self, c: &mut Checker, source_signature: P<Signature>, target_signature: P<Signature>, report_errors: bool) -> bool {
-        let (Some(source_declaration), Some(target_declaration)) = (source_signature.declaration.get(), target_signature.declaration.get()) else {
+    pub(crate) fn constructor_visibilities_are_compatible(&self, c: &mut Checker, source_signature: SignatureKey, target_signature: SignatureKey, report_errors: bool) -> bool {
+        let (Some(source_declaration), Some(target_declaration)) = (c.signature(source_signature).declaration.get(), c.signature(target_signature).declaration.get()) else {
             return true;
         };
         let source_accessibility = source_declaration.modifier_flags() & ModifierFlags::NonPublicAccessibilityModifier;
@@ -2404,7 +2404,7 @@ impl Relater {
 
     // See signatureAssignableTo, compareSignaturesIdentical
     // relater.go:4575
-    pub(crate) fn signature_related_to(&self, c: &mut Checker, source: P<Signature>, target: P<Signature>, erase: bool, report_errors: bool, intersection_state: IntersectionState) -> Ternary {
+    pub(crate) fn signature_related_to(&self, c: &mut Checker, source: SignatureKey, target: SignatureKey, erase: bool, report_errors: bool, intersection_state: IntersectionState) -> Ternary {
         let mut check_mode = SignatureCheckMode::None;
         if self.rel() == c.subtype_relation {
             check_mode = SignatureCheckMode::StrictTopSignature;

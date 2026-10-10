@@ -166,7 +166,7 @@ impl Checker {
                     return IterationTypes { yield_type: Some(self.any_type), return_type: Some(self.any_type), next_type: Some(self.any_type) };
                 }
                 let all_signatures = self.get_signatures_of_type(method_type, SignatureKind::Call);
-                let mut valid_signatures: Vec<P<Signature>> = Vec::new();
+                let mut valid_signatures: Vec<SignatureKey> = Vec::new();
                 for sig in all_signatures .iter().copied() {
                     if self.get_min_argument_count(sig) == 0 {
                         valid_signatures.push(sig);
@@ -329,7 +329,7 @@ impl Checker {
         let mut method_parameter_types: Option<Vec<P<Type>>> = None;
         let mut method_return_types: Option<Vec<P<Type>>> = None;
         for signature in method_signatures {
-            if method_name != "throw" && !signature.parameters().is_empty() {
+            if method_name != "throw" && !self.signature(signature).parameters().is_empty() {
                 let ty = self.get_type_at_position(signature, 0);
                 method_parameter_types.get_or_insert_with(Vec::new).push(ty);
             }
@@ -1322,7 +1322,7 @@ impl Checker {
     pub(crate) fn get_return_type_of_single_non_generic_signature(&mut self, func_type: P<Type>, kind: SignatureKind) -> Option<P<Type>> {
         let signature = self.get_single_signature(func_type, kind, true /*allowMembers*/);
         if let Some(signature) = signature {
-            if signature.type_parameters().is_empty() {
+            if self.signature(signature).type_parameters().is_empty() {
                 return Some(self.get_return_type_of_signature(signature));
             }
         }
@@ -1594,7 +1594,7 @@ impl Checker {
         let Some(signature) = signature else {
             return t;
         };
-        if signature.type_parameters().is_empty() {
+        if self.signature(signature).type_parameters().is_empty() {
             return t;
         }
         let Some(contextual_type) = self.get_apparent_type_of_contextual_type(node, ContextFlags::NoConstraints) else {
@@ -1609,7 +1609,7 @@ impl Checker {
         let Some(contextual_signature) = contextual_signature else {
             return t;
         };
-        if !contextual_signature.type_parameters().is_empty() {
+        if !self.signature(contextual_signature).type_parameters().is_empty() {
             return t;
         }
         if check_mode.intersects(CheckMode::SkipGenericFunctions) {
@@ -1623,16 +1623,16 @@ impl Checker {
         // if the outer function returns a function type with a single non-generic call signature and
         // if some of the outer function type parameters have no inferences so far. If so, we can
         // potentially add inferred type parameters to the outer function return type.
-        let mut return_signature: Option<P<Signature>> = None;
+        let mut return_signature: Option<SignatureKey> = None;
         if let Some(context_signature) = context.signature.get() {
             let return_type = self.get_return_type_of_signature(context_signature);
             return_signature = self.get_single_call_or_construct_signature(return_type);
         }
         if let Some(return_signature) = return_signature {
-            if return_signature.type_parameters().is_empty() && !context.inferences.get().iter().all(|&info| has_inference_candidates(info)) {
+            if self.signature(return_signature).type_parameters().is_empty() && !context.inferences.get().iter().all(|&info| has_inference_candidates(info)) {
                 // Instantiate the signature with its own type parameters as type arguments, possibly
                 // renaming the type parameters to ensure they have unique names.
-                let unique_type_parameters = self.get_unique_type_parameters(context, &signature.type_parameters());
+                let unique_type_parameters = self.get_unique_type_parameters(context, &self.signature(signature).type_parameters());
                 let instantiated_signature = self.get_signature_instantiation_without_filling_in_type_arguments(signature, &unique_type_parameters);
                 // Infer from the parameters of the instantiated signature to the parameters of the
                 // contextual signature starting with an empty set of inference candidates.
@@ -2409,7 +2409,7 @@ impl Checker {
             return self.void_type;
         }
         if is_new_expression(node) {
-            let declaration = signature.declaration();
+            let declaration = self.signature(signature).declaration();
             if let Some(declaration) = declaration {
                 if !is_constructor_declaration(declaration) && !is_construct_signature_declaration(declaration) && !is_constructor_type_node(declaration) {
                     // When resolved signature is a call signature (and not a construct signature) the result type is any
@@ -2451,11 +2451,11 @@ impl Checker {
     }
 
     // checker.go:8538
-    pub(crate) fn check_deprecated_signature(&mut self, sig: P<Signature>, node: P<Node>) {
-        if sig.flags().intersects(SignatureFlags::IsSignatureCandidateForOverloadFailure) {
+    pub(crate) fn check_deprecated_signature(&mut self, sig: SignatureKey, node: P<Node>) {
+        if self.signature(sig).flags().intersects(SignatureFlags::IsSignatureCandidateForOverloadFailure) {
             return;
         }
-        if let Some(declaration) = sig.declaration() {
+        if let Some(declaration) = self.signature(sig).declaration() {
             if self.is_deprecated_declaration(declaration) {
                 let suggestion_node = self.get_deprecated_suggestion_node(node);
                 let name = try_get_property_access_or_identifier_to_string(get_invoked_expression(node));
@@ -2499,7 +2499,7 @@ impl Checker {
      * @return a signature of the call-like expression or undefined if one can't be found
      */
     // checker.go:8581
-    pub fn get_resolved_signature(&mut self, node: P<Node>, candidates_out_array: Option<&mut Vec<P<Signature>>>, check_mode: CheckMode) -> P<Signature> {
+    pub fn get_resolved_signature(&mut self, node: P<Node>, candidates_out_array: Option<&mut Vec<SignatureKey>>, check_mode: CheckMode) -> SignatureKey {
         let links = self.signature_links.get_key(node);
         // If getResolvedSignature has already been called, we will have cached the resolvedSignature.
         // However, it is possible that either candidatesOutArray was not passed in the first time,
@@ -2552,7 +2552,7 @@ impl Checker {
     }
 
     // checker.go:8627
-    pub(crate) fn resolve_signature(&mut self, node: P<Node>, candidates_out_array: Option<&mut Vec<P<Signature>>>, check_mode: CheckMode) -> P<Signature> {
+    pub(crate) fn resolve_signature(&mut self, node: P<Node>, candidates_out_array: Option<&mut Vec<SignatureKey>>, check_mode: CheckMode) -> SignatureKey {
         match node.kind() {
             Kind::CallExpression => self.resolve_call_expression(node, candidates_out_array, check_mode),
             Kind::NewExpression => self.resolve_new_expression(node, candidates_out_array, check_mode),
@@ -2567,7 +2567,7 @@ impl Checker {
     }
 
     // checker.go:8645
-    pub(crate) fn resolve_call_expression(&mut self, node: P<Node>, candidates_out_array: Option<&mut Vec<P<Signature>>>, check_mode: CheckMode) -> P<Signature> {
+    pub(crate) fn resolve_call_expression(&mut self, node: P<Node>, candidates_out_array: Option<&mut Vec<SignatureKey>>, check_mode: CheckMode) -> SignatureKey {
         let expression = node.expression().unwrap();
         if expression.kind() == Kind::SuperKeyword {
             let super_type = self.check_super_expression(expression);

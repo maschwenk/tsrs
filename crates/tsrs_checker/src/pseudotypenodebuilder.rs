@@ -188,9 +188,9 @@ impl NodeBuilderImpl {
                     c,
                     Some(d.signature),
                     &expanded_params,
-                    &signature.type_parameters.get(),
-                    Some(&signature.parameters.get()),
-                    signature.mapper.get(),
+                    &c.signature(signature).type_parameters.get(),
+                    Some(&c.signature(signature).parameters.get()),
+                    c.signature(signature).mapper.get(),
                 );
                 let mut type_params: Option<P<NodeList>> = None;
                 if !d.type_parameters.is_empty() {
@@ -253,9 +253,9 @@ impl NodeBuilderImpl {
                             c,
                             e.signature(),
                             &expanded_params,
-                            &signature.type_parameters.get(),
-                            Some(&signature.parameters.get()),
-                            signature.mapper.get(),
+                            &c.signature(signature).type_parameters.get(),
+                            Some(&c.signature(signature).parameters.get()),
+                            c.signature(signature).mapper.get(),
                         ));
                     }
                     let new_prop: P<Node> = match e.kind {
@@ -576,7 +576,7 @@ impl NodeBuilderImpl {
                     return false;
                 };
                 let pt = t.as_pseudo_type_single_call_signature();
-                if target_sig.type_parameters.get().len() != pt.type_parameters.len() {
+                if c.signature(target_sig).type_parameters.get().len() != pt.type_parameters.len() {
                     if report_errors {
                         self.ctx().tracker.get().unwrap().report_inference_fallback(c, pt.signature);
                     }
@@ -614,9 +614,9 @@ impl NodeBuilderImpl {
     }
 
     // pseudotypenodebuilder.go:585
-    pub(crate) fn pseudo_parameters_equivalent_to_parameters(&self, c: &mut Checker, params: &[P<PseudoParameter>], target_sig: P<Signature>, report_errors: bool, non_param_error_location: P<Node>) -> bool {
+    pub(crate) fn pseudo_parameters_equivalent_to_parameters(&self, c: &mut Checker, params: &[P<PseudoParameter>], target_sig: SignatureKey, report_errors: bool, non_param_error_location: P<Node>) -> bool {
         let mut params = params;
-        let this_parameter = target_sig.this_parameter();
+        let this_parameter = c.signature(target_sig).this_parameter();
         if this_parameter.is_some() && params.is_empty() {
             if report_errors {
                 self.ctx().tracker.get().unwrap().report_inference_fallback(c, non_param_error_location); // missing `this` param
@@ -638,7 +638,7 @@ impl NodeBuilderImpl {
             }
             return false;
         }
-        let target_params = target_sig.parameters.get();
+        let target_params = c.signature(target_sig).parameters.get();
         if target_params.len() != params.len() {
             if report_errors {
                 self.ctx().tracker.get().unwrap().report_inference_fallback(c, non_param_error_location);

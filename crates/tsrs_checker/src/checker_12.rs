@@ -375,8 +375,8 @@ impl Checker {
                         let t = self.get_type_of_symbol(symbol);
                         let signature = self.get_signatures_of_type(t, SignatureKind::Call).first().copied();
                         if let Some(signature) = signature {
-                            if !signature.type_parameters().is_empty() {
-                                outer_type_parameters.extend_from_slice(&signature.type_parameters());
+                            if !self.signature(signature).type_parameters().is_empty() {
+                                outer_type_parameters.extend_from_slice(&self.signature(signature).type_parameters());
                                 return outer_type_parameters;
                             }
                         }
@@ -2004,8 +2004,8 @@ impl Checker {
         &mut self,
         symbol: Option<P<Symbol>>,
         members: Option<P<SymbolTable>>,
-        call_signatures: &[P<Signature>],
-        construct_signatures: &[P<Signature>],
+        call_signatures: &[SignatureKey],
+        construct_signatures: &[SignatureKey],
         index_infos: &[IndexInfoKey],
     ) -> P<Type> {
         let t = self.new_object_type(ObjectFlags::Anonymous, symbol);
@@ -2079,8 +2079,8 @@ impl Checker {
         &mut self,
         t: P<Type>,
         members: Option<P<SymbolTable>>,
-        call_signatures: &[P<Signature>],
-        construct_signatures: &[P<Signature>],
+        call_signatures: &[SignatureKey],
+        construct_signatures: &[SignatureKey],
         index_infos: &[IndexInfoKey],
     ) {
         t.object_flags.set(t.object_flags() | ObjectFlags::MembersResolved);
@@ -2197,6 +2197,25 @@ impl Checker {
         self.new_type(TypeFlags::Substitution, ObjectFlags::None, data)
     }
 
+    /// Resolving a signature borrows its checker; a key cannot produce a static reference.
+    /// ```compile_fail
+    /// use tsrs_checker::{Checker, Signature, SignatureKey};
+    /// fn escape(c: &Checker, key: SignatureKey) -> &'static Signature {
+    ///     c.signature(key)
+    /// }
+    /// ```
+    pub fn signature(&self, key: SignatureKey) -> &Signature {
+        self.signatures.get(key).expect("signature belongs to another checker")
+    }
+
+    pub fn composite_signature(&self, key: CompositeSignatureKey) -> &CompositeSignature {
+        self.composite_signatures.get(key).expect("composite signature belongs to another checker")
+    }
+
+    pub(crate) fn new_composite_signature(&mut self, is_union: bool, signatures: &[SignatureKey]) -> CompositeSignatureKey {
+        self.composite_signatures.alloc(CompositeSignature { is_union: Cell::new(is_union), signatures: ArrayCell::new(signatures) })
+    }
+
     // checker.go:25717
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn new_signature(
@@ -2209,10 +2228,10 @@ impl Checker {
         resolved_return_type: Option<P<Type>>,
         resolved_type_predicate: Option<TypePredicateKey>,
         min_argument_count: i32,
-    ) -> P<Signature> {
+    ) -> SignatureKey {
         self.signature_count += 1;
         tsrs_core::sitecount::hit("signature", "");
-        let sig = P::new(Signature::default());
+        let sig = Signature::default();
         sig.id.set(SignatureId(self.signature_count));
         sig.flags.set(flags);
         sig.declaration.set(declaration);
@@ -2223,7 +2242,7 @@ impl Checker {
         sig.set_resolved_type_predicate(resolved_type_predicate, self.no_type_predicate);
         sig.min_argument_count.set(min_argument_count);
         sig.resolved_min_argument_count.set(-1);
-        sig
+        self.signatures.alloc(sig)
     }
 
     /// Resolve an index record with a borrow of its checker; keys from other stores are rejected.

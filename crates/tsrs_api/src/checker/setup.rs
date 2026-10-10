@@ -2,7 +2,7 @@
 // (`newSymbolResponse`, `newTypeResponse`, `newSignatureResponse`, `newIndexInfoResponse`).
 
 use tsrs_ast::{Node, SourceFile, Symbol, SymbolFlags};
-use tsrs_checker::{Checker, IndexInfoKey, ObjectFlags, Signature, Type, TypeFlags};
+use tsrs_checker::{Checker, IndexInfoKey, ObjectFlags, SignatureKey, Type, TypeFlags};
 use tsrs_compiler::{CheckerHandle, Program};
 use tsrs_core::context::{with_checker_lifetime, CheckerLifetime};
 use tsrs_core::json::Value;
@@ -44,23 +44,23 @@ impl<'h> SnapshotCtx<'h> {
     }
 
     /// Go `snapshotData.newSignatureResponse(projectID, sig)` for a signature produced by `checker_id`.
-    pub(crate) fn signature_response(&self, checker_id: u32, sig: P<Signature>) -> CheckerResult<Value> {
-        let id = self.scope.registry.register_signature(&self.project, checker_id, sig)?;
+    pub(crate) fn signature_response(&self, c: &Checker, checker_id: u32, sig: SignatureKey) -> CheckerResult<Value> {
+        let id = self.scope.registry.register_signature(&self.project, checker_id, c.signature(sig).id(), sig)?;
         let mut o = Obj::new();
         o.num("id", id as f64);
-        o.num("flags", sig.flags().bits() as f64);
-        if let Some(decl) = sig.declaration() {
+        o.num("flags", c.signature(sig).flags().bits() as f64);
+        if let Some(decl) = c.signature(sig).declaration() {
             o.str_nonempty("declaration", &self.host.node_handle(decl)?);
         }
-        o.ids("typeParameters", sig.type_parameters().iter().map(|t| t.id().0 as f64));
-        if !sig.parameters().is_empty() {
-            o.set("parameters", Value::Array(sig.parameters().iter().map(|p| compact_symbol_reference(self.host, *p)).collect::<CheckerResult<_>>()?));
+        o.ids("typeParameters", c.signature(sig).type_parameters().iter().map(|t| t.id().0 as f64));
+        if !c.signature(sig).parameters().is_empty() {
+            o.set("parameters", Value::Array(c.signature(sig).parameters().iter().map(|p| compact_symbol_reference(self.host, *p)).collect::<CheckerResult<_>>()?));
         }
-        if let Some(this) = sig.this_parameter() {
+        if let Some(this) = c.signature(sig).this_parameter() {
             o.set("thisParameter", compact_symbol_reference(self.host, this)?);
         }
-        if let Some(target) = sig.target() {
-            o.nonzero("target", target.id().0 as f64);
+        if let Some(target) = c.signature(sig).target() {
+            o.nonzero("target", c.signature(target).id().0 as f64);
         }
         Ok(o.build())
     }
@@ -69,13 +69,8 @@ impl<'h> SnapshotCtx<'h> {
         self.scope.registry.resolve_type(&self.project, id, checker_id)
     }
 
-    pub(crate) fn resolve_signature(&self, id: u64, checker_id: Option<u32>) -> CheckerResult<P<Signature>> {
+    pub(crate) fn resolve_signature(&self, id: u64, checker_id: Option<u32>) -> CheckerResult<SignatureKey> {
         self.scope.registry.resolve_signature(&self.project, id, checker_id)
-    }
-
-    /// The API checker that produced the project's registered handles (for responses built without one).
-    pub(crate) fn registered_checker_id(&self) -> u32 {
-        self.scope.registry.project_checker_id(&self.project)
     }
 
     pub(crate) fn program(&self) -> CheckerResult<std::sync::Arc<Program>> {
@@ -129,8 +124,8 @@ impl<'h> Setup<'h> {
         Ok(Value::Array(symbols.iter().map(|s| self.symbol_response(*s)).collect::<CheckerResult<_>>()?))
     }
 
-    pub(crate) fn signature_response(&self, sig: P<Signature>) -> CheckerResult<Value> {
-        self.sd.signature_response(self.checker_id, sig)
+    pub(crate) fn signature_response(&self, sig: SignatureKey) -> CheckerResult<Value> {
+        self.sd.signature_response(&self.checker, self.checker_id, sig)
     }
 
     fn register_type(&self, t: P<Type>) -> CheckerResult<u32> {
@@ -212,7 +207,7 @@ impl<'h> Setup<'h> {
         self.sd.resolve_type(id, Some(self.checker_id))
     }
 
-    pub(crate) fn resolve_signature(&self, id: u64) -> CheckerResult<P<Signature>> {
+    pub(crate) fn resolve_signature(&self, id: u64) -> CheckerResult<SignatureKey> {
         self.sd.resolve_signature(id, Some(self.checker_id))
     }
 

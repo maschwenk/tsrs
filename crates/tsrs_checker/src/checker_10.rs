@@ -20,11 +20,11 @@ pub(crate) fn get_base_type_node_of_class(t: P<Type>) -> Option<P<Node>> {
 
 impl Checker {
     // checker.go:19616
-    pub(crate) fn get_instantiated_constructors_for_type_arguments(&mut self, t: P<Type>, type_argument_nodes: &[P<Node>], location: P<Node>) -> Vec<P<Signature>> {
+    pub(crate) fn get_instantiated_constructors_for_type_arguments(&mut self, t: P<Type>, type_argument_nodes: &[P<Node>], location: P<Node>) -> Vec<SignatureKey> {
         let signatures = self.get_constructors_for_type_arguments(t, type_argument_nodes, location);
         let type_arguments: Vec<P<Type>> = type_argument_nodes.iter().map(|n| self.get_type_from_type_node(*n)).collect();
         same_map(&signatures, |sig| {
-            if !sig.type_parameters.get().is_empty() {
+            if !self.signature(*sig).type_parameters.get().is_empty() {
                 return self.get_signature_instantiation(*sig, &type_arguments, ast::is_in_js_file(location), &[]);
             }
             *sig
@@ -33,12 +33,12 @@ impl Checker {
     }
 
     // checker.go:19627
-    pub(crate) fn get_constructors_for_type_arguments(&mut self, t: P<Type>, type_argument_nodes: &[P<Node>], _location: P<Node>) -> Vec<P<Signature>> {
+    pub(crate) fn get_constructors_for_type_arguments(&mut self, t: P<Type>, type_argument_nodes: &[P<Node>], _location: P<Node>) -> Vec<SignatureKey> {
         let type_arg_count = type_argument_nodes.len() as i32;
         let signatures = self.get_signatures_of_type(t, SignatureKind::Construct);
         let mut result = Vec::new();
         for sig in signatures {
-            if type_arg_count >= self.get_min_type_argument_count(&sig.type_parameters.get()) && type_arg_count <= sig.type_parameters.get().len() as i32 {
+            if type_arg_count >= self.get_min_type_argument_count(&self.signature(sig).type_parameters.get()) && type_arg_count <= self.signature(sig).type_parameters.get().len() as i32 {
                 result.push(sig);
             }
         }
@@ -46,20 +46,20 @@ impl Checker {
     }
 
     // checker.go:19634
-    pub(crate) fn get_signature_instantiation(&mut self, sig: P<Signature>, type_arguments: &[P<Type>], is_java_script: bool, inferred_type_parameters: &[P<Type>]) -> P<Signature> {
-        let min_type_argument_count = self.get_min_type_argument_count(&sig.type_parameters.get());
-        let filled = self.fill_missing_type_arguments(type_arguments, &sig.type_parameters.get(), min_type_argument_count, is_java_script);
+    pub(crate) fn get_signature_instantiation(&mut self, sig: SignatureKey, type_arguments: &[P<Type>], is_java_script: bool, inferred_type_parameters: &[P<Type>]) -> SignatureKey {
+        let min_type_argument_count = self.get_min_type_argument_count(&self.signature(sig).type_parameters.get());
+        let filled = self.fill_missing_type_arguments(type_arguments, &self.signature(sig).type_parameters.get(), min_type_argument_count, is_java_script);
         let instantiated_signature = self.get_signature_instantiation_without_filling_in_type_arguments(sig, &filled);
         if !inferred_type_parameters.is_empty() {
             let return_type = self.get_return_type_of_signature(instantiated_signature);
             let return_signature = self.get_single_call_or_construct_signature(return_type);
             if let Some(return_signature) = return_signature {
                 let new_return_signature = self.clone_signature(return_signature);
-                new_return_signature.type_parameters.set(inferred_type_parameters);
+                self.signature(new_return_signature).type_parameters.set(inferred_type_parameters);
                 let new_return_type = self.get_or_create_type_from_signature(new_return_signature);
-                new_return_type.as_object_type().mapper.set(instantiated_signature.mapper.get());
+                new_return_type.as_object_type().mapper.set(self.signature(instantiated_signature).mapper.get());
                 let new_instantiated_signature = self.clone_signature(instantiated_signature);
-                new_instantiated_signature.resolved_return_type.set(Some(new_return_type));
+                self.signature(new_instantiated_signature).resolved_return_type.set(Some(new_return_type));
                 return new_instantiated_signature;
             }
         }
@@ -68,25 +68,25 @@ impl Checker {
 
     // checker.go:19651
     #[cfg_attr(feature = "site-counts", track_caller)]
-    pub(crate) fn clone_signature(&mut self, sig: P<Signature>) -> P<Signature> {
+    pub(crate) fn clone_signature(&mut self, sig: SignatureKey) -> SignatureKey {
         let result = self.new_signature(
-            sig.flags.get() & SignatureFlags::PropagatingFlags,
-            sig.declaration.get(),
-            &sig.type_parameters.get(),
-            sig.this_parameter(),
-            &sig.parameters.get(),
+            self.signature(sig).flags.get() & SignatureFlags::PropagatingFlags,
+            self.signature(sig).declaration.get(),
+            &self.signature(sig).type_parameters.get(),
+            self.signature(sig).this_parameter(),
+            &self.signature(sig).parameters.get(),
             None,
             None,
-            sig.min_argument_count.get(),
+            self.signature(sig).min_argument_count.get(),
         );
-        result.target.set(sig.target.get());
-        result.mapper.set(sig.mapper.get());
-        result.set_composite(sig.composite());
+        self.signature(result).target.set(self.signature(sig).target.get());
+        self.signature(result).mapper.set(self.signature(sig).mapper.get());
+        self.signature(result).set_composite(self.signature(sig).composite());
         result
     }
 
     // checker.go:19659
-    pub(crate) fn get_signature_instantiation_without_filling_in_type_arguments(&mut self, sig: P<Signature>, type_arguments: &[P<Type>]) -> P<Signature> {
+    pub(crate) fn get_signature_instantiation_without_filling_in_type_arguments(&mut self, sig: SignatureKey, type_arguments: &[P<Type>]) -> SignatureKey {
         let key = CachedSignatureKey { sig, key: get_type_list_key(type_arguments) };
         let mut instantiation = self.cached_signatures.get(&key);
         if instantiation.is_none() {
@@ -98,31 +98,31 @@ impl Checker {
     }
 
     // checker.go:19669
-    pub(crate) fn create_signature_instantiation(&mut self, sig: P<Signature>, type_arguments: &[P<Type>]) -> P<Signature> {
+    pub(crate) fn create_signature_instantiation(&mut self, sig: SignatureKey, type_arguments: &[P<Type>]) -> SignatureKey {
         let m = self.create_signature_type_mapper(sig, type_arguments);
         self.instantiate_signature_ex(sig, m, true /*eraseTypeParameters*/)
     }
 
     // checker.go:19673
-    pub(crate) fn create_signature_type_mapper(&mut self, sig: P<Signature>, type_arguments: &[P<Type>]) -> P<TypeMapper> {
+    pub(crate) fn create_signature_type_mapper(&mut self, sig: SignatureKey, type_arguments: &[P<Type>]) -> P<TypeMapper> {
         let sources = self.get_type_parameters_for_mapper(sig);
         new_type_mapper(&sources, type_arguments)
     }
 
     // checker.go:19677
-    pub(crate) fn get_type_parameters_for_mapper(&mut self, sig: P<Signature>) -> Vec<P<Type>> {
-        same_map(&sig.type_parameters.get(), |tp| self.instantiate_type(*tp, tp.mapper())).into_owned()
+    pub(crate) fn get_type_parameters_for_mapper(&mut self, sig: SignatureKey) -> Vec<P<Type>> {
+        same_map(&self.signature(sig).type_parameters.get(), |tp| self.instantiate_type(*tp, tp.mapper())).into_owned()
     }
 
     // If type has a single call signature and no other members, return that signature. Otherwise, return nil.
     // checker.go:19682
     #[cfg_attr(feature = "site-counts", track_caller)]
-    pub(crate) fn get_single_call_signature(&mut self, t: P<Type>) -> Option<P<Signature>> {
+    pub(crate) fn get_single_call_signature(&mut self, t: P<Type>) -> Option<SignatureKey> {
         self.get_single_signature(t, SignatureKind::Call, false /*allowMembers*/)
     }
 
     // checker.go:19686
-    pub(crate) fn get_single_call_or_construct_signature(&mut self, t: P<Type>) -> Option<P<Signature>> {
+    pub(crate) fn get_single_call_or_construct_signature(&mut self, t: P<Type>) -> Option<SignatureKey> {
         let call_sig = self.get_single_signature(t, SignatureKind::Call, false /*allowMembers*/);
         if call_sig.is_some() {
             return call_sig;
@@ -132,7 +132,7 @@ impl Checker {
 
     // checker.go:19694
     #[cfg_attr(feature = "site-counts", track_caller)]
-    pub(crate) fn get_single_signature(&mut self, t: P<Type>, kind: SignatureKind, allow_members: bool) -> Option<P<Signature>> {
+    pub(crate) fn get_single_signature(&mut self, t: P<Type>, kind: SignatureKind, allow_members: bool) -> Option<SignatureKey> {
         if t.flags().intersects(TypeFlags::Object) {
             if allow_members || !self.has_properties_of_structured_type(t) && self.index_infos_of_structured_type(t).is_empty() {
                 let call_signatures = self.signatures_of_structured_type(t, SignatureKind::Call);
@@ -149,21 +149,21 @@ impl Checker {
     }
 
     // checker.go:19709
-    pub(crate) fn get_or_create_type_from_signature(&mut self, sig: P<Signature>) -> P<Type> {
+    pub(crate) fn get_or_create_type_from_signature(&mut self, sig: SignatureKey) -> P<Type> {
         // There are two ways to declare a construct signature, one is by declaring a class constructor
         // using the constructor keyword, and the other is declaring a bare construct signature in an
         // object type literal or interface (using the new keyword). Each way of declaring a constructor
         // will result in a different declaration kind.
-        if sig.isolated_signature_type().is_none() {
+        if self.signature(sig).isolated_signature_type().is_none() {
             let mut kind = Kind::Unknown;
-            if let Some(declaration) = sig.declaration.get() {
+            if let Some(declaration) = self.signature(sig).declaration.get() {
                 kind = declaration.kind();
             }
             // If declaration is undefined, it is likely to be the signature of the default constructor.
             let is_constructor = kind == Kind::Unknown || kind == Kind::Constructor || kind == Kind::ConstructSignature || kind == Kind::ConstructorType;
 
             let mut symbol = None;
-            if let Some(declaration) = sig.declaration.get() {
+            if let Some(declaration) = self.signature(sig).declaration.get() {
                 symbol = declaration.symbol();
             }
             let t = self.new_object_type(ObjectFlags::Anonymous | ObjectFlags::SingleSignatureType, symbol);
@@ -172,20 +172,20 @@ impl Checker {
             } else {
                 self.set_structured_type_members(t, None, &[sig], &[], &[]);
             }
-            sig.set_isolated_signature_type(Some(t));
+            self.signature(sig).set_isolated_signature_type(Some(t));
         }
-        sig.isolated_signature_type().unwrap()
+        self.signature(sig).isolated_signature_type().unwrap()
     }
 
     // checker.go:19737
-    pub(crate) fn get_erased_signature(&mut self, signature: P<Signature>) -> P<Signature> {
-        if signature.type_parameters.get().is_empty() {
+    pub(crate) fn get_erased_signature(&mut self, signature: SignatureKey) -> SignatureKey {
+        if self.signature(signature).type_parameters.get().is_empty() {
             return signature;
         }
         let key = CachedSignatureKey { sig: signature, key: SignatureKeyErased };
         let mut erased = self.cached_signatures.get(&key);
         if erased.is_none() {
-            let m = new_array_to_single_type_mapper(&signature.type_parameters.get(), self.any_type);
+            let m = new_array_to_single_type_mapper(&self.signature(signature).type_parameters.get(), self.any_type);
             let created = self.instantiate_signature_ex(signature, m, true /*eraseTypeParameters*/);
             self.cached_signatures.insert(key, created);
             erased = Some(created);
@@ -194,8 +194,8 @@ impl Checker {
     }
 
     // checker.go:19750
-    pub(crate) fn get_canonical_signature(&mut self, signature: P<Signature>) -> P<Signature> {
-        if signature.type_parameters.get().is_empty() {
+    pub(crate) fn get_canonical_signature(&mut self, signature: SignatureKey) -> SignatureKey {
+        if self.signature(signature).type_parameters.get().is_empty() {
             return signature;
         }
         let key = CachedSignatureKey { sig: signature, key: SignatureKeyCanonical };
@@ -209,15 +209,15 @@ impl Checker {
     }
 
     // checker.go:19763
-    pub(crate) fn create_canonical_signature(&mut self, signature: P<Signature>) -> P<Signature> {
+    pub(crate) fn create_canonical_signature(&mut self, signature: SignatureKey) -> SignatureKey {
         // Create an instantiation of the signature where each unconstrained type parameter is replaced with
         // its original. When a generic class or interface is instantiated, each generic method in the class or
         // interface is instantiated with a fresh set of cloned type parameters (which we need to handle scenarios
         // where different generations of the same type parameter are in scope). This leads to a lot of new type
         // identities, and potentially a lot of work comparing those identities, so here we create an instantiation
         // that uses the original type identities for all unconstrained type parameters.
-        let mut type_arguments = Vec::with_capacity(signature.type_parameters.get().len());
-        for tp in signature.type_parameters.get() {
+        let mut type_arguments = Vec::with_capacity(self.signature(signature).type_parameters.get().len());
+        for tp in self.signature(signature).type_parameters.get() {
             if let Some(target) = tp.target() {
                 if self.get_constraint_of_type_parameter(target).is_none() {
                     type_arguments.push(target);
@@ -226,12 +226,12 @@ impl Checker {
             }
             type_arguments.push(tp);
         }
-        self.get_signature_instantiation(signature, &type_arguments, ast::is_in_js_file(signature.declaration.get()), &[] /*inferredTypeParameters*/)
+        self.get_signature_instantiation(signature, &type_arguments, ast::is_in_js_file(self.signature(signature).declaration.get()), &[] /*inferredTypeParameters*/)
     }
 
     // checker.go:19779
-    pub(crate) fn get_base_signature(&mut self, signature: P<Signature>) -> P<Signature> {
-        let type_parameters = signature.type_parameters.get();
+    pub(crate) fn get_base_signature(&mut self, signature: SignatureKey) -> SignatureKey {
+        let type_parameters = self.signature(signature).type_parameters.get();
         if type_parameters.is_empty() {
             return signature;
         }
@@ -259,7 +259,7 @@ impl Checker {
 
     // Instantiate a generic signature in the context of a non-generic signature (section 3.8.5 in TypeScript spec)
     // checker.go:19807
-    pub(crate) fn instantiate_signature_in_context_of(&mut self, signature: P<Signature>, contextual_signature: P<Signature>, inference_context: Option<P<InferenceContext>>, compare_types: Option<TypeComparer>) -> P<Signature> {
+    pub(crate) fn instantiate_signature_in_context_of(&mut self, signature: SignatureKey, contextual_signature: SignatureKey, inference_context: Option<P<InferenceContext>>, compare_types: Option<TypeComparer>) -> SignatureKey {
         let type_parameters = self.get_type_parameters_for_mapper(signature);
         let context = self.new_inference_context(&type_parameters, Some(signature), InferenceFlags::None, compare_types);
         // We clone the inferenceContext to avoid fixing. For example, when the source signature is <T>(x: T) => T[] and
@@ -285,7 +285,7 @@ impl Checker {
             });
         }
         let inferred = self.get_inferred_types(context);
-        self.get_signature_instantiation(signature, &inferred, ast::is_in_js_file(contextual_signature.declaration.get()), &[] /*inferredTypeParameters*/)
+        self.get_signature_instantiation(signature, &inferred, ast::is_in_js_file(self.signature(contextual_signature).declaration.get()), &[] /*inferredTypeParameters*/)
     }
 
     // checker.go:19839
@@ -643,7 +643,7 @@ impl Checker {
     }
 
     // checker.go:20147
-    pub(crate) fn get_signatures_of_symbol(&mut self, symbol: Option<P<Symbol>>) -> Vec<P<Signature>> {
+    pub(crate) fn get_signatures_of_symbol(&mut self, symbol: Option<P<Symbol>>) -> Vec<SignatureKey> {
         let Some(symbol) = symbol else {
             return Vec::new();
         };
@@ -676,7 +676,7 @@ impl Checker {
     }
 
     // checker.go:20177
-    pub(crate) fn get_signature_from_declaration(&mut self, declaration: P<Node>) -> P<Signature> {
+    pub(crate) fn get_signature_from_declaration(&mut self, declaration: P<Node>) -> SignatureKey {
         let links = self.signature_links.get_key(declaration);
         if let Some(resolved_signature) = self.signature_links.at(links).resolved_signature.get() {
             return resolved_signature;
@@ -768,7 +768,7 @@ impl Checker {
     // checker.go:20253
     pub(crate) fn get_type_parameters_from_declaration(&mut self, declaration: P<Node>) -> Vec<P<Type>> {
         if let Some(sig) = self.get_signature_of_full_signature_type(declaration) {
-            return sig.type_parameters().to_vec();
+            return self.signature(sig).type_parameters().to_vec();
         }
         let mut result = Vec::new();
         for &node in declaration.type_parameters() {
@@ -871,26 +871,26 @@ pub(crate) fn is_late_bindable_ast(node: P<Node>) -> bool {
 
 impl Checker {
     // checker.go:20342
-    pub fn get_return_type_of_signature(&mut self, sig: P<Signature>) -> P<Type> {
-        if let Some(resolved_return_type) = sig.resolved_return_type.get() {
+    pub fn get_return_type_of_signature(&mut self, sig: SignatureKey) -> P<Type> {
+        if let Some(resolved_return_type) = self.signature(sig).resolved_return_type.get() {
             return resolved_return_type;
         }
         if !self.push_type_resolution(sig.into(), TypeSystemPropertyName::ResolvedReturnType) {
             return self.error_type;
         }
         let mut t;
-        if let Some(target) = sig.target.get() {
+        if let Some(target) = self.signature(sig).target.get() {
             let target_return_type = self.get_return_type_of_signature(target);
-            t = self.instantiate_type(target_return_type, sig.mapper.get());
-        } else if let Some(composite) = sig.composite() {
-            let mut return_types = Vec::with_capacity(composite.signatures.get().len());
-            for s in composite.signatures.get() {
+            t = self.instantiate_type(target_return_type, self.signature(sig).mapper.get());
+        } else if let Some(composite) = self.signature(sig).composite() {
+            let mut return_types = Vec::with_capacity(self.composite_signature(composite).signatures.get().len());
+            for s in self.composite_signature(composite).signatures.get() {
                 return_types.push(self.get_return_type_of_signature(s));
             }
-            let combined = self.get_union_or_intersection_type(&return_types, composite.is_union.get(), UnionReduction::Subtype);
-            t = self.instantiate_type(combined, sig.mapper.get());
+            let combined = self.get_union_or_intersection_type(&return_types, self.composite_signature(composite).is_union.get(), UnionReduction::Subtype);
+            t = self.instantiate_type(combined, self.signature(sig).mapper.get());
         } else {
-            let declaration = sig.declaration.get().unwrap();
+            let declaration = self.signature(sig).declaration.get().unwrap();
             let annotated = self.get_return_type_from_annotation(declaration);
             t = match annotated {
                 Some(annotated) => annotated,
@@ -903,13 +903,13 @@ impl Checker {
                 }
             };
         }
-        if sig.flags.get().intersects(SignatureFlags::IsInnerCallChain) {
+        if self.signature(sig).flags.get().intersects(SignatureFlags::IsInnerCallChain) {
             t = self.add_optional_type_marker(t);
-        } else if sig.flags.get().intersects(SignatureFlags::IsOuterCallChain) {
+        } else if self.signature(sig).flags.get().intersects(SignatureFlags::IsOuterCallChain) {
             t = self.get_optional_type(t, false /*isProperty*/);
         }
         if !self.pop_type_resolution() {
-            if let Some(declaration) = sig.declaration.get() {
+            if let Some(declaration) = self.signature(sig).declaration.get() {
                 let type_node = declaration.type_node();
                 if let Some(type_node) = type_node {
                     self.error(Some(type_node), &diagnostics::Return_type_annotation_circularly_references_itself, &[]);
@@ -925,14 +925,14 @@ impl Checker {
             }
             t = self.any_type;
         }
-        if sig.resolved_return_type.get().is_none() {
-            sig.resolved_return_type.set(Some(t));
+        if self.signature(sig).resolved_return_type.get().is_none() {
+            self.signature(sig).resolved_return_type.set(Some(t));
         }
-        sig.resolved_return_type.get().unwrap()
+        self.signature(sig).resolved_return_type.get().unwrap()
     }
 
     // checker.go:20392
-    pub(crate) fn get_non_circular_return_type_of_signature(&mut self, sig: P<Signature>) -> P<Type> {
+    pub(crate) fn get_non_circular_return_type_of_signature(&mut self, sig: SignatureKey) -> P<Type> {
         if self.is_resolving_return_type_of_signature(sig) {
             return self.any_type;
         }
@@ -957,7 +957,7 @@ impl Checker {
     }
 
     // checker.go:20413
-    pub(crate) fn get_signature_of_full_signature_type(&mut self, node: P<Node>) -> Option<P<Signature>> {
+    pub(crate) fn get_signature_of_full_signature_type(&mut self, node: P<Node>) -> Option<SignatureKey> {
         if ast::is_in_js_file(node)
             && (ast::is_function_declaration(node) || ast::is_method_declaration(node) || ast::is_function_expression_or_arrow_function(node))
             && node.function_like_data().unwrap().full_signature().is_some()
@@ -1574,7 +1574,7 @@ impl Checker {
 
     // checker.go:20956
     #[cfg_attr(feature = "site-counts", track_caller)]
-    pub(crate) fn instantiate_signature(&mut self, sig: P<Signature>, m: Option<P<TypeMapper>>) -> P<Signature> {
+    pub(crate) fn instantiate_signature(&mut self, sig: SignatureKey, m: Option<P<TypeMapper>>) -> SignatureKey {
         let erase_type_parameters = m == Some(self.permissive_mapper);
         // Go passes m through unchanged; instantiateSignatureEx requires a mapper.
         self.instantiate_signature_ex(sig, m.unwrap(), erase_type_parameters /*eraseTypeParameters*/)
@@ -1582,15 +1582,15 @@ impl Checker {
 
     // checker.go:20960
     #[cfg_attr(feature = "site-counts", track_caller)]
-    pub(crate) fn instantiate_signature_ex(&mut self, sig: P<Signature>, m: P<TypeMapper>, erase_type_parameters: bool) -> P<Signature> {
+    pub(crate) fn instantiate_signature_ex(&mut self, sig: SignatureKey, m: P<TypeMapper>, erase_type_parameters: bool) -> SignatureKey {
         let mut m = m;
         let mut fresh_type_parameters: Vec<P<Type>> = Vec::new();
-        if !sig.type_parameters.get().is_empty() && !erase_type_parameters {
+        if !self.signature(sig).type_parameters.get().is_empty() && !erase_type_parameters {
             // First create a fresh set of type parameters, then include a mapping from the old to the
             // new type parameters in the mapper function. Finally store this mapper in the new type
             // parameters such that we can use it when instantiating constraints.
-            fresh_type_parameters = sig.type_parameters.get().iter().map(|tp| self.clone_type_parameter(*tp)).collect();
-            m = self.combine_type_mappers(Some(new_type_mapper(&sig.type_parameters.get(), &fresh_type_parameters)), m);
+            fresh_type_parameters = self.signature(sig).type_parameters.get().iter().map(|tp| self.clone_type_parameter(*tp)).collect();
+            m = self.combine_type_mappers(Some(new_type_mapper(&self.signature(sig).type_parameters.get(), &fresh_type_parameters)), m);
             for tp in &fresh_type_parameters {
                 tp.as_type_parameter().mapper.set(Some(m));
             }
@@ -1598,20 +1598,20 @@ impl Checker {
         // Don't compute resolvedReturnType and resolvedTypePredicate now,
         // because using `mapper` now could trigger inferences to become fixed. (See `createInferenceContext`.)
         // See GH#17600.
-        let this_parameter = sig.this_parameter().map(|s| self.instantiate_symbol(s, Some(m)));
-        let parameters = self.instantiate_symbols(&sig.parameters.get(), m);
+        let this_parameter = self.signature(sig).this_parameter().map(|s| self.instantiate_symbol(s, Some(m)));
+        let parameters = self.instantiate_symbols(&self.signature(sig).parameters.get(), m);
         let result = self.new_signature(
-            sig.flags.get() & SignatureFlags::PropagatingFlags,
-            sig.declaration.get(),
+            self.signature(sig).flags.get() & SignatureFlags::PropagatingFlags,
+            self.signature(sig).declaration.get(),
             &fresh_type_parameters,
             this_parameter,
             &parameters,
             None, /*resolvedReturnType*/
             None, /*resolvedTypePredicate*/
-            sig.min_argument_count.get(),
+            self.signature(sig).min_argument_count.get(),
         );
-        result.target.set(Some(sig));
-        result.mapper.set(Some(m));
+        self.signature(result).target.set(Some(sig));
+        self.signature(result).mapper.set(Some(m));
         result
     }
 
@@ -1897,7 +1897,7 @@ pub(crate) fn is_thisless_type_parameter(node: P<Node>) -> bool {
 
 impl Checker {
     // checker.go:21198
-    pub(crate) fn get_default_construct_signatures(&mut self, class_type: P<Type>) -> Vec<P<Signature>> {
+    pub(crate) fn get_default_construct_signatures(&mut self, class_type: P<Type>) -> Vec<SignatureKey> {
         let base_constructor_type = self.get_base_constructor_type_of_class(class_type);
         let base_signatures = self.get_signatures_of_type(base_constructor_type, SignatureKind::Construct);
         let declaration = ast::get_class_like_declaration_of_symbol(class_type.symbol().unwrap());
@@ -1913,21 +1913,21 @@ impl Checker {
         let type_arg_count = type_arguments.len() as i32;
         let mut result = Vec::new();
         for base_sig in base_signatures {
-            let min_type_argument_count = self.get_min_type_argument_count(&base_sig.type_parameters.get());
-            let type_param_count = base_sig.type_parameters.get().len() as i32;
+            let min_type_argument_count = self.get_min_type_argument_count(&self.signature(base_sig).type_parameters.get());
+            let type_param_count = self.signature(base_sig).type_parameters.get().len() as i32;
             if is_java_script || type_arg_count >= min_type_argument_count && type_arg_count <= type_param_count {
                 let sig = if type_param_count != 0 {
-                    let filled = self.fill_missing_type_arguments(&type_arguments, &base_sig.type_parameters.get(), min_type_argument_count, is_java_script);
+                    let filled = self.fill_missing_type_arguments(&type_arguments, &self.signature(base_sig).type_parameters.get(), min_type_argument_count, is_java_script);
                     self.create_signature_instantiation(base_sig, &filled)
                 } else {
                     self.clone_signature(base_sig)
                 };
-                sig.type_parameters.set(&class_type.as_interface_type().local_type_parameters());
-                sig.resolved_return_type.set(Some(class_type));
+                self.signature(sig).type_parameters.set(&class_type.as_interface_type().local_type_parameters());
+                self.signature(sig).resolved_return_type.set(Some(class_type));
                 if is_abstract {
-                    sig.flags.set(sig.flags.get() | SignatureFlags::Abstract);
+                    self.signature(sig).flags.set(self.signature(sig).flags.get() | SignatureFlags::Abstract);
                 } else {
-                    sig.flags.set(sig.flags.get() & !SignatureFlags::Abstract);
+                    self.signature(sig).flags.set(self.signature(sig).flags.get() & !SignatureFlags::Abstract);
                 }
                 result.push(sig);
             }
@@ -2397,7 +2397,7 @@ impl Checker {
     }
 
     // checker.go:21412
-    pub(crate) fn get_array_member_call_signatures(&mut self, t: P<Type>) -> Vec<P<Signature>> {
+    pub(crate) fn get_array_member_call_signatures(&mut self, t: P<Type>) -> Vec<SignatureKey> {
         // Check if union is exclusively instantiations of a member of the global Array or ReadonlyArray type.
         let mut member_name = String::new();
         for (i, &t) in t.types().iter().enumerate() {
@@ -2456,8 +2456,8 @@ impl Checker {
     // parameters and may differ in return types. When signatures differ in return types, the resulting return
     // type is the union of the constituent return types.
     // checker.go:21453
-    pub(crate) fn get_union_signatures(&mut self, signature_lists: &[Vec<P<Signature>>]) -> Vec<P<Signature>> {
-        let mut result: Vec<P<Signature>> = Vec::new();
+    pub(crate) fn get_union_signatures(&mut self, signature_lists: &[Vec<SignatureKey>]) -> Vec<SignatureKey> {
+        let mut result: Vec<SignatureKey> = Vec::new();
         let mut index_with_length_over_one = 0usize;
         let mut count_length_over_one = 0;
         for i in 0..signature_lists.len() {
@@ -2478,12 +2478,12 @@ impl Checker {
                         let mut s = signature;
                         // Union the result types when more than one signature matches
                         if union_signatures.len() > 1 {
-                            let mut this_parameter = signature.this_parameter();
-                            let first_this_parameter_of_union_signatures = first_non_nil(&union_signatures, |sig| sig.this_parameter());
+                            let mut this_parameter = self.signature(signature).this_parameter();
+                            let first_this_parameter_of_union_signatures = first_non_nil(&union_signatures, |sig| self.signature(*sig).this_parameter());
                             if let Some(first_this) = first_this_parameter_of_union_signatures {
                                 let mut this_types = Vec::new();
                                 for &sig in &union_signatures {
-                                    if let Some(tp) = sig.this_parameter() {
+                                    if let Some(tp) = self.signature(sig).this_parameter() {
                                         this_types.push(self.get_type_of_symbol(tp));
                                     }
                                 }
@@ -2491,7 +2491,7 @@ impl Checker {
                                 this_parameter = Some(self.create_symbol_with_type(first_this, Some(this_type)));
                             }
                             s = self.create_union_signature(signature, &union_signatures);
-                            s.set_this_parameter(this_parameter);
+                            self.signature(s).set_this_parameter(this_parameter);
                         }
                         result.push(s);
                     }
@@ -2504,15 +2504,15 @@ impl Checker {
             // nature and having overloads in multiple constituents would necessitate making a power set of signatures from the type, whose
             // ordering would be non-obvious)
             let master_list = &signature_lists[index_with_length_over_one];
-            let mut results: Option<Vec<P<Signature>>> = Some(master_list.clone());
+            let mut results: Option<Vec<SignatureKey>> = Some(master_list.clone());
             for (i, signatures) in signature_lists.iter().enumerate() {
                 // Go compares slice identity (core.Same); the lists are distinct Vecs here, so compare by position.
                 if i != index_with_length_over_one {
                     let signature = signatures[0];
                     let current = results.take().unwrap();
-                    if !signature.type_parameters.get().is_empty()
+                    if !self.signature(signature).type_parameters.get().is_empty()
                         && current.iter().any(|s| {
-                            !s.type_parameters.get().is_empty() && !self.compare_type_parameters_identical(&signature.type_parameters.get(), &s.type_parameters.get())
+                            !self.signature(*s).type_parameters.get().is_empty() && !self.compare_type_parameters_identical(&self.signature(signature).type_parameters.get(), &self.signature(*s).type_parameters.get())
                         })
                     {
                         results = None;
@@ -2530,47 +2530,49 @@ impl Checker {
     }
 
     // checker.go:21524
-    pub(crate) fn combine_union_or_intersection_member_signatures(&mut self, left: P<Signature>, right: P<Signature>, is_union: bool) -> P<Signature> {
-        let mut type_params = left.type_parameters.get();
+    pub(crate) fn combine_union_or_intersection_member_signatures(&mut self, left: SignatureKey, right: SignatureKey, is_union: bool) -> SignatureKey {
+        let mut type_params = self.signature(left).type_parameters.get();
         if type_params.is_empty() {
-            type_params = right.type_parameters.get();
+            type_params = self.signature(right).type_parameters.get();
         }
         let mut param_mapper = None;
-        if !left.type_parameters.get().is_empty() && !right.type_parameters.get().is_empty() {
+        if !self.signature(left).type_parameters.get().is_empty() && !self.signature(right).type_parameters.get().is_empty() {
             // We just use the type parameter defaults from the first signature
-            param_mapper = Some(new_type_mapper(&right.type_parameters.get(), &left.type_parameters.get()));
+            param_mapper = Some(new_type_mapper(&self.signature(right).type_parameters.get(), &self.signature(left).type_parameters.get()));
         }
-        let mut flags = (left.flags.get() | right.flags.get()) & (SignatureFlags::PropagatingFlags & !SignatureFlags::HasRestParameter);
-        let declaration = left.declaration.get();
+        let mut flags = (self.signature(left).flags.get() | self.signature(right).flags.get()) & (SignatureFlags::PropagatingFlags & !SignatureFlags::HasRestParameter);
+        let declaration = self.signature(left).declaration.get();
         let params = self.combine_union_or_intersection_parameters(left, right, param_mapper, is_union);
         let last_param = params.last().copied();
         if last_param.is_some_and(|p| p.check_flags().intersects(CheckFlags::RestParameter)) {
             flags |= SignatureFlags::HasRestParameter;
         }
-        let this_param = self.combine_union_or_intersection_this_param(left.this_parameter(), right.this_parameter(), param_mapper, is_union);
-        let min_arg_count = left.min_argument_count.get().max(right.min_argument_count.get());
+        let this_param = self.combine_union_or_intersection_this_param(self.signature(left).this_parameter(), self.signature(right).this_parameter(), param_mapper, is_union);
+        let min_arg_count = self.signature(left).min_argument_count.get().max(self.signature(right).min_argument_count.get());
         let result = self.new_signature(flags, declaration, &type_params, this_param, &params, None, None, min_arg_count);
-        let mut left_signatures: Vec<P<Signature>> = if let Some(composite) = left.composite().filter(|c| c.is_union.get()) {
-            composite.signatures.get().to_vec()
+        let mut left_signatures: Vec<SignatureKey> = if let Some(composite) = self.signature(left).composite().filter(|c| self.composite_signature(*c).is_union.get()) {
+            self.composite_signature(composite).signatures.get().to_vec()
         } else {
             vec![left]
         };
         left_signatures.push(right);
-        result.set_composite(Some(P::new(CompositeSignature { is_union: Cell::new(is_union), signatures: ArrayCell::new(&left_signatures) })));
+        let composite = self.new_composite_signature(is_union, &left_signatures);
+        self.signature(result).set_composite(Some(composite));
         if let Some(param_mapper) = param_mapper {
-            if left.composite().is_some_and(|c| c.is_union.get() == is_union) && left.mapper.get().is_some() {
-                result.mapper.set(Some(self.combine_type_mappers(left.mapper.get(), param_mapper)));
+            if self.signature(left).composite().is_some_and(|c| self.composite_signature(c).is_union.get() == is_union) && self.signature(left).mapper.get().is_some() {
+                let mapper = self.combine_type_mappers(self.signature(left).mapper.get(), param_mapper);
+                self.signature(result).mapper.set(Some(mapper));
             } else {
-                result.mapper.set(Some(param_mapper));
+                self.signature(result).mapper.set(Some(param_mapper));
             }
-        } else if left.composite().is_some_and(|c| c.is_union.get() == is_union) {
-            result.mapper.set(left.mapper.get());
+        } else if self.signature(left).composite().is_some_and(|c| self.composite_signature(c).is_union.get() == is_union) {
+            self.signature(result).mapper.set(self.signature(left).mapper.get());
         }
         result
     }
 
     // checker.go:21563
-    pub(crate) fn combine_union_or_intersection_parameters(&mut self, left: P<Signature>, right: P<Signature>, mapper: Option<P<TypeMapper>>, is_union: bool) -> Vec<P<Symbol>> {
+    pub(crate) fn combine_union_or_intersection_parameters(&mut self, left: SignatureKey, right: SignatureKey, mapper: Option<P<TypeMapper>>, is_union: bool) -> Vec<P<Symbol>> {
         let left_count = self.get_parameter_count(left);
         let right_count = self.get_parameter_count(right);
         let (longest_count, longest, shorter) = if left_count >= right_count { (left_count, left, right) } else { (right_count, right, left) };
@@ -2665,8 +2667,8 @@ impl Checker {
     pub(crate) fn resolve_intersection_type_members(&mut self, t: P<Type>) {
         // The members and properties collections are empty for intersection types. To get all properties of an
         // intersection type use getPropertiesOfType (only the language service uses this).
-        let mut call_signatures: Vec<P<Signature>> = Vec::new();
-        let mut construct_signatures: Vec<P<Signature>> = Vec::new();
+        let mut call_signatures: Vec<SignatureKey> = Vec::new();
+        let mut construct_signatures: Vec<SignatureKey> = Vec::new();
         let mut index_infos: Vec<IndexInfoKey> = Vec::new();
         let types = t.types();
         let (mixin_flags, mixin_count) = self.find_mixins(&types);
@@ -2684,7 +2686,8 @@ impl Checker {
                         .map(|&s| {
                             let clone = self.clone_signature(s);
                             let return_type = self.get_return_type_of_signature(s);
-                            clone.resolved_return_type.set(Some(self.include_mixin_type(return_type, &types, &mixin_flags, i as i32)));
+                            let return_type = self.include_mixin_type(return_type, &types, &mixin_flags, i as i32);
+                            self.signature(clone).resolved_return_type.set(Some(return_type));
                             clone
                         })
                         .collect();
@@ -2701,7 +2704,7 @@ impl Checker {
     }
 
     // checker.go:21676
-    pub(crate) fn append_signatures(&mut self, signatures: &[P<Signature>], new_signatures: &[P<Signature>]) -> Vec<P<Signature>> {
+    pub(crate) fn append_signatures(&mut self, signatures: &[SignatureKey], new_signatures: &[SignatureKey]) -> Vec<SignatureKey> {
         let mut signatures = signatures.to_vec();
         for &sig in new_signatures {
             let mut all_different = true;

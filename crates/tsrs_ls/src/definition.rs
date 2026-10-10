@@ -450,7 +450,7 @@ pub(crate) fn try_get_signature_declaration(type_checker: &mut Checker, node: P<
     let signature = call_like.map(|call_like| type_checker.get_resolved_signature_exported(call_like));
     // Don't go to a function type, go to the value having that type.
     if let Some(signature) = signature {
-        if let Some(declaration) = signature.declaration() {
+        if let Some(declaration) = type_checker.signature(signature).declaration() {
             if ast::is_function_like(Some(declaration)) && !ast::is_function_type_node(declaration) {
                 return Some(declaration);
             }

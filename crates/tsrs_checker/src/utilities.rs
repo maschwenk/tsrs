@@ -1553,8 +1553,8 @@ pub(crate) fn has_type(node: P<Node>) -> bool {
 }
 
 // utilities.go:1312
-pub(crate) fn get_non_rest_parameter_count(sig: P<Signature>) -> i32 {
-    sig.parameters.get().len() as i32 - if signature_has_rest_parameter(sig) { 1 } else { 0 }
+pub(crate) fn get_non_rest_parameter_count(c: &Checker, sig: SignatureKey) -> i32 {
+    c.signature(sig).parameters.get().len() as i32 - if signature_has_rest_parameter(c, sig) { 1 } else { 0 }
 }
 
 // utilities.go:1316

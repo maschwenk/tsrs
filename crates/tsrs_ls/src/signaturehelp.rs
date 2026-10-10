@@ -1,5 +1,5 @@
 use tsrs_ast::{self as ast, CheckFlags, Kind, Node, NodeList, SourceFile, Symbol, SymbolFlags};
-use tsrs_checker::{self as checker, Checker, ContextFlags, ElementFlags, Flags, InternalFlags, Signature, SymbolFormatFlags, Type};
+use tsrs_checker::{self as checker, Checker, ContextFlags, ElementFlags, Flags, InternalFlags, SignatureKey, SymbolFormatFlags, Type};
 use tsrs_compiler::Program;
 use tsrs_core::context::Context;
 use tsrs_core::{NewLineKind, TextRange, P};
@@ -39,7 +39,7 @@ pub(crate) struct typeArgsInvocation {
 // signaturehelp.go:37
 #[derive(Clone, Copy)]
 pub(crate) struct contextualInvocation {
-    pub(crate) signature: P<Signature>,
+    pub(crate) signature: SignatureKey,
     pub(crate) node: P<Node>, // Just for enclosingDeclaration for printing types
     pub(crate) symbol: P<Symbol>,
 }
@@ -308,8 +308,8 @@ impl LanguageService {
     fn create_signature_help_items(
         &self,
         ctx: &Context,
-        candidates: &[P<Signature>],
-        resolved_signature: Option<P<Signature>>,
+        candidates: &[SignatureKey],
+        resolved_signature: Option<SignatureKey>,
         argument_info: &argumentListInfo,
         source_file: P<SourceFile>,
         c: &mut Checker,
@@ -327,7 +327,7 @@ impl LanguageService {
         } else {
             call_target_symbol = c.get_symbol_at_location_exported(get_expression_from_invocation(argument_info));
             if call_target_symbol.is_none() && use_full_prefix {
-                if let Some(declaration) = resolved_signature.unwrap().declaration() {
+                if let Some(declaration) = c.signature(resolved_signature.unwrap()).declaration() {
                     call_target_symbol = declaration.symbol();
                 }
             }
@@ -467,7 +467,7 @@ impl LanguageService {
     // signaturehelp.go:449
     fn get_signature_help_item(
         &self,
-        candidate: P<Signature>,
+        candidate: SignatureKey,
         is_type_parameter_list: bool,
         call_target_symbol: &str,
         call_target_sym: Option<P<Symbol>>,
@@ -487,7 +487,7 @@ impl LanguageService {
 
         // Generate documentation from the signature's declaration
         let mut documentation: Option<String> = None;
-        if let Some(declaration) = candidate.declaration() {
+        if let Some(declaration) = c.signature(candidate).declaration() {
             let mapper = self.documentation_location_mapper(Feature::SignatureHelp);
             let doc = get_documentation_from_declaration(&mapper, c, None, Some(declaration), None, doc_format, true /*commentOnly*/);
             if !doc.is_empty() {
@@ -517,7 +517,7 @@ impl LanguageService {
 }
 
 // signaturehelp.go:488
-fn return_type_to_display_parts(candidate_signature: P<Signature>, c: &mut Checker, enclosing_declaration: P<Node>, source_file: P<SourceFile>, vs_capability: bool) -> DisplayPartsWriter {
+fn return_type_to_display_parts(candidate_signature: SignatureKey, c: &mut Checker, enclosing_declaration: P<Node>, source_file: P<SourceFile>, vs_capability: bool) -> DisplayPartsWriter {
     let mut dpw = new_display_parts_writer(vs_capability);
 
     // Add ": " prefix
@@ -546,7 +546,7 @@ impl LanguageService {
     // signaturehelp.go:513
     fn item_info_for_type_parameters(
         &self,
-        candidate_signature: P<Signature>,
+        candidate_signature: SignatureKey,
         c: &mut Checker,
         enclosing_declaration: P<Node>,
         source_file: P<SourceFile>,
@@ -556,14 +556,14 @@ impl LanguageService {
         let emit_context = printer::new_emit_context();
         let mut p = printer::new_printer(PrinterOptions { new_line: NewLineKind::LF, ..Default::default() }, printer::PrintHandlers::default(), Some(emit_context));
 
-        let type_parameters: &[P<Type>] = if let Some(target) = candidate_signature.target() { &target.type_parameters() } else { &candidate_signature.type_parameters() };
+        let type_parameters: &[P<Type>] = if let Some(target) = c.signature(candidate_signature).target() { &c.signature(target).type_parameters() } else { &c.signature(candidate_signature).type_parameters() };
         let mut signature_help_type_parameters: Vec<signatureHelpParameter> = Vec::with_capacity(type_parameters.len());
         for &type_parameter in type_parameters {
             signature_help_type_parameters.push(create_signature_help_parameter_for_type_parameter(type_parameter, source_file, enclosing_declaration, c, &mut p));
         }
 
         let mut this_parameter: Vec<signatureHelpParameter> = Vec::new();
-        if let Some(this) = candidate_signature.this_parameter() {
+        if let Some(this) = c.signature(candidate_signature).this_parameter() {
             this_parameter = vec![self.create_signature_help_parameter_for_parameter(this, enclosing_declaration, &mut p, source_file, c, doc_format)];
         }
 
@@ -624,7 +624,7 @@ impl LanguageService {
     // signaturehelp.go:588
     fn item_info_for_parameters(
         &self,
-        candidate_signature: P<Signature>,
+        candidate_signature: SignatureKey,
         c: &mut Checker,
         enclosing_declaratipn: P<Node>,
         source_file: P<SourceFile>,
@@ -634,9 +634,9 @@ impl LanguageService {
         let emit_context = printer::new_emit_context();
         let mut p = printer::new_printer(PrinterOptions { new_line: NewLineKind::LF, ..Default::default() }, printer::PrintHandlers::default(), Some(emit_context));
 
-        let mut signature_help_type_parameters: Vec<signatureHelpParameter> = Vec::with_capacity(candidate_signature.type_parameters().len());
-        if !candidate_signature.type_parameters().is_empty() {
-            for type_parameter in candidate_signature.type_parameters() {
+        let mut signature_help_type_parameters: Vec<signatureHelpParameter> = Vec::with_capacity(c.signature(candidate_signature).type_parameters().len());
+        if !c.signature(candidate_signature).type_parameters().is_empty() {
+            for type_parameter in c.signature(candidate_signature).type_parameters() {
                 signature_help_type_parameters.push(create_signature_help_parameter_for_type_parameter(type_parameter, source_file, enclosing_declaratipn, c, &mut p));
             }
         }
@@ -814,8 +814,8 @@ fn get_expression_from_invocation(argument_info: &argumentListInfo) -> P<Node> {
 
 // signaturehelp.go:757
 struct candidateInfo {
-    candidates: Vec<P<Signature>>,
-    resolved_signature: Option<P<Signature>>,
+    candidates: Vec<SignatureKey>,
+    resolved_signature: Option<SignatureKey>,
 }
 
 // signaturehelp.go:762

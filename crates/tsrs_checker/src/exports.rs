@@ -88,7 +88,7 @@ impl Checker {
     }
 
     // exports.go:76
-    pub fn get_unknown_signature(&mut self) -> P<Signature> {
+    pub fn get_unknown_signature(&mut self) -> SignatureKey {
         self.unknown_signature
     }
 
@@ -215,7 +215,7 @@ impl Checker {
     }
 
     // exports.go:175
-    pub fn get_signatures_of_type_exported(&mut self, t: P<Type>, kind: SignatureKind) -> ArrayView<P<Signature>> {
+    pub fn get_signatures_of_type_exported(&mut self, t: P<Type>, kind: SignatureKind) -> ArrayView<SignatureKey> {
         self.get_signatures_of_type(t, kind)
     }
 
@@ -265,7 +265,7 @@ impl Checker {
     }
 
     // exports.go:215
-    pub fn get_type_predicate_of_signature_exported(&mut self, sig: P<Signature>) -> Option<TypePredicateKey> {
+    pub fn get_type_predicate_of_signature_exported(&mut self, sig: SignatureKey) -> Option<TypePredicateKey> {
         self.get_type_predicate_of_signature(sig)
     }
 
@@ -293,12 +293,12 @@ impl Checker {
     }
 
     // exports.go:235
-    pub fn get_return_type_of_signature_exported(&mut self, sig: P<Signature>) -> P<Type> {
+    pub fn get_return_type_of_signature_exported(&mut self, sig: SignatureKey) -> P<Type> {
         self.get_return_type_of_signature(sig)
     }
 
     // exports.go:239
-    pub fn has_effective_rest_parameter_exported(&mut self, signature: P<Signature>) -> bool {
+    pub fn has_effective_rest_parameter_exported(&mut self, signature: SignatureKey) -> bool {
         self.has_effective_rest_parameter(signature)
     }
 
@@ -318,12 +318,12 @@ impl Checker {
     }
 
     // exports.go:255
-    pub fn get_expanded_parameters_exported(&mut self, signature: P<Signature>, skip_union_expanding: bool) -> Vec<Vec<P<Symbol>>> {
+    pub fn get_expanded_parameters_exported(&mut self, signature: SignatureKey, skip_union_expanding: bool) -> Vec<Vec<P<Symbol>>> {
         self.get_expanded_parameters(signature, skip_union_expanding)
     }
 
     // exports.go:259
-    pub fn get_resolved_signature_exported(&mut self, node: P<Node>) -> P<Signature> {
+    pub fn get_resolved_signature_exported(&mut self, node: P<Node>) -> SignatureKey {
         self.get_resolved_signature(node, None, CheckMode::Normal)
     }
 
@@ -411,7 +411,7 @@ impl Checker {
     }
 
     // exports.go:330
-    pub fn get_rest_type_of_signature_exported(&mut self, sig: P<Signature>) -> P<Type> {
+    pub fn get_rest_type_of_signature_exported(&mut self, sig: SignatureKey) -> P<Type> {
         self.get_rest_type_of_signature(sig)
     }
 

@@ -1,7 +1,7 @@
 use std::rc::Rc;
 use rustc_hash::FxHashSet;
 use tsrs_ast::{self as ast, CommentRange, FileReference, Kind, ModifierFlags, Node, NodeFlags, NodeList, SemanticMeaning, SourceFile, Symbol, SymbolFlags};
-use tsrs_checker::{Checker, ContextFlags, LiteralValue, Signature, SignatureKind, Type, TypeFlags};
+use tsrs_checker::{Checker, ContextFlags, LiteralValue, SignatureKey, SignatureKind, Type, TypeFlags};
 use tsrs_compiler::Program;
 use tsrs_core::jsnum::{self, PseudoBigInt};
 use tsrs_core::{debug, stringutil, tspath, TextPos, TextRange, P};
@@ -1271,7 +1271,7 @@ pub(crate) fn start_end_contains_range(start: i32, end: i32, text_range: TextRan
 }
 
 // utilities.go:1113
-pub(crate) fn get_possible_generic_signatures(called: P<Node>, type_argument_count: usize, c: &mut Checker) -> Vec<P<Signature>> {
+pub(crate) fn get_possible_generic_signatures(called: P<Node>, type_argument_count: usize, c: &mut Checker) -> Vec<SignatureKey> {
     let mut type_at_location = c.get_type_at_location(called);
     let called_parent = called.parent().unwrap();
     if ast::is_optional_chain(called_parent) {
@@ -1282,7 +1282,7 @@ pub(crate) fn get_possible_generic_signatures(called: P<Node>, type_argument_cou
     } else {
         c.get_signatures_of_type_exported(type_at_location, SignatureKind::Call)
     };
-    signatures.iter().copied().filter(|s| !s.type_parameters().is_empty() && s.type_parameters().len() >= type_argument_count).collect()
+    signatures.iter().copied().filter(|s| !c.signature(*s).type_parameters().is_empty() && c.signature(*s).type_parameters().len() >= type_argument_count).collect()
 }
 
 // utilities.go:1129

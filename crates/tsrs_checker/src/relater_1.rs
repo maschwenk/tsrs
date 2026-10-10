@@ -2005,7 +2005,7 @@ impl Checker {
     }
 
     // relater.go:1487
-    pub(crate) fn is_signature_assignable_to(&mut self, source: P<Signature>, target: P<Signature>, ignore_return_types: bool) -> bool {
+    pub(crate) fn is_signature_assignable_to(&mut self, source: SignatureKey, target: SignatureKey, ignore_return_types: bool) -> bool {
         let check_mode = if ignore_return_types { SignatureCheckMode::IgnoreReturnTypes } else { SignatureCheckMode::None };
         let compare_types = self.compare_types_assignable_comparer();
         self.compare_signatures_related(source, target, check_mode, false /*reportErrors*/, None /*errorReporter*/, &compare_types, None /*reportUnreliableMarkers*/)
@@ -2013,7 +2013,7 @@ impl Checker {
     }
 
     // relater.go:1491
-    pub(crate) fn compare_signatures_related(&mut self, source: P<Signature>, target: P<Signature>, check_mode: SignatureCheckMode, report_errors: bool, error_reporter: Option<ErrorReporter<'_>>, compare_types: &TypeComparer, report_unreliable_markers: Option<P<TypeMapper>>) -> Ternary {
+    pub(crate) fn compare_signatures_related(&mut self, source: SignatureKey, target: SignatureKey, check_mode: SignatureCheckMode, report_errors: bool, error_reporter: Option<ErrorReporter<'_>>, compare_types: &TypeComparer, report_unreliable_markers: Option<P<TypeMapper>>) -> Ternary {
         let mut error_reporter = error_reporter;
         let mut source = source;
         let mut target = target;
@@ -2048,7 +2048,7 @@ impl Checker {
             }
             return Ternary::False;
         }
-        if !source.type_parameters().is_empty() && !same(&source.type_parameters(), &target.type_parameters()) {
+        if !self.signature(source).type_parameters().is_empty() && !same(&self.signature(source).type_parameters(), &self.signature(target).type_parameters()) {
             target = self.get_canonical_signature(target);
             source = self.instantiate_signature_in_context_of(source, target, None /*inferenceContext*/, Some(std::sync::Arc::clone(compare_types)));
         }
@@ -2058,7 +2058,7 @@ impl Checker {
         if source_rest_type.is_some() || target_rest_type.is_some() {
             self.instantiate_type(source_rest_type.or(target_rest_type).unwrap(), report_unreliable_markers);
         }
-        let kind = target.declaration().map_or(Kind::Unknown, |d| d.kind());
+        let kind = self.signature(target).declaration().map_or(Kind::Unknown, |d| d.kind());
         let strict_variance = !check_mode.intersects(SignatureCheckMode::Callback)
             && self.strict_function_types
             && kind != Kind::MethodDeclaration
@@ -2113,8 +2113,8 @@ impl Checker {
                     // similar to return values, callback parameters are output positions. This means that a Promise<T>,
                     // where T is used only in callback parameter positions, will be co-variant (as opposed to bi-variant)
                     // with respect to T.
-                    let mut source_sig: Option<P<Signature>> = None;
-                    let mut target_sig: Option<P<Signature>> = None;
+                    let mut source_sig: Option<SignatureKey> = None;
+                    let mut target_sig: Option<SignatureKey> = None;
                     if !check_mode.intersects(SignatureCheckMode::Callback) && !self.is_instantiated_generic_parameter(source, i) {
                         let t = self.get_non_nullable_type(source_type);
                         source_sig = self.get_single_call_signature(t);
@@ -2214,13 +2214,13 @@ impl Checker {
                 if result == Ternary::False && report_errors {
                     // The errors reported here serve as markers that trigger error chain reduction in the (*Relater).reportError
                     // method. The markers are elided in the final diagnostic chain and never actually reported.
-                    let message: &'static Message = if source.parameters().is_empty() && target.parameters().is_empty() {
-                        if source.flags().intersects(SignatureFlags::Construct) {
+                    let message: &'static Message = if self.signature(source).parameters().is_empty() && self.signature(target).parameters().is_empty() {
+                        if self.signature(source).flags().intersects(SignatureFlags::Construct) {
                             &diagnostics::Construct_signatures_with_no_arguments_have_incompatible_return_types_0_and_1
                         } else {
                             &diagnostics::Call_signatures_with_no_arguments_have_incompatible_return_types_0_and_1
                         }
-                    } else if source.flags().intersects(SignatureFlags::Construct) {
+                    } else if self.signature(source).flags().intersects(SignatureFlags::Construct) {
                         &diagnostics::Construct_signature_return_types_0_and_1_are_incompatible
                     } else {
                         &diagnostics::Call_signature_return_types_0_and_1_are_incompatible
@@ -2276,16 +2276,16 @@ impl Checker {
 
     // relater.go:1708
     // Returns true if `s` is `(...args: A) => R` where `A` is `any`, `any[]`, `never`, or `never[]`, and `R` is `any` or `unknown`.
-    pub(crate) fn is_top_signature(&mut self, s: P<Signature>) -> bool {
-        if s.type_parameters().is_empty()
-            && (s.this_parameter().is_none() || {
-                let this_type = self.get_type_of_parameter(s.this_parameter().unwrap());
+    pub(crate) fn is_top_signature(&mut self, s: SignatureKey) -> bool {
+        if self.signature(s).type_parameters().is_empty()
+            && (self.signature(s).this_parameter().is_none() || {
+                let this_type = self.get_type_of_parameter(self.signature(s).this_parameter().unwrap());
                 is_type_any(Some(this_type))
             })
-            && s.parameters().len() == 1
-            && signature_has_rest_parameter(s)
+            && self.signature(s).parameters().len() == 1
+            && signature_has_rest_parameter(self, s)
         {
-            let param_type = self.get_type_of_parameter(s.parameters()[0]);
+            let param_type = self.get_type_of_parameter(self.signature(s).parameters()[0]);
             let rest_type = if self.is_array_type(param_type) { self.get_type_arguments(param_type)[0] } else { param_type };
             return rest_type.flags().intersects(TypeFlags::Any | TypeFlags::Never)
                 && self.get_return_type_of_signature(s).flags().intersects(TypeFlags::AnyOrUnknown);
@@ -2298,10 +2298,10 @@ impl Checker {
     // parameter. For example, the parameter count of (x: number, y: number, ...z: string[]) is 3 and
     // the parameter count of (x: number, ...args: [number, ...string[], boolean])) is also 3. In the
     // latter example, the effective rest type is [...string[], boolean].
-    pub(crate) fn get_parameter_count(&mut self, signature: P<Signature>) -> i32 {
-        let length = signature.parameters().len() as i32;
-        if signature_has_rest_parameter(signature) {
-            let rest_type = self.get_type_of_symbol(signature.parameters()[length as usize - 1]);
+    pub(crate) fn get_parameter_count(&mut self, signature: SignatureKey) -> i32 {
+        let length = self.signature(signature).parameters().len() as i32;
+        if signature_has_rest_parameter(self, signature) {
+            let rest_type = self.get_type_of_symbol(self.signature(signature).parameters()[length as usize - 1]);
             if is_tuple_type(rest_type) {
                 let target_owner = rest_type.reference_target();
                 let target = target_owner.as_tuple_type();
@@ -2313,18 +2313,18 @@ impl Checker {
     }
 
     // relater.go:1737
-    pub(crate) fn get_min_argument_count(&mut self, signature: P<Signature>) -> i32 {
+    pub(crate) fn get_min_argument_count(&mut self, signature: SignatureKey) -> i32 {
         self.get_min_argument_count_ex(signature, MinArgumentCountFlags::None)
     }
 
     // relater.go:1741
-    pub(crate) fn get_min_argument_count_ex(&mut self, signature: P<Signature>, flags: MinArgumentCountFlags) -> i32 {
+    pub(crate) fn get_min_argument_count_ex(&mut self, signature: SignatureKey, flags: MinArgumentCountFlags) -> i32 {
         let strong_arity_for_untyped_js = flags & MinArgumentCountFlags::StrongArityForUntypedJS;
         let void_is_non_optional = flags & MinArgumentCountFlags::VoidIsNonOptional;
-        if !void_is_non_optional.is_empty() || signature.resolved_min_argument_count.get() == -1 {
+        if !void_is_non_optional.is_empty() || self.signature(signature).resolved_min_argument_count.get() == -1 {
             let mut min_argument_count: i32 = -1;
-            if signature_has_rest_parameter(signature) {
-                let rest_type = self.get_type_of_symbol(signature.parameters()[signature.parameters().len() - 1]);
+            if signature_has_rest_parameter(self, signature) {
+                let rest_type = self.get_type_of_symbol(self.signature(signature).parameters()[self.signature(signature).parameters().len() - 1]);
                 if is_tuple_type(rest_type) {
                     let first_optional_index =
                         find_index(&rest_type.reference_target().as_tuple_type().element_infos(), |info| !info.flags.intersects(ElementFlags::Required));
@@ -2333,15 +2333,15 @@ impl Checker {
                         required_count = rest_type.reference_target().as_tuple_type().fixed_length();
                     }
                     if required_count > 0 {
-                        min_argument_count = signature.parameters().len() as i32 - 1 + required_count;
+                        min_argument_count = self.signature(signature).parameters().len() as i32 - 1 + required_count;
                     }
                 }
             }
             if min_argument_count == -1 {
-                if strong_arity_for_untyped_js.is_empty() && signature.flags().intersects(SignatureFlags::IsUntypedSignatureInJSFile) {
+                if strong_arity_for_untyped_js.is_empty() && self.signature(signature).flags().intersects(SignatureFlags::IsUntypedSignatureInJSFile) {
                     return 0;
                 }
-                min_argument_count = signature.min_argument_count();
+                min_argument_count = self.signature(signature).min_argument_count();
             }
             if !void_is_non_optional.is_empty() {
                 return min_argument_count;
@@ -2355,22 +2355,22 @@ impl Checker {
                 min_argument_count = i;
                 i -= 1;
             }
-            signature.resolved_min_argument_count.set(min_argument_count);
+            self.signature(signature).resolved_min_argument_count.set(min_argument_count);
         }
-        signature.resolved_min_argument_count.get()
+        self.signature(signature).resolved_min_argument_count.get()
     }
 
     // relater.go:1782
-    pub fn has_effective_rest_parameter(&mut self, signature: P<Signature>) -> bool {
-        if signature_has_rest_parameter(signature) {
-            let rest_type = self.get_type_of_symbol(signature.parameters()[signature.parameters().len() - 1]);
+    pub fn has_effective_rest_parameter(&mut self, signature: SignatureKey) -> bool {
+        if signature_has_rest_parameter(self, signature) {
+            let rest_type = self.get_type_of_symbol(self.signature(signature).parameters()[self.signature(signature).parameters().len() - 1]);
             return !is_tuple_type(rest_type) || rest_type.reference_target().as_tuple_type().combined_flags.get().intersects(ElementFlags::Variable);
         }
         false
     }
 
     // relater.go:1790
-    pub(crate) fn get_type_at_position(&mut self, signature: P<Signature>, pos: i32) -> P<Type> {
+    pub(crate) fn get_type_at_position(&mut self, signature: SignatureKey, pos: i32) -> P<Type> {
         let t = self.try_get_type_at_position(signature, pos);
         if let Some(t) = t {
             return t;
@@ -2379,16 +2379,16 @@ impl Checker {
     }
 
     // relater.go:1798
-    pub(crate) fn try_get_type_at_position(&mut self, signature: P<Signature>, pos: i32) -> Option<P<Type>> {
-        let param_count = signature.parameters().len() as i32 - if signature_has_rest_parameter(signature) { 1 } else { 0 };
+    pub(crate) fn try_get_type_at_position(&mut self, signature: SignatureKey, pos: i32) -> Option<P<Type>> {
+        let param_count = self.signature(signature).parameters().len() as i32 - if signature_has_rest_parameter(self, signature) { 1 } else { 0 };
         if pos < param_count {
-            return Some(self.get_type_of_parameter(signature.parameters()[pos as usize]));
+            return Some(self.get_type_of_parameter(self.signature(signature).parameters()[pos as usize]));
         }
-        if signature_has_rest_parameter(signature) {
+        if signature_has_rest_parameter(self, signature) {
             // We want to return the value undefined for an out of bounds parameter position,
             // so we need to check bounds here before calling getIndexedAccessType (which
             // otherwise would return the type 'undefined').
-            let rest_type = self.get_type_of_symbol(signature.parameters()[param_count as usize]);
+            let rest_type = self.get_type_of_symbol(self.signature(signature).parameters()[param_count as usize]);
             let index = pos - param_count;
             if !is_tuple_type(rest_type)
                 || rest_type.reference_target().as_tuple_type().combined_flags.get().intersects(ElementFlags::Variable)
@@ -2405,7 +2405,7 @@ impl Checker {
     // Return the rest type at the given position, transforming `any[]` into just `any`. We do this because
     // in signatures we want `any[]` in a rest position to be compatible with anything, but `any[]` isn't
     // assignable to tuple types with required elements.
-    pub(crate) fn get_rest_or_any_type_at_position(&mut self, source: P<Signature>, pos: i32) -> P<Type> {
+    pub(crate) fn get_rest_or_any_type_at_position(&mut self, source: SignatureKey, pos: i32) -> P<Type> {
         let rest_type = self.get_rest_type_at_position(source, pos, false);
         if let Some(element_type) = self.get_element_type_of_array_type(rest_type) {
             if is_type_any(Some(element_type)) {
@@ -2416,7 +2416,7 @@ impl Checker {
     }
 
     // relater.go:1829
-    pub(crate) fn get_rest_type_at_position(&mut self, source: P<Signature>, pos: i32, readonly: bool) -> P<Type> {
+    pub(crate) fn get_rest_type_at_position(&mut self, source: SignatureKey, pos: i32, readonly: bool) -> P<Type> {
         let parameter_count = self.get_parameter_count(source);
         let min_argument_count = self.get_min_argument_count(source);
         let rest_type = self.get_effective_rest_type(source);
@@ -2454,10 +2454,10 @@ impl Checker {
     }
 
     // relater.go:1860
-    pub(crate) fn get_nameable_declaration_at_position(&mut self, signature: P<Signature>, pos: i32) -> Option<P<Node>> {
-        let param_count = signature.parameters().len() as i32 - if signature_has_rest_parameter(signature) { 1 } else { 0 };
+    pub(crate) fn get_nameable_declaration_at_position(&mut self, signature: SignatureKey, pos: i32) -> Option<P<Node>> {
+        let param_count = self.signature(signature).parameters().len() as i32 - if signature_has_rest_parameter(self, signature) { 1 } else { 0 };
         if pos < param_count {
-            let decl = signature.parameters()[pos as usize].value_declaration();
+            let decl = self.signature(signature).parameters()[pos as usize].value_declaration();
             if let Some(decl) = decl {
                 if self.is_valid_declaration_for_tuple_label(decl) {
                     return Some(decl);
@@ -2465,8 +2465,8 @@ impl Checker {
             }
             return None;
         }
-        if signature_has_rest_parameter(signature) {
-            let rest_parameter = signature.parameters()[param_count as usize];
+        if signature_has_rest_parameter(self, signature) {
+            let rest_parameter = self.signature(signature).parameters()[param_count as usize];
             let rest_type = self.get_type_of_symbol(rest_parameter);
             if is_tuple_type(rest_type) {
                 let element_infos = rest_type.reference_target().as_tuple_type().element_infos();
@@ -2491,7 +2491,7 @@ impl Checker {
     }
 
     // relater.go:1891
-    pub(crate) fn get_non_array_rest_type(&mut self, signature: P<Signature>) -> Option<P<Type>> {
+    pub(crate) fn get_non_array_rest_type(&mut self, signature: SignatureKey) -> Option<P<Type>> {
         let rest_type = self.get_effective_rest_type(signature);
         if let Some(rest_type) = rest_type {
             if !self.is_array_type(rest_type) && !is_type_any(Some(rest_type)) {
@@ -2502,9 +2502,9 @@ impl Checker {
     }
 
     // relater.go:1899
-    pub(crate) fn get_effective_rest_type(&mut self, signature: P<Signature>) -> Option<P<Type>> {
-        if signature_has_rest_parameter(signature) {
-            let rest_type = self.get_type_of_symbol(signature.parameters()[signature.parameters().len() - 1]);
+    pub(crate) fn get_effective_rest_type(&mut self, signature: SignatureKey) -> Option<P<Type>> {
+        if signature_has_rest_parameter(self, signature) {
+            let rest_type = self.get_type_of_symbol(self.signature(signature).parameters()[self.signature(signature).parameters().len() - 1]);
             if !is_tuple_type(rest_type) {
                 if is_type_any(Some(rest_type)) {
                     return Some(self.any_array_type);
@@ -2562,16 +2562,16 @@ impl Checker {
     }
 
     // relater.go:1947
-    pub(crate) fn get_this_type_of_signature(&mut self, signature: P<Signature>) -> Option<P<Type>> {
-        if let Some(this_parameter) = signature.this_parameter() {
+    pub(crate) fn get_this_type_of_signature(&mut self, signature: SignatureKey) -> Option<P<Type>> {
+        if let Some(this_parameter) = self.signature(signature).this_parameter() {
             return Some(self.get_type_of_symbol(this_parameter));
         }
         None
     }
 
     // relater.go:1954
-    pub(crate) fn is_instantiated_generic_parameter(&mut self, signature: P<Signature>, pos: i32) -> bool {
-        let Some(target) = signature.target() else {
+    pub(crate) fn is_instantiated_generic_parameter(&mut self, signature: SignatureKey, pos: i32) -> bool {
+        let Some(target) = self.signature(signature).target() else {
             return false;
         };
         let t = self.try_get_type_at_position(target, pos);
@@ -2579,12 +2579,12 @@ impl Checker {
     }
 
     // relater.go:1962
-    pub(crate) fn get_parameter_name_at_position(&mut self, signature: P<Signature>, pos: i32) -> String {
-        let param_count = signature.parameters().len() as i32 - if signature_has_rest_parameter(signature) { 1 } else { 0 };
+    pub(crate) fn get_parameter_name_at_position(&mut self, signature: SignatureKey, pos: i32) -> String {
+        let param_count = self.signature(signature).parameters().len() as i32 - if signature_has_rest_parameter(self, signature) { 1 } else { 0 };
         if pos < param_count {
-            return signature.parameters()[pos as usize].name().to_string();
+            return self.signature(signature).parameters()[pos as usize].name().to_string();
         }
-        let rest_parameter = signature.parameters()[param_count as usize];
+        let rest_parameter = self.signature(signature).parameters()[param_count as usize];
         let rest_type = self.get_type_of_symbol(rest_parameter);
         if is_tuple_type(rest_type) {
             let index = pos - param_count;
@@ -2677,45 +2677,45 @@ impl Checker {
     }
 
     // relater.go:2049
-    pub fn get_type_predicate_of_signature(&mut self, sig: P<Signature>) -> Option<TypePredicateKey> {
-        if sig.resolved_type_predicate(self.no_type_predicate).is_none() {
-            if let Some(target) = sig.target() {
+    pub fn get_type_predicate_of_signature(&mut self, sig: SignatureKey) -> Option<TypePredicateKey> {
+        if self.signature(sig).resolved_type_predicate(self.no_type_predicate).is_none() {
+            if let Some(target) = self.signature(sig).target() {
                 let target_type_predicate = self.get_type_predicate_of_signature(target);
                 if let Some(target_type_predicate) = target_type_predicate {
-                    let predicate = self.instantiate_type_predicate(target_type_predicate, sig.mapper.get().unwrap());
-                    sig.set_resolved_type_predicate(Some(predicate), self.no_type_predicate);
+                    let predicate = self.instantiate_type_predicate(target_type_predicate, self.signature(sig).mapper.get().unwrap());
+                    self.signature(sig).set_resolved_type_predicate(Some(predicate), self.no_type_predicate);
                 }
-            } else if let Some(composite) = sig.composite() {
-                let predicate = self.get_union_or_intersection_type_predicate(&composite.signatures.get(), composite.is_union.get());
-                sig.set_resolved_type_predicate(predicate, self.no_type_predicate);
-            } else if let Some(declaration) = sig.declaration() {
+            } else if let Some(composite) = self.signature(sig).composite() {
+                let predicate = self.get_union_or_intersection_type_predicate(&self.composite_signature(composite).signatures.get(), self.composite_signature(composite).is_union.get());
+                self.signature(sig).set_resolved_type_predicate(predicate, self.no_type_predicate);
+            } else if let Some(declaration) = self.signature(sig).declaration() {
                 let type_node = declaration.type_node();
                 if let Some(type_node) = type_node {
                     if is_type_predicate_node(type_node) {
                         let predicate = self.create_type_predicate_from_type_predicate_node(type_node, sig);
-                        sig.set_resolved_type_predicate(Some(predicate), self.no_type_predicate);
+                        self.signature(sig).set_resolved_type_predicate(Some(predicate), self.no_type_predicate);
                     }
                 } else if is_function_like_declaration(declaration)
-                    && sig.resolved_return_type.get().is_none_or(|t| t.flags().intersects(TypeFlags::Boolean))
+                    && self.signature(sig).resolved_return_type.get().is_none_or(|t| t.flags().intersects(TypeFlags::Boolean))
                     && self.get_parameter_count(sig) > 0
                 {
-                    sig.set_resolved_type_predicate(Some(self.no_type_predicate), self.no_type_predicate); // avoid infinite loop
+                    self.signature(sig).set_resolved_type_predicate(Some(self.no_type_predicate), self.no_type_predicate); // avoid infinite loop
                     let predicate = self.get_type_predicate_from_body(declaration);
-                    sig.set_resolved_type_predicate(predicate, self.no_type_predicate);
+                    self.signature(sig).set_resolved_type_predicate(predicate, self.no_type_predicate);
                 }
             }
-            if sig.resolved_type_predicate(self.no_type_predicate).is_none() {
-                sig.set_resolved_type_predicate(Some(self.no_type_predicate), self.no_type_predicate);
+            if self.signature(sig).resolved_type_predicate(self.no_type_predicate).is_none() {
+                self.signature(sig).set_resolved_type_predicate(Some(self.no_type_predicate), self.no_type_predicate);
             }
         }
-        if sig.resolved_type_predicate(self.no_type_predicate) == Some(self.no_type_predicate) {
+        if self.signature(sig).resolved_type_predicate(self.no_type_predicate) == Some(self.no_type_predicate) {
             return None;
         }
-        sig.resolved_type_predicate(self.no_type_predicate)
+        self.signature(sig).resolved_type_predicate(self.no_type_predicate)
     }
 
     // relater.go:2083
-    pub(crate) fn get_union_or_intersection_type_predicate(&mut self, signatures: &[P<Signature>], is_union: bool) -> Option<TypePredicateKey> {
+    pub(crate) fn get_union_or_intersection_type_predicate(&mut self, signatures: &[SignatureKey], is_union: bool) -> Option<TypePredicateKey> {
         let mut last: Option<TypePredicateKey> = None;
         let mut types: Vec<P<Type>> = Vec::new();
         for &sig in signatures {
@@ -2751,7 +2751,7 @@ impl Checker {
     }
 
     // relater.go:2117
-    pub(crate) fn create_type_predicate_from_type_predicate_node(&mut self, node: P<Node>, signature: P<Signature>) -> TypePredicateKey {
+    pub(crate) fn create_type_predicate_from_type_predicate_node(&mut self, node: P<Node>, signature: SignatureKey) -> TypePredicateKey {
         let predicate_node = node.as_type_predicate_node();
         let mut t: Option<P<Type>> = None;
         if let Some(type_node) = predicate_node.type_ {
@@ -2767,7 +2767,7 @@ impl Checker {
             TypePredicateKind::Identifier
         };
         let name = predicate_node.parameter_name.text();
-        let index = find_index(&signature.parameters(), |p| p.name() == name);
+        let index = find_index(&self.signature(signature).parameters(), |p| p.name() == name);
         self.new_type_predicate(kind, name, index, t)
     }
 
@@ -2792,19 +2792,19 @@ impl Checker {
     }
 
     // relater.go:2145
-    pub(crate) fn is_resolving_return_type_of_signature(&mut self, signature: P<Signature>) -> bool {
-        if let Some(composite) = signature.composite() {
-            if composite.signatures.get().iter().any(|&s| self.is_resolving_return_type_of_signature(s)) {
+    pub(crate) fn is_resolving_return_type_of_signature(&mut self, signature: SignatureKey) -> bool {
+        if let Some(composite) = self.signature(signature).composite() {
+            if self.composite_signature(composite).signatures.get().iter().any(|&s| self.is_resolving_return_type_of_signature(s)) {
                 return true;
             }
         }
-        signature.resolved_return_type.get().is_none()
+        self.signature(signature).resolved_return_type.get().is_none()
             && self.find_resolution_cycle_start_index(TypeSystemEntity::Signature(signature), TypeSystemPropertyName::ResolvedReturnType) >= 0
     }
 
     // relater.go:2152
-    pub(crate) fn find_matching_signatures(&mut self, signature_lists: &[Vec<P<Signature>>], signature: P<Signature>, list_index: i32) -> Vec<P<Signature>> {
-        if !signature.type_parameters().is_empty() {
+    pub(crate) fn find_matching_signatures(&mut self, signature_lists: &[Vec<SignatureKey>], signature: SignatureKey, list_index: i32) -> Vec<SignatureKey> {
+        if !self.signature(signature).type_parameters().is_empty() {
             // We require an exact match for generic signatures, so we only return signatures from the first
             // signature list and only if they have exact matches in the other signature lists.
             if list_index > 0 {
@@ -2820,7 +2820,7 @@ impl Checker {
             }
             return vec![signature];
         }
-        let mut result: Vec<P<Signature>> = Vec::new();
+        let mut result: Vec<SignatureKey> = Vec::new();
         for i in 0..signature_lists.len() {
             // Allow matching non-generic signatures to have excess parameters (as a fallback if exact parameter match is not found) and different return types.
             // Prefer matching this types if possible.
@@ -2843,7 +2843,7 @@ impl Checker {
     }
 
     // relater.go:2187
-    pub(crate) fn find_matching_signature(&mut self, signature_list: &[P<Signature>], signature: P<Signature>, partial_match: bool, ignore_this_types: bool, ignore_return_types: bool) -> Option<P<Signature>> {
+    pub(crate) fn find_matching_signature(&mut self, signature_list: &[SignatureKey], signature: SignatureKey, partial_match: bool, ignore_this_types: bool, ignore_return_types: bool) -> Option<SignatureKey> {
         for &s in signature_list {
             let compare_types = |c: &mut Checker, s: P<Type>, t: P<Type>| {
                 if partial_match { c.compare_types_subtype_of(s, t) } else { c.compare_types_identical(s, t) }
@@ -2859,7 +2859,7 @@ impl Checker {
     /**
      * See signatureRelatedTo, compareSignaturesIdentical
      */
-    pub(crate) fn compare_signatures_identical(&mut self, source: P<Signature>, target: P<Signature>, partial_match: bool, ignore_this_types: bool, ignore_return_types: bool, compare_types: impl FnMut(&mut Checker, P<Type>, P<Type>) -> Ternary) -> Ternary {
+    pub(crate) fn compare_signatures_identical(&mut self, source: SignatureKey, target: SignatureKey, partial_match: bool, ignore_this_types: bool, ignore_return_types: bool, compare_types: impl FnMut(&mut Checker, P<Type>, P<Type>) -> Ternary) -> Ternary {
         let mut compare_types = compare_types;
         let mut source = source;
         if source == target {
@@ -2869,16 +2869,16 @@ impl Checker {
             return Ternary::False;
         }
         // Check that the two signatures have the same number of type parameters.
-        if source.type_parameters().len() != target.type_parameters().len() {
+        if self.signature(source).type_parameters().len() != self.signature(target).type_parameters().len() {
             return Ternary::False;
         }
         // Check that type parameter constraints and defaults match. If they do, instantiate the source
         // signature with the type parameters of the target signature and continue the comparison.
-        if !target.type_parameters().is_empty() {
-            let mapper = new_type_mapper(&source.type_parameters(), &target.type_parameters());
-            for i in 0..target.type_parameters().len() {
-                let s = source.type_parameters()[i];
-                let t = target.type_parameters()[i];
+        if !self.signature(target).type_parameters().is_empty() {
+            let mapper = new_type_mapper(&self.signature(source).type_parameters(), &self.signature(target).type_parameters());
+            for i in 0..self.signature(target).type_parameters().len() {
+                let s = self.signature(source).type_parameters()[i];
+                let t = self.signature(target).type_parameters()[i];
                 if !(s == t || {
                     let sc = self.get_constraint_or_unknown_from_type_parameter(s);
                     let sc = self.instantiate_type(sc, Some(mapper));
@@ -2934,7 +2934,7 @@ impl Checker {
     }
 
     // relater.go:2260
-    pub(crate) fn is_matching_signature(&mut self, source: P<Signature>, target: P<Signature>, partial_match: bool) -> bool {
+    pub(crate) fn is_matching_signature(&mut self, source: SignatureKey, target: SignatureKey, partial_match: bool) -> bool {
         let source_parameter_count = self.get_parameter_count(source);
         let target_parameter_count = self.get_parameter_count(target);
         let source_min_argument_count = self.get_min_argument_count(source);

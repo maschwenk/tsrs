@@ -933,10 +933,10 @@ impl Checker {
     }
 
     // inference.go:853
-    pub(crate) fn infer_from_signature(&mut self, n: P<InferenceState>, source: P<Signature>, target: P<Signature>) {
-        if !source.flags().intersects(SignatureFlags::IsNonInferrable) {
+    pub(crate) fn infer_from_signature(&mut self, n: P<InferenceState>, source: SignatureKey, target: SignatureKey) {
+        if !self.signature(source).flags().intersects(SignatureFlags::IsNonInferrable) {
             let save_bivariant = n.bivariant.get();
-            let kind = match target.declaration() {
+            let kind = match self.signature(target).declaration() {
                 Some(declaration) => declaration.kind(),
                 None => Kind::Unknown,
             };
@@ -949,7 +949,7 @@ impl Checker {
     }
 
     // inference.go:868
-    pub(crate) fn apply_to_parameter_types(&mut self, source: P<Signature>, target: P<Signature>, mut callback: impl FnMut(&mut Checker, P<Type>, P<Type>)) {
+    pub(crate) fn apply_to_parameter_types(&mut self, source: SignatureKey, target: SignatureKey, mut callback: impl FnMut(&mut Checker, P<Type>, P<Type>)) {
         let source_count = self.get_parameter_count(source);
         let target_count = self.get_parameter_count(target);
         let source_rest_type = self.get_effective_rest_type(source);
@@ -982,7 +982,7 @@ impl Checker {
     }
 
     // inference.go:896
-    pub(crate) fn apply_to_return_types(&mut self, source: P<Signature>, target: P<Signature>, mut callback: impl FnMut(&mut Checker, P<Type>, P<Type>)) {
+    pub(crate) fn apply_to_return_types(&mut self, source: SignatureKey, target: SignatureKey, mut callback: impl FnMut(&mut Checker, P<Type>, P<Type>)) {
         let target_type_predicate = self.get_type_predicate_of_signature(target);
         if let Some(target_type_predicate) = target_type_predicate {
             let source_type_predicate = self.get_type_predicate_of_signature(source);
@@ -1427,7 +1427,7 @@ impl Checker {
     }
 
     // inference.go:1251
-    pub(crate) fn new_inference_context(&mut self, type_parameters: &[P<Type>], signature: Option<P<Signature>>, flags: InferenceFlags, compare_types: Option<TypeComparer>) -> P<InferenceContext> {
+    pub(crate) fn new_inference_context(&mut self, type_parameters: &[P<Type>], signature: Option<SignatureKey>, flags: InferenceFlags, compare_types: Option<TypeComparer>) -> P<InferenceContext> {
         let compare_types = match compare_types {
             Some(compare_types) => compare_types,
             None => self.compare_types_assignable_comparer(),
@@ -1455,7 +1455,7 @@ impl Checker {
     }
 
     // inference.go:1273
-    pub(crate) fn new_inference_context_worker(&mut self, inferences: &[P<InferenceInfo>], signature: Option<P<Signature>>, flags: InferenceFlags, compare_types: TypeComparer) -> P<InferenceContext> {
+    pub(crate) fn new_inference_context_worker(&mut self, inferences: &[P<InferenceInfo>], signature: Option<SignatureKey>, flags: InferenceFlags, compare_types: TypeComparer) -> P<InferenceContext> {
         let n = P::new(InferenceContext::new(inferences, signature, flags, compare_types));
         if !tsrs_core::lazymembers::lazy_inference_mappers() {
             n.mapper();
@@ -1648,7 +1648,7 @@ impl Checker {
     }
 
     // inference.go:1434
-    pub(crate) fn get_covariant_inference(&mut self, inference: P<InferenceInfo>, signature: P<Signature>) -> P<Type> {
+    pub(crate) fn get_covariant_inference(&mut self, inference: P<InferenceInfo>, signature: SignatureKey) -> P<Type> {
         // Extract all object and array literal types and replace them with a single widened and normalized type.
         let inference_candidates = inference.candidates.to_vec();
         let candidates = self.union_object_and_array_literal_candidates(&inference_candidates);
@@ -1725,7 +1725,7 @@ impl Checker {
     }
 
     // inference.go:1501
-    pub(crate) fn is_type_parameter_at_top_level_in_return_type(&mut self, signature: P<Signature>, type_parameter: P<Type>) -> bool {
+    pub(crate) fn is_type_parameter_at_top_level_in_return_type(&mut self, signature: SignatureKey, type_parameter: P<Type>) -> bool {
         let type_predicate = self.get_type_predicate_of_signature(signature);
         if let Some(type_predicate) = type_predicate {
             return match self.type_predicate(type_predicate).type_() {

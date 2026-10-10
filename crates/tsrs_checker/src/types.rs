@@ -446,9 +446,9 @@ pub struct SourceFileLinks {
 
 #[derive(Default)]
 pub struct SignatureLinks {
-    pub resolved_signature: Cell<Option<P<Signature>>>, // Cached signature of signature node or call expression
-    pub effects_signature: Cell<Option<P<Signature>>>, // Signature with possible control flow effects
-    pub decorator_signature: Cell<Option<P<Signature>>>, // Signature for decorator as if invoked by the runtime
+    pub resolved_signature: Cell<Option<SignatureKey>>, // Cached signature of signature node or call expression
+    pub effects_signature: Cell<Option<SignatureKey>>, // Signature with possible control flow effects
+    pub decorator_signature: Cell<Option<SignatureKey>>, // Signature for decorator as if invoked by the runtime
     link_key: Cell<tsrs_core::PKey>, // tsrs: the node this record is filed under (`KeyedLinkStore`), in what was padding
 }
 
@@ -458,11 +458,11 @@ impl crate::links::KeyedLinks for SignatureLinks {
     }
 }
 
-// Native pointers make this 32 bytes.
+// Qualified signature keys make this 32 bytes on native and 28 on Wasm.
 #[cfg(target_pointer_width = "64")]
 const _: () = assert!(std::mem::size_of::<SignatureLinks>() == 32);
 #[cfg(target_pointer_width = "32")]
-const _: () = assert!(std::mem::size_of::<SignatureLinks>() == 16);
+const _: () = assert!(std::mem::size_of::<SignatureLinks>() == 28);
 
 // Note that for types of different kinds, the numeric values of TypeFlags determine the order
 // computed by the CompareTypes function and therefore the order of constituent types in union types.
@@ -1717,7 +1717,7 @@ struct StructuredMembers {
     members: Cell<Option<P<SymbolTable>>>,
     // Each owned array field is a nullable Arc<Vec<T>> pointer.
     properties: ArrayCell<P<Symbol>>,
-    signatures: ArrayCell<P<Signature>>, // Signatures (call + construct)
+    signatures: ArrayCell<SignatureKey>, // Signatures (call + construct)
     // Count of call signatures, and index infos (2% of the resolved types on the private monorepo have any).
     count_or_index_infos: CountOrIndexInfos,
 }
@@ -1772,11 +1772,11 @@ impl StructuredType {
     }
     /// Call signatures followed by construct signatures.
     #[inline]
-    pub fn signatures(&self) -> ArrayView<P<Signature>> {
+    pub fn signatures(&self) -> ArrayView<SignatureKey> {
         self.resolved.get().map_or_else(ArrayView::default, |r| r.signatures.get())
     }
     #[inline]
-    pub fn set_signatures(&self, signatures: &[P<Signature>]) {
+    pub fn set_signatures(&self, signatures: &[SignatureKey]) {
         self.resolved_for_write().signatures.set(signatures);
     }
     #[inline]
@@ -1795,10 +1795,10 @@ impl StructuredType {
     pub fn set_index_infos(&self, index_infos: &[IndexInfoKey]) {
         self.resolved_for_write().count_or_index_infos.set_index_infos(index_infos);
     }
-    pub fn call_signatures(&self) -> ArrayView<P<Signature>> {
+    pub fn call_signatures(&self) -> ArrayView<SignatureKey> {
         self.signatures().slice(..self.call_signature_count() as usize)
     }
-    pub fn construct_signatures(&self) -> ArrayView<P<Signature>> {
+    pub fn construct_signatures(&self) -> ArrayView<SignatureKey> {
         self.signatures().slice(self.call_signature_count() as usize..)
     }
 }
@@ -1933,8 +1933,8 @@ pub struct InterfaceType {
     pub resolved_base_constructor_type: Cell<Option<P<Type>>>,
     pub resolved_base_types: ArrayCell<P<Type>>,
     pub declared_members: Cell<Option<P<SymbolTable>>>, // Declared members
-    pub declared_call_signatures: ArrayCell<P<Signature>>, // Declared call signatures
-    pub declared_construct_signatures: ArrayCell<P<Signature>>, // Declared construct signatures
+    pub declared_call_signatures: ArrayCell<SignatureKey>, // Declared call signatures
+    pub declared_construct_signatures: ArrayCell<SignatureKey>, // Declared construct signatures
     pub declared_index_infos: ArrayCell<IndexInfoKey>, // Declared index signatures
 }
 embeds!(InterfaceType, type_reference, TypeReference);
@@ -2490,6 +2490,11 @@ bitflags! {
 
 // Signature
 
+/// Qualified signature edge. Copying it does not retain the checker or access the record.
+pub type SignatureKey = tsrs_core::arena_owner::ArenaKey<Signature>;
+/// Shared composite signature metadata, resolved through its owning checker.
+pub type CompositeSignatureKey = tsrs_core::arena_owner::ArenaKey<CompositeSignature>;
+
 #[derive(Default)]
 pub struct Signature {
     pub id: Cell<SignatureId>,
@@ -2500,7 +2505,7 @@ pub struct Signature {
     pub type_parameters: ArrayCell<P<Type>>,
     pub parameters: ArrayCell<P<Symbol>>,
     pub resolved_return_type: Cell<Option<P<Type>>>,
-    pub target: Cell<Option<P<Signature>>>,
+    pub target: Cell<Option<SignatureKey>>,
     pub mapper: MapperCell,
     // `thisParameter`, `isolatedSignatureType`, `composite` and a resolved type predicate other than the checker's
     // `noTypePredicate` (few signatures have any) live in a tail allocated on the first non-nil write;
@@ -2513,13 +2518,13 @@ pub struct Signature {
 #[cfg(target_pointer_width = "64")]
 const _: () = assert!(std::mem::size_of::<Signature>() == 80);
 #[cfg(target_pointer_width = "32")]
-const _: () = assert!(std::mem::size_of::<Signature>() == 48);
+const _: () = assert!(std::mem::size_of::<Signature>() == 52);
 
 #[derive(Default)]
 struct SignatureRare {
     this_parameter: Cell<Option<P<Symbol>>>,
     isolated_signature_type: Cell<Option<P<Type>>>,
-    composite: Cell<Option<P<CompositeSignature>>>,
+    composite: Cell<Option<CompositeSignatureKey>>,
     resolved_type_predicate: Cell<Option<TypePredicateKey>>, // never the checker's `noTypePredicate` sentinel
 }
 
@@ -2536,7 +2541,7 @@ impl Signature {
     pub fn declaration(&self) -> Option<P<Node>> {
         self.declaration.get()
     }
-    pub fn target(&self) -> Option<P<Signature>> {
+    pub fn target(&self) -> Option<SignatureKey> {
         self.target.get()
     }
     fn rare_for_write(&self) -> &SignatureRare {
@@ -2575,10 +2580,10 @@ impl Signature {
             self.rare_for_write().isolated_signature_type.set(t);
         }
     }
-    pub fn composite(&self) -> Option<P<CompositeSignature>> {
+    pub fn composite(&self) -> Option<CompositeSignatureKey> {
         self.rare.get().and_then(|r| r.composite.get())
     }
-    pub fn set_composite(&self, composite: Option<P<CompositeSignature>>) {
+    pub fn set_composite(&self, composite: Option<CompositeSignatureKey>) {
         if composite.is_some() || self.rare.get().is_some() {
             self.rare_for_write().composite.set(composite);
         }
@@ -2597,7 +2602,7 @@ impl Signature {
 #[derive(Default)]
 pub struct CompositeSignature {
     pub is_union: Cell<bool>, // True for union, false for intersection
-    pub signatures: ArrayCell<P<Signature>>, // Individual signatures
+    pub signatures: ArrayCell<SignatureKey>, // Individual signatures
 }
 
 #[repr(i32)]
@@ -2772,6 +2777,47 @@ pub type StringLiteralType = Type;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn signature_edges_keep_identity_and_semantic_ids_across_growth_and_composite_replacement() {
+        let mut signatures = tsrs_core::arena_owner::ArenaBuilder::with_capacity(1);
+        let first = signatures.alloc(Signature::default());
+        signatures.get(first).unwrap().id.set(SignatureId(41));
+        let clone = signatures.alloc(Signature::default());
+        signatures.get(clone).unwrap().id.set(SignatureId(42));
+        signatures.get(clone).unwrap().target.set(Some(first));
+        let mut composites = tsrs_core::arena_owner::ArenaBuilder::with_capacity(1);
+        let composite = composites.alloc(CompositeSignature { is_union: Cell::new(true), signatures: ArrayCell::new(&[first, clone]) });
+        signatures.get(first).unwrap().set_composite(Some(composite));
+        signatures.get(clone).unwrap().set_composite(Some(composite));
+        let snapshot = composites.get(composite).unwrap().signatures.get();
+        for _ in 0..128 {
+            signatures.alloc(Signature::default());
+            composites.alloc(CompositeSignature::default());
+        }
+        composites.get(composite).unwrap().signatures.set(&[clone]);
+        assert_eq!(signatures.get(first).unwrap().id(), SignatureId(41));
+        assert_eq!(signatures.get(clone).unwrap().id(), SignatureId(42));
+        assert_eq!(signatures.get(clone).unwrap().target(), Some(first));
+        assert_eq!(signatures.get(first).unwrap().composite(), signatures.get(clone).unwrap().composite());
+        assert_eq!(snapshot.as_ref(), &[first, clone]);
+        assert_eq!(composites.get(composite).unwrap().signatures.get().as_ref(), &[clone]);
+        let mut foreign = tsrs_core::arena_owner::ArenaBuilder::new();
+        let foreign_key = foreign.alloc(Signature::default());
+        foreign.get(foreign_key).unwrap().id.set(SignatureId(41));
+        assert_ne!(first, foreign_key);
+        assert!(signatures.get(foreign_key).is_none());
+        assert!(foreign.get(first).is_none());
+        let mut foreign_composites = tsrs_core::arena_owner::ArenaBuilder::new();
+        let foreign_composite = foreign_composites.alloc(CompositeSignature::default());
+        assert!(composites.get(foreign_composite).is_none());
+        assert!(foreign_composites.get(composite).is_none());
+        drop(composites);
+        drop(signatures);
+        // The array retains its key buffer, not the signature records.
+        assert_eq!(snapshot.as_ref(), &[first, clone]);
+        assert!(foreign.get(snapshot[0]).is_none());
+    }
 
     #[test]
     fn pending_alias_hashes_without_allocation_and_materializes_once_in_its_owner() {

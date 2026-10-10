@@ -218,6 +218,22 @@ impl Checker {
     #[expect(clippy::iter_over_hash_type, reason = "sums sizes: the order does not matter")]
     pub fn heap_census(&self) -> HeapCensus {
         let mut h = HeapCensus::default();
+        let slot = std::mem::size_of::<Signature>() as u64;
+        h.row("signatures (owned records)", HeapStat {
+            containers: 1,
+            len: self.signatures.len() as u64,
+            cap: self.signatures.capacity() as u64,
+            slot,
+            bytes: self.signatures.capacity() as u64 * slot,
+        });
+        let slot = std::mem::size_of::<CompositeSignature>() as u64;
+        h.row("composite_signatures (owned records)", HeapStat {
+            containers: 1,
+            len: self.composite_signatures.len() as u64,
+            cap: self.composite_signatures.capacity() as u64,
+            slot,
+            bytes: self.composite_signatures.capacity() as u64 * slot,
+        });
         let slot = std::mem::size_of::<TypeAlias>() as u64;
         h.row("type_aliases (owned records)", HeapStat {
             containers: 1,

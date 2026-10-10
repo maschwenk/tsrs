@@ -24,7 +24,9 @@ impl PackedKey for CacheHashKey {
 impl PackedKey for CachedSignatureKey {
     #[inline]
     fn packed_hash(&self) -> u64 {
-        self.key.lo ^ (self.sig.key() as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15)
+        use std::hash::BuildHasher;
+        // Hash the qualified key; storage addresses are no longer signature identities.
+        self.key.lo ^ rustc_hash::FxBuildHasher.hash_one(self.sig)
     }
 }
 

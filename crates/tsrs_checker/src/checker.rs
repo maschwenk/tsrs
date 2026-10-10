@@ -34,7 +34,7 @@ pub enum TypeSystemEntity {
     Node(P<Node>),
     Symbol(P<Symbol>),
     Type(P<Type>),
-    Signature(P<Signature>),
+    Signature(SignatureKey),
 }
 
 impl From<P<Node>> for TypeSystemEntity {
@@ -52,8 +52,8 @@ impl From<P<Type>> for TypeSystemEntity {
         TypeSystemEntity::Type(v)
     }
 }
-impl From<P<Signature>> for TypeSystemEntity {
-    fn from(v: P<Signature>) -> Self {
+impl From<SignatureKey> for TypeSystemEntity {
+    fn from(v: SignatureKey) -> Self {
         TypeSystemEntity::Signature(v)
     }
 }
@@ -190,7 +190,7 @@ pub struct UnionOfUnionKey {
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct CachedSignatureKey {
-    pub sig: P<Signature>,
+    pub sig: SignatureKey,
     pub key: CacheHashKey, // Type list key or one of the special keys below
 }
 
@@ -315,7 +315,7 @@ bitflags! {
 pub struct InferenceContext {
     pub inferences: ArrayCell<P<InferenceInfo>>, // Inferences made for each type parameter
     pub flags: Cell<InferenceFlags>, // Inference flags
-    pub signature: Cell<Option<P<Signature>>>, // Generic signature for which inferences are made (if any)
+    pub signature: Cell<Option<SignatureKey>>, // Generic signature for which inferences are made (if any)
     pub compare_types: RefCell<Option<TypeComparer>>, // Type comparer function
     // Mapper that fixes inferences / that doesn't: created on first use with `TSRS_LAZY_INFERENCE_MAPPERS` (`mapper()`,
     // `non_fixing_mapper()`), see notes/mem-round3.md.
@@ -328,7 +328,7 @@ pub struct InferenceContext {
 #[cfg(target_pointer_width = "64")]
 const _: () = assert!(std::mem::size_of::<InferenceContext>() == 72);
 #[cfg(target_pointer_width = "32")]
-const _: () = assert!(std::mem::size_of::<InferenceContext>() == 36);
+const _: () = assert!(std::mem::size_of::<InferenceContext>() == 40);
 
 #[derive(Default)]
 pub(crate) struct InferenceContextRare {
@@ -339,7 +339,7 @@ pub(crate) struct InferenceContextRare {
 }
 
 impl InferenceContext {
-    pub(crate) fn new(inferences: &[P<InferenceInfo>], signature: Option<P<Signature>>, flags: InferenceFlags, compare_types: TypeComparer) -> InferenceContext {
+    pub(crate) fn new(inferences: &[P<InferenceInfo>], signature: Option<SignatureKey>, flags: InferenceFlags, compare_types: TypeComparer) -> InferenceContext {
         InferenceContext {
             inferences: ArrayCell::new(inferences),
             signature: Cell::new(signature),
@@ -891,7 +891,7 @@ pub struct Checker {
     pub this_expando_locations: FxHashMap<P<Symbol>, Option<P<Node>>>,
     pub subtype_reduction_cache: FxHashMap<CacheHashKey, Box<[P<Type>]>>,
     pub cached_types: FxHashMap<CachedTypeKey, P<Type>>,
-    pub cached_signatures: PackedMap<CachedSignatureKey, P<Signature>>,
+    pub cached_signatures: PackedMap<CachedSignatureKey, SignatureKey>,
     pub undefined_properties: FxHashMap<String, P<Symbol>>,
     // tsrs: the canonical (history-independent) form of `undefined_properties` (get_undefined_property).
     pub undefined_properties_by_prop: FxHashMap<P<Symbol>, P<Symbol>>,
@@ -1054,12 +1054,14 @@ pub struct Checker {
     pub marker_super_type_for_check: P<Type>,
     pub marker_sub_type_for_check: P<Type>,
     pub(crate) type_aliases: tsrs_core::arena_owner::ArenaBuilder<TypeAlias>,
+    pub(crate) signatures: tsrs_core::arena_owner::ArenaBuilder<Signature>,
+    pub(crate) composite_signatures: tsrs_core::arena_owner::ArenaBuilder<CompositeSignature>,
     pub(crate) type_predicates: tsrs_core::arena_owner::ArenaBuilder<TypePredicate>,
     pub no_type_predicate: TypePredicateKey,
-    pub any_signature: P<Signature>,
-    pub unknown_signature: P<Signature>,
-    pub resolving_signature: P<Signature>,
-    pub silent_never_signature: P<Signature>,
+    pub any_signature: SignatureKey,
+    pub unknown_signature: SignatureKey,
+    pub resolving_signature: SignatureKey,
+    pub silent_never_signature: SignatureKey,
     pub cached_arguments_referenced: FxHashMap<P<Node>, bool>,
     pub(crate) index_infos: tsrs_core::arena_owner::ArenaBuilder<IndexInfo>,
     pub enum_number_index_info: IndexInfoKey,
@@ -1227,7 +1229,8 @@ pub fn new_checker(program: Arc<dyn Program>) -> Box<Checker> {
     let dummy_type = Type::alloc(TypeFlags::None, ObjectFlags::None, TypeId(0), IntrinsicType::default());
     let dummy_symbol = P::new(Symbol::default());
     let dummy_mapper = new_simple_type_mapper(dummy_type, dummy_type);
-    let dummy_signature = P::new(Signature::default());
+    let mut signatures = tsrs_core::arena_owner::ArenaBuilder::new();
+    let dummy_signature = signatures.alloc(Signature::default());
     let mut index_infos = tsrs_core::arena_owner::ArenaBuilder::new();
     let dummy_index_info = index_infos.alloc(IndexInfo::default());
     let dummy_resolver = P::new(NameResolver::<Checker>::new(compiler_options, None));
@@ -1447,6 +1450,8 @@ pub fn new_checker(program: Arc<dyn Program>) -> Box<Checker> {
         marker_super_type_for_check: dummy_type,
         marker_sub_type_for_check: dummy_type,
         type_aliases: tsrs_core::arena_owner::ArenaBuilder::new(),
+        signatures,
+        composite_signatures: tsrs_core::arena_owner::ArenaBuilder::new(),
         type_predicates,
         no_type_predicate: dummy_predicate,
         any_signature: dummy_signature,
@@ -2272,14 +2277,14 @@ pub struct CallState {
     pub node: Option<P<Node>>,
     pub type_arguments: Vec<P<Node>>,
     pub args: Vec<P<Node>>,
-    pub candidates: Vec<P<Signature>>,
+    pub candidates: Vec<SignatureKey>,
     pub arg_check_mode: CheckMode,
     pub is_single_non_generic_candidate: bool,
     pub signature_help_trailing_comma: bool,
     pub recursive_resolution: bool,
-    pub candidates_for_argument_error: Vec<P<Signature>>,
-    pub candidate_for_argument_arity_error: Option<P<Signature>>,
-    pub candidate_for_type_argument_error: Option<P<Signature>>,
+    pub candidates_for_argument_error: Vec<SignatureKey>,
+    pub candidate_for_argument_arity_error: Option<SignatureKey>,
+    pub candidate_for_type_argument_error: Option<SignatureKey>,
 }
 
 bitflags! {

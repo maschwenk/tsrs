@@ -2,7 +2,7 @@ use std::cell::RefCell;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_ast::{self as ast, CheckFlags, Kind, ModifierFlags, Node, NodeFactory, NodeFlags, NodeList, SourceFile, Symbol, SymbolFlags, TokenFlags};
-use tsrs_checker::{self as checker, Checker, Flags, IndexInfoKey, InternalFlags, NodeBuilder, Signature, Type};
+use tsrs_checker::{self as checker, Checker, Flags, IndexInfoKey, InternalFlags, NodeBuilder, SignatureKey, Type};
 use tsrs_compiler::Program;
 use tsrs_core::context::Locale;
 use tsrs_core::{ P};
@@ -182,7 +182,7 @@ impl<'a> missingMemberFixer<'a> {
                 }
 
                 for &signature in &signatures {
-                    if let Some(signature_declaration) = signature.declaration() {
+                    if let Some(signature_declaration) = self.type_checker.signature(signature).declaration() {
                         if signature_declaration.flags().intersects(NodeFlags::Ambient) {
                             continue;
                         }
@@ -237,7 +237,7 @@ impl<'a> missingMemberFixer<'a> {
     }
 
     // codeactions_missingmemberfixer.go:170
-    fn get_call_signatures(&mut self, t: P<Type>) -> Vec<P<Signature>> {
+    fn get_call_signatures(&mut self, t: P<Type>) -> Vec<SignatureKey> {
         if t.is_union() {
             let mut result = Vec::new();
             for member in t.types() {
@@ -287,7 +287,7 @@ impl<'a> missingMemberFixer<'a> {
     // codeactions_missingmemberfixer.go:208
     fn create_signature_declaration_from_signature(
         &mut self,
-        signature: P<Signature>,
+        signature: SignatureKey,
         kind: Kind,
         source_file: P<SourceFile>,
         enclosing_declaration: P<Node>,
@@ -442,7 +442,7 @@ impl<'a> missingMemberFixer<'a> {
     // codeactions_missingmemberfixer.go:305
     fn create_signature_declaration_from_signatures(
         &mut self,
-        signatures: &[P<Signature>],
+        signatures: &[SignatureKey],
         name: Option<P<Node>>,
         optional: bool,
         modifiers: Option<P<ast::ModifierList>>,
@@ -456,22 +456,22 @@ impl<'a> missingMemberFixer<'a> {
 
         let (node_builder, id_to_symbol) = self.create_node_builder();
         let mut max_args_signature = signatures[0];
-        let mut min_argument_count = signatures[0].min_argument_count();
+        let mut min_argument_count = self.type_checker.signature(signatures[0]).min_argument_count();
 
         let mut has_rest_parameter = false;
         for &signature in signatures {
-            min_argument_count = min_argument_count.min(signature.min_argument_count());
-            if signature.has_rest_parameter() {
+            min_argument_count = min_argument_count.min(self.type_checker.signature(signature).min_argument_count());
+            if self.type_checker.signature(signature).has_rest_parameter() {
                 has_rest_parameter = true;
             }
-            if signature.parameters().len() >= max_args_signature.parameters().len() && (!signature.has_rest_parameter() || max_args_signature.has_rest_parameter()) {
+            if self.type_checker.signature(signature).parameters().len() >= self.type_checker.signature(max_args_signature).parameters().len() && (!self.type_checker.signature(signature).has_rest_parameter() || self.type_checker.signature(max_args_signature).has_rest_parameter()) {
                 max_args_signature = signature;
             }
         }
 
-        let max_non_rest_args = max_args_signature.parameters().len() as i32 - if max_args_signature.has_rest_parameter() { 1 } else { 0 };
-        let mut parameter_names: Vec<String> = Vec::with_capacity(max_args_signature.parameters().len());
-        for symbol in max_args_signature.parameters() {
+        let max_non_rest_args = self.type_checker.signature(max_args_signature).parameters().len() as i32 - if self.type_checker.signature(max_args_signature).has_rest_parameter() { 1 } else { 0 };
+        let mut parameter_names: Vec<String> = Vec::with_capacity(self.type_checker.signature(max_args_signature).parameters().len());
+        for symbol in self.type_checker.signature(max_args_signature).parameters() {
             parameter_names.push(symbol.name().to_string());
         }
         let parameters = create_dummy_parameters(self.factory(), max_non_rest_args, &parameter_names, &[] /*types*/, min_argument_count, ast::is_in_js_file(enclosing_declaration));
@@ -525,7 +525,7 @@ impl<'a> missingMemberFixer<'a> {
     }
 
     // codeactions_missingmemberfixer.go:359
-    fn get_return_type_from_signatures(&mut self, signatures: &[P<Signature>], enclosing_declaration: P<Node>, node_builder: P<NodeBuilder>, id_to_symbol: IdToSymbol) -> Option<P<Node>> {
+    fn get_return_type_from_signatures(&mut self, signatures: &[SignatureKey], enclosing_declaration: P<Node>, node_builder: P<NodeBuilder>, id_to_symbol: IdToSymbol) -> Option<P<Node>> {
         if signatures.is_empty() {
             return None;
         }

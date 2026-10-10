@@ -259,7 +259,7 @@ impl NodeBuilderImpl {
         members.extend(self.serialize_index_signatures_of_type(c, interface_type, base_type));
         // Construct signatures (skip abstract)
         for sig in resolved.construct_signatures() {
-            if sig.flags.get().intersects(SignatureFlags::Abstract) {
+            if c.signature(sig).flags.get().intersects(SignatureFlags::Abstract) {
                 continue;
             }
             members.push(self.signature_to_signature_declaration_helper(c, sig, Kind::ConstructSignature, None));
@@ -341,7 +341,7 @@ impl NodeBuilderImpl {
         let signatures = c.get_signatures_of_type(static_type, SignatureKind::Construct);
         if let Some(static_base_type) = static_base_type {
             let base_sigs = c.get_signatures_of_type(static_base_type, SignatureKind::Construct);
-            if base_sigs.is_empty() && signatures.iter().all(|sig| sig.parameters.get().is_empty()) {
+            if base_sigs.is_empty() && signatures.iter().all(|sig| c.signature(*sig).parameters.get().is_empty()) {
                 return Vec::new();
             }
             if base_sigs.len() == signatures.len() {
@@ -358,7 +358,7 @@ impl NodeBuilderImpl {
             }
             let mut private_protected = ModifierFlags::None;
             for sig in signatures .iter().copied() {
-                if let Some(declaration) = sig.declaration.get() {
+                if let Some(declaration) = c.signature(sig).declaration.get() {
                     private_protected |= declaration.modifier_flags() & (ModifierFlags::Private | ModifierFlags::Protected);
                 }
             }
@@ -372,7 +372,7 @@ impl NodeBuilderImpl {
                     None,
                 )];
             }
-        } else if signatures.iter().all(|sig| sig.parameters.get().is_empty()) {
+        } else if signatures.iter().all(|sig| c.signature(*sig).parameters.get().is_empty()) {
             return Vec::new();
         }
         let mut result: Vec<P<Node>> = Vec::new();

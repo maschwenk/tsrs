@@ -48,7 +48,7 @@ impl Checker {
                 if !base_type_node.type_arguments().is_empty() {
                     self.check_source_elements(base_type_node.type_arguments());
                     for constructor in self.get_constructors_for_type_arguments(static_base_type, base_type_node.type_arguments(), base_type_node) {
-                        if !self.check_type_argument_constraints(base_type_node, &constructor.type_parameters()) {
+                        if !self.check_type_argument_constraints(base_type_node, &self.signature(constructor).type_parameters()) {
                             break;
                         }
                     }
@@ -66,7 +66,7 @@ impl Checker {
                         self.error(Some(node.name().unwrap_or(node)), &diagnostics::A_mixin_class_must_have_a_constructor_with_a_single_rest_parameter_of_type_any, &[]);
                     } else {
                         let construct_signatures = self.get_signatures_of_type(base_constructor_type, SignatureKind::Construct);
-                        if construct_signatures.iter().any(|signature| signature.flags().intersects(SignatureFlags::Abstract)) && !has_syntactic_modifier(node, ModifierFlags::Abstract) {
+                        if construct_signatures.iter().any(|signature| self.signature(*signature).flags().intersects(SignatureFlags::Abstract)) && !has_syntactic_modifier(node, ModifierFlags::Abstract) {
                             self.error(Some(node.name().unwrap_or(node)), &diagnostics::A_mixin_class_that_extends_from_a_type_variable_containing_an_abstract_construct_signature_must_also_be_declared_abstract, &[]);
                         }
                     }
@@ -2230,7 +2230,7 @@ impl Checker {
         }
         // if we fail to get a signature and return type here, we will have already reported a grammar error in `checkDecorators`.
         let decorator_signature = self.get_decorator_call_signature(node);
-        let Some(expected_return_type) = decorator_signature.and_then(|s| s.resolved_return_type.get()) else {
+        let Some(expected_return_type) = decorator_signature.and_then(|s| self.signature(s).resolved_return_type.get()) else {
             return;
         };
         let head_message: &'static Message = match node.parent().unwrap().kind() {

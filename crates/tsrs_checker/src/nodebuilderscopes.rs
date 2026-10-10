@@ -50,9 +50,9 @@ impl NodeBuilderImpl {
     }
 
     // nodebuilderscopes.go:53
-    pub(crate) fn enter_signature_scope(&self, c: &mut Checker, signature: P<Signature>) -> (Vec<P<Symbol>>, Box<dyn FnMut(&mut Checker)>) {
+    pub(crate) fn enter_signature_scope(&self, c: &mut Checker, signature: SignatureKey) -> (Vec<P<Symbol>>, Box<dyn FnMut(&mut Checker)>) {
         let expanded_params = c.get_expanded_parameters(signature, true /*skipUnionExpanding*/).swap_remove(0);
-        let cleanup = self.enter_new_scope(c, signature.declaration(), &expanded_params, &signature.type_parameters(), Some(&signature.parameters()), signature.mapper.get());
+        let cleanup = self.enter_new_scope(c, c.signature(signature).declaration(), &expanded_params, &c.signature(signature).type_parameters(), Some(&c.signature(signature).parameters()), c.signature(signature).mapper.get());
         (expanded_params, cleanup)
     }
 

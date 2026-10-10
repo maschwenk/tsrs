@@ -161,6 +161,7 @@ In place:
 | Owned literal/bigint/type text, checker text snapshots, AST literal/synthesized identifier text and symbol names | `notes/rust-owned-type-text.md`: packed symbol-name storage removed; returned text snapshots retain Rust owners; source text/raw graph/runtime remain legacy and cumulative gates still fail | |
 | Typed checker predicate/index metadata vectors and owner-qualified edges | `notes/rust-typed-metadata.md`: raw metadata record pointers and region allocation removed; readers borrow the checker and reject foreign keys; type/symbol/AST edges and cumulative gates remain unfinished | |
 | Typed checker alias records and qualified references in type headers/conditional roots | `notes/rust-typed-alias.md`: alias record pointers removed; pending hashes/materialization and deferred argument replacement retained; remaining graph/runtime and cumulative gates are unfinished | |
+| Typed checker signature/composite records and qualified edges through inference, member arrays, caches and API registries | `notes/rust-typed-signature.md`: records use Rust vectors and short checker borrows; semantic IDs preserved; underlying type/symbol/AST edges and cumulative gates remain unfinished | |
 | Packed layouts with size assertions | `notes/mem-layout.md`, `mem-layout3.md`, `mem-round2.md`, `mem-round3.md`, `mem-small.md` | oxc, ty, rust-analyzer, Bun |
 | Fx hashing everywhere | `notes/perf-checker-cpu2.md` | oxc, Rolldown, Ruff, rust-analyzer |
 | Lazy members, line maps and rare-field tails | `notes/lazy-members.md`, `notes/mem-lazy.md` | |

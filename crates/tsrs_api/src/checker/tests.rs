@@ -604,6 +604,17 @@ fn replaced_api_checker_makes_old_handles_stale() {
     assert!(h.registry.resolve_type(&h.project, id, Some(checker_id)).is_ok());
     let err = h.registry.resolve_type(&h.project, id, Some(checker_id + 1)).unwrap_err();
     assert!(err.message.contains("stale"), "{err}");
+    let signature = h.sig0(&h.type_at(MAIN_FILE, MAIN, "withThis("));
+    let signature_id = num(&signature, "id");
+    assert!(h.registry.resolve_signature(&h.project, signature_id, Some(checker_id)).is_ok());
+    let err = h.registry.resolve_signature(&h.project, signature_id, Some(checker_id + 1)).unwrap_err();
+    assert!(err.message.contains("stale"), "{err}");
+    let wrong_project = format!(r#"{{"snapshot":{},"project":"/other/tsconfig.json","objectId":{signature_id}}}"#, h.handle);
+    assert_eq!(h.call("getParametersOfSignature", &wrong_project).unwrap_err().kind, CheckerErrorKind::Client);
+    h.registry.release();
+    for method in ["getParametersOfSignature", "getThisParameterOfSignature", "getTargetOfSignature"] {
+        assert_eq!(h.call(method, &h.sp(&format!(r#""objectId":{signature_id}"#))).unwrap_err().kind, CheckerErrorKind::Client);
+    }
 }
 
 #[test]

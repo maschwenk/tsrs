@@ -158,7 +158,7 @@ impl Checker {
         let expr = node.expression().unwrap();
         let signature = self.get_decorator_call_signature(node);
         if let Some(signature) = signature {
-            let params = signature.parameters.get();
+            let params = self.signature(signature).parameters.get();
             let mut args = Vec::with_capacity(params.len());
             for param in params {
                 let t = self.get_type_of_symbol(param);
@@ -170,7 +170,7 @@ impl Checker {
     }
 
     // checker.go:30644
-    pub(crate) fn get_decorator_call_signature(&mut self, decorator: P<Node>) -> Option<P<Signature>> {
+    pub(crate) fn get_decorator_call_signature(&mut self, decorator: P<Node>) -> Option<SignatureKey> {
         if self.legacy_decorators {
             return self.get_legacy_decorator_call_signature(decorator);
         }
@@ -178,7 +178,7 @@ impl Checker {
     }
 
     // checker.go:30651
-    pub(crate) fn get_legacy_decorator_call_signature(&mut self, decorator: P<Node>) -> Option<P<Signature>> {
+    pub(crate) fn get_legacy_decorator_call_signature(&mut self, decorator: P<Node>) -> Option<SignatureKey> {
         let node = decorator.parent().unwrap();
         let links = self.signature_links.get_key(node);
         if self.signature_links.at(links).decorator_signature.get().is_none() {
@@ -266,7 +266,7 @@ impl Checker {
     }
 
     // checker.go:30718
-    pub(crate) fn get_es_decorator_call_signature(&mut self, decorator: P<Node>) -> Option<P<Signature>> {
+    pub(crate) fn get_es_decorator_call_signature(&mut self, decorator: P<Node>) -> Option<SignatureKey> {
         // We are considering a future change that would allow the type of a decorator to affect the type of the
         // class and its members, such as a `@Stringify` decorator changing the type of a `number` field to `string`, or
         // a `@Callable` decorator adding a call signature to a `class`. The type arguments for the various context
@@ -565,7 +565,7 @@ impl Checker {
     // Creates a call signature for an ES Decorator. This method is used by the semantics of
     // `getESDecoratorCallSignature`, which you should probably be using instead.
     // checker.go:30985
-    pub(crate) fn new_es_decorator_call_signature(&mut self, target_type: P<Type>, context_type: P<Type>, non_optional_return_type: P<Type>) -> P<Signature> {
+    pub(crate) fn new_es_decorator_call_signature(&mut self, target_type: P<Type>, context_type: P<Type>, non_optional_return_type: P<Type>) -> SignatureKey {
         let target_param = self.new_parameter("target", target_type);
         let context_param = self.new_parameter("context", context_type);
         let void_type = self.void_type;
@@ -594,7 +594,7 @@ impl Checker {
 
     // Creates a synthetic `Signature` corresponding to a call signature.
     // checker.go:31008
-    pub(crate) fn new_call_signature(&mut self, type_parameters: &[P<Type>], this_parameter: Option<P<Symbol>>, parameters: &[P<Symbol>], return_type: P<Type>) -> P<Signature> {
+    pub(crate) fn new_call_signature(&mut self, type_parameters: &[P<Type>], this_parameter: Option<P<Symbol>>, parameters: &[P<Symbol>], return_type: P<Type>) -> SignatureKey {
         let any_keyword = self.factory.new_keyword_type_node(Kind::AnyKeyword);
         let decl = self.factory.new_function_type_node(None, None, Some(any_keyword));
         self.new_signature(SignatureFlags::None, Some(decl), type_parameters, this_parameter, parameters, Some(return_type), None, parameters.len() as i32)
@@ -1923,8 +1923,8 @@ impl Checker {
                     let container = self.get_this_container(node, false /*includeArrowFunctions*/, false /*includeClassComputedPropertyName*/);
                     if ast::is_function_like(container) {
                         let sig = self.get_signature_from_declaration(container.unwrap());
-                        if sig.this_parameter().is_some() {
-                            return sig.this_parameter();
+                        if self.signature(sig).this_parameter().is_some() {
+                            return self.signature(sig).this_parameter();
                         }
                     }
                     if ast::is_in_expression_context(node) {

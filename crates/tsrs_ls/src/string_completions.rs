@@ -1758,7 +1758,7 @@ fn get_string_literal_completions_from_signature(call: P<Node>, arg: P<Node>, ar
     let candidates = type_checker.get_candidate_signatures_for_string_literal_completions(call, editing_argument);
     let mut types: Vec<P<Type>> = Vec::new();
     for candidate in candidates {
-        if !candidate.has_rest_parameter() && argument_info.argument_count > candidate.parameters().len() as i32 {
+        if !type_checker.signature(candidate).has_rest_parameter() && argument_info.argument_count > type_checker.signature(candidate).parameters().len() as i32 {
             continue;
         }
         let mut t = type_checker.get_type_parameter_at_position(candidate, argument_info.argument_index);

@@ -4,7 +4,7 @@ use std::cell::RefCell;
 
 use rustc_hash::FxHashMap;
 use tsrs_ast::{self as ast, Kind, Node, SourceFile, Symbol, SymbolFlags};
-use tsrs_checker::{self as checker, Checker, ElementFlags, Flags, Signature, Type, TypeFlags, TypePredicateKey};
+use tsrs_checker::{self as checker, Checker, ElementFlags, Flags, SignatureKey, Type, TypeFlags, TypePredicateKey};
 use tsrs_core::context::Context;
 use tsrs_core::stringutil;
 use tsrs_core::{TextPos, TextRange, P};
@@ -271,7 +271,7 @@ impl InlayHintState<'_> {
         let mut pos = 0;
         for &param in node.parameters() {
             if is_hintable_declaration(param) {
-                let symbol = if ast::is_this_parameter(param) { signature.this_parameter() } else { Some(signature.parameters()[pos]) };
+                let symbol = if ast::is_this_parameter(param) { self.checker.signature(signature).this_parameter() } else { Some(self.checker.signature(signature).parameters()[pos]) };
                 self.add_parameter_type_hint(param, symbol);
             }
             if ast::is_this_parameter(param) {
@@ -880,9 +880,9 @@ struct ParameterInfo {
 
 impl InlayHintState<'_> {
     // inlay_hints.go:836
-    fn get_parameter_identifier_info_at_position(&mut self, signature: P<Signature>, pos: i32) -> Option<ParameterInfo> {
-        let parameters = signature.parameters();
-        let param_count = parameters.len() as i32 - if signature.has_rest_parameter() { 1 } else { 0 };
+    fn get_parameter_identifier_info_at_position(&mut self, signature: SignatureKey, pos: i32) -> Option<ParameterInfo> {
+        let parameters = self.checker.signature(signature).parameters();
+        let param_count = parameters.len() as i32 - if self.checker.signature(signature).has_rest_parameter() { 1 } else { 0 };
         if pos < param_count {
             let param = parameters[pos as usize];
             let param_id = get_parameter_declaration_identifier(param)?;

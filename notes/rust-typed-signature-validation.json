@@ -1,0 +1,166 @@
+{
+  "units": {
+    "sha256": "c499ba6a97e7f0699363ece9bdcee1919786766a9328dbc44525e5ca6f55e259",
+    "results": [
+      "test result: ok. 36 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.80s",
+      "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s",
+      "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s",
+      "test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.94s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s",
+      "test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.68s",
+      "test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.52s",
+      "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s",
+      "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s",
+      "test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s",
+      "test result: ok. 104 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s",
+      "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 67 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.24s",
+      "test result: ok. 105 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 4.32s",
+      "test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s",
+      "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s",
+      "test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+    ]
+  },
+  "cli-api-lsp": {
+    "sha256": "027e8c9d9e3203c9a96d5b773a01e4cb5415d97f1999ae2e4e0c6807b88657f6",
+    "results": [
+      "test result: ok. 36 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.84s",
+      "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s",
+      "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s",
+      "test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.94s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s",
+      "test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.80s",
+      "test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.43s",
+      "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s",
+      "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s",
+      "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.61s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.05s",
+      "test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.74s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.22s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.42s",
+      "test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s"
+    ],
+    "outcome": "API and CLI units pass; full CLI integrations retain two existing disabled-leaf-retirement assertion failures. Supported CLI and native LSP rerun separately and pass."
+  },
+  "supported-cli-lsp": {
+    "sha256": "92f31cbab995147c5dbc31b5427275f7e9618c40f2a2b43fe6973d00d30b72a8",
+    "results": [
+      "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.59s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.02s",
+      "test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.72s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.17s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.30s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.02s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.51s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.31s",
+      "test result: ok. 41 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.65s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+    ],
+    "excluded_cases": [
+      "freed_leaf_is_skipped_by_the_alternative_container_search",
+      "structurally_identical_instantiation_after_a_freed_leaf"
+    ]
+  },
+  "targets-final": {
+    "sha256": "4bd2d5491c7c720d95711a89cf91b2ec2fac24b1cf5025994502e63f8316edcf"
+  },
+  "features-final": {
+    "sha256": "80480bfc0aa5c609200bc4f4f49d51a41d4eab7131ac1e0c91b04c2746717bc6"
+  },
+  "wasm-final": {
+    "sha256": "6434fe3c530b7a4e294500a18b473e9de22bd8c472d5544c0c6f8dd70faf5456"
+  },
+  "ratchet": {
+    "sha256": "991fd80e294d2f8b7e7af7f188d15011de619e46a1e786116f49906135fcf84f"
+  },
+  "source-final": {
+    "sha256": "b67d4de32581dc43e7c1d5214b5e717781a81150b3d97910ed8cf918613eb90a"
+  },
+  "profile-units": {
+    "sha256": "0de2e3976190c3a2d6b6a8da8bc908fdb2362b866a429743e79dcb7433fc8e23",
+    "results": [
+      "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 104 filtered out; finished in 0.00s"
+    ]
+  },
+  "regressions": {
+    "sha256": "23af6e9de0e81cc98d84ba22c3f796b889b52c8d79b1a53cc1374eb69daafd60",
+    "cases": 28
+  },
+  "classifications": {
+    "sha256": "5eeacf7dd9df6ddc7656659dbcf33c3900463139d8a0b39d1bc4818e25c0ac20"
+  },
+  "full": {
+    "sha256": "cea102e0cff30332462d7d415723a007fce719843717342c1d5fcab6ec2a22cb"
+  },
+  "default": {
+    "sha256": "012aff01c93b072b70d49760145fb435a9f3d4d5ca52353858e82ca063cb7ecc"
+  },
+  "fourslash": {
+    "sha256": "d14fda7b86f926aa2c85bbd0ff4736589dd8413224e9acf5c5cb1c651300e34a"
+  },
+  "eager": {
+    "sha256": "772bd2061ab7a9c717bd071fea41ef1e0944d264d9beca879cc4edd4fb4eba99"
+  },
+  "eager-before": {
+    "sha256": "c74e863dca421ff2a0a82f9347e1e26f0e10bfc74ae7a4b9869c13f448473b9a"
+  },
+  "tsctests": {
+    "sha256": "d642efc6d9b57b4566d5b96528ea961cd045f362d1a8c212281a1dd6d7f4d1c3",
+    "results": [
+      "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 1.64s"
+    ]
+  },
+  "emit": {
+    "sha256": "2290bca4ee9af0d89cd936b84f50da6479b9dc327809deb90a08179363550f73"
+  },
+  "measurements": {
+    "sha256": "35a5b22371a53b9444bbb09eeb119da2885a6330f9a3b7e7c30c5845f7fc445f"
+  },
+  "census": {
+    "sha256": "b8af631534226d4661e033288de1cb4aab86792dceaf490a9c7ebc54ccbd3f66"
+  },
+  "profile-fixture": {
+    "sha256": "1c36430ac6d97909224785e7ecf6d8ee11e684365a58a64d8761b2360fc23688"
+  },
+  "profile-labels": {
+    "sha256": "f4128ffbea64023704316871798e706fbbe5d0833d7a0f967c031f44422e1ce4"
+  },
+  "release-final": {
+    "sha256": "349cb44d7e96a30e408306179296e4789d906a0619baf8860e0d805d48702a5d"
+  },
+  "profile-build": {
+    "sha256": "81ae9828bbcbdf0ab0c2582e9ea9348a56666c77ce7e4f06ce4288b328f7e247"
+  },
+  "typed-signature-work-census.tsv": {
+    "sha256": "e0a5f02f33cf4a3b778c3b1851041e23dbbb2752c97a2f1ab31d3c26aa224be4"
+  },
+  "typed-signature-work-labels.tsv": {
+    "sha256": "6eb905ffad10bfa2c025ead66a1553a77449c9ae609be002fa85a01377036317"
+  },
+  "measured_changed_rust_sources_match_final_code": true,
+  "normal_executable_sha256": "f53c95313145e0ff23b771556e5b81c50def59c4571ece0dc9de9486a634409c",
+  "profiling_executable_sha256": "cbe7177ea0cb21310fe26685edc52cb66ee68a243a45fd3322b46c80d51ba88b",
+  "scope_limits": [
+    "Two existing disabled-leaf-retirement integration cases fail",
+    "Linux/glibc RSS assertions not run on macOS",
+    "No full upstream API client/lifetime audit",
+    "Census validates AST/binder/recycling references, not every type edge",
+    "Full emit oracle and 38k-file codebase not replayed",
+    "All-target/all-feature workspace allocator combination is unsupported (parser oracle mimalloc vs profiling global allocator)"
+  ],
+  "ratchet-final": {
+    "sha256": "14b6ebecc9ced8e11f9ab93b8de7ce9a0b0cfd6897257ac5b82868c9848f4d94"
+  }
+}

@@ -192,18 +192,18 @@ impl Checker {
     }
 
     // printer.go:179
-    pub(crate) fn signature_to_string(&mut self, signature: P<Signature>) -> String {
+    pub(crate) fn signature_to_string(&mut self, signature: SignatureKey) -> String {
         self.signature_to_string_ex(signature, None, TypeFormatFlags::None, None)
     }
 
     // printer.go:183
-    pub fn signature_to_string_ex_exported(&mut self, signature: P<Signature>, enclosing_declaration: Option<P<Node>>, flags: TypeFormatFlags, vc: Option<P<VerbosityContext>>) -> String {
+    pub fn signature_to_string_ex_exported(&mut self, signature: SignatureKey, enclosing_declaration: Option<P<Node>>, flags: TypeFormatFlags, vc: Option<P<VerbosityContext>>) -> String {
         self.signature_to_string_ex(signature, enclosing_declaration, flags, vc)
     }
 
     // printer.go:187
-    pub fn signature_to_string_ex(&mut self, signature: P<Signature>, enclosing_declaration: Option<P<Node>>, flags: TypeFormatFlags, vc: Option<P<VerbosityContext>>) -> String {
-        let is_constructor = signature.flags.get().intersects(SignatureFlags::Construct) && !flags.intersects(TypeFormatFlags::WriteCallStyleSignature);
+    pub fn signature_to_string_ex(&mut self, signature: SignatureKey, enclosing_declaration: Option<P<Node>>, flags: TypeFormatFlags, vc: Option<P<VerbosityContext>>) -> String {
+        let is_constructor = self.signature(signature).flags.get().intersects(SignatureFlags::Construct) && !flags.intersects(TypeFormatFlags::WriteCallStyleSignature);
         let sig_output = if flags.intersects(TypeFormatFlags::WriteArrowStyleSignature) {
             if is_constructor {
                 Kind::ConstructorType
@@ -318,7 +318,7 @@ impl Checker {
     }
 
     // printer.go:293
-    pub fn signature_to_signature_declaration(&mut self, signature: P<Signature>, kind: Kind, enclosing_declaration: Option<P<Node>>, flags: Flags) -> Option<P<Node>> {
+    pub fn signature_to_signature_declaration(&mut self, signature: SignatureKey, kind: Kind, enclosing_declaration: Option<P<Node>>, flags: Flags) -> Option<P<Node>> {
         let (node_builder, mut release) = self.get_node_builder();
         let result = node_builder.signature_to_signature_declaration(self, signature, kind, enclosing_declaration, flags, InternalFlags::None, None);
         release(self);

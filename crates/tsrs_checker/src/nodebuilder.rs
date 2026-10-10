@@ -141,7 +141,7 @@ impl NodeBuilder {
 
     // SignatureToSignatureDeclaration implements NodeBuilderInterface.
     // nodebuilder.go:146
-    pub fn signature_to_signature_declaration(&self, c: &mut Checker, signature: P<Signature>, kind: Kind, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: Option<&'static dyn SymbolTracker>) -> Option<P<Node>> {
+    pub fn signature_to_signature_declaration(&self, c: &mut Checker, signature: SignatureKey, kind: Kind, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: Option<&'static dyn SymbolTracker>) -> Option<P<Node>> {
         self.enter_context(enclosing_declaration, flags, internal_flags, tracker);
         let result = self.impl_.signature_to_signature_declaration_helper(c, signature, kind, None);
         self.exit_context(Some(result))

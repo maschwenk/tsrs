@@ -288,12 +288,12 @@ impl Checker {
     }
 
     // services.go:261
-    pub fn get_call_signatures(&mut self, t: P<Type>) -> ArrayView<P<Signature>> {
+    pub fn get_call_signatures(&mut self, t: P<Type>) -> ArrayView<SignatureKey> {
         self.get_signatures_of_type(t, SignatureKind::Call)
     }
 
     // services.go:265
-    pub fn get_construct_signatures(&mut self, t: P<Type>) -> ArrayView<P<Signature>> {
+    pub fn get_construct_signatures(&mut self, t: P<Type>) -> ArrayView<SignatureKey> {
         self.get_signatures_of_type(t, SignatureKind::Construct)
     }
 
@@ -391,7 +391,7 @@ impl Checker {
 }
 
 // services.go:355
-pub fn get_resolved_signature_for_signature_help(node: P<Node>, argument_count: i32, c: &mut Checker) -> (Option<P<Signature>>, Vec<P<Signature>>) {
+pub fn get_resolved_signature_for_signature_help(node: P<Node>, argument_count: i32, c: &mut Checker) -> (Option<SignatureKey>, Vec<SignatureKey>) {
     c.run_without_resolved_signature_caching(node, |c| c.get_resolved_signature_worker(node, CheckMode::IsForSignatureHelp, argument_count))
 }
 
@@ -774,7 +774,7 @@ impl Checker {
 
     // services.go:708
     // getUninstantiatedSignatures gets generic signatures from the function's/constructor's type.
-    pub(crate) fn get_uninstantiated_signatures(&mut self, node: P<Node>) -> ArrayView<P<Signature>> {
+    pub(crate) fn get_uninstantiated_signatures(&mut self, node: P<Node>) -> ArrayView<SignatureKey> {
         match node.kind() {
             Kind::CallExpression | Kind::Decorator => {
                 let t = self.get_type_of_expression(node.expression().unwrap());
@@ -801,13 +801,13 @@ impl Checker {
     }
 
     // services.go:727
-    pub(crate) fn get_type_parameter_constraint_for_position_across_signatures(&mut self, signatures: &[P<Signature>], position: usize) -> P<Type> {
+    pub(crate) fn get_type_parameter_constraint_for_position_across_signatures(&mut self, signatures: &[SignatureKey], position: usize) -> P<Type> {
         let mut relevant_constraints = Vec::new();
         for signature in signatures {
-            if position >= signature.type_parameters().len() {
+            if position >= self.signature(*signature).type_parameters().len() {
                 continue;
             }
-            let relevant_type_parameter = signature.type_parameters()[position];
+            let relevant_type_parameter = self.signature(*signature).type_parameters()[position];
             let relevant_constraint = self.get_constraint_of_type_parameter(relevant_type_parameter);
             if let Some(relevant_constraint) = relevant_constraint {
                 relevant_constraints.push(relevant_constraint);
@@ -984,7 +984,7 @@ impl Checker {
 
 
     // services.go:899
-    pub(crate) fn get_resolved_signature_worker(&mut self, node: P<Node>, check_mode: CheckMode, argument_count: i32) -> (Option<P<Signature>>, Vec<P<Signature>>) {
+    pub(crate) fn get_resolved_signature_worker(&mut self, node: P<Node>, check_mode: CheckMode, argument_count: i32) -> (Option<SignatureKey>, Vec<SignatureKey>) {
         // Go: printer.NewEmitContext().ParseNode(node). A fresh EmitContext has no original-node links, so ParseNode
         // returns the node itself when it is a parse tree node and nil otherwise.
         let parsed_node = if ast::is_parse_tree_node(node) { Some(node) } else { None };
@@ -999,13 +999,13 @@ impl Checker {
     }
 
     // services.go:911
-    pub fn get_candidate_signatures_for_string_literal_completions(&mut self, call: P<Node>, editing_argument: P<Node>) -> Vec<P<Signature>> {
+    pub fn get_candidate_signatures_for_string_literal_completions(&mut self, call: P<Node>, editing_argument: P<Node>) -> Vec<SignatureKey> {
         // first, get candidates when inference is blocked from the source node.
         let mut candidates = self.run_with_inference_blocked_from_source_node(editing_argument, |c| {
             let (_, blocked_inference_candidates) = c.get_resolved_signature_worker(call, CheckMode::Normal, 0);
             blocked_inference_candidates
         });
-        let candidates_set: FxHashSet<P<Signature>> = candidates.iter().copied().collect();
+        let candidates_set: FxHashSet<SignatureKey> = candidates.iter().copied().collect();
 
         // next, get candidates where the source node is considered for inference.
         let other_candidates = self.run_without_resolved_signature_caching(editing_argument, |c| {
@@ -1025,12 +1025,12 @@ impl Checker {
 
     // services.go:936
     // GetTypeAtPosition returns the type of a parameter at a given index in a signature.
-    pub fn get_type_at_position_exported(&mut self, s: P<Signature>, pos: i32) -> P<Type> {
+    pub fn get_type_at_position_exported(&mut self, s: SignatureKey, pos: i32) -> P<Type> {
         self.get_type_at_position(s, pos)
     }
 
     // services.go:940
-    pub fn get_type_parameter_at_position(&mut self, s: P<Signature>, pos: i32) -> P<Type> {
+    pub fn get_type_parameter_at_position(&mut self, s: SignatureKey, pos: i32) -> P<Type> {
         let t = self.get_type_at_position(s, pos);
         if t.is_index() && is_this_type_parameter(t.as_index_type().target().unwrap()) {
             let constraint = self.get_base_constraint_of_type(t.as_index_type().target().unwrap());
@@ -1221,7 +1221,7 @@ impl Checker {
     }
 
     // services.go:1120
-    pub fn get_signature_from_declaration_exported(&mut self, node: P<Node>) -> P<Signature> {
+    pub fn get_signature_from_declaration_exported(&mut self, node: P<Node>) -> SignatureKey {
         self.get_signature_from_declaration(node)
     }
 

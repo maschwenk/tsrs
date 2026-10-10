@@ -2080,7 +2080,7 @@ impl Checker {
             (TypeSystemPropertyName::ResolvedBaseConstructorType, TypeSystemEntity::Type(t)) => {
                 t.as_interface_type().resolved_base_constructor_type.get().is_some()
             }
-            (TypeSystemPropertyName::ResolvedReturnType, TypeSystemEntity::Signature(s)) => s.resolved_return_type.get().is_some(),
+            (TypeSystemPropertyName::ResolvedReturnType, TypeSystemEntity::Signature(s)) => self.signature(s).resolved_return_type.get().is_some(),
             (TypeSystemPropertyName::ResolvedBaseConstraint, TypeSystemEntity::Type(t)) => {
                 self.resolved_base_constraint_of(t).is_some()
             }
@@ -2307,20 +2307,20 @@ impl Checker {
 
     // checker.go:19303
     #[cfg_attr(feature = "site-counts", track_caller)]
-    pub fn get_signatures_of_type(&mut self, t: P<Type>, kind: SignatureKind) -> ArrayView<P<Signature>> {
+    pub fn get_signatures_of_type(&mut self, t: P<Type>, kind: SignatureKind) -> ArrayView<SignatureKey> {
         let t = self.get_reduced_apparent_type(t);
         self.get_signatures_of_structured_type(t, kind)
     }
 
     // checker.go:19307
     #[cfg_attr(feature = "site-counts", track_caller)]
-    pub(crate) fn get_signatures_of_structured_type(&mut self, t: P<Type>, kind: SignatureKind) -> ArrayView<P<Signature>> {
+    pub(crate) fn get_signatures_of_structured_type(&mut self, t: P<Type>, kind: SignatureKind) -> ArrayView<SignatureKey> {
         self.signatures_of_structured_type(t, kind)
     }
 
     // Go's getSignaturesOfStructuredType returns the stored slice; this is it without the copy.
     #[cfg_attr(feature = "site-counts", track_caller)]
-    pub(crate) fn signatures_of_structured_type(&mut self, t: P<Type>, kind: SignatureKind) -> ArrayView<P<Signature>> {
+    pub(crate) fn signatures_of_structured_type(&mut self, t: P<Type>, kind: SignatureKind) -> ArrayView<SignatureKey> {
         if !t.flags().intersects(TypeFlags::StructuredType) {
             return ArrayView::default();
         }
@@ -2573,8 +2573,8 @@ impl Checker {
     pub(crate) fn resolve_object_type_members(&mut self, t: P<Type>, source: P<Type>, type_parameters: &[P<Type>], type_arguments: &[P<Type>]) {
         let mut mapper: Option<P<TypeMapper>> = None;
         let mut members: Option<P<SymbolTable>>;
-        let mut call_signatures: Vec<P<Signature>>;
-        let mut construct_signatures: Vec<P<Signature>>;
+        let mut call_signatures: Vec<SignatureKey>;
+        let mut construct_signatures: Vec<SignatureKey>;
         let mut index_infos: Vec<IndexInfoKey>;
         let mut instantiated = false;
         let resolved = self.resolve_declared_members(&source).unwrap();
@@ -2627,8 +2627,8 @@ pub(crate) fn find_index_info(c: &Checker, index_infos: &[IndexInfoKey], key_typ
 impl Checker {
     pub(crate) fn append_inherited_signatures_and_index_infos(
         &mut self,
-        call_signatures: &mut Vec<P<Signature>>,
-        construct_signatures: &mut Vec<P<Signature>>,
+        call_signatures: &mut Vec<SignatureKey>,
+        construct_signatures: &mut Vec<SignatureKey>,
         index_infos: &mut Vec<IndexInfoKey>,
         base_type: P<Type>,
     ) {
@@ -2728,8 +2728,8 @@ pub(crate) fn lazy_member_tables_heap(c: &Checker) -> Vec<(String, crate::heapce
 
 pub(crate) struct LazyMembers {
     pub(crate) unaffected: ArrayCell<TextView>, // sorted names of declared members that instantiate to themselves
-    pub(crate) call_signatures: ArrayCell<P<Signature>>,
-    pub(crate) construct_signatures: ArrayCell<P<Signature>>,
+    pub(crate) call_signatures: ArrayCell<SignatureKey>,
+    pub(crate) construct_signatures: ArrayCell<SignatureKey>,
     pub(crate) index_infos: ArrayCell<IndexInfoKey>,
     pub(crate) base_types: ArrayCell<P<Type>>,
 }
