@@ -2423,7 +2423,7 @@ impl Checker {
                 // If element index is known and a contextual property with that name exists, return it. Otherwise return the
                 // iterated or element type of the contextual type.
                 if first_spread_index < 0 || index < first_spread_index {
-                    let prop_type = c.get_type_of_property_of_contextual_type(t, &index.to_string());
+                    let prop_type = c.get_type_of_property_of_contextual_type(t, stringutil::format_int(&mut [0; 20], index as i64));
                     if prop_type.is_some() {
                         return prop_type;
                     }

@@ -1138,7 +1138,7 @@ pub(crate) fn is_numeric_literal_name(name: &str) -> bool {
     // Note that this accepts the values 'Infinity', '-Infinity', and 'NaN', and that this is intentional.
     // This is desired behavior, because when indexing with them as numeric entities, you are indexing
     // with the strings '"Infinity"', '"-Infinity"', and '"NaN"' respectively.
-    jsnum::from_string(name).string() == name
+    jsnum::from_string(name).string_equals(name)
 }
 
 // utilities.go:966
