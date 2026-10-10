@@ -187,6 +187,11 @@ is type-checked, CI runs on pull requests, and the workspace is at 0.11.0. The i
 - Work stealing between checkers: landed after all (notes/perf-checker-stealing.md), once output stopped depending on
   the assignment (notes/perf-order-independence.md); only the counters vary between runs, and naming an assignment
   keeps them fixed. Partition changes: +-4% with no consistent winner (notes/perf-checker-scaling.md).
+- Rayon subtree-weight accumulation and group-adjacency construction (notes/perf-rayon-assignment.md): exact in
+  102/102 verification cells, instructions unchanged to three decimal places; xstate, mui and formbricks
+  +0.8..+3.2% wall at 16 checkers on 32 vCPUs, with peak RSS -0.3..+1.1%. Mui's isolated -6.9% at 32 checkers is
+  not headline/default-mode evidence. Prototype removed; revisit only with a profile showing these steps dominate
+  assignment or a representation that removes the temporary maps and group-member lists.
 - Forked checker processes sharing one warm checker copy-on-write (notes/perf-checker-processes.md): 17-47% fewer
   instructions and 0.2-1.9 GiB less memory at 8-16 workers, but no faster than threads, static or with stealing; worse
   on small programs. Children's private state is mostly their own caches and copied hash-table pages.
