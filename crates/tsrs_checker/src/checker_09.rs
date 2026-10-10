@@ -680,6 +680,17 @@ pub(crate) fn get_relation_key(c: &mut Checker, source: P<Type>, target: P<Type>
     if is_identity && source.id > target.id {
         std::mem::swap(&mut source, &mut target);
     }
+    // Only type references can have generic arguments: the rest (most calls) need no registers for the key builder.
+    if !is_non_deferred_type_reference(source) || !is_non_deferred_type_reference(target) {
+        if let Some(key) = RelationKey::pair(source.id, target.id, intersection_state) {
+            return (key, false);
+        }
+    }
+    get_relation_key_worker(c, source, target, intersection_state, ignore_constraints)
+}
+
+#[inline(never)]
+fn get_relation_key_worker(c: &mut Checker, source: P<Type>, target: P<Type>, intersection_state: IntersectionState, ignore_constraints: bool) -> (RelationKey, bool) {
     let mut b = keyBuilder::default();
     let constrained;
     if is_type_reference_with_generic_arguments(c, source) && is_type_reference_with_generic_arguments(c, target) {
