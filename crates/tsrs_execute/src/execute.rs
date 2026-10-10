@@ -92,6 +92,17 @@ pub fn command_line_with_testing(
         tsrs_compiler::set_checker_cost_cache_from_cli(&path);
         args.drain(pos..pos + 2);
     }
+    // tsrs-only, opt-in: `--checkerMemoryBudget <MiB>` retires a checker of the `--noEmit` type-check pass once it
+    // holds that much arena and checks the rest of its files with a fresh one: less peak memory for more CPU
+    // (checkerpool.rs; notes/mem-recycle-checkers.md).
+    if let Some(pos) = args.iter().position(|a| a.eq_ignore_ascii_case("--checkerMemoryBudget")) {
+        let Some(mib) = args.get(pos + 1).and_then(|v| v.parse::<usize>().ok()) else {
+            sys.write("error: --checkerMemoryBudget expects a size in MiB.\n");
+            return CommandLineResult { status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
+        };
+        tsrs_compiler::set_checker_memory_budget_from_cli(mib);
+        args.drain(pos..pos + 2);
+    }
     let host: &'static sysParseConfigHost = Box::leak(Box::new(sysParseConfigHost { sys, fs: sys.fs() }));
     let mut command = tsoptions::parse_command_line(&args, host);
     if tsrs_core::NO_THREADS {
@@ -331,6 +342,7 @@ fn perform_compilation(
     }
     let mut program_options = ProgramOptions::new(config, host);
     program_options.leaf_files = leaf_settings.mode;
+    program_options.checker_recycling = leaf_freeing_allowed;
 
     let parse_start = sys.now();
     let program = new_program(program_options);

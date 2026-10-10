@@ -77,14 +77,16 @@ pub struct CheckerHandle {
 
 enum checkerHandleKind {
     // The built-in pool's checkers live behind a mutex per checker (Go `locks[i]`).
-    Locked(MutexGuard<'static, Box<Checker>>),
+    // The scope makes the checker's region (`SlotChecker::region`) the allocation target while the handle is held.
+    Locked { guard: MutexGuard<'static, SlotChecker>, _scope: Option<tsrs_core::arena::ScratchScope> },
     // A checker owned by an external pool, which tracks exclusivity itself (Go project pool's `heldBy`).
     External { checker: NonNull<Checker>, release: Option<Box<dyn FnOnce()>> },
 }
 
 impl CheckerHandle {
-    fn locked(guard: MutexGuard<'static, Box<Checker>>) -> CheckerHandle {
-        CheckerHandle { kind: checkerHandleKind::Locked(guard) }
+    fn locked(guard: MutexGuard<'static, SlotChecker>) -> CheckerHandle {
+        let scope = guard.enter();
+        CheckerHandle { kind: checkerHandleKind::Locked { guard, _scope: scope } }
     }
 
     /// Hands out a checker owned by a pool outside this crate; `release` runs when the handle is dropped.
@@ -104,7 +106,7 @@ impl std::ops::Deref for CheckerHandle {
     type Target = Checker;
     fn deref(&self) -> &Checker {
         match &self.kind {
-            checkerHandleKind::Locked(guard) => guard,
+            checkerHandleKind::Locked { guard, .. } => &guard.checker,
             // SAFETY: `from_raw`'s contract: the checker is alive and exclusively ours until release.
             checkerHandleKind::External { checker, .. } => unsafe { checker.as_ref() },
         }
@@ -114,7 +116,7 @@ impl std::ops::Deref for CheckerHandle {
 impl std::ops::DerefMut for CheckerHandle {
     fn deref_mut(&mut self) -> &mut Checker {
         match &mut self.kind {
-            checkerHandleKind::Locked(guard) => guard,
+            checkerHandleKind::Locked { guard, .. } => &mut guard.checker,
             // SAFETY: `from_raw`'s contract: the checker is alive and exclusively ours until release.
             checkerHandleKind::External { checker, .. } => unsafe { checker.as_mut() },
         }
@@ -212,7 +214,100 @@ fn run_work_group(single_threaded: bool, count: usize, task: impl Fn(usize) + Sy
 // A checker is mutated only while its mutex is held, by exactly one thread at a time; the pool
 // never hands out references that outlive the guard. The checker's deferred closures are not
 // `Send`, which is the only reason this wrapper is needed.
-struct CheckerSlot(Mutex<Box<Checker>>);
+struct CheckerSlot(Mutex<SlotChecker>);
+
+// tsrs-only (notes/mem-recycle-checkers.md): a checker of the built-in pool and, when the type-check pass may retire
+// checkers (`recycle_budget`), the region that holds everything it allocates. The region is the allocation target
+// whenever the checker runs (`enter`), so dropping the checker and then the region gives back all of its memory.
+pub(crate) struct SlotChecker {
+    checker: Box<Checker>,
+    region: Option<tsrs_core::arena::Region>,
+}
+
+impl SlotChecker {
+    fn new(program: &'static Program, in_region: bool) -> SlotChecker {
+        if !in_region {
+            return SlotChecker { checker: new_checker(program), region: None };
+        }
+        let region = tsrs_core::arena::Region::new_scratch(1 << 20);
+        let checker = {
+            let _scope = region.enter_scratch();
+            new_checker(program)
+        };
+        SlotChecker { checker, region: Some(region) }
+    }
+
+    // Makes the checker's region the allocation target (and the thread's scratch region, so that lazily filled
+    // data of shared objects and diagnostics escape it: `arena::escape_scratch`) until the scope is dropped.
+    fn enter(&self) -> Option<tsrs_core::arena::ScratchScope> {
+        self.region.as_ref().map(tsrs_core::arena::Region::enter_scratch)
+    }
+
+    // Bytes of arena the checker holds (its region's chunks), 0 without a region.
+    fn region_bytes(&self) -> usize {
+        self.region.as_ref().map_or(0, tsrs_core::arena::Region::allocated_bytes)
+    }
+}
+
+impl std::ops::Deref for SlotChecker {
+    type Target = Checker;
+    fn deref(&self) -> &Checker {
+        &self.checker
+    }
+}
+
+impl std::ops::DerefMut for SlotChecker {
+    fn deref_mut(&mut self) -> &mut Checker {
+        &mut self.checker
+    }
+}
+
+// What the checkers retired during the type-check pass leave behind: their global diagnostics and counters, which the
+// pool adds to those of the live checkers.
+#[derive(Default)]
+pub(crate) struct RetiredCheckers {
+    pub(crate) count: usize,
+    pub(crate) global_diagnostics: Vec<P<Diagnostic>>,
+    pub(crate) symbol_count: u64,
+    pub(crate) type_count: u64,
+    pub(crate) instantiation_count: u64,
+    pub(crate) lazy_member_stats: tsrs_core::lazymembers::LazyMemberStats,
+}
+
+fn evict_relations() -> usize {
+    static N: OnceLock<usize> = OnceLock::new();
+    *N.get_or_init(|| std::env::var("TSRS_EVICT_RELATIONS").ok().and_then(|v| v.parse().ok()).unwrap_or(0))
+}
+
+// With `--checkerMemoryBudget`, each checker checks its leaf files before its other files (see the group loop);
+// `TSRS_LEAVES_FIRST=0` keeps the plain order, for measurement.
+fn leaves_first() -> bool {
+    static S: OnceLock<bool> = OnceLock::new();
+    *S.get_or_init(|| std::env::var("TSRS_LEAVES_FIRST").map_or(true, |v| v != "0"))
+}
+
+// tsrs-only, opt-in: `--checkerMemoryBudget <MiB>` (CLI) or TSRS_CHECKER_MEMORY_BUDGET=<MiB>. In the type-check
+// pass of a program that allows it (`ProgramOptions::checker_recycling`), a checker whose region holds more than this
+// is retired between two files and the rest of its queue goes to a fresh checker (`retire_checker`;
+// notes/mem-recycle-checkers.md). 0 or unset: never.
+static CLI_CHECKER_MEMORY_BUDGET: OnceLock<usize> = OnceLock::new();
+
+pub fn set_checker_memory_budget_from_cli(mib: usize) {
+    let _ = CLI_CHECKER_MEMORY_BUDGET.set(mib);
+}
+
+// The budget in bytes (0: off).
+fn recycle_budget() -> usize {
+    static BUDGET: OnceLock<usize> = OnceLock::new();
+    *BUDGET.get_or_init(|| {
+        let mib = CLI_CHECKER_MEMORY_BUDGET
+            .get()
+            .copied()
+            .or_else(|| std::env::var("TSRS_CHECKER_MEMORY_BUDGET").ok().and_then(|v| v.trim().parse::<usize>().ok()))
+            .unwrap_or(0);
+        mib << 20
+    })
+}
 #[expect(clippy::non_send_fields_in_send_ty, reason = "the checker: touched only under its mutex (see above)")]
 // SAFETY: the checker's non-`Send` parts are reachable only from the checker, which is reached only through the mutex.
 unsafe impl Send for CheckerSlot {}
@@ -249,6 +344,9 @@ pub(crate) struct poolState {
     pub(crate) file_times: Mutex<Vec<(P<SourceFile>, usize, f64, f64)>>,
     // Cost cache only: (file, thread CPU seconds) per checked file, per checker pass.
     file_cpu: Mutex<Vec<(P<SourceFile>, f64)>>,
+    // Whether checkers live in regions and the type-check pass retires them (`recycle_budget`).
+    recycle: bool,
+    pub(crate) retired: Mutex<RetiredCheckers>,
 }
 
 // TSRS_FILE_TIMES=<path> (experiments): after checking, write one line per file run by a checker group:
@@ -579,13 +677,14 @@ impl checkerPool {
                 }
                 crate::program::worker_pool().broadcast(|_| tsrs_core::ptr::release_own_arena());
             }
+            let recycle = program.checker_recycling && !self.single_threaded && recycle_budget() > 0;
             let create_and_assign = || {
                 let create_start = std::time::Instant::now();
                 #[cfg(feature = "checker")]
                 tsrs_checker::links::set_multiple_checkers(self.checker_count > 1);
                 let slots: Vec<Mutex<Option<CheckerSlot>>> = (0..self.checker_count).map(|_| Mutex::new(None)).collect();
                 run_work_group(self.single_threaded, self.checker_count, |i| {
-                    *slots[i].lock().unwrap() = Some(CheckerSlot(Mutex::new(new_checker(program))));
+                    *slots[i].lock().unwrap() = Some(CheckerSlot(Mutex::new(SlotChecker::new(program, recycle))));
                 });
                 let checkers: &'static [CheckerSlot] =
                     Box::leak(slots.into_iter().map(|s| s.into_inner().unwrap().unwrap()).collect::<Vec<_>>().into_boxed_slice());
@@ -620,6 +719,8 @@ impl checkerPool {
                 group_cpu: Mutex::new(Vec::new()),
                 file_times: Mutex::new(Vec::new()),
                 file_cpu: Mutex::new(Vec::new()),
+                recycle,
+                retired: Mutex::new(RetiredCheckers::default()),
             }
         })
     }
@@ -643,6 +744,7 @@ impl checkerPool {
         let state = self.create_checkers();
         let run = |idx: usize| {
             let mut guard = state.checkers[idx].0.lock().unwrap();
+            let _scope = guard.enter();
             cb(idx, &mut guard);
         };
         run_work_group(self.single_threaded, state.checkers.len(), run);
@@ -655,7 +757,8 @@ impl checkerPool {
         self.for_each_checker_parallel(|idx, checker| {
             *global_diagnostics[idx].lock().unwrap() = checker.get_global_diagnostics();
         });
-        let all: Vec<P<Diagnostic>> = global_diagnostics.into_iter().flat_map(|d| d.into_inner().unwrap()).collect();
+        let mut all: Vec<P<Diagnostic>> = global_diagnostics.into_iter().flat_map(|d| d.into_inner().unwrap()).collect();
+        all.extend_from_slice(&state.retired.lock().unwrap().global_diagnostics);
         sort_and_deduplicate_diagnostics(&all)
     }
 
@@ -727,6 +830,19 @@ impl checkerPool {
             let total: u64 = positions.iter().flatten().map(|&i| weight(i)).sum();
             let threshold = total / (active.len() as u64 * heavy_share_divisor());
             positions.iter_mut().for_each(|p| heavy_files_first(p, threshold, weight));
+            if state.recycle && leaves_first() {
+                // With checkers retired at a budget their memory stops growing, and what the front end holds sets
+                // the peak: the leaves' trees go once they are checked, so each checker checks its leaves first
+                // (after the heavy files), keeping its files' order otherwise.
+                let is_leaf = |i: u32| (i as usize) < files.len() && files[i as usize].is_check_leaf();
+                for p in &mut positions {
+                    let heavy = p.iter().take_while(|&&i| weight(i) > threshold).count();
+                    let (leaves, rest): (Vec<u32>, Vec<u32>) = p[heavy..].iter().partition(|&&i| is_leaf(i));
+                    p.truncate(heavy);
+                    p.extend(leaves);
+                    p.extend(rest);
+                }
+            }
         }
         let queues: Vec<FileQueue> = positions.into_iter().map(|p| FileQueue::new(p, weight)).collect();
         // TSRS_MEM_SPLIT: the type-check pass reports once every checker is done and before any thread exits.
@@ -737,6 +853,9 @@ impl checkerPool {
             let mut count = 0;
             let mut file_cpu: Vec<(P<SourceFile>, f64)> = Vec::new();
             let mut guard = state.checkers[checker_idx].0.lock().unwrap();
+            let mut scope = guard.enter();
+            let recycle = allow_steal && state.recycle;
+            let budget = recycle_budget();
             let mut last_victim = usize::MAX;
             while let Some((i, from_other)) = queues_next(&queues, checker_idx, steal, sticky.then_some(&mut last_victim)) {
                 if let Some(&(s, k, _)) = i.checked_sub(files.len()).map(|p| &split.piece_items[p]) {
@@ -779,7 +898,16 @@ impl checkerPool {
                     file_cpu.push((file, thread_cpu_seconds() - cpu_start));
                 }
                 count += 1;
+                if evict_relations() > 0 && guard.relation_cache_entries() > evict_relations() {
+                    guard.clear_relation_caches();
+                }
+                if recycle && guard.region_bytes() > budget && queues.iter().any(|q| q.remaining() > 0) {
+                    drop(scope);
+                    self.retire_checker(state, &mut guard);
+                    scope = guard.enter();
+                }
             }
+            drop(scope);
             if cost_cache {
                 state.file_cpu.lock().unwrap().extend(file_cpu);
             }
@@ -806,12 +934,39 @@ impl checkerPool {
             }
         };
         run_work_group(single, active.len(), |k| run(active[k]));
+        if allow_steal && state.recycle {
+            tsrs_core::phases::count("Checkers: retired", state.retired.lock().unwrap().count as u64);
+        }
         splitcheck::SplitFile::report_stats(&split.files);
         if stats {
             state.group_runs.lock().unwrap().push(times.into_iter().map(|t| t.into_inner().unwrap()).collect());
             state.group_cpu.lock().unwrap().push(cpu.into_iter().map(|t| t.into_inner().unwrap()).collect());
             state.group_stolen.lock().unwrap().push(stolen.into_iter().map(std::sync::atomic::AtomicUsize::into_inner).collect());
         }
+    }
+}
+
+impl checkerPool {
+    // Replaces the checker in `slot` by a fresh one in a new region and frees the old checker and its region, keeping
+    // its global diagnostics and counters (`RetiredCheckers`). Called between two files of the type-check pass: the
+    // diagnostics of the files the old checker checked have been collected, and no later pass runs a checker over
+    // them (the CLI's `--noEmit` check, as for leaf freeing).
+    fn retire_checker(&self, state: &poolState, slot: &mut SlotChecker) {
+        let mut old = std::mem::replace(slot, SlotChecker::new(self.program, true));
+        {
+            let _scope = old.enter();
+            let globals = old.checker.get_global_diagnostics();
+            let mut retired = state.retired.lock().unwrap();
+            retired.count += 1;
+            retired.global_diagnostics.extend(globals);
+            retired.symbol_count += u64::from(old.checker.symbol_count);
+            retired.type_count += u64::from(old.checker.type_count);
+            retired.instantiation_count += u64::from(old.checker.total_instantiation_count);
+            retired.lazy_member_stats.add(&old.checker.lazy_member_stats);
+            drop(retired);
+            drop(old.checker);
+        }
+        drop(old.region);
     }
 }
 

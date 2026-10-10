@@ -68,6 +68,12 @@ impl Relation {
         }
     }
 
+    // tsrs-only (experiment, notes/mem-recycle-checkers.md): drops every cached result and frees the tables.
+    pub(crate) fn clear(&self) {
+        *self.pairs.borrow_mut() = hashbrown::HashTable::new();
+        *self.hashed.borrow_mut() = FxHashMap::default();
+    }
+
     // relater.go:113
     pub(crate) fn size(&self) -> i32 {
         (self.pairs.borrow().len() + self.hashed.borrow().len()) as i32

@@ -54,6 +54,10 @@ pub struct ProgramOptions {
     /// tsrs-only: whether the type-check pass frees the tree of each leaf file once it is checked (fileregions.rs;
     /// the CLI's `--noEmit` check, with file regions on). Nothing may read a leaf's tree after the pass.
     pub leaf_files: crate::fileregions::LeafMode,
+    /// tsrs-only: whether the type-check pass may retire a checker that reaches `--checkerMemoryBudget` and go on
+    /// with a fresh one (checkerpool.rs `retire_checker`; the CLI's `--noEmit` check, where no later pass needs the
+    /// checker that checked a file).
+    pub checker_recycling: bool,
 }
 
 impl ProgramOptions {
@@ -69,6 +73,7 @@ impl ProgramOptions {
             create_checker_pool: None,
             create_module_resolver: None,
             leaf_files: crate::fileregions::LeafMode::Off,
+            checker_recycling: false,
         }
     }
 
@@ -90,6 +95,7 @@ impl ProgramOptions {
             create_checker_pool,
             create_module_resolver,
             leaf_files: crate::fileregions::LeafMode::Off,
+            checker_recycling: false,
         }
     }
 
@@ -189,6 +195,8 @@ pub struct Program {
     pub(crate) leaf_pass_started: std::sync::atomic::AtomicBool,
     // tsrs-only: the files that can be leaves and that another file refers to (`fileregions::prepare`).
     pub(crate) leaf_referred: OnceLock<rustc_hash::FxHashSet<P<SourceFile>>>,
+    // tsrs-only: `ProgramOptions::checker_recycling`.
+    pub(crate) checker_recycling: bool,
 }
 
 impl std::ops::Deref for Program {
@@ -417,6 +425,7 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
         leaf_files: opts.leaf_files,
         leaf_pass_started: std::sync::atomic::AtomicBool::new(false),
         leaf_referred: OnceLock::new(),
+        checker_recycling: opts.checker_recycling,
     };
     // Go initializes the checker pool before verifying options; the pool factory takes the program by
     // `&'static`, so here it runs after verification, once the program is leaked. Neither pool reads anything
@@ -634,6 +643,7 @@ impl Program {
             leaf_files: crate::fileregions::LeafMode::Off,
             leaf_pass_started: std::sync::atomic::AtomicBool::new(false),
             leaf_referred: OnceLock::new(),
+            checker_recycling: false,
         };
         try_reuse(&result.unresolved_imports, &self.unresolved_imports);
         try_reuse(&result.known_symlinks, &self.known_symlinks);
@@ -2209,7 +2219,7 @@ impl Program {
 
     pub fn symbol_count(&'static self) -> usize {
         let count: usize = self.files.iter().map(|f| f.symbol_count.get() as usize).sum();
-        let val = std::sync::atomic::AtomicUsize::new(count);
+        let val = std::sync::atomic::AtomicUsize::new(count + self.retired_checkers(|r| r.symbol_count));
         self.for_each_checker_parallel(|_, c| {
             val.fetch_add(c.symbol_count as usize, std::sync::atomic::Ordering::Relaxed);
         });
@@ -2217,7 +2227,7 @@ impl Program {
     }
 
     pub fn type_count(&'static self) -> usize {
-        let val = std::sync::atomic::AtomicUsize::new(0);
+        let val = std::sync::atomic::AtomicUsize::new(self.retired_checkers(|r| r.type_count));
         self.for_each_checker_parallel(|_, c| {
             val.fetch_add(c.type_count as usize, std::sync::atomic::Ordering::Relaxed);
         });
@@ -2225,7 +2235,7 @@ impl Program {
     }
 
     pub fn instantiation_count(&'static self) -> usize {
-        let val = std::sync::atomic::AtomicUsize::new(0);
+        let val = std::sync::atomic::AtomicUsize::new(self.retired_checkers(|r| r.instantiation_count));
         self.for_each_checker_parallel(|_, c| {
             val.fetch_add(c.total_instantiation_count as usize, std::sync::atomic::Ordering::Relaxed);
         });
@@ -2233,11 +2243,20 @@ impl Program {
     }
 
     pub fn lazy_member_stats(&'static self) -> tsrs_core::lazymembers::LazyMemberStats {
-        let total = std::sync::Mutex::new(tsrs_core::lazymembers::LazyMemberStats::default());
+        let mut retired = tsrs_core::lazymembers::LazyMemberStats::default();
+        if let Some(pool) = self.compiler_checker_pool() {
+            retired.add(&pool.state().retired.lock().unwrap().lazy_member_stats);
+        }
+        let total = std::sync::Mutex::new(retired);
         self.for_each_checker_parallel(|_, c| {
             total.lock().unwrap().add(&c.lazy_member_stats);
         });
         total.into_inner().unwrap()
+    }
+
+    // tsrs-only: a counter of the checkers the type-check pass retired (checkerpool.rs `RetiredCheckers`).
+    fn retired_checkers(&self, f: impl Fn(&crate::checkerpool::RetiredCheckers) -> u64) -> usize {
+        self.compiler_checker_pool().map_or(0, |pool| f(&pool.state().retired.lock().unwrap()) as usize)
     }
 
     // program.go:1743

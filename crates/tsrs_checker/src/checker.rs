@@ -2530,3 +2530,20 @@ pub struct ObjectLiteralDiscriminator {
     pub members: Vec<P<Symbol>>,
 }
 
+
+impl Checker {
+    /// tsrs-only (experiment, notes/mem-recycle-checkers.md): entries in the relation caches.
+    pub fn relation_cache_entries(&self) -> usize {
+        [self.subtype_relation, self.strict_subtype_relation, self.assignable_relation, self.comparable_relation, self.identity_relation]
+            .iter()
+            .map(|r| r.size() as usize)
+            .sum()
+    }
+
+    /// tsrs-only (experiment): empties the relation caches (results are recomputed on demand).
+    pub fn clear_relation_caches(&mut self) {
+        for r in [self.subtype_relation, self.strict_subtype_relation, self.assignable_relation, self.comparable_relation, self.identity_relation] {
+            r.clear();
+        }
+    }
+}
