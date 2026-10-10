@@ -1000,16 +1000,27 @@ impl Checker {
 
     // checker.go:13833
     pub(crate) fn is_const_context(&mut self, node: P<Node>) -> bool {
+        self.is_const_context_ex(node).0
+    }
+
+    /// `is_const_context`, and `get_contextual_type(node, ContextFlags::None)` when it was computed on the way.
+    fn is_const_context_ex(&mut self, node: P<Node>) -> (bool, Option<Option<P<Type>>>) {
         let parent = node.parent().unwrap();
-        ast::is_const_assertion(parent)
-            || self.is_inline_import_attributes(node)
-            || self.is_valid_const_assertion_argument(node) && {
-                let contextual_type = self.get_contextual_type(node, ContextFlags::None);
-                self.is_const_type_variable(contextual_type, 0)
+        if ast::is_const_assertion(parent) || self.is_inline_import_attributes(node) {
+            return (true, None);
+        }
+        let mut node_contextual_type = None;
+        if self.is_valid_const_assertion_argument(node) {
+            let contextual_type = self.get_contextual_type(node, ContextFlags::None);
+            node_contextual_type = Some(contextual_type);
+            if self.is_const_type_variable(contextual_type, 0) {
+                return (true, node_contextual_type);
             }
-            || (ast::is_parenthesized_expression(parent) || ast::is_array_literal_expression(parent) || ast::is_spread_element(parent)) && self.is_const_context(parent)
+        }
+        let result = (ast::is_parenthesized_expression(parent) || ast::is_array_literal_expression(parent) || ast::is_spread_element(parent)) && self.is_const_context(parent)
             || (ast::is_property_assignment(parent) || ast::is_shorthand_property_assignment(parent) || ast::is_template_span(parent))
-                && self.is_const_context(parent.parent().unwrap())
+                && self.is_const_context(parent.parent().unwrap());
+        (result, node_contextual_type)
     }
 
     // checker.go:13842
@@ -1381,12 +1392,17 @@ impl Checker {
     // checker.go:14113
     pub(crate) fn check_expression_for_mutable_location(&mut self, node: P<Node>, check_mode: CheckMode) -> P<Type> {
         let t = self.check_expression_ex(node, check_mode);
-        if self.is_const_context(node) {
+        let (is_const_context, node_contextual_type) = self.is_const_context_ex(node);
+        if is_const_context {
             self.get_regular_type_of_literal_type(t)
         } else if crate::is_type_assertion(node) {
             t
         } else {
-            let contextual_type = self.get_contextual_type(node, ContextFlags::None);
+            // tsrs-only: the contextual type isConstContext computed, if it did; nothing between changes it.
+            let contextual_type = match node_contextual_type {
+                Some(contextual_type) => contextual_type,
+                None => self.get_contextual_type(node, ContextFlags::None),
+            };
             let instantiated = self.instantiate_contextual_type(contextual_type, node, ContextFlags::None);
             self.get_widened_literal_like_type_for_contextual_type(t, instantiated)
         }
