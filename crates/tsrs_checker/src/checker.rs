@@ -1129,6 +1129,9 @@ pub struct Checker {
     /// `contextual_property_type_of_large_union` (checker_15.rs): per (union, name hash), the name, the
     /// `members_reset_epoch` it was computed in and the positions of the constituents that can contribute.
     pub(crate) contextual_relevant: FxHashMap<(P<Type>, u32), Vec<(&'static str, u32, std::rc::Rc<[u32]>)>>,
+    /// `discriminant_property_types` (relater_1.rs): per (union, name hash), the name, the `members_reset_epoch` it
+    /// was computed in and, by constituent, the property type when known for good.
+    pub(crate) discriminant_property_types: FxHashMap<(P<Type>, u32), Vec<(&'static str, u32, std::rc::Rc<[Option<Option<P<Type>>>]>)>>,
     /// Bumped whenever a type's resolved members are reset (`get_base_types`, `canonicalize_base_type_cycles`).
     pub(crate) members_reset_epoch: u32,
     /// Structured type member resolutions in progress: while any is, a member table may be incomplete.
@@ -1538,6 +1541,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         augment_filter: None,
         unmatched_found_pool: Vec::new(),
         contextual_relevant: FxHashMap::default(),
+        discriminant_property_types: FxHashMap::default(),
         members_reset_epoch: 0,
         members_resolving: 0,
         last_emit_module_format: None,
@@ -2028,6 +2032,7 @@ impl Checker {
             augment_filter: base.augment_filter.clone(),
             unmatched_found_pool: Vec::new(),
             contextual_relevant: FxHashMap::default(),
+            discriminant_property_types: FxHashMap::default(),
             members_reset_epoch: 0,
             members_resolving: 0,
             #[cfg(feature = "assignment-stats")]

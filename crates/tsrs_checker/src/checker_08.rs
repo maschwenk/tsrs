@@ -1773,6 +1773,18 @@ impl Checker {
         self.value_symbol_links.try_get_if_id_assigned(symbol)?.resolved_type.get()
     }
 
+    /// What `get_type_of_symbol(symbol)` returns, without side effects, when that is a type it already resolved
+    /// for a value symbol (the fast path at its top); None otherwise.
+    pub(crate) fn cached_type_of_value_symbol(&self, symbol: P<Symbol>) -> Option<P<Type>> {
+        let check_flags = symbol.check_flags.get();
+        let value_symbol = !check_flags.intersects(CheckFlags::DeferredType)
+            && (check_flags.intersects(CheckFlags::Instantiated)
+                || !check_flags.intersects(CheckFlags::Mapped | CheckFlags::ReverseMapped)
+                    && !symbol.flags().intersects(SymbolFlags::Accessor)
+                    && symbol.flags().intersects(SymbolFlags::Variable | SymbolFlags::Property));
+        if value_symbol { self.resolved_type_of_value_symbol(symbol) } else { None }
+    }
+
     // checker.go:16851
     #[inline(never)]
     pub(crate) fn get_type_of_instantiated_symbol(&mut self, symbol: P<Symbol>) -> P<Type> {
