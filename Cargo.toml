@@ -45,7 +45,6 @@ tsrs_ls = { path = "crates/tsrs_ls" }
 tsrs_project = { path = "crates/tsrs_project" }
 tsrs_projectutil = { path = "crates/tsrs_projectutil" }
 tsrs_lsp = { path = "crates/tsrs_lsp" }
-tsrs_fourslash = { path = "crates/tsrs_fourslash" }
 tsrs_incremental = { path = "crates/tsrs_incremental" }
 tsrs_api = { path = "crates/tsrs_api" }
 tsrs_api_transport = { path = "crates/tsrs_api_transport" }
