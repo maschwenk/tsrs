@@ -1954,7 +1954,8 @@ impl Checker {
         // The 'T' in 'keyof T'
         let template_modifiers = get_mapped_type_modifiers(t);
         let include = TypeFlags::StringOrNumberLiteralOrUnique;
-        let lazy = self.lazy_mapped_tables.remove(&t);
+        let from_seed = self.lazy_mapped_tables.base_get(&t).map(|frozen| Rc::new((**frozen).clone()));
+        let lazy = self.lazy_mapped_tables.remove(&t).or(from_seed);
         if lazy.is_some() {
             self.lazy_member_stats.mapped_tables_resolved_in_full += 1;
         }
@@ -2088,10 +2089,28 @@ pub(crate) struct LazyMappedTable {
     pub(crate) resolving: Cell<bool>,
 }
 
+/// Shared-graph prototype: forks copy the seed's tables in parallel, so the copy must not touch the borrow flag.
+impl Clone for LazyMappedTable {
+    fn clone(&self) -> Self {
+        LazyMappedTable {
+            type_parameter: self.type_parameter,
+            template_type: self.template_type,
+            modifiers_type: self.modifiers_type,
+            template_modifiers: self.template_modifiers,
+            should_link_prop_declarations: self.should_link_prop_declarations,
+            // SAFETY: the seed checker is frozen: nothing borrows its tables mutably any more.
+            members: RefCell::new(unsafe { self.members.try_borrow_unguarded() }.unwrap().clone()),
+            index_infos: Cell::new(self.index_infos.get()),
+            index_infos_ready: Cell::new(self.index_infos_ready.get()),
+            resolving: Cell::new(self.resolving.get()),
+        }
+    }
+}
+
 impl Checker {
     #[inline]
     pub(crate) fn get_lazy_mapped_table(&mut self, t: P<Type>) -> Option<std::rc::Rc<LazyMappedTable>> {
-        if !self.lazy_members || t.object_flags() & (ObjectFlags::Mapped | ObjectFlags::MembersResolved) != ObjectFlags::Mapped {
+        if !self.lazy_members || t.object_flags_lazy() & (ObjectFlags::Mapped | ObjectFlags::MembersResolved) != ObjectFlags::Mapped {
             return None;
         }
         self.get_lazy_mapped_table_worker(t)
@@ -2099,8 +2118,14 @@ impl Checker {
 
     #[inline(never)]
     fn get_lazy_mapped_table_worker(&mut self, t: P<Type>) -> Option<std::rc::Rc<LazyMappedTable>> {
-        if let Some(lazy) = self.lazy_mapped_tables.get(&t) {
+        if let Some(lazy) = self.lazy_mapped_tables.own.get(&t) {
             return Some(Rc::clone(lazy));
+        }
+        if let Some(frozen) = self.lazy_mapped_tables.base_get(&t) {
+            // Shared-graph prototype: the seed's table is filled lazily, so the fork takes its own copy.
+            let copy = Rc::new((**frozen).clone());
+            self.lazy_mapped_tables.insert(t, Rc::clone(&copy));
+            return Some(copy);
         }
         if !self.is_mapped_type_with_keyof_constraint_declaration(t) {
             return None;
@@ -2117,11 +2142,11 @@ impl Checker {
         let template_type = self.get_template_type_from_mapped_type(mapped_type);
         let modifiers_type_of_mapped = self.get_modifiers_type_from_mapped_type(t);
         let modifiers_type = self.get_apparent_type(modifiers_type_of_mapped);
-        if !modifiers_type.flags().intersects(TypeFlags::Object) || t.object_flags().intersects(ObjectFlags::MembersResolved) {
+        if !modifiers_type.flags().intersects(TypeFlags::Object) || t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) {
             #[cfg(feature = "site-counts")]
             tsrs_core::sitecount::hit(
                 "mapped-table-refused",
-                if t.object_flags().intersects(ObjectFlags::MembersResolved) { "resolved-meanwhile" } else { type_kind_label(modifiers_type.flags(), modifiers_type.object_flags()) },
+                if t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) { "resolved-meanwhile" } else { type_kind_label(modifiers_type.flags(), modifiers_type.object_flags_lazy()) },
             );
             return None;
         }
@@ -2151,7 +2176,7 @@ impl Checker {
         // Recursive lookups see no member, as they would while resolveMappedTypeMembers runs.
         lazy.members.borrow_mut().insert(name.to_string(), None);
         let modifiers_prop = self.get_member_of_structured_type(lazy.modifiers_type, name);
-        if t.object_flags().intersects(ObjectFlags::MembersResolved) {
+        if t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) {
             return Some(t.as_structured_type().members().and_then(|m| m.lookup(name)));
         }
         let mut member = None;
@@ -2200,7 +2225,7 @@ impl Checker {
                 );
             }
             lazy.resolving.set(false);
-            if t.object_flags().intersects(ObjectFlags::MembersResolved) {
+            if t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) {
                 return t.as_structured_type().index_infos();
             }
             self.lazy_member_stats.mapped_index_info_queries += 1;

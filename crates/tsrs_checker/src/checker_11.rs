@@ -505,13 +505,13 @@ impl Checker {
                 return reduced_type;
             }
         } else if t.flags().intersects(TypeFlags::Intersection) {
-            if !t.object_flags().intersects(ObjectFlags::IsNeverIntersectionComputed) {
-                t.object_flags.set(t.object_flags() | ObjectFlags::IsNeverIntersectionComputed);
+            if !t.object_flags_lazy().intersects(ObjectFlags::IsNeverIntersectionComputed) {
+                t.object_flags.set(t.object_flags_lazy() | ObjectFlags::IsNeverIntersectionComputed);
                 if !self.is_mapping_of_same_object_type(t.types()) && self.some_property_reduces_to_never(t) {
-                    t.object_flags.set(t.object_flags() | ObjectFlags::IsNeverIntersection);
+                    t.object_flags.set(t.object_flags_lazy() | ObjectFlags::IsNeverIntersection);
                 }
             }
-            if t.object_flags().intersects(ObjectFlags::IsNeverIntersection) {
+            if t.object_flags_lazy().intersects(ObjectFlags::IsNeverIntersection) {
                 return self.never_type;
             }
         }
@@ -542,7 +542,7 @@ impl Checker {
         let types = t.types();
         let skipped = if self.lazy_members {
             types.iter().position(|&t| {
-                t.object_flags() & (ObjectFlags::Mapped | ObjectFlags::MembersResolved) == ObjectFlags::Mapped
+                t.object_flags_lazy() & (ObjectFlags::Mapped | ObjectFlags::MembersResolved) == ObjectFlags::Mapped
                     || may_have_lazy_members(t) && t.flags().intersects(TypeFlags::Object)
             })
         } else {
@@ -624,7 +624,7 @@ impl Checker {
 
     // checker.go:22264
     pub(crate) fn elaborate_never_intersection(&mut self, chain: Option<P<Diagnostic>>, node: P<Node>, t: P<Type>) -> Option<P<Diagnostic>> {
-        if t.flags().intersects(TypeFlags::Intersection) && t.object_flags().intersects(ObjectFlags::IsNeverIntersection) {
+        if t.flags().intersects(TypeFlags::Intersection) && t.object_flags_lazy().intersects(ObjectFlags::IsNeverIntersection) {
             let mut never_prop: Option<P<Symbol>> = None;
             for prop in self.get_properties_of_union_or_intersection_type(t).iter().copied() {
                 if self.is_discriminant_with_never_type(prop) {
@@ -923,7 +923,7 @@ impl Checker {
         // `could_contain_type_variables(t)`'s cached answers, so that every path here returns or tail-calls (the
         // checks that call out are in `instantiate_type_with_alias_slow`, which repeats these).
         if t.flags().intersects(TypeFlags::StructuredOrInstantiable) {
-            let object_flags = t.object_flags();
+            let object_flags = t.object_flags_lazy();
             if !object_flags.intersects(ObjectFlags::CouldContainTypeVariablesComputed) {
                 return self.instantiate_type_with_alias_slow(t, m, alias);
             }
@@ -1089,7 +1089,7 @@ impl Checker {
         if !t.flags().intersects(TypeFlags::StructuredOrInstantiable) {
             return false;
         }
-        let object_flags = t.object_flags();
+        let object_flags = t.object_flags_lazy();
         if object_flags.intersects(ObjectFlags::CouldContainTypeVariablesComputed) {
             return object_flags.intersects(ObjectFlags::CouldContainTypeVariables);
         }
@@ -1111,7 +1111,7 @@ impl Checker {
                 && !t.flags().intersects(TypeFlags::EnumLiteral)
                 && !self.is_non_generic_top_level_type(t)
                 && t.types().iter().any(|&u| self.could_contain_type_variables(u));
-        t.object_flags.set(t.object_flags() | ObjectFlags::CouldContainTypeVariablesComputed | tsrs_core::if_else(result, ObjectFlags::CouldContainTypeVariables, ObjectFlags::None));
+        t.object_flags.set(t.object_flags_lazy() | ObjectFlags::CouldContainTypeVariablesComputed | tsrs_core::if_else(result, ObjectFlags::CouldContainTypeVariables, ObjectFlags::None));
         result
     }
 
@@ -1315,11 +1315,14 @@ impl Checker {
         // (the target is a declared anonymous or mapped type or a deferred reference, never an interface or tuple).
         assert!(target.try_as_interface_type().is_none(), "object type instantiation of an interface target");
         let key = get_type_instantiation_key(&type_arguments, new_alias, t.object_flags().intersects(ObjectFlags::SingleSignatureType));
-        let instantiations = self.object_type_instantiations.entry(target).or_insert_with(|| {
+        // Shared-graph prototype: a fork's table for a frozen target holds only what the fork added; the seed's
+        // entries are read through.
+        let from_seed = self.object_type_instantiations.base_get(&target).and_then(|m| m.get(&key));
+        let instantiations = self.object_type_instantiations.own.entry(target).or_insert_with(|| {
             let initial_key = get_type_instantiation_key(type_parameters, target.alias().into(), false);
             PackedMap::from_one(initial_key, target)
         });
-        let mut result = instantiations.get(&key);
+        let mut result = instantiations.get(&key).or(from_seed);
         if result.is_none() {
             let too_complex_before = self.too_complex_reports;
             let new_alias = new_alias.alias();
@@ -1336,21 +1339,21 @@ impl Checker {
             };
             // tsrs-only: not cached when the instantiation reported TS2590 (`too_complex_since`).
             if !self.too_complex_since(too_complex_before) {
-                self.object_type_instantiations.get_mut(&target).unwrap().insert(key, r);
+                self.object_type_instantiations.own.get_mut(&target).unwrap().insert(key, r);
             }
-            if r.flags().intersects(TypeFlags::ObjectFlagsType) && !r.object_flags().intersects(ObjectFlags::CouldContainTypeVariablesComputed) {
+            if r.flags().intersects(TypeFlags::ObjectFlagsType) && !r.object_flags_lazy().intersects(ObjectFlags::CouldContainTypeVariablesComputed) {
                 // if `result` is one of the object types we tried to make (it may not be, due to how `instantiateMappedType` works), we can carry forward the type variable containment check from the input type arguments
                 let result_could_contain_object_flags = type_arguments.iter().any(|&a| self.could_contain_type_variables(a));
-                if !r.object_flags().intersects(ObjectFlags::CouldContainTypeVariablesComputed) {
+                if !r.object_flags_lazy().intersects(ObjectFlags::CouldContainTypeVariablesComputed) {
                     if r.object_flags().intersects(ObjectFlags::Mapped | ObjectFlags::Anonymous | ObjectFlags::Reference) {
                         r.object_flags.set(
-                            r.object_flags() | ObjectFlags::CouldContainTypeVariablesComputed | tsrs_core::if_else(result_could_contain_object_flags, ObjectFlags::CouldContainTypeVariables, ObjectFlags::None),
+                            r.object_flags_lazy() | ObjectFlags::CouldContainTypeVariablesComputed | tsrs_core::if_else(result_could_contain_object_flags, ObjectFlags::CouldContainTypeVariables, ObjectFlags::None),
                         );
                     } else {
                         // If none of the type arguments for the outer type parameters contain type variables, it follows
                         // that the instantiated type doesn't reference type variables.
                         // Intrinsics have `CouldContainTypeVariablesComputed` pre-set, so this should only cover unions and intersections resulting from `instantiateMappedType`
-                        r.object_flags.set(r.object_flags() | tsrs_core::if_else(!result_could_contain_object_flags, ObjectFlags::CouldContainTypeVariablesComputed, ObjectFlags::None));
+                        r.object_flags.set(r.object_flags_lazy() | tsrs_core::if_else(!result_could_contain_object_flags, ObjectFlags::CouldContainTypeVariablesComputed, ObjectFlags::None));
                     }
                 }
             }
@@ -1432,7 +1435,7 @@ impl Checker {
     pub(crate) fn instantiate_anonymous_type(&mut self, t: P<Type>, m: P<TypeMapper>, alias: Option<P<TypeAlias>>) -> P<Type> {
         let mut m = m;
         let mut alias = alias;
-        let result = self.new_object_type((t.object_flags() & !(ObjectFlags::CouldContainTypeVariablesComputed | ObjectFlags::CouldContainTypeVariables)) | ObjectFlags::Instantiated, t.symbol());
+        let result = self.new_object_type((t.object_flags_lazy() & !(ObjectFlags::CouldContainTypeVariablesComputed | ObjectFlags::CouldContainTypeVariables)) | ObjectFlags::Instantiated, t.symbol());
         if t.object_flags().intersects(ObjectFlags::Mapped) {
             result.as_mapped_type().declaration.set(t.as_mapped_type().declaration.get());
             // C.f. instantiateSignature
@@ -1451,7 +1454,7 @@ impl Checker {
         if let Some(alias) = alias {
             if !alias.type_arguments().is_empty() {
                 let propagating = self.get_propagating_flags_of_types(result.alias().unwrap().type_arguments(), TypeFlags::None);
-                result.object_flags.set(result.object_flags() | propagating);
+                result.object_flags.set(result.object_flags_lazy() | propagating);
             }
         }
         let d = result.as_object_type();

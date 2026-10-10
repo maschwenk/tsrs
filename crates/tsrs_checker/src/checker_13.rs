@@ -186,7 +186,7 @@ impl Checker {
             if flags.intersects(TypeFlags::Instantiable) {
                 *includes |= TypeFlags::IncludesInstantiable;
             }
-            if flags.intersects(TypeFlags::Intersection) && t.object_flags().intersects(ObjectFlags::IsConstrainedTypeVariable) {
+            if flags.intersects(TypeFlags::Intersection) && t.object_flags_lazy().intersects(ObjectFlags::IsConstrainedTypeVariable) {
                 *includes |= TypeFlags::IncludesConstrainedTypeVariable;
             }
             if t == c.wildcard_type {
@@ -350,7 +350,7 @@ impl Checker {
         let mut type_variables: Vec<P<Type>> = Vec::new();
         // First collect a list of the type variables occurring in constraining intersections.
         for &t in &types {
-            if t.flags().intersects(TypeFlags::Intersection) && t.object_flags().intersects(ObjectFlags::IsConstrainedTypeVariable) {
+            if t.flags().intersects(TypeFlags::Intersection) && t.object_flags_lazy().intersects(ObjectFlags::IsConstrainedTypeVariable) {
                 let it = t.as_intersection_type().types();
                 let index = if !it[0].flags().intersects(TypeFlags::TypeVariable) { 1 } else { 0 };
                 append_if_unique(&mut type_variables, it[index]);
@@ -363,7 +363,7 @@ impl Checker {
             let mut primitives: Vec<P<Type>> = Vec::new();
             // First collect the primitive types from the constraining intersections.
             for &t in &types {
-                if t.flags().intersects(TypeFlags::Intersection) && t.object_flags().intersects(ObjectFlags::IsConstrainedTypeVariable) {
+                if t.flags().intersects(TypeFlags::Intersection) && t.object_flags_lazy().intersects(ObjectFlags::IsConstrainedTypeVariable) {
                     let it = t.as_intersection_type().types();
                     let index = if !it[0].flags().intersects(TypeFlags::TypeVariable) { 1 } else { 0 };
                     if it[index] == type_variable {
@@ -379,7 +379,7 @@ impl Checker {
                 while i > 0 {
                     i -= 1;
                     let t = types[i];
-                    if t.flags().intersects(TypeFlags::Intersection) && t.object_flags().intersects(ObjectFlags::IsConstrainedTypeVariable) {
+                    if t.flags().intersects(TypeFlags::Intersection) && t.object_flags_lazy().intersects(ObjectFlags::IsConstrainedTypeVariable) {
                         let it = t.as_intersection_type().types();
                         let index = if !it[0].flags().intersects(TypeFlags::TypeVariable) { 1 } else { 0 };
                         if it[index] == type_variable && contains_type(self, &primitives, it[1 - index]) {
@@ -1015,7 +1015,7 @@ impl Checker {
         if !t.object_flags().intersects(ObjectFlags::Anonymous) {
             return false;
         }
-        if t.object_flags().intersects(ObjectFlags::MembersResolved) && self.is_empty_resolved_type(t.as_structured_type()) {
+        if t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) && self.is_empty_resolved_type(t.as_structured_type()) {
             return true;
         }
         match t.symbol() {
@@ -2661,18 +2661,18 @@ impl Checker {
     // checker.go:28273
     pub(crate) fn is_unknown_like_union_type(&mut self, t: P<Type>) -> bool {
         if self.strict_null_checks && t.flags().intersects(TypeFlags::Union) {
-            if !t.object_flags().intersects(ObjectFlags::IsUnknownLikeUnionComputed) {
-                t.object_flags.set(t.object_flags() | ObjectFlags::IsUnknownLikeUnionComputed);
+            if !t.object_flags_lazy().intersects(ObjectFlags::IsUnknownLikeUnionComputed) {
+                t.object_flags.set(t.object_flags_lazy() | ObjectFlags::IsUnknownLikeUnionComputed);
                 let types = t.types();
                 if types.len() >= 3
                     && types[0].flags().intersects(TypeFlags::Undefined)
                     && types[1].flags().intersects(TypeFlags::Null)
                     && types.iter().any(|&t| self.is_empty_anonymous_object_type(t))
                 {
-                    t.object_flags.set(t.object_flags() | ObjectFlags::IsUnknownLikeUnion);
+                    t.object_flags.set(t.object_flags_lazy() | ObjectFlags::IsUnknownLikeUnion);
                 }
             }
-            return t.object_flags().intersects(ObjectFlags::IsUnknownLikeUnion);
+            return t.object_flags_lazy().intersects(ObjectFlags::IsUnknownLikeUnion);
         }
         false
     }
@@ -2683,11 +2683,11 @@ impl Checker {
     // checker.go:28290
     pub(crate) fn is_uniform_union_type(&mut self, t: P<Type>) -> bool {
         if t.object_flags().intersects(ObjectFlags::PrimitiveUnion) {
-            if !t.object_flags().intersects(ObjectFlags::IsUniformEnumComputed) {
+            if !t.object_flags_lazy().intersects(ObjectFlags::IsUniformEnumComputed) {
                 let uniform = self.compute_is_uniform_union_type(t.types());
-                t.object_flags.set(t.object_flags() | ObjectFlags::IsUniformEnumComputed | if_else(uniform, ObjectFlags::IsUniformEnum, ObjectFlags::None));
+                t.object_flags.set(t.object_flags_lazy() | ObjectFlags::IsUniformEnumComputed | if_else(uniform, ObjectFlags::IsUniformEnum, ObjectFlags::None));
             }
-            return t.object_flags().intersects(ObjectFlags::IsUniformEnum);
+            return t.object_flags_lazy().intersects(ObjectFlags::IsUniformEnum);
         }
         false
     }

@@ -311,10 +311,10 @@ impl Checker {
             return None;
         }
         let key = CachedTypeKey { kind: CachedTypeKind::EquivalentBaseType, type_id: t.id };
-        if t.object_flags().intersects(ObjectFlags::IdenticalBaseTypeCalculated) {
+        if t.object_flags_lazy().intersects(ObjectFlags::IdenticalBaseTypeCalculated) {
             return self.cached_types.get(&key).copied();
         }
-        t.object_flags.set(t.object_flags() | ObjectFlags::IdenticalBaseTypeCalculated);
+        t.object_flags.set(t.object_flags_lazy() | ObjectFlags::IdenticalBaseTypeCalculated);
         let target = t.target().unwrap();
         if target.object_flags().intersects(ObjectFlags::Class) {
             let base_type_node = get_base_type_node_of_class(target);
@@ -402,7 +402,7 @@ impl Checker {
         let regular = self.new_anonymous_type(t.symbol(), Some(members), resolved.call_signatures(), resolved.construct_signatures(), resolved.index_infos());
         // resolved is t's own structured data, so resolved.flags/objectFlags are t's header flags
         regular.flags.set(t.flags());
-        regular.object_flags.set(regular.object_flags() | (t.object_flags() & !ObjectFlags::FreshLiteral));
+        regular.object_flags.set(regular.object_flags_lazy() | (t.object_flags_lazy() & !ObjectFlags::FreshLiteral));
         self.cached_types.insert(key, regular);
         regular
     }

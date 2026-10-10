@@ -537,6 +537,12 @@ fn adds_nothing(program: &Program, file: P<SourceFile>) -> bool {
 /// never asks for one file's diagnostics after that pass, and the pass does not keep each file's settled diagnostics
 /// (it returns them all together), so a caller that did would read freed memory; this makes it a clear error instead.
 /// One atomic load for any other file.
+/// Whether `file` was parsed into a region of its own: it may be freed once checked (the shared-graph seed must not
+/// check it, sharedgraph.rs).
+pub(crate) fn has_region(file: P<SourceFile>) -> bool {
+    region_candidate(file.file_name(), file.script_kind.get()) && REGIONS.lock().unwrap().contains_key(&file)
+}
+
 pub(crate) fn assert_not_freed(file: P<SourceFile>) {
     if file.is_check_leaf() && !REGIONS.lock().unwrap().contains_key(&file) {
         panic!("fileregions: {} was freed after the type-check pass; its tree can no longer be read", file.file_name());

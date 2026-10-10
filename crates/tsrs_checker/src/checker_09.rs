@@ -291,7 +291,7 @@ impl Checker {
             // to exhaustively analyze). We give interfaces a "this" type if we can't definitely determine that they are free of
             // "this" references.
             if !type_parameters.is_empty() || kind == ObjectFlags::Class || !self.is_thisless_interface(symbol) {
-                t.object_flags.set(t.object_flags.get() | ObjectFlags::Reference);
+                t.object_flags.set(t.object_flags.get_lazy() | ObjectFlags::Reference);
                 let d = t.as_interface_type();
                 let this_type = self.new_type_parameter(Some(symbol));
                 d.this_type.set(Some(this_type));
@@ -912,7 +912,7 @@ impl Checker {
         }
         let index_infos = self.get_index_infos_of_type(source);
         let result = self.new_anonymous_type(symbol, Some(members), &[], &[], &index_infos);
-        result.object_flags.set(result.object_flags.get() | ObjectFlags::ObjectRestType);
+        result.object_flags.set(result.object_flags.get_lazy() | ObjectFlags::ObjectRestType);
         result
     }
 
@@ -1031,10 +1031,10 @@ impl Checker {
             None => Vec::new(),
         };
         let result = self.new_anonymous_type(None, Some(members), &[], &[], &index_infos);
-        result.object_flags.set(result.object_flags.get() | object_flags);
+        result.object_flags.set(result.object_flags.get_lazy() | object_flags);
         if include_pattern_in_type {
             self.pattern_for_type.insert(result, pattern);
-            result.object_flags.set(result.object_flags.get() | ObjectFlags::ContainsObjectOrArrayLiteral);
+            result.object_flags.set(result.object_flags.get_lazy() | ObjectFlags::ContainsObjectOrArrayLiteral);
         }
         result
     }
@@ -1083,7 +1083,7 @@ impl Checker {
         if include_pattern_in_type {
             result = self.clone_type_reference(result);
             self.pattern_for_type.insert(result, pattern);
-            result.object_flags.set(result.object_flags.get() | ObjectFlags::ContainsObjectOrArrayLiteral);
+            result.object_flags.set(result.object_flags.get_lazy() | ObjectFlags::ContainsObjectOrArrayLiteral);
         }
         result
     }
@@ -1606,7 +1606,7 @@ impl Checker {
             .collect();
         let result = self.new_anonymous_type(t.symbol(), Some(members), &[], &[], &index_infos);
         // Retain js literal flag through widening
-        result.object_flags.set(result.object_flags.get() | (t.object_flags() & (ObjectFlags::JSLiteral | ObjectFlags::NonInferrableType)));
+        result.object_flags.set(result.object_flags.get_lazy() | (t.object_flags_lazy() & (ObjectFlags::JSLiteral | ObjectFlags::NonInferrableType)));
         // Only cache in child contexts since the root context never widens a particular object literal type more than once
         if let Some(context) = context {
             if context.parent.get().is_some() {
@@ -2201,7 +2201,7 @@ impl Checker {
         let t = self.get_reduced_apparent_type(t);
         if t.flags().intersects(TypeFlags::Object) {
             let key = HashedName::new(name);
-            let symbol = if t.object_flags().intersects(ObjectFlags::MembersResolved) {
+            let symbol = if t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) {
                 t.as_structured_type().members().and_then(|m| m.lookup_hashed(key))
             } else {
                 self.get_member_of_unresolved_structured_type(t, name, instantiate)
@@ -2225,7 +2225,7 @@ impl Checker {
             }
             // A name that no member of `Function`, `CallableFunction`, `NewableFunction` or `Object` has is not found
             // below; with `t` resolved, the signature tests below have no side effects to keep.
-            if t.object_flags().intersects(ObjectFlags::MembersResolved) && !self.may_be_augment_member(key) {
+            if t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) && !self.may_be_augment_member(key) {
                 return None;
             }
             let function_type = if t == self.any_function_type {
@@ -2279,7 +2279,7 @@ impl Checker {
             if !t.flags().intersects(TypeFlags::Object) {
                 continue; // get_property_of_object_type finds nothing in it
             }
-            if !t.object_flags().intersects(ObjectFlags::MembersResolved) {
+            if !t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) {
                 return true;
             }
             if let Some(members) = self.resolve_structured_type_members(t).unwrap().members() {
@@ -2328,7 +2328,7 @@ impl Checker {
             return ready.construct_signatures.get();
         }
         if self.lazy_members && t.object_flags().intersects(ObjectFlags::Mapped) {
-            if !t.object_flags().intersects(ObjectFlags::MembersResolved) {
+            if !t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) {
                 self.lazy_member_stats.mapped_signature_early_returns += 1;
             }
             // Mapped types have no signatures.
@@ -2465,7 +2465,7 @@ impl Checker {
     #[inline]
     pub(crate) fn resolve_structured_type_members(&mut self, t: P<Type>) -> Option<&'static StructuredType> {
         #[cfg(feature = "site-counts")]
-        if !t.object_flags().intersects(ObjectFlags::MembersResolved) {
+        if !t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) {
             // Exclusive symbol/signature counts created by this resolution, attributed to the code that asked for it.
             thread_local! { static NESTED: std::cell::RefCell<Vec<u64>> = const { std::cell::RefCell::new(Vec::new()) }; }
             let label = if t.object_flags().intersects(ObjectFlags::Reference) && t.target().is_some_and(|s| s.object_flags().intersects(ObjectFlags::Tuple)) {
@@ -2512,7 +2512,7 @@ impl Checker {
             }
             return r;
         }
-        if t.object_flags().intersects(ObjectFlags::MembersResolved) {
+        if t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) {
             return Some(t.as_structured_type());
         }
         self.resolve_structured_type_members_worker(t)
@@ -2521,7 +2521,7 @@ impl Checker {
     #[cfg_attr(feature = "site-counts", track_caller)]
     #[inline(never)]
     fn resolve_structured_type_members_worker(&mut self, t: P<Type>) -> Option<&'static StructuredType> {
-        if !t.object_flags().intersects(ObjectFlags::MembersResolved) {
+        if !t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) {
             if t.flags().intersects(TypeFlags::Object) {
                 if t.object_flags().intersects(ObjectFlags::Reference) {
                     self.resolve_type_reference_members(t);
@@ -2556,6 +2556,7 @@ impl Checker {
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn resolve_type_reference_members(&mut self, t: P<Type>) {
         if let Some(lm) = self.lazy_member_tables.get(&t).filter(|lm| lm.ready.get().is_some()).copied() {
+            let lm = self.own_lazy_member_table(t, lm);
             self.resolve_lazy_members(t, lm);
             return;
         }
@@ -2719,6 +2720,7 @@ pub(crate) fn lazy_member_tables_heap(c: &Checker) -> Vec<(String, crate::heapce
     ]
 }
 
+#[derive(Clone)]
 pub(crate) struct LazyMembers {
     pub(crate) unaffected: ThinSlice<&'static str>, // sorted names of declared members that instantiate to themselves
     pub(crate) call_signatures: ThinSlice<P<Signature>>,
@@ -2728,7 +2730,7 @@ pub(crate) struct LazyMembers {
 }
 
 pub(crate) fn may_have_lazy_members(t: P<Type>) -> bool {
-    t.object_flags() & (ObjectFlags::MembersResolved | ObjectFlags::Reference) == ObjectFlags::Reference
+    t.object_flags_lazy() & (ObjectFlags::MembersResolved | ObjectFlags::Reference) == ObjectFlags::Reference
 }
 
 impl Checker {
@@ -2746,7 +2748,7 @@ impl Checker {
     /// `resolveStructuredTypeMembers` on instantiated references, which leaves the flag unset). Read-only;
     /// never resolves anything. Used by the Node API to report Go's objectFlags.
     pub fn members_resolved_like_go(&self, t: P<Type>) -> bool {
-        t.object_flags().intersects(ObjectFlags::MembersResolved) || self.lazy_member_tables.contains_key(&t)
+        t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) || self.lazy_member_tables.contains_key(&t)
     }
 
     // Returns nil if t has no lazy member table or it is still being prepared.
@@ -2770,10 +2772,10 @@ impl Checker {
             return None;
         }
         let lm = match self.lazy_member_tables.get(&t) {
-            Some(&lm) => lm,
+            Some(&lm) => self.own_lazy_member_table(t, lm),
             None => self.create_lazy_member_table(t, source.unwrap())?,
         };
-        if lm.ready.get().is_none() || t.object_flags().intersects(ObjectFlags::MembersResolved) {
+        if lm.ready.get().is_none() || t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) {
             return None;
         }
         Some(lm)
@@ -2862,10 +2864,29 @@ impl Checker {
             index_infos: ThinSlice::new(alloc_vec(index_infos)),
             base_types: ThinSlice::new(alloc_vec(base_types)),
         });
-        if t.object_flags().intersects(ObjectFlags::MembersResolved) {
+        if t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) {
             // t was resolved while preparing; resolveObjectTypeMembers would now replace its members.
             self.resolve_lazy_members(t, lm);
         }
+    }
+
+    /// Shared-graph prototype: `lm`, or this checker's copy of it if it belongs to the frozen seed (forks fill tables).
+    #[inline]
+    pub(crate) fn own_lazy_member_table(&mut self, t: P<Type>, lm: P<LazyMemberTable>) -> P<LazyMemberTable> {
+        if !tsrs_core::sharedgraph::frozen(lm.get()) {
+            return lm;
+        }
+        let ready = std::cell::OnceCell::new();
+        if let Some(r) = lm.ready.get() {
+            let _ = ready.set(r.clone());
+        }
+        let ordered_properties = std::cell::OnceCell::new();
+        if let Some(&o) = lm.ordered_properties.get() {
+            let _ = ordered_properties.set(o);
+        }
+        let copy = P::new(LazyMemberTable { mapper: lm.mapper, ready, declared: lm.declared.clone_value(), ordered_properties });
+        self.lazy_member_tables.insert(t, copy);
+        copy
     }
 
     pub(crate) fn resolve_lazy_members(&mut self, t: P<Type>, lm: P<LazyMemberTable>) {
@@ -2916,7 +2937,7 @@ impl Checker {
 
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn get_member_of_structured_type_ex(&mut self, t: P<Type>, name: &str, instantiate: bool) -> Option<P<Symbol>> {
-        if t.object_flags().intersects(ObjectFlags::MembersResolved) {
+        if t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) {
             return t.as_structured_type().members().and_then(|m| m.lookup(name));
         }
         self.get_member_of_unresolved_structured_type(t, name, instantiate)
@@ -3059,7 +3080,7 @@ impl Checker {
             // for resolution of type parameter defaults to cause circularity errors, possibly leaving
             // members partially resolved. Here we ensure any such partial resolution is reset.
             // See https://github.com/microsoft/TypeScript/issues/16861 for an example.
-            t.object_flags.set(t.object_flags.get() & !ObjectFlags::MembersResolved);
+            t.object_flags.set(t.object_flags.get_lazy() & !ObjectFlags::MembersResolved);
             self.augment_filter = None; // t may be one of the filter's four types: its members are resolved again
             data.base_types_resolved.set(true);
             if canonical {
@@ -3111,7 +3132,7 @@ impl Checker {
             let data = r.as_interface_type();
             data.base_types_resolved.set(false);
             data.resolved_base_types.set(&[]);
-            r.object_flags.set(r.object_flags.get() & !ObjectFlags::MembersResolved);
+            r.object_flags.set(r.object_flags.get_lazy() & !ObjectFlags::MembersResolved);
         }
         self.augment_filter = None; // as in get_base_types
         // Each pass resolves `first` for good, so a later reset (another cycle) covers fewer types and this ends.
