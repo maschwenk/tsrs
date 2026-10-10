@@ -442,7 +442,7 @@ impl Checker {
 
     // exports.go:354
     pub fn fill_missing_type_arguments_exported(&mut self, type_arguments: &[P<Type>], type_parameters: &[P<Type>], min_type_argument_count: i32, is_java_script_implicit_any: bool) -> Vec<P<Type>> {
-        self.fill_missing_type_arguments(type_arguments, type_parameters, min_type_argument_count, is_java_script_implicit_any)
+        self.fill_missing_type_arguments(type_arguments, type_parameters, min_type_argument_count, is_java_script_implicit_any).into_owned()
     }
 
     // exports.go:358

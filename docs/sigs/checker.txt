@@ -1,6 +1,6 @@
 # rust_name | signature | origin | receiver  (generated from the Rust sources by tools/sigs-from-rust.py)
 accepts_void | pub(crate) fn accepts_void(t: P<Type>) -> bool | checker.go:9371 | -
-active_mapper_cache_key | fn active_mapper_cache_key(t: P<Type>, alias: Option<P<TypeAlias>>) -> CacheHashKey | rust:checker_11.rs:1010 | -
+active_mapper_cache_key | fn active_mapper_cache_key(t: P<Type>, alias: Option<P<TypeAlias>>) -> CacheHashKey | rust:checker_11.rs:1011 | -
 add | pub fn add(&mut self, other: HeapStat) | rust:heapcensus.rs:23 | HeapStat
 add | pub fn add(&self, reference: P<Type>) | rust:types.rs:2207 | ReferenceInstantiations
 add | pub(crate) fn add(&mut self, c: &mut Checker, t: P<Type>, info: TupleElementInfo) | checker.go:23891 | TupleNormalizer
@@ -778,7 +778,7 @@ extract_unit_type | pub(crate) fn extract_unit_type(&mut self, t: P<Type>) -> P<
 file_and_line | fn file_and_line(node: P<Node>) -> String | rust:workcensus.rs:386 | -
 file_diagnostics_so_far | pub fn file_diagnostics_so_far(&mut self, source_file: P<SourceFile>) -> Vec<P<Diagnostic>> | rust:checker_02.rs:199 | Checker
 files_with_target | fn files_with_target(&self, target: P<Symbol>) -> impl Iterator<Item = u32> + '_ | rust:printer.rs:1668 | ModuleExportIndex
-fill_missing_type_arguments | pub fn fill_missing_type_arguments(&mut self, type_arguments: &[P<Type>], type_parameters: &[P<Type>], min_type_argument_count: i32, is_java_script_implicit_any: bool) -> Vec<P<Type>> | checker.go:22350 | Checker
+fill_missing_type_arguments | pub fn fill_missing_type_arguments<'a>(&mut self, type_arguments: &'a [P<Type>], type_parameters: &[P<Type>], min_type_argument_count: i32, is_java_script_implicit_any: bool) -> std::borrow::Cow<'a, [P<Type>]> | checker.go:22350 | Checker
 fill_missing_type_arguments_exported | pub fn fill_missing_type_arguments_exported(&mut self, type_arguments: &[P<Type>], type_parameters: &[P<Type>], min_type_argument_count: i32, is_java_script_implicit_any: bool) -> Vec<P<Type>> | exports.go:354 | Checker
 filter_inherited_properties | pub(crate) fn filter_inherited_properties(&self, c: &mut Checker, t: P<Type>, base_types: &[P<Type>], properties: &[P<Symbol>]) -> Vec<P<Symbol>> | nodebuilder_hover.go:571 | NodeBuilderImpl
 filter_primitives_if_contains_non_primitive | pub(crate) fn filter_primitives_if_contains_non_primitive(&mut self, union_type: P<Type>) -> P<Type> | relater.go:1256 | Checker
@@ -840,7 +840,7 @@ forget_scratch_keyed_caches | pub fn forget_scratch_keyed_caches(&mut self) | ru
 format_type_flags | pub fn format_type_flags(flags: TypeFlags) -> Vec<&'static str> | rust:types.rs:895 | -
 format_union_types | pub(crate) fn format_union_types(&mut self, types: &[P<Type>], expanding_enum: bool) -> Vec<P<Type>> | printer.go:253 | Checker
 free_signature_list | fn free_signature_list(&mut self, list: Vec<P<Signature>>) | rust:checker_05.rs:462 | Checker
-free_type_list | pub(crate) fn free_type_list(&mut self, list: Vec<P<Type>>) | rust:checker_11.rs:1899 | Checker
+free_type_list | pub(crate) fn free_type_list(&mut self, list: Vec<P<Type>>) | rust:checker_11.rs:1900 | Checker
 fresh_type | pub fn fresh_type(&self) -> Option<P<Type>> | rust:types.rs:1933 | LiteralType
 from_one | pub fn from_one(key: K, value: V) -> Self | rust:packedmap.rs:59 | PackedMap
 from_u128 | pub const fn from_u128(v: u128) -> CacheHashKey | rust:checker.rs:2458 | CacheHashKey
@@ -974,7 +974,7 @@ get_common_supertype | pub(crate) fn get_common_supertype(&mut self, types: &[P<
 get_conditional_flow_type_of_type | pub(crate) fn get_conditional_flow_type_of_type(&mut self, t: P<Type>, node: Option<P<Node>>) -> P<Type> | checker.go:25422 | Checker
 get_conditional_type | pub(crate) fn get_conditional_type(&mut self, root: P<ConditionalRoot>, mapper: Option<P<TypeMapper>>, for_constraint: bool, alias: Option<P<TypeAlias>>) -> P<Type> | checker.go:24770 | Checker
 get_conditional_type_instantiation | pub(crate) fn get_conditional_type_instantiation(&mut self, t: P<Type>, mapper: P<TypeMapper>, for_constraint: bool, alias: Option<P<TypeAlias>>) -> P<Type> | checker.go:22910 | Checker
-get_conditional_type_instantiation_ex | pub(crate) fn get_conditional_type_instantiation_ex(&mut self, t: P<Type>, m1: Option<P<TypeMapper>>, mapper: P<TypeMapper>, for_constraint: bool, alias: Option<P<TypeAlias>>) -> P<Type> | rust:checker_11.rs:1470 | Checker
+get_conditional_type_instantiation_ex | pub(crate) fn get_conditional_type_instantiation_ex(&mut self, t: P<Type>, m1: Option<P<TypeMapper>>, mapper: P<TypeMapper>, for_constraint: bool, alias: Option<P<TypeAlias>>) -> P<Type> | rust:checker_11.rs:1471 | Checker
 get_conditional_type_key | pub(crate) fn get_conditional_type_key(type_arguments: &[P<Type>], alias: Option<P<TypeAlias>>, for_constraint: bool) -> CacheHashKey | checker.go:17943 | -
 get_conditional_type_worker | fn get_conditional_type_worker(&mut self, root: P<ConditionalRoot>, mapper: Option<P<TypeMapper>>, for_constraint: bool, alias: Option<P<TypeAlias>>) -> P<Type> | rust:checker_12.rs:1031 | Checker
 get_constant_value | pub fn get_constant_value(&mut self, node: P<Node>) -> Option<LiteralValue> | services.go:870 | Checker
@@ -2043,7 +2043,7 @@ instantiate_list | pub(crate) fn instantiate_list<T: Copy + Eq + std::hash::Hash
 instantiate_mapped_array_type | pub(crate) fn instantiate_mapped_array_type(&mut self, array_type: P<Type>, mapped_type: P<Type>, m: P<TypeMapper>) -> P<Type> | checker.go:23010 | Checker
 instantiate_mapped_tuple_type | pub(crate) fn instantiate_mapped_tuple_type(&mut self, tuple_type: P<Type>, mapped_type: P<Type>, type_variable: P<Type>, m: P<TypeMapper>) -> P<Type> | checker.go:23018 | Checker
 instantiate_mapped_type | pub(crate) fn instantiate_mapped_type(&mut self, t: P<Type>, m: P<TypeMapper>, alias: Option<P<TypeAlias>>) -> P<Type> | checker.go:22960 | Checker
-instantiate_mapped_type_constituent | fn instantiate_mapped_type_constituent(&mut self, t: P<Type>, type_variable: P<Type>, m: P<TypeMapper>, s: P<Type>) -> P<Type> | rust:checker_11.rs:1623 | Checker
+instantiate_mapped_type_constituent | fn instantiate_mapped_type_constituent(&mut self, t: P<Type>, type_variable: P<Type>, m: P<TypeMapper>, s: P<Type>) -> P<Type> | rust:checker_11.rs:1624 | Checker
 instantiate_mapped_type_template | pub(crate) fn instantiate_mapped_type_template(&mut self, t: P<Type>, key: P<Type>, is_optional: bool, m: P<TypeMapper>) -> P<Type> | checker.go:23071 | Checker
 instantiate_reverse_mapped_type | pub(crate) fn instantiate_reverse_mapped_type(&mut self, t: P<Type>, m: P<TypeMapper>) -> P<Type> | checker.go:23167 | Checker
 instantiate_signature | pub(crate) fn instantiate_signature(&mut self, sig: P<Signature>, m: Option<P<TypeMapper>>) -> P<Signature> | checker.go:20956 | Checker
@@ -2055,16 +2055,16 @@ instantiate_symbol_table | pub(crate) fn instantiate_symbol_table(&mut self, sym
 instantiate_symbols | pub(crate) fn instantiate_symbols(&mut self, symbols: &[P<Symbol>], m: P<TypeMapper>) -> Vec<P<Symbol>> | checker.go:23196 | Checker
 instantiate_type | pub(crate) fn instantiate_type(&mut self, t: P<Type>, m: Option<P<TypeMapper>>) -> P<Type> | checker.go:22496 | Checker
 instantiate_type_alias | pub(crate) fn instantiate_type_alias(&mut self, alias: Option<P<TypeAlias>>, m: Option<P<TypeMapper>>) -> Option<P<TypeAlias>> | checker.go:23185 | Checker
-instantiate_type_alias_pending | pub(crate) fn instantiate_type_alias_pending(&mut self, alias: Option<P<TypeAlias>>, m: Option<P<TypeMapper>>) -> Option<PendingTypeAlias> | rust:checker_11.rs:1867 | Checker
+instantiate_type_alias_pending | pub(crate) fn instantiate_type_alias_pending(&mut self, alias: Option<P<TypeAlias>>, m: Option<P<TypeMapper>>) -> Option<PendingTypeAlias> | rust:checker_11.rs:1868 | Checker
 instantiate_type_or_nil | fn instantiate_type_or_nil(c: &mut Checker, t: Option<P<Type>>, m: Option<P<TypeMapper>>) -> Option<P<Type>> | rust:relater_2.rs:20 | -
 instantiate_type_predicate | pub(crate) fn instantiate_type_predicate(&mut self, predicate: P<TypePredicate>, mapper: P<TypeMapper>) -> P<TypePredicate> | relater.go:2133 | Checker
 instantiate_type_with_alias | pub(crate) fn instantiate_type_with_alias(&mut self, t: P<Type>, m: Option<P<TypeMapper>>, alias: Option<P<TypeAlias>>) -> P<Type> | checker.go:22500 | Checker
-instantiate_type_with_alias_slow | fn instantiate_type_with_alias_slow(&mut self, t: P<Type>, m: P<TypeMapper>, alias: Option<P<TypeAlias>>) -> P<Type> | rust:checker_11.rs:941 | Checker
-instantiate_type_with_alias_worker | fn instantiate_type_with_alias_worker(&mut self, t: P<Type>, m: P<TypeMapper>, alias: Option<P<TypeAlias>>) -> P<Type> | rust:checker_11.rs:951 | Checker
+instantiate_type_with_alias_slow | fn instantiate_type_with_alias_slow(&mut self, t: P<Type>, m: P<TypeMapper>, alias: Option<P<TypeAlias>>) -> P<Type> | rust:checker_11.rs:942 | Checker
+instantiate_type_with_alias_worker | fn instantiate_type_with_alias_worker(&mut self, t: P<Type>, m: P<TypeMapper>, alias: Option<P<TypeAlias>>) -> P<Type> | rust:checker_11.rs:952 | Checker
 instantiate_type_with_single_generic_call_signature | pub(crate) fn instantiate_type_with_single_generic_call_signature(&mut self, node: P<Node>, t: P<Type>, check_mode: CheckMode) -> P<Type> | checker.go:7771 | Checker
 instantiate_type_worker | pub(crate) fn instantiate_type_worker(&mut self, t: P<Type>, m: P<TypeMapper>, alias: Option<P<TypeAlias>>) -> P<Type> | checker.go:22645 | Checker
 instantiate_types | pub(crate) fn instantiate_types(&mut self, types: &[P<Type>], m: Option<P<TypeMapper>>) -> Vec<P<Type>> | checker.go:23192 | Checker
-instantiate_types_changed | pub(crate) fn instantiate_types_changed(&mut self, types: &[P<Type>], m: P<TypeMapper>) -> Option<Vec<P<Type>>> | rust:checker_11.rs:1881 | Checker
+instantiate_types_changed | pub(crate) fn instantiate_types_changed(&mut self, types: &[P<Type>], m: P<TypeMapper>) -> Option<Vec<P<Type>>> | rust:checker_11.rs:1882 | Checker
 intersect_types | pub(crate) fn intersect_types(&mut self, type1: Option<P<Type>>, type2: Option<P<Type>>) -> Option<P<Type>> | checker.go:26494 | Checker
 intersect_unions_of_primitive_types | pub(crate) fn intersect_unions_of_primitive_types(&mut self, types: &mut [P<Type>]) -> (Vec<P<Type>>, bool) | checker.go:26813 | Checker
 intersection_has_matching_recursion_identity | fn intersection_has_matching_recursion_identity(c: &mut Checker, target: P<Type>, identity: RecursionId) -> bool | rust:relater_1.rs:1118 | -
@@ -3305,7 +3305,7 @@ type_kind_label | pub(crate) fn type_kind_label(flags: TypeFlags, object_flags: 
 type_maybe_assignable_to | pub(crate) fn type_maybe_assignable_to(&mut self, source: P<Type>, target: P<Type>) -> bool | flow.go:2434 | Checker
 type_node_is_equivalent_to_type | pub(crate) fn type_node_is_equivalent_to_type(&self, c: &mut Checker, annotated_declaration: Option<P<Node>>, t: P<Type>, type_from_type_node: P<Type>) -> bool | nodebuilderimpl.go:492 | NodeBuilderImpl
 type_parameter | pub fn type_parameter(&self) -> Option<P<Type>> | rust:types.rs:2351 | MappedType
-type_parameter_contains_reference | pub(crate) fn type_parameter_contains_reference(&mut self, tp: P<Type>, node: P<Node>) -> bool | rust:checker_11.rs:1389 | Checker
+type_parameter_contains_reference | pub(crate) fn type_parameter_contains_reference(&mut self, tp: P<Type>, node: P<Node>) -> bool | rust:checker_11.rs:1390 | Checker
 type_parameter_shadows_other_type_parameter_in_scope | pub(crate) fn type_parameter_shadows_other_type_parameter_in_scope(&self, c: &mut Checker, name: &str, type_parameter: P<Type>) -> bool | nodebuilderimpl.go:1468 | NodeBuilderImpl
 type_parameter_to_declaration | pub fn type_parameter_to_declaration(&self, c: &mut Checker, parameter: P<Type>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: Option<&'static dyn SymbolTracker>) -> Option<P<Node>> | nodebuilder.go:255 | NodeBuilder
 type_parameter_to_declaration | pub(crate) fn type_parameter_to_declaration(&self, c: &mut Checker, parameter: P<Type>) -> P<Node> | nodebuilderimpl.go:1683 | NodeBuilderImpl

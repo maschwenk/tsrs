@@ -715,7 +715,7 @@ impl Checker {
     pub(crate) fn get_effective_type_arguments(&mut self, node: P<Node>, type_parameters: &[P<Type>]) -> Vec<P<Type>> {
         let type_arguments: Vec<P<Type>> = node.type_arguments().iter().map(|&n| self.get_type_from_type_node(n)).collect();
         let min_type_argument_count = self.get_min_type_argument_count(type_parameters);
-        self.fill_missing_type_arguments(&type_arguments, type_parameters, min_type_argument_count, ast::is_in_js_file(node))
+        self.fill_missing_type_arguments(&type_arguments, type_parameters, min_type_argument_count, ast::is_in_js_file(node)).into_owned()
     }
 
     // Gets the minimum number of type arguments needed to satisfy all non-optional type parameters.
@@ -739,11 +739,12 @@ impl Checker {
     }
 
     // checker.go:22350
-    pub fn fill_missing_type_arguments(&mut self, type_arguments: &[P<Type>], type_parameters: &[P<Type>], min_type_argument_count: i32, is_java_script_implicit_any: bool) -> Vec<P<Type>> {
+    // Go returns typeArguments itself when no argument is missing.
+    pub fn fill_missing_type_arguments<'a>(&mut self, type_arguments: &'a [P<Type>], type_parameters: &[P<Type>], min_type_argument_count: i32, is_java_script_implicit_any: bool) -> std::borrow::Cow<'a, [P<Type>]> {
         let _ = min_type_argument_count;
         let num_type_parameters = type_parameters.len();
         if num_type_parameters == 0 {
-            return Vec::new();
+            return std::borrow::Cow::Borrowed(&[]);
         }
         let num_type_arguments = type_arguments.len();
         if is_java_script_implicit_any || num_type_arguments < num_type_parameters {
@@ -776,9 +777,9 @@ impl Checker {
                     result[i] = base_default_type;
                 }
             }
-            return result;
+            return std::borrow::Cow::Owned(result);
         }
-        type_arguments.to_vec()
+        std::borrow::Cow::Borrowed(type_arguments)
     }
 
     // checker.go:22382
@@ -2431,7 +2432,7 @@ impl Checker {
             let node_type_arguments = self.get_type_arguments_from_node(node);
             let local_type_arguments = self.fill_missing_type_arguments(&node_type_arguments, type_parameters, min_type_argument_count, is_js);
             let mut type_arguments = d.outer_type_parameters().to_vec();
-            type_arguments.extend(local_type_arguments);
+            type_arguments.extend_from_slice(&local_type_arguments);
             return self.create_type_reference_ex(t, &type_arguments, ObjectFlags::FromTypeNode);
         }
         if self.check_no_type_arguments(node, Some(symbol)) {
