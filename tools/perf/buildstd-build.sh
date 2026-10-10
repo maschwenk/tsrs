@@ -9,6 +9,8 @@
 #   C    B + -Zlocation-detail=none
 #   D    B + non-PIE (-Crelocation-model=static -Clink-arg=-no-pie)
 #   DA   A + non-PIE
+#   E    A + -Ztune-cpu=znver4 (RUSTC_BOOTSTRAP=1; scheduling for Zen 4/5, the ISA stays x86-64)
+#   F    A + -Cno-vectorize-loops -Cno-vectorize-slp
 #
 #   buildstd-build.sh <out dir> <bench work dir> [variants, default A,B,C,D,DA]
 #
@@ -30,13 +32,23 @@ step() { # $1 = name; runs the rest and records its duration
 }
 
 # Per variant: extra RUSTFLAGS, extra cargo arguments, RUSTC_BOOTSTRAP.
-rustflags_of() { case $1 in C) echo "-Zlocation-detail=none" ;; D|DA) echo "-Crelocation-model=static -Clink-arg=-no-pie" ;; *) echo "" ;; esac; }
+rustflags_of() {
+  case $1 in
+    C) echo "-Zlocation-detail=none" ;;
+    D|DA) echo "-Crelocation-model=static -Clink-arg=-no-pie" ;;
+    E) echo "-Ztune-cpu=znver4" ;;
+    F) echo "-Cno-vectorize-loops -Cno-vectorize-slp" ;;
+    *) echo "" ;;
+  esac
+}
 buildstd_of() { case $1 in B|C|D) echo 1 ;; *) echo 0 ;; esac; }
+bootstrap_of() { case $1 in B|C|D|E) echo 1 ;; *) echo 0 ;; esac; }
 
 cargo_dist() { # $1 = variant, $2 = target dir, $3 = RUSTFLAGS, rest = packages
   local v=$1 dir=$2 flags=$3; shift 3
   local extra=()
-  if [ "$(buildstd_of "$v")" = 1 ]; then export RUSTC_BOOTSTRAP=1; extra=(-Zbuild-std=std,panic_unwind); else unset RUSTC_BOOTSTRAP; fi
+  if [ "$(bootstrap_of "$v")" = 1 ]; then export RUSTC_BOOTSTRAP=1; else unset RUSTC_BOOTSTRAP; fi
+  if [ "$(buildstd_of "$v")" = 1 ]; then extra=(-Zbuild-std=std,panic_unwind); fi
   CARGO_TARGET_DIR="$dir" RUSTFLAGS="$flags" CARGO_PROFILE_DIST_STRIP=none \
     cargo build --profile dist --locked "$@" --target "$tgt" "${extra[@]}"
 }

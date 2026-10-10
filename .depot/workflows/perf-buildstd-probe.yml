@@ -17,7 +17,7 @@ on:
         default: "5"
       bins:
         description: comma-separated variants of buildstd-build.sh to build and measure (the first is the baseline)
-        default: A,DA
+        default: A,E,F
 
 permissions:
   contents: read
@@ -26,7 +26,7 @@ env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
   REPS: ${{ inputs.reps || '5' }}
-  BINS: ${{ inputs.bins || 'A,DA' }}
+  BINS: ${{ inputs.bins || 'A,E,F' }}
   PROJECTS: vscode,xstate-main,webpack,mui-docs,cal-diy,formbricks-web,supabase-studio,t3code-server,drizzle-orm
 
 jobs:
@@ -199,6 +199,30 @@ jobs:
           python3 tools/perf/layout-measure.py "${args[@]}" --projects "$PROJECTS" --checkers 1,default --reps "$REPS" \
             --out probe-out
           cat probe-out/layout.md >> "$GITHUB_STEP_SUMMARY"
+
+      # Instruction-cache counters (the generic L1-icache-load-misses event reads 0 on this VM): AMD Zen's
+      # IC tag miss (PMCx18E, umask 0x18) and instruction-cache refills from L2 (PMCx082) and from beyond (PMCx083),
+      # by name if perf knows them, else as raw events. Two `--singleThreaded` runs per project and binary.
+      - name: Instruction-cache counters
+        if: always() && env.PERF != ''
+        run: |
+          IFS=, read -ra names <<< "$BINS"
+          ev="ic_tag_hit_miss.instruction_cache_miss,ic_cache_fill_l2,ic_cache_fill_sys,instructions,cycles"
+          "$PERF" stat -e "$ev" -- true > /dev/null 2>&1 || ev="r10000188e,r82,r83,instructions,cycles"
+          echo "events: $ev" | tee probe-out/icache.txt
+          for p in vscode t3code-server mui-docs supabase-studio; do
+            IFS=$'\t' read -r cwd proj < <(python3 -c 'import json, sys; sys.path.insert(0, "bench"); import run as rb
+          cfg = json.load(open("bench/projects.json")); p = next(p for p in cfg["projects"] if p["name"] == sys.argv[1])
+          cwd, proj = rb.project_path(cfg, p, rb.Path("bench/.work").resolve()); print(f"{cwd}\t{proj}")' "$p")
+            for rep in 1 2; do
+              for n in "${names[@]}"; do
+                [ -x "/tmp/bstd/bin/$n/tsrs" ] || continue
+                (cd "$cwd" && RAYON_NUM_THREADS=1 "$PERF" stat -x, -e "$ev" -o /tmp/ic.csv -- "/tmp/bstd/bin/$n/tsrs" -p "$proj" \
+                  --noEmit --incremental false --singleThreaded --pretty false > /dev/null 2>&1) || true
+                echo "$p $n $rep $(grep -v '^#' /tmp/ic.csv | grep -v '^$' | awk -F, '{printf "%s=%s ", $3, $1}')" | tee -a probe-out/icache.txt
+              done
+            done
+          done
 
       # The bench's deterministic measure (bench/README.md "Regression flag"): user-space instructions of one
       # `--singleThreaded` run with RAYON_NUM_THREADS=1, and its peak RSS. Needs no perf tool.
