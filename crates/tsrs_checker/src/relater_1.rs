@@ -1535,7 +1535,7 @@ impl<'a> TypeDiscriminator<'a> {
     // relater.go:1044
     pub(crate) fn matches(&mut self, c: &mut Checker, index: i32, t: P<Type>) -> bool {
         let prop_type = c.get_type_of_symbol(self.props[index as usize]);
-        for s in prop_type.distributed() {
+        for s in prop_type.distributed_iter() {
             if (self.is_related_to)(c, s, t) != Ternary::False {
                 return true;
             }
@@ -1709,7 +1709,7 @@ impl Checker {
                     return FxHashMap::default();
                 };
                 let mut duplicate = false;
-                for d in discriminant.distributed() {
+                for d in discriminant.distributed_iter() {
                     let key = self.get_regular_type_of_literal_type(d);
                     match types_by_key.get(&key).copied() {
                         None => {

@@ -624,7 +624,7 @@ impl Checker {
                         if let Some(constraint) = constraint {
                             if !is_type_any(Some(constraint)) {
                                 let mut all_type_flags = TypeFlags::None;
-                                for t in constraint.distributed() {
+                                for t in constraint.distributed_iter() {
                                     all_type_flags |= t.flags();
                                 }
                                 // If the constraint contains `string`, we don't need to look for a more preferred type
@@ -639,7 +639,7 @@ impl Checker {
                                         all_type_flags &= !TypeFlags::BigIntLike;
                                     }
                                     let mut matching_type = self.never_type;
-                                    for t in constraint.distributed() {
+                                    for t in constraint.distributed_iter() {
                                         matching_type = infer_to_template_literal_type_choose(self, matching_type, t, all_type_flags, source, &str);
                                     }
                                     if !matching_type.flags().intersects(TypeFlags::Never) {
@@ -1403,7 +1403,7 @@ impl Checker {
     // inference.go:1229
     pub(crate) fn create_empty_object_type_from_string_literal(&mut self, t: P<Type>) -> P<Type> {
         let members = SymbolTable::new();
-        for t in t.distributed() {
+        for t in t.distributed_iter() {
             if !t.flags().intersects(TypeFlags::StringLiteral) {
                 continue;
             }

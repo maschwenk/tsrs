@@ -1687,7 +1687,7 @@ impl Checker {
                     let prop = self.get_property_of_object_type(t, context.property_name.get());
                     if let Some(prop) = prop {
                         let prop_type = self.get_type_of_symbol(prop);
-                        siblings.extend(prop_type.distributed());
+                        siblings.extend(prop_type.distributed_iter());
                     }
                 }
             }

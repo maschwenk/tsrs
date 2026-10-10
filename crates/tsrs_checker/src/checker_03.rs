@@ -837,7 +837,7 @@ impl Checker {
                 let parameters = declaration.parameters();
                 if parameters.len() == 1 {
                     if let Some(type_node) = parameters[0].type_node() {
-                        for t in self.get_type_from_type_node(type_node).distributed() {
+                        for t in self.get_type_from_type_node(type_node).distributed_iter() {
                             index_signature_map.entry(t).or_default().push(declaration);
                         }
                     }

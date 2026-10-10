@@ -2318,7 +2318,7 @@ impl Checker {
     // checker.go:8429
     pub(crate) fn get_constituent_property(&mut self, object_type: P<Type>, property_name: &str) -> Option<P<Symbol>> {
         let apparent_type = self.get_apparent_type(object_type);
-        for t in apparent_type.distributed() {
+        for t in apparent_type.distributed_iter() {
             let prop = self.get_property_of_type(t, property_name);
             if prop.is_some() {
                 return prop;

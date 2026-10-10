@@ -868,7 +868,7 @@ impl ObjectLiteralDiscriminator {
         } else {
             prop_type = c.undefined_type;
         }
-        for s in prop_type.distributed() {
+        for s in prop_type.distributed_iter() {
             if c.is_type_assignable_to(s, t) {
                 return true;
             }
@@ -2044,7 +2044,7 @@ impl Checker {
         if ast::is_identifier(node) && ast::is_property_access_expression(node.parent().unwrap()) && node.parent().unwrap().name() == Some(node) {
             let key_type = self.get_literal_type_from_property_name(node);
             let object_type = self.get_type_of_expression(node.parent().unwrap().expression().unwrap());
-            for t in object_type.distributed() {
+            for t in object_type.distributed_iter() {
                 for info in self.get_applicable_index_infos(t, key_type) {
                     if let Some(declaration) = info.declaration.get() {
                         append_if_unique(&mut signatures, declaration);
