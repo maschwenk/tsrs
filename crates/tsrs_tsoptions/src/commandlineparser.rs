@@ -52,7 +52,7 @@ pub(crate) struct CommandLineParser {
     pub(crate) response_file_stack: FxHashSet<Path>,
 }
 
-pub fn parse_command_line(command_line: &[String], host: &'static dyn ParseConfigHost) -> ParsedCommandLine {
+pub fn parse_command_line(command_line: &[String], host: &dyn ParseConfigHost) -> ParsedCommandLine {
     let parser =
         parse_command_line_worker(&COMPILER_OPTIONS_DID_YOU_MEAN_DIAGNOSTICS, command_line, Some(host.fs()), host.get_current_directory());
     let options = convert_to_options_with_absolute_paths(
@@ -77,7 +77,7 @@ pub fn parse_command_line(command_line: &[String], host: &'static dyn ParseConfi
     result
 }
 
-pub fn parse_build_command_line(command_line: &[String], host: &'static dyn ParseConfigHost) -> ParsedBuildCommandLine {
+pub fn parse_build_command_line(command_line: &[String], host: &dyn ParseConfigHost) -> ParsedBuildCommandLine {
     let parser =
         parse_command_line_worker(&BUILD_OPTIONS_DID_YOU_MEAN_DIAGNOSTICS, command_line, Some(host.fs()), host.get_current_directory());
     let mut compiler_options = CompilerOptions::default();

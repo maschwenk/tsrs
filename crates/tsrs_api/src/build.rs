@@ -29,6 +29,14 @@ pub struct BuildOutcome {
     pub projects_built: usize,
     pub timestamp_updates: usize,
     pub files_deleted: Vec<String>,
+    // Backends retain the graph that raw diagnostics refer to until the outcome is consumed.
+    _owner: Option<Arc<dyn Send + Sync>>,
+}
+
+impl BuildOutcome {
+    pub fn retain_owner(&mut self, owner: Arc<impl Send + Sync + 'static>) {
+        self._owner = Some(owner);
+    }
 }
 
 /// Inputs of Go `handleCreateBuildOrchestrator` (`apiBuildSystem` + `ParseBuildCommandLine`).

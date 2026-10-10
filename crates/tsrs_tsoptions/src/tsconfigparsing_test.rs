@@ -1316,13 +1316,54 @@ struct MemoCache {
     m: std::sync::Mutex<rustc_hash::FxHashMap<Path, P<ExtendedConfigCacheEntry>>>,
 }
 
+#[test]
+fn parsed_config_and_cache_do_not_retain_a_scoped_host() {
+    struct ScopedHost {
+        fs: std::sync::Arc<dyn FS>,
+    }
+    impl ParseConfigHost for ScopedHost {
+        fn fs(&self) -> &dyn FS {
+            &*self.fs
+        }
+        fn get_current_directory(&self) -> &str {
+            "/project"
+        }
+    }
+
+    let cache = MemoCache::default();
+    let (parsed, fs_owner) = {
+        let files = [
+            ("/project/tsconfig.json", r#"{"extends":"preset","files":["index.ts"]}"#),
+            ("/project/index.ts", "export const value = 1;"),
+            ("/project/node_modules/preset/package.json", r#"{"name":"preset","tsconfig":"base.json"}"#),
+            ("/project/node_modules/preset/base.json", r#"{"extends":"./nested.json"}"#),
+            ("/project/node_modules/preset/nested.json", r#"{"compilerOptions":{"strict":true}}"#),
+        ];
+        let fs: std::sync::Arc<dyn FS> = std::sync::Arc::new(tsrs_vfs::vfstest::from_map(files.into_iter().map(|(name, text)| (name, text.to_string())), true));
+        let fs_owner = std::sync::Arc::downgrade(&fs);
+        let host = ScopedHost { fs };
+        for _ in 0..2 {
+            let (parsed, errors) = get_parsed_command_line_of_config_file("/project/tsconfig.json", None, None, &host, Some(&cache));
+            assert!(errors.is_empty());
+            assert!(parsed.unwrap().errors.is_empty());
+        }
+        let (parsed, errors) = get_parsed_command_line_of_config_file("/project/tsconfig.json", None, None, &host, Some(&cache));
+        assert!(errors.is_empty());
+        (parsed.unwrap(), fs_owner)
+    };
+    assert!(fs_owner.upgrade().is_none(), "config parsing retained the host filesystem");
+    assert!(parsed.errors.is_empty());
+    assert!(parsed.compiler_options().unwrap().strict.is_true());
+    assert_eq!(parsed.file_names(), &["/project/index.ts"]);
+}
+
 impl ExtendedConfigCache for MemoCache {
     fn get_extended_config(
         &self,
         file_name: &str,
         path: &Path,
         resolution_stack: &[Path],
-        host: &'static dyn ParseConfigHost,
+        host: &dyn ParseConfigHost,
     ) -> P<ExtendedConfigCacheEntry> {
         if let Some(e) = self.m.lock().unwrap().get(path) {
             return *e;

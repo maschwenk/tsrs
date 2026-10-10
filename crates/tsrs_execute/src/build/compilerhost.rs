@@ -1,5 +1,7 @@
 // Port of execute/build/compilerHost.go.
 
+use std::sync::Arc;
+
 use tsrs_ast::{SourceFile, SourceFileParseOptions};
 use tsrs_compiler::CompilerHost;
 use tsrs_core::tspath::Path;
@@ -11,13 +13,13 @@ use tsrs_vfs::FS;
 use super::host::host;
 
 pub(crate) struct compilerHost {
-    pub(crate) host: &'static host,
+    pub(crate) host: Arc<host>,
     pub(crate) trace: Box<dyn Fn(&'static Message, &[&dyn std::fmt::Display]) + Send + Sync>,
 }
 
 impl CompilerHost for compilerHost {
     fn fs(&self) -> &dyn FS {
-        CompilerHost::fs(self.host)
+        CompilerHost::fs(&*self.host)
     }
 
     fn default_library_path(&self) -> &str {
@@ -25,7 +27,7 @@ impl CompilerHost for compilerHost {
     }
 
     fn get_current_directory(&self) -> &str {
-        CompilerHost::get_current_directory(self.host)
+        CompilerHost::get_current_directory(&*self.host)
     }
 
     fn trace(&self, msg: &'static Message, args: &[&dyn std::fmt::Display]) {

@@ -34,6 +34,8 @@ checkers own their regions directly (`notes/rust-owned-checker-leases.md`). Comp
 shared Rust owners and retain their graph regions (`notes/rust-owned-program-roots.md`: fidelity preserved,
 instruction/RSS gates fail). Symbol-table buffers and filter/extra records use Rust `Vec`/enum ownership
 (`notes/rust-owned-symbol-storage.md`), removing raw container allocation and four unchecked thread traits.
+Build roots/hosts and returned outcomes retain Rust owners, and config parsing borrows scoped hosts/caches
+(`notes/rust-owned-build-roots.md`). Tasks and build system/command inputs remain legacy.
 AST/symbol/type/file referents and snapshot caches still use legacy pointers.
 
 ## Removed behavior

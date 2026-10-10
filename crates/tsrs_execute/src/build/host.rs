@@ -1,6 +1,6 @@
 // Port of execute/build/host.go.
 
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, SystemTime};
 
 use rustc_hash::FxHashMap;
@@ -20,7 +20,7 @@ use crate::tsc::ExtendedConfigCache;
 pub(crate) type mTimeCache = Arc<Mutex<FxHashMap<Path, Option<SystemTime>>>>;
 
 pub(crate) struct host {
-    pub(crate) orchestrator: OnceLock<&'static Orchestrator>,
+    pub(crate) orchestrator: Weak<Orchestrator>,
     pub(crate) host: Arc<dyn CompilerHost>,
     // The caching filesystem under `host` (Go `o.host.host.FS().(*cachedvfs.FS)`), cleared by `resetCaches`.
     pub(crate) cached_fs: Arc<tsrs_vfs::cachedvfs::FS<Arc<dyn tsrs_vfs::FS>>>,
@@ -36,8 +36,8 @@ pub(crate) struct host {
 }
 
 impl host {
-    fn o(&self) -> &'static Orchestrator {
-        *self.orchestrator.get().unwrap()
+    fn o(&self) -> Arc<Orchestrator> {
+        self.orchestrator.upgrade().expect("build host used without its orchestrator owner")
     }
 
     // host.go:118
@@ -140,14 +140,13 @@ impl CompilerHost for host {
                     }
                     _ => None,
                 };
-                let this: &'static host = o.host();
                 let extended_config_cache = self.extended_config_cache.lock().unwrap().clone();
                 let (command_line, _) = tsoptions::get_parsed_command_line_of_config_file_path(
                     file_name,
                     path.clone(),
                     Some(&o.opts.command.compiler_options),
                     command_line_raw.as_ref(),
-                    this,
+                    self,
                     Some(&*extended_config_cache),
                 );
                 let config_time = o.opts.sys.now() - config_start;
@@ -165,13 +164,13 @@ impl BuildInfoReader for host {
         let o = self.o();
         let config_path = o.to_path(config.config_name());
         let task = o.get_task(&config_path);
-        let (build_info, _) = task.load_or_store_build_info(o, &o.to_path(config.config_name()), &config.get_build_info_file_name());
+        let (build_info, _) = task.load_or_store_build_info(&o, &o.to_path(config.config_name()), &config.get_build_info_file_name());
         build_info.map(|b| (*b).clone())
     }
 }
 
 // `incremental.Host` over the orchestrator's host (Go passes `orchestrator.host` itself).
-pub(crate) struct incrementalHost(pub(crate) &'static host);
+pub(crate) struct incrementalHost(pub(crate) Arc<host>);
 
 impl tsrs_incremental::Host for incrementalHost {
     fn fs(&self) -> &dyn FS {

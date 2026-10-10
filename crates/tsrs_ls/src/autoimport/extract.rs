@@ -31,7 +31,7 @@ pub(crate) struct symbolExtractor<'a> {
 // extract.go:29
 pub(crate) struct exportExtractor<'a> {
     pub(crate) symbol_extractor: symbolExtractor<'a>,
-    module_resolver: &'a DefaultResolver,
+    module_resolver: &'a DefaultResolver<'static>,
 }
 
 // extract.go:34
@@ -72,7 +72,7 @@ pub(crate) fn new_symbol_extractor<'a>(package_name: &str, checker: &'a mut Chec
 pub(crate) fn new_export_extractor<'a>(
     package_name: &str,
     checker: &'a mut Checker,
-    module_resolver: &'a DefaultResolver,
+    module_resolver: &'a DefaultResolver<'static>,
     to_path: ToPathFunc,
     realpath: Option<PathFunc>,
 ) -> exportExtractor<'a> {

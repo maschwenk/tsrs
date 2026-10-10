@@ -240,9 +240,7 @@ pub fn parse_test_ts_config(content: &test_case_parser::TestCaseContent) -> Opti
         all_files.insert(tspath::get_normalized_absolute_path(&unit.name, current_directory), unit.content.clone());
     }
     all_files.insert(tspath::get_normalized_absolute_path(&data.name, current_directory), data.content.clone());
-    // Config parsing keeps `&'static dyn ParseConfigHost`; the host is leaked like everything in the arena.
-    let parse_config_host: &'static VfsParseConfigHost =
-        P::new(new_vfs_parse_config_host_with_symlinks(&all_files, &content.symlinks, current_directory, true)).get();
+    let parse_config_host = new_vfs_parse_config_host_with_symlinks(&all_files, &content.symlinks, current_directory, true);
 
     // Content mappers are gated behind --runExternalCode (not supported by tsrs).
     let config_file_name = tspath::get_normalized_absolute_path(&data.name, current_directory);
@@ -256,7 +254,7 @@ pub fn parse_test_ts_config(content: &test_case_parser::TestCaseContent) -> Opti
     let config_dir = tspath::get_directory_path(&config_file_name);
     Some(P::new(tsoptions::parse_json_source_file_config_file_content(
         ts_config_source_file,
-        parse_config_host,
+        &parse_config_host,
         &config_dir,
         None,
         None,

@@ -132,10 +132,10 @@ struct ResolverOptionsTemplate {
 }
 
 impl ResolverOptionsTemplate {
-    fn from(o: &ResolverOptions) -> Self {
+    fn from(o: &ResolverOptions<'static>) -> Self {
         ResolverOptionsTemplate { host: Arc::clone(&o.host), typings_location: o.typings_location.clone(), project_name: o.project_name.clone(), extra_extensions: o.extra_extensions.clone() }
     }
-    fn with_options(&self, compiler_options: P<CompilerOptions>) -> ResolverOptions {
+    fn with_options(&self, compiler_options: P<CompilerOptions>) -> ResolverOptions<'static> {
         let mut o = ResolverOptions::new(Arc::clone(&self.host), compiler_options);
         o.typings_location.clone_from(&self.typings_location);
         o.project_name.clone_from(&self.project_name);
@@ -317,7 +317,7 @@ struct Factory {
 }
 
 impl ModuleResolverFactory for Factory {
-    fn new_resolver(&self, _ctx: &Context, mut options: ResolverOptions) -> (Box<dyn Resolver>, Box<dyn FnOnce() + Send>) {
+    fn new_resolver(&self, _ctx: &Context, mut options: ResolverOptions<'static>) -> (Box<dyn Resolver>, Box<dyn FnOnce() + Send>) {
         options.compiler_options = self.registration.compiler_options;
         let template = ResolverOptionsTemplate::from(&options);
         let mut fallback: Box<dyn Resolver> = Box::new(tsrs_module::new_resolver(options));

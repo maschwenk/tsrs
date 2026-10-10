@@ -99,8 +99,8 @@ pub struct CheckerSetup {
 pub struct Session {
     id: String,
     pub(crate) snapshot_host: Arc<SnapshotHost>,
-    /// Leaked once per session: tsoptions requires a `&'static dyn ParseConfigHost`.
-    pub(crate) parse_config_host: &'static crate::config::ApiParseConfigHost,
+    /// Config parsing borrows this session-owned host for the duration of each request.
+    pub(crate) parse_config_host: crate::config::ApiParseConfigHost,
     binary_responses: bool,
     /// Registered snapshots with their API reference count (Go `snapshotData.refCount`).
     snapshots: RwLock<FxHashMap<SnapshotID, (Arc<SnapshotData>, usize)>>,
@@ -142,8 +142,7 @@ impl Session {
             parse_cache: None,
             content_mapped_parse_cache: None,
         };
-        let parse_config_host: &'static crate::config::ApiParseConfigHost =
-            Box::leak(Box::new(crate::config::ApiParseConfigHost { fs: Arc::clone(&init.fs), cwd: init.options.current_directory.clone() }));
+        let parse_config_host = crate::config::ApiParseConfigHost { fs: Arc::clone(&init.fs), cwd: init.options.current_directory.clone() };
         let id = SESSION_ID_COUNTER.fetch_add(1, Ordering::SeqCst) + 1;
         let base_fs = Arc::clone(&init.fs);
         Arc::new_cyclic(|weak_self| Session {

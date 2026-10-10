@@ -115,7 +115,7 @@ pub fn config_file_response(parsed: &ParsedCommandLine) -> Value {
 impl Session {
     pub(crate) fn handle_parse_command_line(&self, p: Params) -> ApiResult<Value> {
         let command_line = p.strings("commandLine")?;
-        Ok(config_file_response(&tsrs_tsoptions::parse_command_line(&command_line, self.parse_config_host)))
+        Ok(config_file_response(&tsrs_tsoptions::parse_command_line(&command_line, &self.parse_config_host)))
     }
 
     pub(crate) fn handle_read_config_file(&self, p: Params) -> ApiResult<Value> {
@@ -147,7 +147,7 @@ impl Session {
         };
         let parsed = tsrs_tsoptions::parse_json_config_file_content(
             json_to_options_value(p.get("json")),
-            self.parse_config_host,
+            &self.parse_config_host,
             &base_path,
             None,
             &config_file_name,
@@ -167,7 +167,7 @@ impl Session {
         let source = tsrs_tsoptions::new_tsconfig_source_file_from_file_path(&config_file_name, self.to_path(&config_file_name), &content);
         let parsed = tsrs_tsoptions::parse_json_source_file_config_file_content(
             source,
-            self.parse_config_host,
+            &self.parse_config_host,
             &config_dir,
             None,
             None,

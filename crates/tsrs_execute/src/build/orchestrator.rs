@@ -38,10 +38,15 @@ pub struct OrchestratorResult {
     pub status: Option<ExitStatus>,
     pub errors: Option<Vec<P<Diagnostic>>>,
     pub statistics: Statistics,
+    owner: Option<Arc<Orchestrator>>,
     pub files_to_delete: Option<Vec<String>>,
 }
 
 impl OrchestratorResult {
+    pub fn take_owner(&mut self) -> Option<Arc<Orchestrator>> {
+        self.owner.take()
+    }
+
     pub(crate) fn status(&self) -> ExitStatus {
         self.status.unwrap_or(ExitStatus::Success)
     }
@@ -75,7 +80,7 @@ impl OrchestratorResult {
 pub struct Orchestrator {
     pub(crate) opts: Options,
     pub(crate) compare_paths_options: ComparePathsOptions,
-    host: OnceLock<&'static host>,
+    host: OnceLock<Arc<host>>,
 
     // order generation result
     tasks: Mutex<FxHashMap<Path, P<BuildTask>>>,
@@ -84,9 +89,10 @@ pub struct Orchestrator {
     graph_generated: AtomicBool,
     // Set when a builder thread panicked (see range_tasks).
     pub(crate) aborted: AtomicBool,
+    retained_programs: Mutex<Vec<Arc<tsrs_incremental::Program>>>,
     // API builds (crates/tsrs_cli/src/api.rs): every thread that works on this orchestrator allocates in a
     // region collected here, so the whole orchestrator (configs, programs, checkers' arenas, diagnostics) can be
-    // freed at once (`free_api_orchestrator`). Off for the CLI, whose single build runs to process exit.
+    // released when its Rust owner drops. Off for the CLI, whose single build runs to process exit.
     regions: Mutex<Vec<tsrs_core::arena::Region>>,
     use_regions: AtomicBool,
     // API clean existence answers, kept until the next build (which uses a fresh orchestrator): Go's `Clean` asks
@@ -100,8 +106,12 @@ pub struct Orchestrator {
 }
 
 impl Orchestrator {
-    pub(crate) fn host(&self) -> &'static host {
+    pub(crate) fn host(&self) -> &Arc<host> {
         self.host.get().unwrap()
+    }
+
+    pub(crate) fn retain_diagnostic_program(&self, program: Arc<tsrs_incremental::Program>) {
+        self.retained_programs.lock().unwrap().push(program);
     }
 
     // orchestrator.go:94
@@ -270,7 +280,7 @@ impl Orchestrator {
     }
 
     // orchestrator.go:337
-    fn recheck_all_projects(&'static self, project: &str) {
+    fn recheck_all_projects(&self, project: &str) {
         if !self.graph_generated.load(Ordering::SeqCst) {
             return;
         }
@@ -296,7 +306,7 @@ impl Orchestrator {
 
     // tsc -b entrypoint
     // orchestrator.go:295
-    pub fn start(&'static self) -> CommandLineResult {
+    pub fn start(&self) -> CommandLineResult {
         CommandLineResult { status: self.start_worker("", false /*onlyReferences*/).status() }
     }
 
@@ -305,7 +315,7 @@ impl Orchestrator {
         self.use_regions.store(true, Ordering::SeqCst);
     }
 
-    // A fresh region for the calling thread, registered for `free_api_orchestrator`; `None` for CLI builds.
+    // A fresh region for the calling thread, retained by this orchestrator; `None` for CLI builds.
     pub(crate) fn enter_api_region(&self) -> Option<tsrs_core::arena::RegionScope> {
         if !self.use_regions.load(Ordering::SeqCst) {
             return None;
@@ -318,16 +328,24 @@ impl Orchestrator {
 
     // orchestrator.go:295/301 `Build` / `BuildReferences` entrypoints for the API: one orchestrator per API
     // handle, rechecked (statuses, configs, mtimes, caches) on every call; unchanged tasks are reused.
-    pub fn build_for_api(&'static self, project: &str, only_references: bool) -> OrchestratorResult {
+    pub fn build_for_api(self: &Arc<Self>, project: &str, only_references: bool) -> OrchestratorResult {
         {
             let _region = self.enter_api_region();
             self.recheck_all_projects(project);
         }
-        self.start_worker(project, only_references)
+        let mut result = self.start_worker(project, only_references);
+        result.owner = Some(Arc::clone(self));
+        result
     }
 
     // orchestrator.go:354-414 `Clean` / `CleanReferences` entrypoints for the API.
-    pub fn clean_for_api(&'static self, project: &str, only_references: bool) -> OrchestratorResult {
+    pub fn clean_for_api(self: &Arc<Self>, project: &str, only_references: bool) -> OrchestratorResult {
+        let mut result = self.clean_for_api_inner(project, only_references);
+        result.owner = Some(Arc::clone(self));
+        result
+    }
+
+    fn clean_for_api_inner(&self, project: &str, only_references: bool) -> OrchestratorResult {
         let _region = self.enter_api_region();
         if !self.graph_generated.load(Ordering::SeqCst) {
             self.generate_graph();
@@ -404,7 +422,7 @@ impl Orchestrator {
     }
 
     // orchestrator.go:311
-    fn start_worker(&'static self, project: &str, only_references: bool) -> OrchestratorResult {
+    fn start_worker(&self, project: &str, only_references: bool) -> OrchestratorResult {
         // Content mappers are not supported by tsrs. Watch mode is not ported.
         {
             let _region = self.enter_api_region();
@@ -453,7 +471,7 @@ impl Orchestrator {
     }
 
     // orchestrator.go:798
-    fn build_or_clean_order(&'static self, order: &[String]) -> OrchestratorResult {
+    fn build_or_clean_order(&self, order: &[String]) -> OrchestratorResult {
         let build_options = &self.opts.command.build_options;
         if !build_options.clean.is_true() && build_options.verbose.is_true() {
             self.create_builder_status_reporter(None)(new_compiler_diagnostic(
@@ -527,7 +545,7 @@ impl Orchestrator {
     }
 
     // orchestrator.go:925
-    fn range_tasks(&'static self, order: &[String], f: &(dyn Fn(&Path, P<BuildTask>) + Sync)) {
+    fn range_tasks(&self, order: &[String], f: &(dyn Fn(&Path, P<BuildTask>) + Sync)) {
         let mut num_routines = 4;
         if self.use_regions.load(Ordering::SeqCst) {
             // API builds: one task region is entered at a time. Concurrent tasks could each wait to enter the
@@ -590,7 +608,7 @@ impl Orchestrator {
     }
 
     // orchestrator.go:888
-    fn build_or_clean_project(&'static self, task: P<BuildTask>, path: &Path) {
+    fn build_or_clean_project(&self, task: P<BuildTask>, path: &Path) {
         let builder: Arc<Mutex<String>> = Arc::new(Mutex::new(String::new()));
         *task.result.lock().unwrap() = Some(taskResult::new(builder));
         let report_status = self.create_builder_status_reporter(Some(task));
@@ -602,13 +620,13 @@ impl Orchestrator {
             result.diagnostic_reporter = Some(diagnostic_reporter);
         }
         if !self.opts.command.build_options.clean.is_true() {
-            task.get().build_project(self, path);
+            task.build_project(self, path);
         } else {
             task.clean_project(self, path);
         }
-        if self.opts.testing.is_none() {
-            // The program is only needed by Testing.OnProgram at report time; drop it now so a task
-            // that has finished but is not yet reported does not keep its program alive.
+        if self.opts.testing.is_none() && task.errors_are_empty() {
+            // Keep programs that own reported diagnostics until the orchestrator/result owner drops.
+            // A successful task without a testing callback can release its program immediately.
             task.result.lock().unwrap().as_mut().unwrap().program.take();
         }
         task.built.close();
@@ -640,43 +658,31 @@ impl Orchestrator {
     }
 }
 
-/// Frees an orchestrator created with `enable_api_regions` and everything its builds allocated.
-///
-/// # Safety
-/// `o` came from `new_orchestrator`, `enable_api_regions` was called before its first build, no build or clean
-/// is running, and nothing obtained from it (results, programs, diagnostics) is used afterwards.
-pub unsafe fn free_api_orchestrator(o: &'static Orchestrator) {
-    // The lock may be poisoned if the build unwound (`CliOrchestrator::build`); the list itself is intact.
-    let regions = std::mem::take(&mut *o.regions.lock().unwrap_or_else(|e| e.into_inner()));
-    // A build that unwound before reporting may still retain its owned program in a task allocated in that
-    // program's version region. Release these roots while the orchestrator's region owners are still alive.
-    let retained_programs: Vec<_> = o.tasks.lock().unwrap_or_else(|e| e.into_inner()).values()
-        .filter_map(|task| task.result.lock().unwrap_or_else(|e| e.into_inner()).as_mut().and_then(|result| result.program.take()))
-        .collect();
-    drop(retained_programs);
-    if std::env::var_os("TSRS_REGION_LOG").is_some() {
-        eprintln!("regions: api orchestrator freed ({} regions, {} KiB)", regions.len(), regions.iter().map(|r| r.allocated_bytes()).sum::<usize>() >> 10);
+impl Drop for Orchestrator {
+    fn drop(&mut self) {
+        // Tasks are still legacy region allocations. On unwind their results may retain programs that own
+        // those same regions; release the roots before dropping the regions to break that temporary cycle.
+        let retained_programs: Vec<_> = self.tasks.get_mut().unwrap_or_else(|e| e.into_inner()).values()
+            .filter_map(|task| task.result.lock().unwrap_or_else(|e| e.into_inner()).as_mut().and_then(|result| result.program.take()))
+            .collect();
+        drop(retained_programs);
+        self.retained_programs.get_mut().unwrap_or_else(|e| e.into_inner()).clear();
+        if std::env::var_os("TSRS_REGION_LOG").is_some() {
+            let regions = self.regions.get_mut().unwrap_or_else(|e| e.into_inner());
+            eprintln!("regions: build orchestrator dropped ({} regions, {} KiB)", regions.len(), regions.iter().map(|r| r.allocated_bytes()).sum::<usize>() >> 10);
+        }
     }
-    let h = o.host();
-    // Order: the host and orchestrator are dropped before the regions. Their destructors only free heap containers
-    // (maps of `P<..>` pointers, Arcs); none dereferences arena memory, which is still alive here. Keep it that way:
-    // a destructor that reads region memory must run before `drop(regions)`.
-    // SAFETY: `new_orchestrator` leaked both from `Box`es, and nothing uses them afterwards (this function's contract).
-    drop(unsafe { Box::from_raw(std::ptr::from_ref::<host>(h).cast_mut()) });
-    // SAFETY: as above.
-    drop(unsafe { Box::from_raw(std::ptr::from_ref::<Orchestrator>(o).cast_mut()) });
-    drop(regions);
 }
 
 // orchestrator.go:921
-pub fn new_orchestrator(opts: Options) -> &'static Orchestrator {
+pub fn new_orchestrator(opts: Options) -> Arc<Orchestrator> {
     // Several projects build at once; each project's pool keeps Go's checker count.
     tsrs_compiler::use_go_default_checker_count();
     let sys = opts.sys;
     let compare_paths_options =
         ComparePathsOptions { current_directory: sys.get_current_directory().to_string(), use_case_sensitive_file_names: sys.fs().use_case_sensitive_file_names() };
     let error_summary_reporter = create_report_error_summary(sys, &opts.command.compiler_options);
-    let orchestrator: &'static Orchestrator = Box::leak(Box::new(Orchestrator {
+    let orchestrator = Arc::new(Orchestrator {
         opts,
         compare_paths_options,
         host: OnceLock::new(),
@@ -688,14 +694,15 @@ pub fn new_orchestrator(opts: Options) -> &'static Orchestrator {
         error_summary_reporter,
         schedule_order: Mutex::new(Vec::new()),
         regions: Mutex::new(Vec::new()),
+        retained_programs: Mutex::new(Vec::new()),
         use_regions: AtomicBool::new(false),
         api_clean_exists: Mutex::new(FxHashMap::default()),
-    }));
+    });
     let cached_fs = Arc::new(tsrs_vfs::cachedvfs::from(sys.fs()));
     let compiler_host: Arc<dyn CompilerHost> =
         tsrs_compiler::new_compiler_host(sys.get_current_directory(), Arc::<tsrs_vfs::cachedvfs::FS<_>>::clone(&cached_fs), sys.default_library_path(), None, None);
-    let h: &'static host = Box::leak(Box::new(host {
-        orchestrator: OnceLock::new(),
+    let h = Arc::new(host {
+        orchestrator: Arc::downgrade(&orchestrator),
         host: compiler_host,
         cached_fs,
         extended_config_cache: Mutex::new(Arc::new(tsc::ExtendedConfigCache::default())),
@@ -703,8 +710,7 @@ pub fn new_orchestrator(opts: Options) -> &'static Orchestrator {
         config_times: Mutex::new(FxHashMap::default()),
         resolved_references: parseCache::default(),
         m_times: Mutex::new(Arc::new(Mutex::new(FxHashMap::default()))),
-    }));
-    let _ = h.orchestrator.set(orchestrator);
+    });
     let _ = orchestrator.host.set(h);
     orchestrator
 }

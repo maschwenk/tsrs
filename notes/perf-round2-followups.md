@@ -107,6 +107,14 @@ pointer compression costs about +4.9% instructions and took back most of the che
 
 ## Measured and rejected (do not redo)
 
+- Calling owned build roots and scoped config hosts a completed or memory-preserving migration
+  (`notes/rust-owned-build-roots.md`): local single-thread instructions add 0.05–0.19%, and default RSS changes
+  -1.73–-0.07%, below the performance-change threshold. Cumulative single-thread instructions remain +5.49–10.64%
+  against original Oxc and default RSS remains +99–105% against pre-Oxc. Build task/system/command and graph
+  ownership remains legacy. This fixes a real returned-diagnostic lifetime bug, but the whole migration is still
+  an unfinished branch checkpoint. Revisit landing after typed graph owners replace the address-routing/thread
+  arena layer, full runtime/oracle/lifecycle checks pass and fresh measurements recover the gates.
+
 - Calling the Rust-owned symbol-table containers a completed or memory-preserving graph migration
   (`notes/rust-owned-symbol-storage.md`): local single-thread instructions change -0.35–-0.46% and default RSS
   changes -0.83–+0.61%, below the performance-change threshold. Cumulative single-thread instructions remain

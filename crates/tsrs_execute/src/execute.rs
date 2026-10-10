@@ -49,8 +49,8 @@ pub fn command_line_with_testing(
     if let Some(first) = command_line_args.first() {
         match first.to_lowercase().as_str() {
             "-b" | "--b" | "-build" | "--build" => {
-                let host: &'static sysParseConfigHost = Box::leak(Box::new(sysParseConfigHost { sys, fs: sys.fs() }));
-                let mut command = tsoptions::parse_build_command_line(&command_line_args, host);
+                let host = sysParseConfigHost { sys, fs: sys.fs() };
+                let mut command = tsoptions::parse_build_command_line(&command_line_args, &host);
                 if tsrs_core::NO_THREADS {
                     command.compiler_options.single_threaded = tsrs_core::Tristate::True;
                 }
@@ -92,12 +92,12 @@ pub fn command_line_with_testing(
         tsrs_compiler::set_checker_cost_cache_from_cli(&path);
         args.drain(pos..pos + 2);
     }
-    let host: &'static sysParseConfigHost = Box::leak(Box::new(sysParseConfigHost { sys, fs: sys.fs() }));
-    let mut command = tsoptions::parse_command_line(&args, host);
+    let host = sysParseConfigHost { sys, fs: sys.fs() };
+    let mut command = tsoptions::parse_command_line(&args, &host);
     if tsrs_core::NO_THREADS {
         force_single_threaded(&mut command);
     }
-    tsc_compilation(sys, host, P::new(command), testing)
+    tsc_compilation(sys, &host, P::new(command), testing)
 }
 
 /// `tsrs_core::NO_THREADS`: `--singleThreaded`, set on the parsed options so every reader agrees (a config file
@@ -112,7 +112,7 @@ fn force_single_threaded(command: &mut ParsedCommandLine) {
 
 fn tsc_compilation(
     sys: &'static dyn System,
-    host: &'static sysParseConfigHost,
+    host: &sysParseConfigHost,
     command_line: P<ParsedCommandLine>,
     testing: Option<&'static dyn tsc::CommandLineTesting>,
 ) -> CommandLineResult {

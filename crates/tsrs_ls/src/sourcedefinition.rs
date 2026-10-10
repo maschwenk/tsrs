@@ -166,7 +166,7 @@ struct SourceDefResolver<'a> {
     options: P<CompilerOptions>,
     program: &'a Program, // Go `getSourceFile func(string) *ast.SourceFile` (program.GetSourceFile)
     resolve_from: String,
-    resolver: module::DefaultResolver,
+    resolver: module::DefaultResolver<'static>,
     parsed_files: RefCell<FxHashMap<String, Option<P<SourceFile>>>>,
 }
 

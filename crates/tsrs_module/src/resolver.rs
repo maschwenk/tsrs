@@ -94,7 +94,7 @@ macro_rules! trace {
 }
 
 pub(crate) struct ResolutionState<'r> {
-    resolver: &'r DefaultResolver,
+    resolver: &'r DefaultResolver<'r>,
     tracer: Option<Tracer>,
 
     // request fields
@@ -125,7 +125,7 @@ fn new_resolution_state<'r>(
     resolution_mode: ResolutionMode,
     compiler_options: P<CompilerOptions>,
     redirected_reference: Option<&dyn ResolvedProjectReference>,
-    resolver: &'r DefaultResolver,
+    resolver: &'r DefaultResolver<'r>,
     trace_builder: Option<Tracer>,
 ) -> ResolutionState<'r> {
     let mut state = ResolutionState {
@@ -187,9 +187,11 @@ pub fn get_compiler_options_with_redirect(compiler_options: P<CompilerOptions>, 
     compiler_options
 }
 
-pub struct DefaultResolver {
+/// Owns its host handle. A host may borrow input for a synchronous operation such as config resolution;
+/// persistent compiler/project resolvers use `DefaultResolver<'static>` with owned host data.
+pub struct DefaultResolver<'host> {
     pub(crate) resolution_data: P<ResolutionData>,
-    host: Arc<dyn ResolutionHost>,
+    host: Arc<dyn ResolutionHost + 'host>,
     // reportDiagnostic: DiagnosticReporter
     pub(crate) module_resolution_cache: ModuleResolutionCache,
     pub(crate) type_ref_directive_resolution_cache: TypeRefDirectiveResolutionCache,
@@ -200,8 +202,8 @@ pub struct DefaultResolver {
     pub(crate) parsed_patterns_for_paths: ParsedPatternsCache,
 }
 
-pub struct ResolverOptions {
-    pub host: Arc<dyn ResolutionHost>,
+pub struct ResolverOptions<'host> {
+    pub host: Arc<dyn ResolutionHost + 'host>,
     pub compiler_options: P<CompilerOptions>,
     pub typings_location: String,
     pub project_name: String,
@@ -209,8 +211,8 @@ pub struct ResolverOptions {
     pub package_json_cache: Option<P<InfoCache>>,
 }
 
-impl ResolverOptions {
-    pub fn new(host: Arc<dyn ResolutionHost>, compiler_options: P<CompilerOptions>) -> ResolverOptions {
+impl<'host> ResolverOptions<'host> {
+    pub fn new(host: Arc<dyn ResolutionHost + 'host>, compiler_options: P<CompilerOptions>) -> ResolverOptions<'host> {
         ResolverOptions {
             host,
             compiler_options,
@@ -222,14 +224,14 @@ impl ResolverOptions {
     }
 }
 
-pub fn new_resolver(opts: ResolverOptions) -> DefaultResolver {
+pub fn new_resolver(opts: ResolverOptions<'_>) -> DefaultResolver<'_> {
     let host = Arc::clone(&opts.host);
     DefaultResolver::new_from_resolution_data(new_resolution_data(opts), host)
 }
 
-impl DefaultResolver {
+impl<'host> DefaultResolver<'host> {
     // Go's `(*ResolutionData).NewResolver`.
-    pub fn new_from_resolution_data(d: P<ResolutionData>, host: Arc<dyn ResolutionHost>) -> DefaultResolver {
+    pub fn new_from_resolution_data(d: P<ResolutionData>, host: Arc<dyn ResolutionHost + 'host>) -> DefaultResolver<'host> {
         DefaultResolver {
             resolution_data: d,
             host,
@@ -265,7 +267,7 @@ impl Tracer {
     }
 }
 
-impl DefaultResolver {
+impl<'host> DefaultResolver<'host> {
     pub fn resolve_type_reference_directive(
         &self,
         type_reference_directive_name: &str,
@@ -514,7 +516,7 @@ impl DefaultResolver {
     }
 }
 
-impl Resolver for DefaultResolver {
+impl Resolver for DefaultResolver<'_> {
     fn resolve_module_name(
         &self,
         module_name: &str,
@@ -569,7 +571,7 @@ impl Tracer {
 
 impl<'r> ResolutionState<'r> {
     // Go's `&resolutionState{compilerOptions: ..., resolver: r}` literals.
-    fn bare(resolver: &'r DefaultResolver, compiler_options: P<CompilerOptions>) -> ResolutionState<'r> {
+    fn bare(resolver: &'r DefaultResolver<'r>, compiler_options: P<CompilerOptions>) -> ResolutionState<'r> {
         ResolutionState {
             resolver,
             tracer: None,
@@ -2251,7 +2253,7 @@ pub struct ParsedPatterns {
     patterns: Vec<Pattern>,
 }
 
-impl DefaultResolver {
+impl<'host> DefaultResolver<'host> {
     pub(crate) fn get_parsed_patterns_for_paths(&self, compiler_options: &CompilerOptions) -> P<ParsedPatterns> {
         self.parsed_patterns_for_paths.get(compiler_options.paths.as_ref())
     }
@@ -2356,7 +2358,7 @@ fn extension_is_ok(extensions: Extensions, extension: &str) -> bool {
         || (extensions.intersects(Extensions::Json) && extension == tspath::EXTENSION_JSON)
 }
 
-pub fn resolve_config(module_name: &str, containing_file: &str, host: Arc<dyn ResolutionHost>) -> P<ResolvedModule> {
+pub fn resolve_config(module_name: &str, containing_file: &str, host: Arc<dyn ResolutionHost + '_>) -> P<ResolvedModule> {
     let resolver = new_resolver(ResolverOptions::new(
         host,
         P::new(CompilerOptions { module_resolution: ModuleResolutionKind::NodeNext, ..Default::default() }),
@@ -2483,7 +2485,7 @@ impl ResolvedEntrypoint {
     }
 }
 
-impl DefaultResolver {
+impl<'host> DefaultResolver<'host> {
     // resolver.go:2161
     pub fn get_entrypoints_from_package_json_info(
         &self,

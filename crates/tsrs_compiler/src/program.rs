@@ -33,7 +33,7 @@ use crate::fileloader::str_slice;
 use tsrs_module::symlinks::{self, KnownSymlinks};
 use tsrs_module::ResolutionHost;
 
-pub type CreateModuleResolver = Arc<dyn Fn(ResolverOptions) -> Box<dyn Resolver> + Send + Sync>;
+pub type CreateModuleResolver = Arc<dyn Fn(ResolverOptions<'static>) -> Box<dyn Resolver> + Send + Sync>;
 
 // Go `ProgramFactories.CreateCheckerPool func(*Program) CheckerPool`.
 pub type CreateCheckerPool = Arc<dyn Fn(Arc<ProgramData>) -> Box<dyn CheckerPool> + Send + Sync>;
@@ -839,7 +839,7 @@ impl ProgramData {
         }
     }
 
-    fn new_resolver(&self) -> module::DefaultResolver {
+    fn new_resolver(&self) -> module::DefaultResolver<'static> {
         self.resolution_data.get().new_resolver(self.project_reference_file_mapper.resolution_host(Arc::clone(&self.resolution_host)))
     }
 

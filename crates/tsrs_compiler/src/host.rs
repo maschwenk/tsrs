@@ -82,7 +82,7 @@ impl CompilerHost for compilerHost {
                 tsrs_parser::parse_source_file_embedded(opts, text, script_kind)
             }));
         }
-        let text = tsrs_core::festats::timed(tsrs_core::festats::Cat::Read, || self.fs().read_file(&opts.file_name))?;
+        let text = tsrs_core::festats::timed(tsrs_core::festats::Cat::Read, || self.fs.read_file(&opts.file_name))?;
         // tsrs-only: the CLI's `--noEmit` check parses each file that may be a leaf into a region of its own, freed
         // once the file is checked if it is one (fileregions.rs).
         if crate::fileregions::wants_region(&opts.file_name, script_kind) {
@@ -93,28 +93,19 @@ impl CompilerHost for compilerHost {
 
     // host.go:119
     fn get_resolved_project_reference(&self, file_name: &str, path: Path) -> Option<P<ParsedCommandLine>> {
-        // Go passes the host itself as the `ParseConfigHost`; tsoptions keeps it for the parsed command line's
-        // lifetime, so it gets a leaked handle on the same file system and directory.
-        let sys: &'static dyn ParseConfigHost =
-            Box::leak(Box::new(parseConfigHost { fs: Arc::clone(&self.fs), current_directory: self.current_directory.clone() }));
         let (command_line, _) = tsrs_tsoptions::get_parsed_command_line_of_config_file_path(
             file_name,
             path,
             None,
             None, /*optionsRaw*/
-            sys,
+            self,
             self.extended_config_cache.as_deref().map(|c| c as &dyn ExtendedConfigCache),
         );
         command_line.map(P::new)
     }
 }
 
-struct parseConfigHost {
-    fs: Arc<dyn FS>,
-    current_directory: String,
-}
-
-impl ParseConfigHost for parseConfigHost {
+impl ParseConfigHost for compilerHost {
     fn fs(&self) -> &dyn FS {
         &*self.fs
     }

@@ -100,6 +100,17 @@ cloning and destruction use Rust's implementations, without raw buffer managemen
 Their packed symbol pointers and static key referents still require the legacy graph owner
 (`notes/rust-owned-symbol-storage.md`); owning a table does not establish ownership of those referents.
 
+Build orchestrators and their hosts use `Arc`; the host's back-reference is weak. Returned build outcomes retain
+the actual orchestrator, including programs whose diagnostics they expose, through conversion to an API response.
+There is no manual orchestrator free or raw box reconstruction. Tasks still live in legacy regions; destruction
+releases any unreported program roots before those regions. Build system/command inputs remain legacy
+(`notes/rust-owned-build-roots.md`).
+
+Config parsing borrows its host and extended-config cache only during the call. Its synchronous package resolver
+may borrow the host; persistent compiler/project resolvers retain owned hosts. Session config hosts are ordinary
+owned fields, and CLI/compiler/harness parsing helpers use scoped borrows. Never extend a builder's lifetime to
+`'static` to pass it to config parsing; the former `assume_static` adapter is removed.
+
 The following describes the **remaining legacy graph**, not a rule for new stores. Go objects that are referenced
 by pointer, live long, reference each other cyclically and
 are compared by identity — AST nodes, symbols, types, signatures, links, flow nodes,

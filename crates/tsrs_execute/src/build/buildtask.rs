@@ -185,6 +185,10 @@ impl BuildTask {
         (result.as_ref().unwrap().report_status.as_ref().unwrap())(d);
     }
 
+    pub(crate) fn errors_are_empty(&self) -> bool {
+        self.errors.lock().unwrap().is_empty()
+    }
+
     fn set_exit_status(&self, status: ExitStatus) {
         self.result.lock().unwrap().as_mut().unwrap().exit_status = status;
     }
@@ -220,6 +224,11 @@ impl BuildTask {
             build_result.errors.get_or_insert_with(Vec::new).extend(errors.iter().copied());
         }
         let result = self.result.lock().unwrap().take().unwrap();
+        if !errors.is_empty() {
+            if let Some(program) = &result.program {
+                orchestrator.retain_diagnostic_program(Arc::clone(program));
+            }
+        }
         orchestrator.opts.sys.write(&result.builder.lock().unwrap());
         if result.exit_status as i32 > build_result.status() as i32 {
             build_result.status = Some(result.exit_status);
@@ -245,7 +254,7 @@ impl BuildTask {
     }
 
     // buildtask.go:154
-    pub(crate) fn build_project(&'static self, orchestrator: &'static Orchestrator, path: &Path) {
+    pub(crate) fn build_project(&self, orchestrator: &Orchestrator, path: &Path) {
         // Wait on upstream tasks to complete
         self.wait_on_upstream(orchestrator);
         // API builds: the task allocates in its own collectable region, entered after the upstream wait and left
@@ -292,7 +301,7 @@ impl BuildTask {
     }
 
     // buildtask.go:225
-    fn compile_and_emit(&'static self, orchestrator: &'static Orchestrator, path: &Path) {
+    fn compile_and_emit(&self, orchestrator: &Orchestrator, path: &Path) {
         self.errors.lock().unwrap().clear();
         let build_options = &orchestrator.opts.command.build_options;
         if build_options.verbose.is_true() {
@@ -308,12 +317,12 @@ impl BuildTask {
         let builder = Arc::clone(&self.result.lock().unwrap().as_ref().unwrap().builder);
         let trace_builder = Arc::clone(&builder);
         let compiler_host: Arc<dyn tsrs_compiler::CompilerHost> = Arc::new(compilerHost {
-            host,
+            host: Arc::clone(host),
             trace: tsc::get_trace_with_writer_from_sys(Arc::new(move |t: &str| trace_builder.lock().unwrap().push_str(t)), false, orchestrator.opts.testing),
         });
         let mut old_program = None;
         if !build_options.force.is_true() {
-            old_program = tsrs_incremental::read_build_info_program(self.resolved(), host, &*compiler_host);
+            old_program = tsrs_incremental::read_build_info_program(self.resolved(), &**host, &*compiler_host);
         }
         compile_times.build_info_read_time = sys.now() - build_info_read_start;
         let parse_start = sys.now();
@@ -323,14 +332,14 @@ impl BuildTask {
         let incremental_program = tsrs_incremental::new_program(
             Arc::clone(&program),
             old_program,
-            Box::new(incrementalHost(host)),
+            Box::new(incrementalHost(Arc::clone(host))),
             Some(std::time::Instant::now),
             orchestrator.opts.testing.is_some(),
         );
         self.result.lock().unwrap().as_mut().unwrap().program = Some(Arc::clone(&incremental_program));
         compile_times.changes_compute_time = sys.now() - changes_compute_start;
 
-        let this: &'static BuildTask = self;
+        let this = self;
         let report_diagnostic: tsc::DiagnosticReporter = Box::new(move |d| this.report_diagnostic(d));
         let report_error_summary = tsc::quiet_diagnostics_reporter();
         let writer_builder = builder;
@@ -556,7 +565,7 @@ impl BuildTask {
                     if let Some(file_info) = build_info_file_info.map(|i| i.get_file_info()) {
                         if !file_info.version().is_empty() {
                             version = file_info.version().to_string();
-                            if let Some(text) = tsrs_compiler::CompilerHost::fs(host).read_file(&resolved_input_path) {
+                            if let Some(text) = tsrs_compiler::CompilerHost::fs(&**host).read_file(&resolved_input_path) {
                                 current_version = tsrs_incremental::compute_hash(&text, testing);
                                 if version == current_version {
                                     input_text_unchanged = true;
@@ -621,7 +630,7 @@ impl BuildTask {
                     let mut current_version = String::new();
                     let version = build_info_file_info.get_file_info().version().to_string();
                     if !version.is_empty() {
-                        if let Some(text) = tsrs_compiler::CompilerHost::fs(host).read_file(&input_file) {
+                        if let Some(text) = tsrs_compiler::CompilerHost::fs(&**host).read_file(&input_file) {
                             current_version = tsrs_incremental::compute_hash(&text, testing);
                         }
                     }
@@ -922,7 +931,7 @@ impl BuildTask {
         if inputs.has(&output_path) {
             return;
         }
-        let fs = tsrs_compiler::CompilerHost::fs(orchestrator.host());
+        let fs = tsrs_compiler::CompilerHost::fs(&**orchestrator.host());
         if fs.file_exists(output_file) {
             if !orchestrator.opts.command.build_options.dry.is_true() {
                 if fs.remove(output_file).is_err() {
@@ -999,7 +1008,7 @@ impl BuildTask {
     // buildtask.go:897
     fn write_file(&self, orchestrator: &Orchestrator, file_name: &str, text: &str, data: &mut WriteFileData) -> Result<(), String> {
         let host = orchestrator.host();
-        let err = tsrs_compiler::CompilerHost::fs(host).write_file(file_name, text);
+        let err = tsrs_compiler::CompilerHost::fs(&**host).write_file(file_name, text);
         if err.is_ok() {
             match data.build_info.clone() {
                 Some(build_info) => {

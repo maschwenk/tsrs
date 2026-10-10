@@ -315,6 +315,9 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
 - Build orchestration runs the CLI's `tsc -b` orchestrator in-process through `tsrs_api::build::BuildBackend`
   (installed by `tsrs --api`; library sessions without a backend report the methods as unsupported). Clean uses
   the last build's graph like Go; clean existence checks use the uncached filesystem.
+  Build outcomes retain their graph while diagnostics are serialized. Programs that own error diagnostics stay
+  alive through reporting, rebuild replacement and backend disposal; the final outcome releases its owner
+  (`notes/rust-owned-build-roots.md`).
 - Profiling (`startCPUProfile`, `stopCPUProfile`, `saveHeapProfile`) is not implemented (no pprof
   equivalent). `getCurrentLanguageServerSnapshot` returns Go's standalone-session client error; LSP-attached
   API sessions are not ported.

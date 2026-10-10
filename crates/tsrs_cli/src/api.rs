@@ -186,36 +186,29 @@ struct CliBuildBackend;
 struct CliOrchestrator {
     sys: &'static ApiBuildSystem,
     command: P<tsrs_tsoptions::ParsedBuildCommandLine>,
-    orchestrator: Option<&'static crate::build::Orchestrator>,
+    orchestrator: Option<Arc<crate::build::Orchestrator>>,
 }
 
 impl CliOrchestrator {
-    fn fresh(&self) -> &'static crate::build::Orchestrator {
+    fn fresh(&self) -> Arc<crate::build::Orchestrator> {
         let o = new_orchestrator(Options { sys: self.sys, command: self.command, testing: None });
         o.enable_api_regions();
         o
     }
 
-    fn replace(&mut self, o: &'static crate::build::Orchestrator) {
-        if let Some(old) = self.orchestrator.replace(o) {
-            // SAFETY: no build is running on `old` (builds are serialized per handle) and its results were
-            // converted to owned `BuildOutcome`s.
-            unsafe { crate::build::free_api_orchestrator(old) };
-        }
-    }
-}
-
-impl Drop for CliOrchestrator {
-    fn drop(&mut self) {
-        if let Some(o) = self.orchestrator.take() {
-            // SAFETY: as in `replace`; the handle is being disposed.
-            unsafe { crate::build::free_api_orchestrator(o) };
-        }
+    fn replace(&mut self, o: Arc<crate::build::Orchestrator>) {
+        self.orchestrator = Some(o);
     }
 }
 
 impl BuildBackend for CliBuildBackend {
     fn create(&self, request: BuildRequest) -> Box<dyn BuildOrchestrator> {
+        Box::new(self.create_orchestrator(request))
+    }
+}
+
+impl CliBuildBackend {
+    fn create_orchestrator(&self, request: BuildRequest) -> CliOrchestrator {
         // `&'static` system and command line: the CLI build module requires them (one small leak per orchestrator).
         let sys: &'static ApiBuildSystem = Box::leak(Box::new(ApiBuildSystem {
             fs: request.fs,
@@ -233,48 +226,38 @@ impl BuildBackend for CliBuildBackend {
         // API builds allocate in per-task regions (CliOrchestrator); program construction and checking must stay on
         // the task's thread so their allocations land there, not in the compiler worker pool's thread arenas.
         command.compiler_options.single_threaded = tsrs_core::Tristate::True;
-        Box::new(CliOrchestrator { sys, command: P::new(command), orchestrator: None })
+        CliOrchestrator { sys, command: P::new(command), orchestrator: None }
     }
 }
 
-fn outcome(result: crate::build::OrchestratorResult) -> BuildOutcome {
-    BuildOutcome {
-        status: result.status.unwrap_or(crate::tsc::ExitStatus::Success) as i32,
-        diagnostics: result.errors.unwrap_or_default(),
-        projects: result.statistics.projects,
-        projects_built: result.statistics.projects_built,
-        timestamp_updates: result.statistics.timestamp_updates,
-        files_deleted: result.files_to_delete.unwrap_or_default(),
+fn outcome(mut result: crate::build::OrchestratorResult) -> BuildOutcome {
+    let owner = result.take_owner();
+    let mut outcome = BuildOutcome::default();
+    outcome.status = result.status.unwrap_or(crate::tsc::ExitStatus::Success) as i32;
+    outcome.diagnostics = result.errors.unwrap_or_default();
+    outcome.projects = result.statistics.projects;
+    outcome.projects_built = result.statistics.projects_built;
+    outcome.timestamp_updates = result.statistics.timestamp_updates;
+    outcome.files_deleted = result.files_to_delete.unwrap_or_default();
+    if let Some(owner) = owner {
+        outcome.retain_owner(owner);
     }
+    outcome
 }
 
 impl BuildOrchestrator for CliOrchestrator {
     fn build(&mut self, project: &str, only_references: bool) -> BuildOutcome {
         let o = self.fresh();
-        // A build can unwind (a panic while building a program, e.g. the module resolver's `Unexpected
-        // moduleResolution`, which the API turns into an error). The fresh orchestrator is then freed here instead
-        // of being leaked; the retained one (for later cleans) is untouched.
-        let result = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| o.build_for_api(project, only_references))) {
-            Ok(result) => outcome(result),
-            Err(panic) => {
-                // SAFETY: the build ran inline on this thread and has unwound (its scoped workers were joined), so
-                // nothing uses `o`; it was never stored, and nothing returned from it outlives this call.
-                unsafe { crate::build::free_api_orchestrator(o) };
-                std::panic::resume_unwind(panic);
-            }
-        };
+        // Scoped workers join before unwinding; ordinary Rust destruction releases the fresh root on error.
+        let result = outcome(o.build_for_api(project, only_references));
         self.replace(o);
         result
     }
     fn clean(&mut self, project: &str, only_references: bool) -> BuildOutcome {
-        let o = match self.orchestrator {
-            Some(o) => o,
-            None => {
-                let o = self.fresh();
-                self.replace(o);
-                o
-            }
-        };
+        if self.orchestrator.is_none() {
+            self.replace(self.fresh());
+        }
+        let o = self.orchestrator.as_ref().unwrap();
         outcome(o.clean_for_api(project, only_references))
     }
 }
@@ -288,6 +271,38 @@ mod tests {
     use super::*;
     use tsrs_api::{Handler, Response};
     use tsrs_core::json::{self, Value};
+
+    #[test]
+    fn build_outcome_retains_diagnostics_through_replacement_and_disposal() {
+        let _serial = super::BUILD_TESTS.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = std::env::temp_dir().join(format!("tsrs-api-build-owner-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("tsconfig.json"), r#"{"compilerOptions":{"outDir":"out"},"files":["index.ts"]}"#).unwrap();
+        std::fs::write(dir.join("index.ts"), "export const value: string = 1;\n").unwrap();
+        let cwd = dir.canonicalize().unwrap().to_string_lossy().into_owned();
+        let mut backend = CliBuildBackend.create_orchestrator(BuildRequest {
+            fs: Arc::new(bundled::wrap_fs(osvfs::fs())),
+            default_library_path: bundled::lib_path(),
+            current_directory: cwd,
+            root_names: vec![".".to_string()],
+            build_options: None,
+            compiler_options: None,
+        });
+        let result = backend.build("", false);
+        let owner = Arc::downgrade(backend.orchestrator.as_ref().unwrap());
+        std::fs::write(dir.join("index.ts"), "export const value = 2;\n").unwrap();
+        let next = backend.build("", false);
+        drop(next);
+        drop(backend);
+        assert!(owner.upgrade().is_some(), "the returned diagnostics lost their graph owner");
+        let diagnostic = result.diagnostics.iter().find(|d| d.code() == 2322).unwrap();
+        assert_eq!(diagnostic.localize(), "Type 'number' is not assignable to type 'string'.");
+        assert_eq!(diagnostic.file().unwrap().text(), "export const value: string = 1;\n");
+        drop(result);
+        assert!(owner.upgrade().is_none(), "the final build outcome leaked its graph owner");
+        let _ = std::fs::remove_dir_all(dir);
+    }
 
     fn call(s: &Session, method: &str, params: &str) -> Value {
         match s.handle_request(method, params.as_bytes()) {

@@ -18,7 +18,7 @@ impl tsoptions::ExtendedConfigCache for ExtendedConfigCache {
         file_name: &str,
         path: &Path,
         resolution_stack: &[Path],
-        host: &'static dyn ParseConfigHost,
+        host: &dyn ParseConfigHost,
     ) -> P<ExtendedConfigCacheEntry> {
         if let Some(entry) = self.m.lock().unwrap().get(path) {
             return *entry;

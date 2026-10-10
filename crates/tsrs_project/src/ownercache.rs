@@ -19,27 +19,21 @@ struct ownerCacheEntryState<V> {
 // be Acquired multiple times during config parsing while only appearing once in
 // the ParsedCommandLine's list of extended files. When updating this code, check
 // if the same changes should be made to RefCountCache as well.
-pub struct OwnerCache<K: Hash + Eq, V, LoadArgs> {
+pub struct OwnerCache<K: Hash + Eq, V> {
     entries: SyncMap<K, Arc<ownerCacheEntry<V>>>,
-
-    is_expired: Option<Box<dyn Fn(&K, &V, &LoadArgs) -> bool + Send + Sync>>,
-    parse: Box<dyn Fn(&K, &LoadArgs) -> V + Send + Sync>,
 }
 
 // ownercache.go:28
-pub fn new_owner_cache<K: Hash + Eq, V, LoadArgs>(
-    parse: impl Fn(&K, &LoadArgs) -> V + Send + Sync + 'static,
-    is_expired: Option<Box<dyn Fn(&K, &V, &LoadArgs) -> bool + Send + Sync>>,
-) -> OwnerCache<K, V, LoadArgs> {
-    OwnerCache { entries: SyncMap::default(), is_expired, parse: Box::new(parse) }
+pub fn new_owner_cache<K: Hash + Eq, V>() -> OwnerCache<K, V> {
+    OwnerCache { entries: SyncMap::default() }
 }
 
-impl<K: Hash + Eq + Clone, V: Clone, LoadArgs> OwnerCache<K, V, LoadArgs> {
-    // ownercache.go:38
-    pub fn load_and_acquire(&self, identity: &K, owner: u64, load_args: &LoadArgs) -> V {
+impl<K: Hash + Eq + Clone, V: Clone> OwnerCache<K, V> {
+    // ownercache.go:38. Loading borrows its inputs only during this call; neither callback is retained.
+    pub fn load_and_acquire(&self, identity: &K, owner: u64, parse: impl FnOnce() -> V, is_expired: impl FnOnce(&V) -> bool) -> V {
         self.load_or_store_locked_entry(&identity, |entry, loaded| {
-            if !loaded || self.is_expired.as_ref().is_some_and(|is_expired| is_expired(&identity, entry.value.as_ref().unwrap(), &load_args)) {
-                entry.value = Some((self.parse)(&identity, &load_args));
+            if !loaded || is_expired(entry.value.as_ref().unwrap()) {
+                entry.value = Some(parse());
             }
             entry.owners.insert(owner);
             entry.value.clone().unwrap()

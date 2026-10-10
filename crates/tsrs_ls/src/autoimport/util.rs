@@ -330,7 +330,7 @@ impl ResolutionHost for resolutionHost {
 }
 
 // util.go:333
-pub(crate) fn get_module_resolver(host: &dyn RegistryCloneHost, realpath: PathFunc) -> DefaultResolver {
+pub(crate) fn get_module_resolver(host: &dyn RegistryCloneHost, realpath: PathFunc) -> DefaultResolver<'static> {
     let rh = Arc::new(resolutionHost {
         fs: wrapvfs::wrap(host.fs_owned(), wrapvfs::Replacements { realpath: Some(Box::new(move |s: &str| realpath(s))), ..Default::default() }),
         current_directory: host.get_current_directory().to_string(),

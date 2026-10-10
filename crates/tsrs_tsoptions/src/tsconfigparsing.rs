@@ -175,7 +175,7 @@ pub trait ExtendedConfigCache: Sync {
         file_name: &str,
         path: &Path,
         resolution_stack: &[Path],
-        host: &'static dyn ParseConfigHost,
+        host: &dyn ParseConfigHost,
     ) -> P<ExtendedConfigCacheEntry>;
 }
 
@@ -205,7 +205,7 @@ pub(crate) struct ParsedTsconfig {
 
 fn parse_own_config_of_json_source_file(
     source_file: P<SourceFile>,
-    host: &'static dyn ParseConfigHost,
+    host: &dyn ParseConfigHost,
     base_path: &str,
     config_file_name: &str,
 ) -> (ParsedTsconfig, Vec<P<Diagnostic>>) {
@@ -614,7 +614,7 @@ pub(crate) fn convert_json_option(
 
 fn get_extends_config_path_or_array(
     value: &CompilerOptionsValue,
-    host: &'static dyn ParseConfigHost,
+    host: &dyn ParseConfigHost,
     base_path: &str,
     config_file_name: &str,
     property_assignment: Option<P<Node>>,
@@ -678,7 +678,7 @@ fn get_extends_config_path_or_array(
 
 fn get_extends_config_path(
     extended_config: &str,
-    host: &'static dyn ParseConfigHost,
+    host: &dyn ParseConfigHost,
     base_path: &str,
     value_expression: Option<P<Node>>,
     source_file: Option<P<SourceFile>>,
@@ -875,11 +875,11 @@ pub trait ParseConfigHost: Send + Sync {
     fn get_current_directory(&self) -> &str;
 }
 
-struct ResolverHost {
-    host: &'static dyn ParseConfigHost,
+struct ResolverHost<'a> {
+    host: &'a dyn ParseConfigHost,
 }
 
-impl tsrs_module::ResolutionHost for ResolverHost {
+impl tsrs_module::ResolutionHost for ResolverHost<'_> {
     fn fs(&self) -> &dyn FS {
         self.host.fs()
     }
@@ -891,7 +891,7 @@ impl tsrs_module::ResolutionHost for ResolverHost {
 
 pub fn parse_json_source_file_config_file_content(
     source_file: P<TsConfigSourceFile>,
-    host: &'static dyn ParseConfigHost,
+    host: &dyn ParseConfigHost,
     base_path: &str,
     existing_options: Option<&CompilerOptions>,
     existing_options_raw: Option<&CompilerOptionsValue>,
@@ -1080,7 +1080,7 @@ fn convert_property_value_to_json(
 // basePath: A root directory to resolve relative path entries in the config file to. e.g. outDir
 pub fn parse_json_config_file_content(
     json: CompilerOptionsValue,
-    host: &'static dyn ParseConfigHost,
+    host: &dyn ParseConfigHost,
     base_path: &str,
     existing_options: Option<&CompilerOptions>,
     config_file_name: &str,
@@ -1186,7 +1186,7 @@ fn convert_type_acquisition_from_json_worker(
 
 fn parse_own_config_of_json(
     mut json: OrderedMap<String, CompilerOptionsValue>,
-    host: &'static dyn ParseConfigHost,
+    host: &dyn ParseConfigHost,
     base_path: &str,
     config_file_name: &str,
 ) -> (ParsedTsconfig, Vec<P<Diagnostic>>) {
@@ -1257,7 +1257,7 @@ fn read_json_config_file(
 fn get_extended_config(
     source_file: Option<P<TsConfigSourceFile>>,
     extended_config_file_name: &str,
-    host: &'static dyn ParseConfigHost,
+    host: &dyn ParseConfigHost,
     resolution_stack: &[Path],
     extended_config_cache: Option<&dyn ExtendedConfigCache>,
     result: &mut ExtendsResult,
@@ -1296,7 +1296,7 @@ pub fn parse_extended_config(
     file_name: &str,
     path: Path,
     resolution_stack: &[Path],
-    host: &'static dyn ParseConfigHost,
+    host: &dyn ParseConfigHost,
     extended_config_cache: Option<&dyn ExtendedConfigCache>,
 ) -> P<ExtendedConfigCacheEntry> {
     let (extended_result, read_errors) = read_json_config_file(file_name, path, |f| host.fs().read_file(f));
@@ -1332,7 +1332,7 @@ pub fn parse_extended_config(
 fn parse_config(
     json: Option<OrderedMap<String, CompilerOptionsValue>>,
     source_file: Option<P<TsConfigSourceFile>>,
-    host: &'static dyn ParseConfigHost,
+    host: &dyn ParseConfigHost,
     base_path: &str,
     config_file_name: &str,
     resolution_stack: &[Path],
@@ -1440,7 +1440,7 @@ fn apply_extended_config(
     extended_config_path: &str,
     own_config: &ParsedTsconfig,
     source_file: Option<P<TsConfigSourceFile>>,
-    host: &'static dyn ParseConfigHost,
+    host: &dyn ParseConfigHost,
     base_path: &str,
     resolution_stack: &[Path],
     extended_config_cache: Option<&dyn ExtendedConfigCache>,
@@ -1541,7 +1541,7 @@ fn is_string_value(value: &CompilerOptionsValue) -> bool {
 fn parse_json_config_file_content_worker(
     json: Option<OrderedMap<String, CompilerOptionsValue>>,
     source_file: Option<P<TsConfigSourceFile>>,
-    host: &'static dyn ParseConfigHost,
+    host: &dyn ParseConfigHost,
     base_path: &str,
     existing_options: Option<&CompilerOptions>,
     existing_options_raw: Option<&CompilerOptionsValue>,
@@ -2455,7 +2455,7 @@ pub fn get_parsed_command_line_of_config_file(
     config_file_name: &str,
     options: Option<&CompilerOptions>,
     options_raw: Option<&CompilerOptionsValue>,
-    sys: &'static dyn ParseConfigHost,
+    sys: &dyn ParseConfigHost,
     extended_config_cache: Option<&dyn ExtendedConfigCache>,
 ) -> (Option<ParsedCommandLine>, Vec<P<Diagnostic>>) {
     let config_file_name = tspath::get_normalized_absolute_path(config_file_name, sys.get_current_directory());
@@ -2468,7 +2468,7 @@ pub fn get_parsed_command_line_of_config_file_path(
     path: Path,
     options: Option<&CompilerOptions>,
     options_raw: Option<&CompilerOptionsValue>,
-    sys: &'static dyn ParseConfigHost,
+    sys: &dyn ParseConfigHost,
     extended_config_cache: Option<&dyn ExtendedConfigCache>,
 ) -> (Option<ParsedCommandLine>, Vec<P<Diagnostic>>) {
     let (config_file_text, errors) = try_read_file(config_file_name, |f| sys.fs().read_file(f), Vec::new());

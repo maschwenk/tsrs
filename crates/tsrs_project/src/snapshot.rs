@@ -143,7 +143,7 @@ fn snapshot_overlays(fs: &SnapshotFS) -> OverlayMap {
 
 // Go `ModuleResolverFactory` (API programs only).
 pub trait ModuleResolverFactory: Send + Sync {
-    fn new_resolver(&self, ctx: &Context, options: ResolverOptions) -> (Box<dyn Resolver>, Box<dyn FnOnce() + Send>);
+    fn new_resolver(&self, ctx: &Context, options: ResolverOptions<'static>) -> (Box<dyn Resolver>, Box<dyn FnOnce() + Send>);
 }
 
 pub struct APICreateProgramRequest {
