@@ -107,6 +107,14 @@ pointer compression costs about +4.9% instructions and took back most of the che
 
 ## Measured and rejected (do not redo)
 
+- Calling owned type payloads a completed or memory-preserving type-graph migration
+  (`notes/rust-owned-type-payloads.md`): local single-thread instructions change +1.47% / -0.98%, and default
+  RSS rises +2.15% / +1.35%, with neither gain clearing the performance landing bar. Cumulative single-thread
+  instructions remain +4.38–12.20% against original Oxc and default RSS remains +100–111% against pre-Oxc.
+  Payload views and lazy tails use Rust ownership, and the local compiler census is clean, but type handles,
+  static graph slices and the compatibility allocator remain. Revisit landing after the typed graph/runtime
+  migration, full oracle/API/LSP lifecycle validation and recovered instruction/RSS gates.
+
 - Calling Rust-owned build tasks and command inputs a completed or memory-preserving migration
   (`notes/rust-owned-build-tasks.md`): local single-thread instructions change -0.03% on both projects and default
   RSS changes -1.44% / +0.19%, below the performance landing bar. Cumulative single-thread instructions remain

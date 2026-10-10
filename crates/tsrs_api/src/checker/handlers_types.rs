@@ -60,7 +60,7 @@ fn tagged(t: P<Type>, tag: TypeDataTag) -> CheckerResult<P<Type>> {
 }
 
 /// Go `t.AsInterfaceType()` (nil for non-interfaces) followed by a field read.
-fn interface_of(t: P<Type>) -> CheckerResult<&'static tsrs_checker::InterfaceType> {
+fn interface_of(t: &P<Type>) -> CheckerResult<&tsrs_checker::InterfaceType> {
     t.try_as_interface_type().ok_or_else(|| go_panic(GO_NIL_DEREF))
 }
 
@@ -136,7 +136,7 @@ fn type_property(t: P<Type>, property: TypeProperty) -> CheckerResult<Option<P<T
         }
         TypeProperty::FreshType => tagged(t, TypeDataTag::Literal)?.as_literal_type().fresh_type(),
         TypeProperty::RegularType => tagged(t, TypeDataTag::Literal)?.as_literal_type().regular_type(),
-        TypeProperty::ThisType => interface_of(t)?.this_type(),
+        TypeProperty::ThisType => interface_of(&t)?.this_type(),
         TypeProperty::ObjectType => tagged(t, TypeDataTag::IndexedAccess)?.as_indexed_access_type().object_type(),
         TypeProperty::IndexType => tagged(t, TypeDataTag::IndexedAccess)?.as_indexed_access_type().index_type(),
         TypeProperty::CheckType => tagged(t, TypeDataTag::Conditional)?.as_conditional_type().check_type(),
@@ -178,9 +178,9 @@ pub(crate) fn resolve_type_array_property(host: &dyn CheckerHost, p: &Params, pr
             }
             t.types()
         }
-        TypeArrayProperty::TypeParameters => interface_of(t)?.type_parameters(),
-        TypeArrayProperty::OuterTypeParameters => interface_of(t)?.outer_type_parameters(),
-        TypeArrayProperty::LocalTypeParameters => interface_of(t)?.local_type_parameters(),
+        TypeArrayProperty::TypeParameters => interface_of(&t)?.type_parameters(),
+        TypeArrayProperty::OuterTypeParameters => interface_of(&t)?.outer_type_parameters(),
+        TypeArrayProperty::LocalTypeParameters => interface_of(&t)?.local_type_parameters(),
         TypeArrayProperty::AliasTypeArguments => t.alias().map_or(&[], |a| a.type_arguments()),
     };
     if types.is_empty() {

@@ -857,7 +857,7 @@ pub(crate) fn get_type_name_symbol(t: P<Type>) -> Option<P<Symbol>> {
 }
 
 // utilities.go:668
-pub(crate) fn compare_tuple_types(t1: &'static TupleType, t2: &'static TupleType) -> i32 {
+pub(crate) fn compare_tuple_types(t1: &TupleType, t2: &TupleType) -> i32 {
     if std::ptr::eq(t1, t2) {
         return 0;
     }

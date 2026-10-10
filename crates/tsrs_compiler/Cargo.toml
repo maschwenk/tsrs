@@ -29,6 +29,7 @@ bitflags.workspace = true
 rayon.workspace = true
 
 [features]
+alloc-profile = ["tsrs_core/alloc-profile", "tsrs_checker?/alloc-profile"]
 # The checker crate is being ported concurrently; without this feature the program still loads,
 # parses and binds files (enough for --listFilesOnly), but has no type checker.
 default = ["checker"]

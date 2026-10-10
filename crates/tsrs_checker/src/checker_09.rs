@@ -1540,7 +1540,7 @@ impl Checker {
             } else if t.flags().intersects(TypeFlags::Union) {
                 let union_context = match context {
                     Some(context) => context,
-                    None => P::new(WideningContext { siblings: Cell::new(Some(t.types())), ..Default::default() }),
+                    None => P::new(WideningContext { siblings: RefCell::new(Some(t.types().to_vec())), ..Default::default() }),
                 };
                 let widened_types: Vec<P<Type>> = t
                     .types()
@@ -1679,7 +1679,7 @@ impl Checker {
 
     // checker.go:18821
     pub(crate) fn get_siblings_of_context(&mut self, context: P<WideningContext>) -> Vec<P<Type>> {
-        if context.siblings.get().is_none() {
+        if context.siblings.borrow().is_none() {
             let mut siblings: Vec<P<Type>> = Vec::new();
             for t in self.get_siblings_of_context(context.parent.get().unwrap()) {
                 if is_object_literal_type(t) {
@@ -1690,9 +1690,9 @@ impl Checker {
                     }
                 }
             }
-            context.siblings.set(Some(alloc_vec(siblings)));
+            *context.siblings.borrow_mut() = Some(siblings);
         }
-        context.siblings.get().unwrap().to_vec()
+        context.siblings.borrow().as_ref().unwrap().clone()
     }
 
     // checker.go:18837
@@ -2136,7 +2136,7 @@ impl Checker {
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn get_properties_of_object_type(&mut self, t: P<Type>) -> &'static [P<Symbol>] {
         if t.flags().intersects(TypeFlags::Object) {
-            return self.resolve_structured_type_members(t).unwrap().properties();
+            return self.resolve_structured_type_members(&t).unwrap().properties();
         }
         &[]
     }
@@ -2283,7 +2283,7 @@ impl Checker {
             if !t.object_flags().intersects(ObjectFlags::MembersResolved) {
                 return true;
             }
-            if let Some(members) = self.resolve_structured_type_members(t).unwrap().members() {
+            if let Some(members) = self.resolve_structured_type_members(&t).unwrap().members() {
                 filter.add_keys(&members);
             }
         }
@@ -2335,7 +2335,7 @@ impl Checker {
             // Mapped types have no signatures.
             return &[];
         }
-        let resolved = self.resolve_structured_type_members(t).unwrap();
+        let resolved = self.resolve_structured_type_members(&t).unwrap();
         if kind == SignatureKind::Call {
             return resolved.call_signatures();
         }
@@ -2363,7 +2363,7 @@ impl Checker {
             if let Some(lazy) = self.get_lazy_mapped_table(t) {
                 return self.get_lazy_mapped_type_index_infos(t, &lazy);
             }
-            return self.resolve_structured_type_members(t).unwrap().index_infos();
+            return self.resolve_structured_type_members(&t).unwrap().index_infos();
         }
         &[]
     }
@@ -2464,22 +2464,22 @@ impl Checker {
     // checker.go:19406
     #[cfg_attr(feature = "site-counts", track_caller)]
     #[inline]
-    pub(crate) fn resolve_structured_type_members(&mut self, t: P<Type>) -> Option<&'static StructuredType> {
+    pub(crate) fn resolve_structured_type_members<'a>(&mut self, t: &'a P<Type>) -> Option<&'a StructuredType> {
         #[cfg(feature = "site-counts")]
         if !t.object_flags().intersects(ObjectFlags::MembersResolved) {
             // Exclusive symbol/signature counts created by this resolution, attributed to the code that asked for it.
             thread_local! { static NESTED: std::cell::RefCell<Vec<u64>> = const { std::cell::RefCell::new(Vec::new()) }; }
             let label = if t.object_flags().intersects(ObjectFlags::Reference) && t.target().is_some_and(|s| s.object_flags().intersects(ObjectFlags::Tuple)) {
-                if self.lazy_member_tables.contains_key(&t) { "tuple:lazy" } else { "tuple" }
-            } else if t.object_flags().intersects(ObjectFlags::Reference) && self.lazy_member_tables.contains_key(&t) {
+                if self.lazy_member_tables.contains_key(t) { "tuple:lazy" } else { "tuple" }
+            } else if t.object_flags().intersects(ObjectFlags::Reference) && self.lazy_member_tables.contains_key(t) {
                 "reference:lazy"
             } else if t.object_flags().intersects(ObjectFlags::Mapped) {
-                if self.is_mapped_type_with_keyof_constraint_declaration(t) {
-                    if self.lazy_mapped_tables.contains_key(&t) {
+                if self.is_mapped_type_with_keyof_constraint_declaration(*t) {
+                    if self.lazy_mapped_tables.contains_key(t) {
                         "mapped:keyof-lazy"
                     } else {
-                        let mapped_type = t.as_mapped_type().target.get().unwrap_or(t);
-                        let modifiers = self.get_modifiers_type_from_mapped_type(t);
+                        let mapped_type = t.as_mapped_type().target.get().unwrap_or(*t);
+                        let modifiers = self.get_modifiers_type_from_mapped_type(*t);
                         let modifiers = self.get_apparent_type(modifiers);
                         if self.get_name_type_from_mapped_type(mapped_type).is_some() {
                             "mapped:keyof-as"
@@ -2521,26 +2521,26 @@ impl Checker {
 
     #[cfg_attr(feature = "site-counts", track_caller)]
     #[inline(never)]
-    fn resolve_structured_type_members_worker(&mut self, t: P<Type>) -> Option<&'static StructuredType> {
+    fn resolve_structured_type_members_worker<'a>(&mut self, t: &'a P<Type>) -> Option<&'a StructuredType> {
         if !t.object_flags().intersects(ObjectFlags::MembersResolved) {
             if t.flags().intersects(TypeFlags::Object) {
                 if t.object_flags().intersects(ObjectFlags::Reference) {
-                    self.resolve_type_reference_members(t);
+                    self.resolve_type_reference_members(*t);
                 } else if t.object_flags().intersects(ObjectFlags::ClassOrInterface) {
-                    self.resolve_class_or_interface_members(t);
+                    self.resolve_class_or_interface_members(*t);
                 } else if t.object_flags().intersects(ObjectFlags::ReverseMapped) {
-                    self.resolve_reverse_mapped_type_members(t);
+                    self.resolve_reverse_mapped_type_members(*t);
                 } else if t.object_flags().intersects(ObjectFlags::Anonymous) {
-                    self.resolve_anonymous_type_members(t);
+                    self.resolve_anonymous_type_members(*t);
                 } else if t.object_flags().intersects(ObjectFlags::Mapped) {
-                    self.resolve_mapped_type_members(t);
+                    self.resolve_mapped_type_members(*t);
                 } else {
                     panic!("Unhandled case in resolveStructuredTypeMembers");
                 }
             } else if t.flags().intersects(TypeFlags::Union) {
-                self.resolve_union_type_members(t);
+                self.resolve_union_type_members(*t);
             } else if t.flags().intersects(TypeFlags::Intersection) {
-                self.resolve_intersection_type_members(t);
+                self.resolve_intersection_type_members(*t);
             } else {
                 panic!("Unhandled case in resolveStructuredTypeMembers");
             }
@@ -2573,7 +2573,7 @@ impl Checker {
         let mut construct_signatures: Vec<P<Signature>>;
         let mut index_infos: Vec<P<IndexInfo>>;
         let mut instantiated = false;
-        let resolved = self.resolve_declared_members(source).unwrap();
+        let resolved = self.resolve_declared_members(&source).unwrap();
         if type_parameters == type_arguments {
             members = resolved.declared_members.get();
             call_signatures = resolved.declared_call_signatures.get().to_vec();
@@ -2825,7 +2825,7 @@ impl Checker {
     // Mirrors resolveObjectTypeMembers without creating member symbols.
     pub(crate) fn prepare_lazy_members(&mut self, t: P<Type>, lm: P<LazyMemberTable>, this_argument: Option<P<Type>>) {
         let source = t.target().unwrap();
-        let resolved = self.resolve_declared_members(source).unwrap();
+        let resolved = self.resolve_declared_members(&source).unwrap();
         // Whether instantiateSymbol returns a member itself depends on what is resolved now.
         let mut unaffected: Vec<&'static str> = Vec::new();
         if let Some(declared_members) = resolved.declared_members.get() {
@@ -2874,7 +2874,8 @@ impl Checker {
         if t.target().unwrap().object_flags().intersects(ObjectFlags::Tuple) {
             self.lazy_member_stats.tuple_tables_resolved_in_full += 1;
         }
-        let resolved = self.resolve_declared_members(t.target().unwrap()).unwrap();
+        let target = t.target().unwrap();
+        let resolved = self.resolve_declared_members(&target).unwrap();
         let mut members: Option<P<SymbolTable>> = None;
         if let Some(declared_members) = resolved.declared_members.get().filter(|m| !m.is_empty()) {
             let table = SymbolTable::with_capacity(declared_members.len());
@@ -2936,12 +2937,12 @@ impl Checker {
         }
         let lm = self.get_ready_lazy_member_table(t);
         let Some(lm) = lm.filter(|_| !is_reserved_member_name(name)) else {
-            return self.resolve_structured_type_members(t).unwrap().members().and_then(|m| m.lookup(name));
+            return self.resolve_structured_type_members(&t).unwrap().members().and_then(|m| m.lookup(name));
         };
         self.lazy_member_stats.member_lookups += 1;
         // The declared member, else the first base type's property (see addInheritedMembers).
         let mut result: Option<P<Symbol>> = None;
-        let declared_members = self.resolve_declared_members(t.target().unwrap()).unwrap().declared_members.get();
+        let declared_members = self.resolve_declared_members(&t.target().unwrap()).unwrap().declared_members.get();
         if let Some((name, decl)) = declared_members.and_then(|m| m.lookup_entry(name)) {
             if self.is_named_member(decl, name) {
                 if instantiate {
@@ -2972,7 +2973,7 @@ impl Checker {
             let mut seen: FxHashSet<&'static str> = FxHashSet::default();
             return self.every_lazy_property(t, lm, &mut seen, f);
         }
-        let properties = self.resolve_structured_type_members(t).unwrap().properties();
+        let properties = self.resolve_structured_type_members(&t).unwrap().properties();
         properties.iter().all(|&p| f(self, p))
     }
 
@@ -2988,7 +2989,7 @@ impl Checker {
         seen: &mut FxHashSet<&'static str>,
         f: &mut dyn FnMut(&mut Checker, P<Symbol>) -> bool,
     ) -> bool {
-        if let Some(declared_members) = self.resolve_declared_members(t.target().unwrap()).unwrap().declared_members.get() {
+        if let Some(declared_members) = self.resolve_declared_members(&t.target().unwrap()).unwrap().declared_members.get() {
             for (id, symbol) in declared_members.entries() {
                 if self.is_named_member(symbol, id) && seen.insert(id) && !f(self, symbol) {
                     return false;

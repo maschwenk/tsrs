@@ -867,7 +867,7 @@ impl Checker {
         let links = self.export_type_links.get_key(result);
         self.export_type_links.at(links).target.set(Some(symbol));
         self.export_type_links.at(links).originating_import.set(Some(reference_parent));
-        let resolved_module_type = self.resolve_structured_type_members(module_type).unwrap();
+        let resolved_module_type = self.resolve_structured_type_members(&module_type).unwrap();
         let t = self.new_anonymous_type(Some(result), resolved_module_type.members(), &[], &[], resolved_module_type.index_infos());
         self.value_symbol_links.get(result).resolved_type.set(Some(t));
         result
@@ -2147,11 +2147,11 @@ impl Checker {
     // checker.go:17182
     pub(crate) fn pad_tuple_type(&mut self, t: P<Type>, pattern: P<Node>) -> P<Type> {
         let pattern_elements = pattern.elements();
-        if t.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variable) || self.get_type_reference_arity(t) as usize >= pattern_elements.len() {
+        if t.reference_target().as_tuple_type().combined_flags.get().intersects(ElementFlags::Variable) || self.get_type_reference_arity(t) as usize >= pattern_elements.len() {
             return t;
         }
         let mut element_types = self.get_element_types(t).to_vec();
-        let mut element_infos: Vec<TupleElementInfo> = t.target_tuple_type().element_infos.get().to_vec();
+        let mut element_infos: Vec<TupleElementInfo> = t.reference_target().as_tuple_type().element_infos.get().to_vec();
         let mut i = self.get_type_reference_arity(t) as usize;
         while i < pattern_elements.len() {
             let e = pattern_elements[i];
@@ -2169,7 +2169,7 @@ impl Checker {
             }
             i += 1;
         }
-        let readonly = t.target_tuple_type().readonly.get();
+        let readonly = t.reference_target().as_tuple_type().readonly.get();
         self.create_tuple_type_ex(&element_types, &element_infos, readonly)
     }
 
@@ -2272,7 +2272,7 @@ impl Checker {
         if base_constructor_type.flags().intersects(TypeFlags::Object | TypeFlags::Intersection) {
             // Resolving the members of a class requires us to resolve the base class of that class.
             // We force resolution here such that we catch circularities now.
-            self.resolve_structured_type_members(base_constructor_type);
+            self.resolve_structured_type_members(&base_constructor_type);
         }
         if !self.pop_type_resolution() {
             let t_symbol = t.symbol().unwrap();

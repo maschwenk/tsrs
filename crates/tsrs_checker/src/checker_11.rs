@@ -672,7 +672,8 @@ impl Checker {
     pub fn get_type_arguments(&mut self, t: P<Type>) -> &'static [P<Type>] {
         let d = t.as_type_reference();
         if d.resolved_type_arguments.get().is_none() {
-            let n = d.target.get().unwrap().as_interface_type();
+            let target = d.target.get().unwrap();
+            let n = target.as_interface_type();
             if !self.push_type_resolution(t.into(), TypeSystemPropertyName::ResolvedTypeArguments) {
                 return alloc_vec(vec![self.error_type; n.type_parameters().len()]);
             }
@@ -1678,8 +1679,8 @@ impl Checker {
         //   type Keys<T> = { [K in keyof T]: K };
         //   type Foo<T extends any[]> = Keys<[string, string, ...T, string]>; // ["0", "1", ...Keys<T>, number]
         //
-        let element_infos = tuple_type.target_tuple_type().element_infos();
-        let fixed_length = tuple_type.target_tuple_type().fixed_length();
+        let element_infos = tuple_type.reference_target().as_tuple_type().element_infos();
+        let fixed_length = tuple_type.reference_target().as_tuple_type().fixed_length();
         let mut fixed_mapper = m;
         if fixed_length != 0 {
             fixed_mapper = prepend_type_mapping(type_variable, tuple_type, Some(m));
@@ -1711,7 +1712,7 @@ impl Checker {
             }
             new_element_types.push(mapped);
         }
-        let new_readonly = get_modified_readonly_state(tuple_type.target_tuple_type().is_readonly(), get_mapped_type_modifiers(mapped_type));
+        let new_readonly = get_modified_readonly_state(tuple_type.reference_target().as_tuple_type().is_readonly(), get_mapped_type_modifiers(mapped_type));
         if new_element_types.contains(&self.error_type) {
             return self.error_type;
         }
@@ -2615,7 +2616,7 @@ impl TupleNormalizer {
                         return false;
                     }
                     // Spread variadic elements with tuple types into the resulting tuple.
-                    let spread_infos = t.target_tuple_type().element_infos();
+                    let spread_infos = t.reference_target().as_tuple_type().element_infos();
                     for (j, &s) in spread_types.iter().enumerate() {
                         self.add(c, s, spread_infos[j]);
                     }
@@ -2677,7 +2678,7 @@ impl TupleNormalizer {
 
 // Return count of starting consecutive tuple elements of the given kind(s)
 // checker.go:23906
-pub(crate) fn get_start_element_count(t: &'static TupleType, flags: ElementFlags) -> i32 {
+pub(crate) fn get_start_element_count(t: &TupleType, flags: ElementFlags) -> i32 {
     for (i, info) in t.element_infos().iter().enumerate() {
         if !info.flags.intersects(flags) {
             return i as i32;
@@ -2688,7 +2689,7 @@ pub(crate) fn get_start_element_count(t: &'static TupleType, flags: ElementFlags
 
 // Return count of ending consecutive tuple elements of the given kind(s)
 // checker.go:23916
-pub(crate) fn get_end_element_count(t: &'static TupleType, flags: ElementFlags) -> i32 {
+pub(crate) fn get_end_element_count(t: &TupleType, flags: ElementFlags) -> i32 {
     let element_infos = t.element_infos();
     let mut i = element_infos.len();
     while i > 0 {
@@ -2701,7 +2702,7 @@ pub(crate) fn get_end_element_count(t: &'static TupleType, flags: ElementFlags) 
 }
 
 // checker.go:23925
-pub(crate) fn get_total_fixed_element_count(t: &'static TupleType) -> i32 {
+pub(crate) fn get_total_fixed_element_count(t: &TupleType) -> i32 {
     t.fixed_length() + get_end_element_count(t, ElementFlags::Fixed)
 }
 
@@ -2718,7 +2719,7 @@ impl Checker {
 
     // checker.go:23938
     pub(crate) fn get_type_reference_arity(&mut self, t: P<Type>) -> i32 {
-        t.target_interface_type().type_parameters().len() as i32
+        t.reference_target().as_interface_type().type_parameters().len() as i32
     }
 
     // checker.go:23942

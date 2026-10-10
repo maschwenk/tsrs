@@ -299,7 +299,7 @@ impl Checker {
     // checker.go:4571
     pub(crate) fn get_type_without_signatures(&mut self, t: P<Type>) -> P<Type> {
         if t.flags().intersects(TypeFlags::Object) {
-            let resolved = self.resolve_structured_type_members(t).unwrap();
+            let resolved = self.resolve_structured_type_members(&t).unwrap();
             if !resolved.signatures().is_empty() {
                 let result = self.new_object_type(ObjectFlags::Anonymous, t.symbol());
                 result.object_flags.set(result.object_flags.get() | ObjectFlags::MembersResolved);
@@ -988,7 +988,7 @@ impl Checker {
             return true;
         }
         let mut seen: FxHashMap<&'static str, InheritanceInfo> = FxHashMap::default();
-        let declared_members = self.resolve_declared_members(t).unwrap().declared_members.get();
+        let declared_members = self.resolve_declared_members(&t).unwrap().declared_members.get();
         if let Some(declared_members) = declared_members {
             for (id, p) in declared_members.entries() {
                 if self.is_named_member(p, id) {

@@ -100,13 +100,14 @@ impl Arena {
     }
 
     fn with_owner(first_chunk: usize, region: Option<Weak<RegionInner>>, registered: bool) -> Self {
+        let allocator = {
+            #[cfg(feature = "alloc-profile")]
+            let _chunk = crate::alloc_profile::ArenaScope::enter();
+            if first_chunk == 0 { Allocator::new() } else { Allocator::with_capacity(first_chunk) }
+        };
         Self {
             sidecars: RefCell::new(Vec::new()),
-            allocator: if first_chunk == 0 {
-                Allocator::new()
-            } else {
-                Allocator::with_capacity(first_chunk)
-            },
+            allocator,
             region,
             registered,
             allocations: RefCell::new(Vec::new()),

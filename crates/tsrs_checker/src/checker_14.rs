@@ -47,7 +47,7 @@ impl Checker {
 
     // checker.go:28331
     pub fn type_has_call_or_construct_signatures(&mut self, t: P<Type>) -> bool {
-        t.flags().intersects(TypeFlags::StructuredType) && !self.resolve_structured_type_members(t).unwrap().signatures().is_empty()
+        t.flags().intersects(TypeFlags::StructuredType) && !self.resolve_structured_type_members(&t).unwrap().signatures().is_empty()
     }
 
     // checker.go:28335
@@ -144,7 +144,7 @@ impl Checker {
         // fixed element. We simplify to either the combined type of all elements (when the index type
         // the actual number type) or to the combined type of all non-fixed elements.
         if self.is_generic_tuple_type(object_type) && index_type.flags().intersects(TypeFlags::NumberLike) {
-            let index = if_else(index_type.flags().intersects(TypeFlags::Number), 0, object_type.target_tuple_type().fixed_length.get());
+            let index = if_else(index_type.flags().intersects(TypeFlags::Number), 0, object_type.reference_target().as_tuple_type().fixed_length.get());
             if let Some(element_type) = self.get_element_type_of_slice_of_tuple_type(object_type, index, 0 /*endSkipCount*/, writing, false) {
                 return element_type;
             }
@@ -396,7 +396,7 @@ impl Checker {
         if let Some(&cached) = self.cached_types.get(&key) {
             return cached;
         }
-        let resolved = self.resolve_structured_type_members(t).unwrap();
+        let resolved = self.resolve_structured_type_members(&t).unwrap();
         let members = self.transform_type_of_members(t, |c, t| c.get_regular_type_of_object_literal(t));
         let regular = self.new_anonymous_type(t.symbol(), Some(members), resolved.call_signatures(), resolved.construct_signatures(), resolved.index_infos());
         // resolved is t's own structured data, so resolved.flags/objectFlags are t's header flags
@@ -1933,7 +1933,7 @@ impl Checker {
         }
         if is_tuple_type(t) {
             let element_types = self.get_element_types(t);
-            return self.create_tuple_type_ex(&element_types, t.target_tuple_type().element_infos.get(), false /*readonly*/);
+            return self.create_tuple_type_ex(&element_types, t.reference_target().as_tuple_type().element_infos.get(), false /*readonly*/);
         }
         self.create_tuple_type_ex(&[t], &[TupleElementInfo { flags: ElementFlags::Variadic, labeled_declaration: None }], false)
     }
@@ -2385,7 +2385,8 @@ impl Checker {
             t,
             |c, t| {
                 if is_tuple_type(t) {
-                    let tuple = t.target_tuple_type();
+                    let tuple_owner = t.reference_target();
+                    let tuple = tuple_owner.as_tuple_type();
                     // If index is before any spread element and within the fixed part of the contextual tuple type, return
                     // the type of the contextual tuple element.
                     if (first_spread_index < 0 || index < first_spread_index) && index < tuple.fixed_length.get() {

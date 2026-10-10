@@ -252,7 +252,7 @@ impl NodeBuilderImpl {
         }
 
         // Members: reuse existing serialization functions
-        let resolved = c.resolve_structured_type_members(interface_type).unwrap();
+        let resolved = c.resolve_structured_type_members(&interface_type).unwrap();
         let mut members: Vec<P<Node>> = Vec::new();
 
         // Index signatures, filtering those identical to base

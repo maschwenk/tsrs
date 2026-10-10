@@ -1033,12 +1033,12 @@ impl Checker {
                 return ready.call_signatures.get().is_empty() && ready.construct_signatures.get().is_empty() && ready.index_infos.get().is_empty() && !self.has_properties_of_structured_type(t);
             }
         }
-        let resolved = self.resolve_structured_type_members(t).unwrap();
+        let resolved = self.resolve_structured_type_members(&t).unwrap();
         self.is_empty_resolved_type(resolved)
     }
 
     // checker.go:26951
-    pub(crate) fn is_empty_resolved_type(&mut self, t: &'static StructuredType) -> bool {
+    pub(crate) fn is_empty_resolved_type(&mut self, t: &StructuredType) -> bool {
         !std::ptr::eq(t, self.any_function_type.as_structured_type())
             && t.properties().is_empty()
             && t.signatures().is_empty()
@@ -1857,7 +1857,7 @@ impl Checker {
             }
             if every_type(self, object_type, |_, t| is_tuple_type(t)) && is_numeric_literal_name(&prop_name) {
                 let index = jsnum::from_string(&prop_name);
-                if access_node.is_some() && every_type(self, object_type, |_, t| !t.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variable)) && !access_flags.intersects(AccessFlags::AllowMissing) {
+                if access_node.is_some() && every_type(self, object_type, |_, t| !t.reference_target().as_tuple_type().combined_flags.get().intersects(ElementFlags::Variable)) && !access_flags.intersects(AccessFlags::AllowMissing) {
                     let index_node = get_index_node_for_access_expression(access_node.unwrap());
                     if is_tuple_type(object_type) {
                         if index < jsnum::Number(0.0) {
@@ -2228,9 +2228,9 @@ impl Checker {
             return true;
         }
         if access_node.is_some_and(|n| !is_indexed_access_type_node(n)) {
-            return self.is_generic_tuple_type(object_type) && !index_type_less_than(self, index_type, get_total_fixed_element_count(object_type.target_tuple_type()));
+            return self.is_generic_tuple_type(object_type) && !index_type_less_than(self, index_type, get_total_fixed_element_count(object_type.reference_target().as_tuple_type()));
         }
-        self.is_generic_object_type(object_type) && !(is_tuple_type(object_type) && index_type_less_than(self, index_type, get_total_fixed_element_count(object_type.target_tuple_type())))
+        self.is_generic_object_type(object_type) && !(is_tuple_type(object_type) && index_type_less_than(self, index_type, get_total_fixed_element_count(object_type.reference_target().as_tuple_type())))
             || self.is_generic_reducible_type(object_type)
     }
 }
@@ -2465,7 +2465,7 @@ impl Checker {
             // We substitute constraints for variadic elements only when the constraints are array types or
             // non-variadic tuple types as we want to avoid further (possibly unbounded) recursion.
             let element_types = self.get_element_types(t);
-            let element_infos = t.target_tuple_type().element_infos();
+            let element_infos = t.reference_target().as_tuple_type().element_infos();
             let mut new_elements: Vec<P<Type>> = Vec::with_capacity(element_types.len());
             for (i, &v) in element_types.iter().enumerate() {
                 let mut new_element = v;
@@ -2479,7 +2479,7 @@ impl Checker {
                 }
                 new_elements.push(new_element);
             }
-            return Some(self.create_tuple_type_ex(&new_elements, element_infos, t.target_tuple_type().readonly.get()));
+            return Some(self.create_tuple_type_ex(&new_elements, element_infos, t.reference_target().as_tuple_type().readonly.get()));
         }
         Some(t)
     }

@@ -1284,7 +1284,8 @@ fn end_of_required_type_parameters(ch: &mut Checker, t: P<Type>) -> usize {
     if type_args.is_empty() {
         return 0;
     }
-    let Some(interface_type) = t.target().and_then(|target| target.try_as_interface_type()) else {
+    let target = t.target();
+    let Some(interface_type) = target.as_ref().and_then(|target| target.try_as_interface_type()) else {
         return type_args.len();
     };
     let type_params = interface_type.type_parameters();

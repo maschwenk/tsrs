@@ -16,7 +16,7 @@ checker = ["compiler", "tsrs_compiler/checker", "dep:tsrs_checker", "dep:tsrs_sc
 # Option declarations from tsrs_tsoptions (instead of the oracle's options.json).
 tsoptions = ["dep:tsrs_tsoptions", "dep:tsrs_ast", "dep:tsrs_parser", "dep:tsrs_vfs"]
 # Allocation profile (tsrs_core/alloc-profile); replaces the mimalloc global allocator with the counting one.
-alloc-profile = ["tsrs_core/alloc-profile"]
+alloc-profile = ["tsrs_core/alloc-profile", "tsrs_compiler?/alloc-profile", "tsrs_checker?/alloc-profile"]
 
 [dependencies]
 tsrs_core.workspace = true

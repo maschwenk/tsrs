@@ -45,7 +45,7 @@ fn get_instantiated_type(c: &mut Checker, st: &mut InstantiationExpressionState,
 
 fn get_instantiated_type_part(c: &mut Checker, st: &mut InstantiationExpressionState, has_signatures: &mut bool, has_applicable_signature: &mut bool, t: P<Type>) -> P<Type> {
     if t.flags().intersects(TypeFlags::Object) {
-        let resolved = c.resolve_structured_type_members(t).unwrap();
+        let resolved = c.resolve_structured_type_members(&t).unwrap();
         let call_signatures = get_instantiated_signatures(c, st, resolved.call_signatures());
         let construct_signatures = get_instantiated_signatures(c, st, resolved.construct_signatures());
         *has_signatures = *has_signatures || !resolved.call_signatures().is_empty() || !resolved.construct_signatures().is_empty();
@@ -1525,7 +1525,8 @@ impl Checker {
         if !prop.check_flags().intersects(CheckFlags::Synthetic) {
             return callback(self, prop);
         }
-        let types = self.value_symbol_links.get(prop).containing_type().unwrap().types();
+        let containing_type = self.value_symbol_links.get(prop).containing_type().unwrap();
+        let types = containing_type.types();
         for &t in types {
             let p = self.get_property_of_type(t, prop.name());
             if let Some(p) = p {

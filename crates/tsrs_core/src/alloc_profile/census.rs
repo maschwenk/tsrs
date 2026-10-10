@@ -31,7 +31,13 @@ type Stack = [usize; DEPTH];
 static MODE: AtomicU8 = AtomicU8::new(0);
 
 const SHARDS: usize = 64;
-type LiveMap = FxHashMap<usize, (usize, u32, u32)>;
+struct LiveBlock {
+    size: usize,
+    stack: u32,
+    seq: u32,
+    typed: Option<(&'static Location<'static>, &'static str)>,
+}
+type LiveMap = FxHashMap<usize, LiveBlock>;
 static LIVE: [Mutex<Option<LiveMap>>; SHARDS] = [const { Mutex::new(None) }; SHARDS];
 
 struct StackTable {
@@ -151,8 +157,53 @@ pub(super) fn on_alloc(p: *mut u8, size: usize) {
         }
         let id = intern(&capture());
         let a = p as usize;
-        LIVE[shard(a)].lock().unwrap().get_or_insert_with(FxHashMap::default).insert(a, (size, id, next_seq()));
+        LIVE[shard(a)].lock().unwrap().get_or_insert_with(FxHashMap::default).insert(a, LiveBlock { size, stack: id, seq: next_seq(), typed: None });
     });
+}
+
+/// Attach a concrete layout to a normal live heap allocation. `on_free` removes the layout with the allocation.
+pub(super) fn type_heap(addr: usize, loc: &'static Location<'static>, ty: &'static str) {
+    // Relaxed: this only selects optional tracking; the shard mutex synchronizes the allocation metadata.
+    if MODE.load(Ordering::Relaxed) != 2 {
+        return;
+    }
+    unless_guarded(|| {
+        if let Some(block) = LIVE[shard(addr)].lock().unwrap().as_mut().and_then(|map| map.get_mut(&addr)) {
+            block.typed = Some((loc, ty));
+        }
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn nested_arena_scopes_restore_tracking() {
+        assert!(!IN_ARENA.with(Cell::get));
+        let outer = super::super::ArenaScope::enter();
+        let inner = super::super::ArenaScope::enter();
+        drop(inner);
+        assert!(IN_ARENA.with(Cell::get));
+        drop(outer);
+        assert!(!IN_ARENA.with(Cell::get));
+    }
+
+    #[test]
+    fn owned_box_layout_is_removed_on_drop() {
+        let previous = MODE.swap(2, Ordering::SeqCst);
+        let value = super::super::owned_box(7_u64);
+        let addr = std::ptr::from_ref(&*value).addr();
+        with_guard(|| {
+            let shard = LIVE[shard(addr)].lock().unwrap();
+            let block = shard.as_ref().unwrap().get(&addr).unwrap();
+            assert_eq!(block.size, std::mem::size_of::<u64>());
+            assert_eq!(block.typed.unwrap().1, std::any::type_name::<u64>());
+        });
+        drop(value);
+        with_guard(|| assert!(!LIVE[shard(addr)].lock().unwrap().as_ref().unwrap().contains_key(&addr)));
+        MODE.store(previous, Ordering::SeqCst);
+    }
 }
 
 #[inline]
@@ -186,7 +237,17 @@ pub(super) fn next_seq() -> u32 {
 
 enum Class {
     Arena { loc: &'static Location<'static>, ty: &'static str },
+    Owned { loc: &'static Location<'static>, ty: &'static str },
     Heap { stack: u32 },
+}
+
+impl Class {
+    fn typed(&self) -> Option<(&'static Location<'static>, &'static str)> {
+        match self {
+            Self::Arena { loc, ty } | Self::Owned { loc, ty } => Some((*loc, *ty)),
+            Self::Heap { .. } => None,
+        }
+    }
 }
 
 const REGION_SHIFT: u32 = 30;
@@ -496,10 +557,11 @@ fn run_frozen(roots: &[usize]) {
     let stacks = STACKS.lock().unwrap().take().map_or_else(Vec::new, |t| t.stacks);
     classes.extend((0..stacks.len() as u32).map(|stack| Class::Heap { stack }));
     let mut oversized = 0u64;
+    let mut owned_class_index: FxHashMap<(usize, usize), u32> = FxHashMap::default();
     for shard in LIVE.iter() {
         if let Some(map) = shard.lock().unwrap().take() {
             blocks.reserve(map.len());
-            for (a, (size, stack, seq)) in map {
+            for (a, LiveBlock { size, stack, seq, typed }) in map {
                 if size == 0 {
                     continue;
                 }
@@ -507,14 +569,21 @@ fn run_frozen(roots: &[usize]) {
                     oversized += 1;
                     u32::MAX
                 });
-                blocks.push(Block { start: a as u64, size, class: arena_classes + stack, seq });
+                let class = if let Some((loc, ty)) = typed {
+                    let key = (loc as *const Location as usize, ty.as_ptr() as usize ^ ty.len());
+                    let next = classes.len() as u32;
+                    let id = *owned_class_index.entry(key).or_insert(next);
+                    if id == next { classes.push(Class::Owned { loc, ty }); }
+                    id
+                } else { arena_classes + stack };
+                blocks.push(Block { start: a as u64, size, class, seq });
             }
         }
     }
     let scan: Vec<bool> = classes
         .iter()
         .map(|c| match c {
-            Class::Arena { ty, .. } => !pointer_free(ty),
+            Class::Arena { ty, .. } | Class::Owned { ty, .. } => !pointer_free(ty),
             Class::Heap { .. } => true,
         })
         .collect();
@@ -524,6 +593,9 @@ fn run_frozen(roots: &[usize]) {
     for w in table.blocks.windows(2) {
         if w[1].start < w[0].start + w[0].size as u64 {
             overlaps += 1;
+            if overlaps <= 3 {
+                eprintln!("census overlap: {:#x}+{} {} / {:#x}+{} {}", w[0].start, w[0].size, class_name(&classes[w[0].class as usize]), w[1].start, w[1].size, class_name(&classes[w[1].class as usize]));
+            }
         }
     }
     let t_build = t0.elapsed();
@@ -587,7 +659,7 @@ fn run_frozen(roots: &[usize]) {
     for (c, a) in classes.iter().zip(&per_class) {
         match c {
             Class::Arena { .. } => arena.add(a),
-            Class::Heap { .. } => heap.add(a),
+            Class::Heap { .. } | Class::Owned { .. } => heap.add(a),
         }
     }
 
@@ -623,7 +695,7 @@ fn run_frozen(roots: &[usize]) {
     let mut by_type: FxHashMap<String, Agg> = FxHashMap::default();
     let mut by_site: Vec<(String, Agg)> = Vec::new();
     for (c, a) in classes.iter().zip(&per_class) {
-        if let Class::Arena { loc, ty } = c {
+        if let Some((loc, ty)) = c.typed() {
             if a.count == 0 {
                 continue;
             }
@@ -634,8 +706,8 @@ fn run_frozen(roots: &[usize]) {
             by_site.push((format!("{}:{}  {}", file, loc.line(), ty), *a));
         }
     }
-    print_table("arena by type", &mut by_type.into_iter().collect(), top);
-    print_table("arena by call site (one level, #[track_caller])", &mut by_site, top);
+    print_table("typed allocations by type", &mut by_type.into_iter().collect(), top);
+    print_table("typed allocations by call site (one level, #[track_caller])", &mut by_site, top);
 
     let t_resolve = Instant::now();
     // Arena samples: (type, stack) -> scaled aggregate.
@@ -750,11 +822,11 @@ fn class_layouts(classes: &[Class]) -> Vec<Option<ClassLayout>> {
     classes
         .iter()
         .map(|c| {
-            let Class::Arena { ty, .. } = c else { return None };
+            let (_, ty) = c.typed()?;
             let mut l = ClassLayout::default();
             let mut any = false;
             for (name, fields) in layouts.iter() {
-                let applies = if name.ends_with('<') { ty.starts_with(name) } else { ty == name };
+                let applies = if name.ends_with('<') { ty.starts_with(name) } else { ty == *name };
                 if !applies {
                     continue;
                 }
@@ -797,7 +869,7 @@ fn class_layouts(classes: &[Class]) -> Vec<Option<ClassLayout>> {
 
 fn class_name(c: &Class) -> String {
     match c {
-        Class::Arena { loc, ty } => {
+        Class::Arena { loc, ty } | Class::Owned { loc, ty } => {
             let file = loc.file();
             let file = file.find("crates/").map(|i| &file[i + 7..]).unwrap_or(file);
             format!("{}:{}  {}", file, loc.line(), short_type(ty))
@@ -862,8 +934,8 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
         .iter()
         .filter_map(|&(a, _, seq)| table.lookup(a).filter(|&i| table.blocks[i].start == a).map(|i| (i, seq)))
         .collect();
-    let class_is = |c: u32, suffix: &str| matches!(&classes[c as usize], Class::Arena { ty, .. } if ty.ends_with(suffix));
-    let is_heap = |c: u32| matches!(&classes[c as usize], Class::Heap { .. });
+    let class_is = |c: u32, suffix: &str| classes[c as usize].typed().is_some_and(|(_, ty)| ty.ends_with(suffix));
+    let is_heap = |c: u32| matches!(&classes[c as usize], Class::Heap { .. } | Class::Owned { .. });
     let n = table.blocks.len();
     let mut smark = vec![0u64; n / 64 + 1];
     // Who first reached each block strongly (u32::MAX: a root), to print violation chains.
@@ -942,7 +1014,7 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
             let off_t = c - b.start;
             // Interior pointers: hash tables point at their control bytes (heap blocks), sub-slices into arena
             // lists (8-byte elements).
-            let slice = matches!(&classes[b.class as usize], Class::Arena { ty, .. } if ty.starts_with('['));
+            let slice = classes[b.class as usize].typed().is_some_and(|(_, ty)| ty.starts_with('['));
             let aimed = off_t == 0
                 || (tags && off_t < 8 && (class_is(b.class, "TypeMapper") || class_is(b.class, "InferenceContext") || class_is(b.class, "InferenceContextRare")))
                 || is_heap(b.class)

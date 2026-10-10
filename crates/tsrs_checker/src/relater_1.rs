@@ -1421,7 +1421,7 @@ impl Checker {
         }
         let mut members: Vec<P<Symbol>> = Vec::new();
         let mut seen: FxHashSet<&'static str> = FxHashSet::default();
-        if let Some(declared_members) = self.resolve_declared_members(reduced.target().unwrap()).unwrap().declared_members.get() {
+        if let Some(declared_members) = self.resolve_declared_members(&reduced.target().unwrap()).unwrap().declared_members.get() {
             for (id, symbol) in declared_members.entries() {
                 if self.is_named_member(symbol, id) {
                     seen.insert(id);
@@ -2303,7 +2303,8 @@ impl Checker {
         if signature_has_rest_parameter(signature) {
             let rest_type = self.get_type_of_symbol(signature.parameters()[length as usize - 1]);
             if is_tuple_type(rest_type) {
-                let target = rest_type.target_tuple_type();
+                let target_owner = rest_type.reference_target();
+                let target = target_owner.as_tuple_type();
                 return length + target.fixed_length.get()
                     - if target.combined_flags.get().intersects(ElementFlags::Variable) { 0 } else { 1 };
             }
@@ -2326,10 +2327,10 @@ impl Checker {
                 let rest_type = self.get_type_of_symbol(signature.parameters()[signature.parameters().len() - 1]);
                 if is_tuple_type(rest_type) {
                     let first_optional_index =
-                        find_index(rest_type.target_tuple_type().element_infos(), |info| !info.flags.intersects(ElementFlags::Required));
+                        find_index(rest_type.reference_target().as_tuple_type().element_infos(), |info| !info.flags.intersects(ElementFlags::Required));
                     let mut required_count = first_optional_index;
                     if first_optional_index < 0 {
-                        required_count = rest_type.target_tuple_type().fixed_length();
+                        required_count = rest_type.reference_target().as_tuple_type().fixed_length();
                     }
                     if required_count > 0 {
                         min_argument_count = signature.parameters().len() as i32 - 1 + required_count;
@@ -2363,7 +2364,7 @@ impl Checker {
     pub fn has_effective_rest_parameter(&mut self, signature: P<Signature>) -> bool {
         if signature_has_rest_parameter(signature) {
             let rest_type = self.get_type_of_symbol(signature.parameters()[signature.parameters().len() - 1]);
-            return !is_tuple_type(rest_type) || rest_type.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variable);
+            return !is_tuple_type(rest_type) || rest_type.reference_target().as_tuple_type().combined_flags.get().intersects(ElementFlags::Variable);
         }
         false
     }
@@ -2390,8 +2391,8 @@ impl Checker {
             let rest_type = self.get_type_of_symbol(signature.parameters()[param_count as usize]);
             let index = pos - param_count;
             if !is_tuple_type(rest_type)
-                || rest_type.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variable)
-                || index < rest_type.target_tuple_type().fixed_length()
+                || rest_type.reference_target().as_tuple_type().combined_flags.get().intersects(ElementFlags::Variable)
+                || index < rest_type.reference_target().as_tuple_type().fixed_length()
             {
                 let index_type = self.get_number_literal_type(Number(index as f64));
                 return Some(self.get_indexed_access_type(rest_type, index_type));
@@ -2468,7 +2469,7 @@ impl Checker {
             let rest_parameter = signature.parameters()[param_count as usize];
             let rest_type = self.get_type_of_symbol(rest_parameter);
             if is_tuple_type(rest_type) {
-                let element_infos = rest_type.target_tuple_type().element_infos();
+                let element_infos = rest_type.reference_target().as_tuple_type().element_infos();
                 let index = (pos - param_count) as usize;
                 if index < element_infos.len() {
                     return element_infos[index].labeled_declaration;
@@ -2510,8 +2511,8 @@ impl Checker {
                 }
                 return Some(rest_type);
             }
-            if rest_type.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variable) {
-                let fixed_length = rest_type.target_tuple_type().fixed_length();
+            if rest_type.reference_target().as_tuple_type().combined_flags.get().intersects(ElementFlags::Variable) {
+                let fixed_length = rest_type.reference_target().as_tuple_type().fixed_length();
                 return Some(self.slice_tuple_type(rest_type, fixed_length, 0));
             }
         }
@@ -2520,7 +2521,8 @@ impl Checker {
 
     // relater.go:1915
     pub(crate) fn slice_tuple_type(&mut self, t: P<Type>, index: i32, end_skip_count: i32) -> P<Type> {
-        let target = t.target_tuple_type();
+        let target_owner = t.reference_target();
+        let target = target_owner.as_tuple_type();
         let end_index = self.get_type_reference_arity(t) - end_skip_count.max(0);
         if index > target.fixed_length() {
             if let Some(rest_array_type) = self.get_rest_array_type_of_tuple_type(t) {
@@ -2541,12 +2543,12 @@ impl Checker {
 
     // relater.go:1930
     pub(crate) fn get_known_keys_of_tuple_type(&mut self, t: P<Type>) -> P<Type> {
-        let fixed_length = t.target_tuple_type().fixed_length();
+        let fixed_length = t.reference_target().as_tuple_type().fixed_length();
         let mut keys: Vec<P<Type>> = Vec::with_capacity(fixed_length as usize + 1);
         for i in 0..fixed_length {
             keys.push(self.get_string_literal_type(&i.to_string()));
         }
-        let array_type = if t.target_tuple_type().readonly.get() { self.global_readonly_array_type } else { self.global_array_type };
+        let array_type = if t.reference_target().as_tuple_type().readonly.get() { self.global_readonly_array_type } else { self.global_array_type };
         keys.push(self.get_index_type(array_type));
         self.get_union_type(&keys)
     }
@@ -2586,7 +2588,7 @@ impl Checker {
         let rest_type = self.get_type_of_symbol(rest_parameter);
         if is_tuple_type(rest_type) {
             let index = pos - param_count;
-            let element_info = rest_type.target_tuple_type().element_infos()[index as usize];
+            let element_info = rest_type.reference_target().as_tuple_type().element_infos()[index as usize];
             return self.get_tuple_element_label(element_info, Some(rest_parameter), index);
         }
         rest_parameter.name().to_string()
@@ -3043,7 +3045,7 @@ impl Checker {
     }
 
     // relater.go:2354
-    pub(crate) fn template_literal_types_definitely_unrelated(&mut self, source: &'static TemplateLiteralType, target: &'static TemplateLiteralType) -> bool {
+    pub(crate) fn template_literal_types_definitely_unrelated(&mut self, source: &TemplateLiteralType, target: &TemplateLiteralType) -> bool {
         // Two template literal types with differences in their starting or ending text spans are definitely unrelated.
         let source_texts = source.texts();
         let target_texts = target.texts();
@@ -3058,7 +3060,7 @@ impl Checker {
     }
 
     // relater.go:2365
-    pub(crate) fn is_type_matched_by_template_literal_type(&mut self, source: P<Type>, target: &'static TemplateLiteralType, compare_types: TypeComparer) -> bool {
+    pub(crate) fn is_type_matched_by_template_literal_type(&mut self, source: P<Type>, target: &TemplateLiteralType, compare_types: TypeComparer) -> bool {
         let inferences = self.infer_types_from_template_literal_type(source, target, compare_types);
         // An empty result stands for Go's nil (a successful inference is never empty).
         if !inferences.is_empty() {
@@ -3074,7 +3076,7 @@ impl Checker {
 
     // relater.go:2378
     // (An empty result stands for Go's nil: a non-nil result always has one element per target placeholder.)
-    pub(crate) fn infer_types_from_template_literal_type(&mut self, source: P<Type>, target: &'static TemplateLiteralType, compare_types: TypeComparer) -> Vec<P<Type>> {
+    pub(crate) fn infer_types_from_template_literal_type(&mut self, source: P<Type>, target: &TemplateLiteralType, compare_types: TypeComparer) -> Vec<P<Type>> {
         if source.flags().intersects(TypeFlags::StringLiteral) {
             let value = get_string_literal_value(source);
             return self.infer_from_literal_parts_to_template_literal(&[value], &[], target);
@@ -3122,7 +3124,7 @@ impl Checker {
     // the first inference is the template literal type `<${string}>`. The remainder of the source makes up the second
     // inference, the template literal type `<${number}-${number}>`.
     // (An empty result stands for Go's nil.)
-    pub(crate) fn infer_from_literal_parts_to_template_literal(&mut self, source_texts: &[&str], source_types: &[P<Type>], target: &'static TemplateLiteralType) -> Vec<P<Type>> {
+    pub(crate) fn infer_from_literal_parts_to_template_literal(&mut self, source_texts: &[&str], source_types: &[P<Type>], target: &TemplateLiteralType) -> Vec<P<Type>> {
         let last_source_index = source_texts.len() - 1;
         let source_start_text = source_texts[0];
         let source_end_text = source_texts[last_source_index];

@@ -172,7 +172,8 @@ impl InlayHintState<'_> {
             if ast::is_spread_element(arg) {
                 let spread_type = self.checker.get_type_at_location(arg.expression().unwrap());
                 if spread_type.is_tuple_type() {
-                    let tuple_type = spread_type.target().unwrap().as_tuple_type();
+                    let target = spread_type.target().unwrap();
+                    let tuple_type = target.as_tuple_type();
                     let element_flags = tuple_type.element_flags();
                     let fixed_length = tuple_type.fixed_length();
                     if fixed_length == 0 {

@@ -1124,7 +1124,8 @@ struct contextualSignatureLocationInfo {
 fn get_spread_element_count(node: P<Node>, c: &mut Checker) -> i32 {
     let spread_type = c.get_type_at_location(node.expression().unwrap());
     if checker::is_tuple_type_exported(spread_type) {
-        let tuple_type = spread_type.target().unwrap().as_tuple_type();
+        let target = spread_type.target().unwrap();
+        let tuple_type = target.as_tuple_type();
         let element_flags = tuple_type.element_flags();
         let fixed_length = tuple_type.fixed_length();
         if fixed_length == 0 {

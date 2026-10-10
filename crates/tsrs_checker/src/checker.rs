@@ -918,7 +918,7 @@ impl IterationTypesResolver {
 pub struct WideningContext {
     pub parent: Cell<Option<P<WideningContext>>>, // Parent context
     pub property_name: Cell<&'static str>, // Name of property in parent
-    pub siblings: Cell<Option<&'static [P<Type>]>>, // Types of siblings (nil = not computed)
+    pub siblings: RefCell<Option<Vec<P<Type>>>>, // Types of siblings (nil = not computed)
     pub resolved_properties: Cell<Option<&'static [P<Symbol>]>>, // Properties occurring in sibling object literals (nil = not computed)
     pub child_contexts: OwnedMap<String, P<WideningContext>>,
     pub widened_types: OwnedMap<P<Type>, P<Type>>,

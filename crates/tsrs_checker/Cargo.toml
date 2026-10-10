@@ -8,6 +8,7 @@ license.workspace = true
 workspace = true
 
 [features]
+alloc-profile = ["tsrs_core/alloc-profile"]
 # Creation-site counters (tsrs_core::sitecount): `#[track_caller]` on the checker's object constructors.
 site-counts = ["tsrs_core/site-counts"]
 # TSRS_WORK_CENSUS: attribute checker work to source patterns (workcensus.rs, docs/DEBUGGING.md).

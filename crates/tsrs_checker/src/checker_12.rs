@@ -12,17 +12,17 @@ use tsrs_diagnostics as diagnostics;
 
 // checker.go:23954
 pub(crate) fn is_mutable_tuple_type(t: P<Type>) -> bool {
-    is_tuple_type(t) && !t.target_tuple_type().readonly.get()
+    is_tuple_type(t) && !t.reference_target().as_tuple_type().readonly.get()
 }
 
 // checker.go:23958
 pub(crate) fn is_generic_tuple_type(t: P<Type>) -> bool {
-    is_tuple_type(t) && t.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variadic)
+    is_tuple_type(t) && t.reference_target().as_tuple_type().combined_flags.get().intersects(ElementFlags::Variadic)
 }
 
 // checker.go:23962
 pub(crate) fn is_single_element_generic_tuple_type(t: P<Type>) -> bool {
-    is_generic_tuple_type(t) && t.target_tuple_type().element_infos.get().len() == 1
+    is_generic_tuple_type(t) && t.reference_target().as_tuple_type().element_infos.get().len() == 1
 }
 
 impl Checker {
@@ -34,7 +34,7 @@ impl Checker {
 
     // checker.go:23970
     pub(crate) fn is_mutable_array_or_tuple(&mut self, t: P<Type>) -> bool {
-        self.is_array_type(t) && !self.is_readonly_array_type(t) || is_tuple_type(t) && !t.target_tuple_type().readonly.get()
+        self.is_array_type(t) && !self.is_readonly_array_type(t) || is_tuple_type(t) && !t.reference_target().as_tuple_type().readonly.get()
     }
 
     // checker.go:23974
@@ -1709,7 +1709,7 @@ impl Checker {
     // checker.go:25300
     pub(crate) fn get_element_type_of_slice_of_tuple_type(&mut self, t: P<Type>, index: i32, end_skip_count: i32, writing: bool, no_reductions: bool) -> Option<P<Type>> {
         let length = self.get_type_reference_arity(t) - end_skip_count;
-        let element_infos = t.target_tuple_type().element_infos.get();
+        let element_infos = t.reference_target().as_tuple_type().element_infos.get();
         if index < length {
             let type_arguments = self.get_type_arguments(t);
             let mut element_types = Vec::new();
@@ -1730,7 +1730,7 @@ impl Checker {
 
     // checker.go:25321
     pub(crate) fn get_rest_type_of_tuple_type(&mut self, t: P<Type>) -> Option<P<Type>> {
-        let fixed_length = t.target_tuple_type().fixed_length.get();
+        let fixed_length = t.reference_target().as_tuple_type().fixed_length.get();
         self.get_element_type_of_slice_of_tuple_type(t, fixed_length, 0, false, false)
     }
 
@@ -1741,7 +1741,7 @@ impl Checker {
                 return Some(c.undefined_type);
             };
             if let Some(undefined_like_type) = undefined_like_type {
-                if index >= Number(get_total_fixed_element_count(t.target_tuple_type()) as f64) {
+                if index >= Number(get_total_fixed_element_count(t.reference_target().as_tuple_type()) as f64) {
                     return Some(c.get_union_type(&[rest_type, undefined_like_type]));
                 }
             }
@@ -1793,7 +1793,7 @@ impl Checker {
 
     // checker.go:25374
     pub(crate) fn is_generic_tuple_type(&mut self, t: P<Type>) -> bool {
-        is_tuple_type(t) && t.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variadic)
+        is_tuple_type(t) && t.reference_target().as_tuple_type().combined_flags.get().intersects(ElementFlags::Variadic)
     }
 
     // checker.go:25378
@@ -2615,7 +2615,8 @@ impl Checker {
         }
         let u = t.as_union_type();
         let mut types = u.types.get();
-        if let Some(origin) = u.origin() {
+        let origin = u.origin();
+        if let Some(origin) = &origin {
             if origin.flags().intersects(TypeFlags::Union) {
                 types = origin.types();
             }

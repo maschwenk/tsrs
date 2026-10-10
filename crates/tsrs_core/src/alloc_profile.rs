@@ -471,18 +471,20 @@ thread_local! {
 }
 
 /// Marks heap allocations made while the arena grows (chunk allocations) so the heap sampler can tell them apart.
-pub(crate) struct ArenaScope;
+pub(crate) struct ArenaScope {
+    previous: bool,
+}
 impl ArenaScope {
     #[inline]
     pub(crate) fn enter() -> ArenaScope {
-        heap_sample::IN_ARENA.with(|c| c.set(true));
-        ArenaScope
+        let previous = heap_sample::IN_ARENA.with(|c| c.replace(true));
+        ArenaScope { previous }
     }
 }
 impl Drop for ArenaScope {
     #[inline]
     fn drop(&mut self) {
-        heap_sample::IN_ARENA.with(|c| c.set(false));
+        heap_sample::IN_ARENA.with(|c| c.set(self.previous));
     }
 }
 
@@ -584,8 +586,23 @@ pub(crate) fn census_would_free_since(since: usize) {
     });
 }
 
+/// Profile a normal Rust-owned box as a typed allocation, including its census field layout.
+#[track_caller]
+pub fn owned_box<T>(value: T) -> Box<T> {
+    let value = Box::new(value);
+    let site = Location::caller();
+    let ty = std::any::type_name::<T>();
+    census::type_heap(std::ptr::from_ref(&*value).addr(), site, ty);
+    record_impl(site, ty, std::mem::size_of::<T>(), None);
+    value
+}
+
 #[inline(never)]
 pub(crate) fn record(site: &'static Location<'static>, ty: &'static str, bytes: usize, addr: usize) {
+    record_impl(site, ty, bytes, Some(addr));
+}
+
+fn record_impl(site: &'static Location<'static>, ty: &'static str, bytes: usize, arena_addr: Option<usize>) {
     let _ = LOCAL.try_with(|local| {
         let mut data = local.lock().unwrap();
         let key = (site as *const Location as usize, ty.as_ptr() as usize ^ ty.len());
@@ -597,7 +614,7 @@ pub(crate) fn record(site: &'static Location<'static>, ty: &'static str, bytes: 
         let e = &mut data.sites[idx as usize].2;
         e.count += 1;
         e.bytes += bytes as u64;
-        if bytes != 0 && census::recording() {
+        if let Some(addr) = arena_addr.filter(|_| bytes != 0 && census::recording()) {
             let size = u32::try_from(bytes).expect("arena block >= 4 GiB");
             let sample = data.countdown == 0;
             data.countdown = if sample { census::arena_sample_rate() - 1 } else { data.countdown - 1 };

@@ -2133,7 +2133,7 @@ impl Checker {
     }
 
     // flow.go:1573
-    pub(crate) fn get_final_array_type(&mut self, t: &'static EvolvingArrayType) -> P<Type> {
+    pub(crate) fn get_final_array_type(&mut self, t: &EvolvingArrayType) -> P<Type> {
         if t.final_array_type.get().is_none() {
             let final_array_type = self.create_final_array_type(t.element_type.get().unwrap());
             t.final_array_type.set(Some(final_array_type));

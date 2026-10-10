@@ -100,6 +100,12 @@ cloning and destruction use Rust's implementations, without raw buffer managemen
 Their packed symbol pointers and static key referents still require the legacy graph owner
 (`notes/rust-owned-symbol-storage.md`); owning a table does not establish ownership of those referents.
 
+Type records own a closed Rust enum of payload boxes. Payload views borrow the type record; no header-offset
+cast or static payload view remains. Resolved members, reference-instantiation tables and union/intersection
+tail records use owned lazy boxes. Symbol and alias edges are separate ordinary fields. The type header is still
+allocated through `P`, and payload graph edges and slices still require the legacy graph owner. This is not yet
+a typed type arena (`notes/rust-owned-type-payloads.md`).
+
 Build orchestrators and their hosts use `Arc`; the host's back-reference is weak. Returned build outcomes retain
 the actual orchestrator, including programs whose diagnostics they expose, through conversion to an API response.
 There is no manual orchestrator free or raw box reconstruction. Build tasks are Rust-owned records in a typed

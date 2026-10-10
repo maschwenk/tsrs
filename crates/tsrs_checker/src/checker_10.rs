@@ -428,7 +428,7 @@ impl Checker {
     }
 
     // checker.go:19953
-    pub(crate) fn resolve_declared_members(&mut self, t: P<Type>) -> Option<&'static InterfaceType> {
+    pub(crate) fn resolve_declared_members<'a>(&mut self, t: &'a P<Type>) -> Option<&'a InterfaceType> {
         let d = t.as_interface_type();
         if !d.declared_members_resolved.get() {
             let members = self.get_members_of_symbol(t.symbol().unwrap());
@@ -2797,7 +2797,7 @@ impl Checker {
 
     pub(crate) fn get_property_of_object_type_hashed(&mut self, t: P<Type>, key: HashedName<'_>) -> Option<P<Symbol>> {
         if t.flags().intersects(TypeFlags::Object) {
-            let resolved = self.resolve_structured_type_members(t).unwrap();
+            let resolved = self.resolve_structured_type_members(&t).unwrap();
             let symbol = resolved.members().and_then(|m| m.lookup_hashed(key));
             if let Some(symbol) = symbol {
                 if self.symbol_is_value(symbol) {

@@ -1165,14 +1165,14 @@ impl Relater {
         }
         // For a generic type T and a type U that is assignable to T, [...U] is assignable to T, U is assignable to readonly [...T],
         // and U is assignable to [...T] when U is constrained to a mutable array or tuple type.
-        if is_single_element_generic_tuple_type(source) && !source.target_tuple_type().readonly.get() {
+        if is_single_element_generic_tuple_type(source) && !source.reference_target().as_tuple_type().readonly.get() {
             let element = c.get_type_arguments(source)[0];
             result = self.is_related_to(c, element, target, RecursionFlags::Source, false /*reportErrors*/);
             if result != Ternary::False {
                 return result;
             }
         }
-        if is_single_element_generic_tuple_type(target) && (target.target_tuple_type().readonly.get() || {
+        if is_single_element_generic_tuple_type(target) && (target.reference_target().as_tuple_type().readonly.get() || {
             let base = c.get_base_constraint_or_type(source);
             c.is_mutable_array_or_tuple(base)
         }) {
@@ -1941,16 +1941,16 @@ impl Relater {
         let mut result = Ternary::True;
         if is_tuple_type(target) {
             if c.is_array_or_tuple_type(source) {
-                if !target.target_tuple_type().readonly.get() && (c.is_readonly_array_type(source) || is_tuple_type(source) && source.target_tuple_type().readonly.get()) {
+                if !target.reference_target().as_tuple_type().readonly.get() && (c.is_readonly_array_type(source) || is_tuple_type(source) && source.reference_target().as_tuple_type().readonly.get()) {
                     return Ternary::False;
                 }
                 let source_arity = c.get_type_reference_arity(source);
                 let target_arity = c.get_type_reference_arity(target);
-                let source_rest = if is_tuple_type(source) { source.target_tuple_type().combined_flags.get().intersects(ElementFlags::Rest) } else { true };
-                let target_has_rest_element = target.target_tuple_type().combined_flags.get().intersects(ElementFlags::Rest);
-                let target_has_variable_element = target.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variable);
-                let source_min_length = if is_tuple_type(source) { source.target_tuple_type().min_length.get() } else { 0 };
-                let target_min_length = target.target_tuple_type().min_length.get();
+                let source_rest = if is_tuple_type(source) { source.reference_target().as_tuple_type().combined_flags.get().intersects(ElementFlags::Rest) } else { true };
+                let target_has_rest_element = target.reference_target().as_tuple_type().combined_flags.get().intersects(ElementFlags::Rest);
+                let target_has_variable_element = target.reference_target().as_tuple_type().combined_flags.get().intersects(ElementFlags::Variable);
+                let source_min_length = if is_tuple_type(source) { source.reference_target().as_tuple_type().min_length.get() } else { 0 };
+                let target_min_length = target.reference_target().as_tuple_type().min_length.get();
                 if !source_rest && source_arity < target_min_length {
                     if report_errors {
                         self.report_error(c, &diagnostics::Source_has_0_element_s_but_target_requires_1, &[&source_arity, &target_min_length]);
@@ -1975,11 +1975,11 @@ impl Relater {
                 }
                 let source_type_arguments = c.get_type_arguments(source);
                 let target_type_arguments = c.get_type_arguments(target);
-                let target_start_count = get_start_element_count(target.target_tuple_type(), ElementFlags::NonRest);
-                let target_end_count = get_end_element_count(target.target_tuple_type(), ElementFlags::NonRest);
+                let target_start_count = get_start_element_count(target.reference_target().as_tuple_type(), ElementFlags::NonRest);
+                let target_end_count = get_end_element_count(target.reference_target().as_tuple_type(), ElementFlags::NonRest);
                 let mut can_exclude_discriminants = excluded_properties.len() != 0;
                 for source_position in 0..source_arity {
-                    let source_flags = if is_tuple_type(source) { source.target_tuple_type().element_infos.get()[source_position as usize].flags } else { ElementFlags::Rest };
+                    let source_flags = if is_tuple_type(source) { source.reference_target().as_tuple_type().element_infos.get()[source_position as usize].flags } else { ElementFlags::Rest };
                     let source_position_from_end = source_arity - 1 - source_position;
                     let target_position: i32;
                     if target_has_rest_element && source_position >= target_start_count {
@@ -1995,7 +1995,7 @@ impl Relater {
                     }
                     let mut target_flags = ElementFlags::None;
                     if target_position >= 0 {
-                        target_flags = target.target_tuple_type().element_infos.get()[target_position as usize].flags;
+                        target_flags = target.reference_target().as_tuple_type().element_infos.get()[target_position as usize].flags;
                     }
                     if target_flags.intersects(ElementFlags::Variadic) && !source_flags.intersects(ElementFlags::Variadic) {
                         if report_errors {
@@ -2046,7 +2046,7 @@ impl Relater {
                 }
                 return result;
             }
-            if target.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variable) {
+            if target.reference_target().as_tuple_type().combined_flags.get().intersects(ElementFlags::Variable) {
                 return Ternary::False;
             }
         }
@@ -2232,7 +2232,7 @@ impl Relater {
          * - If the source an array then skip property elaborations if the target is a tuple.
          */
         if is_tuple_type(source) {
-            if source.target_tuple_type().readonly.get() && c.is_mutable_array_or_tuple(target) {
+            if source.reference_target().as_tuple_type().readonly.get() && c.is_mutable_array_or_tuple(target) {
                 if report_errors {
                     let source_string = c.type_to_string_exported(source);
                     let target_string = c.type_to_string_exported(target);

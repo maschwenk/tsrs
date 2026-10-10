@@ -1,0 +1,50 @@
+{
+  "conformance": [
+    {
+      "mode": "full",
+      "base": "owned-build-tasks",
+      "entries": 15197,
+      "classification_differences": 0,
+      "classifications_sha256": "177c8eea5eb0b78dee3ad65d4d6f19d1540f386d71f2bcd280f145143b99637a"
+    },
+    {
+      "mode": "full",
+      "base": "oxc",
+      "entries": 15197,
+      "classification_differences": 0,
+      "classifications_sha256": "177c8eea5eb0b78dee3ad65d4d6f19d1540f386d71f2bcd280f145143b99637a"
+    },
+    {
+      "mode": "default",
+      "base": "owned-build-tasks",
+      "entries": 15197,
+      "classification_differences": 0,
+      "classifications_sha256": "bf8f68d37621e3a9660686b2b122a003f4f7807e624889d212c993f6fcd3c55d"
+    },
+    {
+      "mode": "default",
+      "base": "oxc",
+      "entries": 15197,
+      "classification_differences": 0,
+      "classifications_sha256": "bf8f68d37621e3a9660686b2b122a003f4f7807e624889d212c993f6fcd3c55d"
+    }
+  ],
+  "fourslash": [
+    {
+      "class": "pass",
+      "count": 4066,
+      "set_sha256": "363f3fdbd73284b7f794fa954edbb09dd733540c9aba874547182871c9f87699"
+    },
+    {
+      "class": "fail",
+      "count": 63,
+      "set_sha256": "d1adc0b00bc401555ac9ab3cfdd1f85ae825804c1472f1b71c1679c028066a7c"
+    },
+    {
+      "class": "skip",
+      "count": 417,
+      "set_sha256": "5b738cedb67835ff664a0247177949e3b7dcb2639c592c29eec05571787e42e3"
+    }
+  ],
+  "regression_passes": 28
+}

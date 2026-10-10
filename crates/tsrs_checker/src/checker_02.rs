@@ -1343,7 +1343,7 @@ impl Checker {
                     self.error(Some(e), &diagnostics::A_rest_element_type_must_be_an_array_type, &[]);
                     break;
                 }
-                if self.is_array_type(t) || is_tuple_type(t) && t.target_tuple_type().combined_flags.get().intersects(ElementFlags::Rest) {
+                if self.is_array_type(t) || is_tuple_type(t) && t.reference_target().as_tuple_type().combined_flags.get().intersects(ElementFlags::Rest) {
                     flags |= ElementFlags::Rest;
                 }
             }

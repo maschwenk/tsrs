@@ -1002,7 +1002,7 @@ impl NodeBuilderImpl {
             return Some(self.create_mapped_type_node_from_type(c, t));
         }
 
-        let resolved = c.resolve_structured_type_members(t).unwrap();
+        let resolved = c.resolve_structured_type_members(&t).unwrap();
         let call_sigs = resolved.call_signatures();
         let ctor_sigs = resolved.construct_signatures();
         if resolved.properties().is_empty() && resolved.index_infos().is_empty() {

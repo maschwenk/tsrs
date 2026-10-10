@@ -155,6 +155,7 @@ In place:
 | Rust-owned symbol-table buffers and filter/extra-record enum | `notes/rust-owned-symbol-storage.md`: raw container allocation and four unchecked thread traits removed; referents remain legacy and cumulative instruction/RSS gates fail | |
 | Shared build roots/hosts and returned outcome owners; scoped config host/cache borrows | `notes/rust-owned-build-roots.md`: manual orchestrator frees and config lifetime casts removed; build diagnostics keep their program graph alive; task/system/command and graph migration remained incomplete at that checkpoint | |
 | Typed build-task records and dependency keys; owned build inputs, command/testing entry points and returned diagnostic-sink owner | `notes/rust-owned-build-tasks.md`: removes raw task pointers, input/static system leaks and manual task-cycle teardown; raw compiler graph and cumulative performance/memory gates remain unfinished | |
+| Owned type payload enum and lazy member/instantiation/union tails; views borrowed from the type record | `notes/rust-owned-type-payloads.md`: header-offset casts, static payload views and tagged owned tails removed; type handles and graph slices remain legacy, with interim layout costs | |
 | Packed layouts with size assertions | `notes/mem-layout.md`, `mem-layout3.md`, `mem-round2.md`, `mem-round3.md`, `mem-small.md` | oxc, ty, rust-analyzer, Bun |
 | Fx hashing everywhere | `notes/perf-checker-cpu2.md` | oxc, Rolldown, Ruff, rust-analyzer |
 | Lazy members, line maps and rare-field tails | `notes/lazy-members.md`, `notes/mem-lazy.md` | |

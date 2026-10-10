@@ -185,6 +185,9 @@ anything that writes (mutation testing, scripts that create files) uses the disp
 ## The reachability census (run it after any memory or layout change)
 
 The alloc-profile build records Oxc arena allocations and live heap blocks, then walks the compiler graph at exit.
+Owned type payload boxes keep their concrete layouts in the live heap table; dropping a box removes its record.
+The typed allocation tables include both arena records and these live boxes. Arena chunks themselves are excluded
+from the heap block table, including the first chunk allocated when an owner is created.
 It reports retained and unreachable storage by type and allocation site. The old custom allocator also used this as
 an individual-free/rewind gate; those operations are compatibility no-ops after the Oxc migration, so the
 "freed or rewound" totals remain zero.

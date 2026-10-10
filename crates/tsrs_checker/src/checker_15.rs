@@ -88,7 +88,7 @@ impl Checker {
                 }
                 if let Some(spread_type) = spread_type.filter(|&t| is_tuple_type(t)) {
                     for (i, t) in self.get_element_types(spread_type).iter().copied().enumerate() {
-                        let element_infos = spread_type.target_tuple_type().element_infos();
+                        let element_infos = spread_type.reference_target().as_tuple_type().element_infos();
                         let flags = element_infos[i].flags;
                         let mut synthetic_type = t;
                         if flags.intersects(ElementFlags::Rest) {
@@ -750,7 +750,7 @@ impl Checker {
     // checker.go:31135
     pub(crate) fn get_type_from_index_infos_of_contextual_type(&mut self, t: P<Type>, name: &str, name_type: Option<P<Type>>) -> Option<P<Type>> {
         if is_tuple_type(t) && is_numeric_literal_name(name) && jsnum::from_string(name).0 >= 0.0 {
-            let rest_type = self.get_element_type_of_slice_of_tuple_type(t, t.target_tuple_type().fixed_length.get(), 0 /*endSkipCount*/, false /*writing*/, true /*noReductions*/);
+            let rest_type = self.get_element_type_of_slice_of_tuple_type(t, t.reference_target().as_tuple_type().fixed_length.get(), 0 /*endSkipCount*/, false /*writing*/, true /*noReductions*/);
             if rest_type.is_some() {
                 return rest_type;
             }
