@@ -96,13 +96,6 @@ pub struct LeafSettings {
 /// at any count.
 pub const MAX_DEFAULT_CHECKERS: usize = 16;
 
-/// `TSRS_FREE_LEAVES`, a comma-separated list: unset frees the predicted leaves when the program gets at most
-/// `MAX_DEFAULT_CHECKERS` checkers (`checkers`: the most it can get, `checker_count_upper_bound`); `1` frees them at any
-/// count; `0` turns file regions off; `keep` makes the regions (at any count) but frees nothing; `stats` reports
-/// (`stats_report`); `all` gives every TypeScript root file a region (`LeafSettings::every_file`), at any count. Off
-/// under the debug modes that walk files or checker data after the pass (`TSRS_FILE_TIMES` walks every tree;
-/// `TSRS_ASSIGNMENT_STATS`, the work and heap censuses walk checker tables) or that must see every block alive (the
-/// reachability census, `TSRS_CENSUS=1`).
 /// Whether the CLI may parse declaration-file member lists lazily (notes/mem-lazy-dts-members.md): `TSRS_LAZY_DTS=0`
 /// turns it off, and so do the debug modes that walk or freeze the whole program (the reachability census, the
 /// shared-object check).
@@ -210,6 +203,13 @@ fn global_library_files(program: &crate::program::Program) -> Vec<P<SourceFile>>
     program.files.iter().copied().filter(|f| f.is_declaration_file() && global.contains(&*f.path().0)).collect()
 }
 
+/// `TSRS_FREE_LEAVES`, a comma-separated list: unset frees the predicted leaves when the program gets at most
+/// `MAX_DEFAULT_CHECKERS` checkers (`checkers`: the most it can get, `checker_count_upper_bound`); `1` frees them at any
+/// count; `0` turns file regions off; `keep` makes the regions (at any count) but frees nothing; `stats` reports
+/// (`stats_report`); `all` gives every TypeScript root file a region (`LeafSettings::every_file`), at any count. Off
+/// under the debug modes that walk files or checker data after the pass (`TSRS_FILE_TIMES` walks every tree;
+/// `TSRS_ASSIGNMENT_STATS`, the work and heap censuses walk checker tables) or that must see every block alive (the
+/// reachability census, `TSRS_CENSUS=1`).
 pub fn leaf_settings_from_env(checkers: usize) -> LeafSettings {
     let census = std::env::var_os("TSRS_CENSUS").is_some_and(|v| v == "1") || tsrs_core::census_recording();
     #[cfg(feature = "checker")]

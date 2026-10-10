@@ -1,6 +1,7 @@
 // The Rust compiler backend: newCompilerTest (compiler_runner.go), makeUnitsFromTest's tsconfig parsing
-// (test_case_parser.go), and CompileFiles/SetOptionsFromTestConfig/compileFilesWithHost (harnessutil.go),
-// type-check only (no emit, so no pre-/post-emit comparison and no declaration emit diagnostics).
+// (test_case_parser.go), and CompileFiles/SetOptionsFromTestConfig/compileFilesWithHost (harnessutil.go). The default
+// mode type-checks a single program (and collects declaration diagnostics when declarations are emitted); with an emit
+// baseline, emit_harness runs Go's pre-/post-emit programs.
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;

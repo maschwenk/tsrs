@@ -514,7 +514,7 @@ impl Orchestrator {
             }
         } else if self.errors.lock().unwrap().is_empty() {
             build_result.statistics.projects = order.len();
-            // Builders pick up projects in scheduleOrder; results are reported in Order(), waiting for each project to finish
+            // Builders pick up projects in Order() (see the header); results are reported in Order(), waiting for each project to finish
             // (Go: a reporter goroutine; here the calling thread, while rangeTasks runs the builders on their own threads).
             let mut aborted_report = false;
             std::thread::scope(|scope| {

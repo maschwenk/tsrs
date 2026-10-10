@@ -1,6 +1,7 @@
 # Builds the tsrs binaries and the WebAssembly module and publishes the npm packages (npm/README.md), all at the
-# version npm/build.mjs derives from Cargo.toml. The conformance suite and the WebAssembly differential gate run in
-# .depot/workflows/ci.yml and do not gate releases.
+# version npm/build.mjs derives from Cargo.toml. The conformance and fourslash gates run here on the BOLT-optimized
+# Linux binaries (.github/scripts/bolt.sh); the macOS binary and the WebAssembly differential gate are gated only in
+# .depot/workflows/ci.yml.
 #
 # Setup before the first release:
 #   - repository secret NPM_TOKEN: an npm automation (or granular, publish-enabled) token for an account that may
@@ -51,8 +52,8 @@ jobs:
           echo "ts_commit=$(node npm/build.mjs --print-typescript-commit)" >> "$GITHUB_OUTPUT"
 
   # Release binaries are PGO builds with the `dist` profile (fat LTO, one codegen unit; Cargo.toml): an instrumented
-  # build of tsrs + tsrs-test + tsrs-fourslash, the training workload (.github/scripts/pgo-train.sh: the conformance suite and two
-  # open-source bench projects), then the final build with the merged profile. Numbers: notes/perf-pgo.md.
+  # build of tsrs + tsrs-test + tsrs-fourslash, the training workload (.github/scripts/pgo-train.sh: the conformance and fourslash suites
+  # and two open-source bench projects), then the final build with the merged profile. Numbers: notes/perf-pgo.md.
   # On Linux the final build is then optimized with BOLT (.github/scripts/bolt.sh; notes/perf-build-level.md), and
   # the conformance and fourslash gates run on BOLT-optimized binaries before the binary is staged.
   build:

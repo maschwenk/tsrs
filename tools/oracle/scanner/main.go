@@ -4,7 +4,7 @@
 //   tsrs-oracle-scanner dump FILE        print the token streams of FILE
 //   tsrs-oracle-scanner hash < filelist  print "hash path" for every file named on stdin
 //
-// For each file three passes are made (see pass()):
+// For each file four passes are made (see pass()):
 //   1: plain Scan() loop, skipTrivia=true (the parser's mode)
 //   2: plain Scan() loop, skipTrivia=false (trivia tokens)
 //   3: Scan() loop with parser-like rescans (regex with reportErrors, template continuation, '>' combos)

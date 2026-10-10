@@ -1729,7 +1729,7 @@ impl Server {
         }
         let direct = language_service.provide_diagnostics(&ctx, &params.text_document.uri)?;
         // Go runs a full `Program.Emit` (writing nothing) between the two diagnostics requests to provoke checker
-        // state changes; emit is not ported, so the second request runs right after the first.
+        // state changes; this port does not call `Program::emit` here, so the second request follows the first directly.
         let secondary = match language_service.provide_diagnostics(&ctx, &params.text_document.uri) {
             Ok(secondary) => secondary,
             Err(_) => return Ok(direct),
@@ -2615,8 +2615,8 @@ impl tsrs_ls::CrossProjectOrchestrator for crossProjectOrchestrator {
     }
 }
 
-// The handlers of methods whose language-service functions are not ported yet (phase 3) and of out-of-scope
-// features (content mappers, the api package, pprof) answer with this error.
+// The handlers of out-of-scope features (content mappers, API sessions attached to the server, runGC and the profiling
+// commands) answer with this error.
 pub(crate) fn not_yet_ported(method: Method) -> Error {
     Error::wrap_code(ErrorCode::MethodNotFound, Error::new(format!("{} is not ported yet", method)))
 }

@@ -42,8 +42,8 @@ microsoft/TypeScript at the commit pinned in the workspace `Cargo.toml`
 
 ## Adapter for core (`crates/tsrs_cli/src/api.rs`, owned by core)
 
-`tsrs_api::handler` (core) and this crate have the same shape; the CLI adapts them without either
-crate depending on the other:
+`tsrs_api::handler` (core) and this crate have the same shape; the CLI adapts them (this crate does not
+depend on `tsrs_api`; `tsrs_api` uses this crate's `strictjson` and `reentrancy` modules):
 
 ```rust
 struct SessionHandler(Arc<tsrs_api::Session>);
@@ -99,8 +99,10 @@ What the transport provides (no change to core's `Handler` signature needed):
 - `lock_for_request(&Mutex<T>, "resource name")`: blocks while the holder makes progress, returns the
   error above when the lock is contended while a request on the connection waits for the client, and is
   a plain lock outside requests.
-- `blocking_may_deadlock()`: check before waiting on a non-mutex resource (checker lease semaphore);
-  if true, return `reentrancy::reentrancy_error(..)` instead of waiting.
+- `Holder::current()` / `ContentionWait`: for a non-mutex exclusive resource (the checker lease), record the
+  holder on acquisition and create one `ContentionWait` per contended acquisition; when `may_deadlock()` is
+  true, return `reentrancy::reentrancy_error(..)` instead of waiting. `blocking_may_deadlock()` is the legacy
+  predicate, kept for compatibility; it can inherit a previous wait's grace start.
 
 Core (owns the session and adapter): take session-wide locks and exclusive checker leases through these
 helpers in any path that can reach the callback filesystem, or release them before filesystem access.
@@ -116,10 +118,9 @@ is Go `NewForUpdate`: `full` replaces the host, `layer` overlays it, `removedPat
 explicit directory listings, request and host symlinks (cycle-safe), layer-over-layer compaction, and
 file-change summaries with symlink aliases. `RequestFs` implements `FS`, `FileHandleSource`,
 `LayeredFileSystem` (`overlays`) and `FileChangeExpander`, and exposes `base_file_system` /
-`with_base_file_system` (Go `RebasableFileSystem`). Remaining integration (core / tsrs_project):
-`layer_overlay_file_system` must rebase a request filesystem over the overlay FS the way Go's
-`layerOverlayFileSystem` does (tsrs_project's `FsRef` has no rebasable variant yet), and errors map to
-`api: client error: ...`. Decode params with `RequestFileSystemParams::from_json` (or run
+`with_base_file_system` (Go `RebasableFileSystem`). The API session uses its own port
+(`crates/tsrs_api/src/requestfs.rs`), which tsrs_project rebases and uses as a `FileChangeExpander`; this module is
+kept as the reference checked by `tests/requestfs_differential.rs`. Decode params with `RequestFileSystemParams::from_json` (or run
 `strictjson::validate` on the whole request): plain serde would keep the last duplicate key, which the
 pinned decoder rejects.
 

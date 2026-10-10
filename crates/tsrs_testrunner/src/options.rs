@@ -244,7 +244,8 @@ pub fn parse_test_ts_config(content: &test_case_parser::TestCaseContent) -> Opti
     let parse_config_host: &'static VfsParseConfigHost =
         P::new(new_vfs_parse_config_host_with_symlinks(&all_files, &content.symlinks, current_directory, true)).get();
 
-    // Content mappers are gated behind --runExternalCode (not supported by tsrs).
+    // Content mappers are gated behind --runExternalCode; this runner skips such tests (compile.rs, materialize.rs), so
+    // none are configured here.
     let config_file_name = tspath::get_normalized_absolute_path(&data.name, current_directory);
     let path = tspath::to_path(&data.name, current_directory, true);
     let config_json = tsrs_parser::parse_source_file(

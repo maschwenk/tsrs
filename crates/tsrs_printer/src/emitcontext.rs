@@ -92,8 +92,9 @@ impl EmitContext {
         new_emit_context()
     }
 
-    // Go returns the context to a pool; tsrs allocates a new one per file (in the arena, never freed), so `reset`
-    // also releases the tables' memory instead of keeping their capacity.
+    // Go returns the context to a pool; tsrs allocates a new one per use (in the never-freed arena, or in the thread's
+    // scratch region for the scratch variants, freed with the region), so `reset` also releases the tables' memory
+    // instead of keeping their capacity.
     pub fn reset(&self) {
         *self.auto_generate.borrow_mut() = Default::default();
         *self.text_source.borrow_mut() = Default::default();
@@ -109,8 +110,10 @@ impl EmitContext {
     // emitcontext.go:90
     // Creates a new NodeVisitor attached to this EmitContext
     pub fn new_node_visitor(&self, visit: VisitFn) -> NodeVisitor {
-        // SAFETY: an EmitContext is only ever created by `new_emit_context`, which allocates it in the process-lifetime
-        // arena (`P::new`), so `self` is `'static`.
+        // SAFETY: an EmitContext is only created by `new_emit_context_in` (`new_emit_context` /
+        // `new_scratch_emit_context`), which allocates it with `P::new_in` in the process-lifetime arena or the
+        // thread's scratch region; the visitor (and the `P<EmitContext>` its hooks capture) must not outlive that
+        // region.
         let c: P<EmitContext> = P::from_static(unsafe { &*std::ptr::from_ref::<EmitContext>(self) });
         tsrs_ast::new_node_visitor(
             Some(visit),

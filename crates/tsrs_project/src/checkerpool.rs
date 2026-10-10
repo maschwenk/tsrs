@@ -419,7 +419,7 @@ impl checkerPool {
             p.persistent_sem.release();
         };
         // SAFETY: the persistent checker is held (`persistentHeld`, one semaphore slot) until `release` runs; the
-        // pool keeps it alive in `persistent_checker` (or leaks it when disposed).
+        // pool keeps it alive in `persistent_checker` (or parks it in `parked` when disposed, until `free_checkers`).
         unsafe { CheckerHandle::from_raw(c, release) }
     }
 
@@ -468,7 +468,8 @@ impl checkerPool {
             }
         };
         // SAFETY: checker `index` is marked held (`heldBy[index]`) until `release` runs; held checkers are never
-        // disposed by anyone else, and a disposed checker is leaked, so the pointer stays valid.
+        // disposed by anyone else, and a disposed checker is parked (`dispose_checker`) until the pool is freed, so the
+        // pointer stays valid.
         unsafe { CheckerHandle::from_raw(c, release) }
     }
 

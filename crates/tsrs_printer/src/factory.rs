@@ -10,10 +10,10 @@ use crate::*;
 
 // Go embeds `ast.NodeFactory`; here it is the `node_factory` field, reachable through Deref so that
 // `factory.new_identifier(..)` works like the promoted Go methods. Like `ast::NodeFactory` it is a handle: all methods
-// take `&self` and `clone()` shares the factory, so nested calls (`f.new_x(f.new_y())`) port as written. Only the parts
-// the printer, the checker's node builder and the EmitContext environment/visitor hooks use are ported (generated
-// names, string literals from nodes, assignment/strict-equality/void-zero/type-check expressions); the other
-// transform helpers are emit-only.
+// take `&self` and `clone()` shares the factory, so nested calls (`f.new_x(f.new_y())`) port as written. This file
+// holds the parts the printer, the checker's node builder and the EmitContext environment/visitor hooks use
+// (generated names, string literals from nodes, assignment/strict-equality/void-zero/type-check expressions); the
+// emit-only transform helpers of factory.go are in factory_2.rs.
 #[derive(Default, Clone)]
 pub struct NodeFactory {
     pub node_factory: ast::NodeFactory,

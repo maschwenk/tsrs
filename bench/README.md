@@ -1,8 +1,8 @@
 # Benchmarks: tsrs vs tsgo
 
 `bench/run.py` type-checks the projects the TypeScript team benchmarks the Go compiler on
-([microsoft/typescript-benchmarking](https://github.com/microsoft/typescript-benchmarking), `cases/`) and four large
-open-source applications (see "Application projects") with tsrs, with tsgo 7.0.2 (npm `typescript@7.0.2`) and, where a
+([microsoft/typescript-benchmarking](https://github.com/microsoft/typescript-benchmarking), `cases/`) and eleven
+open-source applications and libraries (see "Application projects") with tsrs, with tsgo 7.0.2 (npm `typescript@7.0.2`) and, where a
 Bun binary is given, with `bun check`, and reports wall time, peak memory and the error count of each.
 The Depot CI workflow `.depot/workflows/bench.yml` runs it on every push to `main`. It measures every project on the
 fixed-spec 8-vCPU machine in three modes and on a 16-vCPU machine in two (with bun check); `bench/results/<date>-<commit>.md`
@@ -11,7 +11,7 @@ its own thread count, tsgo, tsrs and bun check side by side (`run.py --readme-mo
 
 ```sh
 cargo build --release -p tsrs_cli
-python3 bench/run.py --local                                   # all projects, 3 reps, both modes
+python3 bench/run.py --local                                   # all projects, 3 reps, default/single/checkers8 modes
 python3 bench/run.py --local --projects webpack,Compiler --reps 1
 python3 bench/run.py --local --work-dir ~/bench-cache          # reuse clones across worktrees
 python3 bench/run.py --local --readme README.md                # also rewrite the README block
@@ -115,9 +115,10 @@ tsrs's errors (`(ref N)` in the table).
 ## What is measured
 
 - Invocation, identical for both: `-p <project> --noEmit --incremental false --extendedDiagnostics --pretty false`,
-  in the default mode (both 4 checker threads; tsrs additionally resolves members lazily, its default), with
-  `--singleThreaded`, with `--checkers 8` (the `checkers8` mode: how each compiler scales when given twice the
-  default checkers), and on a 16-vCPU machine (see "CI") in the default mode again (the `wide` mode: the same flags as
+  in the default mode (no thread flag: tsgo uses 4 checker threads; tsrs every core up to 8, then half the cores,
+  never fewer than 4 nor more than 32, and at most one per 32 type-checked files, so 8 on the 8-vCPU machine for all
+  but small projects; tsrs additionally resolves members lazily, its default), with `--singleThreaded`, with
+  `--checkers 8` (the `checkers8` mode: both compilers at 8 checker threads, twice tsgo's default), and on a 16-vCPU machine (see "CI") in the default mode again (the `wide` mode: the same flags as
   `default`, kept apart so that one result can hold both machines) and with `--checkers 16` (the `checkers16` mode: how
   each scales on a wide machine). Select modes with `--modes` (default `default,single,checkers8`; flags in `MODE_FLAGS`
   in `run.py`).
@@ -132,7 +133,7 @@ tsrs's errors (`(ref N)` in the table).
   to be a native executable printing `Version 7.0.2`), so Node startup is not part of the measurement.
 - tsrs: by default the release build of the checked-out commit (`target/release/tsrs`). CI measures what the npm
   package ships instead: the PGO build of the `dist` profile (fat LTO, one codegen unit), built with the commands of
-  the release workflow and trained with `.github/scripts/pgo-train.sh` (conformance suite + xstate-main + webpack),
+  the release workflow and trained with `.github/scripts/pgo-train.sh` (conformance suite + fourslash suite + xstate-main + webpack),
   then BOLT-optimized like the Linux release binaries (`.github/scripts/bolt.sh`, tsrs trained on xstate-main +
   webpack) on a machine of the bench spec (`--tsrs <binary> --tsrs-build pgo-dist`; notes/perf-pgo.md,
   notes/perf-binary-layout.md), in the build job; each
@@ -168,8 +169,9 @@ so any change in it comes from the code. The PGO profile is retrained every run;
 different profiles and binaries whose counts differed by 0.002-0.046%, well under the threshold. tsgo is not counted:
 the Go runtime makes its count vary 2-4%.
 
-`bench/regressions.py --latest` compares the counts with the newest earlier result from the same runner label and
-build, and only when the CPU model and C library match (they pick different `memcpy`-style routines; compared per
+`bench/regressions.py <result>` (or `--latest`, the newest result) compares the counts with the result of the nearest
+earlier benchmarked ancestor commit from the same runner label and build (the newest earlier result by date when git
+cannot relate the commits), and only when the CPU model and C library match (they pick different `memcpy`-style routines; compared per
 project, since a parallel run can land a project on another machine model, which `run.py --merge` records on the
 project's cells). When the Rust compiler differs (results record `tsrs.rustc`; `rust-toolchain.toml` pins it), it prints the
 change as the upgrade's measurement and flags nothing (`docs/RUST.md`, "Upgrading Rust"). A project up
@@ -252,8 +254,8 @@ once the four application projects were in):
 
 **Fixed machine spec**: `depot-ubuntu-24.04-8`, 8 vCPU, 32 GB RAM, Linux x86_64, for every run, so numbers are
 comparable over time (the `--checkers 16` section: `depot-ubuntu-24.04-16`, 16 vCPU, checked by its own job). Sizing: the largest peak measured is tsgo's default mode on vscode and mui-docs (7.5 GiB on an
-18-core Mac, 6.9 GiB on Linux); 32 GB leaves 4x headroom, and 8 vCPUs cover the 4 checker threads plus parallel
-parsing. The first step fails the job if `nproc`/`MemTotal`/arch differ; there is no fallback runner. (On GitHub's
+18-core Mac, 6.9 GiB on Linux); 32 GB leaves 4x headroom, and 8 vCPUs cover tsrs's default 8 checker threads (tsgo's 4)
+plus parallel parsing. The first step fails the job if `nproc`/`MemTotal`/arch differ; there is no fallback runner. (On GitHub's
 standard 2 vCPU / 7 GB runner tsgo swapped on vscode: 146 s wall for a 50 s check.)
 
 Caching (Depot Cache serves the `actions/cache` API on Depot CI, no special configuration): `Swatinem/rust-cache` for

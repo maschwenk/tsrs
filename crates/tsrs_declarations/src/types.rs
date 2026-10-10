@@ -4,8 +4,9 @@
 // Conventions (see also docs/CHECKER.md "Node builder" for the checker side):
 // - Transformers, the tracker and its shared state are arena handles (`P<…>`, `&self` methods, `Cell`/`RefCell`
 //   fields), because node visitor callbacks (`Rc<dyn Fn>`) capture them, like Go closures capture `tx`.
-// - The checker is reached through `Resolver` (resolver.rs); only the symbol tracker's `track_symbol` /
-//   `report_inference_fallback` receive it directly (they run inside node-builder calls, where Go holds the lock).
+// - The checker is reached through `Resolver` (tsrs_transformers/src/resolver.rs); only the symbol tracker's
+//   `track_symbol` / `report_inference_fallback` receive it directly (they run inside node-builder calls, where Go
+//   holds the lock).
 // - Go func-typed fields become `Rc<dyn Fn>` (cloned to save/restore, as Go copies the func value).
 
 use crate::*;

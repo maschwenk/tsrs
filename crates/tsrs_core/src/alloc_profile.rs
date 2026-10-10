@@ -3,8 +3,9 @@
 //!
 //! Every leak-arena allocation (`P::new`, `alloc`, `alloc_slice`, `alloc_vec`, `alloc_str`) is recorded per
 //! (call site, element type) through `#[track_caller]`; a counting global allocator (over mimalloc, the
-//! binaries' production allocator) tracks the Rust heap (which includes the arena chunks). `dump()` prints top-N tables to stderr; `TSRS_ALLOC_PROFILE_TOP`
-//! sets N (default 60). `TSRS_CENSUS=1` additionally records every live block and marks what is reachable at the
+//! binaries' production allocator) tracks the Rust heap. Arena chunks are mapped directly (`reserve` with compressed
+//! pointers, `census_chunk` otherwise) and are not part of it. `dump()` prints top-N tables to stderr;
+//! `TSRS_ALLOC_PROFILE_TOP` sets N (default 60). `TSRS_CENSUS=1` additionally records every live block and marks what is reachable at the
 //! end of the run (`census`).
 
 use rustc_hash::FxHashMap;
@@ -101,9 +102,9 @@ unsafe impl GlobalAlloc for Counting {
 }
 
 /// Sampling heap profiler (`TSRS_HEAP_PROFILE=1`): roughly every `RATE` allocated bytes the current
-/// allocation's raw stack is recorded; live sampled bytes are aggregated per stack and resolved with `atos`.
-/// `TSRS_HEAP_PROFILE=count` samples every `COUNT_RATE`-th allocation instead (allocation churn by call site,
-/// whatever the size; arena chunk allocations included).
+/// allocation's raw stack is recorded; live sampled bytes are aggregated per stack and resolved with `atos` (macOS)
+/// or `addr2line` (Linux). `TSRS_HEAP_PROFILE=count` samples every `COUNT_RATE`-th allocation instead (allocation
+/// churn by call site, whatever the size).
 mod heap_sample {
     use rustc_hash::FxHashMap;
     use std::cell::Cell;
@@ -238,7 +239,7 @@ mod heap_sample {
             let n = unsafe { backtrace(raw.as_mut_ptr(), raw.len() as i32) } as usize;
             let mut stack: Stack = [0; DEPTH];
             if IN_ARENA.with(|c| c.get()) {
-                stack[0] = 1; // arena chunk
+                stack[0] = 1; // inside an arena allocation (`ArenaScope`)
             } else {
                 for (i, f) in raw.iter().take(n).skip(3).enumerate() {
                     stack[i] = *f as usize;
@@ -470,7 +471,8 @@ thread_local! {
     });
 }
 
-/// Marks heap allocations made while the arena grows (chunk allocations) so the heap sampler can tell them apart.
+/// Marks heap allocations made inside an arena allocation (arena bookkeeping; chunks themselves are mapped, not
+/// heap-allocated) so the heap sampler can tell them apart.
 pub(crate) struct ArenaScope;
 impl ArenaScope {
     #[inline]

@@ -334,7 +334,7 @@ pub fn do_js_emit_baseline(
     let decl_file_context = prepare_declaration_compilation_context(to_be_compiled, other_files, result, options)?;
     if let Some((decl_input_files, decl_other_files)) = decl_file_context {
         // compileDeclarationFiles (js_emit_baseline.go:283): Go passes a tsconfig that carries only the config file
-        // (and its content mappers, which tsrs does not support).
+        // (and its content mappers; this runner skips runExternalCode tests, so there are none).
         let tsconfig = result.program.command_line().config_file.map(|config_file| {
             let mut c = tsrs_tsoptions::new_parsed_command_line(P::new(CompilerOptions::default()), Vec::new(), Vec::new(), ComparePathsOptions::default());
             c.config_file = Some(config_file);

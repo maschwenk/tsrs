@@ -1639,7 +1639,8 @@ impl Checker {
     }
 
     // jsx.go:1486
-    // the specifier is nil when the file has no explicit jsxImportSource pragma node (Program returns Option).
+    // The specifier (the file loader's synthetic import) is None exactly when the file has no JSX runtime import
+    // (empty module reference).
     pub(crate) fn get_jsx_runtime_import_specifier(&mut self, file: P<SourceFile>) -> (String, Option<P<Node>>) {
         self.program.get_jsx_runtime_import_specifier(file.path())
     }

@@ -123,8 +123,8 @@ pub fn enable_lazy_dts() {
 
 /// The first reader of a deferred lazy list (any thread, after the file was bound): binds its members with the
 /// binder state recorded at the list. Its bind diagnostics and symbol count are dropped: the CLI does not report bind
-/// diagnostics of files it does not check (only lists of such files are lazy), and `--extendedDiagnostics` counts the
-/// symbols of the lists that were bound before the report.
+/// diagnostics of files it does not check (only lists of such files are lazy), and `--extendedDiagnostics` counts only
+/// the symbols of lists bound while their file was bound (lists bound here, on first read, are not counted).
 fn bind_lazy_list(record: &LazyNodeList, file: P<SourceFile>, nodes: &'static [P<Node>]) {
     let ctx = *record.bind_context().expect("a deferred list's binder state");
     let mut b = Binder::new_for_lazy_list(file, ctx.unreachable_flow);

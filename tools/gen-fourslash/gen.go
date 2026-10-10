@@ -36,7 +36,6 @@ type varInfo struct {
 	// takesF: a local closure that receives the FourslashTest as its first argument.
 	takesF bool
 	fOwner string // for fclosures: the FourslashTest variable they belong to
-	// constant string/number bound with `let` (no clone needed).
 }
 
 type gen struct {
@@ -49,7 +48,7 @@ type gen struct {
 	used map[types.Object]bool
 	curF string // Rust name of the innermost FourslashTest variable ("" if none)
 	curT string // Rust name of the innermost *testing.T variable
-	// names of package-level declarations of the current file (Rust names).
+	// counter for fresh temporaries (`newTmp`).
 	tmp int
 
 	buf    *strings.Builder

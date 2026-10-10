@@ -2,8 +2,8 @@
 """Exit behavior check: `tsgo-ref --lsp -stdio` vs `tsrs --lsp -stdio`.
 
 Four scenarios: with / without `shutdown` before `exit`, and with / without the client answering the server's
-requests (`client/registerCapability` sent while handling `initialized`). Prints exit status, time and the stderr tail
-per server and fails if the two servers differ. Both servers block their dispatch loop on the unanswered
+requests (`client/registerCapability` sent while handling `initialized`). Prints exit status and the stderr tail per
+server and fails if the two servers differ. Both servers block their dispatch loop on the unanswered
 registration (Go's `sendClientRequest` from a synchronous handler), so `exit` alone ends them only when the client
 answers; then both exit with status 1 and "context canceled" (Go's `Run` returns the errgroup's error).
 """

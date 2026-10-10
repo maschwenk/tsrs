@@ -8,7 +8,8 @@
 // on the native stack.
 
 // Same allocator as the tsrs binary, so `bench` measures what tsrs does; `bench` also reports the number of heap
-// allocations (arena chunks included).
+// allocations (arena chunks are included only in plain-ptrs builds; with compressed pointers they are mapped from the
+// reservation).
 struct CountingAlloc;
 
 static HEAP_ALLOCS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);

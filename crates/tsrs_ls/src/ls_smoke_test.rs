@@ -1,6 +1,7 @@
 // Not a Go test: an end-to-end smoke test of the phase-1 language service (hover, definition, type definition,
 // diagnostics) over an in-memory program with the bundled libs. The exact output is gated by the LSP oracle
-// (tools/oracle/lsp); the expected strings here were written by hand from tsgo's behavior.
+// (tools/oracle/lsp); the expected strings here were recorded from `tsgo-ref --lsp -stdio` (the recorder scripts
+// are scratch files, not checked in).
 
 use std::sync::Arc;
 

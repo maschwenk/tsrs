@@ -180,7 +180,7 @@ fn emit_to_output(program: &'static Program, targets: Option<Vec<P<SourceFile>>>
 }
 
 impl Session {
-    /// Go `handleGetConfigFileNames` (`null` when the program has no tsconfig).
+    /// Go `handleGetConfigFileNames` (`[]` when the program has no tsconfig).
     pub(crate) fn handle_get_config_file_names(&self, p: Params) -> ApiResult<Value> {
         let (_sd, program) = self.program_of(p)?;
         let command_line = program.command_line();

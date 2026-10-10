@@ -1,4 +1,5 @@
-// Only the parts of Go's emitter.go that type checking depends on. Emit itself is not ported.
+// Go's emitter.go: first the parts type checking depends on (sourceFileMayBeEmitted, declaration diagnostics), then
+// the emitter itself (`mod emit`, checker feature only).
 
 use tsrs_ast::{self as ast, SourceFile};
 use tsrs_core::tspath::{self, ComparePathsOptions};

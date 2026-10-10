@@ -1,7 +1,8 @@
 //! What the allocation profile needs from the OS: the main image's load address and data segments, the current
 //! thread's stack top, and symbol names for raw return addresses. macOS uses dyld and `atos`; Linux reads
-//! `/proc/self/maps` and runs `addr2line` (binutils) on the executable, which needs the debug line tables the
-//! `release` profile keeps.
+//! `/proc/self/maps` and runs `addr2line` (binutils) on the executable, which needs symbols and debug line tables:
+//! the `release` profile strips both, so build with `CARGO_PROFILE_RELEASE_STRIP=none` and
+//! `CARGO_PROFILE_RELEASE_DEBUG=line-tables-only`.
 
 use rustc_hash::FxHashMap;
 use std::ffi::c_void;

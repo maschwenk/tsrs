@@ -3,8 +3,9 @@
 //!
 //! While recording, every arena block (address, size, call site + type) and every live Rust heap block (address,
 //! size, raw stack) is kept; arena chunks themselves are not blocks. `run` freezes the tables and does a
-//! conservative mark from the roots the caller passes plus the current thread's stack and the main image's
-//! `__DATA*` segments (all statics, including `OnceLock` / `LazyLock` contents). Every 4-byte-aligned word of a
+//! conservative mark from the roots the caller passes plus the current thread's stack and the main image's data
+//! segments (macOS `__DATA*`, Linux the executable's writable mappings and `.bss`; all statics, including `OnceLock`
+//! / `LazyLock` contents). Every 4-byte-aligned word of a
 //! reachable block (except blocks of pointer-free arena types) is a candidate pointer, decoded three ways: the low 48
 //! bits (plain pointers, low-bit tags, `PackedStr` and `ThinSlice` words with a length in the top 16 bits), the low
 //! 45 bits times 8 (node parents, symbol table entries) and, for a word with a length in the top 16 bits, the low 48

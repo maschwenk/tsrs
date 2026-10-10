@@ -260,9 +260,9 @@ fn completions_preferences() {
     run_profile("pref");
 }
 
-// The auto-import registry is a placeholder that is never prepared (docs/LSP.md "Known gaps"), so completions
-// that would collect auto-imports or build an import adder take Go's ErrNeedsAutoImports path (the server then
-// asks the session for a language service with auto-imports and retries).
+// The test host supplies no auto-import registry (`auto_import_registry` returns None), so it is never prepared and
+// completions that would collect auto-imports or build an import adder take Go's ErrNeedsAutoImports path (the server
+// then asks the session for a language service with auto-imports and retries).
 #[test]
 fn completions_registry_not_prepared() {
     run_profile("autoimports");

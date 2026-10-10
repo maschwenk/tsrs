@@ -1,13 +1,12 @@
 # rust_name | signature | origin | receiver  (generated from the Rust sources by tools/sigs-from-rust.py)
-all_keys_start_with_dot | pub(crate) fn all_keys_start_with_dot(obj: &OrderedMap<String, packagejson::ExportsOrImports>) -> bool | util.go:350 | -
-as_str | pub fn as_str(self) -> &'static str | rust:types.rs:108 | ImportModuleSpecifierEndingPreference
-as_str | pub fn as_str(self) -> &'static str | rust:types.rs:85 | ImportModuleSpecifierPreference
+as_str | pub fn as_str(self) -> &'static str | rust:types.rs:133 | ImportModuleSpecifierEndingPreference
+as_str | pub fn as_str(self) -> &'static str | rust:types.rs:110 | ImportModuleSpecifierPreference
 compare_paths_by_redirect | pub(crate) fn compare_paths_by_redirect(a: &ModulePath, b: &ModulePath, use_case_sensitive_file_names: bool) -> i32 | util.go:29 | -
 compute_module_specifiers | pub(crate) fn compute_module_specifiers(module_paths: &[ModulePath], compiler_options: &CompilerOptions, importing_source_file: P<SourceFile>, host: &dyn ModuleSpecifierGenerationHost, user_preferences: &UserPreferences, options: ModuleSpecifierOptions, for_auto_import: bool) -> (Vec<String>, ResultKind) | specifiers.go:364 | -
 contains_ignored_path | pub(crate) fn contains_ignored_path(s: &str) -> bool | specifiers.go:252 | -
 contains_node_modules | pub fn contains_node_modules(s: &str) -> bool | specifiers.go:259 | -
 count_path_components | pub fn count_path_components(path: &str) -> i32 | compare.go:7 | -
-cut | fn cut<'a>(s: &'a str, sep: &str) -> (&'a str, &'a str, bool) | rust:specifiers.rs:1099 | -
+cut | fn cut<'a>(s: &'a str, sep: &str) -> (&'a str, &'a str, bool) | rust:specifiers.rs:1103 | -
 ensure_path_is_non_module_name | pub(crate) fn ensure_path_is_non_module_name(path: &str) -> String | util.go:136 | -
 extension_from_path | pub(crate) fn extension_from_path(path: &str) -> String | util.go:186 | -
 get_all_module_paths | pub(crate) fn get_all_module_paths(info: &Info, imported_file_name: &str, host: &dyn ModuleSpecifierGenerationHost, compiler_options: &CompilerOptions, _preferences: &UserPreferences, options: ModuleSpecifierOptions) -> Vec<ModulePath> | specifiers.go:180 | -
@@ -27,20 +26,22 @@ get_module_specifiers | pub fn get_module_specifiers(module_symbol: P<Symbol>, c
 get_module_specifiers_for_file_with_info | pub fn get_module_specifiers_for_file_with_info(importing_source_file: P<SourceFile>, module_file_name: &str, compiler_options: &CompilerOptions, host: &dyn ModuleSpecifierGenerationHost, user_preferences: UserPreferences, options: ModuleSpecifierOptions, for_auto_imports: bool) -> (Vec<String>, ResultKind) | specifiers.go:79 | -
 get_module_specifiers_with_info | pub fn get_module_specifiers_with_info(module_symbol: P<Symbol>, checker: &mut dyn CheckerShape, compiler_options: &CompilerOptions, importing_source_file: P<SourceFile>, host: &dyn ModuleSpecifierGenerationHost, user_preferences: UserPreferences, options: ModuleSpecifierOptions, for_auto_imports: bool) -> ModuleSpecifiersResult | specifiers.go:41 | -
 get_node_module_path_parts | pub fn get_node_module_path_parts(full_path: &str) -> Option<NodeModulePathParts> | util.go:279 | -
-get_node_modules_package_name | pub fn get_node_modules_package_name(compiler_options: &CompilerOptions, importing_source_file: P<SourceFile>, node_modules_file_name: &str, host: &dyn ModuleSpecifierGenerationHost, preferences: UserPreferences, options: ModuleSpecifierOptions) -> String | util.go:332 | -
+get_node_modules_package_name | pub fn get_node_modules_package_name(compiler_options: &CompilerOptions, importing_source_file: P<SourceFile>, node_modules_file_name: &str, host: &dyn ModuleSpecifierGenerationHost, preferences: &UserPreferences, options: ModuleSpecifierOptions) -> String | util.go:332 | -
+get_or_compute | pub(crate) fn get_or_compute(&self, key: String, compute: impl FnOnce() -> String) -> String | rust:types.rs:88 | ExportsModuleNameCache
 get_package_name_from_directory | pub fn get_package_name_from_directory(file_or_directory_path: &str) -> String | util.go:359 | -
 get_paths_relative_to_root_dirs | pub(crate) fn get_paths_relative_to_root_dirs(path: &str, root_dirs: &[String], use_case_sensitive_file_names: bool) -> Vec<String> | util.go:214 | -
 get_preferred_ending | pub(crate) fn get_preferred_ending(prefs: &UserPreferences, host: &dyn ModuleSpecifierGenerationHost, compiler_options: &CompilerOptions, importing_source_file: P<SourceFile>, old_import_specifier: &str, resolution_mode: ModuleKind) -> ModuleSpecifierEnding | preferences.go:114 | -
 get_relative_path_if_in_same_volume | pub(crate) fn get_relative_path_if_in_same_volume(path: &str, directory_path: &str, use_case_sensitive_file_names: bool) -> String | util.go:229 | -
-index_of_ending | pub(crate) fn index_of_ending(allowed_endings: &[ModuleSpecifierEnding], e: ModuleSpecifierEnding) -> i32 | rust:util.rs:262 | -
+index_of_ending | pub(crate) fn index_of_ending(allowed_endings: &[ModuleSpecifierEnding], e: ModuleSpecifierEnding) -> i32 | rust:util.rs:266 | -
 infer_preference | pub(crate) fn infer_preference(resolution_mode: ModuleKind, source_file: Option<P<SourceFile>>, module_resolution_is_node_next: bool) -> ModuleSpecifierEnding | preferences.go:28 | -
 is_excluded_by_regex | pub fn is_excluded_by_regex(module_specifier: &str, excludes: &[String]) -> bool | util.go:46 | -
 is_path_relative_to_parent | pub(crate) fn is_path_relative_to_parent(path: &str) -> bool | util.go:225 | -
 module_resolution_is_node_next | fn module_resolution_is_node_next(compiler_options: &CompilerOptions) -> bool | rust:preferences.rs:67 | -
-package_json_paths_are_equal | pub(crate) fn package_json_paths_are_equal(a: &str, b: &str, options: tspath::ComparePathsOptions) -> bool | util.go:240 | -
+package_json_paths_are_equal | pub(crate) fn package_json_paths_are_equal(a: &str, b: &str, options: &tspath::ComparePathsOptions) -> bool | util.go:240 | -
 path_is_bare_specifier | pub fn path_is_bare_specifier(path: &str) -> bool | util.go:42 | -
 prefers_ts_extension | pub(crate) fn prefers_ts_extension(allowed_endings: &[ModuleSpecifierEnding]) -> bool | util.go:250 | -
 process_ending | pub(crate) fn process_ending(file_name: &str, allowed_endings: &[ModuleSpecifierEnding], options: &CompilerOptions, host: Option<&dyn ModuleSpecifierGenerationHost>) -> String | specifiers.go:641 | -
+process_entrypoint_ending | pub fn process_entrypoint_ending(entrypoint: &tsrs_module::ResolvedEntrypoint, prefs: &UserPreferences, host: &dyn ModuleSpecifierGenerationHost, options: &CompilerOptions, importing_source_file: P<SourceFile>, allowed_endings: &[ModuleSpecifierEnding]) -> String | util.go:388 | -
 replace_first_star | pub(crate) fn replace_first_star(s: &str, replacement: &str) -> String | util.go:259 | -
 should_allow_importing_ts_extension | pub(crate) fn should_allow_importing_ts_extension(compiler_options: &CompilerOptions, from_file_name: &str) -> bool | preferences.go:14 | -
 string_to_regex | pub(crate) fn string_to_regex(pattern: &str) -> Option<P<regex::Regex>> | util.go:59 | -

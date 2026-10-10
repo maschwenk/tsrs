@@ -40,8 +40,8 @@ done
 check_exit() { # $1 = exit status, $2 = what ran; 0/1/2 are tsc exit codes, anything else is a crash
   if [ "$1" -gt 2 ]; then echo "::error::$2 exited with $1"; exit 1; fi
 }
-# MIMALLOC_SHOW_STATS: tsrs then ends with `exit`, not `_exit`, so BOLT's exit handler writes the profile
-# (pgo-train.sh has the details).
+# tsrs ends with `exit`, so BOLT's exit handler writes the profile. (MIMALLOC_SHOW_STATS=1 is a leftover from when
+# the CLI ended with `_exit`.)
 for p in xstate-main webpack; do
   (cd "$bench/solutions/$p" && MIMALLOC_SHOW_STATS=1 "$work/tsrs.inst" -p . --noEmit --incremental false --pretty false \
     > /dev/null 2>> "$work/tsrs-train-stderr.log") && status=0 || status=$?

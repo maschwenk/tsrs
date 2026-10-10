@@ -25,18 +25,11 @@ create_full_expando_block | pub(crate) fn create_full_expando_block(&self, id: N
 create_get_isolated_declaration_errors | pub(crate) fn create_get_isolated_declaration_errors(resolver: Resolver) -> GetIsolatedDeclarationError | diagnostics.go:683 | -
 create_get_symbol_accessibility_diagnostic_for_node | pub(crate) fn create_get_symbol_accessibility_diagnostic_for_node(node: P<Node>) -> GetSymbolAccessibilityDiagnostic | diagnostics.go:139 | -
 create_get_symbol_accessibility_diagnostic_for_node_name | pub(crate) fn create_get_symbol_accessibility_diagnostic_for_node_name(node: P<Node>) -> GetSymbolAccessibilityDiagnostic | diagnostics.go:81 | -
-create_late_bound_index_signatures | pub fn create_late_bound_index_signatures(&self, emit_context: P<EmitContext>, container: P<Node>, enclosing_declaration: Option<P<Node>>, flags: nodebuilder::Flags, internal_flags: nodebuilder::InternalFlags, tracker: &'static dyn SymbolTracker) -> Vec<P<Node>> | rust:resolver.rs:123 | Resolver
-create_literal_const_value | pub fn create_literal_const_value(&self, emit_context: P<EmitContext>, node: P<Node>, tracker: &'static dyn SymbolTracker) -> Option<P<Node>> | rust:resolver.rs:115 | Resolver
 create_object_literal_error | pub(crate) fn create_object_literal_error(node: P<Node>) -> P<Diagnostic> | diagnostics.go:604 | -
 create_return_type_error | pub(crate) fn create_return_type_error(node: P<Node>) -> P<Diagnostic> | diagnostics.go:616 | -
-create_return_type_of_signature_declaration | pub fn create_return_type_of_signature_declaration(&self, emit_context: P<EmitContext>, signature_declaration: P<Node>, enclosing_declaration: Option<P<Node>>, flags: nodebuilder::Flags, internal_flags: nodebuilder::InternalFlags, tracker: &'static dyn SymbolTracker) -> Option<P<Node>> | rust:resolver.rs:103 | Resolver
-create_type_of_declaration | pub fn create_type_of_declaration(&self, emit_context: P<EmitContext>, declaration: P<Node>, enclosing_declaration: Option<P<Node>>, flags: nodebuilder::Flags, internal_flags: nodebuilder::InternalFlags, tracker: &'static dyn SymbolTracker) -> Option<P<Node>> | rust:resolver.rs:111 | Resolver
-create_type_of_expression | pub fn create_type_of_expression(&self, emit_context: P<EmitContext>, expression: P<Node>, enclosing_declaration: Option<P<Node>>, flags: nodebuilder::Flags, internal_flags: nodebuilder::InternalFlags, tracker: &'static dyn SymbolTracker) -> Option<P<Node>> | rust:resolver.rs:119 | Resolver
-create_type_parameters_of_signature_declaration | pub fn create_type_parameters_of_signature_declaration(&self, emit_context: P<EmitContext>, signature_declaration: P<Node>, enclosing_declaration: Option<P<Node>>, flags: nodebuilder::Flags, internal_flags: nodebuilder::InternalFlags, tracker: &'static dyn SymbolTracker) -> Option<Vec<P<Node>>> | rust:resolver.rs:107 | Resolver
 create_variable_or_property_error | pub(crate) fn create_variable_or_property_error(node: P<Node>) -> P<Diagnostic> | diagnostics.go:627 | -
 declare_stripping_visitor | pub fn declare_stripping_visitor(&self) -> ast::NodeVisitor | rust:types.rs:131 | DeclarationTransformer
 emit_context | pub fn emit_context(&self) -> P<EmitContext> | rust:types.rs:90 | DeclarationTransformer
-emit_context | pub fn emit_context(&self) -> P<EmitContext> | transformer.go:28 | Transformer
 ensure_modifier_flags | pub(crate) fn ensure_modifier_flags(&self, node: P<Node>) -> ModifierFlags | transform.go:2348 | DeclarationTransformer
 ensure_modifiers | pub(crate) fn ensure_modifiers(&self, node: P<Node>) -> Option<P<ModifierList>> | transform.go:2328 | DeclarationTransformer
 ensure_no_initializer | pub(crate) fn ensure_no_initializer(&self, node: P<Node>) -> Option<P<Node>> | transform.go:2436 | DeclarationTransformer
@@ -50,7 +43,6 @@ export_stripping_visitor | pub fn export_stripping_visitor(&self) -> ast::NodeVi
 expression_visitor | pub fn expression_visitor(&self) -> ast::NodeVisitor | rust:types.rs:115 | DeclarationTransformer
 extract_expando_host_params | pub(crate) fn extract_expando_host_params(node: P<Node>) -> (Option<P<NodeList>>, Option<P<NodeList>>, Option<P<Node>>) | transform.go:2980 | -
 factory | pub fn factory(&self) -> &'static printer::NodeFactory | rust:types.rs:98 | DeclarationTransformer
-factory | pub fn factory(&self) -> &'static printer::NodeFactory | transformer.go:36 | Transformer
 find_nearest_declaration | pub(crate) fn find_nearest_declaration(node: P<Node>) -> Option<P<Node>> | diagnostics.go:551 | -
 flatten_syntax_lists | pub(crate) fn flatten_syntax_lists(nodes: &[P<Node>]) -> Vec<P<Node>> | transform.go:323 | -
 get_accessor_declaration_type_visibility_diagnostic_message | pub(crate) fn get_accessor_declaration_type_visibility_diagnostic_message(node: P<Node>, symbol_accessibility_result: &SymbolAccessibilityResult) -> &'static Message | diagnostics.go:263 | -
@@ -59,9 +51,6 @@ get_binding_name_visible | pub(crate) fn get_binding_name_visible(resolver: Reso
 get_diagnostics | pub fn get_diagnostics(&self) -> Vec<P<Diagnostic>> | transform.go:142 | DeclarationTransformer
 get_diagnostics | pub fn get_diagnostics(&self) -> Vec<P<Diagnostic>> | supplementalreferences.go:52 | SupplementalReferencesTransformer
 get_effective_base_type_node | pub(crate) fn get_effective_base_type_node(node: P<Node>) -> Option<P<Node>> | util.go:164 | -
-get_effective_declaration_flags | pub fn get_effective_declaration_flags(&self, node: P<Node>, flags: ModifierFlags) -> ModifierFlags | rust:resolver.rs:99 | Resolver
-get_element_access_expression_name | pub fn get_element_access_expression_name(&self, expression: P<Node>) -> String | rust:resolver.rs:87 | Resolver
-get_enum_member_value | pub fn get_enum_member_value(&self, node: P<Node>) -> checker::evaluator::Result | rust:resolver.rs:75 | Resolver
 get_error_by_declaration_kind | pub(crate) fn get_error_by_declaration_kind(kind: Kind) -> Option<&'static Message> | diagnostics.go:502 | -
 get_expando_host_id | pub(crate) fn get_expando_host_id(&self, declaration: P<Node>) -> NodeId | transform.go:2868 | DeclarationTransformer
 get_leading_comment_ranges_of_node | pub(crate) fn get_leading_comment_ranges_of_node(&self, node: P<Node>, source_file: P<SourceFile>) -> Vec<CommentRange> | transform.go:203 | DeclarationTransformer
@@ -70,11 +59,7 @@ get_method_name_visibility_diagnostic_message | pub(crate) fn get_method_name_vi
 get_name_expression_preferring_identifier | pub(crate) fn get_name_expression_preferring_identifier(&self, name_expr: P<Node>) -> P<Node> | transform.go:2648 | DeclarationTransformer
 get_name_of_exported_assigned_expression | pub(crate) fn get_name_of_exported_assigned_expression(&self, unwrapped: P<Node>, is_export_equals: bool) -> P<Node> | transform.go:1212 | DeclarationTransformer
 get_parameter_declaration_type_visibility_diagnostic_message | pub(crate) fn get_parameter_declaration_type_visibility_diagnostic_message(node: P<Node>, symbol_accessibility_result: &SymbolAccessibilityResult) -> &'static Message | diagnostics.go:358 | -
-get_properties_of_container_function | pub fn get_properties_of_container_function(&self, c: &mut Checker, node: Option<P<Node>>) -> Vec<P<Symbol>> | rust:resolver.rs:149 | Resolver
 get_referenced_files | pub(crate) fn get_referenced_files(&self, output_file_path: &str) -> Vec<P<FileReference>> | transform.go:464 | DeclarationTransformer
-get_referenced_member_value_declaration | pub fn get_referenced_member_value_declaration(&self, node: P<Node>) -> Option<P<Node>> | rust:resolver.rs:83 | Resolver
-get_referenced_value_declaration | pub fn get_referenced_value_declaration(&self, node: P<Node>) -> Option<P<Node>> | rust:resolver.rs:79 | Resolver
-get_referenced_value_declaration_unsafe | pub fn get_referenced_value_declaration_unsafe(&self, c: &mut Checker, node: P<Node>) -> Option<P<Node>> | rust:resolver.rs:137 | Resolver
 get_related_suggestion_by_declaration_kind | pub(crate) fn get_related_suggestion_by_declaration_kind(kind: Kind) -> Option<&'static Message> | diagnostics.go:471 | -
 get_return_type_visibility_diagnostic_message | pub(crate) fn get_return_type_visibility_diagnostic_message(node: P<Node>, symbol_accessibility_result: &SymbolAccessibilityResult) -> &'static Message | diagnostics.go:299 | -
 get_this_property_assignment_key | pub(crate) fn get_this_property_assignment_key(name: Option<P<Node>>, node: P<Node>, is_static: bool) -> thisPropertyAssignmentKey | transform.go:53 | -
@@ -92,42 +77,22 @@ is_class_extending_null | pub(crate) fn is_class_extending_null(node: Option<P<N
 is_common_js_alias_export | pub(crate) fn is_common_js_alias_export(node: P<Node>) -> bool | transform.go:1569 | -
 is_declaration_and_not_visible | pub(crate) fn is_declaration_and_not_visible(emit_context: P<EmitContext>, resolver: Resolver, node: P<Node>) -> bool | util.go:61 | -
 is_declaration_enough_for_errors | pub(crate) fn is_declaration_enough_for_errors(node: P<Node>) -> bool | diagnostics.go:543 | -
-is_declaration_visible | pub fn is_declaration_visible(&self, node: P<Node>) -> bool | rust:resolver.rs:31 | Resolver
-is_definitely_reference_to_global_symbol_object | pub fn is_definitely_reference_to_global_symbol_object(&self, node: P<Node>) -> bool | rust:resolver.rs:47 | Resolver
 is_enclosing_declaration | pub(crate) fn is_enclosing_declaration(node: P<Node>) -> bool | util.go:109 | -
-is_entity_name_visible | pub fn is_entity_name_visible(&self, entity_name: P<Node>, enclosing_declaration: Option<P<Node>>) -> SymbolAccessibilityResult | rust:resolver.rs:35 | Resolver
-is_expando_function_declaration | pub fn is_expando_function_declaration(&self, node: P<Node>) -> bool | rust:resolver.rs:63 | Resolver
-is_expando_function_declaration_unsafe | pub fn is_expando_function_declaration_unsafe(&self, c: &mut Checker, node: P<Node>) -> bool | rust:resolver.rs:141 | Resolver
 is_function_like_and_not_constructor | pub(crate) fn is_function_like_and_not_constructor(node: P<Node>) -> bool | diagnostics.go:547 | -
-is_implementation_of_overload | pub fn is_implementation_of_overload(&self, node: P<Node>) -> bool | rust:resolver.rs:43 | Resolver
-is_import_required_by_augmentation | pub fn is_import_required_by_augmentation(&self, decl: P<Node>) -> bool | rust:resolver.rs:55 | Resolver
 is_internal_declaration | pub(crate) fn is_internal_declaration(&self, node: Option<P<Node>>, source_file: P<SourceFile>) -> bool | transform.go:150 | DeclarationTransformer
-is_late_bound | pub fn is_late_bound(&self, node: Option<P<Node>>) -> bool | rust:resolver.rs:39 | Resolver
-is_literal_const_declaration | pub fn is_literal_const_declaration(&self, node: P<Node>) -> bool | rust:resolver.rs:59 | Resolver
-is_name_resolvable | pub fn is_name_resolvable(&self, location: Option<P<Node>>, name: &str) -> bool | rust:resolver.rs:91 | Resolver
 is_not_declare_modifier | pub(crate) fn is_not_declare_modifier(mod_: P<Node>) -> bool | transform.go:2668 | -
-is_optional_parameter | pub fn is_optional_parameter(&self, node: P<Node>) -> bool | rust:resolver.rs:67 | Resolver
-is_original_node_single_line | pub fn is_original_node_single_line(emit_context: P<EmitContext>, node: Option<P<Node>>) -> bool | utilities.go:248 | -
 is_parent_for_idd_iagnostic | pub(crate) fn is_parent_for_idd_iagnostic(node: P<Node>) -> FindAncestorResult | diagnostics.go:641 | -
 is_private_method_type_parameter | pub(crate) fn is_private_method_type_parameter(host: &'static dyn DeclarationEmitHost, node: P<Node>) -> bool | util.go:149 | -
 is_scope_marker | pub(crate) fn is_scope_marker(node: P<Node>) -> bool | util.go:177 | -
-is_simple_copiable_expression | pub fn is_simple_copiable_expression(expression: P<Node>) -> bool | utilities.go:241 | -
-is_simple_inlineable_expression | pub fn is_simple_inlineable_expression(expression: P<Node>) -> bool | utilities.go:270 | -
-is_symbol_accessible | pub fn is_symbol_accessible(&self, c: &mut Checker, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags, should_compute_alias_to_mark_visible: bool) -> SymbolAccessibilityResult | rust:resolver.rs:133 | Resolver
-is_this_property_assignment_declaration_redundant | pub fn is_this_property_assignment_declaration_redundant(&self, node: Option<P<Node>>) -> bool | rust:resolver.rs:95 | Resolver
-lock | pub fn lock<R>(&self, f: impl FnOnce(&mut Checker) -> R) -> R | rust:resolver.rs:25 | Resolver
 mask_modifier_flags | pub(crate) fn mask_modifier_flags(node: P<Node>, modifier_mask: ModifierFlags, modifier_additions: ModifierFlags) -> ModifierFlags | util.go:129 | -
 needs_scope_marker | pub(crate) fn needs_scope_marker(result: P<Node>) -> bool | util.go:9 | -
-new | pub fn new(r: P<EmitResolver>, slot: P<CheckerSlot>) -> Resolver | rust:resolver.rs:20 | Resolver
 new_declaration_transformer | pub fn new_declaration_transformer(host: &'static dyn DeclarationEmitHost, context: Option<P<EmitContext>>, compiler_options: P<CompilerOptions>, declaration_file_path: &str, declaration_map_path: &str) -> P<DeclarationTransformer> | transform.go:103 | -
 new_supplemental_references_transformer | pub fn new_supplemental_references_transformer(host: &'static dyn DeclarationEmitHost, source_file: P<SourceFile>, declaration_file_path: &str, force_declaration_paths: bool) -> P<SupplementalReferencesTransformer> | supplementalreferences.go:19 | -
 new_symbol_tracker | pub fn new_symbol_tracker(host: &'static dyn DeclarationEmitHost, resolver: Resolver, state: P<SymbolTrackerSharedState>) -> P<SymbolTrackerImpl> | tracker.go:255 | -
-new_transformer | pub fn new_transformer(&self, visit: ast::VisitFn, emit_context: Option<P<EmitContext>>) | transformer.go:14 | Transformer
 node_or_syntax_list_children | pub(crate) fn node_or_syntax_list_children(node: P<Node>) -> Vec<P<Node>> | transform.go:316 | -
 omit_private_method_type | pub(crate) fn omit_private_method_type(&self, input: P<Node>) -> Option<P<Node>> | transform.go:1096 | DeclarationTransformer
 optimistic | fn optimistic() -> printer::AutoGenerateOptions | rust:transform_2.rs:5 | -
 pop_error_fallback_node | pub fn pop_error_fallback_node(&self) | tracker.go:27 | SymbolTrackerImpl
-precalculate_declaration_emit_visibility | pub fn precalculate_declaration_emit_visibility(&self, file: P<SourceFile>) | rust:resolver.rs:51 | Resolver
 preserve_js_doc | pub(crate) fn preserve_js_doc(&self, updated: P<Node>, original: P<Node>) | transform.go:1616 | DeclarationTransformer
 preserve_partial_js_doc | pub(crate) fn preserve_partial_js_doc(&self, updated: P<Node>, original: P<Node>) | transform.go:1621 | DeclarationTransformer
 push_error_fallback_node | pub fn push_error_fallback_node(&self, node: Option<P<Node>>) | tracker.go:32 | SymbolTrackerImpl
@@ -143,8 +108,6 @@ report_non_serializable_property | pub fn report_non_serializable_property(&self
 report_nonlocal_augmentation | pub fn report_nonlocal_augmentation(&self, containing_file: P<SourceFile>, parent_symbol: P<Symbol>, augmenting_symbol: P<Symbol>) | tracker.go:123 | SymbolTrackerImpl
 report_private_in_base_of_class_expression | pub fn report_private_in_base_of_class_expression(&self, property_name: &str) | tracker.go:137 | SymbolTrackerImpl
 report_truncation_error | pub fn report_truncation_error(&self) | tracker.go:150 | SymbolTrackerImpl
-requires_adding_implicit_undefined | pub fn requires_adding_implicit_undefined(&self, declaration: P<Node>, symbol: Option<P<Symbol>>, enclosing_declaration: Option<P<Node>>) -> bool | rust:resolver.rs:71 | Resolver
-requires_adding_implicit_undefined_unsafe | pub fn requires_adding_implicit_undefined_unsafe(&self, c: &mut Checker, declaration: P<Node>, symbol: Option<P<Symbol>>, enclosing_declaration: Option<P<Node>>) -> bool | rust:resolver.rs:145 | Resolver
 rewrite_module_specifier | pub(crate) fn rewrite_module_specifier(&self, parent: P<Node>, input: Option<P<Node>>) -> Option<P<Node>> | transform.go:1608 | DeclarationTransformer
 select_diagnostic_based_on_module_name | pub(crate) fn select_diagnostic_based_on_module_name(symbol_accessibility_result: &SymbolAccessibilityResult, module_not_nameable: &'static Message, private_module: &'static Message, non_module: &'static Message) -> &'static Message | diagnostics.go:64 | -
 select_diagnostic_based_on_module_name_no_name_check | pub(crate) fn select_diagnostic_based_on_module_name_no_name_check(symbol_accessibility_result: &SymbolAccessibilityResult, private_module: &'static Message, non_module: &'static Message) -> &'static Message | diagnostics.go:74 | -
@@ -201,7 +164,6 @@ transform_property_signature_declaration | pub(crate) fn transform_property_sign
 transform_set_accessor_declaration | pub(crate) fn transform_set_accessor_declaration(&self, input: P<Node>) -> Option<P<Node>> | transform.go:1004 | DeclarationTransformer
 transform_source_file | pub(crate) fn transform_source_file(&self, node: P<SourceFile>) -> P<Node> | transform.go:341 | DeclarationTransformer
 transform_source_file | pub fn transform_source_file(&self, source_file: P<SourceFile>) -> P<SourceFile> | supplementalreferences.go:28 | SupplementalReferencesTransformer
-transform_source_file | pub fn transform_source_file(&self, file: P<SourceFile>) -> P<SourceFile> | transformer.go:40 | Transformer
 transform_top_level_declaration | pub(crate) fn transform_top_level_declaration(&self, input: P<Node>) -> Option<P<Node>> | transform.go:1718 | DeclarationTransformer
 transform_type_alias_declaration | pub(crate) fn transform_type_alias_declaration(&self, input: P<Node>) -> P<Node> | transform.go:1798 | DeclarationTransformer
 transform_type_parameter_declaration | pub(crate) fn transform_type_parameter_declaration(&self, input: P<Node>) -> Option<P<Node>> | transform.go:827 | DeclarationTransformer
@@ -210,7 +172,6 @@ transform_variable_declaration | pub(crate) fn transform_variable_declaration(&s
 transform_variable_statement | pub(crate) fn transform_variable_statement(&self, input: P<Node>) -> Option<P<Node>> | transform.go:2222 | DeclarationTransformer
 try_get_name_of_assigned_expression | pub(crate) fn try_get_name_of_assigned_expression(&self, unwrapped: P<Node>) -> Option<P<Node>> | transform.go:1192 | DeclarationTransformer
 try_get_property_name | pub(crate) fn try_get_property_name(&self, node: P<Node>) -> String | transform.go:2994 | DeclarationTransformer
-try_js_type_node_to_type_node | pub fn try_js_type_node_to_type_node(&self, emit_context: P<EmitContext>, type_node: P<Node>, enclosing_declaration: Option<P<Node>>, flags: nodebuilder::Flags, internal_flags: nodebuilder::InternalFlags, tracker: &'static dyn SymbolTracker) -> Option<P<Node>> | rust:resolver.rs:127 | Resolver
 unwrap_parenthesized_expression | pub(crate) fn unwrap_parenthesized_expression(o: P<Node>) -> Option<P<Node>> | util.go:142 | -
 update_accessor_param_list | pub(crate) fn update_accessor_param_list(&self, input: P<Node>, is_private: bool) -> P<NodeList> | transform.go:1037 | DeclarationTransformer
 update_param_list | pub(crate) fn update_param_list(&self, node: P<Node>, params: P<NodeList>) -> P<NodeList> | transform.go:2399 | DeclarationTransformer
@@ -224,7 +185,6 @@ visit_nested_expression | pub(crate) fn visit_nested_expression(&self, expressio
 visit_source_file | pub(crate) fn visit_source_file(&self, node: P<SourceFile>) -> P<Node> | transform.go:280 | DeclarationTransformer
 visit_this_property_assignments | pub(crate) fn visit_this_property_assignments(&self, node: P<Node>) -> Option<P<Node>> | transform.go:2091 | DeclarationTransformer
 visitor | pub fn visitor(&self) -> ast::NodeVisitor | rust:types.rs:94 | DeclarationTransformer
-visitor | pub fn visitor(&self) -> ast::NodeVisitor | transformer.go:32 | Transformer
 walk_binding_pattern | pub(crate) fn walk_binding_pattern(&self, pattern: P<Node>, param: P<Node>) -> Vec<P<Node>> | transform.go:2201 | DeclarationTransformer
 wrap_fallback_error_diagnostic_selector | pub(crate) fn wrap_fallback_error_diagnostic_selector(node: P<Node>, selector: impl Fn(P<Node>, &SymbolAccessibilityResult) -> &'static Message + 'static) -> GetSymbolAccessibilityDiagnostic | diagnostics.go:47 | -
 wrap_in_cjs_export_namespace | pub(crate) fn wrap_in_cjs_export_namespace(&self, content: P<Node>) -> P<Node> | transform.go:1543 | DeclarationTransformer

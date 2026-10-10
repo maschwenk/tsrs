@@ -3,7 +3,7 @@
 notes/perf-binary-layout.md).
 
     tools/perf/layout-measure.py --bin A=/tmp/l/bin/A/tsrs --bin R=/tmp/l/bin/R/tsrs --out probe-out \
-        [--projects all] [--checkers 32,4] [--reps 7] [--perf /usr/bin/perf]
+        [--projects all] [--checkers default,4] [--reps 7] [--perf /usr/bin/perf]
 
 1. Timed runs: `-p <project> --noEmit --incremental false --pretty false --extendedDiagnostics [--checkers N]`
    (no --checkers for the default count), `--reps` rounds; each round runs every project and checker count with every

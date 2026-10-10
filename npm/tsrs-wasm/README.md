@@ -4,7 +4,7 @@ tsrs (a Rust port of the TypeScript 7 compiler) built as a WebAssembly module, w
 browsers. It runs `tsc` single-threaded; its output is byte-identical to native `tsrs --singleThreaded` on the
 differential gate in the repository (`tools/wasm/diff.mjs`; numbers in
 [notes/wasm-build.md](https://github.com/maschwenk/tsrs/blob/main/notes/wasm-build.md)). The package version names the
-TypeScript commit it ports, as `@maschwenk/tsrs`'s does: `0.9.0-ts7.1.0-dev.20260929` is tsrs 0.9.0 following
+TypeScript commit it ports, as `@maschwenk/tsrs`'s does: `0.10.0-ts7.1.0-dev.20260929` is tsrs 0.10.0 following
 TypeScript `7.1.0-dev.20260929`.
 
 ## Command line (Node 22+)

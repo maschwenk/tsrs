@@ -19,7 +19,7 @@ techniques are in place, rejected or untried.
 - Before you start a performance or memory idea, find what was already tried. Most ideas have been: search
   `notes/` for it (`rg -il '<a few keywords>' notes/ docs/RUST.md`), read the "Measured and rejected (do not redo)"
   list in `notes/perf-round2-followups.md` and `docs/RUST.md` "Techniques", and read the newest round's summary
-  (`notes/mem-round4.md` section 7 for memory against bun check). For example, sharing the type graph between
+  (`notes/mem-round4.md` for memory against bun check). For example, sharing the type graph between
   checkers was measured four times (notes/mem-shared-base.md, notes/perf-checker-processes.md,
   notes/perf-shared-checker.md, notes/spike-shared-graph.md). If a note rejected the idea, start only if something is
   different, and say what in the brief or the pull request: new evidence, a changed constraint, or the condition the

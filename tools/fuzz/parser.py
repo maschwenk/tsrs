@@ -7,7 +7,7 @@ Each round takes M files from the conformance corpus (ts-ref/tsc/testdata/tests/
 duplicates or swaps spans, inserts tokens that stress the scanner and parser, splices two files, truncates), and
 hashes every mutant with both AST oracles (tools/oracle/ast: the Go dumper built from ts-ref, and the Rust
 `ast_oracle` example). A different hash is a divergence from Go; a hash missing from the Rust output is a crash or a
-timeout. Each finding is saved under --out with the input, both dumps and their diff. Exit status 1 if any finding.
+timeout. Each finding is saved under --out with the input, its parse flags and the diff of the two dumps. Exit status 1 if any finding.
 Inputs are kept valid UTF-8: tsrs reads invalid UTF-8 lossily on purpose (Rust strings), where Go keeps the bytes.
 
 Build the oracles first: sh tools/oracle/ast/build.sh

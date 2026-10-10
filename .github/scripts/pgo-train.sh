@@ -10,7 +10,7 @@
 # profile counts apply to the checker code in tsrs), the fourslash suite (in-process language server in
 # tsrs-fourslash's worker processes, for the language-service and project-system code behind `tsrs --lsp`), plus
 # the tsrs binary itself on two open-source projects from bench/projects.json (xstate-main, webpack; default mode,
-# 4 checkers). Needs ts-ref/tsc/testdata and network for the bench projects' clone + install
+# tsrs's default checker count for the runner). Needs ts-ref/tsc/testdata and network for the bench projects' clone + install
 # (bench/run.py --setup-only). Never train on private code.
 set -euo pipefail
 

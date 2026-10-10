@@ -7,8 +7,9 @@
 // handle produced by the old checker becomes a stale-handle client error instead of silently resolving
 // against a different checker.
 //
-// Raw pointers in here are only valid while the owning snapshot is retained. Core calls `release()`
-// before dropping the last API reference of the snapshot; after that every lookup fails.
+// Raw pointers in here are only valid while the owning snapshot is retained. `release()` runs when the
+// snapshot's `SnapshotData` is dropped (`CheckerSnapshotState::drop`, right after `SnapshotData::drop` derefs the
+// project snapshot); no request can reach the registry by then, and after release every lookup fails.
 
 use std::sync::Mutex;
 
@@ -49,7 +50,7 @@ impl CheckerRegistry {
         CheckerRegistry::default()
     }
 
-    /// Drops every registered pointer. Must run before the snapshot's last API reference is released.
+    /// Drops every registered pointer. Runs when the snapshot's `SnapshotData` is dropped.
     pub fn release(&self) {
         let mut st = self.lock();
         st.released = true;

@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 # Re-runs the code generators and fails if any checked-in output differs: a hand edit to a generated file would be
-# lost at the next regeneration. Needs node >= 22.6 (runs the .ts generators directly), python3, Go (the fourslash
-# generator type-checks the Go tests with `go list -export` in ts-ref/tsc; GOTOOLCHAIN=auto fetches the version
-# go.mod asks for), and ts-ref at the commit in Cargo.toml ([workspace.metadata.typescript]). CI runs it as the
-# `generated-code` job.
+# lost at the next regeneration. Needs node >= 22.18 or 23.6 (runs the .ts generators directly, with type stripping
+# on by default; CI uses 24), python3, Go (the fourslash generator type-checks the Go tests with `go list -export` in
+# ts-ref/tsc; GOTOOLCHAIN=auto fetches the version go.mod asks for), and ts-ref at the commit in Cargo.toml
+# ([workspace.metadata.typescript]). CI runs it as the `generated-code` job.
 #
 #   tools/gen-check.sh           regenerate, then fail on a diff
 #   tools/gen-check.sh --write   regenerate only (leaves the result in the working tree)
 #
-# Not covered: the oracle-only files under tools/oracle and crates/*/tests, and
-# crates/tsrs_api/src/checker/coverage_table.rs (written from proto.go by hand-run tooling).
+# Not covered (hand-run tooling): the oracle-only files under tools/oracle and crates/*/tests,
+# crates/tsrs_api/src/checker/coverage_table.rs (written from proto.go), and the `BEGIN GENERATED` regions that
+# tools/gen-tsoptions writes in crates/tsrs_tsoptions/src.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

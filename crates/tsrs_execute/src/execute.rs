@@ -1,4 +1,4 @@
-// Port of the type-check-only subset of Go's execute/tsc.go.
+// Port of Go's execute/tsc.go (no watch mode, --init or --showConfig).
 
 use std::sync::Arc;
 
@@ -68,12 +68,12 @@ pub fn command_line_with_testing(
             args.retain(|a| !a.eq_ignore_ascii_case(flag));
         }
     }
-    // tsrs-only: `--checkerAssignment <locality|go|random:<seed>>` picks how files are assigned to checkers
+    // tsrs-only: `--checkerAssignment <locality|go|random:<seed>|file:<path>>` picks how files are assigned to checkers
     // (tsrs_compiler checkerpool.rs; `go` is Go's FENNEL assignment and Go's check history, tsrs_core::compat).
     if let Some(pos) = args.iter().position(|a| a.eq_ignore_ascii_case("--checkerAssignment")) {
         let name = args.get(pos + 1).cloned().unwrap_or_default();
         if !tsrs_compiler::set_checker_assignment_from_cli(&name) {
-            sys.write(&format!("error: unknown --checkerAssignment {name:?} (expected locality, go or random:<seed>).\n"));
+            sys.write(&format!("error: unknown --checkerAssignment {name:?} (expected locality, go, random:<seed> or file:<path>).\n"));
             return CommandLineResult { status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
         }
         args.drain(pos..(pos + 2).min(args.len()));

@@ -22,7 +22,8 @@ var (
 	snakeRe2 = regexp.MustCompile(`([A-Z]+)([A-Z][a-z])`)
 )
 
-// snake is the snake_case rule of the rest of the port (tools/gen-lsproto/generate.mts): acronym runs are one word.
+// snake is the port's snake_case rule (acronym runs are one word), with gosig's word replacements (JSDoc, NaN, IDs,
+// URLs) applied first; tools/gen-lsproto/generate.mts uses the same rule without them.
 var wordReplacer = strings.NewReplacer("JSDoc", "Jsdoc", "NaN", "Nan", "IDs", "Ids", "URLs", "Urls")
 
 func snake(s string) string {

@@ -287,7 +287,8 @@ impl Script for &Overlay {
 
 // Go `vfs.FS` values that `layerOverlayFileSystem` and `overlayFS` inspect with type assertions
 // (`fileSystem.(*overlayFS)`, `fs.host.(FileHandleSource)`): a plain file system, or one of this package's
-// layered file systems. (`RebasableFileSystem` file systems come only from API requests, which are not ported.)
+// layered file systems. (`RebasableFileSystem` file systems come only from API requests: tsrs_api's
+// `RequestFileSystem`.)
 #[derive(Clone)]
 pub enum FsRef {
     Host(Arc<dyn FS>),

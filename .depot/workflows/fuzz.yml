@@ -1,6 +1,6 @@
 # Depot CI workflow: nightly differential fuzzing of the parser against tsgo's (tools/fuzz/parser.py, docs/RUST.md
 # "Differential fuzzing"). A failed run means the Rust parser built a different AST from Go's for some input; the
-# inputs, both dumps and their diff are in the `fuzz-findings` artifact.
+# inputs, their parse flags and the diff of the two dumps are in the `fuzz-findings` artifact.
 
 name: Fuzz
 

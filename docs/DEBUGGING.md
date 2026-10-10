@@ -154,7 +154,8 @@ the types already hold and resolves nothing. When two runs disagree on a TS2590:
 Running the Go oracle (`tools/oracle/project-types`) takes hours per side. Cache its equivalent instead (not
 populated yet; the first full opt-out run creates it):
 `$TSRS_WORK/project-ref-dump/<types|symbols>/manifest.<kind>` (hash, line count, path
-per file, plus the `#counts` line), produced by `tsrs-test types-dump --mode <kind> --text none` in the opt-out
+per file, plus the `#counts` line), produced by `tsrs-test types-dump -p tsconfig.json --out
+$TSRS_WORK/project-ref-dump/<kind> --mode <kind> --text none` (run from `$PRIVATE_PROJECT`) in the opt-out
 mode (`TSRS_LAZY_MEMBERS=0`; ~30 min and ~122 GB peak for `types`). That mode's `.types` walk was verified identical to the Go oracle on all 28,213 files
 (notes/fix-project-types.md); `.symbols` only on the first 5,558 files (the Go run was stopped). Reference commit b85298b6 (nightly
 7.1.0-dev.20260929); project: the pristine private-monorepo checkout
@@ -226,12 +227,14 @@ bytes per slot, load factor and heap bytes (`crates/tsrs_checker/src/heapcensus.
 arena objects are attributed by the heap sampler of the alloc-profile build instead:
 
 ```sh
-CARGO_TARGET_DIR=target/prof cargo build --release -p tsrs_cli --features alloc-profile
+CARGO_PROFILE_RELEASE_STRIP=none CARGO_PROFILE_RELEASE_DEBUG=line-tables-only CARGO_TARGET_DIR=target/prof \
+  cargo build --release -p tsrs_cli --features alloc-profile
 TSRS_HEAP_PROFILE=1 TSRS_HEAP_PROFILE_RATE=65536 TSRS_HEAP_PROFILE_TSV=/tmp/heap.tsv target/prof/release/tsrs -p . --noEmit --checkers 8
 ```
 
 The TSV has one row per sampled stack and thread group (`main`, `checker-N`, `other`) with live, at-peak and
-cumulative bytes. Symbols come from `atos` on macOS and `addr2line` on Linux.
+cumulative bytes. Symbols come from `atos` on macOS and `addr2line` on Linux; the `release` profile strips symbols and
+has no debug info, hence the two `CARGO_PROFILE_RELEASE_*` overrides in the build command.
 
 ## What the resident memory is: the memory split
 
@@ -370,12 +373,11 @@ reader of the list's nodes or of the owner symbol's members parses and binds it 
 reference directives and what they reference) and of interfaces merged into the global scope are forced in parallel,
 so that the checkers do not wait for one another on them (`force_shared_lists`; `TSRS_LAZY_DTS_SHARED=0` skips the
 global libraries). Output is the same; `--extendedDiagnostics` `Symbols` counts only the lists that were bound. Off in the language server, the
-API and the test harnesses, and under `TSRS_CENSUS=1`, `TSRS_LAZY_DTS_CENSUS=1` and `TSRS_CHECK_SHARED=1`.
+API and the test harnesses, and under `TSRS_CENSUS=1` and `TSRS_CHECK_SHARED=1`.
 
 | variable | values | effect |
 | --- | --- | --- |
 | `TSRS_LAZY_DTS` | unset (on when it applies), `0`/`off`, `stats`, `force` (`tsrs-test` only) | `stats`: one line on stderr: lists made lazy, deferred by the binder, never reached by it, parsed again (and how many while their file was bound). `force` in `tsrs-test`: every declaration file's lists are lazy, checked files included, so the checker and the `.types` / `.symbols` walks force them all: the result trees must equal a run without it (`TSRS_LAZY_DTS_STATS_FILE=<file>` collects the workers' counts) |
-| `TSRS_LAZY_DTS_CENSUS` | `1` (alloc-profile build) | the ceiling census: bytes of every member list of unchecked declaration files, and which lists and member symbols any reader asked for, by phase; `TSRS_LAZY_DTS_CENSUS_TSV=<file>` adds a per-file table |
 
 After a change to what the binder does for members of interfaces, classes or type literals, or to what a member list
 can contain, run the suite with `TSRS_LAZY_DTS=force` (also with `TS_TEST_PROGRAM_SINGLE_THREADED=false`) and a corpus
@@ -410,20 +412,23 @@ against tsgo-ref's output.
 
 ## Profiling
 
-Profile the `dist` profile (fat LTO, one codegen unit; release builds also add PGO, `.github/workflows/release.yml`),
-not `--release`. For reliable stacks on Linux x86-64 build it with frame pointers, in its own target directory (Apple
-arm64 always keeps frame pointers):
+Profile the `dist` profile. It inherits `release` (fat LTO, one codegen unit, symbols stripped, no debug info);
+release binaries also add PGO, and BOLT on Linux (`.github/workflows/release.yml`). Keep the symbols
+(`CARGO_PROFILE_DIST_STRIP=none`, as CI does for BOLT) and, for reliable stacks on Linux x86-64, frame pointers, in a
+separate target directory (Apple arm64 always keeps frame pointers):
 
 ```sh
-RUSTFLAGS="-C force-frame-pointers=yes" CARGO_TARGET_DIR=target/profiling cargo build --profile dist -p tsrs_cli
+CARGO_PROFILE_DIST_STRIP=none RUSTFLAGS="-C force-frame-pointers=yes" CARGO_TARGET_DIR=target/profiling \
+  cargo build --profile dist -p tsrs_cli
 samply record ./target/profiling/dist/tsrs -p <project> --noEmit --incremental false
 ```
 
 For before/after numbers, compare instruction counts, not wall time: `python3 bench/count.py out.json -- <tsrs command>`
 on Linux (single-threaded, with `--singleThreaded` and `RAYON_NUM_THREADS=1`, counts repeat to about 0.001%), or
 `/usr/bin/time -l` on macOS. Per-function counts: `valgrind --tool=callgrind --callgrind-out-file=cg.out <tsrs command>`
-on a `--release` build, then `callgrind_annotate --inclusive=no --tree=none cg.out` (`--tree=none`, or call-graph lines
-are counted twice). The bench flags regressions on main by itself (`bench/README.md`, "Regression flag").
+on a `--release` build with symbols (`CARGO_PROFILE_RELEASE_STRIP=none`), then
+`callgrind_annotate --inclusive=no --tree=none cg.out` (`--tree=none`, or call-graph lines are counted twice). The
+bench flags regressions on main by itself (`bench/README.md`, "Regression flag").
 
 ## How to fix
 

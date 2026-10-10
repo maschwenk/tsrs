@@ -1,6 +1,7 @@
-// Generated from proto.go (pinned; /tmp/opencode/genfields.py): the fields of each method's params struct and of
-// the api-package structs nested in them, their decode kinds and, for arrays, element kinds; for Go-order
-// decoding checks before any lookup (`predecode.rs`). Unknown keys are ignored like Go.
+// Generated from proto.go (pinned) by a script that is not checked in, so update it by hand when proto.go changes.
+// It lists the fields of each method's params struct and of the api-package structs nested in them, their decode
+// kinds and, for arrays, element kinds; for Go-order decoding checks before any lookup (`predecode.rs`). Unknown
+// keys are ignored like Go.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FieldKind { Str, I32, I64, U32, U64, Bool, Doc, DocList, Array, Object, Any }
 

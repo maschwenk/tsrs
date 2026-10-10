@@ -191,13 +191,14 @@ other expression bases, `TypeNodeBase`, `TypeSyntaxBase`, `JSDocTypeBase`, `Comp
 `SubtreeFacts` bitflags with Go's names minus the `Subtree` prefix (`SubtreeContainsJsx` -> `SubtreeFacts::ContainsJsx`,
 `SubtreeExclusionsFunction` -> `SubtreeFacts::ExclusionsFunction`, `SubtreeFactsComputed` -> `SubtreeFacts::Computed`),
 `node.subtree_facts()` (Go `Node.SubtreeFacts()`), `contains_object_rest_or_spread(node)`. Go caches the facts of
-composite nodes in `CompositeBase`; the port recomputes them on every call (they are a pure function of the finished
-subtree), so calling `subtree_facts()` on every node of a deep tree is quadratic. Go uses them to prune the
-JSX module-indicator walk (`parseoptions.rs`) and the JS parameter-decorator walk in the compiler; both prune
-exactly like Go (the pruning is observable: e.g. a function without a body reports only `ContainsTypeScript`).
+composite nodes in `CompositeBase`; the port recomputes them (they are a pure function of the finished subtree),
+except under `with_subtree_facts_cache`, a per-thread side table that emit turns on around the transformers (which ask
+at every node they visit). Outside it, calling `subtree_facts()` on every node of a deep tree is quadratic. Besides the
+transformers, they prune the JSX module-indicator walk (`parseoptions.rs`) and the JS parameter-decorator walk in the
+compiler; both prune exactly like Go (the pruning is observable: e.g. a function without a body reports only `ContainsTypeScript`).
 
 ```rust
-pub struct NodeList { pub loc: Cell<TextRange>, pub nodes: &'static [P<Node>] }   // P<NodeList>; .nodes(), .pos(), .end(), .has_trailing_comma(), .clone_list(f)
+pub struct NodeList { pub loc: OwnedCell<TextRange>, nodes: ThinSlice<P<Node>> }   // 16 bytes; P<NodeList>; .nodes(), .pos(), .end(), .has_trailing_comma(), .clone_list(f)
 pub struct ModifierList { pub list: NodeList, pub modifier_flags: ModifierFlags } // P<ModifierList>; .nodes(), .loc(), .pos(), .end()
 ```
 
@@ -253,7 +254,8 @@ Node-builder helpers: `create_modifiers_from_modifier_flags(flags, |k| f.new_mod
 
 ## Visitor (visitor.go)
 
-`NodeVisitor { visit: Option<VisitFn>, factory: NodeFactory, hooks: NodeVisitorHooks }` with
+`NodeVisitor` is an `Rc` handle to `NodeVisitorData { visit: Option<VisitFn>, factory: NodeFactory, hooks:
+NodeVisitorHooks }` (fields reached through `Deref`), with
 `VisitFn = Rc<dyn Fn(&mut NodeVisitor, P<Node>) -> Option<P<Node>>>` (the callback gets the visitor back,
 so it may re-enter it). Hooks are `Rc<dyn Fn(Option<…>, &mut NodeVisitor) -> Option<…>>`. Exported Go
 methods: `visit_node`, `visit_nodes` (NodeList), `visit_modifiers`, `visit_embedded_statement`,
@@ -267,14 +269,15 @@ discarded (the declaration transformer's side-effect visitors).
 ## Symbols
 
 ```rust
-pub struct Symbol {                                  // 40 bytes
+pub struct Symbol {                                  // 32 bytes (40 with plain-ptrs)
     pub flags: OwnedCell<SymbolFlags>,
     pub check_flags: OwnedCell<CheckFlags>,
-    pub name: OwnedStrCell,                          // PackedStr: pointer + length in one word
-    declarations: OwnedSliceCell<P<Node>>,           // 4-aligned (pointer, u32 length)
+    pub name: OwnedTaggedStrCell,                    // pointer, length and tag bits in one word
+    declarations: OwnedPSliceCell<P<Node>>,
     pub(crate) id: AtomicU32,
-    parent_or_tables: OwnedCell<SymbolParentWord>,   // parent, or a tail {parent, members, exports, export_symbol,
-                                                     // value_declaration}; a bit: value declaration = declarations[0]
+    parent_or_tables: OwnedCell<PKey>,               // parent, or (tag bit) a tail {parent, members, exports,
+                                                     // export_symbol, value_declaration, lazy}; a tag bit: value
+                                                     // declaration = declarations[0]
 }
 ```
 
@@ -285,7 +288,8 @@ pub struct Symbol {                                  // 40 bytes
 `s.Declarations = other.Declarations`), `append_declarations()`; `is_external_module()`, `is_static()`, `combined_local_and_export_symbol_flags()`.
 Free: `get_source_file_of_symbol`, `symbol_name`, `escape_symbol_name`, … `get_symbol_id` is in utilities.
 
-`pub struct SymbolTable(RefCell<IndexMap<&'static str, P<Symbol>>>)`, handled as `P<SymbolTable>`
+`pub struct SymbolTable(FrozenCell<SymbolMap>)` (an insertion-ordered map with one-word entries, see symbol.rs), handled
+as `P<SymbolTable>`
 (`SymbolTable: Default`, `SymbolTable::new()`, `with_capacity(n)`, `clone_table()` = Go `maps.Clone`),
 methods `get(name)` (**on a `P<SymbolTable>` receiver `.get(name)` resolves to `P::get` — write
 `table.lookup(name)`, identical semantics**), `set(name, symbol)`, `delete(name)`, `len()`, `is_empty()`, `has(name)`,
@@ -300,9 +304,11 @@ working byte-for-byte. (Sort order differs from Go only against non-ASCII names.
 
 ## Flow (flow.go)
 
-`FlowFlags` bitflags; `pub struct FlowNode { flags: Cell<FlowFlags>, node: Cell<Option<P<Node>>>,
-antecedent: Cell<Option<P<FlowNode>>>, antecedents: Cell<Option<P<FlowList>>> }` (all pub, plus getters);
-`pub struct FlowList { pub flow: P<FlowNode>, pub next: Cell<Option<P<FlowList>>> }`; `FlowLabel = FlowNode`.
+`FlowFlags` bitflags; `pub struct FlowNode { pub flags: OwnedCell<FlowFlags>, pub text_index: u32, pub node:
+OwnedCell<Option<P<Node>>>, link }` (16 bytes with compressed pointers): the antecedent (non-labels) and the
+antecedents (labels) share `link`; read them with `antecedent()` / `antecedents()`, set the latter with
+`set_antecedents()`. `pub struct FlowList { pub flow: P<FlowNode>, pub next: OwnedCell<Option<P<FlowList>>> }`;
+`FlowLabel = FlowNode`.
 `new_flow_switch_clause_data(switch_statement, clause_start: usize, clause_end: usize) -> P<Node>` and
 `new_flow_reduce_label_data(target, antecedents) -> P<Node>` create `Kind::Unknown` nodes;
 `as_flow_switch_clause_data()`, `as_flow_reduce_label_data()`.
@@ -323,8 +329,8 @@ plus `pos()`/`end()`).
 Language service token cache: `SourceFile::get_or_create_token(kind, pos, end, parent, flags)` (Go `GetOrCreateToken`,
 keyed by `TokenCacheKey { parent, loc }` under a mutex; each call creates tokens with a fresh default factory).
 
-Not ported (language service / emit / API only): `SourceFileDataKey`,
-`GetNameTable`, `GetDeclarationMap`, `Hash`.
+Not ported: `SourceFileDataKey`, `Hash`. `GetNameTable` and `GetDeclarationMap` are `SourceFile::get_name_table` /
+`get_declaration_map` (language service).
 
 ## Diagnostics
 

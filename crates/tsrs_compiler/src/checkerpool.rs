@@ -1519,7 +1519,8 @@ pub fn use_go_default_checker_count() {
 // tsrs-only: the checker count when neither --checkers nor --singleThreaded is given. Go always uses 4. Here: half the
 // available parallelism but every core up to SMALL_MACHINE_CHECKERS, at least Go's 4 and at most MAX_DEFAULT_CHECKERS,
 // and no more than one checker per MIN_CHECKED_FILES_PER_DEFAULT_CHECKER type-checked files, so small programs keep
-// Go's 4: 4 checkers on 4 cores, 8 on 8 and on 16, 9 on 18, 32 on 64 or more. Diagnostics do not depend on the count; the --extendedDiagnostics Types / Symbols /
+// Go's 4: 4 checkers on 4 cores, 8 on 8 and on 16, 9 on 18, 32 on 64 or more. Diagnostics do not depend on the count
+// (except for the known file-order cases in README.md's capability table); the --extendedDiagnostics Types / Symbols /
 // Instantiations counters do (each checker counts what it creates), so they depend on the machine unless --checkers
 // is given.
 fn default_checker_count(program: &Program) -> i64 {

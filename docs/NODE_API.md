@@ -6,13 +6,14 @@ side `packages/typescript/src/{api,ast}` exported as `unstable/sync` and `unstab
 format, method names, params and response schemas are the pinned Go ones; tsrs does not define its own
 protocol or a one-shot CLI wrapper, and it is not compatible with TS5 `createProgram` objects.
 
-Status: **integration candidate, in progress**. The matrix at the end is the source of truth: `supported`
+Status: shipped (in the npm package since 0.3.0, docs/STATUS.md), with the gaps below. The matrix at the end is
+the source of truth: `supported`
 means a core Rust test against a real compiler session exercises it; `partial` means it is implemented
 and dispatched but only covered by the upstream Node suites, a lane's own unit tests, or has a documented
 divergence. Unimplemented methods return an explicit `api: unsupported: ...` error, never a fake success.
 
-Evidence on the integration branch (pinned upstream client, `node tools/node-api/run-upstream.mjs
---binary target/debug/tsrs --suite upstream --filter <file>`): `test/sync/api.test.ts` 339/339 (three
+Evidence at merge time (pinned upstream client, `node tools/node-api/run-upstream.mjs
+--binary target/debug/tsrs --label tsrs --suite upstream --filter <file>`): `test/sync/api.test.ts` 339/339 (three
 consecutive runs; one earlier run had a single unreproduced failure), `test/async/api.test.ts` 348/348,
 `sync/ast` 111/111, `sync/astnav` + `async/astnav` 4/4 each, `sync/api-generators` 43/43, parity `rss` 2/2.
 These are suite results, not byte-level response parity; the parity lane's Go-oracle comparison is the
@@ -27,19 +28,18 @@ skipped tests measure RSS, which poison mode makes grow by design), counted per 
 three packages summed at different heads; a count restricted to core-owned `tsrs_api` integration binaries is
 32. All pass, 0 fail.
 
-## Lanes and ownership
+## Areas
 
-| lane | branch | owns |
-|---|---|---|
-| core (integration lead) | `mfs-cx/node-api-core` | `crates/tsrs_api` (except `src/checker.rs`, `src/checker/**`), `crates/tsrs_cli/src/api.rs`, `--api` dispatch in `main.rs`, root `Cargo.toml`/`Cargo.lock`, CLI dependency wiring, this document |
-| runtime | `mfs-cx/node-api-runtime` | `crates/tsrs_api_transport` (MessagePack tuple protocol, JSON-RPC framing, sync/async conns, stdio/pipe transports, timing) |
-| codec | `mfs-cx/node-api-codec` | `crates/tsrs_api_codec` (AST binary encoder/decoder, string table, node index tables, source-file id) |
-| checker | `mfs-cx/node-api-checker` | `crates/tsrs_api/src/checker.rs`, `crates/tsrs_api/src/checker/**`, necessary checker exports |
-| sdk | `mfs-cx/node-api-sdk` | `npm/**` (ported `unstable/sync` / `unstable/async` client, AST package, Node tests) |
-| parity | `mfs-cx/node-api-parity` | `tools/node-api/**`, `.github/workflows/node-api.yml` |
+The API was developed in parallel lanes; the names stay in use below and in the matrix.
 
-Cross-lane changes go through core. Other lanes may use a local harness to compile but must not commit
-copies of shared modules.
+| area | code |
+|---|---|
+| core | `crates/tsrs_api` (except `src/checker.rs`, `src/checker/**`), `crates/tsrs_cli/src/api.rs`, `--api` dispatch in `main.rs` |
+| runtime | `crates/tsrs_api_transport` (MessagePack tuple protocol, JSON-RPC framing, sync/async conns, stdio/pipe transports, timing) |
+| codec | `crates/tsrs_api_codec` (AST binary encoder/decoder, string table, node index tables, source-file id) |
+| checker | `crates/tsrs_api/src/checker.rs`, `crates/tsrs_api/src/checker/**`, necessary checker exports |
+| sdk | `npm/**` (ported `unstable/sync` / `unstable/async` client, AST package, Node tests) |
+| parity | `tools/node-api/**`, `.depot/workflows/node-api.yml`, `.github/workflows/node-api.yml` |
 
 ## Integration contract (Rust)
 
@@ -67,10 +67,10 @@ session.set_connection(Arc<dyn ClientConn>); session.close();  // Session: Handl
 - Both protocols put errors on the wire as `jsonrpc.CodeInternalError` with `err.to_string()`.
 - Handler panics are caught and returned as `panic: ...` errors (Go conn recovers too).
 
-### Runtime (requested from `tsrs_api_transport`)
+### Runtime (`tsrs_api_transport`)
 
-The transport must compile without `tsrs_api`. It may define its own handler/conn traits with the same
-shape; `crates/tsrs_cli/src/api.rs` (core) adapts them. Needed entry points:
+The transport does not depend on `tsrs_api`. It defines its own handler/conn traits with the same shape;
+`crates/tsrs_cli/src/api.rs` (core) adapts them. Entry points:
 
 - a sync conn running the msgpack `[type, method, payload]` tuple protocol over stdin/stdout or a pipe,
   supporting re-entrant `call` from inside a request (filesystem callbacks), and an async JSON-RPC conn
@@ -80,9 +80,10 @@ shape; `crates/tsrs_cli/src/api.rs` (core) adapts them. Needed entry points:
 - deterministic shutdown: EOF on input ends `run` with `Ok`, malformed frames end it with an error
   without writing non-protocol bytes to stdout.
 
-### Codec (requested from `tsrs_api_codec`)
+### Codec (`tsrs_api_codec`)
 
-- `encode_source_file(&SourceFile) -> Result<Vec<u8>, String>` (Go `encoder.EncodeSourceFile`) and
+- `encode_source_file(&'static SourceFile) -> Result<(Vec<u8>, NodeIndexTable), EncodeError>` (Go
+  `encoder.EncodeSourceFile`) and
   `set_source_file_id(&mut [u8], u64)`;
 - a per-file node index table (Go `encoder.GetNodeIndexTable`) mapping index <-> node so core can
   produce/resolve node handles `"<index>.<kind>.<path>"`;
@@ -105,7 +106,8 @@ Core provides (stable API for the checker lane):
   `sd`, `snapshot`, `project`, `program: &'static Program`, `checker: CheckerHandle`; the setup keeps the
   snapshot alive and holds the API-lifetime checker until dropped (not reentrant);
 - `SnapshotData::get_program`, `SnapshotData::checker_state`;
-- `session::parse_params`, `session::json_response`; node-handle helpers once the codec lands.
+- `session::parse_params`, `session::json_response`, and the codec's node-handle helpers (`node_handle`,
+  `resolve_node_index`).
 
 `handle` receives every method whose `methods::METHODS` owner is `Checker` (115 methods). `None` means
 "not recognized" and becomes `ApiError::unsupported`.
@@ -128,9 +130,9 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
 | 2 | `releaseSourceFile` | core | supported | sourcefile_test |
 | 3 | `retainSourceFile` | core | partial | descriptor validation tested; positive path via upstream suites |
 | 4 | `getCachedSourceFile` | core | partial | via upstream suites only |
-| 5 | `batchRequests` | core | supported | batch_test (nesting error, pagination with continuation tokens); binary-in-batch base64 path untested until source-file methods land |
+| 5 | `batchRequests` | core | supported | batch_test (nesting error, pagination with continuation tokens); binary-in-batch base64 path untested |
 | 6 | `initialize` | core | supported | config_test |
-| 7 | `createSnapshot` | core | supported | program_test, module_resolution_test, requestfs_test (full/layer request filesystems, removedPaths); fileNotifications alias expansion through request symlinks not applied |
+| 7 | `createSnapshot` | core | supported | program_test, module_resolution_test, requestfs_test (full/layer request filesystems, removedPaths, fileNotifications expanded to request-symlink aliases) |
 | 8 | `updateSnapshot` | core | supported | program_test, requestfs_test (layers compacted over full, retained base, release of base) |
 | 9 | `getCurrentLanguageServerSnapshot` | core | partial | returns Go's standalone-session client error; LSP-attached sessions not ported |
 | 10 | `createBuildOrchestrator` | core | supported | tsrs_cli api::tests (in-process CLI build backend; fresh orchestrator per call instead of Go's recheckAllProjects reuse) |
@@ -299,10 +301,10 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
 
 ## Known gaps (core lane, tracked for follow-up)
 
-- Request filesystems are ported (`crates/tsrs_api/src/requestfs.rs`) but enter the project snapshot as a
-  plain host filesystem: LSP overlay rebasing and alias expansion of client `fileNotifications` through
-  request symlinks (Go `ExpandFileChanges`) are not applied. Callback filesystems (`--callbacks`, Go
-  `callbackfs.go`) are ported in `crates/tsrs_api/src/callbackfs.rs`; like Go, invalid callback responses
+- Request filesystems are ported (`crates/tsrs_api/src/requestfs.rs`) and enter the project snapshot as Go's
+  layered, rebasable file system: overlays are rebased under them and client `fileNotifications` are expanded
+  to request-symlink aliases (Go `ExpandFileChanges`; requestfs_test). Callback filesystems (`--callbacks`, Go
+  `callbackfs.go`) are ported in `crates/tsrs_api_transport/src/callbackfs.rs`; like Go, invalid callback responses
   panic and become request errors (a panic on a worker thread can poison shared caches; not yet hardened).
 - API builds differ from `tsrs -b` in how they run, not in what they write: each `build` call uses a fresh
   CLI orchestrator (the state Go's `recheckAllProjects` leaves; reuse across builds comes from the

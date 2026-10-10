@@ -129,7 +129,7 @@ pub struct processedFiles {
     pub(crate) jsx_runtime_import_specifiers: FxHashMap<Path, P<jsxRuntimeImportSpecifier>>,
     pub(crate) import_helpers_import_specifiers: FxHashMap<Path, P<Node>>,
     pub(crate) lib_files: FxHashMap<Path, P<LibFile>>,
-    // List of present unsupported extensions
+    // Files found by searching node_modules (their data's lowest depth is above 0).
     pub(crate) source_files_found_searching_node_modules: rustc_hash::FxHashSet<Path>,
     pub(crate) file_include_data: fileIncludeData,
     // if file was included using source file and its output is actually part of program
@@ -709,10 +709,8 @@ fn content_mapper_mapping_diagnostic(file: P<SourceFile>, label: &str, problem: 
 }
 
 impl sourceFileParser<'_> {
-    // emptyContentMappedFile produces an empty TypeScript source file for a content-mapped file whose
-    // transform could not be used, retaining the original content for diagnostics. Importers see it as an
-    // empty module rather than triggering a "cannot find module" error. It is still marked as content-mapped
-    // so it is excluded from emit like a successfully mapped file.
+    // The mapper's transform identity: the content mapper project's answer, else the mapper's static identity as 32
+    // hex digits.
     // fileloader.go:590
     fn get_content_mapper_transform_identity(&self, mapper: &Mapper) -> String {
         if let Some(project) = self.host.content_mapper_project() {
@@ -724,6 +722,10 @@ impl sourceFileParser<'_> {
     }
 
     // fileloader.go:599
+    // emptyContentMappedFile produces an empty TypeScript source file for a content-mapped file whose
+    // transform could not be used, retaining the original content for diagnostics. Importers see it as an
+    // empty module rather than triggering a "cannot find module" error. It is still marked as content-mapped
+    // so it is excluded from emit like a successfully mapped file.
     fn empty_content_mapped_file(&self, opts: SourceFileParseOptions, mapper_identity: &str, transform_identity: &str) -> P<SourceFile> {
         let content = self.host.fs().read_file(&opts.file_name).unwrap_or_default();
         let virtual_file_name = alloc_str(&format!("{}{}", opts.file_name, tspath::EXTENSION_TS));

@@ -1175,7 +1175,7 @@ pub(crate) fn skip_constraint(t: P<Type>, type_checker: &mut Checker) -> P<Type>
 #[derive(Default)]
 pub(crate) struct CaseClauseTrackerState {
     existing_strings: FxHashSet<String>,
-    // jsnum.Number keys compared by bits (Go map keys compare float64 values; NaN never matches, -0 == 0)
+    // jsnum.Number keys compared by f64 value, like Go float64 map keys (NaN never matches, -0 == 0)
     existing_numbers: Vec<jsnum::Number>,
     existing_big_ints: FxHashSet<PseudoBigInt>,
 }

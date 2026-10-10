@@ -1,5 +1,5 @@
 # Records completion-related responses from tsgo-ref --lsp -stdio for the tsrs_ls completions smoke test.
-# usage: drive.py <proj> <cases.json>  -> prints one JSON object per case: {"id":..., "result":...}
+# usage: record.py <proj> <cases.json>  -> prints one JSON object per case: {"id":..., "result":...}
 import json, subprocess, sys, os
 proj = os.path.abspath(sys.argv[1]); spec = json.load(open(sys.argv[2]))
 p = subprocess.Popen(['/Users/maxschwenk/Developer/tsrs-work/bin/tsgo-ref', '--lsp', '-stdio'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)

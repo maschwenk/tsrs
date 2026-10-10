@@ -9,8 +9,9 @@ contract itself is `docs/NODE_API.md`; this file covers the independent evidence
 - The oracle is the Go server built from `ts-ref/tsc` at the pinned commit (`go build ./cmd/tsc`), not an
   npm package.
 - The client is the pinned upstream client (`ts-ref/packages/typescript/src/api`), unmodified. The harness
-  never ships a second client; the shipped SDK (`npm/tsrs`) is a byte-for-byte copy checked by
-  `node npm/sdk/sync-upstream.mjs --check`, and CI separately exercises the packed SDK.
+  never ships a second client; the shipped SDK (`npm/tsrs`) is a copy of the pinned client, byte for byte
+  except two documented patches (`npm/sdk/patches`: async client connection loss, vscode-jsonrpc write
+  error), checked by `node npm/sdk/sync-upstream.mjs --check`; CI separately exercises the packed SDK.
 - Tests are the upstream suites (`packages/typescript/test/{sync,async}`) plus harness tests in
   `tools/node-api/tests`, all run by `node --test` against real server processes. Every harness test
   must pass on the Go oracle before it can be used against tsrs.

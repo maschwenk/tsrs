@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Reads "Type\tJSON" sample lines on stdin; writes them plus mutated variants (dropped key, null value,
-wrong-kind value, unknown key, reversed key order, wrong top-level kind) and hand-written edge cases."""
+wrong-kind value, unknown key, reversed key order, wrong top-level kind). run.sh appends the hand-written edge cases
+(edge_cases.txt)."""
 
 import json
 import random

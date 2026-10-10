@@ -2,10 +2,10 @@
 
 `tsrs` is a faithful port of the TypeScript 7 type checker (the Go implementation in
 `ts-ref/tsc/internal/`, a symlink to a checkout of microsoft/TypeScript at commit
-b85298b6a81f, = nightly 7.1.0-dev.20260929) to Rust. Scope: everything needed to
-**type-check** a project from the command line. No emit, no language service, no
-build mode, no watch mode. Declaration emit is ported only as far as its diagnostics go (`tsc --noEmit` reports
-them when `declaration`/`composite` is on): crate `tsrs_declarations`; no `.d.ts` text is printed.
+b85298b6a81f, = nightly 7.1.0-dev.20260929) to Rust. Scope: the `tsc` command line (type checking, JavaScript and
+declaration emit, source maps, incremental builds, `--build`), the language server (`--lsp`) and the API server
+(`--api`). Not ported: watch mode for the CLI, tracing (`--generateTrace`), pprof and localized messages (English
+only); the README capability table has the current list.
 
 The port is **mechanical and faithful**: same algorithms, same function decomposition,
 same order of operations, same diagnostics (code, position, message, order). Behavior
@@ -30,9 +30,14 @@ personally choose differently.
 | module, packagejson, symlinks                                           | `tsrs_module`     |
 | tsoptions                                                               | `tsrs_tsoptions`  |
 | checker, evaluator                                                      | `tsrs_checker`    |
-| transformers/declarations (+ the `transformers` base it uses)           | `tsrs_declarations` |
+| transformers/declarations                                               | `tsrs_declarations` |
+| transformers (base and script transformers)                             | `tsrs_transformers` |
+| printer                                                                 | `tsrs_printer`    |
+| sourcemap                                                               | `tsrs_sourcemap`  |
 | compiler                                                                | `tsrs_compiler`   |
-| execute (type-check-only subset)                                        | `tsrs_cli` (binary `tsrs`) |
+| execute (incl. `tsc -b`), execute/incremental                           | `tsrs_execute`, `tsrs_incremental`; the binary `tsrs` is `tsrs_cli` |
+| ls, lsp, project                                                        | `tsrs_ls`, `tsrs_lsp`, `tsrs_project` (docs/LSP.md) |
+| api                                                                     | `tsrs_api` (docs/NODE_API.md) |
 | testrunner, testutil/harnessutil, testutil/baseline (subset)            | `tsrs_testrunner` (binary `tsrs-test`) |
 
 One Rust file per Go file, same base name in snake_case (`relater.go` -> `relater.rs`,
@@ -95,9 +100,9 @@ referenced through `tsrs_core::P<T>`:
 ### Threading
 
 Parsing and binding run per file (in parallel) and finish before checking. Checking runs on N checkers
-(`--checkers N`, `--singleThreaded` = 1; Go's default is 4, tsrs's default is half the available parallelism
-clamped to 4..32 and to one checker per 32 checked files, and 4 in build mode: `default_checker_count`), each on
-its own OS thread with a 512 MB stack (`tsrs_compiler::checkerpool`). Files are assigned to checkers by directory
+(`--checkers N`, `--singleThreaded` = 1; Go's default is 4, tsrs's default is every core up to 8 and half the cores
+above that, at least 4 and at most 32, capped at one checker per 32 type-checked files, and 4 in build mode:
+`default_checker_count`), each on its own OS thread with a 512 MB stack (`tsrs_compiler::checkerpool`). Files are assigned to checkers by directory
 locality; in the type-check pass a checker that runs out steals unstarted files from the busiest one
 (notes/perf-checker-stealing.md), which is safe because output does not depend on which checker checks a file
 (notes/perf-order-independence.md; `--checkerAssignment go` keeps Go's assignment and history). Each thread allocates in its own leak arena;
@@ -198,14 +203,9 @@ callback, even when the closure does not need it.
 
 ## What not to port
 
-Emit, transformers, printer and node builder (except what diagnostics need; the declaration transformer is
-ported for its diagnostics),
-language service, LSP, API/IPC, build mode (`-b`), incremental/tsbuildinfo, watch, tracing,
-pprof, source maps, localization of messages (English only), JS-file/JSDoc type support is
-**lower priority** but the parser must still parse `.js`/JSX files. If a function only serves an
-excluded feature, leave it out. If a needed function has a branch that only serves an excluded
-feature, keep the branch structure and put `unimplemented!("emit")`-style markers only where the
-code is truly unreachable for type checking.
+Watch mode for the CLI, tracing, pprof and message localization are not ported. If a function only serves one of
+those, leave it out; if a needed function has a branch that only serves one, keep the branch structure and mark only
+the truly unreachable part.
 
 ## Working rules for agents
 

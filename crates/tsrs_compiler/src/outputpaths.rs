@@ -1,5 +1,5 @@
-// The subset of Go's `outputpaths` package that type checking needs (common source directory
-// computation used by option verification and sourceFileMayBeEmitted). Emit paths are not ported.
+// The common source directory helpers of Go's `outputpaths` package, used by option verification and
+// sourceFileMayBeEmitted. The emit output paths live in tsrs_tsoptions::outputpaths.
 
 use tsrs_core::tspath;
 use tsrs_core::CompilerOptions;

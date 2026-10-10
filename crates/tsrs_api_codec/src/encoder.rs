@@ -472,9 +472,10 @@ pub fn build_node_index_table(file: &'static SourceFile) -> NodeIndexTable {
 pub(crate) fn record_extended_data_source_file(node: P<Node>, cx: &mut EncodeContext) -> Result<(), EncodeError> {
     let sf = node.as_source_file();
     let text_index = cx.strs.add(sf.text(), Kind::SourceFile, node.pos(), node.end());
-    // Content mappers are not ported in tsrs: OriginalText() == Text(), no span map, no supplemental/canonical
-    // files, no content mapper / virtual file name and no diagnostic directives. These are exactly the values the
-    // pinned encoder writes for a file without content-mapper info.
+    // The API's project system does not content-map files yet (tsrs_project compilerhost.rs), so every file encoded
+    // here has OriginalText() == Text(), no span map, no supplemental/canonical files, no content mapper / virtual
+    // file name and no diagnostic directives. These are exactly the values the pinned encoder writes for a file
+    // without content-mapper info; encoding content-mapper info is not implemented.
     let original_text_index = text_index;
     let file_name_index = cx.strs.add(sf.file_name(), Kind::Unknown, 0, 0);
     let path_index = cx.strs.add(&sf.path().0, Kind::Unknown, 0, 0);

@@ -5,8 +5,8 @@
 
 Each test case is split at `// @filename:` like the harness does, written to a scratch directory, and compiled by
 both compilers with the case's `// @option: value` directives as command-line flags (every combination of
-comma-separated values, as the harness's variants) plus `--outDir out`. Every emitted file is compared byte for
-byte. This is a stand-in for `tsrs-test --baselines js` (E2): it compares against the reference compiler instead of
+comma-separated values, as the harness's variants) plus `--outDir ../go` (tsgo) or `--outDir ../rs` (tsrs) and
+`--pretty false`. Every emitted file is compared byte for byte. This is a stand-in for `tsrs-test --baselines js` (E2): it compares against the reference compiler instead of
 the stored baselines, and harness-only directives are ignored.
 
 Environment: TSGO (reference tsgo built from ts-ref, required), TSRS (binaries), OUT (scratch root, default /tmp/emit-cases).

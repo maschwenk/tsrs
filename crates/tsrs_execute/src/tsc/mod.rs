@@ -1,4 +1,4 @@
-// Port of the type-check-only subset of Go's `execute/tsc` package.
+// Port of Go's `execute/tsc` package (compile, emit, diagnostics reporting, statistics).
 
 mod compile;
 mod diagnostics;

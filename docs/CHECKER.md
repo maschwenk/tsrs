@@ -1,8 +1,7 @@
 # `tsrs_checker` design contract
 
-Read `docs/PORTING.md` and `docs/AST.md` first. This file fixes the checker-specific
-decisions so that ~25 agents can port `ts-ref/tsc/internal/checker/` in parallel.
-The `checker-foundation` agent implements the data model and keeps this file accurate.
+Read `docs/PORTING.md` and `docs/AST.md` first. This file records the checker-specific decisions of the port
+(data model, handles, node builder, links); keep it accurate when they change.
 
 ## Files
 
@@ -18,7 +17,7 @@ The `checker-foundation` agent implements the data model and keeps this file acc
 | `nodebuilder.go`, `nodebuilderimpl.go`, `nodebuilderscopes.go` | `nodebuilder.rs`, `nodebuilderimpl_1.rs` (1–1850), `nodebuilderimpl_2.rs` (1851–end), `nodebuilderscopes.rs`; data model in `nodebuilder_types.rs` + `printer_types.rs` (section "Node builder") |
 | `nodecopy.go`, `pseudotypenodebuilder.go`, `nodebuilder_hover.go` | `nodecopy.rs`, `pseudotypenodebuilder.rs`, `nodebuilder_hover.rs` (node builder, same conventions) |
 | `emitresolver.go` | `emitresolver.rs` (all of it; section "Node builder", paragraph "Emit resolver") |
-| `services.go` | only what the node builder / symbol accessibility and the `.types`/`.symbols` baseline writer reach: `services.rs` (the rest is in `skipFuncs`) |
+| `services.go` | `services.rs` (the checker APIs the node builder, the `.types`/`.symbols` baseline writer and the language service call) |
 | `tracer.go` | not ported |
 | `../pseudochecker/*.go`, `../modulespecifiers/*.go` | crates `tsrs_pseudochecker`, `tsrs_modulespecifiers` (section "Node builder") |
 | `../evaluator/evaluator.go` | `evaluator.rs` (foundation) |
@@ -223,7 +222,7 @@ slice is nil, i.e. empty). Checker-internal callers: `let r = c.get_emit_resolve
 `P<PseudoType> { kind: PseudoTypeKind, data: PseudoTypeData }` (enum of Go's data structs; `pt.as_pseudo_type_inferred()`
 & co. are Go's casts), the singletons are statics (`*pseudochecker::PseudoTypeUndefined`), constructors keep Go names
 (`pseudochecker::new_pseudo_type_union(&[pt, *pseudochecker::PseudoTypeUndefined])`), slices are `&'static [..]`,
-`PseudoChecker` methods take `&self` (`b.pc.get_type_of_declaration(decl)`). lookup.go is stubs (lookup.rs).
+`PseudoChecker` methods take `&self` (`b.pc.get_type_of_declaration(decl)`). lookup.go is ported in lookup.rs.
 
 **modulespecifiers** (crate `tsrs_modulespecifiers`, checker imports it as `modulespecifiers::`): types.go etc. in
 types.rs (`UserPreferences { import_module_specifier_preference: ImportModuleSpecifierPreference::ProjectRelative, .. }`,
@@ -233,19 +232,18 @@ tsrs_compiler/src/modulespecifiers_oracle_test.rs, see notes/nb-6.md). Go `Host`
 `NodeBuilder.host`/`NodeBuilderContext.host` are `&'static dyn ModuleSpecifierGenerationHost`, obtained from the program
 by `Program::as_module_specifier_generation_host()` (Go's implicit interface conversion). `CheckerShape` is implemented
 by `Checker` (so pass `c` where Go passes `b.ch`). `SourceFileForSpecifierGeneration`/`ast.HasFileName` parameters are
-`P<SourceFile>`, `*core.CompilerOptions` is `&CompilerOptions`. `ProcessEntrypointEnding` (language-service only) is not
-ported.
+`P<SourceFile>`, `*core.CompilerOptions` is `&CompilerOptions`. `ProcessEntrypointEnding` (language-service auto-imports)
+is ported in util.rs as `process_entrypoint_ending`.
 
 ## Types
 
 ```rust
-pub struct Type {
+pub struct Type {                          // 24 bytes (const assert in types.rs)
     pub flags: Cell<TypeFlags>,
     pub object_flags: Cell<ObjectFlags>,
     pub id: TypeId,                         // u32 newtype
-    pub symbol: Cell<Option<P<Symbol>>>,
-    pub alias: Cell<Option<P<TypeAlias>>>,
-    pub data: TypeData,
+    data_tag: TypeDataTag,                  // which payload struct follows the header
+    symbol_or_alias: Cell<TypeSymbolWord>,  // the symbol, or a {symbol, alias} record once an alias is set
 }
 #[derive(Clone, Copy)]
 pub enum TypeData { Intrinsic(&'static IntrinsicType), Literal(&'static LiteralType), UniqueESSymbol(..),
@@ -255,8 +253,9 @@ pub enum TypeData { Intrinsic(&'static IntrinsicType), Literal(&'static LiteralT
                     StringMapping(..), Substitution(..), Conditional(..) }
 ```
 
-Types are always handled as `P<Type>`; the payload is a separate arena allocation (`TypeData::Tuple(alloc(TupleType::default()))`)
-so `Type` stays small. `t.flags()`/`t.object_flags()`/`t.symbol()`/`t.alias()` getters return the value. Go's `TypeBase`
+Types are always handled as `P<Type>`; the payload struct is allocated in the same block, right after the header
+(`TypeAlloc<T>`; create types with `self.new_type(flags, object_flags, payload)`). `t.data()` returns the `TypeData` view
+(the enum above) to match on; `t.flags()`/`t.object_flags()`/`t.symbol()`/`t.alias()` getters return the value. Go's `TypeBase`
 (which embeds the header) has no Rust counterpart; header fields are only on `Type`.
 
 Go models the type hierarchy by struct embedding (`TupleType` ⊃ `InterfaceType` ⊃ `TypeReference` ⊃ `ObjectType` ⊃
@@ -276,7 +275,7 @@ exactly like Go: `t.as_interface_type().resolved_type_arguments.get()`, `t.as_ob
   `Cell<&'static [T]>`, strings `Cell<&'static str>`), a `RefCell<Vec<…>>` (slices Go appends to), or a `GoMap` —
   even fields Go only sets at construction, because Go creates them empty and assigns afterwards. All derive `Default`,
   so construct with `Signature { flags: Cell::new(f), ..Default::default() }` or `default()` + `.set()`.
-  Exceptions: `Type.id`/`Type.data` (plain), and value structs (`TupleElementInfo`, `IterationTypes`, `FlowType`, keys…)
+  Exceptions: `Type.id` and the payload tag (plain), and value structs (`TupleElementInfo`, `IterationTypes`, `FlowType`, keys…)
   which are plain `Copy` structs. Go nil-vs-empty slices that matter are `Option<&'static [T]>`
   (`VarianceLinks.variances`, `WideningContext.siblings`/`resolved_properties`, `ContainingSymbolLinks.extended_containers`,
   `TypeReference.resolved_type_arguments`, `UnionOrIntersectionType.resolved_properties`, `TypeNodeLinks.outer_type_parameters`,
@@ -324,14 +323,16 @@ if links.resolved_type.get().is_none() {
 }
 ```
 
-All link stores use one generic `LinkStore<K, V>` keyed by `P<K>` (`FxHashMap<P<K>, P<V>>`), whatever store flavor Go
-uses (`LinkStore<Node, NodeLinks>`, `LinkStore<Symbol, ValueSymbolLinks>`, `LinkStore<SourceFile, SourceFileLinks>`).
+Link stores are keyed by the arena object and create the links on first use. Most are `LinkStore<K, V>` (links.rs:
+`LinkStore<Node, NodeLinks>`, `LinkStore<Symbol, AliasSymbolLinks>`, …), whatever store flavor Go uses; a few use
+specialized stores with the same `get`/`try_get`/`has` API (`KeyedLinkStore`, `NodeLinkStore`, `SymbolArenaLinkStore`,
+`SymbolReferenceLinkStore`; see the field types in checker.rs).
 `MembersAndExportsLinks` derefs to `[Cell<Option<P<SymbolTable>>>; 2]`: `links[kind as usize].get()`.
 
 ## Name resolution in module files
 
-Every stub file starts with `use crate::*; use tsrs_ast::*; use tsrs_core::*;` plus explicit `use tsrs_ast as ast;` and
-`use tsrs_diagnostics as diagnostics;`. lib.rs re-exports the data model and every stub module (`pub(crate) use
+Every generated checker file starts with `use crate::*; use tsrs_ast::*; use tsrs_core::*;` plus explicit
+`use tsrs_ast as ast;` and `use tsrs_diagnostics as diagnostics;`. lib.rs re-exports the data model and every checker module (`pub(crate) use
 checker_01::*` …), so free functions of other checker files resolve unqualified. A few checker free functions have the
 same name as a tsrs_ast function (`is_binary_operator`, `is_assignment_operator_or_higher`, `is_type_assertion`,
 `entity_name_to_string`, `is_node_descendant_of`, `is_instantiated_module`, …); an unqualified call from another file is
@@ -349,15 +350,16 @@ Types/symbols/signatures in messages go through `self.type_to_string(t)`, `self.
 
 `Option<P<Type>>` only where Go can really hold nil. Signatures are generated mechanically from the Go source
 (see `tools/gosig`): a pointer parameter is `Option` iff some call site passes `nil` or the body compares it with `nil`;
-a pointer result is `Option` iff the body can return `nil`. **Do not change a generated signature** unless it is
-wrong; if you must, change it in your file, fix what you can see, and list it in your report.
+a pointer result is `Option` iff the body can return `nil`. Signatures follow these rules; change one only when it is
+wrong for the Go semantics, and update its callers in the same change.
 
 ## Generated signatures (`tools/gosig`)
 
-Function signatures for the whole checker package are generated mechanically from the Go source into stub files
-(`todo!()` bodies) before bodies are ported, so every callee signature can be looked up (`docs/sigs/checker.txt` or grep).
-Since the bodies were integrated, `docs/sigs/checker.txt` is regenerated from the Rust sources with
-`tools/sigs-from-rust.py` (run it after changing signatures); the generated stubs are no longer the reference.
+Function signatures for the whole checker package were generated mechanically from the Go source into stub files
+(`todo!()` bodies) before the bodies were ported. All bodies are now ported, so the Rust sources are the reference.
+`docs/sigs/checker.txt` (and the other `docs/sigs/*.txt` without `_advisory`) is a one-line-per-function index generated
+from the Rust sources by `python3 tools/sigs-from-rust.py`; CI does not run it, so run it after changing signatures (or
+grep the sources). The `*_advisory.txt` files are from the original `tools/gosig` run and are not updated.
 Mapping used by the generator (deviations from PORTING.md are deliberate, for determinism):
 
 - Go `int` -> `i32` always (cast at use sites: `x as usize`, `v.len() as i32`).
@@ -367,4 +369,4 @@ Mapping used by the generator (deviations from PORTING.md are deliberate, for de
 - `string` parameter -> `&str`; `string` result -> `String`.
 - `func(...)` parameter of a `Checker` method -> `impl FnMut(&mut Checker, ...) -> R` (checker first); elsewhere `impl FnMut(...) -> R`.
 - `args ...any` -> `args: &[&dyn std::fmt::Display]`.
-- Each stub carries a terse origin marker comment (`// checker.go:1234`); keep it when you fill in the body.
+- Each function carries a terse origin marker comment (`// checker.go:1234`); keep it.
