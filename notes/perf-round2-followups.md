@@ -338,6 +338,13 @@ is type-checked, CI runs on pull requests, and the workspace is at 0.11.0. The i
   while the cold-process incremental path is ~1 s. Also reasoned out there without measurement: per-file summaries as
   declaration text (declaration emit is not total, import cycles, not identity-preserving), per-file check regions
   (types made in a body can enter long-lived caches), mmap of source files (SIGBUS on truncation).
+- Heap allocation churn (notes/perf-heap-churn.md, landed): vscode single-threaded 41.3M -> 22.3M heap allocations,
+  -2.0% to -4.0% instructions on five projects, from returning stored names and lists instead of copies (accessed
+  property names, effective call arguments, path helpers), arena concatenation of symbol declarations, two pools and
+  two `SmallVec`s. Do not redo those sites. Left, with the reason, in the note: `SymbolMap` growth (memory-tuned),
+  `SymbolTable` snapshots (callees may mutate the table), results Go allocates too, `get_text_of_node`'s copy
+  (58 callers). The heap profile's `TSRS_HEAP_PROFILE=count` names the caller's caller of each allocation as built
+  (the note has the fix used); check a site's attribution before trusting it.
 
 ## The lint ratchet
 
