@@ -115,19 +115,23 @@ pub fn has_trailing_directory_separator(path: &str) -> bool {
 pub fn combine_paths(first_path: &str, paths: &[&str]) -> String {
     // Each absolute path replaces everything before it, so start from the last one without normalizing what it
     // replaces (`first_path` is often the current directory).
-    let is_absolute = |p: &str| if p.as_bytes().contains(&b'\\') { get_root_length(&normalize_slashes(p)) != 0 } else { get_root_length(p) != 0 };
-    let (mut result, paths) = match paths.iter().rposition(|p| is_absolute(p)) {
-        Some(last_absolute) => (normalize_slashes(paths[last_absolute]), &paths[last_absolute + 1..]),
-        None => (normalize_slashes(first_path), paths),
+    let is_absolute = |p: &str| get_root_length(&normalize_slashes_borrowed(p)) != 0;
+    let (first_path, paths) = match paths.iter().rposition(|p| is_absolute(p)) {
+        Some(last_absolute) => (paths[last_absolute], &paths[last_absolute + 1..]),
+        None => (first_path, paths),
     };
+    // One allocation for the result: room for every part and a separator before each.
+    let mut result = String::with_capacity(first_path.len() + paths.iter().map(|p| p.len() + 1).sum::<usize>());
+    result.push_str(&normalize_slashes_borrowed(first_path));
     for &trailing_path in paths {
         if trailing_path.is_empty() {
             continue;
         }
-        let trailing_path = normalize_slashes(trailing_path);
+        let trailing_path = normalize_slashes_borrowed(trailing_path);
         if result.is_empty() || get_root_length(&trailing_path) != 0 {
             // `trailingPath` is absolute.
-            result = trailing_path;
+            result.clear();
+            result.push_str(&trailing_path);
         } else {
             if !has_trailing_directory_separator(&result) {
                 result.push('/');
@@ -140,18 +144,18 @@ pub fn combine_paths(first_path: &str, paths: &[&str]) -> String {
 
 pub fn get_path_components(path: &str, current_directory: &str) -> Vec<String> {
     let path = combine_paths(current_directory, &[path]);
-    path_components(&path, get_root_length(&path))
+    path_components(&path, get_root_length(&path)).into_iter().map(str::to_string).collect()
 }
 
-fn path_components(path: &str, root_length: usize) -> Vec<String> {
+// The components of `path` as slices of it (Go's components share the path's memory too).
+fn path_components(path: &str, root_length: usize) -> Vec<&str> {
     let root = &path[..root_length];
-    let mut rest: Vec<&str> = path[root_length..].split('/').collect();
-    if !rest.is_empty() && rest[rest.len() - 1].is_empty() {
-        rest.pop();
+    let mut result = Vec::with_capacity(path[root_length..].bytes().filter(|&b| b == b'/').count() + 2);
+    result.push(root);
+    result.extend(path[root_length..].split('/'));
+    if result.len() > 1 && result[result.len() - 1].is_empty() {
+        result.pop();
     }
-    let mut result = Vec::with_capacity(rest.len() + 1);
-    result.push(root.to_string());
-    result.extend(rest.into_iter().map(|s| s.to_string()));
     result
 }
 
@@ -266,12 +270,12 @@ fn last_index_byte(s: &str, b: u8) -> i32 {
 }
 
 pub fn get_directory_path(path: &str) -> String {
-    let path = normalize_slashes(path);
+    let path = normalize_slashes_borrowed(path);
 
     // If the path provided is itself a root, then return it.
     let root_length = get_root_length(&path);
     if root_length == path.len() {
-        return path;
+        return path.into_owned();
     }
 
     // return the leading portion of the path up to the last (non-terminal) directory separator
@@ -309,25 +313,34 @@ pub fn normalize_slashes(path: &str) -> String {
     path.replace('\\', "/")
 }
 
-fn reduce_path_components(components: &[String]) -> Vec<String> {
+// `normalize_slashes` without copying a path that has no backslash (Go returns its argument then).
+fn normalize_slashes_borrowed(path: &str) -> std::borrow::Cow<'_, str> {
+    if !path.as_bytes().contains(&b'\\') {
+        return std::borrow::Cow::Borrowed(path);
+    }
+    std::borrow::Cow::Owned(path.replace('\\', "/"))
+}
+
+fn reduce_path_components<S: AsRef<str> + Clone>(components: &[S]) -> Vec<S> {
     if components.is_empty() {
         return Vec::new();
     }
     let mut reduced = vec![components[0].clone()];
     for component in &components[1..] {
-        if component.is_empty() {
+        let text = component.as_ref();
+        if text.is_empty() {
             continue;
         }
-        if component == "." {
+        if text == "." {
             continue;
         }
-        if component == ".." {
+        if text == ".." {
             if reduced.len() > 1 {
-                if reduced[reduced.len() - 1] != ".." {
+                if reduced[reduced.len() - 1].as_ref() != ".." {
                     reduced.pop();
                     continue;
                 }
-            } else if !reduced[0].is_empty() {
+            } else if !reduced[0].as_ref().is_empty() {
                 continue;
             }
         }
@@ -412,11 +425,11 @@ pub fn get_normalized_absolute_path_without_root(file_name: &str, current_direct
 
 pub fn get_normalized_absolute_path(file_name: &str, current_directory: &str) -> String {
     let root_length = get_root_length(file_name);
-    let file_name = if root_length == 0 && !current_directory.is_empty() {
-        combine_paths(current_directory, &[file_name])
+    let file_name: std::borrow::Cow<'_, str> = if root_length == 0 && !current_directory.is_empty() {
+        std::borrow::Cow::Owned(combine_paths(current_directory, &[file_name]))
     } else {
         // CombinePaths normalizes slashes, so not necessary in other branch
-        normalize_slashes(file_name)
+        normalize_slashes_borrowed(file_name)
     };
     let root_length = get_root_length(&file_name);
 
@@ -531,7 +544,7 @@ pub fn get_normalized_absolute_path(file_name: &str, current_directory: &str) ->
     if length == root_length {
         return ensure_trailing_directory_separator(&file_name);
     }
-    file_name
+    file_name.into_owned()
 }
 
 fn simple_normalize_path(path: &str) -> Option<std::borrow::Cow<'_, str>> {
@@ -541,7 +554,8 @@ fn simple_normalize_path(path: &str) -> Option<std::borrow::Cow<'_, str>> {
         return Some(Cow::Borrowed(path));
     }
     // Some paths only require cleanup of `/./` or leading `./`
-    let simplified = path.replace("/./", "/");
+    // (`replace` copies the path even when there is nothing to replace, as for a path with only `..` segments)
+    let simplified: Cow<'_, str> = if path.contains("/./") { Cow::Owned(path.replace("/./", "/")) } else { Cow::Borrowed(path) };
     let trimmed = simplified.strip_prefix("./").unwrap_or(&simplified);
     if trimmed != path && !has_relative_path_segment(trimmed) && !(trimmed != simplified && trimmed.starts_with('/')) {
         // If we trimmed a leading "./" and the path now starts with "/", we changed the meaning
@@ -866,18 +880,25 @@ pub fn get_relative_path_to_directory_or_url(
 //	GetBaseFileName("http://typescriptlang.org/") == ""
 //	GetBaseFileName("http://typescriptlang.org") == ""
 pub fn get_base_file_name(path: &str) -> String {
-    let path = normalize_slashes(path);
+    base_file_name(path).to_string()
+}
+
+/// `get_base_file_name` as a slice of `path`. The base name holds no separator of either kind, so its bytes in
+/// `path` are the bytes of the slash-normalized path at the same offsets (normalizing replaces one byte by one).
+pub fn base_file_name(path: &str) -> &str {
+    let normalized = normalize_slashes_borrowed(path);
 
     // if the path provided is itself the root, then it has no file name.
-    let root_length = get_root_length(&path);
-    if root_length == path.len() {
-        return String::new();
+    let root_length = get_root_length(&normalized);
+    if root_length == normalized.len() {
+        return "";
     }
 
     // return the trailing portion of the path starting after the last (non-terminal) directory
     // separator but not including any trailing directory separator.
-    let path = remove_trailing_directory_separator(&path);
-    path[(get_root_length(path) as i32).max(last_index_byte(path, DIRECTORY_SEPARATOR) + 1) as usize..].to_string()
+    let trimmed = remove_trailing_directory_separator(&normalized);
+    let start = (get_root_length(trimmed) as i32).max(last_index_byte(trimmed, DIRECTORY_SEPARATOR) + 1) as usize;
+    &path[start..trimmed.len()]
 }
 
 // Gets the file extension for a path.
@@ -902,7 +923,7 @@ pub fn get_any_extension_from_path(path: &str, extensions: &[&str], ignore_case:
         );
     }
 
-    let base_file_name = get_base_file_name(path);
+    let base_file_name = base_file_name(path);
     if let Some(extension_index) = base_file_name.rfind('.') {
         return base_file_name[extension_index..].to_string();
     }
@@ -1071,8 +1092,9 @@ pub fn contains_path(parent: &str, child: &str, options: &ComparePathsOptions) -
     if parent == child {
         return true;
     }
-    let parent_components = reduce_path_components(&get_path_components(&parent, ""));
-    let child_components = reduce_path_components(&get_path_components(&child, ""));
+    // `get_path_components(&parent, "")` without copying each component: `parent` is already combined.
+    let parent_components = reduce_path_components(&path_components(&parent, get_root_length(&parent)));
+    let child_components = reduce_path_components(&path_components(&child, get_root_length(&child)));
     if child_components.len() < parent_components.len() {
         return false;
     }
@@ -1080,7 +1102,7 @@ pub fn contains_path(parent: &str, child: &str, options: &ComparePathsOptions) -
     let component_comparer = options.get_equality_comparer();
     for (i, parent_component) in parent_components.iter().enumerate() {
         let comparer: fn(&str, &str) -> bool = if i == 0 { stringutil::equate_string_case_insensitive } else { component_comparer };
-        if !comparer(parent_component, &child_components[i]) {
+        if !comparer(parent_component, child_components[i]) {
             return false;
         }
     }
@@ -1150,7 +1172,7 @@ impl Path {
 }
 
 pub fn has_extension(file_name: &str) -> bool {
-    get_base_file_name(file_name).contains('.')
+    base_file_name(file_name).contains('.')
 }
 
 /// Go `(volume, rest, ok)` -> `Some((volume, rest))`; on failure the rest is the whole path.

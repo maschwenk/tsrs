@@ -4,6 +4,7 @@ use tsrs_core::*;
 use tsrs_ast as ast;
 use tsrs_diagnostics as diagnostics;
 use tsrs_diagnostics::Message;
+use std::borrow::Cow;
 use std::fmt::Display;
 
 // Generated as signature stubs by tools/gosig (checker.json); the bodies have since been ported by hand. Do not re-run
@@ -41,17 +42,18 @@ impl Checker {
 
     // Returns the effective arguments for an expression that works like a function invocation.
     // checker.go:30531
-    pub(crate) fn get_effective_call_arguments(&mut self, node: P<Node>) -> Vec<P<Node>> {
+    // Go returns the node's own argument list unless it builds one (spreads of tuples, tags, decorators, JSX).
+    pub(crate) fn get_effective_call_arguments(&mut self, node: P<Node>) -> Cow<'static, [P<Node>]> {
         if ast::is_jsx_opening_fragment(node) {
             // This attributes Type does not include a children property yet, the same way a fragment created with <React.Fragment> does not at this stage
             let t = self.empty_fresh_jsx_object_type;
-            return vec![self.create_synthetic_expression(node, t, false, None)];
+            return Cow::Owned(vec![self.create_synthetic_expression(node, t, false, None)]);
         } else if ast::is_tagged_template_expression(node) {
             let template = node.as_tagged_template_expression().template;
             let t = self.get_global_template_strings_array_type();
             let first_arg = self.create_synthetic_expression(template, t, false, None);
             if !ast::is_template_expression(template) {
-                return vec![first_arg];
+                return Cow::Owned(vec![first_arg]);
             }
             let spans = template.as_template_expression().template_spans.nodes();
             let mut args = Vec::with_capacity(spans.len() + 1);
@@ -59,17 +61,17 @@ impl Checker {
             for span in spans {
                 args.push(span.expression().unwrap());
             }
-            return args;
+            return Cow::Owned(args);
         } else if ast::is_decorator(node) {
-            return self.get_effective_decorator_arguments(node);
+            return Cow::Owned(self.get_effective_decorator_arguments(node));
         } else if ast::is_binary_expression(node) {
             // Handles instanceof operator
-            return vec![node.as_binary_expression().left];
+            return Cow::Owned(vec![node.as_binary_expression().left]);
         } else if ast::is_jsx_opening_like_element(node) {
             if !node.attributes().unwrap().properties().is_empty() || (ast::is_jsx_opening_element(node) && !node.parent().unwrap().children().nodes().is_empty()) {
-                return vec![node.attributes().unwrap()];
+                return Cow::Owned(vec![node.attributes().unwrap()]);
             }
-            return Vec::new();
+            return Cow::Borrowed(&[]);
         }
         let args = node.arguments();
         let spread_index = self.get_spread_argument_index(args);
@@ -102,9 +104,9 @@ impl Checker {
                     effective_args.push(arg);
                 }
             }
-            return effective_args;
+            return Cow::Owned(effective_args);
         }
-        args.to_vec()
+        Cow::Borrowed(args)
     }
 
     // checker.go:30597

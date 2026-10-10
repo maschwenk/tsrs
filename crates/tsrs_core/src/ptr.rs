@@ -1176,6 +1176,18 @@ pub fn alloc_slice<T: Copy>(items: &[T]) -> &'static [T] {
     s
 }
 
+/// `alloc_slice` of `a` followed by `b`, without building the concatenation on the heap first.
+#[inline]
+#[cfg_attr(feature = "alloc-profile", track_caller)]
+pub fn alloc_slice_concat<T: Copy>(a: &[T], b: &[T]) -> &'static [T] {
+    if a.is_empty() && b.is_empty() {
+        return &[];
+    }
+    let s: &'static [T] = with_arena(|ar| &*ar.alloc_slice_concat_copy(a, b));
+    profile!([T], std::mem::size_of_val(s), s.as_ptr() as usize);
+    s
+}
+
 /// `alloc_slice` in the thread's scratch region if one is entered (see `P::new_scratch`), else like `alloc_slice`.
 #[inline]
 #[cfg_attr(feature = "alloc-profile", track_caller)]

@@ -111,10 +111,7 @@ impl Symbol {
         if declarations.is_empty() {
             return;
         }
-        let mut result = Vec::with_capacity(self.declarations.get().len() + declarations.len());
-        result.extend_from_slice(self.declarations.get());
-        result.extend_from_slice(declarations);
-        self.set_declarations_static(tsrs_core::alloc_vec(result))
+        self.set_declarations_static(tsrs_core::alloc_slice_concat(self.declarations.get(), declarations))
     }
     #[inline]
     #[expect(clippy::disallowed_methods, reason = "indexing with a bounds check: +0.7% instructions, one checker (notes/mem-small.md)")]

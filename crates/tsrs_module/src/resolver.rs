@@ -1213,7 +1213,7 @@ impl<'r> ResolutionState<'r> {
         let containing_directory = self.containing_directory.clone();
         tspath::for_each_ancestor_directory(&containing_directory, |directory| {
             // !!! stop at global cache
-            if tspath::get_base_file_name(directory) != "node_modules" {
+            if tspath::base_file_name(directory) != "node_modules" {
                 return self.load_module_from_immediate_node_modules_directory(ext, directory, types_scope_only);
             }
             continue_searching()
@@ -1625,7 +1625,7 @@ impl<'r> ResolutionState<'r> {
     }
 
     fn load_module_from_file_no_implicit_extensions(&mut self, extensions: Extensions, candidate: &str) -> Option<Resolved> {
-        let base = tspath::get_base_file_name(candidate);
+        let base = tspath::base_file_name(candidate);
         if !base.contains('.') {
             return continue_searching(); // extensionless import, no lookups performed, since we don't support extensionless files
         }

@@ -1466,9 +1466,10 @@ impl Checker {
 }
 
 // relater.go:1008
-pub(crate) fn exclude_properties(properties: &[P<Symbol>], excluded_properties: &Set<String>) -> Vec<P<Symbol>> {
+// Go returns `properties` itself unless a property is excluded.
+pub(crate) fn exclude_properties<'a>(properties: &'a [P<Symbol>], excluded_properties: &Set<String>) -> std::borrow::Cow<'a, [P<Symbol>]> {
     if excluded_properties.len() == 0 || properties.is_empty() {
-        return properties.to_vec();
+        return std::borrow::Cow::Borrowed(properties);
     }
     let mut reduced: Vec<P<Symbol>> = Vec::new();
     let mut excluded = false;
@@ -1483,9 +1484,9 @@ pub(crate) fn exclude_properties(properties: &[P<Symbol>], excluded_properties: 
         }
     }
     if excluded {
-        return reduced;
+        return std::borrow::Cow::Owned(reduced);
     }
-    properties.to_vec()
+    std::borrow::Cow::Borrowed(properties)
 }
 
 impl<'a> TypeDiscriminator<'a> {

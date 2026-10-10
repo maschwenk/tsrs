@@ -1,4 +1,4 @@
-use super::path::{file_extension_is, get_any_extension_from_path, get_base_file_name};
+use super::path::{base_file_name, file_extension_is, get_any_extension_from_path};
 
 pub const EXTENSION_TS: &str = ".ts";
 pub const EXTENSION_TSX: &str = ".tsx";
@@ -150,19 +150,19 @@ pub fn extension_is_one_of(ext: &str, extensions: &[&str]) -> bool {
     extensions.contains(&ext)
 }
 
-pub fn get_declaration_file_extension(file_name: &str) -> String {
-    let base = get_base_file_name(file_name);
+pub fn get_declaration_file_extension(file_name: &str) -> &str {
+    let base = base_file_name(file_name);
     for ext in SUPPORTED_DECLARATION_EXTENSIONS {
         if base.ends_with(ext) {
-            return ext.to_string();
+            return ext;
         }
     }
     if base.ends_with(EXTENSION_TS) {
         if let Some(index) = base.find(".d.") {
-            return base[index..].to_string();
+            return &base[index..];
         }
     }
-    String::new()
+    ""
 }
 
 pub fn get_declaration_emit_extension_for_path(path: &str) -> String {

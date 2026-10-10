@@ -1323,6 +1323,7 @@ pub struct Checker {
     pub scratch_mapper_lists: Vec<(P<TypeMapper>, &'static [P<Type>])>,
     pub free_type_mapper_caches: Vec<PackedMap<CacheHashKey, P<Type>>>, // Rust-only: cleared maps for reuse (Go keeps them in the slice capacity)
     pub free_type_lists: Vec<Vec<P<Type>>>, // Rust-only: empty buffers for `instantiate_types_changed`
+    pub free_signature_lists: Vec<Vec<P<Signature>>>, // Rust-only: empty buffers for `reorder_candidates`
     pub ambient_modules_once: bool, // Go sync.Once: true once ambient_modules has been computed
     pub ambient_modules: Vec<P<Symbol>>,
     pub within_unreachable_code: bool,
@@ -1710,6 +1711,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         scratch_mapper_lists: Vec::new(),
         free_type_mapper_caches: Vec::new(),
         free_type_lists: Vec::new(),
+        free_signature_lists: Vec::new(),
         ambient_modules_once: false,
         ambient_modules: Vec::new(),
         within_unreachable_code: false,
@@ -2413,8 +2415,8 @@ pub struct constructorAccessibilityError {
 #[derive(Clone, Default)]
 pub struct CallState {
     pub node: Option<P<Node>>,
-    pub type_arguments: Vec<P<Node>>,
-    pub args: Vec<P<Node>>,
+    pub type_arguments: &'static [P<Node>],
+    pub args: std::borrow::Cow<'static, [P<Node>]>,
     pub candidates: Vec<P<Signature>>,
     pub arg_check_mode: CheckMode,
     pub is_single_non_generic_candidate: bool,

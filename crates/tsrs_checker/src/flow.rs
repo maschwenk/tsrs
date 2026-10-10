@@ -1,6 +1,7 @@
 use crate::flowmemo::{FlowMemoMode, FrameTaint, MemoHit, ShadowHit, FLAG_EFFECTS, FLAG_COUNT_RESET, FLAG_TYPE_CACHE, FLOW_DEPTH_LIMIT, UNTAINTED};
 use crate::*;
 use tsrs_ast::*;
+use std::borrow::Cow;
 use tsrs_ast as ast;
 use tsrs_diagnostics as diagnostics;
 
@@ -2324,32 +2325,36 @@ impl Checker {
 
     // flow.go:1727
     // Public for lint rules (tsgolint's shim exposes Checker_getAccessedPropertyName).
-    pub fn get_accessed_property_name(&mut self, access: P<Node>) -> (String, bool) {
+    // The name is the node's own text for property accesses and literal element accesses (Go returns that string
+    // without a copy); only computed names are built.
+    pub fn get_accessed_property_name(&mut self, access: P<Node>) -> (Cow<'static, str>, bool) {
         if ast::is_property_access_expression(access) {
-            return (access.name().unwrap().text().to_string(), true);
+            return (Cow::Borrowed(access.name().unwrap().text()), true);
         }
         if ast::is_element_access_expression(access) {
             return self.try_get_element_access_expression_name(access);
         }
         if ast::is_binding_element(access) {
-            return self.get_destructuring_property_name(access);
+            let (name, ok) = self.get_destructuring_property_name(access);
+            return (Cow::Owned(name), ok);
         }
         if ast::is_parameter_declaration(access) {
             let index = access.parent().unwrap().parameters().iter().position(|&p| p == access).map_or(-1, |i| i as i32);
-            return (index.to_string(), true);
+            return (Cow::Owned(index.to_string()), true);
         }
-        (String::new(), false)
+        (Cow::Borrowed(""), false)
     }
 
     // flow.go:1743
-    pub(crate) fn try_get_element_access_expression_name(&mut self, node: P<Node>) -> (String, bool) {
+    pub(crate) fn try_get_element_access_expression_name(&mut self, node: P<Node>) -> (Cow<'static, str>, bool) {
         let argument_expression = node.as_element_access_expression().argument_expression;
         if ast::is_string_or_numeric_literal_like(argument_expression) {
-            return (argument_expression.text().to_string(), true);
+            return (Cow::Borrowed(argument_expression.text()), true);
         } else if ast::is_entity_name_expression(argument_expression) {
-            return self.try_get_name_from_entity_name_expression(argument_expression);
+            let (name, ok) = self.try_get_name_from_entity_name_expression(argument_expression);
+            return (Cow::Owned(name), ok);
         }
-        (String::new(), false)
+        (Cow::Borrowed(""), false)
     }
 
     // flow.go:1753

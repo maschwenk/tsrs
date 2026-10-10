@@ -325,11 +325,10 @@ impl Checker {
         let mut s = CallState::default();
         s.node = Some(node);
         if !is_decorator && !is_instanceof && !is_super_call(node) && !is_jsx_opening_fragment(node) {
-            s.type_arguments = node.type_arguments().to_vec();
+            s.type_arguments = node.type_arguments();
             // We already perform checking on the type arguments on the class declaration itself.
             if is_tagged_template || is_jsx_opening_or_self_closing_element || node.expression().unwrap().kind() != Kind::SuperKeyword {
-                let type_arguments = s.type_arguments.clone();
-                self.check_source_elements(&type_arguments);
+                self.check_source_elements(s.type_arguments);
             }
         }
         s.candidates = self.reorder_candidates(signatures, call_chain_flags);
@@ -363,7 +362,7 @@ impl Checker {
         let mut some_context_sensitive = false;
         if !is_decorator && !s.is_single_non_generic_candidate {
             let args = s.args.clone();
-            for arg in args {
+            for &arg in args.iter() {
                 if self.is_context_sensitive(arg) {
                     some_context_sensitive = true;
                     break;
@@ -426,6 +425,7 @@ impl Checker {
             if let Some(out) = candidates_out_array.as_deref_mut() {
                 out.clone_from(&s.candidates);
             }
+            self.free_signature_list(std::mem::take(&mut s.candidates));
             return result;
         }
         let args = s.args.clone();
@@ -454,7 +454,16 @@ impl Checker {
             }
             self.report_call_resolution_errors(node, &mut s, signatures, head_message);
         }
+        self.free_signature_list(std::mem::take(&mut s.candidates));
         result
+    }
+
+    // Rust-only: returns a `reorder_candidates` list to the pool (Go's lists are garbage once resolveCall returns).
+    fn free_signature_list(&mut self, mut list: Vec<P<Signature>>) {
+        if list.capacity() <= 256 {
+            list.clear();
+            self.free_signature_lists.push(list);
+        }
     }
 
     // checker.go:9145
@@ -465,7 +474,8 @@ impl Checker {
         let mut cutoff_index: usize = 0;
         let mut splice_index: usize;
         let mut specialized_index: i32 = -1;
-        let mut result: Vec<P<Signature>> = Vec::with_capacity(signatures.len());
+        let mut result: Vec<P<Signature>> = self.free_signature_lists.pop().unwrap_or_default();
+        result.reserve(signatures.len());
         for &signature in signatures {
             let mut signature = signature;
             let mut symbol: Option<P<Symbol>> = None;
@@ -549,7 +559,7 @@ impl Checker {
             }
             return Some(candidate);
         }
-        let type_arguments = s.type_arguments.clone();
+        let type_arguments = s.type_arguments;
         for candidate_index in 0..s.candidates.len() {
             let candidate = s.candidates[candidate_index];
             if !self.has_correct_type_argument_arity(candidate, &type_arguments) || !self.has_correct_arity(node, &args, candidate, s.signature_help_trailing_comma) {
@@ -808,7 +818,7 @@ impl Checker {
                 }
             }
         }
-        type_argument_types
+        type_argument_types.into_owned()
     }
 
     // checker.go:9448
@@ -1350,7 +1360,7 @@ impl Checker {
         } else if let Some(candidate_for_type_argument_error) = s.candidate_for_type_argument_error {
             self.check_type_arguments(candidate_for_type_argument_error, s_node.type_arguments(), true /*reportErrors*/, head_message);
         } else if !is_jsx_opening_fragment(node) {
-            let type_arguments = s.type_arguments.clone();
+            let type_arguments = s.type_arguments;
             let mut signatures_with_correct_type_argument_arity = Vec::new();
             for &sig in signatures {
                 if self.has_correct_type_argument_arity(sig, &type_arguments) {
@@ -2086,7 +2096,8 @@ impl Checker {
     // checker.go:10502
     pub(crate) fn get_contextual_call_signature(&mut self, t: P<Type>, node: P<Node>) -> Option<P<Signature>> {
         let signatures = self.get_signatures_of_type(t, SignatureKind::Call);
-        let mut applicable_by_arity = Vec::new();
+        // Almost always one signature, so it stays inline.
+        let mut applicable_by_arity: smallvec::SmallVec<[P<Signature>; 4]> = smallvec::SmallVec::new();
         for &s in signatures {
             if !self.is_arity_smaller(s, node) {
                 applicable_by_arity.push(s);

@@ -29,6 +29,25 @@ impl Number {
     }
 }
 
+impl Number {
+    /// `self.string() == s` without building the string for NaN, the infinities and safe integers (Go's
+    /// `n.String() == s` in isNumericLiteralName runs for every string literal and property name it is asked about).
+    pub fn string_equals(self, s: &str) -> bool {
+        if self.is_nan() {
+            return s == "NaN";
+        } else if self.is_inf() {
+            return s == if self < Number(0.0) { "-Infinity" } else { "Infinity" };
+        }
+        if MinSafeInteger <= self && self <= MaxSafeInteger {
+            let i = self.0 as i64;
+            if i as f64 == self.0 {
+                return stringutil::format_int(&mut [0; 20], i) == s;
+            }
+        }
+        self.string() == s
+    }
+}
+
 impl fmt::Display for Number {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.string())
