@@ -1,0 +1,229 @@
+# Depot CI workflow: one-off probe of the standard library built from source (-Zbuild-std) and of a non-PIE binary,
+# Linux x86-64 (notes/perf-build-std.md). In one job on a 32-vCPU runner it builds each variant with the whole release
+# pipeline (PGO + BOLT; tools/perf/buildstd-build.sh), then measures them interleaved (tools/perf/layout-measure.py,
+# with perf stat counters and the byte comparison of the output). Not scheduled:
+#
+#   depot ci run --workflow .depot/workflows/perf-buildstd-probe.yml
+#
+# Everything worth keeping is the `perf-buildstd-probe` artifact (probe-out/).
+
+name: Perf build-std probe (32 threads)
+
+on:
+  workflow_dispatch:
+    inputs:
+      reps:
+        description: timed rounds per binary, project and checker count
+        default: "3"
+      bins:
+        description: comma-separated variants of buildstd-build.sh to build and measure (the first is the baseline)
+        default: A,B,C,D,DA
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  REPS: ${{ inputs.reps || '3' }}
+  BINS: ${{ inputs.bins || 'A,B,C,D,DA' }}
+  PROJECTS: vscode,xstate-main,webpack,mui-docs,cal-diy,formbricks-web,supabase-studio,t3code-server,drizzle-orm
+
+jobs:
+  probe:
+    runs-on: depot-ubuntu-24.04-32
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Runner hardware (32 vCPU x86_64)
+        run: |
+          mkdir -p probe-out
+          { nproc; lscpu; free -g; uname -r; cat /sys/kernel/mm/transparent_hugepage/enabled; } | tee probe-out/machine.txt
+          if [ "$(nproc)" != 32 ] || [ "$(uname -m)" != x86_64 ]; then
+            echo "::error::expected 32 vCPU x86_64, got $(nproc) vCPU $(uname -m)"; exit 1
+          fi
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+
+      - name: Read TypeScript reference commit
+        id: ts
+        run: echo "commit=$(node npm/build.mjs --print-typescript-commit)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore TypeScript testdata
+        id: ts-ref
+        uses: actions/cache/restore@v4
+        with:
+          path: ts-ref/tsc/testdata
+          key: ts-ref-testdata-${{ steps.ts.outputs.commit }}
+
+      - name: Check out TypeScript testdata
+        if: steps.ts-ref.outputs.cache-hit != 'true'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: microsoft/TypeScript
+          ref: ${{ steps.ts.outputs.commit }}
+          path: ts-ref
+          fetch-depth: 1
+          sparse-checkout: tsc/testdata
+          persist-credentials: false
+
+      - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
+        with:
+          components: llvm-tools
+          restore-cache: false
+          save-cache: false
+
+      - name: Install x86_64-unknown-linux-gnu target and rust-src
+        run: |
+          rustup target add x86_64-unknown-linux-gnu
+          rustup component add rust-src
+
+      - name: Cache keys
+        id: keys
+        run: python3 bench/run.py --print-cache-keys --projects "$PROJECTS" | tee -a "$GITHUB_OUTPUT"
+
+      - name: Restore suite and compilers
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            bench/.work/suite
+            bench/.work/tsgo
+          key: bench-shared-${{ runner.os }}-${{ steps.keys.outputs.shared }}
+
+      - name: Restore vscode
+        if: steps.keys.outputs['vscode'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/vscode
+          key: bench-vscode-${{ runner.os }}-${{ steps.keys.outputs['vscode'] }}
+
+      - name: Restore xstate-main
+        if: steps.keys.outputs['xstate-main'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/xstate-main
+          key: bench-xstate-main-${{ runner.os }}-${{ steps.keys.outputs['xstate-main'] }}
+
+      - name: Restore webpack
+        if: steps.keys.outputs['webpack'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/webpack
+          key: bench-webpack-${{ runner.os }}-${{ steps.keys.outputs['webpack'] }}
+
+      - name: Restore mui-docs
+        if: steps.keys.outputs['mui-docs'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/mui-docs
+          key: bench-mui-docs-${{ runner.os }}-${{ steps.keys.outputs['mui-docs'] }}
+
+      - name: Restore cal-diy
+        if: steps.keys.outputs['cal-diy'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/cal-diy
+          key: bench-cal-diy-${{ runner.os }}-${{ steps.keys.outputs['cal-diy'] }}
+
+      - name: Restore formbricks-web
+        if: steps.keys.outputs['formbricks-web'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/formbricks-web
+          key: bench-formbricks-web-${{ runner.os }}-${{ steps.keys.outputs['formbricks-web'] }}
+
+      - name: Restore supabase-studio
+        if: steps.keys.outputs['supabase-studio'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/supabase-studio
+          key: bench-supabase-studio-${{ runner.os }}-${{ steps.keys.outputs['supabase-studio'] }}
+
+      - name: Restore t3code-server
+        if: steps.keys.outputs['t3code-server'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/t3code-server
+          key: bench-t3code-server-${{ runner.os }}-${{ steps.keys.outputs['t3code-server'] }}
+
+      - name: Restore drizzle-orm
+        if: steps.keys.outputs['drizzle-orm'] != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/drizzle-orm
+          key: bench-drizzle-orm-${{ runner.os }}-${{ steps.keys.outputs['drizzle-orm'] }}
+
+      - name: Set up the projects
+        run: python3 bench/run.py --setup-only --projects "$PROJECTS"
+
+      # perf is best-effort (the packaged tools may not match the runner kernel). BOLT as release.yml installs it, plus
+      # the hugify runtime.
+      - name: Install perf and BOLT
+        run: |
+          (sudo apt-get update -qq && sudo apt-get install -y -qq linux-tools-common linux-tools-generic >/dev/null 2>&1) || true
+          perf=""  # linux-tools-generic's perf is /usr/lib/linux-tools/<version>-generic/perf, a symlink
+          for f in /usr/lib/linux-tools/*/perf /usr/lib/linux-tools-*/perf; do if [ -x "$f" ]; then perf=$f; break; fi; done
+          if [ -n "$perf" ]; then
+            sudo sysctl -w kernel.perf_event_paranoid=-1 kernel.kptr_restrict=0
+            "$perf" stat -e instructions,cycles,iTLB-load-misses,L1-icache-load-misses -- true 2>&1 | tee probe-out/perf-check.txt
+            ("$perf" record -o /tmp/lbr.data -j any,u -e cycles:u -- sleep 0.1 && echo "LBR sampling: yes" \
+              || echo "LBR sampling: no") 2>&1 | tee -a probe-out/perf-check.txt
+            echo "PERF=$perf" >> "$GITHUB_ENV"
+          fi
+          llvm=$(rustc -vV | sed -n 's/^LLVM version: //p')
+          name="LLVM-$llvm-Linux-X64"
+          mkdir -p "$RUNNER_TEMP/llvm"
+          curl -fsSL "https://github.com/llvm/llvm-project/releases/download/llvmorg-$llvm/$name.tar.zst" |
+            tar -x --zstd -C "$RUNNER_TEMP/llvm" --strip-components=1 --wildcards \
+              "$name/bin/llvm-bolt" "$name/bin/merge-fdata" "$name/lib/libbolt_rt_instr.a"
+          echo "$RUNNER_TEMP/llvm/bin" >> "$GITHUB_PATH"
+          rustc -vV | tee probe-out/rustc.txt
+
+      - name: Build the variants
+        run: |
+          bash tools/perf/buildstd-build.sh /tmp/bstd bench/.work "$BINS" 2>&1 | tee probe-out/build.txt
+          cp /tmp/bstd/times.txt /tmp/bstd/sizes.txt /tmp/bstd/profiles.txt probe-out/ || true
+          mkdir -p probe-out/bin && for b in /tmp/bstd/bin/*; do cp "$b/tsrs" "probe-out/bin/$(basename "$b")"; done
+
+      - name: Measure
+        run: |
+          args=()
+          IFS=, read -ra names <<< "$BINS"
+          for n in "${names[@]}"; do if [ -x "/tmp/bstd/bin/$n/tsrs" ]; then args+=(--bin "$n=/tmp/bstd/bin/$n/tsrs"); fi; done
+          [ -n "${PERF:-}" ] && args+=(--perf "$PERF")
+          python3 tools/perf/layout-measure.py "${args[@]}" --projects "$PROJECTS" --checkers 1,default --reps "$REPS" \
+            --out probe-out
+          cat probe-out/layout.md >> "$GITHUB_STEP_SUMMARY"
+
+      # The bench's deterministic measure (bench/README.md "Regression flag"): user-space instructions of one
+      # `--singleThreaded` run with RAYON_NUM_THREADS=1, and its peak RSS. Needs no perf tool.
+      - name: Instruction counts (bench/count.py)
+        if: always()
+        run: |
+          IFS=, read -ra names <<< "$BINS"
+          IFS=, read -ra projects <<< "$PROJECTS"
+          printf 'project\tbin\tinstructions\tmax_rss_bytes\texit\n' > probe-out/counts.tsv
+          for p in "${projects[@]}"; do
+            IFS=$'\t' read -r cwd proj < <(python3 -c 'import json, sys; sys.path.insert(0, "bench"); import run as rb
+          cfg = json.load(open("bench/projects.json")); p = next(p for p in cfg["projects"] if p["name"] == sys.argv[1])
+          cwd, proj = rb.project_path(cfg, p, rb.Path("bench/.work").resolve()); print(f"{cwd}\t{proj}")' "$p")
+            for n in "${names[@]}"; do
+              [ -x "/tmp/bstd/bin/$n/tsrs" ] || continue
+              (cd "$cwd" && RAYON_NUM_THREADS=1 python3 "$GITHUB_WORKSPACE/bench/count.py" /tmp/count.json -- \
+                "/tmp/bstd/bin/$n/tsrs" -p "$proj" --noEmit --incremental false --singleThreaded --pretty false > /dev/null) || true
+              python3 -c 'import json, sys; d = json.load(open("/tmp/count.json")); print(sys.argv[1], sys.argv[2], d["instructions"], d["max_rss_bytes"], d["exit"], sep="\t")' "$p" "$n" | tee -a probe-out/counts.tsv
+            done
+          done
+
+      - name: Upload probe output
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: perf-buildstd-probe
+          path: probe-out
+          if-no-files-found: warn
