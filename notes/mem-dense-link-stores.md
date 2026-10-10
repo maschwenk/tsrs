@@ -81,5 +81,10 @@ match tsgo built from the pinned reference commit. No speed or memory improvemen
   failure lists, zero crashes or timeouts. Go-compatible history: 13,458 diagnostics, 12,779 types, 12,779 symbols.
   Canonical history with `TS_TEST_PROGRAM_SINGLE_THREADED=false`: 13,458 / 12,778 / 12,778, the existing
   `objectLiteralNormalization` difference. `TSRS_LAZY_MEMBERS=0`: 13,458 / 12,779 / 12,779.
+- Audit against the pinned Go reference with PR 64711's four-file change applied through a Go build overlay:
+  diagnostic stdout, stderr and exit status match on both benchmark projects at one, default and eight checkers,
+  and on 25/28 regression projects. The three existing differences (`base-type-cycle-entry`,
+  `merged-interface-check-site`, `union-too-complex-cross-product`) are identical before and after this port.
+  All 34 Rust comparisons are unchanged before/after; the patched and unmodified Go references also agree on all 34.
 
 The README capability counts and supported behavior are unchanged, so the capability table needs no update.
