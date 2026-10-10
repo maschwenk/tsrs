@@ -120,7 +120,7 @@ same diagnostics and emits the same 9,257 files byte for byte. [`docs/STATUS.md`
 | `--watch` | no | exits with "not supported" |
 | `--init`, `--showConfig` | no | exits with "not supported"; `--help` prints a short usage |
 | `--locale` | ignored | messages are English only |
-| `--generateTrace` | ignored | no trace is written |
+| `--generateTrace` | no | warns "Failed to start tracing" (tsgo's message when it can't write a trace) and type-checks as without the flag |
 | Prebuilt binaries | macOS arm64, Linux x64/arm64 (glibc) | no Windows or Intel macOS |
 
 ## Options

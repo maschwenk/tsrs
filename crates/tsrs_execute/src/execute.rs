@@ -284,6 +284,15 @@ fn print_version(sys: &dyn System) {
     ));
 }
 
+// tsc.go:28 startTracingIfNeeded. tsrs has no trace writer (Go's tracing package and the checker's type tracer), so
+// this is Go's branch for a trace that cannot be started: a warning, then the compilation runs untraced.
+fn start_tracing_if_needed(sys: &dyn System, config: &ParsedCommandLine) {
+    if config.compiler_options().unwrap().generate_trace.is_empty() {
+        return;
+    }
+    sys.write("Warning: Failed to start tracing: --generateTrace is not supported by tsrs\n");
+}
+
 fn perform_compilation(
     sys: &'static dyn System,
     config: P<ParsedCommandLine>,
@@ -332,6 +341,7 @@ fn perform_compilation(
     let mut program_options = ProgramOptions::new(config, host);
     program_options.leaf_files = leaf_settings.mode;
 
+    start_tracing_if_needed(sys, &config);
     let parse_start = sys.now();
     let program = new_program(program_options);
     compile_times.parse_time = sys.now() - parse_start;
@@ -400,6 +410,8 @@ fn perform_incremental_compilation(
         let program = new_program(ProgramOptions::new(config, Arc::clone(&host)));
         (program, sys.now() - start)
     };
+    // Go starts tracing between the build info read and the program; nothing in between writes output.
+    start_tracing_if_needed(sys, &config);
     let ((old_program, build_info_read_time), (program, parse_time)) = if config.compiler_options().unwrap().single_threaded.is_true() {
         let read = read_build_info();
         (read, build_program())
