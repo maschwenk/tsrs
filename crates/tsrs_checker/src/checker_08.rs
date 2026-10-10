@@ -506,7 +506,7 @@ impl Checker {
                     }
                     return Some(merged_candidate);
                 }
-                let pattern = find_best_pattern_match(&best_type_candidates, |v| v.pattern.clone(), module_reference).unwrap();
+                let pattern = find_best_pattern_match(&best_type_candidates, |v| &v.pattern, module_reference).unwrap();
                 let merged_candidate = self.get_merged_symbol(pattern.symbol);
                 if augmentation.is_some() && augmentation_target == Some(merged_candidate) {
                     return Some(self.get_merged_symbol(augmentation.unwrap()));

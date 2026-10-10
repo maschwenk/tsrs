@@ -40,7 +40,7 @@ impl Pattern {
     }
 }
 
-pub fn find_best_pattern_match<T: Clone>(values: &[T], mut get_pattern: impl FnMut(&T) -> Pattern, candidate: &str) -> Option<T> {
+pub fn find_best_pattern_match<T: Clone>(values: &[T], get_pattern: impl Fn(&T) -> &Pattern, candidate: &str) -> Option<T> {
     let mut best_pattern = None;
     let mut longest_match_prefix_length = -1;
     for value in values {
