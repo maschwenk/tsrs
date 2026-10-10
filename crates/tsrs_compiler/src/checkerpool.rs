@@ -31,10 +31,6 @@ pub use tsrs_core::context::Context;
 
 #[cfg(not(feature = "checker"))]
 impl Checker {
-    pub fn with_source_file<T>(&mut self, _file: P<SourceFile>, run: impl FnOnce(&mut Self) -> T) -> T {
-        run(self)
-    }
-
     pub fn get_diagnostics_exported(&mut self, _ctx: &Context, _source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
         unimplemented!("tsrs_compiler was built without the `checker` feature")
     }
@@ -1184,6 +1180,10 @@ fn plan_splits(program: &Program, files: &[P<SourceFile>], positions: &mut [Vec<
             if !file.is_declaration_file() || w == 0 || (config.force.is_none() && w * 100 < share * min_share) {
                 continue;
             }
+            // Native lint output belongs to the file's checker, so keep configured files whole.
+            if program.lint.as_ref().is_some_and(|lint| lint.includes(file)) {
+                continue;
+            }
             let count = config.force.unwrap_or(w.div_ceil(piece_size) as usize).min(active.len());
             let pieces = splitcheck::statement_pieces(file, count);
             if pieces.is_empty() {
@@ -2087,4 +2087,16 @@ mod stealing_tests {
         heavy_files_first(&mut unchanged, 100, |i| weights[i as usize]);
         assert_eq!(unchanged, positions);
     }
+}
+
+#[cfg(feature = "checker")]
+pub use tsrs_checker::lint::LintConfig;
+
+#[cfg(not(feature = "checker"))]
+pub struct LintConfig;
+
+#[cfg(not(feature = "checker"))]
+impl LintConfig {
+    pub fn includes(&self, _file: P<SourceFile>) -> bool { false }
+    pub fn collect(&self, _checker: &mut Checker, _file: P<SourceFile>) {}
 }

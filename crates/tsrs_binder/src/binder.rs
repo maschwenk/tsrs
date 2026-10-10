@@ -78,8 +78,6 @@ pub struct Binder {
     // Go appends to file.BindDiagnostics on every report; they are collected here and stored on the
     // file once binding completes (nothing reads them in between).
     bind_diagnostics: Vec<P<Diagnostic>>,
-    // Allocated only for files the caller opted into linting before binding.
-    lint_expression_statements: Option<Vec<P<Node>>>,
 }
 
 pub struct ActiveLabel {
@@ -109,12 +107,6 @@ fn bind_source_file_worker(file: P<SourceFile>) {
         let mut b = Binder::new(file);
         b.bind(file.as_node());
         b.bind_deferred_expando_assignments();
-        if let Some(mut nodes) = b.lint_expression_statements.take() {
-            // Binding visits function declarations first, unlike the rule tester's source-order walk.
-            nodes.sort_by_key(|node| (node.pos(), std::cmp::Reverse(node.end())));
-            nodes.dedup();
-            file.lint_nodes.get().unwrap().expression_statements.set(tsrs_core::alloc_vec(nodes));
-        }
         file.set_bind_diagnostics(&b.bind_diagnostics);
         file.symbol_count.set(b.symbol_count);
         for &lazy in file.lazy_lists.get() {
@@ -182,7 +174,6 @@ impl Binder {
             not_const_enum_only_modules: FxHashSet::default(),
             expando_assignments: Vec::new(),
             bind_diagnostics,
-            lint_expression_statements: file.lint_nodes.get().map(|_| Vec::new()),
         }
     }
 
@@ -769,11 +760,6 @@ impl Binder {
             Kind::Identifier => {
                 node.set_flow_node(self.current_flow);
                 self.check_contextual_identifier(node);
-            }
-            Kind::ExpressionStatement => {
-                if let Some(nodes) = &mut self.lint_expression_statements {
-                    nodes.push(node);
-                }
             }
             Kind::ThisKeyword | Kind::SuperKeyword => {
                 if node.kind() == Kind::ThisKeyword {

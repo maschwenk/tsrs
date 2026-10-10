@@ -2,14 +2,14 @@
 mod snapshot;
 
 use std::collections::BTreeMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use serde::Deserialize;
 use serde_json::Value;
 use tsrs_core::tspath;
 use tsrs_linter::{
-    ConfiguredRule, Fixes, RuleDefinition, RuleDiagnostic, RuleFix, RunLinterOptions, TypeErrors,
-    Workload, run_linter,
+    FileConfig, Fixes, LintConfig, RequestedRule, RuleDiagnostic, RuleFix, RunLinterOptions,
+    TypeErrors, Workload, run_linter,
 };
 use tsrs_scanner::get_ecma_line_and_utf16_character_of_position;
 use tsrs_vfs::{FS, bundled, vfstest};
@@ -69,7 +69,7 @@ fn lint(
     suite: &Suite,
     case: &TestCase,
     code: &str,
-    definition: &'static RuleDefinition,
+    rule_name: &'static str,
 ) -> Vec<RuleDiagnostic> {
     const ROOT: &str = "/fixtures";
     let data = &case.data;
@@ -102,10 +102,26 @@ fn lint(
         &data.tsconfig
     };
     let fs: Arc<dyn FS> = Arc::new(bundled::wrap_fs(vfstest::from_map(files, true)));
-    let diagnostics = Arc::new(Mutex::new(Vec::new()));
-    let output = Arc::clone(&diagnostics);
-    let options = data.options.clone();
-    run_linter(&RunLinterOptions {
+    let lint = Arc::new(
+        LintConfig::new(
+            &[FileConfig {
+                file_paths: vec![file_name.clone()],
+                rules: vec![RequestedRule {
+                    name: rule_name.into(),
+                    options: data.options.clone(),
+                }],
+            }],
+            ROOT,
+            true,
+            Fixes {
+                fix: true,
+                fix_suggestions: true,
+            },
+            false,
+        )
+        .unwrap(),
+    );
+    let result = run_linter(&RunLinterOptions {
         current_directory: ROOT.to_string(),
         workload: Workload {
             programs: BTreeMap::from([(
@@ -115,26 +131,17 @@ fn lint(
             unmatched_files: Vec::new(),
         },
         fs,
-        get_rules_for_file: Arc::new(move |_| {
-            vec![ConfiguredRule {
-                definition,
-                options: options.clone(),
-            }]
-        }),
-        on_rule_diagnostic: Arc::new(move |diagnostic| output.lock().unwrap().push(diagnostic)),
-        on_internal_diagnostic: Arc::new(|diagnostic| {
-            panic!("unexpected internal diagnostic: {diagnostic:?}")
-        }),
-        fixes: Fixes {
-            fix: true,
-            fix_suggestions: true,
-        },
+        lint,
         type_errors: TypeErrors::default(),
         suppress_program_diagnostics: false,
-        timings: false,
     })
     .unwrap_or_else(|error| panic!("{}: {error}", case.name));
-    diagnostics.lock().unwrap().clone()
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected internal diagnostics: {:?}",
+        result.diagnostics
+    );
+    result.lint.diagnostics
 }
 
 // source_code_fixer.go: ApplyRuleFixes. Keep overlapping diagnostic fixes together.
@@ -170,12 +177,7 @@ fn apply_rule_fixes<'a>(
     (output, fixed)
 }
 
-pub fn run_case(
-    suite: &Suite,
-    case: &TestCase,
-    definition: &'static RuleDefinition,
-    snapshots: &str,
-) {
+pub fn run_case(suite: &Suite, case: &TestCase, rule_name: &'static str, snapshots: &str) {
     let data = &case.data;
     assert!(
         !data.only,
@@ -185,7 +187,7 @@ pub fn run_case(
         eprintln!("explicitly running upstream skipped case {}", case.name);
     }
     if case.valid {
-        let diagnostics = lint(suite, case, &data.code, definition);
+        let diagnostics = lint(suite, case, &data.code, rule_name);
         assert!(
             diagnostics.is_empty(),
             "{}: {diagnostics:#?}\n{}",
@@ -198,7 +200,7 @@ pub fn run_case(
     let mut outputs = Vec::new();
     let mut code = data.code.clone();
     for iteration in 0..10 {
-        let diagnostics = lint(suite, case, &code, definition);
+        let diagnostics = lint(suite, case, &code, rule_name);
         let (fixed_code, fixed) =
             apply_rule_fixes(&code, diagnostics.iter().map(|d| d.fixes.as_slice()));
         if iteration == 0 {

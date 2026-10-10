@@ -86,15 +86,6 @@ impl Checker {
         None
     }
 
-    /// Runs a file-level extension before the compiler can retire this file's AST. Type printers
-    /// must still be allowed to read the current leaf file while producing the extension's diagnostics.
-    pub fn with_source_file<T>(&mut self, file: P<SourceFile>, run: impl FnOnce(&mut Self) -> T) -> T {
-        let saved = self.checking_file.replace(file);
-        let result = run(self);
-        self.checking_file = saved;
-        result
-    }
-
     // checker.go:2237
     pub(crate) fn check_source_file(&mut self, ctx: &Context, source_file: P<SourceFile>, check_unused: bool) {
         let saved_checking_file = self.checking_file.replace(source_file);
@@ -2413,6 +2404,7 @@ impl Checker {
                 &[],
             );
         }
+        self.lint_unchecked_node(node.statement());
     }
 
     // checker.go:4199

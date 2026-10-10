@@ -76,5 +76,6 @@ are byte-identical. Artifacts and the measurement script are in the ignored
 - Oxlint 1.87.0 installed in the oxc1 checkout reports the expected rule diagnostic using only
   `OXLINT_TSGOLINT_PATH` to select this release binary. A nonexistent path fails, confirming subprocess selection.
 
-Keep the binder candidate collection and file-completion hook. Do not replace them with callbacks from individual
-expression checks without proving complete coverage and preserving the upstream diagnostic/suggestion order.
+This design was superseded by `notes/perf-checker-node-lint.md`: the explicit request to simplify integration
+changed the constraint. Direct checker dispatch preserves the imported cases and diagnostic/suggestion order;
+coverage tests include deferred, unreachable and skipped bodies.

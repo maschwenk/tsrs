@@ -26,13 +26,8 @@ pub trait System: Sync {
     fn now(&self) -> Instant;
     fn since_start(&self) -> Duration;
 
-    /// Native CLI extensions can prepare freshly parsed files before binding begins.
-    fn compiler_host(&self, host: Arc<dyn tsrs_compiler::CompilerHost>) -> Arc<dyn tsrs_compiler::CompilerHost> {
-        host
-    }
-
-    /// Attach an extension before semantic checking begins.
-    fn program_setup(&self) -> Option<&(dyn Fn(&'static tsrs_compiler::Program) -> Result<(), String> + Sync)> {
+    /// Native lint configuration, installed before the compiler creates any checkers.
+    fn lint_config(&self) -> Option<&Arc<tsrs_compiler::LintConfig>> {
         None
     }
 

@@ -1,16 +1,12 @@
 use std::collections::BTreeMap;
-use std::sync::{Arc, Mutex, Once, OnceLock};
-use std::time::{Duration, Instant};
+use std::sync::{Arc, Mutex};
 
 use rustc_hash::FxHashMap;
-use tsrs_ast::{Diagnostic, LintNodes, SourceFile};
-use tsrs_compiler::{
-    CheckFileHook, Checker, CompilerHost, Context, Program, ProgramOptions,
-    new_cached_fs_compiler_host, new_program,
-};
+use tsrs_ast::{Diagnostic, SourceFile};
+use tsrs_compiler::{Context, Program, ProgramOptions, new_cached_fs_compiler_host, new_program};
 use tsrs_core::tspath::{self, ComparePathsOptions, Path};
 use tsrs_core::{
-    CompilerOptions, JsxEmit, ModuleKind, ModuleResolutionKind, OwnedCell, P, ScriptTarget,
+    CompilerOptions, JsxEmit, ModuleKind, ModuleResolutionKind, P, ScriptTarget, TextRange,
     Tristate,
 };
 use tsrs_tsoptions::{
@@ -18,7 +14,16 @@ use tsrs_tsoptions::{
 };
 use tsrs_vfs::{FS, bundled};
 
-use crate::{ConfiguredRule, Fixes, InternalDiagnostic, RuleContext, RuleDiagnostic};
+use crate::{LintConfig, LintOutput};
+
+#[derive(Clone, Debug)]
+pub struct InternalDiagnostic {
+    pub range: Option<TextRange>,
+    pub id: String,
+    pub description: String,
+    pub help: Option<String>,
+    pub file_path: Option<String>,
+}
 
 #[derive(Clone, Debug, Default)]
 pub struct Workload {
@@ -32,74 +37,18 @@ pub struct TypeErrors {
     pub report_semantic: bool,
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct RuleTimingRecord {
-    pub rule_name: String,
-    pub duration: Duration,
-    pub calls: u64,
-}
-
 pub struct RunLinterOptions {
     pub current_directory: String,
     pub workload: Workload,
     pub fs: Arc<dyn FS>,
-    pub get_rules_for_file: Arc<dyn Fn(P<SourceFile>) -> Vec<ConfiguredRule> + Send + Sync>,
-    pub on_rule_diagnostic: Arc<dyn Fn(RuleDiagnostic) + Send + Sync>,
-    pub on_internal_diagnostic: Arc<dyn Fn(InternalDiagnostic) + Send + Sync>,
-    pub fixes: Fixes,
+    pub lint: Arc<LintConfig>,
     pub type_errors: TypeErrors,
     pub suppress_program_diagnostics: bool,
-    pub timings: bool,
 }
 
-type RulesForFile = dyn Fn(P<SourceFile>) -> Vec<ConfiguredRule> + Send + Sync;
-
-struct LintHost {
-    base: Arc<dyn CompilerHost>,
-    get_rules: Arc<RulesForFile>,
-}
-
-/// Collect rule candidates in the original bind, including files bound during parallel loading.
-pub fn linting_host(
-    base: Arc<dyn CompilerHost>,
-    get_rules: Arc<RulesForFile>,
-) -> Arc<dyn CompilerHost> {
-    Arc::new(LintHost { base, get_rules })
-}
-
-impl CompilerHost for LintHost {
-    fn fs(&self) -> &dyn FS {
-        self.base.fs()
-    }
-    fn default_library_path(&self) -> &str {
-        self.base.default_library_path()
-    }
-    fn get_current_directory(&self) -> &str {
-        self.base.get_current_directory()
-    }
-    fn trace(&self, message: &'static tsrs_diagnostics::Message, args: &[&dyn std::fmt::Display]) {
-        self.base.trace(message, args);
-    }
-    fn get_resolved_project_reference(
-        &self,
-        name: &str,
-        path: Path,
-    ) -> Option<P<tsrs_tsoptions::ParsedCommandLine>> {
-        self.base.get_resolved_project_reference(name, path)
-    }
-    fn get_source_file(&self, options: tsrs_ast::SourceFileParseOptions) -> Option<P<SourceFile>> {
-        let file = self.base.get_source_file(options)?;
-        if !(self.get_rules)(file).is_empty() && file.lint_nodes.get().is_none() {
-            assert!(
-                !file.is_bound(),
-                "linting requires freshly parsed source files"
-            );
-            file.lint_nodes.set(Some(P::new(LintNodes {
-                expression_statements: OwnedCell::new(&[]),
-            })));
-        }
-        Some(file)
-    }
+pub struct LinterResult {
+    pub lint: LintOutput,
+    pub diagnostics: Vec<InternalDiagnostic>,
 }
 
 struct ConfigHost {
@@ -146,8 +95,7 @@ fn create_configured_program(
     fs: Arc<dyn FS>,
     config_name: &str,
     suppress_program_diagnostics: bool,
-    get_rules: Arc<RulesForFile>,
-    setup: &dyn Fn(&'static Program) -> Result<(), String>,
+    lint: Arc<LintConfig>,
 ) -> Result<(Option<&'static Program>, Vec<InternalDiagnostic>), String> {
     let cwd = tspath::get_directory_path(config_name);
     let parse_host: &'static ConfigHost = Box::leak(Box::new(ConfigHost {
@@ -179,11 +127,11 @@ fn create_configured_program(
     }
     let config = P::new(parsed);
     let host = new_cached_fs_compiler_host(&cwd, fs, &bundled::lib_path(), None, None);
-    let mut opts = ProgramOptions::new(config, linting_host(host, get_rules));
+    let mut opts = ProgramOptions::new(config, host);
     opts.use_source_of_project_reference = true;
     opts.single_threaded = Tristate::False;
+    opts.lint = Some(lint);
     let program = new_program(opts);
-    setup(program)?;
     let diagnostics = program.get_program_diagnostics();
     if !diagnostics.is_empty() && !suppress_program_diagnostics {
         return Ok((
@@ -201,9 +149,8 @@ fn create_empty_program(
     fs: Arc<dyn FS>,
     cwd: &str,
     files: &[String],
-    get_rules: Arc<RulesForFile>,
-    setup: &dyn Fn(&'static Program) -> Result<(), String>,
-) -> Result<&'static Program, String> {
+    lint: Arc<LintConfig>,
+) -> &'static Program {
     let options = P::new(CompilerOptions {
         allow_js: Tristate::True,
         module: ModuleKind::ESNext,
@@ -229,11 +176,10 @@ fn create_empty_program(
         },
     ));
     let host = new_cached_fs_compiler_host(cwd, fs, &bundled::lib_path(), None, None);
-    let mut opts = ProgramOptions::new(config, linting_host(host, get_rules));
+    let mut opts = ProgramOptions::new(config, host);
     opts.single_threaded = Tristate::False;
-    let program = new_program(opts);
-    setup(program)?;
-    Ok(program)
+    opts.lint = Some(lint);
+    new_program(opts)
 }
 
 fn requested_source_files(
@@ -269,122 +215,14 @@ fn requested_source_files(
     ))
 }
 
-struct FileRules {
-    rules: Vec<ConfiguredRule>,
-    completed: Once,
-}
-
-/// A per-program lint pass. Executes on the file's checker after
-/// semantic checking, including deferred checks, finishes. It never acquires another checker.
-pub struct LintSession {
-    files: FxHashMap<P<SourceFile>, FileRules>,
-    fixes: Fixes,
-    on_diagnostic: Arc<dyn Fn(RuleDiagnostic) + Send + Sync>,
-    timings_enabled: bool,
-    timings: Mutex<FxHashMap<&'static str, (Duration, u64)>>,
-    error: Mutex<Option<String>>,
-}
-
-impl LintSession {
-    pub fn attach(
-        program: &'static Program,
-        files: &[P<SourceFile>],
-        get_rules: &dyn Fn(P<SourceFile>) -> Vec<ConfiguredRule>,
-        fixes: Fixes,
-        on_diagnostic: Arc<dyn Fn(RuleDiagnostic) + Send + Sync>,
-        timings: bool,
-    ) -> Result<Arc<Self>, String> {
-        let mut configured = FxHashMap::default();
-        for &file in files {
-            let rules = get_rules(file);
-            if !rules.is_empty() && file.lint_nodes.get().is_none() {
-                return Err(format!("linting host did not prepare {}", file.file_name()));
-            }
-            configured.insert(
-                file,
-                FileRules {
-                    rules,
-                    completed: Once::new(),
-                },
-            );
-        }
-        let session = Arc::new(Self {
-            files: configured,
-            fixes,
-            on_diagnostic,
-            timings_enabled: timings,
-            timings: Mutex::new(FxHashMap::default()),
-            error: Mutex::new(None),
-        });
-        program.set_check_file_hook(Arc::clone(&session) as Arc<dyn CheckFileHook>);
-        Ok(session)
-    }
-
-    pub fn result(&self) -> Result<Vec<RuleTimingRecord>, String> {
-        if let Some(error) = self.error.lock().unwrap().as_ref() {
-            return Err(error.clone());
-        }
-        let mut records: Vec<_> = self
-            .timings
-            .lock()
-            .unwrap()
-            .iter()
-            .map(|(&name, &(duration, calls))| RuleTimingRecord {
-                rule_name: name.to_string(),
-                duration,
-                calls,
-            })
-            .collect();
-        records.sort_by(|a, b| a.rule_name.cmp(&b.rule_name));
-        Ok(records)
-    }
-}
-
-impl CheckFileHook for LintSession {
-    fn includes(&self, file: P<SourceFile>) -> bool {
-        self.files.contains_key(&file)
-    }
-
-    fn after_check(&self, program: &'static Program, checker: &mut Checker, file: P<SourceFile>) {
-        let configured = &self.files[&file];
-        configured.completed.call_once(|| {
-            for configured in &configured.rules {
-                let mut context = RuleContext {
-                    source_file: file,
-                    program,
-                    checker,
-                    rule_name: configured.definition.name,
-                    fixes: self.fixes,
-                    on_diagnostic: &self.on_diagnostic,
-                };
-                let start = self.timings_enabled.then(Instant::now);
-                let result = (configured.definition.run)(&mut context, &configured.options);
-                if let Some(start) = start {
-                    let mut all = self.timings.lock().unwrap();
-                    let stat = all.entry(configured.definition.name).or_default();
-                    stat.0 += start.elapsed();
-                    if let Ok(calls) = &result {
-                        stat.1 += *calls;
-                    }
-                }
-                if let Err(error) = result {
-                    self.error.lock().unwrap().get_or_insert(error);
-                    break;
-                }
-            }
-        });
-    }
-}
-
 fn run_on_program(
     options: &RunLinterOptions,
     program: &'static Program,
     files: &[P<SourceFile>],
-    timings: &mut BTreeMap<String, (Duration, u64)>,
-    session: &LintSession,
-) -> Result<(), String> {
+) -> Result<Vec<InternalDiagnostic>, String> {
     program.bind_source_files();
     let ctx = Context::default();
+    let output = Mutex::new(Vec::new());
     if !program.for_each_checker_group(files, |checker, _, file| {
         // Reporting switches never decide whether a requested file is checked.
         let semantic = program.get_semantic_diagnostics_with_checker(&ctx, checker, file);
@@ -396,244 +234,161 @@ fn run_on_program(
         if options.type_errors.report_semantic {
             diagnostics.extend(semantic);
         }
-        for diagnostic in diagnostics {
-            if diagnostic
-                .file()
-                .is_some_and(|f| f.file_name() == file.file_name())
-            {
-                (options.on_internal_diagnostic)(diagnostic_to_internal(
-                    diagnostic,
-                    Some(file.file_name()),
-                    false,
-                ));
-            }
-        }
+        output.lock().unwrap().extend(
+            diagnostics
+                .into_iter()
+                .filter(|diagnostic| {
+                    diagnostic
+                        .file()
+                        .is_some_and(|f| f.file_name() == file.file_name())
+                })
+                .map(|diagnostic| {
+                    diagnostic_to_internal(diagnostic, Some(file.file_name()), false)
+                }),
+        );
     }) {
         return Err("program does not expose a checker pool".to_string());
     }
-    for record in session.result()? {
-        let stat = timings.entry(record.rule_name).or_default();
-        stat.0 += record.duration;
-        stat.1 += record.calls;
-    }
-    Ok(())
+    Ok(output.into_inner().unwrap())
 }
 
-pub fn run_linter(options: &RunLinterOptions) -> Result<Vec<RuleTimingRecord>, String> {
-    let mut timings = BTreeMap::new();
+/// Create the requested TypeScript programs and check their files. Rules run inside those checks.
+pub fn run_linter(options: &RunLinterOptions) -> Result<LinterResult, String> {
+    let mut diagnostics = Vec::new();
     for (config_name, names) in &options.workload.programs {
         let cwd = tspath::get_directory_path(config_name);
-        let session = OnceLock::new();
-        let setup = |program| {
-            let files = requested_source_files(program, names, &cwd)?;
-            session
-                .set(LintSession::attach(
-                    program,
-                    &files,
-                    &*options.get_rules_for_file,
-                    options.fixes,
-                    Arc::clone(&options.on_rule_diagnostic),
-                    options.timings,
-                )?)
-                .ok();
-            Ok(())
-        };
-        let (program, diagnostics) = create_configured_program(
+        let (program, errors) = create_configured_program(
             Arc::clone(&options.fs),
             config_name,
             options.suppress_program_diagnostics,
-            Arc::clone(&options.get_rules_for_file),
-            &setup,
+            Arc::clone(&options.lint),
         )?;
-        for diagnostic in diagnostics {
-            (options.on_internal_diagnostic)(diagnostic);
-        }
+        diagnostics.extend(errors);
         let Some(program) = program else { continue };
         let files = requested_source_files(program, names, &cwd)?;
-        run_on_program(
-            options,
-            program,
-            &files,
-            &mut timings,
-            session.get().unwrap(),
-        )?;
+        diagnostics.extend(run_on_program(options, program, &files)?);
     }
     if !options.workload.unmatched_files.is_empty() {
-        let session = OnceLock::new();
-        let setup = |program| {
-            let files = requested_source_files(
-                program,
-                &options.workload.unmatched_files,
-                &options.current_directory,
-            )?;
-            session
-                .set(LintSession::attach(
-                    program,
-                    &files,
-                    &*options.get_rules_for_file,
-                    options.fixes,
-                    Arc::clone(&options.on_rule_diagnostic),
-                    options.timings,
-                )?)
-                .ok();
-            Ok(())
-        };
         let program = create_empty_program(
             Arc::clone(&options.fs),
             &options.current_directory,
             &options.workload.unmatched_files,
-            Arc::clone(&options.get_rules_for_file),
-            &setup,
-        )?;
+            Arc::clone(&options.lint),
+        );
         let files = requested_source_files(
             program,
             &options.workload.unmatched_files,
             &options.current_directory,
         )?;
-        run_on_program(
-            options,
-            program,
-            &files,
-            &mut timings,
-            session.get().unwrap(),
-        )?;
+        diagnostics.extend(run_on_program(options, program, &files)?);
     }
-    let mut result: Vec<_> = timings
-        .into_iter()
-        .map(|(name, (duration, calls))| RuleTimingRecord {
-            rule_name: name,
-            duration,
-            calls,
-        })
-        .collect();
-    result.sort_by(|a, b| a.rule_name.cmp(&b.rule_name));
-    Ok(result)
+    Ok(LinterResult {
+        lint: options.lint.take_output(),
+        diagnostics,
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::RuleDefinition;
+    use crate::{FileConfig, Fixes, NO_FLOATING_PROMISES, RequestedRule};
     use serde_json::{Value, json};
     use tsrs_ast::{Kind, Node};
     use tsrs_vfs::vfstest;
 
-    static CHECKED_RULE: RuleDefinition = RuleDefinition {
-        name: "assert-checked",
-        run: |context, _| {
-            let links = context.checker.source_file_links.get(context.source_file);
-            assert!(
-                links.type_checked.get(),
-                "lint ran before semantic checking completed"
-            );
-            assert!(
-                links.unused_checked.get(),
-                "lint ran before deferred diagnostics completed"
-            );
-            Ok(1)
-        },
-    };
+    fn config(files: &[&str], enabled: bool) -> Arc<LintConfig> {
+        Arc::new(
+            LintConfig::new(
+                &[FileConfig {
+                    file_paths: files.iter().map(|file| file.to_string()).collect(),
+                    rules: if enabled {
+                        vec![RequestedRule {
+                            name: NO_FLOATING_PROMISES.into(),
+                            options: Value::Null,
+                        }]
+                    } else {
+                        vec![]
+                    },
+                }],
+                "/",
+                true,
+                Fixes::default(),
+                true,
+            )
+            .unwrap(),
+        )
+    }
 
     #[test]
-    fn checking_is_mandatory_and_rules_run_once() {
-        for (mut settings, directive) in [
-            (json!({}), ""),
-            (json!({"noCheck": true}), ""),
-            (json!({}), "// @ts-nocheck\n"),
+    fn checking_is_mandatory_and_each_node_runs_once() {
+        for (mut settings, directive, file_name) in [
+            (json!({}), "", "/file.ts"),
+            (json!({"noCheck": true}), "", "/file.ts"),
+            (json!({}), "// @ts-nocheck\n", "/file.ts"),
+            (json!({"skipLibCheck": true}), "", "/file.d.ts"),
         ] {
             settings["noUnusedLocals"] = json!(true);
             for enabled in [false, true] {
                 let source = format!(
-                    "{directive}const x: number = 'bad';\nfunction f() {{ const unused = 1; }}\n"
+                    "{directive}declare function p(): Promise<void>;\np();\nconst x: number = 'bad';\n"
                 );
-                let config = json!({"compilerOptions": settings, "files": ["file.ts"]}).to_string();
+                let tsconfig =
+                    json!({"compilerOptions": settings, "files": [file_name]}).to_string();
                 let fs: Arc<dyn FS> = Arc::new(bundled::wrap_fs(vfstest::from_map(
                     [
-                        ("/file.ts", source.as_str()),
-                        ("/tsconfig.json", config.as_str()),
+                        (file_name, source.as_str()),
+                        ("/tsconfig.json", tsconfig.as_str()),
                     ],
                     true,
                 )));
-                let get_rules: Arc<RulesForFile> = Arc::new(move |_| {
-                    if enabled {
-                        vec![ConfiguredRule {
-                            definition: &CHECKED_RULE,
-                            options: Value::Null,
-                        }]
-                    } else {
-                        Vec::new()
-                    }
-                });
-                let session = OnceLock::new();
+                let lint = config(&[file_name], enabled);
                 let (program, errors) = create_configured_program(
                     Arc::clone(&fs),
                     "/tsconfig.json",
                     false,
-                    Arc::clone(&get_rules),
-                    &|program| {
-                        let file = program
-                            .source_files()
-                            .iter()
-                            .copied()
-                            .find(|f| f.file_name() == "/file.ts")
-                            .unwrap();
-                        session
-                            .set(LintSession::attach(
-                                program,
-                                &[file],
-                                &*get_rules,
-                                Fixes::default(),
-                                Arc::new(|_| {}),
-                                true,
-                            )?)
-                            .ok();
-                        Ok(())
-                    },
+                    Arc::clone(&lint),
                 )
                 .unwrap();
                 assert!(errors.is_empty());
                 let program = program.unwrap();
-                let file = program
-                    .source_files()
-                    .iter()
-                    .copied()
-                    .find(|f| f.file_name() == "/file.ts")
-                    .unwrap();
+                let file = program.get_source_file(file_name).unwrap();
                 let options = RunLinterOptions {
                     current_directory: "/".into(),
                     workload: Workload::default(),
                     fs,
-                    get_rules_for_file: get_rules,
-                    on_rule_diagnostic: Arc::new(|_| panic!("unexpected rule report")),
-                    on_internal_diagnostic: Arc::new(|_| panic!("reporting is disabled")),
-                    fixes: Fixes::default(),
+                    lint: Arc::clone(&lint),
                     type_errors: TypeErrors::default(),
                     suppress_program_diagnostics: false,
-                    timings: true,
                 };
-                run_on_program(
-                    &options,
-                    program,
-                    &[file],
-                    &mut BTreeMap::new(),
-                    session.get().unwrap(),
-                )
-                .unwrap();
+                assert!(
+                    run_on_program(&options, program, &[file])
+                        .unwrap()
+                        .is_empty()
+                );
                 program.for_each_checker_group(&[file], |checker, _, file| {
                     assert!(checker.source_file_links.get(file).type_checked.get());
+                    assert!(checker.source_file_links.get(file).unused_checked.get());
                 });
-                program.get_semantic_diagnostics(&Context::default(), Some(file));
-                let records = session.get().unwrap().result().unwrap();
+                let output = lint.take_output();
+                assert_eq!(output.diagnostics.len(), usize::from(enabled));
                 assert_eq!(
-                    records.iter().map(|record| record.calls).sum::<u64>(),
+                    output
+                        .timings
+                        .iter()
+                        .map(|record| record.calls)
+                        .sum::<u64>(),
                     u64::from(enabled)
                 );
+                program.get_semantic_diagnostics(&Context::default(), Some(file));
+                let repeated = lint.take_output();
+                assert!(repeated.diagnostics.is_empty());
+                assert!(repeated.timings.is_empty());
             }
         }
     }
 
     #[test]
-    fn binder_candidates_match_source_order_including_deferred_and_unreachable_nodes() {
+    fn checker_dispatch_covers_deferred_unreachable_and_skipped_bodies() {
         let code = r#"
 declare function p(): Promise<void>;
 p();
@@ -649,21 +404,10 @@ try { p(); } catch { p(); } finally { p(); }
             [("/file.ts", code)],
             true,
         )));
-        let rules: Arc<RulesForFile> = Arc::new(|_| {
-            vec![ConfiguredRule {
-                definition: &CHECKED_RULE,
-                options: Value::Null,
-            }]
-        });
-        let program =
-            create_empty_program(fs, "/", &["/file.ts".into()], rules, &|_| Ok(())).unwrap();
-        program.bind_source_files();
-        let file = program
-            .source_files()
-            .iter()
-            .copied()
-            .find(|f| f.file_name() == "/file.ts")
-            .unwrap();
+        let lint = config(&["/file.ts"], true);
+        let program = create_empty_program(fs, "/", &["/file.ts".into()], Arc::clone(&lint));
+        let file = program.get_source_file("/file.ts").unwrap();
+        program.get_semantic_diagnostics(&Context::default(), Some(file));
         fn walk(node: P<Node>, nodes: &mut Vec<P<Node>>) {
             if node.kind() == Kind::ExpressionStatement {
                 nodes.push(node);
@@ -673,12 +417,93 @@ try { p(); } catch { p(); } finally { p(); }
                 false
             });
         }
-        let mut expected = Vec::new();
-        walk(file.as_node(), &mut expected);
-        assert_eq!(expected.len(), 14);
-        assert_eq!(
-            file.lint_nodes.get().unwrap().expression_statements.get(),
-            expected
+        let mut nodes = Vec::new();
+        walk(file.as_node(), &mut nodes);
+        assert_eq!(nodes.len(), 14);
+        program.for_each_checker_group(&[file], |checker, _, _| {
+            for &node in &nodes {
+                assert!(
+                    checker
+                        .node_links
+                        .get(node)
+                        .flags
+                        .get()
+                        .intersects(tsrs_checker::NodeCheckFlags::LintChecked),
+                    "statement at {} was skipped",
+                    node.pos()
+                );
+            }
+        });
+        let output = lint.take_output();
+        assert_eq!(output.timings[0].calls, 14);
+        assert_eq!(output.diagnostics.len(), 12); // with's `any` and the void-returning IIFE are not promises.
+        assert!(
+            output
+                .diagnostics
+                .windows(2)
+                .all(|pair| pair[0].range.pos() < pair[1].range.pos())
         );
+    }
+
+    #[test]
+    fn per_file_options_and_cross_file_inference_keep_results_on_the_owning_checker() {
+        let fs: Arc<dyn FS> = Arc::new(bundled::wrap_fs(vfstest::from_map(
+            [
+                (
+                    "/a.ts",
+                    "import { b } from './b'; export const a = b(); Promise.resolve(a); void Promise.resolve(a);",
+                ),
+                (
+                    "/b.ts",
+                    "export const b = () => { Promise.resolve(1); return 1; }; void Promise.resolve(1);",
+                ),
+                (
+                    "/tsconfig.json",
+                    r#"{"compilerOptions":{"target":"esnext","module":"esnext","checkers":2},"files":["a.ts","b.ts"]}"#,
+                ),
+            ],
+            true,
+        )));
+        let configs = [
+            FileConfig {
+                file_paths: vec!["/a.ts".into()],
+                rules: vec![RequestedRule {
+                    name: NO_FLOATING_PROMISES.into(),
+                    options: Value::Null,
+                }],
+            },
+            FileConfig {
+                file_paths: vec!["/b.ts".into()],
+                rules: vec![RequestedRule {
+                    name: NO_FLOATING_PROMISES.into(),
+                    options: json!({"ignoreVoid":false}),
+                }],
+            },
+        ];
+        let lint = Arc::new(LintConfig::new(&configs, "/", true, Fixes::default(), true).unwrap());
+        let result = run_linter(&RunLinterOptions {
+            current_directory: "/".into(),
+            workload: Workload {
+                programs: BTreeMap::from([(
+                    "/tsconfig.json".into(),
+                    vec!["/a.ts".into(), "/b.ts".into()],
+                )]),
+                unmatched_files: vec![],
+            },
+            fs,
+            lint,
+            type_errors: TypeErrors::default(),
+            suppress_program_diagnostics: false,
+        })
+        .unwrap();
+        assert!(result.diagnostics.is_empty());
+        let files: Vec<_> = result
+            .lint
+            .diagnostics
+            .iter()
+            .map(|d| d.source_file.file_name())
+            .collect();
+        assert_eq!(files, ["/a.ts", "/b.ts", "/b.ts"]);
+        assert_eq!(result.lint.timings[0].calls, 4);
     }
 }

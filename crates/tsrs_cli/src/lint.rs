@@ -1,26 +1,20 @@
 //! Native compiler entry point for `--lint <headless-config.json>`.
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use rustc_hash::FxHashMap;
-use tsrs_ast::SourceFile;
-use tsrs_compiler::{CompilerHost, Program};
-use tsrs_core::P;
 use tsrs_core::tspath;
 use tsrs_execute::{execute, tsc};
-use tsrs_linter::{ConfiguredRule, Fixes, LintSession, RuleDiagnostic, rule_by_name};
+use tsrs_linter::{Fixes, HeadlessConfig as Payload, LintConfig};
 use tsrs_scanner::get_ecma_line_and_utf16_character_of_position;
 use tsrs_vfs::{FS, bundled};
 
-use crate::headless::{OverlayFs, Payload};
-
-type ProgramSetup = dyn Fn(&'static Program) -> Result<(), String> + Send + Sync;
+use crate::headless::OverlayFs;
 
 struct LintSystem {
     base: &'static dyn tsc::System,
     fs: Arc<dyn FS>,
-    setup: Box<ProgramSetup>,
-    rules: Arc<dyn Fn(P<SourceFile>) -> Vec<ConfiguredRule> + Send + Sync>,
+    lint: Arc<LintConfig>,
 }
 
 impl tsc::System for LintSystem {
@@ -51,11 +45,8 @@ impl tsc::System for LintSystem {
     fn since_start(&self) -> Duration {
         self.base.since_start()
     }
-    fn compiler_host(&self, host: Arc<dyn CompilerHost>) -> Arc<dyn CompilerHost> {
-        tsrs_linter::linting_host(host, Arc::clone(&self.rules))
-    }
-    fn program_setup(&self) -> Option<&(dyn Fn(&'static Program) -> Result<(), String> + Sync)> {
-        Some(&*self.setup)
+    fn lint_config(&self) -> Option<&Arc<LintConfig>> {
+        Some(&self.lint)
     }
 }
 
@@ -111,82 +102,37 @@ pub(crate) fn command_line(
         Arc::clone(&base_fs),
         overlays,
     )));
-    let mut rules = FxHashMap::default();
-    for config in payload.configs {
-        let configured: Vec<_> = config
-            .rules
-            .into_iter()
-            .filter_map(|rule| {
-                rule_by_name(&rule.name).map(|definition| ConfiguredRule {
-                    definition,
-                    options: rule.options,
-                })
-            })
-            .collect();
-        for file in config.file_paths {
-            let file = tspath::get_normalized_absolute_path(&file, cwd);
-            rules.insert(
+    let mut lint = match LintConfig::new(
+        &payload.configs,
+        cwd,
+        fs.use_case_sensitive_file_names(),
+        Fixes::default(),
+        false,
+    ) {
+        Ok(lint) => lint,
+        Err(message) => return error(sys, &message),
+    };
+    for config in &payload.configs {
+        for file in &config.file_paths {
+            let file = tspath::get_normalized_absolute_path(file, cwd);
+            lint.add_path_alias(
+                &tspath::to_path(&file, cwd, fs.use_case_sensitive_file_names()),
                 tspath::to_path(
                     &base_fs.realpath(&file),
                     cwd,
                     fs.use_case_sensitive_file_names(),
                 ),
-                configured.clone(),
-            );
-            rules.insert(
-                tspath::to_path(&file, cwd, fs.use_case_sensitive_file_names()),
-                configured.clone(),
             );
         }
     }
-    let rules = Arc::new(rules);
-    let host_rules = Arc::clone(&rules);
-    let output = Arc::new(Mutex::new(Vec::<RuleDiagnostic>::new()));
-    let diagnostics = Arc::clone(&output);
-    let sessions = Arc::new(Mutex::new(Vec::new()));
-    let saved_sessions = Arc::clone(&sessions);
-    let no_emit = Arc::new(Mutex::new(true));
-    let saved_no_emit = Arc::clone(&no_emit);
-    let setup = Box::new(move |program: &'static Program| {
-        *saved_no_emit.lock().unwrap() = program.options().no_emit.is_true();
-        let files: Vec<_> = program
-            .source_files()
-            .iter()
-            .copied()
-            .filter(|file| rules.contains_key(file.path()))
-            .collect();
-        let output = Arc::clone(&diagnostics);
-        let session = LintSession::attach(
-            program,
-            &files,
-            &|file| rules[file.path()].clone(),
-            Fixes::default(),
-            Arc::new(move |diagnostic| output.lock().unwrap().push(diagnostic)),
-            false,
-        )?;
-        saved_sessions.lock().unwrap().push(session);
-        Ok(())
-    });
     let lint_sys: &'static LintSystem = Box::leak(Box::new(LintSystem {
         base: sys,
         fs,
-        setup,
-        rules: Arc::new(move |file| host_rules.get(file.path()).cloned().unwrap_or_default()),
+        lint: Arc::new(lint),
     }));
     let mut result = execute::command_line(lint_sys, args);
-    for session in sessions.lock().unwrap().iter() {
-        if let Err(message) = session.result() {
-            return error(sys, &message);
-        }
-    }
-    let mut diagnostics = output.lock().unwrap();
-    diagnostics.sort_by(|a, b| {
-        a.source_file
-            .file_name()
-            .cmp(b.source_file.file_name())
-            .then(a.range.pos().cmp(&b.range.pos()))
-            .then(a.rule_name.cmp(b.rule_name))
-    });
+    let output = lint_sys.lint.take_output();
+    let diagnostics = output.diagnostics;
     for diagnostic in diagnostics.iter() {
         let (line, column) = get_ecma_line_and_utf16_character_of_position(
             diagnostic.source_file.get(),
@@ -202,7 +148,7 @@ pub(crate) fn command_line(
         ));
     }
     if !diagnostics.is_empty() && result.status == tsc::ExitStatus::Success {
-        result.status = if *no_emit.lock().unwrap() {
+        result.status = if output.no_emit {
             tsc::ExitStatus::DiagnosticsPresent_OutputsSkipped
         } else {
             tsc::ExitStatus::DiagnosticsPresent_OutputsGenerated

@@ -110,7 +110,7 @@ macro_rules! case {
         fn $name() {
             let case = &suite().cases[$index];
             assert_eq!(case.name, $upstream);
-            rule_tester::run_case(suite(), case, &tsrs_linter::NO_FLOATING_PROMISES,
+            rule_tester::run_case(suite(), case, tsrs_linter::NO_FLOATING_PROMISES,
                 include_str!("fixtures/tsgolint/no-floating-promises.snap"));
         }
     };

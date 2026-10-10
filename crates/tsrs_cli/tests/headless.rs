@@ -87,7 +87,7 @@ fn oxc_v2_protocol_emits_rule_diagnostics_suggestions_and_timings() {
     assert_eq!(frames[0].1["suggestions"].as_array().unwrap().len(), 2);
     assert_eq!(frames[1].0, 2);
     assert_eq!(frames[1].1["rules"][0]["rule_name"], "no-floating-promises");
-    assert_eq!(frames[1].1["rules"][0]["calls"], 2);
+    assert_eq!(frames[1].1["rules"][0]["calls"], 1);
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -344,4 +344,61 @@ fn native_lint_checks_with_no_check_and_syntax_errors() {
         );
     }
     let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn native_lint_keeps_configured_declaration_files_on_one_checker() {
+    let dir = scratch("declaration-pieces");
+    let mut source = String::from("declare function p(): Promise<void>;\n");
+    for index in 0..32 {
+        source.push_str(&format!("declare namespace N{index} {{ p(); }}\n"));
+    }
+    std::fs::write(dir.join("a.d.ts"), source).unwrap();
+    std::fs::write(
+        dir.join("tsconfig.json"),
+        json!({
+            "compilerOptions": {"target": "esnext", "noEmit": true, "checkers": 4},
+            "files": ["a.d.ts"]
+        })
+        .to_string(),
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("lint.json"),
+        json!({
+            "version": 2,
+            "configs": [{"file_paths": ["a.d.ts"], "rules": [{"name": "no-floating-promises"}]}]
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let mut expected = None;
+    for mode in ["0", "force:4", "force:4,shadow"] {
+        let output = Command::new(env!("CARGO_BIN_EXE_tsrs"))
+            .args(["-p", ".", "--lint", "lint.json", "--pretty", "false"])
+            .current_dir(&dir)
+            .env("TSRS_SPLIT_FILES", mode)
+            .output()
+            .unwrap();
+        assert!(
+            output
+                .status
+                .code()
+                .is_some_and(|code| code == 1 || code == 2),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let text = String::from_utf8(output.stdout).unwrap();
+        assert_eq!(
+            text.matches("error no-floating-promises:").count(),
+            32,
+            "{mode}: {text}"
+        );
+        if let Some(expected) = &expected {
+            assert_eq!(&text, expected, "{mode}");
+        } else {
+            expected = Some(text);
+        }
+    }
+    std::fs::remove_dir_all(dir).unwrap();
 }

@@ -10,12 +10,21 @@ OXLINT_TSGOLINT_PATH="$PWD/target/release/tsrs" oxlint --type-aware
 
 The backend currently implements `typescript/no-floating-promises`. Rule options, suggestions (`--fix-suggestions`),
 source overlays, per-file tsconfig discovery, project references, TypeScript diagnostics (`oxlint --type-check`) and
-debug timing frames are supported. Headless always type-checks each requested file and runs its configured rules
-on that same checker, after deferred semantic checks finish. `report_syntactic` and `report_semantic` only select
-which TypeScript diagnostics are returned; neither disables checking, including when the rule list is empty.
-`noCheck`, `@ts-nocheck` and `skipLibCheck` still suppress their usual TypeScript reports, but do not bypass the
-check needed by linting. Expression statements are collected during the existing bind traversal, so linting no
-longer walks the entire syntax tree a second time. Rules run once per file and finish before any leaf AST is freed.
+debug timing frames are supported. Headless always type-checks each requested file. `report_syntactic` and
+`report_semantic` only select which TypeScript diagnostics are returned; neither disables checking, including when
+the rule list is empty. `noCheck`, `@ts-nocheck` and `skipLibCheck` still suppress their usual TypeScript reports,
+but do not bypass the check needed by linting.
+
+Both entry points parse the same headless config and prepare rule options once, before creating the program.
+The checker checks an expression statement, then dispatches its configured native rules immediately. Rules live
+in `tsrs_checker::lint`; `tsrs_linter` only loads headless programs and requests checks. There is no binder candidate
+list, compiler-host wrapper, file-completion callback, or separate lint pass.
+
+A node-link flag prevents repeated dispatch when type inference and deferred checking revisit a statement. Each
+checker buffers its diagnostics; the compiler collects only the files assigned to that checker. Configured
+declaration files are checked whole rather than split across checkers. Diagnostics are
+sorted into source order for output. TypeScript deliberately skips `with` bodies, so lint visits that skipped
+subtree explicitly; ordinary code needs no additional AST traversal. Timing `calls` counts node dispatches.
 
 Oxlint may send other type-aware rules in the same request; tsrs silently skips those until they are ported.
 
@@ -66,8 +75,8 @@ cargo test -p tsrs_linter --test no_floating_promises test_no_floating_promises_
 `crates/tsrs_linter/tests/` imports the complete `no_floating_promises_test.go` suite from tsgolint commit
 `24b18b48c47b7ae0d84e21a0e974575026e27908`: 77 valid and 112 invalid cases, including the cases constructed by Go
 loops. The original `node:test` case remains ignored, as upstream marks it `Skip: true`; 188 cases run and pass.
-The crate also has 14 local checks, including mandatory semantic checking, once-per-file rule execution and
-binder candidate coverage/order. Seven CLI integration checks cover the protocol and native flag. Depot CI runs both suites in its fast-crates job.
+The crate also has 15 local checks, including mandatory semantic checking, once-per-node dispatch, deferred and
+skipped subtree coverage, and per-file options across multiple checkers. Eight CLI integration checks cover the protocol and native flag. Depot CI runs both suites in its fast-crates job.
 
 The Rust rule tester uses the upstream fixture files and tsconfig settings, and checks diagnostic count, order,
 message IDs, the specified UTF-16 line/column positions, suggestion count/order/IDs and exact edited output. It

@@ -1,7 +1,7 @@
+use crate::Program;
+use crate::{Checker, Type, TypeFlags};
 use serde::Deserialize;
 use tsrs_ast::{self as ast, Kind, Node, SourceFile, Symbol, SymbolFlags};
-use tsrs_checker::{Checker, Type, TypeFlags};
-use tsrs_compiler::Program;
 use tsrs_core::P;
 use tsrs_core::tspath;
 
@@ -88,7 +88,7 @@ fn contains_node_modules_segment(path: &str) -> bool {
 }
 
 fn package_name_from_nearest_package_json(
-    program: &'static Program,
+    program: &'static dyn Program,
     file_name: &str,
 ) -> Option<String> {
     if !contains_node_modules_segment(file_name) {
@@ -97,7 +97,7 @@ fn package_name_from_nearest_package_json(
     let mut directory = tspath::get_directory_path(file_name);
     while !directory.is_empty() && contains_node_modules_segment(&directory) {
         let path = tspath::combine_paths(&directory, &["package.json"]);
-        if let Some(contents) = program.host().fs().read_file(&path) {
+        if let Some(contents) = program.read_file(&path) {
             if let Some(name) = serde_json::from_str::<serde_json::Value>(&contents)
                 .ok()
                 .and_then(|value| value.get("name")?.as_str().map(str::to_string))
@@ -115,7 +115,7 @@ fn package_name_from_nearest_package_json(
     None
 }
 
-fn package_name_for_file(program: &'static Program, file: P<SourceFile>) -> Option<String> {
+fn package_name_for_file(program: &'static dyn Program, file: P<SourceFile>) -> Option<String> {
     package_name_from_nearest_package_json(program, file.file_name())
         .or_else(|| package_name_from_node_modules_path(file.file_name()))
 }
@@ -161,7 +161,7 @@ fn types_package_name(package_name: &str) -> String {
 fn source_matches(
     specifier: &TypeOrValueSpecifier,
     declarations: &[P<Node>],
-    program: &'static Program,
+    program: &'static dyn Program,
 ) -> bool {
     let TypeOrValueSpecifier::Source(source) = specifier else {
         return true;
@@ -169,11 +169,11 @@ fn source_matches(
     let files = declaration_files(declarations);
     match source.from.as_str() {
         "file" | "" => {
-            let cwd = program.host().get_current_directory();
+            let cwd = program.get_current_directory();
             if source.path.is_empty() {
-                files.iter().any(|file| file.file_name().starts_with(cwd))
+                files.iter().any(|file| file.file_name().starts_with(&cwd))
             } else {
-                let absolute = tspath::get_normalized_absolute_path(&source.path, cwd);
+                let absolute = tspath::get_normalized_absolute_path(&source.path, &cwd);
                 files.iter().any(|file| file.file_name() == absolute)
             }
         }
@@ -221,7 +221,7 @@ fn type_name_matches(t: P<Type>, specifier: &TypeOrValueSpecifier) -> bool {
 pub fn type_matches_some_specifier(
     t: P<Type>,
     specifiers: &[TypeOrValueSpecifier],
-    program: &'static Program,
+    program: &'static dyn Program,
 ) -> bool {
     let matches = |part: P<Type>| {
         !part.flags().intersects(TypeFlags::Intrinsic)
@@ -253,7 +253,7 @@ fn symbol_matches(
     symbol: P<Symbol>,
     name: &str,
     specifier: &TypeOrValueSpecifier,
-    program: &'static Program,
+    program: &'static dyn Program,
 ) -> bool {
     names(specifier).iter().any(|candidate| candidate == name)
         && source_matches(specifier, symbol.declarations(), program)
@@ -262,7 +262,7 @@ fn symbol_matches(
 pub fn value_matches_some_specifier(
     node: P<Node>,
     specifiers: &[TypeOrValueSpecifier],
-    program: &'static Program,
+    program: &'static dyn Program,
     checker: &mut Checker,
 ) -> bool {
     let Some(name) = static_name(node) else {
@@ -336,11 +336,11 @@ pub fn union_parts(t: P<Type>) -> Vec<P<Type>> {
 }
 
 pub fn is_builtin_promise_like(
-    program: &'static Program,
+    program: &'static dyn Program,
     checker: &mut Checker,
     t: P<Type>,
 ) -> bool {
-    fn recur(program: &'static Program, checker: &mut Checker, t: P<Type>) -> bool {
+    fn recur(program: &'static dyn Program, checker: &mut Checker, t: P<Type>) -> bool {
         if t.flags().intersects(TypeFlags::Intersection) {
             return t
                 .types()

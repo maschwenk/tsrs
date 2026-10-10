@@ -1,45 +1,16 @@
 use std::io::{Read, Write};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::SystemTime;
 
 use rustc_hash::FxHashMap;
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde::Serialize;
 use tsrs_core::tspath;
 use tsrs_linter::{
-    ConfiguredRule, Fixes, InternalDiagnostic, RuleDiagnostic, RunLinterOptions, TypeErrors,
-    Workload, rule_by_name,
+    Fixes, HeadlessConfig as Payload, InternalDiagnostic, LintConfig, RuleDiagnostic,
+    RunLinterOptions, TypeErrors, Workload,
 };
 use tsrs_project::TsConfigResolver;
 use tsrs_vfs::{Entries, FS, FileInfo, FileMode, bundled, osvfs};
-
-#[derive(Deserialize)]
-pub(crate) struct Payload {
-    pub version: i32,
-    #[serde(default)]
-    pub configs: Vec<Config>,
-    #[serde(default)]
-    pub source_overrides: Option<FxHashMap<String, String>>,
-    #[serde(default)]
-    report_syntactic: bool,
-    #[serde(default)]
-    report_semantic: bool,
-}
-
-#[derive(Deserialize)]
-pub(crate) struct Config {
-    #[serde(default)]
-    pub file_paths: Vec<String>,
-    #[serde(default)]
-    pub rules: Vec<RequestedRule>,
-}
-
-#[derive(Clone, Deserialize)]
-pub(crate) struct RequestedRule {
-    pub name: String,
-    #[serde(default)]
-    pub options: Value,
-}
 
 #[derive(Clone, Copy, Default)]
 struct HeadlessOptions {
@@ -368,13 +339,26 @@ pub fn run(args: &[String]) -> i32 {
     let overlay = OverlayFs::new(os, payload.source_overrides.unwrap_or_default());
     let fs: Arc<dyn FS> = Arc::new(bundled::wrap_fs(overlay));
     let resolver = TsConfigResolver::new(Arc::clone(&fs), &cwd);
-    let mut file_configs = FxHashMap::default();
+    let lint = match LintConfig::new(
+        &payload.configs,
+        &cwd,
+        fs.use_case_sensitive_file_names(),
+        Fixes {
+            fix: options.fix,
+            fix_suggestions: options.fix_suggestions,
+        },
+        options.timings,
+    ) {
+        Ok(lint) => Arc::new(lint),
+        Err(error) => {
+            write_error(format!("error parsing config: {error}"));
+            return 1;
+        }
+    };
     let mut files = Vec::new();
     for config in payload.configs {
         for file in config.file_paths {
             let file = tspath::normalize_slashes(&file);
-            let path = tspath::to_path(&file, &cwd, fs.use_case_sensitive_file_names());
-            file_configs.insert(path, config.rules.clone());
             files.push(file);
         }
     }
@@ -385,52 +369,11 @@ pub fn run(args: &[String]) -> i32 {
             None => workload.unmatched_files.push(file),
         }
     }
-    let file_configs = Arc::new(file_configs);
-    let diagnostics = Arc::new(Mutex::new(Vec::new()));
-    let rule_output = Arc::clone(&diagnostics);
-    let internal_diagnostics = Arc::new(Mutex::new(Vec::new()));
-    let internal_output = Arc::clone(&internal_diagnostics);
-    let fs_for_rules = Arc::clone(&fs);
-    let cwd_for_rules = cwd.clone();
-    let get_rules = Arc::new(move |file: tsrs_core::P<tsrs_ast::SourceFile>| {
-        let path = tspath::to_path(
-            file.file_name(),
-            &cwd_for_rules,
-            fs_for_rules.use_case_sensitive_file_names(),
-        );
-        file_configs
-            .get(&path)
-            .into_iter()
-            .flatten()
-            .filter_map(|requested| {
-                rule_by_name(&requested.name).map(|definition| ConfiguredRule {
-                    definition,
-                    options: requested.options.clone(),
-                })
-            })
-            .collect()
-    });
     let run_options = RunLinterOptions {
         current_directory: cwd,
         workload,
         fs,
-        get_rules_for_file: get_rules,
-        on_rule_diagnostic: Arc::new(move |diagnostic| {
-            rule_output
-                .lock()
-                .unwrap()
-                .push(rule_diagnostic(diagnostic, options))
-        }),
-        on_internal_diagnostic: Arc::new(move |diagnostic| {
-            internal_output
-                .lock()
-                .unwrap()
-                .push(internal_diagnostic(diagnostic))
-        }),
-        fixes: Fixes {
-            fix: options.fix,
-            fix_suggestions: options.fix_suggestions,
-        },
+        lint,
         type_errors: TypeErrors {
             report_syntactic: payload.report_syntactic,
             report_semantic: payload.report_semantic,
@@ -439,11 +382,10 @@ pub fn run(args: &[String]) -> i32 {
             "OXLINT_TSGOLINT_DANGEROUSLY_SUPPRESS_PROGRAM_DIAGNOSTICS",
         )
         .is_some_and(|value| value == "true"),
-        timings: options.timings,
     };
     let result = tsrs_linter::run_linter(&run_options);
-    let timings = match result {
-        Ok(timings) => timings,
+    let result = match result {
+        Ok(result) => result,
         Err(error) => {
             write_error(format!("error running linter: {error}"));
             return 1;
@@ -452,11 +394,17 @@ pub fn run(args: &[String]) -> i32 {
     let mut stdout = std::io::BufWriter::new(std::io::stdout().lock());
     // Preserve tsgolint's compiler-diagnostics-before-rule-diagnostics framing even though each
     // file now runs both during the same checker task.
-    for diagnostic in internal_diagnostics
-        .lock()
-        .unwrap()
-        .drain(..)
-        .chain(diagnostics.lock().unwrap().drain(..))
+    for diagnostic in result
+        .diagnostics
+        .into_iter()
+        .map(internal_diagnostic)
+        .chain(
+            result
+                .lint
+                .diagnostics
+                .into_iter()
+                .map(|d| rule_diagnostic(d, options)),
+        )
     {
         if let Err(error) = write_message(&mut stdout, 1, &diagnostic) {
             eprintln!("error writing diagnostic: {error}");
@@ -464,7 +412,9 @@ pub fn run(args: &[String]) -> i32 {
         }
     }
     if options.timings {
-        let rules = timings
+        let rules = result
+            .lint
+            .timings
             .into_iter()
             .map(|timing| Timing {
                 rule_name: timing.rule_name,

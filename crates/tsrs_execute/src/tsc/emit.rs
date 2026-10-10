@@ -119,8 +119,8 @@ pub fn emit_files_and_report_errors(input: &EmitInput) -> CompileAndEmitResult {
         },
     );
     // Syntax/options errors stop tsc's diagnostic pipeline, but an explicit lint request still
-    // checks its files. Preserve tsc's diagnostic selection while running the extension once.
-    if input.sys.program_setup().is_some() && !checked.get() {
+    // checks its files. Preserve tsc's diagnostic selection while dispatching lint rules during the check.
+    if input.sys.lint_config().is_some() && !checked.get() {
         let check_start = input.sys.now();
         program.get_semantic_diagnostics(&ctx, None);
         check_time.set(input.sys.now() - check_start);

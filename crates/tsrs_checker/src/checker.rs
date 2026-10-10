@@ -977,6 +977,8 @@ pub struct Checker {
     /// tsrs-only: the file `check_source_file` is checking. The one check leaf (`SourceFile::is_check_leaf`) whose tree
     /// this checker may read.
     pub(crate) checking_file: Option<P<SourceFile>>,
+    pub(crate) lint_config: Option<&'static crate::lint::LintConfig>,
+    pub(crate) lint_output: RefCell<FxHashMap<P<SourceFile>, crate::lint::FileLintOutput>>,
     /// tsrs-only: a file whose statements this checker and others already checked in pieces
     /// (`check_source_file_piece`); the next `check_source_file` of it runs only the file-level steps.
     pub(crate) statements_checked_in_pieces: Option<P<SourceFile>>,
@@ -1402,6 +1404,8 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         serialization_level: 0,
         current_node: None,
         checking_file: None,
+        lint_config: program.lint_config(),
+        lint_output: RefCell::new(FxHashMap::default()),
         statements_checked_in_pieces: None,
         tuple_elements: Vec::new(),
         deferred_type_argument_checks: FxHashMap::default(),

@@ -1,15 +1,7 @@
+//! Headless program loading; native rule dispatch lives in the type checker.
 mod linter;
-mod no_floating_promises;
-mod rule;
-mod utils;
+#[cfg(test)]
+mod tests;
 
 pub use linter::*;
-pub use no_floating_promises::NO_FLOATING_PROMISES;
-pub use rule::*;
-
-pub fn rule_by_name(name: &str) -> Option<&'static RuleDefinition> {
-    match name {
-        "no-floating-promises" => Some(&NO_FLOATING_PROMISES),
-        _ => None,
-    }
-}
+pub use tsrs_checker::lint::*;

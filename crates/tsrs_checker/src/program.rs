@@ -10,6 +10,9 @@ pub use tsrs_tsoptions::{ParsedCommandLine, SourceOutputAndProjectReference};
 /// `ast.HasFileName` parameters are `P<SourceFile>`.
 pub trait Program: Send + Sync {
     fn options(&self) -> P<CompilerOptions>;
+    fn lint_config(&self) -> Option<&crate::lint::LintConfig> { None }
+    fn read_file(&self, _file_name: &str) -> Option<String> { None }
+    fn is_source_file_from_external_library(&self, _file: P<SourceFile>) -> bool { false }
     fn source_files(&self) -> &'static [P<SourceFile>];
     fn bind_source_files(&self);
     fn file_exists(&self, file_name: &str) -> bool;
