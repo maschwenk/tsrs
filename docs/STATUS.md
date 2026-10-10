@@ -1,5 +1,23 @@
 # Status
 
+## 2026-10-09: 0.11.0 release
+
+An opt-in memory target for native CLI type checks (#265), plus an explicit warning for unsupported tracing
+(#264). The TypeScript source pin remains `b85298b6a81f772d080b0455de0ca9d744cd6fd6` (7.1.0-dev.20260929), and
+the package set is unchanged: `@maschwenk/tsrs`, its three native platform packages and `@maschwenk/tsrs-wasm`
+at `0.11.0-ts7.1.0-dev.20260929`.
+
+`--maxMemory <size>` (or `TSRS_MAX_MEMORY`) trades repeated checker work for lower memory use. Above the target,
+the largest checker is retired between files and its remaining files go to a fresh checker; its diagnostics and
+counters are preserved. Sizes accept binary K, M or G suffixes; a bare number is MiB. The target is advisory:
+front-end memory and individual files can exceed it, and checkers smaller than 128 MiB are kept to limit repeated
+work. It applies to `--noEmit` checks with multiple checkers, without declaration diagnostics, `--explainFiles`
+or Go's check history. It is off by default. `--extendedDiagnostics` reports the number of retired checkers.
+The implementation, measurements and regression coverage are in `notes/mem-recycle-checkers.md`.
+
+`--generateTrace` now prints a "Failed to start tracing" warning and continues checking. Previously it silently
+ignored the option; trace generation remains unsupported.
+
 ## 2026-10-09: 0.10.0 release
 
 Content mappers (#260), plus parallel CI steps (#256); the TypeScript source pin remains
