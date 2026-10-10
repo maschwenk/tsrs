@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_ast::{Diagnostic, SourceFile};
 use tsrs_compiler::{Context, Program, ProgramOptions, new_cached_fs_compiler_host, new_program};
 use tsrs_core::tspath::{self, ComparePathsOptions, Path};
@@ -276,11 +276,18 @@ pub fn run_linter(options: &RunLinterOptions) -> Result<LinterResult, String> {
             &options.workload.unmatched_files,
             Arc::clone(&options.lint),
         );
-        let files = requested_source_files(
-            program,
-            &options.workload.unmatched_files,
-            &options.current_directory,
-        )?;
+        let mut files = Vec::with_capacity(options.workload.unmatched_files.len());
+        let mut seen = FxHashSet::default();
+        for name in &options.workload.unmatched_files {
+            // Like tsgolint's inferred program, look up each path so package redirects and
+            // symlink aliases resolve to their source file. Check each resolved file only once.
+            let file = program.get_source_file(name).ok_or_else(|| {
+                format!("requested file is not in its inferred TypeScript program: {name}")
+            })?;
+            if seen.insert(file) {
+                files.push(file);
+            }
+        }
         diagnostics.extend(run_on_program(options, program, &files)?);
     }
     Ok(LinterResult {
@@ -506,5 +513,57 @@ try { p(); } catch { p(); } finally { p(); }
             .collect();
         assert_eq!(files, ["/a.ts", "/b.ts", "/b.ts"]);
         assert_eq!(result.lint.timings[0].calls, 4);
+    }
+
+    #[test]
+    fn inferred_project_resolves_symlink_aliases_and_checks_each_file_once() {
+        let fs = vfstest::from_map(
+            [
+                (
+                    "/repo/packages/pkg/package.json",
+                    vfstest::MapFile::from(
+                        r##"{"name":"pkg","version":"1.0.0","type":"module","imports":{"#value":"./value.ts"}}"##,
+                    ),
+                ),
+                (
+                    "/repo/packages/pkg/index.ts",
+                    vfstest::MapFile::from("import { value } from '#value'; void value;"),
+                ),
+                (
+                    "/repo/packages/pkg/value.ts",
+                    vfstest::MapFile::from(
+                        "export const value: number = 'bad'; Promise.resolve();",
+                    ),
+                ),
+                ("/repo/linked/pkg", vfstest::symlink("/repo/packages/pkg")),
+            ],
+            true,
+        );
+        let names = [
+            "/repo/linked/pkg/index.ts",
+            "/repo/linked/pkg/value.ts",
+            "/repo/packages/pkg/index.ts",
+            "/repo/packages/pkg/value.ts",
+        ];
+        let result = run_linter(&RunLinterOptions {
+            current_directory: "/repo".into(),
+            workload: Workload {
+                programs: BTreeMap::new(),
+                unmatched_files: names.iter().map(|name| (*name).into()).collect(),
+            },
+            fs: Arc::new(bundled::wrap_fs(fs)),
+            lint: config(&names, true),
+            type_errors: TypeErrors {
+                report_syntactic: true,
+                report_semantic: true,
+            },
+            suppress_program_diagnostics: false,
+        })
+        .unwrap();
+        assert_eq!(result.diagnostics.len(), 1);
+        assert_eq!(result.diagnostics[0].id, "TS2322");
+        assert_eq!(result.lint.diagnostics.len(), 1);
+        assert_eq!(result.lint.diagnostics[0].message.id, "floatingVoid");
+        assert_eq!(result.lint.timings[0].calls, 3);
     }
 }

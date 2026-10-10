@@ -75,8 +75,10 @@ cargo test -p tsrs_linter --test no_floating_promises test_no_floating_promises_
 `crates/tsrs_linter/tests/` imports the complete `no_floating_promises_test.go` suite from tsgolint commit
 `24b18b48c47b7ae0d84e21a0e974575026e27908`: 77 valid and 112 invalid cases, including the cases constructed by Go
 loops. The original `node:test` case remains ignored, as upstream marks it `Skip: true`; 188 cases run and pass.
-The crate also has 15 local checks, including mandatory semantic checking, once-per-node dispatch, deferred and
-skipped subtree coverage, and per-file options across multiple checkers. Eight CLI integration checks cover the protocol and native flag. Depot CI runs both suites in its fast-crates job.
+The crate also has 16 local checks, including mandatory semantic checking, once-per-node dispatch, deferred and
+skipped subtree coverage, per-file options across multiple checkers, and inferred-project lookups through
+symlinked package aliases. Eight CLI integration checks cover the protocol and native flag. Depot CI runs both
+suites in its fast-crates job.
 
 The Rust rule tester uses the upstream fixture files and tsconfig settings, and checks diagnostic count, order,
 message IDs, the specified UTF-16 line/column positions, suggestion count/order/IDs and exact edited output. It
@@ -85,13 +87,5 @@ suggestion descriptions), and applies autofixes for up to ten passes, as upstrea
 Rust output never regenerates the expectations.
 
 The data, snapshots and MIT license are checked in under `tests/fixtures/tsgolint/`. Running the suite requires
-neither Go nor a tsgolint checkout. To regenerate it from the pinned checkout:
-
-```sh
-python3 crates/tsrs_linter/tests/import_tsgolint.py /path/to/tsgolint
-```
-
-Regeneration needs Go 1.18 or newer and rustfmt. The importer executes the upstream Go table constructors with a
-recording tester, preserving code, options, auxiliary files and computed suggestion outputs. It checks the
-upstream revision and snapshot coverage, then generates a separate Rust test for each upstream case. This
-imports the suite for the implemented rule; suites for other tsgolint rules are not yet ported.
+neither Go nor a tsgolint checkout. The suite covers the implemented rule; suites for other tsgolint rules are not
+yet ported.
