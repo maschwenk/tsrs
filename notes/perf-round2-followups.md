@@ -107,6 +107,14 @@ pointer compression costs about +4.9% instructions and took back most of the che
 
 ## Measured and rejected (do not redo)
 
+- Calling the Rust-owned symbol-table containers a completed or memory-preserving graph migration
+  (`notes/rust-owned-symbol-storage.md`): local single-thread instructions change -0.35–-0.46% and default RSS
+  changes -0.83–+0.61%, below the performance-change threshold. Cumulative single-thread instructions remain
+  +5.29–10.62% against original Oxc and default RSS remains +99–108% against pre-Oxc. This removes custom
+  container memory management, but packed symbol/key referents remain legacy. Keep the complete ownership
+  goal active. Revisit landing after typed graph owners replace the address-routing/thread-arena layer and
+  fresh full-scope measurements and runtime/oracle/lifecycle checks recover the gates.
+
 - Calling the compiler/incremental root ownership stage completed or memory-preserving
   (`notes/rust-owned-program-roots.md`): against `9500bf1e`, single-thread instructions add 5.17–9.91% and default
   RSS adds 11.24–12.66%; cumulative default RSS is +98–109% against pre-Oxc. This is an unfinished branch

@@ -95,6 +95,11 @@ node builder in the input region would create an ownership cycle (`notes/rust-ow
 Binding selects the source file's allocation owner, because shared files can outlive the checker that first binds
 them. Returned compile/emit results retain their compiler or incremental owner while exposing raw diagnostics.
 
+Symbol-table entries use `Vec`, and their filter/extra-record state is a Rust enum with an owned `Box`. Container
+cloning and destruction use Rust's implementations, without raw buffer management or unchecked thread traits.
+Their packed symbol pointers and static key referents still require the legacy graph owner
+(`notes/rust-owned-symbol-storage.md`); owning a table does not establish ownership of those referents.
+
 The following describes the **remaining legacy graph**, not a rule for new stores. Go objects that are referenced
 by pointer, live long, reference each other cyclically and
 are compared by identity — AST nodes, symbols, types, signatures, links, flow nodes,

@@ -297,126 +297,14 @@ const SYMBOL_TABLE_LINEAR_MAX: usize = 16;
 
 #[derive(Default, Clone)]
 struct SymbolMap {
-    entries: EntryVec,
+    entries: Vec<SymbolMapEntry>,
     extra: ExtraSlot,
 }
 
 #[cfg(target_pointer_width = "64")]
-const _: () = assert!(std::mem::size_of::<SymbolMap>() == 24);
+const _: () = assert!(std::mem::size_of::<SymbolMap>() == 40);
 #[cfg(target_pointer_width = "32")]
-const _: () = assert!(std::mem::size_of::<SymbolMap>() == 16);
-
-/// `Vec<SymbolMapEntry>` with a `u32` length and capacity (16 bytes instead of 24; 3.5M symbol tables on the private monorepo).
-/// Grows like `Vec` (`push` doubles from 4; `reserve_exact` adds exactly).
-struct EntryVec {
-    ptr: std::ptr::NonNull<SymbolMapEntry>,
-    len: u32,
-    cap: u32,
-}
-
-impl Default for EntryVec {
-    fn default() -> Self {
-        EntryVec { ptr: std::ptr::NonNull::dangling(), len: 0, cap: 0 }
-    }
-}
-
-impl EntryVec {
-    fn with_capacity(n: usize) -> EntryVec {
-        let mut v = EntryVec::default();
-        v.reserve_exact(n);
-        v
-    }
-
-    #[inline]
-    fn capacity(&self) -> usize {
-        self.cap as usize
-    }
-
-    fn layout(cap: usize) -> std::alloc::Layout {
-        std::alloc::Layout::array::<SymbolMapEntry>(cap).expect("symbol table too large")
-    }
-
-    /// Makes room for at least `additional` more entries, allocating exactly that much when it grows.
-    fn reserve_exact(&mut self, additional: usize) {
-        let needed = self.len as usize + additional;
-        if needed > self.cap as usize {
-            self.set_capacity(needed);
-        }
-    }
-
-    fn set_capacity(&mut self, cap: usize) {
-        let cap32 = u32::try_from(cap).expect("symbol table with more than u32::MAX entries");
-        let ptr = if self.cap == 0 {
-            // SAFETY: `cap` > 0 entries of a non-zero-sized type.
-            unsafe { std::alloc::alloc(Self::layout(cap)) }
-        } else {
-            // SAFETY: `ptr` was allocated with the layout of `self.cap` entries.
-            unsafe { std::alloc::realloc(self.ptr.as_ptr().cast(), Self::layout(self.cap as usize), Self::layout(cap).size()) }
-        };
-        self.ptr = std::ptr::NonNull::new(ptr.cast()).unwrap_or_else(|| std::alloc::handle_alloc_error(Self::layout(cap)));
-        self.cap = cap32;
-    }
-
-    #[inline]
-    fn push(&mut self, e: SymbolMapEntry) {
-        if self.len == self.cap {
-            self.set_capacity((self.cap as usize * 2).max(4));
-        }
-        // SAFETY: `len` < `cap`.
-        unsafe { self.ptr.as_ptr().add(self.len as usize).write(e) };
-        self.len += 1;
-    }
-
-    fn remove(&mut self, i: usize) {
-        let len = self.len as usize;
-        assert!(i < len, "removal index out of bounds");
-        // SAFETY: `i` < `len`; the entries are `Copy`.
-        unsafe { std::ptr::copy(self.ptr.as_ptr().add(i + 1), self.ptr.as_ptr().add(i), len - i - 1) };
-        self.len -= 1;
-    }
-}
-
-impl std::ops::Deref for EntryVec {
-    type Target = [SymbolMapEntry];
-    #[inline]
-    fn deref(&self) -> &[SymbolMapEntry] {
-        // SAFETY: the first `len` entries are initialized (dangling and empty when `cap` is 0).
-        unsafe { std::slice::from_raw_parts(self.ptr.as_ptr(), self.len as usize) }
-    }
-}
-
-impl std::ops::DerefMut for EntryVec {
-    #[inline]
-    fn deref_mut(&mut self) -> &mut [SymbolMapEntry] {
-        // SAFETY: as in `deref`, and `&mut self` is unique.
-        unsafe { std::slice::from_raw_parts_mut(self.ptr.as_ptr(), self.len as usize) }
-    }
-}
-
-impl Clone for EntryVec {
-    /// Like `Vec::clone`: capacity equal to the length.
-    fn clone(&self) -> EntryVec {
-        let mut v = EntryVec::with_capacity(self.len as usize);
-        for &e in self.iter() {
-            v.push(e);
-        }
-        v
-    }
-}
-
-impl Drop for EntryVec {
-    fn drop(&mut self) {
-        if self.cap != 0 {
-            // SAFETY: allocated with the layout of `cap` entries.
-            unsafe { std::alloc::dealloc(self.ptr.as_ptr().cast(), Self::layout(self.cap as usize)) };
-        }
-    }
-}
-
-// SAFETY: an `EntryVec` owns its buffer like a `Vec` (entries are plain words).
-unsafe impl Send for EntryVec {}
-// SAFETY: as for the `Vec` it stands for: through `&EntryVec` the plain-word entries are only read.
-unsafe impl Sync for EntryVec {}
+const _: () = assert!(std::mem::size_of::<SymbolMap>() == 20);
 
 /// One word: the symbol in the low 45 bits (`P::pack`), then the odd-key flag (the key is in `odd_keys`), the key length capped at 63 (6 bits)
 /// and the top 12 bits of `hash_name(key)`. 8 bytes instead of 16 (pointer + 32-bit hash + length): symbol table
@@ -471,7 +359,7 @@ impl SymbolMapEntry {
 
     #[inline]
     fn symbol(self) -> P<Symbol> {
-        // SAFETY: the low bits were stored from a live `P<Symbol>` (arena symbols are never freed or moved).
+        // SAFETY: the low bits came from a `P<Symbol>`; table users must retain the symbols' legacy graph owner.
         unsafe { P::unpack(self.0) }
     }
 
@@ -502,43 +390,45 @@ struct SymbolMapExtra {
     odd_keys: Vec<(u32, &'static str)>, // (position, key) of the entries whose key is not their symbol's name
 }
 
-/// `SymbolMap::extra`: one word holding either a boxed `SymbolMapExtra` (an even address) or, in a table without
-/// one (a linear table whose keys are all their symbols' names: nearly every table), a 64-bit Bloom filter of its
-/// keys' hashes (two bits per key) whose bit 0 is set as the tag. A lookup the filter rejects returns without
-/// reading the entries, which are a second cache line: over half of all lookups are misses in small tables
+/// An owned extra record, or a Bloom filter of key hashes in linear tables whose keys are their symbols' names.
+/// A lookup the filter rejects returns without reading the entries, which are a second cache line: over half
+/// of all lookups are misses in small tables
 /// (a property lookup tries each type on the apparent-type chain, down to `Object`'s members), and the entries of
 /// a table looked up once in a while are rarely in cache. Deleting a key leaves its bits set (a superset is still
 /// a valid filter).
-struct ExtraSlot(*mut SymbolMapExtra);
+#[derive(Clone)]
+enum ExtraSlot {
+    Filter(usize),
+    Extra(Box<SymbolMapExtra>),
+}
 
 impl ExtraSlot {
     const EMPTY_FILTER: usize = 1;
 
     #[inline]
     fn boxed(extra: SymbolMapExtra) -> ExtraSlot {
-        ExtraSlot(Box::into_raw(Box::new(extra)))
-    }
-
-    #[inline]
-    fn is_filter(&self) -> bool {
-        self.0.addr() & 1 != 0
+        ExtraSlot::Extra(Box::new(extra))
     }
 
     #[inline]
     fn get(&self) -> Option<&SymbolMapExtra> {
-        // SAFETY: an even word is the pointer `boxed` created, owned by this slot.
-        (!self.is_filter()).then(|| unsafe { &*self.0 })
+        match self {
+            Self::Filter(_) => None,
+            Self::Extra(extra) => Some(extra),
+        }
     }
 
     #[inline]
     fn get_mut(&mut self) -> Option<&mut SymbolMapExtra> {
-        // SAFETY: as in `get`, and `&mut self` is unique.
-        (!self.is_filter()).then(|| unsafe { &mut *self.0 })
+        match self {
+            Self::Filter(_) => None,
+            Self::Extra(extra) => Some(extra),
+        }
     }
 
     /// The boxed extra, created (dropping the filter) when the slot holds a filter.
     fn get_or_insert(&mut self) -> &mut SymbolMapExtra {
-        if self.is_filter() {
+        if matches!(self, Self::Filter(_)) {
             *self = ExtraSlot::boxed(SymbolMapExtra::default());
         }
         self.get_mut().unwrap()
@@ -553,13 +443,16 @@ impl ExtraSlot {
     #[inline]
     fn may_contain(&self, hash: u32) -> bool {
         let bits = Self::filter_bits(hash);
-        !self.is_filter() || self.0.addr() & bits == bits
+        match self {
+            Self::Filter(filter) => filter & bits == bits,
+            Self::Extra(_) => true,
+        }
     }
 
     #[inline]
     fn add_to_filter(&mut self, hash: u32) {
-        if self.is_filter() {
-            self.0 = std::ptr::without_provenance_mut(self.0.addr() | Self::filter_bits(hash));
+        if let Self::Filter(filter) = self {
+            *filter |= Self::filter_bits(hash);
         }
     }
 }
@@ -570,33 +463,9 @@ const _: () = assert!(usize::BITS == 64);
 impl Default for ExtraSlot {
     #[inline]
     fn default() -> ExtraSlot {
-        ExtraSlot(std::ptr::without_provenance_mut(Self::EMPTY_FILTER))
+        ExtraSlot::Filter(Self::EMPTY_FILTER)
     }
 }
-
-impl Clone for ExtraSlot {
-    fn clone(&self) -> ExtraSlot {
-        match self.get() {
-            Some(extra) => ExtraSlot::boxed(extra.clone()),
-            None => ExtraSlot(self.0),
-        }
-    }
-}
-
-impl Drop for ExtraSlot {
-    fn drop(&mut self) {
-        if !self.is_filter() {
-            // SAFETY: an even word is the pointer `boxed` created, owned by this slot.
-            drop(unsafe { Box::from_raw(self.0) });
-        }
-    }
-}
-
-// SAFETY: an `ExtraSlot` owns its `SymbolMapExtra` like a `Box` (or holds plain bits).
-unsafe impl Send for ExtraSlot {}
-// SAFETY: as for the `Box` it stands for: `SymbolMapExtra` has no interior mutability, and through `&ExtraSlot` it
-// is only read.
-unsafe impl Sync for ExtraSlot {}
 
 #[inline]
 fn hash_name(name: &str) -> u32 {
@@ -626,7 +495,7 @@ impl SymbolMap {
         } else {
             ExtraSlot::default()
         };
-        SymbolMap { entries: EntryVec::with_capacity(n), extra }
+        SymbolMap { entries: Vec::with_capacity(n), extra }
     }
 
     #[inline]
@@ -970,6 +839,31 @@ pub fn escape_symbol_name(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cloned_symbol_storage_survives_original_drop_and_thread_transfer() {
+        // The graph stays in its legacy thread arena; this case checks ownership of the table's containers.
+        let mut original = SymbolMap::default();
+        for i in 0..40 {
+            let name = tsrs_core::alloc_str(&format!("member{i}"));
+            original.insert(name, Symbol::new(SymbolFlags::Property, name));
+        }
+        let alias = Symbol::new(SymbolFlags::Property, "different-name");
+        original.insert("alias", alias);
+        let mut cloned = original.clone();
+        original.shift_remove("member0");
+        original.shift_remove("alias");
+        drop(original);
+        std::thread::spawn(move || {
+            assert_eq!(cloned.entries.len(), 41);
+            assert_eq!(cloned.key(0), "member0");
+            let position = cloned.position("alias").unwrap();
+            assert_eq!(cloned.entries[position].symbol(), alias);
+            cloned.shift_remove("member1");
+            assert_eq!(cloned.key(cloned.position("alias").unwrap()), "alias");
+            assert!(cloned.position("member1").is_none());
+        }).join().unwrap();
+    }
 
     #[test]
     fn name_filter_keeps_every_key() {

@@ -1,8 +1,4 @@
 # Every unsafe impl Send / Sync (tools/lint/source.py --update). Review each change.
-crates/tsrs_ast/src/symbol.rs	Send	EntryVec
-crates/tsrs_ast/src/symbol.rs	Send	ExtraSlot
-crates/tsrs_ast/src/symbol.rs	Sync	EntryVec
-crates/tsrs_ast/src/symbol.rs	Sync	ExtraSlot
 crates/tsrs_compiler/src/checkerpool.rs	Send	PooledChecker
 crates/tsrs_core/src/arena.rs	Send	RegionInner
 crates/tsrs_core/src/arena.rs	Send	SpareArena

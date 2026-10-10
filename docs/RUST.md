@@ -152,6 +152,7 @@ In place:
 | Shared checker input data independent of the program's pool; Rust-owned program and alias-resolver file-list containers | `notes/rust-owned-checker-inputs.md`: checkers, node builders and compiler/project pools retain input owners; array entries remain raw graph edges | |
 | Exclusive owned checker leases, retained built-in slot arrays and direct ownership of project checker regions | `notes/rust-owned-checker-leases.md`: removes raw lease dereferences, leaked arrays, the checker-address region map and three custom thread-trait implementations; graph referents remain legacy | |
 | Shared compiler/incremental roots, borrowed root operations and region retention by input/snapshot/result owners | `notes/rust-owned-program-roots.md`: root leaks/manual compiler freeing removed; fidelity retained, instruction/RSS gates fail; raw graph and API orchestrator boundaries remain | |
+| Rust-owned symbol-table buffers and filter/extra-record enum | `notes/rust-owned-symbol-storage.md`: raw container allocation and four unchecked thread traits removed; referents remain legacy and cumulative instruction/RSS gates fail | |
 | Packed layouts with size assertions | `notes/mem-layout.md`, `mem-layout3.md`, `mem-round2.md`, `mem-round3.md`, `mem-small.md` | oxc, ty, rust-analyzer, Bun |
 | Fx hashing everywhere | `notes/perf-checker-cpu2.md` | oxc, Rolldown, Ruff, rust-analyzer |
 | Lazy members, line maps and rare-field tails | `notes/lazy-members.md`, `notes/mem-lazy.md` | |

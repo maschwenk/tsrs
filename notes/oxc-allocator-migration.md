@@ -32,7 +32,8 @@ independently of the outer program, and file-list containers use shared Rust arr
 (`notes/rust-owned-checker-inputs.md`). Checker leases and built-in slot arrays now have Rust owners, and project
 checkers own their regions directly (`notes/rust-owned-checker-leases.md`). Compiler/incremental roots now use
 shared Rust owners and retain their graph regions (`notes/rust-owned-program-roots.md`: fidelity preserved,
-instruction/RSS gates fail).
+instruction/RSS gates fail). Symbol-table buffers and filter/extra records use Rust `Vec`/enum ownership
+(`notes/rust-owned-symbol-storage.md`), removing raw container allocation and four unchecked thread traits.
 AST/symbol/type/file referents and snapshot caches still use legacy pointers.
 
 ## Removed behavior
