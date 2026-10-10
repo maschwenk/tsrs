@@ -10,7 +10,7 @@
 //
 // The main package also carries TypeScript 7's unstable JS API (`tsrs/unstable/sync`, `/async`, `/ast`, ...),
 // copied from microsoft/TypeScript packages/typescript by npm/sdk/sync-upstream.mjs. It is compiled here with the
-// build-only compiler in npm/package.json (`npm ci --prefix npm` first; `--tsc <path>` to use another TypeScript 7 tsc).
+// build-only compiler in npm/package.json (`pnpm --dir npm install --frozen-lockfile` first; `--tsc <path>` to use another TypeScript 7 tsc).
 //
 // The package name comes from npm/tsrs/package.json; platform packages are `@ts-rs/<os>-<cpu>`. The version is
 // `<workspace version>-ts<[workspace.metadata.typescript] version>` from the workspace Cargo.toml, for every package
@@ -146,7 +146,7 @@ function buildSdk(tscPath) {
     const pkgDir = path.join(npmDir, "tsrs");
     const tsc = tscPath ?? path.join(npmDir, "node_modules", "typescript", "bin", "tsc");
     if (!fs.existsSync(tsc)) {
-        throw new Error(`the JS API build compiler is not installed (${path.relative(process.cwd(), tsc)}); run \`npm ci --prefix npm\` or pass --tsc`);
+        throw new Error(`the JS API build compiler is not installed (${path.relative(process.cwd(), tsc)}); run \`pnpm --dir npm install --frozen-lockfile\` or pass --tsc`);
     }
     fs.rmSync(path.join(pkgDir, "dist"), { recursive: true, force: true });
     fs.rmSync(path.join(pkgDir, "tsconfig.tsbuildinfo"), { force: true });
@@ -215,14 +215,14 @@ function stageWasm(module, out, versions, license, notice) {
     return dir;
 }
 
-function npmPack(dir, out) {
-    const stdout = execFileSync("npm", ["pack", "--json", "--pack-destination", out], {
+function pnpmPack(dir, out) {
+    const stdout = execFileSync("pnpm", ["pack", "--json", "--pack-destination", out], {
         cwd: dir,
         encoding: "utf8",
         shell: process.platform === "win32",
     });
-    const [info] = JSON.parse(stdout);
-    return path.join(out, info.filename);
+    const info = JSON.parse(stdout);
+    return path.resolve(out, info.filename);
 }
 
 function main() {
@@ -331,7 +331,7 @@ function main() {
     const manifest = [];
     for (const dir of packageDirs) {
         const entry = { name: JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf8")).name, dir };
-        if (opts.pack) entry.tarball = npmPack(dir, opts.out);
+        if (opts.pack) entry.tarball = pnpmPack(dir, opts.out);
         console.log(`${opts.pack ? "packed" : "staged"} ${path.relative(process.cwd(), entry.tarball ?? dir)}`);
         manifest.push(entry);
     }

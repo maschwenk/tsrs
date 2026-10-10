@@ -38,7 +38,7 @@ const run = (cmd, argv, opts = {}) => {
 };
 try {
     fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name: "tsrs-consumer", private: true, type: "module" }));
-    run("npm", ["install", "--no-audit", "--no-fund", "--offline", ...tarballs], { shell: process.platform === "win32" });
+    run("pnpm", ["add", "--offline", ...tarballs], { shell: process.platform === "win32" });
 
     const pkg = JSON.parse(fs.readFileSync(path.join(dir, "node_modules/tsrs/package.json"), "utf8"));
     for (const sub of Object.keys(pkg.exports)) {

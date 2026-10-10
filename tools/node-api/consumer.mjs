@@ -41,7 +41,7 @@ const write = (rel, text) => {
 
 try {
     write("package.json", JSON.stringify({ name: "consumer", private: true, type: "module" }));
-    execFileSync("npm", ["install", "--offline", "--no-audit", "--no-fund", ...tarballs], { cwd: dir, stdio: "inherit", env, shell: win });
+    execFileSync("pnpm", ["add", "--offline", ...tarballs], { cwd: dir, stdio: "inherit", env, shell: win });
     const pkgDir = path.join(dir, "node_modules", "tsrs");
     const pkg = JSON.parse(fs.readFileSync(path.join(pkgDir, "package.json"), "utf8"));
     for (const sub of ["./unstable/sync", "./unstable/async"]) check(pkg.exports?.[sub] !== undefined, `package exports ${sub}`);

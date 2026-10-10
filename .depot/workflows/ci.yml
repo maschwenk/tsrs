@@ -124,21 +124,26 @@ jobs:
         with:
           node-version: 24
 
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 12.10.1
+          run_install: false
+
       # npm/build.mjs compiles the unstable/* JS API with npm/package.json's build-only tools when that manifest
       # exists; branches without it have nothing to install.
       - name: npm packaging smoke test
         run: |
-          if [ -f npm/package-lock.json ]; then npm ci --prefix npm --no-audit --no-fund; fi
+          if [ -f npm/pnpm-lock.yaml ]; then pnpm --dir npm install --frozen-lockfile; fi
           node npm/build.mjs --binary x86_64-unknown-linux-gnu=target/release/tsrs --pack
           dir=$(mktemp -d)
           cd "$dir"
-          npm init -y > /dev/null
-          npm install --no-audit --no-fund "$GITHUB_WORKSPACE"/npm/dist/*.tgz
-          npx tsrs --version
+          printf '{"private":true}\n' > package.json
+          pnpm add --offline "$GITHUB_WORKSPACE"/npm/dist/*.tgz
+          pnpm exec tsrs --version
           printf 'const x: number = 1;\n' > ok.ts
-          npx tsrs ok.ts
+          pnpm exec tsrs ok.ts
           printf 'const x: number = "no";\n' > bad.ts
-          if npx tsrs bad.ts; then echo "expected a type error"; exit 1; fi
+          if pnpm exec tsrs bad.ts; then echo "expected a type error"; exit 1; fi
 
       # tools/ci/determinism.sh: diagnostics must not depend on which checker checks a file or in what order. Four bench
       # projects (checkouts restored from the bench caches, bench/README.md "CI") and the regression cases, under random
@@ -250,6 +255,11 @@ jobs:
               tar xzf /tmp/binaryen.tgz -C /tmp
               echo /tmp/binaryen-version_133/bin >> "$GITHUB_PATH"
 
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 12.10.1
+          run_install: false
+
       - name: Install wasm32-wasip1 target
         run: rustup target add wasm32-wasip1
 
@@ -267,8 +277,8 @@ jobs:
       - name: cargo test -p tsrs_wasm
         run: cargo test --locked -p tsrs_wasm
 
-      - name: npm test (npm/tsrs-wasm)
-        run: npm test --prefix npm/tsrs-wasm
+      - name: pnpm test (npm/tsrs-wasm)
+        run: pnpm --dir npm/tsrs-wasm test
 
       - name: Bench cache keys
         id: bench-keys

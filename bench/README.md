@@ -30,16 +30,16 @@ commands without the sandbox, and check the same `-p` path.
 | suite case | repository | commit | `-p` | install (from the case's `setup.sh`) |
 | --- | --- | --- | --- | --- |
 | `vscode` | microsoft/vscode | `9cf0128b9822` | `src` | `npm ci --ignore-scripts` |
-| `xstate-main` | statelyai/xstate | `fbee62e7c158` | `.` | `npx <packageManager> install` (pnpm 10; runs its postinstall `preconstruct dev`, like the suite) |
+| `xstate-main` | statelyai/xstate | `fbee62e7c158` | `.` | `pnpm dlx <packageManager> install` (pnpm 10; runs its postinstall `preconstruct dev`, like the suite) |
 | `webpack` | webpack/webpack | `b54c5e2aa26d` | `.` | `yarn install --ignore-scripts --ignore-engines`, then `yarn link` webpack into itself |
-| `mui-docs` | mui/material-ui | `6780195595c1` | `docs` | `npx <packageManager> install --ignore-scripts` (pnpm 12) |
+| `mui-docs` | mui/material-ui | `6780195595c1` | `docs` | `pnpm dlx <packageManager> install --ignore-scripts` (pnpm 12) |
 | `Compiler` | (in the suite repo) | suite commit | `cases/solutions/Compiler` | none |
 | `Compiler-Unions` | (in the suite repo) | suite commit | `cases/solutions/Compiler-Unions/tsconfig.json` | none |
 
 Commits: the suite pins only `mui-docs` (`6780195595c1`, "last MUI ref known to install in the sandbox"); the other
 three clone the repository's HEAD at run time. We pin those to the commits used for the typescript-benchmarking
 numbers in microsoft/TypeScript#64475 (gist `c83d9185c6961b6fb43d7d071ef39cf6`, `refs.txt`, late September 2026).
-The suite runs yarn 1 from its Docker image; we run `npx yarn@1.22.22` (webpack's `packageManager`).
+The suite runs yarn 1 from its Docker image; we run `pnpm dlx yarn@1.22.22` (webpack's `packageManager`).
 
 `Compiler` is defined in `cases/` but not scheduled in the suite's pipeline (`scripts/src/setupPipeline.ts` lists only
 `Compiler-Unions`); it is kept because the #64475 measurements include it.
@@ -80,7 +80,7 @@ and one more popular library (drizzle-orm). Each is pinned to one commit.
   it is not part of the project's CI cache.
 - `formbricks-web`: pnpm install, then `turbo run build --filter='@formbricks/web^...'`, which generates the Prisma
   client and builds the workspace packages whose `dist/*.d.ts` the app imports. The build scripts call `pnpm`, so the
-  command puts a `.bench-bin/pnpm` shim (`npx pnpm@<packageManager version>`) on `PATH`. `DATABASE_URL` is a dummy
+  command uses pnpm's automatic version selection from the upstream `packageManager` pin. `DATABASE_URL` is a dummy
   (Prisma's config requires one to generate; nothing connects).
 - `supabase-studio`: pnpm install of `studio` and its workspace dependencies, then `next typegen` (the app's
   `pretypecheck`).
@@ -129,7 +129,7 @@ tsrs's errors (`(ref N)` in the table).
   follows TypeScript 7.0 (on vscode its errors equal tsgo 7.0.2's line for line), tsrs the 7.1-dev commit it ports.
   `--noEmit` instead of the suite's `--outdir` keeps the measurement to type checking; `--pretty
   false` makes the error lines parseable.
-- tsgo: `npm install typescript@7.0.2`. Its `bin/tsc` is a Node launcher (`lib/tsc.js` -> `getExePath.js`) that
+- tsgo: `pnpm add typescript@7.0.2 @typescript/typescript-<os>-<arch>@7.0.2`. Its `bin/tsc` is a Node launcher (`lib/tsc.js` -> `getExePath.js`) that
   `execve`s the Go binary `@typescript/typescript-<os>-<arch>/lib/tsc`; the harness runs that binary directly (checked
   to be a native executable printing `Version 7.0.2`), so Node startup is not part of the measurement.
 - tsrs: by default the release build of the checked-out commit (`target/release/tsrs`). CI measures what the npm
@@ -263,7 +263,7 @@ Caching (Depot Cache serves the `actions/cache` API on Depot CI, no special conf
 `~/.cargo` and the dependency part of `target/`, which holds the PGO-instrumented build (workspace crates are
 rebuilt: they are what is being measured). The final PGO build is not cached: its RUSTFLAGS contain the profile's
 hash, which changes every run, so cargo rebuilds all of it anyway (as in the release workflow); one
-cache for the suite checkout plus the npm-installed compilers (`typescript@7.0.2` and the reference nightly); one cache
+cache for the suite checkout plus the pnpm-installed compilers (`typescript@7.0.2` and the reference nightly); one cache
 per cloned project (checkout + `node_modules`) keyed on its pinned commit and install command
 (`bench/run.py --print-cache-keys`), so changing one pin re-installs only that project. Each measuring job restores
 the shared cache and its own project's; the build job restores the two training projects (xstate-main, webpack) and

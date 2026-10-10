@@ -149,7 +149,9 @@ def ensure_checkout(name: str, repo: str, commit: str, install: str | None, dest
             (dest / rel).parent.mkdir(parents=True, exist_ok=True)
             (dest / rel).write_bytes(data)
         if install:
-            sh(install, cwd=dest, env=dict(os.environ, CI="true", HUSKY="0"))
+            # The install command selects the upstream tool version. Keep Corepack from switching the
+            # pnpm launcher first (or refusing to launch it in a Yarn project).
+            sh(install, cwd=dest, env=dict(os.environ, CI="true", HUSKY="0", COREPACK_ENABLE_PROJECT_SPEC="0"))
 
     retry(name, attempt)
     (dest / MARKER).write_text(json.dumps(want))
@@ -190,7 +192,8 @@ def ensure_tsgo(pkgcfg: dict, work: Path) -> Path:
     if not exe.exists():
         d.mkdir(parents=True, exist_ok=True)
         (d / "package.json").write_text('{"name": "tsgo-bench", "private": true}\n')
-        retry(f"{pkg}@{version}", lambda: sh(["npm", "install", "--no-audit", "--no-fund", "--no-save", f"{pkg}@{version}"], cwd=d))
+        retry(f"{pkg}@{version}", lambda: sh(["pnpm", "add", "--save-exact", f"{pkg}@{version}",
+                                                        f"@typescript/typescript-{native_platform()}@{version}"], cwd=d))
     with open(exe, "rb") as f:
         magic = f.read(4)
     if magic not in (b"\x7fELF", b"\xcf\xfa\xed\xfe", b"\xca\xfe\xba\xbe"):
