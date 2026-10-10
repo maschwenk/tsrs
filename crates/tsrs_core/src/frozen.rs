@@ -193,7 +193,7 @@ impl<T> OwnedCell<T> {
     }
 }
 
-// Shared-graph prototype (`sharedgraph`): a checker-created symbol or node of the frozen seed is read through the
+// Shared graph (`sharedgraph`): a checker-created symbol or node of the frozen seed is read through the
 // current checker's overlay, and its writes go there.
 impl<T: Copy> OwnedCell<T> {
     #[inline]

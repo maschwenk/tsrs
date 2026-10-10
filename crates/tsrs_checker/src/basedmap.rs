@@ -1,4 +1,4 @@
-//! Shared-graph prototype (`tsrs_core::sharedgraph`): a fork's interning map over the frozen seed's. A lookup tries
+//! Shared graph (`tsrs_core::sharedgraph`): a fork's interning map over the frozen seed's. A lookup tries
 //! the fork's own map, then the seed's (read only: the seed checker is frozen and never written again); inserts go
 //! to the fork's own map; a removed key that the seed holds is remembered so the seed's entry stays hidden. Without a
 //! base (the switch off, or the seed itself) it is the plain map plus one `None` test per miss.

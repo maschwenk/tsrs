@@ -1552,7 +1552,7 @@ impl Checker {
             let prop = self.get_union_or_intersection_property(t, name, false /*skipObjectFunctionPropertyAugment*/);
             if let Some(prop) = prop.filter(|p| p.check_flags.get().intersects(CheckFlags::SyntheticProperty)) {
                 if tsrs_core::sharedgraph::frozen(prop.get()) && !prop.check_flags.get().intersects(CheckFlags::IsDiscriminantComputed) {
-                    // Shared-graph prototype: a frozen symbol's flags cannot be cached into; compute, don't cache.
+                    // Shared graph: a frozen symbol's flags cannot be cached into; compute, don't cache.
                     return prop.check_flags.get().contains(CheckFlags::NonUniformAndLiteral) && {
                         let prop_type = self.get_type_of_symbol(prop);
                         !self.is_generic_type(prop_type)

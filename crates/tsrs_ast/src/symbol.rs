@@ -821,7 +821,7 @@ impl SymbolTable {
         P::new(SymbolTable(FrozenCell::new(SymbolMap::with_capacity(n))))
     }
 
-    /// A copy of the table as a value (shared-graph prototype: a checker's copy of a frozen table held inline).
+    /// A copy of the table as a value (shared graph: a checker's copy of a frozen table held inline).
     pub fn clone_value(&self) -> SymbolTable {
         SymbolTable(FrozenCell::new(self.0.borrow().clone()))
     }

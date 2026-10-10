@@ -18,7 +18,7 @@ pub struct LinkStore<K: 'static, V: 'static> {
     chunks: Vec<P<PSlot<V>>>, // first slot of each chunk
     len: u32,
     key: std::marker::PhantomData<P<K>>,
-    /// Shared-graph prototype: the frozen seed's store, read through; a record is copied on first `get`.
+    /// Shared graph: the frozen seed's store, read through; a record is copied on first `get`.
     parent: Option<&'static LinkStore<K, V>>,
 }
 
@@ -91,7 +91,7 @@ impl<K: 'static, V: 'static> LinkStore<K, V> {
         self.index(key).is_some() || self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).is_some_and(|p| p.has(key))
     }
 
-    /// Shared-graph prototype: an empty store that reads through to `self` (frozen).
+    /// Shared graph: an empty store that reads through to `self` (frozen).
     pub fn fork(&'static self) -> Self {
         LinkStore { slots: hashbrown::HashTable::new(), chunks: Vec::new(), len: 0, key: std::marker::PhantomData, parent: Some(self) }
     }
@@ -131,7 +131,7 @@ impl<K: 'static, V: Default + LinkCopy + 'static> LinkStore<K, V> {
     }
 }
 
-/// Shared-graph prototype: how a fork copies a link record of the frozen seed into its own store on first access.
+/// Shared graph: how a fork copies a link record of the frozen seed into its own store on first access.
 /// Records made only of `Cell`s copy bitwise (`bitwise_link_copy!`); records that own or point to mutable side
 /// objects copy those too.
 pub trait LinkCopy {
@@ -187,7 +187,7 @@ pub struct KeyedLinkStore<K: 'static, V: 'static> {
     chunks: Vec<P<PSlot<V>>>,         // first slot of each chunk
     len: u32,
     key: std::marker::PhantomData<P<K>>,
-    /// Shared-graph prototype: as `LinkStore::parent`.
+    /// Shared graph: as `LinkStore::parent`.
     parent: Option<&'static KeyedLinkStore<K, V>>,
 }
 
@@ -229,7 +229,7 @@ impl<K: 'static, V: KeyedLinks + 'static> KeyedLinkStore<K, V> {
         }
     }
 
-    /// Shared-graph prototype: an empty store that reads through to `self` (frozen).
+    /// Shared graph: an empty store that reads through to `self` (frozen).
     pub fn fork(&'static self) -> Self {
         KeyedLinkStore { slots: hashbrown::HashTable::new(), chunks: Vec::new(), len: 0, key: std::marker::PhantomData, parent: Some(self) }
     }
@@ -291,7 +291,7 @@ pub struct SymbolReferenceLinkStore {
 }
 
 impl SymbolReferenceLinkStore {
-    /// Shared-graph prototype: a copy (the slots are heap data of the frozen seed checker).
+    /// Shared graph: a copy (the slots are heap data of the frozen seed checker).
     pub fn fork(&'static self) -> Self {
         SymbolReferenceLinkStore { slots: self.slots.clone() }
     }
@@ -363,7 +363,7 @@ pub struct IdLinkStore<V: 'static> {
     wide_slots: FxHashMap<u64, u32>, // ids >= 2^32 (long-running processes such as the test runner)
     chunks: Vec<P<PSlot<V>>>,        // first slot of each chunk
     len: u32,
-    /// Shared-graph prototype: as `LinkStore::parent`.
+    /// Shared graph: as `LinkStore::parent`.
     parent: Option<&'static IdLinkStore<V>>,
 }
 
@@ -456,7 +456,7 @@ impl<V: 'static> IdLinkStore<V> {
         self.slot(id).is_some() || self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).is_some_and(|p| p.has(id))
     }
 
-    /// Shared-graph prototype: an empty store that reads through to `self` (frozen).
+    /// Shared graph: an empty store that reads through to `self` (frozen).
     pub fn fork(&'static self) -> Self {
         IdLinkStore { index: Vec::new(), wide_slots: FxHashMap::default(), chunks: Vec::new(), len: 0, parent: Some(self) }
     }
@@ -572,7 +572,7 @@ impl<V: Default + LinkCopy + 'static> IdLinkStore<V> {
 pub struct InlineIdStore<V: 'static> {
     blocks: Vec<Option<P<InlineBlock<V>>>>,
     wide: FxHashMap<u64, P<V>>, // ids >= 2^32 (long-running processes such as the test runner)
-    /// Shared-graph prototype: the frozen seed's store; a new group starts as a copy of the parent's group.
+    /// Shared graph: the frozen seed's store; a new group starts as a copy of the parent's group.
     parent: Option<&'static InlineIdStore<V>>,
 }
 
@@ -611,7 +611,7 @@ impl<V: 'static> InlineIdStore<V> {
         }
     }
 
-    /// Shared-graph prototype: an empty store that reads through to `self` (frozen).
+    /// Shared graph: an empty store that reads through to `self` (frozen).
     pub fn fork(&'static self) -> Self {
         InlineIdStore { blocks: Vec::new(), wide: FxHashMap::default(), parent: Some(self) }
     }
@@ -730,7 +730,7 @@ impl<V: 'static> Default for NodeLinkStore<V> {
 }
 
 impl<V: 'static> NodeLinkStore<V> {
-    /// Shared-graph prototype: see `InlineIdStore::fork`.
+    /// Shared graph: see `InlineIdStore::fork`.
     pub fn fork(&'static self) -> Self {
         NodeLinkStore { store: self.store.fork() }
     }
@@ -783,7 +783,7 @@ impl<V: 'static> Default for SymbolArenaLinkStore<V> {
 }
 
 impl<V: 'static> SymbolArenaLinkStore<V> {
-    /// Shared-graph prototype: see `IdLinkStore::fork`.
+    /// Shared graph: see `IdLinkStore::fork`.
     pub fn fork(&'static self) -> Self {
         SymbolArenaLinkStore { store: self.store.fork() }
     }

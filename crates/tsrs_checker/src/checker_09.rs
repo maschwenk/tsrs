@@ -2870,7 +2870,7 @@ impl Checker {
         }
     }
 
-    /// Shared-graph prototype: `lm`, or this checker's copy of it if it belongs to the frozen seed (forks fill tables).
+    /// Shared graph: `lm`, or this checker's copy of it if it belongs to the frozen seed (forks fill tables).
     #[inline]
     pub(crate) fn own_lazy_member_table(&mut self, t: P<Type>, lm: P<LazyMemberTable>) -> P<LazyMemberTable> {
         if !tsrs_core::sharedgraph::frozen(lm.get()) {

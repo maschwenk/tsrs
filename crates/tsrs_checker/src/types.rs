@@ -33,7 +33,7 @@ impl<K: Eq + Hash + Clone + 'static, V: Clone + 'static> GoMap<K, V> {
         let scratch = tsrs_core::arena::scratch_contains(std::ptr::from_ref::<Self>(self) as usize);
         self.0.set(Some(P::new_in(scratch, RefCell::new(FxHashMap::default()))));
     }
-    /// Shared-graph prototype: the table, copied into this checker's arena first if it is frozen.
+    /// Shared graph: the table, copied into this checker's arena first if it is frozen.
     #[inline]
     fn for_write(&self) -> Option<P<RefCell<FxHashMap<K, V>>>> {
         let m = self.0.get()?;
@@ -1148,7 +1148,7 @@ pub struct Type {
     symbol_or_alias: Cell<TypeSymbolWord>,
 }
 
-/// `Type.object_flags`. Shared-graph prototype: a frozen type's flags written by a fork go to the fork's overlay,
+/// `Type.object_flags`. Shared graph: a frozen type's flags written by a fork go to the fork's overlay,
 /// kept by type id (`Overlay::id_word`); with nothing frozen this is a `Cell`.
 #[repr(transparent)]
 pub struct ObjectFlagsCell(Cell<ObjectFlags>);
@@ -1172,7 +1172,7 @@ impl ObjectFlagsCell {
     pub fn get(&self) -> ObjectFlags {
         self.0.get()
     }
-    /// `get` that also sees this checker's lazily computed bits on a frozen type (shared-graph prototype).
+    /// `get` that also sees this checker's lazily computed bits on a frozen type (shared graph).
     #[inline]
     pub fn get_lazy(&self) -> ObjectFlags {
         let v = self.0.get();
@@ -1192,7 +1192,6 @@ impl ObjectFlagsCell {
     #[inline]
     pub fn set(&self, f: ObjectFlags) {
         if tsrs_core::sharedgraph::any_frozen() && tsrs_core::sharedgraph::frozen(self) {
-            tsrs_core::sharedgraph::count_flag_bits((self.get_lazy() ^ f).bits());
             tsrs_core::sharedgraph::set_id_word_frozen(std::ptr::from_ref(self).addr(), self.owner().id.0, f.bits() as u64);
             return;
         }
@@ -2356,7 +2355,7 @@ impl ReferenceInstantiations {
         }
         let mut cell = self.0.get().unwrap();
         if tsrs_core::sharedgraph::frozen(cell.get()) {
-            // Shared-graph prototype: this checker's copy of a frozen table.
+            // Shared graph: this checker's copy of a frozen table.
             cell = P::new(RefCell::new(tsrs_core::sharedgraph::with_ref(&cell, Clone::clone)));
             self.0.set(Some(cell));
         }
@@ -3367,7 +3366,7 @@ mod tests {
 }
 
 
-// Shared-graph prototype: how a fork copies the frozen seed's link records (links.rs `LinkCopy`).
+// Shared graph: how a fork copies the frozen seed's link records (links.rs `LinkCopy`).
 crate::bitwise_link_copy!(
     NodeLinks,
     SymbolNodeLinks,
@@ -3447,7 +3446,7 @@ impl crate::links::LinkCopy for SourceFileLinks {
 }
 
 
-/// Go `getSymbolTable(&cell)` for an overlay cell. Shared-graph prototype: a frozen table is copied to the checker's
+/// Go `getSymbolTable(&cell)` for an overlay cell. Shared graph: a frozen table is copied to the checker's
 /// own arena before it is written (the copy replaces it in the overlay).
 pub fn ov_symbol_table(cell: &OvExact<Option<P<SymbolTable>>>) -> P<SymbolTable> {
     if let Some(table) = cell.get() {

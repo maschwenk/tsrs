@@ -2089,7 +2089,7 @@ pub(crate) struct LazyMappedTable {
     pub(crate) resolving: Cell<bool>,
 }
 
-/// Shared-graph prototype: forks copy the seed's tables in parallel, so the copy must not touch the borrow flag.
+/// Shared graph: forks copy the seed's tables in parallel, so the copy must not touch the borrow flag.
 impl Clone for LazyMappedTable {
     fn clone(&self) -> Self {
         LazyMappedTable {
@@ -2122,7 +2122,7 @@ impl Checker {
             return Some(Rc::clone(lazy));
         }
         if let Some(frozen) = self.lazy_mapped_tables.base_get(&t) {
-            // Shared-graph prototype: the seed's table is filled lazily, so the fork takes its own copy.
+            // Shared graph: the seed's table is filled lazily, so the fork takes its own copy.
             let copy = Rc::new((**frozen).clone());
             self.lazy_mapped_tables.insert(t, Rc::clone(&copy));
             return Some(copy);

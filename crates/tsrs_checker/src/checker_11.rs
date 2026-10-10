@@ -1315,7 +1315,7 @@ impl Checker {
         // (the target is a declared anonymous or mapped type or a deferred reference, never an interface or tuple).
         assert!(target.try_as_interface_type().is_none(), "object type instantiation of an interface target");
         let key = get_type_instantiation_key(&type_arguments, new_alias, t.object_flags().intersects(ObjectFlags::SingleSignatureType));
-        // Shared-graph prototype: a fork's table for a frozen target holds only what the fork added; the seed's
+        // Shared graph: a fork's table for a frozen target holds only what the fork added; the seed's
         // entries are read through.
         let from_seed = self.object_type_instantiations.base_get(&target).and_then(|m| m.get(&key));
         let instantiations = self.object_type_instantiations.own.entry(target).or_insert_with(|| {

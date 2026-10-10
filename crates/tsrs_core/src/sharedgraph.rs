@@ -1,9 +1,9 @@
-//! tsrs-only research prototype (`spike/shared-graph`, `TSRS_SHARED_GRAPH=1`): a frozen seed graph shared by every
-//! checker thread.
+//! tsrs-only: a frozen seed graph shared by every checker thread (`--features shared-graph`, on with
+//! `TSRS_SHARED_GRAPH=1`; tsrs_compiler `sharedgraph` drives it, notes/spike-shared-graph.md).
 //!
-//! One seed checker runs on a fresh thread arena; when it is done its arena's chunks are *frozen*: marked in a page
-//! bitmap (`is_frozen_addr`) and, with `TSRS_SHARED_GRAPH_PROTECT=1` (the default while the prototype is developed),
-//! `mprotect`ed read-only, so a missed write is a fault with a backtrace instead of a silent race. Every pool checker
+//! One seed checker runs in a region of its own; when it is done the region's chunks are *frozen*: marked in a page
+//! bitmap (`is_frozen_addr`) and `mprotect`ed read-only (`TSRS_SHARED_GRAPH_PROTECT=0` turns that off), so a missed
+//! write is a fault with a backtrace instead of a silent race. Every pool checker
 //! is a fork that reads the frozen objects and keeps what it would have written into them in its own `Overlay`, keyed
 //! by the address of the cell. `OvCell` is a `Cell` whose writes to a frozen address go to the overlay of the
 //! checker the current thread runs (`enter_overlay`).
@@ -23,7 +23,7 @@ fn page_size() -> usize {
     unsafe { libc::sysconf(libc::_SC_PAGESIZE) as usize }
 }
 
-/// Whether the prototype is compiled in (`--features shared-graph`). Without it every frozen-object test below is a
+/// Whether the shared graph is compiled in (`--features shared-graph`). Without it every frozen-object test below is a
 /// constant false, so the switch-off build runs main's code paths.
 pub const COMPILED_IN: bool = cfg!(feature = "shared-graph");
 
@@ -36,9 +36,6 @@ const WORDS: usize = SPAN >> PAGE_SHIFT >> 6;
 /// One bit per 4 KiB page of the reservation (1 MiB, zero until a freeze, in .bss).
 static FROZEN: [AtomicU64; WORDS] = [const { AtomicU64::new(0) }; WORDS];
 
-/// Overrides: a fork set a frozen cell that already held a non-default value (counted; the inline value still wins).
-pub static OVERRIDES: AtomicUsize = AtomicUsize::new(0);
-
 /// The frozen chunks lie in `[FROZEN_LO, FROZEN_LO + FROZEN_SPAN)` (0 and 0 while nothing is frozen).
 static FROZEN_LO: AtomicUsize = AtomicUsize::new(0);
 static FROZEN_SPAN: AtomicUsize = AtomicUsize::new(0);
@@ -46,8 +43,6 @@ static FROZEN_SPAN: AtomicUsize = AtomicUsize::new(0);
 /// frozen cell whose line is clean returns the inline value without touching the overlay (no thread-local, no hash).
 /// Bits are only ever set (a fork whose overlay lacks the cell falls back to the inline value).
 static DIRTY: std::sync::atomic::AtomicPtr<AtomicU64> = std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
-/// Lines marked dirty (stats).
-pub static DIRTY_LINES: AtomicUsize = AtomicUsize::new(0);
 
 /// Whether the cell at `addr` is frozen and its line is dirty: the only case a read must consult the overlay.
 #[inline(always)]
@@ -78,9 +73,10 @@ fn mark_dirty(addr: usize) {
     // SAFETY: as in `dirty`; the caller checked that `addr` is frozen.
     let w = unsafe { &*DIRTY.load(Ordering::Relaxed).add(line >> 6) };
     let bit = 1 << (line & 63);
-    if w.load(Ordering::Relaxed) & bit == 0 && w.fetch_or(bit, Ordering::Relaxed) & bit == 0 {
-        // Relaxed: a statistics counter.
-        DIRTY_LINES.fetch_add(1, Ordering::Relaxed);
+    // Relaxed (both): a bit only tells readers to look in their own overlay, which holds only their own writes; a
+    // reader that misses another fork's bit has nothing of that fork's to find.
+    if w.load(Ordering::Relaxed) & bit == 0 {
+        w.fetch_or(bit, Ordering::Relaxed);
     }
 }
 
@@ -127,18 +123,15 @@ fn is_frozen_addr_slow(addr: usize) -> bool {
     }
 }
 
-/// Whether frozen chunks are `mprotect`ed (`TSRS_SHARED_GRAPH_PROTECT`, default on; `0` turns it off, `log` makes a
-/// write fault unprotect the page, print the site once per page, and continue).
-pub fn protect_mode() -> u8 {
-    static MODE: std::sync::OnceLock<u8> = std::sync::OnceLock::new();
-    *MODE.get_or_init(|| match std::env::var("TSRS_SHARED_GRAPH_PROTECT").as_deref() {
-        Ok("0" | "off") => 0,
-        Ok("log") => 2,
-        _ => 1,
-    })
+/// Whether frozen chunks are `mprotect`ed (`TSRS_SHARED_GRAPH_PROTECT`, default on; `0` turns it off).
+#[cfg(unix)]
+fn protect() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| !matches!(std::env::var("TSRS_SHARED_GRAPH_PROTECT").as_deref(), Ok("0" | "off")))
 }
 
-/// Marks `ranges` (start, len; page-aligned chunks of the seed's arena) frozen, and protects them per `protect_mode`.
+/// Marks `ranges` (start, len; page-aligned chunks of the seed's region) frozen, and protects them unless
+/// `TSRS_SHARED_GRAPH_PROTECT=0`.
 pub fn freeze(ranges: &[(usize, usize)]) {
     #[cfg(compressed_ptrs)]
     for &(start, len) in ranges {
@@ -165,7 +158,7 @@ pub fn freeze(ranges: &[(usize, usize)]) {
     // Release: orders the range and bitmap stores above before it (readers are spawned later anyway).
     ANY_FROZEN.store(true, Ordering::Release);
     #[cfg(unix)]
-    if protect_mode() != 0 {
+    if protect() {
         install_fault_handler();
         let page = page_size();
         for &(start, len) in ranges {
@@ -177,31 +170,6 @@ pub fn freeze(ranges: &[(usize, usize)]) {
             // SAFETY: whole pages of a chunk of the reservation, mapped read-write; they become read-only.
             let r = unsafe { libc::mprotect(std::ptr::with_exposed_provenance_mut::<libc::c_void>(lo), hi - lo, libc::PROT_READ) };
             assert!(r == 0, "shared graph: mprotect failed");
-        }
-    }
-}
-
-/// `TSRS_SHARED_GRAPH_LOG_OVERRIDES=1`: prints the stack of every override (`faults.py` groups them).
-#[cold]
-fn log_site(msg: &[u8]) {
-    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    if !*ON.get_or_init(|| std::env::var("TSRS_SHARED_GRAPH_LOG_OVERRIDES").is_ok_and(|v| v == "1")) {
-        return;
-    }
-    #[cfg(not(unix))]
-    let _ = msg;
-    #[cfg(unix)]
-    {
-        unsafe extern "C" {
-            fn backtrace(buf: *mut *mut libc::c_void, size: i32) -> i32;
-            fn backtrace_symbols_fd(buf: *const *mut libc::c_void, size: i32, fd: i32);
-        }
-        let mut frames = [std::ptr::null_mut::<libc::c_void>(); 40];
-        // SAFETY: writes a buffer to stderr; fills and prints a local frame buffer.
-        unsafe {
-            libc::write(2, msg.as_ptr().cast(), msg.len());
-            let n = backtrace(frames.as_mut_ptr(), 40);
-            backtrace_symbols_fd(frames.as_ptr(), n, 2);
         }
     }
 }
@@ -225,78 +193,28 @@ fn install_fault_handler() {
 
 #[cfg(unix)]
 extern "C" fn fault_handler(sig: i32, info: *mut libc::siginfo_t, _ctx: *mut libc::c_void) {
+    unsafe extern "C" {
+        fn backtrace(buf: *mut *mut libc::c_void, size: i32) -> i32;
+        fn backtrace_symbols_fd(buf: *const *mut libc::c_void, size: i32, fd: i32);
+    }
     // SAFETY: the kernel passes a valid siginfo for SA_SIGINFO handlers.
     let addr = unsafe { (*info).si_addr() }.addr();
-    if !is_frozen_addr_slow(addr) {
-        // Not ours: the frames, then the default action (a crash) on return.
-        unsafe extern "C" {
-            fn backtrace(buf: *mut *mut libc::c_void, size: i32) -> i32;
-            fn backtrace_symbols_fd(buf: *const *mut libc::c_void, size: i32, fd: i32);
-        }
-        let mut frames = [std::ptr::null_mut::<libc::c_void>(); 80];
-        let msg = b"tsrs shared graph: fault outside the frozen seed\n";
-        {
-            let mut name = [0u8; 64];
-            // SAFETY: a local buffer; pthread_self is always valid.
-            unsafe {
-                libc::pthread_getname_np(libc::pthread_self(), name.as_mut_ptr().cast(), name.len());
-                let len = name.iter().position(|&b| b == 0).unwrap_or(0);
-                libc::write(2, b"fault thread ".as_ptr().cast(), 13);
-                libc::write(2, name.as_ptr().cast(), len);
-                libc::write(2, b"\n".as_ptr().cast(), 1);
-            }
-        }
-        {
-            let mut buf = [0u8; 40];
-            let mut n = addr;
-            let mut i = buf.len();
-            loop {
-                i -= 1;
-                buf[i] = b"0123456789abcdef"[n & 15];
-                n >>= 4;
-                if n == 0 {
-                    break;
-                }
-            }
-            // SAFETY: writes a local buffer to stderr.
-            unsafe {
-                libc::write(2, b"fault addr 0x".as_ptr().cast(), 13);
-                libc::write(2, buf[i..].as_ptr().cast(), buf.len() - i);
-                libc::write(2, b"\n".as_ptr().cast(), 1);
-            }
-        }
-        // SAFETY: writes a static buffer to stderr; fills and prints a local frame buffer; resets the handler.
-        unsafe {
-            libc::write(2, msg.as_ptr().cast(), msg.len());
-            let n = backtrace(frames.as_mut_ptr(), 80);
-            backtrace_symbols_fd(frames.as_ptr(), n, 2);
-            libc::signal(sig, libc::SIG_DFL);
-        }
-        return;
+    let ours = is_frozen_addr_slow(addr);
+    let msg: &[u8] = if ours { b"tsrs shared graph: write to frozen address\n" } else { b"tsrs shared graph: fault outside the frozen seed\n" };
+    let mut frames = [std::ptr::null_mut::<libc::c_void>(); 64];
+    // SAFETY: writes a static buffer to stderr; fills and prints a local frame buffer (the raw frames, symbolized by
+    // the system without allocating).
+    unsafe {
+        libc::write(2, msg.as_ptr().cast(), msg.len());
+        let n = backtrace(frames.as_mut_ptr(), 64);
+        backtrace_symbols_fd(frames.as_ptr(), n, 2);
     }
-    // Debugging aid: the raw frames (execinfo), symbolized by the system without allocating.
-    {
-        unsafe extern "C" {
-            fn backtrace(buf: *mut *mut libc::c_void, size: i32) -> i32;
-            fn backtrace_symbols_fd(buf: *const *mut libc::c_void, size: i32, fd: i32);
-        }
-        let mut frames = [std::ptr::null_mut::<libc::c_void>(); 40];
-        let msg = b"tsrs shared graph: write to frozen address\n";
-        // SAFETY: writes a static buffer to stderr; fills and prints a local frame buffer.
-        unsafe {
-            libc::write(2, msg.as_ptr().cast(), msg.len());
-            let n = backtrace(frames.as_mut_ptr(), 40);
-            backtrace_symbols_fd(frames.as_ptr(), n, 2);
-        }
-        let _ = addr;
+    if ours {
+        std::process::abort();
     }
-    if protect_mode() == 2 {
-        let page = addr & !(page_size() - 1);
-        // SAFETY: a page of a frozen chunk; it becomes writable again so the faulting write can complete.
-        unsafe { libc::mprotect(std::ptr::with_exposed_provenance_mut::<libc::c_void>(page), page_size(), libc::PROT_READ | libc::PROT_WRITE) };
-        return;
-    }
-    std::process::abort();
+    // Not ours: the default action (a crash) when the faulting access is retried on return.
+    // SAFETY: resets this signal's disposition.
+    unsafe { libc::signal(sig, libc::SIG_DFL) };
 }
 
 /// A checker's private values for frozen cells and its private tables hung off frozen objects.
@@ -339,17 +257,6 @@ impl Overlay {
         }
         mark_dirty(addr);
         self.cells.borrow_mut().insert(addr, encode(v));
-    }
-
-    pub fn cell_count(&self) -> usize {
-        self.cells.borrow().len()
-    }
-    /// Pages of object-flag words (256 per page).
-    pub fn id_word_pages(&self) -> usize {
-        self.id_words.borrow().iter().filter(|p| p.is_some()).count()
-    }
-    pub fn table_count(&self) -> usize {
-        self.tables.borrow().len()
     }
 
     /// The private table keyed by `addr` (a frozen object), made by `make` on first use.
@@ -432,8 +339,7 @@ impl<T: Copy + Default + PartialEq> OvCell<T> {
         OvCell(Cell::new(v))
     }
 
-    /// A set value is returned as is (a fork's write over a value the seed set is an override: counted, not seen);
-    /// an unset one is looked up in the overlay only if its line is dirty.
+    /// A set value is returned as is (the seed's value wins over a fork's later write of another one); an unset one is looked up in the overlay only if its line is dirty.
     #[inline]
     pub fn get(&self) -> T {
         let v = self.0.get();
@@ -458,11 +364,6 @@ impl<T: Copy + Default + PartialEq> OvCell<T> {
         let addr = std::ptr::from_ref(self).addr();
         if !is_frozen_addr_slow(addr) {
             return false;
-        }
-        if self.0.get() != T::default() && self.0.get() != v {
-            // Relaxed: a statistics counter.
-            OVERRIDES.fetch_add(1, Ordering::Relaxed);
-            log_site(b"tsrs shared graph: override\n");
         }
         current_overlay().set_cell(addr, v);
         true
@@ -624,7 +525,7 @@ impl<T: Copy> OvExact<T> {
         if any_frozen() {
             let addr = std::ptr::from_ref(self).addr();
             if is_frozen_addr_slow(addr) {
-                        current_overlay().set_cell(addr, v);
+                current_overlay().set_cell(addr, v);
                 return;
             }
         }
@@ -649,46 +550,7 @@ pub fn overlay_set_if_frozen<C, T: Copy>(cell: &C, v: T) -> bool {
     true
 }
 
-/// Writes by forks to `OwnedCell`s of frozen symbols and nodes (discovery counter).
-pub static OWNED_WRITES: AtomicUsize = AtomicUsize::new(0);
-
-/// Object-flag bits forks changed on frozen types (stats).
-pub static FLAG_BITS: [AtomicUsize; 32] = [const { AtomicUsize::new(0) }; 32];
-
-pub fn count_flag_bits(changed: u32) {
-    for (i, c) in FLAG_BITS.iter().enumerate() {
-        if changed & (1 << i) != 0 {
-            // Relaxed: a statistics counter.
-            c.fetch_add(1, Ordering::Relaxed);
-        }
-    }
-}
-
-/// Prints the stack under `TSRS_SHARED_GRAPH_LOG_OWNED=1` (discovery of fork writes to frozen objects).
-#[cold]
-pub fn log_owned_site() {
-    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    if !*ON.get_or_init(|| std::env::var("TSRS_SHARED_GRAPH_LOG_OWNED").is_ok_and(|v| v == "1")) {
-        return;
-    }
-    #[cfg(unix)]
-    {
-        unsafe extern "C" {
-            fn backtrace(buf: *mut *mut libc::c_void, size: i32) -> i32;
-            fn backtrace_symbols_fd(buf: *const *mut libc::c_void, size: i32, fd: i32);
-        }
-        let mut frames = [std::ptr::null_mut::<libc::c_void>(); 40];
-        let msg = b"tsrs shared graph: owned write\n";
-        // SAFETY: writes a static buffer to stderr; fills and prints a local frame buffer.
-        unsafe {
-            libc::write(2, msg.as_ptr().cast(), msg.len());
-            let n = backtrace(frames.as_mut_ptr(), 40);
-            backtrace_symbols_fd(frames.as_ptr(), n, 2);
-        }
-    }
-}
-
-/// `OwnedCell::set` on a frozen cell: counted and logged (`TSRS_SHARED_GRAPH_LOG_OWNED=1`), kept in the overlay.
+/// `OwnedCell::set` on a frozen cell: kept in the overlay.
 #[cold]
 #[inline(never)]
 pub fn owned_set_if_frozen<C, T: Copy>(cell: &C, v: T) -> bool {
@@ -696,9 +558,6 @@ pub fn owned_set_if_frozen<C, T: Copy>(cell: &C, v: T) -> bool {
     if !is_frozen_addr_slow(addr) {
         return false;
     }
-    // Relaxed: a statistics counter.
-    OWNED_WRITES.fetch_add(1, Ordering::Relaxed);
-    log_owned_site();
     current_overlay().set_cell(addr, v);
     true
 }

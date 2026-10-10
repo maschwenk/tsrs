@@ -1346,11 +1346,11 @@ pub struct Checker {
     /// (`forget_scratch_keyed_caches`, notes/mem-emit-regions.md).
     pub scratch_keyed_chain_cache: Vec<(P<Symbol>, accessibleChainCacheKey)>,
     pub emit_resolver: Option<P<EmitResolver>>, // Go `emitResolver` + `emitResolverOnce`: None until `get_emit_resolver`
-    /// Shared-graph prototype (`tsrs_core::sharedgraph`): this checker's values for lazy fields of frozen objects.
+    /// Shared graph (`tsrs_core::sharedgraph`): this checker's values for lazy fields of frozen objects.
     pub overlay: Box<tsrs_core::sharedgraph::Overlay>,
-    /// Shared-graph prototype: this checker is the seed whose graph will be frozen (symbol ids are assigned eagerly).
+    /// Shared graph: this checker is the seed whose graph will be frozen (symbol ids are assigned eagerly).
     pub seed_mode: bool,
-    /// Shared-graph prototype: made by `fork` from the frozen seed.
+    /// Shared graph: made by `fork` from the frozen seed.
     pub is_fork: bool,
 }
 
@@ -1849,7 +1849,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
 // Methods for Go's function-valued Checker fields.
 
 impl Checker {
-    /// Shared-graph prototype (`tsrs_core::sharedgraph`): a checker whose history is the frozen seed `base`'s, then
+    /// Shared graph (`tsrs_core::sharedgraph`): a checker whose history is the frozen seed `base`'s, then
     /// its own. Interning and identity maps are cloned (their keys and values point into the frozen graph), pure memos
     /// start empty, link stores read through to the base's and copy a record on first access, stacks start empty.
     #[expect(clippy::clone_on_copy, reason = "a field-by-field list: `clone` for every field, whatever its type")]
@@ -2222,7 +2222,7 @@ impl Checker {
         c
     }
 
-    /// Shared-graph prototype: the checker is between files, so its graph can be frozen.
+    /// Shared graph: the checker is between files, so its graph can be frozen.
     pub fn assert_freezable(&self) {
         assert!(
             self.instantiation_stack.is_empty()

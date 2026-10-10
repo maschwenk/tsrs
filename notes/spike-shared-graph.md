@@ -1,4 +1,13 @@
-# spike-shared-graph: one type graph shared by the checker threads (prototype, 2026-10-08)
+# spike-shared-graph: one type graph shared by the checker threads (2026-10-08, updated 2026-10-10)
+
+Status (2026-10-10): sections 1-9 are the first round, without a memory target and with the pool waiting for the
+seed. Section 10 is the version proposed for landing (PR #281): built with `--features shared-graph`, on with
+`TSRS_SHARED_GRAPH=1`, and meant for `--maxMemory`, where a retired checker is replaced by a fork of the seed. That
+version keeps two knobs, `TSRS_SHARED_GRAPH_SEED=<permille>` and `TSRS_SHARED_GRAPH_PROTECT=0`, plus
+`TSRS_DEBUG_REGIONS=1` for debugging. It removed the switches the first round used for measurement and discovery,
+which sections 1-9 still name: `TSRS_SHARED_GRAPH=emulate`, the `spread:`/`files:` seed rules,
+`TSRS_SHARED_GRAPH_OVERLAP`, `_STATS`, `_LOG_OWNED`, `_LOG_OVERRIDES`, `_WAIT`, protect mode `log`, and
+`tools/perf/sharedprobe.sh`. They are in the git history of PR #281 (b0a4a6e0).
 
 The owner asked: "let's start with the graph shared between threads, at least implement it and see what the gains
 are. don't worry about exactness." This note covers the prototype on branch `spike/shared-graph` (not for landing),
@@ -30,7 +39,7 @@ Linux.
 This is plan.md's A+C design ("frozen prefix" plus "seeded base"):
 
 1. **Seed.** One checker checks a program-derived sample of files on its own thread, inside a dedicated arena
-   region. The sample (`TSRS_SHARED_GRAPH_SEED=spread:<permille>`, default 10) is the lighter half of the checked
+   region. The sample (`TSRS_SHARED_GRAPH_SEED=<permille>`, default 10) is the lighter half of the checked
    non-declaration, non-leaf files, evenly spaced in program order up to that share of the checked weight. The pool
    creates its plain checkers meanwhile, as on main.
 2. **Freeze.** The region's chunks are marked in a page bitmap and `mprotect`ed read-only
@@ -186,7 +195,8 @@ formbricks 2640, cal-diy 2468.)
 A larger seed keeps saving memory and instructions. The saving flattens past 20 permille on formbricks, and T_w
 grows linearly. The default stays at 10 permille, and 20 permille is the measured alternative in 4.1.
 `TSRS_SHARED_GRAPH_OVERLAP=k` lets k checkers start at once as share-nothing checkers while the seed runs. At k = 2
-it showed no wall gain at 32 checkers on the Mac and cost about 50 MiB. Default 0.
+it showed no wall gain at 32 checkers on the Mac and cost about 50 MiB. Default 0 (removed; section 10.1's pool, which
+does not wait for the seed, replaces it under `--maxMemory`).
 
 ### 4.5 Against bun check (bun: Linux, 64 threads; tsrs main: Linux, 32 checkers; prototype: Mac)
 
@@ -280,8 +290,8 @@ not a measurement. Linux has 4 KiB pages and THP, and the slack and residency be
   header, flags and loc. Replaced by plain reads plus compute-without-caching at the one writing site.
 - **Object flags through the overlay on every read**: +7% instructions. Replaced by `object_flags_lazy()` at the
   ~70 sites that read the lazily computed families.
-- **The seed overlap with share-nothing checkers** (`TSRS_SHARED_GRAPH_OVERLAP`): kept as a knob, default 0, with no
-  measured gain.
+- **The seed overlap with share-nothing checkers** (`TSRS_SHARED_GRAPH_OVERLAP`): no
+  measured gain; removed in section 10.
 - **A front cache** (plan M3): not built. The switch-on fork costs +2-3% over switch-off, below the plan's +5%
   threshold for it.
 
@@ -341,8 +351,8 @@ than 16 checkers now, and 8 -> 16 gives the per-checker slope.
 
 ## 10. Update (2026-10-09): on top of `--maxMemory`, the 38k-file codebase
 
-Branch `spike/shared-graph-maxmemory`: this spike merged onto `mem-notion` (`--maxMemory`, PR 265; 55 commits of main
-since the spike). With both on, a checker that `--maxMemory` retires is replaced by a fork of the frozen seed instead
+This round put the first round's code on top of `--maxMemory` (PR 265; 55 commits of main since the first round). It is
+PR #281. With both on, a checker that `--maxMemory` retires is replaced by a fork of the frozen seed instead
 of a fresh checker, so the replacement starts with the seed's graph instead of rebuilding it.
 
 What the merge needed:
@@ -360,7 +370,8 @@ What the merge needed:
   is frozen, or replaced by forks when retired). It hid the serial seed (29.1 s against 33.6 s at 8G) but plain
   checkers running beside forks after the freeze crashed in 1-3 of 10 runs (reads of retired regions) that this round
   did not explain; entering the seed region as a scratch region (so that escaping data leaves it) made forks share
-  unfrozen seed data and crashed every run. The pool waits for the seed, as in the spike.
+  unfrozen seed data and crashed every run. The pool waited for the seed, as in the first round (section 10.1 found
+  both causes of the crashes and starts the pool at once).
 
 Measured (Mac, 14 cores, 8 checkers, release build with `--features shared-graph`; diagnostics byte-identical in every
 run; 20 stress runs at 10 and 50 permille with `--maxMemory 8G`, 12 more over seeds 10-100 and targets 8-10G, and every
@@ -406,7 +417,7 @@ the fault handler prints the address and the thread; registers mapped to regions
 
 After both: no failure in 10 runs with regions retired for good, 16 runs over seeds 10-100 and targets 8-10G in both
 modes, and the regression cases with a 30% seed and a retirement after nearly every file. Under `--maxMemory` the pool
-now starts at once (`TSRS_SHARED_GRAPH_WAIT=1` waits).
+now starts at once. Without a target it still waits for the seed and forks each unused checker.
 
 3 interleaved runs (medians):
 

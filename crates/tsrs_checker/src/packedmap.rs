@@ -153,7 +153,7 @@ impl<K: PackedKey + 'static, V: Copy + 'static> GoPackedMap<K, V> {
     pub fn set(&self, key: K, value: V) {
         let m = match self.0.get() {
             Some(m) if tsrs_core::sharedgraph::frozen(m.get()) => {
-                // Shared-graph prototype: this checker's copy of a frozen table.
+                // Shared graph: this checker's copy of a frozen table.
                 let copy = P::new(RefCell::new(tsrs_core::sharedgraph::with_ref(&m, Clone::clone)));
                 self.0.set(Some(copy));
                 copy
@@ -183,7 +183,7 @@ impl<K: PackedKey + 'static, V: Copy + 'static> GoPackedMap<K, V> {
 #[derive(Default, Clone)]
 pub struct StringLiteralTypes {
     table: hashbrown::HashTable<P<Type>>,
-    /// Shared-graph prototype: the frozen seed's table, read through.
+    /// Shared graph: the frozen seed's table, read through.
     base: Option<&'static StringLiteralTypes>,
 }
 
@@ -211,7 +211,7 @@ impl StringLiteralTypes {
         }
     }
 
-    /// Shared-graph prototype: an empty table that reads through to `self` (frozen).
+    /// Shared graph: an empty table that reads through to `self` (frozen).
     pub fn fork(&'static self) -> Self {
         StringLiteralTypes { table: hashbrown::HashTable::new(), base: Some(self) }
     }

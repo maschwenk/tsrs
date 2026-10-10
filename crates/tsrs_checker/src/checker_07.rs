@@ -1607,7 +1607,7 @@ impl Checker {
         tsrs_core::sitecount::hit("symbol", "");
         let s = Symbol::new(flags | SymbolFlags::Transient, name);
         if self.seed_mode {
-            // Shared-graph prototype: a fork must never write an id into a frozen symbol.
+            // Shared graph: a fork must never write an id into a frozen symbol.
             ast::get_symbol_id(s);
         }
         #[cfg(feature = "assignment-stats")]
