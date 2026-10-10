@@ -841,12 +841,12 @@ impl ObjectLiteralDiscriminator {
     }
 
     // checker.go:31212
-    pub(crate) fn name(&mut self, _c: &mut Checker, index: i32) -> String {
+    pub(crate) fn name(&mut self, _c: &mut Checker, index: i32) -> &'static str {
         let index = index as usize;
         if index < self.props.len() {
-            return self.props[index].symbol().unwrap().name().to_string();
+            return self.props[index].symbol().unwrap().name();
         }
-        self.members[index - self.props.len()].name().to_string()
+        self.members[index - self.props.len()].name()
     }
 
     // checker.go:31219

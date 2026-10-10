@@ -1527,9 +1527,9 @@ impl<'a> TypeDiscriminator<'a> {
     }
 
     // relater.go:1040
-    pub(crate) fn name(&mut self, c: &mut Checker, index: i32) -> String {
+    pub(crate) fn name(&mut self, c: &mut Checker, index: i32) -> &'static str {
         let _ = c;
-        self.props[index as usize].name().to_string()
+        self.props[index as usize].name()
     }
 
     // relater.go:1044
@@ -1749,10 +1749,10 @@ impl Checker {
             // have non-matching discriminants. This ensures that we ignore erroneous discriminators and gradually
             // refine the target set without eliminating every constituent (which would lead to `never`).
             let mut matched = false;
+            let name = discriminator.name(self, n);
             for i in 0..types.len() {
                 if include[i] != Ternary::False {
-                    let name = discriminator.name(self, n);
-                    let target_type = self.get_type_of_property_or_index_signature_of_type(types[i], &name);
+                    let target_type = self.get_type_of_property_or_index_signature_of_type(types[i], name);
                     if let Some(target_type) = target_type {
                         if discriminator.matches(self, n, target_type) {
                             matched = true;
