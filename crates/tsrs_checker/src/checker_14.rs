@@ -52,7 +52,21 @@ impl Checker {
     }
 
     // checker.go:28335
+    /// tsrs: the types every branch below passes through unchanged (no fresh literal, reference, union,
+    /// intersection, substitution or simplifiable type) return inline; the relater normalizes both sides of every
+    /// relation (0.5G calls on the 38k-file codebase).
+    #[inline]
     pub(crate) fn get_normalized_type(&mut self, t: P<Type>, writing: bool) -> P<Type> {
+        if !t.flags().intersects(TypeFlags::Freshable | TypeFlags::UnionOrIntersection | TypeFlags::Substitution | TypeFlags::Simplifiable)
+            && !t.object_flags().intersects(ObjectFlags::Reference)
+        {
+            return t;
+        }
+        self.get_normalized_type_worker(t, writing)
+    }
+
+    #[inline(never)]
+    fn get_normalized_type_worker(&mut self, t: P<Type>, writing: bool) -> P<Type> {
         let mut t = t;
         loop {
             let n: P<Type>;
