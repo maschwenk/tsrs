@@ -2274,13 +2274,15 @@ impl Checker {
     #[cold]
     #[inline(never)]
     fn build_augment_filter(&mut self, key: HashedName<'_>) -> bool {
+        let types = [self.global_function_type, self.global_callable_function_type, self.global_newable_function_type, self.global_object_type];
+        // Until all four are resolved every miss comes back here: test that before reading any of their tables.
+        if types.iter().any(|t| t.flags().intersects(TypeFlags::Object) && !t.object_flags_lazy().intersects(ObjectFlags::MembersResolved)) {
+            return true;
+        }
         let mut filter = NameFilter::default();
-        for t in [self.global_function_type, self.global_callable_function_type, self.global_newable_function_type, self.global_object_type] {
+        for t in types {
             if !t.flags().intersects(TypeFlags::Object) {
                 continue; // get_property_of_object_type finds nothing in it
-            }
-            if !t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) {
-                return true;
             }
             if let Some(members) = self.resolve_structured_type_members(t).unwrap().members() {
                 filter.add_keys(&members);
