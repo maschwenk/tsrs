@@ -299,6 +299,30 @@ impl GlobPattern {
         }
     }
 
+    /// tsrs-only: false when no path below the directory `dir_prefix` (ending in '/') can match, because a leading
+    /// literal component differs from the directory's part at its position. `match_path_parts` on such a path reads
+    /// the same parts against the same components first and fails there, so skipping the pattern for the
+    /// directory's entries gives the same answers.
+    fn may_match_below(&self, dir_prefix: &str) -> bool {
+        let (mut offset, mut comp_idx) = (0, 0);
+        loop {
+            let Some((part_start, part_end, next_offset)) = next_path_part_single(dir_prefix, offset) else {
+                return true;
+            };
+            let Some(comp) = self.components.get(comp_idx) else {
+                return true;
+            };
+            if comp.kind != ComponentKind::Literal {
+                return true;
+            }
+            if !self.strings_equal(comp.literal.as_bytes(), &dir_prefix.as_bytes()[part_start..part_end]) {
+                return false;
+            }
+            offset = next_offset;
+            comp_idx += 1;
+        }
+    }
+
     // patternSatisfied checks if remaining pattern components can match empty input.
     fn pattern_satisfied(&self, comp_idx: usize) -> bool {
         // A pattern is satisfied when remaining components can match empty input.
@@ -593,6 +617,10 @@ impl GlobMatcher {
                 return None;
             }
         }
+        self.matches_includes(prefix, suffix)
+    }
+
+    fn matches_includes(&self, prefix: &str, suffix: &str) -> Option<usize> {
         if self.includes.is_empty() {
             if self.had_includes {
                 return None;
@@ -607,6 +635,36 @@ impl GlobMatcher {
         None
     }
 
+    /// tsrs-only: the indices of the exclude patterns, of `parent` (or all), that may match below `dir_prefix`
+    /// (`GlobPattern::may_match_below`); the `_in` variants below then test only those.
+    fn live_excludes(&self, parent: Option<&[u32]>, dir_prefix: &str) -> Vec<u32> {
+        let may = |&i: &u32| self.excludes[i as usize].may_match_below(dir_prefix);
+        match parent {
+            Some(parent) => parent.iter().copied().filter(may).collect(),
+            None => (0..self.excludes.len() as u32).filter(may).collect(),
+        }
+    }
+
+    /// `matches_file_parts` for an entry of a directory whose live excludes are `live`.
+    fn matches_file_parts_in(&self, live: &[u32], prefix: &str, suffix: &str) -> Option<usize> {
+        for &e in live {
+            if self.excludes[e as usize].matches_parts(prefix, suffix) {
+                return None;
+            }
+        }
+        self.matches_includes(prefix, suffix)
+    }
+
+    /// `matches_directory_parts` for an entry of a directory whose live excludes are `live`.
+    fn matches_directory_parts_in(&self, live: &[u32], prefix: &str, suffix: &str) -> bool {
+        for &e in live {
+            if self.excludes[e as usize].matches_parts(prefix, suffix) {
+                return false;
+            }
+        }
+        self.matches_directory_includes(prefix, suffix)
+    }
+
     // matchesDirectoryParts checks if files under the directory prefix+suffix could match any pattern.
     fn matches_directory_parts(&self, prefix: &str, suffix: &str) -> bool {
         for e in &self.excludes {
@@ -614,6 +672,10 @@ impl GlobMatcher {
                 return false;
             }
         }
+        self.matches_directory_includes(prefix, suffix)
+    }
+
+    fn matches_directory_includes(&self, prefix: &str, suffix: &str) -> bool {
         if self.includes.is_empty() {
             return !self.had_includes;
         }
@@ -662,25 +724,29 @@ impl GlobVisitor {
             directory_matcher: &'a GlobMatcher,
             listings: std::sync::Mutex<FxHashMap<String, PrefetchedListing>>,
         }
-        fn walk<'s>(s: &rayon::Scope<'s>, w: &'s Walk<'s>, path: String, depth: usize) {
+        // `live_files` / `live_directories`: the parent directory's live excludes (`GlobMatcher::live_excludes`).
+        fn walk<'s>(s: &rayon::Scope<'s>, w: &'s Walk<'s>, path: String, depth: usize, live_files: Option<&[u32]>, live_directories: Option<&[u32]>) {
             let entries = w.host.get_accessible_entries(&path);
             let prefix = ensure_trailing_slash(&path);
+            let live_files = w.file_matcher.live_excludes(live_files, &prefix);
+            let live_directories = w.directory_matcher.live_excludes(live_directories, &prefix);
             let files = entries
                 .files
                 .iter()
                 .enumerate()
                 .filter(|(_, file)| w.extensions.is_empty() || w.extensions.iter().any(|ext| tspath::file_extension_is(file, ext)))
-                .filter_map(|(i, file)| w.file_matcher.matches_file_parts(&prefix, file).map(|idx| (idx, i)))
+                .filter_map(|(i, file)| w.file_matcher.matches_file_parts_in(&live_files, &prefix, file).map(|idx| (idx, i)))
                 .collect();
             let child_depth = if depth == UNLIMITED_DEPTH { UNLIMITED_DEPTH } else { depth - 1 };
             let mut directories = Vec::new();
             if child_depth != 0 {
-                directories = entries.directories.iter().map(|dir| w.directory_matcher.matches_directory_parts(&prefix, dir)).collect();
+                directories = entries.directories.iter().map(|dir| w.directory_matcher.matches_directory_parts_in(&live_directories, &prefix, dir)).collect();
                 if let Some(symlinks) = &entries.symlinks {
                     for (dir, &matched) in entries.directories.iter().zip(&directories) {
                         if matched && !symlinks.contains(dir) {
                             let child = format!("{}{}", prefix, dir);
-                            s.spawn(move |s| walk(s, w, child, child_depth));
+                            let (live_files, live_directories) = (live_files.clone(), live_directories.clone());
+                            s.spawn(move |s| walk(s, w, child, child_depth, Some(&live_files), Some(&live_directories)));
                         }
                     }
                 }
@@ -700,7 +766,7 @@ impl GlobVisitor {
                 if seen.insert(path) {
                     let path = path.clone();
                     let w = &w;
-                    s.spawn(move |s| walk(s, w, path, depth));
+                    s.spawn(move |s| walk(s, w, path, depth, None, None));
                 }
             }
         });
