@@ -29,6 +29,7 @@ pub mod memsplit;
 pub mod phases;
 pub mod festats;
 pub mod semver;
+pub mod sharedgraph;
 pub mod sitecount;
 pub mod stringutil;
 pub mod tspath;

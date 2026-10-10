@@ -1018,6 +1018,11 @@ impl Region {
         self.0.arena.trim();
     }
 
+    /// The region's chunks, (start, size) (the shared graph freezes the seed's).
+    pub fn chunks(&self) -> Vec<(usize, usize)> {
+        self.0.arena.chunks()
+    }
+
     /// Bytes in use in the region's chunks (call while no other thread has the region entered).
     pub fn used_bytes(&self) -> usize {
         self.0.arena.used_ranges().iter().map(|&(_, len)| len).sum()

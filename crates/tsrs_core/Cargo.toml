@@ -20,6 +20,9 @@ site-counts = []
 compressed-ptrs = []
 # Keeps `P<T>` a plain reference even when `compressed-ptrs` is on (for comparisons: `--features tsrs_core/plain-ptrs`).
 plain-ptrs = []
+# The shared type graph (src/sharedgraph.rs, on with TSRS_SHARED_GRAPH=1). Without it every frozen-object test is a
+# constant false and its read and write paths fold away.
+shared-graph = []
 
 [dependencies]
 rustc-hash.workspace = true

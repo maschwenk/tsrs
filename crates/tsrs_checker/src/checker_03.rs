@@ -303,7 +303,7 @@ impl Checker {
             let resolved = self.resolve_structured_type_members(t).unwrap();
             if !resolved.signatures().is_empty() {
                 let result = self.new_object_type(ObjectFlags::Anonymous, t.symbol());
-                result.object_flags.set(result.object_flags.get() | ObjectFlags::MembersResolved);
+                result.object_flags.set(result.object_flags.get_lazy() | ObjectFlags::MembersResolved);
                 result.as_object_type().set_members(resolved.members());
                 result.as_object_type().set_properties(resolved.properties());
                 return result;
@@ -1500,7 +1500,7 @@ impl Checker {
                 members.set(member.name(), member);
             }
             let t = self.new_anonymous_type(Some(symbol), Some(members), &[], &[], &[]);
-            t.object_flags.set(t.object_flags.get() | ObjectFlags::ObjectLiteral | ObjectFlags::NonInferrableType);
+            t.object_flags.set(t.object_flags.get_lazy() | ObjectFlags::ObjectLiteral | ObjectFlags::NonInferrableType);
             links.resolved_type.set(Some(t));
         }
         links.resolved_type.get().unwrap()
