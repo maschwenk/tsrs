@@ -431,12 +431,16 @@ mod tests {
 mod memory_tests {
     use super::*;
     use tsrs_api::{Handler, Response};
+    // `malloc_trim` is glibc-only and `rss_kib` reads `/proc`; the RSS tests below run only on Linux glibc.
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
     use tsrs_core::json::{self, Value};
 
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
     unsafe extern "C" {
         fn malloc_trim(pad: usize) -> i32;
     }
 
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
     fn rss_kib() -> u64 {
         // SAFETY: glibc `malloc_trim` has no preconditions.
         unsafe { malloc_trim(0) };
@@ -502,6 +506,7 @@ mod memory_tests {
 
     /// Repeated rebuilds on one API build handle (an edit between builds forces a real program build).
     #[test]
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
     fn repeated_builds_memory() {
         let _serial = super::BUILD_TESTS.lock().unwrap_or_else(|e| e.into_inner());
         let dir = std::env::temp_dir().join(format!("tsrs-api-buildmem-{}", std::process::id()));
@@ -543,6 +548,7 @@ mod memory_tests {
     /// moduleResolution` panic, answered as a client error) must free its fresh orchestrator (codec d9be067 review:
     /// ~9 MiB leaked per failed build), and the retained orchestrator keeps working.
     #[test]
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
     fn failed_builds_free_their_orchestrator() {
         let _serial = super::BUILD_TESTS.lock().unwrap_or_else(|e| e.into_inner());
         let dir = std::env::temp_dir().join(format!("tsrs-api-failedbuild-{}", std::process::id()));
