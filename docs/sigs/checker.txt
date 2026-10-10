@@ -500,9 +500,11 @@ classify_property_name | pub(crate) fn classify_property_name(name: &str, string
 clear | pub fn clear(&self) | rust:types.rs:64 | GoMap
 clear | pub fn clear(&self) | rust:checker.rs:577 | LazyVec
 clear | pub fn clear(&mut self) | rust:packedmap.rs:104 | PackedMap
+clear | pub(crate) fn clear(&self) | rust:relater_1.rs:72 | Relation
 clear_active_mapper_caches | pub(crate) fn clear_active_mapper_caches(&mut self) | checker.go:22600 | Checker
 clear_cached_inferences | pub(crate) fn clear_cached_inferences(inferences: &[P<InferenceInfo>]) | inference.go:1643 | -
 clear_intra_expression_inference_sites | pub fn clear_intra_expression_inference_sites(&self) | rust:checker.rs:474 | InferenceContext
+clear_relation_caches | pub fn clear_relation_caches(&mut self) | rust:checker.rs:2545 | Checker
 clear_scratch | pub fn clear_scratch(&self) | rust:types.rs:72 | GoMap
 clone_binding_name | pub(crate) fn clone_binding_name(&self, c: &mut Checker, node: P<Node>) -> Option<P<Node>> | nodebuilderimpl.go:1785 | NodeBuilderImpl
 clone_inference_context | pub(crate) fn clone_inference_context(&mut self, n: Option<P<InferenceContext>>, extra_flags: InferenceFlags) -> Option<P<InferenceContext>> | inference.go:1258 | Checker
@@ -1350,7 +1352,7 @@ get_lazy_mapped_table | pub(crate) fn get_lazy_mapped_table(&mut self, t: P<Type
 get_lazy_mapped_table_worker | fn get_lazy_mapped_table_worker(&mut self, t: P<Type>) -> Option<std::rc::Rc<LazyMappedTable>> | rust:checker_10.rs:2101 | Checker
 get_lazy_mapped_type_index_infos | pub(crate) fn get_lazy_mapped_type_index_infos(&mut self, t: P<Type>, lazy: &std::rc::Rc<LazyMappedTable>) -> &'static [P<IndexInfo>] | rust:checker_10.rs:2182 | Checker
 get_lazy_mapped_type_member | pub(crate) fn get_lazy_mapped_type_member(&mut self, t: P<Type>, lazy: &std::rc::Rc<LazyMappedTable>, name: &str) -> Option<Option<P<Symbol>>> | rust:checker_10.rs:2145 | Checker
-get_lazy_properties_in_order | pub(crate) fn get_lazy_properties_in_order(&mut self, t: P<Type>) -> Option<Vec<P<Symbol>>> | rust:relater_1.rs:1412 | Checker
+get_lazy_properties_in_order | pub(crate) fn get_lazy_properties_in_order(&mut self, t: P<Type>) -> Option<Vec<P<Symbol>>> | rust:relater_1.rs:1418 | Checker
 get_legacy_decorator_argument_count | pub(crate) fn get_legacy_decorator_argument_count(&mut self, node: P<Node>, signature: P<Signature>) -> i32 | checker.go:9385 | Checker
 get_legacy_decorator_call_signature | pub(crate) fn get_legacy_decorator_call_signature(&mut self, decorator: P<Node>) -> Option<P<Signature>> | checker.go:30651 | Checker
 get_limited_constraint | pub(crate) fn get_limited_constraint(&mut self, t: P<Type>) -> Option<P<Type>> | inference.go:1158 | Checker
@@ -1488,7 +1490,7 @@ get_ready_lazy_member_table_worker | pub(crate) fn get_ready_lazy_member_table_w
 get_recursion_identity | pub(crate) fn get_recursion_identity(c: &mut Checker, t: P<Type>) -> RecursionId | relater.go:810 | -
 get_recursion_identity_from_target | pub(crate) fn get_recursion_identity_from_target(t: P<Type>) -> RecursionId | relater.go:840 | -
 get_recursion_identity_target | pub(crate) fn get_recursion_identity_target(c: &mut Checker, t: P<Type>) -> P<Type> | relater.go:820 | -
-get_recursion_identity_target_worker | fn get_recursion_identity_target_worker(c: &mut Checker, t: P<Type>) -> P<Type> | rust:relater_1.rs:1144 | -
+get_recursion_identity_target_worker | fn get_recursion_identity_target_worker(c: &mut Checker, t: P<Type>) -> P<Type> | rust:relater_1.rs:1150 | -
 get_reduced_apparent_type | pub(crate) fn get_reduced_apparent_type(&mut self, t: P<Type>) -> P<Type> | checker.go:22256 | Checker
 get_reduced_type | pub fn get_reduced_type(&mut self, t: P<Type>) -> P<Type> | checker.go:22181 | Checker
 get_reduced_type_exported | pub fn get_reduced_type_exported(&mut self, t: P<Type>) -> P<Type> | exports.go:312 | Checker
@@ -2064,7 +2066,7 @@ instantiate_types | pub(crate) fn instantiate_types(&mut self, types: &[P<Type>]
 instantiate_types_changed | pub(crate) fn instantiate_types_changed(&mut self, types: &[P<Type>], m: P<TypeMapper>) -> Option<Vec<P<Type>>> | rust:checker_11.rs:1881 | Checker
 intersect_types | pub(crate) fn intersect_types(&mut self, type1: Option<P<Type>>, type2: Option<P<Type>>) -> Option<P<Type>> | checker.go:26494 | Checker
 intersect_unions_of_primitive_types | pub(crate) fn intersect_unions_of_primitive_types(&mut self, types: &mut [P<Type>]) -> (Vec<P<Type>>, bool) | checker.go:26813 | Checker
-intersection_has_matching_recursion_identity | fn intersection_has_matching_recursion_identity(c: &mut Checker, target: P<Type>, identity: RecursionId) -> bool | rust:relater_1.rs:1112 | -
+intersection_has_matching_recursion_identity | fn intersection_has_matching_recursion_identity(c: &mut Checker, target: P<Type>, identity: RecursionId) -> bool | rust:relater_1.rs:1118 | -
 intersection_rare | fn intersection_rare(&self) -> Option<&'static IntersectionRare> | rust:types.rs:2589 | IntersectionType
 intersection_rare_for_write | fn intersection_rare_for_write(&self) -> &'static IntersectionRare | rust:types.rs:2594 | IntersectionType
 intra_expression_inference_sites | pub fn intra_expression_inference_sites(&self) -> Vec<IntraExpressionInferenceSite> | rust:checker.rs:468 | InferenceContext
@@ -2872,6 +2874,7 @@ regular_type | pub fn regular_type(&self) -> Option<P<Type>> | rust:types.rs:253
 rel | pub(crate) fn rel(&self) -> P<Relation> | rust:relater_2.rs:60 | Relater
 rel_kind | pub(crate) fn rel_kind(c: &Checker, rel: P<crate::relater_types::Relation>) -> u8 | rust:workcensus.rs:326 | -
 relate_variances | fn relate_variances(&self, c: &mut Checker, source_type_arguments: &[P<Type>], target_type_arguments: &[P<Type>], variances: &[VarianceFlags], intersection_state: IntersectionState, report_errors: bool, save_error_state: &errorState, result: &mut Ternary, variance_check_failed: &mut bool, original_error_chain: &mut Option<P<ErrorChain>>) -> (Ternary, bool) | rust:relater_2.rs:993 | Relater
+relation_cache_entries | pub fn relation_cache_entries(&self) -> usize | rust:checker.rs:2536 | Checker
 relative | fn relative(name: &str) -> &str | rust:uniontrace.rs:110 | -
 remove_constrained_type_variables | pub(crate) fn remove_constrained_type_variables(&mut self, types: &[P<Type>]) -> Vec<P<Type>> | checker.go:26351 | Checker
 remove_definitely_falsy_types | pub fn remove_definitely_falsy_types(&mut self, t: P<Type>) -> P<Type> | checker.go:29576 | Checker
