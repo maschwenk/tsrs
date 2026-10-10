@@ -321,6 +321,10 @@ fn wait_base() -> Base {
         let handle = SEED_THREAD.lock().unwrap().take().expect("shared graph: the seed was not started");
         let out = handle.join().unwrap_or_else(|e| std::panic::resume_unwind(e));
         tsrs_core::sharedgraph::freeze(&out.1);
+        if debug_regions() {
+            let chunks: Vec<String> = out.1.iter().map(|&(s, n)| format!("{s:x}+{n:x}")).collect();
+            eprintln!("dbg-seed chunks={}", chunks.join(","));
+        }
         tsrs_core::phases::record("Checkers: seed", out.4.elapsed());
         if stats_enabled() {
             eprintln!(
@@ -353,10 +357,35 @@ pub(crate) fn fork_into(slot: &mut Box<crate::checkerpool::Checker>) {
 /// checkers became forks at the start of the pass (`fork_into`, which waits for the seed), so the seed is frozen.
 #[cfg(feature = "checker")]
 pub(crate) fn fresh_fork() -> Option<Box<crate::checkerpool::Checker>> {
+    try_base().map(fork_clean)
+}
+
+/// The frozen seed if it is ready, without waiting: freezes it if the seed thread has finished.
+#[cfg(feature = "checker")]
+pub(crate) fn try_base() -> Option<Base> {
     if mode() != Mode::On {
         return None;
     }
-    BASE.get().copied().map(fork_clean)
+    if let Some(b) = BASE.get() {
+        return Some(*b);
+    }
+    let finished = SEED_THREAD.lock().unwrap().as_ref().is_some_and(std::thread::JoinHandle::is_finished);
+    finished.then(wait_base)
+}
+
+/// With `--maxMemory` the pool's checkers do not wait for the seed (its serial time is most of the wall time the seed
+/// costs): they start as plain checkers, and each is retired for a fork at its first file boundary after the seed is
+/// frozen. `TSRS_SHARED_GRAPH_WAIT=1` waits instead, as without `--maxMemory`.
+pub(crate) fn no_wait() -> bool {
+    static V: OnceLock<bool> = OnceLock::new();
+    *V.get_or_init(|| std::env::var("TSRS_SHARED_GRAPH_WAIT").map_or(true, |v| v != "1"))
+}
+
+/// Debugging: `TSRS_DEBUG_REGIONS=1` logs every checker region's chunks when it is retired, and retires them for good
+/// (pages given back, addresses never reused), so that a stale pointer faults at an address that names its region.
+pub(crate) fn debug_regions() -> bool {
+    static V: OnceLock<bool> = OnceLock::new();
+    *V.get_or_init(|| std::env::var_os("TSRS_DEBUG_REGIONS").is_some())
 }
 
 /// `Checker::fork`, leaving the fork's own overlay current (the thread's may still be that of a retired checker).

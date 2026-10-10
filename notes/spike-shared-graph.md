@@ -383,3 +383,41 @@ CPU at 8G) and costs its own size in memory (238-476 MiB, shared). Wall improves
 waits for the serial seed, 2.6-5.9 s on this program. The design is sound and was exact everywhere; a rewrite would
 need the same overlay, frozen-region and fork machinery. What is left: making the seed cost no wall time (seed while
 the front end finishes, or let the pool start safely before the freeze), and the +3.6% the feature costs compiled in.
+
+### 10.1 The wall time: two races fixed, the pool no longer waits for the seed
+
+The seed is serial and every pool thread waited for it (2.6-5.9 s on the 38k-file codebase), which ate most of the
+seed's gain. Starting the pool at once (plain checkers, each retired for a fork at its first file boundary after the
+freeze) crashed in 1-3 of 10 runs. To find out why, `TSRS_DEBUG_REGIONS=1` retires checker regions for good (pages given
+back, addresses never reused, chunks logged) so that a stale pointer faults at an address that names its region, and
+the fault handler prints the address and the thread; registers mapped to regions under lldb showed the two causes:
+
+- **`freeze` published its state with Relaxed stores** ("published to the forks by spawning their threads after the
+  freeze"). A checker running during the freeze could see the frozen span before the dirty bitmap and dereference a
+  null bitmap. The span is now stored with Release after the start and both bitmaps, and `dirty` and `is_frozen_addr`
+  load it with Acquire.
+- **The last, partial 4 KiB page of each seed chunk was not marked frozen** (the page bitmap covered only whole pages
+  inside a chunk, and seed chunk sizes are not page multiples). Seed objects there read as unfrozen, so a fork's lazily
+  filled fields went inline into memory every fork shares: one fork's pointer became every fork's, and dangled once that
+  fork was retired (the successor fork on the same thread faulted on its predecessor's region, through a seed object at
+  offset 0x1e84568 of a 0x1e84800-byte chunk). The bitmap now covers every page a chunk touches; each seed chunk has a
+  slab of its own rounded to whole pages, so no other object shares those pages. This one also affects the waiting
+  pool, more rarely.
+
+After both: no failure in 10 runs with regions retired for good, 16 runs over seeds 10-100 and targets 8-10G in both
+modes, and the regression cases with a 30% seed and a retirement after nearly every file. Under `--maxMemory` the pool
+now starts at once (`TSRS_SHARED_GRAPH_WAIT=1` waits).
+
+3 interleaved runs (medians):
+
+| | wall | peak | instructions |
+| --- | ---: | ---: | ---: |
+| main, no target | 25.6 s | 18.07 GB | 2.273 T |
+| `--maxMemory 8G`, no seed | 32.9 s | 8.73 GB | 3.168 T |
+| `--maxMemory 8G`, seed 50 permille, pool does not wait | 29.1 s | 8.68 GB | 2.785 T |
+| `--maxMemory 9G`, seed 20 permille, pool does not wait | 27.9 s | 10.10 GB | 2.688 T |
+
+(One no-seed 8G run peaked at 9.46 GB: the target is approached from above, one retirement at a time.) Staying under 9
+GB now costs +14% wall against +29% without the seed. What remains of the cost: plain checkers retired at the freeze
+(their state is rebuilt by the forks), the forks' own rebuilds after each retirement, and the +3.6% the feature costs
+compiled in.

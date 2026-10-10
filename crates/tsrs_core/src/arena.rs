@@ -760,6 +760,7 @@ pub(crate) unsafe fn free_block(arena: &Arena, addr: usize, size: usize, align: 
     // same allocation target (thread arena or region) is current.
     #[cfg(debug_assertions)]
     assert!(arena.owns(addr), "arena: block {addr:#x} freed into an arena (or region) that did not allocate it");
+
     // Write access through the chunk's (exposed) provenance, not through the references the program held.
     let p = std::ptr::with_exposed_provenance_mut::<u8>(addr);
     arena.bump_epoch();
@@ -1773,3 +1774,4 @@ mod tests {
         assert_eq!(*y, [8; 4]);
     }
 }
+

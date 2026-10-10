@@ -54,9 +54,12 @@ pub fn dirty(addr: usize) -> bool {
     if !COMPILED_IN {
         return false;
     }
-    // Relaxed: the range is written before the forks' threads were spawned.
+    // Acquire: pairs with `freeze`'s Release store of the span, so a thread that sees the span also sees the start and
+    // the dirty bitmap (checkers may run while the seed is frozen, not only forks spawned after it).
+    let span = FROZEN_SPAN.load(Ordering::Acquire);
+    // Relaxed: ordered by the Acquire load above.
     let off = addr.wrapping_sub(FROZEN_LO.load(Ordering::Relaxed));
-    if off >= FROZEN_SPAN.load(Ordering::Relaxed) {
+    if off >= span {
         return false;
     }
     let line = off >> 6;
@@ -99,8 +102,10 @@ fn is_frozen_addr_slow(addr: usize) -> bool {
     if !COMPILED_IN {
         return false;
     }
-    // Relaxed: as in `dirty`.
-    if addr.wrapping_sub(FROZEN_LO.load(Ordering::Relaxed)) >= FROZEN_SPAN.load(Ordering::Relaxed) {
+    // Acquire: as in `dirty` (it also orders the page bitmap `FROZEN`, written before the span).
+    let span = FROZEN_SPAN.load(Ordering::Acquire);
+    // Relaxed: ordered by the Acquire load above.
+    if addr.wrapping_sub(FROZEN_LO.load(Ordering::Relaxed)) >= span {
         return false;
     }
     #[cfg(compressed_ptrs)]
@@ -137,8 +142,11 @@ pub fn freeze(ranges: &[(usize, usize)]) {
     for &(start, len) in ranges {
         let off = start - crate::reserve::BASE_ADDR;
         assert!(off + len <= SPAN, "shared graph: frozen chunk outside the reservation");
-        // Only whole 4 KiB pages inside the chunk (region chunks are 16-byte aligned).
-        for page in off.div_ceil(1 << PAGE_SHIFT)..((off + len) >> PAGE_SHIFT) {
+        // Every 4 KiB page the chunk touches, partial ones included: a seed object in a chunk's last, partial page is as
+        // frozen as any other (its lazily filled fields must go to the forks' overlays, not inline, where one fork's
+        // value would be every fork's and outlive the fork). The seed's chunks are large and each has a slab of its
+        // own, rounded to whole 4 KiB pages, so the rest of such a page holds no one else's objects.
+        for page in (off >> PAGE_SHIFT)..(off + len).div_ceil(1 << PAGE_SHIFT) {
             // Relaxed: published to the forks by spawning their threads.
             FROZEN[page >> 6].fetch_or(1 << (page & 63), Ordering::Relaxed);
         }
@@ -147,10 +155,11 @@ pub fn freeze(ranges: &[(usize, usize)]) {
     let hi = ranges.iter().map(|r| r.0 + r.1).max().unwrap_or(0);
     let words = ((hi - lo) >> 6).div_ceil(64) + 1;
     let dirty: &'static mut [AtomicU64] = Box::leak((0..words).map(|_| AtomicU64::new(0)).collect());
-    // Relaxed: these three are published to the forks by spawning their threads after the freeze (and ANY_FROZEN's Release).
+    // Relaxed (both): published by the Release store of the span below.
     DIRTY.store(dirty.as_mut_ptr(), Ordering::Relaxed);
     FROZEN_LO.store(lo, Ordering::Relaxed);
-    FROZEN_SPAN.store(hi - lo, Ordering::Relaxed);
+    // Release: a reader that sees the span (Acquire) sees the start, the dirty bitmap and the page bitmap.
+    FROZEN_SPAN.store(hi - lo, Ordering::Release);
     // Release: orders the range and bitmap stores above before it (readers are spawned later anyway).
     ANY_FROZEN.store(true, Ordering::Release);
     #[cfg(unix)]

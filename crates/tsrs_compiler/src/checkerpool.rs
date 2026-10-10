@@ -939,7 +939,7 @@ impl checkerPool {
             let mut file_cpu: Vec<(P<SourceFile>, f64)> = Vec::new();
             let mut guard = state.checkers[checker_idx].0.lock().unwrap();
             #[cfg(feature = "checker")]
-            if allow_steal && state.shared_graph && checker_idx >= crate::sharedgraph::overlap() {
+            if allow_steal && state.shared_graph && checker_idx >= crate::sharedgraph::overlap() && !(state.recycle && crate::sharedgraph::no_wait()) {
                 let _region = guard.enter();
                 crate::sharedgraph::fork_into(&mut guard.checker);
             }
@@ -1000,7 +1000,12 @@ impl checkerPool {
                     // Read by the other checker threads only to pick the largest; a stale value picks another one.
                     region_sizes[checker_idx].store(guard.region_bytes(), std::sync::atomic::Ordering::Relaxed);
                 }
-                if recycle
+                #[cfg(feature = "checker")]
+                let switch_to_fork = recycle && state.shared_graph && crate::sharedgraph::no_wait() && !guard.checker.is_fork && crate::sharedgraph::try_base().is_some();
+                #[cfg(not(feature = "checker"))]
+                let switch_to_fork = false;
+                if switch_to_fork
+                    || recycle
                     && guard.region_bytes() >= retire_min()
                     && tsrs_core::memsplit::process_memory() > max_memory()
                     // Relaxed: see the store above.
@@ -1079,6 +1084,19 @@ impl checkerPool {
             retired.instantiation_count += u64::from(old.checker.total_instantiation_count);
             retired.lazy_member_stats.add(&old.checker.lazy_member_stats);
             drop(retired);
+            if crate::sharedgraph::debug_regions() {
+                if let Some(region) = &old.region {
+                    region.retire_on_free();
+                    let chunks: Vec<String> = region.chunks().iter().map(|&(s, n)| format!("{s:x}+{n:x}")).collect();
+                    eprintln!(
+                        "dbg-retire thread={} fork={} types={} chunks={}",
+                        std::thread::current().name().unwrap_or("?"),
+                        old.checker.is_fork,
+                        old.checker.type_count,
+                        chunks.join(",")
+                    );
+                }
+            }
             drop(old.checker);
         }
         drop(old.region);
