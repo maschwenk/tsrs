@@ -8,15 +8,18 @@ Question: on top of the shipped build (fat LTO, one codegen unit, PGO, BOLT on L
 - C: B + `-Zlocation-detail=none`.
 - D: B + a non-PIE executable (`-Crelocation-model=static -Clink-arg=-no-pie`), x86_64 Linux only (macOS requires PIE).
   DA: the same on the shipped build without build-std.
+- DN: DA with BOLT minus `-split-eh`, which is what ships (AN: A with the same BOLT flags).
 - E: `-Ztune-cpu=znver4` (instruction scheduling for Zen 4/5; the ISA stays baseline x86-64).
 - F: `-Cno-vectorize-loops -Cno-vectorize-slp` (no auto-vectorization).
 
 Answer: **non-PIE on x86_64 Linux: -0.9% to -2.3% single-threaded instructions on all 17 bench projects (1% or more on
-16; mui-docs -0.91%), adopted** in release.yml, bench.yml and bench-compare.yml. Rejected: build-std (-0.04% to -0.27%
-on the probe, -0.42% to +0.27% on the bench), `-Zlocation-detail=none` (no speed; -6.6% stripped binary),
-`-Ztune-cpu=znver4` (-0.39% to +0.02%), no auto-vectorization (-0.17% to +0.04%, `.text` -0.1%, instruction-cache misses
-not lower). `panic=immediate-abort` is not viable and was not measured. Output was byte-identical across every variant
-on every project. Wall time moved inside the runners' noise for every variant.
+16; mui-docs -0.91%), adopted** in release.yml, bench.yml and bench-compare.yml, with BOLT's `-split-eh` left out for
+the non-PIE binary because it broke unwinding there (below). Rejected: build-std (-0.04% to -0.27% on the probe, -0.42%
+to +0.27% on the bench), `-Zlocation-detail=none` (no speed; -6.6% stripped binary), `-Ztune-cpu=znver4` (-0.39% to
++0.02%), no auto-vectorization (-0.17% to +0.04%, `.text` -0.1%, instruction-cache misses not lower).
+`panic=immediate-abort` is not viable and was not measured. Output was byte-identical across every variant on every
+project. Wall time moved inside the runners' noise for every variant but the last probe's DN (-0.6% to -1.6% with one
+checker on eight of nine projects).
 
 ## Method
 
@@ -29,16 +32,14 @@ on every project. Wall time moved inside the runners' noise for every variant.
   the default count, `perf stat` for one `--singleThreaded` run, and the byte comparison of every binary's output at 1,
   4 and 32 checkers), then `bench/count.py` (user-space instructions and peak RSS of one `--singleThreaded` run with
   `RAYON_NUM_THREADS=1`, the regression flag's measure, deterministic to about 0.001%). Runs `cgjxc6xwcl` (A B C D, 3
-  rounds), `67mc3vb2kc` (A DA, 5 rounds) and `g9fjgvd826` (A E F, 5 rounds). Each probe builds and trains its own A; the
-  three A builds' counts agree within 0.2%. The workflow and its build script stayed on the branch
-  `perf/build-std-probe` (not merged).
+  rounds), `67mc3vb2kc` (A DA, 5 rounds), `g9fjgvd826` (A E F, 5 rounds) and `smw6n1l4rm` (A AN DN, 5 rounds, with the
+  release gates). Each probe builds and trains its own A; the four A builds' counts agree within 0.2%. The workflow and
+  its build scripts stayed on the branch `perf/build-std-probe` (not merged).
 - Linux bench: `.depot/workflows/bench.yml` with the variant wired into its build job, started from the branch with
-  `depot ci run` (runs `hqqzfwf8r9` for B, `swsvn5kjl3` for DA), compared with main's two publishes at the same source
-  (7c3e1948 and 9c905fb5: docs-only commits apart). Same CPU model and glibc in all four runs. Between the two main
-  publishes the counts moved by -0.04% to +0.10% (PGO retraining).
-- macOS: Apple M-series, 18 cores, other agents building at load 6-20. Three interleaved rounds of `/usr/bin/time -l`,
-  medians. macOS counts include kernel work and move by a few percent between runs, so they can rule out a large change
-  only.
+  `depot ci run` (runs `hqqzfwf8r9` for B, `swsvn5kjl3` for DA; BOLT there still had `-split-eh`, which moves no
+  instructions), compared with main's two publishes at the same source (7c3e1948 and 9c905fb5: docs-only commits
+  apart). Same CPU model and glibc in all four runs. Between the two main publishes the counts moved by -0.04% to
+  +0.10% (PGO retraining).
 
 cal-diy's bench input changed under the branch runs: the measure job missed its cache, reinstalled the project and
 checked 10,227 files with 144 errors (tsgo also 144), against 10,170 and 136 on main. Its bench rows below compare the
@@ -155,11 +156,52 @@ peak-RSS change.
 
 What it costs: the executable image always loads at the same address (the stack, heap, mmap regions and shared libraries
 are still randomized). The reference compiler ships the same way: `typescript@7.0.2`'s linux-x64 `tsc` is an
-`ELF 64-bit LSB executable`, not a `pie executable` (Go's default for linux/amd64). BOLT handles the non-PIE binary
-unchanged (`--emit-relocs` is still needed), and bolt.sh's byte comparison passed. Not applied: aarch64 Linux (not
-measured; it addresses statics with `adrp`/`add` and uses PC-relative jump tables with or without PIE, so the savings
-here need not carry over) and macOS (arm64 requires PIE). With `--target` given explicitly, RUSTFLAGS do not reach build
-scripts and proc macros, which must stay position-independent.
+`ELF 64-bit LSB executable`, not a `pie executable` (Go's default for linux/amd64). BOLT needs one change, below. Not
+applied: aarch64 Linux (not measured; it addresses statics with `adrp`/`add` and uses PC-relative jump tables with or
+without PIE, so the savings here need not carry over) and macOS (arm64 requires PIE). With `--target` given explicitly,
+RUSTFLAGS do not reach build scripts and proc macros, which must stay position-independent.
+
+## BOLT and unwinding in the non-PIE binary
+
+The first release dry run of the non-PIE build (GitHub Actions run 38027552526) failed the fourslash gate on the
+BOLT-optimized tsrs-fourslash: 94 tests aborted with `fatal runtime error: failed to initiate panic, error 3`
+(`_URC_FATAL_PHASE1_ERROR`: the unwinder could not walk a frame). The probes before had BOLT-optimized only tsrs and
+compared its output, which never panics. A probe of that build (Depot run `8fhr9nsjm5`) ran the fourslash gate on
+tsrs-fourslash in each form:
+
+| tsrs-fourslash, non-PIE | gate | aborted |
+| --- | --- | ---: |
+| instrumented (PGO training build) | pass | 0 |
+| PGO, before BOLT | pass | 0 |
+| BOLT with bolt.sh's flags | fail | 94 |
+| BOLT without `-icf` | fail | 94 |
+| BOLT without `-split-eh` | pass | 0 |
+| BOLT without any splitting | pass | 0 |
+| BOLT reordering only | pass | 0 |
+
+So the non-PIE code unwinds, and BOLT's `-split-eh` (landing pads moved into the cold fragment) produces unwind
+information the unwinder cannot use when the input is not PIE. bolt.sh now passes `-split-eh` only for a PIE input
+(`readelf -h`: `DYN`), so the aarch64 Linux binaries keep it. A fourth probe (Depot run `smw6n1l4rm`) ran the whole of
+bolt.sh, gates included, on A, on AN (A without `-split-eh`) and on DN (non-PIE without `-split-eh`). All three passed
+conformance (13,458 / 12,779 / 12,779) and fourslash (4,066 pass, 63 fail), and the byte comparison of tsrs.
+
+| project | A | AN | DN | DN peak RSS |
+| --- | ---: | ---: | ---: | ---: |
+| vscode | 84.859 G | +0.08% | -1.85% | -0.08% |
+| xstate-main | 5.884 G | +0.00% | -1.22% | -0.69% |
+| webpack | 11.291 G | +0.04% | -1.72% | -0.50% |
+| mui-docs | 40.527 G | -0.06% | -0.95% | -0.28% |
+| cal-diy | 32.235 G | -0.06% | -1.31% | -0.19% |
+| formbricks-web | 40.672 G | -0.08% | -1.28% | -0.13% |
+| supabase-studio | 47.444 G | +0.05% | -1.62% | -0.17% |
+| t3code-server | 41.418 G | +0.06% | -1.31% | -0.14% |
+| drizzle-orm | 11.889 G | -0.02% | -1.65% | -0.57% |
+
+Instruction-cache misses (`ic_tag_hit_miss`, two runs each): AN +1.4% to +2.6% against A on vscode, t3code-server,
+mui-docs and supabase-studio, which is what `-split-eh` buys a PIE binary; DN -2.7%, -2.6%, -0.8% and +1.0%. Wall with
+one checker (medians of 5, the baseline's spread ±0.3% to ±1.1% in this run): AN -0.9% to +0.9%; DN -1.6% to +0.1%
+(vscode +0.1%, the other eight -0.6% to -1.6%); at the default count DN -2.7% to +0.3%. The stripped DN binary is
+30.86 MB against A's 32.69 MB.
 
 ## build-std details
 
