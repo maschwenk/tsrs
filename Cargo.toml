@@ -79,6 +79,7 @@ panic = "unwind"
 # Release binaries (.github/workflows/release.yml) build with this profile twice, for PGO: -Cprofile-generate,
 # training run, -Cprofile-use (notes/perf-pgo.md). `release` has the same LTO and codegen units; the release
 # workflow's `dist` builds add only the PGO profile (and, on Linux, BOLT through .github/scripts/bolt.sh).
+# Instrumented builds override rustc's LTO to thin, keeping this Cargo profile identical for PGO symbol matching.
 [profile.dist]
 inherits = "release"
 lto = "fat"

@@ -190,7 +190,8 @@ jobs:
 
       - name: PGO instrumented build
         env:
-          RUSTFLAGS: -Cprofile-generate=/tmp/tsrs-pgo/raw
+          # Override rustc's LTO, not Cargo's profile: Cargo hashes profile settings into the symbols PGO matches.
+          RUSTFLAGS: -Cprofile-generate=/tmp/tsrs-pgo/raw -Clto=thin
           # The same as the final build's: profile settings are part of every symbol name, and the profile only
           # applies to functions whose names match (notes/perf-pgo.md, 2026-10-09).
           CARGO_PROFILE_DIST_STRIP: none

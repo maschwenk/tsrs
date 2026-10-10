@@ -183,7 +183,8 @@ jobs:
       # release.yml and bench.yml.
       - name: PGO instrumented build
         env:
-          RUSTFLAGS: -Cprofile-generate=/tmp/tsrs-pgo/raw
+          # Override rustc's LTO, not Cargo's profile: Cargo hashes profile settings into the symbols PGO matches.
+          RUSTFLAGS: -Cprofile-generate=/tmp/tsrs-pgo/raw -Clto=thin
         run: cargo build --profile dist --locked -p tsrs_cli -p tsrs_testrunner -p tsrs_fourslash --target x86_64-unknown-linux-gnu
 
       - name: PGO training run

@@ -174,3 +174,76 @@ information changes file metadata, not generated code, so it does not change ret
 Linux `dist` build stays unstripped until after BOLT: release.yml and bench.yml set `CARGO_PROFILE_DIST_STRIP=none`
 for the PGO-use build (and, since the fix, the instrumented build), and `bolt.sh` strips the optimized `tsrs` after
 BOLT's training, optimization and correctness comparisons.
+
+## 2026-10-10: ThinLTO for the instrumented build
+
+The release, benchmark and benchmark-comparison workflows append `-Clto=thin` to the
+`-Cprofile-generate` RUSTFLAGS. The final build uses fat LTO with the collected profile; Linux also runs BOLT.
+This follows [Charlie Marsh's training-build experiment](https://x.com/charliermarsh/status/2108901980504567932).
+
+Use the rustc override rather than `CARGO_PROFILE_DIST_LTO=thin`. Cargo hashes its profile and LTO plan into
+crate metadata, but excludes RUSTFLAGS from symbol metadata ([pinned Cargo implementation](https://github.com/rust-lang/cargo/blob/5f94df478/src/compiler/build_runner/compilation_files.rs#L776-L873)).
+The trailing rustc option overrides Cargo's `-C lto=fat` without changing the function names PGO matches.
+Both LLVM pre-link pipelines insert the ordinary PGO counters before their post-link LTO work diverges
+([pinned rustc pipeline](https://github.com/rust-lang/rust/blob/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/compiler/rustc_llvm/llvm-wrapper/PassWrapper.cpp#L924-L935)).
+
+### Build time
+
+Source `831df111530243c753150bf4370c368719411cd1`, Rust 1.99.0 / LLVM 23.1.1, native
+`aarch64-apple-darwin`, 18-core Apple Silicon, 128 GiB RAM, shared machine. One paired run with fresh Cargo
+target directories and 18 build jobs. Both passes build `tsrs`, `tsrs-test` and `tsrs-fourslash` so the final
+binaries can run the existing correctness gates. The macOS release's final pass builds only `tsrs`, so these
+totals describe the comparison pipeline. Project clone/install time and Linux BOLT are excluded.
+The initial fat training step refreshed the webpack install; the reported training time is its repeat with
+prepared projects. The final binaries use the original profiles, each trained once.
+
+| Step | Fat training (s) | Thin training (s) | Change |
+| --- | ---: | ---: | ---: |
+| Instrumented build | 186.42 | 116.45 | -37.5% |
+| Training, prepared projects | 16.49 | 18.50 | +12.2% |
+| Profile merge | 0.20 | 0.20 | -2.2% |
+| Final fat-LTO build | 148.49 | 151.53 | +2.0% |
+| Total | 351.61 | 286.68 | -18.5% |
+
+The recording build saves 70 seconds (37.5%); this comparison pipeline saves 65 seconds (18.5%).
+These are single-pair build timings, not a cross-platform release-time estimate.
+
+### Profile application and runtime
+
+`cargo build -vv` shows identical metadata for all 61 common target compilation units between generation
+and use in both pipelines. Both final builds enable `-Cllvm-args=-pgo-warn-missing-function` and report zero
+PGO hash mismatches. Missing-function warnings rise from 2,421 to 3,076. Of the 699 function names missing
+only with thin training, 304 have zero counters in the fat profile and 395 have no entry there either;
+none has nonzero counters in the fat profile. All four workloads write nonempty profiles.
+
+Five interleaved rounds per binary on the current `bench/projects.json` pins: one checker with
+`RAYON_NUM_THREADS=1`, and the default checker count. Medians below; `/usr/bin/time -l` instruction counts
+include kernel work. Wall time on this shared machine is noisy. Peak RSS is the running compiler's, not the build's.
+
+| Project / mode | Instructions (G), fat / thin | Change | Peak RSS (MiB), fat / thin | Wall (s), fat / thin |
+| --- | ---: | ---: | ---: | ---: |
+| vscode / single | 83.07 / 83.07 | -0.00% | 1604.4 / 1604.5 | 6.44 / 6.35 |
+| vscode / default | 95.68 / 95.60 | -0.08% | 2108.2 / 2104.5 | 0.74 / 0.75 |
+| webpack / single | 11.26 / 11.05 | -1.80% | 311.1 / 311.1 | 0.74 / 0.73 |
+| webpack / default | 15.45 / 15.59 | +0.90% | 507.0 / 510.7 | 0.12 / 0.12 |
+| mui-docs / single | 45.17 / 44.21 | -2.14% | 732.1 / 732.1 | 2.63 / 2.65 |
+| mui-docs / default | 115.18 / 115.59 | +0.35% | 1633.0 / 1635.7 | 0.98 / 1.04 |
+| t3code-server / single | 40.15 / 39.97 | -0.45% | 734.4 / 734.4 | 2.65 / 2.69 |
+| t3code-server / default | 128.82 / 127.35 | -1.14% | 2208.4 / 2178.4 | 1.12 / 1.08 |
+| formbricks-web / single | 43.35 / 42.82 | -1.23% | 1100.3 / 1100.3 | 2.93 / 2.89 |
+| formbricks-web / default | 75.92 / 75.78 | -0.18% | 1992.8 / 1995.2 | 0.59 / 0.60 |
+
+The initial MUI default-mode wall increase (+6.1%) did not repeat: ten additional interleaved rounds gave
+1.040 / 1.015 seconds (-2.4%), +0.24% instructions and +0.08% peak RSS. No consistent runtime regression was
+observed. The main comparison's largest instruction increase is 0.90%; largest peak-RSS increase is 0.73%.
+The runtime measurements cover macOS; Linux performance has not been measured in this experiment.
+
+### Correctness
+
+Full diagnostic output and exit codes match byte for byte on all five projects at 1, 4 and 16 checkers
+(15 comparisons). Existing conformance gates pass for both final builds in reference and canonical histories,
+with identical outcome lists: 13,458 error-baseline passes; 12,779 `.types` and `.symbols` passes in reference
+history; 12,778 each in canonical history with its documented `objectLiteralNormalization` difference.
+Both fourslash gates pass with the same 4,066 passes / 63 known failures. There are no conformance crashes or timeouts.
+
+Raw build, runtime, profile-coverage and gate measurements for this run are in `/tmp/tsrs-thin-pgo/ab/`.
