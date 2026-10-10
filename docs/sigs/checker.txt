@@ -682,7 +682,7 @@ declaration | pub fn declaration(&self) -> Option<P<Node>> | rust:types.rs:3002 
 declaration | pub fn declaration(&self) -> Option<P<Node>> | rust:types.rs:2873 | Signature
 declaration_belongs_to_private_ambient_member | pub(crate) fn declaration_belongs_to_private_ambient_member(declaration: P<Node>) -> bool | utilities.go:333 | -
 declaration_belongs_to_private_ambient_member | pub(crate) fn declaration_belongs_to_private_ambient_member(&mut self, declaration: P<Node>) -> bool | checker.go:18373 | Checker
-declared | fn declared(&self) -> P<Type> | rust:flow.rs:22 | FlowState
+declared | fn declared(&self) -> P<Type> | rust:flow.rs:23 | FlowState
 declared_parameter_type_contains_undefined | pub(crate) fn declared_parameter_type_contains_undefined(&self, c: &mut Checker, parameter: P<Node>) -> bool | emitresolver.go:609 | EmitResolver
 defer_type_argument_constraints | fn defer_type_argument_constraints(&mut self, node: P<Node>) -> bool | rust:checker_02.rs:1046 | Checker
 delete | pub fn delete(&self, key: &K) | rust:types.rs:56 | GoMap
@@ -815,19 +815,19 @@ flow_frame_begin | pub(crate) fn flow_frame_begin(&mut self) -> FlowFrame | rust
 flow_frame_counters | fn flow_frame_counters(&mut self, frame: FlowFrame) | rust:flowmemo.rs:464 | Checker
 flow_frame_end | pub(crate) fn flow_frame_end(&mut self, frame: FlowFrame) -> (FrameTaint, u16) | rust:flowmemo.rs:445 | Checker
 flow_frame_end_with | pub(crate) fn flow_frame_end_with(&mut self, frame: FlowFrame, height: u16) -> FrameTaint | rust:flowmemo.rs:452 | Checker
-flow_memo_at_node | fn flow_memo_at_node(&mut self, f: P<FlowState>, entry_flow: P<FlowNode>, flow: P<FlowNode>, flags: FlowFlags, key: u128, entry_depth: i32) -> Option<(MemoHit, bool)> | rust:flow.rs:410 | Checker
+flow_memo_at_node | fn flow_memo_at_node(&mut self, f: P<FlowState>, entry_flow: P<FlowNode>, flow: P<FlowNode>, flags: FlowFlags, key: u128, entry_depth: i32) -> Option<(MemoHit, bool)> | rust:flow.rs:411 | Checker
 flow_memo_consult_ok | pub(crate) fn flow_memo_consult_ok(&mut self, f: P<FlowState>, hit: MemoHit) -> bool | rust:flowmemo.rs:588 | Checker
 flow_memo_consume | pub(crate) fn flow_memo_consume(&mut self, transient: u32, reference: u32) | rust:flowmemo.rs:477 | Checker
 flow_memo_consume_transient | fn flow_memo_consume_transient(&mut self, source: u32) | rust:flowmemo.rs:487 | Checker
 flow_memo_created | fn flow_memo_created(&self) -> u32 | rust:flowmemo.rs:459 | Checker
-flow_memo_fill | fn flow_memo_fill(&mut self, f: P<FlowState>, memo: FrameMemo, entry_flow: P<FlowNode>, final_flow: P<FlowNode>, entry_depth: i32, t: FlowType, taint: FrameTaint, height: u16, steps: u32, hit: Option<MemoHit>) | rust:flow.rs:448 | Checker
+flow_memo_fill | fn flow_memo_fill(&mut self, f: P<FlowState>, memo: FrameMemo, entry_flow: P<FlowNode>, final_flow: P<FlowNode>, entry_depth: i32, t: FlowType, taint: FrameTaint, height: u16, steps: u32, hit: Option<MemoHit>) | rust:flow.rs:449 | Checker
 flow_memo_key | pub(crate) fn flow_memo_key(&mut self, f: P<FlowState>) -> Option<u128> | rust:flowmemo.rs:498 | Checker
-flow_memo_lookup | fn flow_memo_lookup(&mut self, f: P<FlowState>, flow: P<FlowNode>, key: u128, entry_depth: i32) -> Option<MemoHit> | rust:flow.rs:428 | Checker
+flow_memo_lookup | fn flow_memo_lookup(&mut self, f: P<FlowState>, flow: P<FlowNode>, key: u128, entry_depth: i32) -> Option<MemoHit> | rust:flow.rs:429 | Checker
 flow_memo_root_symbol | fn flow_memo_root_symbol(&self, node: P<Node>) -> Option<P<Symbol>> | rust:flowmemo.rs:558 | Checker
-flow_memo_shadow_check | fn flow_memo_shadow_check(&mut self, f: P<FlowState>, entry_depth: i32, t: FlowType, taint: FrameTaint, shadow_hit: ShadowHit) | rust:flow.rs:500 | Checker
-flow_memo_shadow_key_bytes | fn flow_memo_shadow_key_bytes(&mut self, f: P<FlowState>) | rust:flow.rs:528 | Checker
-flow_memo_shadow_settle | fn flow_memo_shadow_settle(&mut self, f: P<FlowState>, memo: FrameMemo, entry_depth: i32, t: FlowType, taint: FrameTaint) | rust:flow.rs:490 | Checker
-flow_type_of | fn flow_type_of(t: P<Type>) -> FlowType | rust:flow.rs:31 | -
+flow_memo_shadow_check | fn flow_memo_shadow_check(&mut self, f: P<FlowState>, entry_depth: i32, t: FlowType, taint: FrameTaint, shadow_hit: ShadowHit) | rust:flow.rs:501 | Checker
+flow_memo_shadow_key_bytes | fn flow_memo_shadow_key_bytes(&mut self, f: P<FlowState>) | rust:flow.rs:529 | Checker
+flow_memo_shadow_settle | fn flow_memo_shadow_settle(&mut self, f: P<FlowState>, memo: FrameMemo, entry_depth: i32, t: FlowType, taint: FrameTaint) | rust:flow.rs:491 | Checker
+flow_type_of | fn flow_type_of(t: P<Type>) -> FlowType | rust:flow.rs:32 | -
 flush_too_complex_reports | pub(crate) fn flush_too_complex_reports(&mut self) | rust:checker_13.rs:1351 | Checker
 for_each_enclosing_class | pub(crate) fn for_each_enclosing_class(&mut self, node: P<Node>, callback: impl FnMut(&mut Checker, P<Node>) -> bool) -> bool | checker.go:12167 | Checker
 for_each_export_and_property_of_module | pub fn for_each_export_and_property_of_module(&mut self, module_symbol: P<Symbol>, cb: impl FnMut(&mut Checker, P<Symbol>, &str)) | services.go:136 | Checker
@@ -860,7 +860,7 @@ get | pub fn get(&self, type_arguments: &[P<Type>]) -> Option<P<Type>> | rust:ty
 get | pub fn get(&self, value: &str) -> Option<P<Type>> | rust:packedmap.rs:192 | StringLiteralTypes
 get | pub fn get(&mut self, symbol: P<Symbol>) -> P<V> | rust:links.rs:657 | SymbolArenaLinkStore
 get_access_stack | pub(crate) fn get_access_stack(ref_: P<Node>) -> Vec<P<Node>> | nodebuilderimpl.go:325 | -
-get_accessed_property_name | pub fn get_accessed_property_name(&mut self, access: P<Node>) -> (String, bool) | flow.go:1727 | Checker
+get_accessed_property_name | pub fn get_accessed_property_name(&mut self, access: P<Node>) -> (Cow<'static, str>, bool) | flow.go:1727 | Checker
 get_accessible_symbol_chain | pub fn get_accessible_symbol_chain(&mut self, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags, use_only_external_aliasing: bool) -> Vec<P<Symbol>> | symbolaccessibility.go:373 | Checker
 get_accessible_symbol_chain_ex | pub(crate) fn get_accessible_symbol_chain_ex(&mut self, ctx: &accessibleSymbolChainContext) -> Vec<P<Symbol>> | symbolaccessibility.go:441 | Checker
 get_accessible_symbol_chain_exported | pub fn get_accessible_symbol_chain_exported(&mut self, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags, use_only_external_aliasing: bool) -> Vec<P<Symbol>> | symbolaccessibility.go:382 | Checker
@@ -1128,7 +1128,7 @@ get_expanded_parameters | pub(crate) fn get_expanded_parameters(&mut self, sig: 
 get_expanded_parameters_exported | pub fn get_expanded_parameters_exported(&mut self, signature: P<Signature>, skip_union_expanding: bool) -> Vec<Vec<P<Symbol>>> | exports.go:255 | Checker
 get_explicit_this_type | pub(crate) fn get_explicit_this_type(&mut self, node: P<Node>) -> Option<P<Type>> | flow.go:2215 | Checker
 get_explicit_type_of_symbol | pub(crate) fn get_explicit_type_of_symbol(&mut self, symbol: P<Symbol>, diagnostic: Option<P<Diagnostic>>) -> Option<P<Type>> | flow.go:2155 | Checker
-get_explicit_type_of_symbol_worker | fn get_explicit_type_of_symbol_worker(&mut self, symbol: P<Symbol>, diagnostic: Option<P<Diagnostic>>) -> Option<P<Type>> | rust:flow.rs:2836 | Checker
+get_explicit_type_of_symbol_worker | fn get_explicit_type_of_symbol_worker(&mut self, symbol: P<Symbol>, diagnostic: Option<P<Diagnostic>>) -> Option<P<Type>> | rust:flow.rs:2841 | Checker
 get_export_of_module | pub(crate) fn get_export_of_module(&mut self, symbol: P<Symbol>, name_text: &str, specifier: P<Node>, dont_resolve_alias: bool) -> Option<P<Symbol>> | checker.go:15032 | Checker
 get_export_specifier_local_target_symbol | pub fn get_export_specifier_local_target_symbol(&mut self, node: P<Node>) -> Option<P<Symbol>> | services.go:476 | Checker
 get_export_symbol_of_symbol | pub fn get_export_symbol_of_symbol(&mut self, symbol: P<Symbol>) -> P<Symbol> | services.go:472 | Checker
@@ -1696,7 +1696,7 @@ get_type_at_flow_call | pub(crate) fn get_type_at_flow_call(&mut self, f: P<Flow
 get_type_at_flow_condition | pub(crate) fn get_type_at_flow_condition(&mut self, f: P<FlowState>, flow: P<FlowNode>) -> FlowType | flow.go:354 | Checker
 get_type_at_flow_loop_label | pub(crate) fn get_type_at_flow_loop_label(&mut self, f: P<FlowState>, flow: P<FlowNode>) -> FlowType | flow.go:1325 | Checker
 get_type_at_flow_node | pub(crate) fn get_type_at_flow_node(&mut self, f: P<FlowState>, flow: P<FlowNode>) -> FlowType | flow.go:117 | Checker
-get_type_at_flow_node_step | fn get_type_at_flow_node_step(&mut self, f: P<FlowState>, flow: P<FlowNode>, flags: FlowFlags) -> FlowStep | rust:flow.rs:338 | Checker
+get_type_at_flow_node_step | fn get_type_at_flow_node_step(&mut self, f: P<FlowState>, flow: P<FlowNode>, flags: FlowFlags) -> FlowStep | rust:flow.rs:339 | Checker
 get_type_at_location | pub fn get_type_at_location(&mut self, node: P<Node>) -> P<Type> | checker.go:32652 | Checker
 get_type_at_position | pub(crate) fn get_type_at_position(&mut self, signature: P<Signature>, pos: i32) -> P<Type> | relater.go:1790 | Checker
 get_type_at_position_exported | pub fn get_type_at_position_exported(&mut self, s: P<Signature>, pos: i32) -> P<Type> | services.go:936 | Checker
@@ -2025,7 +2025,7 @@ infer_types_from_template_literal_type | pub(crate) fn infer_types_from_template
 infer_with_priority | pub(crate) fn infer_with_priority(&mut self, n: P<InferenceState>, source: P<Type>, target: P<Type>, new_priority: InferencePriority) | inference.go:294 | Checker
 inferred_type_parameters | pub fn inferred_type_parameters(&self) -> &'static [P<Type>] | rust:checker.rs:457 | InferenceContext
 info_outcomes | fn info_outcomes(n: P<InferenceState>) -> Box<[InfoOutcome]> | rust:infermemo.rs:175 | -
-initial | fn initial(&self) -> P<Type> | rust:flow.rs:26 | FlowState
+initial | fn initial(&self) -> P<Type> | rust:flow.rs:27 | FlowState
 initialize_checker | pub(crate) fn initialize_checker(&mut self) | checker.go:1306 | Checker
 initialize_closures | pub(crate) fn initialize_closures(&mut self) | checker.go:1256 | Checker
 initialize_iteration_resolvers | pub(crate) fn initialize_iteration_resolvers(&mut self) | checker.go:1269 | Checker
@@ -2121,7 +2121,7 @@ is_const_type_reference | pub(crate) fn is_const_type_reference(node: P<Node>) -
 is_const_type_reference_name | pub(crate) fn is_const_type_reference_name(node: Option<P<Node>>) -> bool | utilities.go:133 | -
 is_const_type_variable | pub(crate) fn is_const_type_variable(&mut self, t: Option<P<Type>>, depth: i32) -> bool | checker.go:13880 | Checker
 is_constant_reference | pub(crate) fn is_constant_reference(&mut self, node: P<Node>) -> bool | flow.go:1814 | Checker
-is_constant_reference_of_walk | fn is_constant_reference_of_walk(&mut self, f: P<FlowState>) -> bool | rust:flow.rs:639 | Checker
+is_constant_reference_of_walk | fn is_constant_reference_of_walk(&mut self, f: P<FlowState>) -> bool | rust:flow.rs:640 | Checker
 is_constant_variable | pub(crate) fn is_constant_variable(&mut self, symbol: P<Symbol>) -> bool | utilities.go:1083 | Checker
 is_constraint_position | pub(crate) fn is_constraint_position(&mut self, t: P<Type>, node: P<Node>) -> bool | checker.go:31998 | Checker
 is_constructed_by | pub(crate) fn is_constructed_by(&mut self, source: P<Type>, target: P<Type>) -> bool | flow.go:794 | Checker
@@ -2190,7 +2190,7 @@ is_export_or_export_expression | pub(crate) fn is_export_or_export_expression(lo
 is_export_specifier_alias | pub(crate) fn is_export_specifier_alias(reference_location: P<Node>, export_specifier: P<Node>) -> bool | services.go:633 | -
 is_external_module_symbol | pub fn is_external_module_symbol(module_symbol: P<Symbol>) -> bool | utilities.go:1708 | -
 is_false_expression | pub(crate) fn is_false_expression(&mut self, expr: P<Node>) -> bool | flow.go:2589 | Checker
-is_flow_memo_checkpoint | fn is_flow_memo_checkpoint(flow: P<FlowNode>) -> bool | rust:flow.rs:52 | -
+is_flow_memo_checkpoint | fn is_flow_memo_checkpoint(flow: P<FlowNode>) -> bool | rust:flow.rs:53 | -
 is_for_in_variable_for_numeric_property_names | pub(crate) fn is_for_in_variable_for_numeric_property_names(&mut self, expr: P<Node>) -> bool | checker.go:8351 | Checker
 is_fresh_literal_type | pub(crate) fn is_fresh_literal_type(t: P<Type>) -> bool | checker.go:25771 | -
 is_from_inference_blocked_source | pub(crate) fn is_from_inference_blocked_source(&mut self, t: P<Type>) -> bool | inference.go:1618 | Checker
@@ -2865,7 +2865,7 @@ recycle_held_mapper | fn recycle_held_mapper(m: P<TypeMapper>) | rust:checker.rs
 recycle_mapper | pub(crate) unsafe fn recycle_mapper(m: P<TypeMapper>) | rust:mapper.rs:357 | -
 recycle_mapper_with_targets | pub(crate) unsafe fn recycle_mapper_with_targets(m: P<TypeMapper>, targets: *const [P<Type>]) | rust:mapper.rs:392 | -
 recycle_mapping | pub(crate) unsafe fn recycle_mapping(m: P<TypeMapper>, appended: bool) | rust:mapper.rs:368 | -
-ref_node | fn ref_node(&self) -> P<Node> | rust:flow.rs:18 | FlowState
+ref_node | fn ref_node(&self) -> P<Node> | rust:flow.rs:19 | FlowState
 reference_kinds | pub(crate) fn reference_kinds(&self, symbol: P<Symbol>) -> SymbolFlags | rust:checker_01.rs:573 | Checker
 reference_kinds | pub fn reference_kinds(&self, symbol: P<Symbol>) -> SymbolFlags | rust:links.rs:262 | SymbolReferenceLinkStore
 register_for_unused_identifiers_check | pub(crate) fn register_for_unused_identifiers_check(&mut self, node: P<Node>) | checker.go:7212 | Checker
@@ -3252,7 +3252,7 @@ try_get | pub fn try_get(&self, key: P<K>) -> Option<P<V>> | rust:links.rs:76 | 
 try_get | pub fn try_get(&self, node: P<Node>) -> Option<&'static V> | rust:links.rs:629 | NodeLinkStore
 try_get | pub fn try_get(&self, symbol: P<Symbol>) -> Option<P<V>> | rust:links.rs:668 | SymbolArenaLinkStore
 try_get_declared_type_of_symbol | pub(crate) fn try_get_declared_type_of_symbol(&mut self, symbol: P<Symbol>) -> Option<P<Type>> | checker.go:24139 | Checker
-try_get_element_access_expression_name | pub(crate) fn try_get_element_access_expression_name(&mut self, node: P<Node>) -> (String, bool) | flow.go:1743 | Checker
+try_get_element_access_expression_name | pub(crate) fn try_get_element_access_expression_name(&mut self, node: P<Node>) -> (Cow<'static, str>, bool) | flow.go:1743 | Checker
 try_get_if_id_assigned | pub fn try_get_if_id_assigned(&self, node: P<Node>) -> Option<&'static V> | rust:links.rs:635 | NodeLinkStore
 try_get_if_id_assigned | pub fn try_get_if_id_assigned(&self, symbol: P<Symbol>) -> Option<P<V>> | rust:links.rs:675 | SymbolArenaLinkStore
 try_get_member_in_module_exports | pub fn try_get_member_in_module_exports(&mut self, member_name: &str, module_symbol: P<Symbol>) -> Option<P<Symbol>> | services.go:314 | Checker
