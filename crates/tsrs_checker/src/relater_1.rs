@@ -1497,14 +1497,15 @@ impl Checker {
 }
 
 // relater.go:1008
-pub(crate) fn exclude_properties(properties: &[P<Symbol>], excluded_properties: &Set<String>) -> Vec<P<Symbol>> {
+/// tsrs: borrows `properties` when nothing is excluded (nearly always: the set is empty).
+pub(crate) fn exclude_properties<'a>(properties: &'a [P<Symbol>], excluded_properties: &Set<String>) -> std::borrow::Cow<'a, [P<Symbol>]> {
     if excluded_properties.len() == 0 || properties.is_empty() {
-        return properties.to_vec();
+        return properties.into();
     }
     let mut reduced: Vec<P<Symbol>> = Vec::new();
     let mut excluded = false;
     for (i, &prop) in properties.iter().enumerate() {
-        if !excluded_properties.has(&prop.name().to_string()) {
+        if !excluded_properties.m.contains(prop.name()) {
             if excluded {
                 reduced.push(prop);
             }
@@ -1514,9 +1515,9 @@ pub(crate) fn exclude_properties(properties: &[P<Symbol>], excluded_properties: 
         }
     }
     if excluded {
-        return reduced;
+        return reduced.into();
     }
-    properties.to_vec()
+    properties.into()
 }
 
 impl<'a> TypeDiscriminator<'a> {
