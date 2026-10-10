@@ -4,13 +4,10 @@ use std::cell::Cell;
 pub(crate) enum PathBuffer {
     Extension,
     Suffix,
-    PackageJson,
-    NodeModules,
-    Join,
 }
 
 thread_local! {
-    static PATHS: [Cell<String>; 5] = const { [const { Cell::new(String::new()) }; 5] };
+    static PATHS: [Cell<String>; 2] = const { [const { Cell::new(String::new()) }; 2] };
 }
 
 // Like oxc-resolver's scratch paths, keep capacity across requests on each worker. Take the buffer out before
@@ -54,6 +51,10 @@ mod tests {
     #[test]
     fn long_paths_and_unwinding_leave_the_buffer_usable() {
         with_path_buffer(PathBuffer::Suffix, |path| path.push_str(&"é".repeat(40_000)));
+        with_path_buffer(PathBuffer::Suffix, |path| {
+            assert!(path.is_empty());
+            assert!(path.capacity() <= 64 * 1024);
+        });
         assert!(std::panic::catch_unwind(|| with_path_buffer(PathBuffer::Suffix, |path| {
             path.push_str("/abandoned");
             panic!("host callback");

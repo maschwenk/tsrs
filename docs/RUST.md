@@ -183,13 +183,6 @@ THP off for the whole process (`MIMALLOC_ALLOW_THP=0`, which also drops the aren
 `opt-level = "s"` for the language-server, API and emit crates (`.text` -6%, speed unchanged); adding vscode at eight
 checkers to the PGO training (-3% instructions, cycles unchanged).
 
-Retained for owner review on `codex/resolver-allocations`: resolver TLS scratch paths plus borrowed
-request/cache/path views and consuming package.json decode (`notes/perf-resolver-allocations.md`).
-Resolver-probe allocation calls fall 54-61%; whole-project macOS instructions fall 0.27% / 0.19% on
-xstate / VS Code, with essentially unchanged default peak memory. The owner requested retaining the
-implementation on 2026-10-11. Local results remain below the usual landing thresholds; deterministic
-Linux verification is pending.
-
 Not tried. Each needs a measurement and a note before it is adopted; none is applied yet:
 
 | Candidate | Who does it | What it would give | What it needs |

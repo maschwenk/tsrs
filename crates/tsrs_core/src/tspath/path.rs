@@ -1,7 +1,7 @@
 use crate::stringutil;
 use crate::stringutil::{decode_rune, push_rune, unicode_to_lower};
 use rustc_hash::{FxHashMap, FxHashSet};
-use std::borrow::{Borrow, Cow};
+use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::fmt;
 use std::ops::Deref;
@@ -113,45 +113,29 @@ pub fn has_trailing_directory_separator(path: &str) -> bool {
 //	CombinePaths("/path", "to", "file.ext") === "/path/to/file.ext"
 //	CombinePaths("/path", "/to", "file.ext") === "/to/file.ext"
 pub fn combine_paths(first_path: &str, paths: &[&str]) -> String {
-    let mut result = String::new();
-    combine_paths_into(&mut result, first_path, paths);
-    result
-}
-
-/// The same join into reusable storage. Inputs cannot alias `result`, and normalization remains lexical.
-pub fn combine_paths_into(result: &mut String, first_path: &str, paths: &[&str]) {
     // Each absolute path replaces everything before it, so start from the last one without normalizing what it
     // replaces (`first_path` is often the current directory).
     let is_absolute = |p: &str| if p.as_bytes().contains(&b'\\') { get_root_length(&normalize_slashes(p)) != 0 } else { get_root_length(p) != 0 };
-    let (first_path, paths) = match paths.iter().rposition(|p| is_absolute(p)) {
-        Some(last_absolute) => (paths[last_absolute], &paths[last_absolute + 1..]),
-        None => (first_path, paths),
+    let (mut result, paths) = match paths.iter().rposition(|p| is_absolute(p)) {
+        Some(last_absolute) => (normalize_slashes(paths[last_absolute]), &paths[last_absolute + 1..]),
+        None => (normalize_slashes(first_path), paths),
     };
-    result.clear();
-    push_normalized_slashes(result, first_path);
     for &trailing_path in paths {
         if trailing_path.is_empty() {
             continue;
         }
-        if result.is_empty() {
+        let trailing_path = normalize_slashes(trailing_path);
+        if result.is_empty() || get_root_length(&trailing_path) != 0 {
             // `trailingPath` is absolute.
-            push_normalized_slashes(result, trailing_path);
+            result = trailing_path;
         } else {
             if !has_trailing_directory_separator(&result) {
                 result.push('/');
             }
-            push_normalized_slashes(result, trailing_path);
+            result.push_str(&trailing_path);
         }
     }
-}
-
-fn push_normalized_slashes(result: &mut String, path: &str) {
-    let mut parts = path.split('\\');
-    result.push_str(parts.next().unwrap_or_default());
-    for part in parts {
-        result.push('/');
-        result.push_str(part);
-    }
+    result
 }
 
 pub fn get_path_components(path: &str, current_directory: &str) -> Vec<String> {
@@ -282,18 +266,8 @@ fn last_index_byte(s: &str, b: u8) -> i32 {
 }
 
 pub fn get_directory_path(path: &str) -> String {
-    get_directory_path_cow(path).into_owned()
-}
+    let path = normalize_slashes(path);
 
-/// The directory view used by resolver cache probes; normalize backslashes only when present.
-pub fn get_directory_path_cow(path: &str) -> Cow<'_, str> {
-    if path.as_bytes().contains(&b'\\') {
-        return Cow::Owned(directory_path_slashes(&normalize_slashes(path)).to_string());
-    }
-    Cow::Borrowed(directory_path_slashes(path))
-}
-
-fn directory_path_slashes(path: &str) -> &str {
     // If the path provided is itself a root, then return it.
     let root_length = get_root_length(&path);
     if root_length == path.len() {
@@ -303,7 +277,7 @@ fn directory_path_slashes(path: &str) -> &str {
     // return the leading portion of the path up to the last (non-terminal) directory separator
     // but not including any trailing directory separator.
     let path = remove_trailing_directory_separator(&path);
-    &path[..(root_length as i32).max(last_index_byte(path, b'/')) as usize]
+    path[..(root_length as i32).max(last_index_byte(path, b'/')) as usize].to_string()
 }
 
 impl Path {
@@ -632,16 +606,6 @@ fn dot_segment_at(p: &[u8], start: usize) -> bool {
 }
 
 pub fn normalize_path(path: &str) -> String {
-    normalize_path_cow(path).into_owned()
-}
-
-/// Borrow the overwhelmingly common already-normalized path, without changing the owned API's spelling rules.
-pub fn normalize_path_cow(path: &str) -> Cow<'_, str> {
-    if !path.as_bytes().contains(&b'\\') {
-        if let Some(normalized) = simple_normalize_path(path) {
-            return normalized;
-        }
-    }
     // normalize_slashes without copying a path that has no backslash (the common case; the result is copied once)
     let slashed;
     let path: &str = if path.as_bytes().contains(&b'\\') {
@@ -651,13 +615,13 @@ pub fn normalize_path_cow(path: &str) -> Cow<'_, str> {
         path
     };
     if let Some(normalized) = simple_normalize_path(path) {
-        return Cow::Owned(normalized.into_owned());
+        return normalized.into_owned();
     }
     let mut normalized = get_normalized_absolute_path(path, "");
     if !normalized.is_empty() && has_trailing_directory_separator(path) {
         normalized = ensure_trailing_directory_separator(&normalized);
     }
-    Cow::Owned(normalized)
+    normalized
 }
 
 pub fn get_canonical_file_name(file_name: &str, use_case_sensitive_file_names: bool) -> String {
@@ -756,24 +720,17 @@ pub fn to_file_name_lower_case(file_name: &str) -> String {
 }
 
 pub fn to_path(file_name: &str, base_path: &str, use_case_sensitive_file_names: bool) -> Path {
-    Path::new(to_path_cow(file_name, base_path, use_case_sensitive_file_names).into_owned())
-}
-
-/// Canonical text for a cache lookup. Insertion still owns a `Path`; hits need neither a string nor an Arc.
-pub fn to_path_cow<'a>(file_name: &'a str, base_path: &str, use_case_sensitive_file_names: bool) -> Cow<'a, str> {
     let mut non_canonicalized_path =
-        if is_rooted_disk_path(file_name) { normalize_path_cow(file_name) } else { Cow::Owned(get_normalized_absolute_path(file_name, base_path)) };
+        if is_rooted_disk_path(file_name) { normalize_path(file_name) } else { get_normalized_absolute_path(file_name, base_path) };
     // get_canonical_file_name, reusing the owned string
     if use_case_sensitive_file_names {
-        return non_canonicalized_path;
+        return Path::new(non_canonicalized_path);
     }
     if non_canonicalized_path.is_ascii() {
-        if non_canonicalized_path.bytes().any(|c| c.is_ascii_uppercase()) {
-            non_canonicalized_path.to_mut().make_ascii_lowercase();
-        }
-        return non_canonicalized_path;
+        non_canonicalized_path.make_ascii_lowercase();
+        return Path::new(non_canonicalized_path);
     }
-    Cow::Owned(to_file_name_lower_case(&non_canonicalized_path))
+    Path::new(to_file_name_lower_case(&non_canonicalized_path))
 }
 
 pub fn remove_trailing_directory_separator(path: &str) -> &str {
@@ -909,27 +866,18 @@ pub fn get_relative_path_to_directory_or_url(
 //	GetBaseFileName("http://typescriptlang.org/") == ""
 //	GetBaseFileName("http://typescriptlang.org") == ""
 pub fn get_base_file_name(path: &str) -> String {
-    get_base_file_name_cow(path).into_owned()
-}
+    let path = normalize_slashes(path);
 
-pub fn get_base_file_name_cow(path: &str) -> Cow<'_, str> {
-    if path.as_bytes().contains(&b'\\') {
-        return Cow::Owned(base_file_name_slashes(&normalize_slashes(path)).to_string());
-    }
-    Cow::Borrowed(base_file_name_slashes(path))
-}
-
-fn base_file_name_slashes(path: &str) -> &str {
     // if the path provided is itself the root, then it has no file name.
     let root_length = get_root_length(&path);
     if root_length == path.len() {
-        return "";
+        return String::new();
     }
 
     // return the trailing portion of the path starting after the last (non-terminal) directory
     // separator but not including any trailing directory separator.
     let path = remove_trailing_directory_separator(&path);
-    &path[(get_root_length(path) as i32).max(last_index_byte(path, DIRECTORY_SEPARATOR) + 1) as usize..]
+    path[(get_root_length(path) as i32).max(last_index_byte(path, DIRECTORY_SEPARATOR) + 1) as usize..].to_string()
 }
 
 // Gets the file extension for a path.
@@ -962,14 +910,9 @@ pub fn get_any_extension_from_path(path: &str, extensions: &[&str], ignore_case:
 }
 
 pub fn get_longest_extension_from_path(path: &str, extensions: &[&str], ignore_case: bool) -> String {
-    get_longest_extension_from_path_iter(path, extensions.iter().copied(), ignore_case).to_string()
-}
-
-/// Borrow the matched suffix and accept configured extensions without first collecting their references.
-pub fn get_longest_extension_from_path_iter<'a, 'e>(path: &'a str, extensions: impl IntoIterator<Item = &'e str>, ignore_case: bool) -> &'a str {
     let path = remove_trailing_directory_separator(path);
     let comparer = stringutil::get_string_equality_comparer(ignore_case);
-    let mut longest = "";
+    let mut longest = String::new();
     for extension in extensions {
         if extension.len() > longest.len() {
             let matched = try_get_extension_from_path_with(path, extension, comparer);
@@ -985,14 +928,14 @@ fn get_any_extension_from_path_worker(path: &str, extensions: &[&str], string_eq
     for extension in extensions {
         let result = try_get_extension_from_path_with(path, extension, string_equality_comparer);
         if !result.is_empty() {
-            return result.to_string();
+            return result;
         }
     }
     String::new()
 }
 
 // Go's unexported tryGetExtensionFromPath; renamed because it collides with TryGetExtensionFromPath after snake-casing.
-fn try_get_extension_from_path_with<'a>(path: &'a str, extension: &str, string_equality_comparer: fn(&str, &str) -> bool) -> &'a str {
+fn try_get_extension_from_path_with(path: &str, extension: &str, string_equality_comparer: fn(&str, &str) -> bool) -> String {
     // Go prefixes a missing "." to the extension; both comparers match the "." alike, so the rest is compared
     // without building the prefixed string (this runs once per candidate extension of every changeExtension).
     let without_dot = extension.strip_prefix('.').unwrap_or(extension);
@@ -1001,10 +944,10 @@ fn try_get_extension_from_path_with<'a>(path: &'a str, extension: &str, string_e
     if pb.len() >= len && pb[pb.len() - len] == b'.' {
         let path_extension = &path[path.len() - len..];
         if string_equality_comparer(&path_extension[1..], without_dot) {
-            return path_extension;
+            return path_extension.to_string();
         }
     }
-    ""
+    String::new()
 }
 
 pub fn path_is_relative(path: &str) -> bool {
@@ -1185,19 +1128,6 @@ pub fn for_each_ancestor_directory_stopping_at_global_cache<T: Default>(
 
 /// Go callback `(result T, stop bool)` is `Option<T>` here: `Some(result)` stops the walk.
 pub fn for_each_ancestor_directory<T>(directory: &str, mut callback: impl FnMut(&str) -> Option<T>) -> Option<T> {
-    if !directory.as_bytes().contains(&b'\\') {
-        let mut directory = directory;
-        loop {
-            if let Some(result) = callback(directory) {
-                return Some(result);
-            }
-            let parent = directory_path_slashes(directory);
-            if parent == directory {
-                return None;
-            }
-            directory = parent;
-        }
-    }
     let mut directory = directory.to_string();
     loop {
         if let Some(result) = callback(&directory) {

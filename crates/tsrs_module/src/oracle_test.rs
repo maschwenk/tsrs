@@ -110,7 +110,7 @@ fn format_trace(d: &DiagAndArgs) -> String {
     parts.join("|")
 }
 
-fn run(scenario: &Json, trace: bool) -> Vec<(String, String, String)> {
+fn run(scenario: &Json) -> Vec<(String, String, String)> {
     let mut files: Vec<(String, vfstest::MapFile)> = Vec::new();
     if let Some(Json::Object(members)) = get(scenario, "files") {
         for (path, value) in members {
@@ -146,7 +146,7 @@ fn run(scenario: &Json, trace: bool) -> Vec<(String, String, String)> {
         declaration_dir: str_of(get(o, "declarationDir")),
         root_dir: str_of(get(o, "rootDir")),
         config_file_path: str_of(get(o, "configFilePath")),
-        trace_resolution: if trace { Tristate::True } else { Tristate::False },
+        trace_resolution: Tristate::True,
         ..Default::default()
     };
     if let Some(Json::Array(entries)) = get(o, "paths") {
@@ -213,7 +213,7 @@ fn run(scenario: &Json, trace: bool) -> Vec<(String, String, String)> {
             _ => Vec::new(),
         };
         let got_traces: Vec<String> = traces.iter().map(format_trace).collect();
-        if trace && want_traces != got_traces {
+        if want_traces != got_traces {
             let i = want_traces.iter().zip(got_traces.iter()).position(|(a, b)| a != b).unwrap_or(want_traces.len().min(got_traces.len()));
             mismatches.push((
                 label.clone(),
@@ -263,11 +263,7 @@ fn run_oracle_dir(dir: &str) {
         let scenario = Json::Object(members);
         total += 1;
         let name = str_of(get(&scenario, "name"));
-        let result = std::panic::catch_unwind(|| {
-            let mut mismatches = run(&scenario, true);
-            mismatches.extend(run(&scenario, false));
-            mismatches
-        });
+        let result = std::panic::catch_unwind(|| run(&scenario));
         match result {
             Ok(mismatches) if mismatches.is_empty() => {}
             Ok(mismatches) => {

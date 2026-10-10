@@ -28,7 +28,7 @@ fn test_expected() {
     assert_eq!(p.exports.type_(), JSONValueType::Null);
 
     let mut exports: Expected<String> = Expected::default();
-    exports.unmarshal_json(Json::Null);
+    exports.unmarshal_json(&Json::Null);
     assert!(exports.null);
     assert!(!exports.valid);
 
@@ -100,7 +100,7 @@ fn test_json_value() {
 	}"##,
     )
     .unwrap();
-    let get = |name: &str| JSONValue::from_json(member(&raw, name).clone());
+    let get = |name: &str| JSONValue::from_json(member(&raw, name));
 
     assert_eq!(get("private").data, JSONData::Boolean(true));
     assert!(!get("private").is_falsy());
@@ -108,7 +108,7 @@ fn test_json_value() {
     assert_eq!(get("name").data, JSONData::String("test".to_string()));
     assert_eq!(get("version").data, JSONData::Number(2.0));
     // Go compares the float64 against an int-typed zero, so numbers are never falsy.
-    assert!(!JSONValue::from_json(Json::Number(0.0)).is_falsy());
+    assert!(!JSONValue::from_json(&Json::Number(0.0)).is_falsy());
 
     let exports = get("exports");
     assert_eq!(exports.type_(), JSONValueType::Object);
@@ -178,31 +178,4 @@ fn test_parse_errors_and_dependencies() {
     // A nested plain `json.Unmarshal` rejects duplicate names.
     assert!(!got.dev_dependencies.valid);
     assert!(!got.has_dependency("d"));
-}
-
-#[test]
-fn test_consumed_fields_preserve_repeated_and_invalid_members() {
-    let got = parse(
-        r#"{
-        "name": null, "name": "kept", "name": false,
-        "dependencies": {"a":"1"}, "dependencies": {"b":"2","invalid":false,"after":"3"},
-        "devDependencies": {"a":"1","a":"2"},
-        "exports": {"z":"first","a":"other","z":"last"},
-        "typescript": {"contentMapper":{"exec":["old"]}},
-        "typescript": {"contentMapper":{"exec":["new",false]}}
-    }"#,
-    )
-    .unwrap();
-    assert!(got.name.valid && got.name.null);
-    assert_eq!(got.name.actual_json_type(), "boolean");
-    assert_eq!(got.name.value, "kept");
-    assert!(got.dependencies.valid);
-    assert_eq!(got.dependencies.value.len(), 2);
-    assert_eq!(got.dependencies.value["a"], "1");
-    assert_eq!(got.dependencies.value["b"], "2");
-    assert!(got.dev_dependencies.value.is_empty());
-    assert!(!got.dev_dependencies.valid);
-    assert_eq!(got.exports.as_object().keys().map(String::as_str).collect::<Vec<_>>(), ["z", "a"]);
-    assert_eq!(got.exports.as_object()["z"].as_string(), "last");
-    assert_eq!(got.content_mapper.value.exec.value, ["old"]);
 }

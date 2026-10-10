@@ -236,8 +236,8 @@ impl InfoCache {
     }
 
     pub fn get(&self, package_json_path: &str) -> Option<P<InfoCacheEntry>> {
-        let key = tspath::to_path_cow(package_json_path, &self.current_directory, self.use_case_sensitive_file_names);
-        self.cache.load(key.as_ref())
+        let key = tspath::to_path(package_json_path, &self.current_directory, self.use_case_sensitive_file_names);
+        self.cache.load(&key)
     }
 
     pub fn set(&self, package_json_path: &str, info: P<InfoCacheEntry>) -> P<InfoCacheEntry> {

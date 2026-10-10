@@ -10,11 +10,6 @@ pub trait ExpectedValue: Default + Clone {
     // Decodes `value` into `self`, mirroring `json.Unmarshal(data, &e.Value)` (which merges into
     // maps and leaves `self` unchanged on a type mismatch). Returns false where Go returns an error.
     fn unmarshal_from(&mut self, value: &Json) -> bool;
-    // Parsing owns the raw tree; consuming it lets strings and map keys become the typed values.
-    // Keep the borrowed entry point for callers that retain their raw JSON.
-    fn unmarshal_owned(&mut self, value: Json) -> bool {
-        self.unmarshal_from(&value)
-    }
     fn expected_json_type() -> &'static str;
 }
 
@@ -23,19 +18,6 @@ impl ExpectedValue for String {
         match value {
             Json::String(s) => {
                 self.clone_from(s);
-                true
-            }
-            Json::Null => {
-                *self = String::new();
-                true
-            }
-            _ => false,
-        }
-    }
-    fn unmarshal_owned(&mut self, value: Json) -> bool {
-        match value {
-            Json::String(s) => {
-                *self = s;
                 true
             }
             Json::Null => {
@@ -91,27 +73,6 @@ impl ExpectedValue for Vec<String> {
             _ => false,
         }
     }
-    fn unmarshal_owned(&mut self, value: Json) -> bool {
-        match value {
-            Json::Array(elements) => {
-                let mut result = Vec::with_capacity(elements.len());
-                for element in elements {
-                    let mut s = String::new();
-                    if !s.unmarshal_owned(element) {
-                        return false;
-                    }
-                    result.push(s);
-                }
-                *self = result;
-                true
-            }
-            Json::Null => {
-                self.clear();
-                true
-            }
-            _ => false,
-        }
-    }
     fn expected_json_type() -> &'static str {
         "array"
     }
@@ -137,25 +98,6 @@ impl ExpectedValue for FxHashMap<String, String> {
             _ => false,
         }
     }
-    fn unmarshal_owned(&mut self, value: Json) -> bool {
-        match value {
-            Json::Object(members) => {
-                for (name, member) in members {
-                    let mut s = String::new();
-                    if !s.unmarshal_owned(member) {
-                        return false;
-                    }
-                    self.insert(name, s);
-                }
-                true
-            }
-            Json::Null => {
-                self.clear();
-                true
-            }
-            _ => false,
-        }
-    }
     fn expected_json_type() -> &'static str {
         "object"
     }
@@ -163,26 +105,6 @@ impl ExpectedValue for FxHashMap<String, String> {
 
 impl ExpectedValue for ContentMapperFields {
     fn unmarshal_from(&mut self, value: &Json) -> bool {
-        match value {
-            Json::Object(members) => {
-                for (name, member) in members {
-                    match name.as_str() {
-                        "exec" => self.exec.unmarshal_json(member.clone()),
-                        "compilerOptions" => self.compiler_options.unmarshal_json(member.clone()),
-                        "dynamicConfig" => self.dynamic_config.unmarshal_json(member.clone()),
-                        _ => {}
-                    }
-                }
-                true
-            }
-            Json::Null => {
-                *self = ContentMapperFields::default();
-                true
-            }
-            _ => false,
-        }
-    }
-    fn unmarshal_owned(&mut self, value: Json) -> bool {
         match value {
             Json::Object(members) => {
                 for (name, member) in members {
@@ -216,23 +138,22 @@ pub struct Expected<T> {
 }
 
 impl<T: ExpectedValue> Expected<T> {
-    pub(crate) fn unmarshal_json(&mut self, data: Json) {
+    pub(crate) fn unmarshal_json(&mut self, data: &Json) {
         if let Json::Null = data {
             *self = Expected { actual_json_type: "null", null: true, valid: false, value: T::default() };
             return;
         }
-        let actual_json_type = match data.first_byte() {
+        // Go decodes the raw value with a fresh `json.Unmarshal`, which rejects duplicate names.
+        if !data.has_duplicate_names() && self.value.unmarshal_from(data) {
+            self.valid = true;
+        }
+        self.actual_json_type = match data.first_byte() {
             b'"' => "string",
             b't' | b'f' => "boolean",
             b'[' => "array",
             b'{' => "object",
             _ => "number",
         };
-        // Go decodes the raw value with a fresh `json.Unmarshal`, which rejects duplicate names.
-        if !data.has_duplicate_names() && self.value.unmarshal_owned(data) {
-            self.valid = true;
-        }
-        self.actual_json_type = actual_json_type;
     }
 
     pub fn is_present(&self) -> bool {

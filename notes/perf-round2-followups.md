@@ -33,12 +33,10 @@ is type-checked, CI runs on pull requests, and the workspace is at 0.11.0. The i
 
 ## Pending review
 
-- **Resolver allocation reduction** (`notes/perf-resolver-allocations.md`, `codex/resolver-allocations`): retained
-  for review at the owner's explicit request on 2026-10-11. TLS scratch strings, borrowed cache/path/condition
-  views and consuming package.json decode remove 54-61% of allocation calls in resolver probes (JSON -21%).
-  Whole-project macOS single-threaded instructions improve 0.27% on xstate / 0.19% on VS Code; default peak RSS
-  +0.15% / +0.46%. These native measurements are below the usual landing thresholds and include kernel work;
-  deterministic Linux verification remains outstanding.
+- **Resolver path scratch buffers** (`notes/perf-resolver-allocations.md`): reuse thread-local strings for
+  extension and module-suffix probes. Allocation calls fall 3.7% / 12.7% in the corresponding probes;
+  historical whole-project instructions fall 0.09% on xstate / 0.04% on VS Code. Retained for owner review;
+  below the usual landing thresholds, with deterministic Linux verification outstanding.
 
 ## Not verified yet
 

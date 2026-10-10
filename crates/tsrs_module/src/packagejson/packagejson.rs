@@ -119,23 +119,6 @@ impl ExpectedValue for TypeScriptFields {
             Json::Object(members) => {
                 for (name, member) in members {
                     if name == "contentMapper" {
-                        self.content_mapper.unmarshal_json(member.clone());
-                    }
-                }
-                true
-            }
-            Json::Null => {
-                *self = TypeScriptFields::default();
-                true
-            }
-            _ => false,
-        }
-    }
-    fn unmarshal_owned(&mut self, value: Json) -> bool {
-        match value {
-            Json::Object(members) => {
-                for (name, member) in members {
-                    if name == "contentMapper" {
                         self.content_mapper.unmarshal_json(member);
                     }
                 }
@@ -157,7 +140,7 @@ pub fn parse(data: &str) -> Result<Fields, String> {
     let value = json::parse(data)?;
     let mut parsed = Fields::default();
     let mut type_script: Expected<TypeScriptFields> = Expected::default();
-    match value {
+    match &value {
         // Unmarshaling `null` into a struct leaves it zero.
         Json::Null => {}
         Json::Object(members) => {
