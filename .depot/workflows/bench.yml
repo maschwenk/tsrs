@@ -85,10 +85,8 @@ jobs:
         with:
           node-version: 24
 
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        with:
-          version: 12.10.1
-          run_install: false
+      - name: Set up pnpm
+        run: bash .github/scripts/setup-pnpm.sh
 
       # The conformance suite (part of the PGO training workload) reads its tests from ts-ref/tsc/testdata.
       - name: Read TypeScript reference commit
@@ -295,10 +293,8 @@ jobs:
         with:
           node-version: 24
 
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        with:
-          version: 12.10.1
-          run_install: false
+      - name: Set up pnpm
+        run: bash .github/scripts/setup-pnpm.sh
 
       # `shared` is the suite + compilers cache; `project` is this project's (none for the two suite-only projects,
       # Compiler and Compiler-Unions, which live in the suite checkout).
@@ -400,10 +396,8 @@ jobs:
         with:
           node-version: 24
 
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
-        with:
-          version: 12.10.1
-          run_install: false
+      - name: Set up pnpm
+        run: bash .github/scripts/setup-pnpm.sh
 
       - name: Cache keys
         id: keys
