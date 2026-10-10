@@ -1965,24 +1965,26 @@ impl Checker {
     }
 
     // checker.go:19047
-    pub(crate) fn get_effective_property_name_for_property_name_node(&mut self, node: P<Node>) -> (String, bool) {
+    // The name is the stored text (the node's, or the cached computed name) except on the first lookup of a
+    // computed name; Go returns those strings without a copy.
+    pub(crate) fn get_effective_property_name_for_property_name_node(&mut self, node: P<Node>) -> (std::borrow::Cow<'static, str>, bool) {
         let name = get_property_name_for_property_name_node(node);
         if name != InternalSymbolNameMissing {
-            return (name.into_owned(), true);
+            return (name, true);
         }
         if is_computed_property_name(node) {
             // This is cached so `getTypeOfExpression` isn't constantly reinvoked for every property name lookup
             let links = self.computed_name_links.get(node);
             if let Some(has_name) = links.has_name.get() {
-                return (links.name.get().to_string(), has_name);
+                return (std::borrow::Cow::Borrowed(links.name.get()), has_name);
             }
             let expr_type = self.get_type_of_expression(node.expression().unwrap());
             let (name, exists) = self.try_get_name_from_type(expr_type);
             links.name.set(alloc_str(&name));
             links.has_name.set(Some(exists));
-            return (name, exists);
+            return (std::borrow::Cow::Owned(name), exists);
         }
-        (String::new(), false)
+        (std::borrow::Cow::Borrowed(""), false)
     }
 
     // checker.go:19066
