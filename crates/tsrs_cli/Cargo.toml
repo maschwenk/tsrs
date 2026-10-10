@@ -40,6 +40,8 @@ work-census = ["tsrs_compiler/work-census", "tsrs_execute/work-census"]
 ast-sizing = ["tsrs_compiler/ast-sizing"]
 # Allocation profile (tsrs_core/alloc-profile); replaces the mimalloc global allocator with the counting one.
 alloc-profile = ["tsrs_core/alloc-profile", "tsrs_execute/alloc-profile"]
+# No global allocator (the system one), so malloc-logging profilers such as Instruments' Allocations see every allocation.
+system-alloc = []
 # TSRS_ASSIGNMENT_STATS also attributes checker-created types/symbols to files (tsrs_compiler checkerpool_stats.rs).
 assignment-stats = ["tsrs_compiler/assignment-stats", "tsrs_execute/assignment-stats"]
 

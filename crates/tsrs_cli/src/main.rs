@@ -1,5 +1,6 @@
-// The alloc-profile build installs tsrs_core's counting allocator (over mimalloc) instead.
-#[cfg(not(feature = "alloc-profile"))]
+// The alloc-profile build installs tsrs_core's counting allocator (over mimalloc) instead; the system-alloc build
+// installs none (the system allocator, so Instruments' Allocations template sees every malloc/free).
+#[cfg(not(any(feature = "alloc-profile", feature = "system-alloc")))]
 #[global_allocator]
 static GLOBAL: mimalloc_safe::MiMalloc = mimalloc_safe::MiMalloc;
 
@@ -11,7 +12,7 @@ mod lsp;
 use tsrs_execute::{build, execute, sys, tsc};
 
 // TSRS_MEM_SPLIT (tsrs_core::memsplit): mimalloc's view of its heap, every page of every thread.
-#[cfg(not(feature = "alloc-profile"))]
+#[cfg(not(any(feature = "alloc-profile", feature = "system-alloc")))]
 fn mimalloc_heap_stats() -> tsrs_core::memsplit::HeapStats {
     #[repr(C)]
     struct HeapArea {
@@ -48,7 +49,7 @@ fn mimalloc_heap_stats() -> tsrs_core::memsplit::HeapStats {
     stats
 }
 
-#[cfg(not(feature = "alloc-profile"))]
+#[cfg(not(any(feature = "alloc-profile", feature = "system-alloc")))]
 fn mimalloc_collect(force: bool) {
     unsafe extern "C" {
         fn mi_collect(force: bool);
@@ -76,7 +77,7 @@ fn main() {
     #[cfg(target_os = "linux")]
     allow_transparent_huge_pages();
     let args: Vec<String> = std::env::args().skip(1).collect();
-    #[cfg(not(feature = "alloc-profile"))]
+    #[cfg(not(any(feature = "alloc-profile", feature = "system-alloc")))]
     tsrs_core::memsplit::set_heap_hooks(mimalloc_heap_stats, mimalloc_collect);
     #[cfg(feature = "alloc-profile")]
     tsrs_execute::set_census_hook(census::run);
