@@ -1059,6 +1059,8 @@ pub struct Checker {
     pub diagnostics: ast::DiagnosticsCollection,
     pub suggestion_diagnostics: ast::DiagnosticsCollection,
     pub merged_symbols: FxHashMap<P<Symbol>, P<Symbol>>,
+    /// tsrs-only: which symbols may be keys of `merged_symbols`; written only by `record_merged_symbol`.
+    pub(crate) merged_symbols_filter: MergedSymbolFilter,
     pub factory: ast::NodeFactory,
     pub node_links: LinkStore<Node, NodeLinks>,
     pub signature_links: KeyedLinkStore<Node, SignatureLinks>,
@@ -1466,6 +1468,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         diagnostics: ast::DiagnosticsCollection::default(),
         suggestion_diagnostics: ast::DiagnosticsCollection::default(),
         merged_symbols: FxHashMap::default(),
+        merged_symbols_filter: MergedSymbolFilter::default(),
         factory: ast::NodeFactory::default(),
         node_links: LinkStore::default(),
         signature_links: KeyedLinkStore::default(),

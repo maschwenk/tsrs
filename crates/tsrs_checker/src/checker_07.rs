@@ -1904,6 +1904,42 @@ pub(crate) fn get_excluded_symbol_flags(flags: SymbolFlags) -> SymbolFlags {
     result
 }
 
+/// tsrs-only: a one-hash Bloom filter of the keys of `Checker::merged_symbols`. About 99% of `get_merged_symbol`
+/// calls ask about a symbol that was never merged; a clear bit answers those without hashing into the map, and a set
+/// bit falls through to the map, so the answer is the map's. Nothing is removed from the map, so the filter never
+/// needs a removal either. 2^16 bits (8 KiB) per checker: with vscode's 2,479 merged symbols 3.6% of the misses fall
+/// through (notes/perf-merged-symbols-filter.md).
+pub(crate) struct MergedSymbolFilter(Box<[u64; MERGED_SYMBOLS_FILTER_WORDS]>);
+
+const MERGED_SYMBOLS_FILTER_BITS: u32 = 16;
+const MERGED_SYMBOLS_FILTER_WORDS: usize = 1 << (MERGED_SYMBOLS_FILTER_BITS - 6);
+
+impl MergedSymbolFilter {
+    // Fibonacci hashing: the top bits of the product depend on every bit of the handle.
+    #[inline]
+    fn bit(symbol: P<Symbol>) -> usize {
+        ((symbol.key() as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> (64 - MERGED_SYMBOLS_FILTER_BITS)) as usize
+    }
+
+    #[inline]
+    fn may_contain(&self, symbol: P<Symbol>) -> bool {
+        let bit = Self::bit(symbol);
+        self.0[bit >> 6] & (1 << (bit & 63)) != 0
+    }
+
+    fn insert(&mut self, symbol: P<Symbol>) {
+        let bit = Self::bit(symbol);
+        self.0[bit >> 6] |= 1 << (bit & 63);
+    }
+}
+
+impl Default for MergedSymbolFilter {
+    fn default() -> Self {
+        let words = vec![0; MERGED_SYMBOLS_FILTER_WORDS].into_boxed_slice();
+        MergedSymbolFilter(words.try_into().unwrap_or_else(|_| unreachable!()))
+    }
+}
+
 // A Go `ast.SymbolTable` field lookup, where a nil map yields nil.
 fn lookup_export(symbol: P<Symbol>, name: &str) -> Option<P<Symbol>> {
     symbol.exports().and_then(|exports| exports.lookup(name))
@@ -1925,6 +1961,9 @@ impl Checker {
 
     // checker.go:14584
     pub fn get_merged_symbol(&mut self, symbol: P<Symbol>) -> P<Symbol> {
+        if !self.merged_symbols_filter.may_contain(symbol) {
+            return symbol;
+        }
         if let Some(&merged) = self.merged_symbols.get(&symbol) {
             return merged;
         }
@@ -1943,6 +1982,7 @@ impl Checker {
     // checker.go:14601
     pub(crate) fn record_merged_symbol(&mut self, target: P<Symbol>, source: P<Symbol>) {
         self.merged_symbols.insert(source, target);
+        self.merged_symbols_filter.insert(source);
     }
 
     // checker.go:14605
