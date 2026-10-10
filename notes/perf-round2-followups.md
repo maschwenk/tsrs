@@ -107,6 +107,14 @@ pointer compression costs about +4.9% instructions and took back most of the che
 
 ## Measured and rejected (do not redo)
 
+- Treating typed alias records as enough to recover the complete migration gates
+  (`notes/rust-typed-alias.md`): single-thread instructions change -0.03% / -0.05%, default RSS
+  -1.42% / -1.89%, below the landing bar. Cumulative single-thread instructions remain +15–17% versus
+  original Oxc and default RSS +108–117% versus pre-Oxc. The changed constraint is complete ownership:
+  alias metadata now has typed stores/qualified edges and preserves pending hashes/materialization, but raw
+  type/symbol/AST referents, source text and the compatibility runtime remain. Revisit landing after the
+  complete typed graph/runtime migration, full API/LSP lifetime audit and recovered instruction/RSS gates.
+
 - Treating typed predicate/index metadata as enough to recover the complete migration gates
   (`notes/rust-typed-metadata.md`): single-thread instructions change -0.07% / +0.12%, default RSS
   +0.69% / -0.17%, below the landing bar. Cumulative single-thread instructions remain +15–17% versus

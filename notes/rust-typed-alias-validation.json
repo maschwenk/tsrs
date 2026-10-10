@@ -1,0 +1,77 @@
+{
+  "units": {
+    "sha256": "f743f37f6fbbce8643e929aa50b64161e1b63a574a9ef091ecd65d2a69341668"
+  },
+  "checker-cli-lsp": {
+    "sha256": "22c04be2364bc7d0ecd4c3236b4e6067f591af70b7099c4386e4f3519a9ac2e9",
+    "outcome": "Two existing disabled-leaf-retirement integration failures; Checker unit cases pass. Native LSP was rerun separately and passes."
+  },
+  "cli-supported": {
+    "sha256": "6de58e2569d4440e9e09700fb54e550992d14d4980bbee134315a0c2e808c020",
+    "results": [
+      "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.62s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.99s",
+      "test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.72s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.16s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.40s",
+      "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.00s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.02s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.51s",
+      "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.30s"
+    ],
+    "excluded_cases": [
+      "freed_leaf_is_skipped_by_the_alternative_container_search",
+      "structurally_identical_instantiation_after_a_freed_leaf"
+    ]
+  },
+  "lsp": {
+    "sha256": "ccc5006c5fe300bd78b7913b4f8c1ba93ccb47bfe06381b312f59cfb2c524b71"
+  },
+  "targets-final": {
+    "sha256": "ff295e690f8b912ac400e39e489a0a1df5f66d49faa95e8ec53a1997ef6e4ede"
+  },
+  "features-final": {
+    "sha256": "a8865ffee98323cb2abd73302ea51c83889271da6ae7fe62ad08510de7773a30"
+  },
+  "wasm-final": {
+    "sha256": "4d0b3c010c7fab2fb7c48b8911a8653174d512e952b3baf7e441692a1d81082a"
+  },
+  "ratchet-final": {
+    "sha256": "de313b93acc68fd0a6bb85a2943df00d3de86d49dc05fe4a0ab50a9a500caa27"
+  },
+  "source-final": {
+    "sha256": "b67d4de32581dc43e7c1d5214b5e717781a81150b3d97910ed8cf918613eb90a"
+  },
+  "profile-units": {
+    "sha256": "1a2ed7da3bb1084ec9602c1479ec30936aa6ab592cfb644eb26cd436be3c4fd9"
+  },
+  "regressions": {
+    "sha256": "23af6e9de0e81cc98d84ba22c3f796b889b52c8d79b1a53cc1374eb69daafd60",
+    "cases": 28
+  },
+  "classifications": {
+    "sha256": "3f76bb51eb379288785783383ca0b02da50f0d011e4f1b7fd4d8756e7c1b0c1d"
+  },
+  "profile-labels": {
+    "sha256": "286f012fcff139919bdef3e066549d89b612f6d4d2d91e1c5a8dc369cef0cefd"
+  },
+  "profile-fixture": {
+    "sha256": "a7f11b45cbc40b33784b8beba58c9016cebbf543f8e0e5fc8d27681e09c0e046"
+  },
+  "typed-alias-work-census.tsv": {
+    "sha256": "e5825322e5a9cd2c05a92699a8ef39b2fec2378b5bd22ae5206686df63eba21b",
+    "alias_labels": 5
+  },
+  "typed-alias-work-census.txt": {
+    "sha256": "af128614d58755c62a6f3d74f2122bb169fb8ebf77e02f12d8956474003115b7",
+    "alias_labels": 17
+  },
+  "alias_store_heap": {
+    "len": 377,
+    "capacity": 512,
+    "record_bytes": 16,
+    "capacity_bytes": 8192
+  },
+  "all_workspace_features_and_targets": "Unsupported combined oracle mimalloc/core profiling global allocators; not claimed to pass."
+}

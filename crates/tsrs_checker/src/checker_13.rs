@@ -132,14 +132,14 @@ impl Checker {
         if types.len() == 1 {
             return types[0];
         }
-        let key = get_union_key(types, origin, alias);
+        let key = get_union_key(self, types, origin, alias);
         if let Some(t) = self.union_types.get(&key) {
             return t;
         }
         let flags = precomputed_object_flags | self.get_propagating_flags_of_types(types, TypeFlags::Nullable);
         let t = self.new_union_type(flags, types);
         t.as_union_type().set_origin(origin);
-        t.set_alias(alias.alias());
+        t.set_alias(alias.alias(self));
         if types.len() == 2 && types[0].flags().intersects(TypeFlags::BooleanLiteral) && types[1].flags().intersects(TypeFlags::BooleanLiteral) {
             t.flags.set(t.flags() | TypeFlags::Boolean);
         }
@@ -658,7 +658,7 @@ impl Checker {
                 }
             }
         }
-        let key = get_intersection_key(&type_set, flags, alias);
+        let key = get_intersection_key(self, &type_set, flags, alias);
         let mut result = self.intersection_types.get(&key);
         if result.is_none() {
             let too_complex_before = self.too_complex_reports;
@@ -713,7 +713,7 @@ impl Checker {
             } else {
                 let propagated = self.get_propagating_flags_of_types(types, TypeFlags::Nullable /*excludeKinds*/);
                 r = self.new_intersection_type(object_flags | propagated, &type_set);
-                r.set_alias(alias.alias());
+                r.set_alias(alias.alias(self));
             }
             // tsrs-only: not cached when a TS2590 was reported below (a split, a restart or an inner intersection
             // returned the error type; `too_complex_since`).
@@ -1740,12 +1740,12 @@ impl Checker {
             }
             // Defer the operation by creating an indexed access type.
             let persistent_access_flags = access_flags & AccessFlags::Persistent;
-            let key = get_indexed_access_key(object_type, index_type, access_flags, alias);
+            let key = get_indexed_access_key(self, object_type, index_type, access_flags, alias);
             if let Some(t) = self.indexed_access_types.get(&key) {
                 return Some(t);
             }
             let t = self.new_indexed_access_type(object_type, index_type, persistent_access_flags);
-            t.set_alias(alias.alias());
+            t.set_alias(alias.alias(self));
             self.indexed_access_types.insert(key, t);
             return Some(t);
         }

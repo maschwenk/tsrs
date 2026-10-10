@@ -246,7 +246,7 @@ fn dump(path: &str, flags: &str) -> Result<String, String> {
         escape(&mut d.sb, aug.text());
         d.sb.push('\n');
     }
-    for name in file.ambient_module_names.get() {
+    for name in &file.ambient_module_names() {
         d.sb.push_str("AMB ");
         escape(&mut d.sb, name);
         d.sb.push('\n');

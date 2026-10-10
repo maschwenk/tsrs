@@ -1617,7 +1617,7 @@ impl NodeBuilderImpl {
 
         if t.flags().intersects(TypeFlags::Any) {
             if let Some(alias) = t.alias() {
-                return Some(alias.to_type_reference_node(c, self.as_p()));
+                return Some(TypeAlias::to_type_reference_node(alias, c, self.as_p()));
             }
             if t == c.unresolved_type {
                 return Some(self.e.add_synthetic_leading_comment(self.f.new_keyword_type_node(Kind::AnyKeyword), Kind::MultiLineCommentTrivia, "unresolved", false /*hasTrailingNewLine*/));
@@ -1759,11 +1759,11 @@ impl NodeBuilderImpl {
         }
 
         let mut _decrement_depth: Option<Defer> = None;
-        if in_type_alias.is_empty() && t.alias().is_some() && (self.ctx().flags.get().intersects(Flags::UseAliasDefinedOutsideCurrentScope) || c.is_type_symbol_accessible(t.alias().symbol().unwrap(), self.ctx().enclosing_declaration.get())) {
+        if in_type_alias.is_empty() && t.alias().is_some() && (self.ctx().flags.get().intersects(Flags::UseAliasDefinedOutsideCurrentScope) || c.is_type_symbol_accessible(t.alias().symbol(c).unwrap(), self.ctx().enclosing_declaration.get())) {
             // If we should expand this type alias, skip the alias and fall through to expand the underlying type
             if !self.should_expand_type(c, t, true /*isAlias*/) {
-                let sym = t.alias().symbol().unwrap();
-                let type_argument_nodes = self.map_to_type_nodes(c, &t.alias().type_arguments(), false /*isBareList*/);
+                let sym = t.alias().symbol(c).unwrap();
+                let type_argument_nodes = self.map_to_type_nodes(c, &t.alias().type_arguments(c), false /*isBareList*/);
                 if is_reserved_member_name(sym.name()) && !sym.flags().intersects(SymbolFlags::Class) {
                     return Some(self.f.new_type_reference_node(self.f.new_identifier(""), type_argument_nodes));
                 }
@@ -1944,9 +1944,9 @@ impl NodeBuilderImpl {
 
 impl TypeAlias {
     // nodebuilderimpl.go:3639
-    pub fn to_type_reference_node(&self, c: &mut Checker, b: P<NodeBuilderImpl>) -> P<Node> {
-        let type_name = b.symbol_to_entity_name_node(c, self.symbol().unwrap());
-        let type_arguments = b.map_to_type_nodes(c, &self.type_arguments(), false /*isBareList*/);
+    pub fn to_type_reference_node(alias: TypeAliasKey, c: &mut Checker, b: P<NodeBuilderImpl>) -> P<Node> {
+        let type_name = b.symbol_to_entity_name_node(c, alias.symbol(c).unwrap());
+        let type_arguments = b.map_to_type_nodes(c, &alias.type_arguments(c), false /*isBareList*/);
         b.f.new_type_reference_node(type_name, type_arguments)
     }
 }

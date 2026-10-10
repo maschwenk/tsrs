@@ -1,0 +1,87 @@
+{
+  "disabled_leaf_retirement": {
+    "leaf-alternative-containers": {
+      "oxc": {
+        "exit": 2,
+        "stdout_sha256": "3350a56255a9f74bf8695854695fc86af95f223316d7c1a1aaae5a30317b74b4",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "required_retirement_counter_present": false
+      },
+      "typed-metadata": {
+        "exit": 2,
+        "stdout_sha256": "3350a56255a9f74bf8695854695fc86af95f223316d7c1a1aaae5a30317b74b4",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "required_retirement_counter_present": false
+      },
+      "typed-alias": {
+        "exit": 2,
+        "stdout_sha256": "3350a56255a9f74bf8695854695fc86af95f223316d7c1a1aaae5a30317b74b4",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "required_retirement_counter_present": false
+      }
+    },
+    "leaf-structural-instantiation": {
+      "oxc": {
+        "exit": 2,
+        "stdout_sha256": "73bdaca1dd424d23c326966760db1268b67fb0d1072988d31fa49d5622873cae",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "required_retirement_counter_present": false
+      },
+      "typed-metadata": {
+        "exit": 2,
+        "stdout_sha256": "73bdaca1dd424d23c326966760db1268b67fb0d1072988d31fa49d5622873cae",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "required_retirement_counter_present": false
+      },
+      "typed-alias": {
+        "exit": 2,
+        "stdout_sha256": "73bdaca1dd424d23c326966760db1268b67fb0d1072988d31fa49d5622873cae",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "required_retirement_counter_present": false
+      }
+    }
+  },
+  "rss_sampler_on_macos": {
+    "sampler": "Linux/glibc malloc_trim and /proc/self/status",
+    "before_and_current_crashes": {
+      "before": {
+        "report_sha256": "37a2db9ddb23f5a502b6557251a5b41e2f1488b5ae411fc1ab9d8ebf63c10a6e",
+        "exception": "KERN_INVALID_ADDRESS at 0x0000000000000000",
+        "frames": [
+          {
+            "symbol": null,
+            "symbol_location": null
+          },
+          {
+            "symbol": "_RNvNtNtCs2MQLXXAbEkL_4tsrs3api12memory_tests7rss_kib",
+            "symbol_location": 40
+          },
+          {
+            "symbol": "_RNvNtNtCs2MQLXXAbEkL_4tsrs3api12memory_testss_37failed_builds_free_their_orchestrator",
+            "symbol_location": 916
+          }
+        ]
+      },
+      "current": {
+        "report_sha256": "7afecc05c9b99bb54cafc5ce8e40295fa3270ff1e81d43dfa99111d1f2aefcbe",
+        "exception": "KERN_INVALID_ADDRESS at 0x0000000000000000",
+        "frames": [
+          {
+            "symbol": null,
+            "symbol_location": null
+          },
+          {
+            "symbol": "_RNvNtNtCs2MQLXXAbEkL_4tsrs3api12memory_tests7rss_kib",
+            "symbol_location": 40
+          },
+          {
+            "symbol": "_RNvNtNtCs2MQLXXAbEkL_4tsrs3api12memory_testss_22repeated_builds_memory",
+            "symbol_location": 1496
+          }
+        ]
+      }
+    },
+    "fix": "Compile FFI, sampler and two RSS cases only for Linux/glibc. Output-equivalence case remains cross-platform.",
+    "linux_assertions_exercised": false
+  }
+}

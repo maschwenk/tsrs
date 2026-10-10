@@ -142,10 +142,10 @@ fn count(on: bool, counter: &AtomicU64) {
 /// The key of a call, or None when it does not fit in `MAX_WORDS`.
 #[inline(always)]
 #[expect(clippy::inline_always, reason = "on the getUnionType path; out of line the key is built in memory and copied")]
-fn make_key(types: &[P<Type>], reduction: UnionReduction, alias: AliasArg<'_>, shift: u32) -> Option<([PKey; MAX_WORDS], u16, usize)> {
+fn make_key(c: &Checker, types: &[P<Type>], reduction: UnionReduction, alias: AliasArg<'_>, shift: u32) -> Option<([PKey; MAX_WORDS], u16, usize)> {
     let (symbol, type_arguments): (Option<P<Symbol>>, &[P<Type>]) = match alias {
         AliasArg::None => (None, &[]),
-        AliasArg::Some(alias) => (alias.symbol.get(), &alias.type_arguments.get()),
+        AliasArg::Some(alias) => (c.type_alias(alias).symbol(), &c.type_alias(alias).type_arguments()),
         AliasArg::Pending(pending) => (pending.symbol, pending.type_arguments.as_slice()),
     };
     let has_alias = !alias.is_none();
@@ -177,7 +177,7 @@ fn make_key(types: &[P<Type>], reduction: UnionReduction, alias: AliasArg<'_>, s
 impl Checker {
     /// The front of `getUnionType` for calls with two or more inputs and no origin.
     pub(crate) fn get_union_type_front_cached(&mut self, types: &[P<Type>], union_reduction: UnionReduction, alias: AliasArg<'_>) -> P<Type> {
-        let Some((key, meta, index)) = make_key(types, union_reduction, alias, self.union_front_cache.shift) else {
+        let Some((key, meta, index)) = make_key(self, types, union_reduction, alias, self.union_front_cache.shift) else {
             count_bypass(&self.union_front_cache);
             return self.get_union_type_ex_uncached(types, union_reduction, alias, None);
         };

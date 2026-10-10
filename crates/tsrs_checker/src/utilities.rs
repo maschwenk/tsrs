@@ -810,14 +810,14 @@ pub(crate) fn get_sort_order_flags(t: P<Type>) -> i32 {
 
 // utilities.go:632
 pub(crate) fn compare_type_names(c: &mut Checker, t1: P<Type>, t2: P<Type>) -> i32 {
-    let s1 = get_type_name_symbol(t1);
-    let s2 = get_type_name_symbol(t2);
+    let s1 = get_type_name_symbol(c, t1);
+    let s2 = get_type_name_symbol(c, t2);
     if s1 == s2 {
         // The same alias (or none) has the same arguments (can1357's a3f430da0).
         if t1.alias() == t2.alias() {
             return 0;
         }
-        return compare_type_lists(c, &t1.alias().type_arguments(), &t2.alias().type_arguments());
+        return compare_type_lists(c, &t1.alias().type_arguments(c), &t2.alias().type_arguments(c));
     }
     let Some(s1) = s1 else {
         return 1;
@@ -844,9 +844,9 @@ fn compare_names(a: &str, b: &str) -> i32 {
 }
 
 // utilities.go:651
-pub(crate) fn get_type_name_symbol(t: P<Type>) -> Option<P<Symbol>> {
+pub(crate) fn get_type_name_symbol(c: &Checker, t: P<Type>) -> Option<P<Symbol>> {
     if let Some(alias) = t.alias() {
-        return alias.symbol();
+        return alias.symbol(c);
     }
     if t.flags().intersects(TypeFlags::TypeParameter | TypeFlags::StringMapping)
         || t.object_flags().intersects(ObjectFlags::ClassOrInterface | ObjectFlags::Reference)

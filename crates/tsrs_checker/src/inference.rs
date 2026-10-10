@@ -70,16 +70,16 @@ impl Checker {
             return;
         }
         if let (Some(source_alias), Some(target_alias)) = (source.alias(), target.alias()) {
-            if source_alias.symbol() == target_alias.symbol() {
-                if !source_alias.type_arguments().is_empty() || !target_alias.type_arguments().is_empty() {
+            if source_alias.symbol(self) == target_alias.symbol(self) {
+                if !source_alias.type_arguments(self).is_empty() || !target_alias.type_arguments(self).is_empty() {
                     // Source and target are types originating in the same generic type alias declaration.
                     // Simply infer from source type arguments to target type arguments, with defaults applied.
-                    let alias_symbol = source_alias.symbol().unwrap();
+                    let alias_symbol = source_alias.symbol(self).unwrap();
                     let params = self.type_alias_links.get(alias_symbol).type_parameters.get();
                     let min_params = self.get_min_type_argument_count(&params);
                     let node_is_in_js_file = ast::is_in_js_file(alias_symbol.value_declaration());
-                    let source_types = self.fill_missing_type_arguments(&source_alias.type_arguments(), &params, min_params, node_is_in_js_file);
-                    let target_types = self.fill_missing_type_arguments(&target_alias.type_arguments(), &params, min_params, node_is_in_js_file);
+                    let source_types = self.fill_missing_type_arguments(&source_alias.type_arguments(self), &params, min_params, node_is_in_js_file);
+                    let target_types = self.fill_missing_type_arguments(&target_alias.type_arguments(self), &params, min_params, node_is_in_js_file);
                     let variances = self.get_alias_variances(alias_symbol);
                     self.infer_from_type_arguments(n, &source_types, &target_types, &variances);
                 }
@@ -444,8 +444,8 @@ pub(crate) fn compare_types_and_depth(c: &mut Checker, t1: P<Type>, t2: P<Type>)
 pub(crate) fn get_type_depth(c: &mut Checker, t: P<Type>, max_depth: i32) -> i32 {
     if max_depth != 0 {
         if let Some(alias) = t.alias() {
-            if !alias.type_arguments().is_empty() {
-                return get_type_list_depth(c, &alias.type_arguments(), max_depth - 1) + 1;
+            if !alias.type_arguments(c).is_empty() {
+                return get_type_list_depth(c, &alias.type_arguments(c), max_depth - 1) + 1;
             }
         }
         if t.object_flags().intersects(ObjectFlags::Reference) {
@@ -1398,7 +1398,7 @@ impl Checker {
     // inference.go:1223
     pub(crate) fn is_type_closely_matched_by(&mut self, s: P<Type>, t: P<Type>) -> bool {
         s.flags().intersects(TypeFlags::Object) && t.flags().intersects(TypeFlags::Object) && s.symbol().is_some() && s.symbol() == t.symbol()
-            || s.alias().is_some() && t.alias().is_some() && !s.alias().type_arguments().is_empty() && s.alias().symbol() == t.alias().symbol()
+            || s.alias().is_some() && t.alias().is_some() && !s.alias().type_arguments(self).is_empty() && s.alias().symbol(self) == t.alias().symbol(self)
     }
 
     // Create an object with properties named in the string literal type. Every property has type `any`.

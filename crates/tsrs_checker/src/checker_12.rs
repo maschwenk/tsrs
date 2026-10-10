@@ -26,6 +26,14 @@ pub(crate) fn is_single_element_generic_tuple_type(t: P<Type>) -> bool {
 }
 
 impl Checker {
+    pub fn type_alias(&self, key: TypeAliasKey) -> &TypeAlias {
+        self.type_aliases.get(key).expect("type alias belongs to another checker")
+    }
+
+    pub(crate) fn new_type_alias(&mut self, symbol: Option<P<Symbol>>, type_arguments: &[P<Type>]) -> TypeAliasKey {
+        self.type_aliases.alloc(TypeAlias::new(symbol, type_arguments))
+    }
+
     // checker.go:23966
     // Public for lint rules (tsgolint's shim exposes Checker_isArrayOrTupleType).
     pub fn is_array_or_tuple_type(&mut self, t: P<Type>) -> bool {
@@ -120,8 +128,8 @@ impl Checker {
         let type_arguments = node.type_arguments();
         if symbol.check_flags.get().intersects(CheckFlags::Unresolved) {
             let alias_type_arguments: Vec<P<Type>> = type_arguments.iter().map(|&n| self.get_type_from_type_node(n)).collect();
-            let alias = P::new(TypeAlias { symbol: Cell::new(Some(symbol)), type_arguments: ArrayCell::new(&alias_type_arguments) });
-            let key = get_alias_key(Some(alias).into());
+            let alias = self.new_type_alias(Some(symbol), &alias_type_arguments);
+            let key = get_alias_key(self, Some(alias).into());
             let mut error_type = self.error_types.get(&key);
             if error_type.is_none() {
                 let t = self.new_intrinsic_type(TypeFlags::Any, "error");
@@ -174,7 +182,7 @@ impl Checker {
             }
             let mut new_alias = None;
             if new_alias_symbol.is_some() {
-                new_alias = Some(P::new(TypeAlias { symbol: Cell::new(new_alias_symbol), type_arguments: ArrayCell::new(&alias_type_arguments) }));
+                new_alias = Some(self.new_type_alias(new_alias_symbol, &alias_type_arguments));
             }
             let type_arguments_from_node = self.get_type_arguments_from_node(node);
             return self.get_type_alias_instantiation(symbol, &type_arguments_from_node, new_alias);
@@ -186,7 +194,7 @@ impl Checker {
     }
 
     // checker.go:24102
-    pub(crate) fn get_type_alias_instantiation(&mut self, symbol: P<Symbol>, type_arguments: &[P<Type>], alias: Option<P<TypeAlias>>) -> P<Type> {
+    pub(crate) fn get_type_alias_instantiation(&mut self, symbol: P<Symbol>, type_arguments: &[P<Type>], alias: Option<TypeAliasKey>) -> P<Type> {
         let t = self.get_declared_type_of_symbol(symbol);
         if t == self.intrinsic_marker_type {
             if let Some(&type_kind) = intrinsicTypeKinds.get(symbol.name()) {
@@ -200,7 +208,7 @@ impl Checker {
         }
         let links = self.type_alias_links.get_key(symbol);
         let type_parameters = self.type_alias_links.at(links).type_parameters.get();
-        let key = get_type_alias_instantiation_key(type_arguments, alias);
+        let key = get_type_alias_instantiation_key(self, type_arguments, alias);
         let mut instantiation = self.type_alias_links.at(links).instantiations.get(&key);
         if instantiation.is_none() {
             let too_complex_before = self.too_complex_reports;
@@ -275,11 +283,11 @@ pub(crate) fn get_type_reference_name(node: P<Node>) -> Option<P<Node>> {
 
 impl Checker {
     // checker.go:24172
-    pub(crate) fn get_alias_for_type_node(&mut self, node: P<Node>) -> Option<P<TypeAlias>> {
+    pub(crate) fn get_alias_for_type_node(&mut self, node: P<Node>) -> Option<TypeAliasKey> {
         let symbol = self.get_alias_symbol_for_type_node(node);
         if symbol.is_some() {
             let type_arguments = self.get_type_arguments_for_alias_symbol(symbol);
-            return Some(P::new(TypeAlias { symbol: Cell::new(symbol), type_arguments: ArrayCell::new(&type_arguments) }));
+            return Some(self.new_type_alias(symbol, &type_arguments));
         }
         None
     }
@@ -520,7 +528,7 @@ impl Checker {
                 }
             }
             let enum_type = if !member_type_list.is_empty() {
-                let alias = P::new(TypeAlias { symbol: Cell::new(Some(symbol)), ..Default::default() });
+                let alias = self.new_type_alias(Some(symbol), &[]);
                 self.get_union_type_ex(&member_type_list, UnionReduction::Literal, Some(alias).into(), None /*origin*/)
             } else {
                 self.create_computed_enum_type(symbol)
@@ -986,7 +994,7 @@ impl Checker {
             let check_type = self.get_type_from_type_node(node.as_conditional_type_node().check_type);
             let alias = self.get_alias_for_type_node(node);
             let all_outer_type_parameters = self.get_outer_type_parameters(node, true /*includeThisTypes*/);
-            let outer_type_parameters: Vec<P<Type>> = if alias.is_some_and(|a| !a.type_arguments.get().is_empty()) {
+            let outer_type_parameters: Vec<P<Type>> = if alias.is_some_and(|a| !a.type_arguments(self).is_empty()) {
                 all_outer_type_parameters
             } else {
                 all_outer_type_parameters.into_iter().filter(|&tp| self.is_type_parameter_possibly_referenced(tp, node)).collect()
@@ -1007,14 +1015,14 @@ impl Checker {
             self.type_node_links.at(links).resolved_type.set(Some(resolved_type));
             if !outer_type_parameters.is_empty() {
                 root.instantiations.make();
-                root.instantiations.set(get_conditional_type_key(&outer_type_parameters, None /*alias*/, false /*forConstraint*/), self.type_node_links.at(links).resolved_type.get().unwrap());
+                root.instantiations.set(get_conditional_type_key(self, &outer_type_parameters, None /*alias*/, false /*forConstraint*/), self.type_node_links.at(links).resolved_type.get().unwrap());
             }
         }
         self.type_node_links.at(links).resolved_type.get().unwrap()
     }
 
     // checker.go:24770
-    pub(crate) fn get_conditional_type(&mut self, root: P<ConditionalRoot>, mapper: Option<P<TypeMapper>>, for_constraint: bool, alias: Option<P<TypeAlias>>) -> P<Type> {
+    pub(crate) fn get_conditional_type(&mut self, root: P<ConditionalRoot>, mapper: Option<P<TypeMapper>>, for_constraint: bool, alias: Option<TypeAliasKey>) -> P<Type> {
         let census_span = self.census_begin(crate::workcensus::Cat::Cond, || crate::workcensus::CKey::Root(root));
         let result = self.get_conditional_type_worker(root, mapper, for_constraint, alias);
         if let Some(t) = self.census_end(census_span) {
@@ -1024,7 +1032,7 @@ impl Checker {
         result
     }
 
-    fn get_conditional_type_worker(&mut self, root: P<ConditionalRoot>, mapper: Option<P<TypeMapper>>, for_constraint: bool, alias: Option<P<TypeAlias>>) -> P<Type> {
+    fn get_conditional_type_worker(&mut self, root: P<ConditionalRoot>, mapper: Option<P<TypeMapper>>, for_constraint: bool, alias: Option<TypeAliasKey>) -> P<Type> {
         let mut root = root;
         let mut mapper = mapper;
         let mut alias = alias;
@@ -2036,14 +2044,14 @@ impl Checker {
     }
 
     // checker.go:25591
-    pub(crate) fn create_deferred_type_reference(&mut self, target: P<Type>, node: P<Node>, mapper: Option<P<TypeMapper>>, alias: Option<P<TypeAlias>>) -> P<Type> {
+    pub(crate) fn create_deferred_type_reference(&mut self, target: P<Type>, node: P<Node>, mapper: Option<P<TypeMapper>>, alias: Option<TypeAliasKey>) -> P<Type> {
         let mut alias = alias;
         if alias.is_none() {
             alias = self.get_alias_for_type_node(node);
             if let Some(a) = alias {
                 if mapper.is_some() {
-                    let type_arguments = self.instantiate_types(&a.type_arguments.get(), mapper);
-                    a.type_arguments.set_owned(type_arguments);
+                    let type_arguments = self.instantiate_types(&a.type_arguments(self), mapper);
+                    self.type_alias(a).set_type_arguments(type_arguments);
                 }
             }
         }
@@ -2562,7 +2570,7 @@ impl Checker {
     }
 
     // checker.go:26024
-    pub(crate) fn map_type_with_alias(&mut self, t: P<Type>, f: impl FnMut(&mut Checker, P<Type>) -> P<Type>, alias: Option<P<TypeAlias>>) -> P<Type> {
+    pub(crate) fn map_type_with_alias(&mut self, t: P<Type>, f: impl FnMut(&mut Checker, P<Type>) -> P<Type>, alias: Option<TypeAliasKey>) -> P<Type> {
         let mut f = f;
         if t.flags().intersects(TypeFlags::Union) && alias.is_some() {
             let types: Vec<P<Type>> = t.types().iter().map(|&t| f(self, t)).collect();
@@ -2667,7 +2675,7 @@ impl Checker {
             if id1 > id2 {
                 std::mem::swap(&mut id1, &mut id2);
             }
-            let key = UnionOfUnionKey { id1, id2, r: union_reduction, a: get_alias_key(alias) };
+            let key = UnionOfUnionKey { id1, id2, r: union_reduction, a: get_alias_key(self, alias) };
             let mut t = self.union_of_union_types.get(&key).copied();
             if t.is_none() {
                 let too_complex_before = self.too_complex_reports;

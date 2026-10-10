@@ -344,9 +344,9 @@ const REL_NAMES: [&str; 6] = ["assignable", "comparable", "subtype", "strictSubt
 const KIND_LABELS: [&str; 12] =
     ["object", "union", "intersection", "literal", "type-parameter", "indexed-access", "conditional", "substitution", "index", "template-literal", "primitive", "other"];
 
-pub(crate) fn type_identity(t: P<Type>) -> (Option<P<Symbol>>, u8) {
+pub(crate) fn type_identity(c: &Checker, t: P<Type>) -> (Option<P<Symbol>>, u8) {
     if let Some(alias) = t.alias() {
-        if let Some(s) = alias.symbol() {
+        if let Some(s) = c.type_alias(alias).symbol() {
             return (Some(s), 0);
         }
     }
@@ -436,12 +436,12 @@ fn node_label(node: P<Node>) -> String {
 }
 
 impl CKey {
-    fn label(self) -> String {
+    fn label(self, c: &Checker) -> String {
         match self {
             CKey::None => "-".to_string(),
             CKey::Root(root) => {
                 let node_part = root.node.get().map(node_label).unwrap_or_default();
-                match root.alias.get().and_then(|a| a.symbol()) {
+                match root.alias.get().and_then(|a| c.type_alias(a).symbol()) {
                     Some(s) => format!("alias {} | {node_part}", s.name()),
                     None => format!("(no alias) {node_part}"),
                 }
@@ -540,13 +540,13 @@ impl Checker {
         let mut rows: Vec<((Cat, CKey), Stat)> = c.stats.iter().map(|(k, v)| (*k, *v)).collect();
         rows.sort_by_key(|((cat, _), s)| (*cat, std::cmp::Reverse(s.incl_ns), std::cmp::Reverse(s.count)));
         for ((cat, key), s) in rows {
-            let e = g.stats.entry((cat, key.label())).or_default();
+            let e = g.stats.entry((cat, key.label(self))).or_default();
             add_stat(e, &s);
         }
         let mut fan: Vec<((P<ConditionalRoot>, u32), Stat)> = c.fanout.iter().map(|(k, v)| (*k, *v)).collect();
         fan.sort_by_key(|(_, s)| std::cmp::Reverse(s.incl_ns));
         for ((root, b), s) in fan {
-            let e = g.fanout.entry((CKey::Root(root).label(), b)).or_default();
+            let e = g.fanout.entry((CKey::Root(root).label(self), b)).or_default();
             add_stat(e, &s);
         }
         g.rel_pairs_total += c.rel_pairs.len() as u64;
@@ -581,7 +581,7 @@ impl Checker {
         let mut rows: Vec<(Option<P<Node>>, Stat)> = by_callee.into_iter().collect();
         rows.sort_by_key(|(_, s)| std::cmp::Reverse(s.incl_ns));
         for (decl, s) in rows.into_iter().take(200) {
-            add_stat(g.infer_repeat_by_callee.entry(CKey::OptNode(decl).label()).or_default(), &s);
+            add_stat(g.infer_repeat_by_callee.entry(CKey::OptNode(decl).label(self)).or_default(), &s);
         }
         for (i, s) in c.flow_hist.iter().enumerate() {
             add_stat(&mut g.flow_hist[i], s);

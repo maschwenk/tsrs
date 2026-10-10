@@ -1585,7 +1585,7 @@ impl Checker {
     pub(crate) fn is_awaited_type_instantiation(&mut self, t: P<Type>) -> bool {
         if t.flags().intersects(TypeFlags::Conditional) {
             let awaited_symbol = self.get_global_awaited_symbol_or_nil();
-            return awaited_symbol.is_some() && t.alias().is_some_and(|alias| alias.symbol.get() == awaited_symbol && alias.type_arguments.get().len() == 1);
+            return awaited_symbol.is_some() && t.alias().is_some_and(|alias| self.type_alias(alias).symbol() == awaited_symbol && self.type_alias(alias).type_arguments().len() == 1);
         }
         false
     }
@@ -1646,7 +1646,7 @@ impl Checker {
         if t.flags().intersects(TypeFlags::Union) {
             return self.map_type(t, |c, t| Some(c.unwrap_awaited_type(t))).unwrap();
         } else if self.is_awaited_type_instantiation(t) {
-            return t.alias().unwrap().type_arguments.get()[0];
+            return t.alias().unwrap().type_arguments(self)[0];
         }
         t
     }

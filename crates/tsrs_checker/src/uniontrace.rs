@@ -41,7 +41,7 @@ pub(crate) struct Checkpoint {
 /// One trace line for the reduction of `input` (in the union's order) that kept `kept`: everything the reduction
 /// returned, or what was left when it gave up with TS2590. `comparisons` is `None` for an answer from the cache.
 pub(crate) fn report(c: &Checker, input: &[P<Type>], kept: &[P<Type>], verdict: &str, comparisons: Option<i64>, checkpoint: Option<Checkpoint>) {
-    let described: Vec<String> = input.iter().map(|&t| describe(t)).collect();
+    let described: Vec<String> = input.iter().map(|&t| describe(c, t)).collect();
     let mut sorted = described.clone();
     sorted.sort_unstable();
     let kept: FxHashSet<P<Type>> = kept.iter().copied().collect();
@@ -72,13 +72,13 @@ pub(crate) fn report_cross_product(c: &Checker, types: &[P<Type>], size: i32) {
     let mut line = format!("tsrs cross product: checker {} at {} while checking {} | size {size}, {verdict}", c.id, location(c.current_node), checking_file(c));
     for &t in types {
         if t.flags().intersects(TypeFlags::Union) {
-            let described: Vec<String> = t.types().iter().map(|&m| describe(m)).collect();
+            let described: Vec<String> = t.types().iter().map(|&m| describe(c, m)).collect();
             let mut sorted = described.clone();
             sorted.sort_unstable();
             let head: Vec<&str> = described.iter().take(2).map(String::as_str).collect();
             let _ = write!(line, " | union {} set {:016x} order {:016x} first [{}]", described.len(), fingerprint(&sorted), fingerprint(&described), head.join("; "));
         } else {
-            let _ = write!(line, " | {}", describe(t));
+            let _ = write!(line, " | {}", describe(c, t));
         }
     }
     eprintln!("{line}");
@@ -125,18 +125,18 @@ fn location(node: Option<P<Node>>) -> String {
     format!("{}({},{})", relative(file.file_name()), line + 1, character + 1)
 }
 
-fn describe(t: P<Type>) -> String {
+fn describe(c: &Checker, t: P<Type>) -> String {
     let mut out = String::new();
-    describe_into(t, 3, &mut out);
+    describe_into(c, t, 3, &mut out);
     out
 }
 
-fn describe_into(t: P<Type>, depth: u32, out: &mut String) {
+fn describe_into(c: &Checker, t: P<Type>, depth: u32, out: &mut String) {
     let _ = write!(out, "{:x}", t.flags().bits());
     if t.flags().intersects(TypeFlags::Object) {
         let _ = write!(out, "/{:x}", (t.object_flags() & ObjectFlags::ObjectTypeKindMask).bits());
     }
-    if let Some(symbol) = t.alias().and_then(|a| a.symbol.get()) {
+    if let Some(symbol) = t.alias().and_then(|a| c.type_alias(a).symbol()) {
         out.push_str(" alias ");
         describe_symbol(symbol, out);
     }
@@ -170,7 +170,7 @@ fn describe_into(t: P<Type>, depth: u32, out: &mut String) {
             if i > 0 {
                 out.push(',');
             }
-            describe_into(n, depth - 1, out);
+            describe_into(c, n, depth - 1, out);
         }
         out.push('>');
     }

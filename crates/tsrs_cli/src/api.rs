@@ -441,12 +441,16 @@ mod tests {
 mod memory_tests {
     use super::*;
     use tsrs_api::{Handler, Response};
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
     use tsrs_core::json::{self, Value};
 
+    // RSS assertions require glibc's allocator and Linux /proc; other platforms run the output case only.
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
     unsafe extern "C" {
         fn malloc_trim(pad: usize) -> i32;
     }
 
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
     fn rss_kib() -> u64 {
         // SAFETY: glibc `malloc_trim` has no preconditions.
         unsafe { malloc_trim(0) };
@@ -511,6 +515,7 @@ mod memory_tests {
     }
 
     /// Repeated rebuilds on one API build handle (an edit between builds forces a real program build).
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
     #[test]
     fn repeated_builds_memory() {
         let _serial = super::BUILD_TESTS.lock().unwrap_or_else(|e| e.into_inner());
@@ -552,6 +557,7 @@ mod memory_tests {
     /// A build that unwinds (moduleResolution with no named kind: the module resolver's `Unexpected
     /// moduleResolution` panic, answered as a client error) must free its fresh orchestrator (codec d9be067 review:
     /// ~9 MiB leaked per failed build), and the retained orchestrator keeps working.
+    #[cfg(all(target_os = "linux", target_env = "gnu"))]
     #[test]
     fn failed_builds_free_their_orchestrator() {
         let _serial = super::BUILD_TESTS.lock().unwrap_or_else(|e| e.into_inner());

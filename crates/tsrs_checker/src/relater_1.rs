@@ -1239,7 +1239,7 @@ impl Checker {
                     if overlap_obj_flags.intersects(ObjectFlags::Anonymous)
                         && source.alias().is_some()
                         && target.alias().is_some()
-                        && source.alias().unwrap().symbol() == target.alias().unwrap().symbol()
+                        && source.alias().unwrap().symbol(self) == target.alias().unwrap().symbol(self)
                     {
                         return Some(target);
                     }

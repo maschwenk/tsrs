@@ -128,6 +128,13 @@ Qualified keys cannot dereference themselves or select another owner's slot. Sig
 index-info arrays store keys. Predicate metadata is immutable; index-symbol caching retains its cell. The type,
 symbol and AST entries inside these records remain legacy graph edges (`notes/rust-typed-metadata.md`).
 
+Type-alias records also live in a checker-owned typed vector. Type headers, conditional roots and pending aliases
+retain `TypeAliasKey` values, and readers borrow `Checker::type_alias`. Hash helpers receive the checker or alias
+store explicitly; they still hash symbol/type semantic IDs, never storage slots. Pending aliases materialize once
+only when a type is created. Deferred references may replace an alias's argument list, so retain its `ArrayView`
+before recursive mutation. The API alias-symbol property acquires the persistent checker before resolving the
+key. Alias symbol/type referents remain legacy (`notes/rust-typed-alias.md`).
+
 Build orchestrators and their hosts use `Arc`; the host's back-reference is weak. Returned build outcomes retain
 the actual orchestrator, including programs whose diagnostics they expose, through conversion to an API response.
 There is no manual orchestrator free or raw box reconstruction. Build tasks are Rust-owned records in a typed

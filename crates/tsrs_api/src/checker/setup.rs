@@ -144,7 +144,7 @@ impl<'h> Setup<'h> {
     /// Go `snapshotData.newTypeResponse(projectID, t, checker)`.
     pub(crate) fn type_response(&mut self, t: P<Type>) -> CheckerResult<Value> {
         let id = self.register_type(t)?;
-        let mut o = type_response_base(t, id);
+        let mut o = type_response_base(&self.checker, t, id);
         // The port answers member queries on instantiated references through lazy member tables without
         // setting MembersResolved; report the flag where pinned Go's resolveStructuredTypeMembers would have
         // set it (only when such a query actually happened, never for unresolved types).
@@ -157,7 +157,7 @@ impl<'h> Setup<'h> {
         if let Some(symbol) = t.symbol() {
             o.set("symbol", compact_symbol_reference(self.sd.host, symbol)?);
         }
-        if let Some(alias_symbol) = t.alias().and_then(|a| a.symbol()) {
+        if let Some(alias_symbol) = t.alias().and_then(|a| self.checker.type_alias(a).symbol()) {
             o.set("aliasSymbol", compact_symbol_reference(self.sd.host, alias_symbol)?);
         }
         if t.object_flags().intersects(ObjectFlags::Mapped) {
@@ -305,7 +305,7 @@ pub(crate) fn compact_symbol_reference(host: &dyn CheckerHost, symbol: P<Symbol>
 }
 
 /// Go package-level `newTypeResponse(t, id)` (everything except symbol/alias symbol/mapped/tuple labels).
-fn type_response_base(t: P<Type>, id: u32) -> Obj {
+fn type_response_base(c: &Checker, t: P<Type>, id: u32) -> Obj {
     let mut o = Obj::new();
     o.num("id", id as f64);
     let flags = t.flags();
@@ -381,7 +381,7 @@ fn type_response_base(t: P<Type>, id: u32) -> Obj {
     o.set("value", value);
     o.nonzero("target", target as f64);
     if let Some(alias) = t.alias() {
-        late.ids("aliasTypeArguments", alias.type_arguments().iter().map(|x| x.id().0 as f64));
+        late.ids("aliasTypeArguments", c.type_alias(alias).type_arguments().iter().map(|x| x.id().0 as f64));
     }
     o.extend(late);
     if !flags.intersects(TypeFlags::TypeParameter) {

@@ -1114,11 +1114,11 @@ impl Checker {
             }
         }
         if let Some(alias) = t.alias() {
-            let alias_symbol = alias.symbol().unwrap();
+            let alias_symbol = alias.symbol(self).unwrap();
             if is_known_generic_type_name(alias_symbol.name()) {
                 let symbol = self.get_global_symbol(alias_symbol.name(), SymbolFlags::Type, None);
                 if symbol == Some(alias_symbol) {
-                    return alias.type_arguments().first().copied();
+                    return alias.type_arguments(self).first().copied();
                 }
             }
         }

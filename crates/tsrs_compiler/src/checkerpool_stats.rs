@@ -243,7 +243,7 @@ fn created_by_file(program: &Program, pool: &crate::checkerpool::checkerPool) ->
         let mut symbols = vec![0u64; files.len()];
         let (mut no_type_file, mut no_symbol_file) = (0, 0);
         for &t in &c.stats_created.0 {
-            let symbol = t.symbol().or_else(|| t.alias().and_then(|a| a.symbol.get()));
+            let symbol = t.symbol().or_else(|| t.alias().and_then(|a| c.type_alias(a).symbol()));
             match file_of(symbol) {
                 Some(i) => types[i] += 1,
                 None => no_type_file += 1,

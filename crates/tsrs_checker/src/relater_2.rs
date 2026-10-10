@@ -526,15 +526,13 @@ impl Relater {
         if !c.census_on() {
             return self.type_related_to_some_type_worker(c, source, target, report_errors, intersection_state, &mut (0, 0, 0));
         }
-        let span = c.census_begin(crate::workcensus::Cat::RelUnion, || {
-            let (sym, label) = crate::workcensus::type_identity(target);
-            crate::workcensus::CKey::Rel(0, sym, label)
-        });
+        let (sym, label) = crate::workcensus::type_identity(c, target);
+        let span = c.census_begin(crate::workcensus::Cat::RelUnion, || crate::workcensus::CKey::Rel(0, sym, label));
         let mut outcome = (0u8, 0u8, 0u32);
         let r = self.type_related_to_some_type_worker(c, source, target, report_errors, intersection_state, &mut outcome);
         let timing = c.census_end(span).unwrap();
         let k = crate::workcensus::rel_kind(c, self.rel());
-        let (sym, label) = crate::workcensus::type_identity(target);
+        let (sym, label) = crate::workcensus::type_identity(c, target);
         let n = target.types().len();
         let source_kind = if is_object_literal_type(source) && source.object_flags().intersects(ObjectFlags::FreshLiteral) {
             0
@@ -902,11 +900,12 @@ impl Relater {
     #[cfg_attr(not(feature = "work-census"), inline(always), expect(clippy::inline_always, reason = "without the census the wrapper is a forwarding call; inlined, callers call the body as before (notes/perf-checker-algorithms.md)"))]
     pub(crate) fn structured_type_related_to(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, intersection_state: IntersectionState) -> Ternary {
         if c.census_on() {
-            let span = c.census_begin(crate::workcensus::Cat::Rel, || { let (sym, label) = crate::workcensus::type_identity(target); crate::workcensus::CKey::Rel(0, sym, label) });
+            let (sym, label) = crate::workcensus::type_identity(c, target);
+            let span = c.census_begin(crate::workcensus::Cat::Rel, || crate::workcensus::CKey::Rel(0, sym, label));
             let r = self.structured_type_related_to_body(c, source, target, report_errors, intersection_state);
             let timing = c.census_end(span).unwrap();
             let k = crate::workcensus::rel_kind(c, self.rel());
-            let (sym, label) = crate::workcensus::type_identity(target);
+            let (sym, label) = crate::workcensus::type_identity(c, target);
             let census = c.census.as_mut().unwrap();
             if (((source.id.0 as u64) << 32 | target.id.0 as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 61) == 0 {
                 *census.rel_pairs.entry((source.id.0, target.id.0)).or_default() |= 1 << k;
@@ -1143,12 +1142,12 @@ impl Relater {
         // the order in which things were checked.
         if source.flags().intersects(TypeFlags::Object | TypeFlags::Conditional)
             && source.alias().is_some()
-            && !source.alias().unwrap().type_arguments().is_empty()
+            && !source.alias().unwrap().type_arguments(c).is_empty()
             && target.alias().is_some()
-            && source.alias().unwrap().symbol() == target.alias().unwrap().symbol()
+            && source.alias().unwrap().symbol(c) == target.alias().unwrap().symbol(c)
             && !(c.is_marker_type(source) || c.is_marker_type(target))
         {
-            let alias_symbol = source.alias().unwrap().symbol().unwrap();
+            let alias_symbol = source.alias().unwrap().symbol(c).unwrap();
             let variances = c.get_alias_variances(alias_symbol);
             if variances.is_empty() {
                 return Ternary::Unknown;
@@ -1156,8 +1155,8 @@ impl Relater {
             let params = c.type_alias_links.get(alias_symbol).type_parameters.get();
             let min_params = c.get_min_type_argument_count(&params);
             let node_is_in_js_file = is_in_js_file(alias_symbol.value_declaration());
-            let source_types = c.fill_missing_type_arguments(&source.alias().unwrap().type_arguments(), &params, min_params, node_is_in_js_file);
-            let target_types = c.fill_missing_type_arguments(&target.alias().unwrap().type_arguments(), &params, min_params, node_is_in_js_file);
+            let source_types = c.fill_missing_type_arguments(&source.alias().unwrap().type_arguments(c), &params, min_params, node_is_in_js_file);
+            let target_types = c.fill_missing_type_arguments(&target.alias().unwrap().type_arguments(c), &params, min_params, node_is_in_js_file);
             let (variance_result, ok) = self.relate_variances(c, &source_types, &target_types, &variances, intersection_state, report_errors, &save_error_state, &mut result, &mut variance_check_failed, &mut original_error_chain);
             if ok {
                 return variance_result;

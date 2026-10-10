@@ -699,56 +699,78 @@ bitflags! {
 
 // TypeAlias
 
+pub type TypeAliasKey = tsrs_core::arena_owner::ArenaKey<TypeAlias>;
+
 #[derive(Default)]
 pub struct TypeAlias {
-    pub symbol: Cell<Option<P<Symbol>>>,
-    pub type_arguments: ArrayCell<P<Type>>,
+    symbol: Option<P<Symbol>>,
+    type_arguments: ArrayCell<P<Type>>,
 }
 
+const _: () = assert!(std::mem::size_of::<TypeAlias>() == if cfg!(target_pointer_width = "64") { 16 } else { 8 });
+
 impl TypeAlias {
+    pub(crate) fn new(symbol: Option<P<Symbol>>, type_arguments: &[P<Type>]) -> Self {
+        Self { symbol, type_arguments: ArrayCell::new(type_arguments) }
+    }
+
     pub fn symbol(&self) -> Option<P<Symbol>> {
-        self.symbol.get()
+        self.symbol
     }
     pub fn type_arguments(&self) -> ArrayView<P<Type>> {
         self.type_arguments.get()
+    }
+
+    pub(crate) fn set_type_arguments(&self, type_arguments: Vec<P<Type>>) {
+        self.type_arguments.set_owned(type_arguments);
     }
 }
 
 /// The alias argument of the type constructors that look up a cache before they create a type (union,
 /// intersection, indexed access, object type instantiation; Go passes a `*TypeAlias`). `Pending` is an instantiated
 /// alias (Go's `instantiateTypeAlias` result) that is allocated only when a type is created with it: the cache key
-/// needs only its symbol and type arguments, and most calls return a cached type (on the private monorepo 1.79M of the 2.34M
+/// needs only its symbol and type arguments, and most calls return a cached type (on the 38k-file codebase 1.79M of the 2.34M
 /// instantiated aliases were dropped that way). A pending alias is allocated at most once, so every type created
 /// with it shares one `TypeAlias`, as before.
 #[derive(Clone, Copy, Default)]
 pub enum AliasArg<'a> {
     #[default]
     None,
-    Some(P<TypeAlias>),
+    Some(TypeAliasKey),
     Pending(&'a PendingTypeAlias),
 }
 
 pub struct PendingTypeAlias {
     pub(crate) symbol: Option<P<Symbol>>,
     pub(crate) type_arguments: Vec<P<Type>>,
-    alias: Cell<Option<P<TypeAlias>>>,
+    alias: Cell<Option<TypeAliasKey>>,
 }
 
 impl PendingTypeAlias {
     pub fn new(symbol: Option<P<Symbol>>, type_arguments: Vec<P<Type>>) -> PendingTypeAlias {
         PendingTypeAlias { symbol, type_arguments, alias: Cell::new(None) }
     }
+
+    fn materialize(&self, aliases: &mut tsrs_core::arena_owner::ArenaBuilder<TypeAlias>) -> TypeAliasKey {
+        if let Some(key) = self.alias.get() {
+            aliases.get(key).expect("pending type alias belongs to another checker");
+            return key;
+        }
+        let key = aliases.alloc(TypeAlias::new(self.symbol, &self.type_arguments));
+        self.alias.set(Some(key));
+        key
+    }
 }
 
-impl From<Option<P<TypeAlias>>> for AliasArg<'_> {
-    fn from(alias: Option<P<TypeAlias>>) -> Self {
+impl From<Option<TypeAliasKey>> for AliasArg<'_> {
+    fn from(alias: Option<TypeAliasKey>) -> Self {
         alias.map_or(AliasArg::None, AliasArg::Some)
     }
 }
 
 impl<'a> AliasArg<'a> {
     /// `alias` if given, else the pending one (Go: `if alias == nil { alias = c.instantiateTypeAlias(...) }`).
-    pub fn given_or_pending(alias: Option<P<TypeAlias>>, pending: &'a Option<PendingTypeAlias>) -> AliasArg<'a> {
+    pub fn given_or_pending(alias: Option<TypeAliasKey>, pending: &'a Option<PendingTypeAlias>) -> AliasArg<'a> {
         match (alias, pending) {
             (Some(alias), _) => AliasArg::Some(alias),
             (None, Some(pending)) => AliasArg::Pending(pending),
@@ -761,31 +783,39 @@ impl<'a> AliasArg<'a> {
     }
 
     /// The alias to store in a created type: a pending alias is allocated on the first call.
-    pub fn alias(self) -> Option<P<TypeAlias>> {
+    pub fn alias(self, c: &mut Checker) -> Option<TypeAliasKey> {
         match self {
             AliasArg::None => None,
-            AliasArg::Some(a) => Some(a),
-            AliasArg::Pending(p) => Some(p.alias.get().unwrap_or_else(|| {
-                let a = P::new(TypeAlias { symbol: Cell::new(p.symbol), type_arguments: ArrayCell::new(&p.type_arguments) });
-                p.alias.set(Some(a));
-                a
-            })),
+            AliasArg::Some(a) => {
+                c.type_alias(a);
+                Some(a)
+            }
+            AliasArg::Pending(p) => Some(p.materialize(&mut c.type_aliases)),
         }
     }
 }
 
-/// Go's nil-receiver `(*TypeAlias).Symbol()` / `TypeArguments()`: `t.alias().symbol()` works on `Option<P<TypeAlias>>`.
+/// Go's nil-receiver `(*TypeAlias).Symbol()` / `TypeArguments()`, resolved through the owning checker.
 pub trait TypeAliasOptExt {
-    fn symbol(self) -> Option<P<Symbol>>;
-    fn type_arguments(self) -> ArrayView<P<Type>>;
+    fn symbol(self, c: &Checker) -> Option<P<Symbol>>;
+    fn type_arguments(self, c: &Checker) -> ArrayView<P<Type>>;
 }
 
-impl TypeAliasOptExt for Option<P<TypeAlias>> {
-    fn symbol(self) -> Option<P<Symbol>> {
-        self.and_then(|a| a.symbol.get())
+impl TypeAliasOptExt for Option<TypeAliasKey> {
+    fn symbol(self, c: &Checker) -> Option<P<Symbol>> {
+        self.and_then(|a| c.type_alias(a).symbol())
     }
-    fn type_arguments(self) -> ArrayView<P<Type>> {
-        self.map_or_else(ArrayView::default, |a| a.type_arguments.get())
+    fn type_arguments(self, c: &Checker) -> ArrayView<P<Type>> {
+        self.map_or_else(ArrayView::default, |a| c.type_alias(a).type_arguments())
+    }
+}
+
+impl TypeAliasOptExt for TypeAliasKey {
+    fn symbol(self, c: &Checker) -> Option<P<Symbol>> {
+        c.type_alias(self).symbol()
+    }
+    fn type_arguments(self, c: &Checker) -> ArrayView<P<Type>> {
+        c.type_alias(self).type_arguments()
     }
 }
 
@@ -798,11 +828,11 @@ pub struct Type {
     pub object_flags: Cell<ObjectFlags>,
     pub id: TypeId,
     symbol: Cell<Option<P<Symbol>>>,
-    alias: Cell<Option<P<TypeAlias>>>,
+    alias: Cell<Option<TypeAliasKey>>,
     data: OwnedTypeData,
 }
 
-const _: () = assert!(std::mem::size_of::<Type>() == if cfg!(target_pointer_width = "64") { 48 } else { 28 });
+const _: () = assert!(std::mem::size_of::<Type>() == if cfg!(target_pointer_width = "64") { 48 } else { 32 });
 
 #[repr(C, u8)]
 pub(crate) enum OwnedTypeData {
@@ -1400,9 +1430,9 @@ impl Type {
     pub fn set_symbol(&self, symbol: Option<P<Symbol>>) { self.symbol.set(symbol); }
 
     #[inline]
-    pub fn alias(&self) -> Option<P<TypeAlias>> { self.alias.get() }
+    pub fn alias(&self) -> Option<TypeAliasKey> { self.alias.get() }
 
-    pub fn set_alias(&self, alias: Option<P<TypeAlias>>) { self.alias.set(alias); }
+    pub fn set_alias(&self, alias: Option<TypeAliasKey>) { self.alias.set(alias); }
 
     pub fn is_union(&self) -> bool {
         self.flags.get().intersects(TypeFlags::Union)
@@ -2405,7 +2435,7 @@ pub struct ConditionalRoot {
     pub infer_type_parameters: ArrayCell<P<Type>>,
     pub outer_type_parameters: ArrayCell<P<Type>>,
     pub instantiations: OwnedPackedMap<CacheHashKey, P<Type>>,
-    pub alias: Cell<Option<P<TypeAlias>>>,
+    pub alias: Cell<Option<TypeAliasKey>>,
 }
 
 #[derive(Default)]
@@ -2742,6 +2772,57 @@ pub type StringLiteralType = Type;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pending_alias_hashes_without_allocation_and_materializes_once_in_its_owner() {
+        let region = tsrs_core::arena::Region::new(4096);
+        let _scope = region.enter();
+        let symbol = Symbol::new(SymbolFlags::TypeAlias, "Alias");
+        let t = Type::alloc(TypeFlags::Any, ObjectFlags::None, TypeId(1), IntrinsicType::default());
+        let pending = PendingTypeAlias::new(Some(symbol), vec![t]);
+        let mut aliases = tsrs_core::arena_owner::ArenaBuilder::with_capacity(1);
+        let mut hash = keyBuilder::default();
+        hash.write_alias_arg(&aliases, AliasArg::Pending(&pending));
+        let pending_hash = hash.hash();
+        assert!(pending.alias.get().is_none());
+        assert_eq!(aliases.len(), 0);
+        let key = pending.materialize(&mut aliases);
+        for _ in 0..128 {
+            aliases.alloc(TypeAlias::default());
+        }
+        assert_eq!(pending.materialize(&mut aliases), key);
+        assert_eq!(aliases.len(), 129);
+        let mut hash = keyBuilder::default();
+        hash.write_alias_arg(&aliases, AliasArg::Some(key));
+        assert_eq!(hash.hash(), pending_hash);
+        let mut foreign = tsrs_core::arena_owner::ArenaBuilder::new();
+        let other = foreign.alloc(TypeAlias::new(Some(symbol), &[t]));
+        assert_ne!(key, other);
+        assert!(aliases.get(other).is_none());
+        assert!(foreign.get(key).is_none());
+        let mut hash = keyBuilder::default();
+        hash.write_alias_arg(&foreign, AliasArg::Some(other));
+        assert_eq!(hash.hash(), pending_hash);
+        assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| pending.materialize(&mut foreign))).is_err());
+    }
+
+    #[test]
+    fn alias_argument_snapshots_survive_deferred_replacement_and_store_destruction() {
+        let region = tsrs_core::arena::Region::new(4096);
+        let _scope = region.enter();
+        let t1 = Type::alloc(TypeFlags::Any, ObjectFlags::None, TypeId(1), IntrinsicType::default());
+        let t2 = Type::alloc(TypeFlags::Unknown, ObjectFlags::None, TypeId(2), IntrinsicType::default());
+        let mut aliases = tsrs_core::arena_owner::ArenaBuilder::new();
+        let key = aliases.alloc(TypeAlias::new(None, &[t1]));
+        let before = aliases.get(key).unwrap().type_arguments();
+        aliases.get(key).unwrap().set_type_arguments(vec![t2]);
+        let after = aliases.get(key).unwrap().type_arguments();
+        drop(aliases);
+        assert_eq!(before.as_ref(), &[t1]);
+        assert_eq!(after.as_ref(), &[t2]);
+        assert_eq!(before[0].id.0, 1);
+        assert_eq!(after[0].id.0, 2);
+    }
 
     #[test]
     fn index_metadata_key_keeps_cache_identity_after_store_growth() {

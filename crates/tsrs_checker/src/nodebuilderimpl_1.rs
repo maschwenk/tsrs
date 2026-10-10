@@ -104,7 +104,7 @@ impl NodeBuilderImpl {
     // nodebuilderimpl.go:175
     pub(crate) fn is_expandable_type(&self, c: &mut Checker, t: P<Type>, is_alias: bool) -> bool {
         if is_alias {
-            return !c.is_lib_symbol_for_hover_verbosity(t.alias().symbol());
+            return !c.is_lib_symbol_for_hover_verbosity(t.alias().symbol(c));
         }
         if c.is_lib_type_for_hover_verbosity(t) {
             return false;

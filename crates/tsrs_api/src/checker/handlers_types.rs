@@ -181,7 +181,7 @@ pub(crate) fn resolve_type_array_property(host: &dyn CheckerHost, p: &Params, pr
         TypeArrayProperty::TypeParameters => interface_of(&t)?.type_parameters(),
         TypeArrayProperty::OuterTypeParameters => interface_of(&t)?.outer_type_parameters(),
         TypeArrayProperty::LocalTypeParameters => interface_of(&t)?.local_type_parameters(),
-        TypeArrayProperty::AliasTypeArguments => t.alias().map_or_else(tsrs_checker::ArrayView::default, |a| a.type_arguments()),
+        TypeArrayProperty::AliasTypeArguments => t.alias().map_or_else(tsrs_checker::ArrayView::default, |a| s.checker.type_alias(a).type_arguments()),
     };
     if types.is_empty() {
         return Ok(Value::Array(Vec::new())); // Go nil slice: json/v2 encodes []
@@ -195,15 +195,17 @@ pub(crate) enum TypeSymbolProperty {
     AliasSymbol,
 }
 
-/// Go `resolveSymbolPropertyOfType` (no checker).
+/// Go `resolveSymbolPropertyOfType`; alias metadata is borrowed from its owning checker.
 pub(crate) fn resolve_type_symbol_property(host: &dyn CheckerHost, p: &Params, property: TypeSymbolProperty) -> CheckerResult<Value> {
+    if let TypeSymbolProperty::AliasSymbol = property {
+        let s = setup(host, p)?;
+        let t = s.resolve_type(p.u32("objectId")?)?;
+        let result = t.alias().and_then(|a| s.checker.type_alias(a).symbol());
+        return s.opt_symbol_response(result);
+    }
     let sd = SnapshotCtx::new(host, p.u64("snapshot")?, p.project()?)?;
     let t = sd.resolve_type(p.u32("objectId")?, None)?;
-    let result = match property {
-        TypeSymbolProperty::Symbol => t.symbol(),
-        TypeSymbolProperty::AliasSymbol => t.alias().and_then(|a| a.symbol()),
-    };
-    match result {
+    match t.symbol() {
         Some(symbol) => sd.symbol_response(symbol, &sd.project),
         None => Ok(Value::Null),
     }

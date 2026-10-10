@@ -73,7 +73,7 @@ impl Dumper {
     fn table(&mut self, tag: &str, t: Option<P<SymbolTable>>) {
         let Some(t) = t else { return };
         let mut entries = t.entries();
-        entries.sort_by(|a, b| printed_name(a.0).cmp(&printed_name(b.0)));
+        entries.sort_by(|a, b| printed_name(&a.0).cmp(&printed_name(&b.0)));
         let _ = write!(self.sb, " {}{{", tag);
         for (i, (name, symbol)) in entries.iter().enumerate() {
             if i > 0 {

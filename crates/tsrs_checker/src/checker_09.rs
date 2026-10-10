@@ -459,29 +459,29 @@ impl keyBuilder {
 
     // checker.go:17781
     #[inline]
-    pub(crate) fn write_alias(&mut self, alias: Option<P<TypeAlias>>) {
-        self.write_alias_arg(alias.into());
+    pub(crate) fn write_alias(&mut self, aliases: &tsrs_core::arena_owner::ArenaBuilder<TypeAlias>, alias: Option<TypeAliasKey>) {
+        self.write_alias_arg(aliases, alias.into());
     }
 
     /// `write_alias` of an `AliasArg` (a pending alias writes the same bytes as the alias it stands for). Most keys
     /// have no alias; that byte is written inline.
     #[inline]
-    pub(crate) fn write_alias_arg(&mut self, alias: AliasArg<'_>) {
+    pub(crate) fn write_alias_arg(&mut self, aliases: &tsrs_core::arena_owner::ArenaBuilder<TypeAlias>, alias: AliasArg<'_>) {
         match alias {
             AliasArg::None => self.write_byte(0),
-            _ => self.write_some_alias_arg(alias),
+            _ => self.write_some_alias_arg(aliases, alias),
         }
     }
 
     #[inline(never)]
-    fn write_some_alias_arg(&mut self, alias: AliasArg<'_>) {
+    fn write_some_alias_arg(&mut self, aliases: &tsrs_core::arena_owner::ArenaBuilder<TypeAlias>, alias: AliasArg<'_>) {
         let stored_arguments = match alias {
-            AliasArg::Some(alias) => Some(alias.type_arguments.get()),
+            AliasArg::Some(alias) => Some(aliases.get(alias).expect("type alias belongs to another checker").type_arguments()),
             _ => None,
         };
         let (symbol, type_arguments) = match alias {
             AliasArg::None => unreachable!("write_alias_arg writes a missing alias"),
-            AliasArg::Some(alias) => (alias.symbol.get(), stored_arguments.as_deref().unwrap()),
+            AliasArg::Some(alias) => (aliases.get(alias).expect("type alias belongs to another checker").symbol(), stored_arguments.as_deref().unwrap()),
             AliasArg::Pending(pending) => (pending.symbol, pending.type_arguments.as_slice()),
         };
         self.write_byte(1);
@@ -558,14 +558,14 @@ pub(crate) fn get_type_list_key(types: &[P<Type>]) -> CacheHashKey {
 }
 
 // checker.go:17842
-pub(crate) fn get_alias_key(alias: AliasArg<'_>) -> CacheHashKey {
+pub(crate) fn get_alias_key(c: &Checker, alias: AliasArg<'_>) -> CacheHashKey {
     let mut b = keyBuilder::default();
-    b.write_alias_arg(alias);
+    b.write_alias_arg(&c.type_aliases, alias);
     b.hash()
 }
 
 // checker.go:17848
-pub(crate) fn get_union_key(types: &[P<Type>], origin: Option<P<Type>>, alias: AliasArg<'_>) -> CacheHashKey {
+pub(crate) fn get_union_key(c: &Checker, types: &[P<Type>], origin: Option<P<Type>>, alias: AliasArg<'_>) -> CacheHashKey {
     let mut b = keyBuilder::default();
     match origin {
         None => b.write_types(types),
@@ -586,16 +586,16 @@ pub(crate) fn get_union_key(types: &[P<Type>], origin: Option<P<Type>>, alias: A
         }
         _ => panic!("Unhandled case in getUnionKey"),
     }
-    b.write_alias_arg(alias);
+    b.write_alias_arg(&c.type_aliases, alias);
     b.hash()
 }
 
 // checker.go:17872
-pub(crate) fn get_intersection_key(types: &[P<Type>], flags: IntersectionFlags, alias: AliasArg<'_>) -> CacheHashKey {
+pub(crate) fn get_intersection_key(c: &Checker, types: &[P<Type>], flags: IntersectionFlags, alias: AliasArg<'_>) -> CacheHashKey {
     let mut b = keyBuilder::default();
     b.write_types(types);
     if !flags.intersects(IntersectionFlags::NoConstraintReduction) {
-        b.write_alias_arg(alias);
+        b.write_alias_arg(&c.type_aliases, alias);
     } else {
         b.write_byte(b'*');
     }
@@ -626,15 +626,15 @@ pub(crate) fn get_tuple_key(element_infos: &[TupleElementInfo], readonly: bool) 
 }
 
 // checker.go:17906
-pub(crate) fn get_type_alias_instantiation_key(type_arguments: &[P<Type>], alias: Option<P<TypeAlias>>) -> CacheHashKey {
-    get_type_instantiation_key(type_arguments, alias.into(), false)
+pub(crate) fn get_type_alias_instantiation_key(c: &Checker, type_arguments: &[P<Type>], alias: Option<TypeAliasKey>) -> CacheHashKey {
+    get_type_instantiation_key(&c.type_aliases, type_arguments, alias.into(), false)
 }
 
 // checker.go:17910
-pub(crate) fn get_type_instantiation_key(type_arguments: &[P<Type>], alias: AliasArg<'_>, single_signature: bool) -> CacheHashKey {
+pub(crate) fn get_type_instantiation_key(aliases: &tsrs_core::arena_owner::ArenaBuilder<TypeAlias>, type_arguments: &[P<Type>], alias: AliasArg<'_>, single_signature: bool) -> CacheHashKey {
     let mut b = keyBuilder::default();
     b.write_types(type_arguments);
-    b.write_alias_arg(alias);
+    b.write_alias_arg(aliases, alias);
     if single_signature {
         b.write_byte(b'!');
     }
@@ -642,12 +642,12 @@ pub(crate) fn get_type_instantiation_key(type_arguments: &[P<Type>], alias: Alia
 }
 
 // checker.go:17920
-pub(crate) fn get_indexed_access_key(object_type: P<Type>, index_type: P<Type>, access_flags: AccessFlags, alias: AliasArg<'_>) -> CacheHashKey {
+pub(crate) fn get_indexed_access_key(c: &Checker, object_type: P<Type>, index_type: P<Type>, access_flags: AccessFlags, alias: AliasArg<'_>) -> CacheHashKey {
     let mut b = keyBuilder::default();
     b.write_type(object_type);
     b.write_type(index_type);
     b.write_uint32(access_flags.bits());
-    b.write_alias_arg(alias);
+    b.write_alias_arg(&c.type_aliases, alias);
     b.hash()
 }
 
@@ -667,10 +667,10 @@ pub(crate) fn get_template_type_key(texts: &[&str], types: &[P<Type>]) -> CacheH
 }
 
 // checker.go:17943
-pub(crate) fn get_conditional_type_key(type_arguments: &[P<Type>], alias: Option<P<TypeAlias>>, for_constraint: bool) -> CacheHashKey {
+pub(crate) fn get_conditional_type_key(c: &Checker, type_arguments: &[P<Type>], alias: Option<TypeAliasKey>, for_constraint: bool) -> CacheHashKey {
     let mut b = keyBuilder::default();
     b.write_types(type_arguments);
-    b.write_alias(alias);
+    b.write_alias(&c.type_aliases, alias);
     if for_constraint {
         b.write_byte(b'!');
     }
