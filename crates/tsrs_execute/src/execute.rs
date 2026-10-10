@@ -92,6 +92,17 @@ pub fn command_line_with_testing(
         tsrs_compiler::set_checker_cost_cache_from_cli(&path);
         args.drain(pos..pos + 2);
     }
+    // tsrs-only, opt-in: `--maxMemory <size>` (e.g. `12G`) is a target for the process's memory in `--noEmit` checks:
+    // above it, the type-check pass retires its largest checker and checks the rest of that checker's files with a
+    // fresh one, trading CPU for memory (checkerpool.rs; notes/mem-recycle-checkers.md).
+    if let Some(pos) = args.iter().position(|a| a.eq_ignore_ascii_case("--maxMemory")) {
+        let Some(bytes) = args.get(pos + 1).and_then(|v| tsrs_compiler::parse_memory_size(v)) else {
+            sys.write("error: --maxMemory expects a size such as 12G, 12000M or 12000 (MiB).\n");
+            return CommandLineResult { status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
+        };
+        tsrs_compiler::set_max_memory_from_cli(bytes);
+        args.drain(pos..pos + 2);
+    }
     let host: &'static sysParseConfigHost = Box::leak(Box::new(sysParseConfigHost { sys, fs: sys.fs() }));
     let mut command = tsoptions::parse_command_line(&args, host);
     if tsrs_core::NO_THREADS {
@@ -340,6 +351,7 @@ fn perform_compilation(
     }
     let mut program_options = ProgramOptions::new(config, host);
     program_options.leaf_files = leaf_settings.mode;
+    program_options.checker_recycling = leaf_freeing_allowed;
 
     start_tracing_if_needed(sys, &config);
     let parse_start = sys.now();

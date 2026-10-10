@@ -77,14 +77,16 @@ pub struct CheckerHandle {
 
 enum checkerHandleKind {
     // The built-in pool's checkers live behind a mutex per checker (Go `locks[i]`).
-    Locked(MutexGuard<'static, Box<Checker>>),
+    // The scope makes the checker's region (`SlotChecker::region`) the allocation target while the handle is held.
+    Locked { guard: MutexGuard<'static, SlotChecker>, _scope: Option<tsrs_core::arena::ScratchScope> },
     // A checker owned by an external pool, which tracks exclusivity itself (Go project pool's `heldBy`).
     External { checker: NonNull<Checker>, release: Option<Box<dyn FnOnce()>> },
 }
 
 impl CheckerHandle {
-    fn locked(guard: MutexGuard<'static, Box<Checker>>) -> CheckerHandle {
-        CheckerHandle { kind: checkerHandleKind::Locked(guard) }
+    fn locked(guard: MutexGuard<'static, SlotChecker>) -> CheckerHandle {
+        let scope = guard.enter();
+        CheckerHandle { kind: checkerHandleKind::Locked { guard, _scope: scope } }
     }
 
     /// Hands out a checker owned by a pool outside this crate; `release` runs when the handle is dropped.
@@ -104,7 +106,7 @@ impl std::ops::Deref for CheckerHandle {
     type Target = Checker;
     fn deref(&self) -> &Checker {
         match &self.kind {
-            checkerHandleKind::Locked(guard) => guard,
+            checkerHandleKind::Locked { guard, .. } => &guard.checker,
             // SAFETY: `from_raw`'s contract: the checker is alive and exclusively ours until release.
             checkerHandleKind::External { checker, .. } => unsafe { checker.as_ref() },
         }
@@ -114,7 +116,7 @@ impl std::ops::Deref for CheckerHandle {
 impl std::ops::DerefMut for CheckerHandle {
     fn deref_mut(&mut self) -> &mut Checker {
         match &mut self.kind {
-            checkerHandleKind::Locked(guard) => guard,
+            checkerHandleKind::Locked { guard, .. } => &mut guard.checker,
             // SAFETY: `from_raw`'s contract: the checker is alive and exclusively ours until release.
             checkerHandleKind::External { checker, .. } => unsafe { checker.as_mut() },
         }
@@ -212,7 +214,125 @@ fn run_work_group(single_threaded: bool, count: usize, task: impl Fn(usize) + Sy
 // A checker is mutated only while its mutex is held, by exactly one thread at a time; the pool
 // never hands out references that outlive the guard. The checker's deferred closures are not
 // `Send`, which is the only reason this wrapper is needed.
-struct CheckerSlot(Mutex<Box<Checker>>);
+struct CheckerSlot(Mutex<SlotChecker>);
+
+// tsrs-only (notes/mem-recycle-checkers.md): a checker of the built-in pool and, when the type-check pass may retire
+// checkers (`max_memory`), the region that holds everything it allocates. The region is the allocation target
+// whenever the checker runs (`enter`), so dropping the checker and then the region gives back all of its memory.
+pub(crate) struct SlotChecker {
+    checker: Box<Checker>,
+    region: Option<tsrs_core::arena::Region>,
+}
+
+impl SlotChecker {
+    fn new(program: &'static Program, in_region: bool) -> SlotChecker {
+        if !in_region {
+            return SlotChecker { checker: new_checker(program), region: None };
+        }
+        let region = tsrs_core::arena::Region::new_scratch(1 << 20);
+        let checker = {
+            let _scope = region.enter_scratch();
+            new_checker(program)
+        };
+        SlotChecker { checker, region: Some(region) }
+    }
+
+    // Makes the checker's region the allocation target (and the thread's scratch region, so that lazily filled
+    // data of shared objects and diagnostics escape it: `arena::escape_scratch`) until the scope is dropped.
+    fn enter(&self) -> Option<tsrs_core::arena::ScratchScope> {
+        self.region.as_ref().map(tsrs_core::arena::Region::enter_scratch)
+    }
+
+    // Bytes of arena the checker holds (its region's chunks), 0 without a region.
+    fn region_bytes(&self) -> usize {
+        self.region.as_ref().map_or(0, tsrs_core::arena::Region::allocated_bytes)
+    }
+}
+
+impl std::ops::Deref for SlotChecker {
+    type Target = Checker;
+    fn deref(&self) -> &Checker {
+        &self.checker
+    }
+}
+
+impl std::ops::DerefMut for SlotChecker {
+    fn deref_mut(&mut self) -> &mut Checker {
+        &mut self.checker
+    }
+}
+
+// What the checkers retired during the type-check pass leave behind: their global diagnostics and counters, which the
+// pool adds to those of the live checkers.
+#[derive(Default)]
+pub(crate) struct RetiredCheckers {
+    pub(crate) count: usize,
+    pub(crate) global_diagnostics: Vec<P<Diagnostic>>,
+    pub(crate) symbol_count: u64,
+    pub(crate) type_count: u64,
+    pub(crate) instantiation_count: u64,
+    pub(crate) lazy_member_stats: tsrs_core::lazymembers::LazyMemberStats,
+}
+
+// With `--maxMemory`, a checker's relation caches are emptied between two files once they hold this many
+// entries (`TSRS_RELATION_CACHE_LIMIT` overrides it, for tests). They are memos of yes/no answers, rebuilt on demand;
+// on the 38k-file codebase they are a quarter of a checker's heap, and emptying them at 2M entries lowers the peak by
+// 5.7% for 2.2% more instructions without retiring anything (notes/mem-recycle-checkers.md). Only in this mode: an
+// emptier cache leaves the relater more of its complexity budget (`check_type_related_to_ex`), which could move a
+// TS2859 boundary.
+fn relation_cache_limit() -> usize {
+    static N: OnceLock<usize> = OnceLock::new();
+    *N.get_or_init(|| std::env::var("TSRS_RELATION_CACHE_LIMIT").ok().and_then(|v| v.parse().ok()).unwrap_or(2_000_000))
+}
+
+// With `--maxMemory`, each checker checks its leaf files before its other files (see the group loop);
+// `TSRS_LEAVES_FIRST=0` keeps the plain order, for measurement.
+fn leaves_first() -> bool {
+    static S: OnceLock<bool> = OnceLock::new();
+    *S.get_or_init(|| std::env::var("TSRS_LEAVES_FIRST").map_or(true, |v| v != "0"))
+}
+
+// tsrs-only, opt-in: `--maxMemory <size>` (CLI) or TSRS_MAX_MEMORY=<size>: a target for the process's memory
+// (`memsplit::process_memory`). In the type-check pass of a program that allows it
+// (`ProgramOptions::checker_recycling`), once the process is above it the checker holding the largest region is
+// retired between two files and the rest of its queue goes to a fresh checker (`retire_checker`;
+// notes/mem-recycle-checkers.md). A target below what the front end and fresh checkers hold cannot be met; checkers
+// smaller than `RETIRE_MIN` are never retired, so such a target costs retirements but does not thrash. Unset: never.
+static CLI_MAX_MEMORY: OnceLock<usize> = OnceLock::new();
+
+/// `--maxMemory`: a size with an optional `K`, `M` or `G` suffix (binary units; `B` after it is allowed); a bare
+/// number is MiB. None if it does not parse.
+pub fn parse_memory_size(v: &str) -> Option<usize> {
+    let v = v.trim();
+    let v = v.strip_suffix(['b', 'B']).filter(|s| s.ends_with(|c: char| c.is_ascii_alphabetic())).unwrap_or(v);
+    let (num, shift) = match v.chars().last()?.to_ascii_uppercase() {
+        'K' => (&v[..v.len() - 1], 10),
+        'M' => (&v[..v.len() - 1], 20),
+        'G' => (&v[..v.len() - 1], 30),
+        _ => (v, 20),
+    };
+    let n: f64 = num.trim().parse().ok().filter(|n: &f64| n.is_finite() && *n >= 0.0)?;
+    Some((n * (1u64 << shift) as f64) as usize)
+}
+
+pub fn set_max_memory_from_cli(bytes: usize) {
+    let _ = CLI_MAX_MEMORY.set(bytes);
+}
+
+// The target in bytes (0: off).
+fn max_memory() -> usize {
+    static MAX: OnceLock<usize> = OnceLock::new();
+    *MAX.get_or_init(|| CLI_MAX_MEMORY.get().copied().or_else(|| std::env::var("TSRS_MAX_MEMORY").ok().and_then(|v| parse_memory_size(&v))).unwrap_or(0))
+}
+
+// A checker whose region holds less than this is never retired (`TSRS_RETIRE_MIN=<size>` overrides it, for tests):
+// a fresh checker rebuilds ~200-300 MiB of library and shared-module types on the 38k-file codebase, so retiring
+// smaller ones costs that again for little memory.
+fn retire_min() -> usize {
+    static MIN: OnceLock<usize> = OnceLock::new();
+    *MIN.get_or_init(|| std::env::var("TSRS_RETIRE_MIN").ok().and_then(|v| parse_memory_size(&v)).unwrap_or(128 << 20))
+}
+
 #[expect(clippy::non_send_fields_in_send_ty, reason = "the checker: touched only under its mutex (see above)")]
 // SAFETY: the checker's non-`Send` parts are reachable only from the checker, which is reached only through the mutex.
 unsafe impl Send for CheckerSlot {}
@@ -249,6 +369,9 @@ pub(crate) struct poolState {
     pub(crate) file_times: Mutex<Vec<(P<SourceFile>, usize, f64, f64)>>,
     // Cost cache only: (file, thread CPU seconds) per checked file, per checker pass.
     file_cpu: Mutex<Vec<(P<SourceFile>, f64)>>,
+    // Whether checkers live in regions and the type-check pass may retire them (`max_memory`).
+    recycle: bool,
+    pub(crate) retired: Mutex<RetiredCheckers>,
 }
 
 // TSRS_FILE_TIMES=<path> (experiments): after checking, write one line per file run by a checker group:
@@ -579,13 +702,14 @@ impl checkerPool {
                 }
                 crate::program::worker_pool().broadcast(|_| tsrs_core::ptr::release_own_arena());
             }
+            let recycle = program.checker_recycling && !self.single_threaded && max_memory() > 0;
             let create_and_assign = || {
                 let create_start = std::time::Instant::now();
                 #[cfg(feature = "checker")]
                 tsrs_checker::links::set_multiple_checkers(self.checker_count > 1);
                 let slots: Vec<Mutex<Option<CheckerSlot>>> = (0..self.checker_count).map(|_| Mutex::new(None)).collect();
                 run_work_group(self.single_threaded, self.checker_count, |i| {
-                    *slots[i].lock().unwrap() = Some(CheckerSlot(Mutex::new(new_checker(program))));
+                    *slots[i].lock().unwrap() = Some(CheckerSlot(Mutex::new(SlotChecker::new(program, recycle))));
                 });
                 let checkers: &'static [CheckerSlot] =
                     Box::leak(slots.into_iter().map(|s| s.into_inner().unwrap().unwrap()).collect::<Vec<_>>().into_boxed_slice());
@@ -620,6 +744,8 @@ impl checkerPool {
                 group_cpu: Mutex::new(Vec::new()),
                 file_times: Mutex::new(Vec::new()),
                 file_cpu: Mutex::new(Vec::new()),
+                recycle,
+                retired: Mutex::new(RetiredCheckers::default()),
             }
         })
     }
@@ -643,6 +769,7 @@ impl checkerPool {
         let state = self.create_checkers();
         let run = |idx: usize| {
             let mut guard = state.checkers[idx].0.lock().unwrap();
+            let _scope = guard.enter();
             cb(idx, &mut guard);
         };
         run_work_group(self.single_threaded, state.checkers.len(), run);
@@ -655,7 +782,8 @@ impl checkerPool {
         self.for_each_checker_parallel(|idx, checker| {
             *global_diagnostics[idx].lock().unwrap() = checker.get_global_diagnostics();
         });
-        let all: Vec<P<Diagnostic>> = global_diagnostics.into_iter().flat_map(|d| d.into_inner().unwrap()).collect();
+        let mut all: Vec<P<Diagnostic>> = global_diagnostics.into_iter().flat_map(|d| d.into_inner().unwrap()).collect();
+        all.extend_from_slice(&state.retired.lock().unwrap().global_diagnostics);
         sort_and_deduplicate_diagnostics(&all)
     }
 
@@ -727,8 +855,23 @@ impl checkerPool {
             let total: u64 = positions.iter().flatten().map(|&i| weight(i)).sum();
             let threshold = total / (active.len() as u64 * heavy_share_divisor());
             positions.iter_mut().for_each(|p| heavy_files_first(p, threshold, weight));
+            if state.recycle && leaves_first() {
+                // With checkers retired under a memory target their memory stops growing, and what the front end holds sets
+                // the peak: the leaves' trees go once they are checked, so each checker checks its leaves first
+                // (after the heavy files), keeping its files' order otherwise.
+                let is_leaf = |i: u32| (i as usize) < files.len() && files[i as usize].is_check_leaf();
+                for p in &mut positions {
+                    let heavy = p.iter().take_while(|&&i| weight(i) > threshold).count();
+                    let (leaves, rest): (Vec<u32>, Vec<u32>) = p[heavy..].iter().partition(|&&i| is_leaf(i));
+                    p.truncate(heavy);
+                    p.extend(leaves);
+                    p.extend(rest);
+                }
+            }
         }
         let queues: Vec<FileQueue> = positions.into_iter().map(|p| FileQueue::new(p, weight)).collect();
+        // `--maxMemory`: each checker's region size after its last file, to retire the largest.
+        let region_sizes: Vec<std::sync::atomic::AtomicUsize> = (0..n).map(|_| std::sync::atomic::AtomicUsize::new(0)).collect();
         // TSRS_MEM_SPLIT: the type-check pass reports once every checker is done and before any thread exits.
         let mem_split = (allow_steal && tsrs_core::memsplit::enabled()).then(|| std::sync::Barrier::new(if single { 1 } else { active.len() }));
         let run = |checker_idx: usize| {
@@ -737,6 +880,8 @@ impl checkerPool {
             let mut count = 0;
             let mut file_cpu: Vec<(P<SourceFile>, f64)> = Vec::new();
             let mut guard = state.checkers[checker_idx].0.lock().unwrap();
+            let mut scope = guard.enter();
+            let recycle = allow_steal && state.recycle;
             let mut last_victim = usize::MAX;
             while let Some((i, from_other)) = queues_next(&queues, checker_idx, steal, sticky.then_some(&mut last_victim)) {
                 if let Some(&(s, k, _)) = i.checked_sub(files.len()).map(|p| &split.piece_items[p]) {
@@ -779,7 +924,26 @@ impl checkerPool {
                     file_cpu.push((file, thread_cpu_seconds() - cpu_start));
                 }
                 count += 1;
+                if recycle && guard.relation_cache_entries() > relation_cache_limit() {
+                    guard.clear_relation_caches();
+                }
+                if recycle {
+                    // Read by the other checker threads only to pick the largest; a stale value picks another one.
+                    region_sizes[checker_idx].store(guard.region_bytes(), std::sync::atomic::Ordering::Relaxed);
+                }
+                if recycle
+                    && guard.region_bytes() >= retire_min()
+                    && tsrs_core::memsplit::process_memory() > max_memory()
+                    // Relaxed: see the store above.
+                    && region_sizes.iter().all(|s| s.load(std::sync::atomic::Ordering::Relaxed) <= guard.region_bytes())
+                    && queues.iter().any(|q| q.remaining() > 0)
+                {
+                    drop(scope);
+                    self.retire_checker(state, &mut guard);
+                    scope = guard.enter();
+                }
             }
+            drop(scope);
             if cost_cache {
                 state.file_cpu.lock().unwrap().extend(file_cpu);
             }
@@ -806,12 +970,39 @@ impl checkerPool {
             }
         };
         run_work_group(single, active.len(), |k| run(active[k]));
+        if allow_steal && state.recycle {
+            tsrs_core::phases::count("Checkers: retired", state.retired.lock().unwrap().count as u64);
+        }
         splitcheck::SplitFile::report_stats(&split.files);
         if stats {
             state.group_runs.lock().unwrap().push(times.into_iter().map(|t| t.into_inner().unwrap()).collect());
             state.group_cpu.lock().unwrap().push(cpu.into_iter().map(|t| t.into_inner().unwrap()).collect());
             state.group_stolen.lock().unwrap().push(stolen.into_iter().map(std::sync::atomic::AtomicUsize::into_inner).collect());
         }
+    }
+}
+
+impl checkerPool {
+    // Replaces the checker in `slot` by a fresh one in a new region and frees the old checker and its region, keeping
+    // its global diagnostics and counters (`RetiredCheckers`). Called between two files of the type-check pass: the
+    // diagnostics of the files the old checker checked have been collected, and no later pass runs a checker over
+    // them (the CLI's `--noEmit` check, as for leaf freeing).
+    fn retire_checker(&self, state: &poolState, slot: &mut SlotChecker) {
+        let mut old = std::mem::replace(slot, SlotChecker::new(self.program, true));
+        {
+            let _scope = old.enter();
+            let globals = old.checker.get_global_diagnostics();
+            let mut retired = state.retired.lock().unwrap();
+            retired.count += 1;
+            retired.global_diagnostics.extend(globals);
+            retired.symbol_count += u64::from(old.checker.symbol_count);
+            retired.type_count += u64::from(old.checker.type_count);
+            retired.instantiation_count += u64::from(old.checker.total_instantiation_count);
+            retired.lazy_member_stats.add(&old.checker.lazy_member_stats);
+            drop(retired);
+            drop(old.checker);
+        }
+        drop(old.region);
     }
 }
 
@@ -1756,6 +1947,20 @@ mod stealing_tests {
 
     /// Owners taking from the front and thieves from the back of the same queues must hand out every position exactly
     /// once: a lost position is a file that is never checked (missing diagnostics), a repeated one is checked twice.
+    #[test]
+    fn memory_sizes() {
+        use super::parse_memory_size as p;
+        assert_eq!(p("12G"), Some(12 << 30));
+        assert_eq!(p("12GB"), Some(12 << 30));
+        assert_eq!(p("1.5g"), Some(3 << 29));
+        assert_eq!(p("12000M"), Some(12000 << 20));
+        assert_eq!(p("512"), Some(512 << 20));
+        assert_eq!(p("64k"), Some(64 << 10));
+        assert_eq!(p("12B"), None);
+        assert_eq!(p("lots"), None);
+        assert_eq!(p("-1G"), None);
+    }
+
     #[test]
     fn every_position_is_taken_exactly_once() {
         let sizes = [5000usize, 0, 20000, 300, 1];

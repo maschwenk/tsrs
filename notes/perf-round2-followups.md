@@ -102,6 +102,15 @@ pointer compression costs about +4.9% instructions and took back most of the che
 
 ## Measured and rejected (do not redo)
 
+- A tracing collector for checker data instead of retiring checkers (notes/mem-checker-gc.md): weak identity caches
+  free 3% more than garbage at mid-run; even an upper bound with member tables and value-symbol links weak frees
+  ~37% of the program's memory, about where `--maxMemory` already gets, for weeks of data-model changes.
+
+- Three ideas from notes/mem-recycle-checkers.md (the 38k-file codebase, 8 checkers; `--maxMemory` itself
+  landed, opt-in): mapping source files of at least 16 KiB instead of reading them (-3.4% footprint, RSS unchanged,
+  +4% wall from page faults); retiring a checker only where its queue changes directory (no instruction change: the
+  rebuild cost is the shared base); staggering the checkers' first retirements (-2.2% peak for +2.5% instructions).
+
 - `mimalloc-safe 0.1.67` without its `v3` feature (notes/perf-mimalloc-safe.md): the crate defaults to mimalloc
   v2.5.2, unlike the old crate's v3.3.2 default. On macOS arm64 it adds about 4% peak RSS at the default checker
   count on both Compiler workloads; the prior large Linux measurement found v2 3-14% slower. The migration enables
