@@ -359,18 +359,7 @@ fn is_default_import_name(node: Option<P<Node>>) -> bool {
         return false;
     }
     let Some(grand_parent) = parent.parent() else { return false };
-    is_default_import(grand_parent)
-}
-
-// ast utilities.go:2592 IsDefaultImport (duplicate of tsrs_ast::is_default_import)
-fn is_default_import(node: P<Node>) -> bool {
-    match node.kind() {
-        Kind::ImportDeclaration | Kind::JSImportDeclaration => match node.import_clause() {
-            Some(import_clause) => import_clause.as_import_clause().name.is_some(),
-            None => false,
-        },
-        _ => false,
-    }
+    ast::is_default_import(grand_parent)
 }
 
 // sourcedefinition.go:324

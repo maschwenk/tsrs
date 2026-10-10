@@ -21,7 +21,6 @@ bitflags = "2"
 rayon = "1"
 memchr = "2"
 mimalloc-safe = { version = "0.1.67", features = ["v3"] }
-unicode-id-start = "1"
 tsrs_core = { path = "crates/tsrs_core" }
 tsrs_diagnostics = { path = "crates/tsrs_diagnostics" }
 tsrs_spanmap = { path = "crates/tsrs_spanmap" }

@@ -2114,7 +2114,6 @@ is_compound_like_assignment | pub(crate) fn is_compound_like_assignment(assignme
 is_conflicting_private_property | pub(crate) fn is_conflicting_private_property(prop: P<Symbol>) -> bool | checker.go:22284 | -
 is_const_context | pub(crate) fn is_const_context(&mut self, node: P<Node>) -> bool | checker.go:13833 | Checker
 is_const_enum_object_type | pub(crate) fn is_const_enum_object_type(t: P<Type>) -> bool | checker.go:28134 | -
-is_const_enum_or_const_enum_only_module | fn is_const_enum_or_const_enum_only_module(s: P<Symbol>) -> bool | emitresolver.go:693 | -
 is_const_enum_or_const_enum_only_module | pub(crate) fn is_const_enum_or_const_enum_only_module(s: P<Symbol>) -> bool | emitresolver.go:693 | -
 is_const_enum_symbol | pub(crate) fn is_const_enum_symbol(symbol: P<Symbol>) -> bool | checker.go:28138 | -
 is_const_type_reference | pub(crate) fn is_const_type_reference(node: P<Node>) -> bool | utilities.go:127 | -
