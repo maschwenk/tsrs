@@ -147,6 +147,7 @@ In place:
 | --- | --- | --- |
 | Fat LTO, one codegen unit, PGO for release binaries | `notes/perf-pgo.md`: -13.5% instructions with PGO; fat LTO alone about -2% | oxc, Rolldown, swc (fat); Ruff (fat, PGO); Turborepo, rust-analyzer (thin) |
 | BOLT on top of PGO for the Linux release binaries (`.github/scripts/bolt.sh`, gates run on the BOLT-optimized binaries) | `notes/perf-build-level.md`: -2.7% / -3.2% / -1.0% wall at 1 / 4 / 8 checkers on the 38k-file codebase, -3.4 to -4.0% on vscode; instruction-cache misses -20% | rustc (its Linux toolchain builds), CPython (`--enable-bolt`) |
+| Non-PIE x86-64 Linux binaries: `-Crelocation-model=static -Clink-arg=-no-pie` in both PGO builds (release.yml, bench.yml, bench-compare.yml) | `notes/perf-build-std.md`: -0.9% to -2.3% single-threaded instructions on the 17 bench projects, peak RSS -0.1% to -1%, output byte-identical. A `match` jump table becomes one indirect jump and an address an immediate; the loader applies no relocations (41,068 before) | tsgo (Go's default for linux/amd64 executables) |
 | mimalloc as the global allocator | `notes/fix-perf-memory.md` | oxc, Rolldown, Turborepo, Bun |
 | Leak arenas, one per thread; exact frees of provably dead objects | PORTING.md "Memory model", `notes/mem-recycle.md` | oxc and Bun (arenas with no `Drop`) |
 | 32-bit handles with a niche (`Option<P<T>>` is 4 bytes) | `notes/mem-pointer-compression.md`: -14 to -15% peak memory, +6.5% instructions | oxc and Ruff (`NonMax`/`NonZero` u32 ids), Bun (`StoreRef`) |
@@ -181,7 +182,13 @@ THP off for the whole process (`MIMALLOC_ALLOW_THP=0`, which also drops the aren
 `munmap` cost 3 ms and moved the ~15 ms teardown within noise, `madvise` from 16 threads was slower than one
 `munmap`; `notes/perf-front-end-fixed-costs.md`);
 `opt-level = "s"` for the language-server, API and emit crates (`.text` -6%, speed unchanged); adding vscode at eight
-checkers to the PGO training (-3% instructions, cycles unchanged).
+checkers to the PGO training (-3% instructions, cycles unchanged). The standard library compiled from source with
+tsrs's profile, PGO and BOLT (`-Zbuild-std` on the pinned stable toolchain through `RUSTC_BOOTSTRAP=1`;
+`notes/perf-build-std.md`: -0.04% to -0.27% single-threaded instructions, because fat LTO already merges std's bitcode
+and std's own code is about 3% of the trained work), `-Zlocation-detail=none` on top of it (no speed; the stripped
+binary 6.6% smaller, panic messages without their location), `-Cpanic=immediate-abort` (not measured: no message and
+no unwinding for the CLI's and the API's panic recovery or the fourslash training), `-Ztune-cpu=znver4` (-0.4% to 0%)
+and turning off auto-vectorization (-0.2% to 0%, `.text` -0.1%, instruction-cache misses not lower).
 
 Not tried. Each needs a measurement and a note before it is adopted; none is applied yet:
 
@@ -199,7 +206,7 @@ Not tried. Each needs a measurement and a note before it is adopted; none is app
 Not pursued: a binary-size check (Bun fails a pull request that grows the binary by more than 0.5 MB); size is not a
 goal here (owner decision, 2026-10-05).
 
-Does not transfer: nightly-only flags (Bun's `-Zbuild-std`, `-Zlocation-detail=none`, `-Zshare-generics`; the release
-toolchain is stable), lifetime-carrying arenas such as bumpalo's `&'a T` (PORTING.md: no lifetime parameters), oxc's
-compile-time ban on `Drop` types in the arena (arena objects here own `Vec`s and maps on purpose), thin LTO (fat LTO
-already covers it).
+Does not transfer: Bun's other nightly-only flag, `-Zshare-generics` (the release toolchain is stable; `-Zbuild-std` and
+`-Zlocation-detail=none` were measured with `RUSTC_BOOTSTRAP=1`, above), lifetime-carrying arenas such as bumpalo's
+`&'a T` (PORTING.md: no lifetime parameters), oxc's compile-time ban on `Drop` types in the arena (arena objects here
+own `Vec`s and maps on purpose), thin LTO (fat LTO already covers it).

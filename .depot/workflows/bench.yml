@@ -185,9 +185,12 @@ jobs:
           path: bench/.work/solutions/webpack
           key: ${{ steps.cache-webpack.outputs.cache-primary-key }}
 
+      # A non-PIE executable (-Crelocation-model=static, linked with -no-pie), as release.yml builds x86_64 Linux:
+      # absolute addresses instead of RIP-relative ones and PIC jump tables, and no relative relocations for the loader
+      # to apply (notes/perf-build-std.md). Both PGO builds take the same flags.
       - name: PGO instrumented build
         env:
-          RUSTFLAGS: -Cprofile-generate=/tmp/tsrs-pgo/raw
+          RUSTFLAGS: -Cprofile-generate=/tmp/tsrs-pgo/raw -Crelocation-model=static -Clink-arg=-no-pie
           # The same as the final build's: profile settings are part of every symbol name, and the profile only
           # applies to functions whose names match (notes/perf-pgo.md, 2026-10-09).
           CARGO_PROFILE_DIST_STRIP: none
@@ -209,7 +212,9 @@ jobs:
       # --emit-relocs keeps the relocations BOLT needs to move code (release.yml's Linux builds link the same way).
       - name: Build tsrs (PGO, dist profile)
         env:
-          RUSTFLAGS: -Cprofile-use=${{ steps.profile.outputs.path }} -Clink-arg=-Wl,--emit-relocs
+          RUSTFLAGS: >-
+            -Cprofile-use=${{ steps.profile.outputs.path }} -Clink-arg=-Wl,--emit-relocs -Crelocation-model=static
+            -Clink-arg=-no-pie
           CARGO_TARGET_DIR: /tmp/tsrs-pgo/target
           # BOLT needs the input binary's symbols; bolt.sh strips its final output. The instrumented build sets the same.
           CARGO_PROFILE_DIST_STRIP: none

@@ -221,6 +221,14 @@ pointer compression costs about +4.9% instructions and took back most of the che
   (Mac), about 2 points of it the cells of the 40 lazy fields a fork would overlay (mostly the unset test on every
   read, not the window comparison); the rest alone is +0.41..+0.65% on Linux. Closes the shared layer for the default
   binary.
+- Build flags on top of the PGO + BOLT release build (notes/perf-build-std.md, Linux x86-64 and macOS, output
+  byte-identical): the standard library compiled from source with tsrs's profile (`-Zbuild-std` through
+  `RUSTC_BOOTSTRAP=1`): -0.04% to -0.27% single-threaded instructions, since fat LTO already merges std's bitcode and
+  std's own code is about 3% of the trained work; `-Zlocation-detail=none` on top: no speed, 6.6% smaller binary;
+  `-Cpanic=immediate-abort`: not viable (no panic message, no unwinding for the CLI's and API's recovery).
+  `-Ztune-cpu=znver4`: -0.39% to +0.02%; no auto-vectorization (`-Cno-vectorize-loops -Cno-vectorize-slp`): -0.17% to
+  +0.04%, `.text` -0.1%, instruction-cache misses 1-5% higher. Landed from the same round: non-PIE x86-64 Linux
+  binaries, -0.9% to -2.3%.
 
 ## The lint ratchet
 

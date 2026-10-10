@@ -180,7 +180,8 @@ jobs:
       # release.yml and bench.yml.
       - name: PGO instrumented build
         env:
-          RUSTFLAGS: -Cprofile-generate=/tmp/tsrs-pgo/raw
+          # A non-PIE executable, as release.yml builds x86_64 Linux (notes/perf-build-std.md); both PGO builds.
+          RUSTFLAGS: -Cprofile-generate=/tmp/tsrs-pgo/raw -Crelocation-model=static -Clink-arg=-no-pie
         run: cargo build --profile dist --locked -p tsrs_cli -p tsrs_testrunner -p tsrs_fourslash --target x86_64-unknown-linux-gnu
 
       - name: PGO training run
@@ -195,7 +196,7 @@ jobs:
 
       - name: Build tsrs (PGO, dist profile)
         env:
-          RUSTFLAGS: -Cprofile-use=${{ steps.profile.outputs.path }}
+          RUSTFLAGS: -Cprofile-use=${{ steps.profile.outputs.path }} -Crelocation-model=static -Clink-arg=-no-pie
           CARGO_TARGET_DIR: /tmp/tsrs-pgo/target
         run: cargo build --profile dist --locked -p tsrs_cli --target x86_64-unknown-linux-gnu
 

@@ -109,10 +109,12 @@ jobs:
       # CFLAGS: cc passes -Cprofile-generate/-use on to clang (macOS) but not to gcc (Linux). Apple clang's profile
       # format does not match rustc's LLVM (the instrumented mimalloc crashed in __llvm_profile_instrument_target
       # with rustc 1.99), so the C code (mimalloc) is built without PGO, as on Linux.
+      # x86_64 Linux: a non-PIE executable (-Crelocation-model=static, linked with -no-pie; notes/perf-build-std.md),
+      # in both PGO builds. Not on aarch64 Linux (not measured) or macOS (which requires PIE).
       - name: Instrumented build
         shell: bash
         env:
-          RUSTFLAGS: -Cprofile-generate=${{ runner.temp }}/pgo/raw
+          RUSTFLAGS: -Cprofile-generate=${{ runner.temp }}/pgo/raw${{ matrix.target == 'x86_64-unknown-linux-gnu' && ' -Crelocation-model=static -Clink-arg=-no-pie' || '' }}
           CFLAGS: ${{ runner.os == 'macOS' && '-fno-profile-generate' || '' }}
           CARGO_TARGET_DIR: ${{ runner.temp }}/pgo/target
           # The same as the final build's: profile settings are part of every symbol name, and the profile only
@@ -139,7 +141,7 @@ jobs:
       - name: cargo build
         shell: bash
         env:
-          RUSTFLAGS: -Cprofile-use=${{ steps.profile.outputs.path }}${{ runner.os == 'Linux' && ' -Clink-arg=-Wl,--emit-relocs' || '' }}
+          RUSTFLAGS: -Cprofile-use=${{ steps.profile.outputs.path }}${{ runner.os == 'Linux' && ' -Clink-arg=-Wl,--emit-relocs' || '' }}${{ matrix.target == 'x86_64-unknown-linux-gnu' && ' -Crelocation-model=static -Clink-arg=-no-pie' || '' }}
           CFLAGS: ${{ runner.os == 'macOS' && '-fno-profile-use' || '' }}
           # BOLT needs the Linux binaries' symbols; bolt.sh strips the optimized tsrs after its correctness gates.
           # The instrumented build sets the same value.
