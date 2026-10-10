@@ -340,7 +340,7 @@ fn go_repeat_count(n: i64) -> usize {
 pub fn flatten_diagnostic_message(d: P<Diagnostic>, new_line: &str) -> String {
     let mut output = Vec::new();
     write_flattened_diagnostic_message(&mut output, d, new_line);
-    String::from_utf8(output).unwrap()
+    tsrs_core::utf8::into_string(output).unwrap()
 }
 
 pub fn write_flattened_diagnostic_message(writer: &mut dyn Write, diagnostic: P<Diagnostic>, newline: &str) {
@@ -562,7 +562,7 @@ pub fn write_format_diagnostic(output: &mut dyn Write, diagnostic: P<Diagnostic>
 pub fn format_diagnostic_to_string(diagnostic: P<Diagnostic>, format_opts: &FormattingOptions) -> io::Result<String> {
     let mut out = Vec::new();
     write_format_diagnostic(&mut out, diagnostic, format_opts);
-    Ok(String::from_utf8_lossy(&out).into_owned())
+    Ok(tsrs_core::utf8::from_utf8_lossy(&out).into_owned())
 }
 
 // diagnosticwriter.go:584

@@ -104,7 +104,7 @@ struct ClientConnAdapter(Arc<dyn transport::Caller>);
 impl ClientConn for ClientConnAdapter {
     fn call(&self, method: &str, params: &str) -> tsrs_api::ApiResult<String> {
         let raw = self.0.call(method, Some(params.as_bytes())).map_err(|e| tsrs_api::ApiError::internal(e.to_string()))?;
-        String::from_utf8(raw).map_err(|e| tsrs_api::ApiError::internal(e.to_string()))
+        tsrs_core::utf8::into_string(raw).map_err(|e| tsrs_api::ApiError::internal(e.to_string()))
     }
 }
 
@@ -444,7 +444,7 @@ mod memory_tests {
     fn rss_kib() -> u64 {
         // SAFETY: glibc `malloc_trim` has no preconditions.
         unsafe { malloc_trim(0) };
-        std::fs::read_to_string("/proc/self/status")
+        tsrs_core::utf8::read_to_string("/proc/self/status")
             .ok()
             .and_then(|s| s.lines().find(|l| l.starts_with("VmRSS:")).and_then(|l| l.split_whitespace().nth(1)?.parse().ok()))
             .unwrap_or(0)

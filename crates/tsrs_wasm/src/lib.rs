@@ -33,7 +33,7 @@ struct Request {
 }
 
 fn parse_request(request: &[u8]) -> Request {
-    let mut fields = request.split(|&b| b == 0).map(|f| String::from_utf8_lossy(f).into_owned());
+    let mut fields = request.split(|&b| b == 0).map(|f| tsrs_core::utf8::from_utf8_lossy(f).into_owned());
     let cwd = fields.next().unwrap_or_default();
     let flags = fields.next().and_then(|f| f.parse::<u32>().ok()).unwrap_or(0);
     Request { cwd, flags, args: fields.collect() }

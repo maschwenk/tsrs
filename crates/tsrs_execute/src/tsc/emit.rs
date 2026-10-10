@@ -171,7 +171,7 @@ fn list_files_worker(input: &EmitInput, emit_result: &tsrs_compiler::EmitResult)
     if options.explain_files.is_true() {
         let mut out = Vec::new();
         input.program.explain_files(&mut out);
-        input.write(&String::from_utf8_lossy(&out));
+        input.write(&tsrs_core::utf8::from_utf8_lossy(&out));
     } else if options.list_files.is_true() || options.list_files_only.is_true() {
         let mut out = String::new();
         for file in input.program.get_source_files() {

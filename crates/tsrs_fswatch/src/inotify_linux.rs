@@ -165,7 +165,7 @@ impl inotifyBackend {
                     if let Some(i) = name_bytes.iter().position(|&c| c == 0) {
                         name_bytes = &name_bytes[..i];
                     }
-                    name = String::from_utf8_lossy(name_bytes).into_owned();
+                    name = tsrs_core::utf8::from_utf8_lossy(name_bytes).into_owned();
                 }
 
                 if ev.mask & libc::IN_Q_OVERFLOW != 0 {

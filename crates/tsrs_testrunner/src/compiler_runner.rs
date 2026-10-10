@@ -82,13 +82,13 @@ pub fn reference_baseline_path(suite: &str, name: &str) -> PathBuf {
 }
 
 pub fn read_reference_baseline(suite: &str, name: &str) -> Option<String> {
-    std::fs::read(reference_baseline_path(suite, name)).ok().map(|b| String::from_utf8_lossy(&b).into_owned())
+    std::fs::read(reference_baseline_path(suite, name)).ok().map(|b| tsrs_core::utf8::from_utf8_lossy(&b).into_owned())
 }
 
 // The reference `.types` / `.symbols` baseline (`ext` = "types" | "symbols").
 pub fn read_reference_extra_baseline(suite: &str, name: &str, ext: &str) -> Option<String> {
     let path = testdata_path().join("baselines/reference").join(suite).join(format!("{name}.{ext}"));
-    let text = std::fs::read(path).ok().map(|b| String::from_utf8_lossy(&b).into_owned());
+    let text = std::fs::read(path).ok().map(|b| tsrs_core::utf8::from_utf8_lossy(&b).into_owned());
     #[cfg(feature = "checker")]
     if ext == "js" && crate::compile::dts_only_mode() {
         let block = extract_dts_block(text.as_deref().unwrap_or(""));
@@ -147,7 +147,7 @@ pub fn decode_bytes(b: &[u8]) -> String {
         return String::from_utf16_lossy(&units);
     }
     let b = if b.len() >= 3 && b[0..3] == [0xEF, 0xBB, 0xBF] { &b[3..] } else { b };
-    String::from_utf8_lossy(b).into_owned()
+    tsrs_core::utf8::from_utf8_lossy(b).into_owned()
 }
 
 pub fn read_test_file(path: &str) -> String {

@@ -464,7 +464,7 @@ fn extra_escape_replace(s: &str) -> String {
         out.extend_from_slice(replacement.as_bytes());
     }
     // Only ASCII bytes are replaced (by ASCII), so the result is valid UTF-8 when the input is.
-    String::from_utf8(out).unwrap()
+    tsrs_core::utf8::into_string(out).unwrap()
 }
 
 // converters.go:332
@@ -531,7 +531,7 @@ fn url_path_escape(s: &str) -> String {
             t.push(c);
         }
     }
-    String::from_utf8(t).unwrap()
+    tsrs_core::utf8::into_string(t).unwrap()
 }
 
 impl Converters {
@@ -840,7 +840,7 @@ fn message_chain_to_string(diagnostic: P<Diagnostic>) -> String {
     let mut b: Vec<u8> = Vec::new();
     tsrs_compiler::diagnosticwriter::write_flattened_diagnostic_message(&mut b, diagnostic, "\n");
     b.flush().ok();
-    String::from_utf8(b).unwrap()
+    tsrs_core::utf8::into_string(b).unwrap()
 }
 
 // converters.go:630

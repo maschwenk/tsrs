@@ -65,7 +65,7 @@ struct Worker {
 
 fn stderr_tail(buf: &Arc<Mutex<Vec<u8>>>) -> String {
     let b = buf.lock().unwrap();
-    let s = String::from_utf8_lossy(&b);
+    let s = tsrs_core::utf8::from_utf8_lossy(&b);
     let lines: Vec<&str> = s.lines().filter(|l| !l.trim().is_empty()).collect();
     let start = lines.len().saturating_sub(3);
     lines[start..].join(" | ")
@@ -273,7 +273,7 @@ fn resident_mb(pids: &[u32]) -> rustc_hash::FxHashMap<u32, u64> {
     }
     let list = pids.iter().map(u32::to_string).collect::<Vec<_>>().join(",");
     let Ok(o) = Command::new("ps").args(["-o", "pid=,rss=", "-p", &list]).output() else { return out };
-    for line in String::from_utf8_lossy(&o.stdout).lines() {
+    for line in tsrs_core::utf8::from_utf8_lossy(&o.stdout).lines() {
         let mut it = line.split_whitespace();
         if let (Some(pid), Some(kb)) = (it.next().and_then(|p| p.parse().ok()), it.next().and_then(|k| k.parse::<u64>().ok())) {
             out.insert(pid, kb / 1024);

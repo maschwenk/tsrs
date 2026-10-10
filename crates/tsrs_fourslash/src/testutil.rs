@@ -58,7 +58,7 @@ pub mod baseline {
 
         let mut expected = NO_CONTENT.to_string();
         let mut found_expected = false;
-        if let Ok(content) = fs::read_to_string(reference) {
+        if let Ok(content) = tsrs_core::utf8::read_to_string(reference) {
             expected = content;
             found_expected = true;
         }

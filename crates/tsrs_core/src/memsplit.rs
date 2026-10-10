@@ -222,7 +222,7 @@ mod linux {
     }
 
     pub(super) fn append(out: &mut String, arenas: &ArenaTotals, heap: Option<HeapStats>) {
-        let status = std::fs::read_to_string("/proc/self/status").unwrap_or_default();
+        let status = crate::utf8::read_to_string("/proc/self/status").unwrap_or_default();
         let field = |name: &str| status.lines().find(|l| l.starts_with(name)).map_or(0, kb);
         let threads = status.lines().find(|l| l.starts_with("Threads:")).and_then(|l| l.split_whitespace().nth(1)).unwrap_or("?");
         let _ = writeln!(
@@ -233,7 +233,7 @@ mod linux {
             mib(field("RssAnon:")),
             mib(field("RssFile:"))
         );
-        let smaps = std::fs::read_to_string("/proc/self/smaps").unwrap_or_default();
+        let smaps = crate::utf8::read_to_string("/proc/self/smaps").unwrap_or_default();
         #[cfg(compressed_ptrs)]
         let arena_range = (crate::reserve::BASE_ADDR, crate::reserve::BASE_ADDR + crate::reserve::RESERVE);
         #[cfg(not(compressed_ptrs))]
@@ -351,7 +351,7 @@ fn read_process_memory() -> usize {
 
 #[cfg(target_os = "linux")]
 fn read_process_memory() -> usize {
-    let statm = std::fs::read_to_string("/proc/self/statm").unwrap_or_default();
+    let statm = crate::utf8::read_to_string("/proc/self/statm").unwrap_or_default();
     let pages: usize = statm.split_whitespace().nth(1).and_then(|v| v.parse().ok()).unwrap_or(0);
     // SAFETY: sysconf has no preconditions.
     pages * unsafe { libc::sysconf(libc::_SC_PAGESIZE) } as usize

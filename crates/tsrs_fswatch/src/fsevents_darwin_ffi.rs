@@ -202,7 +202,7 @@ fn cf_string_to_go(src: CFTypeRef) -> String {
         // CFStringGetCString writes a NUL terminator; trim it.
         let n = buf.iter().position(|&b| b == 0).unwrap_or(buf.len());
         buf.truncate(n);
-        String::from_utf8(buf).unwrap_or_default()
+        tsrs_core::utf8::into_string(buf).unwrap_or_default()
     }
 }
 

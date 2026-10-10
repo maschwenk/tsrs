@@ -128,7 +128,7 @@ impl<W: Write> Writer<W> {
 
 // bytes.TrimSpace: Unicode white space at both ends.
 fn trim_space(b: &[u8]) -> &[u8] {
-    match std::str::from_utf8(b) {
+    match tsrs_core::utf8::basic::from_utf8(b) {
         Ok(s) => s.trim().as_bytes(),
         // Invalid UTF-8 fails strconv.ParseInt below anyway; trim the ASCII white space Go would.
         Err(_) => {

@@ -39,13 +39,13 @@ pub fn create_diagnostic_reporter_with_writer<'a>(sys: &'a dyn System, w: Writer
             let mut out = Vec::new();
             diagnosticwriter::format_diagnostic_with_color_and_context(&mut out, diagnostic, &format_opts);
             out.extend_from_slice(format_opts.new_line.as_bytes());
-            w(&String::from_utf8_lossy(&out));
+            w(&tsrs_core::utf8::from_utf8_lossy(&out));
         });
     }
     Box::new(move |diagnostic| {
         let mut out = Vec::new();
         diagnosticwriter::write_format_diagnostic(&mut out, diagnostic, &format_opts);
-        w(&String::from_utf8_lossy(&out));
+        w(&tsrs_core::utf8::from_utf8_lossy(&out));
     })
 }
 
@@ -75,7 +75,7 @@ pub fn create_builder_status_reporter<'a>(
         }
         out.extend_from_slice(format_opts.new_line.as_bytes());
         out.extend_from_slice(format_opts.new_line.as_bytes());
-        w(&String::from_utf8_lossy(&out));
+        w(&tsrs_core::utf8::from_utf8_lossy(&out));
         if let Some(testing) = testing {
             testing.on_build_status_report_end(&*w);
         }
@@ -115,7 +115,7 @@ pub fn create_report_error_summary<'a>(sys: &'a dyn System, options: &CompilerOp
         return Box::new(move |diagnostics| {
             let mut out = Vec::new();
             diagnosticwriter::write_error_summary_text(&mut out, diagnostics, &format_opts);
-            sys.write(&String::from_utf8_lossy(&out));
+            sys.write(&tsrs_core::utf8::from_utf8_lossy(&out));
         });
     }
     Box::new(|_| {})

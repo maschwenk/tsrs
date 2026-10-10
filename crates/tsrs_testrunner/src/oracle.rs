@@ -20,7 +20,7 @@ pub struct Oracle {
 
 impl Oracle {
     pub fn load(path: &str) -> Oracle {
-        let text = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("cannot read oracle file {path}: {e}"));
+        let text = tsrs_core::utf8::read_to_string(path).unwrap_or_else(|e| panic!("cannot read oracle file {path}: {e}"));
         let mut records = FxHashMap::default();
         for line in text.lines() {
             let v: Value = serde_json::from_str(line).expect("bad oracle json");
@@ -75,7 +75,7 @@ fn category(n: i64) -> Category {
 fn bundled_lib_text(name: &str) -> String {
     let base = name.rsplit('/').next().unwrap();
     let path = compiler_runner::repo_root().join("crates/tsrs_vfs/libs").join(base);
-    std::fs::read_to_string(path).unwrap_or_default()
+    tsrs_core::utf8::read_to_string(path).unwrap_or_default()
 }
 
 fn to_diag(v: &Value, texts: &Value, cache: &mut FxHashMap<String, Rc<FileLike>>) -> Diag {
@@ -115,7 +115,7 @@ fn to_diag(v: &Value, texts: &Value, cache: &mut FxHashMap<String, Rc<FileLike>>
 
 // Option table dumped by `tsrs-oracle-testrunner options`.
 pub fn load_option_table(path: &str) -> Result<OptionTable, String> {
-    let text = std::fs::read_to_string(path).map_err(|e| format!("cannot read {path}: {e}"))?;
+    let text = tsrs_core::utf8::read_to_string(path).map_err(|e| format!("cannot read {path}: {e}"))?;
     let v: Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
     let mut decls = Vec::new();
     let mut vary_by = FxHashSet::default();

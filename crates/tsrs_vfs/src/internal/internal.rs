@@ -209,9 +209,11 @@ pub fn decode_bytes(mut s: Vec<u8>) -> String {
 
     // Go strings may hold arbitrary bytes; Rust strings must be UTF-8, so
     // invalid sequences are replaced with U+FFFD.
-    match String::from_utf8(s) {
-        Ok(s) => s,
-        Err(e) => String::from_utf8_lossy(e.as_bytes()).into_owned(),
+    if tsrs_core::utf8::basic::from_utf8(&s).is_ok() {
+        // SAFETY: simdutf8 validated every byte, and s has not been modified since validation.
+        unsafe { String::from_utf8_unchecked(s) }
+    } else {
+        String::from_utf8_lossy(&s).into_owned()
     }
 }
 

@@ -131,7 +131,7 @@ pub fn kind_from_u32(value: u32) -> Option<Kind> {
 pub fn is_wtf8(bytes: &[u8]) -> bool {
     let mut rest = bytes;
     loop {
-        match std::str::from_utf8(rest) {
+        match tsrs_core::utf8::compat::from_utf8(rest) {
             Ok(_) => return true,
             Err(e) => {
                 let i = e.valid_up_to();

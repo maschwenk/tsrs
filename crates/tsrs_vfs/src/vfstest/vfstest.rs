@@ -139,7 +139,7 @@ fn from_map_with_clock_option<K: AsRef<str>, F: Into<MapFile>>(
         file.mod_time = Some(now(&clock));
 
         if file.mode.intersects(FileMode::Symlink) {
-            let target = String::from_utf8_lossy(&file.data).into_owned();
+            let target = tsrs_core::utf8::from_utf8_lossy(&file.data).into_owned();
             check_path(&target);
 
             let target = target.strip_prefix('/').unwrap_or(&target).to_string();
@@ -348,7 +348,7 @@ impl MapFS {
         }
 
         let is_symlink = file.mode.intersects(FileMode::Symlink);
-        let target = if is_symlink { Some(self.get_canonical_path(&String::from_utf8_lossy(&file.data))) } else { None };
+        let target = if is_symlink { Some(self.get_canonical_path(&tsrs_core::utf8::from_utf8_lossy(&file.data))) } else { None };
         inner.m.insert(
             canonical.to_string(),
             MapEntry {
@@ -652,7 +652,7 @@ impl MapFS {
         let canonical = self.get_canonical_path(path);
         if let Some(file_info) = inner.m.get(&canonical) {
             if file_info.file.mode.intersects(FileMode::Symlink) {
-                return Some(format!("/{}", String::from_utf8_lossy(&file_info.file.data)));
+                return Some(format!("/{}", tsrs_core::utf8::from_utf8_lossy(&file_info.file.data)));
             }
         }
         None

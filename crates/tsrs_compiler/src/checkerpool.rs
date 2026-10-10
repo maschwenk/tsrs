@@ -1327,7 +1327,7 @@ fn compute_associations(program: &Program, checker_count: usize) -> Vec<usize> {
             (0..program.files.len()).map(|_| (splitmix64(&mut state) % checker_count as u64) as usize).collect()
         }
         CheckerAssignment::File(path) => {
-            let text = std::fs::read_to_string(path).expect("TSRS_CHECKER_ASSIGNMENT file");
+            let text = tsrs_core::utf8::read_to_string(path).expect("TSRS_CHECKER_ASSIGNMENT file");
             let associations: Vec<usize> = text.lines().map(|l| l.trim().parse::<usize>().unwrap().min(checker_count - 1)).collect();
             assert_eq!(associations.len(), program.files.len(), "TSRS_CHECKER_ASSIGNMENT file length");
             associations
@@ -1376,7 +1376,7 @@ struct CostEntry {
 // malformed lines are skipped.
 fn read_cost_cache(path: &str) -> (FxHashMap<String, CostEntry>, usize) {
     let mut entries = FxHashMap::default();
-    let Ok(text) = std::fs::read_to_string(path) else {
+    let Ok(text) = tsrs_core::utf8::read_to_string(path) else {
         return (entries, 0);
     };
     let mut lines = text.lines();
