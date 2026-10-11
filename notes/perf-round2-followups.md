@@ -140,6 +140,13 @@ with the switch off, which is why it is not in the default build.
 
 ## Measured and rejected (do not redo)
 
+- A `cachedvfs` map of canonical realpath directory prefixes on component-walking platforms
+  (notes/perf-vfs-realpath-prefix-cache.md): realpath `lstat`s fell 79.9% on pinned vscode and 63.2% on the public Oxc
+  website. The website screened at -1.48% single-threaded instructions, but configured vscode was unchanged
+  (-0.003% paired) and default peak RSS was unchanged (-0.047%). Linux and Windows already use native
+  canonicalization. Revisit only for a workload with the 150k-walk scale from notes/perf-dev-loop.md, preferably as
+  part of a design that does not add another concurrent path map.
+
 - Derived equality and ordering on the niche-encoded `TextPos` enum (PR #306;
   notes/perf-unsigned-positions.md): extra discriminant handling despite a four-byte encoding that already supplies
   equality and order. The first correctness-clean refactor added 0.086% to 1.002% instructions on all seventeen

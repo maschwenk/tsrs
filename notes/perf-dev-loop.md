@@ -175,7 +175,8 @@ Leaf edit: the same plus the tsbuildinfo write, 0.32 s (from snapshot 0.14, mars
   probes it would replace 58k probes by 40k entries). These calls already overlap with each other and with parsing.
   The floor for this phase is ~0.3 s of `open`+`read`; it is at 0.46 s.
 - **realpath component cache**: the 150k `lstat`s are 0.7 s CPU, ~40 ms wall. Caching the walk per path prefix would remove most of
-  them; small and exact, not done.
+  them. Later tried and rejected as a standalone `cachedvfs` map (notes/perf-vfs-realpath-prefix-cache.md): it removed
+  80% of the walks on vscode but changed whole-program instructions by -0.003%.
 - **Typed tsbuildinfo decode** (`fileIdsList` 9.5M numbers through `json::Value`): unmarshal 0.17-0.25 s, but the
   read is now overlapped with program construction, so it would save CPU, not wall time.
 - **tsbuildinfo write** (leaf edit 0.32 s): not attacked in this round.
