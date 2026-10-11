@@ -143,9 +143,9 @@ impl Checker {
                             prop_flags = (prop_flags & !SymbolFlags::Accessor) | SymbolFlags::Property;
                         }
                     }
-                    if is_union && self.is_readonly_symbol(prop) {
+                    if is_union && self.is_readonly_symbol_with_modifiers(prop, || modifiers) {
                         check_flags |= CheckFlags::Readonly;
-                    } else if !is_union && !self.is_readonly_symbol(prop) {
+                    } else if !is_union && !self.is_readonly_symbol_with_modifiers(prop, || modifiers) {
                         check_flags &= !CheckFlags::Readonly;
                     }
                     if modifiers.intersects(ModifierFlags::Protected) && !modifiers.intersects(ModifierFlags::Public) {

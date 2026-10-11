@@ -1364,8 +1364,13 @@ impl Checker {
         // Enum members
         // Object.defineProperty assignments with writable false or no setter
         // Unions and intersections of the above (unions and intersections eagerly set isReadonly on creation)
+        self.is_readonly_symbol_with_modifiers(symbol, || get_declaration_modifier_flags_from_symbol(symbol))
+    }
+
+    /// `is_readonly_symbol` for a caller that has `get_declaration_modifier_flags_from_symbol(symbol)` at hand.
+    pub(crate) fn is_readonly_symbol_with_modifiers(&mut self, symbol: P<Symbol>, modifiers: impl FnOnce() -> ModifierFlags) -> bool {
         symbol.check_flags().intersects(CheckFlags::Readonly)
-            || symbol.flags().intersects(SymbolFlags::Property) && get_declaration_modifier_flags_from_symbol(symbol).intersects(ModifierFlags::Readonly)
+            || symbol.flags().intersects(SymbolFlags::Property) && modifiers().intersects(ModifierFlags::Readonly)
             || symbol.flags().intersects(SymbolFlags::Variable) && self.get_declaration_node_flags_from_symbol(symbol).intersects(NodeFlags::Constant)
             || symbol.flags().intersects(SymbolFlags::Accessor) && !symbol.flags().intersects(SymbolFlags::SetAccessor)
             || symbol.flags().intersects(SymbolFlags::EnumMember)
