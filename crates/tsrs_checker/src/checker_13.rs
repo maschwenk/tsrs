@@ -2656,7 +2656,28 @@ impl Checker {
         if NOT_IN_PRIMITIVE_UNION.contains(kind) && t.object_flags().intersects(ObjectFlags::PrimitiveUnion) {
             return false;
         }
+        if t.types().len() >= 8 {
+            return self.constituent_flags(t).intersects(kind);
+        }
         maybe_constituent_of_kind(t.types(), kind)
+    }
+
+    /// The flags of the constituents of the union or intersection `t`, nested unions' and intersections' included:
+    /// `maybe_type_of_kind` of a large union walks all of them for every kind asked, and they never change.
+    #[inline(never)]
+    fn constituent_flags(&mut self, t: P<Type>) -> TypeFlags {
+        if let Some(&flags) = self.constituent_flags.get(&t) {
+            return flags;
+        }
+        let mut flags = TypeFlags::None;
+        for &c in t.types() {
+            flags |= c.flags();
+            if c.flags().intersects(TypeFlags::UnionOrIntersection) {
+                flags |= self.constituent_flags(c);
+            }
+        }
+        self.constituent_flags.insert(t, flags);
+        flags
     }
 
     // checker.go:28090
