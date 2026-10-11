@@ -1252,29 +1252,30 @@ pub(crate) fn has_matching_recursion_identity(c: &mut Checker, t: P<Type>, ident
 /// `has_matching_recursion_identity` of an intersection recursion identity target.
 #[inline(never)]
 fn intersection_has_matching_recursion_identity(c: &mut Checker, target: P<Type>, identity: RecursionId) -> bool {
-    // tsrs: the identities of the constituents (nested intersections' included) are kept per intersection: the
-    // deeply-nested test asks this of every intersection on the relater's stack each time, and they never change.
-    if let Some(&(start, len)) = c.intersection_recursion_ids.get(&target) {
-        return c.intersection_recursion_id_pool[start as usize..(start + len) as usize].contains(&identity);
-    }
-    // Collected apart and then appended: computing an identity target can resolve types, which can fill other
-    // entries of the pool meanwhile.
-    let mut ids = Vec::new();
-    collect_intersection_recursion_ids(c, target, &mut ids);
-    let found = ids.contains(&identity);
-    let start = c.intersection_recursion_id_pool.len() as u32;
-    c.intersection_recursion_id_pool.extend_from_slice(&ids);
-    c.intersection_recursion_ids.insert(target, (start, ids.len() as u32));
-    found
+    intersection_recursion_keys(c, target).contains(&recursion_key(identity))
 }
 
-fn collect_intersection_recursion_ids(c: &mut Checker, target: P<Type>, ids: &mut Vec<RecursionId>) {
+/// The `recursion_key`s of the identities of an intersection recursion identity target's constituents (nested
+/// intersections' included). tsrs: kept per intersection; the deeply-nested tests ask about them again and again, and
+/// they never change.
+fn intersection_recursion_keys(c: &mut Checker, target: P<Type>) -> &'static [u64] {
+    if let Some(&keys) = c.intersection_recursion_ids.get(&target) {
+        return keys;
+    }
+    let mut keys = Vec::new();
+    collect_intersection_recursion_keys(c, target, &mut keys);
+    let keys = alloc_slice(&keys);
+    c.intersection_recursion_ids.insert(target, keys);
+    keys
+}
+
+fn collect_intersection_recursion_keys(c: &mut Checker, target: P<Type>, keys: &mut Vec<u64>) {
     for &t in target.types() {
         let t = get_recursion_identity_target(c, t);
         if t.flags().intersects(TypeFlags::Intersection) {
-            collect_intersection_recursion_ids(c, t, ids);
+            collect_intersection_recursion_keys(c, t, keys);
         } else {
-            ids.push(get_recursion_identity_from_target(t));
+            keys.push(recursion_key(get_recursion_identity_from_target(t)));
         }
     }
 }
