@@ -152,6 +152,53 @@ creation), and property types of a target (dropped with the name or a member res
 modes, with no difference. The peak RSS increase is about the size of the two per-checker maps (constituent flags,
 intersection identities); not broken down further.
 
+## Round 4 (after #304)
+
+Twenty-one commits on c21a36ef (the last a lint fix), plus this note. Clean `--release` builds, c21a36ef (main)
+against the branch, same command and machine as above, diagnostics identical:
+
+| | main | branch | change |
+|---|---|---|---|
+| instructions, default mode (2 runs each) | 1.3552-1.3591T | 1.3041-1.3087T | -3.7% |
+| instructions, `--checkerAssignment locality` | 1.3352T | 1.2859T | -3.7% |
+| wall, native, 3 runs each | 30.12-30.81 s | 29.54-29.80 s | -1.9% (medians) |
+| user CPU | 220.7-221.9 s | 215.4-217.1 s | -2.2% |
+| peak RSS | 16.99-17.08 GB | 16.79-16.90 GB | -1.3% (medians) |
+| `--maxMemory 6G`: wall / peak RSS (one run) | 73.3 s / 7.69 GB | 71.8 s / 7.69 GB | -2.0% / 0% |
+
+Conformance pass lists (three modes and the gate), `tools/regressions.sh` and `--maxMemory 6G` diagnostics as in the
+first round: unchanged. Per-commit numbers (static assignment, profiling builds) are in the commit messages; the round
+went from 1.38165T to 1.33103T (-3.7%) there, before the rebase onto c21a36ef.
+
+- Symbol tables: the index of a table with more than 16 entries is linear probing over 16-bit (up to 255 entries) or
+  32-bit slots holding the entry's position and 8 bits of the key's hash, instead of a `hashbrown` table (-0.50%, peak
+  RSS lower). 383M of 539M lookups go through the index, 40% in tables of 17 to 64 entries; most of the gain is in
+  inserts and growth. An entry's key fingerprint is compared as one word (-0.18%).
+- Modifier flags of properties: `propertyRelatedTo` reads accessibility only for class members and synthetic
+  properties (a declared symbol whose parent is not a class has no accessibility bits; -0.37%);
+  `createUnionOrIntersectionProperty` reuses the read modifiers for writes when there is no set accessor (-0.25%) and
+  passes them to `isReadonlySymbol` (-0.07%).
+- Name resolution: `resolveName` steps through ancestors that cannot hold locals (calls, property accesses,
+  statements, JSX, type literals, ...) without the per-kind tests (-0.36%); `getIsDeferredContext` tests the kind first
+  (-0.22%).
+- Sorting: `sortSymbols` sorts by a key computed once per symbol when all files are known (-0.30%, shadow-checked
+  against the comparator); `compareTypes` compares two string literal types inline and keeps the rest out of line
+  (-0.47% over two commits).
+- Paths: patterns of `paths` indexed by prefix (-0.34%); a URL scheme separator found by its colons (-0.19%).
+- Fewer temporary lists: pooled type lists in `getIntersectionType` and `getConditionalTypeInstantiation` (-0.18%
+  together), in `createUnionOrIntersectionProperty` (-0.12%); `inferFromTypes` borrows constituent lists it does not
+  change (-0.12%).
+- Smaller: one shared empty excluded-properties set (-0.07%); `getUnmatchedProperty` records only looked-up positions
+  (-0.08%); the constituent-flags cache only for unions of 8 or more and a pooled store of intersection recursion
+  identities (peak RSS -0.26%, instructions unchanged).
+
+What the new equivalences rely on, each shadow-checked (the original computation run alongside, panicking on a
+difference) on the 38k-file codebase and the conformance suite in three modes: accessibility is dropped for
+non-class parents in `getDeclarationModifierFlagsFromSymbol` itself; a declared symbol's write declaration differs
+from its read declaration only through a set accessor; the symbol table index finds what a linear scan finds;
+`sortSymbols`' key order is the comparator's order. (In the shadow build's default-mode run one heavy test,
+`intersectionConstructorReductionCrash`, timed out under the extra linear scans; alone it passes with no difference.)
+
 ## Found on the way, not pursued
 
 - One checker (`--checkers 1`) on the 38k-file codebase aborted after 2 h 7 min with "the arena address range is

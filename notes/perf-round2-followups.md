@@ -398,6 +398,16 @@ with the switch off, which is why it is not in the default build.
   inlined); a 256-bit Bloom filter of the keys of indexed symbol tables (+0.25%: `SymbolMap::search` and `insert`
   both grew); rejecting different-flag pairs before the identity relation in inference's exact matching (+0.03%:
   nearly all pairs are object types with equal flags).
+  Round 4 (same note): the symbol table index with a position/tag split that depends on the table size, computed per
+  lookup (1.36945T -> 1.36934T: `SymbolMap::search` +2.8G ate the insert savings; the landed index has fixed widths);
+  the index at most half full (-0.2% more than three quarters, peak RSS +0.6%); the 16-bit slots with one lookup
+  closure for both widths (+0.26%: the closure was outlined); presizing the index from the entry capacity (+0.03%);
+  the object case of `Type::target` inline again (+0.33%, as in round 3); `#[inline]` on `isStatement` (+0.07%); a
+  number-literal case in `compareTypes` inline (+0.33%) or out of line (+0.08%); pooled lists in `getUnionType`
+  (-0.04%) and `contextualPropertyTypeOfConstituent` (-0.02%), both within noise. Not built: a memo of each flow
+  node's conditional or mapped ancestor (80% of lookups repeat a node, about 0.13% for about 50 MB), a memo of
+  intersection type facts (the base constraint can be mid-resolution), and a direct-mapped front cache for relation
+  lookups (simulated: 29% hits, about 0.1% net).
 
 ## The lint ratchet
 
