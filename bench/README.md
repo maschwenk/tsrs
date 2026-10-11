@@ -169,23 +169,40 @@ source revision it ports. Each compiler gets 3 warmup runs and 20 measured runs,
 `--checkers 4`. The chart uses the default-setting medians for wall time and peak RSS; the raw exports also retain
 the individual measurements and their spread.
 
-Run it on the existing 16-vCPU Depot probe workflow:
+To repeat the measurements on Linux x64, use Hyperfine 2.0.0 and the compiler commit recorded in the
+[chart snapshot](RESULTS.md#large-project-chart-snapshot). Build and set up the pinned projects:
 
 ```sh
-depot ci dispatch --repo maschwenk/tsrs --workflow perf-probe.yml --ref main \
-  --input runner=depot-ubuntu-24.04-16 \
-  --input projects=vscode,t3code-server,mui-docs \
-  --input script=bench/hyperfine.sh
+cargo build --release --locked -p tsrs_cli
+python3 bench/run.py --setup-only --projects vscode,t3code-server,mui-docs
 ```
 
-This builds `tsrs` with `cargo build --release --locked -p tsrs_cli`. It does not use the PGO `dist` build of the
-regression benchmark. The runner checks that both compilers finish and report matching diagnostic locations and
-codes before timing them. Hyperfine invokes the native binaries directly, without a shell or Node launcher, and
-measures both wall time and peak RSS. Only the preflight's expected diagnostic exit codes are accepted.
+For VS Code, run the native binaries directly:
 
-The `perf-probe` artifact contains `hyperfine/metadata.json`, the exact commands, diagnostic logs and a raw
+```sh
+benchmark_root="$PWD"
+cd bench/.work/solutions/vscode
+hyperfine -N --warmup 3 --runs 20 \
+  --metrics time_wall_clock,memory_peak_resident \
+  --ignore-failure=2 --export-json /tmp/vscode-default.json \
+  "\"$benchmark_root/bench/.work/tsgo/7.1.0-dev.20260930.4/node_modules/@typescript/typescript-linux-x64/lib/tsc\" -p src --noEmit --incremental false --extendedDiagnostics --pretty false" \
+  "\"$benchmark_root/target/release/tsrs\" -p src --noEmit --incremental false --extendedDiagnostics --pretty false"
+```
+
+Run both compiler commands once before timing to confirm that they finish with matching diagnostic locations,
+codes and file counts. VS Code and T3 Code report diagnostics and exit with code 2; `--ignore-failure=2` accepts
+that expected result. MUI docs exits successfully, so omit that flag for MUI. The recorded run also checked every
+measured exit code and the final diagnostic output against its preflight.
+
+For T3 Code, use `bench/.work/solutions/t3code-server` and `-p apps/server`; for MUI, use
+`bench/.work/solutions/mui-docs` and `-p docs`. Add `--checkers 4` to both compiler commands for the equal-checker
+comparison, and choose a separate output file for each project and setting. The recorded run alternated compiler
+order between project/checker-setting pairs. This procedure uses the release profile without the regression
+benchmark's PGO optimization.
+
+The recorded run's `perf-probe` artifact contains `hyperfine/metadata.json`, the exact commands, diagnostic logs and a raw
 Hyperfine JSON export for each project and checker setting. The [chart snapshot](RESULTS.md#large-project-chart-snapshot)
-records the measured commit, hardware and results. The SVG is updated by hand; this workflow does not regenerate it.
+records the measured commit, hardware and results. The SVG is updated by hand.
 
 ## Regression flag
 
