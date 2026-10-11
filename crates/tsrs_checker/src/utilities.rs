@@ -1033,6 +1033,16 @@ pub fn get_declaration_modifier_flags_from_symbol(s: P<Symbol>) -> ModifierFlags
     get_declaration_modifier_flags_from_symbol_ex(s, false /*isWrite*/)
 }
 
+/// The `Private` and `Protected` bits of `get_declaration_modifier_flags_from_symbol(s)`. A declared symbol whose parent
+/// is not a class has neither (its accessibility modifiers are dropped below), so its declaration is not read.
+#[inline]
+pub(crate) fn get_declaration_non_public_flags_from_symbol(s: P<Symbol>) -> ModifierFlags {
+    if !s.check_flags.get().intersects(CheckFlags::Synthetic) && !s.parent().is_some_and(|p| p.flags().intersects(SymbolFlags::Class)) {
+        return ModifierFlags::None;
+    }
+    get_declaration_modifier_flags_from_symbol(s) & ModifierFlags::NonPublicAccessibilityModifier
+}
+
 // utilities.go:761
 pub(crate) fn get_declaration_modifier_flags_from_symbol_ex(s: P<Symbol>, is_write: bool) -> ModifierFlags {
     let check_flags = s.check_flags.get();

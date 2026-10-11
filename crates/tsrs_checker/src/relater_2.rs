@@ -2160,8 +2160,9 @@ impl Relater {
 
     // relater.go:4302
     pub(crate) fn property_related_to(&self, c: &mut Checker, source: P<Type>, target: P<Type>, source_prop: P<Symbol>, target_prop: P<Symbol>, get_type_of_source_property: impl FnMut(&mut Checker, P<Symbol>) -> P<Type>, report_errors: bool, intersection_state: IntersectionState, skip_optional: bool) -> Ternary {
-        let source_prop_flags = get_declaration_modifier_flags_from_symbol(source_prop);
-        let target_prop_flags = get_declaration_modifier_flags_from_symbol(target_prop);
+        // tsrs: only the Private and Protected bits are tested below.
+        let source_prop_flags = get_declaration_non_public_flags_from_symbol(source_prop);
+        let target_prop_flags = get_declaration_non_public_flags_from_symbol(target_prop);
         if source_prop_flags.intersects(ModifierFlags::Private) || target_prop_flags.intersects(ModifierFlags::Private) {
             if source_prop.value_declaration() != target_prop.value_declaration() {
                 if report_errors {
