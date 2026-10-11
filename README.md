@@ -34,13 +34,17 @@ for supported features and known gaps.
 
 ## Contributing
 
-Bug reports with a small reproduction and fixes are welcome. See the [contributing guide](CONTRIBUTING.md)
+Issues and pull requests are currently disabled until we have the bandwidth to triage them.
+
+See the [contributing guide](CONTRIBUTING.md)
 for building from source and running the suites, the [Code of Conduct](CODE_OF_CONDUCT.md), and
 [security policy](SECURITY.md) for reporting vulnerabilities.
 
-## Acknowledgments and license
+## Acknowledgments
 
 Thanks to [@JiangWeixian](https://github.com/JiangWeixian) for transferring the `tsrs` npm package name.
+
+## License
 
 `tsrs` is a derivative of TypeScript (Copyright Microsoft Corporation), licensed under [Apache-2.0](LICENSE).
 The bundled `lib.*.d.ts` files are TypeScript's. See [NOTICE](NOTICE) for attribution.
