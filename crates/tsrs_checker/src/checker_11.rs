@@ -1518,10 +1518,11 @@ impl Checker {
             // mapper to the type parameters to produce the effective list of type arguments, and compute the
             // instantiation cache key from the type IDs of the type arguments.
             let outer_type_parameters = root.outer_type_parameters.get();
-            // With m1, this is what the composite mapper's Map does.
-            let type_arguments: Vec<P<Type>> = outer_type_parameters
-                .iter()
-                .map(|&tp| match m1 {
+            let mut type_arguments = self.free_type_lists.pop().unwrap_or_default();
+            type_arguments.reserve(outer_type_parameters.len());
+            for &tp in outer_type_parameters {
+                // With m1, this is what the composite mapper's Map does.
+                let mapped = match m1 {
                     Some(m1) => {
                         let t1 = m1.map(self, tp);
                         if t1 != tp {
@@ -1531,8 +1532,9 @@ impl Checker {
                         }
                     }
                     None => mapper.map(self, tp),
-                })
-                .collect();
+                };
+                type_arguments.push(mapped);
+            }
             let key = get_conditional_type_key(&type_arguments, alias, for_constraint);
             let mut result = root.instantiations.get(&key);
             if result.is_none() {
@@ -1610,6 +1612,7 @@ impl Checker {
                     }
                 }
             }
+            self.free_type_list(type_arguments);
             return result.unwrap();
         }
         t
