@@ -630,7 +630,21 @@ pub(crate) fn is_export_default_symbol(symbol: Option<P<Symbol>>) -> bool {
     !declarations.is_empty() && ast::has_syntactic_modifier(declarations[0], ModifierFlags::Default)
 }
 
+/// tsrs: name resolution asks this of every ancestor of a reference (131M calls on the 38k-file codebase), and only
+/// these kinds can answer true; the test itself is out of line.
+#[inline]
 pub(crate) fn get_is_deferred_context(location: P<Node>, last_location: Option<P<Node>>) -> bool {
+    let kind = location.kind();
+    if !matches!(kind, Kind::ArrowFunction | Kind::FunctionExpression | Kind::TypeQuery | Kind::PropertyDeclaration)
+        && !ast::is_function_like_declaration(location)
+    {
+        return false;
+    }
+    get_is_deferred_context_worker(location, last_location)
+}
+
+#[inline(never)]
+fn get_is_deferred_context_worker(location: P<Node>, last_location: Option<P<Node>>) -> bool {
     if location.kind() != Kind::ArrowFunction && location.kind() != Kind::FunctionExpression {
         // initializers in instance property declaration of class like entities are executed in constructor and thus deferred
         // A name is evaluated within the enclosing scope - so it shouldn't count as deferred
